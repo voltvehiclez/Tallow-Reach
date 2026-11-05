@@ -16,6 +16,7 @@ export const BINDINGS = {
   Digit1: "weapon:cannon",
   Digit2: "weapon:beam",
   KeyG: "dock",
+  KeyM: "warp",
   KeyP: "pause",
   Escape: "pause",
 };

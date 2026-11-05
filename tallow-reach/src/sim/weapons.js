@@ -50,6 +50,14 @@ export function updatePrimary(dt) {
     d = SHIPS[S.ship];
 
   F.fireCd -= dt;
+
+  // Weapons are offline during a warp: no cannons, no beam.
+  if (state.warp) {
+    F.beamOn = false;
+    beamMesh.visible = false;
+    return;
+  }
+
   if (keys.fire && S.pw !== "beam" && F.fireCd <= 0) {
     F.fireCd = PRIMARY.cannon.cooldown;
     tone(700, 120, 0.09, 0.05, "square");
@@ -137,6 +145,16 @@ export function updateMissiles(dt) {
     ML = F.missileLock;
 
   F.missileCd -= dt;
+
+  // No lock-on or launches during a warp. Missiles already away keep flying.
+  if (state.warp) {
+    F.coneRadius = 0;
+    ML.target = null;
+    ML.locked = false;
+    ML.t = 0;
+    updateMissileFlight(dt);
+    return;
+  }
 
   if (!S.wp.msl) {
     F.coneRadius = 0;

@@ -159,3 +159,59 @@ then call `setSeed(n)` at the start of a run.
 ## 13. Tuning only
 
 Change numbers in `src/data/`. Run `npm test`, rebuild, and play for a minute.
+
+**Flight feel** is all in the `FLIGHT` table at the top of `src/data/ships.js`:
+
+| Field | What it does | Today |
+| --- | --- | --- |
+| `turn` | multiplier on every hull's `turn` stat | `0.7` (30% slower than the raw stat) |
+| `strafe` | A/D speed, as a fraction of the hull's forward `spd` | `0.3` |
+| `lift` | Space/C speed, as a fraction of forward `spd` | `0.3` |
+| `reverse` | S (throttle below zero), as a fraction of forward `spd` | `0.3` |
+
+**Camera position** is in `src/data/camera.js`, and is the only thing that decides how far
+behind the ship the view sits:
+
+| Field | What it does | Today |
+| --- | --- | --- |
+| `base` | distance behind the ship when it is standing still | `11` |
+| `fast` | distance at full forward speed (throttle 1 plus boost) | `17` |
+| `reverse` | distance at maximum reverse thrust | `10.5` |
+
+The distance is linear in speed between those three points and is hard-capped at both ends, so
+a faster ship cannot push the camera further back. Want the view tighter overall? Lower all
+three. Want it to pull back more under boost? Raise `fast`. `npm test` checks that
+`reverse < base < fast` and that the trail never doubles back.
+
+Forward thrust and the Shift boost are **not** in this table: they are the hull's `spd` and
+`2 x spd`, and they are the only directions that reach full speed. To make turning heavier still,
+lower `turn` (0.6 = 40% slower). To give the ship stronger manoeuvring thrusters, raise
+`strafe` / `lift` / `reverse` toward `1`. Changing a ship's *own* `spd` or `turn` in `SHIPS`
+changes that hull only, on top of these multipliers.
+
+## 14. A new sector (data + small code)
+
+Sectors live in `src/data/sectors.js`. Each entry has `n` name, `d` description, `sn` arrival
+point, and three flags: `st` has the outpost, `fd` has the asteroid field, `foes` allows
+raiders. `SECTOR_IDS` is the order M warps through.
+
+1. Add an entry to `SECTORS` and its id to `SECTOR_IDS` (where you put it in the list is where
+   M goes next). `npm test` checks the fields and the warp cycle.
+2. That is enough for an empty sector: the player arrives at `sn` and sees only stars.
+3. If it needs its own scenery, build it into that sector's group in the render layer:
+   `sectorGroup(id).add(mesh)`. Do not add scenery straight to `scene`, or it shows up in
+   every sector. Only the starting sector has the outpost and planet today.
+4. Anything that assumes the outpost is at the origin must check `st` first, the way
+   `sim/player.js`, `sim/session.js`, `sim/targeting.js` and `ui/hud.js` do.
+5. Rocks: `FIELD_SECTOR` in `sim/world.js` decides which sector owns the asteroid field, and
+   `state.world.asteroids` only ever holds the current sector's rocks (they are parked
+   otherwise). A second field therefore means a per-sector field list, not a second constant.
+6. Do not make a second sector the start unless it has `st: true`: you dock there on boot.
+7. The warp itself is timed by `WARP` in the same file and about two seconds long. The
+   visuals follow those numbers: the 3D streaks (`render/warpfx.js`) and the overlay
+   (`ui/warpflash.js`) read `state.warp.fx` and `state.warp.flash` every frame, so there are
+   no durations to change anywhere else. Keep the overlay to plain gradients; a masked
+   gradient across the whole screen halves the frame rate.
+8. `WARP_COAST.steer` is how long the ship takes to stop turning once M is pressed, and
+   `warpSteerEase(t)` in the same file is the curve (1 -> 0). The throttle is released
+   instantly, so the speed bleeds off through the normal drag model in `sim/player.js`.

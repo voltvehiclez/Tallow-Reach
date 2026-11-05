@@ -15,6 +15,9 @@
 //   mined         { item }           one unit of ore added to the hold
 //   pickup        { item }           crate picked up
 //   pirate-killed                    hostile destroyed
+//   sector-changed { from, to }      the sector changed, mid-warp (see data/sectors.js)
+//   warp-start    { from, to }       a warp began: ship locked, drive charging
+//   warp-end      { from, to }       warp over (arrived, or cancelled by docking)
 
 const handlers = new Map();
 

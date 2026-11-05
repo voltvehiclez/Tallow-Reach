@@ -200,6 +200,86 @@ export function nz(dur, freq, vol) {
   src.stop(t + dur);
 }
 
+/**
+ * Warp charge: a whine rising in pitch over `dur` seconds, with air rushing past
+ * and a sub-bass swell underneath. Call once when a warp starts; the arrival is
+ * warpBurst().
+ */
+export function warpCharge(dur) {
+  if (!ctx || muted) return;
+  const t = ctx.currentTime,
+    end = t + dur;
+
+  // Rising whine.
+  const whine = ctx.createOscillator(),
+    whineGain = ctx.createGain();
+  whine.type = "sawtooth";
+  whine.frequency.setValueAtTime(70, t);
+  whine.frequency.exponentialRampToValueAtTime(660, end);
+  whineGain.gain.setValueAtTime(0.0001, t);
+  whineGain.gain.exponentialRampToValueAtTime(0.055, end);
+  whine.connect(whineGain);
+  whineGain.connect(master);
+  whine.start(t);
+  whine.stop(end + 0.05);
+
+  // Air rushing past, sweeping upwards.
+  const air = ctx.createBufferSource(),
+    band = ctx.createBiquadFilter(),
+    airGain = ctx.createGain();
+  air.buffer = noiseBuf;
+  air.loop = true;
+  band.type = "bandpass";
+  band.Q.value = 1.4;
+  band.frequency.setValueAtTime(200, t);
+  band.frequency.exponentialRampToValueAtTime(3400, end);
+  airGain.gain.setValueAtTime(0.0001, t);
+  airGain.gain.exponentialRampToValueAtTime(0.1, end);
+  air.connect(band);
+  band.connect(airGain);
+  airGain.connect(master);
+  air.start(t);
+  air.stop(end + 0.05);
+
+  // Sub-bass swell.
+  const sub = ctx.createOscillator(),
+    subGain = ctx.createGain();
+  sub.type = "sine";
+  sub.frequency.setValueAtTime(38, t);
+  sub.frequency.linearRampToValueAtTime(72, end);
+  subGain.gain.setValueAtTime(0.05, t);
+  subGain.gain.linearRampToValueAtTime(0.0001, end);
+  sub.connect(subGain);
+  subGain.connect(master);
+  sub.start(t);
+  sub.stop(end + 0.05);
+}
+
+/** Arrival: a noise slam that closes down in pitch, a thump and a short shimmer. */
+export function warpBurst() {
+  if (!ctx || muted) return;
+  const t = ctx.currentTime;
+
+  const src = ctx.createBufferSource(),
+    lp = ctx.createBiquadFilter(),
+    g = ctx.createGain();
+  src.buffer = noiseBuf;
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(6000, t);
+  lp.frequency.exponentialRampToValueAtTime(200, t + 0.9);
+  g.gain.setValueAtTime(0.26, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+  src.connect(lp);
+  lp.connect(g);
+  g.connect(master);
+  src.start(t);
+  src.stop(t + 0.95);
+
+  tone(190, 42, 0.7, 0.15, "sine");
+  tone(1500, 2300, 0.45, 0.02, "triangle");
+  setTimeout(() => tone(2300, 1200, 0.5, 0.015, "triangle"), 90);
+}
+
 function clank() {
   const r = random();
   if (r < 0.35) {

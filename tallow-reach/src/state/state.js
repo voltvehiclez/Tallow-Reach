@@ -2,12 +2,15 @@
 // state.profile (see profile.js). Everything else is rebuilt on load.
 
 import { newProfile } from "./profile.js";
+import { DEFAULT_SECTOR } from "../data/sectors.js";
 
 export const state = {
   profile: newProfile(),
   player: null,        // the flying ship (created in sim/player.js)
   paused: false,
   time: 0,             // seconds of unpaused play
+  sector: DEFAULT_SECTOR,   // id from data/sectors.js: the region you are flying in
+  warp: null,               // { from, to, t, fx, flash, switched, steer } while a warp runs; see sim/sectors.js
 
   world: {
     enemies: [],       // hostile ships

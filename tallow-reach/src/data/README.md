@@ -9,6 +9,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 | `weapons.js` | Cannon, mining beam, missile numbers, and the Shop list (`SHOP_WEAPONS`). |
 | `station.js` | Base modules, their costs, storage and refinery numbers, repair and recovery fees. |
 | `contracts.js` | Contract types, generators, wording (`DESCRIBE`), board size. |
+| `sectors.js` | The regions you can fly in, their flags, the order M warps through them, and the warp timing (`WARP`). |
 
 Rules:
 - Keep the short keys (`n` name, `d` description, `v` value, ...). Copy an existing entry when adding one.

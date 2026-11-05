@@ -1,6 +1,7 @@
 // Pirate raiders: spawning, flying, and shooting at the player.
 
 import { V, R, fwd, face } from "../util/math.js";
+import { sectorAt } from "../data/sectors.js";
 import { tone } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { mkShip } from "../render/models.js";
@@ -81,10 +82,12 @@ export function updateEnemies(dt) {
       hunting = m && m.type === "hunt" && m.p < m.n,
       nearField = pp.distanceTo(FIELD_CENTER) < 1400;
     let want = 0;
-    if (far && hunting) {
-      want = Math.min(3, m.n - m.p) - E.length;
-    } else if (far && nearField && E.length < 2 && Math.random() < 0.4) {
-      want = 1 + (Math.random() < 0.5 ? 1 : 0);
+    if (sectorAt(state.sector).foes) {
+      if (far && hunting) {
+        want = Math.min(3, m.n - m.p) - E.length;
+      } else if (far && nearField && E.length < 2 && Math.random() < 0.4) {
+        want = 1 + (Math.random() < 0.5 ? 1 : 0);
+      }
     }
     for (let i = 0; i < want; i++) {
       spawnPirate(

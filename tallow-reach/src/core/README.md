@@ -2,7 +2,7 @@
 
 | File | What it does |
 |---|---|
-| `audio.js` | All sound, synthesised with Web Audio. `tone()`, `nz()`, `uiSound()`, per-frame `updateAudio()`, mute (`toggleMute`, `isMuted`) and `setAudioSuspended` for pause. |
+| `audio.js` | All sound, synthesised with Web Audio. `tone()`, `nz()`, `uiSound()`, the warp pair `warpCharge()`/`warpBurst()`, per-frame `updateAudio()`, mute (`toggleMute`, `isMuted`) and `setAudioSuspended` for pause. |
 | `input.js` | Keyboard and mouse. `BINDINGS` maps keys to named actions, which are emitted as `action` events and handled in `main.js`. |
 
 Rules:

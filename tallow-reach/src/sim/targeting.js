@@ -3,6 +3,7 @@
 
 import { fwd, clamp } from "../util/math.js";
 import { ITEM } from "../data/items.js";
+import { sectorAt } from "../data/sectors.js";
 import { state, msg } from "../state/state.js";
 import { STATION_POS } from "../render/scene.js";
 
@@ -38,7 +39,7 @@ export function toggleLock() {
   for (const e of W.enemies) test("e", e, e.m.position, 8);
   for (const a of W.asteroids) test("a", a, a.m.position, a.r);
   for (const c of W.crates) test("c", c, c.m.position, 4);
-  test("s", null, STATION_POS, 100);
+  if (sectorAt(state.sector).st) test("s", null, STATION_POS, 100);
 
   if (best) {
     F.lock = best;

@@ -4,6 +4,7 @@
 import { V, R, face } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
+import { DEFAULT_SECTOR, sectorAt } from "../data/sectors.js";
 import { emptyCargo } from "../data/items.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
 import { state, msg } from "../state/state.js";
@@ -13,6 +14,7 @@ import { setShip } from "./player.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
+import { cancelWarp, enterSector } from "./sectors.js";
 
 const DOCK_RANGE = 300;     // metres from the outpost
 const DOCK_MAX_SPEED = 70;  // m/s
@@ -46,6 +48,7 @@ export function dock() {
   const P = state.player,
     S = state.profile;
   state.freeCam.on = false;
+  cancelWarp();
   P.docked = true;
   P.m.visible = false;
   P.v.set(0, 0, 0);
@@ -57,6 +60,7 @@ export function dock() {
   clearTransient();
   state.flight.missileLock = { target: null, t: 0, locked: false };
   state.flight.lock = null;
+  enterSector(DEFAULT_SECTOR);   // the outpost is in the starting sector
   ensureBoard();
   saveAutosave(S);
   emit("docked");
@@ -65,6 +69,7 @@ export function dock() {
 /** Dock if close enough and slow enough. Otherwise do nothing. */
 export function tryDock() {
   const P = state.player;
+  if (!sectorAt(state.sector).st) return;   // no outpost in this sector
   if (P.m.position.length() < DOCK_RANGE && P.v.length() < DOCK_MAX_SPEED) dock();
 }
 

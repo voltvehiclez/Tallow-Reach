@@ -35,6 +35,7 @@ export function introHtml() {
     `<h2>Controls</h2>` +
     `<p>Mouse steers (distance from centre sets turn rate). ` +
     `W/S throttle, A/D strafe, Space and C move up and down, Q/E roll, Shift boost, X all stop. ` +
+    `The main drive is much the strongest thruster: going forward is fast, while strafing, moving up and down and reversing are slow. ` +
     `Left click fires your primary weapon and right click your secondary. ` +
     `Keys 1 and 2 switch the primary between cannons and the mining beam. ` +
     `Missiles lock on when a hostile stays inside the dashed ring for about a second. ` +
@@ -42,6 +43,8 @@ export function introHtml() {
     `The mining beam and missiles are sold in the Shop. ` +
     `F locks whatever is nearest your crosshair, such as hostiles, rocks, crates or the station, and F again releases it. ` +
     `G docks when you are within 300 m of the station and slower than 70 m/s. ` +
+    `M warps to the next sector on the chart: from Tallow Reach that is empty Kestrel Hollow, and M again brings you back. ` +
+    `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
     `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +
     `<button class="go" data-a="intro">Enter the hangar</button>`

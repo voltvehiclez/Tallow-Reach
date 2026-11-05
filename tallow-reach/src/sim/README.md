@@ -13,6 +13,7 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 | `economy.js` | Cargo, storage, selling, repairs, every purchase. Returns optional message text. |
 | `contracts.js` | Offer board and event-driven progress tracking. |
 | `session.js` | Launch, dock, die. Emits `launched`, `docked`, `died`. |
+| `sectors.js` | Warping between sectors (M): swaps the scenery and the rock list. Emits `sector-changed`. |
 | `effects.js` | Cosmetic explosions and exhaust. |
 | `world.js` | Sector layout constants and `clearTransient()`. |
 

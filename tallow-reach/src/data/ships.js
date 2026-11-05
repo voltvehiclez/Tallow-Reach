@@ -5,6 +5,17 @@
 //   mine    multiplier on mining rate  turn    multiplier on steering
 //   sc      model scale                price   cost in the Hangar
 //   col     hull colour (hex)
+//
+// FLIGHT scales every ship at once. A hull's spd is its forward thrust; the other
+// directions are a fraction of it, because side, vertical and reverse thrusters
+// are much weaker than the main drive.
+
+export const FLIGHT = {
+  turn: 0.7,     // multiplier on every ship's turn rate (0.7 = 30% slower than the raw stat)
+  strafe: 0.3,   // sideways (A/D) speed, as a fraction of forward speed
+  lift: 0.3,     // up and down (Space/C) speed, as a fraction of forward speed
+  reverse: 0.3,  // backing up (S below zero throttle), as a fraction of forward speed
+};
 
 export const SHIPS = {
   wasp: {

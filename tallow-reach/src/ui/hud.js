@@ -4,6 +4,7 @@
 import { fmtDist } from "../util/math.js";
 import { on } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
+import { sectorAt } from "../data/sectors.js";
 import { camera, STATION_POS } from "../render/scene.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
@@ -72,13 +73,14 @@ export function updateHud(dt) {
   el.boost.style.width = P.en + "%";
 
   el.topRight.innerHTML =
+    `${sectorAt(state.sector).n}<br>` +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo}<br>` +
     `${S.pw === "beam" ? "Mining beam" : "Cannons"}${S.wp.msl ? ", missiles " + S.msl : ""}<br>` +
     `<span style="color:var(--amber)">${m ? describe(m) + " " + m.p + "/" + m.n : "No contract"}</span>`;
 
   el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
 
-  if (P.m.position.length() < 300) {
+  if (!state.warp && sectorAt(state.sector).st && P.m.position.length() < 300) {
     say(P.v.length() < 70 ? "Press G to dock at Meridian Outpost" : "Slow below 70 m/s to dock");
   }
   el.prompt.textContent = H.prompt;
@@ -168,8 +170,9 @@ function drawMarkers() {
     P = state.player;
   markerCount = 0;
 
-  if (!(F.lock && F.lock.k === "s")) mark(STATION_POS, "Meridian Outpost", "i");
-  mark(FIELD_CENTER, "Asteroid field", "");
+  const here = sectorAt(state.sector);
+  if (here.st && !(F.lock && F.lock.k === "s")) mark(STATION_POS, "Meridian Outpost", "i");
+  if (here.fd) mark(FIELD_CENTER, "Asteroid field", "");
 
   pruneLock();
   const lock = F.lock;

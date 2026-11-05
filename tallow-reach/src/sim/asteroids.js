@@ -2,10 +2,9 @@
 
 import * as THREE from "three";
 import { V, R } from "../util/math.js";
-import { scene } from "../render/scene.js";
+import { sectorGroup } from "../render/scene.js";
 import { mm, rockShape } from "../render/models.js";
-import { state } from "../state/state.js";
-import { FIELD_CENTER } from "./world.js";
+import { FIELD_CENTER, FIELD_SECTOR, fieldList } from "./world.js";
 
 export const FIELD_COUNT = 70;
 const FIELD_RADIUS = 700;   // horizontal spread
@@ -29,9 +28,10 @@ export function spawnAsteroid() {
 
   m.scale.set(r * R(0.8, 1.2), r * R(0.8, 1.2), r * R(0.8, 1.2));
   m.rotation.set(R(0, 6), R(0, 6), R(0, 6));
-  scene.add(m);
+  // Rocks live in the field's own sector, so they appear and disappear with it.
+  sectorGroup(FIELD_SECTOR).add(m);
 
-  state.world.asteroids.push({
+  fieldList(FIELD_SECTOR).push({
     m,
     r,
     type,

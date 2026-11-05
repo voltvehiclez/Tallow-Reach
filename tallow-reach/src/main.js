@@ -18,9 +18,12 @@ import { updateEffects } from "./sim/effects.js";
 import { populateField } from "./sim/asteroids.js";
 import { toggleLock } from "./sim/targeting.js";
 import { tryDock } from "./sim/session.js";
+import { startWarp, updateWarp } from "./sim/sectors.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
+import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
+import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 
 // --- Boot ------------------------------------------------------------------
 
@@ -32,6 +35,8 @@ populateField();
 
 setupHud();
 setupMenu();
+setupWarpStreaks();
+setupWarpFlash();
 setupPause();
 installInput();
 installCameraControls(state.freeCam, {
@@ -54,7 +59,10 @@ on("action", ({ name, repeat }) => {
       if (playing) setWeapon("beam");
       break;
     case "dock":
-      if (playing) tryDock();
+      if (playing && !state.warp) tryDock();
+      break;
+    case "warp":
+      if (playing && !repeat) startWarp();
       break;
     case "pause":
       if (!state.player.docked) setPause(!state.paused);
@@ -101,6 +109,7 @@ function frame(now) {
 
   if (!P.docked) {
     flight(dt);
+    updateWarp(dt);       // may change sector mid-frame; the rest of the frame uses the new one
     updatePrimary(dt);
     updateMissiles(dt);
     updateEnemies(dt);
@@ -108,6 +117,8 @@ function frame(now) {
     updateCrates(dt);
   }
   updateEffects(dt);
+  updateWarpStreaks(dt);   // all three hide themselves when no warp is running
+  updateWarpFlash();
 
   // A hit may have docked the player during the updates above.
   if (P.docked) {

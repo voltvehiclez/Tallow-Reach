@@ -255,6 +255,37 @@ button:focus-visible {
   padding: 10px;
   font-size: 18px;
 }
+/* ---- Warp overlay (built in src/ui/warpflash.js) ---- */
+/* Two full-screen gradients: a tunnel vignette and the white-out at arrival.
+   Both are driven every frame from the warp clock (src/ui/warpflash.js), so the
+   picture cannot drift from the simulation. Nothing here animates in CSS. */
+#warpfx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#warpfx .v {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%,
+      rgba(6, 10, 16, 0) 20%,
+      rgba(6, 10, 16, 0.55) 62%,
+      rgba(6, 10, 16, 0.92) 100%);
+}
+
+#warpfx .f {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 50%,
+      #ffffff 0%,
+      rgba(206, 234, 255, 0.9) 22%,
+      rgba(140, 190, 255, 0.25) 50%,
+      rgba(140, 190, 255, 0) 70%);
+}
+
 /* ---- Pause overlay (built in src/ui/pause.js) ---- */
 #pz {
   position: fixed;

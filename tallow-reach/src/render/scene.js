@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import { V, R } from "../util/math.js";
+import { DEFAULT_SECTOR } from "../data/sectors.js";
 import { mm } from "./models.js";
 
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -13,12 +14,39 @@ export const scene = new THREE.Scene();
 export const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.5, 40000);
 scene.add(camera);
 
+// Each sector's scenery hangs off its own group, so moving between sectors is a
+// visibility toggle and no geometry has to be rebuilt. Groups are made on first
+// use and start hidden unless they are the sector you are in.
+const sectorGroups = new Map();
+let activeSector = DEFAULT_SECTOR;
+
+/** The scene group holding everything that belongs to sector `id`. */
+export function sectorGroup(id) {
+  let g = sectorGroups.get(id);
+  if (!g) {
+    g = new THREE.Group();
+    g.visible = id === activeSector;
+    sectorGroups.set(id, g);
+    scene.add(g);
+  }
+  return g;
+}
+
+/** Show sector `id` and hide every other sector. */
+export function showSector(id) {
+  activeSector = id;
+  sectorGroup(id);
+  for (const [key, g] of sectorGroups) g.visible = key === id;
+}
+
+
 scene.add(new THREE.HemisphereLight(0x5a6e80, 0x120e0c, 0.45));
 const sun = new THREE.DirectionalLight(0xffe2b8, 2.1);
 sun.position.set(-1, 0.4, 0.6);
 scene.add(sun);
 
 // Starfield on a far sphere. It follows the camera so it never runs out.
+// The stars are the backdrop of every sector, so they are not hidden on a warp.
 export const stars = (() => {
   const p = [];
   for (let i = 0; i < 2500; i++) {
@@ -42,7 +70,7 @@ export const planet = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: 0x2c3b45, roughness: 1 })
 );
 planet.position.set(-7000, -1500, -10000);
-scene.add(planet);
+sectorGroup(DEFAULT_SECTOR).add(planet);
 
 const atmosphere = new THREE.Mesh(
   new THREE.SphereGeometry(2950, 48, 32),
@@ -55,13 +83,13 @@ const atmosphere = new THREE.Mesh(
   })
 );
 atmosphere.position.copy(planet.position);
-scene.add(atmosphere);
+sectorGroup(DEFAULT_SECTOR).add(atmosphere);
 
 // Meridian Outpost. `stn` stays put; `spin` (the ring) rotates.
 export const stn = new THREE.Group();
 export const spin = new THREE.Group();
 stn.add(spin);
-scene.add(stn);
+sectorGroup(DEFAULT_SECTOR).add(stn);
 {
   const m = mm(0x4a545c);
   const add = (geo, x, y, z, parent) => {

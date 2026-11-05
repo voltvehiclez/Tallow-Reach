@@ -2,7 +2,9 @@
 
 import { V, fwd, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
-import { SHIPS } from "../data/ships.js";
+import { SHIPS, FLIGHT } from "../data/ships.js";
+import { warpSteerEase } from "../data/sectors.js";
+import { sectorAt } from "../data/sectors.js";
 import { keys, pointer } from "../core/input.js";
 import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
@@ -51,22 +53,39 @@ export function flight(dt) {
     m = P.m,
     d = SHIPS[state.profile.ship],
     fc = state.freeCam;
+
+  // A warp hands the controls to the drive: the throttle is released and the
+  // stick eases back to neutral, so the ship coasts down and unwinds its turn
+  // instead of stopping dead. Weapons are cut separately, in sim/weapons.js.
+  const W = state.warp;
+  const ease = W ? warpSteerEase(W.t) : 1;
+  const stick = W
+    ? W.steer
+    : {
+        x: fc.on ? 0 : pointer.x,
+        y: fc.on ? 0 : pointer.y,
+        roll: (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0),
+      };
+
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
-  const mx = fc.on ? 0 : pointer.x,
-    my = fc.on ? 0 : pointer.y;
+  const turn = d.turn * FLIGHT.turn;   // FLIGHT.turn tunes every hull at once
+  m.rotateY(-dz(stick.x * ease) * 1.6 * turn * dt);
+  m.rotateX(-dz(stick.y * ease) * 1.2 * turn * dt);
+  m.rotateZ(stick.roll * ease * 1.5 * turn * dt);
 
-  m.rotateY(-dz(mx) * 1.6 * d.turn * dt);
-  m.rotateX(-dz(my) * 1.2 * d.turn * dt);
-  m.rotateZ(((keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0)) * 1.5 * d.turn * dt);
-
-  if (keys.KeyW) P.thr = Math.min(1, P.thr + dt * 0.5);
-  if (keys.KeyS) P.thr = Math.max(-1, P.thr - dt * 0.5);
-  if (keys.KeyX) P.thr = 0;
-  if (keys.ControlLeft) {
-    P.thr = P.thr > 0 ? Math.max(0, P.thr - dt * 0.9) : P.thr < 0 ? Math.min(0, P.thr + dt * 0.9) : 0;
+  if (W) {
+    // Throttle released, like pressing X: the drag model bleeds the speed off.
+    P.thr = 0;
+  } else {
+    if (keys.KeyW) P.thr = Math.min(1, P.thr + dt * 0.5);
+    if (keys.KeyS) P.thr = Math.max(-1, P.thr - dt * 0.5);
+    if (keys.KeyX) P.thr = 0;
+    if (keys.ControlLeft) {
+      P.thr = P.thr > 0 ? Math.max(0, P.thr - dt * 0.9) : P.thr < 0 ? Math.min(0, P.thr + dt * 0.9) : 0;
+    }
   }
 
-  const wantBoost = (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
+  const wantBoost = !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
   const wasBoosting = P.boost;
   P.bs = wantBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
   P.boost = P.bs >= 1;
@@ -79,10 +98,16 @@ export function flight(dt) {
   const f = fwd(m);
   const right = V(1, 0, 0).applyQuaternion(m.quaternion);
   const up = V(0, 1, 0).applyQuaternion(m.quaternion);
+  // Strafe and lift are ignored while warping, so the ship only bleeds speed.
+  const strafe = W ? 0 : (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const lift = W ? 0 : (keys.Space ? 1 : 0) - (keys.KeyC ? 1 : 0);
+
+  // Only the main drive reaches full speed; reversing is a fraction of it.
+  const drive = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
   const target = f
-    .multiplyScalar(P.thr * d.spd * (P.boost ? 2 : 1))
-    .addScaledVector(right, ((keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0)) * d.spd * 0.45)
-    .addScaledVector(up, ((keys.Space ? 1 : 0) - (keys.KeyC ? 1 : 0)) * d.spd * 0.4);
+    .multiplyScalar(drive * d.spd * (P.boost ? 2 : 1))
+    .addScaledVector(right, strafe * d.spd * FLIGHT.strafe)
+    .addScaledVector(up, lift * d.spd * FLIGHT.lift);
   P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
   m.position.addScaledVector(P.v, dt);
   m.eng.forEach(e => e.scale.set(1, 1, 0.5 + P.thr * 2 + P.bs * 2));
@@ -101,8 +126,8 @@ export function flight(dt) {
     }
   }
 
-  // Keep out of the outpost.
-  if (m.position.length() < STATION_KEEPOUT) {
+  // Keep out of the outpost (only sectors that have one).
+  if (sectorAt(state.sector).st && m.position.length() < STATION_KEEPOUT) {
     m.position.setLength(STATION_KEEPOUT);
     P.v.multiplyScalar(0.5);
   }
