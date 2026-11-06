@@ -8,6 +8,22 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Shield power made simple: a flat 2 MJ/s, and shields bleed when it is not there
+
+- **Shields now draw a straight 2 MJ/s all the time** while a shield module is fitted — full,
+  filling or under fire, it is the same bill. The 1/2 split is gone, so `chg` is off the module
+  and `draw: 2` replaces it.
+- **If the ship cannot supply that 2 MJ/s** (powerplant gone and cells flat), the shields stop
+  holding themselves together: they **discharge at 1 point a second** (`drain: 1`) down to 0, and
+  **stay at 0** until the ship can pay again. Then the normal rule applies — the 4 second lull,
+  then 1 point a second back.
+- HUD with the basic fit: **2 MJ/s** parked, **4** flying, **5** boosting, **4** while shields
+  fill after a fight, **2** with the shields pulled out.
+- Files: `data/modules.js` (`draw: 2`, `drain: 1`, `chg` removed), `sim/shield.js`
+  (`shieldDraw(shield)` is now flat, `updateShield` discharges when `hasPower()` says no).
+- Tests: the shield power tests were rewritten and a discharge test added → **59 passing**.
+  No save change: still version 6. `npm run build` needed (579 KB).
+
 ## 2026-11-06: Shields cost power: 1 MJ/s up, 2 MJ/s while recharging
 
 - **Basic shields draw 1 MJ/s whenever they are fitted and up**, and **2 MJ/s in total while they

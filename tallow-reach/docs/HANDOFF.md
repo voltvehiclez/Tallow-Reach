@@ -12,10 +12,11 @@
 > `sim/drive.js`), and an empty thruster bay means the ship cannot move, turn or boost at all
 > (pressing a control then warns "Equip thrusters to move").
 > Basic shields are fitted to every hull: 10 points, 1 a second once the ship has gone 4
-> seconds without a hit, pirate cannons do 1 damage a shot, and the shields cost 1 MJ/s while up
-> (2 MJ/s while recharging) out of the same power budget as the thrusters. Paint bays are clickable but no
+> seconds without a hit, pirate cannons do 1 damage a shot, and the shields cost a flat 2 MJ/s out
+> of the same power budget as the thrusters. If the ship cannot pay that, the shields discharge at
+> 1 point a second and stay at 0 until the power is back. Paint bays are clickable but no
 > colours exist yet. Save is at version 6.
-> `npm test` = 58, build = 579 KB.
+> `npm test` = 59, build = 579 KB.
 > See the top of `CHANGELOG.md`.
 
 Read this first, then `tallow-reach/docs/ARCHITECTURE.md` and the top two entries of

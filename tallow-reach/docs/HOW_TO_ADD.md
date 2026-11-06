@@ -273,9 +273,10 @@ cell_basic:  { g: "cell",  n: "Basic power cell",  d: "Standard storage bank.", 
 `g` is the module group it fits (`data/outfitting.js`), and the rest of the fields are the
 stat that group uses: `mjps` for a powerplant, `mj` for a power cell, `spd`/`turn`/`draw`/
 `boost`/`ign` for a thruster (top speed, turn rate, MJ/s while flying, extra MJ/s while the boost
-burns, and the flat MJ slug spent when the boost lights), and `sh`/`regen`/`delay`/`draw`/`chg` for shields
+burns, and the flat MJ slug spent when the boost lights), and `sh`/`regen`/`delay`/`draw`/`drain` for shields
 (points held, points a second while recharging, the seconds without a hit before recharging
-starts again, MJ/s used while they are up, and the extra MJ/s while they are filling). `npm test` checks the group exists, the
+starts again, the flat MJ/s they use while up, and the points a second they lose when the ship
+cannot supply that). `npm test` checks the group exists, the
 name and description are there, and the stat is a positive number.
 
 1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the

@@ -14,8 +14,8 @@
 //   sh      shield: points it holds when full
 //   regen   shield: points per second once it starts recharging
 //   delay   shield: seconds without a hit before recharging starts again
-//   draw    shield: MJ/s the shields use all the time while they are up
-//   chg     shield: extra MJ/s while they are actually recharging
+//   draw    shield: MJ/s the shields use, flat, all the while they are up
+//   drain   shield: points a second lost when the ship cannot supply `draw`
 //
 // A module may only have the stats its group uses. When thrusters, shields and
 // weapons arrive they add fields here (top speed, shield points, damage) and the
@@ -43,8 +43,9 @@ export const MODULES = {
     ign: 20,
   },
   // 10 points, 1 a second once it starts, and it will not start until the ship
-  // has gone 4 seconds without being hit. Keeping the shields up costs 1 MJ/s all
-  // the time, and 2 MJ/s in total while they are filling. No trickle under fire:
+  // has gone 4 seconds without being hit. Keeping the shields up costs a flat
+  // 2 MJ/s, whatever they are doing; if the ship cannot supply that, the shields
+  // bleed away at 1 point a second until they are flat. No trickle under fire:
   // that is a feature for a later shield module (see sim/shield.js).
   shield_basic: {
     g: "shield",
@@ -53,8 +54,8 @@ export const MODULES = {
     sh: 10,
     regen: 1,
     delay: 4,
-    draw: 1,
-    chg: 1,
+    draw: 2,
+    drain: 1,
   },
 };
 

@@ -84,29 +84,30 @@ Four cards on the left, four on the right. Counts and bays:
 ## 6. Power in flight — the thrusters and the shields drink it
 
 1. Click **Launch**. Bottom centre, just above `Throttle 0% 0 m/s`: a **Power cell** bar
-   (full, pale blue), **100 / 100 MJ**, and **Using 1 of 10 MJ/s** — that 1 MJ/s is the shields
-   standing there. Keeping them up is never free.
-2. Hold **W**. The readout becomes **Using 3 of 10 MJ/s** and stays there: 2 for the thrusters
-   (any throttle off centre) plus 1 for the shields. Try **S** for reverse, or ease off to 1% —
-   still 3. **X** (throttle exactly 0) drops the thrusters' share, leaving **1 MJ/s**.
+   (full, pale blue), **100 / 100 MJ**, and **Using 2 of 10 MJ/s** — that is the shields' flat
+   2 MJ/s. Keeping them up is never free, whatever they are doing.
+2. Hold **W**. The readout becomes **Using 4 of 10 MJ/s** and stays there: 2 for the thrusters
+   (any throttle off centre) plus 2 for the shields. Try **S** for reverse, or ease off to 1% —
+   still 4. **X** (throttle exactly 0) drops the thrusters' share, leaving **2 MJ/s**.
 3. **Light the boost.** Hold **Shift** while flying: after the half-second spool-up the screen
    shakes and the cell bar drops by **20 MJ in one go** (100 → 80), then climbs back at about
-   7 MJ a second while you boost. That slug of 20 MJ is the ignition — one big gulp, like
+   5 MJ a second while you boost. That slug of 20 MJ is the ignition — one big gulp, like
    starting a car.
-4. While the boost is actually burning the readout says **Using 4 of 10 MJ/s** (3 for the drive,
-   1 for the shields); let go of Shift and it drops back to **3 MJ/s**.
+4. While the boost is actually burning the readout says **Using 5 of 10 MJ/s** (3 for the drive,
+   2 for the shields); let go of Shift and it drops back to **4 MJ/s**.
 5. **Filling the boost meter is free.** Boost once, then stop and watch the boost bar refill
-   with the power readout at `Using 1 of 10 MJ/s` (shields only) and the cell bar untouched.
+   with the power readout at `Using 2 of 10 MJ/s` (shields only) and the cell bar untouched.
    Nothing is spent on refilling the tank.
 6. **The boost needs 20 MJ in the cells to light.** Dock, unequip the powerplant (keep the
    cell), launch, fly until the cell bar is below a fifth, then hold **Shift**: nothing happens
    — no shake, no boost — until the cells are back above 20 MJ.
 7. The cell stays near full with the basic fit, because the plant makes 10 MJ/s and the ship only
-   asks for 1 to 4. That is correct: the cell is a reserve.
-8. **Run it dry**: with the powerplant still out, hold **W**. The bar falls by about 3 MJ a
+   asks for 2 to 5. That is correct: the cell is a reserve.
+8. **Run it dry**: with the powerplant still out, hold **W**. The bar falls by about 4 MJ a
    second; when it reaches **0 / 100 MJ** the ship stops accelerating and the speed winds down on
-   its own (about 50 m/s → 5 m/s within four seconds), and the shields stop filling as well. The
-   readout keeps saying `Using 3 of 0 MJ/s`: it is asking for power it has not got.
+   its own (about 50 m/s → 5 m/s within four seconds). The shields start to **bleed away** at
+   1 point a second, and the readout keeps saying `Using 4 of 0 MJ/s`: it is asking for power it
+   has not got. If you stay out long enough for them to reach 0, they stay at 0.
 9. Dock and fit the powerplant back: full thrust and shield recharge return. Narrow the window
    below about 900 px and the power block lifts above the controls list instead of printing over
    it.
@@ -120,8 +121,8 @@ Four cards on the left, four on the right. Counts and bays:
 3. Break off and stop being hit. The shield bar **stays put for 4 seconds**, then climbs at
    **1 point a second** — about ten seconds from empty — until it is full again. If a pirate hits
    you during those four seconds, the bar stops where it is and the four seconds start again.
-   Watch the power readout while this happens: **1 MJ/s** with the shields up, **2 MJ/s** while
-   they are actually filling, and **1 MJ/s** again once they are full.
+   The power readout does not move while this happens: the shields cost a flat **2 MJ/s** whether
+   they are full, filling or under fire.
 4. In Outfitting, the **Shields** bay shows **Basic shields** with **10 shields** under it.
    Unequip it, launch, and let a pirate shoot: there is no shield bar left to lose, and every hit
    goes straight to the hull. Fit them back and the shield bar returns.

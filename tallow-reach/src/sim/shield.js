@@ -5,13 +5,17 @@
 //   sh      points it holds when full
 //   regen   points per second once it is recharging
 //   delay   seconds without taking a hit before recharging starts again
-//   draw    MJ/s the shields use all the time while they are up
-//   chg     extra MJ/s while they are actually recharging
+//   draw    MJ/s the shields use, flat, all the while they are up
+//   drain   points a second they lose when the ship cannot supply `draw`
 //
-// Keeping shields up is not free: 1 MJ/s with the basic module, 2 MJ/s in total
-// while they are filling. The figure goes into the ship's power bill through
-// `setDraw("shield", ...)` in sim/power.js, so the HUD's "Using X of Y MJ/s"
-// moves when the shields start and stop recharging.
+// Keeping shields up is not free: the basic module wants a flat 2 MJ/s whether
+// they are full, filling or under fire. That figure goes into the ship's power
+// bill through `setDraw("shield", ...)` in sim/power.js, so the HUD's
+// "Using X of Y MJ/s" always includes it while a shield module is fitted.
+//
+// If the ship cannot supply that much (no powerplant and flat cells) the shields
+// stop holding themselves together: they bleed away at `drain` points a second,
+// down to 0, and stay at 0 until the ship can pay for them again.
 //
 // Any hit stops the recharge dead: hurt() in sim/player.js stamps the time of the
 // last hit, and the shields stay exactly where they are until that was `delay`
@@ -45,23 +49,23 @@ function shieldIn(loadout) {
  */
 export function shieldOf(loadout) {
   const m = shieldIn(loadout);
-  if (!m) return { cap: 0, regen: 0, delay: 0, draw: 0, charge: 0 };
+  if (!m) return { cap: 0, regen: 0, delay: 0, draw: 0, drain: 0 };
   return {
     cap: m.sh,
     regen: m.regen || 0,
     delay: m.delay || 0,
-    draw: m.draw || 0,      // MJ/s while the shields are up
-    charge: m.chg || 0,     // extra MJ/s while they are recharging
+    draw: m.draw || 0,      // MJ/s the shields take, flat, while they are up
+    drain: m.drain || 0,    // points a second lost when that cannot be paid
   };
 }
 
 /**
- * Power the shields are asking for right now, in MJ/s: their standing draw plus
- * the extra while they are actually filling. No shields fitted is 0. Pure.
+ * Power the shields are asking for, in MJ/s: one flat figure whenever a shield
+ * module is fitted, no matter what the shields are doing. None fitted is 0. Pure.
  */
-export function shieldDraw(shield, recharging) {
+export function shieldDraw(shield) {
   if (!shield || !(shield.cap > 0)) return 0;
-  return (shield.draw || 0) + (recharging ? shield.charge || 0 : 0);
+  return shield.draw || 0;
 }
 
 /**
@@ -80,7 +84,9 @@ export function refreshShield() {
 
 /**
  * One frame of shields: charge the ship for keeping them up, recharge only once
- * `delay` seconds have passed without a hit, and never past the maximum.
+ * `delay` seconds have passed without a hit, and never past the maximum. With no
+ * power to pay the bill the shields bleed away instead, and if they reach 0 they
+ * stay there until the ship can supply `draw` again.
  */
 export function updateShield(dt) {
   const P = state.player;
@@ -93,17 +99,17 @@ export function updateShield(dt) {
     return;
   }
 
-  // They are up, so they cost their standing draw; they add the extra only while
-  // they are actually filling (past the lull and not already full).
-  const lull = state.time - P.last >= sh.delay;
-  let recharging = lull && P.sh < P.shMax;
-  setDraw("shield", shieldDraw(sh, recharging));
+  // One flat bill while they are up, whatever they are doing.
+  setDraw("shield", shieldDraw(sh));
 
-  // No power to pay for it: the shields hold where they are and stop filling.
-  if (recharging && !hasPower(state.power.draw)) {
-    recharging = false;
-    setDraw("shield", shieldDraw(sh, false));
+  // Cannot pay for them: the field collapses, slowly, and does not come back
+  // until the ship can supply the draw again.
+  if (!hasPower(state.power.draw)) {
+    P.sh = Math.max(0, P.sh - sh.drain * dt);
+    return;
   }
 
-  if (recharging) P.sh = Math.min(P.shMax, P.sh + sh.regen * dt);
+  // Powered, so the usual rule applies: no recharge until the lull is over.
+  if (state.time - P.last < sh.delay) return;
+  if (P.sh < P.shMax) P.sh = Math.min(P.shMax, P.sh + sh.regen * dt);
 }

@@ -124,8 +124,10 @@ Each `src/` folder also has its own short `README.md`.
   `delay` seconds ago; then it runs at full `regen`. No shield module means `P.shMax` is 0 and
   every hit goes to the hull. Later shield types with special behaviour (recharging under fire)
   are extra fields read by `updateShield()` — nothing outside that file changes. Shields also cost
-  power: `draw` MJ/s all the while they are up, `chg` more while filling, reported through
-  `setDraw("shield", ...)` so `state.power.draw` stays the whole ship's bill.
+  power: a flat `draw` MJ/s (2 on the basic module) all the while they are up, reported through
+  `setDraw("shield", ...)` so `state.power.draw` stays the whole ship's bill. When the ship cannot
+  pay that (no plant, flat cells) they bleed away at `drain` points a second and stay at 0 until
+  the power comes back.
 - **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the
   drive's turn rate, and `strafe` / `lift` / `reverse` are fractions of the drive's `spd`. The
   main drive and its 2x boost are the only directions that reach full speed.

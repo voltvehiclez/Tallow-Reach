@@ -260,6 +260,8 @@ test("every module fits its own group and carries that group's stat", () => {
       assert.ok(isNum(m.sh) && m.sh > 0, `${id}: shields hold shield points`);
       assert.ok(isNum(m.regen) && m.regen > 0, `${id}: shields set a recharge rate`);
       assert.ok(isNum(m.delay) && m.delay >= 0, `${id}: shields set the lull before recharging`);
+      assert.ok(isNum(m.draw) && m.draw > 0, `${id}: shields state a flat power draw`);
+      assert.ok(isNum(m.drain) && m.drain > 0, `${id}: shields state how fast they bleed without power`);
     }
   }
   for (const [g, list] of Object.entries(STOCK_FIT)) {
@@ -277,6 +279,8 @@ test("shields are a module, and every hull is delivered with them", () => {
   assert.equal(m.sh, 10, "10 shield points");
   assert.equal(m.regen, 1, "1 point a second");
   assert.equal(m.delay, 4, "and only after 4 seconds without a hit");
+  assert.equal(m.draw, 2, "2 MJ/s flat, whenever they are fitted");
+  assert.equal(m.drain, 1, "and 1 point a second lost when that cannot be paid");
   assert.deepEqual(STOCK_FIT.shield, ["shield_basic"], "every hull is delivered with them");
   for (const [id, s] of Object.entries(SHIPS)) {
     assert.equal(s.sh, undefined, `${id}: shield points come from the module, not the hull`);
