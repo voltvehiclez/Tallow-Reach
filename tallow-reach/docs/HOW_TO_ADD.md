@@ -272,9 +272,9 @@ cell_basic:  { g: "cell",  n: "Basic power cell",  d: "Standard storage bank.", 
 
 `g` is the module group it fits (`data/outfitting.js`), and the rest of the fields are the
 stat that group uses: `mjps` for a powerplant, `mj` for a power cell, and `spd`/`turn`/`draw`/
-`chg`/`ign` for a thruster (top speed, turn rate, MJ/s while flying, extra MJ/s while the boost
-charges, and MJ spent when the boost lights). `npm test` checks the group exists, the name and
-description are there, and the stat is a positive number.
+`boost`/`ign` for a thruster (top speed, turn rate, MJ/s while flying, extra MJ/s while the boost
+burns, and the flat MJ slug spent when the boost lights). `npm test` checks the group exists, the
+name and description are there, and the stat is a positive number.
 
 1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
    Outfitting screen already names any module found in a bay.

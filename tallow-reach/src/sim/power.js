@@ -2,12 +2,13 @@
 // what the ship is drawing.
 //
 // The thrusters are the only thing that draws power today: 2 MJ/s while the
-// throttle is off centre, plus 1 MJ/s while the boost meter is filling, and a
-// flat 1 MJ each time the boost lights (see data/modules.js and sim/drive.js).
-// sim/player.js writes that figure to state.power.draw every frame, and
-// `hasPower()` answers whether the ship can actually pay for it. When something
-// else needs energy (shields, the mining beam, ...) it adds its share to `draw`
-// and asks `hasPower()` before it works.
+// throttle is off centre, another 1 MJ/s while the boost is burning, and a flat
+// 20 MJ each time the boost lights (see data/modules.js and sim/drive.js).
+// Refilling the boost meter afterwards is free. sim/player.js writes the per-second
+// figure to state.power.draw every frame and takes the 20 MJ straight out of
+// `stored`; `hasPower()` answers whether the ship can pay a per-second demand at
+// all. When something else needs energy (shields, the mining beam, ...) it adds
+// its share to `draw` and asks `hasPower()` before it works.
 //
 // Figures come from the fitted modules in the save (profile.loadout[ship]),
 // through MODULES in data/modules.js. The HUD reads state.power; it does not

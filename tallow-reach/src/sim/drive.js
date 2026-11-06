@@ -15,10 +15,11 @@
 // Wasp: hull differences are a later job, and they belong here as multipliers on
 // top of the thruster's numbers.
 //
-// The drive also carries the thrusters' appetite for power (draw per second while
-// the throttle is off centre, a top-up while the boost charges, and a flat cost
-// each time the boost lights). sim/player.js asks `driveDraw()` for the figure and
-// pays it out of the power cells in sim/power.js.
+// The drive also carries the thrusters' appetite for power: a trickle while the
+// throttle is off centre, a little more while the boost is burning, and one big
+// slug (20 MJ on the basic thrusters) each time the boost lights. sim/player.js
+// asks `driveDraw()` for the trickle and pays the slug out of the cells in
+// sim/power.js. Refilling the boost meter costs nothing.
 //
 // Later thruster modules also carry acceleration and boost strength. Those land
 // in this file and in the flight model, which already reads state.drive.
@@ -42,13 +43,13 @@ function thrusterIn(loadout) {
  */
 export function driveOf(loadout) {
   const t = thrusterIn(loadout);
-  if (!t) return { spd: 0, turn: 0, draw: 0, charge: 0, ignite: 0 };
+  if (!t) return { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0 };
   return {
     spd: t.spd,
     turn: t.turn,
     draw: t.draw || 0,     // MJ/s while the throttle is off centre
-    charge: t.chg || 0,    // extra MJ/s while the boost meter is filling
-    ignite: t.ign || 0,    // MJ spent once when the boost lights
+    boost: t.boost || 0,   // extra MJ/s while the boost is burning
+    ignite: t.ign || 0,    // MJ spent in one go when the boost lights
   };
 }
 
@@ -57,13 +58,14 @@ export const hasDrive = drive => !!drive && drive.spd > 0;
 
 /**
  * Power the thrusters are asking for right now, in MJ/s. Any throttle setting
- * other than zero runs the drive (including reverse), and a filling boost meter
- * adds its top-up on top. Pure, so it can be tested.
+ * other than zero runs the drive (including reverse), and a burning boost adds
+ * its share on top. Filling the boost meter is free and never shows up here.
+ * Pure, so it can be tested.
  */
-export function driveDraw(drive, throttle, chargingBoost) {
+export function driveDraw(drive, throttle, boosting) {
   if (!hasDrive(drive)) return 0;
   const running = throttle !== 0 ? drive.draw || 0 : 0;
-  return running + (chargingBoost ? drive.charge || 0 : 0);
+  return running + (boosting ? drive.boost || 0 : 0);
 }
 
 /**

@@ -203,8 +203,9 @@ These are real, current limits. None of them is a bug in play today.
   off and fitted again
   (`sim/fitting.js`, stored in `profile.modules`), but **nothing can be bought yet**, so
   storage only ever holds parts taken off a hull. The thrusters are the only thing that draws
-  power (2 MJ/s flying, +1 MJ/s while the boost charges, 1 MJ flat per boost ignition), so a
-  basic plant out-produces them and the cells stay full unless the powerplant is removed.
+  power (2 MJ/s flying, +1 MJ/s while the boost burns, a flat 20 MJ each time the boost lights;
+  refilling the boost meter is free), so a basic plant out-produces the trickle and the cells
+  stay near full unless the powerplant is removed.
 - **One active contract at a time** (`profile.mission`), and contract tiers are fixed at 1 to 3
   (`generateContract` in `sim/contracts.js`, wording in `ui/screens.js`).
 - **`pirate-killed` carries no payload.** When enemy types arrive, emit `{ kind }` so listeners can tell them apart.

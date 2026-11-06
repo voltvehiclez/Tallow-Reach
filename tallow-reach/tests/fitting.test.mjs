@@ -103,14 +103,14 @@ test("an old save gains an empty module store, and unknown parts are dropped", (
 test("the thrusters decide how the ship flies, and without them it cannot move", () => {
   freshGame();
   const t = MODULES.thruster_basic;
-  const reference = { spd: t.spd, turn: t.turn, draw: t.draw, charge: t.chg, ignite: t.ign };
+  const reference = { spd: t.spd, turn: t.turn, draw: t.draw, boost: t.boost, ignite: t.ign };
   assert.deepEqual({ ...state.drive }, reference, "the basic thrusters set the drive");
   assert.equal(hasDrive(state.drive), true, "the ship can move");
 
   unequip("thruster", 0);
   assert.deepEqual(
     { ...state.drive },
-    { spd: 0, turn: 0, draw: 0, charge: 0, ignite: 0 },
+    { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0 },
     "with no thrusters there is no drive at all: no thrust, no turn, no boost, no draw"
   );
   assert.equal(hasDrive(state.drive), false, "the ship cannot move an inch");

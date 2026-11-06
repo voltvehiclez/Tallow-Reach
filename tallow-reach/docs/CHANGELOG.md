@@ -8,6 +8,29 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Lighting the boost costs a flat 20 MJ; refilling the meter is free
+
+The boost now works like a car ignition: expensive to start, cheap to run, and filling the tank
+costs nothing at all.
+
+- **Ignition: 20 MJ in one gulp.** When the spool-up finishes and the shake fires, 20 MJ comes
+  straight out of the cells (`ign: 20` on `thruster_basic`). With the basic 100 MJ cell that is a
+  visible 100 → 80 drop in the bar, and the boost **will not light** unless the cells hold 20 MJ.
+- **Burning the boost: 2 + 1 = 3 MJ/s.** The extra 1 MJ/s (`boost: 1`) is now charged only while
+  the boost is actually firing, instead of while the meter was filling.
+- **Filling the boost meter costs nothing.** The old +1 MJ/s charge draw is gone; the meter still
+  fills itself at the same rate, free, at any throttle setting.
+- Everything else stands: 2 MJ/s while the throttle is off centre, nothing at exactly zero, and a
+  ship with no power has no thrust (the speed winds down).
+- Files: `data/modules.js` (`boost` replaces `chg`, `ign: 20`), `sim/drive.js` (`driveOf` carries
+  `boost`, `driveDraw(drive, throttle, boosting)`), `sim/player.js` (draw from the burning boost,
+  ignition takes 20 MJ out of `stored` and needs that much there, meter refills free),
+  `sim/power.js` (comments).
+- Verified headless: idle = 0 MJ/s with the boost filling free; flying = 2; boosting = 3; the
+  ignition frame dropped the cells 20.03 MJ; with 15 MJ in the cells, Shift did nothing at all.
+- Tests: the existing power tests were updated to the new figures → **46 passing**. No save
+  change: still version 5. `npm run build` needed (578 KB).
+
 ## 2026-11-06: Thrusters use power, and a dry cell winds the speed down
 
 Basic thrusters now drink from the power cells. The numbers live on the module in

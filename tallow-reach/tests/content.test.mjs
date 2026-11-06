@@ -23,7 +23,7 @@ import { state } from "../src/state/state.js";
 const isNum = v => typeof v === "number" && Number.isFinite(v);
 // What a ship with an empty thruster bay has: nothing to move or turn with, and
 // nothing to pay for.
-const PARKED = { spd: 0, turn: 0, draw: 0, charge: 0, ignite: 0 };
+const PARKED = { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0 };
 
 test("every ship has all the fields the game reads", () => {
   assert.ok(SHIPS[DEFAULT_SHIP], "DEFAULT_SHIP must exist in SHIPS");
@@ -285,22 +285,23 @@ test("a ship with no thrusters warns the player when they try to move", () => {
   );
 });
 
-test("the basic thrusters draw power while flying, and while the boost charges", () => {
+test("the basic thrusters draw power while flying, and a 20 MJ gulp to light the boost", () => {
   const d = driveOf(newProfile().loadout[DEFAULT_SHIP]);
   assert.equal(d.draw, 2, "2 MJ/s while the throttle is off centre");
-  assert.equal(d.charge, 1, "1 MJ/s more while the boost fills");
-  assert.equal(d.ignite, 1, "1 MJ spent each time the boost lights");
-  assert.equal(driveDraw(d, 0, false), 0, "hands off the throttle and full boost: no draw");
+  assert.equal(d.boost, 1, "1 MJ/s more while the boost burns");
+  assert.equal(d.ignite, 20, "a flat 20 MJ each time the boost lights");
+  assert.equal(driveDraw(d, 0, false), 0, "hands off the throttle, not boosting: no draw");
 });
 
-test("any throttle setting off zero runs the thrusters", () => {
-  const d = { spd: 150, turn: 1.2, draw: 2, charge: 1, ignite: 1 };
+test("any throttle setting off zero runs the thrusters, and the boost adds its share", () => {
+  const d = { spd: 150, turn: 1.2, draw: 2, boost: 1, ignite: 20 };
   for (const thr of [1, 0.99, 0.5, -0.01, -0.3, -1]) {
     assert.equal(driveDraw(d, thr, false), 2, `throttle ${thr} runs the drive at 2 MJ/s`);
   }
   assert.equal(driveDraw(d, 0, false), 0, "exactly zero throttle draws nothing");
-  assert.equal(driveDraw(d, 0, true), 1, "charging the boost on its own draws 1 MJ/s");
-  assert.equal(driveDraw(d, 1, true), 3, "flying and charging together draws 3 MJ/s");
+  assert.equal(driveDraw(d, 1, false), 2, "flying without boosting draws 2 MJ/s");
+  assert.equal(driveDraw(d, 1, true), 3, "flying and boosting together draws 3 MJ/s");
+  assert.equal(driveDraw(d, -0.5, true), 3, "reversing under boost draws 3 MJ/s too");
   assert.equal(driveDraw(PARKED, 1, true), 0, "no thrusters, nothing to pay for");
 });
 
@@ -316,7 +317,7 @@ test("every hull flies exactly like the old Wasp on the basic thrusters", () => 
   const p = newProfile();
   // The basic thrusters carry the figures the old Wasp had, so the feel is kept.
   const t = MODULES.thruster_basic;
-  const reference = { spd: t.spd, turn: t.turn, draw: t.draw, charge: t.chg, ignite: t.ign };
+  const reference = { spd: t.spd, turn: t.turn, draw: t.draw, boost: t.boost, ignite: t.ign };
   for (const id of Object.keys(SHIPS)) {
     assert.deepEqual(driveOf(p.loadout[id]), reference, `${id} should fly like the Wasp today`);
   }

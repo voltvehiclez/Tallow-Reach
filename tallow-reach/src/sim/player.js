@@ -117,17 +117,19 @@ export function flight(dt) {
     }
   }
 
-  // The boost meter fills by itself whenever the ship has power to spare and
-  // nothing is draining it.
-  const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
-  const charging = powered && !wantBoost && P.en < 100;
-
   // Power budget for this frame: the thrusters draw while the throttle is off
-  // centre, plus a top-up while the boost meter fills. If the cells cannot pay,
-  // the drive gets nothing and the speed bleeds away instead of cutting dead.
-  state.power.draw = driveDraw(drv, P.thr, charging);
+  // centre, and a little more while the boost is burning. The boost figure comes
+  // from last frame, so the extra starts the frame after it lights. Refilling the
+  // boost meter is free — it never shows up in the draw, the way filling a car's
+  // tank with fuel does not run the engine.
+  state.power.draw = driveDraw(drv, P.thr, P.boost);
   const supply = hasPower(state.power.draw);
-  const canBoost = wantBoost && supply;
+
+  // The boost: lighting it is the hungry moment. It costs one big slug of stored
+  // energy (20 MJ on the basic thrusters) once the spool-up has finished and the
+  // shake fires, and the cells have to hold that much for it to light at all.
+  const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
+  const canBoost = wantBoost && supply && state.power.stored >= (drv.ignite || 0);
 
   const wasBoosting = P.boost;
   P.bs = canBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
@@ -135,11 +137,11 @@ export function flight(dt) {
   if (P.boost && !wasBoosting) {
     P.shake = 1;
     nz(0.4, 500, 0.35);
-    // Lighting the boost burns a flat charge out of the cells.
+    // The ignition: one flat gulp out of the cells, not a trickle.
     state.power.stored = Math.max(0, state.power.stored - (drv.ignite || 0));
   }
-  if (canBoost) P.en = clamp(P.en - 28 * dt, 0, 100);
-  else if (charging && supply) P.en = clamp(P.en + 10 * dt, 0, 100);
+  // The meter fills by itself whenever the boost is not burning.
+  P.en = clamp(P.en + (canBoost ? -28 : 10) * dt, 0, 100);
 
   // With no power left there is nothing to push with.
   const spd = supply ? drv.spd : 0;

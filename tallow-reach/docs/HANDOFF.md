@@ -4,8 +4,9 @@
 > Appearance card with primary/secondary paint bays). Modules are real now: a basic
 > powerplant (10 MJ/s) and power cell (100 MJ) are fitted to every hull, saved in
 > `profile.loadout`, and shown bottom-centre in flight. The basic thrusters draw 2 MJ/s while
-> the throttle is off centre, +1 MJ/s while the boost charges, 1 MJ flat when the boost lights,
-> and a ship with no power at all cannot push (the speed winds down).
+> the throttle is off centre, +1 MJ/s while the boost burns, and a flat 20 MJ when the boost
+> lights (refilling the boost meter is free). A ship with no power cannot push (the speed winds
+> down), and the boost will not light unless the cells hold 20 MJ.
 > Modules can be unequipped into a store (`profile.modules`) and fitted back by clicking a
 > bay. Basic thrusters exist and every hull flies like the Wasp on them (`state.drive`, from
 > `sim/drive.js`), and an empty thruster bay means the ship cannot move, turn or boost at all
