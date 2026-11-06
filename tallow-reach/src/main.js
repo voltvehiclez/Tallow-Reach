@@ -22,6 +22,7 @@ import { startWarp, updateWarp } from "./sim/sectors.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
+import { updateOutfitting } from "./ui/outfitting.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 
@@ -132,6 +133,9 @@ function frame(now) {
   if (offset) camera.position.add(offset);
   renderer.render(scene, camera);
   if (offset) camera.position.sub(offset);
+
+  // Draws its own canvas and does nothing unless the Outfitting tab is open.
+  updateOutfitting(dt);
 }
 
 requestAnimationFrame(frame);

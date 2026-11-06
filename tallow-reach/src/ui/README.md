@@ -7,6 +7,7 @@ Reads `state`, calls sim actions. No game rules here.
 | `hud.js` | In-flight HUD: bars, cargo and contract readout, lock ring, markers. |
 | `screens.js` | HTML for the intro and each outpost tab. Pure functions of state. `TABS` and `SCREENS` list the tabs. |
 | `menu.js` | The outpost panel: `ACTIONS` (one function per button, `data-a` name) and the click handler. |
+| `outfitting.js` | The Outfitting tab's 3D window: mounts the ship canvas into `#shipview` after every panel redraw, wires drag/zoom, draws one frame per game frame. |
 | `pause.js` | The pause overlay: PAUSED title, resume hint, sound on/off switch, Resume button. |
 | `warpflash.js` | The warp vignette and white-out. Two gradients, updated from `state.warp` each frame. |
 

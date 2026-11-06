@@ -8,6 +8,7 @@ Visual only. Reads `state` and the sim, never changes game rules.
 | `models.js` | Ship and asteroid meshes. `mkShip`, `buildPlayerShip(id)`, `rockShape`. |
 | `camera.js` | Docked orbit, chase camera, free orbit (Alt), screen shake, the FOV/roll kick during a warp. The chase distance behind the ship is the `CAMERA` table in `data/camera.js` and nothing else: the camera rides along with the ship's movement and only eases the offset. |
 | `warpfx.js` | The warp streaks: additive lines hanging off the camera, driven by `state.warp.fx`. Hidden when no warp is running. |
+| `shipviewer.js` | The Outfitting ship view: its own renderer, scene, lights and turntable. `setShip(id)`, `dragShip`, `zoomShip`, `resizeShipViewer`, `renderShip(dt)`. Owned by `ui/outfitting.js`. |
 
 Rules:
 - three.js is bundled by `npm run build`. Do not add other libraries.

@@ -10,6 +10,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 | `station.js` | Base modules, their costs, storage and refinery numbers, repair and recovery fees. |
 | `contracts.js` | Contract types, generators, wording (`DESCRIBE`), board size. |
 | `sectors.js` | The regions you can fly in, their flags, the order M warps through them, and the warp timing (`WARP`). |
+| `outfitting.js` | `MODULE_GROUPS`: the bays the Outfitting screen draws around the ship (name, description, slot count, and `slotsFor`). No modules exist yet. |
 
 Rules:
 - Keep the short keys (`n` name, `d` description, `v` value, ...). Copy an existing entry when adding one.

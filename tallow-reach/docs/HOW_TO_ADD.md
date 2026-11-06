@@ -215,3 +215,24 @@ raiders. `SECTOR_IDS` is the order M warps through.
 8. `WARP_COAST.steer` is how long the ship takes to stop turning once M is pressed, and
    `warpSteerEase(t)` in the same file is the curve (1 -> 0). The throttle is released
    instantly, so the speed bleeds off through the normal drag model in `sim/player.js`.
+
+## 15. A new module group on the Outfitting screen (data only)
+
+The Outfitting screen draws one card per entry in `MODULE_GROUPS`
+(`src/data/outfitting.js`): a heading, a `filled / bays` count, one bay box per slot,
+and the group's description. The list is split in half around the 3D ship, so the first
+half sits on the left and the rest on the right. Nothing else needs to change.
+
+1. Add `{ k, n, d, slots }` to `MODULE_GROUPS`: short id, name, one line about what the
+   group decides, and how many bays. `npm test` fails if a field is missing, an id repeats,
+   or a count is not a whole number of at least one.
+2. Want a different number of bays on a big hull later? `slotsFor(g, shipId)` in the same
+   file is the one place that decides it; the screen already asks through it.
+3. The card look is `.mod` in `styles.css`. Every group uses it, so a new group matches
+   the others without new CSS.
+
+**Fitting a module is a separate job.** Today every bay renders `Empty` and the count is
+`0 / slots`. When modules arrive they need: a table of modules (same `k` group ids), a
+slot in the save (`profile.shipModules` or similar, with `SAVE_VERSION` bumped and a
+migration), a count in `fitted()` in `ui/screens.js`, and a click action in
+`ui/menu.js` that fills a bay. Do it one group at a time, starting with powerplant.

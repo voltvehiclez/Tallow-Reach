@@ -8,6 +8,33 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Outfitting screen with a 3D ship viewer
+
+- **New tab: Outfitting**, between Hangar and Shop. On this tab the outpost panel opens
+  up to the middle of the screen (`#panel.wide`, up to 1180 px), so the ship has room.
+- **The ship sits in the middle of the screen** in its own 3D window, drawn by a second
+  renderer (`src/render/shipviewer.js`) on a transparent canvas over a dark gradient.
+  It turns slowly on a display ring; drag to spin it, scroll to zoom, double click to reset.
+  The idle turn pauses for 3 s whenever you take hold of it, and is off altogether if the
+  system asks for reduced motion. Ships are normalised to the
+  same bounding sphere, so no hull is clipped and none looks tiny.
+- **Module groups surround it**, four down the left and three down the right, in the same
+  card for every group: name, `filled / bays` count, one bay box per slot (all read
+  "Empty"), and a line saying what the group decides. The layout is driven entirely by
+  the new `src/data/outfitting.js`, so adding a group there is enough (recipe 15).
+- **Bays today:** powerplant 1, power cells 1, thrusters 1, shields 1, primary weapons 2,
+  secondary weapons 1, hull 1. Nothing is fitted and **no module exists in the game yet**;
+  no gameplay number, save field or balance was touched, and `SAVE_VERSION` is unchanged.
+- `ui/outfitting.js` mounts the viewer into `#shipview` after every panel redraw (the panel
+  rebuilds its HTML, which throws the canvas out but does not destroy it) and draws one
+  frame from the main loop through `updateOutfitting(dt)`. It does nothing unless you are
+  docked on that tab.
+- The ship window needs WebGL; if the browser refuses a second context the panel says so
+  instead of showing an empty box.
+- Tests: 1 new (`MODULE_GROUPS`: unique ids, a name and description each, whole-number bay
+  counts, `slotsFor` agrees, and the intended 2 primary bays / 1 everywhere else).
+  `npm test` now runs 23. `game/tallow-reach.html` needs `npm run build`.
+
 ## 2026-11-05: The chase camera stops running away at speed
 
 - **The view no longer backs off as you accelerate.** It used to trail further the faster you

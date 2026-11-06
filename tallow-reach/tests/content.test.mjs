@@ -12,6 +12,7 @@ import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
 import { newProfile, sanitizeProfile, MISSION_TYPES } from "../src/state/profile.js";
 import { CAMERA, cameraTrail } from "../src/data/camera.js";
+import { MODULE_GROUPS, slotsFor } from "../src/data/outfitting.js";
 
 const isNum = v => typeof v === "number" && Number.isFinite(v);
 
@@ -194,4 +195,31 @@ test("the camera trail is bounded: idle, flat out and full reverse land on fixed
   const slow = cameraTrail(210, 210, 30);
   assert.equal(slow, CAMERA.fast, "every hull reaches the full trail at its own top speed");
   assert.ok(cameraTrail(210, 300, 45) < CAMERA.fast, "at the same speed a faster hull trails less");
+});
+
+test("the outfitting screen has a complete module group for every bay it draws", () => {
+  assert.ok(MODULE_GROUPS.length > 0, "MODULE_GROUPS needs at least one group");
+
+  const seen = new Set();
+  for (const g of MODULE_GROUPS) {
+    assert.equal(typeof g.k, "string", "every group needs k (id)");
+    assert.ok(!seen.has(g.k), `duplicate module group id: ${g.k}`);
+    seen.add(g.k);
+    assert.equal(typeof g.n, "string", `${g.k}: n (name)`);
+    assert.equal(typeof g.d, "string", `${g.k}: d (description)`);
+    assert.ok(
+      Number.isInteger(g.slots) && g.slots >= 1,
+      `${g.k}: slots must be a whole number of bays, at least one`
+    );
+    // The screen reads counts through slotsFor, so a per-hull override has one home.
+    assert.equal(slotsFor(g, "wasp"), g.slots, `${g.k}: slotsFor must return the group's slots`);
+  }
+
+  // The layout this screen was built for: one bay each, two for primary weapons.
+  const byId = Object.fromEntries(MODULE_GROUPS.map(g => [g.k, g]));
+  assert.equal(byId.primary.slots, 2, "primary weapons start with two bays");
+  for (const k of ["power", "cell", "thruster", "shield", "secondary", "hull"]) {
+    assert.ok(byId[k], `${k} is one of the module groups the screen draws`);
+    assert.equal(byId[k].slots, 1, `${k} starts with one bay`);
+  }
 });

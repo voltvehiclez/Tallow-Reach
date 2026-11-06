@@ -11,6 +11,7 @@ import { launch } from "../sim/session.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import { introHtml, outpostHtml } from "./screens.js";
+import { mountOutfitting } from "./outfitting.js";
 
 const $ = id => document.getElementById(id);
 let panel;
@@ -39,7 +40,10 @@ export function setupMenu() {
 
 export function render() {
   panel.hidden = false;
+  // Outfitting gives the panel the whole screen so the ship has room around it.
+  panel.classList.toggle("wide", !state.ui.intro && state.ui.tab === "o");
   panel.innerHTML = state.ui.intro ? introHtml() : outpostHtml(state.ui);
+  if (!state.ui.intro && state.ui.tab === "o") mountOutfitting();
 }
 
 function save() {

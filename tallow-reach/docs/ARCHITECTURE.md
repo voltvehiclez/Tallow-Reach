@@ -53,6 +53,8 @@ about each other, use the event bus instead.
 | Change flight feel                   | `sim/player.js` (`flight`)                     |
 | Rebind keys                          | `BINDINGS` in `core/input.js`                  |
 | Add an outpost screen (tab)          | `ui/screens.js` (`TABS`, `SCREENS`, a HTML function) and `ui/menu.js` (`ACTIONS`) |
+| Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
+| Change the ship in the Outfitting view| `render/shipviewer.js` (camera, lights, framing); `ui/outfitting.js` (page, input) |
 | Change the pause menu                | `ui/pause.js`, styles under "Pause overlay" in `styles.css` |
 | Change colours or layout of any UI   | `styles.css` (sections are labelled)           |
 | Add a sound                          | `core/audio.js` (`tone`, `nz`, or a new graph) |
@@ -65,13 +67,13 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
-src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js
-src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), pause.js, warpflash.js
+src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
+src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness)
 docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, CHANGELOG.md
 ```
@@ -110,6 +112,12 @@ Each `src/` folder also has its own short `README.md`.
   (`camera.rotateZ(0.05)` every frame, say) silently depends on the frame rate: harmless on a
   60 Hz screen, a visible bug on a 240 Hz one. This bit the warp roll once. Use
   `x += rate * dt`, or steer toward a target with `1 - Math.exp(-k * dt)`.
+- **The Outfitting ship has its own renderer.** The outpost panel is HTML sitting on top
+  of the game canvas, so a view inside it needs its own canvas and WebGL context
+  (`render/shipviewer.js`). The panel rebuilds its HTML on every click, which takes that
+  canvas out of the page without destroying it; `ui/outfitting.js` puts the same canvas
+  back into `#shipview` after each render. Do not create a renderer per render, and keep
+  `id="shipview"` in `outfittingHtml`.
 - **Sounds** are played with `tone()` / `nz()` from `core/audio.js` and respect mute
   automatically. UI sounds go through `uiSound()` and `hoverSound()`.
 - **Text shown to the player** is written inline in the screen or action that shows it.
