@@ -772,3 +772,14 @@ test("outfitting has the ship switcher above the 3D viewer; the Hangar shows no 
   assert.match(menu, /shipPrev\(\)/, "the left arrow is wired to an action");
   assert.match(menu, /shipNext\(\)/, "the right arrow is wired to an action");
 });
+
+test("paid repairs and missile restock live in outfitting, not the hangar or the shop", () => {
+  const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
+  assert.match(screens, /class="outfit-service"/, "outfitting has the services box");
+  // Both services target the ship in the viewer, selected ship only:
+  assert.match(screens, /data-a="rp" data-b="\$\{S\.ship\}"/, "repairs act on the selected ship");
+  assert.match(screens, /data-a="wr"/, "missile restock is wired in outfitting");
+  // The moved rows are gone from their old homes:
+  assert.ok(!screens.includes("Missile stock"), "the shop no longer lists the restock row");
+  assert.equal((screens.match(/Hull repairs/g) || []).length, 1, "the Hangar no longer lists repair rows");
+});

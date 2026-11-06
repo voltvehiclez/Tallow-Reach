@@ -189,8 +189,8 @@ Each `src/` folder also has its own short `README.md`.
   with `dmg`), `state.missiles` holds them, `updateMissiles()` only locks and fires with one
   fitted, `F.missileCd` uses the module's `cd` instead of the old flat 0.9 s, and a fired
   missile carries its module's `dmg` (8) into the world so a mid-flight fit change cannot
-  alter it. Damage is 8 per missile — it used to be 80. The Shop's restock row shows when a
-  launcher is fitted, capped by that launcher. Saves that owned the old launcher were given
+  alter it. Damage is 8 per missile — it used to be 80. The restock row in the Outfitting services box (below the 3D viewer) shows when
+  a launcher is fitted, capped by that launcher. Saves that owned the old launcher were given
   one `missile_basic` in storage in save version 9 (not auto-fitted); the whole `wp` object
   left the save.
 - **The primary line and the equip toast use the equipped modules' own names.**

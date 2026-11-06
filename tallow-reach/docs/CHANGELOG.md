@@ -8,6 +8,22 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Repairs and missile restock moved into Outfitting
+
+- **The Hangar's "Hull repairs" list is gone.** Repairing now happens in
+  Outfitting, in a **Services** box below the 3D viewer: one row, acting on the
+  ship currently shown in the viewer — `Hull HP N%`, an `Intact`/`Repair N cr`
+  button (same cost curve, same behaviour, same toast).
+- **The Shop's "Missile stock" row is gone.** The **Missile restock** row sits
+  in the same Services box: `N of cap loaded`, restocks up to the capacity of
+  the launcher fitted to the ship in the viewer for 35 cr per missile. Hidden
+  when no launcher is fitted.
+- The Services box re-reads the selected ship on every render, so switching
+  ships with the arrows updates the repair cost and the restock row.
+- Save version unchanged (10). Tests: **81 passing** (1 new guard).
+  `npm run build` needed.
+- Files: `ui/screens.js`, `styles.css`, docs (ARCHITECTURE, TESTING-OUTFITTING), tests.
+
 ## 2026-11-06: Ship switcher above the 3D viewer; the berth count is gone
 
 - **Outfitting shows a switcher above the 3D viewer** (left/right arrows with

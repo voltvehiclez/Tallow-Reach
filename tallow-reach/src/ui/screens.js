@@ -93,22 +93,9 @@ function contractsHtml(ui) {
 
 function hangarHtml() {
   const S = state.profile;
-  const repairs =
-    `<h2>Hull repairs</h2>` +
-    S.ships
-      .map(id => {
-        const c = repairCost(id),
-          pct = Math.round((S.hp[id] ?? 1) * 100);
-        return `<div class="row"><div>${SHIPS[id].n}<small>Hull HP ${pct}%. Costs more the more damaged it is.</small></div><button data-a="rp" data-b="${id}" ${
-          c <= 0 || S.cr < c ? "disabled" : ""
-        }>${c <= 0 ? "Intact" : "Repair " + c + " cr"}</button></div>`;
-      })
-      .join("") +
-    `<h2>Ships</h2>`;
 
   return (
-    `<h2>Hangar</h2>` +
-    repairs +
+    `<h2>Hangar</h2><div class="sub">Repairs and missile restock live in the Outfitting tab now.</div>` +
     Object.keys(SHIPS)
       .map(id => {
         const s = SHIPS[id],
@@ -283,6 +270,29 @@ function outfittingHtml() {
   const left = leftRail(MODULE_GROUPS),
     right = MODULE_GROUPS.slice(left.length);
 
+  // Services for the hull in the viewer (the selected ship): paid repair of its
+  // plating and paid restock of its missiles. Moved out of the Hangar and the Shop.
+  const repCost = repairCost(S.ship),
+    repPct = Math.round((S.hp[S.ship] ?? 1) * 100);
+  let serviceRows =
+    `<div class="row"><div>Hull repairs<small>Hull HP ${repPct}%. Costs more the more damaged it is.</small></div>` +
+    `<button data-a="rp" data-b="${S.ship}" ${repCost <= 0 || S.cr < repCost ? "disabled" : ""}>${
+      repCost <= 0 ? "Intact" : "Repair " + repCost + " cr"
+    }</button></div>`;
+  const fittedLauncher = (state.missiles || [])[0];   // launcher fitted to the ship in the viewer
+  if (fittedLauncher) {
+    const cap = fittedLauncher.cap,
+      canRestock = S.msl < cap && S.cr >= MISSILE.unitPrice,
+      n = Math.min(cap - S.msl, Math.floor(S.cr / MISSILE.unitPrice));
+    serviceRows +=
+      `<div class="row"><div>Missile restock<small>${S.msl} of ${cap} loaded. ${MISSILE.unitPrice} cr each.</small></div>` +
+      `<button data-a="wr" ${canRestock ? "" : "disabled"}>${
+        S.msl >= cap ? "Full" : "Restock " + n * MISSILE.unitPrice + " cr"
+      }</button></div>`;
+  }
+  const services =
+    `<div class="outfit-service"><div class="outfit-service-title">Services</div>` + serviceRows + `</div>`;
+
   return (
     `<h2>Outfitting</h2>` +
     `<div class="sub">Your ship flies with the basic powerplant and power cell fitted. More modules and paints arrive in a later update.</div>` +
@@ -302,6 +312,7 @@ function outfittingHtml() {
     `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset</div>` +
     `</div>` +
     `</div>` +
+    services +
     `</div>` +
     `<div class="outfit-rail">${right.map(groupHtml).join("")}${appearanceHtml()}</div>` +
     `</div>`
@@ -358,16 +369,6 @@ function shopHtml() {
       }</div>`;
     })
     .join("");
-
-  const fittedLauncher = (state.missiles || [])[0];
-  if (fittedLauncher) {
-    const cap = fittedLauncher.cap,
-      canRestock = S.msl < cap && S.cr >= MISSILE.unitPrice;
-    const n = Math.min(cap - S.msl, Math.floor(S.cr / MISSILE.unitPrice));
-    h += `<div class="row"><div>Missile stock<small>${S.msl} of ${cap} loaded. ${MISSILE.unitPrice} cr each.</small></div><button data-a="wr" ${
-      canRestock ? "" : "disabled"
-    }>Restock ${n * MISSILE.unitPrice} cr</button></div>`;
-  }
   return h;
 }
 

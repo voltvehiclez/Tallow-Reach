@@ -609,6 +609,28 @@ button.mod-bay.on {
   color: var(--dim);
 }
 
+/* Ship services for the hull in the viewer: paid repair of its plating and
+   paid missile restock. Two rows in one bordered box, under the viewer. */
+.outfit-service {
+  border: 1px solid var(--line);
+  background: rgba(20, 27, 32, .55);
+  padding: 8px 12px 9px;
+}
+.outfit-service-title {
+  margin-bottom: 2px;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.outfit-service .row {
+  padding: 8px 0;
+}
+.outfit-service .row:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
 /* Narrow screens: the ship first, then the bays in two columns. */
 @media (max-width: 900px) {
   .outfit {

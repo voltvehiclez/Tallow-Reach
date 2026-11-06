@@ -173,8 +173,8 @@ primary bay is empty), so every step below starts from the stock ship.
    raider inside the dashed ring for a lock; fires unguided without one) but does **8
    damage** a hit — a 10-hp raider takes two missiles, not one eighth of a second. After a
    launch there is a **4-second** gap before the next one fires (right clicking inside it
-   does nothing). The launcher holds **12** missiles; the Shop's **Missile stock** row
-   (35 cr each) reloads the fitted launcher up to 12. The old launcher is gone: an existing
+   does nothing). The launcher holds **12** missiles; the **Missile restock** row in Outfitting's services box
+   (35 cr each, below the 3D viewer) reloads the fitted launcher up to 12. The old launcher is gone: an existing
    save that had it gets the `Basic missiles` module in storage, and the missiles it carried
    stay in the tubes.
 10. **The basic hull.** Its bay shows **`Basic hull`** with **`10 Hull HP`** under it, and every
@@ -184,7 +184,7 @@ primary bay is empty), so every step below starts from the stock ship.
    but the first one that reaches the hull **destroys the ship outright** — hull-less means
    zero Hull HP, and any damage to the hull is a one-shot kill. Dock again and fit it back:
    the Hull bar comes back with **the fraction you had left** (unfitting never repairs you),
-   and it takes the paid repair at the Hangar to get back to full.
+   and it takes the paid repair in Outfitting (the Services box under the 3D viewer) to get back to full.
 
 ## 8. Shields in flight
 
