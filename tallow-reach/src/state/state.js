@@ -24,7 +24,8 @@ export const state = {
   flight: {
     lock: null,                                   // { k: "e"|"a"|"c"|"s", o } or null
     missileLock: { target: null, t: 0, locked: false },
-    fireCd: 0,
+    gunCd: [],         // seconds until each fitted gun can fire again
+    gunsOn: false,     // the trigger was held and the guns could fire this frame
     missileCd: 0,
     spawnT: 20,        // seconds until the next pirate check
     beamOn: false,
@@ -36,10 +37,9 @@ export const state = {
   //   gen    MJ/s the powerplants make
   //   cap    MJ the cells hold
   //   stored MJ in the cells right now
-  //   draw   MJ/s the ship is asking for; the thrusters set it (sim/player.js)
   //   draw   MJ/s the whole ship is asking for, the sum of `use`
-  //   use    who is asking for what: drive (sim/drive.js) and shield (sim/shield.js)
-  power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0 } },
+  //   use    who is asking for what: drive, shield and guns
+  power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0, guns: 0 } },
 
   // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).
   //   spd    top speed in m/s       0 / 0 with an empty bay: the ship cannot move
@@ -48,6 +48,9 @@ export const state = {
   //   buse   units a second burned while boosting
   //   bfill  units a second the tank refills at
   drive: { spd: 0, turn: 0 },
+
+  // The guns fitted in the primary bays, in bay order (see sim/guns.js).
+  guns: [],
 
   // The ship's shields, rebuilt from the fitted shield module (see sim/shield.js).
   //   cap    shield points when full        0 means no shields fitted

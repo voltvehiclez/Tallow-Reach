@@ -14,6 +14,7 @@ import { setShip } from "./player.js";
 import { refillPower } from "./power.js";
 import { refreshDrive, hasDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
+import { refreshGuns } from "./guns.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
@@ -37,6 +38,7 @@ export function launch() {
   refillPower();      // launched fully charged
   refreshDrive();     // the bays may have changed while docked
   refreshShield();
+  refreshGuns();      // and its primary bays what fires
   P.en = state.drive.bmax;   // launched with a full boost tank
 
   // Salvage contracts need their crates out in the field.
@@ -68,6 +70,7 @@ export function dock() {
   refillPower();      // the outpost tops the cells up
   refreshDrive();     // and the ship may have changed (death, hangar)
   refreshShield();    // likewise its shields
+  refreshGuns();      // and its guns what they can shoot
   P.sh = P.shMax;     // and it leaves with them full
   clearTransient();
   state.flight.missileLock = { target: null, t: 0, locked: false };

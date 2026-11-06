@@ -17,6 +17,7 @@ import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } fr
 import { MODULES, STOCK_FIT } from "../src/data/modules.js";
 import { powerOf, updatePower } from "../src/sim/power.js";
 import { driveOf, hasDrive, driveDraw } from "../src/sim/drive.js";
+import { gunsOf } from "../src/sim/guns.js";
 import { hasPower } from "../src/sim/power.js";
 import { state } from "../src/state/state.js";
 
@@ -45,7 +46,6 @@ test("every item has a name and a value, and cargo objects cover them all", () =
 });
 
 test("weapon data is complete", () => {
-  assert.ok(isNum(PRIMARY.cannon.cooldown) && isNum(PRIMARY.cannon.speed) && isNum(PRIMARY.cannon.damage));
   assert.ok(isNum(PRIMARY.beam.range) && isNum(PRIMARY.beam.rate) && isNum(PRIMARY.beam.price));
   for (const f of ["price", "startStock", "unitPrice", "cap", "dmg", "cd", "range"]) {
     assert.ok(isNum(MISSILE[f]) && MISSILE[f] > 0, `MISSILE.${f}`);
@@ -256,6 +256,12 @@ test("every module fits its own group and carries that group's stat", () => {
       assert.ok(isNum(m.spd) && m.spd > 0, `${id}: thrusters set a top speed`);
       assert.ok(isNum(m.turn) && m.turn > 0, `${id}: thrusters set a turn rate`);
     }
+    if (m.g === "primary") {
+      assert.ok(isNum(m.dmg) && m.dmg > 0, `${id}: guns do damage a shot`);
+      assert.ok(isNum(m.rate) && m.rate > 0, `${id}: guns set a fire rate`);
+      assert.ok(isNum(m.bspd) && m.bspd > 0, `${id}: guns set a bullet speed`);
+      assert.ok(isNum(m.draw) && m.draw >= 0, `${id}: guns state their power draw`);
+    }
     if (m.g === "shield") {
       assert.ok(isNum(m.sh) && m.sh > 0, `${id}: shields hold shield points`);
       assert.ok(isNum(m.regen) && m.regen > 0, `${id}: shields set a recharge rate`);
@@ -297,7 +303,8 @@ test("a new game starts with the basic plant, cell and thrusters", () => {
   assert.deepEqual(p.loadout.wasp.cell, ["cell_basic"], "the basic power cell is fitted");
   assert.deepEqual(p.loadout.wasp.thruster, ["thruster_basic"], "the basic thrusters are fitted");
   assert.deepEqual(powerOf(p.loadout.wasp), { gen: 10, cap: 100 }, "10 MJ/s and 100 MJ");
-  assert.deepEqual(p.loadout.wasp.primary, [null, null], "weapon bays are delivered empty");
+  assert.deepEqual(p.loadout.wasp.primary, ["cannon_basic", null], "one basic cannon in the first primary bay");
+  assert.deepEqual(p.loadout.wasp.secondary, [null], "the secondary bay is still empty");
 });
 
 test("a ship with no thrusters warns the player when they try to move", () => {
@@ -309,6 +316,39 @@ test("a ship with no thrusters warns the player when they try to move", () => {
     /if \(!W && !powered && P\.noDriveT === 0 && tryingToMove\(stick\)\)/,
     "the warning fires when a control is pressed and there is no drive, and not on a warp"
   );
+});
+
+test("basic cannons: 1 damage a shot, 3 a second, 2 MJ/s while firing", () => {
+  const m = MODULES.cannon_basic;
+  assert.ok(m, "there is a basic cannon module");
+  assert.equal(m.g, "primary", "it fits a primary weapon bay");
+  assert.equal(m.dmg, 1, "1 damage a shot");
+  assert.equal(m.rate, 3, "3 shots a second");
+  assert.equal(m.draw, 2, "2 MJ/s while the trigger is held");
+  assert.deepEqual(STOCK_FIT.primary, ["cannon_basic"], "every hull is delivered with one");
+});
+
+test("a gun fires from whichever primary bay it is fitted in", () => {
+  // Either bay works, and the bay only decides the barrel the shot comes from.
+  const bay0 = gunsOf({ primary: ["cannon_basic", null] });
+  const bay1 = gunsOf({ primary: [null, "cannon_basic"] });
+  assert.equal(bay0.length, 1);
+  assert.equal(bay1.length, 1);
+  assert.equal(bay0[0].dmg, bay1[0].dmg, "same damage in either bay");
+  assert.equal(bay0[0].rate, bay1[0].rate, "same fire rate in either bay");
+  assert.equal(bay0[0].i, 0, "bay 0 is the left barrel");
+  assert.equal(bay1[0].i, 1, "bay 1 is the right barrel");
+
+  assert.deepEqual(gunsOf({ primary: [null, null] }), [], "no gun fitted, nothing fires");
+  assert.deepEqual(gunsOf({}), [], "no primary bay at all");
+  assert.deepEqual(gunsOf(undefined), [], "nothing to read");
+});
+
+test("the Newbie Raider has 10 hull points and no shields", () => {
+  // The hostile numbers live in sim/ai.js (see ARCHITECTURE.md), so guard them.
+  const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
+  assert.match(src, /RAIDER = \{ n: "Newbie Raider", hp: 10 \}/, "name and hull points");
+  assert.match(src, /mx: hp/, "no shield pool on the raider record");
 });
 
 test("the basic thrusters draw power while flying, and a 20 MJ gulp to light the boost", () => {
@@ -421,6 +461,21 @@ test("an old save gets the stock fit, and bad modules are dropped", () => {
     loadout: { wasp: { power: [null], cell: ["cell_basic"] } },
   });
   assert.deepEqual(emptied.loadout.wasp.power, [null], "a bay the player emptied stays empty");
+});
+
+test("cannons arrived in save version 7: older saves are fitted with one", () => {
+  const v6 = sanitizeProfile({ v: 6, ships: ["wasp"], ship: "wasp", cr: 100 });
+  assert.equal(v6.v, SAVE_VERSION);
+  assert.deepEqual(v6.loadout.wasp.primary, ["cannon_basic", null], "a v6 save gains basic cannons");
+  assert.deepEqual(v6.loadout.wasp.shield, ["shield_basic"], "and keeps its shields");
+
+  const emptied = sanitizeProfile({
+    v: SAVE_VERSION,
+    ships: ["wasp"],
+    ship: "wasp",
+    loadout: { wasp: { primary: [null, null] } },
+  });
+  assert.deepEqual(emptied.loadout.wasp.primary, [null, null], "a current save can run with no guns");
 });
 
 test("shields arrived in save version 6: older saves are fitted with them", () => {

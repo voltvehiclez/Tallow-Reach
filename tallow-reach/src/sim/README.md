@@ -6,12 +6,13 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 |---|---|
 | `player.js` | Ship setup (`setShip`), flight model, hull and `hurt()` (shields absorb first, then the hull). A ship with no drive gets no thrust and no turn, and pressing a control warns "Equip thrusters to move". |
 | `shield.js` | The ship's shields from the fitted module: `shieldOf` a loadout, `refreshShield` after a fit, ship change, load or dock, `updateShield` each frame (off while being hit, then `regen` a second after the `delay` lull). Also charges the ship a flat `shieldDraw` MJ/s for keeping them up, and bleeds them away when the ship cannot pay. |
-| `power.js` | Ships' power budget: `powerOf` a loadout, `refreshPower`/`refillPower` after a fit change, `updatePower` each frame, and `hasPower` to ask whether the ship can pay for a demand. Writes `state.power` for the HUD; `draw` is set by the thrusters in `sim/player.js`. |
+| `power.js` | Ships' power budget: `powerOf` a loadout, `refreshPower`/`refillPower` after a fit change, `updatePower` each frame, and `hasPower` to ask whether the ship can pay for a demand. Writes `state.power` for the HUD; `draw` is set by the thrusters in `sim/player.js`, the shields in `sim/shield.js` and the guns in `sim/weapons.js`. |
 | `drive.js` | The ship's drive: `driveOf` a loadout, `refreshDrive` after a fit, ship change or undock, `hasDrive` to ask whether the ship can move at all. Writes `state.drive = { spd, turn, draw, boost, ignite, bmax, buse, bfill }` and sizes the boost tank (`player.enMax`), which the flight model and the chase camera read; `driveDraw` works out the per-second power the pilot is asking the thrusters for, and `ignite` is the one-off slug for lighting the boost. No thruster fitted gives 0 / 0: no thrust, turn or boost. |
-| `fitting.js` | Moving modules between bays and storage: `fitModule`, `unequip`, `storedFor`, `fittedAt`. The only writer of `profile.loadout`/`profile.modules`; refreshes power after every change. |
-| `weapons.js` | Cannons, mining beam, missiles and lock-on. |
+| `fitting.js` | Moving modules between bays and storage: `fitModule`, `unequip`, `storedFor`, `fittedAt`. The only writer of `profile.loadout`/`profile.modules`; refreshes power, drive, shields and guns after every change. |
+| `guns.js` | The guns in the primary bays: `gunsOf` a loadout (pure, one `{i, id, dmg, rate, speed, draw}` per fitted gun) and `refreshGuns` after a fit, ship change, load or dock. Own module so `fitting.js`/`economy.js` can refresh the guns without importing the shooting code. |
+| `weapons.js` | Firing the fitted guns on left click (each gun on its own 1/`rate` cooldown, drawing `draw` MJ/s while the trigger is held), the mining beam, missiles and lock-on. Re-exports `gunsOf`/`refreshGuns`. |
 | `combat.js` | Bullets, hostile kills and loot drops, crates and pickups. |
-| `ai.js` | Pirate raiders: spawning, movement, shooting. |
+| `ai.js` | Newbie Raiders: spawning, movement, shooting. Their numbers are the `RAIDER` constant at the top: name and 10 hull points, no shields. |
 | `asteroids.js` | The asteroid field and ore types. |
 | `targeting.js` | Target lock (F). |
 | `economy.js` | Cargo, storage, selling, repairs, every purchase. Returns optional message text. |

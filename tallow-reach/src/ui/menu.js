@@ -11,6 +11,7 @@ import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
+import { refreshGuns } from "../sim/guns.js";
 import * as fitting from "../sim/fitting.js";
 import { toggleModulePicker, togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
@@ -213,6 +214,7 @@ function afterProfileChange() {
   refillPower();
   refreshDrive();
   refreshShield();
+  refreshGuns();
   state.ui.fit = null;
   contracts.rerollBoard();
   state.flight.lock = null;

@@ -43,7 +43,8 @@ about each other, use the event bus instead.
 |--------------------------------------|------------------------------------------------|
 | Add or rebalance a ship              | `data/ships.js`                                |
 | Add a cargo type or change prices    | `data/items.js`                                |
-| Tune a gun, missile or the beam      | `data/weapons.js`                              |
+| Tune the basic cannon                 | `data/modules.js` (`cannon_basic`: `dmg`, `rate`, `bspd`, `draw`) |
+| Tune the missile or the mining beam   | `data/weapons.js`                              |
 | Add or price a shop weapon           | `data/weapons.js` (`SHOP_WEAPONS`)             |
 | Change base module costs             | `data/station.js`                              |
 | Add a contract type                  | `data/contracts.js` (list, generator, wording), plus a listener in `sim/contracts.js` |
@@ -57,9 +58,10 @@ about each other, use the event bus instead.
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
 | Change how a bay opens or closes    | `ui/picker.js` (one picker at a time, pure and tested) |
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
-| Change what power does in flight      | `sim/power.js` (`powerOf`, `hasPower`, `setDraw`, `updatePower`) and `state.power`; who draws what is `sim/drive.js` + `sim/player.js` (drive) and `sim/shield.js` (shields) |
+| Change what power does in flight      | `sim/power.js` (`powerOf`, `hasPower`, `setDraw`, `updatePower`) and `state.power`; who draws what is `sim/drive.js` + `sim/player.js` (drive), `sim/shield.js` (shields) and `sim/weapons.js` (guns) |
 | Change how a ship flies               | the thruster module in `data/modules.js`; `sim/drive.js` turns it into `state.drive` |
 | Change what shields do in flight      | `sim/shield.js` (`shieldOf`, `refreshShield`, `updateShield`) and `state.shield`; the numbers are on the shield module |
+| Change what the guns do in flight     | `sim/guns.js` (which guns are fitted, `state.guns`) and `sim/weapons.js` (`updatePrimary`); the numbers are on the `cannon_basic` module |
 | Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
 | Add a paint bay to Appearance        | `data/outfitting.js` (`APPEARANCE_SLOTS`), drawn by `appearanceHtml()` in `ui/screens.js` |
 | Change the ship in the Outfitting view| `render/shipviewer.js` (camera, lights, framing); `ui/outfitting.js` (page, input) |
@@ -132,6 +134,18 @@ Each `src/` folder also has its own short `README.md`.
   `setDraw("shield", ...)` so `state.power.draw` stays the whole ship's bill. When the ship cannot
   pay that (no plant, flat cells) they bleed away at `drain` points a second and stay at 0 until
   the power comes back.
+- **Guns come from the primary bays, not the hull.** A gun is a module in the `primary`
+  group (`cannon_basic`: `dmg` a shot, `rate` shots a second, `bspd` bullet speed, `draw` MJ/s).
+  `sim/guns.js` turns the fitted bays into `state.guns`, one entry per gun in bay order, and
+  `updatePrimary()` in `sim/weapons.js` fires them all on left click, each on its own
+  `1 / rate` cooldown, from its own barrel (`-1.8 + 3.6 * i` metres across the nose). The bay
+  index is the only difference between the two bays: the same module behaves the same in
+  either one, and there is no separate key for either. The gun's damage is multiplied by the
+  hull's `dmg` (1 on the Wasp, 0.8 on the Prospector, 1.8 on the Bulwark), so the module figure
+  is the Wasp's number. While the trigger is held and the guns are firing they report
+  `setDraw("guns", draw * guns fitted)`; `hasPower()` decides whether they may fire at all, the
+  same rule the thrusters follow. `state.flight.gunCd` holds one cooldown per fitted gun and
+  `state.flight.gunsOn` says whether they fired this frame.
 - **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the
   drive's turn rate, and `strafe` / `lift` / `reverse` are fractions of the drive's `spd`. The
   main drive and its 2x boost are the only directions that reach full speed.

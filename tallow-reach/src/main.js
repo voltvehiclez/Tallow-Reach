@@ -11,7 +11,7 @@ import { installInput } from "./core/input.js";
 import { updateAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
 import { createPlayer, setShip, flight } from "./sim/player.js";
-import { updatePrimary, updateMissiles, setWeapon } from "./sim/weapons.js";
+import { updatePrimary, updateMissiles, setWeapon, refreshGuns } from "./sim/weapons.js";
 import { updateEnemies } from "./sim/ai.js";
 import { updateBullets, updateCrates } from "./sim/combat.js";
 import { updateEffects } from "./sim/effects.js";
@@ -39,6 +39,7 @@ populateField();
 refillPower();   // start docked, so the cells are full
 refreshDrive();  // speed and turn come from the fitted thrusters
 refreshShield(); // and shield strength comes from the fitted shields
+refreshGuns();   // and the primary bays decide what fires on left click
 
 setupHud();
 setupMenu();

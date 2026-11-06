@@ -116,7 +116,42 @@ Four cards on the left, four on the right. Counts and bays:
    below about 900 px and the power block lifts above the controls list instead of printing over
    it.
 
-## 7. Shields in flight
+## 7. Basic cannons in flight
+
+You are delivered with **one** Basic cannons module in the first primary bay (the second
+primary bay is empty), so every step below starts from the stock ship.
+
+1. Click **Launch**, then **hold the left mouse button**. Orange bolts leave the ship
+   **three a second** (count the muzzle flashes: three pips a second) and the shot sound ticks
+   with them. Each bolt does **1 damage**. Let go and they stop at once.
+2. **Watch the power readout**, bottom centre. Sitting still it says **Using 2 of 10 MJ/s**
+   (the shields). Hold the left button and it says **Using 4 of 10 MJ/s** — 2 more while the
+   guns are firing. Let go and it drops back to 2. Hold **W** and fire at the same time and it
+   says **6 of 10** (thrusters 2 + shields 2 + guns 2).
+3. **Fly at a Newbie Raider** and hold the left button on it. It takes **10 hits** to kill:
+   that is its 10 hull points, and it has no shields, so every hit counts. With one gun and
+   3 shots a second a raider should die in something over three seconds.
+4. **Press F** with a raider near the crosshair. The lock, centre screen, now reads
+   **`Locked Newbie Raider 100%`**, and the percentage falls as you hit it (30% = 3 hull points
+   left). Previously it said `hostile 100%`.
+5. **Move the gun to the other bay.** Dock (**G**), open **Outfitting**, click the first
+   **Primary weapons** bay (it reads `Basic cannons` / `1 dmg, 3/s`), then click
+   **Unequip Basic cannons to storage**. Now click the **second** bay and click the
+   **Basic cannons** square. Launch and hold left click: it still fires exactly as before, only
+   from the other side of the nose. Either bay works the same way.
+6. **Take the gun off entirely.** Dock, unequip it from both bays, launch and hold left click:
+   nothing happens, no sound, and the power readout stays at **2 of 10 MJ/s**. Left click is
+   silent with no guns fitted. The line at the top right of the screen changes too: `Cannons`
+   while the gun is fitted, `No guns` once both bays are empty (and `Cannons x2` if you ever have
+   both bays filled).
+7. **Run the guns dry.** Dock, unequip the **powerplant** (keep the power cell), fit the cannon,
+   launch, then hold left click until the cell bar reaches 0 (about 50 seconds at 2 MJ/s). The
+   guns stop firing by themselves and the readout keeps asking for `4 of 0 MJ/s`. Dock and fit
+   the powerplant back to carry on.
+8. The **mining beam** still works as before: press **2**, aim at a rock and hold left click.
+   Press **1** to go back to cannons.
+
+## 8. Shields in flight
 
 1. Launch. Top left, the **Shield** bar starts **full** — the basic shields hold 10 points, and
    the outpost fills them whenever you dock.
@@ -133,7 +168,7 @@ Four cards on the left, four on the right. Counts and bays:
 5. Reload the page: the fit sticks, and a save made before this update loads with basic shields
    already in the bay (the bay was empty because shields did not exist yet).
 
-## 8. It survives a reload
+## 9. It survives a reload
 
 1. Unequip the power cell, so storage holds it and the bay is empty.
 2. Reload the page (F5) and open **Outfitting** again.
@@ -141,7 +176,7 @@ Four cards on the left, four on the right. Counts and bays:
    `Basic power cell` square, and your credits, ships and contracts should be unchanged.
 4. Fit it back, reload again, and confirm it stayed fitted.
 
-## 9. Other ships, and old saves
+## 10. Other ships, and old saves
 
 1. **Hangar → Fly** another hull (or buy one), then **Outfitting**: the new ship comes with
    its own basic powerplant, cell and thrusters fitted, and its own store — storage is shared,

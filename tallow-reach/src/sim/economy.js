@@ -12,6 +12,7 @@ import { stockFor } from "../state/profile.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
+import { refreshGuns } from "./guns.js";
 
 const S = () => state.profile;
 
@@ -98,6 +99,7 @@ export function selectShip(id) {
   refillPower();       // docked: the new hull's cells are full
   refreshDrive();      // and its thrusters decide the way it flies
   refreshShield();     // and its shields how much punishment it takes
+  refreshGuns();       // and its primary bays what fires
   return undefined;
 }
 

@@ -22,7 +22,10 @@ import { layoutFor } from "../data/outfitting.js";
 //   6  the basic shields are standard issue, the same way: saves from before 6
 //      get their shield bay filled on load, and a v6 save where the player
 //      emptied it stays shieldless.
-export const SAVE_VERSION = 6;
+//   7  the basic cannons are standard issue in the first primary bay. Saves from
+//      before 7 gain them on load; weapon bays the player really left empty stay
+//      empty from version 7 onwards.
+export const SAVE_VERSION = 7;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -146,10 +149,11 @@ function cleanLoadouts(saved, version) {
   // Modules arrived over several versions, and a save older than the version that
   // introduced a group has an empty bay because the group did not exist then, not
   // because the player emptied it. Those bays get the stock part.
-  //   version 5: thrusters      version 6: shields
+  //   version 5: thrusters      version 6: shields      version 7: cannons
   const addedLater = [];
   if (version < 5) addedLater.push("thruster");
   if (version < 6) addedLater.push("shield");
+  if (version < 7) addedLater.push("primary");
   const out = {};
   for (const id of Object.keys(SHIPS)) {
     const layout = layoutFor(id),

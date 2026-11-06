@@ -1,4 +1,4 @@
-// Pirate raiders: spawning, flying, and shooting at the player.
+// Newbie Raiders: the pirate hulls that spawn and shoot at the player.
 
 import { V, R, fwd, face } from "../util/math.js";
 import { sectorAt } from "../data/sectors.js";
@@ -16,15 +16,21 @@ const PIRATE_HEARD_RANGE = 600;   // within this, shots make a sound
 const SPAWN_MIN = 800;
 const SPAWN_MAX = 1000;
 
-/** Create a raider at `p`. Its hit points scale with the current contract's tier. */
+/**
+ * The one hostile type so far. 10 hull points and no shields: three seconds of
+ * basic cannon fire. Its name is what the HUD's target lock shows.
+ */
+export const RAIDER = { n: "Newbie Raider", hp: 10 };
+
+/** Create a Newbie Raider at `p`. */
 export function spawnPirate(p) {
   const m = mkShip(0x3a2420, PIRATE_SCALE, true);
   m.position.copy(p);
   scene.add(m);
-  const tier = state.profile.mission ? state.profile.mission.tier : 1;
-  const hp = 70 + 25 * tier;
+  const hp = RAIDER.hp;
   state.world.enemies.push({
     m,
+    n: RAIDER.n,
     hp,
     mx: hp,
     v: V(0, 0, 0),

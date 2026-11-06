@@ -6,11 +6,16 @@ import { emit } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
 import { ITEM } from "../data/items.js";
 import { PRIMARY, MISSILE } from "../data/weapons.js";
+import { MODULES } from "../data/modules.js";
 import { keys } from "../core/input.js";
 import { tone, nz } from "../core/audio.js";
 import { scene, camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
+import { setDraw, hasPower } from "./power.js";
+import { gunsOf } from "./guns.js";
+
+export { gunsOf, refreshGuns } from "./guns.js";
 import { fire, hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
 import { spawnAsteroid } from "./asteroids.js";
@@ -49,28 +54,46 @@ export function updatePrimary(dt) {
     P = state.player,
     d = SHIPS[S.ship];
 
-  F.fireCd -= dt;
+  // Every fitted gun counts down on its own, so two guns can fire out of step.
+  state.guns.forEach((g, i) => {
+    F.gunCd[i] = Math.max(0, (F.gunCd[i] || 0) - dt);
+  });
 
-  // Weapons are offline during a warp: no cannons, no beam.
+  // Weapons are offline during a warp: no cannons, no beam, and nothing is drawn.
   if (state.warp) {
+    F.gunsOn = false;
+    setDraw("guns", 0);
     F.beamOn = false;
     beamMesh.visible = false;
     return;
   }
 
-  if (keys.fire && S.pw !== "beam" && F.fireCd <= 0) {
-    F.fireCd = PRIMARY.cannon.cooldown;
-    tone(700, 120, 0.09, 0.05, "square");
-    const f = fwd(P.m);
-    [-1.8, 1.8].forEach(x =>
+  // Guns: whichever primary bays hold a gun fire together on left click, each on
+  // its own cooldown. Firing costs 2 MJ/s a gun, and a ship with no power to spare
+  // fires nothing — the same rule the thrusters and shields follow.
+  const gunDraw = state.guns.reduce((sum, g) => sum + g.draw, 0);
+  const wantGuns = keys.fire && S.pw !== "beam" && state.guns.length > 0;
+  // Compare against the rest of the ship's bill, so the guns are not counted twice.
+  const otherDraw = state.power.draw - (state.power.use.guns || 0);
+  F.gunsOn = wantGuns && hasPower(otherDraw + gunDraw);
+  setDraw("guns", F.gunsOn ? gunDraw : 0);
+
+  if (F.gunsOn) {
+    let fired = false;
+    state.guns.forEach((g, i) => {
+      if (F.gunCd[i] > 0) return;
+      F.gunCd[i] = 1 / g.rate;
+      fired = true;
+      // One bolt per gun, from that gun's own barrel.
       fire(
-        P.m.localToWorld(V(x, -0.2, -5 * d.sc)),
-        f,
-        PRIMARY.cannon.speed,
+        P.m.localToWorld(V(-1.8 + 3.6 * i, -0.2, -5 * d.sc)),
+        fwd(P.m),
+        g.speed,
         true,
-        PRIMARY.cannon.damage * d.dmg
-      )
-    );
+        g.dmg * d.dmg
+      );
+    });
+    if (fired) tone(700, 120, 0.09, 0.05, "square");
   }
 
   F.beamOn = false;

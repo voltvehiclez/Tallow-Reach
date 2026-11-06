@@ -277,7 +277,8 @@ burns, the flat MJ slug spent when the boost lights) plus `bmax`/`buse`/`bfill` 
 (units held, units a second burned while boosting, units a second refilled), and `sh`/`regen`/`delay`/`draw`/`drain` for shields
 (points held, points a second while recharging, the seconds without a hit before recharging
 starts again, the flat MJ/s they use while up, and the points a second they lose when the ship
-cannot supply that). `npm test` checks the group exists, the
+cannot supply that), and `dmg`/`rate`/`bspd`/`draw` for a gun in a `primary` bay (damage a shot,
+shots a second, bullet speed, MJ/s while the trigger is held). `npm test` checks the group exists, the
 name and description are there, and the stat is a positive number.
 
 1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
@@ -289,13 +290,21 @@ name and description are there, and the stat is a positive number.
    way: read the fitted modules, keep the result in `state.*`, and let the UI read that.
    A module that *uses* power rather than making it reports its demand with
    `setDraw("<name>", mjps)` (`sim/power.js`) and asks `hasPower()` before it does its work, the
-   way the thrusters do in `sim/player.js` and the shields in `sim/shield.js`.
+   way the thrusters do in `sim/player.js`, the shields in `sim/shield.js` and the guns in
+   `sim/weapons.js`. A new name must also be added to `state.power.use` (see `state.js`).
 4. If the module changes a number the ship already has (top speed, hull, shields), do not
    write it into `SHIPS`; compute the effective value where it is used so removing the
    module puts the ship back the way it was. Shields are the worked example: `sim/shield.js`
    turns the module into `state.shield`, and with the bay empty the ship simply has none.
 
-5. **Special kinds of shield.** A shield that behaves differently (for example one that keeps
+5. **More primary weapons.** `cannon_basic` is the worked example of a gun: give the entry
+   `dmg`, `rate`, `bspd` and `draw` and `sim/guns.js` picks it up with no code change, because
+   it reads every module in the `primary` group that has a `dmg`. Put it in `STOCK_FIT.primary`
+   to make it standard issue, and it can go in either primary bay. A gun that behaves
+   differently (burst fire, a shot that costs a slug of energy) needs its own field and a line
+   in `updatePrimary()` in `sim/weapons.js`; nothing outside that file changes.
+
+6. **Special kinds of shield.** A shield that behaves differently (for example one that keeps
    trickling back even under fire, at a reduced rate) is a new entry in `MODULES` with an extra
    field, say `live: 3` for points a second while being hit. `updateShield()` in
    `sim/shield.js` reads that field when it is there; the recharge delay, the cap and the HUD

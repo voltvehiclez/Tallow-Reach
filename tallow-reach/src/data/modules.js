@@ -14,6 +14,10 @@
 //   bmax    thruster: boost fuel units the tank holds
 //   buse    thruster: boost fuel units burned per second while boosting
 //   bfill   thruster: boost fuel units the tank regains per second
+//   dmg     primary: damage per shot, before the hull's dmg multiplier
+//   rate    primary: shots per second
+//   bspd    primary: bullet speed in m/s
+//   draw    primary: MJ/s used while the trigger is held
 //   sh      shield: points it holds when full
 //   regen   shield: points per second once it starts recharging
 //   delay   shield: seconds without a hit before recharging starts again
@@ -66,6 +70,17 @@ export const MODULES = {
     draw: 2,
     drain: 1,
   },
+  // The starting gun: 1 damage a shot, three shots a second, 2 MJ/s while firing.
+  // Fires on left click from whichever primary bay it sits in.
+  cannon_basic: {
+    g: "primary",
+    n: "Basic cannons",
+    d: "Standard autocannons. One damage a shot, three a second.",
+    dmg: 1,
+    rate: 3,
+    bspd: 900,
+    draw: 2,
+  },
 };
 
 // What a hull is delivered with, bay by bay: group id -> module ids in bay
@@ -76,4 +91,5 @@ export const STOCK_FIT = {
   cell: ["cell_basic"],
   thruster: ["thruster_basic"],
   shield: ["shield_basic"],
+  primary: ["cannon_basic"],     // one gun in the first primary bay, the other left empty
 };

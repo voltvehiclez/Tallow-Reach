@@ -1,16 +1,21 @@
 // Ship power: what the fitted powerplants make, what the power cells hold, and
 // what the ship is drawing.
 //
-// The thrusters are the only thing that draws power today: 2 MJ/s while the
-// throttle is off centre, another 1 MJ/s while the boost is burning, and a flat
-// 20 MJ each time the boost lights (see data/modules.js and sim/drive.js).
-// The shields draw 1 MJ/s whenever they are up, and 2 MJ/s while they are
-// actually recharging (see sim/shield.js). Refilling the boost meter is free.
+// Three things draw power today, and every figure comes from the fitted modules
+// in data/modules.js:
 //
-// Each system writes its own figure with `setDraw("drive" | "shield", mjps)` once
-// a frame; `draw` is the sum, which is what the HUD shows and what `hasPower()`
-// checks. The 20 MJ boost ignition is taken straight out of `stored` instead.
-// A new consumer adds a name to `state.power.use` and calls `setDraw()` with it.
+//   drive   2 MJ/s while the throttle is off centre, another 1 MJ/s while the
+//           boost is burning, and a flat 20 MJ each time the boost lights.
+//   shield  2 MJ/s whenever the shields are up (sim/shield.js).
+//   guns    2 MJ/s a gun while the trigger is held (sim/guns.js).
+//
+// Refilling the boost meter is free.
+//
+// Each system writes its own figure with `setDraw("drive" | "shield" | "guns",
+// mjps)` once a frame; `draw` is the sum, which is what the HUD shows and what
+// `hasPower()` checks. The 20 MJ boost ignition is taken straight out of
+// `stored` instead. A new consumer adds a name to `state.power.use` and calls
+// `setDraw()` with it.
 //
 // Figures come from the fitted modules in the save (profile.loadout[ship]),
 // through MODULES in data/modules.js. The HUD reads state.power; it does not
@@ -52,8 +57,7 @@ export function refreshPower() {
   p.gen = gen;
   p.cap = cap;
   p.stored = Math.min(p.stored, cap);
-  setDraw("drive", 0);
-  setDraw("shield", 0);
+  for (const system of Object.keys(p.use)) setDraw(system, 0);
 }
 
 /**

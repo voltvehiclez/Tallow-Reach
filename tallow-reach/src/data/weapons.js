@@ -1,12 +1,8 @@
-// Primary weapons (left click) and secondary weapons (right click).
+// The mining beam and secondary weapons (right click). Guns are modules now: see
+// cannon_basic in data/modules.js for damage, fire rate, bullet speed and the
+// power they draw while firing.
 
 export const PRIMARY = {
-  cannon: {
-    n: "Cannons",
-    cooldown: 0.13,      // seconds between volleys
-    speed: 900,          // bullet speed (m/s)
-    damage: 12,          // before the ship's dmg multiplier
-  },
   beam: {
     n: "Mining beam",
     range: 340,          // metres

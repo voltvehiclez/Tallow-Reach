@@ -78,10 +78,22 @@ export function updateHud(dt) {
   // Numbers beside the bar, so the tank can be read exactly as well as roughly.
   el.boostVal.textContent = P.enMax > 0 ? `${P.en.toFixed(1)} / ${P.enMax}` : "none";
 
+  // The primary line names what left click will do: the beam, or how many guns
+  // the primary bays are holding (bay 1 and bay 2 both count).
+  const guns = state.guns.length,
+    primary =
+      S.pw === "beam"
+        ? "Mining beam"
+        : guns === 0
+        ? "No guns"
+        : guns === 1
+        ? "Cannons"
+        : `Cannons x${guns}`;
+
   el.topRight.innerHTML =
     `${sectorAt(state.sector).n}<br>` +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo}<br>` +
-    `${S.pw === "beam" ? "Mining beam" : "Cannons"}${S.wp.msl ? ", missiles " + S.msl : ""}<br>` +
+    `${primary}${S.wp.msl ? ", missiles " + S.msl : ""}<br>` +
     `<span style="color:var(--amber)">${m ? describe(m) + " " + m.p + "/" + m.n : "No contract"}</span>`;
 
   el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;

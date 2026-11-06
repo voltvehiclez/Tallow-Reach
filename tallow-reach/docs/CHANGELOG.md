@@ -8,6 +8,41 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Basic cannons are a module you can fit in either primary bay; raiders are Newbie Raiders with 10 hull
+
+- **Basic cannons are now a module** (`cannon_basic`, group `primary`): **1 damage a shot, 3
+  shots a second, 2 MJ/s while the trigger is held**, 900 m/s bolts. Every hull is delivered with
+  one in the first primary bay; the second bay starts empty. The same gun works in **either**
+  bay — the bay only decides which barrel the shot leaves from — and both bays firing means two
+  guns on their own 1/3-second cooldowns, 4 MJ/s while the trigger is down.
+- **Left click still fires the primary.** Keys 1 and 2 still switch between cannons and the
+  mining beam; the fitted guns are what actually shoot. An empty pair of primary bays means left
+  click does nothing and costs nothing.
+- **Guns draw power like everything else.** They report `setDraw("guns", …)`, so the power
+  readout climbs by 2 MJ/s a gun while firing and drops back when you let go; with no power left
+  they stop firing rather than draining a dead cell.
+- **The flight HUD's primary line counts the guns.** Top right it reads `Cannons`, `Cannons x2`
+  when both bays are filled, or `No guns` when they are empty (and `Mining beam` after key 2).
+- **Pirate raiders are now "Newbie Raiders"** and have **10 hull points, no shields** — three
+  seconds of cannon fire from the stock Wasp. The target lock and the HUD read the name instead
+  of "hostile NN%", so a lock now says `Locked Newbie Raider 100%`. The 70 + 25-per-tier hit
+  points are gone: every raider is the same 10-point hull now.
+- **Files:** `data/modules.js` (`cannon_basic`, `STOCK_FIT.primary`), `data/weapons.js`
+  (`PRIMARY.cannon` removed — guns are modules), `sim/guns.js` (**new**: `gunsOf`, `refreshGuns`),
+  `sim/weapons.js` (per-gun cooldowns and barrels, the 2 MJ/s draw, `hasPower` gate),
+  `state/state.js` (`state.guns`, `flight.gunCd`, `flight.gunsOn`, `power.use.guns`),
+  `sim/{fitting,session,economy,power}.js` and `ui/menu.js` refresh the guns wherever the drive
+  and shields are refreshed, `sim/ai.js` (`RAIDER` constant), `sim/targeting.js` (`lockName`),
+  `ui/screens.js` (`moduleStat` shows `1 dmg, 3/s`), `ui/hud.js` (the primary line counts the
+  guns).
+- **Save version 7.** Older saves gain a basic cannon in their first primary bay (empty bays
+  stay empty if the save is already v7).
+- Tests: 64 passing (4 new: the cannon figures, either-bay gunnery, the version-7 migration, the
+  Newbie Raider). `npm run build` needed (581 KB).
+- Verified headless: 3 bolts a second and 1 damage each, 2 MJ/s a gun (4 with two guns), guns
+  stop at 5.0 s on a 10 MJ cell with one gun and 2.5 s with two, no power means no shots, no gun
+  means no draw, and `spawnPirate` makes a 10 HP "Newbie Raider" with no shield pool.
+
 ## 2026-11-06: The boost tank has numbers: 10 units, 2 a second out, 1 a second back
 
 - **The boost bar is now a fuel tank measured in units.** Basic thrusters hold **10 units**,
