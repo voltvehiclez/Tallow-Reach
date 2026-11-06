@@ -56,7 +56,7 @@ export function lockPosition(lock) {
 
 /** Label shown on the lock marker. */
 export function lockName(lock) {
-  if (lock.k === "e") return "hostile " + Math.round((lock.o.hp / lock.o.mx) * 100) + "%";
+  if (lock.k === "e") return (lock.o.n || "hostile") + " " + Math.round((lock.o.hp / lock.o.mx) * 100) + "%";
   if (lock.k === "a") return ITEM[lock.o.type].n + " rock, " + Math.ceil(lock.o.ore) + " left";
   if (lock.k === "c") return lock.o.core ? "reactor core" : "crate";
   return "Meridian Outpost";

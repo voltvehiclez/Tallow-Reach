@@ -8,6 +8,405 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Basic cannons are a module you can fit in either primary bay; raiders are Newbie Raiders with 10 hull
+
+- **Basic cannons are now a module** (`cannon_basic`, group `primary`): **1 damage a shot, 3
+  shots a second, 2 MJ/s while the trigger is held**, 900 m/s bolts. Every hull is delivered with
+  one in the first primary bay; the second bay starts empty. The same gun works in **either**
+  bay — the bay only decides which barrel the shot leaves from — and both bays firing means two
+  guns on their own 1/3-second cooldowns, 4 MJ/s while the trigger is down.
+- **Left click still fires the primary.** Keys 1 and 2 still switch between cannons and the
+  mining beam; the fitted guns are what actually shoot. An empty pair of primary bays means left
+  click does nothing and costs nothing.
+- **Guns draw power like everything else.** They report `setDraw("guns", …)`, so the power
+  readout climbs by 2 MJ/s a gun while firing and drops back when you let go; with no power left
+  they stop firing rather than draining a dead cell.
+- **The flight HUD's primary line counts the guns.** Top right it reads `Cannons`, `Cannons x2`
+  when both bays are filled, or `No guns` when they are empty (and `Mining beam` after key 2).
+- **Pirate raiders are now "Newbie Raiders"** and have **10 hull points, no shields** — three
+  seconds of cannon fire from the stock Wasp. The target lock and the HUD read the name instead
+  of "hostile NN%", so a lock now says `Locked Newbie Raider 100%`. The 70 + 25-per-tier hit
+  points are gone: every raider is the same 10-point hull now.
+- **Files:** `data/modules.js` (`cannon_basic`, `STOCK_FIT.primary`), `data/weapons.js`
+  (`PRIMARY.cannon` removed — guns are modules), `sim/guns.js` (**new**: `gunsOf`, `refreshGuns`),
+  `sim/weapons.js` (per-gun cooldowns and barrels, the 2 MJ/s draw, `hasPower` gate),
+  `state/state.js` (`state.guns`, `flight.gunCd`, `flight.gunsOn`, `power.use.guns`),
+  `sim/{fitting,session,economy,power}.js` and `ui/menu.js` refresh the guns wherever the drive
+  and shields are refreshed, `sim/ai.js` (`RAIDER` constant), `sim/targeting.js` (`lockName`),
+  `ui/screens.js` (`moduleStat` shows `1 dmg, 3/s`), `ui/hud.js` (the primary line counts the
+  guns).
+- **Save version 7.** Older saves gain a basic cannon in their first primary bay (empty bays
+  stay empty if the save is already v7).
+- Tests: 64 passing (4 new: the cannon figures, either-bay gunnery, the version-7 migration, the
+  Newbie Raider). `npm run build` needed (581 KB).
+- Verified headless: 3 bolts a second and 1 damage each, 2 MJ/s a gun (4 with two guns), guns
+  stop at 5.0 s on a 10 MJ cell with one gun and 2.5 s with two, no power means no shots, no gun
+  means no draw, and `spawnPirate` makes a 10 HP "Newbie Raider" with no shield pool.
+
+## 2026-11-06: The boost tank has numbers: 10 units, 2 a second out, 1 a second back
+
+- **The boost bar is now a fuel tank measured in units.** Basic thrusters hold **10 units**,
+  burn **2 a second** while boosting (about five seconds from full to the reserve) and refill at
+  **1 a second** when you let go. Mechanically nothing changed: the ignition still costs a flat
+  20 MJ, filling the tank is still free, and the boost still doubles the drive.
+- **The numbers are on the module** (`bmax: 10`, `buse: 2`, `bfill: 1` on `thruster_basic`), so a
+  future thruster can carry a bigger tank or a thirstier boost without touching code — the same
+  pattern as speed, turn and the power draw.
+- **The HUD shows it.** The Boost line, top left, now reads like `Boost 8.4 / 10` beside the bar,
+  so you can see the exact fuel as well as roughly how full it is. With no thrusters fitted it
+  reads `none`.
+- The old invisible numbers (a 0–100 meter, 28 a second out and 10 a second back) are gone;
+  `state.drive` carries the tank, `sim/drive.js` sizes it (`P.enMax`), and the outpost fills it on
+  launch.
+- Files: `data/modules.js`, `sim/drive.js` (`driveOf`, `refreshDrive`), `sim/player.js` (burn and
+  refill from the drive, small reserve before the boost will light), `sim/session.js` (full tank
+  on launch), `ui/hud.js`, `src/index.html`, `styles.css` (the Boost reading).
+- Tests: one new (the tank figures on the module and in the drive) plus the drive-shape
+  expectations → **60 passing**. No save change: still version 6. `npm run build` needed (580 KB).
+- Verified headless: launch 10.0 / 10, boosting 8 → 6 → 4 → 2 a second, boost cut out at 4.78 s
+  with 0.5 left, refill 0.5 → 5.5 over five seconds, and no boost under 0.5 units.
+
+## 2026-11-06: Shield power made simple: a flat 2 MJ/s, and shields bleed when it is not there
+
+- **Shields now draw a straight 2 MJ/s all the time** while a shield module is fitted — full,
+  filling or under fire, it is the same bill. The 1/2 split is gone, so `chg` is off the module
+  and `draw: 2` replaces it.
+- **If the ship cannot supply that 2 MJ/s** (powerplant gone and cells flat), the shields stop
+  holding themselves together: they **discharge at 1 point a second** (`drain: 1`) down to 0, and
+  **stay at 0** until the ship can pay again. Then the normal rule applies — the 4 second lull,
+  then 1 point a second back.
+- HUD with the basic fit: **2 MJ/s** parked, **4** flying, **5** boosting, **4** while shields
+  fill after a fight, **2** with the shields pulled out.
+- Files: `data/modules.js` (`draw: 2`, `drain: 1`, `chg` removed), `sim/shield.js`
+  (`shieldDraw(shield)` is now flat, `updateShield` discharges when `hasPower()` says no).
+- Tests: the shield power tests were rewritten and a discharge test added → **59 passing**.
+  No save change: still version 6. `npm run build` needed (579 KB).
+
+## 2026-11-06: Shields cost power: 1 MJ/s up, 2 MJ/s while recharging
+
+- **Basic shields draw 1 MJ/s whenever they are fitted and up**, and **2 MJ/s in total while they
+  are actually recharging**. Full shields still cost their 1 MJ/s; the extra 1 only applies while
+  points are going back in.
+- **The power bill is now a sum.** `state.power` gained `use: { drive, shield }` and
+  `sim/power.js` gained `setDraw(system, mjps)`: the thrusters and the shields each report their
+  own figure once a frame, and `draw` (what the HUD shows and `hasPower()` checks) is the total.
+  A third consumer later is one more name in `use` and one `setDraw()` call.
+- **The numbers live on the module** (`draw: 1`, `chg: 1` on `shield_basic`), so a better shield
+  can be thirstier without touching code, the way thrusters already work.
+- **No power, no recharge**: if the ship cannot pay the bill (no powerplant and empty cells) the
+  shields hold where they are instead of filling, exactly as the thrusters lose thrust. They
+  still show their standing 1 MJ/s of demand, the same way the drive shows its 2.
+- Files: `data/modules.js`, `sim/shield.js` (`shieldDraw`, `updateShield` charges the ship),
+  `sim/power.js` (`setDraw`, `refreshPower` clears both shares), `sim/player.js` (drive share),
+  `state/state.js` (`power.use`).
+- With the basic fit the HUD now reads **1 MJ/s** parked, **3** flying, **4** boosting, and **4**
+  while flying with shields filling.
+- Tests: 2 new (`shieldDraw`, and the power bill following the shields) plus rescaled
+  expectations → **58 passing**. No save change: still version 6. `npm run build` needed
+  (579 KB).
+
+## 2026-11-06: Smaller shield numbers: 10 points, 1 a second, 1 damage a shot
+
+Everything shield-related is divided by ten, so the numbers are easy to read at a glance.
+
+- **Basic shields: 10 points** (was 100) and **1 point a second** (was 10). The 4 second lull
+  before recharging, and the rule that any hit restarts it, are unchanged.
+- **Pirate cannons do 1 damage a shot** (was 10), in `sim/ai.js`, so a fight against basic
+  shields still takes the same number of hits: ten to strip the shields, then the hull.
+- The shield bar in flight therefore moves a tenth at a time; with a cell-like cap of 10 it
+  refills from empty in about ten quiet seconds.
+- Tests rescaled to match (shield rules, the module figures, the pirate damage guard) →
+  **56 passing**. No save change: still version 6. `npm run build` needed (579 KB).
+
+## 2026-11-06: Shields are a module now; pirate cannons do 10 a shot
+
+- **New module: `shield_basic` ("Basic shields")**, fitted to every hull from the start and
+  fittable in the shield bay that was already in the Outfitting layout. It holds **100 shield
+  points**, recharges at **10 points a second**, and will not start recharging until the ship has
+  gone **4 seconds without being hit**. Any hit inside that lull restarts the clock, so the
+  recharge is off for as long as somebody is shooting at you.
+- **Shields are no longer a hull stat.** `SHIPS` lost its `sh` field (and the Hangar row no
+  longer quotes a shield figure); `sim/shield.js` turns the fitted module into `state.shield`
+  (`cap`, `regen`, `delay`) and `P.shMax`. No shield module means no shields: every hit goes
+  straight to the hull.
+- **Pirate cannons now do 10 damage a shot** (was 7), in `sim/ai.js`. Against basic shields that
+  is ten hits to strip them, then ten more for a Wasp's hull.
+- **Save version 6.** Saves from v5 or older have an empty shield bay because the group did not
+  exist then, so they are retrofitted with basic shields on load (same rule the thrusters got in
+  v5). A v6 save where the player really took the shields out stays shieldless. `cleanLoadouts`
+  now keeps a list of groups added after a save's version instead of one flag per group.
+- Files: `data/modules.js` (`shield_basic`, `STOCK_FIT.shield`), new `sim/shield.js`
+  (`shieldOf`, `refreshShield`, `updateShield`), `state/state.js` (`state.shield`),
+  `state/profile.js` (v6 + retrofit), `sim/player.js` (no shield stats on the ship, recharge
+  moved out of `flight()`), `main.js`, `sim/fitting.js`, `sim/session.js`, `sim/economy.js`,
+  `ui/menu.js` (refresh on dock/fit/ship change/load), `ui/hud.js` (bar copes with no shields),
+  `ui/screens.js` (`100 shields` in the bay, Hangar row without a shield figure), `sim/ai.js`.
+- **Special shields later:** a module that recharges even under fire is one more field read by
+  `updateShield()` (for example `live` for a reduced under-fire rate). Nothing outside
+  `sim/shield.js` needs to change for that.
+- Verified headless: ten 10-damage hits took 100 → 0 shields with the hull untouched, hit 11
+  took 10 hull; with a hit at t=0 the shields sat still at 90 through 3.9 s and were full again
+  by 5 s; with the bay empty a 10-damage hit cost exactly 10 hull.
+- Tests: 3 new files' worth — shield rules (`tests/shield.test.mjs`, 6 tests), the module and
+  stock fit, the v5 → v6 retrofit, the pirate damage figure, and equip/unequip moving `P.shMax`
+  → **56 passing**. `npm run build` needed (579 KB).
+
+## 2026-11-06: Lighting the boost costs a flat 20 MJ; refilling the meter is free
+
+The boost now works like a car ignition: expensive to start, cheap to run, and filling the tank
+costs nothing at all.
+
+- **Ignition: 20 MJ in one gulp.** When the spool-up finishes and the shake fires, 20 MJ comes
+  straight out of the cells (`ign: 20` on `thruster_basic`). With the basic 100 MJ cell that is a
+  visible 100 → 80 drop in the bar, and the boost **will not light** unless the cells hold 20 MJ.
+- **Burning the boost: 2 + 1 = 3 MJ/s.** The extra 1 MJ/s (`boost: 1`) is now charged only while
+  the boost is actually firing, instead of while the meter was filling.
+- **Filling the boost meter costs nothing.** The old +1 MJ/s charge draw is gone; the meter still
+  fills itself at the same rate, free, at any throttle setting.
+- Everything else stands: 2 MJ/s while the throttle is off centre, nothing at exactly zero, and a
+  ship with no power has no thrust (the speed winds down).
+- Files: `data/modules.js` (`boost` replaces `chg`, `ign: 20`), `sim/drive.js` (`driveOf` carries
+  `boost`, `driveDraw(drive, throttle, boosting)`), `sim/player.js` (draw from the burning boost,
+  ignition takes 20 MJ out of `stored` and needs that much there, meter refills free),
+  `sim/power.js` (comments).
+- Verified headless: idle = 0 MJ/s with the boost filling free; flying = 2; boosting = 3; the
+  ignition frame dropped the cells 20.03 MJ; with 15 MJ in the cells, Shift did nothing at all.
+- Tests: the existing power tests were updated to the new figures → **46 passing**. No save
+  change: still version 5. `npm run build` needed (578 KB).
+
+## 2026-11-06: Thrusters use power, and a dry cell winds the speed down
+
+Basic thrusters now drink from the power cells. The numbers live on the module in
+`data/modules.js` (`draw: 2`, `chg: 1`, `ign: 1`), so a better thruster can be thirstier.
+
+- **2 MJ/s whenever the throttle is off centre** — 100%, 99%, 1%, -1%, -30%, -100% all count.
+  Only a throttle of exactly zero (X, or hands off once it has been set to 0) draws nothing.
+- **1 MJ/s more while the boost meter is filling.** The meter fills by itself whenever the ship
+  has power to spare, so the readout often sits at 1 MJ/s when the ship is idle and at 3 MJ/s
+  while flying and charging.
+- **1 MJ flat, each time the boost lights.** Charged on the frame the boost engages, out of the
+  cells' stored energy.
+- **Out of power means no thrust, and the speed winds down.** `hasPower()` in `sim/power.js`
+  answers whether the cells (or a plant that covers the demand) can pay; when they cannot, the
+  drive's speed is treated as 0 and the usual drag model bleeds the speed away instead of
+  stopping the ship dead. Boost is refused too. Turning still works, so a dry ship can aim.
+- Files: `data/modules.js` (draw/chg/ign), `sim/drive.js` (`driveOf` carries them, new
+  `driveDraw`), `sim/power.js` (new `hasPower`), `sim/player.js` (sets `state.power.draw`,
+  gates thrust on power, charges and ignition costs), `ui/hud.js` unchanged (it already shows
+  `Using X of Y MJ/s`).
+- Verified headless: full throttle = 2 MJ/s, throttle 0 with a full boost = 0, idle charging =
+  1, flying + charging = 3; ignition takes exactly 1 MJ plus the frame's 2 MJ/s; with no plant
+  and 3 MJ left the ship went 52 → 33 → 21 → 14 → 9 → 5 → 2 m/s after the cells emptied.
+- Tests: 3 new (`driveDraw` for every throttle setting, the power figures on the module,
+  `hasPower`) → **46 passing**. No save change: still version 5. `npm run build` needed (578 KB).
+- **Consequence to know about:** a plant-less ship that flies until the cells empty cannot fly
+  home. That is the point of the rule; docking is only possible if you get back first.
+
+## 2026-11-06: "Equip thrusters to move" warns you when a dead ship ignores the controls
+
+- Undocking with no thrusters and then pressing **anything that would move the ship** now shows
+  the warning **"Equip thrusters to move"** in the centre of the screen. It covers W/S (thrust),
+  A/D (strafe), Space/C (lift), Q/E (roll), Shift (boost) and the mouse, and it repeats every
+  three seconds while a control is still held, so it reads as a reminder instead of flickering.
+- Nothing else changed: the ship still cannot move, turn or boost, the throttle stays at 0, the
+  launch message and the standing hint line ("No thrusters fitted: press G to dock and fit one.")
+  still explain how to get back to the outpost.
+- The warning lives in `sim/player.js` (`tryingToMove()`, `NO_DRIVE_WARN`, `state.player.noDriveT`)
+  and is shown with the ordinary centre-screen message, so it never stacks up.
+- Tests: a guard test keeps the exact wording and the "only when a control is pressed and there
+  is no drive" rule in place → **43 passing**. No save change: still version 5.
+  `npm run build` needed (578 KB).
+
+## 2026-11-06: No thrusters means no movement, no turning and no boost
+
+- **An empty thruster bay is now a dead ship.** `driveOf()` returns `{ spd: 0, turn: 0 }`
+  instead of falling back to a speed the hull used to carry, so with no thrusters fitted the
+  ship cannot thrust, strafe, lift, turn or boost. The throttle is held at 0, so the engines
+  stay cold, the boost ramp never starts and the boost bar is never spent.
+- **Hulls no longer have `spd`/`turn`** (`data/ships.js`). Speed and turn live only in the
+  thruster module; `npm test` now fails if a hull grows a speed of its own again. When hulls
+  should handle differently, that is a multiplier in `sim/drive.js`, not a base speed.
+- **The player is told, and can get back:** `launch()` puts the ship 200 m from the outpost
+  (inside the 300 m docking range, so an immobile ship can dock straight back), refreshes the
+  drive, and shows *"No thrusters fitted: the ship cannot move. Press G to dock and fit one."*
+  The HUD repeats *"No thrusters fitted: press G to dock and fit one."* while the ship cannot
+  move, so the dead controls have a reason on screen.
+- Files: `sim/drive.js` (no fallback, new `hasDrive`), `sim/player.js` (throttle and boost
+  gated on the drive), `sim/session.js` (launch distance, message, `refreshDrive()`),
+  `ui/hud.js` (prompt), `data/ships.js` (no `spd`/`turn`), `tests/content.test.mjs`,
+  `tests/fitting.test.mjs`.
+- Verified headless: 10 s holding every control (W S A D Space C Shift, mouse hard over) moves
+  an empty-bay ship **0 m and turns it 0°**, on all three hulls; with the basic thrusters
+  nothing changed (150 m/s flat out, 295 m/s boost, same turn rate).
+- Tests: **42 passing**. No save change: still version 5. `npm run build` needed (578 KB).
+
+## 2026-11-06: Paint bays are clickable, and show an empty colour store
+
+- **The two Appearance bays are buttons like module bays.** Clicking one opens the picker
+  rectangle under the card, with a Close button and the message **"No colours in storage."**
+  Clicking the open bay again, or Close, shuts it, and the open bay gets the pale blue edge.
+- **One picker at a time across the whole screen**: opening a module bay closes an open paint
+  picker and the other way round.
+- **No paint data and no save change.** Colours will be stored and fitted the same way
+  modules are, and this picker becomes that list of colours when they arrive; until then the
+  empty message is the whole content.
+- The click rule moved into a new `src/ui/picker.js` (`toggleModulePicker`,
+  `togglePaintPicker`) so it is a pure function that can be tested without a browser.
+  `ui/menu.js` `slot`/`paint` call it, and `fit`/`unfit` now check that the open picker is
+  really a module bay. `state.ui.fit` gained a `kind` field ("module" or "paint").
+- Tests: 3 new in `tests/picker.test.mjs` (the toggle, one-at-a-time, and paints and modules
+  sharing the picker). `npm test` now runs 40.
+  `game/tallow-reach.html` needs `npm run build` (577 KB).
+
+## 2026-11-06: Fix: the Appearance bays lost their boxes
+
+- The two paint bays on the **Appearance** card are plain divs, while module bays are now
+  buttons. When the bays became clickable, the box styling (border, background, padding,
+  grid) was written on `button.mod-bay`, so the paint bays no longer matched any rule and
+  collapsed into bare inline text reading **"PRIMARYEmpty"**.
+- The box is back on the bare `.mod-bay` class, which every bay uses whatever its tag;
+  `button.mod-bay` now only carries the button reset (font, colour, cursor). The Appearance
+  card is two dashed boxes side by side again, "Primary / Empty" and "Secondary / Empty",
+  the same size as the Primary weapons bays.
+- Tests: 1 new guard (now 37) that reads `src/styles.css` and fails if the box properties
+  ever move onto the button selector again. No save or gameplay change.
+  `game/tallow-reach.html` needs `npm run build` (577 KB).
+
+## 2026-11-06: Basic thrusters, and every hull flies like the Wasp
+
+- **The thruster bay has a module now**: `thruster_basic` in `src/data/modules.js`, "Basic
+  thrusters", top speed **150 m/s** and turn **1.2** — the Wasp's old hull figures, copied
+  exactly, so a Wasp with them fitted flies precisely as it did before modules existed.
+  Boost is still 2x, strafe/lift/reverse are still the `FLIGHT` fractions.
+- **Speed and turn now come from the thrusters, not the hull.** New `src/sim/drive.js` turns
+  the fitted thruster into `state.drive = { spd, turn }`; `sim/player.js` and
+  `render/camera.js` read that and nothing else. Measured in a headless flight probe:
+  Wasp, Prospector and Bulwark all reach **150 m/s**, **295 m/s** on boost and turn at
+  **69 deg/s** — identical, as asked. Hull differences are a later job and belong in
+  `driveOf` as multipliers.
+- **A hull with no thrusters fitted falls back to its own `spd`/`turn`** from `data/ships.js`
+  (measured: Bulwark 90 m/s, 40 deg/s). That is deliberate: without it, a player who unequips
+  the drive and launches would be stranded in space with no way back to the outpost.
+- The Outfitting card shows `Basic thrusters` / `150 m/s` and the count `1 / 1`.
+- **Save: `SAVE_VERSION` 4 -> 5.** The saved shape is unchanged; the version marks the point
+  from which thrusters exist. A save made before 5 has its empty thruster bay filled with the
+  stock drive on load (that bay was never a choice), while a save at 5 keeps a bay you chose
+  to empty empty.
+- Tests: 2 new and 1 extended (every hull flies like the old Wasp on stock thrusters; the
+  hull fallback; the thruster module's fields; unequip/refit moving `state.drive`).
+  `npm test` now runs 36. `game/tallow-reach.html` needs `npm run build` (576 KB).
+
+## 2026-11-06: Click a bay to fit a module, or unequip one into storage
+
+- **Every module bay is a button.** All eight bays across the seven groups can be clicked.
+  Clicking one opens a **picker rectangle under that card**; clicking the same bay again, or
+  **Close**, shuts it. Only one picker is open at a time.
+- **The picker holds squares, one per stored part that fits that group**, each with the
+  part's name and number (`Basic powerplant` / `10 MJ/s`). With nothing stored it reads
+  **"No modules in storage."** exactly as asked, and that is what a new game shows.
+- **Unequip**: a filled bay gets a button at the bottom of its picker, "Unequip Basic
+  powerplant to storage". The part leaves the bay, lands in the new module store
+  (`profile.modules`) and appears in the picker as a square, ready to go back in. Fitting
+  into a full bay swaps, sending the part it replaced to storage.
+- **Fitting is instant and updates the ship at once**: every fit/unequip refreshes the power
+  budget, so taking the powerplant off turns 10 MJ/s into 0 MJ/s before you launch. Docked,
+  the cells refill as usual.
+- **Nothing can be bought yet**, so the only way to get a part into storage is to take it off
+  a hull. That is deliberate: the shop is the next step.
+- Save: **`SAVE_VERSION` 3 -> 4**, adding `profile.modules` (a list of module ids). Older
+  saves load with an empty store and their fitted parts untouched; unknown ids are dropped
+  and a corrupted value empties the store rather than failing the load.
+- Files: new `src/sim/fitting.js` (`fitModule`, `unequip`, `storedFor`, `fittedAt`);
+  `ui/screens.js` (bay buttons and the picker), `ui/menu.js` (`slot`, `fit`, `unfit`
+  actions), `state/state.js` (`ui.fit`), `styles.css`, `state/profile.js`.
+- Tests: 6 new in `tests/fitting.test.mjs` (new game, unequip, re-fit, the refusals, the
+  swap, and the old-save migration). `npm test` now runs 34.
+  `game/tallow-reach.html` needs `npm run build` (576 KB).
+
+## 2026-11-06: Basic powerplant and power cell, with a power bar in flight
+
+- **Modules exist.** `src/data/modules.js` holds the first two: **Basic powerplant** (10 MJ/s)
+  and **Basic power cell** (100 MJ). Every hull is delivered with both fitted.
+- **Per-hull bay layouts.** Bay counts moved out of `MODULE_GROUPS` into `SHIP_LAYOUTS`
+  (`src/data/outfitting.js`), one entry per hull. All three are a straight copy of the Wasp's
+  today (1 powerplant, 1 cell, 1 thruster, 1 shield, 2 primary, 1 secondary, 1 hull), so a big
+  hull can be given a different arrangement later by editing its own line. `slotsFor()` and
+  `layoutFor()` are the only readers; a test fails if a hull is missing a group's count.
+- **The Outfitting screen shows what is fitted.** Fitted bays are now solid, with the part's
+  name and its headline number (`Basic powerplant / 10 MJ/s`), and the group count reads
+  `1 / 1`. Empty bays still read `Empty`.
+- **Power in flight.** New `src/sim/power.js` turns the fitted modules into
+  `state.power = { gen, cap, stored, draw }` (10 MJ/s, 100 MJ, 100 MJ, 0 MJ/s at the start) and
+  charges the cells every frame. Bottom centre, above the throttle line, the HUD now shows a
+  **Power cell** bar with `100 / 100 MJ` and `Using 0 of 10 MJ/s`. It reads `No power cell` if a
+  hull has none fitted. Cells are full when you launch and topped up by the outpost on dock.
+- **Nothing draws power yet.** `draw` is 0, so the bar sits full; the first system that needs
+  energy (shields, the mining beam) only has to add to `state.power.draw` and the cells start
+  moving. That is the one line to remember.
+- **Save change: `SAVE_VERSION` 2 -> 3**, adding `profile.loadout`: per hull, per group, one
+  entry per bay (`null` for empty). Old saves and new hulls get the stock fit
+  (`STOCK_FIT` in `data/modules.js`); a bay the player really emptied stays empty, unknown
+  module ids and bays beyond a hull's layout are dropped. A ship bought in the Hangar comes
+  with the stock fit; a destroyed ship's loadout is deleted with it.
+- Tests: 4 new (module data and its group, every hull's layout, a new game's 10 MJ/s into
+  100 MJ, the old-save migration and dropped modules, and the charge/overflow/empty maths).
+  `npm test` now runs 28. `game/tallow-reach.html` needs `npm run build` (572 KB).
+
+## 2026-11-06: Powerplant talks in MJ/s, not MW
+
+- The Powerplant card now reads **"Energy the ship makes every second, in MJ/s."** instead of
+  "Power the ship produces, in MW." The Power cells card reads **"Energy the ship can hold,
+  in MJ."** Both cards now describe energy in the same units, one "per second in", one
+  "stored", which is easier to read than a megawatt with nothing to compare it to.
+- **This is wording only.** 1 MJ/s is exactly 1 MW, so any module numbers written later mean
+  the same figure in either unit and nothing needs rebalancing.
+- One file changed: `src/data/outfitting.js` (`MODULE_GROUPS`). No gameplay, save, layout or
+  visual change. Tests unchanged at 24. `game/tallow-reach.html` needs `npm run build`.
+
+## 2026-11-06: Appearance card under the Hull bay
+
+- **New card at the bottom of the right-hand column: Appearance**, directly under the Hull
+  group. It holds **two paint bays, Primary and Secondary**, both reading `Empty` with a
+  `0 / 2` count, and a line saying the standard livery is used until a colour is fitted.
+- It is layout only. **No paint exists, nothing can be bought or fitted, and no gameplay,
+  save field or `SAVE_VERSION` changed.** Paints will be bought, stored and fitted the same
+  way modules are; the card is drawn by the same code as the module cards, so they will
+  look identical when that arrives.
+- The bays come from the new `APPEARANCE_SLOTS` in `src/data/outfitting.js` (`k` id, `n`
+  name). Add an entry and one more paint bay appears; the card always sits last, under the
+  hull group, so adding module groups does not move it.
+- `ui/screens.js`: `appearanceHtml()`, appended last in the right rail. The screen's intro
+  line now says modules and paints arrive in a later update.
+- Tests: 1 new (the two paint slots have unique ids and names, primary before secondary).
+  `npm test` now runs 24. `game/tallow-reach.html` needs `npm run build` (569 KB).
+
+## 2026-11-06: Outfitting screen with a 3D ship viewer
+
+- **New tab: Outfitting**, between Hangar and Shop. On this tab the outpost panel opens
+  up to the middle of the screen (`#panel.wide`, up to 1180 px), so the ship has room.
+- **The ship sits in the middle of the screen** in its own 3D window, drawn by a second
+  renderer (`src/render/shipviewer.js`) on a transparent canvas over a dark gradient.
+  It turns slowly on a display ring; drag to spin it, scroll to zoom, double click to reset.
+  The idle turn pauses for 3 s whenever you take hold of it, and is off altogether if the
+  system asks for reduced motion. Ships are normalised to the
+  same bounding sphere, so no hull is clipped and none looks tiny.
+- **Module groups surround it**, four down the left and three down the right, in the same
+  card for every group: name, `filled / bays` count, one bay box per slot (all read
+  "Empty"), and a line saying what the group decides. The layout is driven entirely by
+  the new `src/data/outfitting.js`, so adding a group there is enough (recipe 15).
+- **Bays today:** powerplant 1, power cells 1, thrusters 1, shields 1, primary weapons 2,
+  secondary weapons 1, hull 1. Nothing is fitted and **no module exists in the game yet**;
+  no gameplay number, save field or balance was touched, and `SAVE_VERSION` is unchanged.
+- `ui/outfitting.js` mounts the viewer into `#shipview` after every panel redraw (the panel
+  rebuilds its HTML, which throws the canvas out but does not destroy it) and draws one
+  frame from the main loop through `updateOutfitting(dt)`. It does nothing unless you are
+  docked on that tab.
+- The ship window needs WebGL; if the browser refuses a second context the panel says so
+  instead of showing an empty box.
+- Tests: 1 new (`MODULE_GROUPS`: unique ids, a name and description each, whole-number bay
+  counts, `slotsFor` agrees, and the intended 2 primary bays / 1 everywhere else).
+  `npm test` now runs 23. `game/tallow-reach.html` needs `npm run build`.
+
 ## 2026-11-05: The chase camera stops running away at speed
 
 - **The view no longer backs off as you accelerate.** It used to trail further the faster you

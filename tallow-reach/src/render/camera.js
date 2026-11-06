@@ -4,7 +4,7 @@
 import { V, R, face, clamp, fwd } from "../util/math.js";
 import { on } from "../util/events.js";
 import { state } from "../state/state.js";
-import { SHIPS, FLIGHT } from "../data/ships.js";
+import { FLIGHT } from "../data/ships.js";
 import { cameraTrail } from "../data/camera.js";
 import { camera } from "./scene.js";
 
@@ -17,11 +17,11 @@ let _havePrev = false;
 /**
  * Distance behind the ship for the speed it is doing right now. Forward speed
  * lengthens the trail up to `CAMERA.fast`, reversing shortens it to
- * `CAMERA.reverse`; both limits are per hull, so every ship reaches the same
- * numbers at its own top speed.
+ * `CAMERA.reverse`; both limits follow the fitted thrusters, so every ship
+ * reaches the same numbers at its own top speed.
  */
 function trail(P) {
-  const d = SHIPS[state.profile.ship];
+  const d = state.drive;
   return cameraTrail(P.v.dot(fwd(P.m)), d.spd * 2, d.spd * FLIGHT.reverse);
 }
 

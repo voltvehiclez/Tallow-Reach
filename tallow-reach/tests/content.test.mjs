@@ -3,6 +3,7 @@
 // Run with `npm test`. When one fails, the message says which entry is wrong.
 
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { SHIPS, DEFAULT_SHIP, FLIGHT } from "../src/data/ships.js";
 import { ITEM, KEYS, emptyCargo } from "../src/data/items.js";
@@ -10,17 +11,27 @@ import { PRIMARY, MISSILE, SHOP_WEAPONS } from "../src/data/weapons.js";
 import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
-import { newProfile, sanitizeProfile, MISSION_TYPES } from "../src/state/profile.js";
+import { newProfile, sanitizeProfile, SAVE_VERSION, MISSION_TYPES } from "../src/state/profile.js";
 import { CAMERA, cameraTrail } from "../src/data/camera.js";
+import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
+import { MODULES, STOCK_FIT } from "../src/data/modules.js";
+import { powerOf, updatePower } from "../src/sim/power.js";
+import { driveOf, hasDrive, driveDraw } from "../src/sim/drive.js";
+import { gunsOf } from "../src/sim/guns.js";
+import { hasPower } from "../src/sim/power.js";
+import { state } from "../src/state/state.js";
 
 const isNum = v => typeof v === "number" && Number.isFinite(v);
+// What a ship with an empty thruster bay has: nothing to move or turn with, and
+// nothing to pay for.
+const PARKED = { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0, bmax: 0, buse: 0, bfill: 0 };
 
 test("every ship has all the fields the game reads", () => {
   assert.ok(SHIPS[DEFAULT_SHIP], "DEFAULT_SHIP must exist in SHIPS");
   for (const [id, s] of Object.entries(SHIPS)) {
     assert.equal(typeof s.n, "string", `${id}: n (name)`);
     assert.equal(typeof s.d, "string", `${id}: d (description)`);
-    for (const f of ["spd", "cargo", "hull", "sh", "dmg", "mine", "turn", "sc", "price", "col"]) {
+    for (const f of ["cargo", "hull", "dmg", "mine", "sc", "price", "col"]) {
       assert.ok(isNum(s[f]) && s[f] > 0, `${id}: ${f} must be a positive number`);
     }
   }
@@ -35,7 +46,6 @@ test("every item has a name and a value, and cargo objects cover them all", () =
 });
 
 test("weapon data is complete", () => {
-  assert.ok(isNum(PRIMARY.cannon.cooldown) && isNum(PRIMARY.cannon.speed) && isNum(PRIMARY.cannon.damage));
   assert.ok(isNum(PRIMARY.beam.range) && isNum(PRIMARY.beam.rate) && isNum(PRIMARY.beam.price));
   for (const f of ["price", "startStock", "unitPrice", "cap", "dmg", "cd", "range"]) {
     assert.ok(isNum(MISSILE[f]) && MISSILE[f] > 0, `MISSILE.${f}`);
@@ -194,4 +204,359 @@ test("the camera trail is bounded: idle, flat out and full reverse land on fixed
   const slow = cameraTrail(210, 210, 30);
   assert.equal(slow, CAMERA.fast, "every hull reaches the full trail at its own top speed");
   assert.ok(cameraTrail(210, 300, 45) < CAMERA.fast, "at the same speed a faster hull trails less");
+});
+
+test("every module group is complete, and every hull has a bay count for it", () => {
+  assert.ok(MODULE_GROUPS.length > 0, "MODULE_GROUPS needs at least one group");
+
+  const groups = new Set();
+  for (const g of MODULE_GROUPS) {
+    assert.equal(typeof g.k, "string", "every group needs k (id)");
+    assert.ok(!groups.has(g.k), `duplicate module group id: ${g.k}`);
+    groups.add(g.k);
+    assert.equal(typeof g.n, "string", `${g.k}: n (name)`);
+    assert.equal(typeof g.d, "string", `${g.k}: d (description)`);
+  }
+
+  // Every hull lays out every group once, through slotsFor.
+  for (const id of Object.keys(SHIPS)) {
+    const layout = layoutFor(id);
+    for (const g of MODULE_GROUPS) {
+      assert.ok(
+        Number.isInteger(layout[g.k]) && layout[g.k] >= 1,
+        `${id}: ${g.k} needs a whole number of bays, at least one`
+      );
+      assert.equal(slotsFor(g, id), layout[g.k], `${id}: slotsFor must read the hull's layout`);
+    }
+    for (const k of Object.keys(layout)) {
+      assert.ok(groups.has(k), `${id}: layout mentions ${k}, which is not a module group`);
+    }
+  }
+
+  // The layout the screen was built for: the Wasp's, copied to every hull today.
+  assert.deepEqual(
+    layoutFor("wasp"),
+    { power: 1, cell: 1, thruster: 1, shield: 1, primary: 2, secondary: 1, hull: 1 },
+    "the Wasp's layout"
+  );
+  for (const id of Object.keys(SHIP_LAYOUTS)) {
+    assert.deepEqual(layoutFor(id), layoutFor("wasp"), `${id} should start with the Wasp's layout`);
+  }
+});
+
+test("every module fits its own group and carries that group's stat", () => {
+  const groupIds = new Set(MODULE_GROUPS.map(g => g.k));
+  for (const [id, m] of Object.entries(MODULES)) {
+    assert.ok(groupIds.has(m.g), `${id}: g must name a module group, not ${m.g}`);
+    assert.equal(typeof m.n, "string", `${id}: n (name)`);
+    assert.equal(typeof m.d, "string", `${id}: d (description)`);
+    if (m.g === "power") assert.ok(isNum(m.mjps) && m.mjps > 0, `${id}: a powerplant makes MJ/s`);
+    if (m.g === "cell") assert.ok(isNum(m.mj) && m.mj > 0, `${id}: a power cell holds MJ`);
+    if (m.g === "thruster") {
+      assert.ok(isNum(m.spd) && m.spd > 0, `${id}: thrusters set a top speed`);
+      assert.ok(isNum(m.turn) && m.turn > 0, `${id}: thrusters set a turn rate`);
+    }
+    if (m.g === "primary") {
+      assert.ok(isNum(m.dmg) && m.dmg > 0, `${id}: guns do damage a shot`);
+      assert.ok(isNum(m.rate) && m.rate > 0, `${id}: guns set a fire rate`);
+      assert.ok(isNum(m.bspd) && m.bspd > 0, `${id}: guns set a bullet speed`);
+      assert.ok(isNum(m.draw) && m.draw >= 0, `${id}: guns state their power draw`);
+    }
+    if (m.g === "shield") {
+      assert.ok(isNum(m.sh) && m.sh > 0, `${id}: shields hold shield points`);
+      assert.ok(isNum(m.regen) && m.regen > 0, `${id}: shields set a recharge rate`);
+      assert.ok(isNum(m.delay) && m.delay >= 0, `${id}: shields set the lull before recharging`);
+      assert.ok(isNum(m.draw) && m.draw > 0, `${id}: shields state a flat power draw`);
+      assert.ok(isNum(m.drain) && m.drain > 0, `${id}: shields state how fast they bleed without power`);
+    }
+  }
+  for (const [g, list] of Object.entries(STOCK_FIT)) {
+    for (const id of list) {
+      assert.ok(MODULES[id], `${g}: stock module ${id} must exist`);
+      assert.equal(MODULES[id].g, g, `${id} can only be fitted in a ${MODULES[id].g} bay`);
+    }
+  }
+});
+
+test("shields are a module, and every hull is delivered with them", () => {
+  const m = MODULES.shield_basic;
+  assert.ok(m, "there is a basic shield module");
+  assert.equal(m.g, "shield", "it fits the shield bay");
+  assert.equal(m.sh, 10, "10 shield points");
+  assert.equal(m.regen, 1, "1 point a second");
+  assert.equal(m.delay, 4, "and only after 4 seconds without a hit");
+  assert.equal(m.draw, 2, "2 MJ/s flat, whenever they are fitted");
+  assert.equal(m.drain, 1, "and 1 point a second lost when that cannot be paid");
+  assert.deepEqual(STOCK_FIT.shield, ["shield_basic"], "every hull is delivered with them");
+  for (const [id, s] of Object.entries(SHIPS)) {
+    assert.equal(s.sh, undefined, `${id}: shield points come from the module, not the hull`);
+  }
+  const p = newProfile();
+  for (const id of Object.keys(SHIPS)) {
+    assert.deepEqual(p.loadout[id].shield, ["shield_basic"], `${id} has basic shields fitted`);
+  }
+});
+
+test("a new game starts with the basic plant, cell and thrusters", () => {
+  const p = newProfile();
+  assert.deepEqual(p.loadout.wasp.power, ["power_basic"], "the basic powerplant is fitted");
+  assert.deepEqual(p.loadout.wasp.cell, ["cell_basic"], "the basic power cell is fitted");
+  assert.deepEqual(p.loadout.wasp.thruster, ["thruster_basic"], "the basic thrusters are fitted");
+  assert.deepEqual(powerOf(p.loadout.wasp), { gen: 10, cap: 100 }, "10 MJ/s and 100 MJ");
+  assert.deepEqual(p.loadout.wasp.primary, ["cannon_basic", null], "one basic cannon in the first primary bay");
+  assert.deepEqual(p.loadout.wasp.secondary, [null], "the secondary bay is still empty");
+});
+
+test("a ship with no thrusters warns the player when they try to move", () => {
+  // The warning is player-facing wording, so guard it: sim/player.js is its only home.
+  const src = readFileSync(new URL("../src/sim/player.js", import.meta.url), "utf8");
+  assert.match(src, /msg\("Equip thrusters to move"/, "the warning must say exactly that");
+  assert.match(
+    src,
+    /if \(!W && !powered && P\.noDriveT === 0 && tryingToMove\(stick\)\)/,
+    "the warning fires when a control is pressed and there is no drive, and not on a warp"
+  );
+});
+
+test("basic cannons: 1 damage a shot, 3 a second, 2 MJ/s while firing", () => {
+  const m = MODULES.cannon_basic;
+  assert.ok(m, "there is a basic cannon module");
+  assert.equal(m.g, "primary", "it fits a primary weapon bay");
+  assert.equal(m.dmg, 1, "1 damage a shot");
+  assert.equal(m.rate, 3, "3 shots a second");
+  assert.equal(m.draw, 2, "2 MJ/s while the trigger is held");
+  assert.deepEqual(STOCK_FIT.primary, ["cannon_basic"], "every hull is delivered with one");
+});
+
+test("a gun fires from whichever primary bay it is fitted in", () => {
+  // Either bay works, and the bay only decides the barrel the shot comes from.
+  const bay0 = gunsOf({ primary: ["cannon_basic", null] });
+  const bay1 = gunsOf({ primary: [null, "cannon_basic"] });
+  assert.equal(bay0.length, 1);
+  assert.equal(bay1.length, 1);
+  assert.equal(bay0[0].dmg, bay1[0].dmg, "same damage in either bay");
+  assert.equal(bay0[0].rate, bay1[0].rate, "same fire rate in either bay");
+  assert.equal(bay0[0].i, 0, "bay 0 is the left barrel");
+  assert.equal(bay1[0].i, 1, "bay 1 is the right barrel");
+
+  assert.deepEqual(gunsOf({ primary: [null, null] }), [], "no gun fitted, nothing fires");
+  assert.deepEqual(gunsOf({}), [], "no primary bay at all");
+  assert.deepEqual(gunsOf(undefined), [], "nothing to read");
+});
+
+test("the Newbie Raider has 10 hull points and no shields", () => {
+  // The hostile numbers live in sim/ai.js (see ARCHITECTURE.md), so guard them.
+  const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
+  assert.match(src, /RAIDER = \{ n: "Newbie Raider", hp: 10 \}/, "name and hull points");
+  assert.match(src, /mx: hp/, "no shield pool on the raider record");
+});
+
+test("the basic thrusters draw power while flying, and a 20 MJ gulp to light the boost", () => {
+  const d = driveOf(newProfile().loadout[DEFAULT_SHIP]);
+  assert.equal(d.draw, 2, "2 MJ/s while the throttle is off centre");
+  assert.equal(d.boost, 1, "1 MJ/s more while the boost burns");
+  assert.equal(d.ignite, 20, "a flat 20 MJ each time the boost lights");
+  assert.equal(driveDraw(d, 0, false), 0, "hands off the throttle, not boosting: no draw");
+});
+
+test("the boost tank is 10 units, burns 2 a second and refills at 1", () => {
+  const m = MODULES.thruster_basic;
+  assert.equal(m.bmax, 10, "10 units in the tank");
+  assert.equal(m.buse, 2, "2 units a second while boosting");
+  assert.equal(m.bfill, 1, "1 unit a second back");
+  assert.ok(m.bmax / m.buse > 1, "a full tank must buy more than a second of boost");
+
+  const d = driveOf(newProfile().loadout[DEFAULT_SHIP]);
+  assert.equal(d.bmax, 10, "the drive carries the tank size");
+  assert.equal(d.buse, 2);
+  assert.equal(d.bfill, 1);
+  assert.equal(PARKED.bmax, 0, "no thrusters, no tank");
+});
+
+test("any throttle setting off zero runs the thrusters, and the boost adds its share", () => {
+  const d = { spd: 150, turn: 1.2, draw: 2, boost: 1, ignite: 20 };
+  for (const thr of [1, 0.99, 0.5, -0.01, -0.3, -1]) {
+    assert.equal(driveDraw(d, thr, false), 2, `throttle ${thr} runs the drive at 2 MJ/s`);
+  }
+  assert.equal(driveDraw(d, 0, false), 0, "exactly zero throttle draws nothing");
+  assert.equal(driveDraw(d, 1, false), 2, "flying without boosting draws 2 MJ/s");
+  assert.equal(driveDraw(d, 1, true), 3, "flying and boosting together draws 3 MJ/s");
+  assert.equal(driveDraw(d, -0.5, true), 3, "reversing under boost draws 3 MJ/s too");
+  assert.equal(driveDraw(PARKED, 1, true), 0, "no thrusters, nothing to pay for");
+});
+
+test("a ship with empty cells and no powerplant has no power to fly on", () => {
+  assert.equal(hasPower(0, { stored: 0, gen: 0 }), true, "asking for nothing always works");
+  assert.equal(hasPower(2, { stored: 0, gen: 0 }), false, "empty cells and no plant: no thrust");
+  assert.equal(hasPower(2, { stored: 0, gen: 2 }), true, "a plant that covers the draw is enough");
+  assert.equal(hasPower(2, { stored: 0, gen: 1.5 }), false, "a plant that cannot cover it is not");
+  assert.equal(hasPower(2, { stored: 0.1, gen: 0 }), true, "anything left in the cells will do");
+});
+
+test("every hull flies exactly like the old Wasp on the basic thrusters", () => {
+  const p = newProfile();
+  // The basic thrusters carry the figures the old Wasp had, so the feel is kept.
+  const t = MODULES.thruster_basic;
+  const reference = {
+    spd: t.spd,
+    turn: t.turn,
+    draw: t.draw,
+    boost: t.boost,
+    ignite: t.ign,
+    bmax: t.bmax,
+    buse: t.buse,
+    bfill: t.bfill,
+  };
+  for (const id of Object.keys(SHIPS)) {
+    assert.deepEqual(driveOf(p.loadout[id]), reference, `${id} should fly like the Wasp today`);
+  }
+});
+
+test("a hull has no speed of its own, so no thrusters means it cannot move", () => {
+  // Speed and turn live in the thruster module now, nowhere else.
+  for (const [id, s] of Object.entries(SHIPS)) {
+    assert.equal(s.spd, undefined, `${id}: the hull must not define a top speed`);
+    assert.equal(s.turn, undefined, `${id}: the hull must not define a turn rate`);
+  }
+  const p = newProfile();
+  for (const id of Object.keys(SHIPS)) {
+    const empty = { ...p.loadout[id], thruster: [null] };
+    assert.deepEqual(driveOf(empty), PARKED, `${id} with an empty thruster bay is dead in space`);
+    assert.equal(hasDrive(driveOf(empty)), false, `${id} must not be able to move`);
+  }
+  assert.equal(
+    hasDrive(driveOf(newProfile().loadout[DEFAULT_SHIP])),
+    true,
+    "a fitted thruster does move the ship"
+  );
+});
+
+test("thrusters are the only thing that sets speed and turn", () => {
+  // Anyone reading the data should find the numbers in one place.
+  const thrusters = Object.entries(MODULES).filter(([, m]) => m.g === "thruster");
+  assert.ok(thrusters.length > 0, "at least one thruster must exist");
+  for (const [id, m] of thrusters) {
+    assert.ok(isNum(m.spd) && m.spd > 0, `${id}: spd is the top speed in m/s`);
+    assert.ok(isNum(m.turn) && m.turn > 0, `${id}: turn is the steering rate`);
+  }
+  // No drive at all is a parked ship rather than a crash.
+  assert.deepEqual(driveOf(undefined), PARKED);
+  assert.deepEqual(driveOf({ thruster: ["junk", null] }), PARKED);
+});
+
+test("an old save gets the stock fit, and bad modules are dropped", () => {
+  const old = sanitizeProfile({ v: 2, ships: ["wasp"], ship: "wasp", cr: 50 });
+  assert.equal(old.v, SAVE_VERSION, "old saves are stamped with the new version");
+  assert.deepEqual(old.loadout.wasp.power, ["power_basic"], "an old save is fitted with the basic plant");
+  assert.deepEqual(powerOf(old.loadout.wasp), { gen: 10, cap: 100 });
+
+  const wrong = sanitizeProfile({
+    ships: ["wasp"],
+    loadout: { wasp: { power: ["cell_basic", "power_basic"], cell: ["cell_basic"] } },
+  });
+  assert.deepEqual(wrong.loadout.wasp.power, [null], "a cell cannot sit in a powerplant bay, and the extra bay is dropped");
+
+  const emptied = sanitizeProfile({
+    ships: ["wasp"],
+    loadout: { wasp: { power: [null], cell: ["cell_basic"] } },
+  });
+  assert.deepEqual(emptied.loadout.wasp.power, [null], "a bay the player emptied stays empty");
+});
+
+test("cannons arrived in save version 7: older saves are fitted with one", () => {
+  const v6 = sanitizeProfile({ v: 6, ships: ["wasp"], ship: "wasp", cr: 100 });
+  assert.equal(v6.v, SAVE_VERSION);
+  assert.deepEqual(v6.loadout.wasp.primary, ["cannon_basic", null], "a v6 save gains basic cannons");
+  assert.deepEqual(v6.loadout.wasp.shield, ["shield_basic"], "and keeps its shields");
+
+  const emptied = sanitizeProfile({
+    v: SAVE_VERSION,
+    ships: ["wasp"],
+    ship: "wasp",
+    loadout: { wasp: { primary: [null, null] } },
+  });
+  assert.deepEqual(emptied.loadout.wasp.primary, [null, null], "a current save can run with no guns");
+});
+
+test("shields arrived in save version 6: older saves are fitted with them", () => {
+  const v5 = sanitizeProfile({ v: 5, ships: ["wasp"], ship: "wasp", cr: 100 });
+  assert.equal(v5.v, SAVE_VERSION);
+  assert.deepEqual(v5.loadout.wasp.shield, ["shield_basic"], "a v5 save gains basic shields");
+  assert.deepEqual(v5.loadout.wasp.thruster, ["thruster_basic"], "and keeps its thrusters");
+
+  const ancient = sanitizeProfile({ v: 2, ships: ["wasp"], ship: "wasp", cr: 100 });
+  assert.deepEqual(ancient.loadout.wasp.shield, ["shield_basic"], "so does a very old one");
+
+  // A save from this version that really has an empty shield bay keeps it empty.
+  const removed = sanitizeProfile({
+    v: SAVE_VERSION,
+    ships: ["wasp"],
+    ship: "wasp",
+    loadout: { wasp: { shield: [null] } },
+  });
+  assert.deepEqual(removed.loadout.wasp.shield, [null], "the player's choice to run shieldless stands");
+});
+
+test("a pirate cannon does 1 damage a shot", () => {
+  // The pirate numbers live in sim/ai.js (see ARCHITECTURE.md), so guard the one
+  // the shields are balanced against.
+  const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
+  assert.match(src, /fire\(e\.m\.position, dir, 520, false, 1\)/, "enemy cannons must do 1 a shot");
+});
+
+test("the cells charge at the plants' rate, never overflow and never go negative", () => {
+  const p = state.power;
+  p.gen = 10;
+  p.cap = 100;
+  p.draw = 0;
+  p.stored = 0;
+
+  updatePower(1);
+  assert.equal(p.stored, 10, "one second at 10 MJ/s puts 10 MJ in the cells");
+  for (let i = 0; i < 20; i++) updatePower(1);
+  assert.equal(p.stored, 100, "the cells stop at their capacity");
+
+  p.draw = 25;   // using more than the plant makes
+  updatePower(1);
+  assert.equal(p.stored, 85, "the cells make up the difference");
+
+  p.draw = 1000;
+  updatePower(1);
+  assert.equal(p.stored, 0, "the cells empty, they do not go negative");
+});
+
+test("the appearance card has its two paint bays, primary first", () => {
+  const seen = new Set();
+  for (const a of APPEARANCE_SLOTS) {
+    assert.equal(typeof a.k, "string", "every paint slot needs k (id)");
+    assert.ok(!seen.has(a.k), `duplicate paint slot id: ${a.k}`);
+    seen.add(a.k);
+    assert.equal(typeof a.n, "string", `${a.k}: n (name)`);
+    assert.ok(a.n.trim().length > 0, `${a.k}: the bay needs a name`);
+  }
+  assert.deepEqual(
+    APPEARANCE_SLOTS.map(a => a.k),
+    ["primary", "secondary"],
+    "the hull has a primary and a secondary colour, in that order"
+  );
+});
+
+test("the bay box style sits on .mod-bay itself, so paint bays get a box too", () => {
+  // Module bays are buttons; paint bays on the Appearance card are divs. When the
+  // box styling lived only on `button.mod-bay`, the paint bays collapsed into bare
+  // text ("PRIMARYEmpty"). Keep the box on the bare class.
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+  const box = css.match(/(?:^|\n)\.mod-bay\s*\{([\s\S]*?)\}/);
+  assert.ok(box, "styles.css needs a bare .mod-bay rule for every bay, button or not");
+  for (const re of [/display:\s*grid/, /padding:/, /border:/, /background:/]) {
+    assert.match(box[1], re, `.mod-bay is missing ${re} - every bay needs the box`);
+  }
+
+  const button = css.match(/(?:^|\n)button\.mod-bay\s*\{([\s\S]*?)\}/);
+  assert.ok(button, "button.mod-bay should keep the button reset (font, colour, cursor)");
+  assert.ok(
+    !/(?:^|\n)\s*(?:border|padding|display|background)\s*:/.test(button[1]),
+    "button.mod-bay must not hold the box styles: the paint bays would lose them"
+  );
 });

@@ -6,15 +6,52 @@ import { KEYS, emptyCargo } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
 import { CONTRACT_TYPES } from "../data/contracts.js";
+import { MODULES, STOCK_FIT } from "../data/modules.js";
+import { layoutFor } from "../data/outfitting.js";
 
 // Version history:
 //   1  original prototype (no "v" field)
 //   2  adds "v"; otherwise identical shape
-export const SAVE_VERSION = 2;
+//   3  adds "loadout": the modules fitted to each hull, bay by bay. Older saves
+//      get the stock fit for their bays (stockFor), so nothing is lost.
+//   4  adds "modules": the parts held in storage, ready to be fitted. Older
+//      saves simply start with an empty store.
+//   5  the basic thrusters are standard issue. Saves from before 5 have their
+//      empty thruster bay filled on load (they were made before thrusters
+//      existed, so the bay was never a choice).
+//   6  the basic shields are standard issue, the same way: saves from before 6
+//      get their shield bay filled on load, and a v6 save where the player
+//      emptied it stays shieldless.
+//   7  the basic cannons are standard issue in the first primary bay. Saves from
+//      before 7 gain them on load; weapon bays the player really left empty stay
+//      empty from version 7 onwards.
+export const SAVE_VERSION = 7;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
 export const MISSION_TYPES = CONTRACT_TYPES;
+
+/**
+ * The modules hull `shipId` is delivered with: one entry per bay, `null` where
+ * the bay is empty. Bay counts come from the hull's layout.
+ */
+export function stockFor(shipId) {
+  const layout = layoutFor(shipId);
+  const fit = {};
+  for (const [g, slots] of Object.entries(layout)) {
+    const list = Array.from({ length: slots }, () => null);
+    (STOCK_FIT[g] || []).slice(0, slots).forEach((mod, i) => (list[i] = mod));
+    fit[g] = list;
+  }
+  return fit;
+}
+
+/** A stock fit for every hull the game knows. */
+function allStockFit() {
+  const out = {};
+  for (const id of Object.keys(SHIPS)) out[id] = stockFor(id);
+  return out;
+}
 
 export function newProfile() {
   return {
@@ -32,6 +69,8 @@ export function newProfile() {
     msl: 0,            // missiles carried
     pw: "cannon",      // equipped primary
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
+    loadout: allStockFit(),      // fitted modules per hull, group -> bay array
+    modules: [],                 // spare parts in storage, ready to be fitted
   };
 }
 
@@ -74,6 +113,9 @@ export function sanitizeProfile(raw) {
   }
   s.hp = hp;
 
+  s.loadout = cleanLoadouts(raw.loadout, +raw.v || 1);
+  s.modules = cleanStorage(raw.modules);
+
   s.done = +s.done || 0;
   s.kills = +s.kills || 0;
   if (s.mission && !MISSION_TYPES.includes(s.mission.type)) s.mission = null;
@@ -90,4 +132,43 @@ export function sanitizeProfile(raw) {
 
 function clampLevel(value, lo, hi) {
   return Math.min(hi, Math.max(lo, +value || lo));
+}
+
+/** Parts held in storage: known ids only, in the order they were stored. */
+function cleanStorage(raw) {
+  return Array.isArray(raw) ? raw.filter(id => MODULES[id]) : [];
+}
+
+/**
+ * Rebuild every hull's loadout from a save. Unknown modules are dropped, a bay
+ * beyond the hull's layout is dropped, and a hull with no saved loadout (an old
+ * save, or a hull added in an update) gets the stock fit. A bay the player has
+ * really left empty stays empty: only a missing hull or group falls back.
+ */
+function cleanLoadouts(saved, version) {
+  // Modules arrived over several versions, and a save older than the version that
+  // introduced a group has an empty bay because the group did not exist then, not
+  // because the player emptied it. Those bays get the stock part.
+  //   version 5: thrusters      version 6: shields      version 7: cannons
+  const addedLater = [];
+  if (version < 5) addedLater.push("thruster");
+  if (version < 6) addedLater.push("shield");
+  if (version < 7) addedLater.push("primary");
+  const out = {};
+  for (const id of Object.keys(SHIPS)) {
+    const layout = layoutFor(id),
+      stock = stockFor(id),
+      forShip = saved && saved[id];
+    const fit = {};
+    for (const [g, slots] of Object.entries(layout)) {
+      const src =
+        addedLater.includes(g) || !forShip || !Array.isArray(forShip[g]) ? stock[g] : forShip[g];
+      fit[g] = Array.from({ length: slots }, (_, i) => {
+        const m = src[i];
+        return MODULES[m] && MODULES[m].g === g ? m : null;
+      });
+    }
+    out[id] = fit;
+  }
+  return out;
 }

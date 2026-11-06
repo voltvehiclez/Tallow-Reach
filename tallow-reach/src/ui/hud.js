@@ -28,8 +28,12 @@ export function setupHud() {
     shield: $("b1"),
     hull: $("b2"),
     boost: $("b3"),
+    boostVal: $("boost-val"),
     topRight: $("tr"),
     bottomCenter: $("bc"),
+    powerBar: $("pwbar"),
+    powerValue: $("pw-val"),
+    powerFlow: $("pw-flow"),
     prompt: $("pr"),
     msg: $("msg"),
     cursor: $("cur"),
@@ -68,22 +72,45 @@ export function updateHud(dt) {
     d = SHIPS[S.ship],
     m = S.mission;
 
-  el.shield.style.width = (P.sh / P.shMax) * 100 + "%";
+  el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
   el.hull.style.width = Math.max(0, (P.hull / P.hullMax) * 100) + "%";
-  el.boost.style.width = P.en + "%";
+  el.boost.style.width = (P.enMax > 0 ? Math.max(0, Math.min(1, P.en / P.enMax)) : 0) * 100 + "%";
+  // Numbers beside the bar, so the tank can be read exactly as well as roughly.
+  el.boostVal.textContent = P.enMax > 0 ? `${P.en.toFixed(1)} / ${P.enMax}` : "none";
+
+  // The primary line names what left click will do: the beam, or how many guns
+  // the primary bays are holding (bay 1 and bay 2 both count).
+  const guns = state.guns.length,
+    primary =
+      S.pw === "beam"
+        ? "Mining beam"
+        : guns === 0
+        ? "No guns"
+        : guns === 1
+        ? "Cannons"
+        : `Cannons x${guns}`;
 
   el.topRight.innerHTML =
     `${sectorAt(state.sector).n}<br>` +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo}<br>` +
-    `${S.pw === "beam" ? "Mining beam" : "Cannons"}${S.wp.msl ? ", missiles " + S.msl : ""}<br>` +
+    `${primary}${S.wp.msl ? ", missiles " + S.msl : ""}<br>` +
     `<span style="color:var(--amber)">${m ? describe(m) + " " + m.p + "/" + m.n : "No contract"}</span>`;
 
   el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
 
+  // Ship power: what the cells hold, and what the powerplants are making.
+  const pw = state.power,
+    cap = Math.max(0, pw.cap);
+  el.powerBar.style.width = (cap ? Math.max(0, Math.min(1, pw.stored / cap)) * 100 : 0) + "%";
+  el.powerValue.textContent = cap ? `${Math.round(pw.stored)} / ${Math.round(cap)} MJ` : "No power cell";
+  el.powerFlow.textContent = `Using ${round1(pw.draw)} of ${round1(pw.gen)} MJ/s`;
+
   if (!state.warp && sectorAt(state.sector).st && P.m.position.length() < 300) {
     say(P.v.length() < 70 ? "Press G to dock at Meridian Outpost" : "Slow below 70 m/s to dock");
   }
-  el.prompt.textContent = H.prompt;
+  // A ship with no thrusters cannot move, so say why the controls do nothing.
+  el.prompt.textContent =
+    H.prompt || (state.drive.spd > 0 ? "" : "No thrusters fitted: press G to dock and fit one.");
   H.prompt = "";
 
   el.msg.textContent = H.msgT > 0 ? H.msg : "";
@@ -97,6 +124,9 @@ export function updateHud(dt) {
 
   drawMarkers();
 }
+
+/** One decimal at most, so 10 does not print as 10.0 and 0.25 does not print as 0. */
+const round1 = v => (Math.round(v * 10) / 10).toString();
 
 /** Corner brackets that tighten as the missile lock builds, then flash red. */
 function drawLockRing(ML, radius) {
