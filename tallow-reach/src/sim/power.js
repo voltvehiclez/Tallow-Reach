@@ -1,10 +1,13 @@
 // Ship power: what the fitted powerplants make, what the power cells hold, and
 // what the ship is drawing.
 //
-// Nothing consumes power yet, so the cells charge to full in the first seconds
-// of a flight and then stay there. The accounting is real rather than faked, so
-// the first system that needs energy (shields, the mining beam, ...) only has to
-// add to `draw` and the bar starts moving.
+// The thrusters are the only thing that draws power today: 2 MJ/s while the
+// throttle is off centre, plus 1 MJ/s while the boost meter is filling, and a
+// flat 1 MJ each time the boost lights (see data/modules.js and sim/drive.js).
+// sim/player.js writes that figure to state.power.draw every frame, and
+// `hasPower()` answers whether the ship can actually pay for it. When something
+// else needs energy (shields, the mining beam, ...) it adds its share to `draw`
+// and asks `hasPower()` before it works.
 //
 // Figures come from the fitted modules in the save (profile.loadout[ship]),
 // through MODULES in data/modules.js. The HUD reads state.power; it does not
@@ -53,6 +56,17 @@ export function refreshPower() {
 export function refillPower() {
   refreshPower();
   state.power.stored = state.power.cap;
+}
+
+/**
+ * Can the ship pay for `mjps` right now, out of the cells or straight off the
+ * powerplant? False when the cells are empty and the plants make less than the
+ * demand, which is what stops the thrusters when a ship runs dry. Pure.
+ */
+export function hasPower(mjps = 0, p = state.power) {
+  if (mjps <= 0) return true;
+  if (p.stored > 0) return true;
+  return p.gen >= mjps;
 }
 
 /** One frame of the power budget: cells take in what is made, give out what is used. */

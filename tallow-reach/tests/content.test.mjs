@@ -16,10 +16,14 @@ import { CAMERA, cameraTrail } from "../src/data/camera.js";
 import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
 import { MODULES, STOCK_FIT } from "../src/data/modules.js";
 import { powerOf, updatePower } from "../src/sim/power.js";
-import { driveOf, hasDrive } from "../src/sim/drive.js";
+import { driveOf, hasDrive, driveDraw } from "../src/sim/drive.js";
+import { hasPower } from "../src/sim/power.js";
 import { state } from "../src/state/state.js";
 
 const isNum = v => typeof v === "number" && Number.isFinite(v);
+// What a ship with an empty thruster bay has: nothing to move or turn with, and
+// nothing to pay for.
+const PARKED = { spd: 0, turn: 0, draw: 0, charge: 0, ignite: 0 };
 
 test("every ship has all the fields the game reads", () => {
   assert.ok(SHIPS[DEFAULT_SHIP], "DEFAULT_SHIP must exist in SHIPS");
@@ -281,11 +285,38 @@ test("a ship with no thrusters warns the player when they try to move", () => {
   );
 });
 
+test("the basic thrusters draw power while flying, and while the boost charges", () => {
+  const d = driveOf(newProfile().loadout[DEFAULT_SHIP]);
+  assert.equal(d.draw, 2, "2 MJ/s while the throttle is off centre");
+  assert.equal(d.charge, 1, "1 MJ/s more while the boost fills");
+  assert.equal(d.ignite, 1, "1 MJ spent each time the boost lights");
+  assert.equal(driveDraw(d, 0, false), 0, "hands off the throttle and full boost: no draw");
+});
+
+test("any throttle setting off zero runs the thrusters", () => {
+  const d = { spd: 150, turn: 1.2, draw: 2, charge: 1, ignite: 1 };
+  for (const thr of [1, 0.99, 0.5, -0.01, -0.3, -1]) {
+    assert.equal(driveDraw(d, thr, false), 2, `throttle ${thr} runs the drive at 2 MJ/s`);
+  }
+  assert.equal(driveDraw(d, 0, false), 0, "exactly zero throttle draws nothing");
+  assert.equal(driveDraw(d, 0, true), 1, "charging the boost on its own draws 1 MJ/s");
+  assert.equal(driveDraw(d, 1, true), 3, "flying and charging together draws 3 MJ/s");
+  assert.equal(driveDraw(PARKED, 1, true), 0, "no thrusters, nothing to pay for");
+});
+
+test("a ship with empty cells and no powerplant has no power to fly on", () => {
+  assert.equal(hasPower(0, { stored: 0, gen: 0 }), true, "asking for nothing always works");
+  assert.equal(hasPower(2, { stored: 0, gen: 0 }), false, "empty cells and no plant: no thrust");
+  assert.equal(hasPower(2, { stored: 0, gen: 2 }), true, "a plant that covers the draw is enough");
+  assert.equal(hasPower(2, { stored: 0, gen: 1.5 }), false, "a plant that cannot cover it is not");
+  assert.equal(hasPower(2, { stored: 0.1, gen: 0 }), true, "anything left in the cells will do");
+});
+
 test("every hull flies exactly like the old Wasp on the basic thrusters", () => {
   const p = newProfile();
   // The basic thrusters carry the figures the old Wasp had, so the feel is kept.
   const t = MODULES.thruster_basic;
-  const reference = { spd: t.spd, turn: t.turn };
+  const reference = { spd: t.spd, turn: t.turn, draw: t.draw, charge: t.chg, ignite: t.ign };
   for (const id of Object.keys(SHIPS)) {
     assert.deepEqual(driveOf(p.loadout[id]), reference, `${id} should fly like the Wasp today`);
   }
@@ -300,7 +331,7 @@ test("a hull has no speed of its own, so no thrusters means it cannot move", () 
   const p = newProfile();
   for (const id of Object.keys(SHIPS)) {
     const empty = { ...p.loadout[id], thruster: [null] };
-    assert.deepEqual(driveOf(empty), { spd: 0, turn: 0 }, `${id} with an empty thruster bay is dead in space`);
+    assert.deepEqual(driveOf(empty), PARKED, `${id} with an empty thruster bay is dead in space`);
     assert.equal(hasDrive(driveOf(empty)), false, `${id} must not be able to move`);
   }
   assert.equal(
@@ -318,9 +349,9 @@ test("thrusters are the only thing that sets speed and turn", () => {
     assert.ok(isNum(m.spd) && m.spd > 0, `${id}: spd is the top speed in m/s`);
     assert.ok(isNum(m.turn) && m.turn > 0, `${id}: turn is the steering rate`);
   }
-  // No drive at all is 0 / 0 rather than a crash.
-  assert.deepEqual(driveOf(undefined), { spd: 0, turn: 0 });
-  assert.deepEqual(driveOf({ thruster: ["junk", null] }), { spd: 0, turn: 0 });
+  // No drive at all is a parked ship rather than a crash.
+  assert.deepEqual(driveOf(undefined), PARKED);
+  assert.deepEqual(driveOf({ thruster: ["junk", null] }), PARKED);
 });
 
 test("an old save gets the stock fit, and bad modules are dropped", () => {

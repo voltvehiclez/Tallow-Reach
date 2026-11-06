@@ -10,7 +10,8 @@ import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { buildPlayerShip } from "../render/models.js";
 import { state, msg } from "../state/state.js";
-import { hasDrive } from "./drive.js";
+import { hasDrive, driveDraw } from "./drive.js";
+import { hasPower } from "./power.js";
 import { STATION_KEEPOUT } from "./world.js";
 
 /**
@@ -116,15 +117,32 @@ export function flight(dt) {
     }
   }
 
+  // The boost meter fills by itself whenever the ship has power to spare and
+  // nothing is draining it.
   const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
+  const charging = powered && !wantBoost && P.en < 100;
+
+  // Power budget for this frame: the thrusters draw while the throttle is off
+  // centre, plus a top-up while the boost meter fills. If the cells cannot pay,
+  // the drive gets nothing and the speed bleeds away instead of cutting dead.
+  state.power.draw = driveDraw(drv, P.thr, charging);
+  const supply = hasPower(state.power.draw);
+  const canBoost = wantBoost && supply;
+
   const wasBoosting = P.boost;
-  P.bs = wantBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
+  P.bs = canBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
   P.boost = P.bs >= 1;
   if (P.boost && !wasBoosting) {
     P.shake = 1;
     nz(0.4, 500, 0.35);
+    // Lighting the boost burns a flat charge out of the cells.
+    state.power.stored = Math.max(0, state.power.stored - (drv.ignite || 0));
   }
-  P.en = clamp(P.en + (wantBoost ? -28 : 10) * dt, 0, 100);
+  if (canBoost) P.en = clamp(P.en - 28 * dt, 0, 100);
+  else if (charging && supply) P.en = clamp(P.en + 10 * dt, 0, 100);
+
+  // With no power left there is nothing to push with.
+  const spd = supply ? drv.spd : 0;
 
   const f = fwd(m);
   const right = V(1, 0, 0).applyQuaternion(m.quaternion);
@@ -136,9 +154,9 @@ export function flight(dt) {
   // Only the main drive reaches full speed; reversing is a fraction of it.
   const throttle = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
   const target = f
-    .multiplyScalar(throttle * drv.spd * (P.boost ? 2 : 1))
-    .addScaledVector(right, strafe * drv.spd * FLIGHT.strafe)
-    .addScaledVector(up, lift * drv.spd * FLIGHT.lift);
+    .multiplyScalar(throttle * spd * (P.boost ? 2 : 1))
+    .addScaledVector(right, strafe * spd * FLIGHT.strafe)
+    .addScaledVector(up, lift * spd * FLIGHT.lift);
   P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
   m.position.addScaledVector(P.v, dt);
   m.eng.forEach(e => e.scale.set(1, 1, 0.5 + P.thr * 2 + P.bs * 2));

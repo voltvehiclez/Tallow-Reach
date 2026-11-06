@@ -81,15 +81,28 @@ Four cards on the left, four on the right. Counts and bays:
 8. Fit them back and launch: **150 m/s** and normal turning return. No warning appears. Reload
    the page and check the fit stuck.
 
-## 6. Power in flight
+## 6. Power in flight — the thrusters drink it
 
-1. Click **Launch**.
-2. Bottom centre, just above `Throttle 0% 0 m/s`: a **Power cell** bar (full, pale blue),
-   **100 / 100 MJ**, and **Using 0 of 10 MJ/s**.
-3. It should not change, because nothing draws power yet. That is correct.
-4. Fly back, dock (**G**), unequip the powerplant in Outfitting, launch again: the same bar
-   now reads **Using 0 of 0 MJ/s** (no plant). Refit it and the 10 MJ/s comes back.
-5. Narrow the window below about 900 px: the power block lifts above the controls list
+1. Click **Launch**. Bottom centre, just above `Throttle 0% 0 m/s`: a **Power cell** bar
+   (full, pale blue), **100 / 100 MJ**, and **Using 0 of 10 MJ/s** — you are stopped and the
+   boost meter starts full, so nothing is being used.
+2. Hold **W**. The readout becomes **Using 2 of 10 MJ/s** and stays there: the thrusters draw
+   2 MJ/s whenever the throttle is off centre. Try **S** for reverse, or ease off to 1% — it is
+   still 2 MJ/s. Only **X** (throttle exactly 0) drops the draw back to 0. Boost once, let go,
+   and at a standstill you will see **Using 1 of 10 MJ/s** until the boost meter has refilled.
+3. Hold **Shift** to boost: the draw stays at **2 MJ/s** while the boost is burning, then reads
+   **Using 3 of 10 MJ/s** while the meter refills as you fly (2 for flying, 1 for charging), and
+   drops to 2 when the meter is full. Each time the boost *lights up* it costs a flat **1 MJ**
+   — with the basic plant the bar refills too fast to see, which is fine.
+4. The cell stays full at 100 MJ the whole time, because the basic plant makes 10 MJ/s and the
+   thrusters only use 2 or 3. That is correct: the cell is a reserve.
+5. **Run it dry**: dock (**G**), Outfitting, **unequip the powerplant** (keep the cell), launch
+   and hold **W**. The bar falls by 2 MJ a second; when it reaches **0 / 100 MJ** the ship stops
+   accelerating and the speed winds down on its own (about 50 m/s → 5 m/s within four seconds).
+   The readout keeps saying `Using 2 of 0 MJ/s`: it is asking for power it has not got.
+6. With the cells empty, **Shift** does nothing (no boost, no shake, the meter does not drain).
+7. Dock and fit the powerplant back: full thrust returns.
+8. Narrow the window below about 900 px: the power block lifts above the controls list
    instead of printing over it.
 
 ## 7. It survives a reload

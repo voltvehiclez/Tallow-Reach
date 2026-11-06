@@ -8,6 +8,9 @@
 //   mj      power cell: energy it holds when full
 //   spd     thruster: top speed in m/s (boost is 2x, as it always was)
 //   turn    thruster: turn rate multiplier
+//   draw    thruster: MJ/s used while the throttle is off centre (any amount)
+//   chg     thruster: extra MJ/s used while the boost meter is filling up
+//   ign     thruster: MJ spent once, each time the boost lights
 //
 // A module may only have the stat its group uses. When thrusters, shields and
 // weapons arrive they add fields here (top speed, shield points, damage) and the
@@ -21,7 +24,18 @@ export const MODULES = {
   // The reference drive: 150 m/s and turn 1.2 are the Wasp's old hull figures,
   // so a Wasp with these fitted flies exactly as it did before modules existed.
   // Every hull flies on these now; hull differences come later.
-  thruster_basic: { g: "thruster", n: "Basic thrusters", d: "Reference drive. Sets top speed and turn rate.", spd: 150, turn: 1.2 },
+  // 2 MJ/s whenever the throttle is off centre, whatever the setting; another
+  // 1 MJ/s while the boost is charging; 1 MJ spent when the boost lights.
+  thruster_basic: {
+    g: "thruster",
+    n: "Basic thrusters",
+    d: "Reference drive. Sets top speed and turn rate.",
+    spd: 150,
+    turn: 1.2,
+    draw: 2,
+    chg: 1,
+    ign: 1,
+  },
 };
 
 // What a hull is delivered with, bay by bay: group id -> module ids in bay

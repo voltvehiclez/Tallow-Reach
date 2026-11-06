@@ -57,7 +57,7 @@ about each other, use the event bus instead.
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
 | Change how a bay opens or closes    | `ui/picker.js` (one picker at a time, pure and tested) |
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
-| Change what power does in flight      | `sim/power.js` (and `state.power`)              |
+| Change what power does in flight      | `sim/power.js` (`powerOf`, `hasPower`, `updatePower`) and `state.power`; who draws what is `sim/drive.js` + `sim/player.js` |
 | Change how a ship flies               | the thruster module in `data/modules.js`; `sim/drive.js` turns it into `state.drive` |
 | Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
 | Add a paint bay to Appearance        | `data/outfitting.js` (`APPEARANCE_SLOTS`), drawn by `appearanceHtml()` in `ui/screens.js` |
@@ -202,8 +202,9 @@ These are real, current limits. None of them is a bug in play today.
 - **Only three modules exist**, two power parts and the basic thruster. They can be taken
   off and fitted again
   (`sim/fitting.js`, stored in `profile.modules`), but **nothing can be bought yet**, so
-  storage only ever holds parts taken off a hull. Nothing draws power, so the cells stay
-  full in flight.
+  storage only ever holds parts taken off a hull. The thrusters are the only thing that draws
+  power (2 MJ/s flying, +1 MJ/s while the boost charges, 1 MJ flat per boost ignition), so a
+  basic plant out-produces them and the cells stay full unless the powerplant is removed.
 - **One active contract at a time** (`profile.mission`), and contract tiers are fixed at 1 to 3
   (`generateContract` in `sim/contracts.js`, wording in `ui/screens.js`).
 - **`pirate-killed` carries no payload.** When enemy types arrive, emit `{ kind }` so listeners can tell them apart.

@@ -3,13 +3,15 @@
 > Updated 2026-11-06: the Outfitting tab exists (3D ship window, per-hull bay layouts, an
 > Appearance card with primary/secondary paint bays). Modules are real now: a basic
 > powerplant (10 MJ/s) and power cell (100 MJ) are fitted to every hull, saved in
-> `profile.loadout`, and shown bottom-centre in flight.
+> `profile.loadout`, and shown bottom-centre in flight. The basic thrusters draw 2 MJ/s while
+> the throttle is off centre, +1 MJ/s while the boost charges, 1 MJ flat when the boost lights,
+> and a ship with no power at all cannot push (the speed winds down).
 > Modules can be unequipped into a store (`profile.modules`) and fitted back by clicking a
 > bay. Basic thrusters exist and every hull flies like the Wasp on them (`state.drive`, from
 > `sim/drive.js`), and an empty thruster bay means the ship cannot move, turn or boost at all
 > (pressing a control then warns "Equip thrusters to move").
 > Paint bays are clickable but no colours exist yet. Save is at version 5.
-> `npm test` = 43, build = 578 KB.
+> `npm test` = 46, build = 578 KB.
 > See the top of `CHANGELOG.md`.
 
 Read this first, then `tallow-reach/docs/ARCHITECTURE.md` and the top two entries of

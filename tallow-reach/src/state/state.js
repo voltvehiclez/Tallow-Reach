@@ -36,7 +36,7 @@ export const state = {
   //   gen    MJ/s the powerplants make
   //   cap    MJ the cells hold
   //   stored MJ in the cells right now
-  //   draw   MJ/s the ship is using
+  //   draw   MJ/s the ship is asking for; the thrusters set it (sim/player.js)
   power: { gen: 0, cap: 0, stored: 0, draw: 0 },
 
   // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).

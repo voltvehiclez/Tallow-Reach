@@ -8,6 +8,34 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Thrusters use power, and a dry cell winds the speed down
+
+Basic thrusters now drink from the power cells. The numbers live on the module in
+`data/modules.js` (`draw: 2`, `chg: 1`, `ign: 1`), so a better thruster can be thirstier.
+
+- **2 MJ/s whenever the throttle is off centre** — 100%, 99%, 1%, -1%, -30%, -100% all count.
+  Only a throttle of exactly zero (X, or hands off once it has been set to 0) draws nothing.
+- **1 MJ/s more while the boost meter is filling.** The meter fills by itself whenever the ship
+  has power to spare, so the readout often sits at 1 MJ/s when the ship is idle and at 3 MJ/s
+  while flying and charging.
+- **1 MJ flat, each time the boost lights.** Charged on the frame the boost engages, out of the
+  cells' stored energy.
+- **Out of power means no thrust, and the speed winds down.** `hasPower()` in `sim/power.js`
+  answers whether the cells (or a plant that covers the demand) can pay; when they cannot, the
+  drive's speed is treated as 0 and the usual drag model bleeds the speed away instead of
+  stopping the ship dead. Boost is refused too. Turning still works, so a dry ship can aim.
+- Files: `data/modules.js` (draw/chg/ign), `sim/drive.js` (`driveOf` carries them, new
+  `driveDraw`), `sim/power.js` (new `hasPower`), `sim/player.js` (sets `state.power.draw`,
+  gates thrust on power, charges and ignition costs), `ui/hud.js` unchanged (it already shows
+  `Using X of Y MJ/s`).
+- Verified headless: full throttle = 2 MJ/s, throttle 0 with a full boost = 0, idle charging =
+  1, flying + charging = 3; ignition takes exactly 1 MJ plus the frame's 2 MJ/s; with no plant
+  and 3 MJ left the ship went 52 → 33 → 21 → 14 → 9 → 5 → 2 m/s after the cells emptied.
+- Tests: 3 new (`driveDraw` for every throttle setting, the power figures on the module,
+  `hasPower`) → **46 passing**. No save change: still version 5. `npm run build` needed (578 KB).
+- **Consequence to know about:** a plant-less ship that flies until the cells empty cannot fly
+  home. That is the point of the rule; docking is only possible if you get back first.
+
 ## 2026-11-06: "Equip thrusters to move" warns you when a dead ship ignores the controls
 
 - Undocking with no thrusters and then pressing **anything that would move the ship** now shows
