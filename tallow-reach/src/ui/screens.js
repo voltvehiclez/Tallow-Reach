@@ -130,7 +130,7 @@ const baysOf = () => (state.profile.loadout || {})[state.profile.ship] || {};
 
 /**
  * The stat line on a fitted module's bay: "10 MJ/s", "100 MJ", "150 m/s",
- * "100 shields", or nothing.
+ * "10 shields", or nothing.
  */
 function moduleStat(m) {
   if (m.mjps) return `${m.mjps} MJ/s`;

@@ -274,8 +274,8 @@ test("shields are a module, and every hull is delivered with them", () => {
   const m = MODULES.shield_basic;
   assert.ok(m, "there is a basic shield module");
   assert.equal(m.g, "shield", "it fits the shield bay");
-  assert.equal(m.sh, 100, "100 shield points");
-  assert.equal(m.regen, 10, "10 points a second");
+  assert.equal(m.sh, 10, "10 shield points");
+  assert.equal(m.regen, 1, "1 point a second");
   assert.equal(m.delay, 4, "and only after 4 seconds without a hit");
   assert.deepEqual(STOCK_FIT.shield, ["shield_basic"], "every hull is delivered with them");
   for (const [id, s] of Object.entries(SHIPS)) {
@@ -415,11 +415,11 @@ test("shields arrived in save version 6: older saves are fitted with them", () =
   assert.deepEqual(removed.loadout.wasp.shield, [null], "the player's choice to run shieldless stands");
 });
 
-test("a pirate cannon does 10 damage a shot", () => {
+test("a pirate cannon does 1 damage a shot", () => {
   // The pirate numbers live in sim/ai.js (see ARCHITECTURE.md), so guard the one
-  // the shields were balanced against.
+  // the shields are balanced against.
   const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
-  assert.match(src, /fire\(e\.m\.position, dir, 520, false, 10\)/, "enemy cannons must do 10 a shot");
+  assert.match(src, /fire\(e\.m\.position, dir, 520, false, 1\)/, "enemy cannons must do 1 a shot");
 });
 
 test("the cells charge at the plants' rate, never overflow and never go negative", () => {

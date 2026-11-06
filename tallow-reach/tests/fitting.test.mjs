@@ -127,7 +127,7 @@ test("the thrusters decide how the ship flies, and without them it cannot move",
 
 test("taking the shields out leaves the ship with none, and fitting them back restores them", () => {
   freshGame();
-  assert.equal(state.player.shMax, 100, "basic shields give 100 points");
+  assert.equal(state.player.shMax, 10, "basic shields give 10 points");
 
   unequip("shield", 0);
   assert.equal(state.player.shMax, 0, "with the bay empty there is nothing to absorb a hit");
@@ -135,5 +135,5 @@ test("taking the shields out leaves the ship with none, and fitting them back re
   assert.deepEqual(state.profile.modules, ["shield_basic"], "the shields are in storage");
 
   fitModule("shield", 0, "shield_basic");
-  assert.equal(state.player.shMax, 100, "and they come back when fitted");
+  assert.equal(state.player.shMax, 10, "and they come back when fitted");
 });

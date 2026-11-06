@@ -8,6 +8,19 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Smaller shield numbers: 10 points, 1 a second, 1 damage a shot
+
+Everything shield-related is divided by ten, so the numbers are easy to read at a glance.
+
+- **Basic shields: 10 points** (was 100) and **1 point a second** (was 10). The 4 second lull
+  before recharging, and the rule that any hit restarts it, are unchanged.
+- **Pirate cannons do 1 damage a shot** (was 10), in `sim/ai.js`, so a fight against basic
+  shields still takes the same number of hits: ten to strip the shields, then the hull.
+- The shield bar in flight therefore moves a tenth at a time; with a cell-like cap of 10 it
+  refills from empty in about ten quiet seconds.
+- Tests rescaled to match (shield rules, the module figures, the pirate damage guard) →
+  **56 passing**. No save change: still version 6. `npm run build` needed (579 KB).
+
 ## 2026-11-06: Shields are a module now; pirate cannons do 10 a shot
 
 - **New module: `shield_basic` ("Basic shields")**, fitted to every hull from the start and

@@ -20,8 +20,8 @@ function fresh({ loadout, docked = false } = {}) {
 
 const bay = (id) => ({ shield: [id] });
 
-test("the basic shields hold 100 points, recharge 10 a second, after 4 quiet seconds", () => {
-  assert.deepEqual(shieldOf({ shield: ["shield_basic"] }), { cap: 100, regen: 10, delay: 4 });
+test("the basic shields hold 10 points, recharge 1 a second, after 4 quiet seconds", () => {
+  assert.deepEqual(shieldOf({ shield: ["shield_basic"] }), { cap: 10, regen: 1, delay: 4 });
   assert.deepEqual(shieldOf({ shield: [null] }), { cap: 0, regen: 0, delay: 0 }, "empty bay: no shields");
   assert.deepEqual(shieldOf({}), { cap: 0, regen: 0, delay: 0 }, "no bay at all: no shields");
   assert.deepEqual(shieldOf(undefined), { cap: 0, regen: 0, delay: 0 }, "nothing to read: no crash");
@@ -29,12 +29,12 @@ test("the basic shields hold 100 points, recharge 10 a second, after 4 quiet sec
 
 test("a fitted shield sets the ship's maximum, and docking fills it", () => {
   const flying = fresh();
-  assert.equal(flying.shMax, 100, "100 points from the module");
+  assert.equal(flying.shMax, 10, "10 points from the module");
   assert.equal(flying.sh, 0, "not docked, so the shields stay empty");
-  assert.deepEqual({ ...state.shield }, { cap: 100, regen: 10, delay: 4 }, "state.shield mirrors the module");
+  assert.deepEqual({ ...state.shield }, { cap: 10, regen: 1, delay: 4 }, "state.shield mirrors the module");
 
   const docked = fresh({ docked: true });
-  assert.equal(docked.sh, 100, "the outpost fills them");
+  assert.equal(docked.sh, 10, "the outpost fills them");
 });
 
 test("no shield module means no shields at all", () => {
@@ -47,50 +47,50 @@ test("no shield module means no shields at all", () => {
   assert.deepEqual({ ...state.shield }, { cap: 0, regen: 0, delay: 0 });
 });
 
-test("shields recharge 10 points a second once four quiet seconds have passed", () => {
+test("shields recharge 1 point a second once four quiet seconds have passed", () => {
   const P = fresh();
-  P.sh = 40;
+  P.sh = 4;
 
   // Just hit: the recharge stops dead.
   P.last = 0;
   state.time = 0;
   updateShield(1);
-  assert.equal(P.sh, 40, "no recharge the moment damage lands");
+  assert.equal(P.sh, 4, "no recharge the moment damage lands");
 
   state.time = 3.9;
   updateShield(0.1);
-  assert.equal(P.sh, 40, "still inside the 4 second lull");
+  assert.equal(P.sh, 4, "still inside the 4 second lull");
 
   state.time = 4.5;
   updateShield(0.5);
-  assert.equal(P.sh, 45, "half a second after the lull ends: 40 + 5");
+  assert.equal(P.sh, 4.5, "half a second after the lull ends: 4 + 0.5");
 
   state.time = 5.5;
   updateShield(1);
-  assert.equal(P.sh, 55, "then 10 a second");
+  assert.equal(P.sh, 5.5, "then 1 a second");
 });
 
 test("a hit during the recharge stops it again, and it never passes the maximum", () => {
   const P = fresh();
-  P.sh = 20;
+  P.sh = 2;
   state.time = 10;
   P.last = 5.5;                    // 4.5 s ago, so it is recharging
   updateShield(1);
-  assert.equal(P.sh, 30);
+  assert.equal(P.sh, 3);
 
   P.last = 10;                     // hit now
   state.time = 10.9;
   updateShield(0.9);
-  assert.equal(P.sh, 30, "the hit puts the recharge back on hold");
+  assert.equal(P.sh, 3, "the hit puts the recharge back on hold");
 
   state.time = 14;                 // 4 s after that hit
   updateShield(0.1);
-  assert.equal(P.sh, 31, "and it starts again after another 4 quiet seconds");
+  assert.equal(P.sh, 3.1, "and it starts again after another 4 quiet seconds");
 
-  P.sh = 99;
+  P.sh = 9;
   state.time = 30;
   updateShield(10);
-  assert.equal(P.sh, 100, "capped at 100");
+  assert.equal(P.sh, 10, "capped at 10");
 });
 
 test("a ship with no shields takes every hit on the hull", () => {

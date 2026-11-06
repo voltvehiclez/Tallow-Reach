@@ -40,15 +40,15 @@ export const MODULES = {
     boost: 1,
     ign: 20,
   },
-  // 100 points, 10 a second once it starts, and it will not start until the ship
+  // 10 points, 1 a second once it starts, and it will not start until the ship
   // has gone 4 seconds without being hit. No trickle under fire: that is a feature
   // for a later shield module (see sim/shield.js).
   shield_basic: {
     g: "shield",
     n: "Basic shields",
     d: "Standard deflectors. Recharges after a lull in the fighting.",
-    sh: 100,
-    regen: 10,
+    sh: 10,
+    regen: 1,
     delay: 4,
   },
 };

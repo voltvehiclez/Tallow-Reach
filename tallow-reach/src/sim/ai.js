@@ -67,7 +67,7 @@ export function updateEnemies(dt) {
       const dir = toPlayer
         .add(V(R(-0.04, 0.04), R(-0.04, 0.04), R(-0.04, 0.04)))
         .normalize();
-      fire(e.m.position, dir, 520, false, 10);   // 10 damage a shot
+      fire(e.m.position, dir, 520, false, 1);    // 1 damage a shot
       if (dist < PIRATE_HEARD_RANGE) tone(260, 80, 0.12, 0.03, "sawtooth");
     }
   }
