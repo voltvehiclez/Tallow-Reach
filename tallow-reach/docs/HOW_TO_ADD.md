@@ -231,6 +231,12 @@ half sits on the left and the rest on the right. Nothing else needs to change.
 3. The card look is `.mod` in `styles.css`. Every group uses it, so a new group matches
    the others without new CSS.
 
+**Paint bays** are the same idea and live in the same file, as `APPEARANCE_SLOTS`
+(`{ k, n }`). They are drawn by `appearanceHtml()` in `ui/screens.js` and always sit last
+in the right-hand column, under the hull group. Add an entry for another colour channel.
+When paints arrive they will need a table of paints, a save field, and a `fitted()` count
+in `ui/screens.js`, exactly like modules.
+
 **Fitting a module is a separate job.** Today every bay renders `Empty` and the count is
 `0 / slots`. When modules arrive they need: a table of modules (same `k` group ids), a
 slot in the save (`profile.shipModules` or similar, with `SAVE_VERSION` bumped and a

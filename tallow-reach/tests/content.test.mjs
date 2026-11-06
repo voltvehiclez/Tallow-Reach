@@ -12,7 +12,7 @@ import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
 import { newProfile, sanitizeProfile, MISSION_TYPES } from "../src/state/profile.js";
 import { CAMERA, cameraTrail } from "../src/data/camera.js";
-import { MODULE_GROUPS, slotsFor } from "../src/data/outfitting.js";
+import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
 
 const isNum = v => typeof v === "number" && Number.isFinite(v);
 
@@ -222,4 +222,20 @@ test("the outfitting screen has a complete module group for every bay it draws",
     assert.ok(byId[k], `${k} is one of the module groups the screen draws`);
     assert.equal(byId[k].slots, 1, `${k} starts with one bay`);
   }
+});
+
+test("the appearance card has its two paint bays, primary first", () => {
+  const seen = new Set();
+  for (const a of APPEARANCE_SLOTS) {
+    assert.equal(typeof a.k, "string", "every paint slot needs k (id)");
+    assert.ok(!seen.has(a.k), `duplicate paint slot id: ${a.k}`);
+    seen.add(a.k);
+    assert.equal(typeof a.n, "string", `${a.k}: n (name)`);
+    assert.ok(a.n.trim().length > 0, `${a.k}: the bay needs a name`);
+  }
+  assert.deepEqual(
+    APPEARANCE_SLOTS.map(a => a.k),
+    ["primary", "secondary"],
+    "the hull has a primary and a secondary colour, in that order"
+  );
 });

@@ -27,9 +27,10 @@ You should already be docked at Meridian Outpost; if the intro is showing, click
 
 ## 3. The module bays
 
-Around the ship window there are seven groups. Four on the left, three on the right.
-Each has a name, a `0 / slots` count, one dashed "Bay" box per slot, and a line saying
-what that group will decide. Check the counts:
+Around the ship window there are seven module groups. Four on the left, four cards on the
+right (the seventh group plus the Appearance card). Each has a name, a `0 / slots` count,
+one dashed bay box per slot, and a line saying what that group will decide. Check the
+counts:
 
 | Group | Bays |
 | --- | --- |
@@ -40,9 +41,16 @@ what that group will decide. Check the counts:
 | Primary weapons | **2** (Bay 1 and Bay 2 side by side) |
 | Secondary weapons | 1 |
 | Hull | 1 |
+| Appearance — Primary (paint) | 1 |
+| Appearance — Secondary (paint) | 1 |
+
+Order matters on the right: **Primary weapons, Secondary weapons, Hull, then Appearance**
+last, directly under the Hull card.
 
 Every bay should say **Empty** and every count should read **0 / n**. There are no
-modules in the game yet, so nothing here is clickable: that is expected.
+modules or paints in the game yet, so nothing here is clickable: that is expected.
+The Appearance card's two bays are labelled **Primary** and **Secondary** and it reads
+`0 / 2`.
 
 ## 4. It follows your ship
 
@@ -61,8 +69,8 @@ modules in the game yet, so nothing here is clickable: that is expected.
 3. Turn the ship to a nice angle, click **Contracts**, then click **Outfitting** again:
    the ship keeps the angle you left it at (it is the same canvas being re-mounted).
 4. Resize the browser window, or make it much narrower than 900 px: the ship window moves
-   to the top and the bay cards sit below it in two columns. Nothing should be cropped or
-   squashed.
+   to the top and the bay cards sit below it in two columns, Appearance included. Nothing
+   should be cropped or squashed.
 
 ## 6. Nothing else changed
 

@@ -1,7 +1,8 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-06: the Outfitting tab exists (3D ship window + module bay layout, no
-> modules yet). `npm test` = 23, build = 568 KB. See the top of `CHANGELOG.md`.
+> Updated 2026-11-06: the Outfitting tab exists (3D ship window, module bay layout, and an
+> Appearance card with primary/secondary paint bays; no modules or paints yet).
+> `npm test` = 24, build = 569 KB. See the top of `CHANGELOG.md`.
 
 Read this first, then `tallow-reach/docs/ARCHITECTURE.md` and the top two entries of
 `tallow-reach/docs/CHANGELOG.md`. Together they replace the memory of the previous chat.

@@ -5,7 +5,7 @@ import { SHIPS } from "../data/ships.js";
 import { ITEM, KEYS } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
-import { MODULE_GROUPS, slotsFor } from "../data/outfitting.js";
+import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, valueOf, repairCost } from "../sim/economy.js";
@@ -150,6 +150,25 @@ function groupHtml(group) {
   );
 }
 
+// The paint card, always last in the right-hand column: it sits under the hull
+// group, which is the last module group. Same card as a module group, so paints
+// will look like modules once they can be bought and fitted.
+function appearanceHtml() {
+  const bays = APPEARANCE_SLOTS.map(
+    a =>
+      `<div class="mod-bay" data-paint="${a.k}" aria-label="${a.n} colour: empty">` +
+      `<span class="bay-no">${a.n}</span><span class="bay-empty">Empty</span></div>`
+  ).join("");
+
+  return (
+    `<section class="mod mod-appearance" data-appearance>` +
+    `<header><h3>Appearance</h3><span class="mod-count">0 / ${APPEARANCE_SLOTS.length}</span></header>` +
+    `<div class="mod-bays">${bays}</div>` +
+    `<p>Paint for the main plates and the trim. The standard livery is used until a colour is fitted.</p>` +
+    `</section>`
+  );
+}
+
 function outfittingHtml() {
   const ship = SHIPS[state.profile.ship];
   const left = leftRail(MODULE_GROUPS),
@@ -157,7 +176,7 @@ function outfittingHtml() {
 
   return (
     `<h2>Outfitting</h2>` +
-    `<div class="sub">Nothing is fitted yet: the module sets arrive in a later update, and these bays are where they go.</div>` +
+    `<div class="sub">Nothing is fitted yet: modules and paints arrive in a later update, and these bays are where they go.</div>` +
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
     `<div class="outfit-view">` +
@@ -167,7 +186,7 @@ function outfittingHtml() {
     `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset</div>` +
     `</div>` +
     `</div>` +
-    `<div class="outfit-rail">${right.map(groupHtml).join("")}</div>` +
+    `<div class="outfit-rail">${right.map(groupHtml).join("")}${appearanceHtml()}</div>` +
     `</div>`
   );
 }

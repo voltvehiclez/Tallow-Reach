@@ -1,5 +1,6 @@
-// The module groups on the Outfitting screen. This file only describes the
-// bays the screen draws around the ship: no module is fitted yet, and nothing
+// What the Outfitting screen lays out: the module groups around the ship
+// (MODULE_GROUPS) and the paint slots under the hull group (APPEARANCE_SLOTS).
+// This file only describes bays: nothing is fitted or painted yet, and nothing
 // here changes flight, combat or the save.
 //
 //   k      short id, will name the group in module data and saves later
@@ -29,3 +30,18 @@ export const MODULE_GROUPS = [
  * Today every hull is the same; a per-hull override belongs in this function.
  */
 export const slotsFor = (g, shipId) => g.slots;
+
+// Paint slots on the Appearance card, which sits under the hull group in the
+// right-hand column. Like modules, no paint exists yet: these entries only name
+// the bays. Paints will be bought, stored and fitted exactly the way modules
+// are, so one entry per colour channel is all the screen needs.
+//
+//   k   short id, will name the channel in paint data and saves later
+//   n   name shown in the bay
+//
+// Add an entry and one more paint bay appears; the card is drawn by the same
+// code and styled like the module cards.
+export const APPEARANCE_SLOTS = [
+  { k: "primary", n: "Primary" },
+  { k: "secondary", n: "Secondary" },
+];

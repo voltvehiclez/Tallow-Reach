@@ -54,6 +54,7 @@ about each other, use the event bus instead.
 | Rebind keys                          | `BINDINGS` in `core/input.js`                  |
 | Add an outpost screen (tab)          | `ui/screens.js` (`TABS`, `SCREENS`, a HTML function) and `ui/menu.js` (`ACTIONS`) |
 | Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
+| Add a paint bay to Appearance        | `data/outfitting.js` (`APPEARANCE_SLOTS`), drawn by `appearanceHtml()` in `ui/screens.js` |
 | Change the ship in the Outfitting view| `render/shipviewer.js` (camera, lights, framing); `ui/outfitting.js` (page, input) |
 | Change the pause menu                | `ui/pause.js`, styles under "Pause overlay" in `styles.css` |
 | Change colours or layout of any UI   | `styles.css` (sections are labelled)           |
@@ -67,7 +68,7 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)

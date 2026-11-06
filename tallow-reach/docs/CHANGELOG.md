@@ -8,6 +8,23 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Appearance card under the Hull bay
+
+- **New card at the bottom of the right-hand column: Appearance**, directly under the Hull
+  group. It holds **two paint bays, Primary and Secondary**, both reading `Empty` with a
+  `0 / 2` count, and a line saying the standard livery is used until a colour is fitted.
+- It is layout only. **No paint exists, nothing can be bought or fitted, and no gameplay,
+  save field or `SAVE_VERSION` changed.** Paints will be bought, stored and fitted the same
+  way modules are; the card is drawn by the same code as the module cards, so they will
+  look identical when that arrives.
+- The bays come from the new `APPEARANCE_SLOTS` in `src/data/outfitting.js` (`k` id, `n`
+  name). Add an entry and one more paint bay appears; the card always sits last, under the
+  hull group, so adding module groups does not move it.
+- `ui/screens.js`: `appearanceHtml()`, appended last in the right rail. The screen's intro
+  line now says modules and paints arrive in a later update.
+- Tests: 1 new (the two paint slots have unique ids and names, primary before secondary).
+  `npm test` now runs 24. `game/tallow-reach.html` needs `npm run build` (569 KB).
+
 ## 2026-11-06: Outfitting screen with a 3D ship viewer
 
 - **New tab: Outfitting**, between Hangar and Shop. On this tab the outpost panel opens
