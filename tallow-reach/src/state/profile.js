@@ -16,7 +16,10 @@ import { layoutFor } from "../data/outfitting.js";
 //      get the stock fit for their bays (stockFor), so nothing is lost.
 //   4  adds "modules": the parts held in storage, ready to be fitted. Older
 //      saves simply start with an empty store.
-export const SAVE_VERSION = 4;
+//   5  the basic thrusters are standard issue. Saves from before 5 have their
+//      empty thruster bay filled on load (they were made before thrusters
+//      existed, so the bay was never a choice).
+export const SAVE_VERSION = 5;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -104,7 +107,7 @@ export function sanitizeProfile(raw) {
   }
   s.hp = hp;
 
-  s.loadout = cleanLoadouts(raw.loadout);
+  s.loadout = cleanLoadouts(raw.loadout, +raw.v || 1);
   s.modules = cleanStorage(raw.modules);
 
   s.done = +s.done || 0;
@@ -136,7 +139,11 @@ function cleanStorage(raw) {
  * save, or a hull added in an update) gets the stock fit. A bay the player has
  * really left empty stays empty: only a missing hull or group falls back.
  */
-function cleanLoadouts(saved) {
+function cleanLoadouts(saved, version) {
+  // Thrusters arrived in save version 5. A save older than that has an empty
+  // thruster bay because the bay did not exist, not because the player emptied
+  // it, so it is filled with the stock drive.
+  const preThrusters = version < 5;
   const out = {};
   for (const id of Object.keys(SHIPS)) {
     const layout = layoutFor(id),
@@ -144,7 +151,12 @@ function cleanLoadouts(saved) {
       forShip = saved && saved[id];
     const fit = {};
     for (const [g, slots] of Object.entries(layout)) {
-      const src = forShip && Array.isArray(forShip[g]) ? forShip[g] : stock[g];
+      const src =
+        preThrusters && g === "thruster"
+          ? stock[g]
+          : forShip && Array.isArray(forShip[g])
+            ? forShip[g]
+            : stock[g];
       fit[g] = Array.from({ length: slots }, (_, i) => {
         const m = src[i];
         return MODULES[m] && MODULES[m].g === g ? m : null;

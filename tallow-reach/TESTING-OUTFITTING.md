@@ -20,7 +20,7 @@ Four cards on the left, four on the right. Counts and bays:
 | --- | --- | --- |
 | Powerplant | **1 / 1** | **Basic powerplant** — solid bay, `10 MJ/s` |
 | Power cells | **1 / 1** | **Basic power cell** — solid bay, `100 MJ` |
-| Thrusters | 0 / 1 | Empty |
+| Thrusters | **1 / 1** | **Basic thrusters** — solid bay, `150 m/s` |
 | Shields | 0 / 1 | Empty |
 | Primary weapons | 0 / 2 | Empty, Empty |
 | Secondary weapons | 0 / 1 | Empty |
@@ -48,11 +48,24 @@ Four cards on the left, four on the right. Counts and bays:
    `Basic powerplant` with `10 MJ/s` under it.
 3. Click that square. The part goes back into the bay, the count returns to **1 / 1**, and
    the square disappears (storage is empty again).
-4. Try the same with the **Power cells** bay: unequip it, see the square, fit it back.
+4. Try the same with the **Power cells** and **Thrusters** bays: unequip each, see its square,
+   fit it back.
 5. Unequip power **and** cell, then dock/launch: the ship still flies, the power readout shows
    `No power cell` and `Using 0 of 0 MJ/s`. Fit them back before flying if you want the bar.
 
-## 5. Power in flight
+## 5. Speed in flight — every hull flies the same
+
+1. Click **Launch** and hold **W** for a few seconds: the bottom-centre speed should settle at
+   **150 m/s**, and **Shift** should take it to about **300 m/s**.
+2. Turn (mouse held over): about **69 deg/s** at full stick, the same Wasp feel as before.
+3. Dock, **Hangar → Fly** the Prospector, launch: the same 150 m/s and the same turn rate. The
+   Bulwark too. They are identical on purpose — hull differences come later.
+4. Back in Outfitting, **unequip the thrusters** from the Bulwark, then launch: it now moves at
+   its own hull speed (about **90 m/s**, turning slower). This is the safety fallback: with no
+   drive at all you would be stuck in space, so the hull's own figures take over.
+5. Fit the thrusters back and confirm 150 m/s returns. Reload the page and check the fit stuck.
+
+## 6. Power in flight
 
 1. Click **Launch**.
 2. Bottom centre, just above `Throttle 0% 0 m/s`: a **Power cell** bar (full, pale blue),
@@ -63,7 +76,7 @@ Four cards on the left, four on the right. Counts and bays:
 5. Narrow the window below about 900 px: the power block lifts above the controls list
    instead of printing over it.
 
-## 6. It survives a reload
+## 7. It survives a reload
 
 1. Unequip the power cell, so storage holds it and the bay is empty.
 2. Reload the page (F5) and open **Outfitting** again.
@@ -71,13 +84,14 @@ Four cards on the left, four on the right. Counts and bays:
    `Basic power cell` square, and your credits, ships and contracts should be unchanged.
 4. Fit it back, reload again, and confirm it stayed fitted.
 
-## 7. Other ships, and old saves
+## 8. Other ships, and old saves
 
 1. **Hangar → Fly** another hull (or buy one), then **Outfitting**: the new ship comes with
-   its own basic powerplant and cell fitted, and its own store — storage is shared, bays are
-   per ship.
-2. If this browser has a save from before this update, it loads with the fitted parts intact
-   and an empty store. Nothing asks you to start again.
+   its own basic powerplant, cell and thrusters fitted, and its own store — storage is shared,
+   bays are per ship.
+2. If this browser has a save from before this update, it loads with the fitted parts intact,
+   **the basic thrusters included** (the bay did not exist before), and an empty store.
+   Nothing asks you to start again.
 3. Open the browser console (F12): no errors, and no "Too many active WebGL contexts"
    warning while you stay on the Outfitting tab.
 

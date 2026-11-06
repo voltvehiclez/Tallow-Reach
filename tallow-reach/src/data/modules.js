@@ -6,6 +6,8 @@
 //   d       one line
 //   mjps    powerplant: energy made per second
 //   mj      power cell: energy it holds when full
+//   spd     thruster: top speed in m/s (boost is 2x, as it always was)
+//   turn    thruster: turn rate multiplier
 //
 // A module may only have the stat its group uses. When thrusters, shields and
 // weapons arrive they add fields here (top speed, shield points, damage) and the
@@ -16,6 +18,10 @@
 export const MODULES = {
   power_basic: { g: "power", n: "Basic powerplant", d: "Standard reactor.", mjps: 10 },
   cell_basic: { g: "cell", n: "Basic power cell", d: "Standard storage bank.", mj: 100 },
+  // The reference drive: 150 m/s and turn 1.2 are the Wasp's old hull figures,
+  // so a Wasp with these fitted flies exactly as it did before modules existed.
+  // Every hull flies on these now; hull differences come later.
+  thruster_basic: { g: "thruster", n: "Basic thrusters", d: "Reference drive. Sets top speed and turn rate.", spd: 150, turn: 1.2 },
 };
 
 // What a hull is delivered with, bay by bay: group id -> module ids in bay
@@ -24,4 +30,5 @@ export const MODULES = {
 export const STOCK_FIT = {
   power: ["power_basic"],
   cell: ["cell_basic"],
+  thruster: ["thruster_basic"],
 };

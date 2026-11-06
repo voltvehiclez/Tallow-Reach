@@ -9,6 +9,7 @@ import { newProfile, sanitizeProfile } from "../state/profile.js";
 import { setShip } from "../sim/player.js";
 import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
+import { refreshDrive } from "../sim/drive.js";
 import * as fitting from "../sim/fitting.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
@@ -206,6 +207,7 @@ const ACTIONS = {
 function afterProfileChange() {
   setShip(state.profile.ship);
   refillPower();
+  refreshDrive();
   state.ui.fit = null;
   contracts.rerollBoard();
   state.flight.lock = null;

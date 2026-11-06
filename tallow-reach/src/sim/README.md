@@ -6,6 +6,7 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 |---|---|
 | `player.js` | Ship setup (`setShip`), flight model, shields and hull, `hurt()`. |
 | `power.js` | Ships' power budget: `powerOf` a loadout, `refreshPower`/`refillPower` after a fit change, `updatePower` each frame. Writes `state.power` for the HUD. |
+| `drive.js` | The ship's drive: `driveOf` a loadout, `refreshDrive` after a fit or ship change. Writes `state.drive = { spd, turn }`, which the flight model and the chase camera read. |
 | `fitting.js` | Moving modules between bays and storage: `fitModule`, `unequip`, `storedFor`, `fittedAt`. The only writer of `profile.loadout`/`profile.modules`; refreshes power after every change. |
 | `weapons.js` | Cannons, mining beam, missiles and lock-on. |
 | `combat.js` | Bullets, hostile kills and loot drops, crates and pickups. |

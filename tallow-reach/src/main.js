@@ -24,6 +24,7 @@ import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { updateOutfitting } from "./ui/outfitting.js";
 import { refillPower, updatePower } from "./sim/power.js";
+import { refreshDrive } from "./sim/drive.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 
@@ -35,6 +36,7 @@ createPlayer();
 setShip(state.profile.ship);
 populateField();
 refillPower();   // start docked, so the cells are full
+refreshDrive();  // speed and turn come from the fitted thrusters
 
 setupHud();
 setupMenu();

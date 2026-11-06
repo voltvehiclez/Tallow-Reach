@@ -15,6 +15,7 @@ import { CAMERA, cameraTrail } from "../src/data/camera.js";
 import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
 import { MODULES, STOCK_FIT } from "../src/data/modules.js";
 import { powerOf, updatePower } from "../src/sim/power.js";
+import { driveOf } from "../src/sim/drive.js";
 import { state } from "../src/state/state.js";
 
 const isNum = v => typeof v === "number" && Number.isFinite(v);
@@ -246,6 +247,10 @@ test("every module fits its own group and carries that group's stat", () => {
     assert.equal(typeof m.d, "string", `${id}: d (description)`);
     if (m.g === "power") assert.ok(isNum(m.mjps) && m.mjps > 0, `${id}: a powerplant makes MJ/s`);
     if (m.g === "cell") assert.ok(isNum(m.mj) && m.mj > 0, `${id}: a power cell holds MJ`);
+    if (m.g === "thruster") {
+      assert.ok(isNum(m.spd) && m.spd > 0, `${id}: thrusters set a top speed`);
+      assert.ok(isNum(m.turn) && m.turn > 0, `${id}: thrusters set a turn rate`);
+    }
   }
   for (const [g, list] of Object.entries(STOCK_FIT)) {
     for (const id of list) {
@@ -255,12 +260,28 @@ test("every module fits its own group and carries that group's stat", () => {
   }
 });
 
-test("a new game starts with the basic plant and cell: 10 MJ/s into 100 MJ", () => {
+test("a new game starts with the basic plant, cell and thrusters", () => {
   const p = newProfile();
   assert.deepEqual(p.loadout.wasp.power, ["power_basic"], "the basic powerplant is fitted");
   assert.deepEqual(p.loadout.wasp.cell, ["cell_basic"], "the basic power cell is fitted");
+  assert.deepEqual(p.loadout.wasp.thruster, ["thruster_basic"], "the basic thrusters are fitted");
   assert.deepEqual(powerOf(p.loadout.wasp), { gen: 10, cap: 100 }, "10 MJ/s and 100 MJ");
   assert.deepEqual(p.loadout.wasp.primary, [null, null], "weapon bays are delivered empty");
+});
+
+test("every hull flies exactly like the old Wasp on the basic thrusters", () => {
+  const p = newProfile();
+  // The Wasp's own figures are the reference the basic thrusters were copied from.
+  const reference = { spd: SHIPS.wasp.spd, turn: SHIPS.wasp.turn };
+  for (const id of Object.keys(SHIPS)) {
+    assert.deepEqual(driveOf(p.loadout[id], id), reference, `${id} should fly like the Wasp today`);
+  }
+  // A ship with no thrusters fitted falls back to its own drive, so it cannot
+  // be stranded in space with an empty bay.
+  assert.deepEqual(driveOf({ thruster: [null] }, "bulwark"), {
+    spd: SHIPS.bulwark.spd,
+    turn: SHIPS.bulwark.turn,
+  });
 });
 
 test("an old save gets the stock fit, and bad modules are dropped", () => {

@@ -6,12 +6,15 @@ import assert from "node:assert/strict";
 import { state } from "../src/state/state.js";
 import { newProfile, sanitizeProfile, SAVE_VERSION } from "../src/state/profile.js";
 import { refillPower } from "../src/sim/power.js";
+import { refreshDrive } from "../src/sim/drive.js";
+import { SHIPS } from "../src/data/ships.js";
 import { fitModule, unequip, storedFor, fittedAt } from "../src/sim/fitting.js";
 
 /** A new game, as if it had just booted docked at the outpost. */
 function freshGame() {
   state.profile = newProfile();
   refillPower();
+  refreshDrive();
   return state.profile;
 }
 
@@ -95,4 +98,22 @@ test("an old save gains an empty module store, and unknown parts are dropped", (
 
   const notArray = sanitizeProfile({ ships: ["wasp"], modules: "power_basic" });
   assert.deepEqual(notArray.modules, [], "a corrupted store is emptied, not fatal");
+});
+
+test("the thrusters decide how the ship flies, and the hull takes over if they come out", () => {
+  freshGame();
+  const reference = { spd: SHIPS.wasp.spd, turn: SHIPS.wasp.turn };
+  assert.deepEqual({ ...state.drive }, reference, "the basic thrusters match the Wasp's old figures");
+
+  unequip("thruster", 0);
+  assert.deepEqual(
+    { ...state.drive },
+    { spd: SHIPS.wasp.spd, turn: SHIPS.wasp.turn },
+    "with no thrusters the Wasp falls back to its own drive"
+  );
+  assert.deepEqual(state.profile.loadout.wasp.thruster, [null], "the bay is empty");
+  assert.deepEqual(state.profile.modules, ["thruster_basic"], "the drive is in storage");
+
+  fitModule("thruster", 0, "thruster_basic");
+  assert.deepEqual({ ...state.drive }, reference, "and fitting it back restores the drive");
 });

@@ -39,6 +39,11 @@ export const state = {
   //   draw   MJ/s the ship is using
   power: { gen: 0, cap: 0, stored: 0, draw: 0 },
 
+  // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).
+  //   spd    top speed in m/s
+  //   turn   turn rate multiplier (scaled again by FLIGHT.turn)
+  drive: { spd: 0, turn: 0 },
+
   freeCam: { on: false, yaw: 0, pitch: 0.25, dist: 14 },
 
   ui: {

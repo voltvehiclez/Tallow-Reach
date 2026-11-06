@@ -57,6 +57,7 @@ about each other, use the event bus instead.
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
 | Change what power does in flight      | `sim/power.js` (and `state.power`)              |
+| Change how a ship flies               | the thruster module in `data/modules.js`; `sim/drive.js` turns it into `state.drive` |
 | Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
 | Add a paint bay to Appearance        | `data/outfitting.js` (`APPEARANCE_SLOTS`), drawn by `appearanceHtml()` in `ui/screens.js` |
 | Change the ship in the Outfitting view| `render/shipviewer.js` (camera, lights, framing); `ui/outfitting.js` (page, input) |
@@ -77,7 +78,7 @@ src/data/              tuning numbers and content tables (ships, items, weapons,
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
-src/sim/               player, power, fitting, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
+src/sim/               player, power, drive, fitting, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness)
@@ -102,11 +103,14 @@ Each `src/` folder also has its own short `README.md`.
   `reverse` 10.5, with the pure helper `cameraTrail(vf, fwdTop, revTop)`). It is the only thing
   that changes the chase distance with speed; the camera's easing must never see the ship's
   travel, or speed leaks back in.
-- **Flight feel has one home: the `FLIGHT` table in `data/ships.js`.** It scales every hull at
-  once — `turn` (multiplier on each ship's `turn` stat), and `strafe` / `lift` / `reverse`
-  (fractions of each ship's forward `spd`). The main drive and its 2x boost are the only
-  forward speeds that reach full `spd`. Do not put a raw speed in `sim/player.js`; add a field
-  to `FLIGHT` instead, or the ships stop agreeing with each other.
+- **Speed and turn have one home: the fitted thrusters.** `sim/drive.js` reads the thruster
+  module and writes `state.drive = { spd, turn }`; `sim/player.js` and `render/camera.js` read
+  that and nothing else. Do not read `SHIPS[id].spd` in flight code and do not hard-code a
+  speed: swap the module, or add a field to it. A hull with no thrusters falls back to its own
+  `SHIPS` figures, which is what stops an empty bay stranding the player in space.
+- **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the
+  drive's turn rate, and `strafe` / `lift` / `reverse` are fractions of the drive's `spd`. The
+  main drive and its 2x boost are the only directions that reach full speed.
 - **Fitting lives in one place.** `sim/fitting.js` is the only code that writes
   `profile.loadout` or `profile.modules`, and it refreshes ship power after every change.
   Anything else that changes a bay must go through it, or the ship keeps the old numbers.
@@ -183,7 +187,11 @@ These are real, current limits. None of them is a bug in play today.
   base module or weapon needs a line there too. `tests/content.test.mjs` fails if a base module is missing.
 - **There is one enemy type.** Pirate numbers (hit points, speeds, ranges, fire rate) sit inside
   `sim/ai.js`. Before adding a second enemy, move them into a new `src/data/enemies.js` (see HOW_TO_ADD.md).
-- **Only two modules exist**, both power parts. They can be taken off and fitted again
+- **Every hull flies the same today.** Thrusters set speed and turn, every hull ships with
+  the same basic drive, and nothing on the hull modifies it yet. Hull character (a heavy
+  Bulwark being slower) is meant to arrive as hull attributes multiplying `driveOf()`.
+- **Only three modules exist**, two power parts and the basic thruster. They can be taken
+  off and fitted again
   (`sim/fitting.js`, stored in `profile.modules`), but **nothing can be bought yet**, so
   storage only ever holds parts taken off a hull. Nothing draws power, so the cells stay
   full in flight.

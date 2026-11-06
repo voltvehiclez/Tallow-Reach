@@ -12,6 +12,7 @@ import { saveAutosave } from "../state/storage.js";
 import { FIELD_CENTER, clearTransient } from "./world.js";
 import { setShip } from "./player.js";
 import { refillPower } from "./power.js";
+import { refreshDrive } from "./drive.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
@@ -60,6 +61,7 @@ export function dock() {
   }
   P.sh = P.shMax;
   refillPower();      // the outpost tops the cells up
+  refreshDrive();     // and the ship may have changed (death, hangar)
   clearTransient();
   state.flight.missileLock = { target: null, t: 0, locked: false };
   state.flight.lock = null;

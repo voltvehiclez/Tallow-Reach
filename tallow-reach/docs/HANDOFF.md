@@ -5,7 +5,9 @@
 > powerplant (10 MJ/s) and power cell (100 MJ) are fitted to every hull, saved in
 > `profile.loadout`, and shown bottom-centre in flight. Save is at version 3.
 > Modules can be unequipped into a store (`profile.modules`) and fitted back by clicking a
-> bay. Save is at version 4. `npm test` = 34, build = 576 KB. See the top of `CHANGELOG.md`.
+> bay. Basic thrusters exist and every hull flies like the Wasp on them (`state.drive`, from
+> `sim/drive.js`). Save is at version 5. `npm test` = 36, build = 576 KB.
+> See the top of `CHANGELOG.md`.
 
 Read this first, then `tallow-reach/docs/ARCHITECTURE.md` and the top two entries of
 `tallow-reach/docs/CHANGELOG.md`. Together they replace the memory of the previous chat.

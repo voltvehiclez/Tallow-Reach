@@ -8,6 +8,30 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Basic thrusters, and every hull flies like the Wasp
+
+- **The thruster bay has a module now**: `thruster_basic` in `src/data/modules.js`, "Basic
+  thrusters", top speed **150 m/s** and turn **1.2** — the Wasp's old hull figures, copied
+  exactly, so a Wasp with them fitted flies precisely as it did before modules existed.
+  Boost is still 2x, strafe/lift/reverse are still the `FLIGHT` fractions.
+- **Speed and turn now come from the thrusters, not the hull.** New `src/sim/drive.js` turns
+  the fitted thruster into `state.drive = { spd, turn }`; `sim/player.js` and
+  `render/camera.js` read that and nothing else. Measured in a headless flight probe:
+  Wasp, Prospector and Bulwark all reach **150 m/s**, **295 m/s** on boost and turn at
+  **69 deg/s** — identical, as asked. Hull differences are a later job and belong in
+  `driveOf` as multipliers.
+- **A hull with no thrusters fitted falls back to its own `spd`/`turn`** from `data/ships.js`
+  (measured: Bulwark 90 m/s, 40 deg/s). That is deliberate: without it, a player who unequips
+  the drive and launches would be stranded in space with no way back to the outpost.
+- The Outfitting card shows `Basic thrusters` / `150 m/s` and the count `1 / 1`.
+- **Save: `SAVE_VERSION` 4 -> 5.** The saved shape is unchanged; the version marks the point
+  from which thrusters exist. A save made before 5 has its empty thruster bay filled with the
+  stock drive on load (that bay was never a choice), while a save at 5 keeps a bay you chose
+  to empty empty.
+- Tests: 2 new and 1 extended (every hull flies like the old Wasp on stock thrusters; the
+  hull fallback; the thruster module's fields; unequip/refit moving `state.drive`).
+  `npm test` now runs 36. `game/tallow-reach.html` needs `npm run build` (576 KB).
+
 ## 2026-11-06: Click a bay to fit a module, or unequip one into storage
 
 - **Every module bay is a button.** All eight bays across the seven groups can be clicked.

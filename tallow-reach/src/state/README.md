@@ -2,7 +2,7 @@
 
 | File | What it does |
 |---|---|
-| `state.js` | The single runtime `state` object (player, world lists, flight, ui, hud). Also `msg()` and `say()` for on-screen text. |
+| `state.js` | The single runtime `state` object (player, world lists, flight, ui, hud, `power`, `drive`). Also `msg()` and `say()` for on-screen text. |
 | `profile.js` | The saved game: `newProfile()`, `sanitizeProfile()`, `SAVE_VERSION`. Everything that is saved goes through here. |
 | `storage.js` | Autosave, three save slots and text save codes. Storage keys must not change. |
 

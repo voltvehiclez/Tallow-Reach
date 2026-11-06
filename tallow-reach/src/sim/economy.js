@@ -10,6 +10,7 @@ import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
 import { setShip } from "./player.js";
 import { stockFor } from "../state/profile.js";
 import { refillPower } from "./power.js";
+import { refreshDrive } from "./drive.js";
 
 const S = () => state.profile;
 
@@ -94,6 +95,7 @@ export function selectShip(id) {
   p.ship = id;
   setShip(id);
   refillPower();       // docked: the new hull's cells are full
+  refreshDrive();      // and its thrusters decide the way it flies
   return undefined;
 }
 

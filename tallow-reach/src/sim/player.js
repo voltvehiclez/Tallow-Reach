@@ -51,7 +51,6 @@ export function setShip(id) {
 export function flight(dt) {
   const P = state.player,
     m = P.m,
-    d = SHIPS[state.profile.ship],
     fc = state.freeCam;
 
   // A warp hands the controls to the drive: the throttle is released and the
@@ -68,7 +67,9 @@ export function flight(dt) {
       };
 
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
-  const turn = d.turn * FLIGHT.turn;   // FLIGHT.turn tunes every hull at once
+  // Speed and turn come from the fitted thrusters, not from the hull.
+  const drv = state.drive;
+  const turn = drv.turn * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
   m.rotateY(-dz(stick.x * ease) * 1.6 * turn * dt);
   m.rotateX(-dz(stick.y * ease) * 1.2 * turn * dt);
   m.rotateZ(stick.roll * ease * 1.5 * turn * dt);
@@ -103,11 +104,11 @@ export function flight(dt) {
   const lift = W ? 0 : (keys.Space ? 1 : 0) - (keys.KeyC ? 1 : 0);
 
   // Only the main drive reaches full speed; reversing is a fraction of it.
-  const drive = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
+  const throttle = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
   const target = f
-    .multiplyScalar(drive * d.spd * (P.boost ? 2 : 1))
-    .addScaledVector(right, strafe * d.spd * FLIGHT.strafe)
-    .addScaledVector(up, lift * d.spd * FLIGHT.lift);
+    .multiplyScalar(throttle * drv.spd * (P.boost ? 2 : 1))
+    .addScaledVector(right, strafe * drv.spd * FLIGHT.strafe)
+    .addScaledVector(up, lift * drv.spd * FLIGHT.lift);
   P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
   m.position.addScaledVector(P.v, dt);
   m.eng.forEach(e => e.scale.set(1, 1, 0.5 + P.thr * 2 + P.bs * 2));

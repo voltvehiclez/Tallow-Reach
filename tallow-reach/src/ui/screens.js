@@ -132,6 +132,7 @@ const baysOf = () => (state.profile.loadout || {})[state.profile.ship] || {};
 function moduleStat(m) {
   if (m.mjps) return `${m.mjps} MJ/s`;
   if (m.mj) return `${m.mj} MJ`;
+  if (m.spd) return `${m.spd} m/s`;
   return "";
 }
 
