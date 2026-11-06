@@ -8,6 +8,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Powerplant talks in MJ/s, not MW
+
+- The Powerplant card now reads **"Energy the ship makes every second, in MJ/s."** instead of
+  "Power the ship produces, in MW." The Power cells card reads **"Energy the ship can hold,
+  in MJ."** Both cards now describe energy in the same units, one "per second in", one
+  "stored", which is easier to read than a megawatt with nothing to compare it to.
+- **This is wording only.** 1 MJ/s is exactly 1 MW, so any module numbers written later mean
+  the same figure in either unit and nothing needs rebalancing.
+- One file changed: `src/data/outfitting.js` (`MODULE_GROUPS`). No gameplay, save, layout or
+  visual change. Tests unchanged at 24. `game/tallow-reach.html` needs `npm run build`.
+
 ## 2026-11-06: Appearance card under the Hull bay
 
 - **New card at the bottom of the right-hand column: Appearance**, directly under the Hull

@@ -16,8 +16,8 @@
 // Keep the keys short, like the other data tables.
 
 export const MODULE_GROUPS = [
-  { k: "power", n: "Powerplant", d: "Power the ship produces, in MW.", slots: 1 },
-  { k: "cell", n: "Power cells", d: "Energy the ship can store, in MJ.", slots: 1 },
+  { k: "power", n: "Powerplant", d: "Energy the ship makes every second, in MJ/s.", slots: 1 },
+  { k: "cell", n: "Power cells", d: "Energy the ship can hold, in MJ.", slots: 1 },
   { k: "thruster", n: "Thrusters", d: "Acceleration, top speed, turn rate and boost.", slots: 1 },
   { k: "shield", n: "Shields", d: "Shield strength and how fast it recharges.", slots: 1 },
   { k: "primary", n: "Primary weapons", d: "Main guns. Fired with left click.", slots: 2 },
