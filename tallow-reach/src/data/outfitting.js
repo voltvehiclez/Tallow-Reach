@@ -19,7 +19,7 @@ export const MODULE_GROUPS = [
   { k: "shield", n: "Shields", d: "Shield strength and how fast it recharges." },
   { k: "primary", n: "Primary weapons", d: "Main guns. Fired with left click." },
   { k: "secondary", n: "Secondary weapons", d: "Launchers and specials. Fired with right click." },
-  { k: "hull", n: "Hull", d: "Armour, turn rate and top speed of the hull itself." },
+  { k: "hull", n: "Hull", d: "Hull plating. How many Hull HP the ship has." },
 ];
 
 // How many bays each hull has, group id -> count.

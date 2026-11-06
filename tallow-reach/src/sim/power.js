@@ -1,17 +1,18 @@
 // Ship power: what the fitted powerplants make, what the power cells hold, and
 // what the ship is drawing.
 //
-// Three things draw power today, and every figure comes from the fitted modules
+// Four things draw power today, and every figure comes from the fitted modules
 // in data/modules.js:
 //
 //   drive   2 MJ/s while the throttle is off centre, another 1 MJ/s while the
 //           boost is burning, and a flat 20 MJ each time the boost lights.
 //   shield  2 MJ/s whenever the shields are up (sim/shield.js).
 //   guns    2 MJ/s a gun while the trigger is held (sim/guns.js).
+//   beam    2 MJ/s while the mining beam is cutting (sim/weapons.js).
 //
 // Refilling the boost meter is free.
 //
-// Each system writes its own figure with `setDraw("drive" | "shield" | "guns",
+// Each system writes its own figure with `setDraw("drive" | "shield" | "guns" | "beam",
 // mjps)` once a frame; `draw` is the sum, which is what the HUD shows and what
 // `hasPower()` checks. The 20 MJ boost ignition is taken straight out of
 // `stored` instead. A new consumer adds a name to `state.power.use` and calls

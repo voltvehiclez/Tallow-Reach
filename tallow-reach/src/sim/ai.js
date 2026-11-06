@@ -17,7 +17,7 @@ const SPAWN_MIN = 800;
 const SPAWN_MAX = 1000;
 
 /**
- * The one hostile type so far. 10 hull points and no shields: three seconds of
+ * The one hostile type so far. 10 Hull HP and no shields: three seconds of
  * basic cannon fire. Its name is what the HUD's target lock shows.
  */
 export const RAIDER = { n: "Newbie Raider", hp: 10 };

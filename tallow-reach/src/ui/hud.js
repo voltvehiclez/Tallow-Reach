@@ -8,6 +8,7 @@ import { sectorAt } from "../data/sectors.js";
 import { camera, STATION_POS } from "../render/scene.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
+import { moduleListName } from "../sim/guns.js";
 import { describe } from "../sim/contracts.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { FIELD_CENTER } from "../sim/world.js";
@@ -29,11 +30,17 @@ export function setupHud() {
     hull: $("b2"),
     boost: $("b3"),
     boostVal: $("boost-val"),
+    shieldVal: $("sh-val"),
+    hullVal: $("hull-val"),
     topRight: $("tr"),
     bottomCenter: $("bc"),
     powerBar: $("pwbar"),
     powerValue: $("pw-val"),
     powerFlow: $("pw-flow"),
+    beam: $("bm"),
+    beamBar: $("bmbar"),
+    beamName: $("bm-name"),
+    beamPct: $("bm-pct"),
     prompt: $("pr"),
     msg: $("msg"),
     cursor: $("cur"),
@@ -73,27 +80,31 @@ export function updateHud(dt) {
     m = S.mission;
 
   el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
-  el.hull.style.width = Math.max(0, (P.hull / P.hullMax) * 100) + "%";
+  el.hull.style.width = (P.hullMax > 0 ? Math.max(0, P.hull / P.hullMax) * 100 : 0) + "%";
   el.boost.style.width = (P.enMax > 0 ? Math.max(0, Math.min(1, P.en / P.enMax)) : 0) * 100 + "%";
-  // Numbers beside the bar, so the tank can be read exactly as well as roughly.
-  el.boostVal.textContent = P.enMax > 0 ? `${P.en.toFixed(1)} / ${P.enMax}` : "none";
+  // Numbers beside every bar, so each pool can be read exactly as well as roughly.
+  el.shieldVal.textContent = P.shMax > 0 ? `${Math.round(P.sh)} / ${Math.round(P.shMax)}` : "none";
+  el.hullVal.textContent = P.hullMax > 0 ? `${Math.round(P.hull)} / ${Math.round(P.hullMax)}` : "none";
+  el.boostVal.textContent = P.enMax > 0 ? `${Math.round(P.en)} / ${Math.round(P.enMax)}` : "none";
 
-  // The primary line names what left click will do: the beam, or how many guns
-  // the primary bays are holding (bay 1 and bay 2 both count).
-  const guns = state.guns.length,
+  // The primary line names what left click will do, using the names of the
+  // equipped modules: the fitted beams for the beam slot, the fitted guns for the
+  // cannon slot, and the same "Empty weapon slot" either way when nothing is there.
+  const guns = state.guns,
+    beams = state.beams || [],
     primary =
       S.pw === "beam"
-        ? "Mining beam"
-        : guns === 0
-        ? "No guns"
-        : guns === 1
-        ? "Cannons"
-        : `Cannons x${guns}`;
+        ? beams.length > 0
+          ? moduleListName(beams)
+          : "Empty weapon slot"
+        : guns.length > 0
+        ? moduleListName(guns)
+        : "Empty weapon slot";
 
   el.topRight.innerHTML =
     `${sectorAt(state.sector).n}<br>` +
-    `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo}<br>` +
-    `${primary}${S.wp.msl ? ", missiles " + S.msl : ""}<br>` +
+    `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
+    `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
     `<span style="color:var(--amber)">${m ? describe(m) + " " + m.p + "/" + m.n : "No contract"}</span>`;
 
   el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
@@ -104,6 +115,18 @@ export function updateHud(dt) {
   el.powerBar.style.width = (cap ? Math.max(0, Math.min(1, pw.stored / cap)) * 100 : 0) + "%";
   el.powerValue.textContent = cap ? `${Math.round(pw.stored)} / ${Math.round(cap)} MJ` : "No power cell";
   el.powerFlow.textContent = `Using ${round1(pw.draw)} of ${round1(pw.gen)} MJ/s`;
+
+  // Beam progress toward the next ore: a small bar with the percentage, shown
+  // only while the beam is actually cutting, right under the "left in rock"
+  // hint.
+  const fittedBeam = (state.beams || [])[0];
+  el.beam.hidden = !(F.beamOn && fittedBeam);
+  if (!el.beam.hidden) {
+    const pct = Math.min(100, Math.floor(((F.beamT || 0) / fittedBeam.period) * 100));
+    el.beamBar.style.width = pct + "%";
+    el.beamName.textContent = fittedBeam.n;
+    el.beamPct.textContent = `${pct}%`;
+  }
 
   if (!state.warp && sectorAt(state.sector).st && P.m.position.length() < 300) {
     say(P.v.length() < 70 ? "Press G to dock at Meridian Outpost" : "Slow below 70 m/s to dock");
@@ -132,7 +155,7 @@ const round1 = v => (Math.round(v * 10) / 10).toString();
 function drawLockRing(ML, radius) {
   const ctx = el.reticle;
   ctx.clearRect(0, 0, 160, 160);
-  if (!state.profile.wp.msl || state.player.docked || !ML.target) return;
+  if (!(state.missiles || []).length || state.player.docked || !ML.target) return;
 
   const raw = ML.locked ? 1 : Math.min(1, ML.t / MISSILE.lock);
   const pr = raw < 1 ? raw * 0.5 * (1 + raw) : 1;

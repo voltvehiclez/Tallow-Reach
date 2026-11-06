@@ -26,7 +26,7 @@ test("a new game has the power parts fitted and nothing in storage", () => {
   assert.deepEqual(p.modules, [], "storage starts empty");
   assert.deepEqual(p.loadout.wasp.power, ["power_basic"]);
   assert.deepEqual(p.loadout.wasp.cell, ["cell_basic"]);
-  assert.deepEqual(state.power, { gen: 10, cap: 100, stored: 100, draw: 0, use: { drive: 0, shield: 0, guns: 0 } });
+  assert.deepEqual(state.power, { gen: 10, cap: 100, stored: 100, draw: 0, use: { drive: 0, shield: 0, guns: 0, beam: 0 } });
 });
 
 test("unequipping a module puts it in storage and changes the ship at once", () => {

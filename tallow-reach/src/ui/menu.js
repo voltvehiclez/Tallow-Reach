@@ -11,6 +11,7 @@ import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
+import { refreshHull } from "../sim/hull.js";
 import { refreshGuns } from "../sim/guns.js";
 import * as fitting from "../sim/fitting.js";
 import { toggleModulePicker, togglePaintPicker } from "./picker.js";
@@ -113,6 +114,15 @@ const ACTIONS = {
     toast(eco.restockMissiles());
   },
 
+  // The arrows above the 3D viewer in Outfitting: cycle through the ships in the
+  // hangar (same selection as the Hangar's Fly button).
+  shipPrev() {
+    cycleShip(-1);
+  },
+  shipNext() {
+    cycleShip(1);
+  },
+
   // Outfitting
   slot(arg) {
     // data-b is "group:bay". Clicking the open bay again closes the picker.
@@ -208,12 +218,24 @@ const ACTIONS = {
   },
 };
 
+/** Step the flown ship through the hangar. The arrows do nothing with one ship. */
+function cycleShip(dir) {
+  const S = state.profile,
+    owned = S.ships;
+  if (!owned || owned.length < 2) return;
+  const i = owned.indexOf(S.ship);
+  const next = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
+  const msgText = eco.selectShip(next);   // cargo that fits the new hold switches here
+  if (msgText) toast(msgText);
+}
+
 /** Common work after the whole profile is replaced (load, import, reset). */
 function afterProfileChange() {
   setShip(state.profile.ship);
   refillPower();
   refreshDrive();
   refreshShield();
+  refreshHull();
   refreshGuns();
   state.ui.fit = null;
   contracts.rerollBoard();

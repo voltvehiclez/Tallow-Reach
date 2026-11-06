@@ -7,11 +7,13 @@ import { SHIPS } from "../data/ships.js";
 import { ITEM, KEYS, emptyCargo } from "../data/items.js";
 import { BASE_MODULES, STORAGE_PER_LEVEL, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
+import { MODULES } from "../data/modules.js";
 import { setShip } from "./player.js";
 import { stockFor } from "../state/profile.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
+import { refreshHull, hullOf } from "./hull.js";
 import { refreshGuns } from "./guns.js";
 
 const S = () => state.profile;
@@ -31,10 +33,13 @@ export function valueOf(cargo) {
   return Math.round(base * (1 + REFINERY_BONUS_PER_LEVEL * S().base.refinery));
 }
 
-/** Repair cost for a ship. Costs rise steeply with damage. */
+/** Repair cost for a ship. Costs rise steeply with damage. Hull HP come from the
+ *  fitted hull module — no module fitted means nothing to repair, and a free repair. */
 export function repairCost(id) {
-  const frac = S().hp[id] ?? 1;
-  const max = SHIPS[id].hull;
+  const p = S();
+  const frac = p.hp[id] ?? 1;
+  const max = hullOf((p.loadout || {})[id]);
+  if (max <= 0) return 0;
   const missing = max * (1 - frac);
   return Math.round(missing * (2 + (3 * missing) / max));
 }
@@ -100,6 +105,7 @@ export function selectShip(id) {
   refreshDrive();      // and its thrusters decide the way it flies
   refreshShield();     // and its shields how much punishment it takes
   refreshGuns();       // and its primary bays what fires
+  refreshHull();       // and its Hull HP
   return undefined;
 }
 
@@ -115,19 +121,23 @@ export function repairShip(id) {
 
 export function buyWeapon(k) {
   const p = S();
-  const price = SHOP_WEAPONS[k].price;
-  if (p.cr < price) return;
-  p.cr -= price;
-  p.wp[k] = true;
-  if (k === "msl") p.msl = Math.max(p.msl, MISSILE.startStock);
-  return k === "beam"
-    ? "Mining beam installed. Press 2 in flight to equip it."
-    : `Missile launcher installed with ${MISSILE.startStock} missiles.`;
+  const w = SHOP_WEAPONS[k];
+  if (!w || p.cr < w.price) return;
+  p.cr -= w.price;
+  // The mining beam and the missiles are modules now: buying one puts it in
+  // storage; it has to be fitted in a bay before it does anything.
+  if (w.module) {
+    (p.modules || (p.modules = [])).push(w.module);
+    if (w.startStock) p.msl = Math.max(p.msl || 0, w.startStock);
+    return `${w.n} in storage. Fit it in a ${w.bay || "primary"} bay to use it.${w.startStock ? ` ${w.startStock} missiles included.` : ""}`;
+  }
+  return `${w.n} installed.`;
 }
 
 export function restockMissiles() {
   const p = S();
-  const n = Math.min(MISSILE.cap - p.msl, Math.floor(p.cr / MISSILE.unitPrice));
+  const cap = ((state.missiles || [])[0] || MODULES.missile_basic).cap,
+    n = Math.min(cap - p.msl, Math.floor(p.cr / MISSILE.unitPrice));
   p.cr -= n * MISSILE.unitPrice;
   p.msl += n;
   return `Restocked ${n} missiles.`;

@@ -16,6 +16,7 @@ import { state } from "../state/state.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
+import { refreshHull } from "./hull.js";
 import { refreshGuns } from "./guns.js";
 
 const S = () => state.profile;
@@ -68,6 +69,7 @@ export function fitModule(group, i, id) {
   refillPower();
   refreshDrive();
   refreshShield();
+  refreshHull();
   refreshGuns();
   return replaced
     ? `Fitted ${m.n}. ${MODULES[replaced].n} moved to storage.`
@@ -88,9 +90,23 @@ export function unequip(group, i) {
   refillPower();
   refreshDrive();
   refreshShield();
+  refreshHull();
   refreshGuns();
   return `${MODULES[id].n} moved to storage.`;
 }
 
 /** True when `group` is a real bay group on the ship being flown. */
 export const isBayGroup = group => Object.prototype.hasOwnProperty.call(layoutFor(shipId()), group);
+
+/** True when the player owns module `id` — in storage, or fitted in any bay of any
+ *  owned hull (a fitted part is owned, it is just not in storage right now). */
+export function ownsModule(id) {
+  const p = S();
+  if ((p.modules || []).includes(id)) return true;
+  for (const fit of Object.values(p.loadout || {})) {
+    for (const bays of Object.values(fit || {})) {
+      if (Array.isArray(bays) && bays.includes(id)) return true;
+    }
+  }
+  return false;
+}

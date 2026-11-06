@@ -73,6 +73,7 @@ export function startWarp() {
   P.acc = 0;
   state.freeCam.on = false;
   state.flight.beamOn = false;
+  state.flight.beamT = 0;
 
   warpCharge(WARP.charge);
   emit("warp-start", { from, to });

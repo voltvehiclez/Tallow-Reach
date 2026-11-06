@@ -4,7 +4,7 @@ Reads `state`, calls sim actions. No game rules here.
 
 | File | What it does |
 |---|---|
-| `hud.js` | In-flight HUD: bars, cargo and contract readout, lock ring, markers. |
+| `hud.js` | In-flight HUD: bars, cargo and contract readout, lock ring, markers, and the beam progress bar with percentage (small, directly under the "left in rock" hint, shown only while the beam is cutting). |
 | `screens.js` | HTML for the intro and each outpost tab. Pure functions of state. `TABS` and `SCREENS` list the tabs. |
 | `menu.js` | The outpost panel: `ACTIONS` (one function per button, `data-a` name) and the click handler. |
 | `picker.js` | Which Outfitting bay picker is open: `toggleModulePicker`, `togglePaintPicker`. Pure, one at a time, tested in `tests/picker.test.mjs`. |

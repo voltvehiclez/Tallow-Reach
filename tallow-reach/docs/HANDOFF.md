@@ -8,11 +8,12 @@
 from one built HTML file. You fly out of Meridian Outpost, take contracts, mine asteroids, fight
 Newbie Raiders, and dock to spend the money. Ships are built out of **modules in bays** on the
 Outfitting screen: a powerplant (10 MJ/s), a power cell (100 MJ), thrusters (150 m/s and 69 deg/s
-on the basic set, 20 MJ boost that doubles the drive), shields (10 points, 1 a second back after a
+on the basic set, 20 MJ boost that doubles the drive), shields (10 Shield HP, 1 a second back after a
 4-second lull) and now **basic cannons** — 1 damage a shot, 3 shots a second, 2 MJ/s a gun while
 the trigger is held, fittable in **either** primary bay. Everything that uses power draws it from
-the same budget and refuses to run when the ship cannot pay. Hostiles are **Newbie Raiders**: 10
-hull points, no shields.
+the same budget and refuses to run when the ship cannot pay. The **basic hull** grants 10 Hull HP, and no hull module fitted means no Hull HP at all — any hit reaching the hull destroys
+the ship. Hostiles are **Newbie Raiders**: 10
+Hull HP, no shields.
 
 ---
 
@@ -20,7 +21,7 @@ hull points, no shields.
 
 The user is building **Tallow Reach** and **does not code**. You are their programmer. Deliver
 complete files or exact find-and-replace edits with full paths, and test steps that say **where to
-click**, not just what file to open. Plain-language units (**MJ/s**, "units", "points") — never
+click**, not just what file to open. Plain-language units (**MJ/s**, "units", "Hull HP" and "Shield HP") — never
 MW, never "the dt-scaled integrator".
 
 Project: `/home/user/Tallow-Reach/tallow-reach/`. The workspace persists between chats.
@@ -54,26 +55,27 @@ GitHub: `github.com/voltvehiclez/Tallow-Reach`, folder `tallow-reach/`.
 | --- | --- |
 | Sector + flight | Two sectors, **M** warps (2 s sequence, coasts down); settled flight feel; chase camera from `data/camera.js` |
 | Outfitting screen | 3D ship window, seven bay groups around it, Appearance card with two empty paint bays, module picker per bay, storage |
-| Modules | `power_basic` (10 MJ/s), `cell_basic` (100 MJ), `thruster_basic` (drive + 10-unit boost tank), `shield_basic` (10 points), `cannon_basic` (1 dmg, 3/s, 2 MJ/s) |
-| Power | `state.power` = gen / cap / stored / draw; `use` has `drive`, `shield`, `guns`; `hasPower()` gates every consumer; HUD shows `Using 4 of 10 MJ/s` |
+| Modules | `power_basic` (10 MJ/s), `cell_basic` (100 MJ), `thruster_basic` (drive + 10-unit boost tank), `shield_basic` (10 Shield HP), `cannon_basic` (1 dmg, 3/s, 2 MJ/s), `beam_basic` (1 ore per 4 s of contact, 2 MJ/s, shop only) |
+| Power | `state.power` = gen / cap / stored / draw; `use` has `drive`, `shield`, `guns`, `beam`; `hasPower()` gates every consumer; HUD shows `Using 4 of 10 MJ/s` |
 | Thrusters | 150 m/s, 69 deg/s, boost ×2; 10-unit tank, 2 a second out, 1 a second back; 20 MJ ignition; no thruster fitted = cannot move (and says so) |
-| Shields | 10 points, 1 a second after 4 s without a hit, flat 2 MJ/s, bleed 1 a second when unpayable |
-| Guns | Both primary bays fire on left click, each gun on its own 1/3-second cooldown, 2 MJ/s each while firing; keys 1/2 switch to the mining beam |
-| Hostiles | One type: **Newbie Raider**, 10 hull points, no shields, 1 damage a shot |
-| Saves | Version 7, migrations for every change so far; old saves keep working |
+| Shields | 10 Shield HP, 1 a second after 4 s without a hit, flat 2 MJ/s, bleed 1 a second when unpayable |
+| Guns | Both primary bays fire on left click, each gun on its own 1/3-second cooldown, 2 MJ/s each while firing; keys 1/2 cycle the primary slots (1 = guns, 2 = mining beam — an `Empty weapon slot` if nothing is fitted) |
+| Hostiles | One type: **Newbie Raider**, 10 Hull HP, no shields, 1 damage a shot |
+| Saves | Version 10, migrations for every change so far; old saves keep working |
 
 ## Where the knobs are
 
 | You want to change | File |
 | --- | --- |
-| Hull shape, cargo, `dmg` multiplier | `src/data/ships.js` (`SHIPS`) |
+| Hull shape, cargo, `dmg` multiplier | `src/data/ships.js` (`SHIPS`); Hull HP are the fitted `hull_basic` module (`src/data/modules.js`, `src/sim/hull.js`) |
 | Turning, strafe/lift/reverse, throttle response | `src/data/ships.js` (`FLIGHT`) — settled, do not retune |
 | Chase distance | `src/data/camera.js` (`CAMERA`) — settled |
 | What a module does (power, thrust, shield, gun figures) | `src/data/modules.js` (`MODULES`, `STOCK_FIT`) |
 | Which bays a hull has | `src/data/outfitting.js` (`SHIP_LAYOUTS`, `MODULE_GROUPS`) |
 | Cannon figures | `cannon_basic` in `src/data/modules.js` (`dmg`, `rate`, `bspd`, `draw`) |
-| Newbie Raider name and hit points | `RAIDER` at the top of `src/sim/ai.js` |
-| Mining beam, missiles, shop weapons | `src/data/weapons.js` |
+| Newbie Raider name and Hull HP | `RAIDER` at the top of `src/sim/ai.js` |
+| Mining beam figures | `beam_basic` in `src/data/modules.js` (`period`, `range`, `draw`) |
+| Missiles, shop weapons | `src/data/weapons.js` (`SHOP_WEAPONS` sells `beam_basic` and `missile_basic` as modules) |
 | Contracts, sectors, items, station prices | `src/data/contracts.js`, `sectors.js`, `items.js`, `station.js` |
 
 ## How the module pattern works (copy this for the next part)
