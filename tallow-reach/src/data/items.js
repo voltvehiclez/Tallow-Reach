@@ -10,3 +10,7 @@ export const ITEM = {
 export const KEYS = Object.keys(ITEM);
 
 export const emptyCargo = () => Object.fromEntries(KEYS.map(k => [k, 0]));
+
+// Every cargo unit takes 1 m³ of space, in a ship's hold and in the station's
+// storage alike. Modules carry their own volume (`vol` in data/modules.js).
+export const ITEM_VOL = 1;

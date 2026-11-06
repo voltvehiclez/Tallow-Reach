@@ -50,8 +50,10 @@ canvas {
   justify-content: space-between;
   gap: 10px;
 }
-#tl #boost-val {
-  color: var(--ink);
+#tl .tl-shield { color: var(--ice); }
+#tl .tl-hull { color: var(--ink); }
+#tl .tl-boost { color: var(--amber); }
+#tl .tl-label span {
   font-variant-numeric: tabular-nums;
 }
 #tr {
@@ -94,6 +96,30 @@ canvas {
   font-size: 11px;
   letter-spacing: .04em;
   color: var(--dim);
+}
+/* Beam progress toward the next ore: a small bar directly under the "N left
+   in rock" hint, shown only while the beam is cutting. */
+#bm {
+  left: 50%;
+  top: calc(62% + 24px);
+  transform: translateX(-50%);
+  width: 150px;
+  text-align: center;
+}
+#bm .bm-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--dim);
+}
+#bm #bm-pct {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+#bm .bar {
+  height: 4px;
+  margin: 2px 0 0;
 }
 /* Narrow windows: the controls list in the bottom-left is several lines tall,
    so lift the power block above it rather than printing over it. */
@@ -542,13 +568,115 @@ button.mod-bay.on {
   transform: translateY(-50%);
 }
 
+/* The ship switcher above the 3D viewer: arrows cycling the ships in the
+   hangar, the middle showing which one and where it sits in the collection. */
+.outfit-mid {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.ship-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: rgba(20, 27, 32, .55);
+  padding: 6px 10px;
+}
+.ship-arrow {
+  flex: 0 0 auto;
+  padding: 1px 15px 3px;
+  font-size: 21px;
+  line-height: 1.1;
+}
+.ship-switch-mid {
+  min-width: 0;
+  text-align: center;
+}
+.ship-switch-name {
+  font-size: 14px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ship-switch-count {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* Ship services for the hull in the viewer: paid repair of its plating and
+   paid missile restock. Two rows in one bordered box, under the viewer. */
+.outfit-service {
+  border: 1px solid var(--line);
+  background: rgba(20, 27, 32, .55);
+  padding: 8px 12px 9px;
+}
+.outfit-service-title {
+  margin-bottom: 2px;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.outfit-service .row {
+  padding: 8px 0;
+}
+.outfit-service .row:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+/* ---- Inventory: the station's store on top, one ship's hold below ---- */
+/* Two stacked boxes in the normal outpost panel. The ship switcher between them
+   reuses .ship-switch from the Outfitting tab. */
+.inv-col {
+  border: 1px solid var(--line);
+  background: rgba(20, 27, 32, .55);
+  padding: 8px 12px 10px;
+}
+.inv-col header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.inv-col h3 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ice);
+}
+.inv-col .row:last-child {
+  border-bottom: none;
+}
+.inv-n {
+  color: var(--amber);
+}
+.inv-btns {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.inv-switch {
+  margin: 10px 0;
+}
+
 /* Narrow screens: the ship first, then the bays in two columns. */
 @media (max-width: 900px) {
   .outfit {
     grid-template-columns: 1fr;
   }
-  .outfit-view {
+  .outfit-mid {
     order: -1;
+  }
+  .outfit-view {
     min-height: 300px;
   }
   .outfit-rail {

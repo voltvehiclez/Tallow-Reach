@@ -17,9 +17,13 @@ test("prototype saves (no version field) still load", () => {
   const p = sanitizeProfile(old);
   assert.equal(p.v, SAVE_VERSION);
   assert.equal(p.cr, 1200);
-  assert.equal(p.cargo.ferrite, 3);
-  assert.equal(p.cargo.core, 0);
+  assert.equal(p.holds.wasp.cargo.ferrite, 3, "the old single cargo became the flown ship's hold");
+  assert.equal(p.holds.wasp.cargo.core, 0);
+  assert.equal(p.cargo, undefined, "the single cargo object left the save");
   assert.equal(p.pw, "beam");
+  assert.deepEqual(p.modules, ["beam_basic"], "the old beam purchase became the beam module in storage");
+  assert.equal(p.wp, undefined, "the whole wp object left the save");
+  assert.deepEqual(p.modules, ["beam_basic"], "msl was false, so no missile module");
 });
 
 test("sanitising clamps out-of-range values and drops unknown ships", () => {

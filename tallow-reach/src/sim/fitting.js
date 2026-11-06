@@ -7,15 +7,20 @@
 // because that is what turns a fitted part into numbers the game uses.
 //
 // The save shape is one array per hull and group in profile.loadout (one entry
-// per bay, null = empty) and a flat list of spare parts in profile.modules. The
-// Outfitting screen reads both; this file is the only thing that writes them.
+// per bay, null = empty) and a flat list of spare parts in profile.modules — the
+// station's inventory, where everything you buy lands and where every bay is fitted
+// from (any number of the same part). The station has limited room in m³, so a part
+// coming off a ship needs space (sim/inventory.js). The Outfitting screen reads both;
+// this file is the only thing that writes them.
 
 import { MODULES } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { state } from "../state/state.js";
+import { STATION, freeOf, volOf, nameOf } from "./inventory.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
+import { refreshHull } from "./hull.js";
 import { refreshGuns } from "./guns.js";
 
 const S = () => state.profile;
@@ -60,14 +65,19 @@ export function fitModule(group, i, id) {
   const at = stored.indexOf(id);
   if (at < 0) return "That module is not in storage.";
 
-  stored.splice(at, 1);
   const replaced = list[i];
+  // The part that comes out needs somewhere to go; the one going in frees its own space.
+  if (replaced && volOf(replaced) > freeOf(STATION) + volOf(id)) {
+    return `No room in ${nameOf(STATION)} for the ${MODULES[replaced].n}. Make space in the Inventory tab.`;
+  }
+  stored.splice(at, 1);
   if (replaced) stored.push(replaced);
   list[i] = id;
 
   refillPower();
   refreshDrive();
   refreshShield();
+  refreshHull();
   refreshGuns();
   return replaced
     ? `Fitted ${m.n}. ${MODULES[replaced].n} moved to storage.`
@@ -81,6 +91,9 @@ export function unequip(group, i) {
 
   const id = list[i];
   if (!id) return "That bay is already empty.";
+  if (volOf(id) > freeOf(STATION)) {
+    return `No room in ${nameOf(STATION)} for the ${MODULES[id].n}. Make space in the Inventory tab.`;
+  }
 
   list[i] = null;
   (S().modules || (S().modules = [])).push(id);
@@ -88,9 +101,29 @@ export function unequip(group, i) {
   refillPower();
   refreshDrive();
   refreshShield();
+  refreshHull();
   refreshGuns();
   return `${MODULES[id].n} moved to storage.`;
 }
 
 /** True when `group` is a real bay group on the ship being flown. */
 export const isBayGroup = group => Object.prototype.hasOwnProperty.call(layoutFor(shipId()), group);
+
+/** How many of module `id` the player owns: in the station's storage, carried in
+ *  any ship's hold, or fitted in any bay of any owned hull. */
+export function ownedCount(id) {
+  const p = S();
+  let n = (p.modules || []).filter(m => m === id).length;
+  for (const hold of Object.values(p.holds || {})) {
+    n += ((hold && hold.modules) || []).filter(m => m === id).length;
+  }
+  for (const fit of Object.values(p.loadout || {})) {
+    for (const bays of Object.values(fit || {})) {
+      if (Array.isArray(bays)) n += bays.filter(m => m === id).length;
+    }
+  }
+  return n;
+}
+
+/** True when the player owns at least one module `id` (see ownedCount). */
+export const ownsModule = id => ownedCount(id) > 0;

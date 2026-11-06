@@ -8,6 +8,330 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Inventory — the station and every ship have room in m³, and you can buy more than one module
+
+- **Why you could only buy one module:** the Shop hid the Buy button as soon as `ownsModule()` was
+  true, so a second beam or launcher could never be bought. The shop now always offers Buy (and says
+  `You own N`); the only limit is room.
+- **New Inventory tab** (between Outfitting and Shop): the **station** on top (ore and modules, with
+  `used / room m³`), then the hold of one ship below it, with arrows to step through every ship in the
+  hangar (the arrows only change which hold you are looking at, not which ship you fly). Each row
+  has `1` and `all` buttons that move that item between the station and the ship shown, limited by
+  room at the destination.
+- **Everything is in m³.** Ore is 1 m³ a unit (`ITEM_VOL`), each module has a `vol`
+  (powerplant 3, cell 3, thrusters 4, shields 3, cannons 2, beam 2, hull 4, missiles 2 — tuning
+  in `data/modules.js`). The station holds `250 x Storage bay level` m³; a hold is the hull's size
+  (Wasp 20, Bulwark 30, Prospector 70). Ore and modules share the room. Fitted modules take none.
+- **Purchases go to the station** (`buyModule`), as many as you like while there is room; a full
+  station refuses the sale and charges nothing. **Outfitting fits from the station's modules**: the
+  picker shows one square per kind with a count (`Basic cannons x3`). Taking a part off a ship (or
+  swapping one) needs room in the station and says so if there is none.
+- **Each ship now has its own hold** (`profile.holds[shipId] = { cargo, modules }`). Cargo stays in the
+  ship it is in: switching ships no longer carries it along, so the old "Store your cargo first"
+  refusal is gone. Mining and crate pickup fill the flown ship's hold, and the HUD `Hold x/y m³`
+  now counts carried modules too. A destroyed ship takes its hold with it. The Base screen's
+  Store hold / Load stored / Sell hold act on the ship being flown and only on ore.
+- **Save version 11.** Saves from before 11 hand their single `cargo` to the ship they were
+  flying; other ships start with an empty hold; the station's ore and modules are unchanged.
+  Importing and loading old codes works (tests cover it).
+- Behaviour you may notice: the missiles that come with the launcher (8) are only given when you
+  carry fewer than 8; a second launcher does not top you up.
+- New `sim/inventory.js` (pure, no 3D). Files: `data/items.js`, `data/modules.js`, `state/profile.js`,
+  `state/state.js` (`ui.invShip`), `sim/inventory.js`, `sim/economy.js`, `sim/fitting.js`,
+  `sim/session.js`, `sim/combat.js`, `sim/weapons.js`, `ui/screens.js`, `ui/menu.js`, `styles.css`,
+  docs, READMEs, tests (new `tests/inventory.test.mjs`; the prototype-save test now expects the
+  hold). **94 tests**, run against a stand-in for three.js because it could not be installed
+  there — run `npm test` yourself. `npm run build` needed (not built in that session).
+
+## 2026-11-06: Handoff note brought up to date (docs only)
+
+- `docs/HANDOFF.md` was out of date: its header said save version 7, 64 tests and 581 KB while
+  the body said version 10, and it left out the hull module, the missile launcher, the Services
+  box and the ship switcher. The outer `HANDOFF.md` also still said 22 tests, 559 KB and that
+  `ships.js` holds the Wasp's speed. Rewritten to match the code: save version 10, 81 tests
+  (counted from `tests/`), a 587 KB build, all eight modules, current known gaps.
+- No code, data or save change. No rebuild needed.
+- Files: `docs/HANDOFF.md`, this changelog.
+
+## 2026-11-06: Repairs and missile restock moved into Outfitting
+
+- **The Hangar's "Hull repairs" list is gone.** Repairing now happens in
+  Outfitting, in a **Services** box below the 3D viewer: one row, acting on the
+  ship currently shown in the viewer — `Hull HP N%`, an `Intact`/`Repair N cr`
+  button (same cost curve, same behaviour, same toast).
+- **The Shop's "Missile stock" row is gone.** The **Missile restock** row sits
+  in the same Services box: `N of cap loaded`, restocks up to the capacity of
+  the launcher fitted to the ship in the viewer for 35 cr per missile. Hidden
+  when no launcher is fitted.
+- The Services box re-reads the selected ship on every render, so switching
+  ships with the arrows updates the repair cost and the restock row.
+- Save version unchanged (10). Tests: **81 passing** (1 new guard).
+  `npm run build` needed.
+- Files: `ui/screens.js`, `styles.css`, docs (ARCHITECTURE, TESTING-OUTFITTING), tests.
+
+## 2026-11-06: Ship switcher above the 3D viewer; the berth count is gone
+
+- **Outfitting shows a switcher above the 3D viewer** (left/right arrows with
+  the ship's name and `N of M in the hangar` in the middle). It cycles through
+  the ships you own, wrap-around, the same selection the Hangar's Fly button
+  makes — cargo is respected, so a ship that cannot hold what you carry is
+  refused with the same message the Fly button shows. With one ship the arrows
+  are disabled. The viewer re-fits the new hull on the next frame.
+- **The Hangar's `Berths 2/3` line is removed**; the buy limit that fed it
+  still applies and is still enforced on the Buy buttons.
+- Tests: **80 passing** (1 new guard). Save version unchanged (10).
+  `npm run build` needed.
+- Files: `ui/screens.js`, `ui/menu.js`, `styles.css`, docs, tests.
+
+## 2026-11-06: Whole numbers in the top-left readouts; labels recoloured to match their bars
+
+- **The Shield HP / Hull HP / Boost numbers are whole numbers now**
+  (`${Math.round(...)}`), matching the bars' coarse granularity.
+- **Each top-left label takes its bar's colour** — Shield HP in `--ice`,
+  Hull HP in `--ink`, Boost in `--amber` — so the three blocks are
+  distinguishable at a glance.
+- Save version unchanged (10). `npm run build` needed.
+- Files: `index.html`, `styles.css`, `ui/hud.js`.
+
+## 2026-11-06: Numbers on the shield and hull bars — and the units are "Shield HP" / "Hull HP" everywhere
+
+- **The shield and hull bars in the HUD show numbers like boost does**: bottom-left labels
+  now read `Shield HP 7.2 / 10` and `Hull HP 10.0 / 10` style — each on one line with its
+  reading beside it (the same flex-label treatment as the boost bar; both bars were plain
+  labels before). A ship with no shield/hull module reads `none`, like boost with no tank.
+- **"Shield HP" and "Hull HP" are the unit names everywhere**: the HUD labels, the bay stat
+  lines in Outfitting (`10 Shield HP` / `10 Hull HP`), the shop and Hangar rows, the repairs
+  screen, the module data and descriptions, and the user docs (TESTING-OUTFITTING, ARCHITECTURE,
+  HOW_TO_ADD, HANDOFF, READMEs). Historical CHANGELOG entries are left as they were written.
+- Tests: **79 passing** (1 new guard). Save version unchanged (10). `npm run build` needed.
+- Files: `index.html`, `ui/hud.js`, `ui/screens.js`, `data/modules.js`, `data/outfitting.js`,
+  `data/ships.js`, `sim/*.js` (comments), `state/*.js` (comments), docs, tests.
+
+## 2026-11-06: Asteroid collision damage scaled to the 10-point hull
+
+- Hull points are 10 now (the hull is a module), so a collision that used to take a tenth of
+  the old 100-point bar was effectively removing the ship outright. Asteroid collisions
+  (`speed * 0.15`, threshold 25 m/s, same as always) now deal `speed * 0.015` — the same
+  proportion of the hull as before, 1/10th the damage. The speed threshold is unchanged.
+- Files: `sim/player.js`. Save version unchanged (10). Tests: **78 passing**. `npm run build`
+  needed.
+
+## 2026-11-06: The hull is a module — "Basic hull", 10 hit points, no module fitted means none
+
+- **New hull module: `hull_basic` ("Basic hull")**, 10 hit points, standard issue in every
+  hull bay (the bay existed but could hold nothing). Hit points work exactly like shield
+  points — the fitted module decides how many the ship has (`sim/hull.js`, read from
+  `MODULES[id].hp`), and **no hull module fitted means no hit points at all**: `P.hull` is 0
+  and the first hit that reaches the hull emits `player-dead` — a one-shot kill, exactly the
+  "fly without shields" rule. Shields, if fitted, still absorb their hits first.
+- **Hit points no longer come from `SHIPS[].hull`** — the stat is gone from the data, from
+  repairs (`economy.repairCost` now reads the fitted module's `hp`), from the Hangar row
+  (`Hull 10` is the fitted amount) and from the tests; a hull with no module shows `Hull 0`.
+- **Damage is never forgotten and never given for free.** The hull fraction lives in
+  `profile.hp[ship]`, stamped on every hull hit in `hurt()` and on dock, so a fit change, a
+  hangar visit or a ship switch keeps the damage taken — unfitting the hull at the outpost
+  drops the ship to 0 points, and fitting it back restores the fraction (never a free repair;
+  topping it up stays the paid Hangar repair). `refreshHull()` is called wherever
+  `refreshShield()` is.
+- **Save version 10.** Saves from before 10 get `hull_basic` fitted into their hull bays
+  (like the thrusters, shields and cannons before it — the bay was unfillable); a v10 save
+  where the player emptied the bay stays hull-less. Existing ships effectively go from
+  100 HP to 10 HP, and saved `hp` fractions carry over, so a damaged ship is equally damaged.
+- **Outfitting** shows `10 hull` under the bay name like other modules; `hit points` are not
+  affected by the flat power bill, and `FLIGHT` is untouched.
+- Files: `data/modules.js` (`hull_basic`, `STOCK_FIT.hull`), `data/ships.js` (stat removed),
+  `sim/hull.js` (new), `sim/player.js` (`setShip`, placeholder, `hurt()` stamps the fraction),
+  `sim/session.js`, `sim/economy.js`, `sim/fitting.js`, `ui/hud.js` (bar guard), `ui/screens.js`
+  (stat line + Hangar row), `main.js`, `ui/menu.js`, `state/profile.js` (v10), tests
+  (**78 passing**, 3 new), READMEs, docs. `npm run build` needed.
+
+## 2026-11-06: The missile launcher is a module — "Basic missiles", 8 damage, 12 cap, 4 s reload — and the beam shows its rate
+
+- **The shop missile launcher is gone; Basic missiles (`missile_basic`) is a module now**,
+  in the `secondary` group, bought for the same 1500 cr (the row reads *Owned* once bought,
+  and buying still includes 8 missiles). Fit it in the Secondary weapons bay like any other
+  module. It works exactly like the old launcher — right click, the dashed lock cone, MISSILE
+  LOCK, homing, 7 s life — with three changes: **8 damage per missile** (was 80), a
+  **12-missile capacity** (unchanged) and **4 seconds between launches** (was 0.9 s). The
+  stock is still refilled at the Shop (35 cr per missile), and the restock row now appears
+  when a launcher is fitted, capped by it.
+- The missile's flight and lock-on mechanics moved conceptually into the launcher module;
+  what stays in `data/weapons.js` is the missile itself plus the ammunition price
+  (`MISSILE`) and the Shop rows (`SHOP_WEAPONS`). `sim/guns.js` gained `missilesOf()` and
+  `refreshGuns()` now also sets `state.missiles`; a fired missile carries its module's damage,
+  so a mid-flight fit change cannot alter what is already in the air.
+- **Save version 9.** Saves from before 9 whose owner had bought the launcher get one
+  `missile_basic` in storage instead (not auto-fitted; their carried missiles stay, clamped
+  to 12). The whole `profile.wp` object left the save — ownership of both formerly flagged
+  weapons is now the module's presence.
+- **The Outfitting bay shows the beam's mining rate**: **0.25 m³/s** under `Basic mining beam`
+  (one ore = 1 m³, one ore per 4 s of contact), the same stat line other modules get. The
+  missiles bay shows `8 dmg, 12 cap, 4 s reload`.
+- Files: `data/modules.js` (`missile_basic`), `data/weapons.js`, `state/profile.js` (v9),
+  `sim/guns.js` (`missilesOf`), `state/state.js`, `sim/weapons.js`, `sim/economy.js`,
+  `ui/screens.js` (stat lines, shop rows), `ui/hud.js`, READMEs, docs, tests (**75 passing**,
+  3 new). `npm run build` needed.
+
+## 2026-11-06: All hulls are the same ship apart from the hold — and the hold is measured in m³
+
+- **Wasp, Prospector and Bulwark now have identical stats.** Hull 100, gun damage ×1, mining
+  rate ×1 (the Prospector's ×2.3 is gone — no more ≈1.7 s ores), model scale 1 and price
+  600 cr on every hull. The only remaining difference is the hold, which is why the hold was
+  kept: **Wasp 20 m³, Bulwark 30 m³, Prospector 70 m³**. One cargo unit = 1 m³.
+  Colours and the per-hull add-on meshes (the Prospector's drill, the Bulwark's plates) are
+  kept, so the hulls remain visually distinct. Ship-specific bonuses arrive later; a test
+  pins the everything-but-the-hold identity.
+- **Holds are shown in m³**: the HUD readout (`Hold 12/20 m³`), the Hangar rows and the
+  Cargo and storage panel. 1 unit of cargo occupies 1 m³, for every item type.
+- Save version unchanged (8) — no saved-data shape changed. Repair costs drop for owners
+  of the big hulls (hull 100 across the board); `hp` fractions persist, so damage carries
+  over correctly.
+- Files: `data/ships.js`, `ui/hud.js`, `ui/screens.js`, READMEs/docs, tests (**72 passing**,
+  1 new). `npm run build` needed.
+
+## 2026-11-06: The beam bar moves under the mining hint, only while cutting — and an ore-secured chime
+
+- **The beam progress bar is smaller, moved, and shows only while mining.** It now sits
+  directly under the amber "… left in rock" hint (top 62%) — the text that already tells you
+  what the rock holds — is 150 px wide with a 4 px bar and 11 px labels, and is visible only
+  while the beam is actually cutting (`state.flight.beamOn`). It was bottom centre above the
+  power block and visible whenever the beam slot was selected with a beam fitted.
+- **A satisfying chime when an ore banks.** `oreGained()` in `core/audio.js` — a warm
+  ascending D5–A5–D6 — plays the moment a beam cycle completes (progress hits 100%), on top of
+  the existing hold-capacity rules.
+- Files: `src/index.html` (`#bm` after `#pr`), `styles.css` (`#bm`), `ui/hud.js` (visibility
+  condition), `core/audio.js` (`oreGained`), `sim/weapons.js` (calls it), READMEs, docs.
+- Save version unchanged (8). Tests: **71 passing**. `npm run build` needed.
+
+## 2026-11-06: Beam progress resets the moment contact is lost; beam bar in the HUD; module names in the UI
+
+- **The 2-second grace is gone.** The instant the beam stops cutting — ship off the rock,
+  trigger released, mine out of reach, cargo full, or not enough power — the progress toward
+  the next ore is lost straight away (`state.flight.beamT` → 0, one "Beam contact lost — the
+  ore starts again" message). `state.flight.beamIdle` and the `BEAM_RESET` constant are gone,
+  and a test guards the immediate reset. Dock/launch/fit/warp still clear the count.
+- **New beam progress bar in the HUD.** Bottom centre, above the power readout: the fitted
+  beam's name and the percentage on the right (`Basic mining beam … 37%`), filling toward the
+  next ore. Shown only while the beam slot is selected and a beam is fitted.
+- **The primary line and the equip toast take the modules' own names.** `moduleListName()` in
+  `sim/guns.js` builds them — `Basic cannons` with one gun, `Basic cannons x2` with both bays
+  (same module), `Basic mining beam` in the beam slot, `A + B` for a mixed pair — and the HUD
+  and `setWeapon` share it, so they can never disagree. The hardcoded `Cannons` /
+  `Mining beam` / `Cannons equipped` / `Mining beam equipped` strings are gone; the shop row
+  for the beam now reads **Basic mining beam** (it buys exactly that module).
+- Files: `ui/hud.js` (bar + primary line), `src/index.html` (`#bm`), `styles.css` (`#bm`
+  block, mirrors `#pw`), `sim/guns.js` (`moduleListName`), `sim/weapons.js`, `state/state.js`,
+  `sim/sectors.js`, `data/weapons.js`, READMEs, tests.
+- Save version unchanged (8). Tests: **71 passing** (2 new). `npm run build` needed.
+
+## 2026-11-06: The mining beam is a module — "Basic mining beam", one ore per 4 s of contact
+
+- **Replaces the old mining beam outright.** Same Shop slot and price (900 cr), but buying it
+  now drops a `beam_basic` module into storage (the row reads *Owned* once it is somewhere you
+  own, fitted or in storage). The `wp.beam` flag is gone from the save.
+- **Fits either primary bay**, like a gun — Outfitting, fit it in a bay. **Key 2** selects the
+  beam slot; with no beam fitted the slot is the `Empty weapon slot` and left click does nothing.
+- **One ore per 4 seconds of uninterrupted contact** with the rock (scaled by the hull's `mine`
+  multiplier, so the Prospector cuts faster). The ore banks per completed 4-second cycle; the
+  rock depletes one ore at a time and disappears when dry.
+- **Two seconds off the rock and the count toward the next ore resets.** Contact is timed per
+  frame (`state.flight.beamT` / `beamIdle`); taking off the target for more than 2 s discards
+  the in-progress ore with the message "Beam contact lost — the ore starts again". A fit
+  change, dock/launch, load or warp clears the count too.
+- **2 MJ/s while cutting** — reported as `setDraw("beam", …)` with a new `state.power.use.beam`,
+  gated by `hasPower()`, and drawn only while actually mining (not with the slot merely
+  selected, not without a rock in reach) — the same rules the guns follow.
+- **Save version 8.** Saves from before 8 whose `wp.beam` was set (players who had bought the
+  beam) get one `beam_basic` in storage on load — **not auto-fitted**; fit it once and carry on.
+  Re-importing an old code cannot double-grant. The `beam` flag is dropped from the save.
+- Files: `data/modules.js` (`beam_basic`), `data/weapons.js` (beam leaves weapon data; the
+  shop row gains a `module` field), `sim/guns.js` (`beamsOf`, refreshes `state.beams`),
+  `sim/weapons.js` (beam rewrite), `sim/sectors.js` (warp clears the count),
+  `sim/economy.js` (shop purchase → module storage), `sim/fitting.js` (`ownsModule`),
+  `state/state.js` (`flight.beamT`/`beamIdle`, `beams`, `power.use.beam`), `ui/hud.js` (slot
+  line), `ui/screens.js` (shop *Owned* check), `state/profile.js` (v8 + migration),
+  plus docs and tests.
+- Behaviour note: the beam and the guns can coexist in the two primary bays; key 1/2 decides
+  which left click fires. If two beams are fitted, the first bay's beam is the one that cuts.
+- Tests: **70 passing** (4 new). `npm run build` needed.
+- Known limit: the beam has no dedicated progress bar; the mining hum tracks the rock's
+  remaining ore as before, and an interrupted count is only visible via the reset message.
+
+## 2026-11-06: "Empty weapon slot" now covers an empty cannon slot too
+
+- **One wording for every empty primary slot.** With every primary bay empty, the top-right
+  HUD line now reads `Empty weapon slot` (it said `No guns` before), and pressing 1 toasts
+  `Empty weapon slot` instead of `Cannons equipped`. The slot behaves the same as the empty
+  beam slot: left click does nothing, and the HUD and toast agree with each other.
+- Unchanged: `Cannons` / `Cannons x2` with guns fitted, `Mining beam` with the beam bought,
+  and left click firing only in a filled slot.
+- Files: `src/ui/hud.js` (the primary line), `src/sim/weapons.js` (`setWeapon` toast),
+  `tests/content.test.mjs` (guard: the old wording is gone), `TESTING-OUTFITTING.md`.
+- Save version unchanged (7). Tests: 66 passing. `npm run build` needed.
+
+## 2026-11-06: Keys 1 and 2 now cycle the primary slots; key 2 with no beam is the "Empty weapon slot"
+
+- **Pressing 2 selects the beam slot even with no mining beam bought.** The centre-screen
+  message says **"Empty weapon slot"** (instead of refusing the switch or naming a weapon
+  you do not have), the top-right HUD line reads `Empty weapon slot`, and **left click does
+  nothing** in that slot — the guns only answer in the cannon slot, the beam only with the
+  beam bought. Key 1 switches back to the cannon slot at any time.
+- **Cycling model**: 1 = cannon slot (whatever the primary bays are fitted with — already
+  symmetric: with no guns fitted it shows `No guns` and left click does nothing), 2 = mining
+  beam slot (`Mining beam` once bought, `Empty weapon slot` until then).
+- **Buying the beam** flips the slot to the beam without any extra step; the selected slot is
+  saved as before (`pw` stays "beam" in a save, same as always) — no save change (still v7).
+- Files: `src/sim/weapons.js` (`setWeapon` cycles slots unconditionally), `src/ui/hud.js`
+  (the primary line names the empty slot), `tests/content.test.mjs` (wording guard).
+- Behaviour change from the two earlier today entries: pressing 2 with no beam is no longer
+  silent — it equips the empty beam slot and switches the HUD line with it.
+- Tests: 66 passing. `npm run build` needed.
+
+## 2026-11-06: Pressing 2 with no mining beam fitted no longer shows a message
+
+- **Switching to an unavailable primary weapon is now silent.** Pressing 2 with no mining
+  beam bought simply does nothing and says nothing, instead of toasting "No mining beam
+  installed. Buy one in the station shop." The `"Cannons equipped"` / `"Mining beam equipped"`
+  confirmations and every other message are unchanged; the beam still cannot be equipped
+  until it is bought.
+- Files: `src/sim/weapons.js` (`setWeapon`).
+- Save version unchanged (7). Tests: 65 passing. `npm run build` needed.
+
+## 2026-11-06: Twin-linked bolts fire from the fixed nose hardpoints (one per side)
+
+- **Follow-up to the twin-linked cannons below**: the two bolts no longer straddle the gun's
+  bay mount (both came from the same side of the nose). A multi-barrel gun now fires from the
+  **fixed nose hardpoints at -1.8 m and +1.8 m**, one bolt per side — the pre-module cannon
+  layout. `BARREL_SPACING` in `sim/weapons.js` is now 3.6 m; single barrels still fire from
+  their bay mount (`-1.8 + 3.6 * i`).
+- Positions are the same whichever primary bay the gun sits in. Two twin-linked guns fitted at
+  once (impossible today — one `cannon_basic` exists and nothing sells parts yet) would each
+  fire their own pair from the same hardpoints.
+- Rate, power draw, damage and the `barrels` stat are unchanged. No save change (still v7).
+- Files: `sim/weapons.js` (hardpoint rule + comment), `docs/ARCHITECTURE.md`.
+- Tests: 65 passing. `npm run build` needed.
+
+## 2026-11-06: Basic cannons fire two bolts per shot again (twin-linked barrels)
+
+- **`cannon_basic` links two barrels** (`barrels: 2` on the module): one trigger pull now puts
+  **two bolts** downrange, side by side (0.9 m apart, `BARREL_SPACING` in `sim/weapons.js`),
+  straddling the gun's own mount — the way the cannons fired before they became a module.
+  One gun in the first primary bay is enough for the pair of bolts.
+- **Same fire rate, per barrel**: 3 shots a second per barrel, on the gun's own `1 / rate`
+  cooldown as before. **Same power draw**: 2 MJ/s a gun while the trigger is held, however
+  many bolts come out (the `guns` share in `state.power.use` counts guns, not bolts).
+- **Damage per bolt unchanged** at 1 (before the hull's `dmg` multiplier), so a pair is 2
+  damage per shot per gun; a Newbie Raider (10 hull) drops in about two seconds of fire from
+  the stock fit. No behaviour change when both primary bays are filled: each fitted gun fires
+  its own linked pair (four bolts a volley).
+- **Outfitting bay shows it**: the stat line for the cannon reads `1 dmg x2, 3/s`.
+- Files: `data/modules.js` (`barrels` + `rate` noted per barrel), `sim/guns.js` (carries
+  `barrels`, default 1), `sim/weapons.js` (one bolt per barrel, `BARREL_SPACING`),
+  `ui/screens.js` (`moduleStat` shows x2), docs (`ARCHITECTURE.md`, `HOW_TO_ADD.md` recipe 16,
+  folder READMEs) and tests updated.
+- **Save version unchanged (7).** `barrels` is a module stat, not saved data.
+- Tests: 65 passing (2 new guard assertions plus the fire-loop rule). `npm run build` needed.
+
 ## 2026-11-06: Basic cannons are a module you can fit in either primary bay; raiders are Newbie Raiders with 10 hull
 
 - **Basic cannons are now a module** (`cannon_basic`, group `primary`): **1 damage a shot, 3

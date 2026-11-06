@@ -1,12 +1,12 @@
-// The ship's shields: how many points they hold, how fast they come back, and how
+// The ship's shields: how many Shield HP they hold, how fast they come back, and how
 // long a lull in the fighting has to last before they start.
 //
 // A shield module carries five numbers (data/modules.js):
-//   sh      points it holds when full
-//   regen   points per second once it is recharging
+//   sh      Shield HP it holds when full
+//   regen   Shield HP per second once it is recharging
 //   delay   seconds without taking a hit before recharging starts again
 //   draw    MJ/s the shields use, flat, all the while they are up
-//   drain   points a second they lose when the ship cannot supply `draw`
+//   drain   Shield HP a second they lose when the ship cannot supply `draw`
 //
 // Keeping shields up is not free: the basic module wants a flat 2 MJ/s whether
 // they are full, filling or under fire. That figure goes into the ship's power
@@ -14,7 +14,7 @@
 // "Using X of Y MJ/s" always includes it while a shield module is fitted.
 //
 // If the ship cannot supply that much (no powerplant and flat cells) the shields
-// stop holding themselves together: they bleed away at `drain` points a second,
+// stop holding themselves together: they bleed away at `drain` Shield HP a second,
 // down to 0, and stay at 0 until the ship can pay for them again.
 //
 // Any hit stops the recharge dead: hurt() in sim/player.js stamps the time of the
@@ -43,7 +43,7 @@ function shieldIn(loadout) {
 }
 
 /**
- * Shield figures for a loadout: points, points per second, and the seconds of
+ * Shield figures for a loadout: Shield HP, Shield HP per second, and the seconds of
  * peace needed before they start coming back. Pure, so it can be tested.
  * No shield fitted is 0 / 0 / 0.
  */
@@ -55,7 +55,7 @@ export function shieldOf(loadout) {
     regen: m.regen || 0,
     delay: m.delay || 0,
     draw: m.draw || 0,      // MJ/s the shields take, flat, while they are up
-    drain: m.drain || 0,    // points a second lost when that cannot be paid
+    drain: m.drain || 0,    // Shield HP a second lost when that cannot be paid
   };
 }
 

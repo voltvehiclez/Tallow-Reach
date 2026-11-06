@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { SHIPS, DEFAULT_SHIP, FLIGHT } from "../src/data/ships.js";
 import { ITEM, KEYS, emptyCargo } from "../src/data/items.js";
-import { PRIMARY, MISSILE, SHOP_WEAPONS } from "../src/data/weapons.js";
+import { MISSILE, SHOP_WEAPONS } from "../src/data/weapons.js";
 import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
@@ -17,7 +17,8 @@ import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } fr
 import { MODULES, STOCK_FIT } from "../src/data/modules.js";
 import { powerOf, updatePower } from "../src/sim/power.js";
 import { driveOf, hasDrive, driveDraw } from "../src/sim/drive.js";
-import { gunsOf } from "../src/sim/guns.js";
+import { gunsOf, beamsOf, missilesOf, moduleListName } from "../src/sim/guns.js";
+import { hullOf } from "../src/sim/hull.js";
 import { hasPower } from "../src/sim/power.js";
 import { state } from "../src/state/state.js";
 
@@ -31,10 +32,21 @@ test("every ship has all the fields the game reads", () => {
   for (const [id, s] of Object.entries(SHIPS)) {
     assert.equal(typeof s.n, "string", `${id}: n (name)`);
     assert.equal(typeof s.d, "string", `${id}: d (description)`);
-    for (const f of ["cargo", "hull", "dmg", "mine", "sc", "price", "col"]) {
+    for (const f of ["cargo", "dmg", "mine", "sc", "price", "col"]) {
       assert.ok(isNum(s[f]) && s[f] > 0, `${id}: ${f} must be a positive number`);
     }
   }
+});
+
+test("every hull is the same ship apart from its hold (m³)", () => {
+  const [first, ...rest] = Object.values(SHIPS);
+  for (const s of rest) {
+    for (const f of ["hull", "dmg", "mine", "sc", "price"]) {
+      assert.equal(s[f], first[f], `every hull ships the same ${f} — only the hold differs`);
+    }
+  }
+  const holds = Object.values(SHIPS).map(s => s.cargo);
+  assert.ok(new Set(holds).size > 1, "the hulls differ in hold size (that is the point of them)");
 });
 
 test("every item has a name and a value, and cargo objects cover them all", () => {
@@ -46,8 +58,7 @@ test("every item has a name and a value, and cargo objects cover them all", () =
 });
 
 test("weapon data is complete", () => {
-  assert.ok(isNum(PRIMARY.beam.range) && isNum(PRIMARY.beam.rate) && isNum(PRIMARY.beam.price));
-  for (const f of ["price", "startStock", "unitPrice", "cap", "dmg", "cd", "range"]) {
+  for (const f of ["unitPrice", "sp0", "max", "acc", "life", "turn", "range", "lock", "cone"]) {
     assert.ok(isNum(MISSILE[f]) && MISSILE[f] > 0, `MISSILE.${f}`);
   }
   for (const [id, w] of Object.entries(SHOP_WEAPONS)) {
@@ -55,6 +66,11 @@ test("weapon data is complete", () => {
     assert.equal(typeof w.d, "string", `${id}: d`);
     assert.ok(isNum(w.price) && w.price > 0, `${id}: price`);
   }
+  assert.equal(SHOP_WEAPONS.beam.module, "beam_basic", "the shop beam buys the beam module");
+  assert.equal(SHOP_WEAPONS.beam.price, 900, "at the price the beam has always been");
+  assert.equal(SHOP_WEAPONS.msl.module, "missile_basic", "the shop missiles buy the module");
+  assert.equal(SHOP_WEAPONS.msl.price, 1500, "at the price the launcher has always been");
+  assert.equal(SHOP_WEAPONS.msl.startStock, 8, "buying it includes 8 missiles");
 });
 
 test("every base module has a cost curve and a default level, and saves keep it", () => {
@@ -257,10 +273,17 @@ test("every module fits its own group and carries that group's stat", () => {
       assert.ok(isNum(m.turn) && m.turn > 0, `${id}: thrusters set a turn rate`);
     }
     if (m.g === "primary") {
-      assert.ok(isNum(m.dmg) && m.dmg > 0, `${id}: guns do damage a shot`);
-      assert.ok(isNum(m.rate) && m.rate > 0, `${id}: guns set a fire rate`);
-      assert.ok(isNum(m.bspd) && m.bspd > 0, `${id}: guns set a bullet speed`);
-      assert.ok(isNum(m.draw) && m.draw >= 0, `${id}: guns state their power draw`);
+      if (m.period) {
+        // a mining beam, not a gun
+        assert.ok(isNum(m.period) && m.period > 0, `${id}: the beam takes period seconds per ore`);
+        assert.ok(isNum(m.range) && m.range > 0, `${id}: the beam states its reach in metres`);
+        assert.ok(isNum(m.draw) && m.draw >= 0, `${id}: the beam states its power draw`);
+      } else {
+        assert.ok(isNum(m.dmg) && m.dmg > 0, `${id}: guns do damage a shot`);
+        assert.ok(isNum(m.rate) && m.rate > 0, `${id}: guns set a fire rate`);
+        assert.ok(isNum(m.bspd) && m.bspd > 0, `${id}: guns set a bullet speed`);
+        assert.ok(isNum(m.draw) && m.draw >= 0, `${id}: guns state their power draw`);
+      }
     }
     if (m.g === "shield") {
       assert.ok(isNum(m.sh) && m.sh > 0, `${id}: shields hold shield points`);
@@ -297,6 +320,21 @@ test("shields are a module, and every hull is delivered with them", () => {
   }
 });
 
+test("the hull is a module, and every hull is delivered with it", () => {
+  const m = MODULES.hull_basic;
+  assert.ok(m, "there is a basic hull module");
+  assert.equal(m.g, "hull", "it fits the hull bay");
+  assert.equal(m.hp, 10, "10 hull points");
+  assert.deepEqual(STOCK_FIT.hull, ["hull_basic"], "every hull is delivered with one");
+  for (const [id, s] of Object.entries(SHIPS)) {
+    assert.equal(s.hull, undefined, `${id}: hit points come from the module, not the hull`);
+  }
+  const p = newProfile();
+  for (const id of Object.keys(SHIPS)) {
+    assert.deepEqual(p.loadout[id].hull, ["hull_basic"], `${id} has the basic hull fitted`);
+  }
+});
+
 test("a new game starts with the basic plant, cell and thrusters", () => {
   const p = newProfile();
   assert.deepEqual(p.loadout.wasp.power, ["power_basic"], "the basic powerplant is fitted");
@@ -318,14 +356,175 @@ test("a ship with no thrusters warns the player when they try to move", () => {
   );
 });
 
-test("basic cannons: 1 damage a shot, 3 a second, 2 MJ/s while firing", () => {
+test("basic cannons: 1 damage a shot, 3 a second per barrel, 2 MJ/s while firing", () => {
   const m = MODULES.cannon_basic;
   assert.ok(m, "there is a basic cannon module");
   assert.equal(m.g, "primary", "it fits a primary weapon bay");
   assert.equal(m.dmg, 1, "1 damage a shot");
-  assert.equal(m.rate, 3, "3 shots a second");
-  assert.equal(m.draw, 2, "2 MJ/s while the trigger is held");
+  assert.equal(m.rate, 3, "3 shots a second, per barrel");
+  assert.equal(m.barrels, 2, "twin-linked: two bolts per shot");
+  assert.equal(m.draw, 2, "2 MJ/s while the trigger is held, however many bolts it puts out");
   assert.deepEqual(STOCK_FIT.primary, ["cannon_basic"], "every hull is delivered with one");
+});
+
+test("any primary slot with nothing in it is called 'Empty weapon slot'", () => {
+  // Player-facing wording lives in sim/weapons.js and ui/hud.js; guard both.
+  const weapons = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
+  assert.match(weapons, /"Empty weapon slot"/, "an empty slot says exactly that");
+  assert.match(weapons, /state\.guns\.length > 0/, "the cannon slot is empty when no guns are fitted");
+  const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
+  assert.match(hud, /"Empty weapon slot"/, "the HUD names the empty slot the same way");
+  assert.doesNotMatch(hud, /"No guns"/, "the old 'No guns' wording is gone");
+  // The equipped line and the toast take the module's own name now.
+  assert.match(hud, /moduleListName\(/, "the HUD builds the primary line from the modules' names");
+  assert.match(weapons, /moduleListName\(/, "the equip toast too");
+  assert.doesNotMatch(weapons, /"Cannons equipped"/, "the hardcoded 'Cannons equipped' is gone");
+});
+
+test("the basic mining beam: one ore per 4 s of contact, 2 MJ/s, any primary bay", () => {
+  const m = MODULES.beam_basic;
+  assert.ok(m, "there is a basic mining beam module");
+  assert.equal(m.g, "primary", "it fits a primary weapon bay");
+  assert.equal(m.period, 4, "one ore per 4 seconds of continuous contact");
+  assert.equal(m.range, 340, "the same reach the old beam had");
+  assert.equal(m.draw, 2, "2 MJ/s while it is cutting");
+  assert.equal(m.dmg, undefined, "a beam is not a gun");
+  assert.deepEqual(STOCK_FIT.primary, ["cannon_basic"], "the beam is not standard issue");
+});
+
+test("the basic missiles: 8 damage, 12 capacity, 4 s reload, any secondary bay", () => {
+  const m = MODULES.missile_basic;
+  assert.ok(m, "there is a basic missiles module");
+  assert.equal(m.g, "secondary", "it fits the secondary weapon bay");
+  assert.equal(m.dmg, 8, "8 damage a missile");
+  assert.equal(m.cap, 12, "a 12-missile stock");
+  assert.equal(m.cd, 4, "4 seconds between launches");
+  assert.equal(STOCK_FIT.secondary, undefined, "the launcher is not standard issue");
+});
+
+test("a fitted launcher is not a gun, and missilesOf finds it", () => {
+  const both = { secondary: ["missile_basic"], primary: ["cannon_basic"] };
+  assert.deepEqual(gunsOf(both).map(g => g.id), ["cannon_basic"], "the launcher is no gun");
+  assert.deepEqual(beamsOf(both), [], "and no beam");
+  const launchers = missilesOf(both);
+  assert.equal(launchers.length, 1, "the launcher is picked up");
+  assert.equal(launchers[0].i, 0, "from its bay");
+  assert.equal(launchers[0].dmg, 8);
+  assert.equal(launchers[0].cap, 12);
+  assert.equal(launchers[0].cd, 4);
+  assert.deepEqual(missilesOf({ secondary: [null] }), [], "no launcher fitted, empty list");
+  assert.deepEqual(missilesOf({}), [], "no secondary bay at all");
+  assert.deepEqual(missilesOf(undefined), [], "nothing to read");
+});
+
+test("hullOf: a fitted hull grants its points, no module fitted means none", () => {
+  assert.equal(hullOf({ hull: ["hull_basic"] }), 10);
+  assert.equal(hullOf({ hull: [null] }), 0, "the empty hull bay is a one-shot kill");
+  assert.equal(hullOf({}), 0);
+  assert.equal(hullOf(undefined), 0);
+});
+
+test("save version 10: the pre-module hull bay is filled with the stock hull", () => {
+  const old = sanitizeProfile({
+    v: 9, ships: ["wasp"], ship: "wasp", cr: 100,
+    loadout: { wasp: { hull: [null] } },
+  });
+  assert.equal(old.v, SAVE_VERSION);
+  assert.deepEqual(old.loadout.wasp.hull, ["hull_basic"], "a pre-10 save gets the stock hull fitted");
+
+  const emptied = sanitizeProfile({
+    v: 10, ships: ["wasp"], ship: "wasp", cr: 100,
+    loadout: { wasp: { hull: [null] } },
+  });
+  assert.deepEqual(emptied.loadout.wasp.hull, [null], "a v10 save where the player emptied the bay stays hull-less");
+});
+
+test("a fitted beam is not a gun, and beamsOf finds it", () => {
+  const both = { primary: ["beam_basic", "cannon_basic"] };
+  assert.deepEqual(gunsOf(both).map(g => g.id), ["cannon_basic"], "only the gun is a gun");
+  const beams = beamsOf(both);
+  assert.equal(beams.length, 1, "the beam is picked up");
+  assert.equal(beams[0].i, 0, "from its bay");
+  assert.equal(beams[0].period, 4);
+  assert.equal(beams[0].draw, 2);
+  assert.deepEqual(beamsOf({ primary: [null, null] }), [], "no beam fitted, empty list");
+  assert.deepEqual(beamsOf({}), [], "no primary bay at all");
+  assert.deepEqual(beamsOf(undefined), [], "nothing to read");
+});
+
+test("moduleListName names the equipped modules for the HUD and the toast", () => {
+  const cannon = { id: "cannon_basic", n: "Basic cannons" };
+  const beam = { id: "beam_basic", n: "Basic mining beam" };
+  assert.equal(moduleListName([cannon]), "Basic cannons");
+  assert.equal(moduleListName([cannon, cannon]), "Basic cannons x2");
+  assert.equal(moduleListName([beam, cannon]), "Basic mining beam + Basic cannons");
+  assert.equal(moduleListName([]), "");
+  assert.equal(moduleListName(undefined), "");
+});
+
+test("the shield and hull bars show numbers with their HP units", () => {
+  const html = readFileSync(new URL("../src/index.html", import.meta.url), "utf8");
+  assert.match(html, /Shield HP/, "the shield bar is labelled Shield HP");
+  assert.match(html, /Hull HP/, "the hull bar is labelled Hull HP");
+  const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
+  assert.match(hud, /sh-val/, "the shield bar has a numeric readout");
+  assert.match(hud, /hull-val/, "the hull bar has a numeric readout");
+  const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
+  assert.match(screens, /Shield HP/, "the bay stat line uses Shield HP");
+  assert.match(screens, /Hull HP/, "the bay stat line uses Hull HP");
+});
+
+test("the beam loses its progress the moment contact stops", () => {
+  // weapons.js imports the scene, so the rule is guarded rather than imported.
+  const src = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
+  assert.match(src, /if \(!F\.beamOn && F\.beamT > 0\)/, "the reset fires the moment contact stops");
+  assert.match(src, /state\.beams/, "which beam fits comes from the fitted modules");
+  assert.ok(!src.includes("beamIdle"), "no lingering idle timer: the reset is immediate");
+});
+
+test("save version 8: the old mining beam purchase becomes the beam module", () => {
+  const owner = sanitizeProfile({
+    v: 7, ships: ["wasp"], ship: "wasp", cr: 100,
+    wp: { beam: true, msl: false }, pw: "beam",
+  });
+  assert.equal(owner.v, SAVE_VERSION);
+  assert.deepEqual(owner.modules, ["beam_basic"], "an owner of the old beam gets one beam module in storage");
+  assert.equal(owner.wp, undefined, "the whole wp object is gone from the save");
+  assert.equal(owner.pw, "beam", "the selected slot is kept");
+
+  const never = sanitizeProfile({ v: 7, ships: ["wasp"], ship: "wasp", cr: 100, wp: { beam: false, msl: false } });
+  assert.deepEqual(never.modules, [], "a save that never bought the beam gets nothing");
+
+  const again = sanitizeProfile(owner);
+  assert.deepEqual(again.modules, ["beam_basic"], "importing keeps exactly one");
+});
+
+test("save version 9: the old missile launcher purchase becomes the missile module", () => {
+  const owner = sanitizeProfile({
+    v: 8, ships: ["wasp"], ship: "wasp", cr: 100,
+    wp: { beam: false, msl: true }, msl: 5,
+  });
+  assert.equal(owner.v, SAVE_VERSION);
+  assert.deepEqual(owner.modules, ["missile_basic"], "an owner of the old launcher gets one missile module in storage");
+  assert.equal(owner.wp, undefined, "the whole wp object is gone from the save");
+  assert.equal(owner.msl, 5, "the missiles they carried stay");
+
+  const never = sanitizeProfile({ v: 8, ships: ["wasp"], ship: "wasp", cr: 100, wp: { msl: false } });
+  assert.deepEqual(never.modules, [], "a save that never bought the launcher gets nothing");
+
+  const again = sanitizeProfile(owner);
+  assert.deepEqual(again.modules, ["missile_basic"], "importing keeps exactly one");
+
+  const rich = sanitizeProfile({ v: 8, ships: ["wasp"], ship: "wasp", cr: 100, wp: { msl: true }, msl: 99 });
+  assert.equal(rich.msl, 12, "carried missiles clamp to the module's capacity");
+});
+
+test("the primary fire loop puts one bolt downrange per linked barrel", () => {
+  // weapons.js imports the scene, so it cannot be imported here; guard the rule.
+  const src = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
+  assert.match(src, /g\.barrels/, "the number of barrels comes from the module");
+  assert.match(src, /for \(let b = 0; b < n; b\+\+\)/, "one bolt per barrel, on the gun's own cooldown");
+  assert.match(src, /setDraw\("guns", F\.gunsOn \? gunDraw : 0\)/, "the power bill does not count bolts");
 });
 
 test("a gun fires from whichever primary bay it is fitted in", () => {
@@ -336,6 +535,7 @@ test("a gun fires from whichever primary bay it is fitted in", () => {
   assert.equal(bay1.length, 1);
   assert.equal(bay0[0].dmg, bay1[0].dmg, "same damage in either bay");
   assert.equal(bay0[0].rate, bay1[0].rate, "same fire rate in either bay");
+  assert.equal(bay0[0].barrels, 2, "the basic cannon carries its linked pair of barrels");
   assert.equal(bay0[0].i, 0, "bay 0 is the left barrel");
   assert.equal(bay1[0].i, 1, "bay 1 is the right barrel");
 
@@ -559,4 +759,27 @@ test("the bay box style sits on .mod-bay itself, so paint bays get a box too", (
     !/(?:^|\n)\s*(?:border|padding|display|background)\s*:/.test(button[1]),
     "button.mod-bay must not hold the box styles: the paint bays would lose them"
   );
+});
+
+test("outfitting has the ship switcher above the 3D viewer; the Hangar shows no berth count", () => {
+  const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
+  // The Hangar tab used to read "Berths 2/3"; the switcher replaces it.
+  assert.ok(!screens.includes("Berths"), "the berth count is gone from the Hangar");
+  assert.match(screens, /class="ship-switch"/, "the outfitting screen has the ship switcher");
+  assert.match(screens, /data-a="shipPrev"/, "the switcher has a left arrow");
+  assert.match(screens, /data-a="shipNext"/, "the switcher has a right arrow");
+  const menu = readFileSync(new URL("../src/ui/menu.js", import.meta.url), "utf8");
+  assert.match(menu, /shipPrev\(\)/, "the left arrow is wired to an action");
+  assert.match(menu, /shipNext\(\)/, "the right arrow is wired to an action");
+});
+
+test("paid repairs and missile restock live in outfitting, not the hangar or the shop", () => {
+  const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
+  assert.match(screens, /class="outfit-service"/, "outfitting has the services box");
+  // Both services target the ship in the viewer, selected ship only:
+  assert.match(screens, /data-a="rp" data-b="\$\{S\.ship\}"/, "repairs act on the selected ship");
+  assert.match(screens, /data-a="wr"/, "missile restock is wired in outfitting");
+  // The moved rows are gone from their old homes:
+  assert.ok(!screens.includes("Missile stock"), "the shop no longer lists the restock row");
+  assert.equal((screens.match(/Hull repairs/g) || []).length, 1, "the Hangar no longer lists repair rows");
 });

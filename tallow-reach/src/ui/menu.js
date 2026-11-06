@@ -11,12 +11,14 @@ import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
+import { refreshHull } from "../sim/hull.js";
 import { refreshGuns } from "../sim/guns.js";
 import * as fitting from "../sim/fitting.js";
 import { toggleModulePicker, togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
-import { introHtml, outpostHtml } from "./screens.js";
+import * as inv from "../sim/inventory.js";
+import { introHtml, outpostHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
 
 const $ = id => document.getElementById(id);
@@ -111,6 +113,33 @@ const ACTIONS = {
   },
   wr() {
     toast(eco.restockMissiles());
+  },
+
+  // The arrows above the 3D viewer in Outfitting: cycle through the ships in the
+  // hangar (same selection as the Hangar's Fly button).
+  shipPrev() {
+    cycleShip(-1);
+  },
+  shipNext() {
+    cycleShip(1);
+  },
+
+  // Inventory: step through the ships' holds (this only changes which hold is shown,
+  // not which ship you fly), and move things between the station and that hold.
+  invPrev() {
+    cycleInvShip(-1);
+  },
+  invNext() {
+    cycleInvShip(1);
+  },
+  mv(arg) {
+    // data-b is "kind:id:dir:n": kind c = ore, m = module; dir s = station to the
+    // ship shown, t = from it to the station; n = a count or "all".
+    const [kind, id, dir, n] = String(arg || "").split(":");
+    const ship = viewedShip();
+    const [from, to] = dir === "s" ? [inv.STATION, ship] : [ship, inv.STATION];
+    const count = n === "all" ? Infinity : Math.max(1, +n || 1);
+    toast(kind === "c" ? inv.moveCargo(from, to, id, count) : inv.moveModule(from, to, id, count));
   },
 
   // Outfitting
@@ -208,14 +237,35 @@ const ACTIONS = {
   },
 };
 
+/** Step the flown ship through the hangar. The arrows do nothing with one ship. */
+function cycleShip(dir) {
+  const S = state.profile,
+    owned = S.ships;
+  if (!owned || owned.length < 2) return;
+  const i = owned.indexOf(S.ship);
+  const next = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
+  const msgText = eco.selectShip(next);
+  if (msgText) toast(msgText);
+}
+
+/** Step the Inventory tab through the hangar's ships without changing the ship being flown. */
+function cycleInvShip(dir) {
+  const owned = state.profile.ships;
+  if (!owned || owned.length < 2) return;
+  const i = owned.indexOf(viewedShip());
+  state.ui.invShip = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
+}
+
 /** Common work after the whole profile is replaced (load, import, reset). */
 function afterProfileChange() {
   setShip(state.profile.ship);
   refillPower();
   refreshDrive();
   refreshShield();
+  refreshHull();
   refreshGuns();
   state.ui.fit = null;
+  state.ui.invShip = null;
   contracts.rerollBoard();
   state.flight.lock = null;
   state.flight.missileLock = { target: null, t: 0, locked: false };

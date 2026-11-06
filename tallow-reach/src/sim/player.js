@@ -1,10 +1,11 @@
-// The player's ship: flight model, shields and hull, and taking damage.
+// The player's ship: flight model, Shield HP and Hull HP, and taking damage.
 
 import { V, fwd, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
-import { SHIPS, FLIGHT } from "../data/ships.js";
+import { FLIGHT } from "../data/ships.js";
 import { warpSteerEase } from "../data/sectors.js";
 import { sectorAt } from "../data/sectors.js";
+import { REPAIR_MIN_HULL } from "../data/station.js";
 import { keys, pointer } from "../core/input.js";
 import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
@@ -12,6 +13,7 @@ import { buildPlayerShip } from "../render/models.js";
 import { state, msg } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
+import { refreshHull } from "./hull.js";
 import { STATION_KEEPOUT } from "./world.js";
 
 /**
@@ -35,9 +37,9 @@ export function createPlayer() {
     m: null,
     v: V(0, 0, 0),     // current velocity
     thr: 0,            // throttle, -1..1
-    hull: 100,
+    hull: 0,
     sh: 0,
-    hullMax: 100,
+    hullMax: 0,        // set from the fitted hull module (sim/hull.js)
     shMax: 0,          // set from the fitted shield module (sim/shield.js)
     en: 0,             // boost fuel in the tank
     enMax: 0,          // tank size, set from the fitted thrusters (sim/drive.js)
@@ -53,15 +55,15 @@ export function createPlayer() {
   return state.player;
 }
 
-/** Swap the flying model to ship `id`, keeping hull fraction from the save. */
+/** Swap the flying model to ship `id`, rebuilding its Hull HP from the fit. */
 export function setShip(id) {
-  const P = state.player,
-    d = SHIPS[id];
+  const P = state.player;
   if (P.m) scene.remove(P.m);
   P.m = buildPlayerShip(id);
   scene.add(P.m);
-  P.hullMax = d.hull;
-  P.hull = d.hull * (state.profile.hp[id] ?? 1);
+  P.hullMax = 0;
+  P.hull = 0;
+  refreshHull();   // Hull HP come from the hull module fitted in the bay
   P.m.visible = !P.docked;
 }
 
@@ -176,7 +178,8 @@ export function flight(dt) {
       m.position.addScaledVector(normal, r - len);
       const speed = P.v.length();
       P.v.reflect(normal).multiplyScalar(0.4);
-      if (speed > 25) hurt(speed * 0.15);
+      if (speed > 25) hurt(speed * 0.015);   // was 0.15 against a 100-point hull; the basic
+                                             // hull has 10, so collision damage is 1/10th
     }
   }
 
@@ -201,6 +204,12 @@ export function hurt(d) {
     }
   } else {
     P.hull -= d;
+  }
+  // Stamp the save with the fraction the ship is on, so damage is remembered
+  // across fit changes, hangar visits and hull switches.
+  if (P.hullMax > 0) {
+    const frac = clamp(P.hull / P.hullMax, 0, 1);
+    state.profile.hp[state.profile.ship] = Math.max(REPAIR_MIN_HULL, frac);
   }
   emit("hurt", { shielded: P.sh > 0 });
   if (P.hull <= 0) emit("player-dead");

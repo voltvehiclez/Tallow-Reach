@@ -10,4 +10,5 @@ Rules:
 - Changing saved data means: default in `newProfile`, validation in `sanitizeProfile`, bump `SAVE_VERSION`, a "Version history" line, and a test. See `docs/ARCHITECTURE.md`.
 - `sanitizeProfile` names the base modules and weapon flags explicitly. A new one needs a line there.
 - Groups added in a later version (thrusters in v5, shields in v6) are retrofitted by `cleanLoadouts` for older saves; a save of the current version keeps a bay the player emptied.
+- `profile.holds[shipId] = { cargo, modules }` is each ship's own hold (save version 11; it replaced the single `cargo`). `profile.store` and `profile.modules` are the station's ore and spare parts, all measured in m³ (see `sim/inventory.js`).
 - `profile.loadout` holds the modules fitted to each hull: group id -> one entry per bay (`null` = empty). `profile.modules` is the store of spare parts (a list of module ids). Only `sim/fitting.js` writes either. `cleanLoadouts` drops unknown ids and bays past the hull's layout, and gives a hull with no saved loadout the stock fit. Bump `SAVE_VERSION` when its shape changes.

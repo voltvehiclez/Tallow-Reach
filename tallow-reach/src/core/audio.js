@@ -308,8 +308,19 @@ export function uiSound(kind) {
   }
 }
 
+/** Hover blip for menu items. */
 export function hoverSound() {
   tone(900, 900, 0.03, 0.015);
+}
+
+/**
+ * Ore secured: a warm ascending chime — the payoff for a completed beam cycle.
+ * Call once per ore that goes into the hold.
+ */
+export function oreGained() {
+  tone(587, 587, 0.16, 0.085, "triangle");                     // D5
+  setTimeout(() => tone(880, 880, 0.22, 0.085, "triangle"), 70); // A5
+  setTimeout(() => tone(1174, 1174, 0.36, 0.07, "sine"), 150);   // D6
 }
 
 /**

@@ -4,8 +4,8 @@
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { KEYS, emptyCargo } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
-import { MISSILE } from "../data/weapons.js";
 import { CONTRACT_TYPES } from "../data/contracts.js";
+// The missile capacity comes from the launcher module; one source of truth.
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 
@@ -25,7 +25,31 @@ import { layoutFor } from "../data/outfitting.js";
 //   7  the basic cannons are standard issue in the first primary bay. Saves from
 //      before 7 gain them on load; weapon bays the player really left empty stay
 //      empty from version 7 onwards.
-export const SAVE_VERSION = 7;
+//   8  the mining beam is a module (beam_basic) instead of the wp.beam flag. Saves
+//      from before 8 whose owner had bought the beam get one beam_basic module in
+//      storage instead; it is not auto-fitted — fit it in a primary bay. The shop
+//      sells the module now. The wp.beam flag is gone from the save.
+//   9  the missile launcher is a module (missile_basic) instead of the wp.msl
+//      flag. Saves from before 9 whose owner had bought it get one missile_basic
+//      module in storage instead; it is not auto-fitted — fit it in a secondary
+//      bay. The Shop sells the module now. The whole wp object is gone from the
+//      save. Missiles carried (msl) stay, clamped by the launcher's capacity.
+//   10 the hull is a module (hull_basic) instead of the hull's built-in hit
+//      Hull HP: the fitted module decides how many Hull HP the ship has, and
+//      no module fitted means none — any hit reaching the hull kills the ship.
+//      Saves from before 10 get hull_basic fitted into their hull bay (the bay
+//      existed but could not hold anything), like the thrusters, shields and
+//      cannons before it. A v10 save where the player emptied the bay stays
+//      hull-less — a one-shot kill waiting to happen.
+//   11 inventory. Every ship has its own hold, `holds[shipId] = { cargo, modules }`:
+//      the ore it carries and the spare modules it hauls, together limited by the
+//      hull's size in m³. This replaces the single `cargo` object, which belonged to
+//      whichever ship was being flown. Saves from before 11 hand their `cargo` to the
+//      ship they were flying; every other ship starts with an empty hold. The station
+//      keeps `store` (ore) and `modules` (parts) as before, but both now count in m³
+//      against the station's storage (data/station.js) and `modules` can be many of
+//      the same part.
+export const SAVE_VERSION = 11;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -46,6 +70,9 @@ export function stockFor(shipId) {
   return fit;
 }
 
+/** An empty hold: no ore, no spare modules. One per owned ship (`profile.holds`). */
+export const newHold = () => ({ cargo: emptyCargo(), modules: [] });
+
 /** A stock fit for every hull the game knows. */
 function allStockFit() {
   const out = {};
@@ -57,20 +84,19 @@ export function newProfile() {
   return {
     v: SAVE_VERSION,
     cr: 600,
-    cargo: emptyCargo(),
-    store: emptyCargo(),
+    holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { cargo, modules } carried in its hold
+    store: emptyCargo(),               // ore in the station's storage
     ships: [DEFAULT_SHIP],
     ship: DEFAULT_SHIP,
     base: { ...BASE_DEFAULT },
     mission: null,
     done: 0,           // contracts completed
     kills: 0,
-    wp: { beam: false, msl: false },
     msl: 0,            // missiles carried
     pw: "cannon",      // equipped primary
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
     loadout: allStockFit(),      // fitted modules per hull, group -> bay array
-    modules: [],                 // spare parts in storage, ready to be fitted
+    modules: [],                 // spare parts in the station's storage, ready to be fitted
   };
 }
 
@@ -88,12 +114,7 @@ export function sanitizeProfile(raw) {
   s.ships = s.ships.filter(id => SHIPS[id]);
   if (!SHIPS[s.ship]) s.ship = s.ships[0] || DEFAULT_SHIP;
 
-  for (const key of ["cargo", "store"]) {
-    const src = s[key] || {};
-    const clean = emptyCargo();
-    KEYS.forEach(k => (clean[k] = Math.max(0, +src[k] || 0)));
-    s[key] = clean;
-  }
+  s.store = cleanCargo(s.store);
 
   const base = s.base || {};
   s.base = {
@@ -102,8 +123,13 @@ export function sanitizeProfile(raw) {
     refinery: clampLevel(base.refinery, 0, BASE_MODULES.refinery.max),
   };
 
-  s.wp = Object.assign({ beam: false, msl: false }, s.wp || {});
-  s.msl = Math.max(0, Math.min(MISSILE.cap, +s.msl || 0));
+  // The beam flag left the save in version 8, the missile flag in version 9:
+  // whether the player owns those weapons is now "does modules storage or a bay
+  // hold the module" (see ownsModule). The whole wp object is gone from the save.
+  const hadOldBeam = !!((raw.wp || {}).beam);
+  const hadOldLauncher = !!((raw.wp || {}).msl);
+  delete s.wp;
+  s.msl = Math.max(0, Math.min(MODULES.missile_basic.cap, +s.msl || 0));
   if (s.pw !== "beam") s.pw = "cannon";
 
   const hp = {};
@@ -113,8 +139,15 @@ export function sanitizeProfile(raw) {
   }
   s.hp = hp;
 
-  s.loadout = cleanLoadouts(raw.loadout, +raw.v || 1);
+  const rawVersion = +raw.v || 1;
+  s.loadout = cleanLoadouts(raw.loadout, rawVersion);
   s.modules = cleanStorage(raw.modules);
+  // v8: the old beam purchase becomes one Basic mining beam module in storage.
+  // Not auto-fitted — the player fits it in a primary bay like any other module.
+  if (rawVersion < 8 && hadOldBeam && !s.modules.includes("beam_basic")) s.modules.push("beam_basic");
+  // v9: the old missile launcher purchase becomes one Basic missiles module in
+  // storage. Not auto-fitted — the player fits it in a secondary bay.
+  if (rawVersion < 9 && hadOldLauncher && !s.modules.includes("missile_basic")) s.modules.push("missile_basic");
 
   s.done = +s.done || 0;
   s.kills = +s.kills || 0;
@@ -126,8 +159,32 @@ export function sanitizeProfile(raw) {
     s.ship = DEFAULT_SHIP;
   }
 
+  // v11: every ship has its own hold. A save from before that carried one `cargo`
+  // object for the ship being flown, so that ship gets it.
+  const oldCargo = raw.holds ? null : raw.cargo;
+  delete s.cargo;
+  s.holds = cleanHolds(raw.holds, s.ships);
+  if (oldCargo && s.holds[s.ship]) s.holds[s.ship].cargo = cleanCargo(oldCargo);
+
   s.v = SAVE_VERSION;
   return s;
+}
+
+/** Ore counts: known items only, never negative. */
+function cleanCargo(src) {
+  const out = emptyCargo();
+  KEYS.forEach(k => (out[k] = Math.max(0, +((src || {})[k]) || 0)));
+  return out;
+}
+
+/** One hold per owned ship; unknown parts and damaged shapes are dropped. */
+function cleanHolds(raw, ships) {
+  const out = {};
+  for (const id of ships) {
+    const h = raw && typeof raw === "object" ? raw[id] : null;
+    out[id] = { cargo: cleanCargo(h && h.cargo), modules: cleanStorage(h && h.modules) };
+  }
+  return out;
 }
 
 function clampLevel(value, lo, hi) {
@@ -150,10 +207,14 @@ function cleanLoadouts(saved, version) {
   // introduced a group has an empty bay because the group did not exist then, not
   // because the player emptied it. Those bays get the stock part.
   //   version 5: thrusters      version 6: shields      version 7: cannons
+  // The hull bay is the same story as the others, from version 10: before the
+  // hull module existed the bay was empty for lack of anything to fit, not by
+  // choice. Saves from before 10 get the stock hull fitted.
   const addedLater = [];
   if (version < 5) addedLater.push("thruster");
   if (version < 6) addedLater.push("shield");
   if (version < 7) addedLater.push("primary");
+  if (version < 10) addedLater.push("hull");
   const out = {};
   for (const id of Object.keys(SHIPS)) {
     const layout = layoutFor(id),

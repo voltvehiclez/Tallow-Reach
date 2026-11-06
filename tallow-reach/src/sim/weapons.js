@@ -1,19 +1,21 @@
-// Player weapons: cannons and mining beam (primary), homing missiles (secondary).
+// Player weapons: the fitted primary modules (guns, the mining beam) and homing
+// missiles (secondary).
 
 import * as THREE from "three";
 import { V, fwd, face, UP, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
 import { ITEM } from "../data/items.js";
-import { PRIMARY, MISSILE } from "../data/weapons.js";
+import { MISSILE } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
 import { keys } from "../core/input.js";
-import { tone, nz } from "../core/audio.js";
+import { tone, nz, oreGained } from "../core/audio.js";
 import { scene, camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
+import { cargoOf } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
-import { gunsOf } from "./guns.js";
+import { gunsOf, moduleListName } from "./guns.js";
 
 export { gunsOf, refreshGuns } from "./guns.js";
 import { fire, hitHostile } from "./combat.js";
@@ -21,6 +23,11 @@ import { boom, puff } from "./effects.js";
 import { spawnAsteroid } from "./asteroids.js";
 
 const ASTEROID_RESPAWN_MS = 30000;
+// Metres between the linked barrels of a multi-barrel gun (the basic cannon links two).
+// A twin-link sits on the two fixed nose hardpoints at -1.8 m and +1.8 m, the layout
+// the cannons had before they were a module: one bolt per side of the nose. Private
+// to the firing code; how many barrels a gun has is data (`barrels` on the module).
+const BARREL_SPACING = 3.6;
 
 const beamMesh = new THREE.Mesh(
   new THREE.CylinderGeometry(0.3, 0.3, 1, 6),
@@ -36,18 +43,21 @@ const missileMat = new THREE.MeshStandardMaterial({
   emissiveIntensity: 0.8,
 });
 
-/** Equip a primary weapon. The beam needs to be bought first. */
+/** Equip a primary weapon. Keys 1 and 2 cycle the primary slots: key 1 is the
+ *  cannon slot (whatever the primary bays are holding), key 2 is the mining beam
+ *  slot. A slot with nothing in it — the beam unbought, or every primary bay
+ *  empty — is an "Empty weapon slot": left click does nothing. */
 export function setWeapon(name) {
   const S = state.profile;
-  if (name === "beam" && !S.wp.beam) {
-    msg("No mining beam installed. Buy one in the station shop.", 3);
-    return;
-  }
   S.pw = name;
-  msg(name === "beam" ? "Mining beam equipped" : "Cannons equipped", 1.5);
+  if (name === "beam")
+    msg((state.beams || []).length > 0 ? `${moduleListName(state.beams)} equipped` : "Empty weapon slot", 1.5);
+  else
+    msg(state.guns.length > 0 ? `${moduleListName(state.guns)} equipped` : "Empty weapon slot", 1.5);
 }
 
-/** Primary fire: cannons when held, or the mining beam if it is equipped. */
+/** Primary fire: the fitted guns when held, or the mining beam if its slot is
+ *  selected and one is fitted. */
 export function updatePrimary(dt) {
   const F = state.flight,
     S = state.profile,
@@ -64,6 +74,8 @@ export function updatePrimary(dt) {
     F.gunsOn = false;
     setDraw("guns", 0);
     F.beamOn = false;
+    F.beamT = 0;
+    setDraw("beam", 0);
     beamMesh.visible = false;
     return;
   }
@@ -84,75 +96,104 @@ export function updatePrimary(dt) {
       if (F.gunCd[i] > 0) return;
       F.gunCd[i] = 1 / g.rate;
       fired = true;
-      // One bolt per gun, from that gun's own barrel.
-      fire(
-        P.m.localToWorld(V(-1.8 + 3.6 * i, -0.2, -5 * d.sc)),
-        fwd(P.m),
-        g.speed,
-        true,
-        g.dmg * d.dmg
-      );
+      // One bolt per linked barrel. A multi-barrel gun fires from the fixed nose
+      // hardpoints mirrored about the centerline (the basic cannon puts one bolt
+      // per side, at -1.8 m and +1.8 m) wherever it sits in the bays — the way the
+      // cannons fired before they were a module. A single barrel fires from its
+      // bay mount as usual. Same cooldown and same power draw either way.
+      const n = Math.max(1, g.barrels || 1),
+        f = fwd(P.m);
+      for (let b = 0; b < n; b++) {
+        const x = n > 1 ? (b - (n - 1) / 2) * BARREL_SPACING : -1.8 + 3.6 * i;
+        fire(
+          P.m.localToWorld(V(x, -0.2, -5 * d.sc)),
+          f,
+          g.speed,
+          true,
+          g.dmg * d.dmg
+        );
+      }
     });
     if (fired) tone(700, 120, 0.09, 0.05, "square");
   }
 
+  // The mining beam: the first beam module fitted in the primary bays, in bay
+  // order. It needs the beam slot (key 2), a rock in reach and the power to cut;
+  // it draws MJ/s only while it is actually cutting. One ore per `period`
+  // seconds of uninterrupted contact with the same rock (scaled by the hull's
+  // mine multiplier); the moment contact stops, the progress toward the next
+  // ore is lost — the count starts over.
+  const beam = (state.beams || [])[0];
+  const beamOtherDraw = state.power.draw - (state.power.use.beam || 0);
   F.beamOn = false;
   beamMesh.visible = false;
-  if (!(keys.fire && S.pw === "beam" && S.wp.beam)) return;
+  if (keys.fire && S.pw === "beam" && beam) {
+    // Find the nearest asteroid inside the beam cone.
+    const f = fwd(P.m),
+      pp = P.m.position;
+    let best = null,
+      bestDist = 1e9;
+    for (const a of state.world.asteroids) {
+      const q = a.m.position.clone().sub(pp),
+        along = q.dot(f);
+      if (along < 5 || along > beam.range) continue;
+      const off = Math.sqrt(Math.max(0, q.lengthSq() - along * along));
+      if (off < a.r + 4 && along < bestDist) {
+        bestDist = along;
+        best = a;
+      }
+    }
+    if (!best) {
+      say("No asteroid in beam range");
+    } else if (holdLoad() >= d.cargo) {
+      say("Cargo hold full");
+    } else if (!hasPower(beamOtherDraw + beam.draw)) {
+      say("Not enough power");
+    } else {
+      // The beam cuts continuously. Draw it, charge for it, and bank whole ores
+      // as they complete.
+      const start = P.m.localToWorld(V(0, -1, -6 * d.sc)),
+        end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5)),
+        delta = end.clone().sub(start),
+        len = delta.length();
+      beamMesh.visible = true;
+      F.beamOn = true;
+      beamMesh.position.copy(start).addScaledVector(delta, 0.5);
+      beamMesh.scale.set(1, len, 1);
+      beamMesh.quaternion.setFromUnitVectors(UP, delta.normalize());
 
-  // Find the nearest asteroid inside the beam cone.
-  const f = fwd(P.m),
-    pp = P.m.position;
-  let best = null,
-    bestDist = 1e9;
-  for (const a of state.world.asteroids) {
-    const q = a.m.position.clone().sub(pp),
-      along = q.dot(f);
-    if (along < 5 || along > PRIMARY.beam.range) continue;
-    const off = Math.sqrt(Math.max(0, q.lengthSq() - along * along));
-    if (off < a.r + 4 && along < bestDist) {
-      bestDist = along;
-      best = a;
+      F.beamT = (F.beamT || 0) + dt * (d.mine || 1);
+      const gained = Math.floor(F.beamT / beam.period);
+      say(`${ITEM[best.type].n}: ${Math.ceil(best.ore)} left in rock`);
+      if (gained > 0) {
+        F.beamT -= gained * beam.period;
+        best.ore = Math.max(0, best.ore - gained);
+        best.m.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
+        F.mineFrac = best.ore / best.max;
+        P.acc += gained;
+        oreGained();   // the beam sweep hits 100%: a resource is yours
+        if (best.ore <= 0) {
+          scene.remove(best.m);
+          state.world.asteroids.splice(state.world.asteroids.indexOf(best), 1);
+          boom(best.m.position, 12, 0x8a7a6a);
+          setTimeout(spawnAsteroid, ASTEROID_RESPAWN_MS);
+          F.beamT = 0;
+        }
+        while (P.acc >= 1 && holdLoad() < d.cargo) {
+          cargoOf()[best.type]++;
+          P.acc--;
+          emit("mined", { item: best.type });
+        }
+      }
     }
   }
-  if (!best) {
-    say("No asteroid in beam range");
-    return;
-  }
+  setDraw("beam", F.beamOn ? beam.draw : 0);
 
-  // Draw the beam from the gun to the rock.
-  const start = P.m.localToWorld(V(0, -1, -6 * d.sc)),
-    end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5)),
-    delta = end.clone().sub(start),
-    len = delta.length();
-  beamMesh.visible = true;
-  F.beamOn = true;
-  beamMesh.position.copy(start).addScaledVector(delta, 0.5);
-  beamMesh.scale.set(1, len, 1);
-  beamMesh.quaternion.setFromUnitVectors(UP, delta.normalize());
-
-  if (holdLoad() >= d.cargo) {
-    say("Cargo hold full");
-    return;
-  }
-
-  const mined = Math.min(PRIMARY.beam.rate * d.mine * dt, best.ore);
-  best.ore -= mined;
-  P.acc += mined;
-  say(`${ITEM[best.type].n}: ${Math.ceil(best.ore)} left in rock`);
-  while (P.acc >= 1 && holdLoad() < d.cargo) {
-    S.cargo[best.type]++;
-    P.acc--;
-    emit("mined", { item: best.type });
-  }
-
-  best.m.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
-  F.mineFrac = best.ore / best.max;
-  if (best.ore <= 0) {
-    scene.remove(best.m);
-    state.world.asteroids.splice(state.world.asteroids.indexOf(best), 1);
-    boom(best.m.position, 12, 0x8a7a6a);
-    setTimeout(spawnAsteroid, ASTEROID_RESPAWN_MS);
+  // The moment contact stops — ship off the rock, trigger released, mine out of
+  // reach — the progress toward the next ore is lost.
+  if (!F.beamOn && F.beamT > 0) {
+    F.beamT = 0;
+    say("Beam contact lost — the ore starts again");
   }
 }
 
@@ -179,7 +220,9 @@ export function updateMissiles(dt) {
     return;
   }
 
-  if (!S.wp.msl) {
+  // Which fitted launcher (if any) decides the damage, the stock and the reload.
+  const launcher = (state.missiles || [])[0];
+  if (!launcher) {
     F.coneRadius = 0;
     ML.target = null;
     ML.locked = false;
@@ -228,8 +271,8 @@ export function updateMissiles(dt) {
     if (keys.sec && F.missileCd <= 0) {
       if (S.msl <= 0) say("Out of missiles");
       else {
-        fireMissile(ML.locked ? ML.target : null);
-        F.missileCd = MISSILE.cd;
+        fireMissile(ML.locked ? ML.target : null, launcher);
+        F.missileCd = launcher.cd;
       }
     }
   }
@@ -237,7 +280,7 @@ export function updateMissiles(dt) {
   updateMissileFlight(dt);
 }
 
-function fireMissile(target) {
+function fireMissile(target, launcher) {
   const S = state.profile,
     P = state.player;
   S.msl--;
@@ -253,6 +296,7 @@ function fireMissile(target) {
     sp: MISSILE.sp0 + Math.max(0, P.v.dot(d)),
     t: target,
     l: MISSILE.life,
+    dmg: launcher.dmg,
   });
   nz(0.35, 900, 0.15);
   tone(300, 120, 0.3, 0.05, "sawtooth");
@@ -285,7 +329,7 @@ function updateMissileFlight(dt) {
     let end = s.l <= 0;
     for (const e of W.enemies) {
       if (e.m.position.distanceTo(m.position) < 12) {
-        hitHostile(e, MISSILE.dmg, e.m.position);
+        hitHostile(e, s.dmg, e.m.position);
         end = true;
         break;
       }

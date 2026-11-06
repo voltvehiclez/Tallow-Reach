@@ -10,6 +10,7 @@ import { scene } from "../render/scene.js";
 import { mm } from "../render/models.js";
 import { state, msg, say } from "../state/state.js";
 import { holdLoad } from "./economy.js";
+import { cargoOf } from "./inventory.js";
 import { hurt } from "./player.js";
 import { boom } from "./effects.js";
 
@@ -136,7 +137,7 @@ export function updateCrates(dt) {
         say("Cargo hold full");
       } else {
         const k = c.core ? "core" : "salv";
-        S.cargo[k]++;
+        cargoOf()[k]++;
         emit("pickup", { item: k });
         msg(`Picked up ${ITEM[k].n}`, 2);
         tone(880, 1320, 0.15, 0.08);

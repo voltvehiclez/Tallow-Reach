@@ -2,12 +2,16 @@
 // so the look of a screen can be changed without touching game logic.
 
 import { SHIPS } from "../data/ships.js";
-import { ITEM, KEYS } from "../data/items.js";
+import { ITEM, KEYS, ITEM_VOL } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
-import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
+import { storedFor, fittedAt, isBayGroup, ownedCount } from "../sim/fitting.js";
+import {
+  STATION, cargoOf, loadOf, capacityOf, freeOf, hasRoomFor, moduleStacks, volOf,
+} from "../sim/inventory.js";
+import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, valueOf, repairCost } from "../sim/economy.js";
@@ -17,6 +21,7 @@ export const TABS = [
   ["m", "Contracts"],
   ["h", "Hangar"],
   ["o", "Outfitting"],
+  ["i", "Inventory"],
   ["p", "Shop"],
   ["b", "Base"],
   ["s", "Saves"],
@@ -28,6 +33,7 @@ const SCREENS = {
   m: contractsHtml,
   h: hangarHtml,
   o: outfittingHtml,
+  i: inventoryHtml,
   p: shopHtml,
   b: baseHtml,
   s: savesHtml,
@@ -92,26 +98,14 @@ function contractsHtml(ui) {
 
 function hangarHtml() {
   const S = state.profile;
-  const repairs =
-    `<h2>Hull repairs</h2>` +
-    S.ships
-      .map(id => {
-        const c = repairCost(id),
-          pct = Math.round((S.hp[id] ?? 1) * 100);
-        return `<div class="row"><div>${SHIPS[id].n}<small>Hull ${pct}%. Costs more the more damaged it is.</small></div><button data-a="rp" data-b="${id}" ${
-          c <= 0 || S.cr < c ? "disabled" : ""
-        }>${c <= 0 ? "Intact" : "Repair " + c + " cr"}</button></div>`;
-      })
-      .join("") +
-    `<h2>Ships</h2>`;
 
   return (
-    `<h2>Hangar</h2><div class="sub">Berths ${S.ships.length}/${S.base.hangar + 1}</div>` +
-    repairs +
+    `<h2>Hangar</h2><div class="sub">Repairs and missile restock live in the Outfitting tab now.</div>` +
     Object.keys(SHIPS)
       .map(id => {
         const s = SHIPS[id],
-          owned = S.ships.includes(id);
+          owned = S.ships.includes(id),
+          hp = hullOf((S.loadout || {})[id]);
         const action = owned
           ? S.ship === id
             ? `<span class="ok">In use</span>`
@@ -119,7 +113,7 @@ function hangarHtml() {
           : `<button data-a="buy" data-b="${id}" ${
               S.cr < s.price || S.ships.length >= S.base.hangar + 1 ? "disabled" : ""
             }>Buy ${s.price} cr</button>`;
-        return `<div class="row"><div>${s.n}<small>${s.d} Hull ${s.hull}, hold ${s.cargo}.</small></div>${action}</div>`;
+        return `<div class="row"><div>${s.n}<small>${s.d} Hull HP ${hp}, hold ${s.cargo} m³.</small></div>${action}</div>`;
       })
       .join("")
   );
@@ -130,14 +124,17 @@ const baysOf = () => (state.profile.loadout || {})[state.profile.ship] || {};
 
 /**
  * The stat line on a fitted module's bay: "10 MJ/s", "100 MJ", "150 m/s",
- * "10 shields", "1 dmg, 3/s", or nothing.
+ * "10 Shield HP", "1 dmg, 3/s", "0.25 m³/s", or nothing.
  */
 function moduleStat(m) {
   if (m.mjps) return `${m.mjps} MJ/s`;
   if (m.mj) return `${m.mj} MJ`;
   if (m.spd) return `${m.spd} m/s`;
-  if (m.sh) return `${m.sh} shields`;
-  if (m.dmg) return `${m.dmg} dmg, ${m.rate}/s`;
+  if (m.sh) return `${m.sh} Shield HP`;
+  if (m.hp) return `${m.hp} Hull HP`;
+  if (m.period) return `${+(1 / m.period).toFixed(2)} m³/s`;
+  if (m.dmg && m.cd) return `${m.dmg} dmg, ${m.cap} cap, ${m.cd} s reload`;
+  if (m.dmg) return `${m.dmg} dmg${(m.barrels || 1) > 1 ? ` x${m.barrels}` : ""}, ${m.rate}/s`;
   return "";
 }
 
@@ -187,14 +184,21 @@ function pickerHtml(group) {
   const current = fittedAt(group.k, i);
   const stored = storedFor(group.k);
 
-  const squares = stored.length
+  // One square per kind of part, with how many the station holds ("x3").
+  const kinds = [];
+  for (const id of stored) {
+    const hit = kinds.find(k => k.id === id);
+    if (hit) hit.n++;
+    else kinds.push({ id, n: 1 });
+  }
+  const squares = kinds.length
     ? `<div class="fit-squares">` +
-      stored
-        .map(id => {
+      kinds
+        .map(({ id, n }) => {
           const m = MODULES[id];
           return (
-            `<button class="fit-sq" data-a="fit" data-b="${id}" aria-label="Fit ${m.n}">` +
-            `<span>${m.n}</span><small>${moduleStat(m)}</small></button>`
+            `<button class="fit-sq" data-a="fit" data-b="${id}" aria-label="Fit ${m.n}${n > 1 ? ", " + n + " in storage" : ""}">` +
+            `<span>${m.n}${n > 1 ? ` &times;${n}` : ""}</span><small>${moduleStat(m)}</small></button>`
           );
         })
         .join("") +
@@ -270,21 +274,57 @@ function appearanceHtml() {
 }
 
 function outfittingHtml() {
-  const ship = SHIPS[state.profile.ship];
+  const S = state.profile;
+  const ship = SHIPS[S.ship];
+  const owned = S.ships;
+  const idx = Math.max(0, owned.indexOf(S.ship));
+  const many = owned.length > 1 ? "" : "disabled";
   const left = leftRail(MODULE_GROUPS),
     right = MODULE_GROUPS.slice(left.length);
+
+  // Services for the hull in the viewer (the selected ship): paid repair of its
+  // plating and paid restock of its missiles. Moved out of the Hangar and the Shop.
+  const repCost = repairCost(S.ship),
+    repPct = Math.round((S.hp[S.ship] ?? 1) * 100);
+  let serviceRows =
+    `<div class="row"><div>Hull repairs<small>Hull HP ${repPct}%. Costs more the more damaged it is.</small></div>` +
+    `<button data-a="rp" data-b="${S.ship}" ${repCost <= 0 || S.cr < repCost ? "disabled" : ""}>${
+      repCost <= 0 ? "Intact" : "Repair " + repCost + " cr"
+    }</button></div>`;
+  const fittedLauncher = (state.missiles || [])[0];   // launcher fitted to the ship in the viewer
+  if (fittedLauncher) {
+    const cap = fittedLauncher.cap,
+      canRestock = S.msl < cap && S.cr >= MISSILE.unitPrice,
+      n = Math.min(cap - S.msl, Math.floor(S.cr / MISSILE.unitPrice));
+    serviceRows +=
+      `<div class="row"><div>Missile restock<small>${S.msl} of ${cap} loaded. ${MISSILE.unitPrice} cr each.</small></div>` +
+      `<button data-a="wr" ${canRestock ? "" : "disabled"}>${
+        S.msl >= cap ? "Full" : "Restock " + n * MISSILE.unitPrice + " cr"
+      }</button></div>`;
+  }
+  const services =
+    `<div class="outfit-service"><div class="outfit-service-title">Services</div>` + serviceRows + `</div>`;
 
   return (
     `<h2>Outfitting</h2>` +
     `<div class="sub">Your ship flies with the basic powerplant and power cell fitted. More modules and paints arrive in a later update.</div>` +
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
+    `<div class="outfit-mid">` +
+    // Cycle through the ships in the hangar; the arrows carry the same action as the Hangar's Fly button.
+    `<div class="ship-switch">` +
+    `<button class="ship-arrow" data-a="shipPrev" ${many} aria-label="Previous ship">&#8249;</button>` +
+    `<div class="ship-switch-mid"><div class="ship-switch-name">${ship.n}</div><div class="ship-switch-count">${idx + 1} of ${owned.length} in the hangar</div></div>` +
+    `<button class="ship-arrow" data-a="shipNext" ${many} aria-label="Next ship">&#8250;</button>` +
+    `</div>` +
     `<div class="outfit-view">` +
     // ui/outfitting.js mounts the 3D ship into #shipview after this HTML is drawn.
     `<div class="outfit-stage" id="shipview">` +
     `<div class="outfit-title">${ship.n}<small>${ship.d}</small></div>` +
     `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset</div>` +
     `</div>` +
+    `</div>` +
+    services +
     `</div>` +
     `<div class="outfit-rail">${right.map(groupHtml).join("")}${appearanceHtml()}</div>` +
     `</div>`
@@ -293,23 +333,27 @@ function outfittingHtml() {
 
 function baseHtml() {
   const S = state.profile,
-    ship = SHIPS[S.ship];
+    ship = SHIPS[S.ship],
+    cargo = cargoOf(S.ship);
   const load = holdLoad(),
     used = storedUnits(),
     cap = storageCap();
+  // Selling only concerns ore, so the buttons look at ore and not at spare modules.
+  const oreHeld = KEYS.reduce((sum, k) => sum + cargo[k], 0),
+    oreStored = KEYS.reduce((sum, k) => sum + S.store[k], 0);
 
   let h =
-    `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo}. Storage ${used}/${cap}. Refinery bonus +${Math.round(
+    `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. Storage ${used}/${cap} m³. Refinery bonus +${Math.round(
       REFINERY_BONUS_PER_LEVEL * 100 * S.base.refinery
     )}%.</div>` +
     KEYS.map(
       k =>
-        `<div class="row"><div>${ITEM[k].n}<small>${S.cargo[k]} in hold, ${S.store[k]} stored, ${ITEM[k].v} cr each</small></div></div>`
+        `<div class="row"><div>${ITEM[k].n}<small>${cargo[k]} in hold, ${S.store[k]} stored, ${ITEM[k].v} cr each</small></div></div>`
     ).join("") +
     `<div class="row"><button data-a="dep">Store hold</button><button data-a="wd">Load stored</button><button data-a="sellh" ${
-      load ? "" : "disabled"
-    }>Sell hold ${valueOf(S.cargo)} cr</button><button data-a="sells" ${
-      used ? "" : "disabled"
+      oreHeld ? "" : "disabled"
+    }>Sell hold ${valueOf(cargo)} cr</button><button data-a="sells" ${
+      oreStored ? "" : "disabled"
     }>Sell stored ${valueOf(S.store)} cr</button></div><h2>Base modules</h2>`;
 
   h += Object.keys(BASE_MODULES)
@@ -329,26 +373,87 @@ function baseHtml() {
 function shopHtml() {
   const S = state.profile;
   let h =
-    `<h2>Weapons shop</h2><div class="sub">Left click fires your primary weapon (keys 1 and 2 switch). Right click fires your secondary weapon.</div>` +
+    `<h2>Weapons shop</h2><div class="sub">Left click fires your primary weapon (keys 1 and 2 switch). Right click fires your secondary weapon. Everything you buy goes into the station inventory, as many as you like: fit it in Outfitting or move it to a ship in Inventory.</div>` +
     `<div class="row"><div>Autocannons<small>Primary. Standard issue.</small></div><span class="ok">Owned</span></div>`;
 
   h += Object.keys(SHOP_WEAPONS)
     .map(k => {
-      const w = SHOP_WEAPONS[k];
-      return `<div class="row"><div>${w.n}<small>${w.d}</small></div>${
-        S.wp[k] ? `<span class="ok">Owned</span>` : `<button data-a="wb" data-b="${k}" ${S.cr < w.price ? "disabled" : ""}>Buy ${w.price} cr</button>`
-      }</div>`;
+      const w = SHOP_WEAPONS[k],
+        have = w.module ? ownedCount(w.module) : 0,                  // both shop rows buy modules
+        room = w.module ? hasRoomFor(STATION, w.module) : true;      // the station must have the m³
+      return `<div class="row"><div>${w.n}<small>${w.d}${w.module ? ` Takes ${volOf(w.module)} m³.` : ""}${
+        have ? ` You own ${have}.` : ""
+      }${room ? "" : " No room in the station's storage."}</small></div>` +
+        `<button data-a="wb" data-b="${k}" ${S.cr < w.price || !room ? "disabled" : ""}>Buy ${w.price} cr</button></div>`;
     })
     .join("");
-
-  if (S.wp.msl) {
-    const canRestock = S.msl < MISSILE.cap && S.cr >= MISSILE.unitPrice;
-    const n = Math.min(MISSILE.cap - S.msl, Math.floor(S.cr / MISSILE.unitPrice));
-    h += `<div class="row"><div>Missile stock<small>${S.msl} of ${MISSILE.cap} loaded. ${MISSILE.unitPrice} cr each.</small></div><button data-a="wr" ${
-      canRestock ? "" : "disabled"
-    }>Restock ${n * MISSILE.unitPrice} cr</button></div>`;
-  }
   return h;
+}
+
+/** The ship whose hold the Inventory tab shows: the one picked with its arrows, else the one being flown. */
+export function viewedShip(ui = state.ui) {
+  const S = state.profile;
+  return S.ships.includes(ui.invShip) ? ui.invShip : S.ship;
+}
+
+/** One ore or module row in an inventory column, with its move buttons. */
+function invRow({ name, sub, kind, id, count, dir, free, vol }) {
+  const arrow = dir === "s" ? "&darr;" : "&uarr;";   // the station is drawn above the ship
+  const where = dir === "s" ? "ship" : "station";
+  const room = Math.floor(free / (vol || 1));
+  const can = room > 0 ? "" : "disabled";
+  const btn = (n, label) =>
+    `<button data-a="mv" data-b="${kind}:${id}:${dir}:${n}" ${can} aria-label="Move ${n === "all" ? "all" : n} ${name} to the ${where}">${arrow} ${label}</button>`;
+  return (
+    `<div class="row"><div>${name} <span class="inv-n">&times;${count}</span><small>${sub}</small></div>` +
+    `<div class="inv-btns">${btn(1, "1")}${count > 1 ? btn("all", "all") : ""}</div></div>`
+  );
+}
+
+/** One column: a heading with the m³ in use, then everything held there. */
+function invColumn(where, title, dir) {
+  const stock = where === STATION ? { cargo: state.profile.store } : { cargo: cargoOf(where) };
+  const dest = where === STATION ? viewedShip() : STATION;   // where the buttons send things
+  const used = loadOf(where),
+    cap = capacityOf(where),
+    destFree = freeOf(dest);
+  const rows = [];
+  for (const k of KEYS) {
+    const n = stock.cargo[k];
+    if (n > 0) {
+      rows.push(invRow({ name: ITEM[k].n, sub: `Ore, ${ITEM_VOL} m³ each`, kind: "c", id: k, count: n, dir, free: destFree, vol: ITEM_VOL }));
+    }
+  }
+  for (const { id, n } of moduleStacks(where)) {
+    const m = MODULES[id];
+    rows.push(invRow({ name: m.n, sub: `Module, ${m.vol} m³ each`, kind: "m", id, count: n, dir, free: destFree, vol: m.vol }));
+  }
+  return (
+    `<section class="inv-col"><header><h3>${title}</h3><span class="mod-count">${used} / ${cap} m³</span></header>` +
+    (rows.length ? rows.join("") : `<div class="fit-empty">Empty</div>`) +
+    `</section>`
+  );
+}
+
+function inventoryHtml(ui) {
+  const S = state.profile;
+  const id = viewedShip(ui),
+    ship = SHIPS[id],
+    idx = Math.max(0, S.ships.indexOf(id)),
+    many = S.ships.length > 1 ? "" : "disabled";
+
+  return (
+    `<h2>Inventory</h2><div class="sub">Everything you buy is kept in the station. Move things to a ship to carry them; ` +
+    `Outfitting fits modules from the station. Fitted modules take no space. Each ship has its own hold, and a lost ship takes its hold with it.</div>` +
+    invColumn(STATION, "Station", "s") +
+    `<div class="ship-switch inv-switch">` +
+    `<button class="ship-arrow" data-a="invPrev" ${many} aria-label="Previous ship">&#8249;</button>` +
+    `<div class="ship-switch-mid"><div class="ship-switch-name">${ship.n}${id === S.ship ? " (flying)" : ""}</div>` +
+    `<div class="ship-switch-count">${idx + 1} of ${S.ships.length} in the hangar</div></div>` +
+    `<button class="ship-arrow" data-a="invNext" ${many} aria-label="Next ship">&#8250;</button>` +
+    `</div>` +
+    invColumn(id, `${ship.n} hold`, "t")
+  );
 }
 
 function savesHtml(ui) {

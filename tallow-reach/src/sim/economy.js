@@ -5,25 +5,28 @@
 import { state } from "../state/state.js";
 import { SHIPS } from "../data/ships.js";
 import { ITEM, KEYS, emptyCargo } from "../data/items.js";
-import { BASE_MODULES, STORAGE_PER_LEVEL, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
+import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
+import { MODULES } from "../data/modules.js";
 import { setShip } from "./player.js";
 import { stockFor } from "../state/profile.js";
+import { STATION, cargoOf, holdOf, loadOf, capacityOf, buyModule, moveCargo } from "./inventory.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
+import { refreshHull, hullOf } from "./hull.js";
 import { refreshGuns } from "./guns.js";
 
 const S = () => state.profile;
 
-/** Units currently in the hold. */
-export const holdLoad = () => KEYS.reduce((sum, k) => sum + S().cargo[k], 0);
+/** m³ in use in the hold of the ship being flown: its ore plus any spare modules it carries. */
+export const holdLoad = () => loadOf(S().ship);
 
-/** Units in the station store. */
-export const storedUnits = () => KEYS.reduce((sum, k) => sum + S().store[k], 0);
+/** m³ in use in the station's storage: ore plus spare modules. */
+export const storedUnits = () => loadOf(STATION);
 
-/** Storage capacity in units. */
-export const storageCap = () => STORAGE_PER_LEVEL * S().base.store;
+/** The station's storage capacity in m³. */
+export const storageCap = () => capacityOf(STATION);
 
 /** Sell value of a cargo object, including the refinery bonus. */
 export function valueOf(cargo) {
@@ -31,39 +34,37 @@ export function valueOf(cargo) {
   return Math.round(base * (1 + REFINERY_BONUS_PER_LEVEL * S().base.refinery));
 }
 
-/** Repair cost for a ship. Costs rise steeply with damage. */
+/** Repair cost for a ship. Costs rise steeply with damage. Hull HP come from the
+ *  fitted hull module — no module fitted means nothing to repair, and a free repair. */
 export function repairCost(id) {
-  const frac = S().hp[id] ?? 1;
-  const max = SHIPS[id].hull;
+  const p = S();
+  const frac = p.hp[id] ?? 1;
+  const max = hullOf((p.loadout || {})[id]);
+  if (max <= 0) return 0;
   const missing = max * (1 - frac);
   return Math.round(missing * (2 + (3 * missing) / max));
 }
 
+/** Move all the ore in the flown ship's hold into the station (spare modules stay put). */
 export function storeHold() {
   const p = S();
-  let moved = 0;
-  for (const k of KEYS) {
-    const t = Math.min(p.cargo[k], storageCap() - storedUnits());
-    p.cargo[k] -= t;
-    p.store[k] += t;
-    moved += t;
-  }
+  const before = KEYS.reduce((sum, k) => sum + cargoOf(p.ship)[k], 0);
+  for (const k of KEYS) moveCargo(p.ship, STATION, k);
+  const moved = before - KEYS.reduce((sum, k) => sum + cargoOf(p.ship)[k], 0);
   return moved ? `Stored ${moved} units.` : "Storage is full.";
 }
 
+/** Load as much stored ore as fits into the flown ship's hold. */
 export function withdrawStored() {
   const p = S();
-  for (const k of KEYS) {
-    const t = Math.min(p.store[k], SHIPS[p.ship].cargo - holdLoad());
-    p.store[k] -= t;
-    p.cargo[k] += t;
-  }
+  for (const k of KEYS) moveCargo(STATION, p.ship, k);
 }
 
 export function sellHold() {
   const p = S();
-  p.cr += valueOf(p.cargo);
-  p.cargo = emptyCargo();
+  const hold = cargoOf(p.ship);
+  p.cr += valueOf(hold);
+  KEYS.forEach(k => (hold[k] = 0));
 }
 
 export function sellStored() {
@@ -87,19 +88,22 @@ export function buyShip(id) {
   if (p.cr < price || p.ships.length >= p.base.hangar + 1) return;
   p.cr -= price;
   p.ships.push(id);
+  holdOf(id);                       // its own empty hold
   delete p.hp[id];
   p.loadout[id] = stockFor(id);   // comes with the stock modules fitted
 }
 
 export function selectShip(id) {
   const p = S();
-  if (holdLoad() > SHIPS[id].cargo) return "Store your cargo first. It will not fit in that ship.";
+  // Each ship has its own hold now, so cargo stays with the ship it is in and
+  // nothing has to fit before you can switch.
   p.ship = id;
   setShip(id);
   refillPower();       // docked: the new hull's cells are full
   refreshDrive();      // and its thrusters decide the way it flies
   refreshShield();     // and its shields how much punishment it takes
   refreshGuns();       // and its primary bays what fires
+  refreshHull();       // and its Hull HP
   return undefined;
 }
 
@@ -115,19 +119,26 @@ export function repairShip(id) {
 
 export function buyWeapon(k) {
   const p = S();
-  const price = SHOP_WEAPONS[k].price;
-  if (p.cr < price) return;
-  p.cr -= price;
-  p.wp[k] = true;
-  if (k === "msl") p.msl = Math.max(p.msl, MISSILE.startStock);
-  return k === "beam"
-    ? "Mining beam installed. Press 2 in flight to equip it."
-    : `Missile launcher installed with ${MISSILE.startStock} missiles.`;
+  const w = SHOP_WEAPONS[k];
+  if (!w || p.cr < w.price) return;
+  // The mining beam and the missiles are modules: buying one puts it in the
+  // station's inventory (as many as you like, as long as there is room), and it
+  // has to be fitted in a bay at Outfitting before it does anything.
+  if (w.module) {
+    const refusal = buyModule(w.module, w.price);
+    if (refusal) return refusal;
+    const gave = w.startStock && (p.msl || 0) < w.startStock;
+    if (gave) p.msl = w.startStock;
+    return `${w.n} in the station inventory. Fit it in a ${w.bay || "primary"} bay to use it.${gave ? ` ${w.startStock} missiles included.` : ""}`;
+  }
+  p.cr -= w.price;
+  return `${w.n} installed.`;
 }
 
 export function restockMissiles() {
   const p = S();
-  const n = Math.min(MISSILE.cap - p.msl, Math.floor(p.cr / MISSILE.unitPrice));
+  const cap = ((state.missiles || [])[0] || MODULES.missile_basic).cap,
+    n = Math.min(cap - p.msl, Math.floor(p.cr / MISSILE.unitPrice));
   p.cr -= n * MISSILE.unitPrice;
   p.msl += n;
   return `Restocked ${n} missiles.`;

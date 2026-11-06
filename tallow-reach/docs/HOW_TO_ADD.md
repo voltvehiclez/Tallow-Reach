@@ -28,7 +28,11 @@ forgotten second place usually fails the tests with a message saying what to fix
 ## 1. A new ship (data only)
 
 File: `src/data/ships.js`. Copy an existing entry and give it a new key. All of these
-fields are required (the test checks them): `n d spd cargo hull sh dmg mine turn sc price col`.
+fields are required (the test checks them): `n d cargo dmg mine sc price col`.
+Every hull is the same ship apart from its `cargo` (the hold, in m³: one cargo unit = 1 m³) —
+`dmg`, `mine`, `sc` and `price` are the same on all of them and a test enforces it. Hull HP
+come from the fitted hull module (`hull_basic`, `sim/hull.js`), not from the hull.
+Ship-specific bonuses will come later as new hull attributes.
 
 The Hangar, the purchase rules, repairs and saves all read `SHIPS`, so the new ship
 appears automatically. It uses the standard hull model coloured by `col` and sized by `sc`.
@@ -37,6 +41,8 @@ Optional: a visible add-on (like the Prospector's drill) goes in `buildPlayerShi
 `src/render/models.js`.
 
 ## 2. A new cargo item or ore
+
+(Every unit of any item takes 1 m³ in a hold or in the station: `ITEM_VOL` in `data/items.js`.)
 
 - **Item that is only sold or carried** (data only): add it to `ITEM` in `src/data/items.js`
   (`n` name, `v` value). Cargo, storage, the Base screen and saves pick it up. Old saves
@@ -82,14 +88,19 @@ Which events can drive progress: `mined`, `pickup`, `pirate-killed`, `docked`, `
 ## 4. A new shop weapon (data + real code)
 
 Adding to `SHOP_WEAPONS` in `src/data/weapons.js` makes it appear in the Shop and be
-purchasable, but **it will not do anything** until code uses it:
+purchasable. A shop item that is really **a module** (the mining beam is) points at
+it with a `module` field; `buyWeapon()` in `sim/economy.js` then puts it in
+`profile.modules` storage and the player fits it in a bay. For anything else:
 
-- `buyWeapon()` in `sim/economy.js` has a message for the beam and the missile launcher only
+- `buyWeapon()` in `sim/economy.js` is generic for prices and module grants
+  (every shop row buys a module today: the beam and the missiles)
 - firing and switching are in `sim/weapons.js` (`setWeapon`, the primary and missile updates)
 - the HUD line in `ui/hud.js` names the equipped weapon
-- the weapon flag lives in `profile.wp`; `sanitizeProfile` keeps unknown flags
+- the shop shows a module's ownership with `ownsModule()` from `sim/fitting.js`
+  (storage or fitted anywhere); there is no `profile.wp` any more — ownership of
+  the old flagged weapons is the module's presence
 
-Plan it as a small system: data entry, flag, firing code, HUD text, test.
+Plan it as a small system: data entry, firing code, HUD text, test.
 
 ## 5. A new base module (data + small code)
 
@@ -275,11 +286,15 @@ stat that group uses: `mjps` for a powerplant, `mj` for a power cell, `spd`/`tur
 `boost`/`ign` for a thruster (top speed, turn rate, MJ/s while flying, extra MJ/s while the boost
 burns, the flat MJ slug spent when the boost lights) plus `bmax`/`buse`/`bfill` for its boost tank
 (units held, units a second burned while boosting, units a second refilled), and `sh`/`regen`/`delay`/`draw`/`drain` for shields
-(points held, points a second while recharging, the seconds without a hit before recharging
-starts again, the flat MJ/s they use while up, and the points a second they lose when the ship
+(Shield HP held, Shield HP a second while recharging, the seconds without a hit before recharging
+starts again, the flat MJ/s they use while up, and the Shield HP a second they lose when the ship
 cannot supply that), and `dmg`/`rate`/`bspd`/`draw` for a gun in a `primary` bay (damage a shot,
-shots a second, bullet speed, MJ/s while the trigger is held). `npm test` checks the group exists, the
-name and description are there, and the stat is a positive number.
+shots a second per barrel, bullet speed, MJ/s while the trigger is held) plus an optional `barrels`
+for linked barrels fired side by side on every shot (default 1), and `period`/`range`/`draw` for a
+beam in a `primary` bay (seconds of uninterrupted contact per ore before the hull's mine multiplier,
+metres it reaches, MJ/s while cutting). Every module also needs `vol`, the m³ it takes up in a
+ship's hold or in the station's storage (a whole number, at least 1). `npm test` checks the group
+exists, the name and description are there, the volume is set, and the stat is a positive number.
 
 1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
    Outfitting screen already names any module found in a bay.
@@ -298,7 +313,8 @@ name and description are there, and the stat is a positive number.
    turns the module into `state.shield`, and with the bay empty the ship simply has none.
 
 5. **More primary weapons.** `cannon_basic` is the worked example of a gun: give the entry
-   `dmg`, `rate`, `bspd` and `draw` and `sim/guns.js` picks it up with no code change, because
+   `dmg`, `rate`, `bspd` and `draw` (plus `barrels` if it fires linked bolts side by side) and
+   `sim/guns.js` picks it up with no code change, because
    it reads every module in the `primary` group that has a `dmg`. Put it in `STOCK_FIT.primary`
    to make it standard issue, and it can go in either primary bay. A gun that behaves
    differently (burst fire, a shot that costs a slug of energy) needs its own field and a line
@@ -306,21 +322,26 @@ name and description are there, and the stat is a positive number.
 
 6. **Special kinds of shield.** A shield that behaves differently (for example one that keeps
    trickling back even under fire, at a reduced rate) is a new entry in `MODULES` with an extra
-   field, say `live: 3` for points a second while being hit. `updateShield()` in
+   field, say `live: 3` for Shield HP a second while being hit. `updateShield()` in
    `sim/shield.js` reads that field when it is there; the recharge delay, the cap and the HUD
    bar need no changes. Do not patch `sim/player.js` for it.
 
 ## 17. A module shop (the next step; fitting is already done)
 
 Fitting and storage work: `sim/fitting.js` moves parts between `profile.loadout` and
-`profile.modules`, and the Outfitting bays are clickable. What is missing is a way to
-**obtain** a part, so storage today only holds what you have taken off a hull.
+`profile.modules`, and the Outfitting bays are clickable. What is missing is a general way to
+**obtain** a part, so storage today only holds what you have taken off a hull (with one
+exception: the Shop sells `beam_basic` and puts it straight into storage for you). The beam is
+the worked example to copy for a module shop: a `module` field on the `SHOP_WEAPONS` entry,
+`ownsModule()` in the shop row, and `buyWeapon()` pushes the module into storage.
 
 1. **Price.** Add `price` to the module entries in `data/modules.js`. The basic pair can
    stay at 0, meaning standard issue.
-2. **Buy.** A function in `sim/economy.js` next to `buyWeapon`: check credits, take the
-   money, `S.modules.push(id)`. Nothing else: the picker will show it the next time a bay
-   of that group is opened.
+2. **Buy.** Call `buyModule(id, price)` from `sim/inventory.js` (`buyWeapon` in `sim/economy.js`
+   is the worked example). It checks credits and room in the station, takes the money and
+   stores the part, and returns a refusal message or `null`. It already allows buying the same
+   part again; the limit is the station's room in m³. The picker shows it next time a bay of
+   that group is opened.
 3. **Show it.** A shop section listing `MODULES` grouped by `g`, with name, the stat and
    the price, and a `data-a="mb"` button per module. `ui/screens.js` for the markup,
    `ui/menu.js` `ACTIONS` for the click. `ui/screens.js` already has `moduleStat(m)` for

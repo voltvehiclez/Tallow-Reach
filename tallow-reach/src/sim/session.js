@@ -5,7 +5,6 @@ import { V, R, face } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { DEFAULT_SECTOR, sectorAt } from "../data/sectors.js";
-import { emptyCargo } from "../data/items.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
 import { state, msg } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
@@ -15,6 +14,7 @@ import { refillPower } from "./power.js";
 import { refreshDrive, hasDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
 import { refreshGuns } from "./guns.js";
+import { refreshHull } from "./hull.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
@@ -39,6 +39,7 @@ export function launch() {
   refreshDrive();     // the bays may have changed while docked
   refreshShield();
   refreshGuns();      // and its primary bays what fires
+  refreshHull();      // and its Hull HP follow the fitted hull module
   P.en = state.drive.bmax;   // launched with a full boost tank
 
   // Salvage contracts need their crates out in the field.
@@ -64,13 +65,14 @@ export function dock() {
   P.m.visible = false;
   P.v.set(0, 0, 0);
   P.thr = 0;
-  if (S.ships.includes(S.ship)) {
+  if (S.ships.includes(S.ship) && P.hullMax > 0) {
     S.hp[S.ship] = Math.max(REPAIR_MIN_HULL, P.hull / P.hullMax);
   }
   refillPower();      // the outpost tops the cells up
   refreshDrive();     // and the ship may have changed (death, hangar)
   refreshShield();    // likewise its shields
   refreshGuns();      // and its guns what they can shoot
+  refreshHull();      // and its Hull HP
   P.sh = P.shMax;     // and it leaves with them full
   clearTransient();
   state.flight.missileLock = { target: null, t: 0, locked: false };
@@ -100,7 +102,7 @@ export function die() {
   boom(state.player.m.position, 30, 0xffa050);
 
   let text = `Your ${SHIPS[lost].n} was destroyed and is gone for good. Cargo lost, ${fee} cr recovery fee.`;
-  S.cargo = emptyCargo();
+  delete S.holds[lost];      // its ore and any spare modules it carried go with it
   S.cr -= fee;
   S.ships = S.ships.filter(id => id !== lost);
   delete S.hp[lost];
