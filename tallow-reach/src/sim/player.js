@@ -11,7 +11,7 @@ import { scene } from "../render/scene.js";
 import { buildPlayerShip } from "../render/models.js";
 import { state, msg } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
-import { hasPower } from "./power.js";
+import { hasPower, setDraw } from "./power.js";
 import { STATION_KEEPOUT } from "./world.js";
 
 /**
@@ -121,7 +121,7 @@ export function flight(dt) {
   // from last frame, so the extra starts the frame after it lights. Refilling the
   // boost meter is free — it never shows up in the draw, the way filling a car's
   // tank with fuel does not run the engine.
-  state.power.draw = driveDraw(drv, P.thr, P.boost);
+  setDraw("drive", driveDraw(drv, P.thr, P.boost));
   const supply = hasPower(state.power.draw);
 
   // The boost: lighting it is the hungry moment. It costs one big slug of stored

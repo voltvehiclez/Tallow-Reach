@@ -37,7 +37,9 @@ export const state = {
   //   cap    MJ the cells hold
   //   stored MJ in the cells right now
   //   draw   MJ/s the ship is asking for; the thrusters set it (sim/player.js)
-  power: { gen: 0, cap: 0, stored: 0, draw: 0 },
+  //   draw   MJ/s the whole ship is asking for, the sum of `use`
+  //   use    who is asking for what: drive (sim/drive.js) and shield (sim/shield.js)
+  power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0 } },
 
   // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).
   //   spd    top speed in m/s       0 / 0 with an empty bay: the ship cannot move

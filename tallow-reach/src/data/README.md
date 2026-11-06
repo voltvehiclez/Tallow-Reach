@@ -11,7 +11,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 | `contracts.js` | Contract types, generators, wording (`DESCRIBE`), board size. |
 | `sectors.js` | The regions you can fly in, their flags, the order M warps through them, and the warp timing (`WARP`). |
 | `outfitting.js` | `MODULE_GROUPS` (name and description per bay group), `SHIP_LAYOUTS` (how many bays each hull has of each group), `layoutFor`/`slotsFor`, and `APPEARANCE_SLOTS` (the paint bays under the hull). |
-| `modules.js` | `MODULES`: every part that can sit in a bay (`g` group, `n`, `d`, and the stat it feeds: `mjps`, `mj`, `spd`/`turn`, for thrusters the power appetite `draw`/`boost`/`ign`, and for shields `sh`/`regen`/`delay`). `STOCK_FIT`: what a hull is delivered with. |
+| `modules.js` | `MODULES`: every part that can sit in a bay (`g` group, `n`, `d`, and the stat it feeds: `mjps`, `mj`, `spd`/`turn`, for thrusters the power appetite `draw`/`boost`/`ign`, and for shields `sh`/`regen`/`delay`/`draw`/`chg`). `STOCK_FIT`: what a hull is delivered with. |
 
 Rules:
 - Keep the short keys (`n` name, `d` description, `v` value, ...). Copy an existing entry when adding one.

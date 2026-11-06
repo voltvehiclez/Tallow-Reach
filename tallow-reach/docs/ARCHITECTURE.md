@@ -57,7 +57,7 @@ about each other, use the event bus instead.
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
 | Change how a bay opens or closes    | `ui/picker.js` (one picker at a time, pure and tested) |
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
-| Change what power does in flight      | `sim/power.js` (`powerOf`, `hasPower`, `updatePower`) and `state.power`; who draws what is `sim/drive.js` + `sim/player.js` |
+| Change what power does in flight      | `sim/power.js` (`powerOf`, `hasPower`, `setDraw`, `updatePower`) and `state.power`; who draws what is `sim/drive.js` + `sim/player.js` (drive) and `sim/shield.js` (shields) |
 | Change how a ship flies               | the thruster module in `data/modules.js`; `sim/drive.js` turns it into `state.drive` |
 | Change what shields do in flight      | `sim/shield.js` (`shieldOf`, `refreshShield`, `updateShield`) and `state.shield`; the numbers are on the shield module |
 | Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
@@ -123,7 +123,9 @@ Each `src/` folder also has its own short `README.md`.
   `P.shMax`. Any hit stamps `P.last` (in `hurt()`), and the recharge stays off until that was
   `delay` seconds ago; then it runs at full `regen`. No shield module means `P.shMax` is 0 and
   every hit goes to the hull. Later shield types with special behaviour (recharging under fire)
-  are extra fields read by `updateShield()` — nothing outside that file changes.
+  are extra fields read by `updateShield()` — nothing outside that file changes. Shields also cost
+  power: `draw` MJ/s all the while they are up, `chg` more while filling, reported through
+  `setDraw("shield", ...)` so `state.power.draw` stays the whole ship's bill.
 - **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the
   drive's turn rate, and `strafe` / `lift` / `reverse` are fractions of the drive's `spd`. The
   main drive and its 2x boost are the only directions that reach full speed.

@@ -4,11 +4,13 @@
 // The thrusters are the only thing that draws power today: 2 MJ/s while the
 // throttle is off centre, another 1 MJ/s while the boost is burning, and a flat
 // 20 MJ each time the boost lights (see data/modules.js and sim/drive.js).
-// Refilling the boost meter afterwards is free. sim/player.js writes the per-second
-// figure to state.power.draw every frame and takes the 20 MJ straight out of
-// `stored`; `hasPower()` answers whether the ship can pay a per-second demand at
-// all. When something else needs energy (shields, the mining beam, ...) it adds
-// its share to `draw` and asks `hasPower()` before it works.
+// The shields draw 1 MJ/s whenever they are up, and 2 MJ/s while they are
+// actually recharging (see sim/shield.js). Refilling the boost meter is free.
+//
+// Each system writes its own figure with `setDraw("drive" | "shield", mjps)` once
+// a frame; `draw` is the sum, which is what the HUD shows and what `hasPower()`
+// checks. The 20 MJ boost ignition is taken straight out of `stored` instead.
+// A new consumer adds a name to `state.power.use` and calls `setDraw()` with it.
 //
 // Figures come from the fitted modules in the save (profile.loadout[ship]),
 // through MODULES in data/modules.js. The HUD reads state.power; it does not
@@ -50,7 +52,18 @@ export function refreshPower() {
   p.gen = gen;
   p.cap = cap;
   p.stored = Math.min(p.stored, cap);
-  p.draw = 0;
+  setDraw("drive", 0);
+  setDraw("shield", 0);
+}
+
+/**
+ * Record what one system is asking for, in MJ/s, and rebuild the total. Systems
+ * call this every frame while they are running; nothing else writes `draw`.
+ */
+export function setDraw(system, mjps) {
+  const p = state.power;
+  p.use[system] = Math.max(0, +mjps || 0);
+  p.draw = Object.values(p.use).reduce((a, b) => a + b, 0);
 }
 
 /** Docked at the outpost: the cells are filled. Call on dock, launch and load. */

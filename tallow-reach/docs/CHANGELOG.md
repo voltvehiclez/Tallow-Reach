@@ -8,6 +8,29 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Shields cost power: 1 MJ/s up, 2 MJ/s while recharging
+
+- **Basic shields draw 1 MJ/s whenever they are fitted and up**, and **2 MJ/s in total while they
+  are actually recharging**. Full shields still cost their 1 MJ/s; the extra 1 only applies while
+  points are going back in.
+- **The power bill is now a sum.** `state.power` gained `use: { drive, shield }` and
+  `sim/power.js` gained `setDraw(system, mjps)`: the thrusters and the shields each report their
+  own figure once a frame, and `draw` (what the HUD shows and `hasPower()` checks) is the total.
+  A third consumer later is one more name in `use` and one `setDraw()` call.
+- **The numbers live on the module** (`draw: 1`, `chg: 1` on `shield_basic`), so a better shield
+  can be thirstier without touching code, the way thrusters already work.
+- **No power, no recharge**: if the ship cannot pay the bill (no powerplant and empty cells) the
+  shields hold where they are instead of filling, exactly as the thrusters lose thrust. They
+  still show their standing 1 MJ/s of demand, the same way the drive shows its 2.
+- Files: `data/modules.js`, `sim/shield.js` (`shieldDraw`, `updateShield` charges the ship),
+  `sim/power.js` (`setDraw`, `refreshPower` clears both shares), `sim/player.js` (drive share),
+  `state/state.js` (`power.use`).
+- With the basic fit the HUD now reads **1 MJ/s** parked, **3** flying, **4** boosting, and **4**
+  while flying with shields filling.
+- Tests: 2 new (`shieldDraw`, and the power bill following the shields) plus rescaled
+  expectations → **58 passing**. No save change: still version 6. `npm run build` needed
+  (579 KB).
+
 ## 2026-11-06: Smaller shield numbers: 10 points, 1 a second, 1 damage a shot
 
 Everything shield-related is divided by ten, so the numbers are easy to read at a glance.

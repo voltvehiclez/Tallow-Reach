@@ -273,9 +273,9 @@ cell_basic:  { g: "cell",  n: "Basic power cell",  d: "Standard storage bank.", 
 `g` is the module group it fits (`data/outfitting.js`), and the rest of the fields are the
 stat that group uses: `mjps` for a powerplant, `mj` for a power cell, `spd`/`turn`/`draw`/
 `boost`/`ign` for a thruster (top speed, turn rate, MJ/s while flying, extra MJ/s while the boost
-burns, and the flat MJ slug spent when the boost lights), and `sh`/`regen`/`delay` for shields
-(points held, points a second while recharging, and the seconds without a hit before recharging
-starts again). `npm test` checks the group exists, the
+burns, and the flat MJ slug spent when the boost lights), and `sh`/`regen`/`delay`/`draw`/`chg` for shields
+(points held, points a second while recharging, the seconds without a hit before recharging
+starts again, MJ/s used while they are up, and the extra MJ/s while they are filling). `npm test` checks the group exists, the
 name and description are there, and the stat is a positive number.
 
 1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
@@ -285,9 +285,9 @@ name and description are there, and the stat is a positive number.
 3. Make the stat do something. Power is done: `sim/power.js` sums `mjps` and `mj` into
    `state.power`, and `ui/hud.js` draws it. A new kind of stat needs its own system the same
    way: read the fitted modules, keep the result in `state.*`, and let the UI read that.
-   A module that *uses* power rather than making it should add its demand to
-   `state.power.draw` and ask `hasPower(demand)` before it does its work, the way the
-   thrusters do in `sim/player.js`.
+   A module that *uses* power rather than making it reports its demand with
+   `setDraw("<name>", mjps)` (`sim/power.js`) and asks `hasPower()` before it does its work, the
+   way the thrusters do in `sim/player.js` and the shields in `sim/shield.js`.
 4. If the module changes a number the ship already has (top speed, hull, shields), do not
    write it into `SHIPS`; compute the effective value where it is used so removing the
    module puts the ship back the way it was. Shields are the worked example: `sim/shield.js`
