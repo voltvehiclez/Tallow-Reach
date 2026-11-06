@@ -14,7 +14,9 @@ import { layoutFor } from "../data/outfitting.js";
 //   2  adds "v"; otherwise identical shape
 //   3  adds "loadout": the modules fitted to each hull, bay by bay. Older saves
 //      get the stock fit for their bays (stockFor), so nothing is lost.
-export const SAVE_VERSION = 3;
+//   4  adds "modules": the parts held in storage, ready to be fitted. Older
+//      saves simply start with an empty store.
+export const SAVE_VERSION = 4;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -59,6 +61,7 @@ export function newProfile() {
     pw: "cannon",      // equipped primary
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
     loadout: allStockFit(),      // fitted modules per hull, group -> bay array
+    modules: [],                 // spare parts in storage, ready to be fitted
   };
 }
 
@@ -102,6 +105,7 @@ export function sanitizeProfile(raw) {
   s.hp = hp;
 
   s.loadout = cleanLoadouts(raw.loadout);
+  s.modules = cleanStorage(raw.modules);
 
   s.done = +s.done || 0;
   s.kills = +s.kills || 0;
@@ -119,6 +123,11 @@ export function sanitizeProfile(raw) {
 
 function clampLevel(value, lo, hi) {
   return Math.min(hi, Math.max(lo, +value || lo));
+}
+
+/** Parts held in storage: known ids only, in the order they were stored. */
+function cleanStorage(raw) {
+  return Array.isArray(raw) ? raw.filter(id => MODULES[id]) : [];
 }
 
 /**

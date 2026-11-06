@@ -269,21 +269,22 @@ group exists, the name and description are there, and the stat is a positive num
    write it into `SHIPS`; compute the effective value where it is used so removing the
    module puts the ship back the way it was.
 
-## 17. Letting the player buy, store and fit a module (new system)
+## 17. A module shop (the next step; fitting is already done)
 
-The save already has the shape for it: `profile.loadout[shipId][groupId]` is an array with
-one entry per bay, `null` where empty, and `sanitizeProfile` accepts any module id whose
-group matches the bay. What is missing is the shop and the fitting action.
+Fitting and storage work: `sim/fitting.js` moves parts between `profile.loadout` and
+`profile.modules`, and the Outfitting bays are clickable. What is missing is a way to
+**obtain** a part, so storage today only holds what you have taken off a hull.
 
-1. **Where the parts live.** A stock list on the profile, the way weapons work today
-   (`profile.wp`), or a station store like `profile.store` for cargo. Keep the ids from
-   `MODULES` so nothing has to be mapped.
-2. **Fit / remove.** A function in `sim/economy.js` (it owns purchases) that writes the bay
-   and then calls `refreshPower()` from `sim/power.js`, or the equivalent for the group. That
-   refresh is what makes the new numbers take effect; forgetting it is the usual bug.
-3. **The panel.** Bays are `div.mod-bay` with `data-slot` and `data-group`; give the fitted
-   ones a `data-a` action in `ui/screens.js` and handle it in `ui/menu.js` `ACTIONS`. Empty
-   bays get a picker of the modules for that group.
-4. **Save rules** apply: a default in `newProfile`, validation in `sanitizeProfile` (already
-   there), a `SAVE_VERSION` bump only if the shape changes, and a test.
-5. **Do it one group at a time**, starting with power, so each step is playable.
+1. **Price.** Add `price` to the module entries in `data/modules.js`. The basic pair can
+   stay at 0, meaning standard issue.
+2. **Buy.** A function in `sim/economy.js` next to `buyWeapon`: check credits, take the
+   money, `S.modules.push(id)`. Nothing else: the picker will show it the next time a bay
+   of that group is opened.
+3. **Show it.** A shop section listing `MODULES` grouped by `g`, with name, the stat and
+   the price, and a `data-a="mb"` button per module. `ui/screens.js` for the markup,
+   `ui/menu.js` `ACTIONS` for the click. `ui/screens.js` already has `moduleStat(m)` for
+   the one-line number.
+4. **Storage limits** if you want them: cap `profile.modules.length` in
+   `sim/economy.js` and in `sanitizeProfile`, and show the count in the panel.
+5. **Do it one group at a time.** The power group is the one with parts in it, so start
+   there: buy a better powerplant, fit it, watch the HUD figure change.

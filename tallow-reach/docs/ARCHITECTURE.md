@@ -54,6 +54,7 @@ about each other, use the event bus instead.
 | Rebind keys                          | `BINDINGS` in `core/input.js`                  |
 | Add an outpost screen (tab)          | `ui/screens.js` (`TABS`, `SCREENS`, a HTML function) and `ui/menu.js` (`ACTIONS`) |
 | Add a module                         | `data/modules.js` (`MODULES`, `STOCK_FIT`); see HOW_TO_ADD.md recipe 16 |
+| Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
 | Change what power does in flight      | `sim/power.js` (and `state.power`)              |
 | Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
@@ -76,7 +77,7 @@ src/data/              tuning numbers and content tables (ships, items, weapons,
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
-src/sim/               player, power, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
+src/sim/               player, power, fitting, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness)
@@ -106,6 +107,9 @@ Each `src/` folder also has its own short `README.md`.
   (fractions of each ship's forward `spd`). The main drive and its 2x boost are the only
   forward speeds that reach full `spd`. Do not put a raw speed in `sim/player.js`; add a field
   to `FLIGHT` instead, or the ships stop agreeing with each other.
+- **Fitting lives in one place.** `sim/fitting.js` is the only code that writes
+  `profile.loadout` or `profile.modules`, and it refreshes ship power after every change.
+  Anything else that changes a bay must go through it, or the ship keeps the old numbers.
 - **Outpost actions** are functions in `ACTIONS` in `ui/menu.js`. A button carries
   `data-a="actionName"` and optionally `data-b="argument"`. After each click the panel
   re-renders and the game autosaves.
@@ -179,9 +183,10 @@ These are real, current limits. None of them is a bug in play today.
   base module or weapon needs a line there too. `tests/content.test.mjs` fails if a base module is missing.
 - **There is one enemy type.** Pirate numbers (hit points, speeds, ranges, fire rate) sit inside
   `sim/ai.js`. Before adding a second enemy, move them into a new `src/data/enemies.js` (see HOW_TO_ADD.md).
-- **Only two modules exist**, both power parts, and neither can be bought, stored or swapped
-  yet: every hull is delivered with them and `profile.loadout` is the place the fitted ones
-  live. Nothing draws power, so the cells stay full in flight.
+- **Only two modules exist**, both power parts. They can be taken off and fitted again
+  (`sim/fitting.js`, stored in `profile.modules`), but **nothing can be bought yet**, so
+  storage only ever holds parts taken off a hull. Nothing draws power, so the cells stay
+  full in flight.
 - **One active contract at a time** (`profile.mission`), and contract tiers are fixed at 1 to 3
   (`generateContract` in `sim/contracts.js`, wording in `ui/screens.js`).
 - **`pirate-killed` carries no payload.** When enemy types arrive, emit `{ kind }` so listeners can tell them apart.

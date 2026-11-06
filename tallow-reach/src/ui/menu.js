@@ -9,6 +9,7 @@ import { newProfile, sanitizeProfile } from "../state/profile.js";
 import { setShip } from "../sim/player.js";
 import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
+import * as fitting from "../sim/fitting.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import { introHtml, outpostHtml } from "./screens.js";
@@ -65,8 +66,10 @@ const ACTIONS = {
     state.ui.tab = name;
     state.ui.toast = "";
     state.ui.confirmReset = false;
+    state.ui.fit = null;
   },
   go() {
+    state.ui.fit = null;
     launch();
   },
 
@@ -104,6 +107,27 @@ const ACTIONS = {
   },
   wr() {
     toast(eco.restockMissiles());
+  },
+
+  // Outfitting
+  slot(arg) {
+    // data-b is "group:bay". Clicking the open bay again closes the picker.
+    const [g, i] = String(arg || "").split(":");
+    const bay = +i;
+    const open = state.ui.fit;
+    state.ui.fit = open && open.g === g && open.i === bay ? null : { g, i: bay };
+  },
+  fit(id) {
+    const open = state.ui.fit;
+    if (!open) return;
+    const text = fitting.fitModule(open.g, open.i, id);
+    if (text) toast(text);
+  },
+  unfit() {
+    const open = state.ui.fit;
+    if (!open) return;
+    const text = fitting.unequip(open.g, open.i);
+    if (text) toast(text);
   },
 
   // Base
@@ -182,6 +206,7 @@ const ACTIONS = {
 function afterProfileChange() {
   setShip(state.profile.ship);
   refillPower();
+  state.ui.fit = null;
   contracts.rerollBoard();
   state.flight.lock = null;
   state.flight.missileLock = { target: null, t: 0, locked: false };

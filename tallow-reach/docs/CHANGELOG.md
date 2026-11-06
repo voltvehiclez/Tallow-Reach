@@ -8,6 +8,33 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Click a bay to fit a module, or unequip one into storage
+
+- **Every module bay is a button.** All eight bays across the seven groups can be clicked.
+  Clicking one opens a **picker rectangle under that card**; clicking the same bay again, or
+  **Close**, shuts it. Only one picker is open at a time.
+- **The picker holds squares, one per stored part that fits that group**, each with the
+  part's name and number (`Basic powerplant` / `10 MJ/s`). With nothing stored it reads
+  **"No modules in storage."** exactly as asked, and that is what a new game shows.
+- **Unequip**: a filled bay gets a button at the bottom of its picker, "Unequip Basic
+  powerplant to storage". The part leaves the bay, lands in the new module store
+  (`profile.modules`) and appears in the picker as a square, ready to go back in. Fitting
+  into a full bay swaps, sending the part it replaced to storage.
+- **Fitting is instant and updates the ship at once**: every fit/unequip refreshes the power
+  budget, so taking the powerplant off turns 10 MJ/s into 0 MJ/s before you launch. Docked,
+  the cells refill as usual.
+- **Nothing can be bought yet**, so the only way to get a part into storage is to take it off
+  a hull. That is deliberate: the shop is the next step.
+- Save: **`SAVE_VERSION` 3 -> 4**, adding `profile.modules` (a list of module ids). Older
+  saves load with an empty store and their fitted parts untouched; unknown ids are dropped
+  and a corrupted value empties the store rather than failing the load.
+- Files: new `src/sim/fitting.js` (`fitModule`, `unequip`, `storedFor`, `fittedAt`);
+  `ui/screens.js` (bay buttons and the picker), `ui/menu.js` (`slot`, `fit`, `unfit`
+  actions), `state/state.js` (`ui.fit`), `styles.css`, `state/profile.js`.
+- Tests: 6 new in `tests/fitting.test.mjs` (new game, unequip, re-fit, the refusals, the
+  swap, and the old-save migration). `npm test` now runs 34.
+  `game/tallow-reach.html` needs `npm run build` (576 KB).
+
 ## 2026-11-06: Basic powerplant and power cell, with a power bar in flight
 
 - **Modules exist.** `src/data/modules.js` holds the first two: **Basic powerplant** (10 MJ/s)

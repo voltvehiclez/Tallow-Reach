@@ -47,6 +47,7 @@ export const state = {
     toast: "",         // green message at the top of the panel
     board: [],         // contract offers
     confirmReset: false,
+    fit: null,         // { g, i } module bay whose picker is open, or null
     xcode: "",         // last exported or pasted save code
   },
 

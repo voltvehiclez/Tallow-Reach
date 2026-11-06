@@ -7,6 +7,7 @@ import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
+import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, valueOf, repairCost } from "../sim/economy.js";
@@ -137,32 +138,84 @@ function moduleStat(m) {
 /** How many groups sit in the left column; the rest go to the right. */
 const leftRail = list => list.slice(0, Math.ceil(list.length / 2));
 
+/** Is this the bay whose picker is open? */
+const isBayOpen = (g, i) => !!(state.ui.fit && state.ui.fit.g === g && state.ui.fit.i === i);
+
+/**
+ * One bay. Every bay is a button: clicking it opens the picker under the card
+ * (or closes it again if it was already open).
+ */
 function bayHtml(group, i, id) {
   const m = MODULES[id];
+  const open = isBayOpen(group.k, i);
+  const attrs =
+    `data-a="slot" data-b="${group.k}:${i}" aria-expanded="${open}"`;
   if (!m) {
-    return `<div class="mod-bay" data-slot="${i}" aria-label="${group.n} bay ${i + 1}: empty">` +
-      `<span class="bay-no">Bay ${i + 1}</span><span class="bay-empty">Empty</span></div>`;
+    return (
+      `<button class="mod-bay empty${open ? " on" : ""}" ${attrs} ` +
+      `aria-label="${group.n} bay ${i + 1}: empty, click to fit a module">` +
+      `<span class="bay-no">Bay ${i + 1}</span><span class="bay-empty">Empty</span></button>`
+    );
   }
   return (
-    `<div class="mod-bay fitted" data-slot="${i}" data-module="${id}" aria-label="${group.n} bay ${i + 1}: ${m.n}">` +
+    `<button class="mod-bay fitted${open ? " on" : ""}" ${attrs} data-module="${id}" ` +
+    `aria-label="${group.n} bay ${i + 1}: ${m.n}, click to change">` +
     `<span class="bay-no">Bay ${i + 1}</span>` +
     `<span class="bay-val">${m.n}</span>` +
     `<span class="bay-stat">${moduleStat(m)}</span>` +
+    `</button>`
+  );
+}
+
+/**
+ * The picker under a card: every stored part that fits this group, as squares,
+ * plus Unequip when the bay is holding something. This is the whole fitting UI.
+ */
+function pickerHtml(group) {
+  const i = state.ui.fit.i;
+  const current = fittedAt(group.k, i);
+  const stored = storedFor(group.k);
+
+  const squares = stored.length
+    ? `<div class="fit-squares">` +
+      stored
+        .map(id => {
+          const m = MODULES[id];
+          return (
+            `<button class="fit-sq" data-a="fit" data-b="${id}" aria-label="Fit ${m.n}">` +
+            `<span>${m.n}</span><small>${moduleStat(m)}</small></button>`
+          );
+        })
+        .join("") +
+      `</div>`
+    : `<div class="fit-empty">No modules in storage.</div>`;
+
+  return (
+    `<div class="fit-picker">` +
+    `<div class="fit-head"><span>${group.n} &middot; bay ${i + 1}</span>` +
+    `<button class="fit-close" data-a="slot" data-b="${group.k}:${i}">Close</button></div>` +
+    squares +
+    (current
+      ? `<button class="fit-unfit" data-a="unfit">Unequip ${MODULES[current].n} to storage</button>`
+      : "") +
     `</div>`
   );
 }
 
-/** One module group: a heading, its bays, and what the group decides. */
+/** One module group: a heading, its bays, the picker if open, and what it decides. */
 function groupHtml(group) {
   const slots = slotsFor(group, state.profile.ship),
     fitted = baysOf()[group.k] || [];
   let bays = "";
   for (let i = 0; i < slots; i++) bays += bayHtml(group, i, fitted[i]);
   const used = fitted.filter(Boolean).length;
+  const open = state.ui.fit && state.ui.fit.g === group.k && isBayGroup(group.k);
+
   return (
-    `<section class="mod" data-group="${group.k}">` +
+    `<section class="mod${open ? " open" : ""}" data-group="${group.k}">` +
     `<header><h3>${group.n}</h3><span class="mod-count">${used} / ${slots}</span></header>` +
     `<div class="mod-bays">${bays}</div>` +
+    (open ? pickerHtml(group) : "") +
     `<p>${group.d}</p>` +
     `</section>`
   );
