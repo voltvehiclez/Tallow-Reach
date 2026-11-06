@@ -2,7 +2,10 @@
 
 **Reading order for an AI assistant:** this file, then [HOW_TO_ADD.md](HOW_TO_ADD.md)
 (step-by-step recipes), then the `README.md` in the folder you are about to edit,
-then [CHANGELOG.md](CHANGELOG.md) (what earlier sessions changed).
+then [CHANGELOG.md](CHANGELOG.md) (what earlier sessions changed: the newest entries in full,
+plus a one-line index of every older entry). Open [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md)
+only when the index shows an older entry that matters to the task. See "Keeping the docs
+scalable" at the end of this file.
 
 ## Running it
 
@@ -89,7 +92,7 @@ src/sim/               player, power, drive, fitting, inventory, weapons, combat
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness)
-docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, CHANGELOG.md
+docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, HANDOFF.md, CHANGELOG.md (recent + index), CHANGELOG_ARCHIVE.md (older, full text)
 ```
 
 Each `src/` folder also has its own short `README.md`.
@@ -330,3 +333,28 @@ These are real, current limits. None of them is a bug in play today.
 - **One sector's geography is written into the code.** The field belongs to `FIELD_SECTOR`
   (`sim/world.js`), and the outpost is always at the origin of the sector whose `st` flag is
   true. A second populated sector needs those two made per-sector.
+
+## Keeping the docs scalable
+
+The docs are read in full by a fresh assistant at the start of every chat, so they have to stay
+a size that can be read in one go while still telling the whole story of the project.
+
+- **`CHANGELOG.md` is the memory of the project, and it keeps its history.** It holds the newest
+  entries in full and an "Older entries" index with one line per older entry (date and title).
+  When it holds more than 15 full entries, move the oldest to the top of `CHANGELOG_ARCHIVE.md`
+  until 10 remain, word for word, and add an index line for each one moved. Never delete or
+  shorten history, only move it. Do this in the same change that adds a new entry.
+- **Write entries so the index line is enough on its own.** The title says what changed and the
+  first bullet says why. Put rules that must stay true in this file as well (the conventions
+  above), not only in an entry, because entries get archived.
+- **This file states how things are now, not how they got there.** When a change replaces an old
+  rule, rewrite the rule here instead of adding a second one beside it; the story of the change
+  belongs in the changelog. Remove "Known gaps" that have been closed.
+- **Names, numbers and file lists that change often belong in one place.** Tuning numbers live in
+  `src/data/` and the folder READMEs; avoid repeating them in several docs, because every copy
+  has to be updated on every change.
+- **If this file or `HOW_TO_ADD.md` passes about 40 KB**, split it by topic (for example
+  `docs/CONVENTIONS.md`) and leave a short table of contents with links where the text was.
+  Do the split as its own change, with no gameplay changes in it.
+- **`HANDOFF.md` is a snapshot, not a log.** Rewrite it (do not append to it) when a chat ends:
+  where the game is right now, the standing rules, and what to do next.

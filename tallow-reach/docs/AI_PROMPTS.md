@@ -21,7 +21,8 @@ file paths.
 The attached zip is the whole project. Before changing anything, read:
 - docs/ARCHITECTURE.md (layers, where things live, conventions, known gaps)
 - docs/HOW_TO_ADD.md (step-by-step recipes; use the one that matches my request)
-- docs/CHANGELOG.md (what earlier chats changed)
+- docs/CHANGELOG.md (what earlier chats changed: the newest entries, then a one-line index of
+  every older one; open docs/CHANGELOG_ARCHIVE.md only if the index shows something relevant)
 - the README.md in each src/ folder you will touch, and the file(s) relevant to my request
 
 Ground rules:
@@ -36,7 +37,9 @@ Ground rules:
 - Never edit game/tallow-reach.html. It is generated. End every reply that
   changes src/ by telling me to run `npm run build` (and `npm test`).
 - Add a short entry at the top of docs/CHANGELOG.md for every change, and
-  include it in the files you give me.
+  include it in the files you give me. If it then has more than 15 full
+  entries, move the oldest to docs/CHANGELOG_ARCHIVE.md until 10 remain,
+  add an index line for each, and include both files. Never delete history.
 
 Reply with:
 1. A short plan (which files change, and why)
@@ -75,6 +78,7 @@ DONE WHEN:
 
 - **One feature per request.** Smaller changes are easier to test and easier to undo.
 - **Ask for a plan first** on anything big: "Give me a plan before any code."
+- **Ask for a handoff at the end of a long chat:** "Rewrite docs/HANDOFF.md for the next chat." It replaces the memory the next chat will not have.
 - **Keep the zip fresh.** After each round of changes, download a new zip, so the next chat starts from the latest code.
 - **Report bugs the same way:** what you did, what you expected, what happened, and a screenshot if you can.
 

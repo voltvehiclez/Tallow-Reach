@@ -1,11 +1,15 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-06 (save version **11**, **94 tests** in `tests/`). The inventory session could
-> not install three.js, so it ran the tests against a stand-in and did **not** rebuild
-> `game/tallow-reach.html`: the built file in the zip is from BEFORE the inventory work. Run
-> `npm install`, `npm test` (expect 94 passing) and `npm run build` first, and note the new size.
+> Updated 2026-11-06. Save version **11**. **94 tests** in `tests/` (counted from the files;
+> an AI session without network cannot run them, so the user's own `npm test` is the real check).
+> The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
+> on their own computer with `npm install` then `npm run build`. The inventory work was written in
+> a session that could not install three.js, so it was only tested against a stand-in; treat
+> inventory as "untested in the real game" until the user says they have played it.
 > This file replaces the memory of the previous chat. Read it, then `docs/ARCHITECTURE.md`,
 > `docs/HOW_TO_ADD.md` and the top two entries of `docs/CHANGELOG.md`, and you are up to speed.
+> `docs/CHANGELOG.md` also has a one-line index of older entries; the full text of those is in
+> `docs/CHANGELOG_ARCHIVE.md` (open it only when the index shows something relevant).
 
 **Where the game is right now, in one paragraph.** Tallow Reach is a three.js space game played
 from one built HTML file. You fly out of Meridian Outpost, take contracts, mine asteroids, fight
@@ -29,9 +33,12 @@ complete files or exact find-and-replace edits with full paths, and test steps t
 click**, not just what file to open. Plain-language units (**MJ/s**, "units", "Hull HP" and
 "Shield HP") — never MW, never "the dt-scaled integrator".
 
-Project: `/home/user/Tallow-Reach/tallow-reach/`. The workspace persists between chats.
-GitHub: `github.com/voltvehiclez/Tallow-Reach`, branch `main`, folder `tallow-reach/`
-(the repo has a `.gitignore` for `node_modules/` and `*.zip`).
+The project arrives as a zip; the folder you work in is `tallow-reach` (it holds `package.json`,
+`build.mjs`, `src/`, `docs/`, `tests/`). The user plays by building it themselves (Node.js, then
+`npm install`, `npm run build`, and opening `game/tallow-reach.html`), and has asked to be told
+exactly how, so keep instructions step by step and say where to click. They plan to make the game
+much bigger, including a storyline with missions: plan big features first (a short plan, the files
+that change, whether the save changes) and build them in small slices that can each be played.
 
 ## Standing ground rules (the user stated these; do not break them)
 
@@ -47,8 +54,14 @@ GitHub: `github.com/voltvehiclez/Tallow-Reach`, branch `main`, folder `tallow-re
 - Short entry at the top of `docs/CHANGELOG.md` for every change, included in the files you give.
 - End every reply that changes `src/` by telling the user to run **`npm run build`** and
   **`npm test`**.
-- Deliver as: a fresh zip, a `TESTING-*.md` checklist for the user, and the built game opened with
-  `present_file`.
+- Deliver **complete files** (not snippets) with full paths, so the user can drop them into the
+  project, plus test steps written for a non-coder. If a change adds a feature the user will click
+  through, add or update a `TESTING-*.md` checklist (`TESTING-OUTFITTING.md` and
+  `TESTING-INVENTORY.md` exist at the project root). Say plainly if you could not run the build or the tests.
+- Keep the docs a readable size: new changelog entry on top; when `CHANGELOG.md` has more than 15
+  full entries, move the oldest to `CHANGELOG_ARCHIVE.md` until 10 remain and add an index line
+  for each (see "Keeping the docs scalable" in `ARCHITECTURE.md`). Never delete history.
+- Rewrite this file (do not append) when a long session ends.
 - **`FLIGHT` and `CAMERA` are settled.** The Wasp on basic thrusters must feel exactly as it does
   now (`turn` 0.7, `strafe`/`lift`/`reverse` 0.3 of the drive's speed; chase camera 11 / 17 /
   10.5). The user said it "feels less arcadey, i like it a lot like this". Do not retune without
@@ -131,27 +144,30 @@ GitHub: `github.com/voltvehiclez/Tallow-Reach`, branch `main`, folder `tallow-re
 
 ## How to check your own work
 
+The user runs, in the `tallow-reach` folder:
+
 ```
-cd /home/user/Tallow-Reach/tallow-reach
-npm install       # once; needs network. node_modules is not in the zip
-npm test          # 94 tests
+npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
+npm test          # 94 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 
-- Some sessions have no network, and then `npm install` fails and so do most tests (they import
-  `three` through `src/util/math.js`). Say so plainly instead of guessing the result.
-- To check gameplay headlessly: bundle a probe with esbuild, stubbing `src/render/scene.js` (the
-  file needs a DOM). Call `createPlayer()` **and** `setShip(id)`, then step `flight(dt)` /
-  `updatePrimary(dt)` / `updateShield(dt)` / `updatePower(dt)` yourself at `dt = 1/60`. Sim time
-  is not wall time under software rendering, so read game state, not the clock. Old probes lived
-  in `/tmp` and are gone; rebuild them from this description.
+- Some AI sessions have no network. Then `npm install` fails, `node build.mjs` fails (no `esbuild`)
+  and most tests fail (they import `three` through `src/util/math.js`). Say so plainly and tell
+  the user to run the two commands, instead of guessing the result.
+- To check gameplay headlessly (only if the packages are available): bundle a probe with esbuild,
+  stubbing `src/render/scene.js` (the file needs a DOM). Call `createPlayer()` **and**
+  `setShip(id)`, then step `flight(dt)` / `updatePrimary(dt)` / `updateShield(dt)` /
+  `updatePower(dt)` yourself at `dt = 1/60`. Sim time is not wall time under software rendering,
+  so read game state, not the clock. Rebuild probes from this description; none are kept.
 - Some sessions have Chromium and Playwright; check before assuming either way.
-- Live preview: serve the repo folder with `python3 -m http.server 8080 --bind 0.0.0.0` and open
-  `/game/tallow-reach.html`. Check the port is free with `ss -ltnp | grep 8080` first.
-- The user tests by clicking through `TESTING-OUTFITTING.md`. Keep it current: it is the only
+- The user tests by clicking through the `TESTING-*.md` files. Keep them current: they are the only
   bridge between the code and someone who does not read it.
+- Known-unverified: the Inventory tab, buying several modules, and loading old saves in the real
+  built game. Ask the user how it played if it matters to the task.
 
 ## To start the next session
 
 Say what you want to build, and point the assistant at this file. It will read this plus
-`ARCHITECTURE.md`, `HOW_TO_ADD.md` and `CHANGELOG.md` and be ready in one step.
+`ARCHITECTURE.md`, `HOW_TO_ADD.md`, `CHANGELOG.md` and the `README.md` of the folders it will touch,
+and be ready in one step. The starter prompt is in `docs/AI_PROMPTS.md`.

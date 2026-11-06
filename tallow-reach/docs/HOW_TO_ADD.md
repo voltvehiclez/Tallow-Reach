@@ -20,7 +20,10 @@ forgotten second place usually fails the tests with a message saying what to fix
 2. Make the change in `src/`. Never edit `game/tallow-reach.html` (it is generated).
 3. Did the saved data change? Follow "Save compatibility" in ARCHITECTURE.md.
 4. Add or update a test if the change has rules that can break.
-5. Add a short entry at the top of `docs/CHANGELOG.md`.
+5. Add a short entry at the top of `docs/CHANGELOG.md`. If that leaves more than 15 full entries in
+   it, move the oldest ones to `docs/CHANGELOG_ARCHIVE.md` until 10 remain, and add one index
+   line for each at the top of the "Older entries" list (see "Keeping the docs scalable" in
+   ARCHITECTURE.md). Never delete history.
 6. Tell the user to run `npm run build` and `npm test`, and give them test steps.
 
 ---
