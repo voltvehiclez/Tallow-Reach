@@ -59,6 +59,7 @@ about each other, use the event bus instead.
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
 | Change what power does in flight      | `sim/power.js` (`powerOf`, `hasPower`, `updatePower`) and `state.power`; who draws what is `sim/drive.js` + `sim/player.js` |
 | Change how a ship flies               | the thruster module in `data/modules.js`; `sim/drive.js` turns it into `state.drive` |
+| Change what shields do in flight      | `sim/shield.js` (`shieldOf`, `refreshShield`, `updateShield`) and `state.shield`; the numbers are on the shield module |
 | Add or reorder outfitting bay groups | `data/outfitting.js` (`MODULE_GROUPS`)          |
 | Add a paint bay to Appearance        | `data/outfitting.js` (`APPEARANCE_SLOTS`), drawn by `appearanceHtml()` in `ui/screens.js` |
 | Change the ship in the Outfitting view| `render/shipviewer.js` (camera, lights, framing); `ui/outfitting.js` (page, input) |
@@ -117,6 +118,12 @@ Each `src/` folder also has its own short `README.md`.
   and `launch()` says the same in the centre message. Test it with any hull
   plus an empty thruster bay (`hasDrive(state.drive)` is false). Docking range is 300 m and
   launch puts the ship at 200 m, so an immobile ship can always dock straight back.
+- **Shields come from the shield module, not the hull.** `sim/shield.js` reads `sh` (points),
+  `regen` (points a second) and `delay` (seconds without a hit) and writes `state.shield` plus
+  `P.shMax`. Any hit stamps `P.last` (in `hurt()`), and the recharge stays off until that was
+  `delay` seconds ago; then it runs at full `regen`. No shield module means `P.shMax` is 0 and
+  every hit goes to the hull. Later shield types with special behaviour (recharging under fire)
+  are extra fields read by `updateShield()` — nothing outside that file changes.
 - **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the
   drive's turn rate, and `strafe` / `lift` / `reverse` are fractions of the drive's `spd`. The
   main drive and its 2x boost are the only directions that reach full speed.
@@ -199,8 +206,8 @@ These are real, current limits. None of them is a bug in play today.
 - **Every hull flies the same today.** Thrusters set speed and turn, every hull ships with
   the same basic drive, and nothing on the hull modifies it yet. Hull character (a heavy
   Bulwark being slower) is meant to arrive as hull attributes multiplying `driveOf()`.
-- **Only three modules exist**, two power parts and the basic thruster. They can be taken
-  off and fitted again
+- **Only a handful of modules exist**: a powerplant, a power cell, basic thrusters and basic
+  shields. They can be taken off and fitted again
   (`sim/fitting.js`, stored in `profile.modules`), but **nothing can be bought yet**, so
   storage only ever holds parts taken off a hull. The thrusters are the only thing that draws
   power (2 MJ/s flying, +1 MJ/s while the boost burns, a flat 20 MJ each time the boost lights;

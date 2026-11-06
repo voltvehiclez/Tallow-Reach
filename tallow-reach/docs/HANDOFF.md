@@ -11,8 +11,10 @@
 > bay. Basic thrusters exist and every hull flies like the Wasp on them (`state.drive`, from
 > `sim/drive.js`), and an empty thruster bay means the ship cannot move, turn or boost at all
 > (pressing a control then warns "Equip thrusters to move").
-> Paint bays are clickable but no colours exist yet. Save is at version 5.
-> `npm test` = 46, build = 578 KB.
+> Basic shields are fitted to every hull: 100 points, 10 a second once the ship has gone 4
+> seconds without a hit, and pirate cannons do 10 a shot. Paint bays are clickable but no
+> colours exist yet. Save is at version 6.
+> `npm test` = 56, build = 579 KB.
 > See the top of `CHANGELOG.md`.
 
 Read this first, then `tallow-reach/docs/ARCHITECTURE.md` and the top two entries of

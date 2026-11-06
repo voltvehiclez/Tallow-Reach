@@ -71,7 +71,7 @@ export function updateHud(dt) {
     d = SHIPS[S.ship],
     m = S.mission;
 
-  el.shield.style.width = (P.sh / P.shMax) * 100 + "%";
+  el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
   el.hull.style.width = Math.max(0, (P.hull / P.hullMax) * 100) + "%";
   el.boost.style.width = P.en + "%";
 

@@ -44,6 +44,12 @@ export const state = {
   //   turn   turn rate multiplier (scaled again by FLIGHT.turn)
   drive: { spd: 0, turn: 0 },
 
+  // The ship's shields, rebuilt from the fitted shield module (see sim/shield.js).
+  //   cap    shield points when full        0 means no shields fitted
+  //   regen  points per second while recharging
+  //   delay  seconds without a hit before recharging starts
+  shield: { cap: 0, regen: 0, delay: 0 },
+
   freeCam: { on: false, yaw: 0, pitch: 0.25, dist: 14 },
 
   ui: {

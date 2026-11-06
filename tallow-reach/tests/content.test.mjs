@@ -30,7 +30,7 @@ test("every ship has all the fields the game reads", () => {
   for (const [id, s] of Object.entries(SHIPS)) {
     assert.equal(typeof s.n, "string", `${id}: n (name)`);
     assert.equal(typeof s.d, "string", `${id}: d (description)`);
-    for (const f of ["cargo", "hull", "sh", "dmg", "mine", "sc", "price", "col"]) {
+    for (const f of ["cargo", "hull", "dmg", "mine", "sc", "price", "col"]) {
       assert.ok(isNum(s[f]) && s[f] > 0, `${id}: ${f} must be a positive number`);
     }
   }
@@ -256,12 +256,34 @@ test("every module fits its own group and carries that group's stat", () => {
       assert.ok(isNum(m.spd) && m.spd > 0, `${id}: thrusters set a top speed`);
       assert.ok(isNum(m.turn) && m.turn > 0, `${id}: thrusters set a turn rate`);
     }
+    if (m.g === "shield") {
+      assert.ok(isNum(m.sh) && m.sh > 0, `${id}: shields hold shield points`);
+      assert.ok(isNum(m.regen) && m.regen > 0, `${id}: shields set a recharge rate`);
+      assert.ok(isNum(m.delay) && m.delay >= 0, `${id}: shields set the lull before recharging`);
+    }
   }
   for (const [g, list] of Object.entries(STOCK_FIT)) {
     for (const id of list) {
       assert.ok(MODULES[id], `${g}: stock module ${id} must exist`);
       assert.equal(MODULES[id].g, g, `${id} can only be fitted in a ${MODULES[id].g} bay`);
     }
+  }
+});
+
+test("shields are a module, and every hull is delivered with them", () => {
+  const m = MODULES.shield_basic;
+  assert.ok(m, "there is a basic shield module");
+  assert.equal(m.g, "shield", "it fits the shield bay");
+  assert.equal(m.sh, 100, "100 shield points");
+  assert.equal(m.regen, 10, "10 points a second");
+  assert.equal(m.delay, 4, "and only after 4 seconds without a hit");
+  assert.deepEqual(STOCK_FIT.shield, ["shield_basic"], "every hull is delivered with them");
+  for (const [id, s] of Object.entries(SHIPS)) {
+    assert.equal(s.sh, undefined, `${id}: shield points come from the module, not the hull`);
+  }
+  const p = newProfile();
+  for (const id of Object.keys(SHIPS)) {
+    assert.deepEqual(p.loadout[id].shield, ["shield_basic"], `${id} has basic shields fitted`);
   }
 });
 
@@ -372,6 +394,32 @@ test("an old save gets the stock fit, and bad modules are dropped", () => {
     loadout: { wasp: { power: [null], cell: ["cell_basic"] } },
   });
   assert.deepEqual(emptied.loadout.wasp.power, [null], "a bay the player emptied stays empty");
+});
+
+test("shields arrived in save version 6: older saves are fitted with them", () => {
+  const v5 = sanitizeProfile({ v: 5, ships: ["wasp"], ship: "wasp", cr: 100 });
+  assert.equal(v5.v, SAVE_VERSION);
+  assert.deepEqual(v5.loadout.wasp.shield, ["shield_basic"], "a v5 save gains basic shields");
+  assert.deepEqual(v5.loadout.wasp.thruster, ["thruster_basic"], "and keeps its thrusters");
+
+  const ancient = sanitizeProfile({ v: 2, ships: ["wasp"], ship: "wasp", cr: 100 });
+  assert.deepEqual(ancient.loadout.wasp.shield, ["shield_basic"], "so does a very old one");
+
+  // A save from this version that really has an empty shield bay keeps it empty.
+  const removed = sanitizeProfile({
+    v: SAVE_VERSION,
+    ships: ["wasp"],
+    ship: "wasp",
+    loadout: { wasp: { shield: [null] } },
+  });
+  assert.deepEqual(removed.loadout.wasp.shield, [null], "the player's choice to run shieldless stands");
+});
+
+test("a pirate cannon does 10 damage a shot", () => {
+  // The pirate numbers live in sim/ai.js (see ARCHITECTURE.md), so guard the one
+  // the shields were balanced against.
+  const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
+  assert.match(src, /fire\(e\.m\.position, dir, 520, false, 10\)/, "enemy cannons must do 10 a shot");
 });
 
 test("the cells charge at the plants' rate, never overflow and never go negative", () => {

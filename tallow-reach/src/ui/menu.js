@@ -10,6 +10,7 @@ import { setShip } from "../sim/player.js";
 import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
+import { refreshShield } from "../sim/shield.js";
 import * as fitting from "../sim/fitting.js";
 import { toggleModulePicker, togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
@@ -211,6 +212,7 @@ function afterProfileChange() {
   setShip(state.profile.ship);
   refillPower();
   refreshDrive();
+  refreshShield();
   state.ui.fit = null;
   contracts.rerollBoard();
   state.flight.lock = null;

@@ -2,11 +2,12 @@
 
 | File | What it does |
 |---|---|
-| `state.js` | The single runtime `state` object (player, world lists, flight, ui, hud, `power`, `drive`). Also `msg()` and `say()` for on-screen text. |
+| `state.js` | The single runtime `state` object (player, world lists, flight, ui, hud, `power`, `drive`, `shield`). Also `msg()` and `say()` for on-screen text. |
 | `profile.js` | The saved game: `newProfile()`, `sanitizeProfile()`, `SAVE_VERSION`. Everything that is saved goes through here. |
 | `storage.js` | Autosave, three save slots and text save codes. Storage keys must not change. |
 
 Rules:
 - Changing saved data means: default in `newProfile`, validation in `sanitizeProfile`, bump `SAVE_VERSION`, a "Version history" line, and a test. See `docs/ARCHITECTURE.md`.
 - `sanitizeProfile` names the base modules and weapon flags explicitly. A new one needs a line there.
+- Groups added in a later version (thrusters in v5, shields in v6) are retrofitted by `cleanLoadouts` for older saves; a save of the current version keeps a bay the player emptied.
 - `profile.loadout` holds the modules fitted to each hull: group id -> one entry per bay (`null` = empty). `profile.modules` is the store of spare parts (a list of module ids). Only `sim/fitting.js` writes either. `cleanLoadouts` drops unknown ids and bays past the hull's layout, and gives a hull with no saved loadout the stock fit. Bump `SAVE_VERSION` when its shape changes.

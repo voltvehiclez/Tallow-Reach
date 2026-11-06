@@ -2,9 +2,9 @@
 //
 // Fitting costs nothing and is done at the outpost: a part comes out of storage
 // and into a bay, and whatever was in that bay goes back into storage. Every
-// change refreshes the ship's power budget (sim/power.js) and its drive
-// (sim/drive.js), because that is what turns a fitted part into numbers the game
-// uses.
+// change refreshes the ship's power budget (sim/power.js), its drive
+// (sim/drive.js) and its shields (sim/shield.js), because that is what turns a
+// fitted part into numbers the game uses.
 //
 // The save shape is one array per hull and group in profile.loadout (one entry
 // per bay, null = empty) and a flat list of spare parts in profile.modules. The
@@ -15,6 +15,7 @@ import { layoutFor } from "../data/outfitting.js";
 import { state } from "../state/state.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
+import { refreshShield } from "./shield.js";
 
 const S = () => state.profile;
 const shipId = () => S().ship;
@@ -65,6 +66,7 @@ export function fitModule(group, i, id) {
 
   refillPower();
   refreshDrive();
+  refreshShield();
   return replaced
     ? `Fitted ${m.n}. ${MODULES[replaced].n} moved to storage.`
     : `Fitted ${m.n}.`;
@@ -83,6 +85,7 @@ export function unequip(group, i) {
 
   refillPower();
   refreshDrive();
+  refreshShield();
   return `${MODULES[id].n} moved to storage.`;
 }
 

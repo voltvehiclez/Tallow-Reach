@@ -11,8 +11,11 @@
 //   draw    thruster: MJ/s used while the throttle is off centre (any amount)
 //   boost   thruster: extra MJ/s used while the boost is actually burning
 //   ign     thruster: MJ spent once, each time the boost lights
+//   sh      shield: points it holds when full
+//   regen   shield: points per second once it starts recharging
+//   delay   shield: seconds without a hit before recharging starts again
 //
-// A module may only have the stat its group uses. When thrusters, shields and
+// A module may only have the stats its group uses. When thrusters, shields and
 // weapons arrive they add fields here (top speed, shield points, damage) and the
 // systems that read those fields, the way sim/power.js reads mjps and mj.
 //
@@ -37,6 +40,17 @@ export const MODULES = {
     boost: 1,
     ign: 20,
   },
+  // 100 points, 10 a second once it starts, and it will not start until the ship
+  // has gone 4 seconds without being hit. No trickle under fire: that is a feature
+  // for a later shield module (see sim/shield.js).
+  shield_basic: {
+    g: "shield",
+    n: "Basic shields",
+    d: "Standard deflectors. Recharges after a lull in the fighting.",
+    sh: 100,
+    regen: 10,
+    delay: 4,
+  },
 };
 
 // What a hull is delivered with, bay by bay: group id -> module ids in bay
@@ -46,4 +60,5 @@ export const STOCK_FIT = {
   power: ["power_basic"],
   cell: ["cell_basic"],
   thruster: ["thruster_basic"],
+  shield: ["shield_basic"],
 };

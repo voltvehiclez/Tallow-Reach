@@ -8,6 +8,39 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Shields are a module now; pirate cannons do 10 a shot
+
+- **New module: `shield_basic` ("Basic shields")**, fitted to every hull from the start and
+  fittable in the shield bay that was already in the Outfitting layout. It holds **100 shield
+  points**, recharges at **10 points a second**, and will not start recharging until the ship has
+  gone **4 seconds without being hit**. Any hit inside that lull restarts the clock, so the
+  recharge is off for as long as somebody is shooting at you.
+- **Shields are no longer a hull stat.** `SHIPS` lost its `sh` field (and the Hangar row no
+  longer quotes a shield figure); `sim/shield.js` turns the fitted module into `state.shield`
+  (`cap`, `regen`, `delay`) and `P.shMax`. No shield module means no shields: every hit goes
+  straight to the hull.
+- **Pirate cannons now do 10 damage a shot** (was 7), in `sim/ai.js`. Against basic shields that
+  is ten hits to strip them, then ten more for a Wasp's hull.
+- **Save version 6.** Saves from v5 or older have an empty shield bay because the group did not
+  exist then, so they are retrofitted with basic shields on load (same rule the thrusters got in
+  v5). A v6 save where the player really took the shields out stays shieldless. `cleanLoadouts`
+  now keeps a list of groups added after a save's version instead of one flag per group.
+- Files: `data/modules.js` (`shield_basic`, `STOCK_FIT.shield`), new `sim/shield.js`
+  (`shieldOf`, `refreshShield`, `updateShield`), `state/state.js` (`state.shield`),
+  `state/profile.js` (v6 + retrofit), `sim/player.js` (no shield stats on the ship, recharge
+  moved out of `flight()`), `main.js`, `sim/fitting.js`, `sim/session.js`, `sim/economy.js`,
+  `ui/menu.js` (refresh on dock/fit/ship change/load), `ui/hud.js` (bar copes with no shields),
+  `ui/screens.js` (`100 shields` in the bay, Hangar row without a shield figure), `sim/ai.js`.
+- **Special shields later:** a module that recharges even under fire is one more field read by
+  `updateShield()` (for example `live` for a reduced under-fire rate). Nothing outside
+  `sim/shield.js` needs to change for that.
+- Verified headless: ten 10-damage hits took 100 → 0 shields with the hull untouched, hit 11
+  took 10 hull; with a hit at t=0 the shields sat still at 90 through 3.9 s and were full again
+  by 5 s; with the bay empty a 10-damage hit cost exactly 10 hull.
+- Tests: 3 new files' worth — shield rules (`tests/shield.test.mjs`, 6 tests), the module and
+  stock fit, the v5 → v6 retrofit, the pirate damage figure, and equip/unequip moving `P.shMax`
+  → **56 passing**. `npm run build` needed (579 KB).
+
 ## 2026-11-06: Lighting the boost costs a flat 20 MJ; refilling the meter is free
 
 The boost now works like a car ignition: expensive to start, cheap to run, and filling the tank

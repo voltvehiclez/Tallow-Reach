@@ -271,9 +271,11 @@ cell_basic:  { g: "cell",  n: "Basic power cell",  d: "Standard storage bank.", 
 ```
 
 `g` is the module group it fits (`data/outfitting.js`), and the rest of the fields are the
-stat that group uses: `mjps` for a powerplant, `mj` for a power cell, and `spd`/`turn`/`draw`/
+stat that group uses: `mjps` for a powerplant, `mj` for a power cell, `spd`/`turn`/`draw`/
 `boost`/`ign` for a thruster (top speed, turn rate, MJ/s while flying, extra MJ/s while the boost
-burns, and the flat MJ slug spent when the boost lights). `npm test` checks the group exists, the
+burns, and the flat MJ slug spent when the boost lights), and `sh`/`regen`/`delay` for shields
+(points held, points a second while recharging, and the seconds without a hit before recharging
+starts again). `npm test` checks the group exists, the
 name and description are there, and the stat is a positive number.
 
 1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
@@ -286,9 +288,16 @@ name and description are there, and the stat is a positive number.
    A module that *uses* power rather than making it should add its demand to
    `state.power.draw` and ask `hasPower(demand)` before it does its work, the way the
    thrusters do in `sim/player.js`.
-4. If the module changes a number the ship already has (top speed, hull, shield), do not
+4. If the module changes a number the ship already has (top speed, hull, shields), do not
    write it into `SHIPS`; compute the effective value where it is used so removing the
-   module puts the ship back the way it was.
+   module puts the ship back the way it was. Shields are the worked example: `sim/shield.js`
+   turns the module into `state.shield`, and with the bay empty the ship simply has none.
+
+5. **Special kinds of shield.** A shield that behaves differently (for example one that keeps
+   trickling back even under fire, at a reduced rate) is a new entry in `MODULES` with an extra
+   field, say `live: 3` for points a second while being hit. `updateShield()` in
+   `sim/shield.js` reads that field when it is there; the recharge delay, the cap and the HUD
+   bar need no changes. Do not patch `sim/player.js` for it.
 
 ## 17. A module shop (the next step; fitting is already done)
 

@@ -21,7 +21,7 @@ Four cards on the left, four on the right. Counts and bays:
 | Powerplant | **1 / 1** | **Basic powerplant** — solid bay, `10 MJ/s` |
 | Power cells | **1 / 1** | **Basic power cell** — solid bay, `100 MJ` |
 | Thrusters | **1 / 1** | **Basic thrusters** — solid bay, `150 m/s` |
-| Shields | 0 / 1 | Empty |
+| Shields | **1 / 1** | **Basic shields** — solid bay, `100 shields` |
 | Primary weapons | 0 / 2 | Empty, Empty |
 | Secondary weapons | 0 / 1 | Empty |
 | Hull | 0 / 1 | Empty |
@@ -110,7 +110,22 @@ Four cards on the left, four on the right. Counts and bays:
 9. Dock and fit the powerplant back: full thrust returns. Narrow the window below about 900 px
    and the power block lifts above the controls list instead of printing over it.
 
-## 7. It survives a reload
+## 7. Shields in flight
+
+1. Launch. Top left, the **Shield** bar starts **full** — the basic shields hold 100 points, and
+   the outpost fills them whenever you dock.
+2. Find a pirate and let it shoot you. Each cannon hit takes **10 points**: the shield bar drops
+   a tenth at a time and the **Hull** bar does not move until the shield bar is empty.
+3. Break off and stop being hit. The shield bar **stays put for 4 seconds**, then climbs at
+   **10 points a second** until it is full again. If a pirate hits you during those four seconds,
+   the bar stops where it is and the four seconds start again.
+4. In Outfitting, the **Shields** bay shows **Basic shields** with **100 shields** under it.
+   Unequip it, launch, and let a pirate shoot: there is no shield bar left to lose, and every hit
+   goes straight to the hull. Fit them back and the shield bar returns.
+5. Reload the page: the fit sticks, and a save made before this update loads with basic shields
+   already in the bay (the bay was empty because shields did not exist yet).
+
+## 8. It survives a reload
 
 1. Unequip the power cell, so storage holds it and the bay is empty.
 2. Reload the page (F5) and open **Outfitting** again.
@@ -118,7 +133,7 @@ Four cards on the left, four on the right. Counts and bays:
    `Basic power cell` square, and your credits, ships and contracts should be unchanged.
 4. Fit it back, reload again, and confirm it stayed fitted.
 
-## 8. Other ships, and old saves
+## 9. Other ships, and old saves
 
 1. **Hangar → Fly** another hull (or buy one), then **Outfitting**: the new ship comes with
    its own basic powerplant, cell and thrusters fitted, and its own store — storage is shared,

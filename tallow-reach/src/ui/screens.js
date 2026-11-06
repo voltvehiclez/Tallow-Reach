@@ -119,7 +119,7 @@ function hangarHtml() {
           : `<button data-a="buy" data-b="${id}" ${
               S.cr < s.price || S.ships.length >= S.base.hangar + 1 ? "disabled" : ""
             }>Buy ${s.price} cr</button>`;
-        return `<div class="row"><div>${s.n}<small>${s.d} Hull ${s.hull}, shield ${s.sh}, hold ${s.cargo}.</small></div>${action}</div>`;
+        return `<div class="row"><div>${s.n}<small>${s.d} Hull ${s.hull}, hold ${s.cargo}.</small></div>${action}</div>`;
       })
       .join("")
   );
@@ -128,11 +128,15 @@ function hangarHtml() {
 // The bays fitted to the ship being flown, group id -> module ids per bay.
 const baysOf = () => (state.profile.loadout || {})[state.profile.ship] || {};
 
-/** The stat line on a fitted module's bay: "10 MJ/s", "100 MJ", or nothing. */
+/**
+ * The stat line on a fitted module's bay: "10 MJ/s", "100 MJ", "150 m/s",
+ * "100 shields", or nothing.
+ */
 function moduleStat(m) {
   if (m.mjps) return `${m.mjps} MJ/s`;
   if (m.mj) return `${m.mj} MJ`;
   if (m.spd) return `${m.spd} m/s`;
+  if (m.sh) return `${m.sh} shields`;
   return "";
 }
 

@@ -13,6 +13,7 @@ import { FIELD_CENTER, clearTransient } from "./world.js";
 import { setShip } from "./player.js";
 import { refillPower } from "./power.js";
 import { refreshDrive, hasDrive } from "./drive.js";
+import { refreshShield } from "./shield.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
@@ -36,6 +37,7 @@ export function launch() {
   P.snap = true;
   refillPower();      // launched fully charged
   refreshDrive();     // the bays may have changed while docked
+  refreshShield();
 
   // Salvage contracts need their crates out in the field.
   const m = S.mission;
@@ -63,9 +65,10 @@ export function dock() {
   if (S.ships.includes(S.ship)) {
     S.hp[S.ship] = Math.max(REPAIR_MIN_HULL, P.hull / P.hullMax);
   }
-  P.sh = P.shMax;
   refillPower();      // the outpost tops the cells up
   refreshDrive();     // and the ship may have changed (death, hangar)
+  refreshShield();    // likewise its shields
+  P.sh = P.shMax;     // and it leaves with them full
   clearTransient();
   state.flight.missileLock = { target: null, t: 0, locked: false };
   state.flight.lock = null;

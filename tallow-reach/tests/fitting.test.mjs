@@ -7,6 +7,7 @@ import { state } from "../src/state/state.js";
 import { newProfile, sanitizeProfile, SAVE_VERSION } from "../src/state/profile.js";
 import { refillPower } from "../src/sim/power.js";
 import { refreshDrive, hasDrive } from "../src/sim/drive.js";
+import { refreshShield } from "../src/sim/shield.js";
 import { MODULES } from "../src/data/modules.js";
 import { fitModule, unequip, storedFor, fittedAt } from "../src/sim/fitting.js";
 
@@ -15,6 +16,8 @@ function freshGame() {
   state.profile = newProfile();
   refillPower();
   refreshDrive();
+  state.player = { sh: 0, shMax: 0, last: 0, docked: true };
+  refreshShield();
   return state.profile;
 }
 
@@ -120,4 +123,17 @@ test("the thrusters decide how the ship flies, and without them it cannot move",
   fitModule("thruster", 0, "thruster_basic");
   assert.deepEqual({ ...state.drive }, reference, "and fitting it back restores the drive");
   assert.equal(hasDrive(state.drive), true, "the ship can move again");
+});
+
+test("taking the shields out leaves the ship with none, and fitting them back restores them", () => {
+  freshGame();
+  assert.equal(state.player.shMax, 100, "basic shields give 100 points");
+
+  unequip("shield", 0);
+  assert.equal(state.player.shMax, 0, "with the bay empty there is nothing to absorb a hit");
+  assert.deepEqual(state.profile.loadout.wasp.shield, [null], "the bay is empty");
+  assert.deepEqual(state.profile.modules, ["shield_basic"], "the shields are in storage");
+
+  fitModule("shield", 0, "shield_basic");
+  assert.equal(state.player.shMax, 100, "and they come back when fitted");
 });

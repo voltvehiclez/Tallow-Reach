@@ -1,8 +1,12 @@
 // Hulls the player can fly. Stats are per ship:
 //   hull    hit points                 cargo   hold capacity
-//   sh      shield points              dmg     multiplier on cannon damage
+//   dmg     multiplier on cannon damage
 //   mine    multiplier on mining rate  sc      model scale
 //   price   cost in the Hangar         col     hull colour (hex)
+//
+// Shields are not a hull stat: the fitted shield module decides how many points
+// the ship has, how fast they come back and how long a lull has to last
+// (data/modules.js, sim/shield.js). No shield module means no shields at all.
 //
 // A hull has no speed or turn of its own: both come from the thrusters fitted in
 // the thruster bay (data/modules.js, sim/drive.js). A ship with an empty thruster
@@ -24,21 +28,21 @@ export const SHIPS = {
   wasp: {
     n: "Wasp",
     d: "Light interceptor. Fast, fragile.",
-    cargo: 20, hull: 100, sh: 80,
+    cargo: 20, hull: 100,
     dmg: 1, mine: 1, sc: 1,
     price: 600, col: 0x59636b,
   },
   prospector: {
     n: "Prospector",
     d: "Mining rig with a heavy beam and a deep hold.",
-    cargo: 70, hull: 150, sh: 60,
+    cargo: 70, hull: 150,
     dmg: 0.8, mine: 2.3, sc: 1.4,
     price: 3500, col: 0x6b5b45,
   },
   bulwark: {
     n: "Bulwark",
     d: "Armoured gunship. Slow to turn, hard to kill.",
-    cargo: 30, hull: 280, sh: 160,
+    cargo: 30, hull: 280,
     dmg: 1.8, mine: 1, sc: 1.7,
     price: 6000, col: 0x434b53,
   },

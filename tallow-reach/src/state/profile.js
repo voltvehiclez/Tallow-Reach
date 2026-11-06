@@ -19,7 +19,10 @@ import { layoutFor } from "../data/outfitting.js";
 //   5  the basic thrusters are standard issue. Saves from before 5 have their
 //      empty thruster bay filled on load (they were made before thrusters
 //      existed, so the bay was never a choice).
-export const SAVE_VERSION = 5;
+//   6  the basic shields are standard issue, the same way: saves from before 6
+//      get their shield bay filled on load, and a v6 save where the player
+//      emptied it stays shieldless.
+export const SAVE_VERSION = 6;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -140,10 +143,13 @@ function cleanStorage(raw) {
  * really left empty stays empty: only a missing hull or group falls back.
  */
 function cleanLoadouts(saved, version) {
-  // Thrusters arrived in save version 5. A save older than that has an empty
-  // thruster bay because the bay did not exist, not because the player emptied
-  // it, so it is filled with the stock drive.
-  const preThrusters = version < 5;
+  // Modules arrived over several versions, and a save older than the version that
+  // introduced a group has an empty bay because the group did not exist then, not
+  // because the player emptied it. Those bays get the stock part.
+  //   version 5: thrusters      version 6: shields
+  const addedLater = [];
+  if (version < 5) addedLater.push("thruster");
+  if (version < 6) addedLater.push("shield");
   const out = {};
   for (const id of Object.keys(SHIPS)) {
     const layout = layoutFor(id),
@@ -152,11 +158,7 @@ function cleanLoadouts(saved, version) {
     const fit = {};
     for (const [g, slots] of Object.entries(layout)) {
       const src =
-        preThrusters && g === "thruster"
-          ? stock[g]
-          : forShip && Array.isArray(forShip[g])
-            ? forShip[g]
-            : stock[g];
+        addedLater.includes(g) || !forShip || !Array.isArray(forShip[g]) ? stock[g] : forShip[g];
       fit[g] = Array.from({ length: slots }, (_, i) => {
         const m = src[i];
         return MODULES[m] && MODULES[m].g === g ? m : null;

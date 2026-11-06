@@ -11,6 +11,7 @@ import { setShip } from "./player.js";
 import { stockFor } from "../state/profile.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
+import { refreshShield } from "./shield.js";
 
 const S = () => state.profile;
 
@@ -96,6 +97,7 @@ export function selectShip(id) {
   setShip(id);
   refillPower();       // docked: the new hull's cells are full
   refreshDrive();      // and its thrusters decide the way it flies
+  refreshShield();     // and its shields how much punishment it takes
   return undefined;
 }
 

@@ -36,9 +36,9 @@ export function createPlayer() {
     v: V(0, 0, 0),     // current velocity
     thr: 0,            // throttle, -1..1
     hull: 100,
-    sh: 80,
+    sh: 0,
     hullMax: 100,
-    shMax: 80,
+    shMax: 0,          // set from the fitted shield module (sim/shield.js)
     en: 100,           // boost energy
     bs: 0,             // boost ramp, 0..1
     boost: false,
@@ -61,7 +61,6 @@ export function setShip(id) {
   scene.add(P.m);
   P.hullMax = d.hull;
   P.hull = d.hull * (state.profile.hp[id] ?? 1);
-  P.shMax = P.sh = d.sh;
   P.m.visible = !P.docked;
 }
 
@@ -183,8 +182,6 @@ export function flight(dt) {
     P.v.multiplyScalar(0.5);
   }
 
-  // Shields recharge after four seconds without a hit.
-  if (state.time - P.last > 4 && P.sh < P.shMax) P.sh = Math.min(P.shMax, P.sh + 12 * dt);
 }
 
 /** Apply `d` damage: shields first, then hull. Emits "player-dead" at zero hull. */
