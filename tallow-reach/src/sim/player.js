@@ -9,8 +9,25 @@ import { keys, pointer } from "../core/input.js";
 import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { buildPlayerShip } from "../render/models.js";
-import { state } from "../state/state.js";
+import { state, msg } from "../state/state.js";
+import { hasDrive, driveDraw } from "./drive.js";
+import { hasPower, setDraw } from "./power.js";
 import { STATION_KEEPOUT } from "./world.js";
+
+/**
+ * How long the "Equip thrusters to move" warning stays on screen, and the gap
+ * before it repeats while the player keeps a control held.
+ */
+const NO_DRIVE_WARN = 2.5;
+
+/** Is the player asking the ship to move, strafe, lift or turn? */
+function tryingToMove(stick) {
+  return !!(
+    keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.Space || keys.KeyC ||
+    keys.ShiftLeft || keys.ShiftRight || keys.KeyQ || keys.KeyE ||
+    Math.abs(stick.x) > 0.03 || Math.abs(stick.y) > 0.03
+  );
+}
 
 /** Create the player record. The model is attached by setShip(). */
 export function createPlayer() {
@@ -19,9 +36,9 @@ export function createPlayer() {
     v: V(0, 0, 0),     // current velocity
     thr: 0,            // throttle, -1..1
     hull: 100,
-    sh: 80,
+    sh: 0,
     hullMax: 100,
-    shMax: 80,
+    shMax: 0,          // set from the fitted shield module (sim/shield.js)
     en: 100,           // boost energy
     bs: 0,             // boost ramp, 0..1
     boost: false,
@@ -30,6 +47,7 @@ export function createPlayer() {
     snap: false,       // snap the camera to the ship on the next frame
     docked: true,
     shake: 0,
+    noDriveT: 0,       // seconds until the "Equip thrusters to move" warning may repeat
   };
   return state.player;
 }
@@ -43,7 +61,6 @@ export function setShip(id) {
   scene.add(P.m);
   P.hullMax = d.hull;
   P.hull = d.hull * (state.profile.hp[id] ?? 1);
-  P.shMax = P.sh = d.sh;
   P.m.visible = !P.docked;
 }
 
@@ -51,7 +68,6 @@ export function setShip(id) {
 export function flight(dt) {
   const P = state.player,
     m = P.m,
-    d = SHIPS[state.profile.ship],
     fc = state.freeCam;
 
   // A warp hands the controls to the drive: the throttle is released and the
@@ -68,13 +84,28 @@ export function flight(dt) {
       };
 
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
-  const turn = d.turn * FLIGHT.turn;   // FLIGHT.turn tunes every hull at once
+  // Speed and turn come from the fitted thrusters, not from the hull.
+  const drv = state.drive;
+  const powered = hasDrive(drv);         // no thruster fitted: a dead ship
+  const turn = drv.turn * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
+
+  // A dead ship cannot answer the controls, so warn the moment the player asks
+  // it to move. The warning repeats while a control is still held, but slowly,
+  // so it reads as a reminder rather than a flicker.
+  P.noDriveT = Math.max(0, P.noDriveT - dt);
+  if (!W && !powered && P.noDriveT === 0 && tryingToMove(stick)) {
+    msg("Equip thrusters to move", NO_DRIVE_WARN);
+    P.noDriveT = NO_DRIVE_WARN + 0.5;
+  }
   m.rotateY(-dz(stick.x * ease) * 1.6 * turn * dt);
   m.rotateX(-dz(stick.y * ease) * 1.2 * turn * dt);
   m.rotateZ(stick.roll * ease * 1.5 * turn * dt);
 
   if (W) {
     // Throttle released, like pressing X: the drag model bleeds the speed off.
+    P.thr = 0;
+  } else if (!powered) {
+    // No thrusters: the throttle does nothing and the engines stay cold.
     P.thr = 0;
   } else {
     if (keys.KeyW) P.thr = Math.min(1, P.thr + dt * 0.5);
@@ -85,15 +116,34 @@ export function flight(dt) {
     }
   }
 
-  const wantBoost = !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
+  // Power budget for this frame: the thrusters draw while the throttle is off
+  // centre, and a little more while the boost is burning. The boost figure comes
+  // from last frame, so the extra starts the frame after it lights. Refilling the
+  // boost meter is free — it never shows up in the draw, the way filling a car's
+  // tank with fuel does not run the engine.
+  setDraw("drive", driveDraw(drv, P.thr, P.boost));
+  const supply = hasPower(state.power.draw);
+
+  // The boost: lighting it is the hungry moment. It costs one big slug of stored
+  // energy (20 MJ on the basic thrusters) once the spool-up has finished and the
+  // shake fires, and the cells have to hold that much for it to light at all.
+  const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
+  const canBoost = wantBoost && supply && state.power.stored >= (drv.ignite || 0);
+
   const wasBoosting = P.boost;
-  P.bs = wantBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
+  P.bs = canBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
   P.boost = P.bs >= 1;
   if (P.boost && !wasBoosting) {
     P.shake = 1;
     nz(0.4, 500, 0.35);
+    // The ignition: one flat gulp out of the cells, not a trickle.
+    state.power.stored = Math.max(0, state.power.stored - (drv.ignite || 0));
   }
-  P.en = clamp(P.en + (wantBoost ? -28 : 10) * dt, 0, 100);
+  // The meter fills by itself whenever the boost is not burning.
+  P.en = clamp(P.en + (canBoost ? -28 : 10) * dt, 0, 100);
+
+  // With no power left there is nothing to push with.
+  const spd = supply ? drv.spd : 0;
 
   const f = fwd(m);
   const right = V(1, 0, 0).applyQuaternion(m.quaternion);
@@ -103,11 +153,11 @@ export function flight(dt) {
   const lift = W ? 0 : (keys.Space ? 1 : 0) - (keys.KeyC ? 1 : 0);
 
   // Only the main drive reaches full speed; reversing is a fraction of it.
-  const drive = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
+  const throttle = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
   const target = f
-    .multiplyScalar(drive * d.spd * (P.boost ? 2 : 1))
-    .addScaledVector(right, strafe * d.spd * FLIGHT.strafe)
-    .addScaledVector(up, lift * d.spd * FLIGHT.lift);
+    .multiplyScalar(throttle * spd * (P.boost ? 2 : 1))
+    .addScaledVector(right, strafe * spd * FLIGHT.strafe)
+    .addScaledVector(up, lift * spd * FLIGHT.lift);
   P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
   m.position.addScaledVector(P.v, dt);
   m.eng.forEach(e => e.scale.set(1, 1, 0.5 + P.thr * 2 + P.bs * 2));
@@ -132,8 +182,6 @@ export function flight(dt) {
     P.v.multiplyScalar(0.5);
   }
 
-  // Shields recharge after four seconds without a hit.
-  if (state.time - P.last > 4 && P.sh < P.shMax) P.sh = Math.min(P.shMax, P.sh + 12 * dt);
 }
 
 /** Apply `d` damage: shields first, then hull. Emits "player-dead" at zero hull. */

@@ -22,6 +22,10 @@ import { startWarp, updateWarp } from "./sim/sectors.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
+import { updateOutfitting } from "./ui/outfitting.js";
+import { refillPower, updatePower } from "./sim/power.js";
+import { refreshDrive } from "./sim/drive.js";
+import { refreshShield, updateShield } from "./sim/shield.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 
@@ -32,6 +36,9 @@ state.profile = loadAutosave() || newProfile();
 createPlayer();
 setShip(state.profile.ship);
 populateField();
+refillPower();   // start docked, so the cells are full
+refreshDrive();  // speed and turn come from the fitted thrusters
+refreshShield(); // and shield strength comes from the fitted shields
 
 setupHud();
 setupMenu();
@@ -109,6 +116,8 @@ function frame(now) {
 
   if (!P.docked) {
     flight(dt);
+    updateShield(dt);     // shields recharge after a lull in the fighting
+    updatePower(dt);      // cells charge from the fitted powerplants and cells
     updateWarp(dt);       // may change sector mid-frame; the rest of the frame uses the new one
     updatePrimary(dt);
     updateMissiles(dt);
@@ -132,6 +141,9 @@ function frame(now) {
   if (offset) camera.position.add(offset);
   renderer.render(scene, camera);
   if (offset) camera.position.sub(offset);
+
+  // Draws its own canvas and does nothing unless the Outfitting tab is open.
+  updateOutfitting(dt);
 }
 
 requestAnimationFrame(frame);

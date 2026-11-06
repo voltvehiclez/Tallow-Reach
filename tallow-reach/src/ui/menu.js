@@ -8,9 +8,15 @@ import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave }
 import { newProfile, sanitizeProfile } from "../state/profile.js";
 import { setShip } from "../sim/player.js";
 import { launch } from "../sim/session.js";
+import { refillPower } from "../sim/power.js";
+import { refreshDrive } from "../sim/drive.js";
+import { refreshShield } from "../sim/shield.js";
+import * as fitting from "../sim/fitting.js";
+import { toggleModulePicker, togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import { introHtml, outpostHtml } from "./screens.js";
+import { mountOutfitting } from "./outfitting.js";
 
 const $ = id => document.getElementById(id);
 let panel;
@@ -39,7 +45,10 @@ export function setupMenu() {
 
 export function render() {
   panel.hidden = false;
+  // Outfitting gives the panel the whole screen so the ship has room around it.
+  panel.classList.toggle("wide", !state.ui.intro && state.ui.tab === "o");
   panel.innerHTML = state.ui.intro ? introHtml() : outpostHtml(state.ui);
+  if (!state.ui.intro && state.ui.tab === "o") mountOutfitting();
 }
 
 function save() {
@@ -60,8 +69,10 @@ const ACTIONS = {
     state.ui.tab = name;
     state.ui.toast = "";
     state.ui.confirmReset = false;
+    state.ui.fit = null;
   },
   go() {
+    state.ui.fit = null;
     launch();
   },
 
@@ -99,6 +110,29 @@ const ACTIONS = {
   },
   wr() {
     toast(eco.restockMissiles());
+  },
+
+  // Outfitting
+  slot(arg) {
+    // data-b is "group:bay". Clicking the open bay again closes the picker.
+    const [g, i] = String(arg || "").split(":");
+    state.ui.fit = toggleModulePicker(state.ui.fit, g, +i);
+  },
+  paint(k) {
+    // Paint bays behave like module bays: one picker, click again to close.
+    state.ui.fit = togglePaintPicker(state.ui.fit, k);
+  },
+  fit(id) {
+    const open = state.ui.fit;
+    if (!open || open.kind !== "module") return;
+    const text = fitting.fitModule(open.g, open.i, id);
+    if (text) toast(text);
+  },
+  unfit() {
+    const open = state.ui.fit;
+    if (!open || open.kind !== "module") return;
+    const text = fitting.unequip(open.g, open.i);
+    if (text) toast(text);
   },
 
   // Base
@@ -176,6 +210,10 @@ const ACTIONS = {
 /** Common work after the whole profile is replaced (load, import, reset). */
 function afterProfileChange() {
   setShip(state.profile.ship);
+  refillPower();
+  refreshDrive();
+  refreshShield();
+  state.ui.fit = null;
   contracts.rerollBoard();
   state.flight.lock = null;
   state.flight.missileLock = { target: null, t: 0, locked: false };

@@ -160,14 +160,25 @@ then call `setSeed(n)` at the start of a run.
 
 Change numbers in `src/data/`. Run `npm test`, rebuild, and play for a minute.
 
-**Flight feel** is all in the `FLIGHT` table at the top of `src/data/ships.js`:
+**Top speed and turn rate** belong to the thrusters, in `src/data/modules.js`
+(`thruster_basic` today: `spd: 150`, `turn: 1.2`). `sim/drive.js` turns the fitted module into
+`state.drive`, and the flight model and the chase camera read only that. To make a ship
+faster, fit a different thruster module and do not put a raw speed in `sim/player.js`.
+
+There is **no hull speed any more**: `SHIPS` has no `spd`/`turn` fields, and a ship whose
+thruster bay is empty cannot move or turn at all (`driveOf()` gives 0 / 0 and
+`hasDrive(state.drive)` is false). Keep it that way — the bays are what make a ship fly, and
+`npm test` fails if a hull grows a speed of its own again. When hulls should handle
+differently, add a multiplier in `sim/drive.js` on top of the thruster's numbers.
+
+**Flight feel** is in the `FLIGHT` table at the top of `src/data/ships.js`:
 
 | Field | What it does | Today |
 | --- | --- | --- |
-| `turn` | multiplier on every hull's `turn` stat | `0.7` (30% slower than the raw stat) |
-| `strafe` | A/D speed, as a fraction of the hull's forward `spd` | `0.3` |
-| `lift` | Space/C speed, as a fraction of forward `spd` | `0.3` |
-| `reverse` | S (throttle below zero), as a fraction of forward `spd` | `0.3` |
+| `turn` | multiplier on the drive's turn rate | `0.7` (30% slower than the raw stat) |
+| `strafe` | A/D speed, as a fraction of the drive's `spd` | `0.3` |
+| `lift` | Space/C speed, as a fraction of the drive's `spd` | `0.3` |
+| `reverse` | S (throttle below zero), as a fraction of the drive's `spd` | `0.3` |
 
 **Camera position** is in `src/data/camera.js`, and is the only thing that decides how far
 behind the ship the view sits:
@@ -179,15 +190,15 @@ behind the ship the view sits:
 | `reverse` | distance at maximum reverse thrust | `10.5` |
 
 The distance is linear in speed between those three points and is hard-capped at both ends, so
-a faster ship cannot push the camera further back. Want the view tighter overall? Lower all
+a faster ship cannot push the camera further back. The speed the trail compares against is the
+fitted drive's `spd`, so it stays right when you change thrusters. Want the view tighter overall? Lower all
 three. Want it to pull back more under boost? Raise `fast`. `npm test` checks that
 `reverse < base < fast` and that the trail never doubles back.
 
-Forward thrust and the Shift boost are **not** in this table: they are the hull's `spd` and
-`2 x spd`, and they are the only directions that reach full speed. To make turning heavier still,
-lower `turn` (0.6 = 40% slower). To give the ship stronger manoeuvring thrusters, raise
-`strafe` / `lift` / `reverse` toward `1`. Changing a ship's *own* `spd` or `turn` in `SHIPS`
-changes that hull only, on top of these multipliers.
+Forward thrust and the Shift boost are **not** in this table: they are the drive's `spd` and
+`2 x spd`, and they are the only directions that reach full speed. To make turning heavier
+still, lower `turn` (0.6 = 40% slower). To give the ship stronger manoeuvring thrusters, raise
+`strafe` / `lift` / `reverse` toward `1`.
 
 ## 14. A new sector (data + small code)
 
@@ -215,3 +226,95 @@ raiders. `SECTOR_IDS` is the order M warps through.
 8. `WARP_COAST.steer` is how long the ship takes to stop turning once M is pressed, and
    `warpSteerEase(t)` in the same file is the curve (1 -> 0). The throttle is released
    instantly, so the speed bleeds off through the normal drag model in `sim/player.js`.
+
+## 15. A new module group on the Outfitting screen (data only)
+
+The Outfitting screen draws one card per entry in `MODULE_GROUPS`
+(`src/data/outfitting.js`): a heading, a `filled / bays` count, one bay box per slot,
+and the group's description. The list is split in half around the 3D ship, so the first
+half sits on the left and the rest on the right. Nothing else needs to change.
+
+1. Add `{ k, n, d, slots }` to `MODULE_GROUPS`: short id, name, one line about what the
+   group decides, and how many bays. `npm test` fails if a field is missing, an id repeats,
+   or a count is not a whole number of at least one.
+2. Want a different number of bays on a big hull later? `slotsFor(g, shipId)` in the same
+   file is the one place that decides it; the screen already asks through it.
+3. The card look is `.mod` in `styles.css`. Every group uses it, so a new group matches
+   the others without new CSS.
+
+**Paint bays** are the same idea and live in the same file, as `APPEARANCE_SLOTS`
+(`{ k, n }`). They are drawn by `appearanceHtml()` in `ui/screens.js`, always sit last in the
+right-hand column under the hull group, and are clickable like module bays: the click rule is
+`togglePaintPicker` in `ui/picker.js`, and the rectangle under the card is
+`paintPickerHtml()`. It shows **No colours in storage** because no paint exists yet.
+
+When paints arrive they need: a table of paints, a store in the save (the way
+`profile.modules` holds spare parts), the list of stored colours drawn as squares inside
+`paintPickerHtml`, a fitted paint per channel, and the counts in `appearanceHtml`. That is
+save-format work, so bump `SAVE_VERSION` and add a migration as usual.
+
+**Bay counts are per hull.** `SHIP_LAYOUTS` in the same file gives each hull its own
+numbers; every hull is a copy of the Wasp's today. `layoutFor(id)` and `slotsFor(g, id)`
+are the only readers, and a test fails if a hull is missing a group.
+
+**Fitted modules** are saved in `profile.loadout[shipId][groupId]`, one entry per bay
+(`null` = empty), written by `src/state/profile.js`. The power parts are fitted already;
+see recipe 16 for adding another module, and recipe 17 for letting the player swap one.
+
+## 16. A new module (data + the stat it feeds)
+
+Modules live in `src/data/modules.js`:
+
+```js
+power_basic: { g: "power", n: "Basic powerplant", d: "Standard reactor.", mjps: 10 },
+cell_basic:  { g: "cell",  n: "Basic power cell",  d: "Standard storage bank.", mj: 100 },
+```
+
+`g` is the module group it fits (`data/outfitting.js`), and the rest of the fields are the
+stat that group uses: `mjps` for a powerplant, `mj` for a power cell, `spd`/`turn`/`draw`/
+`boost`/`ign` for a thruster (top speed, turn rate, MJ/s while flying, extra MJ/s while the boost
+burns, and the flat MJ slug spent when the boost lights), and `sh`/`regen`/`delay`/`draw`/`chg` for shields
+(points held, points a second while recharging, the seconds without a hit before recharging
+starts again, MJ/s used while they are up, and the extra MJ/s while they are filling). `npm test` checks the group exists, the
+name and description are there, and the stat is a positive number.
+
+1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
+   Outfitting screen already names any module found in a bay.
+2. A hull is delivered with `STOCK_FIT` (`data/modules.js`): group id -> module ids in bay
+   order. Put the module there to make it standard issue, or in a Hangar purchase later.
+3. Make the stat do something. Power is done: `sim/power.js` sums `mjps` and `mj` into
+   `state.power`, and `ui/hud.js` draws it. A new kind of stat needs its own system the same
+   way: read the fitted modules, keep the result in `state.*`, and let the UI read that.
+   A module that *uses* power rather than making it reports its demand with
+   `setDraw("<name>", mjps)` (`sim/power.js`) and asks `hasPower()` before it does its work, the
+   way the thrusters do in `sim/player.js` and the shields in `sim/shield.js`.
+4. If the module changes a number the ship already has (top speed, hull, shields), do not
+   write it into `SHIPS`; compute the effective value where it is used so removing the
+   module puts the ship back the way it was. Shields are the worked example: `sim/shield.js`
+   turns the module into `state.shield`, and with the bay empty the ship simply has none.
+
+5. **Special kinds of shield.** A shield that behaves differently (for example one that keeps
+   trickling back even under fire, at a reduced rate) is a new entry in `MODULES` with an extra
+   field, say `live: 3` for points a second while being hit. `updateShield()` in
+   `sim/shield.js` reads that field when it is there; the recharge delay, the cap and the HUD
+   bar need no changes. Do not patch `sim/player.js` for it.
+
+## 17. A module shop (the next step; fitting is already done)
+
+Fitting and storage work: `sim/fitting.js` moves parts between `profile.loadout` and
+`profile.modules`, and the Outfitting bays are clickable. What is missing is a way to
+**obtain** a part, so storage today only holds what you have taken off a hull.
+
+1. **Price.** Add `price` to the module entries in `data/modules.js`. The basic pair can
+   stay at 0, meaning standard issue.
+2. **Buy.** A function in `sim/economy.js` next to `buyWeapon`: check credits, take the
+   money, `S.modules.push(id)`. Nothing else: the picker will show it the next time a bay
+   of that group is opened.
+3. **Show it.** A shop section listing `MODULES` grouped by `g`, with name, the stat and
+   the price, and a `data-a="mb"` button per module. `ui/screens.js` for the markup,
+   `ui/menu.js` `ACTIONS` for the click. `ui/screens.js` already has `moduleStat(m)` for
+   the one-line number.
+4. **Storage limits** if you want them: cap `profile.modules.length` in
+   `sim/economy.js` and in `sanitizeProfile`, and show the count in the panel.
+5. **Do it one group at a time.** The power group is the one with parts in it, so start
+   there: buy a better powerplant, fit it, watch the HUD figure change.

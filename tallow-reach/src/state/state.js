@@ -32,6 +32,26 @@ export const state = {
     coneRadius: 0,     // px radius of the missile lock ring, 0 when hidden
   },
 
+  // Ship power, rebuilt from the fitted modules (see sim/power.js).
+  //   gen    MJ/s the powerplants make
+  //   cap    MJ the cells hold
+  //   stored MJ in the cells right now
+  //   draw   MJ/s the ship is asking for; the thrusters set it (sim/player.js)
+  //   draw   MJ/s the whole ship is asking for, the sum of `use`
+  //   use    who is asking for what: drive (sim/drive.js) and shield (sim/shield.js)
+  power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0 } },
+
+  // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).
+  //   spd    top speed in m/s       0 / 0 with an empty bay: the ship cannot move
+  //   turn   turn rate multiplier (scaled again by FLIGHT.turn)
+  drive: { spd: 0, turn: 0 },
+
+  // The ship's shields, rebuilt from the fitted shield module (see sim/shield.js).
+  //   cap    shield points when full        0 means no shields fitted
+  //   regen  points per second while recharging
+  //   delay  seconds without a hit before recharging starts
+  shield: { cap: 0, regen: 0, delay: 0 },
+
   freeCam: { on: false, yaw: 0, pitch: 0.25, dist: 14 },
 
   ui: {
@@ -40,6 +60,7 @@ export const state = {
     toast: "",         // green message at the top of the panel
     board: [],         // contract offers
     confirmReset: false,
+    fit: null,         // the open picker: { kind: "module", g, i } or { kind: "paint", k }
     xcode: "",         // last exported or pasted save code
   },
 

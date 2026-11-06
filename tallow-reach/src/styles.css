@@ -57,6 +57,42 @@ canvas {
   text-align: center;
 }
 
+/* Ship power, bottom centre, above the throttle line (#bc). */
+#pw {
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  width: 236px;
+  text-align: center;
+}
+#pw .pw-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+#pw #pw-val {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+#pw .bar {
+  height: 5px;
+  margin: 4px 0 3px;
+}
+#pw #pw-flow {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--dim);
+}
+/* Narrow windows: the controls list in the bottom-left is several lines tall,
+   so lift the power block above it rather than printing over it. */
+@media (max-width: 900px) {
+  #pw {
+    bottom: 132px;
+  }
+}
+
 #hint {
   left: 20px;
   bottom: 20px;
@@ -207,6 +243,7 @@ h2 {
 
 nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -255,6 +292,260 @@ button:focus-visible {
   padding: 10px;
   font-size: 18px;
 }
+/* ---- Outfitting: the ship in the middle, module bays around it ---- */
+/* This tab opens the panel up to the middle of the screen, because the ship
+   needs room to be looked at. Everything else stays where it was. */
+#panel.wide {
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: min(1180px, 100%);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+.outfit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 1.35fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.outfit-rail {
+  display: grid;
+  gap: 10px;
+}
+
+/* One module group. The same shape is used for every group, so a new entry in
+   MODULE_GROUPS (src/data/outfitting.js) needs no styling of its own. */
+.mod {
+  border: 1px solid var(--line);
+  background: rgba(20, 27, 32, .55);
+  padding: 9px 11px 10px;
+}
+.mod header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.mod h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mod-count {
+  color: var(--dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.mod-bays {
+  display: flex;
+  gap: 8px;
+}
+/* The bay box itself. Module bays are buttons and paint bays are plain divs, so
+   the look lives on the bare class and only the button behaviour is added below.
+   (Putting the box on `button.mod-bay` left the paint bays unstyled: they came
+   out as bare inline text reading "PRIMARYEmpty".) */
+.mod-bay {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px 7px;
+  border: 1px dashed var(--line);
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    rgba(127, 183, 196, .05) 6px 12px
+  );
+}
+
+/* A module bay is a button: clicking it opens the picker under the card. It
+   keeps the dashed "empty socket" look instead of the amber button style. */
+button.mod-bay {
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+button.mod-bay:hover:not(:disabled) {
+  color: inherit;
+  border-color: var(--amber);
+  background: rgba(224, 164, 88, .10);
+}
+button.mod-bay.on {
+  color: inherit;
+  border-color: var(--ice);
+  background: rgba(127, 183, 196, .12);
+}
+.bay-no {
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.bay-empty {
+  font-size: 13px;
+  color: #57656e;
+}
+/* A bay with a module in it: solid edge, the part's name, its headline number. */
+.mod-bay.fitted {
+  border-style: solid;
+  border-color: #3c4a54;
+  background: linear-gradient(180deg, rgba(127, 183, 196, .10), rgba(127, 183, 196, .02));
+}
+.bay-val {
+  font-size: 13px;
+  color: var(--ink);
+}
+.bay-stat {
+  font-size: 11px;
+  color: var(--ice);
+}
+/* The picker: a box under the bays holding one square per stored part. */
+.fit-picker {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  background: #0a0e11;
+  padding: 8px;
+}
+.fit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.fit-close {
+  padding: 1px 8px;
+  font-size: 11px;
+}
+.fit-squares {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(94px, 1fr));
+  gap: 6px;
+}
+.fit-sq {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 56px;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.fit-sq small {
+  color: var(--ice);
+  font-size: 11px;
+}
+.fit-empty {
+  border: 1px dashed var(--line);
+  padding: 12px 10px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+}
+.fit-unfit {
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.mod p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--dim);
+}
+
+/* The window the ship is shown in. Its own canvas, its own renderer; see
+   render/shipviewer.js. The gradients sit behind the transparent canvas. */
+.outfit-view {
+  position: relative;
+  min-height: 460px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 38%, rgba(127, 183, 196, .10), transparent 62%),
+    radial-gradient(90% 70% at 50% 102%, rgba(224, 164, 88, .10), transparent 72%),
+    #070a0c;
+}
+.outfit-stage {
+  position: absolute;
+  inset: 0;
+}
+.outfit-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+.outfit-stage canvas.dragging {
+  cursor: grabbing;
+}
+.outfit-title {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  z-index: 2;
+  pointer-events: none;
+  font-size: 15px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.outfit-title small {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dim);
+}
+.outfit-tip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9px;
+  z-index: 2;
+  padding: 0 12px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .05em;
+  color: var(--dim);
+  pointer-events: none;
+}
+.outfit-stage.no-webgl .outfit-tip {
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+/* Narrow screens: the ship first, then the bays in two columns. */
+@media (max-width: 900px) {
+  .outfit {
+    grid-template-columns: 1fr;
+  }
+  .outfit-view {
+    order: -1;
+    min-height: 300px;
+  }
+  .outfit-rail {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /* ---- Warp overlay (built in src/ui/warpflash.js) ---- */
 /* Two full-screen gradients: a tunnel vignette and the white-out at arrival.
    Both are driven every frame from the warp clock (src/ui/warpflash.js), so the

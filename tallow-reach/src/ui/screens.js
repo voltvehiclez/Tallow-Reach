@@ -5,6 +5,9 @@ import { SHIPS } from "../data/ships.js";
 import { ITEM, KEYS } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
+import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
+import { MODULES } from "../data/modules.js";
+import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, valueOf, repairCost } from "../sim/economy.js";
@@ -13,6 +16,7 @@ import { describe } from "../sim/contracts.js";
 export const TABS = [
   ["m", "Contracts"],
   ["h", "Hangar"],
+  ["o", "Outfitting"],
   ["p", "Shop"],
   ["b", "Base"],
   ["s", "Saves"],
@@ -23,6 +27,7 @@ export const TABS = [
 const SCREENS = {
   m: contractsHtml,
   h: hangarHtml,
+  o: outfittingHtml,
   p: shopHtml,
   b: baseHtml,
   s: savesHtml,
@@ -114,9 +119,174 @@ function hangarHtml() {
           : `<button data-a="buy" data-b="${id}" ${
               S.cr < s.price || S.ships.length >= S.base.hangar + 1 ? "disabled" : ""
             }>Buy ${s.price} cr</button>`;
-        return `<div class="row"><div>${s.n}<small>${s.d} Hull ${s.hull}, shield ${s.sh}, hold ${s.cargo}.</small></div>${action}</div>`;
+        return `<div class="row"><div>${s.n}<small>${s.d} Hull ${s.hull}, hold ${s.cargo}.</small></div>${action}</div>`;
       })
       .join("")
+  );
+}
+
+// The bays fitted to the ship being flown, group id -> module ids per bay.
+const baysOf = () => (state.profile.loadout || {})[state.profile.ship] || {};
+
+/**
+ * The stat line on a fitted module's bay: "10 MJ/s", "100 MJ", "150 m/s",
+ * "10 shields", or nothing.
+ */
+function moduleStat(m) {
+  if (m.mjps) return `${m.mjps} MJ/s`;
+  if (m.mj) return `${m.mj} MJ`;
+  if (m.spd) return `${m.spd} m/s`;
+  if (m.sh) return `${m.sh} shields`;
+  return "";
+}
+
+/** How many groups sit in the left column; the rest go to the right. */
+const leftRail = list => list.slice(0, Math.ceil(list.length / 2));
+
+/** Is this the bay whose picker is open? */
+const isBayOpen = (g, i) =>
+  !!(state.ui.fit && state.ui.fit.kind === "module" && state.ui.fit.g === g && state.ui.fit.i === i);
+
+/** Is this the paint bay whose picker is open? */
+const isPaintOpen = k =>
+  !!(state.ui.fit && state.ui.fit.kind === "paint" && state.ui.fit.k === k);
+
+/**
+ * One bay. Every bay is a button: clicking it opens the picker under the card
+ * (or closes it again if it was already open).
+ */
+function bayHtml(group, i, id) {
+  const m = MODULES[id];
+  const open = isBayOpen(group.k, i);
+  const attrs =
+    `data-a="slot" data-b="${group.k}:${i}" aria-expanded="${open}"`;
+  if (!m) {
+    return (
+      `<button class="mod-bay empty${open ? " on" : ""}" ${attrs} ` +
+      `aria-label="${group.n} bay ${i + 1}: empty, click to fit a module">` +
+      `<span class="bay-no">Bay ${i + 1}</span><span class="bay-empty">Empty</span></button>`
+    );
+  }
+  return (
+    `<button class="mod-bay fitted${open ? " on" : ""}" ${attrs} data-module="${id}" ` +
+    `aria-label="${group.n} bay ${i + 1}: ${m.n}, click to change">` +
+    `<span class="bay-no">Bay ${i + 1}</span>` +
+    `<span class="bay-val">${m.n}</span>` +
+    `<span class="bay-stat">${moduleStat(m)}</span>` +
+    `</button>`
+  );
+}
+
+/**
+ * The picker under a card: every stored part that fits this group, as squares,
+ * plus Unequip when the bay is holding something. This is the whole fitting UI.
+ */
+function pickerHtml(group) {
+  const i = state.ui.fit.i;
+  const current = fittedAt(group.k, i);
+  const stored = storedFor(group.k);
+
+  const squares = stored.length
+    ? `<div class="fit-squares">` +
+      stored
+        .map(id => {
+          const m = MODULES[id];
+          return (
+            `<button class="fit-sq" data-a="fit" data-b="${id}" aria-label="Fit ${m.n}">` +
+            `<span>${m.n}</span><small>${moduleStat(m)}</small></button>`
+          );
+        })
+        .join("") +
+      `</div>`
+    : `<div class="fit-empty">No modules in storage.</div>`;
+
+  return (
+    `<div class="fit-picker">` +
+    `<div class="fit-head"><span>${group.n} &middot; bay ${i + 1}</span>` +
+    `<button class="fit-close" data-a="slot" data-b="${group.k}:${i}">Close</button></div>` +
+    squares +
+    (current
+      ? `<button class="fit-unfit" data-a="unfit">Unequip ${MODULES[current].n} to storage</button>`
+      : "") +
+    `</div>`
+  );
+}
+
+/** One module group: a heading, its bays, the picker if open, and what it decides. */
+function groupHtml(group) {
+  const slots = slotsFor(group, state.profile.ship),
+    fitted = baysOf()[group.k] || [];
+  let bays = "";
+  for (let i = 0; i < slots; i++) bays += bayHtml(group, i, fitted[i]);
+  const used = fitted.filter(Boolean).length;
+  const open = state.ui.fit && state.ui.fit.g === group.k && isBayGroup(group.k);
+
+  return (
+    `<section class="mod${open ? " open" : ""}" data-group="${group.k}">` +
+    `<header><h3>${group.n}</h3><span class="mod-count">${used} / ${slots}</span></header>` +
+    `<div class="mod-bays">${bays}</div>` +
+    (open ? pickerHtml(group) : "") +
+    `<p>${group.d}</p>` +
+    `</section>`
+  );
+}
+
+// The paint card, always last in the right-hand column: it sits under the hull
+// group, which is the last module group. Its bays are buttons exactly like module
+// bays and open the same kind of picker; nothing can be stored in it yet, so the
+// picker always reads empty until paints exist.
+function paintPickerHtml(slot) {
+  return (
+    `<div class="fit-picker">` +
+    `<div class="fit-head"><span>Appearance &middot; ${slot.n}</span>` +
+    `<button class="fit-close" data-a="paint" data-b="${slot.k}">Close</button></div>` +
+    // Stored paints will be listed here as squares, the way modules are.
+    `<div class="fit-empty">No colours in storage.</div>` +
+    `</div>`
+  );
+}
+
+function appearanceHtml() {
+  const bays = APPEARANCE_SLOTS.map(a => {
+    const open = isPaintOpen(a.k);
+    return (
+      `<button class="mod-bay${open ? " on" : ""}" data-a="paint" data-b="${a.k}" ` +
+      `aria-expanded="${open}" aria-label="${a.n} colour: empty, click to choose a colour">` +
+      `<span class="bay-no">${a.n}</span><span class="bay-empty">Empty</span></button>`
+    );
+  }).join("");
+
+  const open = APPEARANCE_SLOTS.find(a => isPaintOpen(a.k));
+
+  return (
+    `<section class="mod mod-appearance${open ? " open" : ""}" data-appearance>` +
+    `<header><h3>Appearance</h3><span class="mod-count">0 / ${APPEARANCE_SLOTS.length}</span></header>` +
+    `<div class="mod-bays">${bays}</div>` +
+    (open ? paintPickerHtml(open) : "") +
+    `<p>Paint for the main plates and the trim. The standard livery is used until a colour is fitted.</p>` +
+    `</section>`
+  );
+}
+
+function outfittingHtml() {
+  const ship = SHIPS[state.profile.ship];
+  const left = leftRail(MODULE_GROUPS),
+    right = MODULE_GROUPS.slice(left.length);
+
+  return (
+    `<h2>Outfitting</h2>` +
+    `<div class="sub">Your ship flies with the basic powerplant and power cell fitted. More modules and paints arrive in a later update.</div>` +
+    `<div class="outfit">` +
+    `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
+    `<div class="outfit-view">` +
+    // ui/outfitting.js mounts the 3D ship into #shipview after this HTML is drawn.
+    `<div class="outfit-stage" id="shipview">` +
+    `<div class="outfit-title">${ship.n}<small>${ship.d}</small></div>` +
+    `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset</div>` +
+    `</div>` +
+    `</div>` +
+    `<div class="outfit-rail">${right.map(groupHtml).join("")}${appearanceHtml()}</div>` +
+    `</div>`
   );
 }
 

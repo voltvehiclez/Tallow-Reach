@@ -11,6 +11,9 @@ import { state, msg } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { FIELD_CENTER, clearTransient } from "./world.js";
 import { setShip } from "./player.js";
+import { refillPower } from "./power.js";
+import { refreshDrive, hasDrive } from "./drive.js";
+import { refreshShield } from "./shield.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
@@ -25,11 +28,16 @@ export function launch() {
     S = state.profile;
   P.docked = false;
   P.m.visible = true;
-  P.m.position.set(0, 0, 300);
+  // 200 m out is inside docking range (300), so a ship that cannot move can
+  // still turn round and dock straight away.
+  P.m.position.set(0, 0, 200);
   face(P.m, FIELD_CENTER, 1);
   P.v.set(0, 0, 0);
   P.en = 100;
   P.snap = true;
+  refillPower();      // launched fully charged
+  refreshDrive();     // the bays may have changed while docked
+  refreshShield();
 
   // Salvage contracts need their crates out in the field.
   const m = S.mission;
@@ -40,7 +48,8 @@ export function launch() {
   }
 
   emit("launched");
-  msg("Launched. Fly to the asteroid field.", 4);
+  if (hasDrive(state.drive)) msg("Launched. Fly to the asteroid field.", 4);
+  else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
 }
 
 /** Dock at the outpost: clear the field, repair shields, save. */
@@ -56,7 +65,10 @@ export function dock() {
   if (S.ships.includes(S.ship)) {
     S.hp[S.ship] = Math.max(REPAIR_MIN_HULL, P.hull / P.hullMax);
   }
-  P.sh = P.shMax;
+  refillPower();      // the outpost tops the cells up
+  refreshDrive();     // and the ship may have changed (death, hangar)
+  refreshShield();    // likewise its shields
+  P.sh = P.shMax;     // and it leaves with them full
   clearTransient();
   state.flight.missileLock = { target: null, t: 0, locked: false };
   state.flight.lock = null;
@@ -89,6 +101,7 @@ export function die() {
   S.cr -= fee;
   S.ships = S.ships.filter(id => id !== lost);
   delete S.hp[lost];
+  delete S.loadout[lost];
 
   if (S.ships.length) {
     S.ship = S.ships[0];
