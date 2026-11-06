@@ -105,6 +105,10 @@ Each `src/` folder also has its own short `README.md`.
   `reverse` 10.5, with the pure helper `cameraTrail(vf, fwdTop, revTop)`). It is the only thing
   that changes the chase distance with speed; the camera's easing must never see the ship's
   travel, or speed leaks back in.
+- **The boost tank is part of the drive too.** `data/modules.js` gives the thrusters
+  `bmax`/`buse`/`bfill` (tank size, units a second out, units a second back); `sim/drive.js`
+  carries them on `state.drive` and sizes `state.player.enMax`, and `sim/player.js` burns and
+  refills `player.en`. The HUD prints `en / enMax` beside the bar. Nothing else knows the numbers.
 - **Speed and turn have one home: the fitted thrusters.** `sim/drive.js` reads the thruster
   module and writes `state.drive = { spd, turn }`; `sim/player.js` and `render/camera.js` read
   that and nothing else. Hulls no longer carry `spd`/`turn` at all: do not add them back and do

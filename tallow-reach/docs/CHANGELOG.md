@@ -8,6 +8,29 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: The boost tank has numbers: 10 units, 2 a second out, 1 a second back
+
+- **The boost bar is now a fuel tank measured in units.** Basic thrusters hold **10 units**,
+  burn **2 a second** while boosting (about five seconds from full to the reserve) and refill at
+  **1 a second** when you let go. Mechanically nothing changed: the ignition still costs a flat
+  20 MJ, filling the tank is still free, and the boost still doubles the drive.
+- **The numbers are on the module** (`bmax: 10`, `buse: 2`, `bfill: 1` on `thruster_basic`), so a
+  future thruster can carry a bigger tank or a thirstier boost without touching code — the same
+  pattern as speed, turn and the power draw.
+- **The HUD shows it.** The Boost line, top left, now reads like `Boost 8.4 / 10` beside the bar,
+  so you can see the exact fuel as well as roughly how full it is. With no thrusters fitted it
+  reads `none`.
+- The old invisible numbers (a 0–100 meter, 28 a second out and 10 a second back) are gone;
+  `state.drive` carries the tank, `sim/drive.js` sizes it (`P.enMax`), and the outpost fills it on
+  launch.
+- Files: `data/modules.js`, `sim/drive.js` (`driveOf`, `refreshDrive`), `sim/player.js` (burn and
+  refill from the drive, small reserve before the boost will light), `sim/session.js` (full tank
+  on launch), `ui/hud.js`, `src/index.html`, `styles.css` (the Boost reading).
+- Tests: one new (the tank figures on the module and in the drive) plus the drive-shape
+  expectations → **60 passing**. No save change: still version 6. `npm run build` needed (580 KB).
+- Verified headless: launch 10.0 / 10, boosting 8 → 6 → 4 → 2 a second, boost cut out at 4.78 s
+  with 0.5 left, refill 0.5 → 5.5 over five seconds, and no boost under 0.5 units.
+
 ## 2026-11-06: Shield power made simple: a flat 2 MJ/s, and shields bleed when it is not there
 
 - **Shields now draw a straight 2 MJ/s all the time** while a shield module is fitted — full,

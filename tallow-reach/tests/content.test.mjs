@@ -23,7 +23,7 @@ import { state } from "../src/state/state.js";
 const isNum = v => typeof v === "number" && Number.isFinite(v);
 // What a ship with an empty thruster bay has: nothing to move or turn with, and
 // nothing to pay for.
-const PARKED = { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0 };
+const PARKED = { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0, bmax: 0, buse: 0, bfill: 0 };
 
 test("every ship has all the fields the game reads", () => {
   assert.ok(SHIPS[DEFAULT_SHIP], "DEFAULT_SHIP must exist in SHIPS");
@@ -319,6 +319,20 @@ test("the basic thrusters draw power while flying, and a 20 MJ gulp to light the
   assert.equal(driveDraw(d, 0, false), 0, "hands off the throttle, not boosting: no draw");
 });
 
+test("the boost tank is 10 units, burns 2 a second and refills at 1", () => {
+  const m = MODULES.thruster_basic;
+  assert.equal(m.bmax, 10, "10 units in the tank");
+  assert.equal(m.buse, 2, "2 units a second while boosting");
+  assert.equal(m.bfill, 1, "1 unit a second back");
+  assert.ok(m.bmax / m.buse > 1, "a full tank must buy more than a second of boost");
+
+  const d = driveOf(newProfile().loadout[DEFAULT_SHIP]);
+  assert.equal(d.bmax, 10, "the drive carries the tank size");
+  assert.equal(d.buse, 2);
+  assert.equal(d.bfill, 1);
+  assert.equal(PARKED.bmax, 0, "no thrusters, no tank");
+});
+
 test("any throttle setting off zero runs the thrusters, and the boost adds its share", () => {
   const d = { spd: 150, turn: 1.2, draw: 2, boost: 1, ignite: 20 };
   for (const thr of [1, 0.99, 0.5, -0.01, -0.3, -1]) {
@@ -343,7 +357,16 @@ test("every hull flies exactly like the old Wasp on the basic thrusters", () => 
   const p = newProfile();
   // The basic thrusters carry the figures the old Wasp had, so the feel is kept.
   const t = MODULES.thruster_basic;
-  const reference = { spd: t.spd, turn: t.turn, draw: t.draw, boost: t.boost, ignite: t.ign };
+  const reference = {
+    spd: t.spd,
+    turn: t.turn,
+    draw: t.draw,
+    boost: t.boost,
+    ignite: t.ign,
+    bmax: t.bmax,
+    buse: t.buse,
+    bfill: t.bfill,
+  };
   for (const id of Object.keys(SHIPS)) {
     assert.deepEqual(driveOf(p.loadout[id]), reference, `${id} should fly like the Wasp today`);
   }

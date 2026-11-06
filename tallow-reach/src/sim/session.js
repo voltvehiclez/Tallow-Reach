@@ -33,11 +33,11 @@ export function launch() {
   P.m.position.set(0, 0, 200);
   face(P.m, FIELD_CENTER, 1);
   P.v.set(0, 0, 0);
-  P.en = 100;
   P.snap = true;
   refillPower();      // launched fully charged
   refreshDrive();     // the bays may have changed while docked
   refreshShield();
+  P.en = state.drive.bmax;   // launched with a full boost tank
 
   // Salvage contracts need their crates out in the field.
   const m = S.mission;

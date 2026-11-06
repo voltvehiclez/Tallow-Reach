@@ -44,6 +44,9 @@ export const state = {
   // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).
   //   spd    top speed in m/s       0 / 0 with an empty bay: the ship cannot move
   //   turn   turn rate multiplier (scaled again by FLIGHT.turn)
+  //   bmax   boost fuel units the tank holds (player.enMax; sim/drive.js sizes it)
+  //   buse   units a second burned while boosting
+  //   bfill  units a second the tank refills at
   drive: { spd: 0, turn: 0 },
 
   // The ship's shields, rebuilt from the fitted shield module (see sim/shield.js).

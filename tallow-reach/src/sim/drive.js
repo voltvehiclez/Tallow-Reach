@@ -43,13 +43,16 @@ function thrusterIn(loadout) {
  */
 export function driveOf(loadout) {
   const t = thrusterIn(loadout);
-  if (!t) return { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0 };
+  if (!t) return { spd: 0, turn: 0, draw: 0, boost: 0, ignite: 0, bmax: 0, buse: 0, bfill: 0 };
   return {
     spd: t.spd,
     turn: t.turn,
     draw: t.draw || 0,     // MJ/s while the throttle is off centre
     boost: t.boost || 0,   // extra MJ/s while the boost is burning
     ignite: t.ign || 0,    // MJ spent in one go when the boost lights
+    bmax: t.bmax || 0,     // boost fuel units the tank holds
+    buse: t.buse || 0,     // units a second burned while boosting
+    bfill: t.bfill || 0,   // units a second the tank refills at
   };
 }
 
@@ -75,4 +78,10 @@ export function driveDraw(drive, throttle, boosting) {
 export function refreshDrive() {
   const S = state.profile;
   Object.assign(state.drive, driveOf((S.loadout || {})[S.ship]));
+  // The boost tank belongs to the drive, so a new thruster means a new tank size.
+  // Docked, the outpost fills it; in flight the fuel already aboard is kept.
+  const P = state.player;
+  if (!P) return;
+  P.enMax = state.drive.bmax;
+  P.en = P.docked ? P.enMax : Math.min(P.en, P.enMax);
 }

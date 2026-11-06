@@ -39,7 +39,8 @@ export function createPlayer() {
     sh: 0,
     hullMax: 100,
     shMax: 0,          // set from the fitted shield module (sim/shield.js)
-    en: 100,           // boost energy
+    en: 0,             // boost fuel in the tank
+    enMax: 0,          // tank size, set from the fitted thrusters (sim/drive.js)
     bs: 0,             // boost ramp, 0..1
     boost: false,
     last: 0,           // time of last hit (shields recharge after a pause)
@@ -127,7 +128,8 @@ export function flight(dt) {
   // The boost: lighting it is the hungry moment. It costs one big slug of stored
   // energy (20 MJ on the basic thrusters) once the spool-up has finished and the
   // shake fires, and the cells have to hold that much for it to light at all.
-  const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
+  // A tank with only a splash left cannot light the boost: keep a little in reserve.
+  const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > drv.bmax * 0.05 && P.thr > 0;
   const canBoost = wantBoost && supply && state.power.stored >= (drv.ignite || 0);
 
   const wasBoosting = P.boost;
@@ -139,8 +141,10 @@ export function flight(dt) {
     // The ignition: one flat gulp out of the cells, not a trickle.
     state.power.stored = Math.max(0, state.power.stored - (drv.ignite || 0));
   }
-  // The meter fills by itself whenever the boost is not burning.
-  P.en = clamp(P.en + (canBoost ? -28 : 10) * dt, 0, 100);
+  // The tank fills by itself whenever the boost is not burning. Both rates come
+  // from the fitted thrusters, so a bigger tank or a thirstier boost is a change in
+  // data/modules.js and nothing else.
+  P.en = clamp(P.en + (canBoost ? -drv.buse : drv.bfill) * dt, 0, P.enMax);
 
   // With no power left there is nothing to push with.
   const spd = supply ? drv.spd : 0;

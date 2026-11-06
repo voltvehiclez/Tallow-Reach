@@ -44,6 +44,16 @@ canvas {
   top: 20px;
   width: 210px;
 }
+/* A label with its reading on the right, like the power block's "100 / 100 MJ". */
+#tl .tl-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+#tl #boost-val {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
 #tr {
   right: 20px;
   top: 20px;

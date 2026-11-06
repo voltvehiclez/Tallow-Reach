@@ -95,20 +95,24 @@ Four cards on the left, four on the right. Counts and bays:
    starting a car.
 4. While the boost is actually burning the readout says **Using 5 of 10 MJ/s** (3 for the drive,
    2 for the shields); let go of Shift and it drops back to **4 MJ/s**.
-5. **Filling the boost meter is free.** Boost once, then stop and watch the boost bar refill
-   with the power readout at `Using 2 of 10 MJ/s` (shields only) and the cell bar untouched.
-   Nothing is spent on refilling the tank.
-6. **The boost needs 20 MJ in the cells to light.** Dock, unequip the powerplant (keep the
+5. **Watch the Boost line**, top left under Shield and Hull. It reads like **`Boost 8.4 / 10`**
+   next to the bar: 10 units is a full tank. Hold **Shift** and the number falls **2 a second**
+   (about five seconds of boost from full); let go and it climbs back **1 a second**. The bar
+   fills as the number does, and the number is the exact fuel left.
+6. **Filling the boost tank is free.** Boost once, then stop and watch it refill with the power
+   readout at `Using 2 of 10 MJ/s` (shields only) and the cell bar untouched. Nothing is spent on
+   refilling the tank.
+7. **The boost needs 20 MJ in the cells to light.** Dock, unequip the powerplant (keep the
    cell), launch, fly until the cell bar is below a fifth, then hold **Shift**: nothing happens
    — no shake, no boost — until the cells are back above 20 MJ.
-7. The cell stays near full with the basic fit, because the plant makes 10 MJ/s and the ship only
+8. The cell stays near full with the basic fit, because the plant makes 10 MJ/s and the ship only
    asks for 2 to 5. That is correct: the cell is a reserve.
-8. **Run it dry**: with the powerplant still out, hold **W**. The bar falls by about 4 MJ a
+9. **Run it dry**: with the powerplant still out, hold **W**. The bar falls by about 4 MJ a
    second; when it reaches **0 / 100 MJ** the ship stops accelerating and the speed winds down on
    its own (about 50 m/s → 5 m/s within four seconds). The shields start to **bleed away** at
    1 point a second, and the readout keeps saying `Using 4 of 0 MJ/s`: it is asking for power it
    has not got. If you stay out long enough for them to reach 0, they stay at 0.
-9. Dock and fit the powerplant back: full thrust and shield recharge return. Narrow the window
+10. Dock and fit the powerplant back: full thrust and shield recharge return. Narrow the window
    below about 900 px and the power block lifts above the controls list instead of printing over
    it.
 

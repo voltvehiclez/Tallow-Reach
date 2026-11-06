@@ -5,7 +5,9 @@
 > powerplant (10 MJ/s) and power cell (100 MJ) are fitted to every hull, saved in
 > `profile.loadout`, and shown bottom-centre in flight. The basic thrusters draw 2 MJ/s while
 > the throttle is off centre, +1 MJ/s while the boost burns, and a flat 20 MJ when the boost
-> lights (refilling the boost meter is free). A ship with no power cannot push (the speed winds
+> lights (refilling the boost tank is free). The tank holds 10 units, burns 2 a second while
+> boosting and refills at 1 a second, all on the thruster module, and the HUD prints
+> `Boost 8.4 / 10` beside the bar. A ship with no power cannot push (the speed winds
 > down), and the boost will not light unless the cells hold 20 MJ.
 > Modules can be unequipped into a store (`profile.modules`) and fitted back by clicking a
 > bay. Basic thrusters exist and every hull flies like the Wasp on them (`state.drive`, from
@@ -16,7 +18,7 @@
 > of the same power budget as the thrusters. If the ship cannot pay that, the shields discharge at
 > 1 point a second and stay at 0 until the power is back. Paint bays are clickable but no
 > colours exist yet. Save is at version 6.
-> `npm test` = 59, build = 579 KB.
+> `npm test` = 60, build = 580 KB.
 > See the top of `CHANGELOG.md`.
 
 Read this first, then `tallow-reach/docs/ARCHITECTURE.md` and the top two entries of

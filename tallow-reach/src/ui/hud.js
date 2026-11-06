@@ -28,6 +28,7 @@ export function setupHud() {
     shield: $("b1"),
     hull: $("b2"),
     boost: $("b3"),
+    boostVal: $("boost-val"),
     topRight: $("tr"),
     bottomCenter: $("bc"),
     powerBar: $("pwbar"),
@@ -73,7 +74,9 @@ export function updateHud(dt) {
 
   el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
   el.hull.style.width = Math.max(0, (P.hull / P.hullMax) * 100) + "%";
-  el.boost.style.width = P.en + "%";
+  el.boost.style.width = (P.enMax > 0 ? Math.max(0, Math.min(1, P.en / P.enMax)) : 0) * 100 + "%";
+  // Numbers beside the bar, so the tank can be read exactly as well as roughly.
+  el.boostVal.textContent = P.enMax > 0 ? `${P.en.toFixed(1)} / ${P.enMax}` : "none";
 
   el.topRight.innerHTML =
     `${sectorAt(state.sector).n}<br>` +

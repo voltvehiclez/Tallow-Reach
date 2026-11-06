@@ -11,6 +11,9 @@
 //   draw    thruster: MJ/s used while the throttle is off centre (any amount)
 //   boost   thruster: extra MJ/s used while the boost is actually burning
 //   ign     thruster: MJ spent once, each time the boost lights
+//   bmax    thruster: boost fuel units the tank holds
+//   buse    thruster: boost fuel units burned per second while boosting
+//   bfill   thruster: boost fuel units the tank regains per second
 //   sh      shield: points it holds when full
 //   regen   shield: points per second once it starts recharging
 //   delay   shield: seconds without a hit before recharging starts again
@@ -32,6 +35,9 @@ export const MODULES = {
   // 2 MJ/s whenever the throttle is off centre, whatever the setting, and 1 MJ/s
   // more while the boost burns. Lighting the boost is the hungry bit: 20 MJ in one
   // go, like a car ignition. Filling the boost meter again afterwards is free.
+  //
+  // The boost tank holds 10 units: boosting burns 2 a second (5 seconds of boost
+  // from full) and the tank refills at 1 a second when you are not boosting.
   thruster_basic: {
     g: "thruster",
     n: "Basic thrusters",
@@ -41,6 +47,9 @@ export const MODULES = {
     draw: 2,
     boost: 1,
     ign: 20,
+    bmax: 10,
+    buse: 2,
+    bfill: 1,
   },
   // 10 points, 1 a second once it starts, and it will not start until the ship
   // has gone 4 seconds without being hit. Keeping the shields up costs a flat
