@@ -4,7 +4,7 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 
 | File | What it does |
 |---|---|
-| `player.js` | Ship setup (`setShip`), flight model, shields and hull, `hurt()`. |
+| `player.js` | Ship setup (`setShip`), flight model, shields and hull, `hurt()`. A ship with no drive gets no thrust and no turn, and pressing a control warns "Equip thrusters to move". |
 | `power.js` | Ships' power budget: `powerOf` a loadout, `refreshPower`/`refillPower` after a fit change, `updatePower` each frame. Writes `state.power` for the HUD. |
 | `drive.js` | The ship's drive: `driveOf` a loadout, `refreshDrive` after a fit, ship change or undock, `hasDrive` to ask whether the ship can move at all. Writes `state.drive = { spd, turn }`, which the flight model and the chase camera read. No thruster fitted gives 0 / 0: no thrust, turn or boost. |
 | `fitting.js` | Moving modules between bays and storage: `fitModule`, `unequip`, `storedFor`, `fittedAt`. The only writer of `profile.loadout`/`profile.modules`; refreshes power after every change. |

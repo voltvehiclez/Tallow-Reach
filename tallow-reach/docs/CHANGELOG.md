@@ -8,6 +8,21 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: "Equip thrusters to move" warns you when a dead ship ignores the controls
+
+- Undocking with no thrusters and then pressing **anything that would move the ship** now shows
+  the warning **"Equip thrusters to move"** in the centre of the screen. It covers W/S (thrust),
+  A/D (strafe), Space/C (lift), Q/E (roll), Shift (boost) and the mouse, and it repeats every
+  three seconds while a control is still held, so it reads as a reminder instead of flickering.
+- Nothing else changed: the ship still cannot move, turn or boost, the throttle stays at 0, the
+  launch message and the standing hint line ("No thrusters fitted: press G to dock and fit one.")
+  still explain how to get back to the outpost.
+- The warning lives in `sim/player.js` (`tryingToMove()`, `NO_DRIVE_WARN`, `state.player.noDriveT`)
+  and is shown with the ordinary centre-screen message, so it never stacks up.
+- Tests: a guard test keeps the exact wording and the "only when a control is pressed and there
+  is no drive" rule in place → **43 passing**. No save change: still version 5.
+  `npm run build` needed (578 KB).
+
 ## 2026-11-06: No thrusters means no movement, no turning and no boost
 
 - **An empty thruster bay is now a dead ship.** `driveOf()` returns `{ spd: 0, turn: 0 }`

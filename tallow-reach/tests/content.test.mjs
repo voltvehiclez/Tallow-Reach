@@ -270,6 +270,17 @@ test("a new game starts with the basic plant, cell and thrusters", () => {
   assert.deepEqual(p.loadout.wasp.primary, [null, null], "weapon bays are delivered empty");
 });
 
+test("a ship with no thrusters warns the player when they try to move", () => {
+  // The warning is player-facing wording, so guard it: sim/player.js is its only home.
+  const src = readFileSync(new URL("../src/sim/player.js", import.meta.url), "utf8");
+  assert.match(src, /msg\("Equip thrusters to move"/, "the warning must say exactly that");
+  assert.match(
+    src,
+    /if \(!W && !powered && P\.noDriveT === 0 && tryingToMove\(stick\)\)/,
+    "the warning fires when a control is pressed and there is no drive, and not on a warp"
+  );
+});
+
 test("every hull flies exactly like the old Wasp on the basic thrusters", () => {
   const p = newProfile();
   // The basic thrusters carry the figures the old Wasp had, so the feel is kept.

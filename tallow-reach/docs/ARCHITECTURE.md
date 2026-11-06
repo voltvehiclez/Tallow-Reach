@@ -111,8 +111,10 @@ Each `src/` folder also has its own short `README.md`.
 - **No thruster fitted means a dead ship.** `driveOf()` returns `{ spd: 0, turn: 0 }` when the
   thruster bay is empty (there is no hull fallback, on purpose: the bays are what make the ship
   fly). `flight()` then holds the throttle at 0 and refuses boost as well as thrust, so holding
-  W, Shift or the mouse does nothing at all; the HUD prints "No thrusters fitted: press G to
-  dock and fit one." and `launch()` says the same in the centre message. Test it with any hull
+  W, Shift or the mouse does nothing at all, and pressing any of them raises the centre-screen
+  warning "Equip thrusters to move" (`tryingToMove()` in `sim/player.js`, repeat-limited by
+  `state.player.noDriveT`). The HUD prints "No thrusters fitted: press G to dock and fit one."
+  and `launch()` says the same in the centre message. Test it with any hull
   plus an empty thruster bay (`hasDrive(state.drive)` is false). Docking range is 300 m and
   launch puts the ship at 200 m, so an immobile ship can always dock straight back.
 - **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the

@@ -70,13 +70,16 @@ Four cards on the left, four on the right. Counts and bays:
    The ship **cannot move at all**: hold **W**, **S**, **A**, **D**, **Space**, **C**, **Shift**
    or move the mouse and nothing happens. Bottom centre stays `Throttle 0%  0 m/s`, the boost
    bar never drains, and the engines do not glow.
-5. The centre of the screen says **No thrusters fitted: the ship cannot move. Press G to dock
-   and fit one.** The small hint line keeps repeating **No thrusters fitted: press G to dock and
-   fit one.**
-6. Press **G** right away: undocking leaves you only 200 m out, inside docking range, so docking
+5. Press **W** (or any of those controls): a warning appears in the middle of the screen saying
+   **Equip thrusters to move**. Keep holding and it comes back every few seconds; let go and it
+   clears. The mouse does it too — push it into a corner.
+6. Just after undocking the centre of the screen also says **No thrusters fitted: the ship cannot
+   move. Press G to dock and fit one.**, and the small hint line keeps repeating **No thrusters
+   fitted: press G to dock and fit one.**
+7. Press **G** right away: undocking leaves you only 200 m out, inside docking range, so docking
    works and you can fit the thrusters back in Outfitting.
-7. Fit them back and launch: **150 m/s** and normal turning return. Reload the page and check
-   the fit stuck.
+8. Fit them back and launch: **150 m/s** and normal turning return. No warning appears. Reload
+   the page and check the fit stuck.
 
 ## 6. Power in flight
 

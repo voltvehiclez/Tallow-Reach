@@ -9,9 +9,24 @@ import { keys, pointer } from "../core/input.js";
 import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { buildPlayerShip } from "../render/models.js";
-import { state } from "../state/state.js";
+import { state, msg } from "../state/state.js";
 import { hasDrive } from "./drive.js";
 import { STATION_KEEPOUT } from "./world.js";
+
+/**
+ * How long the "Equip thrusters to move" warning stays on screen, and the gap
+ * before it repeats while the player keeps a control held.
+ */
+const NO_DRIVE_WARN = 2.5;
+
+/** Is the player asking the ship to move, strafe, lift or turn? */
+function tryingToMove(stick) {
+  return !!(
+    keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.Space || keys.KeyC ||
+    keys.ShiftLeft || keys.ShiftRight || keys.KeyQ || keys.KeyE ||
+    Math.abs(stick.x) > 0.03 || Math.abs(stick.y) > 0.03
+  );
+}
 
 /** Create the player record. The model is attached by setShip(). */
 export function createPlayer() {
@@ -31,6 +46,7 @@ export function createPlayer() {
     snap: false,       // snap the camera to the ship on the next frame
     docked: true,
     shake: 0,
+    noDriveT: 0,       // seconds until the "Equip thrusters to move" warning may repeat
   };
   return state.player;
 }
@@ -72,6 +88,15 @@ export function flight(dt) {
   const drv = state.drive;
   const powered = hasDrive(drv);         // no thruster fitted: a dead ship
   const turn = drv.turn * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
+
+  // A dead ship cannot answer the controls, so warn the moment the player asks
+  // it to move. The warning repeats while a control is still held, but slowly,
+  // so it reads as a reminder rather than a flicker.
+  P.noDriveT = Math.max(0, P.noDriveT - dt);
+  if (!W && !powered && P.noDriveT === 0 && tryingToMove(stick)) {
+    msg("Equip thrusters to move", NO_DRIVE_WARN);
+    P.noDriveT = NO_DRIVE_WARN + 0.5;
+  }
   m.rotateY(-dz(stick.x * ease) * 1.6 * turn * dt);
   m.rotateX(-dz(stick.y * ease) * 1.2 * turn * dt);
   m.rotateZ(stick.roll * ease * 1.5 * turn * dt);
