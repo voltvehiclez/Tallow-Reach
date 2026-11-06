@@ -5,6 +5,7 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 | File | What it does |
 |---|---|
 | `player.js` | Ship setup (`setShip`), flight model, shields and hull, `hurt()`. |
+| `power.js` | Ships' power budget: `powerOf` a loadout, `refreshPower`/`refillPower` after a fit change, `updatePower` each frame. Writes `state.power` for the HUD. |
 | `weapons.js` | Cannons, mining beam, missiles and lock-on. |
 | `combat.js` | Bullets, hostile kills and loot drops, crates and pickups. |
 | `ai.js` | Pirate raiders: spawning, movement, shooting. |

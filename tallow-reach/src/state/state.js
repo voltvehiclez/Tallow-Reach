@@ -32,6 +32,13 @@ export const state = {
     coneRadius: 0,     // px radius of the missile lock ring, 0 when hidden
   },
 
+  // Ship power, rebuilt from the fitted modules (see sim/power.js).
+  //   gen    MJ/s the powerplants make
+  //   cap    MJ the cells hold
+  //   stored MJ in the cells right now
+  //   draw   MJ/s the ship is using
+  power: { gen: 0, cap: 0, stored: 0, draw: 0 },
+
   freeCam: { on: false, yaw: 0, pitch: 0.25, dist: 14 },
 
   ui: {

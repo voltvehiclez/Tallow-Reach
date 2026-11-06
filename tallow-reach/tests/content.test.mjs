@@ -10,9 +10,12 @@ import { PRIMARY, MISSILE, SHOP_WEAPONS } from "../src/data/weapons.js";
 import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
-import { newProfile, sanitizeProfile, MISSION_TYPES } from "../src/state/profile.js";
+import { newProfile, sanitizeProfile, SAVE_VERSION, MISSION_TYPES } from "../src/state/profile.js";
 import { CAMERA, cameraTrail } from "../src/data/camera.js";
-import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
+import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
+import { MODULES, STOCK_FIT } from "../src/data/modules.js";
+import { powerOf, updatePower } from "../src/sim/power.js";
+import { state } from "../src/state/state.js";
 
 const isNum = v => typeof v === "number" && Number.isFinite(v);
 
@@ -197,31 +200,107 @@ test("the camera trail is bounded: idle, flat out and full reverse land on fixed
   assert.ok(cameraTrail(210, 300, 45) < CAMERA.fast, "at the same speed a faster hull trails less");
 });
 
-test("the outfitting screen has a complete module group for every bay it draws", () => {
+test("every module group is complete, and every hull has a bay count for it", () => {
   assert.ok(MODULE_GROUPS.length > 0, "MODULE_GROUPS needs at least one group");
 
-  const seen = new Set();
+  const groups = new Set();
   for (const g of MODULE_GROUPS) {
     assert.equal(typeof g.k, "string", "every group needs k (id)");
-    assert.ok(!seen.has(g.k), `duplicate module group id: ${g.k}`);
-    seen.add(g.k);
+    assert.ok(!groups.has(g.k), `duplicate module group id: ${g.k}`);
+    groups.add(g.k);
     assert.equal(typeof g.n, "string", `${g.k}: n (name)`);
     assert.equal(typeof g.d, "string", `${g.k}: d (description)`);
-    assert.ok(
-      Number.isInteger(g.slots) && g.slots >= 1,
-      `${g.k}: slots must be a whole number of bays, at least one`
-    );
-    // The screen reads counts through slotsFor, so a per-hull override has one home.
-    assert.equal(slotsFor(g, "wasp"), g.slots, `${g.k}: slotsFor must return the group's slots`);
   }
 
-  // The layout this screen was built for: one bay each, two for primary weapons.
-  const byId = Object.fromEntries(MODULE_GROUPS.map(g => [g.k, g]));
-  assert.equal(byId.primary.slots, 2, "primary weapons start with two bays");
-  for (const k of ["power", "cell", "thruster", "shield", "secondary", "hull"]) {
-    assert.ok(byId[k], `${k} is one of the module groups the screen draws`);
-    assert.equal(byId[k].slots, 1, `${k} starts with one bay`);
+  // Every hull lays out every group once, through slotsFor.
+  for (const id of Object.keys(SHIPS)) {
+    const layout = layoutFor(id);
+    for (const g of MODULE_GROUPS) {
+      assert.ok(
+        Number.isInteger(layout[g.k]) && layout[g.k] >= 1,
+        `${id}: ${g.k} needs a whole number of bays, at least one`
+      );
+      assert.equal(slotsFor(g, id), layout[g.k], `${id}: slotsFor must read the hull's layout`);
+    }
+    for (const k of Object.keys(layout)) {
+      assert.ok(groups.has(k), `${id}: layout mentions ${k}, which is not a module group`);
+    }
   }
+
+  // The layout the screen was built for: the Wasp's, copied to every hull today.
+  assert.deepEqual(
+    layoutFor("wasp"),
+    { power: 1, cell: 1, thruster: 1, shield: 1, primary: 2, secondary: 1, hull: 1 },
+    "the Wasp's layout"
+  );
+  for (const id of Object.keys(SHIP_LAYOUTS)) {
+    assert.deepEqual(layoutFor(id), layoutFor("wasp"), `${id} should start with the Wasp's layout`);
+  }
+});
+
+test("every module fits its own group and carries that group's stat", () => {
+  const groupIds = new Set(MODULE_GROUPS.map(g => g.k));
+  for (const [id, m] of Object.entries(MODULES)) {
+    assert.ok(groupIds.has(m.g), `${id}: g must name a module group, not ${m.g}`);
+    assert.equal(typeof m.n, "string", `${id}: n (name)`);
+    assert.equal(typeof m.d, "string", `${id}: d (description)`);
+    if (m.g === "power") assert.ok(isNum(m.mjps) && m.mjps > 0, `${id}: a powerplant makes MJ/s`);
+    if (m.g === "cell") assert.ok(isNum(m.mj) && m.mj > 0, `${id}: a power cell holds MJ`);
+  }
+  for (const [g, list] of Object.entries(STOCK_FIT)) {
+    for (const id of list) {
+      assert.ok(MODULES[id], `${g}: stock module ${id} must exist`);
+      assert.equal(MODULES[id].g, g, `${id} can only be fitted in a ${MODULES[id].g} bay`);
+    }
+  }
+});
+
+test("a new game starts with the basic plant and cell: 10 MJ/s into 100 MJ", () => {
+  const p = newProfile();
+  assert.deepEqual(p.loadout.wasp.power, ["power_basic"], "the basic powerplant is fitted");
+  assert.deepEqual(p.loadout.wasp.cell, ["cell_basic"], "the basic power cell is fitted");
+  assert.deepEqual(powerOf(p.loadout.wasp), { gen: 10, cap: 100 }, "10 MJ/s and 100 MJ");
+  assert.deepEqual(p.loadout.wasp.primary, [null, null], "weapon bays are delivered empty");
+});
+
+test("an old save gets the stock fit, and bad modules are dropped", () => {
+  const old = sanitizeProfile({ v: 2, ships: ["wasp"], ship: "wasp", cr: 50 });
+  assert.equal(old.v, SAVE_VERSION, "old saves are stamped with the new version");
+  assert.deepEqual(old.loadout.wasp.power, ["power_basic"], "an old save is fitted with the basic plant");
+  assert.deepEqual(powerOf(old.loadout.wasp), { gen: 10, cap: 100 });
+
+  const wrong = sanitizeProfile({
+    ships: ["wasp"],
+    loadout: { wasp: { power: ["cell_basic", "power_basic"], cell: ["cell_basic"] } },
+  });
+  assert.deepEqual(wrong.loadout.wasp.power, [null], "a cell cannot sit in a powerplant bay, and the extra bay is dropped");
+
+  const emptied = sanitizeProfile({
+    ships: ["wasp"],
+    loadout: { wasp: { power: [null], cell: ["cell_basic"] } },
+  });
+  assert.deepEqual(emptied.loadout.wasp.power, [null], "a bay the player emptied stays empty");
+});
+
+test("the cells charge at the plants' rate, never overflow and never go negative", () => {
+  const p = state.power;
+  p.gen = 10;
+  p.cap = 100;
+  p.draw = 0;
+  p.stored = 0;
+
+  updatePower(1);
+  assert.equal(p.stored, 10, "one second at 10 MJ/s puts 10 MJ in the cells");
+  for (let i = 0; i < 20; i++) updatePower(1);
+  assert.equal(p.stored, 100, "the cells stop at their capacity");
+
+  p.draw = 25;   // using more than the plant makes
+  updatePower(1);
+  assert.equal(p.stored, 85, "the cells make up the difference");
+
+  p.draw = 1000;
+  updatePower(1);
+  assert.equal(p.stored, 0, "the cells empty, they do not go negative");
 });
 
 test("the appearance card has its two paint bays, primary first", () => {

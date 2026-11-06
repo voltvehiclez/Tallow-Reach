@@ -8,6 +8,8 @@ import { ITEM, KEYS, emptyCargo } from "../data/items.js";
 import { BASE_MODULES, STORAGE_PER_LEVEL, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
 import { setShip } from "./player.js";
+import { stockFor } from "../state/profile.js";
+import { refillPower } from "./power.js";
 
 const S = () => state.profile;
 
@@ -83,6 +85,7 @@ export function buyShip(id) {
   p.cr -= price;
   p.ships.push(id);
   delete p.hp[id];
+  p.loadout[id] = stockFor(id);   // comes with the stock modules fitted
 }
 
 export function selectShip(id) {
@@ -90,6 +93,7 @@ export function selectShip(id) {
   if (holdLoad() > SHIPS[id].cargo) return "Store your cargo first. It will not fit in that ship.";
   p.ship = id;
   setShip(id);
+  refillPower();       // docked: the new hull's cells are full
   return undefined;
 }
 

@@ -8,6 +8,7 @@ import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave }
 import { newProfile, sanitizeProfile } from "../state/profile.js";
 import { setShip } from "../sim/player.js";
 import { launch } from "../sim/session.js";
+import { refillPower } from "../sim/power.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import { introHtml, outpostHtml } from "./screens.js";
@@ -180,6 +181,7 @@ const ACTIONS = {
 /** Common work after the whole profile is replaced (load, import, reset). */
 function afterProfileChange() {
   setShip(state.profile.ship);
+  refillPower();
   contracts.rerollBoard();
   state.flight.lock = null;
   state.flight.missileLock = { target: null, t: 0, locked: false };

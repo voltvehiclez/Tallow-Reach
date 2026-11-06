@@ -57,6 +57,42 @@ canvas {
   text-align: center;
 }
 
+/* Ship power, bottom centre, above the throttle line (#bc). */
+#pw {
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  width: 236px;
+  text-align: center;
+}
+#pw .pw-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+#pw #pw-val {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+#pw .bar {
+  height: 5px;
+  margin: 4px 0 3px;
+}
+#pw #pw-flow {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--dim);
+}
+/* Narrow windows: the controls list in the bottom-left is several lines tall,
+   so lift the power block above it rather than printing over it. */
+@media (max-width: 900px) {
+  #pw {
+    bottom: 132px;
+  }
+}
+
 #hint {
   left: 20px;
   bottom: 20px;
@@ -332,6 +368,20 @@ button:focus-visible {
 .bay-empty {
   font-size: 13px;
   color: #57656e;
+}
+/* A bay with a module in it: solid edge, the part's name, its headline number. */
+.mod-bay.fitted {
+  border-style: solid;
+  border-color: #3c4a54;
+  background: linear-gradient(180deg, rgba(127, 183, 196, .10), rgba(127, 183, 196, .02));
+}
+.bay-val {
+  font-size: 13px;
+  color: var(--ink);
+}
+.bay-stat {
+  font-size: 11px;
+  color: var(--ice);
 }
 .mod p {
   margin: 8px 0 0;

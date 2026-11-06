@@ -23,6 +23,7 @@ import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { updateOutfitting } from "./ui/outfitting.js";
+import { refillPower, updatePower } from "./sim/power.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 
@@ -33,6 +34,7 @@ state.profile = loadAutosave() || newProfile();
 createPlayer();
 setShip(state.profile.ship);
 populateField();
+refillPower();   // start docked, so the cells are full
 
 setupHud();
 setupMenu();
@@ -110,6 +112,7 @@ function frame(now) {
 
   if (!P.docked) {
     flight(dt);
+    updatePower(dt);      // cells charge from the fitted powerplants and cells
     updateWarp(dt);       // may change sector mid-frame; the rest of the frame uses the new one
     updatePrimary(dt);
     updateMissiles(dt);

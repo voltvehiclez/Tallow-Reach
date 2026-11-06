@@ -237,8 +237,53 @@ in the right-hand column, under the hull group. Add an entry for another colour 
 When paints arrive they will need a table of paints, a save field, and a `fitted()` count
 in `ui/screens.js`, exactly like modules.
 
-**Fitting a module is a separate job.** Today every bay renders `Empty` and the count is
-`0 / slots`. When modules arrive they need: a table of modules (same `k` group ids), a
-slot in the save (`profile.shipModules` or similar, with `SAVE_VERSION` bumped and a
-migration), a count in `fitted()` in `ui/screens.js`, and a click action in
-`ui/menu.js` that fills a bay. Do it one group at a time, starting with powerplant.
+**Bay counts are per hull.** `SHIP_LAYOUTS` in the same file gives each hull its own
+numbers; every hull is a copy of the Wasp's today. `layoutFor(id)` and `slotsFor(g, id)`
+are the only readers, and a test fails if a hull is missing a group.
+
+**Fitted modules** are saved in `profile.loadout[shipId][groupId]`, one entry per bay
+(`null` = empty), written by `src/state/profile.js`. The power parts are fitted already;
+see recipe 16 for adding another module, and recipe 17 for letting the player swap one.
+
+## 16. A new module (data + the stat it feeds)
+
+Modules live in `src/data/modules.js`:
+
+```js
+power_basic: { g: "power", n: "Basic powerplant", d: "Standard reactor.", mjps: 10 },
+cell_basic:  { g: "cell",  n: "Basic power cell",  d: "Standard storage bank.", mj: 100 },
+```
+
+`g` is the module group it fits (`data/outfitting.js`), and the rest of the fields are the
+stat that group uses: `mjps` for a powerplant, `mj` for a power cell. `npm test` checks the
+group exists, the name and description are there, and the stat is a positive number.
+
+1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
+   Outfitting screen already names any module found in a bay.
+2. A hull is delivered with `STOCK_FIT` (`data/modules.js`): group id -> module ids in bay
+   order. Put the module there to make it standard issue, or in a Hangar purchase later.
+3. Make the stat do something. Power is done: `sim/power.js` sums `mjps` and `mj` into
+   `state.power`, and `ui/hud.js` draws it. A new kind of stat needs its own system the same
+   way: read the fitted modules, keep the result in `state.*`, and let the UI read that.
+4. If the module changes a number the ship already has (top speed, hull, shield), do not
+   write it into `SHIPS`; compute the effective value where it is used so removing the
+   module puts the ship back the way it was.
+
+## 17. Letting the player buy, store and fit a module (new system)
+
+The save already has the shape for it: `profile.loadout[shipId][groupId]` is an array with
+one entry per bay, `null` where empty, and `sanitizeProfile` accepts any module id whose
+group matches the bay. What is missing is the shop and the fitting action.
+
+1. **Where the parts live.** A stock list on the profile, the way weapons work today
+   (`profile.wp`), or a station store like `profile.store` for cargo. Keep the ids from
+   `MODULES` so nothing has to be mapped.
+2. **Fit / remove.** A function in `sim/economy.js` (it owns purchases) that writes the bay
+   and then calls `refreshPower()` from `sim/power.js`, or the equivalent for the group. That
+   refresh is what makes the new numbers take effect; forgetting it is the usual bug.
+3. **The panel.** Bays are `div.mod-bay` with `data-slot` and `data-group`; give the fitted
+   ones a `data-a` action in `ui/screens.js` and handle it in `ui/menu.js` `ACTIONS`. Empty
+   bays get a picker of the modules for that group.
+4. **Save rules** apply: a default in `newProfile`, validation in `sanitizeProfile` (already
+   there), a `SAVE_VERSION` bump only if the shape changes, and a test.
+5. **Do it one group at a time**, starting with power, so each step is playable.

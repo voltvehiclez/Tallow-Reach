@@ -6,6 +6,7 @@ import { ITEM, KEYS } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
+import { MODULES } from "../data/modules.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, valueOf, repairCost } from "../sim/economy.js";
@@ -123,27 +124,44 @@ function hangarHtml() {
   );
 }
 
-// Nothing can be fitted yet, so every bay is empty. When modules exist, this is
-// where the count comes from: read the ship's fitted modules out of the profile
-// and count them per group.
-const fitted = () => 0;
+// The bays fitted to the ship being flown, group id -> module ids per bay.
+const baysOf = () => (state.profile.loadout || {})[state.profile.ship] || {};
+
+/** The stat line on a fitted module's bay: "10 MJ/s", "100 MJ", or nothing. */
+function moduleStat(m) {
+  if (m.mjps) return `${m.mjps} MJ/s`;
+  if (m.mj) return `${m.mj} MJ`;
+  return "";
+}
 
 /** How many groups sit in the left column; the rest go to the right. */
 const leftRail = list => list.slice(0, Math.ceil(list.length / 2));
 
-function bayHtml(group, i) {
-  return `<div class="mod-bay" data-slot="${i}" aria-label="${group.n} bay ${i + 1}: empty">` +
-    `<span class="bay-no">Bay ${i + 1}</span><span class="bay-empty">Empty</span></div>`;
+function bayHtml(group, i, id) {
+  const m = MODULES[id];
+  if (!m) {
+    return `<div class="mod-bay" data-slot="${i}" aria-label="${group.n} bay ${i + 1}: empty">` +
+      `<span class="bay-no">Bay ${i + 1}</span><span class="bay-empty">Empty</span></div>`;
+  }
+  return (
+    `<div class="mod-bay fitted" data-slot="${i}" data-module="${id}" aria-label="${group.n} bay ${i + 1}: ${m.n}">` +
+    `<span class="bay-no">Bay ${i + 1}</span>` +
+    `<span class="bay-val">${m.n}</span>` +
+    `<span class="bay-stat">${moduleStat(m)}</span>` +
+    `</div>`
+  );
 }
 
 /** One module group: a heading, its bays, and what the group decides. */
 function groupHtml(group) {
-  const slots = slotsFor(group, state.profile.ship);
+  const slots = slotsFor(group, state.profile.ship),
+    fitted = baysOf()[group.k] || [];
   let bays = "";
-  for (let i = 0; i < slots; i++) bays += bayHtml(group, i);
+  for (let i = 0; i < slots; i++) bays += bayHtml(group, i, fitted[i]);
+  const used = fitted.filter(Boolean).length;
   return (
     `<section class="mod" data-group="${group.k}">` +
-    `<header><h3>${group.n}</h3><span class="mod-count">${fitted(group)} / ${slots}</span></header>` +
+    `<header><h3>${group.n}</h3><span class="mod-count">${used} / ${slots}</span></header>` +
     `<div class="mod-bays">${bays}</div>` +
     `<p>${group.d}</p>` +
     `</section>`
@@ -176,7 +194,7 @@ function outfittingHtml() {
 
   return (
     `<h2>Outfitting</h2>` +
-    `<div class="sub">Nothing is fitted yet: modules and paints arrive in a later update, and these bays are where they go.</div>` +
+    `<div class="sub">Your ship flies with the basic powerplant and power cell fitted. More modules and paints arrive in a later update.</div>` +
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
     `<div class="outfit-view">` +

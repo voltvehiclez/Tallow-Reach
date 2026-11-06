@@ -8,6 +8,35 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Basic powerplant and power cell, with a power bar in flight
+
+- **Modules exist.** `src/data/modules.js` holds the first two: **Basic powerplant** (10 MJ/s)
+  and **Basic power cell** (100 MJ). Every hull is delivered with both fitted.
+- **Per-hull bay layouts.** Bay counts moved out of `MODULE_GROUPS` into `SHIP_LAYOUTS`
+  (`src/data/outfitting.js`), one entry per hull. All three are a straight copy of the Wasp's
+  today (1 powerplant, 1 cell, 1 thruster, 1 shield, 2 primary, 1 secondary, 1 hull), so a big
+  hull can be given a different arrangement later by editing its own line. `slotsFor()` and
+  `layoutFor()` are the only readers; a test fails if a hull is missing a group's count.
+- **The Outfitting screen shows what is fitted.** Fitted bays are now solid, with the part's
+  name and its headline number (`Basic powerplant / 10 MJ/s`), and the group count reads
+  `1 / 1`. Empty bays still read `Empty`.
+- **Power in flight.** New `src/sim/power.js` turns the fitted modules into
+  `state.power = { gen, cap, stored, draw }` (10 MJ/s, 100 MJ, 100 MJ, 0 MJ/s at the start) and
+  charges the cells every frame. Bottom centre, above the throttle line, the HUD now shows a
+  **Power cell** bar with `100 / 100 MJ` and `Using 0 of 10 MJ/s`. It reads `No power cell` if a
+  hull has none fitted. Cells are full when you launch and topped up by the outpost on dock.
+- **Nothing draws power yet.** `draw` is 0, so the bar sits full; the first system that needs
+  energy (shields, the mining beam) only has to add to `state.power.draw` and the cells start
+  moving. That is the one line to remember.
+- **Save change: `SAVE_VERSION` 2 -> 3**, adding `profile.loadout`: per hull, per group, one
+  entry per bay (`null` for empty). Old saves and new hulls get the stock fit
+  (`STOCK_FIT` in `data/modules.js`); a bay the player really emptied stays empty, unknown
+  module ids and bays beyond a hull's layout are dropped. A ship bought in the Hangar comes
+  with the stock fit; a destroyed ship's loadout is deleted with it.
+- Tests: 4 new (module data and its group, every hull's layout, a new game's 10 MJ/s into
+  100 MJ, the old-save migration and dropped modules, and the charge/overflow/empty maths).
+  `npm test` now runs 28. `game/tallow-reach.html` needs `npm run build` (572 KB).
+
 ## 2026-11-06: Powerplant talks in MJ/s, not MW
 
 - The Powerplant card now reads **"Energy the ship makes every second, in MJ/s."** instead of

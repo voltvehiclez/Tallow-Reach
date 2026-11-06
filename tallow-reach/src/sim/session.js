@@ -11,6 +11,7 @@ import { state, msg } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { FIELD_CENTER, clearTransient } from "./world.js";
 import { setShip } from "./player.js";
+import { refillPower } from "./power.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
@@ -30,6 +31,7 @@ export function launch() {
   P.v.set(0, 0, 0);
   P.en = 100;
   P.snap = true;
+  refillPower();      // launched fully charged
 
   // Salvage contracts need their crates out in the field.
   const m = S.mission;
@@ -57,6 +59,7 @@ export function dock() {
     S.hp[S.ship] = Math.max(REPAIR_MIN_HULL, P.hull / P.hullMax);
   }
   P.sh = P.shMax;
+  refillPower();      // the outpost tops the cells up
   clearTransient();
   state.flight.missileLock = { target: null, t: 0, locked: false };
   state.flight.lock = null;
@@ -89,6 +92,7 @@ export function die() {
   S.cr -= fee;
   S.ships = S.ships.filter(id => id !== lost);
   delete S.hp[lost];
+  delete S.loadout[lost];
 
   if (S.ships.length) {
     S.ship = S.ships[0];
