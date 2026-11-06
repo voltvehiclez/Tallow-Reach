@@ -8,6 +8,20 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Fix: the Appearance bays lost their boxes
+
+- The two paint bays on the **Appearance** card are plain divs, while module bays are now
+  buttons. When the bays became clickable, the box styling (border, background, padding,
+  grid) was written on `button.mod-bay`, so the paint bays no longer matched any rule and
+  collapsed into bare inline text reading **"PRIMARYEmpty"**.
+- The box is back on the bare `.mod-bay` class, which every bay uses whatever its tag;
+  `button.mod-bay` now only carries the button reset (font, colour, cursor). The Appearance
+  card is two dashed boxes side by side again, "Primary / Empty" and "Secondary / Empty",
+  the same size as the Primary weapons bays.
+- Tests: 1 new guard (now 37) that reads `src/styles.css` and fails if the box properties
+  ever move onto the button selector again. No save or gameplay change.
+  `game/tallow-reach.html` needs `npm run build` (577 KB).
+
 ## 2026-11-06: Basic thrusters, and every hull flies like the Wasp
 
 - **The thruster bay has a module now**: `thruster_basic` in `src/data/modules.js`, "Basic

@@ -346,24 +346,31 @@ button:focus-visible {
   display: flex;
   gap: 8px;
 }
-/* A bay is a button: clicking it opens the picker under the card. It keeps the
-   dashed "empty socket" look instead of the amber button style. */
-button.mod-bay {
+/* The bay box itself. Module bays are buttons and paint bays are plain divs, so
+   the look lives on the bare class and only the button behaviour is added below.
+   (Putting the box on `button.mod-bay` left the paint bays unstyled: they came
+   out as bare inline text reading "PRIMARYEmpty".) */
+.mod-bay {
   flex: 1;
   min-width: 0;
   display: grid;
   gap: 1px;
   padding: 6px 8px 7px;
-  font: inherit;
-  text-align: left;
-  color: inherit;
-  cursor: pointer;
   border: 1px dashed var(--line);
   background: repeating-linear-gradient(
     135deg,
     transparent 0 6px,
     rgba(127, 183, 196, .05) 6px 12px
   );
+}
+
+/* A module bay is a button: clicking it opens the picker under the card. It
+   keeps the dashed "empty socket" look instead of the amber button style. */
+button.mod-bay {
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
 }
 button.mod-bay:hover:not(:disabled) {
   color: inherit;

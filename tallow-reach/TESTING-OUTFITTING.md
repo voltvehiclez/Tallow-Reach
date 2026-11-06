@@ -25,7 +25,7 @@ Four cards on the left, four on the right. Counts and bays:
 | Primary weapons | 0 / 2 | Empty, Empty |
 | Secondary weapons | 0 / 1 | Empty |
 | Hull | 0 / 1 | Empty |
-| Appearance | 0 / 2 | Primary, Secondary (paint, still empty) |
+| Appearance | 0 / 2 | **Primary** and **Secondary** — two dashed paint boxes, side by side, the same size as the Primary weapons bays (paint comes later) |
 
 ## 3. Opening a bay — the new part
 

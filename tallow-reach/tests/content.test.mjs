@@ -3,6 +3,7 @@
 // Run with `npm test`. When one fails, the message says which entry is wrong.
 
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { SHIPS, DEFAULT_SHIP, FLIGHT } from "../src/data/ships.js";
 import { ITEM, KEYS, emptyCargo } from "../src/data/items.js";
@@ -337,5 +338,25 @@ test("the appearance card has its two paint bays, primary first", () => {
     APPEARANCE_SLOTS.map(a => a.k),
     ["primary", "secondary"],
     "the hull has a primary and a secondary colour, in that order"
+  );
+});
+
+test("the bay box style sits on .mod-bay itself, so paint bays get a box too", () => {
+  // Module bays are buttons; paint bays on the Appearance card are divs. When the
+  // box styling lived only on `button.mod-bay`, the paint bays collapsed into bare
+  // text ("PRIMARYEmpty"). Keep the box on the bare class.
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+  const box = css.match(/(?:^|\n)\.mod-bay\s*\{([\s\S]*?)\}/);
+  assert.ok(box, "styles.css needs a bare .mod-bay rule for every bay, button or not");
+  for (const re of [/display:\s*grid/, /padding:/, /border:/, /background:/]) {
+    assert.match(box[1], re, `.mod-bay is missing ${re} - every bay needs the box`);
+  }
+
+  const button = css.match(/(?:^|\n)button\.mod-bay\s*\{([\s\S]*?)\}/);
+  assert.ok(button, "button.mod-bay should keep the button reset (font, colour, cursor)");
+  assert.ok(
+    !/(?:^|\n)\s*(?:border|padding|display|background)\s*:/.test(button[1]),
+    "button.mod-bay must not hold the box styles: the paint bays would lose them"
   );
 });
