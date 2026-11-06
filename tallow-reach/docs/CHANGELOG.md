@@ -8,6 +8,24 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: Paint bays are clickable, and show an empty colour store
+
+- **The two Appearance bays are buttons like module bays.** Clicking one opens the picker
+  rectangle under the card, with a Close button and the message **"No colours in storage."**
+  Clicking the open bay again, or Close, shuts it, and the open bay gets the pale blue edge.
+- **One picker at a time across the whole screen**: opening a module bay closes an open paint
+  picker and the other way round.
+- **No paint data and no save change.** Colours will be stored and fitted the same way
+  modules are, and this picker becomes that list of colours when they arrive; until then the
+  empty message is the whole content.
+- The click rule moved into a new `src/ui/picker.js` (`toggleModulePicker`,
+  `togglePaintPicker`) so it is a pure function that can be tested without a browser.
+  `ui/menu.js` `slot`/`paint` call it, and `fit`/`unfit` now check that the open picker is
+  really a module bay. `state.ui.fit` gained a `kind` field ("module" or "paint").
+- Tests: 3 new in `tests/picker.test.mjs` (the toggle, one-at-a-time, and paints and modules
+  sharing the picker). `npm test` now runs 40.
+  `game/tallow-reach.html` needs `npm run build` (577 KB).
+
 ## 2026-11-06: Fix: the Appearance bays lost their boxes
 
 - The two paint bays on the **Appearance** card are plain divs, while module bays are now

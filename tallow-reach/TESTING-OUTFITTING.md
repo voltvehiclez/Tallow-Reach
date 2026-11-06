@@ -25,7 +25,7 @@ Four cards on the left, four on the right. Counts and bays:
 | Primary weapons | 0 / 2 | Empty, Empty |
 | Secondary weapons | 0 / 1 | Empty |
 | Hull | 0 / 1 | Empty |
-| Appearance | 0 / 2 | **Primary** and **Secondary** — two dashed paint boxes, side by side, the same size as the Primary weapons bays (paint comes later) |
+| Appearance | 0 / 2 | **Primary** and **Secondary** — two dashed paint boxes, side by side, clickable like module bays |
 
 ## 3. Opening a bay — the new part
 
@@ -39,6 +39,12 @@ Four cards on the left, four on the right. Counts and bays:
 4. Click the **Shields** bay: the picker moves to that card, shows **No modules in storage.**
    and no Unequip button (the bay is empty). Only one picker is ever open.
 5. Click an **empty** power bay equivalent on another hull later — same behaviour everywhere.
+6. **Click a paint bay on the Appearance card** (Primary or Secondary). A rectangle opens
+   under that card with a heading like `APPEARANCE · PRIMARY`, a **Close** button and the
+   message **No colours in storage.** — there are no paints in the game yet, so that is the
+   whole list. Clicking the bay again or Close shuts it.
+7. With the paint picker open, click a module bay: the paint rectangle closes and the module
+   one opens. Only one rectangle is ever open on the screen.
 
 ## 4. Unequipping and fitting back
 

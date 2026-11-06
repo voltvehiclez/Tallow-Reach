@@ -140,7 +140,12 @@ function moduleStat(m) {
 const leftRail = list => list.slice(0, Math.ceil(list.length / 2));
 
 /** Is this the bay whose picker is open? */
-const isBayOpen = (g, i) => !!(state.ui.fit && state.ui.fit.g === g && state.ui.fit.i === i);
+const isBayOpen = (g, i) =>
+  !!(state.ui.fit && state.ui.fit.kind === "module" && state.ui.fit.g === g && state.ui.fit.i === i);
+
+/** Is this the paint bay whose picker is open? */
+const isPaintOpen = k =>
+  !!(state.ui.fit && state.ui.fit.kind === "paint" && state.ui.fit.k === k);
 
 /**
  * One bay. Every bay is a button: clicking it opens the picker under the card
@@ -223,19 +228,37 @@ function groupHtml(group) {
 }
 
 // The paint card, always last in the right-hand column: it sits under the hull
-// group, which is the last module group. Same card as a module group, so paints
-// will look like modules once they can be bought and fitted.
+// group, which is the last module group. Its bays are buttons exactly like module
+// bays and open the same kind of picker; nothing can be stored in it yet, so the
+// picker always reads empty until paints exist.
+function paintPickerHtml(slot) {
+  return (
+    `<div class="fit-picker">` +
+    `<div class="fit-head"><span>Appearance &middot; ${slot.n}</span>` +
+    `<button class="fit-close" data-a="paint" data-b="${slot.k}">Close</button></div>` +
+    // Stored paints will be listed here as squares, the way modules are.
+    `<div class="fit-empty">No colours in storage.</div>` +
+    `</div>`
+  );
+}
+
 function appearanceHtml() {
-  const bays = APPEARANCE_SLOTS.map(
-    a =>
-      `<div class="mod-bay" data-paint="${a.k}" aria-label="${a.n} colour: empty">` +
-      `<span class="bay-no">${a.n}</span><span class="bay-empty">Empty</span></div>`
-  ).join("");
+  const bays = APPEARANCE_SLOTS.map(a => {
+    const open = isPaintOpen(a.k);
+    return (
+      `<button class="mod-bay${open ? " on" : ""}" data-a="paint" data-b="${a.k}" ` +
+      `aria-expanded="${open}" aria-label="${a.n} colour: empty, click to choose a colour">` +
+      `<span class="bay-no">${a.n}</span><span class="bay-empty">Empty</span></button>`
+    );
+  }).join("");
+
+  const open = APPEARANCE_SLOTS.find(a => isPaintOpen(a.k));
 
   return (
-    `<section class="mod mod-appearance" data-appearance>` +
+    `<section class="mod mod-appearance${open ? " open" : ""}" data-appearance>` +
     `<header><h3>Appearance</h3><span class="mod-count">0 / ${APPEARANCE_SLOTS.length}</span></header>` +
     `<div class="mod-bays">${bays}</div>` +
+    (open ? paintPickerHtml(open) : "") +
     `<p>Paint for the main plates and the trim. The standard livery is used until a colour is fitted.</p>` +
     `</section>`
   );

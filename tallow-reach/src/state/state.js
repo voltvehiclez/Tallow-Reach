@@ -52,7 +52,7 @@ export const state = {
     toast: "",         // green message at the top of the panel
     board: [],         // contract offers
     confirmReset: false,
-    fit: null,         // { g, i } module bay whose picker is open, or null
+    fit: null,         // the open picker: { kind: "module", g, i } or { kind: "paint", k }
     xcode: "",         // last exported or pasted save code
   },
 

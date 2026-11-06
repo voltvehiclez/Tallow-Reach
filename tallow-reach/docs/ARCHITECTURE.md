@@ -55,6 +55,7 @@ about each other, use the event bus instead.
 | Add an outpost screen (tab)          | `ui/screens.js` (`TABS`, `SCREENS`, a HTML function) and `ui/menu.js` (`ACTIONS`) |
 | Add a module                         | `data/modules.js` (`MODULES`, `STOCK_FIT`); see HOW_TO_ADD.md recipe 16 |
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
+| Change how a bay opens or closes    | `ui/picker.js` (one picker at a time, pure and tested) |
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
 | Change what power does in flight      | `sim/power.js` (and `state.power`)              |
 | Change how a ship flies               | the thruster module in `data/modules.js`; `sim/drive.js` turns it into `state.drive` |
@@ -80,7 +81,7 @@ src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, power, drive, fitting, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
-src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), pause.js, warpflash.js
+src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness)
 docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, CHANGELOG.md
 ```

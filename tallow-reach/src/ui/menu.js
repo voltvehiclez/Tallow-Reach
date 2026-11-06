@@ -11,6 +11,7 @@ import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import * as fitting from "../sim/fitting.js";
+import { toggleModulePicker, togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import { introHtml, outpostHtml } from "./screens.js";
@@ -114,19 +115,21 @@ const ACTIONS = {
   slot(arg) {
     // data-b is "group:bay". Clicking the open bay again closes the picker.
     const [g, i] = String(arg || "").split(":");
-    const bay = +i;
-    const open = state.ui.fit;
-    state.ui.fit = open && open.g === g && open.i === bay ? null : { g, i: bay };
+    state.ui.fit = toggleModulePicker(state.ui.fit, g, +i);
+  },
+  paint(k) {
+    // Paint bays behave like module bays: one picker, click again to close.
+    state.ui.fit = togglePaintPicker(state.ui.fit, k);
   },
   fit(id) {
     const open = state.ui.fit;
-    if (!open) return;
+    if (!open || open.kind !== "module") return;
     const text = fitting.fitModule(open.g, open.i, id);
     if (text) toast(text);
   },
   unfit() {
     const open = state.ui.fit;
-    if (!open) return;
+    if (!open || open.kind !== "module") return;
     const text = fitting.unequip(open.g, open.i);
     if (text) toast(text);
   },

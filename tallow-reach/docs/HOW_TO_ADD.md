@@ -238,10 +238,15 @@ half sits on the left and the rest on the right. Nothing else needs to change.
    the others without new CSS.
 
 **Paint bays** are the same idea and live in the same file, as `APPEARANCE_SLOTS`
-(`{ k, n }`). They are drawn by `appearanceHtml()` in `ui/screens.js` and always sit last
-in the right-hand column, under the hull group. Add an entry for another colour channel.
-When paints arrive they will need a table of paints, a save field, and a `fitted()` count
-in `ui/screens.js`, exactly like modules.
+(`{ k, n }`). They are drawn by `appearanceHtml()` in `ui/screens.js`, always sit last in the
+right-hand column under the hull group, and are clickable like module bays: the click rule is
+`togglePaintPicker` in `ui/picker.js`, and the rectangle under the card is
+`paintPickerHtml()`. It shows **No colours in storage** because no paint exists yet.
+
+When paints arrive they need: a table of paints, a store in the save (the way
+`profile.modules` holds spare parts), the list of stored colours drawn as squares inside
+`paintPickerHtml`, a fitted paint per channel, and the counts in `appearanceHtml`. That is
+save-format work, so bump `SAVE_VERSION` and add a migration as usual.
 
 **Bay counts are per hull.** `SHIP_LAYOUTS` in the same file gives each hull its own
 numbers; every hull is a copy of the Wasp's today. `layoutFor(id)` and `slotsFor(g, id)`
