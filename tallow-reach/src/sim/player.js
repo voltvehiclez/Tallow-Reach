@@ -10,6 +10,7 @@ import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { buildPlayerShip } from "../render/models.js";
 import { state } from "../state/state.js";
+import { hasDrive } from "./drive.js";
 import { STATION_KEEPOUT } from "./world.js";
 
 /** Create the player record. The model is attached by setShip(). */
@@ -69,6 +70,7 @@ export function flight(dt) {
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
   // Speed and turn come from the fitted thrusters, not from the hull.
   const drv = state.drive;
+  const powered = hasDrive(drv);         // no thruster fitted: a dead ship
   const turn = drv.turn * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
   m.rotateY(-dz(stick.x * ease) * 1.6 * turn * dt);
   m.rotateX(-dz(stick.y * ease) * 1.2 * turn * dt);
@@ -76,6 +78,9 @@ export function flight(dt) {
 
   if (W) {
     // Throttle released, like pressing X: the drag model bleeds the speed off.
+    P.thr = 0;
+  } else if (!powered) {
+    // No thrusters: the throttle does nothing and the engines stay cold.
     P.thr = 0;
   } else {
     if (keys.KeyW) P.thr = Math.min(1, P.thr + dt * 0.5);
@@ -86,7 +91,7 @@ export function flight(dt) {
     }
   }
 
-  const wantBoost = !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
+  const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > 5 && P.thr > 0;
   const wasBoosting = P.boost;
   P.bs = wantBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
   P.boost = P.bs >= 1;

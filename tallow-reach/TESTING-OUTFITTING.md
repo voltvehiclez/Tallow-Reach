@@ -66,10 +66,17 @@ Four cards on the left, four on the right. Counts and bays:
 2. Turn (mouse held over): about **69 deg/s** at full stick, the same Wasp feel as before.
 3. Dock, **Hangar → Fly** the Prospector, launch: the same 150 m/s and the same turn rate. The
    Bulwark too. They are identical on purpose — hull differences come later.
-4. Back in Outfitting, **unequip the thrusters** from the Bulwark, then launch: it now moves at
-   its own hull speed (about **90 m/s**, turning slower). This is the safety fallback: with no
-   drive at all you would be stuck in space, so the hull's own figures take over.
-5. Fit the thrusters back and confirm 150 m/s returns. Reload the page and check the fit stuck.
+4. Back in Outfitting, **unequip the thrusters** from the Bulwark (or any hull), then launch.
+   The ship **cannot move at all**: hold **W**, **S**, **A**, **D**, **Space**, **C**, **Shift**
+   or move the mouse and nothing happens. Bottom centre stays `Throttle 0%  0 m/s`, the boost
+   bar never drains, and the engines do not glow.
+5. The centre of the screen says **No thrusters fitted: the ship cannot move. Press G to dock
+   and fit one.** The small hint line keeps repeating **No thrusters fitted: press G to dock and
+   fit one.**
+6. Press **G** right away: undocking leaves you only 200 m out, inside docking range, so docking
+   works and you can fit the thrusters back in Outfitting.
+7. Fit them back and launch: **150 m/s** and normal turning return. Reload the page and check
+   the fit stuck.
 
 ## 6. Power in flight
 

@@ -8,6 +8,29 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-06: No thrusters means no movement, no turning and no boost
+
+- **An empty thruster bay is now a dead ship.** `driveOf()` returns `{ spd: 0, turn: 0 }`
+  instead of falling back to a speed the hull used to carry, so with no thrusters fitted the
+  ship cannot thrust, strafe, lift, turn or boost. The throttle is held at 0, so the engines
+  stay cold, the boost ramp never starts and the boost bar is never spent.
+- **Hulls no longer have `spd`/`turn`** (`data/ships.js`). Speed and turn live only in the
+  thruster module; `npm test` now fails if a hull grows a speed of its own again. When hulls
+  should handle differently, that is a multiplier in `sim/drive.js`, not a base speed.
+- **The player is told, and can get back:** `launch()` puts the ship 200 m from the outpost
+  (inside the 300 m docking range, so an immobile ship can dock straight back), refreshes the
+  drive, and shows *"No thrusters fitted: the ship cannot move. Press G to dock and fit one."*
+  The HUD repeats *"No thrusters fitted: press G to dock and fit one."* while the ship cannot
+  move, so the dead controls have a reason on screen.
+- Files: `sim/drive.js` (no fallback, new `hasDrive`), `sim/player.js` (throttle and boost
+  gated on the drive), `sim/session.js` (launch distance, message, `refreshDrive()`),
+  `ui/hud.js` (prompt), `data/ships.js` (no `spd`/`turn`), `tests/content.test.mjs`,
+  `tests/fitting.test.mjs`.
+- Verified headless: 10 s holding every control (W S A D Space C Shift, mouse hard over) moves
+  an empty-bay ship **0 m and turns it 0°**, on all three hulls; with the basic thrusters
+  nothing changed (150 m/s flat out, 295 m/s boost, same turn rate).
+- Tests: **42 passing**. No save change: still version 5. `npm run build` needed (578 KB).
+
 ## 2026-11-06: Paint bays are clickable, and show an empty colour store
 
 - **The two Appearance bays are buttons like module bays.** Clicking one opens the picker

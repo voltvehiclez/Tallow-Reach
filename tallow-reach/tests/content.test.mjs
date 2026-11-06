@@ -16,7 +16,7 @@ import { CAMERA, cameraTrail } from "../src/data/camera.js";
 import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
 import { MODULES, STOCK_FIT } from "../src/data/modules.js";
 import { powerOf, updatePower } from "../src/sim/power.js";
-import { driveOf } from "../src/sim/drive.js";
+import { driveOf, hasDrive } from "../src/sim/drive.js";
 import { state } from "../src/state/state.js";
 
 const isNum = v => typeof v === "number" && Number.isFinite(v);
@@ -26,7 +26,7 @@ test("every ship has all the fields the game reads", () => {
   for (const [id, s] of Object.entries(SHIPS)) {
     assert.equal(typeof s.n, "string", `${id}: n (name)`);
     assert.equal(typeof s.d, "string", `${id}: d (description)`);
-    for (const f of ["spd", "cargo", "hull", "sh", "dmg", "mine", "turn", "sc", "price", "col"]) {
+    for (const f of ["cargo", "hull", "sh", "dmg", "mine", "sc", "price", "col"]) {
       assert.ok(isNum(s[f]) && s[f] > 0, `${id}: ${f} must be a positive number`);
     }
   }
@@ -272,17 +272,44 @@ test("a new game starts with the basic plant, cell and thrusters", () => {
 
 test("every hull flies exactly like the old Wasp on the basic thrusters", () => {
   const p = newProfile();
-  // The Wasp's own figures are the reference the basic thrusters were copied from.
-  const reference = { spd: SHIPS.wasp.spd, turn: SHIPS.wasp.turn };
+  // The basic thrusters carry the figures the old Wasp had, so the feel is kept.
+  const t = MODULES.thruster_basic;
+  const reference = { spd: t.spd, turn: t.turn };
   for (const id of Object.keys(SHIPS)) {
-    assert.deepEqual(driveOf(p.loadout[id], id), reference, `${id} should fly like the Wasp today`);
+    assert.deepEqual(driveOf(p.loadout[id]), reference, `${id} should fly like the Wasp today`);
   }
-  // A ship with no thrusters fitted falls back to its own drive, so it cannot
-  // be stranded in space with an empty bay.
-  assert.deepEqual(driveOf({ thruster: [null] }, "bulwark"), {
-    spd: SHIPS.bulwark.spd,
-    turn: SHIPS.bulwark.turn,
-  });
+});
+
+test("a hull has no speed of its own, so no thrusters means it cannot move", () => {
+  // Speed and turn live in the thruster module now, nowhere else.
+  for (const [id, s] of Object.entries(SHIPS)) {
+    assert.equal(s.spd, undefined, `${id}: the hull must not define a top speed`);
+    assert.equal(s.turn, undefined, `${id}: the hull must not define a turn rate`);
+  }
+  const p = newProfile();
+  for (const id of Object.keys(SHIPS)) {
+    const empty = { ...p.loadout[id], thruster: [null] };
+    assert.deepEqual(driveOf(empty), { spd: 0, turn: 0 }, `${id} with an empty thruster bay is dead in space`);
+    assert.equal(hasDrive(driveOf(empty)), false, `${id} must not be able to move`);
+  }
+  assert.equal(
+    hasDrive(driveOf(newProfile().loadout[DEFAULT_SHIP])),
+    true,
+    "a fitted thruster does move the ship"
+  );
+});
+
+test("thrusters are the only thing that sets speed and turn", () => {
+  // Anyone reading the data should find the numbers in one place.
+  const thrusters = Object.entries(MODULES).filter(([, m]) => m.g === "thruster");
+  assert.ok(thrusters.length > 0, "at least one thruster must exist");
+  for (const [id, m] of thrusters) {
+    assert.ok(isNum(m.spd) && m.spd > 0, `${id}: spd is the top speed in m/s`);
+    assert.ok(isNum(m.turn) && m.turn > 0, `${id}: turn is the steering rate`);
+  }
+  // No drive at all is 0 / 0 rather than a crash.
+  assert.deepEqual(driveOf(undefined), { spd: 0, turn: 0 });
+  assert.deepEqual(driveOf({ thruster: ["junk", null] }), { spd: 0, turn: 0 });
 });
 
 test("an old save gets the stock fit, and bad modules are dropped", () => {

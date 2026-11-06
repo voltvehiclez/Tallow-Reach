@@ -4,7 +4,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 
 | File | What it holds |
 |---|---|
-| `ships.js` | Hulls the player can fly, and the `FLIGHT` table that scales every ship at once. `spd`/`turn` are only the fallback for a hull with no thrusters fitted: the fitted thrusters set speed and turn (see `sim/drive.js`). |
+| `ships.js` | Hulls the player can fly, and the `FLIGHT` table that scales every ship at once. A hull has no `spd`/`turn`: the fitted thrusters set speed and turn (see `sim/drive.js`), and an empty thruster bay means the ship cannot move. |
 | `items.js` | Cargo types and base sell values. |
 | `weapons.js` | Cannon, mining beam, missile numbers, and the Shop list (`SHOP_WEAPONS`). |
 | `station.js` | Base modules, their costs, storage and refinery numbers, repair and recovery fees. |

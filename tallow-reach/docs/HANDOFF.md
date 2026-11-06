@@ -6,8 +6,9 @@
 > `profile.loadout`, and shown bottom-centre in flight.
 > Modules can be unequipped into a store (`profile.modules`) and fitted back by clicking a
 > bay. Basic thrusters exist and every hull flies like the Wasp on them (`state.drive`, from
-> `sim/drive.js`). Paint bays are clickable but no colours exist yet. Save is at version 5.
-> `npm test` = 40, build = 577 KB.
+> `sim/drive.js`), and an empty thruster bay means the ship cannot move, turn or boost at all.
+> Paint bays are clickable but no colours exist yet. Save is at version 5.
+> `npm test` = 42, build = 578 KB.
 > See the top of `CHANGELOG.md`.
 
 Read this first, then `tallow-reach/docs/ARCHITECTURE.md` and the top two entries of

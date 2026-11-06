@@ -106,9 +106,15 @@ Each `src/` folder also has its own short `README.md`.
   travel, or speed leaks back in.
 - **Speed and turn have one home: the fitted thrusters.** `sim/drive.js` reads the thruster
   module and writes `state.drive = { spd, turn }`; `sim/player.js` and `render/camera.js` read
-  that and nothing else. Do not read `SHIPS[id].spd` in flight code and do not hard-code a
-  speed: swap the module, or add a field to it. A hull with no thrusters falls back to its own
-  `SHIPS` figures, which is what stops an empty bay stranding the player in space.
+  that and nothing else. Hulls no longer carry `spd`/`turn` at all: do not add them back and do
+  not hard-code a speed. Swap the module, or add a field to it.
+- **No thruster fitted means a dead ship.** `driveOf()` returns `{ spd: 0, turn: 0 }` when the
+  thruster bay is empty (there is no hull fallback, on purpose: the bays are what make the ship
+  fly). `flight()` then holds the throttle at 0 and refuses boost as well as thrust, so holding
+  W, Shift or the mouse does nothing at all; the HUD prints "No thrusters fitted: press G to
+  dock and fit one." and `launch()` says the same in the centre message. Test it with any hull
+  plus an empty thruster bay (`hasDrive(state.drive)` is false). Docking range is 300 m and
+  launch puts the ship at 200 m, so an immobile ship can always dock straight back.
 - **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the
   drive's turn rate, and `strafe` / `lift` / `reverse` are fractions of the drive's `spd`. The
   main drive and its 2x boost are the only directions that reach full speed.

@@ -12,7 +12,7 @@ import { saveAutosave } from "../state/storage.js";
 import { FIELD_CENTER, clearTransient } from "./world.js";
 import { setShip } from "./player.js";
 import { refillPower } from "./power.js";
-import { refreshDrive } from "./drive.js";
+import { refreshDrive, hasDrive } from "./drive.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
@@ -27,12 +27,15 @@ export function launch() {
     S = state.profile;
   P.docked = false;
   P.m.visible = true;
-  P.m.position.set(0, 0, 300);
+  // 200 m out is inside docking range (300), so a ship that cannot move can
+  // still turn round and dock straight away.
+  P.m.position.set(0, 0, 200);
   face(P.m, FIELD_CENTER, 1);
   P.v.set(0, 0, 0);
   P.en = 100;
   P.snap = true;
   refillPower();      // launched fully charged
+  refreshDrive();     // the bays may have changed while docked
 
   // Salvage contracts need their crates out in the field.
   const m = S.mission;
@@ -43,7 +46,8 @@ export function launch() {
   }
 
   emit("launched");
-  msg("Launched. Fly to the asteroid field.", 4);
+  if (hasDrive(state.drive)) msg("Launched. Fly to the asteroid field.", 4);
+  else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
 }
 
 /** Dock at the outpost: clear the field, repair shields, save. */

@@ -40,7 +40,7 @@ export const state = {
   power: { gen: 0, cap: 0, stored: 0, draw: 0 },
 
   // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).
-  //   spd    top speed in m/s
+  //   spd    top speed in m/s       0 / 0 with an empty bay: the ship cannot move
   //   turn   turn rate multiplier (scaled again by FLIGHT.turn)
   drive: { spd: 0, turn: 0 },
 

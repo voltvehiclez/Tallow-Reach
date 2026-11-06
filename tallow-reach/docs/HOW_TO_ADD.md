@@ -163,8 +163,13 @@ Change numbers in `src/data/`. Run `npm test`, rebuild, and play for a minute.
 **Top speed and turn rate** belong to the thrusters, in `src/data/modules.js`
 (`thruster_basic` today: `spd: 150`, `turn: 1.2`). `sim/drive.js` turns the fitted module into
 `state.drive`, and the flight model and the chase camera read only that. To make a ship
-faster, fit a different thruster module; do not edit `SHIPS.spd` (that is now only the
-fallback for a hull with no thrusters) and do not put a raw speed in `sim/player.js`.
+faster, fit a different thruster module and do not put a raw speed in `sim/player.js`.
+
+There is **no hull speed any more**: `SHIPS` has no `spd`/`turn` fields, and a ship whose
+thruster bay is empty cannot move or turn at all (`driveOf()` gives 0 / 0 and
+`hasDrive(state.drive)` is false). Keep it that way — the bays are what make a ship fly, and
+`npm test` fails if a hull grows a speed of its own again. When hulls should handle
+differently, add a multiplier in `sim/drive.js` on top of the thruster's numbers.
 
 **Flight feel** is in the `FLIGHT` table at the top of `src/data/ships.js`:
 

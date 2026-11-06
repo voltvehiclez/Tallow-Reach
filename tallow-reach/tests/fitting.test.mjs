@@ -6,8 +6,8 @@ import assert from "node:assert/strict";
 import { state } from "../src/state/state.js";
 import { newProfile, sanitizeProfile, SAVE_VERSION } from "../src/state/profile.js";
 import { refillPower } from "../src/sim/power.js";
-import { refreshDrive } from "../src/sim/drive.js";
-import { SHIPS } from "../src/data/ships.js";
+import { refreshDrive, hasDrive } from "../src/sim/drive.js";
+import { MODULES } from "../src/data/modules.js";
 import { fitModule, unequip, storedFor, fittedAt } from "../src/sim/fitting.js";
 
 /** A new game, as if it had just booted docked at the outpost. */
@@ -100,20 +100,23 @@ test("an old save gains an empty module store, and unknown parts are dropped", (
   assert.deepEqual(notArray.modules, [], "a corrupted store is emptied, not fatal");
 });
 
-test("the thrusters decide how the ship flies, and the hull takes over if they come out", () => {
+test("the thrusters decide how the ship flies, and without them it cannot move", () => {
   freshGame();
-  const reference = { spd: SHIPS.wasp.spd, turn: SHIPS.wasp.turn };
-  assert.deepEqual({ ...state.drive }, reference, "the basic thrusters match the Wasp's old figures");
+  const reference = { spd: MODULES.thruster_basic.spd, turn: MODULES.thruster_basic.turn };
+  assert.deepEqual({ ...state.drive }, reference, "the basic thrusters set the drive");
+  assert.equal(hasDrive(state.drive), true, "the ship can move");
 
   unequip("thruster", 0);
   assert.deepEqual(
     { ...state.drive },
-    { spd: SHIPS.wasp.spd, turn: SHIPS.wasp.turn },
-    "with no thrusters the Wasp falls back to its own drive"
+    { spd: 0, turn: 0 },
+    "with no thrusters there is no drive at all: no thrust, no turn, no boost"
   );
+  assert.equal(hasDrive(state.drive), false, "the ship cannot move an inch");
   assert.deepEqual(state.profile.loadout.wasp.thruster, [null], "the bay is empty");
   assert.deepEqual(state.profile.modules, ["thruster_basic"], "the drive is in storage");
 
   fitModule("thruster", 0, "thruster_basic");
   assert.deepEqual({ ...state.drive }, reference, "and fitting it back restores the drive");
+  assert.equal(hasDrive(state.drive), true, "the ship can move again");
 });

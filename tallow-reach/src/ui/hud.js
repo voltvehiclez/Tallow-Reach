@@ -93,7 +93,9 @@ export function updateHud(dt) {
   if (!state.warp && sectorAt(state.sector).st && P.m.position.length() < 300) {
     say(P.v.length() < 70 ? "Press G to dock at Meridian Outpost" : "Slow below 70 m/s to dock");
   }
-  el.prompt.textContent = H.prompt;
+  // A ship with no thrusters cannot move, so say why the controls do nothing.
+  el.prompt.textContent =
+    H.prompt || (state.drive.spd > 0 ? "" : "No thrusters fitted: press G to dock and fit one.");
   H.prompt = "";
 
   el.msg.textContent = H.msgT > 0 ? H.msg : "";
