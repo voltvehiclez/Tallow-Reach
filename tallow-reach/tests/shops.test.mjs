@@ -66,10 +66,9 @@ test("every shop row is complete, and names a real item", () => {
       assert.ok(row.max == null || (Number.isInteger(row.max) && row.max > 0), `${where}: max must be a whole number above 0 when given`);
       assert.ok(row.own == null || typeof row.own === "boolean", `${where}: own must be true or false when given`);
     }
-    for (const kit of shop.kit || []) {
-      assert.equal(typeof kit.n, "string", `${id}: kit row n`);
-      assert.equal(typeof kit.d, "string", `${id}: kit row d`);
-    }
+    // A row is the only way something reaches the screen: a hidden "already
+    // owned" list (the old `kit`) would list a part twice.
+    assert.equal(shop.kit, undefined, `${id}: no kit list — every part shown is a stock row`);
     // One row per item: two rows for the same item would make the Buy buttons ambiguous.
     const ids = shop.stock.map(r => r.id);
     assert.equal(new Set(ids).size, ids.length, `${id}: one row per item`);
@@ -91,9 +90,12 @@ test("Meridian sells exactly what it always has, at the prices the owner set", (
   // Nothing else is sold yet: no ore, no spare anything.
   assert.equal(rows.length, 8, "eight rows in the shop");
   for (const row of rows) assert.ok(ITEMS[row.id].cat === "module", `${row.id}: only parts are sold today`);
-  // The standard-issue line is shown, not sold.
-  assert.deepEqual(SHOPS[M].kit.map(k => k.n), ["Autocannons"], "the Autocannons line is still there");
-  assert.ok(!shopRow(M, "cannon_basic").own, "and it is not offered twice");
+  // Every part is listed once. The old standard-issue "Autocannons" line is gone:
+  // there is only one cannon module (basic cannons), and it is a stock row now.
+  assert.equal(rows.filter(r => r.id === "cannon_basic").length, 1, "the cannons are listed once");
+  for (const id of new Set(rows.map(r => r.id))) {
+    assert.equal(rows.filter(r => r.id === id).length, 1, `${id} is listed once`);
+  }
 });
 
 test("buying the beam and the missiles behaves exactly as before", () => {

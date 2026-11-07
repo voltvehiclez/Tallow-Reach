@@ -125,13 +125,15 @@ Each `src/` folder also has its own short `README.md`.
   from a seed (sectors, wormhole instances, co-op) takes a `makeRng` generator rather than reaching
   for the shared one.
 - **Shops are data, buying is one function.** `data/shops.js` holds `SHOPS`: per shop a heading (`n`),
-  its line of explanation (`d`), `kit` (standard-issue parts, shown as "Owned", not sold) and
-  `stock`, one row per item: `id` (from `ITEMS`), `price`, the row's own wording `n`/`d`, and
+  its line of explanation (`d`) and `stock`, one row per item: `id` (from `ITEMS`), `price`, the row's own wording `n`/`d`, and
   optionally `max`. **No `max` means the shop never runs out**; with `max` the row shows "N left",
   greys out at zero and `buyItem()` refuses. Prices live on the row, not on the item, so two
   traders can charge differently for the same part. `sim/economy.js` has the only purchase —
   `buyItem(shopId, itemId, qty = 1)` — and `shopList(shopId)` is what the Shop tab draws; nothing
-  hard-codes a shop, a row or a weapon key in the screen, and `SHOP_WEAPONS` is gone. How much of a
+  hard-codes a shop, a row or a weapon key in the screen, and `SHOP_WEAPONS` is gone. **A stock row
+  is the only way a part appears on the shop screen**: one row per part, no second "already owned"
+  list (the old `kit` list was removed for listing the cannons twice). A part the ship flies with
+  is either on sale or not mentioned. How much of a
   limited row is left is **session state** (`state.shops`, `shopStock()`, `setShopStock()`), not
   saved: a restock timer, event or roll later calls `setShopStock()` and nothing else. A purchase
   still lands in the station's inventory through `sim/inventory.js`, and the missiles that come

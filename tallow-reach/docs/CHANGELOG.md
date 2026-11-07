@@ -19,6 +19,30 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Shop fix — the cannons are listed once, as "Basic cannons"
+
+- **Why:** the Shop showed the cannons twice. The first line, **Autocannons — Primary. Standard
+  issue. — Owned**, was typed into the old shop screen and came through step 5 as a `kit` list of
+  "standard-issue" lines; step 5's own change then put **Basic cannons** in the stock at 1 cr. The
+  game has only one cannon module (`cannon_basic`, "Basic cannons"), so one of the two lines was
+  wrong — and "Autocannons" named a part that does not exist.
+- **Changed:** `src/data/shops.js` loses its `kit` list, and `shopHtml()` in `src/ui/screens.js`
+  no longer draws one. A stock row is now the **only** way a part appears on the shop screen, so
+  the same part cannot be listed twice. The Shop's first two rows (the beam and the missiles) are
+  unchanged, word for word.
+- **Nothing else changes:** the same eight parts are for sale at the same prices (beam 900 cr,
+  missile pod 1500 cr, the six standard parts 1 cr each), and buying, selling, saves and flight are
+  untouched. Save version stays 12.
+- **When more cannon types exist** they are new `MODULES` entries plus a shop row each (recipe 17):
+  one row per cannon, no extra list.
+- **Tests:** 131 pass. `tests/shops.test.mjs` now fails if a shop has a `kit` list or if any item
+  appears in a shop's stock twice.
+- Files: `src/data/shops.js`, `src/ui/screens.js`, `tests/shops.test.mjs`, `TESTING-SHOPS.md`,
+  `src/data/README.md`, `docs/ARCHITECTURE.md`, `docs/HOW_TO_ADD.md` (recipe 4), `docs/ROADMAP.md`,
+  this changelog. Run `npm run build` and `npm test`.
+
+---
+
 ## 2026-11-07: Refactor step 5 — shops and prices from data (plus a visible Shop change)
 
 - **Why:** the Shop was hard-wired. `SHOP_WEAPONS` in `data/weapons.js` held two rows, `buyWeapon()`

@@ -16,9 +16,11 @@ Nothing else about the game changed.
 ## 1. The Shop still looks and behaves the way it did
 
 1. Click **Shop**. The heading is still **Weapons shop** and the same explanatory line is under it.
-2. The first line is still **Autocannons — Primary. Standard issue. — Owned**.
-3. The next two rows are exactly as before: **Basic mining beam**, 2 m³, **Buy 900 cr**; and
+2. The first two rows are exactly as before: **Basic mining beam**, 2 m³, **Buy 900 cr**; and
    **Basic missiles**, 2 m³, **Buy 1500 cr**. With a new game's 600 cr both buttons are greyed out.
+3. There is **no "Autocannons — Owned" line** any more, and no row says **Owned**: the cannons are
+   listed once, further down, as **Basic cannons — Buy 1 cr**. That was the only change here: the
+   old line repeated the cannons, and the cannon module is called Basic cannons.
 4. Buy the beam (if you have 900 cr). A green message reads
    **Basic mining beam in the station inventory. Fit it in a primary bay to use it.**
    The row now says **You own 1.** and the button is still there. Buy it twice more: you own 3 and
@@ -29,7 +31,7 @@ Nothing else about the game changed.
 
 ## 2. The six standard parts are on sale for 1 cr (the new rows)
 
-1. Below the missiles you now see six more rows, each **Buy 1 cr**:
+1. Below the missiles you now see six more rows, each **Buy 1 cr**, in this order:
    **Basic powerplant** (3 m³), **Basic power cell** (3 m³), **Basic thrusters** (4 m³),
    **Basic shields** (3 m³), **Basic cannons** (2 m³), **Basic hull** (4 m³).
 2. They do **not** say "You own N" — that count would have included the parts fitted to ships you

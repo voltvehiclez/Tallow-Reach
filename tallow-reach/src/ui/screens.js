@@ -378,12 +378,9 @@ function shopHtml() {
   // The shop is data (data/shops.js) and sim/economy.js's shopList() turns it
   // into these rows; the screen only decides how a row looks.
   const def = shopDef(OUTPOST_SHOP);
+  // One row per part: everything the shop offers comes from `stock`, so a part
+  // is never listed twice (a part the ship already flies with is simply on sale).
   let h = `<h2>${def.n}</h2><div class="sub">${def.d}</div>`;
-
-  // Parts every pilot already has: shown, not sold.
-  h += (def.kit || [])
-    .map(k => `<div class="row"><div>${k.n}<small>${k.d}</small></div><span class="ok">Owned</span></div>`)
-    .join("");
 
   h += shopList(OUTPOST_SHOP)
     .map(s => {

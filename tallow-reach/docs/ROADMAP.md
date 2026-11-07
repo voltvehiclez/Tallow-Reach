@@ -13,7 +13,8 @@ they are ticked: `TESTING-INVENTORY.md` (section 8, loading an old save, is the 
 the new `TESTING-SHOPS.md`. The owner's answers so far: found modules do **not** get random stats
 yet, so a stock stays a plain count per item; and Meridian also sells the **six standard parts for
 1 cr each** (a visible change the owner asked for at step 5), with the beam at 900 cr and the
-missile pod at 1500 cr unchanged. Shop stock can be **limited** (`max` on a row) but no row uses it
+missile pod at 1500 cr unchanged. The old "Autocannons — Owned" line was removed after the owner's
+first look at the build: it listed the same part twice (the module is Basic cannons). Shop stock can be **limited** (`max` on a row) but no row uses it
 yet, and nothing restocks: `setShopStock()` is the hook, waiting for the owner to ask for the timers.
 **Next: Step 6, the sim stops using sound and the keyboard** — and the owner is free to add data-only
 content meanwhile (Milestone A is reached in everything but the tick).
@@ -124,3 +125,7 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   saved, so save version stays 12. 131 tests green. Compared with the previous commit by a 19-step
   scripted outpost session: identical credits, stocks, holds, loadouts and messages, and six of the
   seven tabs render byte-identical HTML.
+- 2026-11-07: Shop fix after the owner's look at the step 5 build: the "Autocannons — Owned" line is
+  gone, so the Shop lists the cannons once, as **Basic cannons** (`src/data/shops.js` lost its `kit`
+  list, the screen stopped drawing it). There is one cannon module today; more will be stock rows
+  when they exist. Nothing else about buying changed.

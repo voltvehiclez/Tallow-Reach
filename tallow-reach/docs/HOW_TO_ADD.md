@@ -126,7 +126,8 @@ item and has a price.
 },
 ```
 
-- The order in the file is the order on screen.
+- The order in the file is the order on screen, and every row appears exactly once. There is no
+  second "already owned" list: a part the ship flies with is either on sale or not mentioned.
 - `Takes N m³.` and `You own N.` are worked out for you from the catalogue.
 - A module has to be fitted before it does anything, so buying one puts it in the station's
   inventory (the Inventory tab moves it to a ship, Outfitting fits it).

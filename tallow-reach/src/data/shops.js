@@ -4,8 +4,6 @@
 //
 //   n      the shop's name, shown as the screen's heading
 //   d      the line of explanation under the heading
-//   kit    parts every pilot already has, shown as "Owned". They are not for
-//          sale; the line is there so the screen says what the ship flies with.
 //   stock  the rows for sale, top to bottom in the order written here:
 //            id     item id from data/items.js (a module's stats are in data/modules.js)
 //            price  credits for one
@@ -28,6 +26,10 @@
 // and world, a world's shop stock moves into the world half. Nothing is written
 // into the save today, so the save version is unchanged.
 //
+// A row is the only way something appears on the shop screen: a part the ship
+// flies with is either on sale (the six standard parts at 1 cr) or not shown at
+// all. Do not add a second list of "already owned" lines — one entry per part.
+//
 // A new trader is one entry here plus the shop's id where the player docks.
 // Add a row to an existing shop with one line. See docs/HOW_TO_ADD.md recipe 4.
 
@@ -36,9 +38,6 @@ export const SHOPS = {
     n: "Weapons shop",
     d:
       "Left click fires your primary weapon (keys 1 and 2 switch). Right click fires your secondary weapon. Everything you buy goes into the station inventory, as many as you like: fit it in Outfitting or move it to a ship in Inventory.",
-    // Standard issue: every hull is delivered with these fitted, and they are
-    // not sold here (the autocannons are shown so the screen says so).
-    kit: [{ n: "Autocannons", d: "Primary. Standard issue." }],
     stock: [
       {
         id: "beam_basic",
