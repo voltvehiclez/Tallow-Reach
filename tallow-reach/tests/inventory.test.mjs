@@ -288,7 +288,7 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
     assert.match(menu, new RegExp(`\\b${action}\\(`), `menu.js has the ${action} action`);
     assert.match(screens, new RegExp(`data-a="${action}`), `a button in screens.js uses ${action}`);
   }
-  assert.match(economy, /buyItem\(w\.module, w\.price\)/, "the shop buys through the inventory (no Owned limit)");
+  assert.match(economy, /buyInto\(id, row\.price, STATION, n\)/, "the shop buys through the inventory (no Owned limit)");
   assert.doesNotMatch(economy, /Store your cargo first/, "ships keep their own cargo, so switching is never refused");
 
   // The fixed list of cargo types is gone for good: no file may read the old

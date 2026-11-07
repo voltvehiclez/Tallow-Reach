@@ -2,19 +2,20 @@
 // so the look of a screen can be changed without touching game logic.
 
 import { SHIPS } from "../data/ships.js";
-import { ITEM_IDS, isModule, itemName, itemValue, itemVol } from "../data/items.js";
+import { ITEM_IDS, canSell, isItem, isModule, itemName, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
-import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
+import { MISSILE } from "../data/weapons.js";
+import { OUTPOST_SHOP, shopDef } from "../data/shops.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
-import { storedFor, fittedAt, isBayGroup, ownedCount } from "../sim/fitting.js";
+import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import {
-  STATION, capacityOf, freeOf, hasRoomFor, itemsAt, loadOf, stockOf, unitsOf, valueOf,
+  STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, valueOf,
 } from "../sim/inventory.js";
 import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
-import { holdLoad, storedUnits, storageCap, repairCost } from "../sim/economy.js";
+import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/economy.js";
 import { describe } from "../sim/contracts.js";
 
 export const TABS = [
@@ -338,9 +339,11 @@ function baseHtml() {
   const load = holdLoad(),
     used = storedUnits(),
     cap = storageCap();
-  // Selling only concerns ore, so the buttons look at ore and not at spare modules.
-  const oreHeld = unitsOf(S.ship),
-    oreStored = unitsOf(STATION);
+  // Sell buttons cover everything with a sell value: ore, salvage and spare
+  // modules alike. A part fitted in a bay is in no place, so it is not for sale.
+  const sellable = stock => Object.keys(stock || {}).filter(id => isItem(id) && canSell(id)).length;
+  const sellHeld = sellable(cargo),
+    sellStored = sellable(S.store);
 
   let h =
     `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. Storage ${used}/${cap} m³. Refinery bonus +${Math.round(
@@ -353,10 +356,11 @@ function baseHtml() {
       )
       .join("") +
     `<div class="row"><button data-a="dep">Store hold</button><button data-a="wd">Load stored</button><button data-a="sellh" ${
-      oreHeld ? "" : "disabled"
+      sellHeld ? "" : "disabled"
     }>Sell hold ${valueOf(cargo)} cr</button><button data-a="sells" ${
-      oreStored ? "" : "disabled"
-    }>Sell stored ${valueOf(S.store)} cr</button></div><h2>Base modules</h2>`;
+      sellStored ? "" : "disabled"
+    }>Sell stored ${valueOf(S.store)} cr</button></div>` +
+    `<div class="sub">Selling takes ore, salvage and spare modules from the hold or the station, and leaves parts fitted on a ship alone.</div><h2>Base modules</h2>`;
 
   h += Object.keys(BASE_MODULES)
     .map(k => {
@@ -374,19 +378,22 @@ function baseHtml() {
 
 function shopHtml() {
   const S = state.profile;
-  let h =
-    `<h2>Weapons shop</h2><div class="sub">Left click fires your primary weapon (keys 1 and 2 switch). Right click fires your secondary weapon. Everything you buy goes into the station inventory, as many as you like: fit it in Outfitting or move it to a ship in Inventory.</div>` +
-    `<div class="row"><div>Autocannons<small>Primary. Standard issue.</small></div><span class="ok">Owned</span></div>`;
+  // The shop is data (data/shops.js) and sim/economy.js's shopList() turns it
+  // into these rows; the screen only decides how a row looks.
+  const def = shopDef(OUTPOST_SHOP);
+  // One row per part: everything the shop offers comes from `stock`, so a part
+  // is never listed twice (a part the ship already flies with is simply on sale).
+  let h = `<h2>${def.n}</h2><div class="sub">${def.d}</div>`;
 
-  h += Object.keys(SHOP_WEAPONS)
-    .map(k => {
-      const w = SHOP_WEAPONS[k],
-        have = w.module ? ownedCount(w.module) : 0,                  // both shop rows buy modules
-        room = w.module ? hasRoomFor(STATION, w.module) : true;      // the station must have the m³
-      return `<div class="row"><div>${w.n}<small>${w.d}${w.module ? ` Takes ${itemVol(w.module)} m³.` : ""}${
-        have ? ` You own ${have}.` : ""
-      }${room ? "" : " No room in the station's storage."}</small></div>` +
-        `<button data-a="wb" data-b="${k}" ${S.cr < w.price || !room ? "disabled" : ""}>Buy ${w.price} cr</button></div>`;
+  h += shopList(OUTPOST_SHOP)
+    .map(s => {
+      // A limited row shows what is left and greys out when it is gone; an
+      // unlimited row (every row today) shows nothing extra.
+      const soldOut = s.left !== null && s.left < 1;
+      return `<div class="row"><div>${s.n}<small>${s.d} Takes ${s.vol} m³.${s.owned ? ` You own ${s.owned}.` : ""}${
+        soldOut ? " Sold out." : s.left !== null ? ` ${s.left} left.` : ""
+      }${s.room ? "" : " No room in the station's storage."}</small></div>` +
+        `<button data-a="wb" data-b="${OUTPOST_SHOP}:${s.id}" ${S.cr < s.price || !s.room || soldOut ? "disabled" : ""}>Buy ${s.price} cr</button></div>`;
     })
     .join("");
   return h;
@@ -456,7 +463,7 @@ function inventoryHtml(ui) {
     many = S.ships.length > 1 ? "" : "disabled";
 
   return (
-    `<h2>Inventory</h2><div class="sub">Click an item to move one; Shift-click to move its whole stack. Everything you buy is kept in the station. ` +
+    `<h2>Inventory</h2><div class="sub">Click an item to move one; Shift-click to move its whole stack. Right-click an item to sell it — ore, salvage and spare modules alike. Everything you buy is kept in the station. ` +
     `Outfitting fits modules from the station. Fitted modules take no space. Each ship has its own hold, and a lost ship takes its hold with it.</div>` +
     invColumn(STATION, "Station", "s") +
     `<div class="ship-switch inv-switch">` +

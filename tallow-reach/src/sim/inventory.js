@@ -151,16 +151,18 @@ export function moveItem(from, to, id, n = Infinity) {
 }
 
 /**
- * Buy item `id` for `price` credits: it goes into the station's inventory (or
- * the place given). Returns `null` when it worked, or the reason it did not.
- * Nothing is charged unless the item really was stored.
+ * Buy `n` of item `id` for `price` credits each: they go into the station's
+ * inventory (or the place given). Returns `null` when it worked, or the reason
+ * it did not. Nothing is charged unless the items really were stored.
  */
-export function buyItem(id, price, where = STATION) {
+export function buyItem(id, price, where = STATION, n = 1) {
   const p = S();
   if (!isItem(id)) return "Unknown item.";
-  if (p.cr < price) return "Not enough credits.";
-  if (!hasRoomFor(where, id)) return `No room in ${nameOf(where)} for the ${itemName(id)}.`;
-  p.cr -= price;
-  addItem(where, id, 1);
+  const count = Math.max(1, Math.floor(+n) || 1);
+  const total = price * count;
+  if (p.cr < total) return "Not enough credits.";
+  if (!hasRoomFor(where, id, count)) return `No room in ${nameOf(where)} for the ${itemName(id)}.`;
+  p.cr -= total;
+  addItem(where, id, count);
   return null;
 }

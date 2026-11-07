@@ -87,6 +87,13 @@ export const state = {
     msg: "",           // timed centre-screen message
     msgT: 0,
   },
+
+  // How much a limited shop row has left: `{ "shopId:itemId": count }`, made on
+  // first use and stamped from the shop's `max` (data/shops.js). Only shops with
+  // a `max` on a row are ever in here: an unlimited row has no entry. Session
+  // state, not saved — a restock timer, event or roll later resets it through
+  // `setShopStock()` in sim/economy.js, and save step 9 moves it into the world.
+  shops: {},
 };
 
 /** Show a hint for this frame only. Call every frame to keep it visible. */

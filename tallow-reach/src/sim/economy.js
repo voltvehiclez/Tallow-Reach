@@ -4,14 +4,17 @@
 
 import { state } from "../state/state.js";
 import { SHIPS } from "../data/ships.js";
-import { canSell, isModule, itemName, itemValue } from "../data/items.js";
+import { canSell, isItem, isModule, itemName, itemValue } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
-import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
+import { MISSILE } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
+import { isShop, shopDef, shopRow } from "../data/shops.js";
+import { ownedCount } from "./fitting.js";
 import { setShip } from "./player.js";
 import { stockFor } from "../state/profile.js";
 import {
-  STATION, buyItem, capacityOf, countOf, holdOf, loadOf, moveItem, stockOf, takeItem, unitsOf, valueOf,
+  STATION, buyItem as buyInto, capacityOf, countOf, hasRoomFor, holdOf, loadOf, moveItem, stockOf,
+  takeItem, unitsOf, valueOf,
 } from "./inventory.js";
 export { valueOf };   // the Base tab and the Inventory sell box both ask for it
 import { refillPower } from "./power.js";
@@ -67,24 +70,45 @@ export function withdrawStored() {
   }
 }
 
-/** Sell everything in the hold that has a value; spare modules stay in the ship. */
+/**
+ * Sell everything in the flown ship's hold that has a value. Spare modules sell
+ * too (they have a sell value like any item); only a part fitted in a bay stays
+ * put, because a fitted part is in no hold. Returns the message for the panel.
+ */
 export function sellHold() {
   const p = S();
-  const hold = stockOf(p.ship);
-  p.cr += valueOf(hold);
-  for (const id of Object.keys(hold)) if (canSell(id)) takeItem(p.ship, id, Infinity);
+  const where = p.ship;
+  const earned = valueOf(stockOf(where));
+  const sold = countSaleable(where);
+  if (!sold) return "Nothing in the hold can be sold.";
+  p.cr += earned;
+  for (const id of Object.keys(stockOf(where))) if (canSell(id)) takeItem(where, id, Infinity);
+  return `Sold ${sold} ${sold === 1 ? "item" : "items"} for ${earned} cr.`;
 }
 
-/** Sell everything saleable in the station's storage; spare modules stay there. */
+/** Sell everything saleable in the station's storage. Returns the message. */
 export function sellStored() {
   const p = S();
-  p.cr += valueOf(stockOf(STATION));
+  const earned = valueOf(stockOf(STATION));
+  const sold = countSaleable(STATION);
+  if (!sold) return "Nothing in the station can be sold.";
+  p.cr += earned;
   for (const id of Object.keys(stockOf(STATION))) if (canSell(id)) takeItem(STATION, id, Infinity);
+  return `Sold ${sold} ${sold === 1 ? "item" : "items"} for ${earned} cr.`;
 }
 
-/** Sell `amount` of one item from the station's storage or a ship's hold. */
+/** How many whole items at a place have a sell value — goods and spare parts alike. */
+function countSaleable(where) {
+  const stock = stockOf(where);
+  let n = 0;
+  for (const id of Object.keys(stock)) if (canSell(id)) n += stock[id];
+  return n;
+}
+
+/** Sell `amount` of one item from the station's storage or a ship's hold — a good
+ *  or a spare part; both have a sell value in the catalogue. */
 export function sellInventoryItem(id, where, amount = null) {
-  if (!canSell(id)) return "Only cargo can be sold.";
+  if (!canSell(id)) return "That cannot be sold.";
   const p = S();
   const available = countOf(where, id);
   const count = amount === null ? available : amount;
@@ -142,22 +166,96 @@ export function repairShip(id) {
   return `${SHIPS[id].n} repaired for ${c} cr.`;
 }
 
-export function buyWeapon(k) {
+/**
+ * How much of shop `shopId`'s row for item `id` is left, or `null` when that row
+ * never runs out (no `max` in data/shops.js — every Meridian row today). The
+ * count is made on first use and lives in `state.shops` (session only).
+ */
+export function shopStock(shopId, id) {
+  const row = shopRow(shopId, id);
+  if (!row || !(row.max > 0)) return null;
+  const key = `${shopId}:${id}`;
+  const shops = state.shops || (state.shops = {});
+  if (!(key in shops)) shops[key] = Math.floor(row.max);
+  return shops[key];
+}
+
+/**
+ * Set how much of a limited row is left. This is the hook a restock timer, a
+ * restock event or a random roll uses later; nothing needs saving today, so
+ * buying from a fresh save always starts from the row's `max`.
+ */
+export function setShopStock(shopId, id, n) {
+  const row = shopRow(shopId, id);
+  if (!row || !(row.max > 0)) return;
+  const shops = state.shops || (state.shops = {});
+  shops[`${shopId}:${id}`] = Math.max(0, Math.floor(+n || 0));
+}
+
+/**
+ * The rows the Shop tab draws for shop `shopId`: for sale, in data order, each
+ * with what the screen needs and nothing it has to work out. Pure apart from
+ * reading the limited rows' counts.
+ *
+ *   id, n, d     the row and the pitch, from data/shops.js
+ *   price        credits for one
+ *   vol          m³ one takes in the station's storage (purchases go there)
+ *   owned        how many you already own (storage, any hold, any bay)
+ *   left         how many more this shop has, or null when it never runs out
+ *   room         is there room in the station's storage for one more?
+ */
+export function shopList(shopId) {
+  return (shopDef(shopId).stock || []).map(row => {
+    const id = row.id;
+    const bought = isItem(id);
+    return {
+      id,
+      n: row.n || (bought ? itemName(id) : String(id)),
+      d: row.d || "",
+      price: row.price,
+      vol: bought ? (MODULES[id] ? MODULES[id].vol : 1) : 0,
+      owned: bought && isModule(id) && row.own !== false ? ownedCount(id) : 0,
+      left: shopStock(shopId, id),
+      room: bought ? hasRoomFor(STATION, id) : false,
+    };
+  });
+}
+
+/**
+ * Buy `qty` of shop `shopId`'s row for item `id`. This is the one purchase at
+ * any outpost: the shop is data (data/shops.js), a purchase lands in the
+ * station's inventory as a normal item (sim/inventory.js), and a launcher comes
+ * with its missiles (the module's `ammo`). Returns a message for the panel, or
+ * `undefined` when nothing could happen (unknown shop, unknown row, not enough
+ * credits, a full station, a row sold out) — the Buy button is disabled in those
+ * cases, so the player never reads it.
+ */
+export function buyItem(shopId, id, qty = 1) {
   const p = S();
-  const w = SHOP_WEAPONS[k];
-  if (!w || p.cr < w.price) return;
-  // The mining beam and the missiles are modules: buying one puts it in the
-  // station's inventory (as many as you like, as long as there is room), and it
-  // has to be fitted in a bay at Outfitting before it does anything.
-  if (w.module) {
-    const refusal = buyItem(w.module, w.price);
-    if (refusal) return refusal;
-    const gave = w.startStock && (p.msl || 0) < w.startStock;
-    if (gave) p.msl = w.startStock;
-    return `${w.n} in the station inventory. Fit it in a ${w.bay || "primary"} bay to use it.${gave ? ` ${w.startStock} missiles included.` : ""}`;
-  }
-  p.cr -= w.price;
-  return `${w.n} installed.`;
+  const row = shopRow(shopId, id);
+  if (!isShop(shopId) || !row || !isItem(id)) return;
+  const n = Math.max(1, Math.floor(+qty) || 1);
+  const total = row.price * n;
+  const left = shopStock(shopId, id);
+  if (p.cr < total) return;
+  if (left !== null && left < n) return;
+  if (!hasRoomFor(STATION, id, n)) return `No room in the station for the ${row.n || itemName(id)}.`;
+  // Everything is checked, so nothing below can fail half way: `buyInto` takes
+  // the credits and stores the items together.
+  buyInto(id, row.price, STATION, n);
+  if (left !== null) setShopStock(shopId, id, left - n);
+  const mod = MODULES[id];
+  const ammo = (mod && mod.ammo) || 0;
+  const gave = ammo > 0 && p.msl < ammo;
+  if (gave) p.msl = ammo;
+  const name = row.n || itemName(id);
+  if (n > 1) return `${n} ${name} in the station inventory.`;
+  // A module has to be fitted before it does anything; its bay group is the
+  // module's own `g` (primary, secondary, ...), so the message needs no data.
+  const bay = (mod && mod.g) || "primary";
+  return `${name} in the station inventory.${mod ? ` Fit it in a ${bay} bay to use it.` : ""}${
+    gave ? ` ${ammo} missiles included.` : ""
+  }`;
 }
 
 export function restockMissiles() {

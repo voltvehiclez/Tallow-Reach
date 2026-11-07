@@ -26,6 +26,8 @@
 //   range   beam: metres it reaches
 //   cap     secondary: missiles the launcher carries
 //   cd      secondary: seconds between launches
+//   ammo    secondary: missiles that come with a bought launcher (data/shops.js
+//           prices the launcher; this is the only part of "includes 8 missiles")
 //   hp      hull: Hull HP the hull has (no hull module fitted means none at all)
 //   sh      shield: Shield HP it holds when full
 //   regen   shield: Shield HP per second once it starts recharging
@@ -129,7 +131,8 @@ export const MODULES = {
   // the secondary bay, fired with right click. The missile itself works the way
   // it always has (data/weapons.js MISSILE); what the module decides is the
   // payload, the stock and the reload — 8 damage a hit, a 12-missile stock
-  // bought at the shop, 4 seconds between launches. Bought in the Shop.
+  // bought at the shop, 4 seconds between launches. Bought in the Shop (priced
+  // in data/shops.js), and a purchase fills the ship up to `ammo` missiles.
   missile_basic: {
     g: "secondary",
     vol: 2,
@@ -138,6 +141,7 @@ export const MODULES = {
     dmg: 8,
     cap: 12,
     cd: 4,
+    ammo: 8,
   },
 };
 

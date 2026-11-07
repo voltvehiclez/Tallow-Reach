@@ -68,7 +68,7 @@ The AI doing each refactor step decides exact field names, but must keep these i
 existing short-key style (`n`, `d`, `v`) for data tables.
 
 **Registries (all in `src/data/`, string ids).** `ITEMS`, `MODULES`, `SHIPS`, `ENEMIES`,
-`LOOT_TABLES`, `FACTIONS`, `SHOPS`, `SECTOR_TEMPLATES`, `ENCOUNTERS`, `MISSIONS`. A content test
+`LOOT_TABLES`, `FACTIONS`, `SHOPS` (done, step 5), `SECTOR_TEMPLATES`, `ENCOUNTERS`, `MISSIONS`. A content test
 (`tests/content.test.mjs`) checks every entry is complete and every id referenced actually exists
 (an enemy's loot table exists, a mission's sector exists, ...). This test is what lets people add
 content without reading the engine.
@@ -135,7 +135,6 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 
 | Debt | Evidence | Step |
 | --- | --- | --- |
-| Shop is partly hard-coded | `SHOP_WEAPONS` in `data/weapons.js`; `buyModule` special-cased | 5 |
 | `sim/` imports the screen and speakers | `sim/*.js` import `render/scene.js`, `render/models.js`, `core/audio.js`, `core/input.js` | 6 |
 | Entities are three.js meshes | enemies `{ m, hp, ... }` in `sim/ai.js`; player `P.m`; crates, rocks, bullets likewise | 7 |
 | Variable time step | `main.js` `dt = Math.min(0.05, ...)` per animation frame | 8 |

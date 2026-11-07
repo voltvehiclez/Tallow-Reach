@@ -5,8 +5,9 @@ Plain objects and numbers only. No imports from other layers (except other data 
 | File | What it holds |
 |---|---|
 | `ships.js` | Hulls the player can fly, and the `FLIGHT` table that scales every ship at once. A hull has no `spd`/`turn` and no Hull HP of its own: the fitted thrusters set speed and turn (`sim/drive.js`), the fitted shields set shield strength and recharge (`sim/shield.js`), the fitted hull module sets Hull HP (`sim/hull.js`), and an empty thruster bay means the ship cannot move. |
-| `items.js` | `ITEMS`: the whole item catalogue — every ore, salvage good and **module**, keyed by id, with a category (`cat`), sell value (`v`), volume in m³ (`vol`) and stack rule (`st`). A module's entry is only `{ cat: "module" }`: its name, volume and stats live in `modules.js` under the same id (`npm test` checks both directions). Adding an item is one line; read them through `itemName`/`itemVol`/`itemValue`/`canSell`/`isModule`, never by hand. |
-| `weapons.js` | The missile's flight and lock-on numbers, the ammunition price (`unitPrice`), and the Shop list (`SHOP_WEAPONS`). Guns, the mining beam and the missile launcher are modules (`data/modules.js`), not weapon data. |
+| `items.js` | `ITEMS`: the whole item catalogue — every ore, salvage good and **module**, keyed by id, with a category (`cat`), sell value (`v`), volume in m³ (`vol`) and stack rule (`st`). A module's entry is `{ cat: "module", v: 540 }`: its name, volume and stats live in `modules.js` under the same id (`npm test` checks both directions), and `v` is what a spare part sells for — 60% of its shop price, never below 1 credit. Adding an item is one line; read them through `itemName`/`itemVol`/`itemValue`/`canSell`/`isModule`, never by hand. |
+| `weapons.js` | The missile's flight and lock-on numbers and the ammunition price (`unitPrice`). Guns, the mining beam and the missile launcher are modules (`data/modules.js`), not weapon data. |
+| `shops.js` | `SHOPS`: what each shop sells and charges. Per shop a heading (`n`), its line of explanation (`d`) and `stock` — one row per item, and the only way a part appears on the screen: `id` from `items.js`, `price`, the row's own `n`/`d`, and optionally `max` (leave it out: never runs out; a number: `N left`, sells out). Optional `own: false` hides the "You own N" count. `OUTPOST_SHOP` names the outpost's shop. Bought through `sim/economy.js` `buyItem(shopId, itemId, qty)`. |
 | `station.js` | Base modules, their costs, storage and refinery numbers, repair and recovery fees. |
 | `contracts.js` | Contract types, generators, wording (`DESCRIBE`), board size. |
 | `sectors.js` | The regions you can fly in, their flags, the order M warps through them, and the warp timing (`WARP`). |
@@ -20,4 +21,5 @@ Rules:
 - Keep the short keys (`n` name, `d` description, `v` value, ...). Copy an existing entry when adding one.
 - `npm test` (`tests/content.test.mjs`) fails if an entry is missing a field.
 - Adding a ship, item or contract type: see `docs/HOW_TO_ADD.md` recipes 1 to 3.
-- A module needs an entry in `items.js` as well as `modules.js` (recipe 16 step 1).
+- A module needs an entry in `items.js` as well as `modules.js` (recipe 16 step 1), and a row in
+  `shops.js` if the player should be able to buy one (recipe 4).
