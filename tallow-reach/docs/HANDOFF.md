@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-07. Save version **12**. **131 tests** in `tests/` (counted from the files;
+> Updated 2026-11-07. Save version **12**. **141 tests** in `tests/` (counted from the files;
 > an AI session without network cannot run them, so the user's own `npm test` is the real check).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. The inventory work was written in
@@ -165,7 +165,8 @@ that change, whether the save changes) and build them in small slices that can e
   (`addItem`, `takeItem`, `moveItem`, `countOf`, `itemsAt`).
 - A module's item entry carries no numbers: `MODULES[id]` is the one place its name, volume and
   stats live, and `npm test` checks the two tables agree in both directions.
-- `valueOf(stock)` (in `sim/inventory.js`, with the refinery bonus) is what a pile sells for;
+- `valueOf(stock)` (in `sim/inventory.js`, with the refinery bonus) is what a pile sells for, and it
+  counts spare modules too now that they have a value;
   selling and storing only ever touch items the catalogue gives a value to, so spare parts are safe.
 
 ## Known gaps (good next steps, none urgent)
@@ -176,8 +177,10 @@ that change, whether the save changes) and build them in small slices that can e
   `setShopStock()` in `sim/economy.js` is the hook for the restock timers/events/rolls the owner
   wants later. There is no second trader, and no way to buy ore or salvage (only parts are sold).
 - Inventory limits: only the station's parts can be fitted (a module in a ship's hold must be
-  moved back first), modules cannot be sold, and cargo stays in the ship it is in when you switch
-  ships. Nothing uses a hold of spare modules yet.
+  moved back first), and cargo stays in the ship it is in when you switch ships. Spare modules can
+  be sold from a hold or the station (60% of the shop price: beam 540, missile pod 900, the six
+  standard parts 1) — right-click a MOD tile in Inventory, or the Base tab's Sell buttons. A part
+  fitted in a bay is not for sale.
 - One active contract at a time, and one enemy *type* in play (adding more is now a data entry, but
   nothing spawns a second type yet: the spawner only brings in the enemy a hunt contract names).
   Raiders no longer get tougher with the contract tier (they are all 10 HP now).
@@ -196,7 +199,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 131 tests expected
+npm test          # 141 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 

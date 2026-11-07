@@ -61,7 +61,7 @@ voidglass: { n: "Void glass", cat: "salvage", v: 120, vol: 2 },
 
 - `n` name (the screens use it everywhere), `cat` one of `ITEM_CATEGORIES` (`ore`, `salvage`,
   `module`, `ammo`, `consumable`, `trade`), `v` credits a unit sells for (leave it out and the item
-  cannot be sold), `vol` m³ a unit takes up (1 if you leave it out), `st` most that fit in one stack
+  cannot be sold at all — every sellable item has one), `vol` m³ a unit takes up (1 if you leave it out), `st` most that fit in one stack
   (no limit if you leave it out — nothing uses a limit yet).
 - Holds, the station's storage, moving, selling, the Base screen, the Inventory tab and the save all
   read the catalogue, so nothing else changes. Old saves simply have none of it, and `npm test`
@@ -374,7 +374,8 @@ ship's hold or in the station's storage (a whole number, at least 1). `npm test`
 exists, the name and description are there, the volume is set, and the stat is a positive number.
 
 1. Add the entry to `MODULES` — **and one line to `ITEMS` in `src/data/items.js`**:
-   `beam_basic: { cat: "module" }`. A module is an item before it is a part, which is what lets it be
+   `beam_basic: { cat: "module", v: 540 }`. The `v` is what a **spare** one sells for: 60% of its
+   shop price, never below 1 credit (a test checks the two agree, so set both together). A module is an item before it is a part, which is what lets it be
    carried, stored and moved like anything else; its name, volume and stats stay in `MODULES`.
    `npm test` names any module that has no item entry. Nothing appears in the world until it is
    fitted the usual way, and the Outfitting screen already names any module found in a bay.

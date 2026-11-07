@@ -80,7 +80,7 @@ test("every item is complete, and the catalogue agrees with the module table", (
   assert.equal(itemVol("ferrite"), 1, "a good is 1 m³ unless its entry says otherwise");
   assert.ok(itemValue("core") > itemValue("voidite"), "the catalogue carries the prices");
   assert.equal(canSell("core"), true);
-  assert.equal(canSell("beam_basic"), false, "a module has no sell value");
+  assert.equal(canSell("beam_basic"), true, "a spare module sells like any other item");
   assert.equal(itemStack("ferrite"), Infinity, "nothing has a stack limit yet");
   assert.equal(itemName("no-such-thing"), "no-such-thing", "an unknown id does not crash a screen");
   assert.equal(itemVol("no-such-thing"), 0);
@@ -103,6 +103,28 @@ test("weapon data is complete", () => {
   // The two things the shop has always sold, at the prices the owner set.
   assert.equal(shopRow(OUTPOST_SHOP, "beam_basic").price, 900, "the mining beam is still 900 cr");
   assert.equal(shopRow(OUTPOST_SHOP, "missile_basic").price, 1500, "the missile pod is still 1500 cr");
+});
+
+test("a spare module sells for 60% of what a shop charges for it", () => {
+  // The rule the owner set: 60% of the shop price, rounded down and never below 1
+  // credit. Both numbers are data, so this test is what stops a shop price change
+  // from leaving the sell price behind.
+  for (const [shopId, shop] of Object.entries(SHOPS)) {
+    for (const row of shop.stock || []) {
+      if (!isModule(row.id)) continue;
+      const expected = Math.max(1, Math.floor(row.price * 0.6));
+      assert.equal(
+        itemValue(row.id),
+        expected,
+        `${shopId} sells ${row.id} for ${row.price} cr, so a spare one sells for ${expected} cr (data/items.js \`v\`)`
+      );
+    }
+  }
+  assert.equal(itemValue("beam_basic"), 540, "the beam: 900 cr in the shop, 540 cr sold back");
+  assert.equal(itemValue("missile_basic"), 900, "the missile pod: 1500 cr in the shop, 900 cr sold back");
+  assert.equal(itemValue("hull_basic"), 1, "a 1-cr standard part sells for 1 cr: 60% would round to nothing");
+  // Every item that can be sold is worth something, module or not.
+  for (const id of ITEM_IDS) if (canSell(id)) assert.ok(itemValue(id) > 0, `${id}: sell value must be above 0`);
 });
 
 test("every base module has a cost curve and a default level, and saves keep it", () => {

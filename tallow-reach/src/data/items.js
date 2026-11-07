@@ -13,6 +13,15 @@
 // Every module must be listed here too — tests/content.test.mjs names the one
 // that is missing — because the item catalogue is what a hold can carry.
 //
+// The one number a module's entry does carry is its sell value `v`: what the
+// station pays for a spare part. Spare modules sell like anything else (Base tab
+// or right-click a MOD tile in Inventory); a part fitted in a bay is not for sale
+// because it is not in any stock. The rule is 60% of what a shop charges, rounded
+// down, but never below 1 (a sellable part must be worth something): the beam 540
+// (of 900), the missile pod 900 (of 1500), the six standard parts 1 each (of their
+// 1 cr, where 60% would round to nothing). Change a shop price in data/shops.js
+// and the sell value here together — `npm test` checks the two agree.
+//
 // Adding an ore, a salvage good or a trade good is one line here and nowhere
 // else. Read it through the helpers below rather than reaching into ITEMS.
 
@@ -27,15 +36,16 @@ export const ITEMS = {
   salv: { n: "Salvage", cat: "salvage", v: 70 },
   core: { n: "Reactor core", cat: "salvage", v: 350 },
 
-  // Modules: the numbers live in data/modules.js under the same id.
-  power_basic: { cat: "module" },
-  cell_basic: { cat: "module" },
-  thruster_basic: { cat: "module" },
-  shield_basic: { cat: "module" },
-  cannon_basic: { cat: "module" },
-  beam_basic: { cat: "module" },
-  hull_basic: { cat: "module" },
-  missile_basic: { cat: "module" },
+  // Modules: the stats live in data/modules.js under the same id; `v` is what a
+  // spare part sells for (60% of the shop price, see the note at the top).
+  power_basic: { cat: "module", v: 1 },       // shop 1 cr
+  cell_basic: { cat: "module", v: 1 },        // shop 1 cr
+  thruster_basic: { cat: "module", v: 1 },    // shop 1 cr
+  shield_basic: { cat: "module", v: 1 },      // shop 1 cr
+  cannon_basic: { cat: "module", v: 1 },      // shop 1 cr
+  beam_basic: { cat: "module", v: 540 },      // shop 900 cr
+  hull_basic: { cat: "module", v: 1 },        // shop 1 cr
+  missile_basic: { cat: "module", v: 900 },   // shop 1500 cr
 };
 
 /** Every id, in catalogue order — the order the inventory lists things in. */

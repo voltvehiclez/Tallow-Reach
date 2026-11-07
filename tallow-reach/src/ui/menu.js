@@ -18,6 +18,7 @@ import { toggleModulePicker, togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
+import { canSell, itemName } from "../data/items.js";
 import { introHtml, outpostHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
 
@@ -180,10 +181,10 @@ const ACTIONS = {
     eco.withdrawStored();
   },
   sellh() {
-    eco.sellHold();
+    toast(eco.sellHold());
   },
   sells() {
-    eco.sellStored();
+    toast(eco.sellStored());
   },
   up(mod) {
     eco.upgradeBase(mod);
@@ -280,7 +281,7 @@ function afterProfileChange() {
 
 function openInventorySell(button) {
   const [kind, id, dir, stack] = String(button.dataset.b || "").split(":");
-  if (kind !== "c") return;
+  if (!canSell(id)) return;
   const source = dir === "s" ? inv.STATION : viewedShip();
   const available = inv.countOf(source, id);
   if (!(available > 0)) return;
@@ -297,10 +298,10 @@ function openInventorySell(button) {
   const popover = document.createElement("div");
   popover.className = "inv-sell-popover";
   popover.setAttribute("role", "dialog");
-  popover.setAttribute("aria-label", "Sell cargo");
+  popover.setAttribute("aria-label", "Sell item");
   popover.dataset.source = `${kind}:${id}:${dir}`;
   popover.innerHTML =
-    `<strong>Sell cargo</strong>` +
+    `<strong>Sell ${itemName(id)}</strong>` +
     `<label>Amount <span>(1–${available})</span><input class="inv-sell-amount" type="number" min="1" max="${available}" step="1" value="${stack || available}"></label>` +
     `<div class="inv-sell-error" aria-live="polite"></div>` +
     `<div class="inv-sell-actions"><button type="button" data-a="invSellConfirm">Sell</button><button type="button" data-a="invSellCancel">Cancel</button></div>`;
@@ -328,7 +329,7 @@ function confirmInventorySell(button) {
   const available = inv.countOf(source, id);
   const input = popover.querySelector(".inv-sell-amount");
   const amount = Number(input.value);
-  if (kind !== "c" || !Number.isInteger(amount) || amount < 1 || amount > available) {
+  if (!Number.isInteger(amount) || amount < 1 || amount > available) {
     popover.querySelector(".inv-sell-error").textContent = `Enter a whole number from 1 to ${available}.`;
     input.focus();
     return;
@@ -356,9 +357,11 @@ function onInventoryContextMenu(e) {
   sell.dataset.b = `${tile.dataset.kind}:${tile.dataset.id}:${tile.dataset.dir}:${tile.dataset.count}`;
   sell.setAttribute("role", "menuitem");
   sell.textContent = "Sell";
-  if (tile.dataset.kind !== "c") {
+  // Goods and spare modules both have a sell value, so both can be sold here; a
+  // part fitted in a bay is in no place and never gets a tile.
+  if (!canSell(tile.dataset.id)) {
     sell.disabled = true;
-    sell.title = "Modules cannot be sold; only cargo has a sell value.";
+    sell.title = "This cannot be sold.";
   }
   menu.append(sell);
 

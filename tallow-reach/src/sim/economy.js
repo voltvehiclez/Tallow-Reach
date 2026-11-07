@@ -70,24 +70,45 @@ export function withdrawStored() {
   }
 }
 
-/** Sell everything in the hold that has a value; spare modules stay in the ship. */
+/**
+ * Sell everything in the flown ship's hold that has a value. Spare modules sell
+ * too (they have a sell value like any item); only a part fitted in a bay stays
+ * put, because a fitted part is in no hold. Returns the message for the panel.
+ */
 export function sellHold() {
   const p = S();
-  const hold = stockOf(p.ship);
-  p.cr += valueOf(hold);
-  for (const id of Object.keys(hold)) if (canSell(id)) takeItem(p.ship, id, Infinity);
+  const where = p.ship;
+  const earned = valueOf(stockOf(where));
+  const sold = countSaleable(where);
+  if (!sold) return "Nothing in the hold can be sold.";
+  p.cr += earned;
+  for (const id of Object.keys(stockOf(where))) if (canSell(id)) takeItem(where, id, Infinity);
+  return `Sold ${sold} ${sold === 1 ? "item" : "items"} for ${earned} cr.`;
 }
 
-/** Sell everything saleable in the station's storage; spare modules stay there. */
+/** Sell everything saleable in the station's storage. Returns the message. */
 export function sellStored() {
   const p = S();
-  p.cr += valueOf(stockOf(STATION));
+  const earned = valueOf(stockOf(STATION));
+  const sold = countSaleable(STATION);
+  if (!sold) return "Nothing in the station can be sold.";
+  p.cr += earned;
   for (const id of Object.keys(stockOf(STATION))) if (canSell(id)) takeItem(STATION, id, Infinity);
+  return `Sold ${sold} ${sold === 1 ? "item" : "items"} for ${earned} cr.`;
 }
 
-/** Sell `amount` of one item from the station's storage or a ship's hold. */
+/** How many whole items at a place have a sell value — goods and spare parts alike. */
+function countSaleable(where) {
+  const stock = stockOf(where);
+  let n = 0;
+  for (const id of Object.keys(stock)) if (canSell(id)) n += stock[id];
+  return n;
+}
+
+/** Sell `amount` of one item from the station's storage or a ship's hold — a good
+ *  or a spare part; both have a sell value in the catalogue. */
 export function sellInventoryItem(id, where, amount = null) {
-  if (!canSell(id)) return "Only cargo can be sold.";
+  if (!canSell(id)) return "That cannot be sold.";
   const p = S();
   const available = countOf(where, id);
   const count = amount === null ? available : amount;

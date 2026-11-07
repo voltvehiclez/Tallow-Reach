@@ -1,7 +1,7 @@
 # Testing: Inventory, buying several modules, and station and ship room
 
 Built file: `tallow-reach/game/tallow-reach.html`. **Run `npm run build` first** (and `npm test`,
-which should say 121 passing). Open the built file in your browser. If the intro is showing, click
+which should say 141 passing). Open the built file in your browser. If the intro is showing, click
 **Enter the hangar**. Start from a new game or a save you do not mind changing (Saves tab).
 
 You need credits for this. If you are short, the numbers below assume at least 6000 cr.

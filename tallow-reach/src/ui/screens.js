@@ -2,7 +2,7 @@
 // so the look of a screen can be changed without touching game logic.
 
 import { SHIPS } from "../data/ships.js";
-import { ITEM_IDS, isModule, itemName, itemValue, itemVol } from "../data/items.js";
+import { ITEM_IDS, canSell, isItem, isModule, itemName, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
 import { OUTPOST_SHOP, shopDef } from "../data/shops.js";
@@ -10,7 +10,7 @@ import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js
 import { MODULES } from "../data/modules.js";
 import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import {
-  STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, unitsOf, valueOf,
+  STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, valueOf,
 } from "../sim/inventory.js";
 import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
@@ -339,9 +339,11 @@ function baseHtml() {
   const load = holdLoad(),
     used = storedUnits(),
     cap = storageCap();
-  // Selling only concerns ore, so the buttons look at ore and not at spare modules.
-  const oreHeld = unitsOf(S.ship),
-    oreStored = unitsOf(STATION);
+  // Sell buttons cover everything with a sell value: ore, salvage and spare
+  // modules alike. A part fitted in a bay is in no place, so it is not for sale.
+  const sellable = stock => Object.keys(stock || {}).filter(id => isItem(id) && canSell(id)).length;
+  const sellHeld = sellable(cargo),
+    sellStored = sellable(S.store);
 
   let h =
     `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. Storage ${used}/${cap} m³. Refinery bonus +${Math.round(
@@ -354,10 +356,11 @@ function baseHtml() {
       )
       .join("") +
     `<div class="row"><button data-a="dep">Store hold</button><button data-a="wd">Load stored</button><button data-a="sellh" ${
-      oreHeld ? "" : "disabled"
+      sellHeld ? "" : "disabled"
     }>Sell hold ${valueOf(cargo)} cr</button><button data-a="sells" ${
-      oreStored ? "" : "disabled"
-    }>Sell stored ${valueOf(S.store)} cr</button></div><h2>Base modules</h2>`;
+      sellStored ? "" : "disabled"
+    }>Sell stored ${valueOf(S.store)} cr</button></div>` +
+    `<div class="sub">Selling takes ore, salvage and spare modules from the hold or the station, and leaves parts fitted on a ship alone.</div><h2>Base modules</h2>`;
 
   h += Object.keys(BASE_MODULES)
     .map(k => {
@@ -460,7 +463,7 @@ function inventoryHtml(ui) {
     many = S.ships.length > 1 ? "" : "disabled";
 
   return (
-    `<h2>Inventory</h2><div class="sub">Click an item to move one; Shift-click to move its whole stack. Everything you buy is kept in the station. ` +
+    `<h2>Inventory</h2><div class="sub">Click an item to move one; Shift-click to move its whole stack. Right-click an item to sell it — ore, salvage and spare modules alike. Everything you buy is kept in the station. ` +
     `Outfitting fits modules from the station. Fitted modules take no space. Each ship has its own hold, and a lost ship takes its hold with it.</div>` +
     invColumn(STATION, "Station", "s") +
     `<div class="ship-switch inv-switch">` +

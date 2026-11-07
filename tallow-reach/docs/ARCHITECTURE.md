@@ -153,7 +153,11 @@ Each `src/` folder also has its own short `README.md`.
   that moves things between places or measures how full one is (`loadOf`/`freeOf` in m³,
   `addItem`/`takeItem`/`moveItem`, `countOf`, `itemsAt` for the screens). Code asks the catalogue
   what something is called, how big it is and what it is worth — `itemName`, `itemVol`, `itemValue`,
-  `canSell`, `itemStack`, `isModule` — and never names an item id of its own.
+  `canSell`, `itemStack`, `isModule` — and never names an item id of its own. **A spare module sells
+  like anything else**: its catalogue entry carries a sell value `v` (60% of the shop price, never
+  below 1 credit, kept in step by a test), so `canSell()` is true for it and every selling path —
+  right-click a MOD tile in Inventory, or the Base tab's Sell hold / Sell stored — treats it as an
+  item. A module fitted in a bay is in **no** stock, so it is never sold; only stocks are.
 - **Enemies are data.** `data/enemies.js` (`ENEMIES`, keyed by id) holds every hostile's name,
   plural name, Hull HP, colour, scale, faction, numbers and the id of its behaviour. `sim/ai.js`
   spawns one with `spawnEnemy(id, pos)`, and the entity it makes carries `def` (the id) and `f`
@@ -374,9 +378,9 @@ These are real, current limits. None of them is a bug in play today.
   2 MJ/s cutting), so a basic plant out-produces the trickle and the cells stay near full
   unless the powerplant is removed.
 - **Inventory limits.** Only the station's parts can be fitted in Outfitting: a module sitting in a
-  ship's hold has to be moved back to the station first. Modules cannot be sold, there is no
-  "move everything" button, and nothing yet uses a ship's hold of spare modules (fitting in the
-  field is not possible). Cargo no longer travels with you between ships: it stays in the ship you
+  ship's hold has to be moved back to the station first. Spare modules can be sold (a spare part is
+  an item with a value), but there is no "move everything" button, and fitting in the field is not
+  possible. Cargo no longer travels with you between ships: it stays in the ship you
   left it in, and the Base screen's Store/Load/Sell buttons act on the ship being flown.
 - **One active contract at a time** (`profile.mission`), and contract tiers are fixed at 1 to 3
   (`generateContract` in `sim/contracts.js`, wording in `ui/screens.js`).

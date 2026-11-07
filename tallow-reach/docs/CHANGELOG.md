@@ -19,6 +19,40 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Spare modules can be sold (60% of the shop price)
+
+- **Why:** the game treated a module as unsellable. `canSell(id)` is `itemValue(id) > 0` and a
+  module's catalogue entry was only `{ cat: "module" }`, so every selling path skipped parts: the
+  Inventory's right-click **Sell** was greyed out on a MOD tile ("Modules cannot be sold; only
+  cargo has a sell value"), and the Base tab's **Sell hold / Sell stored** quietly sold only ore and
+  salvage. A part you took off a hull was dead weight.
+- **The owner's rule:** a spare module sells for **60% of its shop price**, never below 1 credit —
+  the beam **540** (of 900), the missile pod **900** (of 1500), the six standard parts **1** each
+  (60% of 1 would round to nothing, and then they could not be sold again). The values are data, in
+  `ITEMS[<module>].v` in `src/data/items.js`, and a test fails if a shop price and its sell value
+  stop agreeing (`Math.max(1, Math.floor(price * 0.6))`).
+- **Changed:** `sim/economy.js` — `sellHold()` and `sellStored()` count and sell goods **and** spare
+  parts, and return a message (`Sold 4 items for 1270 cr.`, or `Nothing in the hold can be sold.`);
+  `sellInventoryItem()` no longer says "Only cargo can be sold."  `ui/menu.js` — right-click **Sell**
+  is offered whenever the item has a value, the box is titled with the item's name
+  (`SELL BASIC MINING BEAM`) instead of "Sell cargo", and the two Base buttons now report their
+  result in the toast. `ui/screens.js` — the Base tab's sell buttons look at everything with a value
+  (and say so), and the Inventory blurb mentions selling.
+- **What is still not for sale:** a module **fitted in a bay** — it is in no stock, so no selling
+  path can reach it, and a test pins that. Missiles loaded in a launcher are not cargo either.
+- **No save change.** Sell values come from the catalogue, not the save; `SAVE_VERSION` stays 12.
+- **Tests:** 141 pass (was 132). New `tests/selling.test.mjs` (9 tests): every sellable item is worth
+  whole credits, a part sells at 60% of its shop price from a hold or the station, refusals change
+  nothing, the refinery bonus applies to parts, whole-hold and whole-station sales take the parts,
+  the "nothing to sell" messages, a fitted part is never sold, and source guards on the old
+  "cargo only" rules. `tests/content.test.mjs` gained the price↔value rule.
+- Files: `src/data/items.js`, `src/sim/economy.js`, `src/ui/screens.js`, `src/ui/menu.js`,
+  `tests/selling.test.mjs` (new), `tests/content.test.mjs`, `TESTING-SELLING.md` (new),
+  `src/data/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/HANDOFF.md`,
+  `docs/HOW_TO_ADD.md` (recipes 2 and 16), this changelog. Run `npm run build` and `npm test`.
+
+---
+
 ## 2026-11-07: Shop fix — the cannons are listed once, as "Basic cannons"
 
 - **Why:** the Shop showed the cannons twice. The first line, **Autocannons — Primary. Standard

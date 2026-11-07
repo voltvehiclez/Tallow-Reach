@@ -1,7 +1,7 @@
 # Testing: the Shop (refactor step 5)
 
 Built file: `tallow-reach/game/tallow-reach.html`. **Run `npm run build` first**, then `npm test`
-(which should say **131 passing**). Open the built file in your browser. If the intro is showing,
+(which should say **141 passing**). Open the built file in your browser. If the intro is showing,
 click **Enter the hangar**.
 
 You need credits. A new game has 600 cr, which is enough for everything here; the beam and the
