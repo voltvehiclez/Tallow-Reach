@@ -6,9 +6,10 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** Milestone A is under way. **Steps 0 and 1 are done** (2026-11-07). **Step 2
-(seeded randomness) is built and tested (108 tests green)** — waiting for the owner's playtest before
-it is ticked. **Next: Step 3, loot tables.**
+**Current position:** Milestone A is under way. **Steps 0, 1 and 2 are done** (2026-11-07). **Step 3
+(loot tables) is built and tested (118 tests green)** — waiting for the owner's playtest of
+`TESTING-LOOT.md` before it is ticked. **Next: Step 4, item registry and the generic inventory (save
+v12 — it needs one answer from the owner first).**
 
 ## The order of work
 
@@ -27,7 +28,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | --- | --- | --- | --- |
 | 0 | Backup, `npm test`, play TESTING-BASELINE.md once | start | [x] 2026-11-07 |
 | 1 | Enemy registry (`data/enemies.js`, `enemy-killed` event) | A | [x] 2026-11-07 |
-| 2 | Seeded randomness everywhere | A | [ ] |
+| 2 | Seeded randomness everywhere | A | [x] 2026-11-07 |
 | 3 | Loot tables | A | [ ] |
 | 4 | Item registry and generic inventory (save v12) | A | [ ] |
 | 5 | Shops and prices from data | A | [ ] |
@@ -93,4 +94,7 @@ Not before step 5, or the work will have to be redone.
 - 2026-11-07: Steps 0 and 1 ticked after the owner played the built game in this version.
 - 2026-11-07: Step 2 (seeded randomness) built: `makeRng` added, the six `Math.random()` rolls in the
   sim replaced with `random()`, and `tests/rng.test.mjs` guards it. Old and new code compared side by
-  side (rocks, 60 s of raiders, 40 loot rolls): identical.
+  side (rocks, 60 s of raiders, 40 loot rolls): identical. Ticked after the owner's playtest.
+- 2026-11-07: Step 3 (loot tables) built: `data/loot.js` + pure `sim/loot.js`, raider drops and the
+  asteroid ore mix are data, a crate carries the item it holds. 118 tests green; save unchanged.
+  Compared with `main` before the step: 50,000 rocks identical, 200,000 kills at the same odds.

@@ -66,6 +66,7 @@ about each other, use the event bus instead.
 | Add a sector or change the warp order| `data/sectors.js`; see HOW_TO_ADD.md recipe 14 |
 | Change the warp timing or its lockout | `WARP` in `data/sectors.js` (the look itself follows those numbers) |
 | Add an enemy, or change one's numbers, colour or size | `data/enemies.js` (`ENEMIES`); see HOW_TO_ADD.md recipe 6 |
+| Change what an enemy drops, or the ore mix of rocks | `data/loot.js` (`LOOT_TABLES`); see HOW_TO_ADD.md recipe 18 |
 | Change how a hostile flies or shoots | `sim/ai.js` (`AI_BEHAVIOURS`, chosen by the def's `ai` field) |
 | Add or rename a faction              | `data/factions.js` (`FACTIONS`)                |
 | Change flight feel                   | `sim/player.js` (`flight`)                     |
@@ -98,11 +99,11 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
-src/sim/               player, power, drive, fitting, inventory, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
+src/sim/               player, power, drive, fitting, inventory, weapons, combat, ai, loot, asteroids, targeting, economy, contracts, session, sectors, effects, world
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
@@ -122,6 +123,12 @@ Each `src/` folder also has its own short `README.md`.
   instance never depends on how many dice combat rolled before it. Anything that must be repeatable
   from a seed (sectors, wormhole instances, co-op) takes a `makeRng` generator rather than reaching
   for the shared one.
+- **Loot is data.** `data/loot.js` holds `LOOT_TABLES`: an enemy's drops (each line a chance `w`, a
+  count range `c` and a scatter `j`) and a rock's ore mix (weighted `pick`). `sim/loot.js` is pure
+  and rolls them — `rollLoot(id, rng)` for drops, `pickLoot(id, rng)` for one weighted pick — so a
+  test can roll a table 10,000 times and check the odds. An enemy names its table with `loot` in
+  `data/enemies.js`; a crate in the world carries the item id it holds (`{ m, t, item }`) and nothing
+  else knows which item a crate is. Do not write a drop rule in `sim/` again.
 - **Enemies are data.** `data/enemies.js` (`ENEMIES`, keyed by id) holds every hostile's name,
   plural name, Hull HP, colour, scale, faction, numbers and the id of its behaviour. `sim/ai.js`
   spawns one with `spawnEnemy(id, pos)`, and the entity it makes carries `def` (the id) and `f`

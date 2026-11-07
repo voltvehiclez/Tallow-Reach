@@ -142,6 +142,7 @@ in `render/models.js`), and runs the behaviour its `ai` field names.
 4. A **new kind of behaviour** (not just new numbers) is `AI_BEHAVIOURS` in `sim/ai.js`: one
    function `(e, def, toTarget, dist, dt)` that moves `e`, then name it in the def's `ai` field.
    The raider uses `chase`.
+5. What it **drops** is its `loot` field: a table id from `src/data/loot.js`. See recipe 18.
 5. A new faction is one entry in `src/data/factions.js` (`n` name, `d` description).
 6. Test it: `tests/enemies.test.mjs` spawns enemies headlessly (`tests/headless.mjs` runs sim code
    with the screen and sound stubbed out). Copy that test to check a second type quickly.
@@ -381,3 +382,30 @@ the worked example to copy for a module shop: a `module` field on the `SHOP_WEAP
    `sim/economy.js` and in `sanitizeProfile`, and show the count in the panel.
 5. **Do it one group at a time.** The power group is the one with parts in it, so start
    there: buy a better powerplant, fit it, watch the HUD figure change.
+
+## 18. What something drops, or what a rock is made of (data only)
+
+Loot is data (`src/data/loot.js`), rolled by the pure `src/sim/loot.js`. Nothing about a drop is
+written in the game code.
+
+A table is one of two kinds:
+
+- **`kind: "drops"`** — every line is rolled on its own. `w` is the chance (0 to 1, default 1 =
+  always), `c` is `[min, max]` how many, and `j` is how far the crate scatters (default 8 m, `0` =
+  exactly on the wreck). Used for enemies.
+- **`kind: "pick"`** — exactly one line is chosen, weighted by `w`. Used for the ore a rock is made
+  of.
+
+Steps:
+
+1. Add or edit an entry in `LOOT_TABLES` in `src/data/loot.js`. Every `i` must be an item id from
+   `src/data/items.js` (a new item first: recipe 2).
+2. Point an enemy at it with `loot: "<table id>"` in `src/data/enemies.js`.
+3. For a brand-new table used by something else (a crate in the field, an encounter), call
+   `rollLoot("<table id>")` for drops or `pickLoot("<table id>")` for a single weighted pick. Both
+   use the seeded random source, so a run repeats.
+4. `npm test` checks every item id, every weight and the odds of every table (`tests/loot.test.mjs`
+   rolls each table 10,000 times), so a typo or a missing item fails the tests, not the game.
+
+Today: a killed raider drops one or two salvage crates (50/50) and a reactor core on one kill in
+ten; a rock is about 62% ferrite, 30% cobalt, 8% voidite.

@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import { V, R, face } from "../util/math.js";
-import { random } from "../util/rng.js";
+import { rollLoot } from "./loot.js";
 import { emit } from "../util/events.js";
 import { ITEM } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
@@ -54,23 +54,25 @@ function killHostile(e) {
   state.profile.kills++;
   emit("enemy-killed", { def: e.def, faction: e.f });
 
-  // Loot drop: one or two salvage crates, sometimes a reactor core.
-  for (let k = random() < 0.5 ? 2 : 1; k > 0; k--) {
-    spawnCrate(e.m.position.clone().add(V(R(-8, 8), R(-8, 8), R(-8, 8))));
+  // Loot: whatever the enemy's table says (data/loot.js).
+  for (const drop of rollLoot(e.loot)) {
+    for (let k = 0; k < drop.count; k++) spawnCrate(scattered(e.m.position, drop.scatter), drop.item);
   }
-  if (random() < 0.1) spawnCrate(e.m.position, true);
   msg("Hostile destroyed", 2);
 }
 
-/** Drop a crate of loot at `p`. Cores are rarer and drawn in blue. */
-export function spawnCrate(p, core) {
+/** A point up to `d` metres away from `p` in each direction (0 = exactly `p`). */
+const scattered = (p, d) => (d > 0 ? p.clone().add(V(R(-d, d), R(-d, d), R(-d, d))) : p);
+
+/** Drop a crate holding `item` at `p`. Cores are rarer and drawn in blue. */
+export function spawnCrate(p, item = "salv") {
   const m = new THREE.Mesh(
     crateGeo,
-    core ? mm(0x3a6a7a, 0x1a5a6a) : mm(0x6a5a3a, 0x4a3510)
+    item === "core" ? mm(0x3a6a7a, 0x1a5a6a) : mm(0x6a5a3a, 0x4a3510)
   );
   m.position.copy(p);
   scene.add(m);
-  state.world.crates.push({ m, t: CRATE_LIFE, core: !!core });
+  state.world.crates.push({ m, t: CRATE_LIFE, item });
 }
 
 /** Move bullets along their path and resolve hits. */
@@ -137,7 +139,7 @@ export function updateCrates(dt) {
       if (holdLoad() >= SHIPS[S.ship].cargo) {
         say("Cargo hold full");
       } else {
-        const k = c.core ? "core" : "salv";
+        const k = c.item;
         cargoOf()[k]++;
         emit("pickup", { item: k });
         msg(`Picked up ${ITEM[k].n}`, 2);

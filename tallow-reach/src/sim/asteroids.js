@@ -2,7 +2,7 @@
 
 import * as THREE from "three";
 import { V, R } from "../util/math.js";
-import { random } from "../util/rng.js";
+import { pickLoot } from "./loot.js";
 import { sectorGroup } from "../render/scene.js";
 import { mm, rockShape } from "../render/models.js";
 import { FIELD_CENTER, FIELD_SECTOR, fieldList } from "./world.js";
@@ -14,8 +14,7 @@ const FIELD_HEIGHT = 250;   // vertical spread
 /** Spawn one rock somewhere in the field. Ore type depends on the roll. */
 export function spawnAsteroid() {
   const r = R(18, 70),
-    roll = random(),
-    type = roll < 0.62 ? "ferrite" : roll < 0.92 ? "cobalt" : "voidite";
+    type = pickLoot("asteroid");   // the ore mix is data (data/loot.js)
   const glow = type === "cobalt" ? 0x14304a : type === "voidite" ? 0x3a1a55 : 0;
 
   const m = new THREE.Mesh(rockShape(), mm(0x4a4540, glow));

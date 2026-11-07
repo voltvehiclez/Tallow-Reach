@@ -19,6 +19,42 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Refactor step 3 — loot tables (drops and ore mix are data)
+
+- **Why:** the two drop rules were written inside the game code — one or two salvage crates and a
+  10% core in `sim/combat.js`, the ore mix in `sim/asteroids.js` — so a new drop, a second enemy's
+  loot or a new rock type meant editing the sim. Now both are tables.
+- **New:** `src/data/loot.js` (`LOOT_TABLES`, two kinds: `drops` — a line per drop with a chance `w`,
+  a count range `c` and a scatter `j`; and `pick` — one weighted choice, for a rock's ore) and
+  `src/sim/loot.js` (`rollLoot(id, rng)`, `pickLoot(id, rng)`, pure and tested). The raider table is
+  today's rule exactly: `salv` 1–2 at 100%, `core` 1 at 10% dropped on the wreck; the asteroid table
+  is ferrite 62 / cobalt 30 / voidite 8.
+- **Changed:** `src/data/enemies.js` gains `loot: "raider"`; the enemy record carries it
+  (`src/sim/ai.js`), `killHostile` rolls the table instead of hard-coding crates, `spawnAsteroid`
+  takes its ore from the table, and a crate in the world now carries **which item it holds**
+  (`{ m, t, item }`) instead of a `core` flag — `src/sim/targeting.js` reads that for its label, so
+  the marker still says "crate" / "reactor core".
+- **Nothing plays differently.** Checked against `main` before this step, both versions running on
+  the same substituted `Math.random`: **50,000 rocks gave an identical ore sequence**, and 200,000
+  kills each gave the same odds — one crate 49.80% vs 49.96%, two crates 50.20% vs 50.04%, a core
+  10.02% vs 9.85%, and in both versions every core landed exactly on the wreck. One honest detail:
+  the 50/50 crate count now maps a low die to *one* crate where the old code mapped it to *two*, so
+  individual kills can swap 1↔2 crates while the odds are unchanged. Matching that would have meant
+  writing the count range backwards in the data, which is worse than the invisible difference.
+- **New:** `tests/loot.test.mjs` (9 tests, rolls each table 10,000 times and checks the odds,
+  determinism, a 0% line never dropping, an unknown table giving nothing, and that adding a drop is
+  a data edit) and `TESTING-LOOT.md`. `tests/content.test.mjs` now checks every loot table: real item
+  ids, sane weights and ranges, every enemy's table exists, and the raider/asteroid numbers pinned.
+- **Also:** `tests/rng.test.mjs` followed the crate change (`c.core` → `c.item`).
+- **Saves:** none; still version 11, no migration.
+- **Tests:** 118 pass (108 before).
+- Files: `src/data/loot.js`, `src/sim/loot.js`, `src/data/enemies.js`, `src/sim/ai.js`,
+  `src/sim/combat.js`, `src/sim/asteroids.js`, `src/sim/targeting.js`, `tests/loot.test.mjs`,
+  `tests/content.test.mjs`, `tests/rng.test.mjs`, `TESTING-LOOT.md`, `src/data/README.md`,
+  `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md` (closed debt removed),
+  `docs/HOW_TO_ADD.md` (recipe 18 added), `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog.
+  Run `npm run build` and `npm test`.
+
 ## 2026-11-07: Refactor step 2 — seeded randomness everywhere
 
 - **Why:** "same seed, same run" is the foundation for generated sectors, wormhole instances and

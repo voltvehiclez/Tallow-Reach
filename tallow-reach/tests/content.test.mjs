@@ -12,6 +12,7 @@ import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../src/data/enemies.js";
 import { FACTIONS } from "../src/data/factions.js";
+import { LOOT_TABLES } from "../src/data/loot.js";
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
 import { newProfile, sanitizeProfile, SAVE_VERSION, MISSION_TYPES } from "../src/state/profile.js";
 import { CAMERA, cameraTrail } from "../src/data/camera.js";
@@ -566,6 +567,7 @@ test("every enemy def is complete, and adding one is a data entry", () => {
       );
     }
     assert.ok(FACTIONS[d.f], `${id}: faction "${d.f}" is not in data/factions.js`);
+    assert.ok(LOOT_TABLES[d.loot], `${id}: loot table "${d.loot}" is not in data/loot.js`);
   }
 
   // The raider keeps exactly the numbers the game has today.
@@ -575,6 +577,39 @@ test("every enemy def is complete, and adding one is a data entry", () => {
   assert.equal(r.dmg, 1, "1 damage a shot (the shields are balanced against this)");
   assert.equal(r.f, "pirates");
   assert.equal(r.ai, "chase", "close in, then circle and shoot");
+});
+
+test("every loot table is complete and names real items", () => {
+  const kinds = ["drops", "pick"];
+  for (const [id, t] of Object.entries(LOOT_TABLES)) {
+    assert.ok(kinds.includes(t.kind), `${id}: kind must be one of ${kinds.join(" / ")}`);
+    assert.ok(Array.isArray(t.entries) && t.entries.length > 0, `${id}: needs at least one entry`);
+
+    for (const [i, e] of t.entries.entries()) {
+      const where = `${id} entry ${i + 1}`;
+      assert.ok(ITEM[e.i], `${where}: item "${e.i}" is not in data/items.js`);
+      assert.ok(isNum(e.w == null ? 1 : e.w) && (e.w == null ? 1 : e.w) > 0, `${where}: w must be a positive number`);
+      if (t.kind === "drops") assert.ok((e.w == null ? 1 : e.w) <= 1, `${where}: a chance cannot be over 1`);
+      if (e.c) {
+        assert.ok(Array.isArray(e.c) && e.c.length === 2, `${where}: c must be [min, max]`);
+        assert.ok(Number.isInteger(e.c[0]) && Number.isInteger(e.c[1]) && e.c[0] >= 1 && e.c[0] <= e.c[1],
+          `${where}: c must be whole numbers with min <= max`);
+      }
+      if (e.j != null) assert.ok(isNum(e.j) && e.j >= 0, `${where}: j (scatter) must be 0 or more`);
+    }
+  }
+
+  // Today's drops, pinned: an edit here is a balance change, not a refactor.
+  const raider = LOOT_TABLES.raider.entries;
+  const salv = raider.find(e => e.i === "salv"),
+    core = raider.find(e => e.i === "core");
+  assert.deepEqual(salv.c, [1, 2], "one or two salvage crates");
+  assert.equal(salv.w, 1, "salvage always drops");
+  assert.equal(core.w, 0.1, "a reactor core on one kill in ten");
+  assert.equal(core.j, 0, "and it lands on the wreck");
+
+  const ore = LOOT_TABLES.asteroid.entries;
+  assert.deepEqual(ore.map(e => `${e.i}:${e.w}`), ["ferrite:62", "cobalt:30", "voidite:8"], "the ore mix");
 });
 
 test("an unknown enemy id resolves to the default enemy instead of blowing up", () => {

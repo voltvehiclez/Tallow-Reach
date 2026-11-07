@@ -131,7 +131,7 @@ test("setSeed(n) makes the loot rolls repeat themselves exactly", () => {
     sim.state.world.crates.length = 0;
     const e = sim.spawnEnemy("raider", at);
     sim.hitHostile(e, 99, at);
-    return sim.state.world.crates.map(c => (c.core ? "core" : "salvage"));
+    return sim.state.world.crates.map(c => c.item);
   };
 
   assert.deepEqual(kill(5), kill(5), "same seed, same crates");
