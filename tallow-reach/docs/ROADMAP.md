@@ -6,8 +6,8 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** Milestone A has started. **Step 1 (enemy registry) is built and tested** —
-waiting for the owner's playtest of `TESTING-ENEMIES.md` before it is ticked below. **Next: Step 2.**
+**Current position:** Milestone A is under way. **Steps 0 and 1 are done** (2026-11-07: baseline
+played, enemies are data). **Next: Step 2, seeded randomness.**
 
 ## The order of work
 
@@ -24,8 +24,8 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 
 | Step | What | Milestone | Status |
 | --- | --- | --- | --- |
-| 0 | Backup, `npm test`, play TESTING-BASELINE.md once | start | [ ] |
-| 1 | Enemy registry (`data/enemies.js`, `enemy-killed` event) | A | [ ] |
+| 0 | Backup, `npm test`, play TESTING-BASELINE.md once | start | [x] 2026-11-07 |
+| 1 | Enemy registry (`data/enemies.js`, `enemy-killed` event) | A | [x] 2026-11-07 |
 | 2 | Seeded randomness everywhere | A | [ ] |
 | 3 | Loot tables | A | [ ] |
 | 4 | Item registry and generic inventory (save v12) | A | [ ] |
@@ -88,5 +88,5 @@ Not before step 5, or the work will have to be redone.
 - 2026-11-07: Vision, target architecture, roadmap and refactor plan written (docs only).
 - 2026-11-07: Step 1 (enemy registry) built: enemies are entries in `src/data/enemies.js`, factions in
   `src/data/factions.js`, kills emit `enemy-killed { def, faction }`, plus a headless sim test harness
-  (`tests/headless.mjs`). 101 tests green; save version unchanged. Ticked once the owner has played
-  `TESTING-ENEMIES.md`.
+  (`tests/headless.mjs`). 101 tests green; save version unchanged.
+- 2026-11-07: Steps 0 and 1 ticked after the owner played the built game in this version.

@@ -45,6 +45,8 @@ the next person must know (save version, rebuild needed, known issues).
   version has no enemy id, so it keeps its old wording and still counts any hostile.
 - **Tests:** 101 pass (94 before; two `content.test.mjs` source-guards were replaced by real
   enemy-table checks, and six headless enemy tests are new).
+- **Roadmap:** steps 0 and 1 ticked 2026-11-07 (the owner played this build; old save with a
+  Prospector loaded unchanged).
 - Files: `src/data/enemies.js`, `src/data/factions.js`, `src/sim/ai.js`, `src/sim/combat.js`,
   `src/sim/contracts.js`, `src/data/contracts.js`, `src/util/events.js`, `tests/headless.mjs`,
   `tests/enemies.test.mjs`, `tests/content.test.mjs`, `TESTING-ENEMIES.md`, `src/data/README.md`,
