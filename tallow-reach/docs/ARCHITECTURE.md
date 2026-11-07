@@ -18,6 +18,10 @@ npm run watch        # rebuilds on every save
 npm test             # unit tests: data and save layers, plus content checks
 ```
 
+`tests/headless.mjs` runs gameplay code (`src/sim/`) in a test with the screen and the
+speakers stubbed out, so a test can spawn an enemy and read the result without a browser.
+It bundles with esbuild (already a dev dependency) and adds no package.
+
 `game/tallow-reach.html` is **generated** from `src/`. Never edit it by hand. It only
 changes when someone runs `npm run build`, so every change to `src/` should end with
 a reminder to rebuild. It is self-contained (three.js is bundled in), so it still
@@ -61,7 +65,9 @@ about each other, use the event bus instead.
 | Add a contract type                  | `data/contracts.js` (list, generator, wording), plus a listener in `sim/contracts.js` |
 | Add a sector or change the warp order| `data/sectors.js`; see HOW_TO_ADD.md recipe 14 |
 | Change the warp timing or its lockout | `WARP` in `data/sectors.js` (the look itself follows those numbers) |
-| Change pirate behaviour              | `sim/ai.js`                                    |
+| Add an enemy, or change one's numbers, colour or size | `data/enemies.js` (`ENEMIES`); see HOW_TO_ADD.md recipe 6 |
+| Change how a hostile flies or shoots | `sim/ai.js` (`AI_BEHAVIOURS`, chosen by the def's `ai` field) |
+| Add or rename a faction              | `data/factions.js` (`FACTIONS`)                |
 | Change flight feel                   | `sim/player.js` (`flight`)                     |
 | Rebind keys                          | `BINDINGS` in `core/input.js`                  |
 | Add an outpost screen (tab)          | `ui/screens.js` (`TABS`, `SCREENS`, a HTML function) and `ui/menu.js` (`ACTIONS`) |
@@ -83,6 +89,7 @@ about each other, use the event bus instead.
 | Add a sound                          | `core/audio.js` (`tone`, `nz`, or a new graph) |
 | Change what gets saved               | `state/profile.js` (bump `SAVE_VERSION`, add a migration) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
+| Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
 | Add tests                            | `tests/` (`*.test.mjs`, run by `npm test`)     |
 
 ## File map
@@ -91,14 +98,15 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, power, drive, fitting, inventory, weapons, combat, ai, asteroids, targeting, economy, contracts, session, sectors, effects, world
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
-tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness)
+tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
+                       enemies.test.mjs (headless enemy spawn), headless.mjs (test helper)
 docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, HANDOFF.md, CHANGELOG.md (recent + index), CHANGELOG_ARCHIVE.md (older, full text)
 ```
 
@@ -106,6 +114,21 @@ Each `src/` folder also has its own short `README.md`.
 
 ## Conventions
 
+- **All randomness goes through `src/util/rng.js`.** Gameplay code calls `random()` (or `R(a, b)`
+  from `util/math.js`, which is built on it); nothing in `src/sim/` or `src/data/` may call
+  `Math.random()` — `tests/rng.test.mjs` fails and names the file and line if it does.
+  `setSeed(n)` makes a whole run reproducible, `setSeed(null)` goes back to `Math.random` (the
+  default), and `makeRng(n)` hands out an *independent* generator so generating a sector or an
+  instance never depends on how many dice combat rolled before it. Anything that must be repeatable
+  from a seed (sectors, wormhole instances, co-op) takes a `makeRng` generator rather than reaching
+  for the shared one.
+- **Enemies are data.** `data/enemies.js` (`ENEMIES`, keyed by id) holds every hostile's name,
+  plural name, Hull HP, colour, scale, faction, numbers and the id of its behaviour. `sim/ai.js`
+  spawns one with `spawnEnemy(id, pos)`, and the entity it makes carries `def` (the id) and `f`
+  (the faction id) so events and screens can name it. A def's `ai` field picks a function from
+  `AI_BEHAVIOURS` in `sim/ai.js`; adding *numbers* is a data edit, adding a *way of fighting* is
+  one function there. `tests/enemies.test.mjs` spawns a fake enemy to prove no enemy lives in code.
+  Kills emit `enemy-killed { def, faction }`; a hunt contract names the def it counts (`e`).
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `v`.
   Contracts: `n` count, `r` reward, `o` ore, `p` progress. Keep the short keys when adding entries.
@@ -258,7 +281,7 @@ to gameplay from a new feature, subscribe with `on(name, handler)`. For example:
 
 ```js
 import { on } from "../util/events.js";
-on("pirate-killed", () => { /* achievements, faction reputation, ... */ });
+on("enemy-killed", ({ def, faction }) => { /* achievements, faction reputation, ... */ });
 ```
 
 If you add an event, add it to the list at the top of `util/events.js` in the same change.
@@ -271,9 +294,10 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## Replayability hooks
 
-- `util/rng.js`: `random()` is the seedable random source. Call `setSeed(n)` and anything
-  that uses `random()` or `R()` becomes reproducible. Today that covers the contract board
-  and the audio noise buffers. See "Known gaps" for what still bypasses it.
+- `util/rng.js`: `random()` is the one random source for the whole game — spawns, loot, asteroid
+  ore, the contract board and the audio noise buffers all draw from it. `setSeed(n)` makes a run
+  reproducible; `makeRng(n)` gives an independent stream for anything that must be regenerated from
+  its own seed.
 - `data/contracts.js`: contract generators take a random source, so they can be seeded in the same way.
 
 ## Save compatibility
@@ -296,16 +320,10 @@ single mixed save, fixed item keys) are tracked with their fixing step in the "D
 
 These are real, current limits. None of them is a bug in play today.
 
-- **Some randomness bypasses the seed.** `sim/ai.js`, `sim/combat.js` (loot drops) and
-  `sim/asteroids.js` call `Math.random()` directly, so pirate waves, loot and some asteroid
-  rolls ignore `setSeed`. Switching them to `random()` from `util/rng.js` makes them seedable
-  with no change in unseeded play. Do this before building seeded sectors or daily challenges.
 - **`sanitizeProfile` lists some things by name.** The three base modules (`store`, `hangar`,
   `refinery`) and the weapon flag (`msl`) are written out in `state/profile.js`. A new
   base module or weapon needs a line there too. `tests/content.test.mjs` fails if a base module is missing.
   (The `beam` flag left the save in version 8; the beam is a module.)
-- **There is one enemy type.** Pirate numbers (Hull HP, speeds, ranges, fire rate) sit inside
-  `sim/ai.js`. Before adding a second enemy, move them into a new `src/data/enemies.js` (see HOW_TO_ADD.md).
 - **Every hull is the same ship apart from the hold today.** Thrusters set speed and turn,
   every hull ships with the same basic drive, and the hull's combat and mining multipliers
   are 1 everywhere. The only difference between hulls is the hold, measured in m³ (one
@@ -327,7 +345,6 @@ These are real, current limits. None of them is a bug in play today.
   left it in, and the Base screen's Store/Load/Sell buttons act on the ship being flown.
 - **One active contract at a time** (`profile.mission`), and contract tiers are fixed at 1 to 3
   (`generateContract` in `sim/contracts.js`, wording in `ui/screens.js`).
-- **`pirate-killed` carries no payload.** When enemy types arrive, emit `{ kind }` so listeners can tell them apart.
 - **Muting is not saved.** Sound starts on every time the game opens.
 - **The sector you are in is not saved.** `state.sector` is runtime only, so you always launch
   in Tallow Reach. Only Tallow Reach has content: Kestrel Hollow is empty, and the outpost,

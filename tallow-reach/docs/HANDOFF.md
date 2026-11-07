@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-07. Save version **11**. **94 tests** in `tests/` (counted from the files;
+> Updated 2026-11-07. Save version **11**. **108 tests** in `tests/` (counted from the files;
 > an AI session without network cannot run them, so the user's own `npm test` is the real check).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. The inventory work was written in
@@ -36,7 +36,8 @@ hull, no hull module = the first hit that reaches the hull destroys the ship. Ho
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** Step 0 (backup, `npm test`, play `TESTING-BASELINE.md`), then Step 1 (enemy registry).
+- **Next action:** step 2 (seeded randomness) is built and tested (108 tests green) but not yet ticked
+  in ROADMAP.md; play it and tick. Then step 3 (loot tables).
 
 ---
 
@@ -105,7 +106,7 @@ that change, whether the save changes) and build them in small slices that can e
 | Hull | 10 Hull HP from `hull_basic`; damage is kept as a fraction in `profile.hp[ship]` and only repaired for credits at the outpost (Outfitting > Services); asteroid collisions deal `speed * 0.015` over 25 m/s |
 | Guns | Both primary bays fire on left click, each gun on its own cooldown; keys **1/2** cycle the primary slots (1 = guns, 2 = mining beam; an `Empty weapon slot` if nothing is fitted there). Right click = missiles (needs a launcher fitted) |
 | Mining beam | One ore per 4 s of unbroken contact; progress is lost the moment contact stops; small bar with percentage under the "left in rock" hint; chime when an ore banks |
-| Hostiles | One type: **Newbie Raider**, 10 Hull HP, no shields, 1 damage a shot (`RAIDER` in `sim/ai.js`) |
+| Hostiles | One type, but now **data**: the **Newbie Raider** is the `raider` entry in `src/data/enemies.js` (10 Hull HP, no shields, 1 damage a shot). `spawnEnemy(id, pos)` in `sim/ai.js` builds it; `AI_BEHAVIOURS` holds the one behaviour (`chase`). Kills emit `enemy-killed { def, faction }` |
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
 | Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
 | Saves | **Version 11**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds); old saves keep working |
@@ -119,10 +120,13 @@ that change, whether the save changes) and build them in small slices that can e
 | Chase distance | `src/data/camera.js` (`CAMERA`) — settled |
 | What a module does (power, thrust, shield, hull, gun, beam, missile figures) | `src/data/modules.js` (`MODULES`, `STOCK_FIT`) |
 | Which bays a hull has | `src/data/outfitting.js` (`SHIP_LAYOUTS`, `MODULE_GROUPS`, `APPEARANCE_SLOTS`) |
-| Newbie Raider name and Hull HP | `RAIDER` at the top of `src/sim/ai.js` |
+| An enemy's name, Hull HP, colour, size, speeds, ranges, damage | `src/data/enemies.js` (`ENEMIES`, the `raider` entry) |
+| How a hostile flies and shoots | `src/sim/ai.js` (`AI_BEHAVIOURS`, chosen by a def's `ai`) |
+| Factions | `src/data/factions.js` |
 | Missile flight and lock, ammo price, Shop rows | `src/data/weapons.js` (`MISSILE`, `SHOP_WEAPONS`) |
 | Warp timing and coast | `src/data/sectors.js` (`WARP`, `WARP_TIME`, `WARP_COAST`) |
 | Contracts, sectors, items, station prices | `src/data/contracts.js`, `sectors.js`, `items.js`, `station.js` |
+| Randomness and seeds | `src/util/rng.js` (`random`, `setSeed`, `makeRng`) — never `Math.random()` in `sim/` or `data/` |
 
 ## How the module pattern works (copy this for the next part)
 
@@ -148,14 +152,13 @@ that change, whether the save changes) and build them in small slices that can e
 - Inventory limits: only the station's parts can be fitted (a module in a ship's hold must be
   moved back first), modules cannot be sold, and cargo stays in the ship it is in when you switch
   ships. Nothing uses a hold of spare modules yet.
-- One enemy type and one active contract at a time; raiders no longer get tougher with the
-  contract tier (they are all 10 HP now). `pirate-killed` carries no payload.
+- One active contract at a time, and one enemy *type* in play (adding more is now a data entry, but
+  nothing spawns a second type yet: the spawner only brings in the enemy a hunt contract names).
+  Raiders no longer get tougher with the contract tier (they are all 10 HP now).
 - Kestrel Hollow is empty, and there is no star map screen (M just cycles the sectors).
   One sector's geography (outpost, field) is written into the code.
 - Salvage crates are abandoned when you warp out.
 - Current sector and mute state are not saved.
-- `Math.random()` in `sim/ai.js`, `sim/combat.js` and `sim/asteroids.js` bypasses the seed, so
-  "same seed" is not yet an identical run.
 - Paint bays are clickable but no paints exist yet.
 - Hulls differ only in hold size; ship-specific bonuses are meant to arrive later.
 - Enemies keep shooting you during a warp charge; whether warp should grant invulnerability is
@@ -171,6 +174,8 @@ npm test          # 94 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 
+- `tests/headless.mjs` runs sim code (`src/sim/`) in a test with the 3D scene and the sound stubbed
+  out, so enemy behaviour can be tested with no browser. Copy its pattern for step 7's headless test.
 - Some AI sessions have no network. Then `npm install` fails, `node build.mjs` fails (no `esbuild`)
   and most tests fail (they import `three` through `src/util/math.js`). Say so plainly and tell
   the user to run the two commands, instead of guessing the result.

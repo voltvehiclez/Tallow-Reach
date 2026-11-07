@@ -10,6 +10,8 @@ import { ITEM, KEYS, emptyCargo } from "../src/data/items.js";
 import { MISSILE, SHOP_WEAPONS } from "../src/data/weapons.js";
 import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
+import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../src/data/enemies.js";
+import { FACTIONS } from "../src/data/factions.js";
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
 import { newProfile, sanitizeProfile, SAVE_VERSION, MISSION_TYPES } from "../src/state/profile.js";
 import { CAMERA, cameraTrail } from "../src/data/camera.js";
@@ -104,6 +106,8 @@ test("every contract type has a generator, a description and is accepted by the 
         assert.ok(Number.isInteger(c.n) && c.n > 0, `${type} tier ${tier}: n must be a whole number above 0`);
         assert.ok(Number.isInteger(c.r) && c.r > 0, `${type} tier ${tier}: r (reward) must be a whole number above 0`);
         if (type === "mine") assert.ok(ITEM[c.o], `mine: ore "${c.o}" is not in ITEM`);
+        if (type === "hunt") assert.ok(ENEMIES[c.e], `hunt: enemy "${c.e}" is not in ENEMIES`);
+        if (type === "hunt") assert.match(DESCRIBE.hunt(c), /^Destroy \d+ pirate raiders$/, "hunt wording is built from the enemy's plural name");
         const text = DESCRIBE[type](c);
         assert.ok(text && !text.includes("undefined"), `${type}: description reads "${text}"`);
       }
@@ -541,11 +545,42 @@ test("a gun fires from whichever primary bay it is fitted in", () => {
   assert.deepEqual(gunsOf(undefined), [], "nothing to read");
 });
 
-test("the Newbie Raider has 10 hull points and no shields", () => {
-  // The hostile numbers live in sim/ai.js (see ARCHITECTURE.md), so guard them.
-  const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
-  assert.match(src, /RAIDER = \{ n: "Newbie Raider", hp: 10 \}/, "name and hull points");
-  assert.match(src, /mx: hp/, "no shield pool on the raider record");
+test("every enemy def is complete, and adding one is a data entry", () => {
+  // The hostile numbers live in data/enemies.js; an enemy is nothing but an entry.
+  assert.ok(ENEMIES[DEFAULT_ENEMY], `DEFAULT_ENEMY "${DEFAULT_ENEMY}" must be in ENEMIES`);
+  const numbers = ["hp", "col", "scale", "turn", "spdFar", "spdNear", "spdOrbit", "circleAt",
+    "fireRange", "lostRange", "hearRange", "fireDelay", "dmg", "bspd"];
+
+  for (const [id, d] of Object.entries(ENEMIES)) {
+    for (const f of ["n", "pl", "ai"]) {
+      assert.equal(typeof d[f], "string", `${id}: ${f} must be text`);
+    }
+    assert.ok(d.n.length > 0 && d.pl.length > 0, `${id}: it needs a name and a plural name`);
+    for (const f of numbers) {
+      assert.ok(isNum(d[f]) && d[f] > 0, `${id}: ${f} must be a positive number`);
+    }
+    for (const [f, parts] of [["fireGap", 2], ["spawnDist", 2]]) {
+      assert.ok(
+        Array.isArray(d[f]) && d[f].length === parts && d[f].every(isNum) && d[f][0] < d[f][1],
+        `${id}: ${f} must be [low, high] with low < high`
+      );
+    }
+    assert.ok(FACTIONS[d.f], `${id}: faction "${d.f}" is not in data/factions.js`);
+  }
+
+  // The raider keeps exactly the numbers the game has today.
+  const r = ENEMIES.raider;
+  assert.equal(r.n, "Newbie Raider");
+  assert.equal(r.hp, 10, "10 Hull HP");
+  assert.equal(r.dmg, 1, "1 damage a shot (the shields are balanced against this)");
+  assert.equal(r.f, "pirates");
+  assert.equal(r.ai, "chase", "close in, then circle and shoot");
+});
+
+test("an unknown enemy id resolves to the default enemy instead of blowing up", () => {
+  for (const id of [undefined, null, "", "no-such-enemy"]) {
+    assert.equal(enemyDef(id), ENEMIES[DEFAULT_ENEMY], `${id} should fall back to ${DEFAULT_ENEMY}`);
+  }
 });
 
 test("the basic thrusters draw power while flying, and a 20 MJ gulp to light the boost", () => {
@@ -694,11 +729,16 @@ test("shields arrived in save version 6: older saves are fitted with them", () =
   assert.deepEqual(removed.loadout.wasp.shield, [null], "the player's choice to run shieldless stands");
 });
 
-test("a pirate cannon does 1 damage a shot", () => {
-  // The pirate numbers live in sim/ai.js (see ARCHITECTURE.md), so guard the one
-  // the shields are balanced against.
+test("an enemy's shot uses its own def's damage and bullet speed", () => {
+  // The sim must never hard-code an enemy's numbers (tests/enemies.test.mjs spawns
+  // a fake enemy to prove the same thing at runtime).
   const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
-  assert.match(src, /fire\(e\.m\.position, dir, 520, false, 1\)/, "enemy cannons must do 1 a shot");
+  assert.match(
+    src,
+    /fire\(e\.m\.position, dir, def\.bspd, false, def\.dmg\)/,
+    "the shot's speed and damage come from the enemy's def"
+  );
+  assert.equal(ENEMIES.raider.dmg, 1, "the raider still does 1 damage a shot");
 });
 
 test("the cells charge at the plants' rate, never overflow and never go negative", () => {

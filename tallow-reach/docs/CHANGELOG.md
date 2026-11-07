@@ -19,6 +19,70 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Refactor step 2 — seeded randomness everywhere
+
+- **Why:** "same seed, same run" is the foundation for generated sectors, wormhole instances and
+  co-op. Six rolls in the simulation still called `Math.random()` directly, so seeding never covered
+  the whole game.
+- **Changed:** `src/util/rng.js` now owns everything: `makeRng(seed)` is a new independent generator
+  (same seed, same sequence, forever), `setSeed(n)` installs it for the whole game, `setSeed(null)`
+  goes back to `Math.random`, and `random()` reads `Math.random` at call time when unseeded.
+- **Changed:** the six direct rolls now go through `random()` — the raider's circling direction and
+  the two wander-spawn dice (`src/sim/ai.js`), the 1-or-2 crates and the 10% core (`src/sim/combat.js`),
+  and a rock's ore type (`src/sim/asteroids.js`). Same number of rolls, same order, same odds.
+- **New:** `tests/rng.test.mjs` — fails and names the file and line if `Math.random` appears anywhere
+  in `src/sim/` or `src/data/`; checks `makeRng` repeatability, range and independence from the shared
+  stream; and runs the real spawn, loot and asteroid code headlessly to prove `setSeed(1)` twice gives
+  the identical run.
+- **Nothing plays differently.** The old code (commit `75498f8`) and the new code were run side by side
+  with a substituted `Math.random`: 70 asteroid rocks (ore type, size, ore amount), 60 simulated
+  seconds of raiders with the hunt spawner and every bullet, and 40 kills of loot rolls all came out
+  identical.
+- **Rule for next time:** never call `Math.random()` in `src/sim/` or `src/data/` — use `random()`, or
+  `makeRng(seed)` when a thing must regenerate from its own seed. Written into `ARCHITECTURE.md`,
+  `src/sim/README.md` and `src/util/README.md`.
+- **Saves:** no change; still version 11, no migration.
+- **Tests:** 108 pass (101 before).
+- Files: `src/util/rng.js`, `src/sim/ai.js`, `src/sim/combat.js`, `src/sim/asteroids.js`,
+  `tests/rng.test.mjs`, `src/util/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`,
+  `docs/TARGET_ARCHITECTURE.md` (closed debt removed), `docs/HOW_TO_ADD.md` (recipe 12 rewritten),
+  `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Refactor step 1 — enemies are data (enemy registry, `enemy-killed` event)
+
+- **Why:** the Newbie Raider's numbers were written inside `sim/ai.js`, so a second enemy meant
+  editing game code. Now an enemy is one entry in `src/data/enemies.js`, which is the first piece of
+  Milestone A (content becomes data-only additions).
+- **New:** `src/data/enemies.js` (`ENEMIES`, the `raider` entry with exactly today's numbers: name,
+  plural name, 10 Hull HP, colour, scale, faction, `chase` behaviour, close/near/orbit speeds,
+  circling distance, fire/lost/hear ranges, first-shot delay, shot gap, 1 damage, 520 m/s bolt, spawn
+  distance; plus `DEFAULT_ENEMY` and `enemyDef()`), `src/data/factions.js` (`FACTIONS`: `pirates`),
+  `tests/headless.mjs` (runs `src/sim/` code in a test with the screen and sound stubbed out — no new
+  package, it uses the esbuild the build already needs), `tests/enemies.test.mjs`, `TESTING-ENEMIES.md`.
+- **Changed:** `src/sim/ai.js` — `spawnPirate(p)` is now `spawnEnemy(id, pos)`; the model, record
+  (`def`, `n`, `f`, `hp`, `mx`, fire timer) and the shot all read the def, and the behaviour comes
+  from `AI_BEHAVIOURS` (one entry, `chase`). `src/sim/combat.js` emits
+  `enemy-killed { def, faction }`; `src/util/events.js` lists it; `src/sim/contracts.js` counts only
+  the enemy a hunt contract names; `src/data/contracts.js` stores that id (`e`) and builds the wording
+  from the def's plural name, so it still reads "Destroy 3 pirate raiders".
+- **Nothing plays differently.** The same numbers were copied, not retuned, and the old and new
+  `sim/ai.js` were run side by side for 60 simulated seconds in three situations (a lone raider, the
+  wandering spawner, a hunt contract): enemy positions, Hull HP, fire timers and every bullet's
+  position and damage matched step for step. Hunt contracts still count raiders only. Contract text,
+  rewards, the lock marker ("Newbie Raider 100%") and loot are unchanged.
+- **Saves:** no change; save version still 11, no migration. A hunt contract saved by an older
+  version has no enemy id, so it keeps its old wording and still counts any hostile.
+- **Tests:** 101 pass (94 before; two `content.test.mjs` source-guards were replaced by real
+  enemy-table checks, and six headless enemy tests are new).
+- **Roadmap:** steps 0 and 1 ticked 2026-11-07 (the owner played this build; old save with a
+  Prospector loaded unchanged).
+- Files: `src/data/enemies.js`, `src/data/factions.js`, `src/sim/ai.js`, `src/sim/combat.js`,
+  `src/sim/contracts.js`, `src/data/contracts.js`, `src/util/events.js`, `tests/headless.mjs`,
+  `tests/enemies.test.mjs`, `tests/content.test.mjs`, `TESTING-ENEMIES.md`, `src/data/README.md`,
+  `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md` (two closed debts
+  removed), `docs/HOW_TO_ADD.md` (recipe 6 rewritten), `docs/HANDOFF.md`, this changelog.
+  Run `npm run build` and `npm test`.
+
 ## 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
 
 - **Why:** the owner's plan is much bigger than the code's shape (100+ sector starmap, wormhole

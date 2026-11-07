@@ -10,6 +10,7 @@
 // so nothing else needs the list.
 
 import { ITEM } from "./items.js";
+import { DEFAULT_ENEMY, enemyDef } from "./enemies.js";
 
 export const CONTRACT_TYPES = ["mine", "hunt", "salvage"];
 export const MINE_ORES = ["ferrite", "cobalt", "voidite"];
@@ -22,7 +23,9 @@ export const CONTRACT = {
   },
   hunt: tier => {
     const n = 2 + tier * 2;
-    return { n, r: n * 190 + 100 * tier };
+    // `e` is the enemy def the contract wants (data/enemies.js). Old saves have
+    // no `e`; both the counter and the wording fall back to the default enemy.
+    return { e: DEFAULT_ENEMY, n, r: n * 190 + 100 * tier };
   },
   salvage: tier => {
     const n = 3 * tier;
@@ -33,7 +36,7 @@ export const CONTRACT = {
 /** One-line text for a contract `m` (as returned by a generator, plus its type). */
 export const DESCRIBE = {
   mine: m => `Mine ${m.n} ${ITEM[m.o].n}`,
-  hunt: m => `Destroy ${m.n} pirate raiders`,
+  hunt: m => `Destroy ${m.n} ${enemyDef(m.e).pl}`,
   salvage: m => `Recover ${m.n} derelict crates`,
 };
 

@@ -57,5 +57,6 @@ function progress(type, matches = () => true) {
 }
 
 on("mined", ({ item }) => progress("mine", m => m.o === item));
-on("pirate-killed", () => progress("hunt"));
+// A hunt contract counts only the enemy it named (old saves named none: any kill counts).
+on("enemy-killed", ({ def } = {}) => progress("hunt", m => !m.e || m.e === def));
 on("pickup", () => progress("salvage"));
