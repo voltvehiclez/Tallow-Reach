@@ -73,6 +73,24 @@ export function sellStored() {
   p.store = emptyCargo();
 }
 
+/** Sell `amount` units of one cargo type from a station store or ship hold. */
+export function sellInventoryItem(id, where, amount = null) {
+  if (!KEYS.includes(id)) return "Only cargo can be sold.";
+  const p = S();
+  const cargo = where === STATION ? p.store : cargoOf(where);
+  const available = cargo[id] || 0;
+  const count = amount === null ? available : amount;
+  if (!Number.isInteger(count) || count < 1 || count > available) {
+    return `Enter a whole number from 1 to ${available}.`;
+  }
+  const sold = emptyCargo();
+  sold[id] = count;
+  const value = valueOf(sold);  // same base value and refinery bonus as Base-tab selling
+  p.cr += value;
+  cargo[id] -= count;
+  return `Sold ${count} ${ITEM[id].n} for ${value} cr.`;
+}
+
 export function upgradeBase(mod) {
   const p = S();
   const mdef = BASE_MODULES[mod];

@@ -19,6 +19,99 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Inventory Sell quantity uses a game-styled popover
+
+- Replaced the browser-owned quantity prompt with a small in-game box positioned beside the
+  selected inventory tile. It contains the quantity field (prefilled with the stack size),
+  inline validation, and Sell/Cancel buttons. No other inventory layout changed.
+- Files: `src/ui/menu.js`, `src/styles.css`, `tests/inventory.test.mjs`, this changelog.
+  Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory Sell asks how many units to sell
+
+- Choosing Sell on a cargo stack now opens a quantity prompt, prefilled with the whole stack
+  count. Enter any whole number from 1 to the stack size to sell that partial or full amount;
+  cancelling leaves the stack unchanged. Existing prices and refinery bonus still apply.
+- Files: `src/ui/menu.js`, `src/ui/screens.js`, `src/sim/economy.js`, `src/ui/README.md`,
+  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory grids use five narrower, shorter slots per row
+
+- Set both inventory grids to exactly five columns, with narrower tiles and a 68px tile/row
+  height. The 25-slot minimum gives five rows by default; each additional item beyond 25
+  naturally adds a row. The three-row scroll viewport and independent scrolling are retained.
+- Files: `src/styles.css`, `tests/inventory.test.mjs`, this changelog. Save data unchanged.
+  Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory grids keep their size when empty, and moves no longer show status text
+
+- Each hold now always renders a 5-by-5 slot field with a fixed three-row viewport, so empty
+  slots preserve the inventory window size and scrolling can be tested even with fewer items.
+  Station and ship grids scroll independently. Moving items clears/suppresses the "Moved ..."
+  status message; other actions are unchanged.
+- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
+  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Station and ship item grids scroll independently after three rows
+
+- Both inventory grids now show up to three full rows at once and scroll within their own
+  window when they contain more. This keeps the station and selected ship hold independently
+  browsable without changing the surrounding Inventory layout or other screens.
+- Files: `src/styles.css`, `src/ui/README.md`, `tests/inventory.test.mjs`, this changelog.
+  Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Right-click inventory menu can sell a cargo stack
+
+- Right-click an inventory tile to open an extensible context menu. Its first action is Sell,
+  which sells that cargo type's whole stack from the station or selected ship hold using the
+  existing item prices and refinery bonus. Modules show Sell disabled because they have no
+  existing resale value. No inventory/save format changes.
+- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/sim/economy.js`,
+  `src/ui/README.md`, `tests/inventory.test.mjs`, this changelog. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory tile text restored to the more readable size
+
+- Raised item names from 11px to 12px and volume labels from 9px to 10px, restoring their
+  previous readable sizes while keeping the more compact tile layout.
+- Files: `src/styles.css`, this changelog. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory item tiles tightened to reduce empty space
+
+- Reduced each tile's minimum height, padding, typography and spacing, and fit more columns
+  across the panel. No inventory behavior or data changed.
+- Files: `src/styles.css`, this changelog. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory tiles move one item on click and a stack on Shift-click
+
+- Removed the two small move buttons from every tile. Clicking a tile moves one item;
+  Shift-clicking it moves the whole stack. Tiles are slightly shorter to fit more items.
+  The inventory data and capacity rules are unchanged.
+- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
+  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory contents displayed as a compact grid
+
+- Replaced the long per-item row list in both the station and ship inventories with compact,
+  responsive item tiles showing category, quantity, volume and the existing move-one/move-all
+  controls. Inventory data and movement actions are unchanged.
+- Files: `src/ui/screens.js`, `src/styles.css`, `src/ui/README.md`, `tests/inventory.test.mjs`,
+  this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Lateral, vertical and reverse thrust increased to 60%
+
+- Doubled `FLIGHT.strafe`, `FLIGHT.lift` and `FLIGHT.reverse` from 0.3 to 0.6. Forward
+  thrust and turn are unchanged. No save data change.
+- Files: `src/data/ships.js`, `tests/content.test.mjs`, this changelog. Rebuild and test.
+
+## 2026-11-07: Boost works from any throttle and press snaps throttle to full forward
+
+- Boost no longer requires positive throttle; when active it adds forward acceleration only,
+  so it never boosts the ship backward even if throttle is in reverse.
+- A fresh Shift press sets throttle to +100% once. Holding boost does not lock the throttle,
+  so the pilot can change it while boosting. Existing throttle-to-speed behavior is otherwise
+  unchanged. Save version unchanged; no migration needed.
+- Files: `src/sim/player.js`, this changelog. Run `npm run build` and `npm test`.
+
 ## 2026-11-06: HANDOFF.md rewritten to match the project as it is now (docs only)
 
 - **Why:** the header and a few lines were out of date. It said the built file in the zip predated the

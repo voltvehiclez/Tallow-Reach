@@ -199,8 +199,26 @@ test("a part cannot come off a ship if the station has no room for it", () => {
 test("the Inventory tab, the shop and the picker are wired up (source guards)", () => {
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
   const menu = readFileSync(new URL("../src/ui/menu.js", import.meta.url), "utf8");
+  const economy = readFileSync(new URL("../src/sim/economy.js", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(screens, /\["i",\s*"Inventory"\]/, "there is an Inventory tab");
   assert.match(screens, /i:\s*inventoryHtml/, "and a screen for it");
+  assert.match(screens, /class="inv-grid"/, "inventory contents render as a grid of item tiles");
+  assert.match(screens, /class="inv-item"/, "each item is shown as an individual tile");
+  assert.match(screens, /while \(rows\.length < 25\)/, "empty slots keep each inventory grid at a 25-slot minimum");
+  assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/, "each inventory row has five slots");
+  assert.match(styles, /height: calc\(3 \* var\(--inv-row-height\) \+ 2 \* var\(--inv-row-gap\)\)/, "each hold grid keeps a three-row viewport");
+  assert.match(styles, /overflow-y: auto/, "each hold grid scrolls independently");
+  assert.match(screens, /Shift-click to move its whole stack/, "the Inventory explains stack movement");
+  assert.match(menu, /name === "mv" && e\.shiftKey/, "Shift-click moves the full stack");
+  assert.doesNotMatch(menu, /toast\(kind === "c" \? inv\.moveCargo/, "moving items does not show a message");
+  assert.match(menu, /addEventListener\("contextmenu", onInventoryContextMenu\)/, "inventory tiles open a right-click menu");
+  assert.match(menu, /dataset\.a = "invSellOpen"/, "the item context menu opens the in-game Sell box");
+  assert.match(menu, /className = "inv-sell-popover"/, "Sell uses a styled in-game popover");
+  assert.match(menu, /value="\$\{stack \|\| available\}"/, "the amount field defaults to the whole stack");
+  assert.doesNotMatch(menu, /window\.prompt/, "selling does not use a browser prompt");
+  assert.match(economy, /sellInventoryItem/, "inventory selling uses an economy action");
+  assert.match(economy, /cargo\[id\] -= count/, "only the requested amount is removed");
   assert.doesNotMatch(screens, /ownsModule/, "the shop no longer hides Buy once you own one");
   assert.match(screens, /&times;\$\{n\}/, "the picker shows how many of a part there are");
   for (const action of ["mv", "invPrev", "invNext"]) {
@@ -221,7 +239,6 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
     const text = readFileSync(file, "utf8");
     assert.doesNotMatch(text, /\b(S|p|profile|state\.profile)\.cargo\b|S\(\)\.cargo/, `${file} reads the old profile.cargo`);
   }
-  const economy = readFileSync(new URL("../src/sim/economy.js", import.meta.url), "utf8");
   assert.match(economy, /buyModule\(w\.module, w\.price\)/, "the shop buys through the inventory (no Owned limit)");
   assert.doesNotMatch(economy, /Store your cargo first/, "ships keep their own cargo, so switching is never refused");
 });

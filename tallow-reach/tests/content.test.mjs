@@ -192,10 +192,7 @@ test("the controls ease to neutral during a warp, they do not snap off", () => {
 
 test("only forward thrust reaches full speed, and turning is scaled", () => {
   for (const k of ["strafe", "lift", "reverse"]) {
-    assert.ok(
-      isNum(FLIGHT[k]) && FLIGHT[k] > 0 && FLIGHT[k] < 1,
-      `FLIGHT.${k} must be a fraction of forward speed, above 0 and below 1`
-    );
+    assert.equal(FLIGHT[k], 0.6, `FLIGHT.${k} is tuned to 60% of forward speed`);
   }
   assert.ok(isNum(FLIGHT.turn) && FLIGHT.turn > 0, "FLIGHT.turn must be a positive multiplier");
   assert.ok(FLIGHT.turn <= 1, "FLIGHT.turn scales the hulls down, it should not exceed 1");

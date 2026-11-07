@@ -653,19 +653,156 @@ button.mod-bay.on {
   text-transform: uppercase;
   color: var(--ice);
 }
-.inv-col .row:last-child {
-  border-bottom: none;
+.inv-grid {
+  --inv-row-height: 68px;
+  --inv-row-gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: var(--inv-row-height);
+  gap: var(--inv-row-gap);
+  height: calc(3 * var(--inv-row-height) + 2 * var(--inv-row-gap));
+  overflow-y: auto;
+  align-content: start;
+}
+.inv-item {
+  display: flex;
+  width: 100%;
+  height: 68px;
+  min-width: 0;
+  min-height: 68px;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 3px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-align: left;
+  background: rgba(8, 12, 15, .72);
+}
+.inv-item:hover:not(:disabled) {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: rgba(25, 30, 32, .95);
+}
+.inv-item[aria-disabled="true"] {
+  opacity: .62;
+}
+.inv-empty-slot {
+  height: 68px;
+  border: 1px solid var(--line);
+  background: rgba(8, 12, 15, .24);
+}
+.inv-context {
+  position: absolute;
+  z-index: 20;
+  min-width: 124px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  background: rgba(7, 9, 11, .98);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .6);
+}
+.inv-context button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  text-align: left;
+  font-size: 12px;
+}
+.inv-sell-popover {
+  position: absolute;
+  z-index: 25;
+  width: min(220px, calc(100% - 16px));
+  padding: 10px 12px;
+  border: 1px solid var(--amber);
+  background: rgba(7, 9, 11, .98);
+  color: var(--ink);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .7);
+}
+.inv-sell-popover > strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ice);
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.inv-sell-popover label {
+  display: block;
+  color: var(--dim);
+  font-size: 12px;
+}
+.inv-sell-popover label span {
+  color: var(--dim);
+  font-size: 10px;
+}
+.inv-sell-amount {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: #0d1216;
+  font: inherit;
+}
+.inv-sell-error {
+  min-height: 16px;
+  margin-top: 3px;
+  color: var(--red);
+  font-size: 11px;
+}
+.inv-sell-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 5px;
+}
+.inv-sell-actions button {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.inv-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+.inv-kind {
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: .1em;
 }
 .inv-n {
   color: var(--amber);
+  font-size: 12px;
 }
-.inv-btns {
-  display: flex;
-  gap: 6px;
-  flex: 0 0 auto;
+.inv-item-name {
+  display: -webkit-box;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.inv-item-meta {
+  display: block;
+  margin-top: 1px;
+  color: var(--dim);
+  font-size: 10px;
 }
 .inv-switch {
   margin: 10px 0;
+}
+@media (max-width: 420px) {
+  .inv-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    --inv-row-gap: 4px;
+  }
+  .inv-item {
+    padding: 2px;
+  }
 }
 
 /* Narrow screens: the ship first, then the bays in two columns. */

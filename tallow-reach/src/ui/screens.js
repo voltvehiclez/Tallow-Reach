@@ -396,21 +396,22 @@ export function viewedShip(ui = state.ui) {
   return S.ships.includes(ui.invShip) ? ui.invShip : S.ship;
 }
 
-/** One ore or module row in an inventory column, with its move buttons. */
+/** One ore or module tile in the inventory grid, with its existing move actions. */
 function invRow({ name, sub, kind, id, count, dir, free, vol }) {
-  const arrow = dir === "s" ? "&darr;" : "&uarr;";   // the station is drawn above the ship
   const where = dir === "s" ? "ship" : "station";
   const room = Math.floor(free / (vol || 1));
-  const can = room > 0 ? "" : "disabled";
-  const btn = (n, label) =>
-    `<button data-a="mv" data-b="${kind}:${id}:${dir}:${n}" ${can} aria-label="Move ${n === "all" ? "all" : n} ${name} to the ${where}">${arrow} ${label}</button>`;
+  const noRoom = room > 0 ? "false" : "true";
   return (
-    `<div class="row"><div>${name} <span class="inv-n">&times;${count}</span><small>${sub}</small></div>` +
-    `<div class="inv-btns">${btn(1, "1")}${count > 1 ? btn("all", "all") : ""}</div></div>`
+    `<button class="inv-item" data-a="mv" data-b="${kind}:${id}:${dir}:1" data-kind="${kind}" data-id="${id}" data-dir="${dir}" data-count="${count}" aria-disabled="${noRoom}" ` +
+    `title="${name}: ${sub}. Click to move one; Shift-click to move the whole stack." ` +
+    `aria-label="${name}, quantity ${count}. Click to move one to the ${where}; Shift-click to move the whole stack.">` +
+    `<span class="inv-item-top"><span class="inv-kind">${kind === "c" ? "ORE" : "MOD"}</span><span class="inv-n">&times;${count}</span></span>` +
+    `<span class="inv-item-name">${name}</span><span class="inv-item-meta">${vol} m³ each</span>` +
+    `</button>`
   );
 }
 
-/** One column: a heading with the m³ in use, then everything held there. */
+/** One inventory panel: a heading with the m³ in use, then a grid of contents. */
 function invColumn(where, title, dir) {
   const stock = where === STATION ? { cargo: state.profile.store } : { cargo: cargoOf(where) };
   const dest = where === STATION ? viewedShip() : STATION;   // where the buttons send things
@@ -428,9 +429,12 @@ function invColumn(where, title, dir) {
     const m = MODULES[id];
     rows.push(invRow({ name: m.n, sub: `Module, ${m.vol} m³ each`, kind: "m", id, count: n, dir, free: destFree, vol: m.vol }));
   }
+  // Keep a 5-by-5 slot field even when this hold contains fewer items. The
+  // three-row viewport therefore stays the same size and remains scrollable.
+  while (rows.length < 25) rows.push(`<div class="inv-empty-slot" aria-hidden="true"></div>`);
   return (
     `<section class="inv-col"><header><h3>${title}</h3><span class="mod-count">${used} / ${cap} m³</span></header>` +
-    (rows.length ? rows.join("") : `<div class="fit-empty">Empty</div>`) +
+    `<div class="inv-grid">${rows.join("")}</div>` +
     `</section>`
   );
 }
@@ -443,7 +447,7 @@ function inventoryHtml(ui) {
     many = S.ships.length > 1 ? "" : "disabled";
 
   return (
-    `<h2>Inventory</h2><div class="sub">Everything you buy is kept in the station. Move things to a ship to carry them; ` +
+    `<h2>Inventory</h2><div class="sub">Click an item to move one; Shift-click to move its whole stack. Everything you buy is kept in the station. ` +
     `Outfitting fits modules from the station. Fitted modules take no space. Each ship has its own hold, and a lost ship takes its hold with it.</div>` +
     invColumn(STATION, "Station", "s") +
     `<div class="ship-switch inv-switch">` +
