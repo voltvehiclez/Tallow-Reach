@@ -1,7 +1,7 @@
 # Testing: Inventory, buying several modules, and station and ship room
 
 Built file: `tallow-reach/game/tallow-reach.html`. **Run `npm run build` first** (and `npm test`,
-which should say 94 passing). Open the built file in your browser. If the intro is showing, click
+which should say 121 passing). Open the built file in your browser. If the intro is showing, click
 **Enter the hangar**. Start from a new game or a save you do not mind changing (Saves tab).
 
 You need credits for this. If you are short, the numbers below assume at least 6000 cr.
@@ -68,10 +68,26 @@ You need credits for this. If you are short, the numbers below assume at least 6
    storage**. If you force it, the message says so and no credits are taken.
 2. In Outfitting, taking a part off a ship with the station full says **No room in the station**.
 
-## 8. Old saves
+## 8. Old saves (this is the new part in step 4)
 
-Load a save slot or code made before this update (Saves tab). It loads without an error: the
-cargo you were carrying is in the ship you were flying, the station keeps its ore and modules.
+The save changed shape in this version, so this is the section to do if you only do one.
+
+1. Load a save slot or a code made **before** this update (Saves tab). It loads with no error and
+   nothing is lost: the ore you were carrying is in the ship you were flying, the station still has
+   its ore **and** its spare parts, credits and fitted modules are untouched.
+2. Open **Inventory** and look at the tiles: the same items, in the same order, with the same
+   `ORE` / `MOD` labels, the same m³ numbers and the same click behaviour as before.
+3. **Base**: the "in hold / stored / cr each" lines and the two Sell buttons show the same credits
+   as before.
+4. **Shop**: buying the beam and the missiles costs what it did, and the row still counts how many
+   you own.
+5. If you use an exported code (`TR1:...`), an old one still imports. Note the other way round does
+   not work: a save written by this version cannot be opened by an older build, so keep your old
+   export somewhere if you might go back.
+
+Under the hood the save is `{ itemId: count }` per place instead of separate ore and part lists.
+You should not be able to tell from playing, and that is the point — if you *can* tell, say what
+you saw.
 
 ## What to tell me
 

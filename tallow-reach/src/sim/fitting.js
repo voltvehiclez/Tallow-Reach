@@ -7,16 +7,17 @@
 // because that is what turns a fitted part into numbers the game uses.
 //
 // The save shape is one array per hull and group in profile.loadout (one entry
-// per bay, null = empty) and a flat list of spare parts in profile.modules — the
-// station's inventory, where everything you buy lands and where every bay is fitted
-// from (any number of the same part). The station has limited room in m³, so a part
-// coming off a ship needs space (sim/inventory.js). The Outfitting screen reads both;
-// this file is the only thing that writes them.
+// per bay, null = empty) and one stock in profile.store — the station's
+// inventory, where everything you buy lands, ore and spare parts alike, and where
+// every bay is fitted from (any number of the same part). The station has limited
+// room in m³, so a part coming off a ship needs space (sim/inventory.js). The
+// Outfitting screen reads both; this file is the only thing that writes them.
 
 import { MODULES } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
+import { isModule, itemVol } from "../data/items.js";
 import { state } from "../state/state.js";
-import { STATION, freeOf, volOf, nameOf } from "./inventory.js";
+import { STATION, addItem, countOf, freeOf, itemsAt, nameOf, takeItem } from "./inventory.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
@@ -38,9 +39,17 @@ function bayList(group, i) {
   return list;
 }
 
-/** Spare parts in storage that would fit a `group` bay, in stored order. */
+/**
+ * Spare parts in storage that would fit a `group` bay, in the order they
+ * arrived: one entry per part, so three beams are three "beam_basic"s.
+ */
 export function storedFor(group) {
-  return (S().modules || []).filter(id => MODULES[id] && MODULES[id].g === group);
+  const out = [];
+  for (const { id, n } of itemsAt(STATION)) {
+    if (!isModule(id) || MODULES[id].g !== group) continue;
+    for (let i = 0; i < n; i++) out.push(id);
+  }
+  return out;
 }
 
 /** The module fitted in one bay, or null. */
@@ -61,17 +70,15 @@ export function fitModule(group, i, id) {
   const m = MODULES[id];
   if (!m || m.g !== group) return "That module does not fit in that bay.";
 
-  const stored = S().modules || (S().modules = []);
-  const at = stored.indexOf(id);
-  if (at < 0) return "That module is not in storage.";
+  if (!countOf(STATION, id)) return "That module is not in storage.";
 
   const replaced = list[i];
   // The part that comes out needs somewhere to go; the one going in frees its own space.
-  if (replaced && volOf(replaced) > freeOf(STATION) + volOf(id)) {
+  if (replaced && itemVol(replaced) > freeOf(STATION) + itemVol(id)) {
     return `No room in ${nameOf(STATION)} for the ${MODULES[replaced].n}. Make space in the Inventory tab.`;
   }
-  stored.splice(at, 1);
-  if (replaced) stored.push(replaced);
+  takeItem(STATION, id, 1);
+  if (replaced) addItem(STATION, replaced, 1);
   list[i] = id;
 
   refillPower();
@@ -91,12 +98,12 @@ export function unequip(group, i) {
 
   const id = list[i];
   if (!id) return "That bay is already empty.";
-  if (volOf(id) > freeOf(STATION)) {
+  if (itemVol(id) > freeOf(STATION)) {
     return `No room in ${nameOf(STATION)} for the ${MODULES[id].n}. Make space in the Inventory tab.`;
   }
 
   list[i] = null;
-  (S().modules || (S().modules = [])).push(id);
+  addItem(STATION, id, 1);
 
   refillPower();
   refreshDrive();
@@ -113,10 +120,8 @@ export const isBayGroup = group => Object.prototype.hasOwnProperty.call(layoutFo
  *  any ship's hold, or fitted in any bay of any owned hull. */
 export function ownedCount(id) {
   const p = S();
-  let n = (p.modules || []).filter(m => m === id).length;
-  for (const hold of Object.values(p.holds || {})) {
-    n += ((hold && hold.modules) || []).filter(m => m === id).length;
-  }
+  let n = (p.store && p.store[id]) || 0;
+  for (const hold of Object.values(p.holds || {})) n += (hold && hold[id]) || 0;
   for (const fit of Object.values(p.loadout || {})) {
     for (const bays of Object.values(fit || {})) {
       if (Array.isArray(bays)) n += bays.filter(m => m === id).length;

@@ -4,13 +4,16 @@
 
 import { state } from "../state/state.js";
 import { SHIPS } from "../data/ships.js";
-import { ITEM, KEYS, emptyCargo } from "../data/items.js";
+import { canSell, isModule, itemName, itemValue } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
 import { setShip } from "./player.js";
 import { stockFor } from "../state/profile.js";
-import { STATION, cargoOf, holdOf, loadOf, capacityOf, buyModule, moveCargo } from "./inventory.js";
+import {
+  STATION, buyItem, capacityOf, countOf, holdOf, loadOf, moveItem, stockOf, takeItem, unitsOf, valueOf,
+} from "./inventory.js";
+export { valueOf };   // the Base tab and the Inventory sell box both ask for it
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
@@ -28,11 +31,7 @@ export const storedUnits = () => loadOf(STATION);
 /** The station's storage capacity in m³. */
 export const storageCap = () => capacityOf(STATION);
 
-/** Sell value of a cargo object, including the refinery bonus. */
-export function valueOf(cargo) {
-  const base = KEYS.reduce((sum, k) => sum + cargo[k] * ITEM[k].v, 0);
-  return Math.round(base * (1 + REFINERY_BONUS_PER_LEVEL * S().base.refinery));
-}
+/** (Sell value lives in sim/inventory.js with the stock it prices; re-exported above.) */
 
 /** Repair cost for a ship. Costs rise steeply with damage. Hull HP come from the
  *  fitted hull module — no module fitted means nothing to repair, and a free repair. */
@@ -45,50 +44,58 @@ export function repairCost(id) {
   return Math.round(missing * (2 + (3 * missing) / max));
 }
 
-/** Move all the ore in the flown ship's hold into the station (spare modules stay put). */
+/**
+ * Move every good in the flown ship's hold into the station (spare modules stay
+ * put, as they always did: a part is moved in the Inventory tab if you want it
+ * in storage).
+ */
 export function storeHold() {
   const p = S();
-  const before = KEYS.reduce((sum, k) => sum + cargoOf(p.ship)[k], 0);
-  for (const k of KEYS) moveCargo(p.ship, STATION, k);
-  const moved = before - KEYS.reduce((sum, k) => sum + cargoOf(p.ship)[k], 0);
+  const before = unitsOf(p.ship);
+  for (const id of Object.keys(stockOf(p.ship))) {
+    if (!isModule(id)) moveItem(p.ship, STATION, id, Infinity);
+  }
+  const moved = before - unitsOf(p.ship);
   return moved ? `Stored ${moved} units.` : "Storage is full.";
 }
 
-/** Load as much stored ore as fits into the flown ship's hold. */
+/** Load as much stored goods as fits into the flown ship's hold. */
 export function withdrawStored() {
   const p = S();
-  for (const k of KEYS) moveCargo(STATION, p.ship, k);
+  for (const id of Object.keys(stockOf(STATION))) {
+    if (!isModule(id)) moveItem(STATION, p.ship, id, Infinity);
+  }
 }
 
+/** Sell everything in the hold that has a value; spare modules stay in the ship. */
 export function sellHold() {
   const p = S();
-  const hold = cargoOf(p.ship);
+  const hold = stockOf(p.ship);
   p.cr += valueOf(hold);
-  KEYS.forEach(k => (hold[k] = 0));
+  for (const id of Object.keys(hold)) if (canSell(id)) takeItem(p.ship, id, Infinity);
 }
 
+/** Sell everything saleable in the station's storage; spare modules stay there. */
 export function sellStored() {
   const p = S();
-  p.cr += valueOf(p.store);
-  p.store = emptyCargo();
+  p.cr += valueOf(stockOf(STATION));
+  for (const id of Object.keys(stockOf(STATION))) if (canSell(id)) takeItem(STATION, id, Infinity);
 }
 
-/** Sell `amount` units of one cargo type from a station store or ship hold. */
+/** Sell `amount` of one item from the station's storage or a ship's hold. */
 export function sellInventoryItem(id, where, amount = null) {
-  if (!KEYS.includes(id)) return "Only cargo can be sold.";
+  if (!canSell(id)) return "Only cargo can be sold.";
   const p = S();
-  const cargo = where === STATION ? p.store : cargoOf(where);
-  const available = cargo[id] || 0;
+  const available = countOf(where, id);
   const count = amount === null ? available : amount;
   if (!Number.isInteger(count) || count < 1 || count > available) {
     return `Enter a whole number from 1 to ${available}.`;
   }
-  const sold = emptyCargo();
-  sold[id] = count;
-  const value = valueOf(sold);  // same base value and refinery bonus as Base-tab selling
+  // Same base value and refinery bonus as Base-tab selling.
+  const value = Math.round(count * itemValue(id) * (1 + REFINERY_BONUS_PER_LEVEL * S().base.refinery));
   p.cr += value;
-  cargo[id] -= count;
-  return `Sold ${count} ${ITEM[id].n} for ${value} cr.`;
+  takeItem(where, id, count);
+  return `Sold ${count} ${itemName(id)} for ${value} cr.`;
 }
 
 export function upgradeBase(mod) {
@@ -143,7 +150,7 @@ export function buyWeapon(k) {
   // station's inventory (as many as you like, as long as there is room), and it
   // has to be fitted in a bay at Outfitting before it does anything.
   if (w.module) {
-    const refusal = buyModule(w.module, w.price);
+    const refusal = buyItem(w.module, w.price);
     if (refusal) return refusal;
     const gave = w.startStock && (p.msl || 0) < w.startStock;
     if (gave) p.msl = w.startStock;

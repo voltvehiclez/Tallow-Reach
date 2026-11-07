@@ -2,19 +2,19 @@
 // so the look of a screen can be changed without touching game logic.
 
 import { SHIPS } from "../data/ships.js";
-import { ITEM, KEYS, ITEM_VOL } from "../data/items.js";
+import { ITEM_IDS, isModule, itemName, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
 import { storedFor, fittedAt, isBayGroup, ownedCount } from "../sim/fitting.js";
 import {
-  STATION, cargoOf, loadOf, capacityOf, freeOf, hasRoomFor, moduleStacks, volOf,
+  STATION, capacityOf, freeOf, hasRoomFor, itemsAt, loadOf, stockOf, unitsOf, valueOf,
 } from "../sim/inventory.js";
 import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
-import { holdLoad, storedUnits, storageCap, valueOf, repairCost } from "../sim/economy.js";
+import { holdLoad, storedUnits, storageCap, repairCost } from "../sim/economy.js";
 import { describe } from "../sim/contracts.js";
 
 export const TABS = [
@@ -334,22 +334,24 @@ function outfittingHtml() {
 function baseHtml() {
   const S = state.profile,
     ship = SHIPS[S.ship],
-    cargo = cargoOf(S.ship);
+    cargo = stockOf(S.ship);
   const load = holdLoad(),
     used = storedUnits(),
     cap = storageCap();
   // Selling only concerns ore, so the buttons look at ore and not at spare modules.
-  const oreHeld = KEYS.reduce((sum, k) => sum + cargo[k], 0),
-    oreStored = KEYS.reduce((sum, k) => sum + S.store[k], 0);
+  const oreHeld = unitsOf(S.ship),
+    oreStored = unitsOf(STATION);
 
   let h =
     `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. Storage ${used}/${cap} m³. Refinery bonus +${Math.round(
       REFINERY_BONUS_PER_LEVEL * 100 * S.base.refinery
     )}%.</div>` +
-    KEYS.map(
-      k =>
-        `<div class="row"><div>${ITEM[k].n}<small>${cargo[k]} in hold, ${S.store[k]} stored, ${ITEM[k].v} cr each</small></div></div>`
-    ).join("") +
+    ITEM_IDS.filter(id => !isModule(id))
+      .map(
+        id =>
+          `<div class="row"><div>${itemName(id)}<small>${cargo[id] || 0} in hold, ${S.store[id] || 0} stored, ${itemValue(id)} cr each</small></div></div>`
+      )
+      .join("") +
     `<div class="row"><button data-a="dep">Store hold</button><button data-a="wd">Load stored</button><button data-a="sellh" ${
       oreHeld ? "" : "disabled"
     }>Sell hold ${valueOf(cargo)} cr</button><button data-a="sells" ${
@@ -381,7 +383,7 @@ function shopHtml() {
       const w = SHOP_WEAPONS[k],
         have = w.module ? ownedCount(w.module) : 0,                  // both shop rows buy modules
         room = w.module ? hasRoomFor(STATION, w.module) : true;      // the station must have the m³
-      return `<div class="row"><div>${w.n}<small>${w.d}${w.module ? ` Takes ${volOf(w.module)} m³.` : ""}${
+      return `<div class="row"><div>${w.n}<small>${w.d}${w.module ? ` Takes ${itemVol(w.module)} m³.` : ""}${
         have ? ` You own ${have}.` : ""
       }${room ? "" : " No room in the station's storage."}</small></div>` +
         `<button data-a="wb" data-b="${k}" ${S.cr < w.price || !room ? "disabled" : ""}>Buy ${w.price} cr</button></div>`;
@@ -413,21 +415,28 @@ function invRow({ name, sub, kind, id, count, dir, free, vol }) {
 
 /** One inventory panel: a heading with the m³ in use, then a grid of contents. */
 function invColumn(where, title, dir) {
-  const stock = where === STATION ? { cargo: state.profile.store } : { cargo: cargoOf(where) };
   const dest = where === STATION ? viewedShip() : STATION;   // where the buttons send things
   const used = loadOf(where),
     cap = capacityOf(where),
     destFree = freeOf(dest);
   const rows = [];
-  for (const k of KEYS) {
-    const n = stock.cargo[k];
-    if (n > 0) {
-      rows.push(invRow({ name: ITEM[k].n, sub: `Ore, ${ITEM_VOL} m³ each`, kind: "c", id: k, count: n, dir, free: destFree, vol: ITEM_VOL }));
-    }
-  }
-  for (const { id, n } of moduleStacks(where)) {
-    const m = MODULES[id];
-    rows.push(invRow({ name: m.n, sub: `Module, ${m.vol} m³ each`, kind: "m", id, count: n, dir, free: destFree, vol: m.vol }));
+  // One list for the whole place: goods in catalogue order, then spare modules
+  // in the order they arrived. The kind is what the tile shows (ORE / MOD) and
+  // what the move and sell actions read; the catalogue decides which is which.
+  for (const { id, n } of itemsAt(where)) {
+    const part = isModule(id);
+    rows.push(
+      invRow({
+        name: itemName(id),
+        sub: `${part ? "Module" : "Ore"}, ${itemVol(id)} m³ each`,
+        kind: part ? "m" : "c",
+        id,
+        count: n,
+        dir,
+        free: destFree,
+        vol: itemVol(id),
+      })
+    );
   }
   // Keep a 5-by-5 slot field even when this hold contains fewer items. The
   // three-row viewport therefore stays the same size and remains scrollable.
