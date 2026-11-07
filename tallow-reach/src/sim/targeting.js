@@ -2,7 +2,7 @@
 // rocks, crates or the outpost. Pressing F again releases the lock.
 
 import { fwd, clamp } from "../util/math.js";
-import { ITEM } from "../data/items.js";
+import { itemName } from "../data/items.js";
 import { sectorAt } from "../data/sectors.js";
 import { state, msg } from "../state/state.js";
 import { STATION_POS } from "../render/scene.js";
@@ -57,7 +57,7 @@ export function lockPosition(lock) {
 /** Label shown on the lock marker. */
 export function lockName(lock) {
   if (lock.k === "e") return (lock.o.n || "hostile") + " " + Math.round((lock.o.hp / lock.o.mx) * 100) + "%";
-  if (lock.k === "a") return ITEM[lock.o.type].n + " rock, " + Math.ceil(lock.o.ore) + " left";
+  if (lock.k === "a") return itemName(lock.o.type) + " rock, " + Math.ceil(lock.o.ore) + " left";
   if (lock.k === "c") return lock.o.item === "core" ? "reactor core" : "crate";
   return "Meridian Outpost";
 }

@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-07. Save version **11**. **118 tests** in `tests/` (counted from the files;
+> Updated 2026-11-07. Save version **12**. **121 tests** in `tests/` (counted from the files;
 > an AI session without network cannot run them, so the user's own `npm test` is the real check).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. The inventory work was written in
@@ -25,7 +25,9 @@ bought in the Shop: the **basic mining beam** and the **basic missiles**. Everyt
 power draws from one budget and refuses to run when the ship cannot pay. An empty bay means the
 ship simply lacks that thing: no thrusters = cannot move, no shields = every hit reaches the
 hull, no hull module = the first hit that reaches the hull destroys the ship. Hostiles are
-**Newbie Raiders**: 10 Hull HP, no shields, 1 damage a shot.
+**Newbie Raiders**: 10 Hull HP, no shields, 1 damage a shot. Everything a place holds — ore,
+salvage and spare modules — is one **stock of items** (`{ itemId: count }`) from the catalogue in
+`src/data/items.js`.
 
 **The big picture, in five lines** (full text in `docs/VISION.md`).
 - **Open world:** a 2D starmap grid of 100+ sectors (FTL-style); Meridian Station is sector one; encounters,
@@ -36,9 +38,10 @@ hull, no hull module = the first hit that reaches the hull destroys the ship. Ho
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** step 3 (loot tables) is built and tested (118 tests green) but not yet ticked in
-  ROADMAP.md; play `TESTING-LOOT.md` and tick. Then step 4 (item registry and the generic inventory),
-  which moves the save to version 12 and asks you one question first.
+- **Next action:** step 4 (item catalogue and one inventory per place, save v12) is **built and
+  tested (121 green)** and on `main`, but **not yet ticked** — the owner plays `TESTING-INVENTORY.md`
+  (section 8 is the new part: loading an old save) and then it is ticked. Step 5 (shops and prices
+  from data) is next.
 
 ---
 
@@ -108,9 +111,10 @@ that change, whether the save changes) and build them in small slices that can e
 | Guns | Both primary bays fire on left click, each gun on its own cooldown; keys **1/2** cycle the primary slots (1 = guns, 2 = mining beam; an `Empty weapon slot` if nothing is fitted there). Right click = missiles (needs a launcher fitted) |
 | Mining beam | One ore per 4 s of unbroken contact; progress is lost the moment contact stops; small bar with percentage under the "left in rock" hint; chime when an ore banks |
 | Hostiles | One type, but now **data**: the **Newbie Raider** is the `raider` entry in `src/data/enemies.js` (10 Hull HP, no shields, 1 damage a shot). `spawnEnemy(id, pos)` in `sim/ai.js` builds it; `AI_BEHAVIOURS` holds the one behaviour (`chase`). Kills emit `enemy-killed { def, faction }` |
+| Items | `ITEMS` in `data/items.js`: five goods (ferrite 10 cr, cobalt 24, voidite 60, salvage 70, reactor core 350, all 1 m³) plus an entry for each module (`{ cat: "module" }`, name/volume/stats in `data/modules.js`). A place is one stock `{ itemId: count }`; `sim/inventory.js` is the only mover |
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
 | Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
-| Saves | **Version 11**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds); old saves keep working |
+| Saves | **Version 12**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds, v12 one stock per place); old saves keep working. `tests/saves/v11-real.json` is a genuine v11 save the tests convert |
 
 ## Where the knobs are
 
@@ -127,13 +131,16 @@ that change, whether the save changes) and build them in small slices that can e
 | Factions | `src/data/factions.js` |
 | Missile flight and lock, ammo price, Shop rows | `src/data/weapons.js` (`MISSILE`, `SHOP_WEAPONS`) |
 | Warp timing and coast | `src/data/sectors.js` (`WARP`, `WARP_TIME`, `WARP_COAST`) |
-| Contracts, sectors, items, station prices | `src/data/contracts.js`, `sectors.js`, `items.js`, `station.js` |
+| An item's name, category, price, volume or stack limit; adding an ore or a trade good | `src/data/items.js` (`ITEMS`) |
+| Contracts, sectors, station prices | `src/data/contracts.js`, `sectors.js`, `station.js` |
 | Randomness and seeds | `src/util/rng.js` (`random`, `setSeed`, `makeRng`) — never `Math.random()` in `sim/` or `data/` |
 
 ## How the module pattern works (copy this for the next part)
 
 1. A part is one entry in `MODULES` in `src/data/modules.js`: `g` (which bay group), `n`, `d`, and
-   the stat fields that group uses.
+   the stat fields that group uses — **plus one line in `ITEMS`** in `src/data/items.js`
+   (`beam_basic: { cat: "module" }`) so it is an item that can be carried and stored. `npm test`
+   names a module with no item entry.
 2. A system owns the translation from modules to numbers and keeps it in `state`:
    `sim/power.js` → `state.power`, `sim/drive.js` → `state.drive`, `sim/shield.js` →
    `state.shield`, `sim/hull.js` → `P.hullMax`, `sim/guns.js` → `state.guns` / `state.beams` /
@@ -146,11 +153,22 @@ that change, whether the save changes) and build them in small slices that can e
 4. The UI reads `state`, never modules: `ui/hud.js` for the flight readouts, `ui/screens.js` for
    the outpost panels (`moduleStat(m)` gives the one-line number in a bay).
 
+## How the item pattern works (copy this for shops, loot and missions)
+
+- Everything carryable is an entry in `ITEMS` (`data/items.js`); code asks `itemName(id)`,
+  `itemVol(id)`, `itemValue(id)`, `canSell(id)`, `itemStack(id)` or `isModule(id)` — never a list of
+  ids of its own. A place is `{ itemId: count }` and only `sim/inventory.js` moves things
+  (`addItem`, `takeItem`, `moveItem`, `countOf`, `itemsAt`).
+- A module's item entry carries no numbers: `MODULES[id]` is the one place its name, volume and
+  stats live, and `npm test` checks the two tables agree in both directions.
+- `valueOf(stock)` (in `sim/inventory.js`, with the refinery bonus) is what a pile sells for;
+  selling and storing only ever touch items the catalogue gives a value to, so spare parts are safe.
+
 ## Known gaps (good next steps, none urgent)
 
-- **Modules can only be bought for the beam and the missiles** (as many as the station has room
-  for). Every other part is standard issue, so a second cannon cannot be obtained. A general
-  module shop is recipe 17 in `HOW_TO_ADD.md`; use `buyModule()` in `sim/inventory.js`.
+- **Shops are still hard-coded** (step 5): `SHOP_WEAPONS` in `data/weapons.js` is the only stock,
+  so a second cannon or a spare powerplant cannot be bought; `buyItem()` in `sim/inventory.js` is
+  ready for a data-driven shop. A general module shop is recipe 17 in `HOW_TO_ADD.md`.
 - Inventory limits: only the station's parts can be fitted (a module in a ship's hold must be
   moved back first), modules cannot be sold, and cargo stays in the ship it is in when you switch
   ships. Nothing uses a hold of spare modules yet.
@@ -172,7 +190,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 94 tests expected
+npm test          # 121 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 
@@ -186,6 +204,11 @@ npm run build     # writes game/tallow-reach.html
   `setShip(id)`, then step `flight(dt)` / `updatePrimary(dt)` / `updateShield(dt)` /
   `updatePower(dt)` yourself at `dt = 1/60`. Sim time is not wall time under software rendering,
   so read game state, not the clock. Rebuild probes from this description; none are kept.
+- For a refactor step, the strongest check is an **old-vs-new probe**: bundle the previous commit's
+  tree and the working tree with esbuild (stubbing `src/render/*` and `src/core/*`, real `three`),
+  run one scripted session through both, and compare state after every step. Step 4's probe did 29
+  steps (buy, refuse, move, fill a hold, fit, unequip, buy and switch ships, store, load, sell) and
+  also compared the rendered Inventory/Shop/Base HTML: identical. Probes are never kept.
 - Some sessions have Chromium and Playwright; check before assuming either way.
 - The user tests by clicking through the `TESTING-*.md` files. Keep them current: they are the only
   bridge between the code and someone who does not read it.

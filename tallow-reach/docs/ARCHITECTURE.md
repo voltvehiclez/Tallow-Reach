@@ -56,7 +56,7 @@ about each other, use the event bus instead.
 | You want to...                       | Edit                                           |
 |--------------------------------------|------------------------------------------------|
 | Add or rebalance a ship              | `data/ships.js`                                |
-| Add a cargo type or change prices    | `data/items.js`                                |
+| Add an item (ore, salvage, trade good) or change prices | `data/items.js` (`ITEMS`); see HOW_TO_ADD.md recipe 2 |
 | Tune the basic cannon                 | `data/modules.js` (`cannon_basic`: `dmg`, `rate`, `bspd`, `draw`) |
 | Tune the mining beam                  | `data/modules.js` (`beam_basic`: `period`, `range`, `draw`)  |
 | Tune the missile or the shop list     | `data/weapons.js`                              |
@@ -75,8 +75,8 @@ about each other, use the event bus instead.
 | Add a module                         | `data/modules.js` (`MODULES`, `STOCK_FIT`); see HOW_TO_ADD.md recipe 16 |
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
 | Change how a bay opens or closes    | `ui/picker.js` (one picker at a time, pure and tested) |
-| Change how much a module or an ore takes up, or how big a hold or the station store is | module `vol` in `data/modules.js`, ore `ITEM_VOL` in `data/items.js`, hull `cargo` in `data/ships.js`, `STORAGE_PER_LEVEL` in `data/station.js` |
-| Move things between the station and a ship, buy a module into storage | `sim/inventory.js` (`moveCargo`, `moveModule`, `buyModule`); the Inventory tab is `inventoryHtml()` in `ui/screens.js`, its buttons are `mv`/`invPrev`/`invNext` in `ui/menu.js` |
+| Change how much an item takes up, or how big a hold or the station store is | item `vol` in `data/items.js` (a module's `vol` is in `data/modules.js`), hull `cargo` in `data/ships.js`, `STORAGE_PER_LEVEL` in `data/station.js` |
+| Move things between the station and a ship, or buy one into storage | `sim/inventory.js` (`moveItem`, `addItem`, `takeItem`, `buyItem`); the Inventory tab is `inventoryHtml()` in `ui/screens.js`, its buttons are `mv`/`invPrev`/`invNext` in `ui/menu.js` |
 | Give a hull its own bays             | `data/outfitting.js` (`SHIP_LAYOUTS`)           |
 | Change what power does in flight      | `sim/power.js` (`powerOf`, `hasPower`, `setDraw`, `updatePower`) and `state.power`; who draws what is `sim/drive.js` + `sim/player.js` (drive), `sim/shield.js` (shields) and `sim/weapons.js` (guns) |
 | Change how a ship flies               | the thruster module in `data/modules.js`; `sim/drive.js` turns it into `state.drive` |
@@ -129,6 +129,16 @@ Each `src/` folder also has its own short `README.md`.
   test can roll a table 10,000 times and check the odds. An enemy names its table with `loot` in
   `data/enemies.js`; a crate in the world carries the item id it holds (`{ m, t, item }`) and nothing
   else knows which item a crate is. Do not write a drop rule in `sim/` again.
+- **A place is one stock of items.** `ITEMS` in `data/items.js` is the catalogue: every ore, every
+  salvage good and **every module** (a module's entry is just `{ cat: "module" }` — its name, volume
+  and stats stay in `data/modules.js`, keyed by the same id). A place — the station's `profile.store`,
+  a ship's `profile.holds[id]` — is `{ itemId: count }`, nothing else; there is no list of cargo keys
+  and no separate list of spare parts, and `npm test` fails if any file reads `profile.cargo`,
+  `profile.modules`, `KEYS`, `emptyCargo` or `ITEM_VOL` again. `sim/inventory.js` is the only code
+  that moves things between places or measures how full one is (`loadOf`/`freeOf` in m³,
+  `addItem`/`takeItem`/`moveItem`, `countOf`, `itemsAt` for the screens). Code asks the catalogue
+  what something is called, how big it is and what it is worth — `itemName`, `itemVol`, `itemValue`,
+  `canSell`, `itemStack`, `isModule` — and never names an item id of its own.
 - **Enemies are data.** `data/enemies.js` (`ENEMIES`, keyed by id) holds every hostile's name,
   plural name, Hull HP, colour, scale, faction, numbers and the id of its behaviour. `sim/ai.js`
   spawns one with `spawnEnemy(id, pos)`, and the entity it makes carries `def` (the id) and `f`
@@ -137,7 +147,8 @@ Each `src/` folder also has its own short `README.md`.
   one function there. `tests/enemies.test.mjs` spawns a fake enemy to prove no enemy lives in code.
   Kills emit `enemy-killed { def, faction }`; a hunt contract names the def it counts (`e`).
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
-  `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `v`.
+  `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
+  `vol`, `st`.
   Contracts: `n` count, `r` reward, `o` ore, `p` progress. Keep the short keys when adding entries.
 - **Tuning numbers go in `src/data/`.** Constants private to one system (ranges, timers)
   may sit at the top of that file with a comment.

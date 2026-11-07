@@ -135,7 +135,6 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 
 | Debt | Evidence | Step |
 | --- | --- | --- |
-| Hard-coded cargo types | `data/items.js` `emptyCargo()` builds a fixed object; `state/profile.js` names stores/holds by item key | 4 |
 | Shop is partly hard-coded | `SHOP_WEAPONS` in `data/weapons.js`; `buyModule` special-cased | 5 |
 | `sim/` imports the screen and speakers | `sim/*.js` import `render/scene.js`, `render/models.js`, `core/audio.js`, `core/input.js` | 6 |
 | Entities are three.js meshes | enemies `{ m, hp, ... }` in `sim/ai.js`; player `P.m`; crates, rocks, bullets likewise | 7 |

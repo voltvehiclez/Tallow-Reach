@@ -1,0 +1,121 @@
+{
+  "v": 11,
+  "cr": 2450,
+  "holds": {
+    "wasp": {
+      "cargo": {
+        "ferrite": 5,
+        "cobalt": 0,
+        "voidite": 0,
+        "salv": 0,
+        "core": 1
+      },
+      "modules": [
+        "thruster_basic"
+      ]
+    }
+  },
+  "store": {
+    "ferrite": 12,
+    "cobalt": 0,
+    "voidite": 0,
+    "salv": 3,
+    "core": 0
+  },
+  "ships": [
+    "wasp"
+  ],
+  "ship": "wasp",
+  "base": {
+    "store": 1,
+    "hangar": 1,
+    "refinery": 0
+  },
+  "mission": null,
+  "done": 4,
+  "kills": 17,
+  "msl": 0,
+  "pw": "cannon",
+  "hp": {
+    "wasp": 1
+  },
+  "loadout": {
+    "wasp": {
+      "power": [
+        "power_basic"
+      ],
+      "cell": [
+        "cell_basic"
+      ],
+      "thruster": [
+        "thruster_basic"
+      ],
+      "shield": [
+        "shield_basic"
+      ],
+      "primary": [
+        "cannon_basic",
+        null
+      ],
+      "secondary": [
+        null
+      ],
+      "hull": [
+        "hull_basic"
+      ]
+    },
+    "prospector": {
+      "power": [
+        "power_basic"
+      ],
+      "cell": [
+        "cell_basic"
+      ],
+      "thruster": [
+        "thruster_basic"
+      ],
+      "shield": [
+        "shield_basic"
+      ],
+      "primary": [
+        "cannon_basic",
+        null
+      ],
+      "secondary": [
+        null
+      ],
+      "hull": [
+        "hull_basic"
+      ]
+    },
+    "bulwark": {
+      "power": [
+        "power_basic"
+      ],
+      "cell": [
+        "cell_basic"
+      ],
+      "thruster": [
+        "thruster_basic"
+      ],
+      "shield": [
+        "shield_basic"
+      ],
+      "primary": [
+        "cannon_basic",
+        null
+      ],
+      "secondary": [
+        null
+      ],
+      "hull": [
+        "hull_basic"
+      ]
+    }
+  },
+  "modules": [
+    "beam_basic",
+    "cannon_basic",
+    "cannon_basic"
+  ]
+}

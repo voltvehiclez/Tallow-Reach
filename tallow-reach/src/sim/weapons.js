@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { V, fwd, face, UP, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
-import { ITEM } from "../data/items.js";
+import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
 import { keys } from "../core/input.js";
@@ -13,7 +13,7 @@ import { tone, nz, oreGained } from "../core/audio.js";
 import { scene, camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
-import { cargoOf } from "./inventory.js";
+import { addItem } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
 import { gunsOf, moduleListName } from "./guns.js";
 
@@ -164,7 +164,7 @@ export function updatePrimary(dt) {
 
       F.beamT = (F.beamT || 0) + dt * (d.mine || 1);
       const gained = Math.floor(F.beamT / beam.period);
-      say(`${ITEM[best.type].n}: ${Math.ceil(best.ore)} left in rock`);
+      say(`${itemName(best.type)}: ${Math.ceil(best.ore)} left in rock`);
       if (gained > 0) {
         F.beamT -= gained * beam.period;
         best.ore = Math.max(0, best.ore - gained);
@@ -180,7 +180,7 @@ export function updatePrimary(dt) {
           F.beamT = 0;
         }
         while (P.acc >= 1 && holdLoad() < d.cargo) {
-          cargoOf()[best.type]++;
+          if (!addItem(state.profile.ship, best.type, 1)) break;   // hold or stack is full
           P.acc--;
           emit("mined", { item: best.type });
         }

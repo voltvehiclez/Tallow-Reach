@@ -9,7 +9,7 @@
 // sim/contracts.js. The offer board and the save loader read CONTRACT_TYPES,
 // so nothing else needs the list.
 
-import { ITEM } from "./items.js";
+import { itemName, itemValue } from "./items.js";
 import { DEFAULT_ENEMY, enemyDef } from "./enemies.js";
 
 export const CONTRACT_TYPES = ["mine", "hunt", "salvage"];
@@ -19,7 +19,7 @@ export const CONTRACT = {
   mine: (tier, rnd) => {
     const ore = MINE_ORES[Math.floor(rnd() * MINE_ORES.length)];
     const n = 8 * tier + Math.floor(rnd() * 8);
-    return { o: ore, n, r: Math.round(n * ITEM[ore].v * 1.9 + 120 * tier) };
+    return { o: ore, n, r: Math.round(n * itemValue(ore) * 1.9 + 120 * tier) };
   },
   hunt: tier => {
     const n = 2 + tier * 2;
@@ -35,7 +35,7 @@ export const CONTRACT = {
 
 /** One-line text for a contract `m` (as returned by a generator, plus its type). */
 export const DESCRIBE = {
-  mine: m => `Mine ${m.n} ${ITEM[m.o].n}`,
+  mine: m => `Mine ${m.n} ${itemName(m.o)}`,
   hunt: m => `Destroy ${m.n} ${enemyDef(m.e).pl}`,
   salvage: m => `Recover ${m.n} derelict crates`,
 };
