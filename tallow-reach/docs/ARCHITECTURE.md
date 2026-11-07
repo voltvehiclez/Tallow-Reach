@@ -89,6 +89,7 @@ about each other, use the event bus instead.
 | Add a sound                          | `core/audio.js` (`tone`, `nz`, or a new graph) |
 | Change what gets saved               | `state/profile.js` (bump `SAVE_VERSION`, add a migration) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
+| Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
 | Add tests                            | `tests/` (`*.test.mjs`, run by `npm test`)     |
 
 ## File map
@@ -113,6 +114,14 @@ Each `src/` folder also has its own short `README.md`.
 
 ## Conventions
 
+- **All randomness goes through `src/util/rng.js`.** Gameplay code calls `random()` (or `R(a, b)`
+  from `util/math.js`, which is built on it); nothing in `src/sim/` or `src/data/` may call
+  `Math.random()` — `tests/rng.test.mjs` fails and names the file and line if it does.
+  `setSeed(n)` makes a whole run reproducible, `setSeed(null)` goes back to `Math.random` (the
+  default), and `makeRng(n)` hands out an *independent* generator so generating a sector or an
+  instance never depends on how many dice combat rolled before it. Anything that must be repeatable
+  from a seed (sectors, wormhole instances, co-op) takes a `makeRng` generator rather than reaching
+  for the shared one.
 - **Enemies are data.** `data/enemies.js` (`ENEMIES`, keyed by id) holds every hostile's name,
   plural name, Hull HP, colour, scale, faction, numbers and the id of its behaviour. `sim/ai.js`
   spawns one with `spawnEnemy(id, pos)`, and the entity it makes carries `def` (the id) and `f`
@@ -285,9 +294,10 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## Replayability hooks
 
-- `util/rng.js`: `random()` is the seedable random source. Call `setSeed(n)` and anything
-  that uses `random()` or `R()` becomes reproducible. Today that covers the contract board
-  and the audio noise buffers. See "Known gaps" for what still bypasses it.
+- `util/rng.js`: `random()` is the one random source for the whole game — spawns, loot, asteroid
+  ore, the contract board and the audio noise buffers all draw from it. `setSeed(n)` makes a run
+  reproducible; `makeRng(n)` gives an independent stream for anything that must be regenerated from
+  its own seed.
 - `data/contracts.js`: contract generators take a random source, so they can be seeded in the same way.
 
 ## Save compatibility
@@ -310,10 +320,6 @@ single mixed save, fixed item keys) are tracked with their fixing step in the "D
 
 These are real, current limits. None of them is a bug in play today.
 
-- **Some randomness bypasses the seed.** `sim/ai.js`, `sim/combat.js` (loot drops) and
-  `sim/asteroids.js` call `Math.random()` directly, so pirate waves, loot and some asteroid
-  rolls ignore `setSeed`. Switching them to `random()` from `util/rng.js` makes them seedable
-  with no change in unseeded play. Do this before building seeded sectors or daily challenges.
 - **`sanitizeProfile` lists some things by name.** The three base modules (`store`, `hangar`,
   `refinery`) and the weapon flag (`msl`) are written out in `state/profile.js`. A new
   base module or weapon needs a line there too. `tests/content.test.mjs` fails if a base module is missing.

@@ -136,7 +136,6 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | Debt | Evidence | Step |
 | --- | --- | --- |
 | Hard-coded cargo types | `data/items.js` `emptyCargo()` builds a fixed object; `state/profile.js` names stores/holds by item key | 4 |
-| Randomness ignores the seed | `Math.random()` in `sim/ai.js`, `sim/combat.js`, `sim/asteroids.js` | 2 |
 | Loot rules written inside code | drops in `sim/combat.js` (killed-hostile branch) | 3 |
 | Shop is partly hard-coded | `SHOP_WEAPONS` in `data/weapons.js`; `buyModule` special-cased | 5 |
 | `sim/` imports the screen and speakers | `sim/*.js` import `render/scene.js`, `render/models.js`, `core/audio.js`, `core/input.js` | 6 |

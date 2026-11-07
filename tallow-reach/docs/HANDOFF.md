@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-07. Save version **11**. **101 tests** in `tests/` (counted from the files;
+> Updated 2026-11-07. Save version **11**. **108 tests** in `tests/` (counted from the files;
 > an AI session without network cannot run them, so the user's own `npm test` is the real check).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. The inventory work was written in
@@ -36,8 +36,8 @@ hull, no hull module = the first hit that reaches the hull destroys the ship. Ho
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** play `TESTING-ENEMIES.md` and `TESTING-BASELINE.md` to accept step 1, then Step 2
-  (seeded randomness). Step 1 is built and tested (101 tests green) but not yet ticked in ROADMAP.md.
+- **Next action:** step 2 (seeded randomness) is built and tested (108 tests green) but not yet ticked
+  in ROADMAP.md; play it and tick. Then step 3 (loot tables).
 
 ---
 
@@ -126,6 +126,7 @@ that change, whether the save changes) and build them in small slices that can e
 | Missile flight and lock, ammo price, Shop rows | `src/data/weapons.js` (`MISSILE`, `SHOP_WEAPONS`) |
 | Warp timing and coast | `src/data/sectors.js` (`WARP`, `WARP_TIME`, `WARP_COAST`) |
 | Contracts, sectors, items, station prices | `src/data/contracts.js`, `sectors.js`, `items.js`, `station.js` |
+| Randomness and seeds | `src/util/rng.js` (`random`, `setSeed`, `makeRng`) — never `Math.random()` in `sim/` or `data/` |
 
 ## How the module pattern works (copy this for the next part)
 
@@ -158,8 +159,6 @@ that change, whether the save changes) and build them in small slices that can e
   One sector's geography (outpost, field) is written into the code.
 - Salvage crates are abandoned when you warp out.
 - Current sector and mute state are not saved.
-- `Math.random()` in `sim/ai.js`, `sim/combat.js` and `sim/asteroids.js` bypasses the seed, so
-  "same seed" is not yet an identical run.
 - Paint bays are clickable but no paints exist yet.
 - Hulls differ only in hold size; ship-specific bonuses are meant to arrive later.
 - Enemies keep shooting you during a warp charge; whether warp should grant invulnerability is

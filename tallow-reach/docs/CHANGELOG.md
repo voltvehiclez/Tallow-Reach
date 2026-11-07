@@ -19,6 +19,35 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Refactor step 2 — seeded randomness everywhere
+
+- **Why:** "same seed, same run" is the foundation for generated sectors, wormhole instances and
+  co-op. Six rolls in the simulation still called `Math.random()` directly, so seeding never covered
+  the whole game.
+- **Changed:** `src/util/rng.js` now owns everything: `makeRng(seed)` is a new independent generator
+  (same seed, same sequence, forever), `setSeed(n)` installs it for the whole game, `setSeed(null)`
+  goes back to `Math.random`, and `random()` reads `Math.random` at call time when unseeded.
+- **Changed:** the six direct rolls now go through `random()` — the raider's circling direction and
+  the two wander-spawn dice (`src/sim/ai.js`), the 1-or-2 crates and the 10% core (`src/sim/combat.js`),
+  and a rock's ore type (`src/sim/asteroids.js`). Same number of rolls, same order, same odds.
+- **New:** `tests/rng.test.mjs` — fails and names the file and line if `Math.random` appears anywhere
+  in `src/sim/` or `src/data/`; checks `makeRng` repeatability, range and independence from the shared
+  stream; and runs the real spawn, loot and asteroid code headlessly to prove `setSeed(1)` twice gives
+  the identical run.
+- **Nothing plays differently.** The old code (commit `75498f8`) and the new code were run side by side
+  with a substituted `Math.random`: 70 asteroid rocks (ore type, size, ore amount), 60 simulated
+  seconds of raiders with the hunt spawner and every bullet, and 40 kills of loot rolls all came out
+  identical.
+- **Rule for next time:** never call `Math.random()` in `src/sim/` or `src/data/` — use `random()`, or
+  `makeRng(seed)` when a thing must regenerate from its own seed. Written into `ARCHITECTURE.md`,
+  `src/sim/README.md` and `src/util/README.md`.
+- **Saves:** no change; still version 11, no migration.
+- **Tests:** 108 pass (101 before).
+- Files: `src/util/rng.js`, `src/sim/ai.js`, `src/sim/combat.js`, `src/sim/asteroids.js`,
+  `tests/rng.test.mjs`, `src/util/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`,
+  `docs/TARGET_ARCHITECTURE.md` (closed debt removed), `docs/HOW_TO_ADD.md` (recipe 12 rewritten),
+  `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog. Run `npm run build` and `npm test`.
+
 ## 2026-11-07: Refactor step 1 — enemies are data (enemy registry, `enemy-killed` event)
 
 - **Why:** the Newbie Raider's numbers were written inside `sim/ai.js`, so a second enemy meant

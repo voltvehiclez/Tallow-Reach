@@ -26,5 +26,7 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 
 Rules:
 - Use `emit`/`on` to connect systems that should not know each other.
+- Never call `Math.random()`. Use `random()` from `util/rng.js`, so `setSeed(n)` makes a whole run
+  repeat; `tests/rng.test.mjs` fails if `Math.random` appears in this folder.
 - New rules that need numbers: put the numbers in `src/data/`.
 - `docs/HOW_TO_ADD.md` recipes 3, 4, 6, 10, 11 touch this folder.

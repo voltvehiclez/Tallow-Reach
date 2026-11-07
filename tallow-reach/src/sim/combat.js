@@ -2,6 +2,7 @@
 
 import * as THREE from "three";
 import { V, R, face } from "../util/math.js";
+import { random } from "../util/rng.js";
 import { emit } from "../util/events.js";
 import { ITEM } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
@@ -54,10 +55,10 @@ function killHostile(e) {
   emit("enemy-killed", { def: e.def, faction: e.f });
 
   // Loot drop: one or two salvage crates, sometimes a reactor core.
-  for (let k = Math.random() < 0.5 ? 2 : 1; k > 0; k--) {
+  for (let k = random() < 0.5 ? 2 : 1; k > 0; k--) {
     spawnCrate(e.m.position.clone().add(V(R(-8, 8), R(-8, 8), R(-8, 8))));
   }
-  if (Math.random() < 0.1) spawnCrate(e.m.position, true);
+  if (random() < 0.1) spawnCrate(e.m.position, true);
   msg("Hostile destroyed", 2);
 }
 

@@ -5,6 +5,7 @@
 // enemy is a data entry and a new *way of fighting* is one function here.
 
 import { V, R, fwd, face } from "../util/math.js";
+import { random } from "../util/rng.js";
 import { sectorAt } from "../data/sectors.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
 import { tone } from "../core/audio.js";
@@ -46,7 +47,7 @@ export function spawnEnemy(id, pos) {
     mx: def.hp,
     v: V(0, 0, 0),
     fire: def.fireDelay,                     // seconds until it may fire
-    o: Math.random() < 0.5 ? 1 : -1,         // circling direction
+    o: random() < 0.5 ? 1 : -1,              // circling direction
   };
   state.world.enemies.push(e);
   return e;
@@ -105,8 +106,8 @@ export function updateEnemies(dt) {
     if (sectorAt(state.sector).foes) {
       if (far && hunting) {
         want = Math.min(3, m.n - m.p) - E.length;
-      } else if (far && nearField && E.length < 2 && Math.random() < 0.4) {
-        want = 1 + (Math.random() < 0.5 ? 1 : 0);
+      } else if (far && nearField && E.length < 2 && random() < 0.4) {
+        want = 1 + (random() < 0.5 ? 1 : 0);
       }
     }
     for (let i = 0; i < want; i++) {

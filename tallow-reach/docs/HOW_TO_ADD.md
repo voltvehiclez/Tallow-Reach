@@ -184,11 +184,19 @@ There is no story system yet. Recommended shape, so it fits the current design:
 - Test: build a state, `emit` the events in order, check the step advances (`tests/story.test.mjs`).
 - Keep it separate from `profile.mission`. That slot holds the one active contract.
 
-## 12. Seeded sectors and daily challenges (needs one cleanup first)
+## 12. Seeded sectors and daily challenges
 
-Some randomness ignores the seed. See "Known gaps" in ARCHITECTURE.md. First replace the
-`Math.random()` calls in `sim/ai.js`, `sim/combat.js` and `sim/asteroids.js` with `random()` from `util/rng.js`,
-then call `setSeed(n)` at the start of a run.
+All gameplay randomness already goes through `util/rng.js` (refactor step 2), so this is now just
+using it:
+
+1. Call `setSeed(n)` at the start of a run to make the whole game reproducible, and
+   `setSeed(null)` to go back to ordinary play.
+2. For anything that must regenerate from its own seed — a sector, a wormhole instance, a daily
+   challenge — build a generator with `makeRng(seed)` and pass it in. Do **not** use the shared
+   `random()` for that: it depends on how many dice the rest of the game rolled first, so the same
+   sector seed would give a different sector in a different run.
+3. `tests/rng.test.mjs` fails and names the file and line if anything in `src/sim/` or `src/data/`
+   calls `Math.random()` directly. `R(a, b)` from `util/math.js` is the shared stream in a range.
 
 ## 13. Tuning only
 
