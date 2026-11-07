@@ -1,11 +1,9 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-07. Save version **11**. **118 tests** in `tests/` (counted from the files;
-> an AI session without network cannot run them, so the user's own `npm test` is the real check).
-> The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
-> on their own computer with `npm install` then `npm run build`. The inventory work was written in
-> a session that could not install three.js, so it was only tested against a stand-in; treat
-> inventory as "untested in the real game" until the user says they have played it.
+> Updated 2026-11-07. Save version **12**. **121 tests** in `tests/` (`npm test` is the real check;
+> run it yourself rather than trusting this number). The zip has **no `game/` folder**:
+> `game/tallow-reach.html` is generated, and the user builds it on their own computer with
+> `npm install` then `npm run build`.
 > This file replaces the memory of the previous chat. Read it, then **`docs/VISION.md`** (what the
 > game is meant to become), **`docs/ROADMAP.md`** (what is done and next), `docs/ARCHITECTURE.md`
 > (the code as it is), `docs/TARGET_ARCHITECTURE.md` (where it is heading), `docs/HOW_TO_ADD.md`
@@ -25,7 +23,9 @@ bought in the Shop: the **basic mining beam** and the **basic missiles**. Everyt
 power draws from one budget and refuses to run when the ship cannot pay. An empty bay means the
 ship simply lacks that thing: no thrusters = cannot move, no shields = every hit reaches the
 hull, no hull module = the first hit that reaches the hull destroys the ship. Hostiles are
-**Newbie Raiders**: 10 Hull HP, no shields, 1 damage a shot.
+**Newbie Raiders**: 10 Hull HP, no shields, 1 damage a shot. Everything a place holds — ore,
+salvage and spare modules — is one **stock of items** (`{ itemId: count }`) from the catalogue in
+`src/data/items.js`.
 
 **The big picture, in five lines** (full text in `docs/VISION.md`).
 - **Open world:** a 2D starmap grid of 100+ sectors (FTL-style); Meridian Station is sector one; encounters,
@@ -36,9 +36,10 @@ hull, no hull module = the first hit that reaches the hull destroys the ship. Ho
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** step 3 (loot tables) is built and tested (118 tests green) but not yet ticked in
-  ROADMAP.md; play `TESTING-LOOT.md` and tick. Then step 4 (item registry and the generic inventory),
-  which moves the save to version 12 and asks you one question first.
+- **Next action:** step 4 (item catalogue and one inventory per place, save v12) is **built and
+  tested (121 green)** and pushed, but **not yet ticked** — the owner plays `TESTING-INVENTORY.md`
+  (section 8 is the new part: loading an old save) and then it is ticked. Step 5 (shops and prices
+  from data) is next.
 
 ---
 
@@ -49,12 +50,15 @@ complete files or exact find-and-replace edits with full paths, and test steps t
 click**, not just what file to open. Plain-language units (**MJ/s**, "units", "Hull HP" and
 "Shield HP") — never MW, never "the dt-scaled integrator".
 
-The project arrives as a zip; the folder you work in is `tallow-reach` (it holds `package.json`,
+The project arrives as a zip (delivered through GitHub now, because sandbox preview links do not
+open in the user's browser); the folder you work in is `tallow-reach` (it holds `package.json`,
 `build.mjs`, `src/`, `docs/`, `tests/`). The user plays by building it themselves (Node.js, then
 `npm install`, `npm run build`, and opening `game/tallow-reach.html`), and has asked to be told
-exactly how, so keep instructions step by step and say where to click. They plan to make the game
-much bigger, including a storyline with missions: plan big features first (a short plan, the files
-that change, whether the save changes) and build them in small slices that can each be played.
+exactly how, so keep instructions step by step and say where to click. **GitHub confuses them** —
+they have said so. Do the git work yourself (branch, commit, pull request, merge) and explain it in
+plain words: `main` is the shelf, a branch is a draft, a pull request is "may I put this on the
+shelf", merging is putting it there. A download is
+`https://github.com/voltvehiclez/Tallow-Reach/archive/refs/heads/main.zip`.
 
 ## Standing ground rules (the user stated these; do not break them)
 
@@ -64,7 +68,7 @@ that change, whether the save changes) and build them in small slices that can e
   of `src/sim/player.js`).
 - Build **toward `docs/TARGET_ARCHITECTURE.md`**: never add code that deepens a debt listed there
   (for example `Math.random()` in `sim/`, new three.js objects stored in game state, a new
-  hard-coded sector position, a new fixed list of item keys).
+  hard-coded sector position, a new fixed list of item keys, a drop rule written in `sim/`).
 - **No npm dependencies.** Plain ES modules; only `three@0.128.0` and `esbuild`.
 - Save format stays backward-compatible: bump `SAVE_VERSION` in `src/state/profile.js` and add a
   migration whenever saved data changes.
@@ -77,8 +81,9 @@ that change, whether the save changes) and build them in small slices that can e
   **`npm test`**.
 - Deliver **complete files** (not snippets) with full paths, so the user can drop them into the
   project, plus test steps written for a non-coder. If a change adds a feature the user will click
-  through, add or update a `TESTING-*.md` checklist (`TESTING-OUTFITTING.md` and
-  `TESTING-INVENTORY.md` exist at the project root). Say plainly if you could not run the build or the tests.
+  through, add or update a `TESTING-*.md` checklist (`TESTING-BASELINE.md`, `TESTING-OUTFITTING.md`,
+  `TESTING-INVENTORY.md`, `TESTING-ENEMIES.md`, `TESTING-LOOT.md` exist at the project root). Say
+  plainly if you could not run the build or the tests.
 - Keep the docs a readable size: new changelog entry on top; when `CHANGELOG.md` has more than 15
   full entries, move the oldest to `CHANGELOG_ARCHIVE.md` until 10 remain and add an index line
   for each (see "Keeping the docs scalable" in `ARCHITECTURE.md`). Never delete history.
@@ -93,6 +98,7 @@ that change, whether the save changes) and build them in small slices that can e
   `npm test` pins this. Per-hull differences will come later as module data or multipliers.
 - The player must never be stranded: launch is 200 m out, docking range is 300 m, **G** docks.
 - Units: one cargo unit = 1 m³. Use "Shield HP" and "Hull HP" in anything the player reads.
+- **Ticks and dates in `ROADMAP.md` are written by the agent**, not typed by the owner.
 
 ## What exists (all accepted by the user)
 
@@ -101,16 +107,18 @@ that change, whether the save changes) and build them in small slices that can e
 | Sectors + flight | Two sectors (Tallow Reach, and an empty Kestrel Hollow). **M** warps between them (2 s sequence, coasts down, turn winds out). Settled flight feel; chase camera from `data/camera.js` |
 | Outfitting screen | Ship switcher (arrows, name, `N of M in the hangar`) above a 3D ship window; seven bay groups around it; Appearance card with two empty paint bays; module picker per bay; storage; a **Services** box under the viewer with Hull repair and Missile restock for the ship shown |
 | Modules | `power_basic` (10 MJ/s), `cell_basic` (100 MJ), `thruster_basic` (150 m/s, 69 deg/s, 10-unit boost tank), `shield_basic` (10 Shield HP), `hull_basic` (10 Hull HP), `cannon_basic` (1 dmg, 3/s per barrel, x2 linked, 2 MJ/s), `beam_basic` (1 ore per 4 s of contact, 340 m, 2 MJ/s, Shop 900 cr), `missile_basic` (8 dmg, 12 cap, 4 s reload, Shop 1500 cr incl. 8 missiles) |
+| Items | `ITEMS` in `data/items.js`: five goods (ferrite 10 cr, cobalt 24, voidite 60, salvage 70, reactor core 350, all 1 m³) plus an entry for each module (`{ cat: "module" }`, name/volume/stats in `data/modules.js`). A place is one stock `{ itemId: count }`; `sim/inventory.js` is the only mover |
 | Power | `state.power` = gen / cap / stored / draw; `use` has `drive`, `shield`, `guns`, `beam`; `hasPower()` gates every consumer; HUD shows `Using 4 of 10 MJ/s` |
 | Thrusters | 150 m/s, 69 deg/s, boost x2; 10-unit tank, 2 a second out, 1 a second back; 20 MJ ignition; no thruster fitted = cannot move (and says so) |
 | Shields | 10 Shield HP, 1 a second after 4 s without a hit, flat 2 MJ/s, bleed 1 a second when unpayable |
 | Hull | 10 Hull HP from `hull_basic`; damage is kept as a fraction in `profile.hp[ship]` and only repaired for credits at the outpost (Outfitting > Services); asteroid collisions deal `speed * 0.015` over 25 m/s |
 | Guns | Both primary bays fire on left click, each gun on its own cooldown; keys **1/2** cycle the primary slots (1 = guns, 2 = mining beam; an `Empty weapon slot` if nothing is fitted there). Right click = missiles (needs a launcher fitted) |
 | Mining beam | One ore per 4 s of unbroken contact; progress is lost the moment contact stops; small bar with percentage under the "left in rock" hint; chime when an ore banks |
-| Hostiles | One type, but now **data**: the **Newbie Raider** is the `raider` entry in `src/data/enemies.js` (10 Hull HP, no shields, 1 damage a shot). `spawnEnemy(id, pos)` in `sim/ai.js` builds it; `AI_BEHAVIOURS` holds the one behaviour (`chase`). Kills emit `enemy-killed { def, faction }` |
+| Hostiles | One type, but **data**: the **Newbie Raider** is the `raider` entry in `src/data/enemies.js` (10 Hull HP, no shields, 1 damage a shot) and names its loot table with `loot: "raider"`. `spawnEnemy(id, pos)` in `sim/ai.js` builds it; `AI_BEHAVIOURS` holds the one behaviour (`chase`). Kills emit `enemy-killed { def, faction }` |
+| Loot | `LOOT_TABLES` in `data/loot.js`, rolled by the pure `sim/loot.js`: the raider table (salvage 1–2 always, a reactor core 10% of kills dropped on the wreck) and the asteroid ore mix (ferrite 62 / cobalt 30 / voidite 8). A crate carries the item id it holds |
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
-| Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
-| Saves | **Version 11**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds); old saves keep working |
+| Inventory | **Inventory tab**: the station's stock above one ship's hold, arrows step through the hangar, click moves one, Shift-click moves the stack. Everything is in m³ (`vol` from the catalogue; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold. Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's stock. Code: `sim/inventory.js` |
+| Saves | **Version 12**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds, v12 one stock per place); old saves keep working. `tests/saves/v11-real.json` is a genuine v11 save the tests convert |
 
 ## Where the knobs are
 
@@ -125,15 +133,18 @@ that change, whether the save changes) and build them in small slices that can e
 | What an enemy drops, and what a rock is made of | `src/data/loot.js` (`LOOT_TABLES`); an enemy names its table with `loot` |
 | How a hostile flies and shoots | `src/sim/ai.js` (`AI_BEHAVIOURS`, chosen by a def's `ai`) |
 | Factions | `src/data/factions.js` |
+| An item's name, category, price, volume or stack limit; adding an ore or a trade good | `src/data/items.js` (`ITEMS`) |
 | Missile flight and lock, ammo price, Shop rows | `src/data/weapons.js` (`MISSILE`, `SHOP_WEAPONS`) |
 | Warp timing and coast | `src/data/sectors.js` (`WARP`, `WARP_TIME`, `WARP_COAST`) |
-| Contracts, sectors, items, station prices | `src/data/contracts.js`, `sectors.js`, `items.js`, `station.js` |
+| Contracts, sectors, station prices | `src/data/contracts.js`, `sectors.js`, `station.js` |
 | Randomness and seeds | `src/util/rng.js` (`random`, `setSeed`, `makeRng`) — never `Math.random()` in `sim/` or `data/` |
 
 ## How the module pattern works (copy this for the next part)
 
 1. A part is one entry in `MODULES` in `src/data/modules.js`: `g` (which bay group), `n`, `d`, and
-   the stat fields that group uses.
+   the stat fields that group uses — **plus one line in `ITEMS`** in `src/data/items.js`
+   (`beam_basic: { cat: "module" }`) so it is an item that can be carried and stored. `npm test`
+   names a module with no item entry.
 2. A system owns the translation from modules to numbers and keeps it in `state`:
    `sim/power.js` → `state.power`, `sim/drive.js` → `state.drive`, `sim/shield.js` →
    `state.shield`, `sim/hull.js` → `P.hullMax`, `sim/guns.js` → `state.guns` / `state.beams` /
@@ -146,17 +157,27 @@ that change, whether the save changes) and build them in small slices that can e
 4. The UI reads `state`, never modules: `ui/hud.js` for the flight readouts, `ui/screens.js` for
    the outpost panels (`moduleStat(m)` gives the one-line number in a bay).
 
+## How the item pattern works (copy this for shops, loot and missions)
+
+- Everything carryable is an entry in `ITEMS` (`data/items.js`); code asks `itemName(id)`,
+  `itemVol(id)`, `itemValue(id)`, `canSell(id)`, `itemStack(id)` or `isModule(id)` — never a list of
+  ids of its own. A place is `{ itemId: count }` and only `sim/inventory.js` moves things
+  (`addItem`, `takeItem`, `moveItem`, `countOf`, `itemsAt`).
+- A module's item entry carries no numbers: `MODULES[id]` is the one place its name, volume and
+  stats live, and `npm test` checks the two tables agree in both directions.
+- `valueOf(stock)` (in `sim/inventory.js`, with the refinery bonus) is what a pile sells for;
+  selling and storing only ever touch items the catalogue gives a value to, so spare parts are safe.
+
 ## Known gaps (good next steps, none urgent)
 
-- **Modules can only be bought for the beam and the missiles** (as many as the station has room
-  for). Every other part is standard issue, so a second cannon cannot be obtained. A general
-  module shop is recipe 17 in `HOW_TO_ADD.md`; use `buyModule()` in `sim/inventory.js`.
-- Inventory limits: only the station's parts can be fitted (a module in a ship's hold must be
-  moved back first), modules cannot be sold, and cargo stays in the ship it is in when you switch
-  ships. Nothing uses a hold of spare modules yet.
-- One active contract at a time, and one enemy *type* in play (adding more is now a data entry, but
+- **Shops are still hard-coded** (step 5): `SHOP_WEAPONS` in `data/weapons.js` is the only stock,
+  so a second cannon or a spare powerplant cannot be bought; `buyItem()` in `sim/inventory.js` is
+  ready for a data-driven shop.
+- **Stack limits exist but nothing uses them** (`st` in `ITEMS`): useful for ammo later.
+- Modules cannot be sold (they have no `v`), and a module in a ship's hold must be moved to the
+  station before Outfitting can fit it.
+- One active contract at a time, and one enemy *type* in play (adding more is a data entry, but
   nothing spawns a second type yet: the spawner only brings in the enemy a hunt contract names).
-  Raiders no longer get tougher with the contract tier (they are all 10 HP now).
 - Kestrel Hollow is empty, and there is no star map screen (M just cycles the sectors).
   One sector's geography (outpost, field) is written into the code.
 - Salvage crates are abandoned when you warp out.
@@ -172,7 +193,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 94 tests expected
+npm test          # 121 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 
@@ -181,16 +202,14 @@ npm run build     # writes game/tallow-reach.html
 - Some AI sessions have no network. Then `npm install` fails, `node build.mjs` fails (no `esbuild`)
   and most tests fail (they import `three` through `src/util/math.js`). Say so plainly and tell
   the user to run the two commands, instead of guessing the result.
-- To check gameplay headlessly (only if the packages are available): bundle a probe with esbuild,
-  stubbing `src/render/scene.js` (the file needs a DOM). Call `createPlayer()` **and**
-  `setShip(id)`, then step `flight(dt)` / `updatePrimary(dt)` / `updateShield(dt)` /
-  `updatePower(dt)` yourself at `dt = 1/60`. Sim time is not wall time under software rendering,
-  so read game state, not the clock. Rebuild probes from this description; none are kept.
+- For a refactor step, the strongest check is an **old-vs-new probe**: bundle the previous commit's
+  tree and the working tree with esbuild (stubbing `src/render/*` and `src/core/*`, real `three`),
+  run one scripted session through both, and compare state after every step. Step 4's probe did 29
+  steps (buy, refuse, move, fill a hold, fit, unequip, buy and switch ships, store, load, sell) and
+  also compared the rendered Inventory/Shop/Base HTML: identical. Probes are never kept.
 - Some sessions have Chromium and Playwright; check before assuming either way.
 - The user tests by clicking through the `TESTING-*.md` files. Keep them current: they are the only
   bridge between the code and someone who does not read it.
-- Known-unverified: the Inventory tab, buying several modules, and loading old saves in the real
-  built game. Ask the user how it played if it matters to the task.
 
 ## To start the next session
 

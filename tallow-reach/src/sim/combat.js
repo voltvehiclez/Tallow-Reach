@@ -4,14 +4,14 @@ import * as THREE from "three";
 import { V, R, face } from "../util/math.js";
 import { rollLoot } from "./loot.js";
 import { emit } from "../util/events.js";
-import { ITEM } from "../data/items.js";
+import { itemName } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
 import { tone } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { mm } from "../render/models.js";
 import { state, msg, say } from "../state/state.js";
 import { holdLoad } from "./economy.js";
-import { cargoOf } from "./inventory.js";
+import { addItem } from "./inventory.js";
 import { hurt } from "./player.js";
 import { boom } from "./effects.js";
 
@@ -136,13 +136,12 @@ export function updateCrates(dt) {
     }
     if (d < CRATE_PULL) c.m.position.addScaledVector(q.normalize(), Math.min(d, 60 * dt));
     if (d < CRATE_PICKUP) {
-      if (holdLoad() >= SHIPS[S.ship].cargo) {
+      const k = c.item;
+      if (holdLoad() >= SHIPS[S.ship].cargo || !addItem(S.ship, k, 1)) {
         say("Cargo hold full");
       } else {
-        const k = c.item;
-        cargoOf()[k]++;
         emit("pickup", { item: k });
-        msg(`Picked up ${ITEM[k].n}`, 2);
+        msg(`Picked up ${itemName(k)}`, 2);
         tone(880, 1320, 0.15, 0.08);
         scene.remove(c.m);
         C.splice(i, 1);

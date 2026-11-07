@@ -7,9 +7,11 @@
 > [HANDOFF.md](HANDOFF.md).
 
 **Current position:** Milestone A is under way. **Steps 0, 1, 2 and 3 are done** (2026-11-07).
-**Next: Step 4, item registry and the generic inventory (save v12).** The owner has answered the
-one question that step needs: found modules do **not** get random stats yet, so a stock stays a
-plain count per item.
+**Step 4 (the item catalogue and one inventory per place, save v12) is built and tested (121
+green)** — waiting for the owner's playtest of `TESTING-INVENTORY.md` (section 8, loading an old
+save, is the new part) before it is ticked. The owner has answered the one question that step
+needs: found modules do **not** get random stats yet, so a stock stays a plain count per item.
+**Next: Step 5, shops and prices from data.**
 
 ## The order of work
 
@@ -99,3 +101,10 @@ Not before step 5, or the work will have to be redone.
   asteroid ore mix are data, a crate carries the item it holds. 118 tests green; save unchanged.
   Compared with `main` before the step: 50,000 rocks identical, 200,000 kills at the same odds.
 - 2026-11-07: Step 3 ticked after the owner played the loot build and accepted it (merged to `main`).
+- 2026-11-07: Step 4 (item catalogue, one inventory per place) built: `ITEMS` in `data/items.js` with
+  a category, value, volume and stack rule, and an entry for every module that points at its stats in
+  `data/modules.js`; a place is now `{ itemId: count }` (save **v12**, converting v11 and older on
+  load, pinned by a real v11 save in `tests/saves/`). 121 tests green. Compared with the previous
+  commit: a 29-step scripted session (buy, refuse, move, fill a hold, fit, unequip, buy and switch
+  ships, store, load, sell) gave identical credits, stocks, m³ and fitted bays after every step, and
+  the Inventory, Shop and Base tabs rendered identical HTML.

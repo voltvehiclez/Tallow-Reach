@@ -134,15 +134,16 @@ const ACTIONS = {
     cycleInvShip(1);
   },
   mv(arg) {
-    // data-b is "kind:id:dir:n": kind c = ore, m = module; dir s = station to the
-    // ship shown, t = from it to the station; n = a count or "all".
-    const [kind, id, dir, n] = String(arg || "").split(":");
+    // data-b is "kind:id:dir:n": dir s = station to the ship shown, t = from it to
+    // the station; n = a count or "all". The kind is only what the tile shows
+    // (ORE / MOD) — the item catalogue says what the thing is, so one move
+    // handles goods and parts alike.
+    const [, id, dir, n] = String(arg || "").split(":");
     const ship = viewedShip();
     const [from, to] = dir === "s" ? [inv.STATION, ship] : [ship, inv.STATION];
     const count = n === "all" ? Infinity : Math.max(1, +n || 1);
     state.ui.toast = "";
-    if (kind === "c") inv.moveCargo(from, to, id, count);
-    else inv.moveModule(from, to, id, count);
+    inv.moveItem(from, to, id, count);
   },
 
 
@@ -279,7 +280,7 @@ function openInventorySell(button) {
   const [kind, id, dir, stack] = String(button.dataset.b || "").split(":");
   if (kind !== "c") return;
   const source = dir === "s" ? inv.STATION : viewedShip();
-  const available = source === inv.STATION ? state.profile.store[id] : inv.cargoOf(source)[id];
+  const available = inv.countOf(source, id);
   if (!(available > 0)) return;
 
   const context = button.closest(".inv-context");
@@ -322,8 +323,7 @@ function confirmInventorySell(button) {
   if (!popover) return;
   const [kind, id, dir] = String(popover.dataset.source || "").split(":");
   const source = dir === "s" ? inv.STATION : viewedShip();
-  const cargo = source === inv.STATION ? state.profile.store : inv.cargoOf(source);
-  const available = cargo[id] || 0;
+  const available = inv.countOf(source, id);
   const input = popover.querySelector(".inv-sell-amount");
   const amount = Number(input.value);
   if (kind !== "c" || !Number.isInteger(amount) || amount < 1 || amount > available) {

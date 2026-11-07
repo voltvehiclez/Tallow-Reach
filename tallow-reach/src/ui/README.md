@@ -16,5 +16,5 @@ Rules:
 - Buttons carry `data-a` (action name) and optional `data-b` (argument). The panel re-renders and autosaves after each click.
 - Styling lives in `src/styles.css` (labelled sections; the pause menu has its own).
 - New tab: `docs/HOW_TO_ADD.md` recipe 7.
-- Inventory buttons carry `data-a="mv"` with `data-b="kind:id:dir:n"` (kind `c` ore or `m` module, dir `s` station to the ship shown or `t` back, n a count or `all`).
+- Inventory buttons carry `data-a="mv"` with `data-b="kind:id:dir:n"` (kind `c` goods or `m` module — only what the tile shows, since one `moveItem` moves either — dir `s` station to the ship shown or `t` back, n a count or `all`). The tiles come from `itemsAt(place)` in `sim/inventory.js`, which lists goods in catalogue order and then spare modules in the order they arrived.
 - A bay opens a picker: `data-a="slot"` (module, `data-b` is `group:bay`) or `data-a="paint"` (paint, `data-b` is the paint id). The rule lives in `picker.js`.

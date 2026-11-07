@@ -19,6 +19,44 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Refactor step 4 — the item catalogue and one inventory per place (save v12)
+
+- **Why:** the game knew five cargo types by name. `data/items.js` built a fixed object with a key
+  per ore (`emptyCargo()`), the save named those keys by hand, spare modules were a separate list,
+  and every system that touched cargo looped over the same `KEYS` array. A sixth item — a trade
+  good, a second salvage type, ammo — meant editing the sim, the save and the screens.
+- **New:** one catalogue, `ITEMS` in `src/data/items.js`, with a category (`ore`, `salvage`,
+  `module`, `ammo`, `consumable`, `trade`), a sell value, a volume in m³ and a stack rule. Every
+  module is an item entry too (`beam_basic: { cat: "module" }`) whose name, volume and stats stay in
+  `data/modules.js`, so nothing is written twice. Code reads it through the helpers only
+  (`itemName`, `itemVol`, `itemValue`, `canSell`, `itemStack`, `isModule`, `isItem`).
+- **Save version 12.** A place (`profile.store`, `profile.holds[id]`) is one stock,
+  `{ itemId: count }`, instead of goods in one object plus a `modules` list — and `profile.modules`
+  is gone. Old saves convert on load: the old lists are poured in, zero counts are dropped, unknown
+  ids and negative counts are still cleaned. `tests/saves/v11-real.json` is a genuine v11 save
+  (written by the code before this step) and a test converts it.
+- **Changed:** `sim/inventory.js` (`moveItem` replaces `moveCargo` and `moveModule`; new `addItem`,
+  `takeItem`, `countOf`, `itemsAt`, `unitsOf`, `buyItem`, and `valueOf`, which moved here so it can
+  be tested without the screen), `sim/fitting.js` (bays are fitted from the one stock),
+  `sim/economy.js` (store, load and sell read the catalogue; selling or storing now touches only
+  goods, so spare parts are never swept away), `sim/combat.js` and `sim/weapons.js` (a picked-up
+  crate or a mined ore is `addItem(...)`), `ui/screens.js` and `ui/menu.js` (one tile list per place,
+  the same ORE/MOD tiles, arrows and Sell box).
+- **Nothing plays differently.** A throwaway probe ran the same 29-step session through the previous
+  commit and this one, with the screen and the speakers stubbed: buying 3 beams and 2 missiles, a
+  refused purchase, 11 cannons into a hold that only takes 10, ore across, fitting a beam, a bad bay,
+  unequipping a powerplant, buying and switching ships, storing, loading, selling the hold, selling
+  the station, selling part of a stack, and what the station is worth. **Credits, every stock, the
+  m³ in use and every fitted bay were identical after every step**; the Inventory, Shop and Base tabs
+  also render byte-identical HTML (10,332 characters). One wording change: buying an id that does
+  not exist says "Unknown item." instead of "Unknown module." — no screen can reach it.
+- **Tests:** 121 pass (was 118). `tests/inventory.test.mjs` now covers the v11 conversion, the
+  registry (a test adds a temporary item and watches it be carried, moved, listed and sold), and a
+  source guard: no file may read `profile.cargo`/`profile.modules` or import a fixed list of item
+  keys again.
+
+---
+
 ## 2026-11-07: Refactor step 3 — loot tables (drops and ore mix are data)
 
 - **Why:** the two drop rules were written inside the game code — one or two salvage crates and a

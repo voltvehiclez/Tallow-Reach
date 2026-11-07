@@ -2,7 +2,7 @@
 // Everything saved to disk goes through this file so old saves keep loading.
 
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
-import { KEYS, emptyCargo } from "../data/items.js";
+import { isItem, isModule, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES } from "../data/contracts.js";
 // The missile capacity comes from the launcher module; one source of truth.
@@ -49,7 +49,14 @@ import { layoutFor } from "../data/outfitting.js";
 //      keeps `store` (ore) and `modules` (parts) as before, but both now count in m³
 //      against the station's storage (data/station.js) and `modules` can be many of
 //      the same part.
-export const SAVE_VERSION = 11;
+//   12 the item catalogue (data/items.js). A place is one stock, `{ itemId: count }`:
+//      the station's `store` and each ship's hold hold ore, salvage and spare
+//      modules together, instead of goods in one object and parts in a list.
+//      Which items exist, what they are worth and how big they are lives in the
+//      catalogue, not in this file. A save from before 12 pours its `modules`
+//      list into the station's stock and each hold's `modules` into that hold.
+//      Counts of zero are never kept: a stock only names what is really there.
+export const SAVE_VERSION = 12;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -70,8 +77,8 @@ export function stockFor(shipId) {
   return fit;
 }
 
-/** An empty hold: no ore, no spare modules. One per owned ship (`profile.holds`). */
-export const newHold = () => ({ cargo: emptyCargo(), modules: [] });
+/** An empty hold: nothing carried. One per owned ship (`profile.holds`). */
+export const newHold = () => newStock();
 
 /** A stock fit for every hull the game knows. */
 function allStockFit() {
@@ -84,8 +91,8 @@ export function newProfile() {
   return {
     v: SAVE_VERSION,
     cr: 600,
-    holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { cargo, modules } carried in its hold
-    store: emptyCargo(),               // ore in the station's storage
+    holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
+    store: newStock(),                 // the station's storage, same shape
     ships: [DEFAULT_SHIP],
     ship: DEFAULT_SHIP,
     base: { ...BASE_DEFAULT },
@@ -96,7 +103,6 @@ export function newProfile() {
     pw: "cannon",      // equipped primary
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
     loadout: allStockFit(),      // fitted modules per hull, group -> bay array
-    modules: [],                 // spare parts in the station's storage, ready to be fitted
   };
 }
 
@@ -113,8 +119,6 @@ export function sanitizeProfile(raw) {
   s.cr = Math.max(0, +s.cr || 0);
   s.ships = s.ships.filter(id => SHIPS[id]);
   if (!SHIPS[s.ship]) s.ship = s.ships[0] || DEFAULT_SHIP;
-
-  s.store = cleanCargo(s.store);
 
   const base = s.base || {};
   s.base = {
@@ -141,13 +145,20 @@ export function sanitizeProfile(raw) {
 
   const rawVersion = +raw.v || 1;
   s.loadout = cleanLoadouts(raw.loadout, rawVersion);
-  s.modules = cleanStorage(raw.modules);
+
+  // Storage: one stock, `{ itemId: count }`. Before version 12 the station kept
+  // goods in `store` and spare parts in a `modules` list; both are poured into
+  // the single stock now, because a part and a stack of ore are both items.
+  const oldShape = rawVersion < 12;
+  s.store = cleanStock(raw.store);
+  if (oldShape) for (const id of cleanModuleList(raw.modules)) addToStock(s.store, id, 1);
+  delete s.modules;
   // v8: the old beam purchase becomes one Basic mining beam module in storage.
   // Not auto-fitted — the player fits it in a primary bay like any other module.
-  if (rawVersion < 8 && hadOldBeam && !s.modules.includes("beam_basic")) s.modules.push("beam_basic");
+  if (rawVersion < 8 && hadOldBeam && !s.store.beam_basic) addToStock(s.store, "beam_basic", 1);
   // v9: the old missile launcher purchase becomes one Basic missiles module in
   // storage. Not auto-fitted — the player fits it in a secondary bay.
-  if (rawVersion < 9 && hadOldLauncher && !s.modules.includes("missile_basic")) s.modules.push("missile_basic");
+  if (rawVersion < 9 && hadOldLauncher && !s.store.missile_basic) addToStock(s.store, "missile_basic", 1);
 
   s.done = +s.done || 0;
   s.kills = +s.kills || 0;
@@ -163,37 +174,62 @@ export function sanitizeProfile(raw) {
   // object for the ship being flown, so that ship gets it.
   const oldCargo = raw.holds ? null : raw.cargo;
   delete s.cargo;
-  s.holds = cleanHolds(raw.holds, s.ships);
-  if (oldCargo && s.holds[s.ship]) s.holds[s.ship].cargo = cleanCargo(oldCargo);
+  s.holds = cleanHolds(raw.holds, s.ships, oldShape);
+  if (oldCargo && s.holds[s.ship]) mergeStock(s.holds[s.ship], cleanStock(oldCargo));
 
   s.v = SAVE_VERSION;
   return s;
 }
 
-/** Ore counts: known items only, never negative. */
-function cleanCargo(src) {
-  const out = emptyCargo();
-  KEYS.forEach(k => (out[k] = Math.max(0, +((src || {})[k]) || 0)));
+/**
+ * A stock — `{ itemId: count }` — as a save keeps it: known items only, whole
+ * counts, and no entry for something that is not there.
+ */
+function cleanStock(src) {
+  const out = newStock();
+  if (!src || typeof src !== "object" || Array.isArray(src)) return out;
+  for (const [id, n] of Object.entries(src)) {
+    const count = Math.floor(+n || 0);
+    if (isItem(id) && count > 0) out[id] = count;
+  }
   return out;
 }
 
-/** One hold per owned ship; unknown parts and damaged shapes are dropped. */
-function cleanHolds(raw, ships) {
+/** Add `n` of `id` to a stock, whatever the room: a save is not a purchase. */
+function addToStock(stock, id, n = 1) {
+  if (!isItem(id) || !(n > 0)) return stock;
+  stock[id] = (stock[id] || 0) + n;
+  return stock;
+}
+
+/** Add every count of `src` to `stock`. */
+function mergeStock(stock, src) {
+  for (const [id, n] of Object.entries(src || {})) addToStock(stock, id, n);
+  return stock;
+}
+
+/** An old `modules` list: real module ids only, in the order they were stored. */
+function cleanModuleList(raw) {
+  return Array.isArray(raw) ? raw.filter(id => isModule(id)) : [];
+}
+
+/**
+ * One hold per owned ship. Before version 12 a hold was `{ cargo, modules }`
+ * (goods and a list of parts); both are poured into the one stock now.
+ */
+function cleanHolds(raw, ships, oldShape) {
   const out = {};
   for (const id of ships) {
     const h = raw && typeof raw === "object" ? raw[id] : null;
-    out[id] = { cargo: cleanCargo(h && h.cargo), modules: cleanStorage(h && h.modules) };
+    const stock = cleanStock(oldShape && h ? h.cargo : h);
+    if (oldShape && h) for (const m of cleanModuleList(h.modules)) addToStock(stock, m, 1);
+    out[id] = stock;
   }
   return out;
 }
 
 function clampLevel(value, lo, hi) {
   return Math.min(hi, Math.max(lo, +value || lo));
-}
-
-/** Parts held in storage: known ids only, in the order they were stored. */
-function cleanStorage(raw) {
-  return Array.isArray(raw) ? raw.filter(id => MODULES[id]) : [];
 }
 
 /**

@@ -1,10 +1,11 @@
 # How to add things to Tallow Reach
 
 > **These recipes describe the code as it is today.** Several will change during the refactor in
-> [REFACTOR_PLAN.md](REFACTOR_PLAN.md): enemies (recipe 6) become data in step 1, items and shops
-> (2, 4, 5, 17) in steps 4 and 5, sectors (14) in steps 10 to 12, missions and story (3, 11) in steps 13
-> to 15. A step that changes a recipe must rewrite it in the same change. If a recipe here says
-> "do the refactor first", check [ROADMAP.md](ROADMAP.md) to see whether that step is done.
+> [REFACTOR_PLAN.md](REFACTOR_PLAN.md): enemies (recipe 6) became data in step 1, loot in step 3,
+> items in step 4; shops (4, 5, 17) change in step 5; sectors (14) in steps 10 to 12; missions and
+> story (3, 11) in steps 13 to 15. A step that changes a recipe must rewrite it in the same change.
+> If a recipe here says "do the refactor first", check [ROADMAP.md](ROADMAP.md) to see whether that
+> step is done.
 
 
 Step-by-step recipes for the common kinds of change. Read
@@ -50,18 +51,31 @@ appears automatically. It uses the standard hull model coloured by `col` and siz
 Optional: a visible add-on (like the Prospector's drill) goes in `buildPlayerShip(id)` in
 `src/render/models.js`.
 
-## 2. A new cargo item or ore
+## 2. A new item: ore, salvage or a trade good (data only)
 
-(Every unit of any item takes 1 m³ in a hold or in the station: `ITEM_VOL` in `data/items.js`.)
+Every item lives in `ITEMS` in `src/data/items.js`. One line is all it takes:
 
-- **Item that is only sold or carried** (data only): add it to `ITEM` in `src/data/items.js`
-  (`n` name, `v` value). Cargo, storage, the Base screen and saves pick it up. Old saves
-  load with 0 of it.
-- **Something that has to be found.** Items do not appear on their own:
-  - *Ore in asteroids*: `spawnAsteroid()` in `src/sim/asteroids.js` chooses the ore from a roll
-    and sets the glow colour. Add a band to both.
-  - *Loot in crates*: `updateCrates()` in `src/sim/combat.js` gives `salv` or `core` only.
-  - *Mine contracts for the new ore*: add it to `MINE_ORES` in `src/data/contracts.js`.
+```js
+voidglass: { n: "Void glass", cat: "salvage", v: 120, vol: 2 },
+```
+
+- `n` name (the screens use it everywhere), `cat` one of `ITEM_CATEGORIES` (`ore`, `salvage`,
+  `module`, `ammo`, `consumable`, `trade`), `v` credits a unit sells for (leave it out and the item
+  cannot be sold), `vol` m³ a unit takes up (1 if you leave it out), `st` most that fit in one stack
+  (no limit if you leave it out — nothing uses a limit yet).
+- Holds, the station's storage, moving, selling, the Base screen, the Inventory tab and the save all
+  read the catalogue, so nothing else changes. Old saves simply have none of it, and `npm test`
+  checks the entry is complete.
+
+**Nothing appears in the world on its own.** To make the new item findable:
+
+- *Ore in rocks*: add a weighted line to the `asteroid` table in `src/data/loot.js` (recipe 18), and
+  give the ore a glow colour in `spawnAsteroid()` in `src/sim/asteroids.js` — that one line is the
+  only place a rock's colour is chosen.
+- *Loot from kills*: add a line to a table in `src/data/loot.js` (recipe 18).
+- *Mine contracts for a new ore*: add its id to `MINE_ORES` in `src/data/contracts.js`.
+- *Sold at the station*: the shop still only lists weapons (`SHOP_WEAPONS` in `data/weapons.js`);
+  general shop stock is step 5 of the refactor.
 
 ## 3. A new contract type (data + small code)
 
@@ -328,8 +342,11 @@ metres it reaches, MJ/s while cutting). Every module also needs `vol`, the m³ i
 ship's hold or in the station's storage (a whole number, at least 1). `npm test` checks the group
 exists, the name and description are there, the volume is set, and the stat is a positive number.
 
-1. Add the entry. Nothing appears in the world until it is fitted (see recipe 17), and the
-   Outfitting screen already names any module found in a bay.
+1. Add the entry to `MODULES` — **and one line to `ITEMS` in `src/data/items.js`**:
+   `beam_basic: { cat: "module" }`. A module is an item before it is a part, which is what lets it be
+   carried, stored and moved like anything else; its name, volume and stats stay in `MODULES`.
+   `npm test` names any module that has no item entry. Nothing appears in the world until it is
+   fitted (see recipe 17), and the Outfitting screen already names any module found in a bay.
 2. A hull is delivered with `STOCK_FIT` (`data/modules.js`): group id -> module ids in bay
    order. Put the module there to make it standard issue, or in a Hangar purchase later.
 3. Make the stat do something. Power is done: `sim/power.js` sums `mjps` and `mj` into

@@ -6,7 +6,9 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { SHIPS, DEFAULT_SHIP, FLIGHT } from "../src/data/ships.js";
-import { ITEM, KEYS, emptyCargo } from "../src/data/items.js";
+import {
+  ITEMS, ITEM_IDS, ITEM_CATEGORIES, canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol,
+} from "../src/data/items.js";
 import { MISSILE, SHOP_WEAPONS } from "../src/data/weapons.js";
 import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
@@ -52,12 +54,35 @@ test("every hull is the same ship apart from its hold (m³)", () => {
   assert.ok(new Set(holds).size > 1, "the hulls differ in hold size (that is the point of them)");
 });
 
-test("every item has a name and a value, and cargo objects cover them all", () => {
-  for (const [id, it] of Object.entries(ITEM)) {
+test("every item is complete, and the catalogue agrees with the module table", () => {
+  for (const [id, it] of Object.entries(ITEMS)) {
+    assert.ok(ITEM_CATEGORIES.includes(it.cat), `${id}: cat must be one of ${ITEM_CATEGORIES.join(", ")}`);
+    if (it.cat === "module") continue;    // a module's name, volume and value live in data/modules.js
     assert.equal(typeof it.n, "string", `${id}: n (name)`);
     assert.ok(isNum(it.v) && it.v > 0, `${id}: v (value) must be positive`);
+    assert.ok(it.vol == null || (isNum(it.vol) && it.vol > 0), `${id}: vol (m³) must be above 0`);
+    assert.ok(it.st == null || (Number.isInteger(it.st) && it.st > 0), `${id}: st (stack) must be a whole number above 0`);
   }
-  assert.deepEqual(Object.keys(emptyCargo()), KEYS);
+
+  // A module is an item too — that is what lets it be carried, stored and moved —
+  // and an item that says "module" must be a real module.
+  for (const id of Object.keys(MODULES)) {
+    assert.ok(isItem(id), `${id} is a module with no item entry: add \`${id}: { cat: "module" }\` to data/items.js`);
+    assert.ok(isModule(id), `${id}: its item entry must say cat: "module"`);
+  }
+  for (const id of ITEM_IDS) if (isModule(id)) assert.ok(MODULES[id], `${id}: item module with no entry in data/modules.js`);
+
+  // One place per number: names, volumes and values are read through the helpers.
+  assert.equal(itemName("ferrite"), "Ferrite");
+  assert.equal(itemName("beam_basic"), MODULES.beam_basic.n, "a module's name comes from its stats");
+  assert.equal(itemVol("beam_basic"), MODULES.beam_basic.vol, "and so does its volume");
+  assert.equal(itemVol("ferrite"), 1, "a good is 1 m³ unless its entry says otherwise");
+  assert.ok(itemValue("core") > itemValue("voidite"), "the catalogue carries the prices");
+  assert.equal(canSell("core"), true);
+  assert.equal(canSell("beam_basic"), false, "a module has no sell value");
+  assert.equal(itemStack("ferrite"), Infinity, "nothing has a stack limit yet");
+  assert.equal(itemName("no-such-thing"), "no-such-thing", "an unknown id does not crash a screen");
+  assert.equal(itemVol("no-such-thing"), 0);
 });
 
 test("weapon data is complete", () => {
@@ -106,7 +131,7 @@ test("every contract type has a generator, a description and is accepted by the 
         const c = { type, tier, p: 0, ...CONTRACT[type](tier, () => r) };
         assert.ok(Number.isInteger(c.n) && c.n > 0, `${type} tier ${tier}: n must be a whole number above 0`);
         assert.ok(Number.isInteger(c.r) && c.r > 0, `${type} tier ${tier}: r (reward) must be a whole number above 0`);
-        if (type === "mine") assert.ok(ITEM[c.o], `mine: ore "${c.o}" is not in ITEM`);
+        if (type === "mine") assert.ok(isItem(c.o), `mine: ore "${c.o}" is not in data/items.js`);
         if (type === "hunt") assert.ok(ENEMIES[c.e], `hunt: enemy "${c.e}" is not in ENEMIES`);
         if (type === "hunt") assert.match(DESCRIBE.hunt(c), /^Destroy \d+ pirate raiders$/, "hunt wording is built from the enemy's plural name");
         const text = DESCRIBE[type](c);
@@ -490,15 +515,15 @@ test("save version 8: the old mining beam purchase becomes the beam module", () 
     wp: { beam: true, msl: false }, pw: "beam",
   });
   assert.equal(owner.v, SAVE_VERSION);
-  assert.deepEqual(owner.modules, ["beam_basic"], "an owner of the old beam gets one beam module in storage");
+  assert.equal(owner.store.beam_basic, 1, "an owner of the old beam gets one beam module in storage");
   assert.equal(owner.wp, undefined, "the whole wp object is gone from the save");
   assert.equal(owner.pw, "beam", "the selected slot is kept");
 
   const never = sanitizeProfile({ v: 7, ships: ["wasp"], ship: "wasp", cr: 100, wp: { beam: false, msl: false } });
-  assert.deepEqual(never.modules, [], "a save that never bought the beam gets nothing");
+  assert.equal(never.store.beam_basic, undefined, "a save that never bought the beam gets nothing");
 
   const again = sanitizeProfile(owner);
-  assert.deepEqual(again.modules, ["beam_basic"], "importing keeps exactly one");
+  assert.equal(again.store.beam_basic, 1, "importing keeps exactly one");
 });
 
 test("save version 9: the old missile launcher purchase becomes the missile module", () => {
@@ -507,15 +532,15 @@ test("save version 9: the old missile launcher purchase becomes the missile modu
     wp: { beam: false, msl: true }, msl: 5,
   });
   assert.equal(owner.v, SAVE_VERSION);
-  assert.deepEqual(owner.modules, ["missile_basic"], "an owner of the old launcher gets one missile module in storage");
+  assert.equal(owner.store.missile_basic, 1, "an owner of the old launcher gets one missile module in storage");
   assert.equal(owner.wp, undefined, "the whole wp object is gone from the save");
   assert.equal(owner.msl, 5, "the missiles they carried stay");
 
   const never = sanitizeProfile({ v: 8, ships: ["wasp"], ship: "wasp", cr: 100, wp: { msl: false } });
-  assert.deepEqual(never.modules, [], "a save that never bought the launcher gets nothing");
+  assert.equal(never.store.missile_basic, undefined, "a save that never bought the launcher gets nothing");
 
   const again = sanitizeProfile(owner);
-  assert.deepEqual(again.modules, ["missile_basic"], "importing keeps exactly one");
+  assert.equal(again.store.missile_basic, 1, "importing keeps exactly one");
 
   const rich = sanitizeProfile({ v: 8, ships: ["wasp"], ship: "wasp", cr: 100, wp: { msl: true }, msl: 99 });
   assert.equal(rich.msl, 12, "carried missiles clamp to the module's capacity");
@@ -587,7 +612,7 @@ test("every loot table is complete and names real items", () => {
 
     for (const [i, e] of t.entries.entries()) {
       const where = `${id} entry ${i + 1}`;
-      assert.ok(ITEM[e.i], `${where}: item "${e.i}" is not in data/items.js`);
+      assert.ok(isItem(e.i), `${where}: item "${e.i}" is not in data/items.js`);
       assert.ok(isNum(e.w == null ? 1 : e.w) && (e.w == null ? 1 : e.w) > 0, `${where}: w must be a positive number`);
       if (t.kind === "drops") assert.ok((e.w == null ? 1 : e.w) <= 1, `${where}: a chance cannot be over 1`);
       if (e.c) {

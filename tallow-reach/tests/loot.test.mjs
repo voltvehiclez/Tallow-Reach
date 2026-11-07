@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { LOOT_TABLES } from "../src/data/loot.js";
 import { rollLoot, pickLoot } from "../src/sim/loot.js";
 import { makeRng } from "../src/util/rng.js";
-import { ITEM } from "../src/data/items.js";
+import { isItem } from "../src/data/items.js";
 
 const ROLLS = 10000;
 
@@ -52,7 +52,7 @@ test("a killed raider drops one or two salvage crates, 50/50", () => {
   // Every crate still holds exactly one unit of the item its line names.
   for (const drops of rollMany("raider", 500)) {
     for (const d of drops) {
-      assert.ok(ITEM[d.item], `${d.item} is not an item`);
+      assert.ok(isItem(d.item), `${d.item} is not an item`);
       assert.ok(d.count >= 1 && d.count <= 2, `${d.count} crates is outside the table's range`);
     }
   }
@@ -79,7 +79,7 @@ test("a rock is still about 62% ferrite, 30% cobalt and 8% voidite", () => {
   assert.ok(off(share("ferrite"), 0.62) < 0.03, `ferrite ${(share("ferrite") * 100).toFixed(2)}% (was 62%)`);
   assert.ok(off(share("cobalt"), 0.3) < 0.05, `cobalt ${(share("cobalt") * 100).toFixed(2)}% (was 30%)`);
   assert.ok(off(share("voidite"), 0.08) < 0.2, `voidite ${(share("voidite") * 100).toFixed(2)}% (was 8%)`);
-  for (const p of picks) assert.ok(ITEM[p], `${p} is not an item`);
+  for (const p of picks) assert.ok(isItem(p), `${p} is not an item`);
 });
 
 test("a line at 0 never drops and a line at 1 always does", () => {
