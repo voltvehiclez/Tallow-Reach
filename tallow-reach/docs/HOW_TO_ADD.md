@@ -89,10 +89,11 @@ cores: m => `Recover ${m.n} reactor cores`,
 on("pickup", ({ item }) => progress("cores", () => item === "core"));
 ```
 
-Making the thing *exist in the world* is separate code. Hunt contracts get raiders from
-the spawner in `sim/ai.js`. Salvage crates are placed in `launch()` in `sim/session.js`.
+Making the thing *exist in the world* is separate code. A hunt contract names the enemy it
+wants with `e` in `data/contracts.js` and the spawner in `sim/ai.js` brings that enemy in.
+Salvage crates are placed in `launch()` in `sim/session.js`.
 
-Which events can drive progress: `mined`, `pickup`, `pirate-killed`, `docked`, `launched`
+Which events can drive progress: `mined`, `pickup`, `enemy-killed`, `docked`, `launched`
 (payloads are listed at the top of `src/util/events.js`).
 
 ## 4. A new shop weapon (data + real code)
@@ -122,16 +123,28 @@ Plan it as a small system: data entry, firing code, HUD text, test.
    nothing until some rule reads its level (as `storageCap()` and `valueOf()` in `sim/economy.js` do).
 4. The content test fails if step 2 is forgotten.
 
-## 6. A new enemy type (new system, do the refactor first)
+## 6. A new enemy type (data only, plus at most one behaviour function)
 
-Today there is one raider and its numbers sit inside `sim/ai.js`.
+An enemy is an entry in `src/data/enemies.js`. The sim (`sim/ai.js`) spawns it with
+`spawnEnemy(id, pos)`, builds its model with the def's `col` and `scale` (`mkShip(col, scale, true)`
+in `render/models.js`), and runs the behaviour its `ai` field names.
 
-1. Create `src/data/enemies.js` with a table like `ENEMY = { pirate: { hp: 70, hpPerTier: 25, speedFar: 125, ... } }`
-   and move the constants from the top of `sim/ai.js` and from `spawnPirate` into it. Behaviour must not change. Test by playing a hunt contract.
-2. Give each spawned enemy a `kind` field and read its numbers from `ENEMY[kind]`.
-3. Emit `emit("pirate-killed", { kind })` from `killHostile` in `sim/combat.js` and add the payload to the event list in `util/events.js`.
-4. Add the new type to the table, and a spawn rule in the spawner at the bottom of `updateEnemies`.
-5. Models: `mkShip(color, scale, foe)` in `render/models.js`.
+1. Copy the `raider` entry in `src/data/enemies.js` and change what you want: `n` name,
+   `pl` plural name (used in contract wording), `hp` Hull HP, `col` colour, `scale` size,
+   `f` faction, `spdFar`/`spdNear`/`spdOrbit`/`circleAt` how it closes and circles, the ranges,
+   `fireDelay`/`fireGap`/`dmg`/`bspd` for its gun, `spawnDist` how far away it appears.
+2. Give it a **new** id (the key). `npm test` (`tests/content.test.mjs`) fails if a field is
+   missing or its `f` is not a faction in `src/data/factions.js`.
+3. Make it appear. Today the spawner at the bottom of `updateEnemies` (`sim/ai.js`) brings in the
+   enemy a hunt contract names (`e` in `src/data/contracts.js`) and wandering raiders. Sector
+   encounter tables (refactor step 12) will place enemies by data; until then, spawning a new type
+   means a line in that spawner.
+4. A **new kind of behaviour** (not just new numbers) is `AI_BEHAVIOURS` in `sim/ai.js`: one
+   function `(e, def, toTarget, dist, dt)` that moves `e`, then name it in the def's `ai` field.
+   The raider uses `chase`.
+5. A new faction is one entry in `src/data/factions.js` (`n` name, `d` description).
+6. Test it: `tests/enemies.test.mjs` spawns enemies headlessly (`tests/headless.mjs` runs sim code
+   with the screen and sound stubbed out). Copy that test to check a second type quickly.
 
 ## 7. A new outpost screen (tab)
 
@@ -161,7 +174,7 @@ and call it from the system that needs it. Mute and pause are handled for you. S
 
 There is no story system yet. Recommended shape, so it fits the current design:
 
-- `src/data/story.js`: the chapters as data. Each step has an `id`, a `when` event (`"docked"`, `"pirate-killed"`, ...),
+- `src/data/story.js`: the chapters as data. Each step has an `id`, a `when` event (`"docked"`, `"enemy-killed"`, ...),
   an optional condition, the text to show, and an optional reward.
 - `src/sim/story.js`: subscribes with `on(...)`, advances the player's step, shows text with `msg()`,
   and pays rewards through the profile. Keep its imports to `util/events.js`, `data/`, and `state/` so it can be tested without any 3D.

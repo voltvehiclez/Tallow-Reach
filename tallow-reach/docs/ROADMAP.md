@@ -6,7 +6,8 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** Planning is done (docs written 2026-11-07). **Next: Step 0 (baseline), then Step 1.**
+**Current position:** Milestone A has started. **Step 1 (enemy registry) is built and tested** —
+waiting for the owner's playtest of `TESTING-ENEMIES.md` before it is ticked below. **Next: Step 2.**
 
 ## The order of work
 
@@ -85,3 +86,7 @@ Not before step 5, or the work will have to be redone.
 ## Log
 
 - 2026-11-07: Vision, target architecture, roadmap and refactor plan written (docs only).
+- 2026-11-07: Step 1 (enemy registry) built: enemies are entries in `src/data/enemies.js`, factions in
+  `src/data/factions.js`, kills emit `enemy-killed { def, faction }`, plus a headless sim test harness
+  (`tests/headless.mjs`). 101 tests green; save version unchanged. Ticked once the owner has played
+  `TESTING-ENEMIES.md`.

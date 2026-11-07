@@ -51,7 +51,7 @@ function killHostile(e) {
   scene.remove(e.m);
   W.enemies.splice(W.enemies.indexOf(e), 1);
   state.profile.kills++;
-  emit("pirate-killed");
+  emit("enemy-killed", { def: e.def, faction: e.f });
 
   // Loot drop: one or two salvage crates, sometimes a reactor core.
   for (let k = Math.random() < 0.5 ? 2 : 1; k > 0; k--) {

@@ -14,7 +14,7 @@
 //   died          text               ship destroyed (after docking)
 //   mined         { item }           one unit of ore added to the hold
 //   pickup        { item }           crate picked up
-//   pirate-killed                    hostile destroyed
+//   enemy-killed  { def, faction }   a hostile was destroyed (def and faction are ids)
 //   sector-changed { from, to }      the sector changed, mid-warp (see data/sectors.js)
 //   warp-start    { from, to }       a warp began: ship locked, drive charging
 //   warp-end      { from, to }       warp over (arrived, or cancelled by docking)

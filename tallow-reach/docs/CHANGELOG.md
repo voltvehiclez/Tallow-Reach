@@ -19,6 +19,39 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Refactor step 1 — enemies are data (enemy registry, `enemy-killed` event)
+
+- **Why:** the Newbie Raider's numbers were written inside `sim/ai.js`, so a second enemy meant
+  editing game code. Now an enemy is one entry in `src/data/enemies.js`, which is the first piece of
+  Milestone A (content becomes data-only additions).
+- **New:** `src/data/enemies.js` (`ENEMIES`, the `raider` entry with exactly today's numbers: name,
+  plural name, 10 Hull HP, colour, scale, faction, `chase` behaviour, close/near/orbit speeds,
+  circling distance, fire/lost/hear ranges, first-shot delay, shot gap, 1 damage, 520 m/s bolt, spawn
+  distance; plus `DEFAULT_ENEMY` and `enemyDef()`), `src/data/factions.js` (`FACTIONS`: `pirates`),
+  `tests/headless.mjs` (runs `src/sim/` code in a test with the screen and sound stubbed out — no new
+  package, it uses the esbuild the build already needs), `tests/enemies.test.mjs`, `TESTING-ENEMIES.md`.
+- **Changed:** `src/sim/ai.js` — `spawnPirate(p)` is now `spawnEnemy(id, pos)`; the model, record
+  (`def`, `n`, `f`, `hp`, `mx`, fire timer) and the shot all read the def, and the behaviour comes
+  from `AI_BEHAVIOURS` (one entry, `chase`). `src/sim/combat.js` emits
+  `enemy-killed { def, faction }`; `src/util/events.js` lists it; `src/sim/contracts.js` counts only
+  the enemy a hunt contract names; `src/data/contracts.js` stores that id (`e`) and builds the wording
+  from the def's plural name, so it still reads "Destroy 3 pirate raiders".
+- **Nothing plays differently.** The same numbers were copied, not retuned, and the old and new
+  `sim/ai.js` were run side by side for 60 simulated seconds in three situations (a lone raider, the
+  wandering spawner, a hunt contract): enemy positions, Hull HP, fire timers and every bullet's
+  position and damage matched step for step. Hunt contracts still count raiders only. Contract text,
+  rewards, the lock marker ("Newbie Raider 100%") and loot are unchanged.
+- **Saves:** no change; save version still 11, no migration. A hunt contract saved by an older
+  version has no enemy id, so it keeps its old wording and still counts any hostile.
+- **Tests:** 101 pass (94 before; two `content.test.mjs` source-guards were replaced by real
+  enemy-table checks, and six headless enemy tests are new).
+- Files: `src/data/enemies.js`, `src/data/factions.js`, `src/sim/ai.js`, `src/sim/combat.js`,
+  `src/sim/contracts.js`, `src/data/contracts.js`, `src/util/events.js`, `tests/headless.mjs`,
+  `tests/enemies.test.mjs`, `tests/content.test.mjs`, `TESTING-ENEMIES.md`, `src/data/README.md`,
+  `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md` (two closed debts
+  removed), `docs/HOW_TO_ADD.md` (recipe 6 rewritten), `docs/HANDOFF.md`, this changelog.
+  Run `npm run build` and `npm test`.
+
 ## 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
 
 - **Why:** the owner's plan is much bigger than the code's shape (100+ sector starmap, wormhole

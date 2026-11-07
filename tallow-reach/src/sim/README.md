@@ -14,7 +14,7 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 | `guns.js` | The guns in the primary bays: `gunsOf` a loadout (pure, one `{i, id, dmg, rate, speed, draw, barrels}` per fitted gun) and `beamsOf` (the beam modules there, with `period`/`range`/`draw`), `refreshGuns` after a fit, ship change, load or dock, and `moduleListName` — the short name for a fitted list that the HUD and the equip toast share. Own module so `fitting.js`/`economy.js` can refresh the guns without importing the shooting code. |
 | `weapons.js` | Firing the fitted guns on left click (each gun on its own 1/`rate` cooldown, one bolt per linked barrel per shot, drawing `draw` MJ/s while the trigger is held), the mining beam (per fitted `beam_basic` module: `period` seconds of continuous contact per ore, `range`, resetting the moment contact stops), missiles and lock-on (per the fitted `missile_basic` module: `dmg`, `cap`, `cd`; the missile's own flight and lock mechanics come from `data/weapons.js`). Re-exports `gunsOf`/`refreshGuns`. |
 | `combat.js` | Bullets, hostile kills and loot drops, crates and pickups. |
-| `ai.js` | Newbie Raiders: spawning, movement, shooting. Their numbers are the `RAIDER` constant at the top: name and 10 Hull HP, no shields. |
+| `ai.js` | Hostiles: `spawnEnemy(id, pos)` builds one from its def in `data/enemies.js` (name, Hull HP, colour, scale, faction, every number) and `AI_BEHAVIOURS` holds the ways they fight (`chase`: close in, then circle and shoot). `updateEnemies` runs them and the spawner that brings them in. |
 | `asteroids.js` | The asteroid field and ore types. |
 | `targeting.js` | Target lock (F). |
 | `economy.js` | Cargo, storage, selling, repairs, every purchase. Returns optional message text. |
