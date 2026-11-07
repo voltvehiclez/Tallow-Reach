@@ -384,6 +384,22 @@ These are real, current limits. None of them is a bug in play today.
   left it in, and the Base screen's Store/Load/Sell buttons act on the ship being flown.
 - **One active contract at a time** (`profile.mission`), and contract tiers are fixed at 1 to 3
   (`generateContract` in `sim/contracts.js`, wording in `ui/screens.js`).
+- **Shops are independent; the place you buy into is not (yet).** Any number of shops are fine as
+  content: each is a `SHOPS` entry in `data/shops.js` with its own heading, rows, prices and `max`
+  limits, it is addressed by `shopId` everywhere (`shopList`, `buyItem`, `shopStock`,
+  `setShopStock`), and its limited stock is keyed per shop (`"shopId:itemId"` in `state.shops`), so
+  two shops never share a shelf. What is **not** independent is the destination: every purchase
+  lands in the one place called `STATION` (`profile.store`), and room is checked there, so a shop in
+  another sector would still deliver into — and be blocked by — Meridian's storage. A probe with a
+  second shop proved both halves: prices and stock independent, both purchases in `profile.store`,
+  and a full station refusing the second shop's sale. **The owner's plan: other stations will have
+  their own independent inventory.** That is **not** a shop data change; it is a new kind of
+  *place*: (1) named stations with their own stock and capacity in `sim/inventory.js` (anything that
+  is not `STATION` and not a ship id needs handling before `SHIPS[where]` is reached), (2) that stock
+  saved with the world (the station store, shop stock and contracts move into the world half in
+  step 9), and (3) the sector naming its station and its shop — `OUTPOST_SHOP` becomes a field on the
+  sector in step 10, which is why it is one constant today rather than a parameter threaded through
+  `ui/screens.js`. Do not add a second hard-coded shop pointer before then.
 - **Muting is not saved.** Sound starts on every time the game opens.
 - **The sector you are in is not saved.** `state.sector` is runtime only, so you always launch
   in Tallow Reach. Only Tallow Reach has content: Kestrel Hollow is empty, and the outpost,

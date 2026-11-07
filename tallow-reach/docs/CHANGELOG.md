@@ -19,6 +19,27 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Recorded what is and is not per-shop about shops (docs only)
+
+- **Why:** the owner asked whether the game can hold more than one **independent** shop (for
+  example a trader in Kestrel Hollow beside Meridian's). A probe answered it, and the answer is worth
+  keeping so the next session does not re-derive or, worse, pre-empt it.
+- **What holds up:** shops are independent as content — `SHOPS` entries with their own heading,
+  rows, prices and `max` limits, addressed by `shopId`, with limited stock keyed per shop
+  (`"shopId:itemId"`), so two shops never share a shelf.
+- **What does not (yet):** the *destination*. Every purchase lands in the one place `STATION`
+  (`profile.store`) and room is checked there, so a shop in another sector would deliver into — and
+  be blocked by — Meridian's storage. The probe showed exactly that: independent prices and stock,
+  both purchases in one `profile.store`, and a full station refusing the other shop's sale.
+- **Owner's decision, recorded:** other stations will have **their own independent inventory**. The
+  route is written into the new known gap in `docs/ARCHITECTURE.md`: named places in
+  `sim/inventory.js`, their stock saved with the world (step 9), and the sector naming its station and
+  shop (`OUTPOST_SHOP` becomes a sector field, step 10).
+- **No code, no save change.** `SAVE_VERSION` stays 12; tests unaffected (141 still pass).
+- Files: `docs/ARCHITECTURE.md` (known gap), this changelog.
+
+---
+
 ## 2026-11-07: Spare modules can be sold (60% of the shop price)
 
 - **Why:** the game treated a module as unsellable. `canSell(id)` is `itemValue(id) > 0` and a
