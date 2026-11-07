@@ -29,9 +29,9 @@
 
 export const FLIGHT = {
   turn: 0.7,     // multiplier on every ship's turn rate (0.7 = 30% slower than the raw stat)
-  strafe: 0.3,   // sideways (A/D) speed, as a fraction of forward speed
-  lift: 0.3,     // up and down (Space/C) speed, as a fraction of forward speed
-  reverse: 0.3,  // backing up (S below zero throttle), as a fraction of forward speed
+  strafe: 0.6,   // sideways (A/D) speed, as a fraction of forward speed
+  lift: 0.6,     // up and down (Space/C) speed, as a fraction of forward speed
+  reverse: 0.6,  // backing up (S below zero throttle), as a fraction of forward speed
 };
 
 export const SHIPS = {

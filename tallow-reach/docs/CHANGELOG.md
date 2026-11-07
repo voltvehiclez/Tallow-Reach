@@ -19,6 +19,21 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Lateral, vertical and reverse thrust increased to 60%
+
+- Doubled `FLIGHT.strafe`, `FLIGHT.lift` and `FLIGHT.reverse` from 0.3 to 0.6. Forward
+  thrust and turn are unchanged. No save data change.
+- Files: `src/data/ships.js`, `tests/content.test.mjs`, this changelog. Rebuild and test.
+
+## 2026-11-07: Boost works from any throttle and press snaps throttle to full forward
+
+- Boost no longer requires positive throttle; when active it adds forward acceleration only,
+  so it never boosts the ship backward even if throttle is in reverse.
+- A fresh Shift press sets throttle to +100% once. Holding boost does not lock the throttle,
+  so the pilot can change it while boosting. Existing throttle-to-speed behavior is otherwise
+  unchanged. Save version unchanged; no migration needed.
+- Files: `src/sim/player.js`, this changelog. Run `npm run build` and `npm test`.
+
 ## 2026-11-06: HANDOFF.md rewritten to match the project as it is now (docs only)
 
 - **Why:** the header and a few lines were out of date. It said the built file in the zip predated the

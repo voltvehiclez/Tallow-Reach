@@ -45,6 +45,7 @@ export function createPlayer() {
     enMax: 0,          // tank size, set from the fitted thrusters (sim/drive.js)
     bs: 0,             // boost ramp, 0..1
     boost: false,
+    boostKeyWasDown: false, // detects a fresh Shift press without locking throttle while held
     last: 0,           // time of last hit (shields recharge after a pause)
     acc: 0,            // fractional ore carried over between frames
     snap: false,       // snap the camera to the ship on the next frame
@@ -119,6 +120,12 @@ export function flight(dt) {
     }
   }
 
+  // A fresh boost press snaps the throttle to full forward once. Holding boost
+  // does not hold the throttle there; the pilot can still change it afterward.
+  const boostKey = keys.ShiftLeft || keys.ShiftRight;
+  if (boostKey && !P.boostKeyWasDown && powered && !W) P.thr = 1;
+  P.boostKeyWasDown = boostKey;
+
   // Power budget for this frame: the thrusters draw while the throttle is off
   // centre, and a little more while the boost is burning. The boost figure comes
   // from last frame, so the extra starts the frame after it lights. Refilling the
@@ -131,7 +138,7 @@ export function flight(dt) {
   // energy (20 MJ on the basic thrusters) once the spool-up has finished and the
   // shake fires, and the cells have to hold that much for it to light at all.
   // A tank with only a splash left cannot light the boost: keep a little in reserve.
-  const wantBoost = powered && !W && (keys.ShiftLeft || keys.ShiftRight) && P.en > drv.bmax * 0.05 && P.thr > 0;
+  const wantBoost = powered && !W && boostKey && P.en > drv.bmax * 0.05;
   const canBoost = wantBoost && supply && state.power.stored >= (drv.ignite || 0);
 
   const wasBoosting = P.boost;
@@ -161,7 +168,9 @@ export function flight(dt) {
   // Only the main drive reaches full speed; reversing is a fraction of it.
   const throttle = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
   const target = f
-    .multiplyScalar(throttle * spd * (P.boost ? 2 : 1))
+    // Boost is an additional forward-only push, even if the pilot has moved
+    // throttle into reverse. The ordinary throttle contribution is unchanged.
+    .multiplyScalar(throttle * spd + (P.boost ? spd : 0))
     .addScaledVector(right, strafe * spd * FLIGHT.strafe)
     .addScaledVector(up, lift * spd * FLIGHT.lift);
   P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
