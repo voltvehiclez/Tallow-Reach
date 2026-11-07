@@ -19,6 +19,58 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-07: Refactor step 5 — shops and prices from data (plus a visible Shop change)
+
+- **Why:** the Shop was hard-wired. `SHOP_WEAPONS` in `data/weapons.js` held two rows, `buyWeapon()`
+  in `sim/economy.js` knew those two keys by name, and `shopHtml()` even had a third row
+  ("Autocannons — Owned") typed into the markup. A second trader, or a station selling a spare
+  powerplant, needed code in three files.
+- **New:** `src/data/shops.js` — `SHOPS`: per shop, a heading (`n`), its line of explanation (`d`),
+  `kit` (standard-issue parts, shown as "Owned", not sold) and `stock` (one row per item: `id`,
+  `price`, how the row is worded `n`/`d`, and optionally `max`). Meridian is the first entry and
+  sells what it sold before. One generic `buyItem(shopId, itemId, qty = 1)` in `sim/economy.js`
+  replaces `buyWeapon`, plus `shopList(shopId)` (what the Shop tab draws) and `shopStock()`/
+  `setShopStock()` (see stock below).
+- **Visible change the owner asked for:** six rows added at **1 cr** each — `power_basic`,
+  `cell_basic`, `thruster_basic`, `shield_basic`, `cannon_basic`, `hull_basic` — so a pilot who takes
+  a standard part off a hull, or loses one with a ship, can always buy it back. The beam stays 900 cr
+  and the missile pod 1500 cr. Those six rows are marked `own: false`, so they do not show
+  "You own N" (that count includes the stock fit of hulls you have not bought).
+- **Stock rules:** no `max` means the shop never runs out — every Meridian row today. A row with
+  `max: 5` shows "N left", greys out at zero, and `buyItem()` refuses when it is gone. How much is
+  left lives in **session state** (`state.shops`), never in the save, and starts again from `max`.
+  `setShopStock(shopId, itemId, n)` is the one hook a restock timer, a restock event or a random roll
+  will call later; nothing calls it today. Restocking is deliberately unfinished, not forgotten.
+- **The 8 starter missiles moved to the item:** `missile_basic` has `ammo: 8` in `data/modules.js`
+  (the save's clamp was already reading `MODULES.missile_basic.cap`), so a purchase tops the rack up
+  to 8 and never takes missiles away. `SHOP_WEAPONS` is deleted.
+- **Changed:** `sim/economy.js` (the generic purchase; a module is still bought into the station's
+  inventory through `sim/inventory.js`, whose `buyItem` gained a quantity argument),
+  `ui/screens.js` (`shopHtml()` draws from `shopList()`/`shopDef()`), `ui/menu.js` (the Buy button
+  passes `shopId:itemId`), `state/state.js` (`shops: {}`), `data/weapons.js` (now only `MISSILE`).
+- **Nothing else plays differently.** An old-vs-new probe ran the same 19-step session through the
+  previous commit and this one (buy beam and missiles, move one to a hold, fit a beam in an empty
+  bay, unequip a powerplant, store the hold, load, sell the hold, sell the station, repair, buy a
+  ship, upgrade the base, restock missiles): **credits, every stock, every hold, every loadout, the
+  base levels and every message were identical**, and the Contracts, Hangar, Outfitting, Inventory,
+  Base and Saves tabs render byte-identical HTML. On the Shop tab the two old rows are unchanged,
+  word for word and in the same order, with the Launch button still last; the only differences are
+  the six new rows and the invisible `data-b` now naming shop and item.
+- **Save version unchanged (12).** Nothing saved changed.
+- **Tests:** 131 pass (was 121). New `tests/shops.test.mjs` (10 tests): every row is complete and
+  names a real item, Meridian's prices and its "Autocannons" line, the beam/missile messages and
+  missile top-up, refusals that change nothing, the six 1-credit parts and quantity purchases, what
+  `shopList()` hands the screen, a temporary limited shop that sells out and is restocked through
+  `setShopStock()`, stock never reaching the save, and source guards proving the tabs read `SHOPS`.
+  The old `SHOP_WEAPONS` assertions moved out of `content.test.mjs` into it.
+- Files: `src/data/shops.js` (new), `src/data/weapons.js`, `src/data/modules.js`, `src/sim/economy.js`,
+  `src/sim/inventory.js`, `src/state/state.js`, `src/ui/screens.js`, `src/ui/menu.js`,
+  `tests/shops.test.mjs` (new), `tests/content.test.mjs`, `tests/inventory.test.mjs`,
+  `TESTING-SHOPS.md` (new), this changelog and the docs listed in the step. Run `npm run build` and
+  `npm test`.
+
+---
+
 ## 2026-11-07: Refactor step 4 — the item catalogue and one inventory per place (save v12)
 
 - **Why:** the game knew five cargo types by name. `data/items.js` built a fixed object with a key
@@ -210,45 +262,15 @@ the next person must know (save version, rebuild needed, known issues).
 - Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
   `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
 
-## 2026-11-07: Station and ship item grids scroll independently after three rows
-
-- Both inventory grids now show up to three full rows at once and scroll within their own
-  window when they contain more. This keeps the station and selected ship hold independently
-  browsable without changing the surrounding Inventory layout or other screens.
-- Files: `src/styles.css`, `src/ui/README.md`, `tests/inventory.test.mjs`, this changelog.
-  Save version unchanged. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Right-click inventory menu can sell a cargo stack
-
-- Right-click an inventory tile to open an extensible context menu. Its first action is Sell,
-  which sells that cargo type's whole stack from the station or selected ship hold using the
-  existing item prices and refinery bonus. Modules show Sell disabled because they have no
-  existing resale value. No inventory/save format changes.
-- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/sim/economy.js`,
-  `src/ui/README.md`, `tests/inventory.test.mjs`, this changelog. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory tile text restored to the more readable size
-
-- Raised item names from 11px to 12px and volume labels from 9px to 10px, restoring their
-  previous readable sizes while keeping the more compact tile layout.
-- Files: `src/styles.css`, this changelog. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory item tiles tightened to reduce empty space
-
-- Reduced each tile's minimum height, padding, typography and spacing, and fit more columns
-  across the panel. No inventory behavior or data changed.
-- Files: `src/styles.css`, this changelog. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory tiles move one item on click and a stack on Shift-click
-
-- Removed the two small move buttons from every tile. Clicking a tile moves one item;
-  Shift-clicking it moves the whole stack. Tiles are slightly shorter to fit more items.
-  The inventory data and capacity rules are unchanged.
-- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
-  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+---
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-07: Station and ship item grids scroll independently after three rows
+- 2026-11-07: Right-click inventory menu can sell a cargo stack
+- 2026-11-07: Inventory tile text restored to the more readable size
+- 2026-11-07: Inventory item tiles tightened to reduce empty space
+- 2026-11-07: Inventory tiles move one item on click and a stack on Shift-click
 - 2026-11-07: Inventory contents displayed as a compact grid
 - 2026-11-07: Lateral, vertical and reverse thrust increased to 60%
 - 2026-11-07: Boost works from any throttle and press snaps throttle to full forward

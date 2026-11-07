@@ -59,8 +59,9 @@ about each other, use the event bus instead.
 | Add an item (ore, salvage, trade good) or change prices | `data/items.js` (`ITEMS`); see HOW_TO_ADD.md recipe 2 |
 | Tune the basic cannon                 | `data/modules.js` (`cannon_basic`: `dmg`, `rate`, `bspd`, `draw`) |
 | Tune the mining beam                  | `data/modules.js` (`beam_basic`: `period`, `range`, `draw`)  |
-| Tune the missile or the shop list     | `data/weapons.js`                              |
-| Add or price a shop weapon           | `data/weapons.js` (`SHOP_WEAPONS`)             |
+| Tune the missile (flight, lock, ammo price) | `data/weapons.js` (`MISSILE`)            |
+| Add a shop row, change a price, or make a row run out | `data/shops.js` (`SHOPS`); see HOW_TO_ADD.md recipe 4 |
+| Add a second trader or station shop  | `data/shops.js` (a new `SHOPS` entry) and point the counter at it (`OUTPOST_SHOP` today); see HOW_TO_ADD.md recipe 17 |
 | Change base module costs             | `data/station.js`                              |
 | Add a contract type                  | `data/contracts.js` (list, generator, wording), plus a listener in `sim/contracts.js` |
 | Add a sector or change the warp order| `data/sectors.js`; see HOW_TO_ADD.md recipe 14 |
@@ -99,11 +100,11 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
-src/sim/               player, power, drive, fitting, inventory, weapons, combat, ai, loot, asteroids, targeting, economy, contracts, session, sectors, effects, world
+src/sim/               player, power, drive, fitting, inventory, shops' purchases (economy), weapons, combat, ai, loot, asteroids, targeting, contracts, session, sectors, effects, world
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
@@ -123,6 +124,18 @@ Each `src/` folder also has its own short `README.md`.
   instance never depends on how many dice combat rolled before it. Anything that must be repeatable
   from a seed (sectors, wormhole instances, co-op) takes a `makeRng` generator rather than reaching
   for the shared one.
+- **Shops are data, buying is one function.** `data/shops.js` holds `SHOPS`: per shop a heading (`n`),
+  its line of explanation (`d`), `kit` (standard-issue parts, shown as "Owned", not sold) and
+  `stock`, one row per item: `id` (from `ITEMS`), `price`, the row's own wording `n`/`d`, and
+  optionally `max`. **No `max` means the shop never runs out**; with `max` the row shows "N left",
+  greys out at zero and `buyItem()` refuses. Prices live on the row, not on the item, so two
+  traders can charge differently for the same part. `sim/economy.js` has the only purchase —
+  `buyItem(shopId, itemId, qty = 1)` — and `shopList(shopId)` is what the Shop tab draws; nothing
+  hard-codes a shop, a row or a weapon key in the screen, and `SHOP_WEAPONS` is gone. How much of a
+  limited row is left is **session state** (`state.shops`, `shopStock()`, `setShopStock()`), not
+  saved: a restock timer, event or roll later calls `setShopStock()` and nothing else. A purchase
+  still lands in the station's inventory through `sim/inventory.js`, and the missiles that come
+  with a pod are the module's `ammo` (`data/modules.js`), not a number in the shop code.
 - **Loot is data.** `data/loot.js` holds `LOOT_TABLES`: an enemy's drops (each line a chance `w`, a
   count range `c` and a scatter `j`) and a rock's ore mix (weighted `pick`). `sim/loot.js` is pure
   and rolls them — `rollLoot(id, rng)` for drops, `pickLoot(id, rng)` for one weighted pick — so a
@@ -216,7 +229,7 @@ Each `src/` folder also has its own short `README.md`.
   `state.flight.gunsOn` says whether they fired this frame.
 - **The mining beam is a module too, not a weapon flag.** `beam_basic` lives in the `primary`
   group (`period` 4 s of continuous contact per ore before the hull's `mine` multiplier,
-  `range` 340 m, `draw` 2 MJ/s), bought in the Shop for 900 cr — buying it puts the module in
+  `range` 340 m, `draw` 2 MJ/s), sold at Meridian for 900 cr (`data/shops.js`) — buying it puts the module in
   storage, from where it can be fitted in either primary bay like a gun (key 2 selects the
   beam slot; with no beam fitted that slot is the `Empty weapon slot`).
   `sim/guns.js`'s `beamsOf()` picks the fitted beams (a primary module with `period`, no
@@ -233,8 +246,9 @@ Each `src/` folder also has its own short `README.md`.
   The first fitted beam (lowest bay) acts if two are fitted. Saves that owned the old shop
   beam were given one `beam_basic` in storage in save version 8 (not auto-fitted).
 - **The missile launcher is a module too — it replaced the old `wp.msl` flag.** `missile_basic`
-  lives in the `secondary` group (`dmg` 8, `cap` 12, `cd` 4 s), bought in the Shop for
-  1500 cr like the old launcher (the row still includes 8 missiles) — buying it puts the
+  lives in the `secondary` group (`dmg` 8, `cap` 12, `cd` 4 s, `ammo` 8), sold at Meridian for
+  1500 cr like the old launcher, and a purchase tops the rack up to the module's `ammo` (8
+  missiles) without ever taking any away — buying it puts the
   module in storage, fitted in the secondary bay like any other module. The missile itself is
   unchanged (`data/weapons.js`: `sp0` 140, `max` 480, `acc` 300, `life` 7 s, `turn` 5.5,
   lock 2.34 s in the dashed cone, 20° cone, 2500 m range, `unitPrice` 35 cr per missile in
@@ -349,10 +363,11 @@ These are real, current limits. None of them is a bug in play today.
   are meant to arrive later as hull attributes; hold size is the one stat being kept.
 - **Only a handful of modules exist**: a powerplant, a power cell, basic thrusters, basic
   shields, the basic cannons, the basic mining beam, the basic missiles and the basic hull. They can be
-  taken off and fitted again (`sim/fitting.js`, stored in `profile.modules`). The only
-  modules a player can buy are the mining beam and the basic missiles (the Shop hands out
-  `beam_basic` / `missile_basic`, as many as the station has room for), so the station's inventory
-  otherwise only holds parts taken off a hull.
+  taken off and fitted again (`sim/fitting.js`, stored in `profile.store`). All eight are on sale at
+  Meridian (`data/shops.js`): the beam at 900 cr and the missile pod at 1500 cr, and the six
+  standard parts at 1 cr each, so a part taken off a hull or lost with a ship can always be
+  bought back. There is still only one tier of each part — better versions are new `MODULES`
+  entries plus a shop row, not a new system.
   Several things draw power (thrusters 2 MJ/s flying plus boost, shields, guns, the beam
   2 MJ/s cutting), so a basic plant out-produces the trickle and the cells stay near full
   unless the powerplant is removed.

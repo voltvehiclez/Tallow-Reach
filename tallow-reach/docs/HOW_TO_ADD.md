@@ -2,7 +2,7 @@
 
 > **These recipes describe the code as it is today.** Several will change during the refactor in
 > [REFACTOR_PLAN.md](REFACTOR_PLAN.md): enemies (recipe 6) became data in step 1, loot in step 3,
-> items in step 4; shops (4, 5, 17) change in step 5; sectors (14) in steps 10 to 12; missions and
+> items in step 4; shops (4, 17) became data in step 5; sectors (14) in steps 10 to 12; missions and
 > story (3, 11) in steps 13 to 15. A step that changes a recipe must rewrite it in the same change.
 > If a recipe here says "do the refactor first", check [ROADMAP.md](ROADMAP.md) to see whether that
 > step is done.
@@ -74,8 +74,7 @@ voidglass: { n: "Void glass", cat: "salvage", v: 120, vol: 2 },
   only place a rock's colour is chosen.
 - *Loot from kills*: add a line to a table in `src/data/loot.js` (recipe 18).
 - *Mine contracts for a new ore*: add its id to `MINE_ORES` in `src/data/contracts.js`.
-- *Sold at the station*: the shop still only lists weapons (`SHOP_WEAPONS` in `data/weapons.js`);
-  general shop stock is step 5 of the refactor.
+- *Sold at the station*: add a row to Meridian in `src/data/shops.js` (recipe 4).
 
 ## 3. A new contract type (data + small code)
 
@@ -110,22 +109,53 @@ Salvage crates are placed in `launch()` in `sim/session.js`.
 Which events can drive progress: `mined`, `pickup`, `enemy-killed`, `docked`, `launched`
 (payloads are listed at the top of `src/util/events.js`).
 
-## 4. A new shop weapon (data + real code)
+## 4. Something a shop sells, or a new trader (data only)
 
-Adding to `SHOP_WEAPONS` in `src/data/weapons.js` makes it appear in the Shop and be
-purchasable. A shop item that is really **a module** (the mining beam is) points at
-it with a `module` field; `buyWeapon()` in `sim/economy.js` then puts it in
-`profile.modules` storage and the player fits it in a bay. For anything else:
+Shops are data: `src/data/shops.js`. Nothing in the screen or the sim names a row, so a new
+line is a new thing for sale. `npm test` (`tests/shops.test.mjs`) checks every row names a real
+item and has a price.
 
-- `buyWeapon()` in `sim/economy.js` is generic for prices and module grants
-  (every shop row buys a module today: the beam and the missiles)
-- firing and switching are in `sim/weapons.js` (`setWeapon`, the primary and missile updates)
-- the HUD line in `ui/hud.js` names the equipped weapon
-- the shop shows a module's ownership with `ownsModule()` from `sim/fitting.js`
-  (storage or fitted anywhere); there is no `profile.wp` any more — ownership of
-  the old flagged weapons is the module's presence
+**A row at Meridian** — add one line to `SHOPS.meridian.stock`:
 
-Plan it as a small system: data entry, firing code, HUD text, test.
+```js
+{
+  id: "power_basic",         // must exist in data/items.js (a module: stats in data/modules.js)
+  price: 1,                  // credits for one
+  n: "Basic powerplant",     // the row's name on screen
+  d: "Power. Standard reactor: 10 MJ/s for the whole ship.",   // the small print
+},
+```
+
+- The order in the file is the order on screen.
+- `Takes N m³.` and `You own N.` are worked out for you from the catalogue.
+- A module has to be fitted before it does anything, so buying one puts it in the station's
+  inventory (the Inventory tab moves it to a ship, Outfitting fits it).
+- Two shops can price the same part differently: the price is on the row, not the item.
+
+**Make a row run out.** Add `max`, and the screen shows `N left`, greys out at zero, and buying
+is refused:
+
+```js
+{ id: "core", price: 500, n: "Reactor core", d: "Salvage. Worth a fortune to the right buyer.", max: 3 },
+```
+
+How much is left is **session state** (`state.shops`), not saved, and starts again from `max`.
+`setShopStock(shopId, itemId, n)` in `sim/economy.js` is the hook a restock timer, a restock
+event or a random roll calls later. Restocking itself is deliberately not built yet.
+
+**Hide the "You own N" count** on a part every hull is delivered with: add `own: false`
+(the count would include the stock fit of hulls the player has not bought).
+
+**A second trader or station.** Add an entry to `SHOPS` with its own `n`, `d` and `stock`, then
+point the counter at it. Today `OUTPOST_SHOP` in `data/shops.js` names Meridian's shop for the
+whole outpost, because there is one station; when sectors become data (step 10) a sector will name
+its shop and `ui/screens.js` passes that id to `shopList()`. `shopList(id)` and
+`buyItem(id, itemId)` already take a shop id, so a trader needs data only.
+
+**What a purchase does** — `buyItem(shopId, itemId, qty = 1)` in `sim/economy.js`: it checks the
+shop, the row, the credits, what is left and the station's room, then takes the money and stores
+the items through `sim/inventory.js` (one place writes stocks). A module with `ammo` in
+`data/modules.js` (the missile pod, `ammo: 8`) tops the ship's rack up to that many, never down.
 
 ## 5. A new base module (data + small code)
 
@@ -316,7 +346,7 @@ are the only readers, and a test fails if a hull is missing a group.
 
 **Fitted modules** are saved in `profile.loadout[shipId][groupId]`, one entry per bay
 (`null` = empty), written by `src/state/profile.js`. The power parts are fitted already;
-see recipe 16 for adding another module, and recipe 17 for letting the player swap one.
+see recipe 16 for adding another module and recipe 17 for putting one on sale.
 
 ## 16. A new module (data + the stat it feeds)
 
@@ -346,7 +376,7 @@ exists, the name and description are there, the volume is set, and the stat is a
    `beam_basic: { cat: "module" }`. A module is an item before it is a part, which is what lets it be
    carried, stored and moved like anything else; its name, volume and stats stay in `MODULES`.
    `npm test` names any module that has no item entry. Nothing appears in the world until it is
-   fitted (see recipe 17), and the Outfitting screen already names any module found in a bay.
+   fitted the usual way, and the Outfitting screen already names any module found in a bay.
 2. A hull is delivered with `STOCK_FIT` (`data/modules.js`): group id -> module ids in bay
    order. Put the module there to make it standard issue, or in a Hangar purchase later.
 3. Make the stat do something. Power is done: `sim/power.js` sums `mjps` and `mj` into
@@ -375,30 +405,29 @@ exists, the name and description are there, the volume is set, and the stat is a
    `sim/shield.js` reads that field when it is there; the recharge delay, the cap and the HUD
    bar need no changes. Do not patch `sim/player.js` for it.
 
-## 17. A module shop (the next step; fitting is already done)
+## 17. A better part: a new tier of module, on sale (data only)
 
-Fitting and storage work: `sim/fitting.js` moves parts between `profile.loadout` and
-`profile.modules`, and the Outfitting bays are clickable. What is missing is a general way to
-**obtain** a part, so storage today only holds what you have taken off a hull (with one
-exception: the Shop sells `beam_basic` and puts it straight into storage for you). The beam is
-the worked example to copy for a module shop: a `module` field on the `SHOP_WEAPONS` entry,
-`ownsModule()` in the shop row, and `buyWeapon()` pushes the module into storage.
+This was "a module shop" before refactor step 5. The shop exists now, so a better powerplant, a
+second cannon or a new shield is one data file plus one shop row — no code.
 
-1. **Price.** Add `price` to the module entries in `data/modules.js`. The basic pair can
-   stay at 0, meaning standard issue.
-2. **Buy.** Call `buyModule(id, price)` from `sim/inventory.js` (`buyWeapon` in `sim/economy.js`
-   is the worked example). It checks credits and room in the station, takes the money and
-   stores the part, and returns a refusal message or `null`. It already allows buying the same
-   part again; the limit is the station's room in m³. The picker shows it next time a bay of
-   that group is opened.
-3. **Show it.** A shop section listing `MODULES` grouped by `g`, with name, the stat and
-   the price, and a `data-a="mb"` button per module. `ui/screens.js` for the markup,
-   `ui/menu.js` `ACTIONS` for the click. `ui/screens.js` already has `moduleStat(m)` for
-   the one-line number.
-4. **Storage limits** if you want them: cap `profile.modules.length` in
-   `sim/economy.js` and in `sanitizeProfile`, and show the count in the panel.
-5. **Do it one group at a time.** The power group is the one with parts in it, so start
-   there: buy a better powerplant, fit it, watch the HUD figure change.
+1. **The part.** Add it to `MODULES` in `src/data/modules.js`, copying the basic entry and
+   changing the numbers: same `g` (the bay group it fits), a new `vol`, `n`, `d`, and the stat
+   that group uses (`mjps`, `mj`; thruster `spd`/`turn` and its power appetite; shield
+   `sh`/`regen`/`delay`/`draw`/`drain`; hull `hp`; primary `dmg`/`rate`/`bspd`/`draw`/`barrels`;
+   beam `period`/`range`/`draw`; secondary `dmg`/`cap`/`cd`, plus `ammo` if buying it should hand
+   out missiles). A module may only carry the stats its group uses.
+2. **The item.** Add `id: { cat: "module" }` to `ITEMS` in `src/data/items.js`. `npm test` names
+   the module if you forget: a part you cannot carry is not a part.
+3. **The sale.** Add a row to Meridian in `src/data/shops.js` (recipe 4). Add `max` if the shop
+   should only have a few.
+4. **Nothing else.** The picker lists it in the right bay automatically (`ui/screens.js`,
+   `sim/fitting.js`), `moduleStat()` gives the one-line number in the bay, and the systems that
+   read the module (`sim/power.js`, `drive.js`, `shield.js`, `hull.js`, `guns.js`) already read
+   the fields.
+
+`npm test` then checks the tables agree (`tests/content.test.mjs`) and the row is complete
+(`tests/shops.test.mjs`). Anything a hull's combat or mining multiplier would scale is 1 on every
+hull today: do not put per-hull bonuses on a part.
 
 ## 18. What something drops, or what a rock is made of (data only)
 

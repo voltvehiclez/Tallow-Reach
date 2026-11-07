@@ -7,11 +7,16 @@
 > [HANDOFF.md](HANDOFF.md).
 
 **Current position:** Milestone A is under way. **Steps 0, 1, 2 and 3 are done** (2026-11-07).
-**Step 4 (the item catalogue and one inventory per place, save v12) is built and tested (121
-green)** — waiting for the owner's playtest of `TESTING-INVENTORY.md` (section 8, loading an old
-save, is the new part) before it is ticked. The owner has answered the one question that step
-needs: found modules do **not** get random stats yet, so a stock stays a plain count per item.
-**Next: Step 5, shops and prices from data.**
+**Steps 4 and 5** — the item catalogue with one inventory per place (save v12), and shops and
+prices from data — are **built and tested (131 green)**, waiting for the owner's playtest before
+they are ticked: `TESTING-INVENTORY.md` (section 8, loading an old save, is the new part there) and
+the new `TESTING-SHOPS.md`. The owner's answers so far: found modules do **not** get random stats
+yet, so a stock stays a plain count per item; and Meridian also sells the **six standard parts for
+1 cr each** (a visible change the owner asked for at step 5), with the beam at 900 cr and the
+missile pod at 1500 cr unchanged. Shop stock can be **limited** (`max` on a row) but no row uses it
+yet, and nothing restocks: `setShopStock()` is the hook, waiting for the owner to ask for the timers.
+**Next: Step 6, the sim stops using sound and the keyboard** — and the owner is free to add data-only
+content meanwhile (Milestone A is reached in everything but the tick).
 
 ## The order of work
 
@@ -32,8 +37,8 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 1 | Enemy registry (`data/enemies.js`, `enemy-killed` event) | A | [x] 2026-11-07 |
 | 2 | Seeded randomness everywhere | A | [x] 2026-11-07 |
 | 3 | Loot tables | A | [x] 2026-11-07 |
-| 4 | Item registry and generic inventory (save v12) | A | [ ] |
-| 5 | Shops and prices from data | A | [ ] |
+| 4 | Item registry and generic inventory (save v12) | A | [ ] built, tested; waiting for playtest |
+| 5 | Shops and prices from data | A | [ ] built, tested; waiting for playtest |
 | 6 | Sim stops using sound and keyboard (6a sound, 6b input) | B | [ ] |
 | 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] |
 | 8 | Fixed time step and a list of players | B | [ ] |
@@ -51,7 +56,8 @@ Save version numbers above are the plan. If a step needs a different one, the AI
 ## Content you can add now (after Milestone A: data only)
 
 Do these as ordinary feature requests (use the feature template in [AI_PROMPTS.md](AI_PROMPTS.md)).
-Not before step 5, or the work will have to be redone.
+Steps 4 and 5 are built, so these no longer wait for anything: modules, items, loot and shop stock
+are all data now (recipes 2, 4, 16 and 17). They are listed below the step table for that reason.
 
 - **More enemy types** (different Hull HP, speed, damage, shields, scale, colour, loot table).
   Factions beyond pirates.
@@ -62,7 +68,8 @@ Not before step 5, or the work will have to be redone.
   hull is identical apart from the hold). The settled flight feel of the Wasp must not change.
 - **More ships**, with their own bay layouts.
 - **Paints** for the empty Appearance bays.
-- **Shop stock** and prices; a second kind of trader.
+- **Shop stock** and prices (a row in `data/shops.js`, recipe 4); a second kind of trader (a new
+  `SHOPS` entry — data only, and the first real use of a limited `max` row).
 
 ## Content you can add after Milestone C (world data)
 
@@ -109,3 +116,11 @@ Not before step 5, or the work will have to be redone.
   ships, store, load, sell) gave identical credits, stocks, m³ and fitted bays after every step, and
   the Inventory, Shop and Base tabs rendered identical HTML. This replace the first attempt at
   step 4, which was lost when its branch was deleted before it reached `main`.
+- 2026-11-07: Step 5 (shops and prices from data) built: `data/shops.js` holds `SHOPS`, one generic
+  `buyItem(shopId, itemId, qty)` replaces `buyWeapon`, the Shop tab draws `shopList()`, and the 8
+  starter missiles are the missile module's `ammo`. The owner also asked for the six standard parts
+  to go on sale at 1 cr each, so the Shop gained six rows (the beam and missiles are unchanged).
+  Limited stock (`max`) works and `setShopStock()` is ready for restock timers later; nothing is
+  saved, so save version stays 12. 131 tests green. Compared with the previous commit by a 19-step
+  scripted outpost session: identical credits, stocks, holds, loadouts and messages, and six of the
+  seven tabs render byte-identical HTML.

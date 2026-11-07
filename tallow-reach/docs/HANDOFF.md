@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-07. Save version **12**. **121 tests** in `tests/` (counted from the files;
+> Updated 2026-11-07. Save version **12**. **131 tests** in `tests/` (counted from the files;
 > an AI session without network cannot run them, so the user's own `npm test` is the real check).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. The inventory work was written in
@@ -38,10 +38,11 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** step 4 (item catalogue and one inventory per place, save v12) is **built and
-  tested (121 green)** and on `main`, but **not yet ticked** — the owner plays `TESTING-INVENTORY.md`
-  (section 8 is the new part: loading an old save) and then it is ticked. Step 5 (shops and prices
-  from data) is next.
+- **Next action:** steps **4** (item catalogue, one inventory per place, save v12) and **5** (shops
+  and prices from data) are **built and tested (131 green)** but **not yet ticked** — the owner
+  plays `TESTING-INVENTORY.md` (section 8 is the new part: loading an old save) and
+  `TESTING-SHOPS.md`, then both are ticked. **Step 6** (the sim stops using sound and the keyboard)
+  is next. Data-only content can be added in the meantime.
 
 ---
 
@@ -103,7 +104,7 @@ that change, whether the save changes) and build them in small slices that can e
 | --- | --- |
 | Sectors + flight | Two sectors (Tallow Reach, and an empty Kestrel Hollow). **M** warps between them (2 s sequence, coasts down, turn winds out). Settled flight feel; chase camera from `data/camera.js` |
 | Outfitting screen | Ship switcher (arrows, name, `N of M in the hangar`) above a 3D ship window; seven bay groups around it; Appearance card with two empty paint bays; module picker per bay; storage; a **Services** box under the viewer with Hull repair and Missile restock for the ship shown |
-| Modules | `power_basic` (10 MJ/s), `cell_basic` (100 MJ), `thruster_basic` (150 m/s, 69 deg/s, 10-unit boost tank), `shield_basic` (10 Shield HP), `hull_basic` (10 Hull HP), `cannon_basic` (1 dmg, 3/s per barrel, x2 linked, 2 MJ/s), `beam_basic` (1 ore per 4 s of contact, 340 m, 2 MJ/s, Shop 900 cr), `missile_basic` (8 dmg, 12 cap, 4 s reload, Shop 1500 cr incl. 8 missiles) |
+| Modules | `power_basic` (10 MJ/s), `cell_basic` (100 MJ), `thruster_basic` (150 m/s, 69 deg/s, 10-unit boost tank), `shield_basic` (10 Shield HP), `hull_basic` (10 Hull HP), `cannon_basic` (1 dmg, 3/s per barrel, x2 linked, 2 MJ/s), `beam_basic` (1 ore per 4 s of contact, 340 m, 2 MJ/s, Shop 900 cr), `missile_basic` (8 dmg, 12 cap, 4 s reload, `ammo` 8, Shop 1500 cr incl. 8 missiles). All eight are on sale at Meridian (`data/shops.js`); the six standard parts cost 1 cr |
 | Power | `state.power` = gen / cap / stored / draw; `use` has `drive`, `shield`, `guns`, `beam`; `hasPower()` gates every consumer; HUD shows `Using 4 of 10 MJ/s` |
 | Thrusters | 150 m/s, 69 deg/s, boost x2; 10-unit tank, 2 a second out, 1 a second back; 20 MJ ignition; no thruster fitted = cannot move (and says so) |
 | Shields | 10 Shield HP, 1 a second after 4 s without a hit, flat 2 MJ/s, bleed 1 a second when unpayable |
@@ -114,6 +115,7 @@ that change, whether the save changes) and build them in small slices that can e
 | Items | `ITEMS` in `data/items.js`: five goods (ferrite 10 cr, cobalt 24, voidite 60, salvage 70, reactor core 350, all 1 m³) plus an entry for each module (`{ cat: "module" }`, name/volume/stats in `data/modules.js`). A place is one stock `{ itemId: count }`; `sim/inventory.js` is the only mover |
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
 | Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
+| Shop | Rows, prices and wording are data (`data/shops.js`); the Shop tab just draws `shopList()`. One generic purchase, `buyItem(shopId, itemId, qty)`. A row can be limited with `max` (none is yet); `setShopStock()` is the future restock hook |
 | Saves | **Version 12**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds, v12 one stock per place); old saves keep working. `tests/saves/v11-real.json` is a genuine v11 save the tests convert |
 
 ## Where the knobs are
@@ -129,7 +131,8 @@ that change, whether the save changes) and build them in small slices that can e
 | What an enemy drops, and what a rock is made of | `src/data/loot.js` (`LOOT_TABLES`); an enemy names its table with `loot` |
 | How a hostile flies and shoots | `src/sim/ai.js` (`AI_BEHAVIOURS`, chosen by a def's `ai`) |
 | Factions | `src/data/factions.js` |
-| Missile flight and lock, ammo price, Shop rows | `src/data/weapons.js` (`MISSILE`, `SHOP_WEAPONS`) |
+| Missile flight and lock, ammo price | `src/data/weapons.js` (`MISSILE`) |
+| What a shop sells, its prices, whether a row runs out | `src/data/shops.js` (`SHOPS`); how to add a row is recipe 4 |
 | Warp timing and coast | `src/data/sectors.js` (`WARP`, `WARP_TIME`, `WARP_COAST`) |
 | An item's name, category, price, volume or stack limit; adding an ore or a trade good | `src/data/items.js` (`ITEMS`) |
 | Contracts, sectors, station prices | `src/data/contracts.js`, `sectors.js`, `station.js` |
@@ -140,7 +143,8 @@ that change, whether the save changes) and build them in small slices that can e
 1. A part is one entry in `MODULES` in `src/data/modules.js`: `g` (which bay group), `n`, `d`, and
    the stat fields that group uses — **plus one line in `ITEMS`** in `src/data/items.js`
    (`beam_basic: { cat: "module" }`) so it is an item that can be carried and stored. `npm test`
-   names a module with no item entry.
+   names a module with no item entry. If the player should be able to **buy** it, add a row to
+   Meridian in `src/data/shops.js` (recipe 4); all eight basic parts are on sale there now.
 2. A system owns the translation from modules to numbers and keeps it in `state`:
    `sim/power.js` → `state.power`, `sim/drive.js` → `state.drive`, `sim/shield.js` →
    `state.shield`, `sim/hull.js` → `P.hullMax`, `sim/guns.js` → `state.guns` / `state.beams` /
@@ -166,9 +170,11 @@ that change, whether the save changes) and build them in small slices that can e
 
 ## Known gaps (good next steps, none urgent)
 
-- **Shops are still hard-coded** (step 5): `SHOP_WEAPONS` in `data/weapons.js` is the only stock,
-  so a second cannon or a spare powerplant cannot be bought; `buyItem()` in `sim/inventory.js` is
-  ready for a data-driven shop. A general module shop is recipe 17 in `HOW_TO_ADD.md`.
+- **Shops are data now, but there is one shop and nothing restocks.** `data/shops.js` holds every
+  row and price, `buyItem(shopId, itemId, qty)` is the one purchase, and a row can be made to run
+  out with `max` (no row does yet). The stock is session state, so it resets on load;
+  `setShopStock()` in `sim/economy.js` is the hook for the restock timers/events/rolls the owner
+  wants later. There is no second trader, and no way to buy ore or salvage (only parts are sold).
 - Inventory limits: only the station's parts can be fitted (a module in a ship's hold must be
   moved back first), modules cannot be sold, and cargo stays in the ship it is in when you switch
   ships. Nothing uses a hold of spare modules yet.
@@ -190,7 +196,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 121 tests expected
+npm test          # 131 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 

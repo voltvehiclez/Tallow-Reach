@@ -9,7 +9,8 @@ import { SHIPS, DEFAULT_SHIP, FLIGHT } from "../src/data/ships.js";
 import {
   ITEMS, ITEM_IDS, ITEM_CATEGORIES, canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol,
 } from "../src/data/items.js";
-import { MISSILE, SHOP_WEAPONS } from "../src/data/weapons.js";
+import { MISSILE } from "../src/data/weapons.js";
+import { SHOPS, OUTPOST_SHOP, isShop, shopRow } from "../src/data/shops.js";
 import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../src/data/enemies.js";
@@ -89,16 +90,19 @@ test("weapon data is complete", () => {
   for (const f of ["unitPrice", "sp0", "max", "acc", "life", "turn", "range", "lock", "cone"]) {
     assert.ok(isNum(MISSILE[f]) && MISSILE[f] > 0, `MISSILE.${f}`);
   }
-  for (const [id, w] of Object.entries(SHOP_WEAPONS)) {
-    assert.equal(typeof w.n, "string", `${id}: n`);
-    assert.equal(typeof w.d, "string", `${id}: d`);
-    assert.ok(isNum(w.price) && w.price > 0, `${id}: price`);
+  // What a shop sells is data now (data/shops.js); the row-by-row checks live in
+  // tests/shops.test.mjs. What matters here is that the outpost has a shop and
+  // that a row never names an item the catalogue does not know.
+  assert.ok(isShop(OUTPOST_SHOP), `the outpost's shop (${OUTPOST_SHOP}) must exist in SHOPS`);
+  for (const [id, shop] of Object.entries(SHOPS)) {
+    for (const row of shop.stock || []) {
+      assert.ok(isItem(row.id), `${id} / ${row.id}: not in data/items.js`);
+      assert.ok(isNum(row.price) && row.price > 0, `${id} / ${row.id}: price`);
+    }
   }
-  assert.equal(SHOP_WEAPONS.beam.module, "beam_basic", "the shop beam buys the beam module");
-  assert.equal(SHOP_WEAPONS.beam.price, 900, "at the price the beam has always been");
-  assert.equal(SHOP_WEAPONS.msl.module, "missile_basic", "the shop missiles buy the module");
-  assert.equal(SHOP_WEAPONS.msl.price, 1500, "at the price the launcher has always been");
-  assert.equal(SHOP_WEAPONS.msl.startStock, 8, "buying it includes 8 missiles");
+  // The two things the shop has always sold, at the prices the owner set.
+  assert.equal(shopRow(OUTPOST_SHOP, "beam_basic").price, 900, "the mining beam is still 900 cr");
+  assert.equal(shopRow(OUTPOST_SHOP, "missile_basic").price, 1500, "the missile pod is still 1500 cr");
 });
 
 test("every base module has a cost curve and a default level, and saves keep it", () => {

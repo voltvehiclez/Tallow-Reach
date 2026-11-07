@@ -4,17 +4,18 @@
 import { SHIPS } from "../data/ships.js";
 import { ITEM_IDS, isModule, itemName, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
-import { MISSILE, SHOP_WEAPONS } from "../data/weapons.js";
+import { MISSILE } from "../data/weapons.js";
+import { OUTPOST_SHOP, shopDef } from "../data/shops.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
-import { storedFor, fittedAt, isBayGroup, ownedCount } from "../sim/fitting.js";
+import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import {
-  STATION, capacityOf, freeOf, hasRoomFor, itemsAt, loadOf, stockOf, unitsOf, valueOf,
+  STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, unitsOf, valueOf,
 } from "../sim/inventory.js";
 import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
-import { holdLoad, storedUnits, storageCap, repairCost } from "../sim/economy.js";
+import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/economy.js";
 import { describe } from "../sim/contracts.js";
 
 export const TABS = [
@@ -374,19 +375,25 @@ function baseHtml() {
 
 function shopHtml() {
   const S = state.profile;
-  let h =
-    `<h2>Weapons shop</h2><div class="sub">Left click fires your primary weapon (keys 1 and 2 switch). Right click fires your secondary weapon. Everything you buy goes into the station inventory, as many as you like: fit it in Outfitting or move it to a ship in Inventory.</div>` +
-    `<div class="row"><div>Autocannons<small>Primary. Standard issue.</small></div><span class="ok">Owned</span></div>`;
+  // The shop is data (data/shops.js) and sim/economy.js's shopList() turns it
+  // into these rows; the screen only decides how a row looks.
+  const def = shopDef(OUTPOST_SHOP);
+  let h = `<h2>${def.n}</h2><div class="sub">${def.d}</div>`;
 
-  h += Object.keys(SHOP_WEAPONS)
-    .map(k => {
-      const w = SHOP_WEAPONS[k],
-        have = w.module ? ownedCount(w.module) : 0,                  // both shop rows buy modules
-        room = w.module ? hasRoomFor(STATION, w.module) : true;      // the station must have the m³
-      return `<div class="row"><div>${w.n}<small>${w.d}${w.module ? ` Takes ${itemVol(w.module)} m³.` : ""}${
-        have ? ` You own ${have}.` : ""
-      }${room ? "" : " No room in the station's storage."}</small></div>` +
-        `<button data-a="wb" data-b="${k}" ${S.cr < w.price || !room ? "disabled" : ""}>Buy ${w.price} cr</button></div>`;
+  // Parts every pilot already has: shown, not sold.
+  h += (def.kit || [])
+    .map(k => `<div class="row"><div>${k.n}<small>${k.d}</small></div><span class="ok">Owned</span></div>`)
+    .join("");
+
+  h += shopList(OUTPOST_SHOP)
+    .map(s => {
+      // A limited row shows what is left and greys out when it is gone; an
+      // unlimited row (every row today) shows nothing extra.
+      const soldOut = s.left !== null && s.left < 1;
+      return `<div class="row"><div>${s.n}<small>${s.d} Takes ${s.vol} m³.${s.owned ? ` You own ${s.owned}.` : ""}${
+        soldOut ? " Sold out." : s.left !== null ? ` ${s.left} left.` : ""
+      }${s.room ? "" : " No room in the station's storage."}</small></div>` +
+        `<button data-a="wb" data-b="${OUTPOST_SHOP}:${s.id}" ${S.cr < s.price || !s.room || soldOut ? "disabled" : ""}>Buy ${s.price} cr</button></div>`;
     })
     .join("");
   return h;

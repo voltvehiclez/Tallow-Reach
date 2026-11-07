@@ -18,7 +18,7 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 | `loot.js` | Rolls the tables in `data/loot.js`: `rollLoot(id, rng)` returns drops `{ item, count, scatter }`, `pickLoot(id, rng)` returns one weighted item id. Pure (no screen, no state), so it is tested by rolling tables 10,000 times. |
 | `asteroids.js` | The asteroid field. A rock's ore comes from the `asteroid` table in `data/loot.js`. |
 | `targeting.js` | Target lock (F). |
-| `economy.js` | Cargo, storage, selling, repairs, every purchase. Returns optional message text. |
+| `economy.js` | Cargo, storage, selling, repairs, every purchase. The outpost's one purchase is `buyItem(shopId, itemId, qty)` — the shop is data (`data/shops.js`) and everything it buys lands in the station's inventory through `inventory.js`; `shopList(shopId)` is what the Shop tab draws, and `shopStock()`/`setShopStock()` hold how much a limited row has left (session state, the hook a restock will use). Returns optional message text. |
 | `contracts.js` | Offer board and event-driven progress tracking. |
 | `session.js` | Launch, dock, die. Emits `launched`, `docked`, `died`. |
 | `sectors.js` | Warping between sectors (M): swaps the scenery and the rock list. Emits `sector-changed`. |

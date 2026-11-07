@@ -107,9 +107,11 @@ const ACTIONS = {
     if (msgText) toast(msgText);
   },
 
-  // Shop
-  wb(k) {
-    const msgText = eco.buyWeapon(k);
+  // Shop. data-b is "shopId:itemId" — the shop is data (data/shops.js), so the
+  // same action serves every counter.
+  wb(arg) {
+    const [shop, id] = String(arg || "").split(":");
+    const msgText = eco.buyItem(shop, id);
     if (msgText) toast(msgText);
   },
   wr() {

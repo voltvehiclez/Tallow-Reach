@@ -10,6 +10,45 @@ newest stay first.
 
 ---
 
+## 2026-11-07: Station and ship item grids scroll independently after three rows
+
+- Both inventory grids now show up to three full rows at once and scroll within their own
+  window when they contain more. This keeps the station and selected ship hold independently
+  browsable without changing the surrounding Inventory layout or other screens.
+- Files: `src/styles.css`, `src/ui/README.md`, `tests/inventory.test.mjs`, this changelog.
+  Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Right-click inventory menu can sell a cargo stack
+
+- Right-click an inventory tile to open an extensible context menu. Its first action is Sell,
+  which sells that cargo type's whole stack from the station or selected ship hold using the
+  existing item prices and refinery bonus. Modules show Sell disabled because they have no
+  existing resale value. No inventory/save format changes.
+- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/sim/economy.js`,
+  `src/ui/README.md`, `tests/inventory.test.mjs`, this changelog. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory tile text restored to the more readable size
+
+- Raised item names from 11px to 12px and volume labels from 9px to 10px, restoring their
+  previous readable sizes while keeping the more compact tile layout.
+- Files: `src/styles.css`, this changelog. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory item tiles tightened to reduce empty space
+
+- Reduced each tile's minimum height, padding, typography and spacing, and fit more columns
+  across the panel. No inventory behavior or data changed.
+- Files: `src/styles.css`, this changelog. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory tiles move one item on click and a stack on Shift-click
+
+- Removed the two small move buttons from every tile. Clicking a tile moves one item;
+  Shift-clicking it moves the whole stack. Tiles are slightly shorter to fit more items.
+  The inventory data and capacity rules are unchanged.
+- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
+  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+
+---
+
 ## 2026-11-07: Inventory contents displayed as a compact grid
 
 - Replaced the long per-item row list in both the station and ship inventories with compact,
