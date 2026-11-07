@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-07. Save version **11**. **108 tests** in `tests/` (counted from the files;
+> Updated 2026-11-07. Save version **11**. **118 tests** in `tests/` (counted from the files;
 > an AI session without network cannot run them, so the user's own `npm test` is the real check).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. The inventory work was written in
@@ -36,8 +36,9 @@ hull, no hull module = the first hit that reaches the hull destroys the ship. Ho
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** step 2 (seeded randomness) is built and tested (108 tests green) but not yet ticked
-  in ROADMAP.md; play it and tick. Then step 3 (loot tables).
+- **Next action:** step 3 (loot tables) is built and tested (118 tests green) but not yet ticked in
+  ROADMAP.md; play `TESTING-LOOT.md` and tick. Then step 4 (item registry and the generic inventory),
+  which moves the save to version 12 and asks you one question first.
 
 ---
 
@@ -121,6 +122,7 @@ that change, whether the save changes) and build them in small slices that can e
 | What a module does (power, thrust, shield, hull, gun, beam, missile figures) | `src/data/modules.js` (`MODULES`, `STOCK_FIT`) |
 | Which bays a hull has | `src/data/outfitting.js` (`SHIP_LAYOUTS`, `MODULE_GROUPS`, `APPEARANCE_SLOTS`) |
 | An enemy's name, Hull HP, colour, size, speeds, ranges, damage | `src/data/enemies.js` (`ENEMIES`, the `raider` entry) |
+| What an enemy drops, and what a rock is made of | `src/data/loot.js` (`LOOT_TABLES`); an enemy names its table with `loot` |
 | How a hostile flies and shoots | `src/sim/ai.js` (`AI_BEHAVIOURS`, chosen by a def's `ai`) |
 | Factions | `src/data/factions.js` |
 | Missile flight and lock, ammo price, Shop rows | `src/data/weapons.js` (`MISSILE`, `SHOP_WEAPONS`) |

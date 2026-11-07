@@ -43,6 +43,7 @@ export function spawnEnemy(id, pos) {
     def: ENEMIES[id] ? id : DEFAULT_ENEMY,   // the id, so saves and events can name it
     n: def.n,                                // the lock marker's label
     f: def.f,                                // faction id (data/factions.js)
+    loot: def.loot,                          // table id (data/loot.js)
     hp: def.hp,
     mx: def.hp,
     v: V(0, 0, 0),

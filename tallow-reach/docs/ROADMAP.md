@@ -6,9 +6,10 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** Milestone A is under way. **Steps 0 and 1 are done** (2026-11-07). **Step 2
-(seeded randomness) is built and tested (108 tests green)** — waiting for the owner's playtest before
-it is ticked. **Next: Step 3, loot tables.**
+**Current position:** Milestone A is under way. **Steps 0, 1, 2 and 3 are done** (2026-11-07).
+**Next: Step 4, item registry and the generic inventory (save v12).** The owner has answered the
+one question that step needs: found modules do **not** get random stats yet, so a stock stays a
+plain count per item.
 
 ## The order of work
 
@@ -27,8 +28,8 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | --- | --- | --- | --- |
 | 0 | Backup, `npm test`, play TESTING-BASELINE.md once | start | [x] 2026-11-07 |
 | 1 | Enemy registry (`data/enemies.js`, `enemy-killed` event) | A | [x] 2026-11-07 |
-| 2 | Seeded randomness everywhere | A | [ ] |
-| 3 | Loot tables | A | [ ] |
+| 2 | Seeded randomness everywhere | A | [x] 2026-11-07 |
+| 3 | Loot tables | A | [x] 2026-11-07 |
 | 4 | Item registry and generic inventory (save v12) | A | [ ] |
 | 5 | Shops and prices from data | A | [ ] |
 | 6 | Sim stops using sound and keyboard (6a sound, 6b input) | B | [ ] |
@@ -93,4 +94,8 @@ Not before step 5, or the work will have to be redone.
 - 2026-11-07: Steps 0 and 1 ticked after the owner played the built game in this version.
 - 2026-11-07: Step 2 (seeded randomness) built: `makeRng` added, the six `Math.random()` rolls in the
   sim replaced with `random()`, and `tests/rng.test.mjs` guards it. Old and new code compared side by
-  side (rocks, 60 s of raiders, 40 loot rolls): identical.
+  side (rocks, 60 s of raiders, 40 loot rolls): identical. Ticked after the owner's playtest.
+- 2026-11-07: Step 3 (loot tables) built: `data/loot.js` + pure `sim/loot.js`, raider drops and the
+  asteroid ore mix are data, a crate carries the item it holds. 118 tests green; save unchanged.
+  Compared with `main` before the step: 50,000 rocks identical, 200,000 kills at the same odds.
+- 2026-11-07: Step 3 ticked after the owner played the loot build and accepted it (merged to `main`).

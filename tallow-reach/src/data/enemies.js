@@ -26,6 +26,7 @@
 //   dmg        damage a shot
 //   bspd       bullet speed (m/s)
 //   spawnDist  [min, max] distance (m) a new one appears at
+//   loot       what it leaves behind: a table id from data/loot.js
 //
 // `npm test` (tests/content.test.mjs) fails if an entry is missing a field or
 // names a faction that does not exist.
@@ -52,6 +53,7 @@ export const ENEMIES = {
     dmg: 1,
     bspd: 520,
     spawnDist: [800, 1000],
+    loot: "raider",
   },
 };
 
