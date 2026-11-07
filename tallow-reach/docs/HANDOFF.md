@@ -1,13 +1,16 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-06. Save version **11**. **94 tests** in `tests/` (counted from the files;
+> Updated 2026-11-07. Save version **11**. **94 tests** in `tests/` (counted from the files;
 > an AI session without network cannot run them, so the user's own `npm test` is the real check).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. The inventory work was written in
 > a session that could not install three.js, so it was only tested against a stand-in; treat
 > inventory as "untested in the real game" until the user says they have played it.
-> This file replaces the memory of the previous chat. Read it, then `docs/ARCHITECTURE.md`,
-> `docs/HOW_TO_ADD.md` and the top two entries of `docs/CHANGELOG.md`, and you are up to speed.
+> This file replaces the memory of the previous chat. Read it, then **`docs/VISION.md`** (what the
+> game is meant to become), **`docs/ROADMAP.md`** (what is done and next), `docs/ARCHITECTURE.md`
+> (the code as it is), `docs/TARGET_ARCHITECTURE.md` (where it is heading), `docs/HOW_TO_ADD.md`
+> and the top two entries of `docs/CHANGELOG.md`, and you are up to speed. Any AI model may be
+> reading this: do not assume you are the one who wrote earlier changes.
 > `docs/CHANGELOG.md` also has a one-line index of older entries; the full text of those is in
 > `docs/CHANGELOG_ARCHIVE.md` (open it only when the index shows something relevant).
 
@@ -23,6 +26,17 @@ power draws from one budget and refuses to run when the ship cannot pay. An empt
 ship simply lacks that thing: no thrusters = cannot move, no shields = every hit reaches the
 hull, no hull module = the first hit that reaches the hull destroys the ship. Hostiles are
 **Newbie Raiders**: 10 Hull HP, no shields, 1 damage a shot.
+
+**The big picture, in five lines** (full text in `docs/VISION.md`).
+- **Open world:** a 2D starmap grid of 100+ sectors (FTL-style); Meridian Station is sector one; encounters,
+  resources and loot; hard, generated **wormhole instance** sectors off the map; steep difficulty; dying
+  loses the ship and its hold.
+- **Campaign:** built after the open world; 10+ modular story missions; you start in it and become a free
+  agent when it ends; missions replayable in any order for modest rewards.
+- **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
+- **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
+  data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
+- **Next action:** Step 0 (backup, `npm test`, play `TESTING-BASELINE.md`), then Step 1 (enemy registry).
 
 ---
 
@@ -42,8 +56,13 @@ that change, whether the save changes) and build them in small slices that can e
 
 ## Standing ground rules (the user stated these; do not break them)
 
-- Keep the existing structure. **Tuning numbers go in `src/data/`** (one agreed exception:
-  `NO_DRIVE_WARN` at the top of `src/sim/player.js`).
+- Keep the existing folders and conventions. **Restructuring is only done as a numbered step in
+  `docs/REFACTOR_PLAN.md`** (the owner has approved that plan; refactor steps must not change how the
+  game plays). **Tuning numbers go in `src/data/`** (one agreed exception: `NO_DRIVE_WARN` at the top
+  of `src/sim/player.js`).
+- Build **toward `docs/TARGET_ARCHITECTURE.md`**: never add code that deepens a debt listed there
+  (for example `Math.random()` in `sim/`, new three.js objects stored in game state, a new
+  hard-coded sector position, a new fixed list of item keys).
 - **No npm dependencies.** Plain ES modules; only `three@0.128.0` and `esbuild`.
 - Save format stays backward-compatible: bump `SAVE_VERSION` in `src/state/profile.js` and add a
   migration whenever saved data changes.
@@ -169,5 +188,7 @@ npm run build     # writes game/tallow-reach.html
 ## To start the next session
 
 Say what you want to build, and point the assistant at this file. It will read this plus
-`ARCHITECTURE.md`, `HOW_TO_ADD.md`, `CHANGELOG.md` and the `README.md` of the folders it will touch,
-and be ready in one step. The starter prompt is in `docs/AI_PROMPTS.md`.
+`VISION.md`, `ROADMAP.md`, `ARCHITECTURE.md`, `TARGET_ARCHITECTURE.md`, `HOW_TO_ADD.md`,
+`CHANGELOG.md` and the `README.md` of the folders it will touch, and be ready in one step. The
+starter prompt (and the refactor-step prompt) are in `docs/AI_PROMPTS.md`.
+A new baseline smoke test that covers the whole game is `TESTING-BASELINE.md`.

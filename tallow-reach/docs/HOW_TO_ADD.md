@@ -1,5 +1,12 @@
 # How to add things to Tallow Reach
 
+> **These recipes describe the code as it is today.** Several will change during the refactor in
+> [REFACTOR_PLAN.md](REFACTOR_PLAN.md): enemies (recipe 6) become data in step 1, items and shops
+> (2, 4, 5, 17) in steps 4 and 5, sectors (14) in steps 10 to 12, missions and story (3, 11) in steps 13
+> to 15. A step that changes a recipe must rewrite it in the same change. If a recipe here says
+> "do the refactor first", check [ROADMAP.md](ROADMAP.md) to see whether that step is done.
+
+
 Step-by-step recipes for the common kinds of change. Read
 [ARCHITECTURE.md](ARCHITECTURE.md) first for the layers and conventions.
 

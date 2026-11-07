@@ -1,6 +1,8 @@
 # Tallow Reach: code architecture
 
-**Reading order for an AI assistant:** this file, then [HOW_TO_ADD.md](HOW_TO_ADD.md)
+**Reading order for an AI assistant:** [HANDOFF.md](HANDOFF.md), [VISION.md](VISION.md) and
+[ROADMAP.md](ROADMAP.md) first, then this file (the code **as it is now**), then
+[TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) (where it must go), then [HOW_TO_ADD.md](HOW_TO_ADD.md)
 (step-by-step recipes), then the `README.md` in the folder you are about to edit,
 then [CHANGELOG.md](CHANGELOG.md) (what earlier sessions changed: the newest entries in full,
 plus a one-line index of every older entry). Open [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md)
@@ -24,6 +26,11 @@ runs when opened from disk.
 ## Layers
 
 Dependencies only point downward. Lower layers never import higher ones.
+
+> **Known exception today:** `sim/` imports `render/` (scene, models) and `core/` (audio, input),
+> which this rule forbids. It is the biggest structural debt and is closed by refactor steps 6 and 7
+> ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). Do not add *new* such imports. The full list of debts and
+> the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
 
 ```
 main.js                 boot + frame loop
@@ -282,6 +289,10 @@ When you change what is saved:
 5. Add a test in `tests/` that loads an old-shaped save.
 
 ## Known gaps (things to know before building on top)
+
+The structural gaps (the sim touching the screen, one global player, hard-coded sector geography, a
+single mixed save, fixed item keys) are tracked with their fixing step in the "Debt today" table of
+[TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md). The list below is the gameplay-level detail.
 
 These are real, current limits. None of them is a bug in play today.
 
