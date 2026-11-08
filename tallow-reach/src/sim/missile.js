@@ -12,11 +12,10 @@
 import { V, Q, faceQ } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 import { emit } from "../util/events.js";
-import { state } from "../state/state.js";
+import { state, localPlayer } from "../state/state.js";
 import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
-import { playerLocal } from "./pilot.js";
 import { addEntity, dropEntity } from "./entity.js";
 
 /**
@@ -24,10 +23,11 @@ import { addEntity, dropEntity } from "./entity.js";
  * launcher fitted as `launcher` (see sim/guns.js). `dir` is the ship's nose and
  * `muzzle` the point on the ship it leaves from.
  */
-export function launchMissile(target, launcher, dir, muzzle) {
-  const P = state.player;
+export function launchMissile(target, launcher, dir, muzzle, player = localPlayer()) {
+  const P = player;
   const m = {
     kind: "missile",
+    owner: player,
     pos: muzzle.clone(),
     quat: pointing(muzzle, dir),
     d: dir.clone(),
@@ -49,9 +49,6 @@ function pointing(p, dir) {
   faceQ(q, p, p.clone().add(dir), 1);
   return q;
 }
-
-/** The point a missile leaves the ship from (5 m ahead of its middle). */
-export const missileMuzzle = scale => playerLocal(V(0, -1.2, -5 * scale));
 
 /** Move every missile, steer it, trail it and resolve its hit. */
 export function updateMissileFlight(dt) {

@@ -191,8 +191,9 @@ Everything plays as before.
 `render/views.js` creating, updating and removing their meshes by watching the entity lists. **7b
 (ticked 2026-11-08):** bullets, missiles, crates and particles as records (`sim/entity.js`,
 `sim/missile.js`), and — pulled forward because the rules already read them — rocks and the player's
-own ship (`sim/pilot.js`). **7c (left):** the player hull's own view class with named mount points
-(the gun muzzles and the missile rail), and then making `sectors.js` not import `render/` at all.
+own ship (`sim/pilot.js`). **7c (ticked 2026-11-08):** the player hull has its own view class with named mount points
+(the gun muzzles and the missile rail); `sectors.js` and `weapons.js` no longer import `render/`.
+The owner playtested 7c and reported it passed.
 Each slice is playable on its own. Positions are plain `{x,y,z}` data (or keep three.js
 vectors/quaternions as maths types, which is fine; just no meshes, scenes or materials in `sim/`).
 **Done when.** The `render/` allow-list in the layer test is empty. A new **headless sim test**
@@ -200,8 +201,18 @@ builds a world, spawns an enemy, steps 600 ticks with no browser and checks the 
 shot. The game plays as before. Mount points to be data-driven and named, so a model can supply them later.
 **Save.** None.
 
+## Step 7d: Entity view registry (ticked 2026-11-08)
+**Goal.** Make new entity views extensible without changing existing view machinery.
+**Do.** Replace the two entity-kind switches and separate enemy mesh map in `render/views.js`
+with one registry of kind-specific list, build, update and removal handlers and one live-view map.
+Keep the player hull view and beam separate. Preserve events, frame reconciliation and disposal.
+**Done when.** Existing views behave as before; a test registers a fake kind and proves its mesh
+appears, updates and disappears without editing existing kinds. Tests and build pass. The owner
+reported the playtest passed.
+**Save.** None.
+
 ## Step 8: Fixed time step and a list of players
-**Goal.** The sim steps at a fixed rate and does not assume one player.
+**Goal.** The sim steps at a fixed rate; flight, drive, power, shield, hull damage, weapons, missiles, targeting and enemy AI act on individual players. Inventory, economy, docking, contracts, death/recovery and saves remain local-only until step 9.
 **Do.** `sim/step.js` exposes `stepSim(dt)`; `main.js` feeds it fixed steps (for example 1/60 s)
 from an accumulator. `state.player` becomes an entry in `state.players` with its own `controls`;
 `localPlayer()` is the one the screen follows. Systems take the player they act on. The flight feel
@@ -209,10 +220,35 @@ is **settled** and must be identical: add a test comparing the position after N 
 at the old variable step and the new fixed step.
 **Done when.** Single-player plays identically at 30, 60 and 144 fps (check with the browser's frame
 rate throttle if you can). Tests green.
+**Owner-approved slices** (each gets tests; 8c is playtested only after all its sub-slices are done; no networking):
+- **8a — fixed simulation tick.** Move the gameplay updates to `sim/step.js`, feed them from a
+  fixed-step accumulator, preserve pause and the existing long-frame cap, and compare flight with
+  the old loop. **Ticked 2026-11-08:** the owner reports the playtest passed
+  (`TESTING-BASELINE.md` section J). The 60 fps flight test matches the old loop; other old frame rates have measured differences.
+- **8b — player records and controls.** Introduce `state.players`, `localPlayer()` and an
+  independent control record for each player. Keep the existing single-player experience and
+  add tests showing that player records and controls are independent. **Ticked 2026-11-08:**
+  the owner reported the playtest passed (`TESTING-BASELINE.md` section K). Temporary local-player
+  compatibility aliases remain
+  for systems to migrate in 8c.
+- **8c — player-aware simulation.** Flight, drive, power, shields, hull damage, weapons,
+  missiles and targeting use the passed player's independent runtime. `stepSim` advances each
+  active pilot and shared projectiles/world once; enemies pursue the nearest active player.
+  **Ticked 2026-11-08:** implementation and automated checks complete; the owner reports the
+  playtest passed (section L of `TESTING-BASELINE.md`). Two-player headless tests and scripted 8b flight and combat/lifecycle comparisons pass.
+  No multiplayer transport or guest UI. Inventory, economy, docking, contracts, death/recovery,
+  saves and the other exceptions in the still-local-only table remain step 9 work.
+
+**Before all of step 8 can be ticked:** resolve or explicitly validate the remaining frame-rate
+risks: missile lock currently samples the rendered camera, asteroid respawn uses a wall-clock
+timer, and views are not interpolated between ticks. The owner must playtest the slices; verify
+single-player at 30, 60 and 144 fps where possible. Do not represent the headless flight/combat
+tests as proof that the entire game is frame-rate independent.
 **Save.** None.
 
 ## Step 9: Split the save into profile and world
-**Goal.** Portable character data apart from per-world data (TARGET_ARCHITECTURE principle 5).
+**Goal.** Portable character data apart from per-world data (TARGET_ARCHITECTURE principle 5), and remove the remaining local-player assumptions listed after 8c.
+**Required:** close every item in the [still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-step-9-must-close-every-item), with tests.
 **Do.** `profile` keeps credits, ships, loadouts, holds, hull damage, stats, the active mission and
 (later) campaign progress. `world` gets the station (base levels, store), the contract board and
 placeholders for the galaxy and current sector. Same save slots and export code carry both.

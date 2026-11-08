@@ -64,7 +64,8 @@ export function setupHud() {
 
   on("docked", () => (el.root.hidden = true));
   on("launched", () => (el.root.hidden = false));
-  on("hurt", ({ shielded }) => {
+  on("hurt", ({ shielded, player }) => {
+    if (player && player !== state.player) return;
     el.flash.style.opacity = shielded ? 0.25 : 0.8;
     setTimeout(() => (el.flash.style.opacity = 0), 120);
   });
@@ -145,7 +146,6 @@ export function updateHud(dt) {
   // A ship with no thrusters cannot move, so say why the controls do nothing.
   el.prompt.textContent =
     H.prompt || (state.drive.spd > 0 ? "" : "No thrusters fitted: press G to dock and fit one.");
-  H.prompt = "";
 
   el.msg.textContent = H.msgT > 0 ? H.msg : "";
   if (H.msgT > 0) H.msgT -= dt;

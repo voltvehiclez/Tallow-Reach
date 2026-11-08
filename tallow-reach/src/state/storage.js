@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: slots, autosave and import/export store the local profile only.
 // Persistence: the autosave, three manual save slots, and text save codes.
 // Storage keys are unchanged from the prototype so existing saves still load.
 

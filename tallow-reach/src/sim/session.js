@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: launch, docking, death, recovery and autosave operate on state.player/profile.
 // Flight lifecycle: launching from the outpost, docking, and losing a ship.
 // Menus and HUD react to the events emitted here (docked, launched, died).
 
@@ -20,6 +21,20 @@ import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
 import { cancelWarp, enterSector } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
+
+/** Initialise an independent transient pilot from a fit. This does not retain or save the profile. */
+export function configurePlayer(P, profile) {
+  P.ship = profile.ship;
+  P.weapon = profile.pw;
+  P.missileStock = profile.msl;
+  refillPower(P, profile);
+  refreshDrive(P, profile);
+  refreshShield(P, profile);
+  refreshHull(P, profile);
+  refreshGuns(P, profile);
+  P.configured = true;
+  return P;
+}
 
 const DOCK_RANGE = 300;     // metres from the outpost
 const DOCK_MAX_SPEED = 70;  // m/s
@@ -124,4 +139,8 @@ export function die() {
   emit("died", text);
 }
 
-on("player-dead", die);
+on("player-dead", ({ player } = {}) => {
+  // A death event from another pilot must never destroy the local ship.
+  // Non-local recovery is still to be implemented as part of step 8c.
+  if (!player || player === state.player) die();
+});

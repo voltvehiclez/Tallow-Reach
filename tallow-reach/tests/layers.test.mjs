@@ -106,13 +106,7 @@ const CORE_ALLOWED = new Set();
  * sim/ files that may still import render/. Step 7 empties this: it lost ai.js
  * and targeting.js in 7a, and loses the rest in 7b and 7c.
  */
-const RENDER_ALLOWED = new Set([
-  // 7b emptied this of asteroids.js, combat.js, effects.js, player.js and
-  // world.js: rocks, bullets, crates, particles and the player's ship are plain
-  // data now, and render/views.js draws them.
-  "sectors.js",    // showSector() shows and hides a sector's scenery groups (step 10)
-  "weapons.js",    // reads camera.quaternion for the missile lock cone (step 8)
-]);
+const RENDER_ALLOWED = new Set();
 
 /** sim/ files that may import ui/. None may, and none ever will (ui reads state). */
 const UI_ALLOWED = new Set();
@@ -223,7 +217,7 @@ test("the sim reads its input from the control record, not the keys", () => {
     const src = readFileSync(path.join(srcDir, "sim", file), "utf8");
     assert.doesNotMatch(src, /\bkeys\b/, `sim/${file} must read state.controls, not keys`);
     assert.doesNotMatch(src, /\bpointer\./, `sim/${file} must read state.controls, not pointer`);
-    assert.match(src, /state\.controls/, `sim/${file} should read state.controls`);
+    assert.match(src, /P\.controls/, `sim/${file} should read the player's controls`);
   }
 });
 
@@ -408,6 +402,6 @@ test("the sim announces every entity, and render/views.js builds one mesh per en
     assert.match(views, new RegExp(`on\\("${name}"`), `render/views.js listens for ${name}`);
   }
   for (const kind of ["bullet", "missile", "crate", "fx", "rock"]) {
-    assert.match(views, new RegExp(`case "${kind}"`), `render/views.js knows how to draw a ${kind}`);
+    assert.match(views, new RegExp(`registerEntityView\\("${kind}"`), `render/views.js knows how to draw a ${kind}`);
   }
 });

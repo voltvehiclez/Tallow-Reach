@@ -1,32 +1,31 @@
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
-import { renderer, scene, camera, stars, planet, spin } from "./render/scene.js";
+import { renderer, scene, camera, stars, planet, spin, showSector } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state } from "./state/state.js";
+import { state, localPlayer } from "./state/state.js";
 import { newProfile } from "./state/profile.js";
 import { loadAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
-import { createPlayer, setShip, flight } from "./sim/player.js";
-import { updatePrimary, updateMissiles, setWeapon, refreshGuns } from "./sim/weapons.js";
-import { updateEnemies } from "./sim/ai.js";
-import { updateBullets, updateCrates } from "./sim/combat.js";
-import { updateEffects } from "./sim/effects.js";
+import { createPlayer, setShip } from "./sim/player.js";
+import { setWeapon, refreshGuns } from "./sim/weapons.js";
 import { populateField } from "./sim/asteroids.js";
 import { toggleLock } from "./sim/targeting.js";
 import { tryDock } from "./sim/session.js";
-import { startWarp, updateWarp } from "./sim/sectors.js";
+import { startWarp } from "./sim/sectors.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { updateOutfitting } from "./ui/outfitting.js";
-import { refillPower, updatePower } from "./sim/power.js";
+import { refillPower } from "./sim/power.js";
 import { refreshDrive } from "./sim/drive.js";
-import { refreshShield, updateShield } from "./sim/shield.js";
+import { refreshShield } from "./sim/shield.js";
 import { refreshHull } from "./sim/hull.js";
+import { createSimClock } from "./sim/step.js";
+import { MAX_FRAME_DT } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 import { installEnemyViews, updateEnemyViews, updateEntityViews } from "./render/views.js";
@@ -53,14 +52,17 @@ setupPause();
 installInput();
 syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
-  canStart: () => !state.player.docked && !state.paused,
+  canStart: () => !localPlayer().docked && !state.paused,
   getScale: () => SHIPS[state.profile.ship].sc,
 });
+
+on("sector-entered", ({ id }) => showSector(id));
+showSector(state.sector);
 
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
 
 on("action", ({ name, repeat }) => {
-  const playing = !state.player.docked && !state.paused;
+  const playing = !localPlayer().docked && !state.paused;
   switch (name) {
     case "lock":
       if (playing && !repeat) toggleLock();
@@ -78,7 +80,7 @@ on("action", ({ name, repeat }) => {
       if (playing && !repeat) startWarp();
       break;
     case "pause":
-      if (!state.player.docked) setPause(!state.paused);
+      if (!localPlayer().docked) setPause(!state.paused);
       break;
   }
 });
@@ -92,19 +94,20 @@ addEventListener("resize", () => {
 // --- Frame loop ------------------------------------------------------------
 
 let last = performance.now();
+const cameraAim = camera.position.clone();
+const simClock = createSimClock();
 
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = Math.min(MAX_FRAME_DT, (now - last) / 1000);
   last = now;
 
   if (state.paused) {
     renderer.render(scene, camera);
     return;
   }
-  state.time += dt;
 
-  const P = state.player,
+  const P = localPlayer(),
     F = state.flight;
   planet.rotation.y += dt * 0.003;
   spin.rotation.y += dt * 0.1;
@@ -120,18 +123,12 @@ function frame(now) {
     mineFrac: F.mineFrac,
   });
 
+  // Lock uses the previous rendered camera direction, just as before 8a.
   if (!P.docked) {
-    flight(dt);
-    updateShield(dt);     // shields recharge after a lull in the fighting
-    updatePower(dt);      // cells charge from the fitted powerplants and cells
-    updateWarp(dt);       // may change sector mid-frame; the rest of the frame uses the new one
-    updatePrimary(dt);
-    updateMissiles(dt);
-    updateEnemies(dt);
-    updateBullets(dt);
-    updateCrates(dt);
+    const aim = cameraAim.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
   }
-  updateEffects(dt);
+  simClock.advance(dt);
   updateEnemyViews();      // copy each hostile's position onto its mesh
   updateEntityViews();     // and every bullet, missile, crate, particle, rock and the ship
   updateWarpStreaks(dt);   // all three hide themselves when no warp is running

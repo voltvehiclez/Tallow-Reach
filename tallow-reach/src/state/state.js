@@ -3,11 +3,57 @@
 
 import { newProfile } from "./profile.js";
 import { neutralControls } from "./controls.js";
+import { DEFAULT_SHIP } from "../data/ships.js";
 import { DEFAULT_SECTOR } from "../data/sectors.js";
+
+// Before the local ship exists, input can still be prepared for it. Once created,
+// every pilot owns its own controls; legacy aliases expose the selected local pilot.
+let pendingControls = neutralControls();
+const copyControls = c => ({ ...c, steer: { ...c.steer } });
+
+// Per-pilot runtime values. Profile, inventory and lifecycle remain local-only
+// until step 9; these fields are transient and never written into the save.
+export function createPlayerRuntime() {
+  return {
+    flight: { lock: null, missileLock: { target: null, t: 0, locked: false },
+      gunCd: [], missileCd: 0, spawnT: 20, beamOn: false, beamStart: null,
+      beamEnd: null, beamT: 0, mineFrac: 1, coneAngle: 0 },
+    power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0, guns: 0, beam: 0 } },
+    drive: { spd: 0, turn: 0 }, shield: { cap: 0, regen: 0, delay: 0 }, hullSpec: { cap: 0 },
+    guns: [], beams: [], missiles: [], ship: DEFAULT_SHIP, weapon: "cannon", missileStock: 0,
+    aimDirection: null, warp: null, configured: false,
+  };
+}
+
+const initialRuntime = createPlayerRuntime();
+
+/** The player followed by the local screen, or null before it is created. */
+export const localPlayer = () => state.players[state.localPlayerIndex] || null;
 
 export const state = {
   profile: newProfile(),
-  player: null,        // the flying ship (created in sim/player.js: pos, quat, velocity, hull)
+  players: [],         // player records, including their own controls
+  localPlayerIndex: 0,  // which player this screen and its input follow
+  // Local-player compatibility alias for the local UI and step 9 systems.
+  get player() { return localPlayer(); },
+  set player(player) {
+    const previous = localPlayer();
+    if (!player) {
+      if (previous) {
+        pendingControls = copyControls(previous.controls);
+        this.players.splice(this.localPlayerIndex, 1);
+      }
+      return;
+    }
+    if (!player.controls) player.controls = copyControls(previous?.controls || pendingControls);
+    // Legacy local UI reads state.power/flight/etc. Preserve those live values
+    // when the local ship record is replaced; other players have fresh records.
+    if (!player.configured) {
+      for (const [alias, field] of Object.entries(runtimeFields)) player[field] = this[alias];
+    }
+    this.players[this.localPlayerIndex] = player;
+  },
+  aimDirection: { x: 0, y: 0, z: -1 }, // last rendered camera direction, supplied by the frame loop
   paused: false,
   time: 0,             // seconds of unpaused play
   sector: DEFAULT_SECTOR,   // id from data/sectors.js: the region you are flying in
@@ -22,65 +68,25 @@ export const state = {
     fx: [],            // short-lived particles
   },
 
-  flight: {
-    lock: null,                                   // { k: "e"|"a"|"c"|"s", o } or null
-    missileLock: { target: null, t: 0, locked: false },
-    gunCd: [],         // seconds until each fitted gun can fire again
-    // (There is no `gunsOn` field: whether the trigger was held and the guns could
-    // fire is local to one frame of sim/weapons.js. Nothing outside it read the
-    // stored copy, and a stale value on a shared record would confuse co-op.)
-    missileCd: 0,
-    spawnT: 20,        // seconds until the next pirate check
-    beamOn: false,
-    beamStart: null,   // where the mining beam starts, while it is cutting (the view draws it)
-    beamEnd: null,     // and where it stops
-    beamT: 0,          // seconds of continuous contact toward the next ore; resets the moment contact stops
-    mineFrac: 1,       // ore left in the rock being mined (drives hum pitch)
-    coneAngle: 0,      // degrees: the missile lock cone, 0 when no ring is shown
-  },
-
-  // Ship power, rebuilt from the fitted modules (see sim/power.js).
-  //   gen    MJ/s the powerplants make
-  //   cap    MJ the cells hold
-  //   stored MJ in the cells right now
-  //   draw   MJ/s the whole ship is asking for, the sum of `use`
-  //   use    who is asking for what: drive, shield, guns and beam
-  power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0, guns: 0, beam: 0 } },
-
-  // The ship's drive, rebuilt from the fitted thrusters (see sim/drive.js).
-  //   spd    top speed in m/s       0 / 0 with an empty bay: the ship cannot move
-  //   turn   turn rate multiplier (scaled again by FLIGHT.turn)
-  //   bmax   boost fuel units the tank holds (player.enMax; sim/drive.js sizes it)
-  //   buse   units a second burned while boosting
-  //   bfill  units a second the tank refills at
-  drive: { spd: 0, turn: 0 },
-
-  // The guns fitted in the primary bays, in bay order (see sim/guns.js).
-  guns: [],
-
-  // The mining beams fitted in the primary bays, in bay order (see sim/guns.js).
-  beams: [],
-  // The missile launchers fitted in the secondary bays, in bay order (see sim/guns.js).
-  missiles: [],
-
-  // The ship's shields, rebuilt from the fitted shield module (see sim/shield.js).
-  //   cap    Shield HP when full        0 means no shields fitted
-  //   regen  Shield HP per second while recharging
-  //   delay  seconds without a hit before recharging starts
-  shield: { cap: 0, regen: 0, delay: 0 },
-
-  // The ship's Hull HP, rebuilt from the fitted hull module (see sim/hull.js).
-  //   cap    Hull HP when full            0 means no hull module fitted
-  //           (any hit reaching the hull then destroys the ship)
-  hull: { cap: 0 },
+  // Local compatibility aliases are redirected to the selected player below.
+  flight: initialRuntime.flight,
+  power: initialRuntime.power,
+  drive: initialRuntime.drive,
+  guns: initialRuntime.guns,
+  beams: initialRuntime.beams,
+  missiles: initialRuntime.missiles,
+  shield: initialRuntime.shield,
+  hull: initialRuntime.hullSpec,
 
   freeCam: { on: false, yaw: 0, pitch: 0.25, dist: 14 },
 
-  // What the local pilot is asking for this frame. `core/input.js` writes it from
-  // the keyboard and mouse; `src/sim/` reads it and never touches the keyboard.
-  // The shape (and the meanings of every field) is in state/controls.js. Step 8
-  // moves this onto a per-player record; the network fills a guest's copy.
-  controls: neutralControls(),
+  // Temporary compatibility alias: there is no separate global control record.
+  get controls() { return localPlayer()?.controls || pendingControls; },
+  set controls(controls) {
+    const player = localPlayer();
+    if (player) player.controls = controls;
+    else pendingControls = controls;
+  },
 
   ui: {
     intro: true,
@@ -107,7 +113,21 @@ export const state = {
   shops: {},
 };
 
-/** Show a hint for this frame only. Call every frame to keep it visible. */
+// Compatibility aliases for the existing local UI and local-only step 9 systems.
+// The authoritative live runtime values belong to the selected player record.
+const runtimeFields = { flight: "flight", power: "power", drive: "drive", shield: "shield",
+  hull: "hullSpec", guns: "guns", beams: "beams", missiles: "missiles" };
+const pendingRuntime = {};
+for (const [alias, field] of Object.entries(runtimeFields)) {
+  pendingRuntime[alias] = state[alias];
+  Object.defineProperty(state, alias, {
+    enumerable: true, configurable: true,
+    get() { return localPlayer()?.[field] || pendingRuntime[alias]; },
+    set(value) { const p = localPlayer(); if (p) p[field] = value; else pendingRuntime[alias] = value; },
+  });
+}
+
+/** Show a hint until the next simulation tick. */
 export const say = text => {
   state.hud.prompt = text;
 };

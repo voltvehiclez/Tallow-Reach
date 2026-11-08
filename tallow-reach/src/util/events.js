@@ -7,8 +7,8 @@
 //   freecam       boolean            Alt held / released
 //   look          { dx, dy }         mouse movement while orbiting
 //   wheel         deltaY             mouse wheel
-//   hurt          { shielded }       player took damage
-//   player-dead                      hull reached zero
+//   hurt          { shielded, player } player took damage
+//   player-dead   { player }         hull reached zero (non-local recovery not yet implemented)
 //   docked                           player docked at the outpost
 //   launched                         player left the outpost
 //   died          text               ship destroyed (after docking)
@@ -27,6 +27,7 @@
 //   enemy-spawned { id, def, pos }   a hostile entered the world (render/views.js builds its mesh)
 //   enemy-removed { id }             a hostile left the world: killed, out of range, or the field
 //                                    was cleared (render/views.js removes its mesh)
+//   sector-entered { id }           scenery should show this sector (also on docking reset)
 //   sector-changed { from, to }      the sector changed, mid-warp (see data/sectors.js)
 //   warp-start    { from, to }       a warp began: ship locked, drive charging
 //   warp-end      { from, to }       warp over (arrived, or cancelled by docking)

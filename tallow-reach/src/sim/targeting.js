@@ -13,18 +13,18 @@ import { playerPos, playerFwd } from "./pilot.js";
  * A lock is { k, o }: k is "e" hostile, "a" asteroid, "c" crate, "s" station.
  * o is the world object (null for the station).
  */
-export function toggleLock() {
-  const F = state.flight,
-    W = state.world,
-    P = state.player;
+export function toggleLock(P = state.player) {
+  const F = P.flight,
+    W = state.world;
+  const notify = text => { if (P === state.player) msg(text, 1.5); };
   if (F.lock) {
     F.lock = null;
-    msg("Target released", 1.5);
+    notify("Target released");
     return;
   }
 
-  const f = playerFwd(),
-    pp = playerPos();
+  const f = playerFwd(P),
+    pp = playerPos(P);
   let best = null,
     bestScore = 0.45;
 
@@ -45,9 +45,9 @@ export function toggleLock() {
 
   if (best) {
     F.lock = best;
-    msg("Target locked", 1.5);
+    notify("Target locked");
   } else {
-    msg("No object to lock", 1.5);
+    notify("No object to lock");
   }
 }
 
@@ -67,8 +67,8 @@ export function lockName(lock) {
 
 
 /** Drop the lock if its target has been destroyed or collected. */
-export function pruneLock() {
-  const F = state.flight,
+export function pruneLock(P = state.player) {
+  const F = P.flight,
     W = state.world,
     L = F.lock;
   if (!L || L.k === "s") return;

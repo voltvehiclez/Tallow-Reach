@@ -130,3 +130,83 @@ check that nothing was left behind. Run it straight after **A** and **B**, while
    again to come back.
 
 **Pass:** every item above behaves as written, and `npm test` is green.
+
+## H. Step 7c: hull mounts, lock and sector scenery
+
+1. In the project folder run `npm install`, `npm test`, then `npm run build`. Open
+   `game/tallow-reach.html` and click **Enter the hangar**. Load an existing save or start a new game.
+2. Launch and fire the cannons: both bolts should leave the usual left and right nose positions.
+   If available, select the mining beam with **2** and mine a rock; its beam should start at the
+   ship as before. Try other owned hulls from **Outfitting** if available.
+3. With missiles fitted, keep a raider inside the dashed ring until it locks, then right click.
+   Check the missile leaves the ship and homes as before. Hold **Left Alt** to orbit: the missile
+   should not acquire a lock in free camera; release and check it can lock again.
+4. Press **M** to warp to Kestrel Hollow. Meridian and the asteroid field should disappear.
+   Warp back: they should return. Also dock after returning and launch again; the scenery should
+   still be correct. If destroyed while in Kestrel Hollow, check the outpost scenery returns on
+   respawn. Report any differences before marking 7c complete.
+
+## I. Step 7d: entity view registry cleanup
+
+1. Launch and fly to the asteroid field. Check rocks appear normally; if you have the mining beam,
+   mine a rock and check it shrinks and disappears when emptied.
+2. Fire the cannons at a raider. Check your shots and the raider's shots appear and disappear on
+   impact or expiry. Destroy it: the raider should vanish, sparks should fade, and loot crates
+   should appear. Fly into a crate and check it vanishes when picked up.
+3. If you have missiles, lock a raider and fire one: it should appear, fly, and disappear on impact.
+4. Press **M** to warp away and back. Check scenery and rocks match the sector, and that no shots,
+   raiders, crates or sparks are left floating after the warp. Dock with **G** when back at Meridian,
+   then launch again and check the ship and asteroid field look normal.
+
+## J. Step 8a: fixed-tick flight and combat
+
+1. Open the 8a build, click **Enter the hangar** and launch. Fly forward, turn, strafe, reverse,
+   brake and boost; compare the feel and camera movement with your 7d baseline. Look for visible
+   judder, especially on a high-refresh screen. Press **P**, wait several seconds and resume:
+   the ship, enemies and projectiles should not jump forward from the paused time.
+2. Fly to the asteroid field; check rocks, hints and the mining beam if you have it. Fight a raider:
+   cannons, incoming fire, hits, explosions, loot and shields should work as before. If fitted,
+   acquire a missile lock and launch a missile; check the lock ring and its target.
+3. Press **M** to warp away and back, then dock with **G**. Check the scenery and flight. Launch
+   again and load an older save from the Saves tab; check the ship and equipment are still there.
+4. If you have a way to cap your display at 30, 60 and 144 frames per second, repeat the flight
+   and combat checks at each rate. If not, ordinary playtesting is useful too. Report anything
+   different, especially judder or inconsistent missile lock; the camera and asteroid respawn
+   are not yet proven frame-rate independent.
+
+## K. Step 8b: the local player and their controls
+
+1. Open the 8b build, click **Enter the hangar**, and load a familiar save if you have one.
+   Launch. Check the ship appears and the camera follows it normally.
+2. Use **W/S**, **A/D**, **Space/C**, **Q/E**, mouse steering, **X**, **Ctrl** and **Shift**.
+   The ship should respond as it did in 8a. Hold **Left Alt** to orbit, then release it and steer.
+3. Shoot a raider with left click. If you have the mining beam or missiles fitted, use **2** to
+   mine and right-click after a missile lock. Check the HUD and weapon controls as before.
+4. Press **M** to warp away and back, then **G** to dock. Launch again, and check the ship and
+   controls still work. Press **P** to pause and resume. Report any differences.
+
+This slice does not add co-op or a second controllable ship; the automated tests check that two
+player records and their controls are independent. Step 8c is still needed for player-aware rules.
+
+## L. Step 8c: final single-player regression playtest
+
+Make a backup or copy of a save first: the last check deliberately destroys a ship and can cost
+credits and cargo. This is a single-player playtest; the second player is tested automatically,
+not exposed in the game, and no co-op connection has been added.
+
+1. Open the freshly built game, click **Enter the hangar**, and load a familiar save. Launch.
+   Fly forward and backwards, turn, strafe, brake and boost. Check the camera, speed, power and
+   shield bars feel and look the same as before.
+2. Fly to the asteroid field. Fire the cannons while moving and turning; bolts should leave the
+   ship. Fight a raider and check incoming hits, shield recharge, hull damage, explosions and loot.
+   If fitted, select the mining beam with **2** and mine an asteroid; check ore enters the hold.
+3. If a missile launcher is fitted, aim at a raider, wait for the lock and right-click. Check the
+   lock ring, missile launch, tracking and impact. Press **F** to lock and release another target.
+4. Return to Meridian; press **G** in docking range at low speed. Check the outpost appears, then
+   launch again and check the ship, weapons and controls. Optionally press **M** to warp away and back.
+5. On your disposable/copy save, deliberately let a raider destroy your ship. Check the death
+   message, lost ship/cargo and recovery fee, return to the outpost, and launch the replacement
+   if one is available. Reload your backed-up save when finished.
+6. If practical, repeat flight and combat with display rates capped at 30, 60 and 144 fps. Report
+   any judder or missile-lock differences; the complete game's frame-rate independence remains
+   unproven because camera aim, asteroid respawn timing and view interpolation are still open.

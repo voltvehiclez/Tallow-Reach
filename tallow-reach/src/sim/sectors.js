@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: sector transitions and warp operate on the local ship and one shared sector.
 // Moving between sectors. M starts a warp to the next sector in data/sectors.js.
 //
 // A warp is a sequence, timed by WARP in data/sectors.js and about two seconds
@@ -21,7 +22,6 @@ import {
 } from "../data/sectors.js";
 import { emit } from "../util/events.js";
 import { state, msg, say } from "../state/state.js";
-import { showSector } from "../render/scene.js";
 import { clearWorldObjects, swapField } from "./world.js";
 
 /** True while a warp is in progress. */
@@ -35,7 +35,7 @@ export function enterSector(id) {
   if (id === state.sector) return;
   swapField(state.sector, id);
   state.sector = id;
-  showSector(id);
+  emit("sector-entered", { id });
 }
 
 /**
@@ -60,9 +60,9 @@ export function startWarp() {
     // Where the stick is right now, from the control record: sim/player.js eases
     // it back to neutral during the warp, so the ship's turn unwinds.
     steer: {
-      x: state.freeCam.on ? 0 : state.controls.steer.x,
-      y: state.freeCam.on ? 0 : state.controls.steer.y,
-      roll: state.controls.roll,
+      x: state.freeCam.on ? 0 : P.controls.steer.x,
+      y: state.freeCam.on ? 0 : P.controls.steer.y,
+      roll: P.controls.roll,
     },
   };
 

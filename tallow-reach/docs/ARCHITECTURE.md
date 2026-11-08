@@ -31,14 +31,10 @@ runs when opened from disk.
 
 Dependencies only point downward. Lower layers never import higher ones.
 
-> **Known exception today:** `sim/` still imports `render/` (scene, models) to build and remove
-> the meshes of bullets, crates, particles, rocks and the player's ship. That is the last one, and
-> refactor step 7 closes it ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)); **7a is done**, so hostiles are
-> already plain data and no `sim/` file touches an enemy's mesh any more.
-> **`core/` is closed (step 6):** the sim emits `sfx { name }` for sound and reads
-> `state.controls` for input, so no `sim/` file imports `core/` at all. Do not add *new* upward
-> imports. `tests/layers.test.mjs` fails if a `sim/` file imports `core/` or `ui/`, and holds the
-> shrinking allow-list of `sim/` files that may still import `render/`.
+> **Layer boundary:** steps 6 and 7c removed sim imports of core, UI and render. Sector
+> scenery follows `sector-entered`, and `main.js` supplies the previous rendered camera direction
+> for missile lock. `tests/layers.test.mjs` enforces empty allow-lists. Hull mounts are shared data
+> (`data/mounts.js`), used by `sim/pilot.js` and the `PlayerShipView` in `render/views.js`.
 > The full list of debts and the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
 
 ```
@@ -107,7 +103,7 @@ src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
 src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers), ids.js (entity ids)
-src/core/              audio.js (synth + mute), input.js (keys -> state.controls + named actions)
+src/core/              audio.js (synth + mute), input.js (keys -> local player controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, pilot (where the ship is), power, drive, fitting, inventory, shops' purchases (economy),
                        weapons, missile, combat, ai, enemy (a hostile as data), entity (every other entity as data),
@@ -180,6 +176,9 @@ Each `src/` folder also has its own short `README.md`.
   are three.js `Vector3`/`Quaternion` — maths types, which the target architecture allows — and the
   mesh is `render/views.js`'s business: it listens for `enemy-spawned` / `enemy-removed` and sweeps
   the list every frame. **Never give an entity a mesh again**; add the drawing to `render/views.js`.
+  Since 7d a registry in `render/views.js` defines each kind's list, build, update and cleanup;
+  one active-view map namespaces enemy and other entity ids because their counters are separate.
+  `tests/views.test.mjs` registers a fake kind to prove the common machinery is extensible.
   Kills emit `enemy-killed { def, faction, id }`; a hunt contract names the def it counts (`e`).
 - **Every other entity is a record too (step 7b).** A bullet, a missile, a loot crate, an explosion
   spark, a rock and the player's own ship are all plain data with an `id` and a `kind`, held in
@@ -336,6 +335,11 @@ Each `src/` folder also has its own short `README.md`.
   string, which the panel shows as a green toast.
 - **Screens are pure functions** that return an HTML string from the current state.
   They never change state.
+- **The sim runs at 60 ticks a second** (`sim/step.js`, `data/simulation.js`); the frame loop
+  accumulates time and keeps the old 0.05-second stall cap. Pause does not advance it. Screen and
+  sound randomness use a separate cosmetic stream. Missile aim still samples the last rendered
+  camera direction and asteroid respawn still uses a wall-clock timer; full frame-rate independence
+  has not been proven. Views are not interpolated between ticks.
 - **Anything that accumulates must be multiplied by `dt`.** A constant added per frame
   (`camera.rotateZ(0.05)` every frame, say) silently depends on the frame rate: harmless on a
   60 Hz screen, a visible bug on a 240 Hz one. This bit the warp roll once. Use
@@ -347,11 +351,15 @@ Each `src/` folder also has its own short `README.md`.
   back into `#shipview` after each render. Do not create a renderer per render, and keep
   `id="shipview"` in `outfittingHtml`.
 - **The sim never reads the keyboard.** `core/input.js` is the only file that knows a key code.
-  It fills `state.controls` (one plain record per pilot, shape in `src/state/controls.js`) and the
-  sim reads that. `docs/REFACTOR_PLAN.md` step 6 chose this shape; it is the co-op contract, so do
-  not rename fields without saying so there: `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`,
-  `stop`, `brake`, `boost`, `fire`, `sec`. Step 8 moves it onto a per-player record and step 16
-  fills a guest's copy from the network. `tests/layers.test.mjs` fails if a `sim/` file mentions
+  It fills `localPlayer().controls` (one plain record per pilot, shape in `src/state/controls.js`)
+  and the sim reads that. Step 8c gives each player independent flight, power, drive, shield,
+  hull, equipped weapons, cooldowns and locks; `state.player`, `state.flight`, `state.power` and
+  related names alias the local record for existing UI and local-only systems. The sim advances
+  every active player; shared projectiles and enemies advance once, with AI selecting the nearest.
+  The remaining local-only assumptions are listed in `TARGET_ARCHITECTURE.md` for step 9.
+  Do not rename fields without saying so there: `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`,
+  `stop`, `brake`, `boost`, `fire`, `sec`. Step 8b puts it on each player; step 16 will fill a
+  guest's copy from the network. `tests/layers.test.mjs` fails if a `sim/` file mentions
   `keys`/`pointer`, or if `HELD` sets a field the record does not have.
 - **The sim never plays a sound itself.** It emits `sfx { name, ...rest }` at the moment the
   sound belongs to, and `core/audio.js` plays the matching entry of its `SFX` table (one entry per

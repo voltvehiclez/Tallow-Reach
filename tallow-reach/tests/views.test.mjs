@@ -279,3 +279,84 @@ test("the mining beam is drawn from the sim's start and end points", () => {
   views.updateEntityViews();
   assert.equal(S.flight.beamOn, false);
 });
+
+test("a registered fake kind appears, updates and disappears without changing view machinery", () => {
+  const S = fresh();
+  views.installEnemyViews();
+  S.world.testProbes = [];
+  let built = 0, updated = 0, removed = 0;
+  const mesh = { marker: "fake mesh" };
+  views.registerEntityView("test-probe", {
+    list: () => S.world.testProbes,
+    build: () => { built++; return mesh; },
+    update: (entity, actual) => { assert.equal(actual, mesh); actual.x = entity.pos.x; updated++; },
+    remove: actual => { assert.equal(actual, mesh); removed++; },
+  });
+  const probe = { id: 123456, kind: "test-probe", pos: views.V(3, 0, 0) };
+  S.world.testProbes.push(probe);
+  const mark = views.__calls.length;
+  views.emit("entity-spawned", { id: probe.id, kind: probe.kind });
+  assert.equal(built, 1, "spawn event builds immediately, even with multiple listeners");
+  assert.ok(views.__calls.slice(mark).some(c => c.name === "scene.add" && c.args[0] === mesh));
+  probe.pos.x = 42;
+  views.updateEntityViews();
+  assert.equal(mesh.x, 42);
+  assert.equal(updated, 1);
+  S.world.testProbes.pop();
+  views.emit("entity-removed", { id: probe.id, kind: probe.kind });
+  assert.equal(removed, 1, "the kind's cleanup runs on the removal event");
+  assert.ok(views.__calls.slice(mark).some(c => c.name === "scene.remove" && c.args[0] === mesh));
+  views.updateEntityViews();
+  assert.equal(removed, 1, "the frame sweep does not remove it twice");
+
+  // Missed events are also reconciled by the generic sweep.
+  S.world.testProbes.push(probe);
+  views.updateEntityViews();
+  assert.equal(built, 2);
+  S.world.testProbes.pop();
+  views.updateEntityViews();
+  assert.equal(removed, 2);
+});
+
+test("enemy and other entity IDs can overlap without sharing a view", () => {
+  const S = fresh();
+  views.installEnemyViews();
+  const e = { id: 55555, kind: "enemy", def: "raider", pos: views.V(0, 0, 1), quat: views.V(0, 0, 0) };
+  e.quat.w = 1;
+  const b = { id: e.id, kind: "bullet", own: true, pos: views.V(0, 0, 2), quat: views.V(0, 0, 0) };
+  b.quat.w = 1;
+  S.world.enemies.push(e);
+  S.world.bullets.push(b);
+  views.emit("enemy-spawned", { id: e.id });
+  views.emit("entity-spawned", { id: b.id, kind: b.kind });
+  assert.equal(views.enemyViewCount(), 1);
+  assert.equal(views.entityViewCount(), 1);
+  S.world.bullets.pop();
+  views.emit("entity-removed", { id: b.id, kind: b.kind });
+  assert.equal(views.enemyViewCount(), 1, "removing the bullet leaves the enemy");
+  assert.equal(views.entityViewCount(), 0);
+  S.world.enemies.pop();
+  views.emit("enemy-removed", { id: e.id });
+  assert.equal(views.enemyViewCount(), 0);
+});
+
+test("particle views fade and dispose their own material on event and sweep removal", () => {
+  const S = fresh();
+  views.installEnemyViews();
+  const particle = id => ({ id, kind: "fx", pos: views.V(0, 0, 0), col: 0xffd080, size: 1, l: 1, t: 2 });
+  for (const byEvent of [true, false]) {
+    const fx = particle(byEvent ? 88801 : 88802);
+    S.world.fx.push(fx);
+    const mark = views.__calls.length;
+    views.emit("entity-spawned", { id: fx.id, kind: fx.kind });
+    const mesh = views.__calls.slice(mark).find(c => c.name === "scene.add").args[0];
+    views.updateEntityViews();
+    assert.equal(mesh.material.opacity, 0.5);
+    let disposed = 0;
+    mesh.material.addEventListener("dispose", () => disposed++);
+    S.world.fx.pop();
+    if (byEvent) views.emit("entity-removed", { id: fx.id, kind: fx.kind });
+    views.updateEntityViews();
+    assert.equal(disposed, 1);
+  }
+});

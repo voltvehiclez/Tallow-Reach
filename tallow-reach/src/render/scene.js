@@ -2,9 +2,11 @@
 // Visual only. Gameplay positions live in sim/ and are read here.
 
 import * as THREE from "three";
-import { V, R } from "../util/math.js";
+import { V } from "../util/math.js";
 import { DEFAULT_SECTOR } from "../data/sectors.js";
 import { mm } from "./models.js";
+import { cosmeticRandom } from "../util/rng.js";
+const R = (a, b) => a + cosmeticRandom() * (b - a);
 
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
