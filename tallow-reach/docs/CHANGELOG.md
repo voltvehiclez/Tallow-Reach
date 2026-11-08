@@ -25,6 +25,12 @@ the next person must know (save version, rebuild needed, known issues).
   is closed the way every other step has been. Nothing is in flight; **7c has not been started**.
   (The evidence it is right: the old-vs-new probe's 0 differences, 182 green tests, and
   `TESTING-BASELINE.md` section G, which is the manual check if anyone wants to re-run it.)
+- **Also:** the commit was tagged **`step7b`**, so the owner can download the whole project as a zip
+  straight from GitHub without any tool of mine being involved:
+  `https://github.com/voltvehiclez/Tallow-Reach/archive/refs/tags/step7b.zip` (GitHub builds it on
+  request; it contains the prebuilt `game/tallow-reach.html` and excludes `node_modules`). GitHub
+  uploads are blocked from this sandbox's network, which is why a release asset could not be
+  attached; the tag archive needs no upload. Step 7a was tagged `step7a-ticked` the same way.
 - Files: `docs/ROADMAP.md` (status line, step-7 row, status log), `docs/HANDOFF.md` (next action),
   this changelog. No source changed, so no rebuild is needed for this entry — the zip and the build
   are the 7b build.

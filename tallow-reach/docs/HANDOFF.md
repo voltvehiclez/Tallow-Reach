@@ -240,6 +240,10 @@ npm run build     # writes game/tallow-reach.html
   the lock and the hold fingerprinted each time — **0 differences**. The one trick it needs: call
   `updateMatrixWorld()` on the old build's ship after every teleport, or the old build fires from a
   stale transform and the shot positions differ for that reason alone. Probes are never kept.
+- **Getting the project as a zip:** every ticked step is a git tag, and GitHub builds a zip for any
+  tag on request — `https://github.com/voltvehiclez/Tallow-Reach/archive/refs/tags/step7b.zip`
+  (replace `step7b` with `step6b`, `step7a-ticked`, ...). No upload is involved, so this works even
+  when the sandbox cannot reach GitHub's upload host (it cannot). Tag each finished step.
 - **Play-testing from inside a chat:** `node serve.mjs` (then open the port it prints) serves
   `game/tallow-reach.html` over HTTP with caching off, so a rebuild shows on refresh and the owner
   can play the current build in the browser without copying files. It is a convenience only — no
