@@ -6,13 +6,16 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **Milestone A is done, step 6 is done, and step 7b is ticked** (2026-11-08):
+**Current position:** **Milestone A is done, step 6 is done, and step 7b is complete and closed**
+(2026-11-08):
 an enemy, a bullet, a missile, a crate, an explosion spark, a rock and the player's own ship are all
 plain data now, and `render/views.js` draws every one of them. **No `src/sim/` file holds a mesh**,
 which is what step 7 set out to do; two `render/` imports remain (`sectors.js` for the scenery
 groups, `weapons.js` for the lock cone) and step 7c closes them. An old-vs-new probe proved the game
-plays identically. 182 tests green, save version still 12. **Step 7c is next**, then step 8 (a fixed
-time step and a list of players).
+plays identically. The owner then asked for the slice to be ticked and closed without raising a
+problem with it (`TESTING-BASELINE.md` section G is the checklist if it is ever needed again).
+182 tests green, save version still 12. **Step 7c is next** (nothing else is in flight), then step 8
+(a fixed time step and a list of players).
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -48,7 +51,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 4 | Item registry and generic inventory (save v12) | A | [x] 2026-11-08 |
 | 5 | Shops and prices from data | A | [x] 2026-11-08 |
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
-| 7 | Entities are data, meshes are views (7a enemies, 7b everything else in the world, 7c the hull's own view class) | B | [ ] **7a and 7b ticked 2026-11-08. 7c to do** |
+| 7 | Entities are data, meshes are views (7a enemies, 7b everything else in the world, 7c the hull's own view class) | B | [ ] **7a and 7b ticked and closed 2026-11-08 (7b is complete). 7c is next.** |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
@@ -140,8 +143,9 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   a seeded session through both builds and found **no difference** in flight, shooting, hits, loot,
   mining, lock-on or clearing, apart from the deliberate fix that bolts no longer leave from last
   frame's gun position (the stale `matrixWorld`). Two porting bugs were caught and fixed: mining must
-  shrink the rock's data, and a rock's shape must be rolled before its position. 182 tests green,
-  save version 12. Next is **7c**.
+  shrink the rock's data, and a rock's shape must be rolled before its position. The owner asked for
+  the slice to be ticked and closed, so **7b is complete**; 182 tests green, save version 12. Next
+  is **7c**.
 - 2026-11-08: **Step 7a ticked.** The owner played the build: the raiders behave as usual and they
   clear when the field is cleared on docking, so the slice is closed. (The clearing is not new —
   `dock()` has always called `clearTransient()`, and it deliberately does not count as a kill.)

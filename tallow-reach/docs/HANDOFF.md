@@ -37,8 +37,9 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** steps **4**, **5**, **6**, **7a** and **7b** are **ticked** (7a and 7b are
-  refactors, so they need no playtest; 7b was proved identical by an old-vs-new probe). **Every
+- **Next action:** steps **4**, **5**, **6**, **7a** and **7b** are **ticked**, and **7b is
+  complete** (proved identical by the old-vs-new probe and then closed by the owner, who did not
+  report a problem with it). Nothing is in flight: **7c has not been started**. **Every
   entity in the game is plain data now** — an enemy, a bullet, a missile, a crate, an explosion
   spark, a rock and the player's own ship — and `render/views.js` draws all of them, so **no
   `src/sim/` file holds a mesh**. **Step 7c is next**: the player hull's own view class with named

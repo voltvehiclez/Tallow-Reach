@@ -19,6 +19,18 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 7b complete and closed (docs only, no code change)
+
+- **Why:** the owner asked for the slice to be ticked and closed, and raised nothing about it, so it
+  is closed the way every other step has been. Nothing is in flight; **7c has not been started**.
+  (The evidence it is right: the old-vs-new probe's 0 differences, 182 green tests, and
+  `TESTING-BASELINE.md` section G, which is the manual check if anyone wants to re-run it.)
+- Files: `docs/ROADMAP.md` (status line, step-7 row, status log), `docs/HANDOFF.md` (next action),
+  this changelog. No source changed, so no rebuild is needed for this entry — the zip and the build
+  are the 7b build.
+
+---
+
 ## 2026-11-08: Refactor step 7b — bullets, missiles, crates and particles become data
 
 - **Why:** after 7a a hostile was plain data, but a bullet, a missile, a loot crate and an explosion
