@@ -157,7 +157,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | `sim/` imports the screen | **Closed in 7c:** sector entry emits an event; the frame loop supplies the camera direction used for missile lock. The render-import allow-list is empty. | — |
 | Entities are three.js meshes | **Closed (steps 7a and 7b):** every entity is a record with an `id` and a `kind` — an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. `render/views.js` owns every mesh | — |
 | Variable time step | **8a in progress:** gameplay now runs at fixed 60 Hz through `sim/step.js`; camera-derived missile aim and wall-clock asteroid respawn remain frame/time dependent. Owner playtested 8a successfully; full frame-rate independence remains open. | 8 |
-| One global player | **8c implementation complete, owner playtest pending:** each active player has independent flight, power, drive, shield, hull, weapons and target state; enemies chase the nearest active player. Profile, lifecycle and other exceptions are listed in the table above. | 8 / 9 |
+| One global player | **8c complete and owner-playtested:** each active player has independent flight, power, drive, shield, hull, weapons and target state; enemies chase the nearest active player. Profile, lifecycle and other exceptions are listed in the table above. | 8 / 9 |
 | Single mixed save | `state/profile.js` holds character, station and mission together | 9 |
 | Sector geography in code | `FIELD_CENTER`, `FIELD_SECTOR` in `sim/world.js`; `launch()` in `sim/session.js` starts at the origin facing the field; `parked` rock lists in `sim/world.js` | 10 |
 | Current sector not saved | `state.sector` is runtime only | 10 |

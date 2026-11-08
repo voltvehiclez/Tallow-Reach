@@ -19,6 +19,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 8c owner playtest passed
+
+- The owner reports the 8c playtest works. Ticked 8c in the roadmap and refactor plan; no code
+  or save data changed. Step 8 overall remains open pending frame-rate caveat validation.
+
+---
+
 ## 2026-11-08: Step 8c scoped implementation complete — playtest pending
 
 - Flight, drive, power, shield, hull, weapons, missiles and targeting use per-player runtime;

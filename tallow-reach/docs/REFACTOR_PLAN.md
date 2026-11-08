@@ -234,8 +234,8 @@ rate throttle if you can). Tests green.
 - **8c — player-aware simulation.** Flight, drive, power, shields, hull damage, weapons,
   missiles and targeting use the passed player's independent runtime. `stepSim` advances each
   active pilot and shared projectiles/world once; enemies pursue the nearest active player.
-  **Implementation and automated checks complete; owner playtest pending** (section L of
-  `TESTING-BASELINE.md`). Two-player headless tests and scripted 8b flight and combat/lifecycle comparisons pass.
+  **Ticked 2026-11-08:** implementation and automated checks complete; the owner reports the
+  playtest passed (section L of `TESTING-BASELINE.md`). Two-player headless tests and scripted 8b flight and combat/lifecycle comparisons pass.
   No multiplayer transport or guest UI. Inventory, economy, docking, contracts, death/recovery,
   saves and the other exceptions in the still-local-only table remain step 9 work.
 

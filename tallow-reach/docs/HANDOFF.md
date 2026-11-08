@@ -37,11 +37,11 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** 8c's scoped implementation and automated tests are complete; ask the owner to
-  play section L in `TESTING-BASELINE.md`. They did not want intermediate playtests. Do not tick 8c
-  until they pass it. Step 8 overall also remains unticked until the frame-rate caveats are addressed
-  or explicitly validated: camera-sampled missile aim, wall-clock asteroid respawn and no view
-  interpolation. The owner has not reported a 30/60/144 fps browser throttle result.
+- **Next action:** the owner reports the 8c playtest passed; 8a, 8b and 8c are ticked.
+  Step 8 overall remains unticked until the frame-rate caveats are addressed or explicitly
+  validated: camera-sampled missile aim, wall-clock asteroid respawn and no view interpolation.
+  The owner has not reported a 30/60/144 fps browser throttle result. Ask before beginning the
+  next work; step 9 must close the local-only items listed below.
 - **8c design:** each player owns controls, flight/lock/cooldowns, power, drive, shield, hull,
   fitted weapons and transient missile stock. `configurePlayer` in `sim/session.js` copies a fit
   into a second player's runtime. `stepSim` advances each active player, then shared projectiles,

@@ -10,8 +10,7 @@
 and confirmed step 7c. The player hull has its own view and shared named mount data; sector
 scenery follows an event, and missile lock uses the previous camera direction supplied by
 `main.js`. The sim's render-import allow-list is empty. **7d registry cleanup is complete and ticked** after the owner's playtest.
-**Steps 8a and 8b are ticked after the owner's playtests. 8c is implemented and automated
-checks pass; owner playtest is pending.** Flight, drive, power, shield, hull damage, weapons,
+**Steps 8a, 8b and 8c are ticked after the owner's playtests.** Flight, drive, power, shield, hull damage, weapons,
 missiles, targeting and nearest-player enemy AI use independent player runtime. Inventory,
 economy, docking, contracts, death/recovery, saves and the other exceptions in the
 [still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-step-9-must-close-every-item)
@@ -54,10 +53,10 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
 | 7 | Entities are data, meshes are views (7a enemies, 7b everything else in the world, 7c the hull's own view class) | B | [x] **2026-11-08: 7a, 7b and 7c complete; owner playtested 7c.** |
 | 7d | Entity view registry cleanup | B | [x] **2026-11-08: owner playtest passed.** |
-| 8 | Fixed time step and player-aware flight/combat | B | [ ] **8a and 8b ticked; 8c implemented, owner playtest and frame-rate validation pending.** |
+| 8 | Fixed time step and player-aware flight/combat | B | [ ] **8a, 8b and 8c ticked; full step 8 frame-rate validation remains.** |
 | 8a | Fixed simulation tick and old-versus-new flight tests | B | [x] **2026-11-08: owner playtest passed.** |
 | 8b | Player list, local player and per-player controls | B | [x] **2026-11-08: owner playtest passed.** |
-| 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [ ] **Implemented; automated tests pass, owner playtest pending.** |
+| 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [x] **2026-11-08: owner playtest passed.** |
 | 9 | Split profile/world save and close every still-local-only item (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
 | 11 | Galaxy (100+ sectors) and starmap screen (save v15) | C | [ ] |
