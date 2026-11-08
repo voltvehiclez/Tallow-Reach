@@ -30,13 +30,14 @@ import {
   completeContract,
 } from "../src/sim/contracts.js";
 import { stepSim } from "../src/sim/step.js";
-import { OUTPOST_SHOP } from "../src/data/shops.js";
+import { DEFAULT_PLACE } from "../src/data/places.js";
+import { stationAt } from "../src/sim/places.js";
 
 function resetArena() {
   setSeed(4242);
   applySave(newSave());
   state.shops = {};
-  state.sector = "reach";
+  state.place = "reach";
   state.time = 0;
   state.warp = null;
   state.freeCam.on = false;
@@ -150,7 +151,7 @@ test("9c (economy, outfitting & saved ammo): guest purchases, fits, repairs, wea
 
   // Buy a missile pod as guest: charges guest credits, stores pod in hosted station,
   // and loads 8 starter missiles into guest's saved profile.
-  const msgBuy = buyItem(OUTPOST_SHOP, "missile_basic", 1, guest, guestProfile);
+  const msgBuy = buyItem(stationAt(DEFAULT_PLACE).shop, "missile_basic", 1, guest, guestProfile);
   assert.match(msgBuy, /8 missiles included/);
   assert.equal(guestProfile.cr, 3500);
   assert.equal(guestProfile.msl, 8);

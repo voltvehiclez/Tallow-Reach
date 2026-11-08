@@ -5,7 +5,7 @@ import { mountOffset } from "../src/data/mounts.js";
 import { SHIPS } from "../src/data/ships.js";
 import { state } from "../src/state/state.js";
 import { playerMount } from "../src/sim/pilot.js";
-import { enterSector } from "../src/sim/sectors.js";
+import { enterPlace } from "../src/sim/places.js";
 import { updateMissiles } from "../src/sim/weapons.js";
 import { on } from "../src/util/events.js";
 
@@ -32,11 +32,11 @@ test("named mounts preserve old offsets and ship transforms for every hull", () 
 
 test("every actual sector entry notifies scenery, including a return to the outpost", () => {
   const entered = [];
-  on("sector-entered", ({ id }) => entered.push(id));
-  state.sector = "reach";
-  enterSector("hollow");
-  enterSector("hollow");
-  enterSector("reach");
+  on("place-entered", ({ id }) => entered.push(id));
+  state.place = "reach";
+  enterPlace("hollow");
+  enterPlace("hollow");
+  enterPlace("reach");
   assert.deepEqual(entered, ["hollow", "reach"]);
 });
 

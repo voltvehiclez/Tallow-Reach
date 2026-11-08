@@ -33,15 +33,22 @@ organised so that most new content is **data, not code**.
 
 ### 1. Open world (the majority of the game; built first)
 
-- A **starmap** of sectors laid out as a **2D grid**, like the map in FTL. You pick a sector and
-  warp there. **100+ sectors** is the target. Each sector is a 3D space you fly around in (what
-  Tallow Reach is today, times a hundred).
-- **Meridian Station** is the first sector and the home base (outpost, shop, hangar, storage).
-- Sectors contain a mix of **encounters** (friendly and hostile), **resources** (asteroids, salvage)
+- A **starmap** of **systems** laid out as a **2D grid**, like the map in FTL. **100+ systems**
+  is the target. A system groups **pockets**: flyable areas of space named after their main point
+  of interest. You are always in a pocket, never "in" the system itself.
+- The starting system is **Meridian System**. Its first two pockets are **Meridian Station**
+  (the station and asteroid belt; internal id `reach`, formerly shown as Tallow Reach) and
+  **Kestrel Hollow** (internal id `hollow`, still empty). More pockets can be added to a system;
+  code must never assume a system has exactly two.
+- **Meridian Station** is the home base (station, shop, hangar, storage). It is a station feature
+  inside its pocket, not a separate flyable child place. The in-game station label is **Meridian
+  Station** (formerly Meridian Outpost).
+- Pockets contain a mix of **encounters** (friendly and hostile), **resources** (asteroids, salvage)
   and **loot**. The list of things that can appear is meant to grow indefinitely.
-- **Instanced sectors** are *not* on the map. You reach them through **wormholes**, which can occur
+- **Instanced places** are *not* on the map. You reach them through **wormholes**, which can occur
   naturally or be spawned by the player. They are generated when you enter and are the hardest,
-  most rewarding content.
+  most rewarding content. The same place model supports them; no fixed two-level hierarchy is
+  assumed.
 - **Difficulty** rises steeply: the start is easy, the far map and the wormholes are not. Risk
   versus reward is the main source of replayability.
 - **Death** = the ship and its whole hold are gone for good (today's rule; the recovery fee and the
@@ -91,7 +98,22 @@ mention) until the owner decides. Record the decision here when made, and delete
 | 8 | **Campaign ships.** Do campaign missions use your own ship or a ship the story gives you? | The story gives a fixed ship per mission (keeps missions balanced and replayable). |
 | 9 | **Pausing in co-op.** | Pause only exists in single player; in co-op the game keeps running. |
 | 10 | **Joining technology** (how a link connects two browsers without a server). | Decided at the multiplayer step, not now. See TARGET_ARCHITECTURE.md. It may need to relax the "no new dependencies" rule. |
+| 11 | **What goes in Kestrel Hollow and later pockets/systems?** | Kestrel Hollow stays empty until the owner adds content. New pockets are data entries under a system; the place model allows deeper optional parents later without assuming a fixed depth. |
 
 ## Decisions made
 
-(None recorded yet. Move answered questions here with the date.)
+- **2026-11-08 — universe grouping and names (owner):** the map level is a **system**; a flyable
+  area is a **pocket**, named after its main point of interest. You are always in a pocket, never
+  in a system itself. The starting system is **Meridian System**; its first pockets are **Meridian
+  Station** (station + asteroid belt, internal id `reach`) and **Kestrel Hollow** (internal id
+  `hollow`). A system may have any number of pockets. M cycles the current system's pockets for
+  now; choosing among many pockets and the 100+ system starmap come in step 11. Generic words live
+  in `src/data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
+  Meridian is a station feature inside its pocket, not a child place; the in-game station label is
+  **Meridian Station**. Internal place ids and old saves/export codes keep working.
+- **2026-11-08 — logging out mid-flight (owner, supersedes the arrival-point rule above):** you come
+  back **where you logged out** — the same pocket, the exact spot and heading. The owner's reason:
+  pockets may become large, and being sent back to the pocket entry every time you quit would be
+  tedious. The **arrival point stays as the fallback** for older saves, a damaged position, or a ship
+  that cannot move. Default taken where the owner did not choose: shields and boost return **as you
+  left them** (quitting is not a free repair) but the ship loads **stationary**. Save v15.

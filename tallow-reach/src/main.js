@@ -1,20 +1,20 @@
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
-import { renderer, scene, camera, stars, planet, spin, showSector } from "./render/scene.js";
+import { renderer, scene, camera, stars, showPlace, updateScenery } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer, applySave } from "./state/state.js";
+import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
-import { loadAutosave } from "./state/storage.js";
+import { loadAutosave, saveAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
 import { installInput, syncControls } from "./core/input.js";
-import { updateAudio } from "./core/audio.js";
+import { updateAudio, initAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
 import { createPlayer, setShip } from "./sim/player.js";
 import { setWeapon, refreshGuns } from "./sim/weapons.js";
-import { populateField } from "./sim/asteroids.js";
+import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
-import { tryDock } from "./sim/session.js";
+import { tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
@@ -25,7 +25,7 @@ import { refreshDrive } from "./sim/drive.js";
 import { refreshShield } from "./sim/shield.js";
 import { refreshHull } from "./sim/hull.js";
 import { createSimClock } from "./sim/step.js";
-import { SIM_DT, MAX_FRAME_DT } from "./data/simulation.js";
+import { SIM_DT, MAX_FRAME_DT, AUTOSAVE_SECONDS } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 import {
@@ -43,15 +43,35 @@ document.body.prepend(renderer.domElement);
 applySave(loadAutosave() || newSave());
 createPlayer();
 setShip(state.profile.ship);
-populateField();
+loadPlace(state.place);
 refillPower();   // start docked, so the cells are full
 refreshDrive();  // speed and turn come from the fitted thrusters
 refreshShield(); // and shield strength comes from the fitted shields
 refreshHull();   // and Hull HP come from the fitted hull module
 refreshGuns();   // and the primary bays decide what fires on left click
 
+// Browsers only allow sound after a user gesture. The start button used to be
+// the only thing that started it, so a save that resumes out in space (start
+// screen skipped) was silent forever. Any click or key now starts/resumes it.
+addEventListener("pointerdown", () => initAudio(), { passive: true });
+addEventListener("keydown", () => initAudio());
+
 setupHud();
 setupMenu();
+resumeFromSave();   // prepares the ship; the start screen still owns the panel
+
+// Save where the pilot is, so quitting mid-flight returns them to that spot.
+// Docking, warping and menu clicks already save; this covers simply flying off
+// and closing the tab. `pagehide` and the hidden-tab event are the ones browsers
+// actually deliver on close; the timer bounds what a crash can lose.
+const saveResumePoint = () => {
+  if (!state.ui.intro) saveAutosave(currentSave());
+};
+addEventListener("pagehide", saveResumePoint);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveResumePoint();
+});
+setInterval(saveResumePoint, AUTOSAVE_SECONDS * 1000);
 setupWarpStreaks();
 installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, rocks, the ship
 setupWarpFlash();
@@ -63,13 +83,13 @@ installCameraControls(state.freeCam, {
   getScale: () => SHIPS[state.profile.ship].sc,
 });
 
-on("sector-entered", ({ id }) => showSector(id));
-showSector(state.sector);
+on("place-entered", ({ id }) => showPlace(id));
+showPlace(state.place);
 
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
 
 on("action", ({ name, repeat }) => {
-  const playing = !localPlayer().docked && !state.paused;
+  const playing = !state.ui.intro && !localPlayer().docked && !state.paused;
   switch (name) {
     case "lock":
       if (playing && !repeat) toggleLock();
@@ -87,7 +107,7 @@ on("action", ({ name, repeat }) => {
       if (playing && !repeat) startWarp();
       break;
     case "pause":
-      if (!localPlayer().docked) setPause(!state.paused);
+      if (!state.ui.intro && !localPlayer().docked) setPause(!state.paused);
       break;
   }
 });
@@ -113,15 +133,15 @@ function frame(now) {
   const dt = Math.min(MAX_FRAME_DT, (now - last) / 1000);
   last = now;
 
-  if (state.paused) {
+  // Nothing simulates behind the start screen or the pause overlay.
+  if (state.paused || state.ui.intro) {
     renderer.render(scene, camera);
     return;
   }
 
   const P = localPlayer(),
     F = state.flight;
-  planet.rotation.y += dt * 0.003;
-  spin.rotation.y += dt * 0.1;
+  updateScenery(dt);
 
   updateAudio({
     time: state.time,

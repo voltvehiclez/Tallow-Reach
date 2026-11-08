@@ -10,6 +10,68 @@ newest stay first.
 
 ---
 
+## 2026-11-08: Step 8a ticked; step 8b player records and controls
+
+- The owner reported the 8a playtest passed, so 8a is ticked. The frame-rate caveats remain
+  open; no separate 30/60/144 browser throttle result was reported.
+- Added `state.players`, `localPlayer()`, `createPlayerRecord()` and independent per-player
+  controls. Input and the screen follow the local player; `state.player` and `state.controls`
+  temporarily alias that entry for existing systems until 8c. Guest gameplay is not implemented.
+- Added `tests/players.test.mjs`: separate players, controls, input, replacement and local flight.
+  200 tests pass. A scripted 12-second old-vs-new flight/weapon/warp probe was identical. Save
+  remains version 12; 8b awaits playtest, and 8c is not started.
+
+---
+
+## 2026-11-08: Step 8 slices documented
+
+- Expanded the approved 8a/8b/8c breakdown in `docs/REFACTOR_PLAN.md`, added separate status
+  rows in `docs/ROADMAP.md`, and clarified the remaining work in `docs/HANDOFF.md`. 8a remains
+  awaiting playtest; 8b and 8c have not started. No gameplay or save changes in this entry.
+
+---
+
+## 2026-11-08: Step 8a — fixed simulation tick (playtest pending)
+
+- Added `src/sim/step.js` and `src/data/simulation.js`: gameplay runs at 60 ticks per second,
+  while rendering remains per frame. The previous 0.05-second frame cap and pause semantics
+  remain. HUD hints persist across display-only frames; cosmetic visuals and audio no longer
+  consume the seeded gameplay random stream.
+- `tests/sim-step.test.mjs` checks the real flight and seeded combat at 30/60/144 display rates,
+  fixed-clock stalls, hints and the old loop. At 60 fps flight matches exactly; a 10-second test
+  differs by 2.2932 units from old 30 fps and 1.3400 units from old 144 fps. 195 tests pass.
+- Full game frame-rate independence is **not proved**: missile aim follows the rendered camera,
+  asteroid respawn uses wall time, and rendering has no tick interpolation. Browser playtest is
+  pending. 8b and 8c remain; save version stays 12. See `TESTING-BASELINE.md` section J.
+
+---
+
+## 2026-11-08: Step 7d complete and ticked
+
+- The owner reported the registry cleanup playtest passed. Marked 7d complete in the handoff,
+  roadmap and refactor plan; step 8 is next. No code or save changes in this entry.
+
+---
+
+## 2026-11-08: Step 7d — entity view registry cleanup
+
+- Replaced view-kind switches and the separate enemy map with a registry and one active-view map.
+  Each kind supplies its world list and build, update and removal handlers; enemy and other entity
+  ids are namespaced because they use separate counters. Existing events and frame sweeps remain.
+- Added fake-kind lifecycle, overlapping-id and particle cleanup tests; updated recipe 19 and the
+  render README, and added `TESTING-BASELINE.md` section I. No gameplay or save changes; save version remains 12. 188 tests pass. Owner
+  playtest pending; build and testing checklist are noted in the handoff and roadmap.
+
+---
+
+## 2026-11-08: Step 7c and step 7 complete and ticked
+
+- The owner playtested step 7c and reported it passed. Marked step 7c and step 7 complete in
+  `docs/ROADMAP.md`, `docs/REFACTOR_PLAN.md` and `docs/HANDOFF.md`; step 8 is next.
+- No gameplay or save changes in this entry. The 7c build and all 185 tests passed previously.
+
+---
+
 ## 2026-11-08: Refactor step 7c — hull view and render-free simulation
 
 - Added `PlayerShipView` and shared named gun, missile and beam mounts in `src/data/mounts.js`;
@@ -889,7 +951,6 @@ newest stay first.
   over correctly.
 - Files: `data/ships.js`, `ui/hud.js`, `ui/screens.js`, READMEs/docs, tests (**72 passing**,
   1 new). `npm run build` needed.
-
 
 ---
 

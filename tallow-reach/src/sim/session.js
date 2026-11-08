@@ -6,11 +6,12 @@
 import { V, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
-import { DEFAULT_SECTOR, sectorAt } from "../data/sectors.js";
+import { DEFAULT_PLACE } from "../data/places.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
-import { state, msg, profileOf, currentSave } from "../state/state.js";
+import { state, msg, profileOf, currentSave, placeWorld } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
-import { FIELD_CENTER, clearTransient } from "./world.js";
+import { clearTransient } from "./world.js";
+import { stationAt, fieldAt, launchFace, enterPlace, arrivalPos } from "./places.js";
 import { setShip } from "./player.js";
 import { refillPower } from "./power.js";
 import { refreshDrive, hasDrive } from "./drive.js";
@@ -20,7 +21,7 @@ import { refreshHull } from "./hull.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
-import { cancelWarp, enterSector } from "./sectors.js";
+import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
 
 function assertSessionPilot(P, profile, verb) {
@@ -61,8 +62,10 @@ export function launch(P = state.player, profile = profileOf(P)) {
   // 200 m out is inside docking range (300), so a ship that cannot move can
   // still turn round and dock straight away. The model's visibility follows
   // `P.docked` in render/views.js (step 7b).
-  P.pos.set(0, 0, 200);
-  facePlayer(FIELD_CENTER, 1, P);
+  const placeId = P.place || state.place;
+  const station = stationAt(placeId) || stationAt(DEFAULT_PLACE);
+  P.pos.set(...station.launch.pos);
+  facePlayer(launchFace(placeId, station), 1, P);
   P.v.set(0, 0, 0);
   P.snap = true;
   refillPower(P, profile);      // launched fully charged
@@ -73,10 +76,12 @@ export function launch(P = state.player, profile = profileOf(P)) {
   P.en = P.drive.bmax;          // launched with a full boost tank
 
   // Salvage contracts need their crates out in the field.
-  const m = profile.mission;
-  if (m && m.type === "salvage" && state.world.crates.length === 0) {
+  const m = profile.mission,
+    field = fieldAt(placeId);
+  if (m && m.type === "salvage" && field && placeWorld(placeId).crates.length === 0) {
+    const [sx, sy, sz] = field.salvage.spread;
     for (let i = 0; i < m.n - m.p; i++) {
-      spawnCrate(FIELD_CENTER.clone().add(V(R(-600, 600), R(-150, 150), R(-600, 600))));
+      spawnCrate(V(...field.pos).add(V(R(-sx, sx), R(-sy, sy), R(-sz, sz))), undefined, placeId);
     }
   }
 
@@ -93,7 +98,7 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   const local = P === state.player;
   if (local) {
     state.freeCam.on = false;
-    cancelWarp();
+    cancelWarp(P);
   } else {
     P.warp = null;
   }
@@ -110,23 +115,90 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   refreshHull(P, profile);      // and its Hull HP
   P.sh = P.shMax;               // and it leaves with them full
 
-  const anyOtherActive = state.players.some(p => p && p !== P && !p.docked && !p.dead);
-  if (!anyOtherActive) clearTransient();
+  const placeId = P.place || state.place;
+  const anyOtherActive = state.players.some(p => p && p !== P && !p.docked && !p.dead && (p.place || state.place) === placeId);
+  if (!anyOtherActive) clearTransient(placeId);
 
   P.flight.missileLock = { target: null, t: 0, locked: false };
   P.flight.lock = null;
-  if (local) enterSector(DEFAULT_SECTOR);   // the outpost is in the starting sector
+  if (local) enterPlace(DEFAULT_PLACE, P);   // the home station is in the starting pocket
   ensureBoard(world);
   if (local) saveAutosave(currentSave());
   emit("docked", { player: P });
+}
+
+/**
+ * Resume the local pilot from the loaded save: the same pocket, and the exact
+ * spot and heading they quit at (`world.resume`). A save made while docked opens
+ * the station menu. The pocket's arrival point is the fallback for older saves,
+ * a damaged position, or a ship that cannot move.
+ */
+export function resumeFromSave(P = state.player, profile = profileOf(P)) {
+  const placeId = state.worldState.place || DEFAULT_PLACE;
+  enterPlace(placeId, P);
+  emit("place-entered", { id: placeId, player: P });   // refresh scenery/views even when the id did not change
+  P.ship = profile.ship;
+  P.weapon = profile.pw;
+  P.missileStock = profile.msl;
+  P.warp = null;
+  P.v.set(0, 0, 0);
+  P.thr = 0;
+  P.acc = 0;
+  P.snap = true;
+  refillPower(P, profile);
+  refreshDrive(P, profile);
+  refreshShield(P, profile);
+  refreshGuns(P, profile);
+  refreshHull(P, profile);
+  P.flight.lock = null;
+  P.flight.missileLock = { target: null, t: 0, locked: false };
+
+  // Come back where you left off. `world.resume` is null while docked, so an
+  // older save (which has no resume point at all) keeps the old behaviour: dock
+  // if this pocket has a station, otherwise fly in at its arrival point.
+  const saved = state.worldState.resume;
+  const station = stationAt(placeId);
+
+  // Shields and boost return as they were, so quitting is not a free repair.
+  // A save without them tops up. Speed is always zero: you load stationary.
+  P.en = saved && saved.en !== null ? Math.min(saved.en, P.drive.bmax) : P.drive.bmax;
+  P.sh = saved && saved.sh !== null ? Math.min(saved.sh, P.shMax) : P.shMax;
+
+  let spot = null,
+    facing = null;
+  if (saved) {
+    // A ship with no thrusters cannot fly home. If the saved spot would strand
+    // it outside docking range, put it back at the station instead.
+    const stranded = station && !hasDrive(P.drive) &&
+      V(...saved.pos).distanceTo(V(...station.pos)) >= (station.dockRange ?? DOCK_RANGE);
+    if (!stranded) {
+      spot = saved.pos;
+      facing = saved.quat;
+    }
+  }
+  if (!spot && !station) spot = arrivalPos(placeId).toArray();   // empty pocket: the entry point
+
+  if (spot) {
+    P.docked = false;
+    P.pos.set(...spot);
+    if (facing) P.quat.set(...facing).normalize();
+    emit("launched", { player: P });
+  } else {
+    P.docked = true;
+    P.pos.set(...station.pos);
+    emit("docked", { player: P });
+  }
+  return P;
 }
 
 /** Dock if close enough and slow enough. Otherwise do nothing. */
 export function tryDock(P = state.player, profile = profileOf(P), world = state.worldState) {
   assertSessionPilot(P, profile, "tryDock");
   if (!P || P.docked || P.dead) return false;
-  if (!sectorAt(state.sector).st) return false;   // no outpost in this sector
-  if (P.pos.length() < DOCK_RANGE && P.v.length() < DOCK_MAX_SPEED) {
+  const station = stationAt(P.place || state.place);
+  if (!station) return false;   // no station in this pocket
+  const at = V(...station.pos);
+  if (P.pos.distanceTo(at) < (station.dockRange ?? DOCK_RANGE) && P.v.length() < (station.dockSpeed ?? DOCK_MAX_SPEED)) {
     dock(P, profile, world);
     return true;
   }

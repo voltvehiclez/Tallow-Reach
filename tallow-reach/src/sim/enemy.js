@@ -19,7 +19,7 @@
 
 import { V, fwdQ, faceQ } from "../util/math.js";
 import { emit } from "../util/events.js";
-import { state } from "../state/state.js";
+import { state, placeWorld } from "../state/state.js";
 
 /** Where enemy `e` is. */
 export const enemyPos = e => e.pos;
@@ -42,8 +42,8 @@ export const enemyDist = (e, p) => e.pos.distanceTo(p);
  * and `enemy-removed` tells `render/views.js` to delete its mesh. Used when it is
  * killed, when it drifts out of range, and when docking clears the field.
  */
-export function dropEnemy(e) {
-  const E = state.world.enemies,
+export function dropEnemy(e, placeId = e.place || state.place) {
+  const E = placeWorld(placeId).enemies,
     i = E.indexOf(e);
   if (i !== -1) E.splice(i, 1);
   emit("enemy-removed", { id: e.id });

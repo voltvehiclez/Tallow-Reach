@@ -262,42 +262,65 @@ every step-9-owned local-only item). No networking.
 
 # Milestone C: World-ready
 
-## Step 10: Sector definitions
-**Goal.** A sector's contents are data; no geography in code.
-**Do.** Describe today's Tallow Reach and Kestrel Hollow as sector definitions (features: station,
-asteroid field with position/radius/ores, enemy spawner rules, spawn point). One generic loader builds
-a sector's entities from its definition. Entities live in per-sector containers (replacing the
-`parked` rock lists, `FIELD_CENTER`, `FIELD_SECTOR` and `launch()` facing the field). The sector you
-are in is **saved** (`world.sector`).
-**Done when.** The two sectors look and play exactly as before; deleting `FIELD_CENTER` breaks
-nothing; reloading a save puts you back in the sector you left.
-**Save.** **Version 14**, migration from 13.
+## Step 10: Place definitions (systems and pockets)
+**Goal.** A flyable place's contents are data; no geography in code. The owner's 2026-11-08
+decision replaces the old "two sectors" wording: the map level is a **system**, a flyable area is
+a **pocket**, and you are always in a pocket. The starting system is **Meridian System**; its first
+pockets are **Meridian Station** (internal id `reach`, station + asteroid belt, formerly Tallow
+Reach) and **Kestrel Hollow** (internal id `hollow`, empty). A system may have any number of
+pockets. Meridian is a station feature inside its pocket, not a child place. Generic nouns live in
+`data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line; the
+in-game station label is **Meridian Station**.
+**Do.** Describe the two pockets as place records `{ id, kind, def, parent, enter, leave }` pointing
+at `PLACE_DEFS` features (station, asteroid field with position/radius/height/count/ore/respawn,
+spawner rules, planet scenery, arrival point). One generic loader builds a place's entities and
+scenery from its definition. Entities live in per-place runtime containers (replacing the `parked`
+rock lists, `FIELD_CENTER`, `FIELD_SECTOR`, `STATION_POS` and `launch()` facing a hard-coded field).
+Each pilot owns a current place and warp sequence; shared systems advance once per occupied place.
+M keeps cycling the pockets of the current system exactly as today. The pocket you are in is
+**saved** (`world.place`, replacing the `sector` placeholder). Loading a save made away from the
+station resumes flying at that pocket's arrival point; a save made at the station opens the station
+menu. Internal ids `reach`/`hollow` and old saves/export codes keep working.
+**Owner-approved slices** (each tested before the next): 10a docs, terms, place registry, generic
+loader and per-place containers (save stays 13); 10b per-pilot place/warp ownership and place-scoped
+simulation (save stays 13); 10c save v14, migration, resume-on-load, checklist and final docs.
+**Done when.** The two pockets look and play exactly as before apart from the approved names;
+deleting `FIELD_CENTER` breaks nothing; a third pocket can be added as data and M cycles all of
+them; reloading a save puts you back in the pocket you left; one pilot warping does not move
+another pilot's place or clear their fight.
+**Save.** **Version 14**, migration from 13 (`world.sector` -> `world.place`).
+**Status:** [x] **complete 2026-11-08 — owner playtest passed (`TESTING-PLACES.md`); the three bugs it found were fixed and confirmed. 247 tests green, build succeeded.**
 
-## Step 11: Galaxy and starmap
-**Goal.** A generated grid of 100+ sectors and a 2D map to travel on.
-**Ask the owner first:** VISION.md open questions 1 to 3 (travel rules, fog, what sets difficulty).
-If unanswered, use the defaults and say so.
+## Step 11: System map, pocket chooser and starmap
+**Goal.** A generated grid of 100+ systems, a 2D starmap to travel between systems, and a proper
+way to choose among the pockets of the current system (M today only cycles them).
+**Ask the owner first:** VISION.md open questions 1 to 3 (travel rules, fog, what sets difficulty)
+and what goes in Kestrel Hollow / new pockets. If unanswered, use the defaults and say so.
 **Do.** `data/galaxy.js` (grid size, seed, tier rules) and `sim/galaxy.js` (`generateGalaxy(seed)`)
-build sector records from templates; Meridian is hand-written at a fixed cell. A 2D **starmap screen**
-(`ui/starmap.js`, opened with **M**) shows the grid, where you are, which neighbours you can reach, and
-fog per the defaults; choosing one runs the existing warp sequence. Only the seed and each sector's
-`discovered/visited/memory` are saved, not the generated content.
-**Done when.** Tests prove generation is deterministic, has at least 100 sectors, every sector is
-reachable, and difficulty rises with distance from Meridian. You can click through the map and warp.
+build system records; Meridian System is hand-written at a fixed cell and points at its pockets.
+A 2D **starmap screen** (`ui/starmap.js`, opened with **M**) shows the system grid, where you are,
+which neighbours you can reach, and fog per the defaults; a pocket list chooses the destination
+inside the current system. Choosing one runs the existing warp sequence. Only the seed and each
+system/pocket's `discovered/visited/memory` are saved, not the generated content. Do not assume a
+system has exactly two pockets, and do not hard-code a two-level universe: pockets may later have
+optional child places through the same place record.
+**Done when.** Tests prove generation is deterministic, has at least 100 systems, every system is
+reachable, and difficulty rises with distance from Meridian. You can click through the map, choose
+among any number of pockets, and warp.
 **Save.** **Version 15**, migration from 14.
 
-## Step 12: Encounters, sector templates and sector memory
+## Step 12: Encounters, place templates and place memory
 **Goal.** The open world's content is data you can pile onto.
-**Do.** `data/encounters.js` and `data/sector-templates.js`. Ship at least **three templates** and
+**Do.** `data/encounters.js` and `data/place-templates.js`. Ship at least **three templates** and
 **four encounter kinds** as proof (for example a hostile patrol, a friendly trader using `SHOPS`, a
 derelict with loot, a resource cache). Templates pull encounters by tier. A generic spawner replaces
-the raider special cases in `sim/ai.js` (hunt-contract behaviour stays the same). Sectors remember
+the raider special cases in `sim/ai.js` (hunt-contract behaviour stays the same). Places remember
 what you did (mined-out rocks, cleared encounters) with respawn timers (open question 4).
 **Done when.** Adding an encounter is a data entry; the content test checks every reference; flying
-into a few generated sectors shows different things.
+into a few generated pockets shows different things.
 **Save.** **Version 16**, migration from 15.
 
-> **Milestone C reached.** The open world can scale to 100+ sectors of content.
+> **Milestone C reached.** The open world can scale to 100+ systems of pocket content.
 
 ---
 

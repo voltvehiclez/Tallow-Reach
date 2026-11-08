@@ -7,7 +7,7 @@ import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { SHIPS } from "../data/ships.js";
 
-import { state, say, msg, profileOf } from "../state/state.js";
+import { state, say, msg, profileOf, placeWorld } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
@@ -21,8 +21,8 @@ import { playerPos, playerFwd, playerMount } from "./pilot.js";
 import { launchMissile, updateMissileFlight } from "./missile.js";
 import { dropEntity } from "./entity.js";
 import { spawnAsteroid } from "./asteroids.js";
+import { fieldAt } from "./places.js";
 
-const ASTEROID_RESPAWN_MS = 30000;
 // The mining beam's glow and the missiles' bodies are drawn by `render/views.js`
 // (step 7b). The sim only says where the beam is and when it is on:
 // `state.flight.beamStart` / `beamEnd` / `beamOn`, which the view copies.
@@ -126,7 +126,7 @@ export function updatePrimary(dt, P = state.player) {
       pp = playerPos(P);
     let best = null,
       bestDist = 1e9;
-    for (const a of state.world.asteroids) {
+    for (const a of placeWorld(P.place || state.place).asteroids) {
       const q = a.pos.clone().sub(pp),
         along = q.dot(f);
       if (along < 5 || along > beam.range) continue;
@@ -164,11 +164,12 @@ export function updatePrimary(dt, P = state.player) {
         best.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
         F.mineFrac = best.ore / best.max;
         P.acc += gained;
-        emit("sfx", { name: "ore-gained" });   // the beam sweep hits 100%: a resource is yours
+        if (P === state.player) emit("sfx", { name: "ore-gained" });   // the beam sweep hits 100%: a resource is yours
         if (best.ore <= 0) {
-          dropEntity(state.world.asteroids, best);   // removes it, and its mesh with it
-          boom(best.pos, 12, 0x8a7a6a);
-          setTimeout(spawnAsteroid, ASTEROID_RESPAWN_MS);
+          dropEntity(placeWorld(P.place || state.place).asteroids, best);   // removes it, and its mesh with it
+          boom(best.pos, 12, 0x8a7a6a, P.place || state.place);
+          const placeId = best.place || P.place || state.place, field = fieldAt(placeId);
+          setTimeout(() => spawnAsteroid(placeId, field), field.respawnMs);
           F.beamT = 0;
         }
         while (prof && P.acc >= 1 && holdLoad(prof) < d.cargo) {
@@ -198,7 +199,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     F = P.flight,
     c = P.controls,
     sayFor = text => { if (local) say(text); },
-    W = state.world,
+    W = placeWorld(P.place || state.place),
     ML = F.missileLock;
 
   F.missileCd -= dt;
@@ -209,7 +210,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     ML.target = null;
     ML.locked = false;
     ML.t = 0;
-    if (advanceWorld) updateMissileFlight(dt);
+    if (advanceWorld) updateMissileFlight(dt, P.place || state.place);
     return;
   }
 
@@ -272,7 +273,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     }
   }
 
-  if (advanceWorld) updateMissileFlight(dt);
+  if (advanceWorld) updateMissileFlight(dt, P.place || state.place);
 }
 
 function fireMissile(target, launcher, player) {

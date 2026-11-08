@@ -14,7 +14,7 @@ function fresh() {
   state.players.length = 0;
   state.localPlayerIndex = 0;
   state.profile = newProfile();
-  state.sector = "hollow";
+  state.place = "hollow";
   state.time = 10;
   state.warp = null;
   state.freeCam.on = false;

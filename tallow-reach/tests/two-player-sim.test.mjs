@@ -16,7 +16,7 @@ import { setSeed } from "../src/util/rng.js";
 const dt = 1 / 60;
 function fresh() {
   state.players.length = 0; state.localPlayerIndex = 0;
-  state.profile = newProfile(); state.sector = "hollow";
+  state.profile = newProfile(); state.place = "hollow";
   state.time = 0; state.warp = null; state.freeCam.on = false;
   state.aimDirection = { x: 0, y: 0, z: -1 };
   for (const list of Object.values(state.world)) list.length = 0;

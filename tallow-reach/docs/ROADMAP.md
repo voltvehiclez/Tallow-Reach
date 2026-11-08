@@ -6,13 +6,13 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **Milestone B is complete** — **steps 0 to 9 are all ticked** (step 9 owner
-playtest passed on 2026-11-08). Saves are version **13**, split into `{ v: 13, profile, world }`
-(`state.profile` + `state.worldState`), with automatic migration from v1..v12 saves and `TR1:`
-export codes, `portableProfile` / `mergeProfile` co-op helpers, and all five step-9-owned
-local-only areas closed across `state/` and `sim/` (225 tests passing, including both 8b
-single-player oracles). Next is **Milestone C — step 10** (sector definitions, current sector
-saved, save v14).
+**Current position:** **Milestone C is underway.** **Steps 0 to 10 are ticked** (step 10 owner
+playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). Step 10 delivered:
+place definitions are systems and pockets (`data/terms.js`, `data/places.js`), each pilot owns
+their place/warp, and saves are version **15** (`{ v: 15, profile, world }` with `world.place` and
+`world.resume`), migrating v14/v13 and older saves/codes. `npm test` is **260/260** (both 8b oracles
+unchanged) and `npm run build` succeeded. Next: **step 11** (system map, pocket chooser, 100+
+systems, save v15) — ask VISION open questions 1 to 3 and what goes in Kestrel Hollow first.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -55,11 +55,11 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 8b | Player list, local player and per-player controls | B | [x] **2026-11-08: owner playtest passed.** |
 | 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [x] **2026-11-08: owner playtest passed.** |
 | 9 | Split profile/world save and close step-9 local-only items (save v13) | B | [x] **2026-11-08: owner playtest passed (Milestone B complete).** |
-| 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
-| 11 | Galaxy (100+ sectors) and starmap screen (save v15) | C | [ ] |
-| 12 | Encounters, sector templates, sector memory (save v16) | C | [ ] |
+| 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
+| 11 | System map, pocket chooser and starmap (100+ systems, save v15) | C | [ ] |
+| 12 | Encounters, place templates, place memory (save v16) | C | [ ] |
 | 13 | Mission framework; contracts rebuilt on it (save v17) | D | [ ] |
-| 14 | Instanced sectors and wormholes | D | [ ] |
+| 14 | Instanced places and wormholes | D | [ ] |
 | 15 | Campaign scaffolding (save v18) | D | [ ] |
 | 16 | Multiplayer (plan written when reached) | | [ ] |
 
@@ -85,9 +85,9 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 
 ## Content you can add after Milestone C (world data)
 
-- **Sector templates** (asteroid belt, derelict graveyard, pirate den, nebula, trade lane, ...).
+- **Place templates** (asteroid belt, derelict graveyard, pirate den, nebula, trade lane, ...).
 - **Encounters** (patrols, ambushes, traders, distress calls, caches, hazards).
-- **Hand-made special sectors** (a hub, a boss sector).
+- **Hand-made special pockets** (a hub, a boss pocket).
 - **Wormhole instance templates** (the hard, high-reward content).
 
 ## Campaign (after Milestone D)
@@ -105,13 +105,16 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   `stepSim`. Benign in single-player; revisit when per-player aim input arrives in multiplayer
   (step 16) or if cross-refresh replay determinism is needed.
 - Wall-clock asteroid respawn (`src/sim/weapons.js`, `src/sim/asteroids.js`): `spawnAsteroid` uses
-  `setTimeout(..., 30000)` on wall-clock time instead of a simulation countdown, so respawn ignores
-  simulation pause and time scaling. Move onto simulation time when persistent sector state (step 10
-  / step 12) or pause/replay needs it.
+  `setTimeout(..., field.respawnMs)` on wall-clock time instead of a simulation countdown, so respawn
+  ignores simulation pause and time scaling. Move onto simulation time when persistent place memory
+  (step 12) or pause/replay needs it.
 - Warp: should enemies keep shooting during the charge, or does a warp grant invulnerability?
   (design decision, undecided).
-- Salvage crates are abandoned when you warp out. (Will be handled by sector memory in step 12.)
+- Salvage crates are abandoned when you warp out of a pocket. (Will be handled by place memory in step 12.)
 - Mute state is not saved.
+- The world around a resumed pilot is not saved: enemies, crates and shots are session-only and the
+  asteroid belt is re-rolled each page load, so you return to the exact spot but not the same
+  situation. Persistent place memory (and a seeded belt) is step 12.
 - Inventory is still "untested in the real game" per HANDOFF.md until the owner has played it.
 
 ## Log
@@ -201,3 +204,14 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   gone, so the Shop lists the cannons once, as **Basic cannons** (`src/data/shops.js` lost its `kit`
   list, the screen stopped drawing it). There is one cannon module today; more will be stock rows
   when they exist. Nothing else about buying changed.
+
+- 2026-11-08: Step 10 built and **ticked** (place definitions: systems and pockets; per-pilot
+  place/warp; save v14 `world.place`; Meridian Station label). The owner played `TESTING-PLACES.md`,
+  found three bugs (dead sound after an away resume, the start screen reappearing on dock, and
+  Load/Import/Reset not redrawing), all fixed and confirmed working. 247 tests green, build succeeded.
+- 2026-11-08: Follow-up feature (owner request): **come back where you logged out**. Save v15 adds
+  `world.resume` (exact spot, heading, shields, boost; null while docked), with the pocket arrival
+  point kept as the fallback, plus autosave on tab hide/close and every 15 s. 260 tests green.
+- 2026-11-08: Autosave interval raised **15 s -> 30 s** at the owner's request, to keep the number of
+  save writes down. One line in `src/data/simulation.js`; the save-on-close/hide behaviour is
+  unchanged, so a normal quit still loses nothing. 260 tests green.

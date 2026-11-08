@@ -9,14 +9,14 @@
 // fades it by copying `l`, so nothing here holds a three.js material any more.
 
 import { V, Q, R } from "../util/math.js";
-import { state } from "../state/state.js";
+import { state, placeWorld } from "../state/state.js";
 import { emit } from "../util/events.js";
 import { addEntity, dropEntity } from "./entity.js";
 
 /** Burst of `count` particles from point `p`. Big bursts also make a rumble. */
-export function boom(p, count, color) {
+export function boom(p, count, color, placeId = state.place) {
   // How loud an explosion is depends on its size, so the size goes with the event.
-  if (count > 10) emit("sfx", { name: "explosion", count });
+  if (count > 10 && placeId === state.place) emit("sfx", { name: "explosion", count });
   for (let i = 0; i < count; i++) {
     add({
       kind: "fx",
@@ -26,12 +26,12 @@ export function boom(p, count, color) {
       t: 1,
       col: color,
       size: 1,
-    });
+    }, placeId);
   }
 }
 
 /** Single slow particle, used for missile exhaust. */
-export function puff(p, color, life) {
+export function puff(p, color, life, placeId = state.place) {
   add({
     kind: "fx",
     pos: V(p.x, p.y, p.z),
@@ -40,17 +40,18 @@ export function puff(p, color, life) {
     t: life || 0.6,
     col: color,
     size: 0.4,     // the exhaust puff was always drawn at 0.4 of the bomb's size
-  });
+  }, placeId);
 }
 
 /** Put one particle into the world and tell the view about it. */
-function add(f) {
+function add(f, placeId) {
   f.quat = Q();
-  return addEntity(state.world.fx, f);
+  f.place = placeId;
+  return addEntity(placeWorld(placeId).fx, f);
 }
 
-export function updateEffects(dt) {
-  const fx = state.world.fx;
+export function updateEffects(dt, placeId = state.place) {
+  const fx = placeWorld(placeId).fx;
   for (let i = fx.length - 1; i >= 0; i--) {
     const f = fx[i];
     f.pos.addScaledVector(f.v, dt);

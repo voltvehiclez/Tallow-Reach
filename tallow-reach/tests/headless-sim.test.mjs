@@ -41,7 +41,7 @@ function freshWorld() {
   S.player = { kind: "ship", pos: sim.V(0, 0, 0), quat: sim.V(0, 0, 0), v: sim.V(0, 0, 0) };
   S.player.quat.w = 1;           // an unrotated quaternion, not a vector
   S.flight.spawnT = 1e9;         // no wandering pirates: this test is one raider
-  S.sector = "reach";
+  S.place = "reach";
   S.profile.mission = null;
   S.profile.kills = 0;
   return S;

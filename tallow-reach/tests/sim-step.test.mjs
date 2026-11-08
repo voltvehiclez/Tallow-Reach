@@ -23,7 +23,7 @@ function fresh() {
   state.profile = newProfile();
   state.time = 0;
   state.warp = null;
-  state.sector = "hollow";
+  state.place = "hollow";
   state.freeCam.on = false;
   state.controls = neutralControls();
   state.controls.thrust = 1;

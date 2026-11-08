@@ -83,7 +83,7 @@ test("sanitizeProfile and sanitizeWorld clamp bogus numbers and drop unknown ids
   assert.deepEqual(w.base, { store: 5, hangar: 1, refinery: 4 });
   assert.deepEqual(w.store, { cobalt: 2 });
   assert.deepEqual(w.board, [{ type: "hunt", tier: 2, n: 3, p: 1, r: 900 }]);
-  assert.equal(w.sector, "reach");
+  assert.equal(w.place, "reach");
 });
 
 test("sanitizeProfile, sanitizeWorld and sanitizeSave reject non-saves", () => {

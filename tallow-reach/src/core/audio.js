@@ -18,7 +18,8 @@ export const isMuted = () => muted;
 
 export function initAudio() {
   if (ctx) {
-    ctx.resume();
+    const resumed = ctx.resume();
+    if (resumed && resumed.catch) resumed.catch(() => {});
     return;
   }
   try {

@@ -10,13 +10,15 @@ import {
   ITEMS, ITEM_IDS, ITEM_CATEGORIES, canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol,
 } from "../src/data/items.js";
 import { MISSILE } from "../src/data/weapons.js";
-import { SHOPS, OUTPOST_SHOP, isShop, shopRow } from "../src/data/shops.js";
+import { SHOPS, isShop, shopRow } from "../src/data/shops.js";
 import { BASE_MODULES, BASE_DEFAULT } from "../src/data/station.js";
 import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/data/contracts.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../src/data/enemies.js";
 import { FACTIONS } from "../src/data/factions.js";
 import { LOOT_TABLES } from "../src/data/loot.js";
-import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
+import { WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
+import { PLACES, PLACE_IDS, DEFAULT_PLACE, placeAt, nextPocket, pocketsIn, isPocket } from "../src/data/places.js";
+import { stationAt } from "../src/sim/places.js";
 import {
   newProfile,
   newWorld,
@@ -101,7 +103,7 @@ test("weapon data is complete", () => {
   // What a shop sells is data now (data/shops.js); the row-by-row checks live in
   // tests/shops.test.mjs. What matters here is that the outpost has a shop and
   // that a row never names an item the catalogue does not know.
-  assert.ok(isShop(OUTPOST_SHOP), `the outpost's shop (${OUTPOST_SHOP}) must exist in SHOPS`);
+  assert.ok(isShop(stationAt(DEFAULT_PLACE).shop), `the outpost's shop (${stationAt(DEFAULT_PLACE).shop}) must exist in SHOPS`);
   for (const [id, shop] of Object.entries(SHOPS)) {
     for (const row of shop.stock || []) {
       assert.ok(isItem(row.id), `${id} / ${row.id}: not in data/items.js`);
@@ -109,8 +111,8 @@ test("weapon data is complete", () => {
     }
   }
   // The two things the shop has always sold, at the prices the owner set.
-  assert.equal(shopRow(OUTPOST_SHOP, "beam_basic").price, 900, "the mining beam is still 900 cr");
-  assert.equal(shopRow(OUTPOST_SHOP, "missile_basic").price, 1500, "the missile pod is still 1500 cr");
+  assert.equal(shopRow(stationAt(DEFAULT_PLACE).shop, "beam_basic").price, 900, "the mining beam is still 900 cr");
+  assert.equal(shopRow(stationAt(DEFAULT_PLACE).shop, "missile_basic").price, 1500, "the missile pod is still 1500 cr");
 });
 
 test("a spare module sells for 60% of what a shop charges for it", () => {
@@ -179,42 +181,39 @@ test("every contract type has a generator, a description and is accepted by the 
   }
 });
 
-test("every sector has a name, a description, a spawn point and its flags", () => {
-  assert.ok(SECTORS[DEFAULT_SECTOR], `DEFAULT_SECTOR "${DEFAULT_SECTOR}" must be in SECTORS`);
-  assert.ok(SECTOR_IDS.length >= 2, "the warp key needs at least two sectors");
-  for (const id of SECTOR_IDS) {
-    const s = SECTORS[id];
-    assert.ok(s, `${id} is listed in SECTOR_IDS but missing from SECTORS`);
-    assert.equal(typeof s.n, "string", `${id}: n (name)`);
-    assert.equal(typeof s.d, "string", `${id}: d (description)`);
-    assert.ok(
-      Array.isArray(s.sn) && s.sn.length === 3 && s.sn.every(isNum),
-      `${id}: sn (spawn point) must be three numbers`
-    );
-    for (const f of ["st", "fd", "foes"]) {
-      assert.equal(typeof s[f], "boolean", `${id}: ${f} must be true or false`);
-    }
+test("every pocket has a name, description, arrival point, parent system and definition", () => {
+  assert.ok(isPocket(DEFAULT_PLACE), `DEFAULT_PLACE "${DEFAULT_PLACE}" must be a pocket`);
+  for (const id of PLACE_IDS) {
+    const p = PLACES[id];
+    assert.equal(p.id, id);
+    assert.ok(["system", "pocket"].includes(p.kind), `${id}: kind`);
+    assert.equal(typeof p.n, "string", `${id}: n (name)`);
+    if (p.kind !== "pocket") continue;
+    assert.equal(typeof p.d, "string", `${id}: d (description)`);
+    assert.ok(p.parent && PLACES[p.parent]?.kind === "system", `${id}: parent system`);
+    assert.ok(Array.isArray(p.enter.pos) && p.enter.pos.length === 3 && p.enter.pos.every(isNum), `${id}: enter.pos`);
+    assert.equal(p.enter.kind, "warp");
+    assert.equal(p.leave.kind, "warp");
   }
-  assert.deepEqual(
-    Object.keys(SECTORS).sort(),
-    [...SECTOR_IDS].sort(),
-    "SECTORS and SECTOR_IDS must list the same sectors"
-  );
+  assert.ok(stationAt(DEFAULT_PLACE), "the starting pocket has a station feature");
 });
 
-test("warping visits every sector and comes back to where it started", () => {
-  let id = DEFAULT_SECTOR;
+test("M cycles every pocket of the current system, however many there are", () => {
+  const system = PLACES[DEFAULT_PLACE].parent;
+  const siblings = pocketsIn(system);
+  assert.ok(siblings.length >= 2);
+  let id = DEFAULT_PLACE;
   const seen = [id];
-  for (let i = 1; i < SECTOR_IDS.length; i++) {
-    id = nextSector(id);
+  for (let i = 1; i < siblings.length; i++) {
+    id = nextPocket(id);
     seen.push(id);
   }
-  assert.deepEqual(seen.sort(), [...SECTOR_IDS].sort(), "the warp cycle must reach every sector");
-  assert.equal(nextSector(id), DEFAULT_SECTOR, "the warp cycle must return to the starting sector");
+  assert.deepEqual(seen.sort(), [...siblings].sort());
+  assert.equal(nextPocket(id), DEFAULT_PLACE);
 });
 
-test("an unknown sector id falls back to the starting sector", () => {
-  assert.equal(sectorAt("no-such-sector"), SECTORS[DEFAULT_SECTOR]);
+test("an unknown place id falls back to the starting pocket", () => {
+  assert.equal(placeAt("no-such-place"), PLACES[DEFAULT_PLACE]);
 });
 
 test("a warp takes about two seconds and its phases run in order", () => {

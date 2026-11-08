@@ -12,7 +12,7 @@
 import { V, Q, faceQ } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 import { emit } from "../util/events.js";
-import { state, localPlayer } from "../state/state.js";
+import { state, localPlayer, placeWorld } from "../state/state.js";
 import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
@@ -27,6 +27,7 @@ export function launchMissile(target, launcher, dir, muzzle, player = localPlaye
   const P = player;
   const m = {
     kind: "missile",
+    place: P.place || state.place,
     owner: player,
     pos: muzzle.clone(),
     quat: pointing(muzzle, dir),
@@ -38,8 +39,8 @@ export function launchMissile(target, launcher, dir, muzzle, player = localPlaye
     l: MISSILE.life,
     dmg: launcher.dmg,
   };
-  addEntity(state.world.missiles, m);
-  emit("sfx", { name: "missile-fire" });
+  addEntity(placeWorld(m.place).missiles, m);
+  if (m.place === state.place) emit("sfx", { name: "missile-fire" });
   return m;
 }
 
@@ -51,8 +52,8 @@ function pointing(p, dir) {
 }
 
 /** Move every missile, steer it, trail it and resolve its hit. */
-export function updateMissileFlight(dt) {
-  const W = state.world,
+export function updateMissileFlight(dt, placeId = state.place) {
+  const W = placeWorld(placeId),
     MS = W.missiles;
   for (let i = MS.length - 1; i >= 0; i--) {
     const s = MS[i];
@@ -73,12 +74,12 @@ export function updateMissileFlight(dt) {
     s.sp = Math.min(MISSILE.max, s.sp + MISSILE.acc * dt);
     s.pos.addScaledVector(s.d, s.sp * dt);
     faceQ(s.quat, s.pos, s.pos.clone().add(s.d), 1);
-    puff(s.pos.clone(), 0xaaa090, 0.5);   // the exhaust trail, one puff a frame
+    puff(s.pos.clone(), 0xaaa090, 0.5, placeId);   // the exhaust trail, one puff a frame
 
     let end = s.l <= 0;
     for (const e of W.enemies) {
       if (enemyPos(e).distanceTo(s.pos) < 12) {
-        hitHostile(e, s.dmg, enemyPos(e), s.owner);
+        hitHostile(e, s.dmg, enemyPos(e), s.owner, placeId);
         end = true;
         break;
       }
@@ -92,7 +93,7 @@ export function updateMissileFlight(dt) {
       }
     }
     if (end) {
-      boom(s.pos, 16, 0xffa060);
+      boom(s.pos, 16, 0xffa060, placeId);
       dropEntity(MS, s);
     }
   }
