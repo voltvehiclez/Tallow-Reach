@@ -336,9 +336,12 @@ Each `src/` folder also has its own short `README.md`.
   They never change state.
 - **The sim runs at 60 ticks a second** (`sim/step.js`, `data/simulation.js`); the frame loop
   accumulates time and keeps the old 0.05-second stall cap. Pause does not advance it. Screen and
-  sound randomness use a separate cosmetic stream. Missile aim still samples the last rendered
-  camera direction and asteroid respawn still uses a wall-clock timer; full frame-rate independence
-  has not been proven. Views are not interpolated between ticks.
+  sound randomness use a separate cosmetic stream. Between 60 Hz ticks, `render/views.js`,
+  `render/camera.js` and `ui/hud.js` interpolate visual poses using `simClock.alpha()` (keeping
+  previous-tick poses in a render-side `WeakMap` so simulation state stays untouched and 240 Hz
+  displays see smooth per-frame motion without sawtooth jitter; teleports with `P.snap` snap
+  immediately). Missile aim still samples the last rendered camera direction and asteroid respawn
+  still uses a wall-clock timer.
 - **Anything that accumulates must be multiplied by `dt`.** A constant added per frame
   (`camera.rotateZ(0.05)` every frame, say) silently depends on the frame rate: harmless on a
   60 Hz screen, a visible bug on a 240 Hz one. This bit the warp roll once. Use

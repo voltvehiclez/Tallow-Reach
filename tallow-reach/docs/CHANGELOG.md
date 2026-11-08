@@ -19,6 +19,24 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Fix high-refresh (240 Hz) ship blur via between-tick render interpolation
+
+- **Root cause:** the pre-built `game/tallow-reach.html` in the merged 8c branch (`74a9ab5`) had
+  never been rebuilt after step 7b, so opening it directly ran the old variable-`dt` loop at 240 Hz.
+  Rebuilding `game/tallow-reach.html` in step 9 activated step 8a's 60 Hz `simClock`, where the
+  ship mesh updated once every 4 frames (60 Hz) while `chaseView` eased the camera every frame
+  (240 Hz), causing a ~2.4 px 60 Hz sawtooth jitter/blur on the ship model during side-to-side motion.
+- **Fix:** `createSimClock` (`src/sim/step.js`) now exposes `alpha()` (`remainder / SIM_DT`) and
+  optional `beforeStep`/`afterStep` hooks. `src/render/views.js` snapshots previous-tick poses in a
+  `WeakMap` (keeping simulation records untouched) and interpolates entity meshes, the player hull,
+  the mining beam origin, HUD markers (`src/ui/hud.js`) and `chaseView` (`src/render/camera.js`)
+  across fractional frames, snapping immediately on teleports (`P.snap`). Also refreshed
+  `renderer.setPixelRatio` on window resize (`src/main.js`).
+- Added `tests/render-interp.test.mjs`; all **226 tests** pass (both 8b single-player oracles
+  unchanged), and `game/tallow-reach.html` was rebuilt via `npm run build`. Save version remains **13**.
+
+---
+
 ## 2026-11-08: Step 9 complete and ticked — Milestone B reached
 
 - The owner reported the step 9 playtest passed. Ticked step 9 across `docs/ROADMAP.md`,

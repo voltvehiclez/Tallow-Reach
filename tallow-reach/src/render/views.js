@@ -61,6 +61,107 @@ const kinds = new Map();
 const drawn = new Map(); // group:id -> { mesh, kind, group, handler }
 const keyFor = (group, id) => `${group}:${id}`;
 
+// Previous-tick poses for smooth between-tick interpolation on high-refresh
+// displays (120/144/240 Hz). Keyed in a WeakMap so sim records stay pure.
+const prevPoses = new WeakMap();
+const TELEPORT_DIST_SQ = 2500; // > 50 m in one 60 Hz tick = teleport, snap instead
+let frameAlpha = 1;
+const _interpPos = new THREE.Vector3();
+const _interpQuat = new THREE.Quaternion();
+const _beamOrigin = new THREE.Vector3();
+const _playerPose = {
+  pos: new THREE.Vector3(),
+  quat: new THREE.Quaternion(),
+  v: new THREE.Vector3(),
+  thr: 0,
+  bs: 0,
+  docked: true,
+};
+
+function capturePose(e) {
+  if (!e || !e.pos) return;
+  let p = prevPoses.get(e);
+  if (!p) {
+    prevPoses.set(e, {
+      pos: e.pos.clone(),
+      quat: e.quat ? e.quat.clone() : null,
+      v: e.v ? e.v.clone() : null,
+      thr: e.thr || 0,
+      bs: e.bs || 0,
+    });
+    return;
+  }
+  p.pos.copy(e.pos);
+  if (e.quat) {
+    if (p.quat) p.quat.copy(e.quat);
+    else p.quat = e.quat.clone();
+  }
+  if (e.v) {
+    if (p.v) p.v.copy(e.v);
+    else p.v = e.v.clone();
+  }
+  p.thr = e.thr || 0;
+  p.bs = e.bs || 0;
+}
+
+/** Snapshot active entity and player poses immediately before a 60 Hz sim tick. */
+export function snapshotSimPoses() {
+  const P = localPlayer();
+  if (P) capturePose(P);
+  for (const [, handler] of kinds) {
+    for (const e of handler.list()) {
+      if (e) capturePose(e);
+    }
+  }
+}
+
+/** Snap the local player's previous pose after teleports (launch, warp, dock). */
+export function snapRenderedPlayer() {
+  const P = localPlayer();
+  if (P && (P.snap || P.docked)) capturePose(P);
+}
+
+/** Interpolated world position for `e` at fractional tick `alpha` (for HUD markers). */
+export function interpolatedPos(e, alpha = frameAlpha, out = new THREE.Vector3()) {
+  if (!e || !e.pos) return out;
+  const p = prevPoses.get(e);
+  if (!p || alpha >= 1 || p.pos.distanceToSquared(e.pos) > TELEPORT_DIST_SQ) {
+    return out.copy(e.pos);
+  }
+  return out.copy(p.pos).lerp(e.pos, alpha);
+}
+
+/** Interpolated pose for `P` at fractional tick `alpha` (shared by hull view and camera). */
+export function renderPlayerPose(P = localPlayer(), alpha = frameAlpha) {
+  if (!P || !P.pos) return P;
+  const p = prevPoses.get(P);
+  if (
+    !p ||
+    P.snap ||
+    P.docked ||
+    alpha >= 1 ||
+    p.pos.distanceToSquared(P.pos) > TELEPORT_DIST_SQ
+  ) {
+    if (P.snap) capturePose(P);
+    _playerPose.pos.copy(P.pos);
+    _playerPose.quat.copy(P.quat);
+    if (P.v) _playerPose.v.copy(P.v);
+    _playerPose.thr = P.thr || 0;
+    _playerPose.bs = P.bs || 0;
+    _playerPose.docked = !!P.docked;
+    return _playerPose;
+  }
+  _playerPose.pos.copy(p.pos).lerp(P.pos, alpha);
+  if (p.quat) _playerPose.quat.copy(p.quat).slerp(P.quat, alpha);
+  else _playerPose.quat.copy(P.quat);
+  if (p.v && P.v) _playerPose.v.copy(p.v).lerp(P.v, alpha);
+  else if (P.v) _playerPose.v.copy(P.v);
+  _playerPose.thr = p.thr + ((P.thr || 0) - p.thr) * alpha;
+  _playerPose.bs = p.bs + ((P.bs || 0) - p.bs) * alpha;
+  _playerPose.docked = !!P.docked;
+  return _playerPose;
+}
+
 /**
  * Register a view kind. `list` returns its current world records; build returns
  * a mesh, update copies per-frame state, and remove releases owned resources.
@@ -83,8 +184,22 @@ function initialPose(e, m) {
   return m;
 }
 function updatePose(e, m) {
-  m.position.copy(e.pos);
-  if (e.quat) m.quaternion.copy(e.quat);
+  const p = prevPoses.get(e);
+  if (!p || frameAlpha >= 1 || p.pos.distanceToSquared(e.pos) > TELEPORT_DIST_SQ) {
+    m.position.copy(e.pos);
+    if (e.quat) m.quaternion.copy(e.quat);
+    return;
+  }
+  _interpPos.copy(p.pos).lerp(e.pos, frameAlpha);
+  m.position.copy(_interpPos);
+  if (e.quat) {
+    if (p.quat) {
+      _interpQuat.copy(p.quat).slerp(e.quat, frameAlpha);
+      m.quaternion.copy(_interpQuat);
+    } else {
+      m.quaternion.copy(e.quat);
+    }
+  }
 }
 const noCleanup = () => {};
 
@@ -132,6 +247,7 @@ registerEntityView("rock", {
 function addView(e, handler) {
   const key = keyFor(handler.group, e.id);
   if (drawn.has(key)) return drawn.get(key);
+  capturePose(e);
   const mesh = handler.build(e);
   if (!mesh) return null;
   scene.add(mesh);
@@ -231,25 +347,30 @@ export function installEnemyViews() {
   on("enemy-removed", ({ id }) => removeView(keyFor("enemy", id)));
   on("entity-spawned", ({ id, kind }) => spawnView(kind, id));
   on("entity-removed", ({ id }) => removeView(keyFor("entity", id)));
+  on("launched", () => snapRenderedPlayer());
+  on("sector-entered", () => snapRenderedPlayer());
 }
 
 /** Reconcile hostiles at their existing point in the frame. */
-export function updateEnemyViews() {
+export function updateEnemyViews(alpha = 1) {
+  frameAlpha = alpha;
   updateGroup("enemy");
 }
 
 /** Reconcile other entities, then the player hull and mining beam. */
-export function updateEntityViews() {
+export function updateEntityViews(alpha = 1) {
+  frameAlpha = alpha;
   updateGroup("entity");
   updatePlayerView();
   updateBeamView();
 }
 
-/** The player's ship: its model follows `state.player.pos` / `quat`. */
+/** The player's ship: its model follows `state.player.pos` / `quat` (interpolated when `alpha < 1`). */
 function updatePlayerView() {
   const P = localPlayer();
   if (!P || !P.pos) return;
-  ensurePlayerView().update(P);
+  const pose = frameAlpha >= 1 ? P : renderPlayerPose(P, frameAlpha);
+  ensurePlayerView().update(pose);
 }
 
 /** The mining beam: a cylinder from `beamStart` to `beamEnd` while it is on. */
@@ -258,9 +379,20 @@ function updateBeamView() {
   const on_ = !!(F.beamOn && F.beamStart && F.beamEnd);
   beamMesh.visible = on_;
   if (!on_) return;
-  const delta = F.beamEnd.clone().sub(F.beamStart),
+  let start = F.beamStart;
+  const P = localPlayer();
+  if (frameAlpha < 1 && P && !P.docked) {
+    const pose = renderPlayerPose(P, frameAlpha);
+    const hull = state.profile.ship;
+    _beamOrigin
+      .copy(mountOffset(hull, "beam", SHIPS[hull].sc))
+      .applyQuaternion(pose.quat)
+      .add(pose.pos);
+    start = _beamOrigin;
+  }
+  const delta = F.beamEnd.clone().sub(start),
     len = delta.length();
-  beamMesh.position.copy(F.beamStart).addScaledVector(delta, 0.5);
+  beamMesh.position.copy(start).addScaledVector(delta, 0.5);
   beamMesh.scale.set(1, len, 1);
   beamMesh.quaternion.setFromUnitVectors(UP, delta.normalize());
 }
