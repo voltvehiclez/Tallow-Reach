@@ -44,37 +44,37 @@ export function powerOf(loadout) {
   return { gen, cap };
 }
 
-/** The loadout fitted to the ship being flown, or an empty object. */
-const fitted = () => (state.profile.loadout || {})[state.profile.ship] || {};
-
 /**
  * Rebuild state.power from the save. Call after anything that changes which
  * modules are fitted, or which ship is being flown. Energy already in the
  * cells is kept, but cannot exceed the new capacity.
  */
-export function refreshPower() {
-  const { gen, cap } = powerOf(fitted());
-  const p = state.power;
+export function refreshPower(player = state.player, profile = state.profile) {
+  if (player && player !== state.player && arguments.length < 2) throw new Error("Non-local fitting requires an explicit fit profile");
+  const { gen, cap } = powerOf((profile.loadout || {})[profile.ship] || {});
+  const p = player?.power || state.power;
   p.gen = gen;
   p.cap = cap;
   p.stored = Math.min(p.stored, cap);
-  for (const system of Object.keys(p.use)) setDraw(system, 0);
+  for (const system of Object.keys(p.use)) setDraw(system, 0, p);
 }
 
 /**
  * Record what one system is asking for, in MJ/s, and rebuild the total. Systems
  * call this every frame while they are running; nothing else writes `draw`.
  */
-export function setDraw(system, mjps) {
-  const p = state.power;
+export function setDraw(system, mjps, p = state.power) {
+  p = p.power || p;
   p.use[system] = Math.max(0, +mjps || 0);
   p.draw = Object.values(p.use).reduce((a, b) => a + b, 0);
 }
 
 /** Docked at the outpost: the cells are filled. Call on dock, launch and load. */
-export function refillPower() {
-  refreshPower();
-  state.power.stored = state.power.cap;
+export function refillPower(player = state.player, profile = state.profile) {
+  if (player && player !== state.player && arguments.length < 2) throw new Error("Non-local fitting requires an explicit fit profile");
+  refreshPower(player, profile);
+  const p = player?.power || state.power;
+  p.stored = p.cap;
 }
 
 /**
@@ -83,14 +83,15 @@ export function refillPower() {
  * demand, which is what stops the thrusters when a ship runs dry. Pure.
  */
 export function hasPower(mjps = 0, p = state.power) {
+  p = p.power || p;
   if (mjps <= 0) return true;
   if (p.stored > 0) return true;
   return p.gen >= mjps;
 }
 
 /** One frame of the power budget: cells take in what is made, give out what is used. */
-export function updatePower(dt) {
-  const p = state.power;
+export function updatePower(dt, p = state.power) {
+  p = p.power || p;
   const net = p.gen - p.draw;      // MJ/s
   p.stored = Math.max(0, Math.min(p.cap, p.stored + net * dt));
 }

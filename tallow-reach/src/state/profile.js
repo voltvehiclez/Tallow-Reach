@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: this schema is the single local profile, not a remote player save.
 // The persistent part of a game: credits, ships, base, contracts, and stats.
 // Everything saved to disk goes through this file so old saves keep loading.
 

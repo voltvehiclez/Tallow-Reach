@@ -12,3 +12,5 @@ Rules:
   entry plus an `emit("sfx", ...)` in the sim); `tests/layers.test.mjs` checks they agree.
 - **Nothing in this folder is imported by `src/sim/` any more** (step 6 closed that): the sim emits
   `sfx` for sound and reads the player's `controls` for input. `tests/layers.test.mjs` enforces it.
+
+Input populates only the local player's controls; remote input/transport is not implemented. See `docs/TARGET_ARCHITECTURE.md`.

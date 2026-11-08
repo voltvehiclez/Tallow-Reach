@@ -131,12 +131,13 @@ export function missilesOf(loadout) {
  * fit change, a ship change, a save load or a dock, the way the drive and the
  * shields are refreshed. Also clears any mining progress toward the next ore.
  */
-export function refreshGuns() {
-  const S = state.profile;
+export function refreshGuns(P = state.player, S = state.profile) {
+  if (P && P !== state.player && arguments.length < 2) throw new Error("Non-local fitting requires an explicit fit profile");
   const loadout = (S.loadout || {})[S.ship];
-  state.guns = gunsOf(loadout);
-  state.beams = beamsOf(loadout);
-  state.missiles = missilesOf(loadout);
-  state.flight.gunCd = state.guns.map(() => 0);
-  state.flight.beamT = 0;
+  const runtime = P || state;
+  runtime.guns = gunsOf(loadout);
+  runtime.beams = beamsOf(loadout);
+  runtime.missiles = missilesOf(loadout);
+  runtime.flight.gunCd = runtime.guns.map(() => 0);
+  runtime.flight.beamT = 0;
 }

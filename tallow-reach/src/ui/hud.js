@@ -64,7 +64,8 @@ export function setupHud() {
 
   on("docked", () => (el.root.hidden = true));
   on("launched", () => (el.root.hidden = false));
-  on("hurt", ({ shielded }) => {
+  on("hurt", ({ shielded, player }) => {
+    if (player && player !== state.player) return;
     el.flash.style.opacity = shielded ? 0.25 : 0.8;
     setTimeout(() => (el.flash.style.opacity = 0), 120);
   });

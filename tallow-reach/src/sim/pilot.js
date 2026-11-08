@@ -52,7 +52,7 @@ export const facePlayer = (target, k, player = localPlayer()) => faceQ(player.qu
  * chase camera already does. For a ship that has not moved yet the two agree
  * exactly.
  */
-export function playerLocal(v, player = localPlayer(), ship = state.profile.ship) {
+export function playerLocal(v, player = localPlayer(), ship = player === localPlayer() ? state.profile.ship : player.ship) {
   const P = player;
   // The model is drawn at the hull's own scale (`SHIPS[id].sc`), so a point given
   // in the ship's frame is scaled, turned and then moved into the world — exactly
@@ -70,7 +70,7 @@ export const shipScale = (ship = state.profile.ship) => SHIPS[ship].sc;
 export const playerVel = (player = localPlayer()) => player.v || V(0, 0, 0);
 
 /** World-space position of a named weapon mount. */
-export function playerMount(name, bay = 0, barrel = 0, count = 1, player = localPlayer(), ship = state.profile.ship) {
+export function playerMount(name, bay = 0, barrel = 0, count = 1, player = localPlayer(), ship = player === localPlayer() ? state.profile.ship : player.ship) {
   const { x, y, z } = mountOffset(ship, name, shipScale(ship), bay, barrel, count);
   return playerLocal(V(x, y, z), player, ship);
 }

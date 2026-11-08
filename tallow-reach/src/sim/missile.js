@@ -27,6 +27,7 @@ export function launchMissile(target, launcher, dir, muzzle, player = localPlaye
   const P = player;
   const m = {
     kind: "missile",
+    owner: player,
     pos: muzzle.clone(),
     quat: pointing(muzzle, dir),
     d: dir.clone(),

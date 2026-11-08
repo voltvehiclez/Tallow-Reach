@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: sector transitions and warp operate on the local ship and one shared sector.
 // Moving between sectors. M starts a warp to the next sector in data/sectors.js.
 //
 // A warp is a sequence, timed by WARP in data/sectors.js and about two seconds

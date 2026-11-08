@@ -7,8 +7,8 @@
 //   freecam       boolean            Alt held / released
 //   look          { dx, dy }         mouse movement while orbiting
 //   wheel         deltaY             mouse wheel
-//   hurt          { shielded }       player took damage
-//   player-dead                      hull reached zero
+//   hurt          { shielded, player } player took damage
+//   player-dead   { player }         hull reached zero (non-local recovery not yet implemented)
 //   docked                           player docked at the outpost
 //   launched                         player left the outpost
 //   died          text               ship destroyed (after docking)

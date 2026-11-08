@@ -188,12 +188,25 @@ check that nothing was left behind. Run it straight after **A** and **B**, while
 This slice does not add co-op or a second controllable ship; the automated tests check that two
 player records and their controls are independent. Step 8c is still needed for player-aware rules.
 
-## L. Step 8c in-progress: player-specific weapon origins
+## L. Step 8c: final single-player regression playtest
 
-1. Launch and fly as in section K. Fire the cannons while moving and turning: both bolts should
-   leave from the ship and carry its speed as before.
-2. If fitted, use the mining beam on an asteroid and launch a missile after acquiring a lock.
-   The beam and missile should start at the ship and behave as before.
-3. Press **F** to target a rock or raider, press **M** to warp away and back, then dock with **G**.
-   Report anything that looks different. This is only a regression check for the work so far;
-   step 8c is not finished and co-op is not available.
+Make a backup or copy of a save first: the last check deliberately destroys a ship and can cost
+credits and cargo. This is a single-player playtest; the second player is tested automatically,
+not exposed in the game, and no co-op connection has been added.
+
+1. Open the freshly built game, click **Enter the hangar**, and load a familiar save. Launch.
+   Fly forward and backwards, turn, strafe, brake and boost. Check the camera, speed, power and
+   shield bars feel and look the same as before.
+2. Fly to the asteroid field. Fire the cannons while moving and turning; bolts should leave the
+   ship. Fight a raider and check incoming hits, shield recharge, hull damage, explosions and loot.
+   If fitted, select the mining beam with **2** and mine an asteroid; check ore enters the hold.
+3. If a missile launcher is fitted, aim at a raider, wait for the lock and right-click. Check the
+   lock ring, missile launch, tracking and impact. Press **F** to lock and release another target.
+4. Return to Meridian; press **G** in docking range at low speed. Check the outpost appears, then
+   launch again and check the ship, weapons and controls. Optionally press **M** to warp away and back.
+5. On your disposable/copy save, deliberately let a raider destroy your ship. Check the death
+   message, lost ship/cargo and recovery fee, return to the outpost, and launch the replacement
+   if one is available. Reload your backed-up save when finished.
+6. If practical, repeat flight and combat with display rates capped at 30, 60 and 144 fps. Report
+   any judder or missile-lock differences; the complete game's frame-rate independence remains
+   unproven because camera aim, asteroid respawn timing and view interpolation are still open.

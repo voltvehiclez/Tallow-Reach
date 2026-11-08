@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: purchases, currency and ship management use the local profile.
 // Cargo, storage, the refinery, repairs and every purchase at the outpost.
 // Each action changes state.profile directly and returns an optional
 // message for the panel to show.

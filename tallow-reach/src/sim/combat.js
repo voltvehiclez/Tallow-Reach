@@ -45,6 +45,7 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer()) {
     quat,
     v: dir.clone().multiplyScalar(speed).add(own ? playerVel(player) : V(0, 0, 0)),
     own,
+    owner: own ? player : null,
     dmg,
     l: 2.4,
   };
@@ -58,6 +59,7 @@ export function hitHostile(e, dmg, at) {
   if (e.hp <= 0) killHostile(e);
 }
 
+// Kills, rewards and contract events still update the local profile only (step 9).
 function killHostile(e) {
   boom(enemyPos(e), 22, 0xff8a40);
   dropEnemy(e);          // out of the world, and render/views.js removes its mesh
@@ -90,8 +92,7 @@ export function spawnCrate(p, item = "salv") {
 /** Move bullets along their path and resolve hits. */
 export function updateBullets(dt) {
   const W = state.world,
-    B = W.bullets,
-    pp = playerPos();
+    B = W.bullets;
   for (let i = B.length - 1; i >= 0; i--) {
     const b = B[i];
     // A hit can kill the player mid-loop and clear this array. Skip stale entries.
@@ -117,9 +118,15 @@ export function updateBullets(dt) {
           }
         }
       }
-    } else if (!dead && !b.own && pp.distanceTo(b.pos) < 6) {
-      hurt(b.dmg);
-      dead = true;
+    } else if (!dead && !b.own) {
+      for (const player of state.players) {
+        if (!player || player.docked || player.dead) continue;
+        if (playerPos(player).distanceTo(b.pos) < 6) {
+          hurt(b.dmg, player);
+          dead = true;
+          break;
+        }
+      }
     }
 
     if (dead) dropEntity(B, b);
@@ -127,6 +134,7 @@ export function updateBullets(dt) {
 }
 
 /** Drift, expire and collect loot crates. */
+// Crate collection and inventory are local-profile only until step 9.
 export function updateCrates(dt) {
   const C = state.world.crates,
     S = state.profile,

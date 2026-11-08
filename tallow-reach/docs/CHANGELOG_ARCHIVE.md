@@ -10,6 +10,178 @@ newest stay first.
 
 ---
 
+## 2026-11-08: Refactor step 7c — hull view and render-free simulation
+
+- Added `PlayerShipView` and shared named gun, missile and beam mounts in `src/data/mounts.js`;
+  the sim transforms the same offsets without reading a mesh. Existing offsets are unchanged.
+- Sector entry emits `sector-entered`, including docking resets; `main.js` updates scenery. The
+  frame loop supplies the previous camera direction for missile lock. The sim imports no render
+  files; the layer allow-list is empty. Save version remains 12.
+- Added `tests/step7c.test.mjs` and a manual checklist in `TESTING-BASELINE.md` section H.
+  `npm install`, `npm test` (185 passing) and `npm run build` succeeded. Owner playtest pending.
+  Updated architecture, roadmap, handoff, and folder READMEs; generated HTML is not included.
+
+---
+
+## 2026-11-08: Step 7b complete and closed (docs only, no code change)
+
+- **Why:** the owner asked for the slice to be ticked and closed, and raised nothing about it, so it
+  is closed the way every other step has been. Nothing is in flight; **7c has not been started**.
+  (The evidence it is right: the old-vs-new probe's 0 differences, 182 green tests, and
+  `TESTING-BASELINE.md` section G, which is the manual check if anyone wants to re-run it.)
+- **Also:** the commit was tagged **`step7b`**, so the owner can download the whole project as a zip
+  straight from GitHub without any tool of mine being involved:
+  `https://github.com/voltvehiclez/Tallow-Reach/archive/refs/tags/step7b.zip` (GitHub builds it on
+  request; it contains the prebuilt `game/tallow-reach.html` and excludes `node_modules`). GitHub
+  uploads are blocked from this sandbox's network, which is why a release asset could not be
+  attached; the tag archive needs no upload. Step 7a was tagged `step7a-ticked` the same way.
+- Files: `docs/ROADMAP.md` (status line, step-7 row, status log), `docs/HANDOFF.md` (next action),
+  this changelog. No source changed, so no rebuild is needed for this entry — the zip and the build
+  are the 7b build.
+
+---
+
+## 2026-11-08: Refactor step 7b — bullets, missiles, crates and particles become data
+
+- **Why:** after 7a a hostile was plain data, but a bullet, a missile, a loot crate and an explosion
+  spark were still three.js meshes living in `state.world`, moved and removed by the sim
+  (`combat.js`, `effects.js`, `weapons.js`, `world.js`). The sim could not run without a scene, and a
+  host could not send a guest a bullet. Step 7b removes that for every one of them.
+- **Everything transient is a record now** (`src/sim/entity.js`, `src/util/ids.js`): a bullet is
+  `{ id, kind: "bullet", pos, quat, v, own, dmg, l }`, a crate `{ id, kind: "crate", pos, quat, t,
+  item, spin }`, a spark `{ id, kind: "fx", pos, v, l, t, col, size }` and a missile
+  `{ id, kind: "missile", pos, quat, d, sp, t, l, dmg }` (`src/sim/missile.js` is new). `pos` and
+  `quat` are three.js maths types, which the target architecture allows: **no `src/sim/` file holds
+  a mesh, a material or the scene any more**.
+- **`render/views.js` draws all of them.** It listens for the new `entity-spawned` / `entity-removed`
+  events, builds one mesh per entity from its kind, copies `pos`/`quat` (and a rock's `scale`, a
+  spark's fade) once a frame, and sweeps the lists so a mesh can never be left behind. The player's
+  ship model lives here too, built from `profile.ship` and hidden while `player.docked`.
+- **The player's ship is data.** `state.player.pos` / `quat` replace `state.player.m.position` /
+  `.quaternion`; `src/sim/pilot.js` is the only way the sim reads them (`playerPos`, `playerFwd`,
+  `playerLocal`, `facePlayer`). The turn is applied to the record in the same Y-then-X-then-Z order
+  the model's `rotateY/X/Z` used.
+- **Rocks are data a step early** (they were 7c) because the rules already read them: a rock carries
+  `pos`, `quat`, `s0` (born size), `scale` (drawn size, which mining shrinks) and `shape` (which
+  lumpy model), and `render/views.js` draws it into the sector group it belongs to.
+- **The mining beam is a line of numbers:** the sim reports `state.flight.beamStart` / `beamEnd`
+  while it cuts, and the view stretches a cylinder between them.
+- **Two new sim files:** `src/sim/entity.js` (`addEntity` / `dropEntity` / `clearEntities`, and the
+  only emitter of `entity-spawned` / `entity-removed`) and `src/sim/pilot.js`. `src/util/ids.js`
+  hands out ids from a counter, so adding an entity never touches the seeded RNG.
+- **Unchanged behaviour, proven.** An old-vs-new probe ran one seeded session through the previous
+  commit and this tree (real three.js maths, a fake scene) and fingerprinted the pilot, power,
+  every hostile, bullet, missile, crate, spark, rock, the lock and the hold after each stage:
+  **flight, turning, boost, firing, hits, missiles, damage, lock-on, mining, loot, pickup and
+  clearing all identical**. The only deliberate difference: a bolt's muzzle is now built from the
+  ship's data instead of its `matrixWorld`, which three.js keeps a frame behind — so bolts no longer
+  leave from where the guns were last frame (the documented stale-transform bug). With the probe
+  refreshing `matrixWorld` first, both trees agree to the last digit.
+- **Two bugs found and fixed while porting** (both would have changed play): mining must shrink the
+  rock's *data* (`scale`), because collision reads it, not just its mesh; and a rock's random shape
+  must be rolled *before* its position, in the same order as before, or a seed builds a different
+  field. Both are now pinned by the probe and by tests.
+- **`tests/layers.test.mjs`:** `asteroids.js`, `combat.js`, `effects.js`, `player.js` and `world.js`
+  left the `render/` allow-list. Two files remain and the test now says why: `sectors.js`
+  (`showSector` — scenery groups, step 10) and `weapons.js` (`camera.quaternion` for the lock cone,
+  step 8). New rules: no sim file's *code* may mention `Mesh`/`Group`/`Geometry`/`Material`/
+  `scene`/`matrixWorld`; a rock and the pilot's ship must be plain data; and `render/views.js` must
+  know every entity kind.
+- **New tests (182 in all):** `tests/headless-fight.test.mjs` (9) — the whole fight with no browser:
+  a shot's record, a hit, a kill with loot crates, a crate picked up or expiring, a homing missile,
+  mining a rock, clearing the world, and a check that the sim makes **no scene call at all**.
+  `tests/views.test.mjs` grew five: a bullet's mesh appears and goes, crates/sparks/rocks are drawn,
+  a missile is drawn from its record, the ship's model follows its record, and the beam's numbers.
+- **Save:** unchanged, version stays **12**. **Files:** `src/sim/{entity,pilot,missile}.js` (new),
+  `src/util/{ids}.js` (new), `src/sim/{combat,effects,weapons,player,asteroids,world,ai,targeting,sectors,session}.js`,
+  `src/render/{views,camera,models}.js`, `src/ui/hud.js`, `src/main.js`, `src/state/state.js`,
+  `src/util/{events,math}.js`, `tests/{headless-fight,views,layers,headless-sim}.test.mjs`,
+  `src/sim/README.md`, `src/render/README.md`, `docs/{ARCHITECTURE,TARGET_ARCHITECTURE,ROADMAP,REFACTOR_PLAN,HOW_TO_ADD,HANDOFF}.md`,
+  `TESTING-BASELINE.md` (new section G), this changelog and `CHANGELOG_ARCHIVE.md` (four oldest
+  entries moved out, index lines added). Run `npm run build` and `npm test`.
+- **`serve.mjs` (new, testing only):** `node serve.mjs` serves `game/tallow-reach.html` over HTTP
+  with caching off, so the owner can play the current build in a browser without copying files.
+  Nothing in `src/` imports it; the game is still built to one file by `npm run build`.
+- **Next:** step 7c (the player hull's own view class and mount points), then step 8.
+
+---
+
+## 2026-11-08: Step 7a ticked (docs only, no code change)
+
+- **Why:** the owner played the 7a build and reported that the raiders behave as usual and that
+  they are cleared when the field is cleared on docking. That was the one thing the slice waited
+  for, so 7a closes.
+- **Also settled:** clearing raiders on docking is **not** a 7a change and not a bug. `dock()` has
+  always called `clearTransient()` (pirates, bullets and missiles go; crates stay), and it does not
+  count as a kill. Whether that should change is a gameplay decision, still open and not started.
+- **State of the code, unchanged by this entry:** an enemy is a plain-data record
+  (`src/sim/enemy.js`), `render/views.js` draws it, and no `src/sim/` file touches an enemy's mesh.
+  165 tests green. Save version stays **12** (step 7 changes no saved data).
+- **Files:** `docs/ROADMAP.md` (7a ticked, current position and log), `docs/HANDOFF.md` (next action
+  is 7b), `docs/REFACTOR_PLAN.md` (slice 7a marked ticked), this changelog. No source changed, so no
+  rebuild is needed: the zip and the tag are the 7a build.
+- **Next:** step 7b, bullets, missiles, crates and particles as data with views.
+
+---
+
+## 2026-11-08: Refactor step 7a — a hostile becomes data; the mesh becomes a view
+
+- **Why:** an enemy *was* a three.js mesh (`sim/ai.js` built one with `mkShip`, and every system that
+  touched a hostile moved `e.m.position`). That is what stops the sim running on a host or in a test:
+  the rules could not run without a scene. Step 7 removes that for every entity; 7a does hostiles.
+- **A hostile is a record now** (`src/sim/enemy.js`):
+  `{ id, kind: "enemy", def, n, f, loot, hp, mx, pos, quat, v, fire, o }`. `pos` and `quat` are
+  three.js `Vector3`/`Quaternion` — maths types, which the target architecture allows — and no
+  `sim/` file holds a mesh. `enemyPos`/`enemyFwd`/`turnEnemy`/`enemyDist`/`enemyVel` are the only
+  ways to read its position and rotation, so the storage can change again in one file.
+- **`render/views.js` draws them.** It listens for `enemy-spawned` and builds the mesh from the def
+  (`mkShip(col, scale, true)`), copies `pos`/`quat` onto it once a frame, and removes it on
+  `enemy-removed` — which fires when a hostile is killed, drifts out of `lostRange`, or the field is
+  cleared by docking or a warp. A per-frame sweep reconciles the two lists so a mesh can never be
+  left behind or missing.
+- **Two files left the `render/` allow-list** in `tests/layers.test.mjs`: `ai.js` and `targeting.js`.
+  `combat.js` and `world.js` still import render/ for crates and the spark field (7b/7c).
+- **The station's position moved to the sim.** `STATION_POS` used to be exported from
+  `render/scene.js`; targeting needs it (lock the outpost) and may not import render/, so it is in
+  `sim/world.js` now and `ui/hud.js` reads it from there. It is still 0,0,0 — the outpost's mesh has
+  not moved.
+- **New tests (165 in all):** `tests/headless-sim.test.mjs` — the headless test step 7 asks for: one
+  raider, 600 ticks, no browser, checking it approached, turned to face the pilot and fired; plus
+  the kill, out-of-range and clear-the-field paths. `tests/views.test.mjs` — a mesh appears per
+  hostile from its def's colour and size, follows its data every frame, and goes away with it. Two
+  new layer tests: no `sim/` file may mention an enemy's mesh (`e.m`), and `render/views.js` is the
+  only place that builds one. `tests/headless.mjs` gained `opts.keep`, so a test can load one
+  `render/` file for real (that is how `views.js` is tested).
+- **Equivalence proof:** an old-vs-new probe ran one scripted fight (spawn, chase, shoot, kill, drop
+  loot, out-of-range removal, dock) through the previous commit and this tree, fingerprinting the
+  player and every hostile each tick: **2545 of 2545 frames identical**. The one new thing is each
+  enemy's `id`, which is what the view keys its mesh on.
+- **Save:** unchanged, version stays **12**. **Files:** `src/sim/enemy.js` (new),
+  `src/render/views.js` (new), `src/sim/{ai,combat,targeting,weapons,world}.js`, `src/util/math.js`
+  (`fwdQ`/`faceQ`), `src/util/events.js` (two events), `src/render/scene.js` (STATION_POS moved out),
+  `src/ui/hud.js`, `src/main.js`, `tests/{headless,layers,enemies,content}.test.mjs`,
+  `tests/headless-sim.test.mjs` (new), `tests/views.test.mjs` (new), `src/sim/README.md`,
+  `src/render/README.md`, `docs/{ARCHITECTURE,TARGET_ARCHITECTURE,HOW_TO_ADD,ROADMAP,HANDOFF}.md`,
+  this changelog. Run `npm run build` and `npm test`.
+
+---
+
+## 2026-11-08: Step 6 ticked in full (docs only, no code change)
+
+- **Why:** the owner played the 6b build and reported **no problems with the controls**. That was
+  the one thing 6b was waiting for, so step 6 closes.
+- **What was signed off:** `TESTING-BASELINE.md` section A (flight feel) and section B (mining,
+  guns, missiles). The lock ring resizing with the window was checked by the owner too.
+- **State of the code, unchanged by this entry:** no `src/sim/` file imports `core/` (no sound, no
+  keys, no mouse), the sim reads `state.controls`, and the lock ring is sized in `ui/hud.js`. 155
+  tests green. Save version stays **12** (step 6 changed no saved data).
+- **Files:** `docs/ROADMAP.md` (step 6 ticked, current position and log), `docs/HANDOFF.md` (next
+  action is step 7; the layers-test row no longer says "input (until 6b)"), this changelog. No
+  source changed, so no rebuild is required: the zip and the tag are the 6b build.
+- **Next:** step 7, entities as data and meshes as views, in three playable slices.
+
+---
+
 ## 2026-11-08: Refactor step 6b — the sim stops reading the keyboard (step 6 done)
 
 - **Why:** with 6a the sim no longer played sound; it still read the keyboard and the mouse

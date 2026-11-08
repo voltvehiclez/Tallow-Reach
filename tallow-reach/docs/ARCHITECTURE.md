@@ -352,11 +352,12 @@ Each `src/` folder also has its own short `README.md`.
   `id="shipview"` in `outfittingHtml`.
 - **The sim never reads the keyboard.** `core/input.js` is the only file that knows a key code.
   It fills `localPlayer().controls` (one plain record per pilot, shape in `src/state/controls.js`)
-  and the sim reads that. In 8b, `state.player` and `state.controls` are temporary aliases of the
-  local list entry; 8c must remove the systems' single-player assumptions. 8c is in progress:
-  pilot transform/mount helpers and projectile launch accept an explicit player, but flight,
-  power, inventory, damage, targets and lifecycle still assume the local player. `docs/REFACTOR_PLAN.md` step 6 chose this shape; it is the co-op contract, so do
-  not rename fields without saying so there: `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`,
+  and the sim reads that. Step 8c gives each player independent flight, power, drive, shield,
+  hull, equipped weapons, cooldowns and locks; `state.player`, `state.flight`, `state.power` and
+  related names alias the local record for existing UI and local-only systems. The sim advances
+  every active player; shared projectiles and enemies advance once, with AI selecting the nearest.
+  The remaining local-only assumptions are listed in `TARGET_ARCHITECTURE.md` for step 9.
+  Do not rename fields without saying so there: `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`,
   `stop`, `brake`, `boost`, `fire`, `sec`. Step 8b puts it on each player; step 16 will fill a
   guest's copy from the network. `tests/layers.test.mjs` fails if a `sim/` file mentions
   `keys`/`pointer`, or if `HELD` sets a field the record does not have.

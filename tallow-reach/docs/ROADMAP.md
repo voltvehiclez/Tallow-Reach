@@ -10,10 +10,13 @@
 and confirmed step 7c. The player hull has its own view and shared named mount data; sector
 scenery follows an event, and missile lock uses the previous camera direction supplied by
 `main.js`. The sim's render-import allow-list is empty. **7d registry cleanup is complete and ticked** after the owner's playtest.
-**Steps 8a and 8b are ticked after the owner's playtests; 8c is in progress, not complete.**
-Pilot transforms and projectile launches can name a player; most systems still assume the local
-player. 202 tests pass; save version remains 12. Gameplay ticks at 60 Hz; camera-derived missile
-aim and wall-clock asteroid respawn still limit full frame-rate independence.
+**Steps 8a and 8b are ticked after the owner's playtests. 8c is implemented and automated
+checks pass; owner playtest is pending.** Flight, drive, power, shield, hull damage, weapons,
+missiles, targeting and nearest-player enemy AI use independent player runtime. Inventory,
+economy, docking, contracts, death/recovery, saves and the other exceptions in the
+[still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-step-9-must-close-every-item)
+remain for step 9. 216 tests pass; save version remains 12. Gameplay ticks at 60 Hz; camera-derived
+missile aim and wall-clock asteroid respawn still limit full frame-rate independence.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -51,11 +54,11 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
 | 7 | Entities are data, meshes are views (7a enemies, 7b everything else in the world, 7c the hull's own view class) | B | [x] **2026-11-08: 7a, 7b and 7c complete; owner playtested 7c.** |
 | 7d | Entity view registry cleanup | B | [x] **2026-11-08: owner playtest passed.** |
-| 8 | Fixed time step and a list of players | B | [ ] **8a and 8b ticked; 8c started but incomplete.** |
+| 8 | Fixed time step and player-aware flight/combat | B | [ ] **8a and 8b ticked; 8c implemented, owner playtest and frame-rate validation pending.** |
 | 8a | Fixed simulation tick and old-versus-new flight tests | B | [x] **2026-11-08: owner playtest passed.** |
 | 8b | Player list, local player and per-player controls | B | [x] **2026-11-08: owner playtest passed.** |
-| 8c | Player-aware simulation systems | B | [ ] **In progress: transforms and projectile launch only.** |
-| 9 | Split the save: profile and world (save v13) | B | [ ] |
+| 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [ ] **Implemented; automated tests pass, owner playtest pending.** |
+| 9 | Split profile/world save and close every still-local-only item (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
 | 11 | Galaxy (100+ sectors) and starmap screen (save v15) | C | [ ] |
 | 12 | Encounters, sector templates, sector memory (save v16) | C | [ ] |

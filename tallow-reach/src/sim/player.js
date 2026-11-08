@@ -8,7 +8,7 @@ import { warpSteerEase } from "../data/sectors.js";
 import { sectorAt } from "../data/sectors.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 
-import { state, msg, localPlayer } from "../state/state.js";
+import { state, msg, localPlayer, createPlayerRuntime } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
 import { refreshHull } from "./hull.js";
@@ -46,6 +46,7 @@ function tryingToMove(c, stick) {
  */
 export function createPlayerRecord(controls = neutralControls()) {
   return {
+    ...createPlayerRuntime(),
     controls: { ...controls, steer: { ...controls.steer } },
     kind: "ship",
     pos: V(0, 0, 0),    // where the ship is (world metres)
@@ -89,15 +90,22 @@ export function setShip(id) {
 }
 
 /** Flight model. Mouse steers, WASD strafes and throttles, Shift boosts. */
-export function flight(dt) {
-  const P = state.player,
-    fc = state.freeCam,
+export function flight(dt, P = state.player, runtime = null) {
+  // Unconfigured non-local records cannot silently borrow the local fit.
+  if (P !== state.player && ((!P.configured && !runtime) || (!runtime && (P.drive === state.drive || P.power === state.power)) || (runtime &&
+      (!runtime.drive || !runtime.power || !runtime.profile || runtime.drive === state.drive ||
+       runtime.power === state.power || runtime.profile === state.profile)))) {
+    throw new Error("Non-local flight requires its own drive, power and profile");
+  }
+  const r = runtime || { drive: P.drive, power: P.power, profile: P === state.player ? state.profile : null,
+    freeCam: P === state.player ? state.freeCam : null, warp: P === state.player ? state.warp : P.warp };
+  const fc = r.freeCam || { on: false },
     c = P.controls;
 
   // A warp hands the controls to the drive: the throttle is released and the
   // stick eases back to neutral, so the ship coasts down and unwinds its turn
   // instead of stopping dead. Weapons are cut separately, in sim/weapons.js.
-  const W = state.warp;
+  const W = r.warp || null;
   const ease = W ? warpSteerEase(W.t) : 1;
   const stick = W
     ? W.steer
@@ -109,7 +117,7 @@ export function flight(dt) {
 
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
   // Speed and turn come from the fitted thrusters, not from the hull.
-  const drv = state.drive;
+  const drv = r.drive;
   const powered = hasDrive(drv);         // no thruster fitted: a dead ship
   const turn = drv.turn * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
 
@@ -118,7 +126,7 @@ export function flight(dt) {
   // so it reads as a reminder rather than a flicker.
   P.noDriveT = Math.max(0, P.noDriveT - dt);
   if (!W && !powered && P.noDriveT === 0 && tryingToMove(c, stick)) {
-    msg("Equip thrusters to move", NO_DRIVE_WARN);
+    if (P === state.player) msg("Equip thrusters to move", NO_DRIVE_WARN);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
   }
   // The ship turns on its own record; the view copies the rotation onto the model.
@@ -153,15 +161,15 @@ export function flight(dt) {
   // from last frame, so the extra starts the frame after it lights. Refilling the
   // boost meter is free — it never shows up in the draw, the way filling a car's
   // tank with fuel does not run the engine.
-  setDraw("drive", driveDraw(drv, P.thr, P.boost));
-  const supply = hasPower(state.power.draw);
+  setDraw("drive", driveDraw(drv, P.thr, P.boost), r.power);
+  const supply = hasPower(r.power.draw, r.power);
 
   // The boost: lighting it is the hungry moment. It costs one big slug of stored
   // energy (20 MJ on the basic thrusters) once the spool-up has finished and the
   // shake fires, and the cells have to hold that much for it to light at all.
   // A tank with only a splash left cannot light the boost: keep a little in reserve.
   const wantBoost = powered && !W && boostKey && P.en > drv.bmax * 0.05;
-  const canBoost = wantBoost && supply && state.power.stored >= (drv.ignite || 0);
+  const canBoost = wantBoost && supply && r.power.stored >= (drv.ignite || 0);
 
   const wasBoosting = P.boost;
   P.bs = canBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
@@ -170,7 +178,7 @@ export function flight(dt) {
     P.shake = 1;
     emit("sfx", { name: "boost" });
     // The ignition: one flat gulp out of the cells, not a trickle.
-    state.power.stored = Math.max(0, state.power.stored - (drv.ignite || 0));
+    r.power.stored = Math.max(0, r.power.stored - (drv.ignite || 0));
   }
   // The tank fills by itself whenever the boost is not burning. Both rates come
   // from the fitted thrusters, so a bigger tank or a thirstier boost is a change in
@@ -209,7 +217,7 @@ export function flight(dt) {
       P.pos.addScaledVector(normal, r - len);
       const speed = P.v.length();
       P.v.reflect(normal).multiplyScalar(0.4);
-      if (speed > 25) hurt(speed * 0.015);   // was 0.15 against a 100-point hull; the basic
+      if (speed > 25) hurt(speed * 0.015, P, r.profile);   // was 0.15 against a 100-point hull; the basic
                                              // hull has 10, so collision damage is 1/10th
     }
   }
@@ -223,8 +231,12 @@ export function flight(dt) {
 }
 
 /** Apply `d` damage: shields first, then hull. Emits "player-dead" at zero hull. */
-export function hurt(d) {
-  const P = state.player;
+export function hurt(d, P = state.player, profile = null) {
+  if (P !== state.player && ((!profile && !P.configured) || profile === state.profile)) {
+    throw new Error("Non-local damage requires its own profile");
+  }
+  // Saved hull fractions are local-profile only until step 9.
+  const S = profile || (P === state.player ? state.profile : null);
   P.last = state.time;
   emit("sfx", { name: "hit" });
   if (P.sh > 0) {
@@ -238,10 +250,14 @@ export function hurt(d) {
   }
   // Stamp the save with the fraction the ship is on, so damage is remembered
   // across fit changes, hangar visits and hull switches.
-  if (P.hullMax > 0) {
+  if (S && P.hullMax > 0) {
     const frac = clamp(P.hull / P.hullMax, 0, 1);
-    state.profile.hp[state.profile.ship] = Math.max(REPAIR_MIN_HULL, frac);
+    S.hp[S.ship] = Math.max(REPAIR_MIN_HULL, frac);
   }
-  emit("hurt", { shielded: P.sh > 0 });
-  if (P.hull <= 0) emit("player-dead");
+  emit("hurt", { shielded: P.sh > 0, player: P });
+  if (P.hull <= 0) {
+    // Non-local death/recovery is deliberately not implemented until step 9.
+    if (P !== state.player) P.dead = true;
+    emit("player-dead", { player: P });
+  }
 }

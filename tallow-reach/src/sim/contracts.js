@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: board, contract progress and rewards belong to state.profile.
 // Contracts: the offer board at the outpost and progress tracking while flying.
 // Progress is driven entirely by events, so new contract types only need
 // a generator in data/contracts.js and a listener here.

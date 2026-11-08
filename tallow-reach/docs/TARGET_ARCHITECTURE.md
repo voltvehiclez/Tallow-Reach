@@ -107,7 +107,7 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 
 ## Saves
 
-- Today there is one `profile` object (save version 11) holding everything. The target splits it
+- Today there is one `profile` object (save version 12) holding everything. The target splits it
   into `profile` and `world` (principle 5) inside the same save slot and export code, with a
   migration, so old saves keep working.
 - **Recommended co-op rule** (open question 6/7 in VISION.md): a guest brings their own profile
@@ -129,6 +129,25 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 - The host must keep the tab open and the game running (no pause in co-op).
 - What this needs from the code *today*: principles 2, 3, 4, 6, 7, 8 above. Nothing else.
 
+## Still local-only after step 8c (step 9 must close every item)
+
+8c has no networking and does not make a complete co-op game. The headless simulation can fly
+and fire two independent players, but the following code still assumes the local player/profile.
+**Step 9 must close every item in this table**, with save migration and tests, without silently
+crediting or changing the wrong player. It should prepare player presentation/input without
+adding network transport; networking remains step 16.
+
+| Still local-only | Current assumption / evidence |
+| --- | --- |
+| Inventory and pickups | `sim/inventory.js`, `sim/combat.js` and `sim/weapons.js` credit only `state.profile`. Non-local mining can cut rocks, but its accumulated ore is not credited to an inventory. |
+| Economy, outfitting and saved ammunition | `sim/economy.js`, `sim/fitting.js`, `sim/weapons.js`: purchases, credits, loadouts and saved missile stock are local. Another player's missile stock is transient only. |
+| Docking and launch | `sim/session.js` operates on `state.player`; docking also clears shared transient world entities. |
+| Contracts and rewards | `sim/contracts.js`, `sim/ai.js` and `sim/combat.js`: board, progress, spawn policy and kill statistics use the local profile regardless of who caused an event. |
+| Death and recovery | `sim/player.js` and `sim/session.js`: only the local player gets profile damage saved, ship loss, recovery and docking; another player is marked dead and cannot yet recover. |
+| Saves and profiles | `state/profile.js` and `state/storage.js`: a single local profile and save slots; other players' transient runtime is not saved. |
+| Warp and sector ownership | `sim/sectors.js` and `sim/step.js`: warp and the current sector are local/shared; non-local warp transitions are not implemented. |
+| Player presentation and input | `render/views.js`, `core/input.js`: the screen draws/follows the local ship and local beam, and input only fills local controls. No guest UI, remote input or transport exists yet. |
+
 ## Debt today (what the refactor closes)
 
 Each item names evidence so a new AI can verify it. The step that fixes it is in brackets.
@@ -138,7 +157,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | `sim/` imports the screen | **Closed in 7c:** sector entry emits an event; the frame loop supplies the camera direction used for missile lock. The render-import allow-list is empty. | — |
 | Entities are three.js meshes | **Closed (steps 7a and 7b):** every entity is a record with an `id` and a `kind` — an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. `render/views.js` owns every mesh | — |
 | Variable time step | **8a in progress:** gameplay now runs at fixed 60 Hz through `sim/step.js`; camera-derived missile aim and wall-clock asteroid respawn remain frame/time dependent. Owner playtested 8a successfully; full frame-rate independence remains open. | 8 |
-| One global player | **8b in progress:** `state.players` holds independent controls and `localPlayer()` selects the screen/input player. 8c has started: pilot transforms and projectile launch can name a player. Temporary `state.player`/`state.controls` aliases and global flight/power/profile, damage and inventory still assume one player; 8c remains incomplete. | 8 |
+| One global player | **8c implementation complete, owner playtest pending:** each active player has independent flight, power, drive, shield, hull, weapons and target state; enemies chase the nearest active player. Profile, lifecycle and other exceptions are listed in the table above. | 8 / 9 |
 | Single mixed save | `state/profile.js` holds character, station and mission together | 9 |
 | Sector geography in code | `FIELD_CENTER`, `FIELD_SECTOR` in `sim/world.js`; `launch()` in `sim/session.js` starts at the origin facing the field; `parked` rock lists in `sim/world.js` | 10 |
 | Current sector not saved | `state.sector` is runtime only | 10 |

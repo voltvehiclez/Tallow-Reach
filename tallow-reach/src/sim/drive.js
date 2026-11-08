@@ -1,7 +1,7 @@
 // The ship's drive: top speed and turn rate, taken from the thrusters fitted in
 // the thruster bay.
 //
-// Movement reads state.drive and nothing else, so swapping a thruster changes
+// Movement reads the acting player's drive (state.drive aliases the local one), so swapping a thruster changes
 // the way the ship flies the moment it is fitted. With no thruster fitted the
 // drive is 0 / 0 and the ship cannot move, turn or boost at all: undock with an
 // empty thruster bay and you hang in space until you dock again (G) and fit one.
@@ -22,7 +22,7 @@
 // sim/power.js. Refilling the boost meter costs nothing.
 //
 // Later thruster modules also carry acceleration and boost strength. Those land
-// in this file and in the flight model, which already reads state.drive.
+// in this file and in the flight model, which reads the acting player's drive.
 
 import { MODULES } from "../data/modules.js";
 import { state } from "../state/state.js";
@@ -75,13 +75,13 @@ export function driveDraw(drive, throttle, boosting) {
  * Rebuild state.drive from the save. Call after a fit change, a ship change,
  * loading a game, or undocking, the way sim/power.js refreshes state.power.
  */
-export function refreshDrive() {
-  const S = state.profile;
-  Object.assign(state.drive, driveOf((S.loadout || {})[S.ship]));
+export function refreshDrive(P = state.player, S = state.profile) {
+  if (P && P !== state.player && arguments.length < 2) throw new Error("Non-local fitting requires an explicit fit profile");
+  const drive = P?.drive || state.drive;
+  Object.assign(drive, driveOf((S.loadout || {})[S.ship]));
   // The boost tank belongs to the drive, so a new thruster means a new tank size.
   // Docked, the outpost fills it; in flight the fuel already aboard is kept.
-  const P = state.player;
   if (!P) return;
-  P.enMax = state.drive.bmax;
+  P.enMax = drive.bmax;
   P.en = P.docked ? P.enMax : Math.min(P.en, P.enMax);
 }

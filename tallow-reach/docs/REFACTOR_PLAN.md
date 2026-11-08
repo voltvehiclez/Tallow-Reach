@@ -212,7 +212,7 @@ reported the playtest passed.
 **Save.** None.
 
 ## Step 8: Fixed time step and a list of players
-**Goal.** The sim steps at a fixed rate and does not assume one player.
+**Goal.** The sim steps at a fixed rate; flight, drive, power, shield, hull damage, weapons, missiles, targeting and enemy AI act on individual players. Inventory, economy, docking, contracts, death/recovery and saves remain local-only until step 9.
 **Do.** `sim/step.js` exposes `stepSim(dt)`; `main.js` feeds it fixed steps (for example 1/60 s)
 from an accumulator. `state.player` becomes an entry in `state.players` with its own `controls`;
 `localPlayer()` is the one the screen follows. Systems take the player they act on. The flight feel
@@ -220,7 +220,7 @@ is **settled** and must be identical: add a test comparing the position after N 
 at the old variable step and the new fixed step.
 **Done when.** Single-player plays identically at 30, 60 and 144 fps (check with the browser's frame
 rate throttle if you can). Tests green.
-**Owner-approved slices** (each gets its own tests and playtest; no networking in these slices):
+**Owner-approved slices** (each gets tests; 8c is playtested only after all its sub-slices are done; no networking):
 - **8a — fixed simulation tick.** Move the gameplay updates to `sim/step.js`, feed them from a
   fixed-step accumulator, preserve pause and the existing long-frame cap, and compare flight with
   the old loop. **Ticked 2026-11-08:** the owner reports the playtest passed
@@ -231,13 +231,13 @@ rate throttle if you can). Tests green.
   the owner reported the playtest passed (`TESTING-BASELINE.md` section K). Temporary local-player
   compatibility aliases remain
   for systems to migrate in 8c.
-- **8c — player-aware systems.** Make the relevant simulation systems act on the player passed
-  to them instead of assuming one global player. Test independent players without adding
-  multiplayer transport. **In progress, not complete:** pilot transforms/mounts and projectile
-  launch accept an explicit player, with two-player tests. Flight, power, shields, weapons state,
-  combat hits, inventory, AI targeting, lifecycle, shared timers/events and the simulation loop
-  still assume the local player. Do not tick 8c or claim a working two-player sim until these
-  systems are isolated and tested together.
+- **8c — player-aware simulation.** Flight, drive, power, shields, hull damage, weapons,
+  missiles and targeting use the passed player's independent runtime. `stepSim` advances each
+  active pilot and shared projectiles/world once; enemies pursue the nearest active player.
+  **Implementation and automated checks complete; owner playtest pending** (section L of
+  `TESTING-BASELINE.md`). Two-player headless tests and scripted 8b flight and combat/lifecycle comparisons pass.
+  No multiplayer transport or guest UI. Inventory, economy, docking, contracts, death/recovery,
+  saves and the other exceptions in the still-local-only table remain step 9 work.
 
 **Before all of step 8 can be ticked:** resolve or explicitly validate the remaining frame-rate
 risks: missile lock currently samples the rendered camera, asteroid respawn uses a wall-clock
@@ -247,7 +247,8 @@ tests as proof that the entire game is frame-rate independent.
 **Save.** None.
 
 ## Step 9: Split the save into profile and world
-**Goal.** Portable character data apart from per-world data (TARGET_ARCHITECTURE principle 5).
+**Goal.** Portable character data apart from per-world data (TARGET_ARCHITECTURE principle 5), and remove the remaining local-player assumptions listed after 8c.
+**Required:** close every item in the [still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-step-9-must-close-every-item), with tests.
 **Do.** `profile` keeps credits, ships, loadouts, holds, hull damage, stats, the active mission and
 (later) campaign progress. `world` gets the station (base levels, store), the contract board and
 placeholders for the galaxy and current sector. Same save slots and export code carry both.

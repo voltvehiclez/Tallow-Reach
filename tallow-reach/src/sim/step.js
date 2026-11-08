@@ -6,6 +6,8 @@ import { updateShield } from "./shield.js";
 import { updatePower } from "./power.js";
 import { updateWarp } from "./sectors.js";
 import { updatePrimary, updateMissiles } from "./weapons.js";
+import { updateMissileFlight } from "./missile.js";
+import { pruneLock } from "./targeting.js";
 import { updateEnemies } from "./ai.js";
 import { updateBullets, updateCrates } from "./combat.js";
 import { updateEffects } from "./effects.js";
@@ -17,16 +19,27 @@ export function stepSim(dt) {
   // A hint lasts until the next sim tick, not just a display frame. This keeps
   // it visible when a display renders more than once between sim ticks.
   state.hud.prompt = "";
-  if (!state.player.docked) {
-    flight(dt);
-    updateShield(dt);
-    updatePower(dt);
-    updateWarp(dt);
-    updatePrimary(dt);
-    updateMissiles(dt);
+  // Local first preserves the old single-player ordering. Other players have
+  // independent per-ship runtime; shared world systems are stepped exactly once.
+  const local = state.player;
+  const active = state.players.filter(p => p && !p.docked && !p.dead);
+  const ordered = local && active.includes(local) ? [local, ...active.filter(p => p !== local)] : active;
+  for (const player of ordered) {
+    flight(dt, player);
+    updateShield(dt, player);
+    updatePower(dt, player);
+    // Sector/warp transition is still local-only until step 9.
+    if (player === local) updateWarp(dt);
+    updatePrimary(dt, player);
+    updateMissiles(dt, player, false);
+    if (player !== local) pruneLock(player);
+  }
+  if (ordered.length) {
+    updateMissileFlight(dt);
     updateEnemies(dt);
     updateBullets(dt);
-    updateCrates(dt);
+    // Inventory and pickup are intentionally local-only until step 9.
+    if (local && !local.docked) updateCrates(dt);
   }
   updateEffects(dt);
 }

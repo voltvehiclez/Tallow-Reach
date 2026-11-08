@@ -31,7 +31,8 @@ const ASTEROID_RESPAWN_MS = 30000;
  *  cannon slot (whatever the primary bays are holding), key 2 is the mining beam
  *  slot. A slot with nothing in it — the beam unbought, or every primary bay
  *  empty — is an "Empty weapon slot": left click does nothing. */
-export function setWeapon(name) {
+export function setWeapon(name, P = state.player) {
+  if (P !== state.player) { P.weapon = name; return; }
   const S = state.profile;
   S.pw = name;
   if (name === "beam")
@@ -42,40 +43,43 @@ export function setWeapon(name) {
 
 /** Primary fire: the fitted guns when held, or the mining beam if its slot is
  *  selected and one is fitted. */
-export function updatePrimary(dt) {
-  const F = state.flight,
-    S = state.profile,
-    P = state.player,
+export function updatePrimary(dt, P = state.player) {
+  const local = P === state.player,
+    F = P.flight, power = P.power,
+    ship = local ? state.profile.ship : P.ship,
+    weapon = local ? state.profile.pw : P.weapon,
     c = P.controls,
-    d = SHIPS[S.ship];
+    d = SHIPS[ship],
+    sayFor = text => { if (local) say(text); };
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.
-  state.guns.forEach((g, i) => {
+  P.guns.forEach((g, i) => {
     F.gunCd[i] = Math.max(0, (F.gunCd[i] || 0) - dt);
   });
 
   // Weapons are offline during a warp: no cannons, no beam, and nothing is drawn.
-  if (state.warp) {
-    setDraw("guns", 0);
+  if (local ? state.warp : P.warp) {
+    setDraw("guns", 0, power);
     F.beamOn = false;
     F.beamT = 0;
-    setDraw("beam", 0);
+    setDraw("beam", 0, power);
     return;   // render/views.js hides the beam when F.beamOn is false
   }
 
   // Guns: whichever primary bays hold a gun fire together on left click, each on
   // its own cooldown. Firing costs 2 MJ/s a gun, and a ship with no power to spare
   // fires nothing — the same rule the thrusters and shields follow.
-  const gunDraw = state.guns.reduce((sum, g) => sum + g.draw, 0);
-  const wantGuns = c.fire && S.pw !== "beam" && state.guns.length > 0;
+  const gunDraw = P.guns.reduce((sum, g) => sum + g.draw, 0);
+  const wantGuns = c.fire && weapon !== "beam" && P.guns.length > 0;
   // Compare against the rest of the ship's bill, so the guns are not counted twice.
-  const otherDraw = state.power.draw - (state.power.use.guns || 0);
-  const gunsOn = wantGuns && hasPower(otherDraw + gunDraw);
-  setDraw("guns", gunsOn ? gunDraw : 0);
+  const otherDraw = power.draw - (power.use.guns || 0);
+  const gunsOn = wantGuns && hasPower(otherDraw + gunDraw, power);
+  if (local) setDraw("guns", gunsOn ? gunDraw : 0);
+  else setDraw("guns", gunsOn ? gunDraw : 0, power);
 
   if (gunsOn) {
     let fired = false;
-    state.guns.forEach((g, i) => {
+    P.guns.forEach((g, i) => {
       if (F.gunCd[i] > 0) return;
       F.gunCd[i] = 1 / g.rate;
       fired = true;
@@ -88,7 +92,7 @@ export function updatePrimary(dt) {
         f = playerFwd(P);
       for (let b = 0; b < n; b++) {
         fire(
-          playerMount("gun", i, b, n, P, S.ship),
+          playerMount("gun", i, b, n, P, ship),
           f,
           g.speed,
           true,
@@ -106,10 +110,10 @@ export function updatePrimary(dt) {
   // seconds of uninterrupted contact with the same rock (scaled by the hull's
   // mine multiplier); the moment contact stops, the progress toward the next
   // ore is lost — the count starts over.
-  const beam = (state.beams || [])[0];
-  const beamOtherDraw = state.power.draw - (state.power.use.beam || 0);
+  const beam = (P.beams || [])[0];
+  const beamOtherDraw = power.draw - (power.use.beam || 0);
   F.beamOn = false;
-  if (c.fire && S.pw === "beam" && beam) {
+  if (c.fire && weapon === "beam" && beam) {
     // Find the nearest asteroid inside the beam cone.
     const f = playerFwd(P),
       pp = playerPos(P);
@@ -126,15 +130,15 @@ export function updatePrimary(dt) {
       }
     }
     if (!best) {
-      say("No asteroid in beam range");
-    } else if (holdLoad() >= d.cargo) {
-      say("Cargo hold full");
-    } else if (!hasPower(beamOtherDraw + beam.draw)) {
-      say("Not enough power");
+      sayFor("No asteroid in beam range");
+    } else if (local && holdLoad() >= d.cargo) {
+      sayFor("Cargo hold full");
+    } else if (!hasPower(beamOtherDraw + beam.draw, power)) {
+      sayFor("Not enough power");
     } else {
       // The beam cuts continuously. Draw it, charge for it, and bank whole ores
       // as they complete.
-      const start = playerMount("beam", 0, 0, 1, P, S.ship),
+      const start = playerMount("beam", 0, 0, 1, P, ship),
         end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5));
       // The sim says where the beam starts and stops; render/views.js draws it.
       F.beamOn = true;
@@ -143,7 +147,7 @@ export function updatePrimary(dt) {
 
       F.beamT = (F.beamT || 0) + dt * (d.mine || 1);
       const gained = Math.floor(F.beamT / beam.period);
-      say(`${itemName(best.type)}: ${Math.ceil(best.ore)} left in rock`);
+      sayFor(`${itemName(best.type)}: ${Math.ceil(best.ore)} left in rock`);
       if (gained > 0) {
         F.beamT -= gained * beam.period;
         best.ore = Math.max(0, best.ore - gained);
@@ -160,7 +164,8 @@ export function updatePrimary(dt) {
           setTimeout(spawnAsteroid, ASTEROID_RESPAWN_MS);
           F.beamT = 0;
         }
-        while (P.acc >= 1 && holdLoad() < d.cargo) {
+        // Inventory and cargo remain local-profile only until step 9.
+        while (local && P.acc >= 1 && holdLoad() < d.cargo) {
           if (!addItem(state.profile.ship, best.type, 1)) break;   // hold or stack is full
           P.acc--;
           emit("mined", { item: best.type });
@@ -168,13 +173,13 @@ export function updatePrimary(dt) {
       }
     }
   }
-  setDraw("beam", F.beamOn ? beam.draw : 0);
+  setDraw("beam", F.beamOn ? beam.draw : 0, power);
 
   // The moment contact stops — ship off the rock, trigger released, mine out of
   // reach — the progress toward the next ore is lost.
   if (!F.beamOn && F.beamT > 0) {
     F.beamT = 0;
-    say("Beam contact lost — the ore starts again");
+    sayFor("Beam contact lost — the ore starts again");
   }
 }
 
@@ -182,45 +187,46 @@ export function updatePrimary(dt) {
  * Secondary fire and missile lock-on. Hostiles that stay in the lock cone
  * for MISSILE.lock seconds become a locked target.
  */
-export function updateMissiles(dt) {
-  const F = state.flight,
-    S = state.profile,
-    P = state.player,
+export function updateMissiles(dt, P = state.player, advanceWorld = true) {
+  const local = P === state.player,
+    F = P.flight,
     c = P.controls,
+    sayFor = text => { if (local) say(text); },
     W = state.world,
     ML = F.missileLock;
 
   F.missileCd -= dt;
 
   // No lock-on or launches during a warp. Missiles already away keep flying.
-  if (state.warp) {
+  if (local ? state.warp : P.warp) {
     F.coneAngle = 0;
     ML.target = null;
     ML.locked = false;
     ML.t = 0;
-    updateMissileFlight(dt);
+    if (advanceWorld) updateMissileFlight(dt);
     return;
   }
 
   // Which fitted launcher (if any) decides the damage, the stock and the reload.
-  const launcher = (state.missiles || [])[0];
+  const launcher = (P.missiles || [])[0];
   if (!launcher) {
     F.coneAngle = 0;
     ML.target = null;
     ML.locked = false;
     ML.t = 0;
-    if (c.sec) say("No secondary weapon installed");
+    if (c.sec) sayFor("No secondary weapon installed");
   } else {
     // The lock cone, in degrees. The sim stops here: turning it into the ring's
     // radius on screen needs the camera and the window size, which belong to
     // ui/hud.js (step 6b). The sim says the angle; the HUD draws it.
     F.coneAngle = MISSILE.cone;
 
-    const cf = V(state.aimDirection.x, state.aimDirection.y, state.aimDirection.z),
+    const aim = local ? state.aimDirection : (P.aimDirection || playerFwd(P));
+    const cf = V(aim.x, aim.y, aim.z),
       pp = playerPos(P);
     let best = null,
       bestAngle = (MISSILE.cone * Math.PI) / 180;
-    if (!state.freeCam.on) {
+    if (!local || !state.freeCam.on) {
       for (const e of W.enemies) {
         const q = enemyPos(e).clone().sub(pp),
           d = q.length();
@@ -246,11 +252,11 @@ export function updateMissiles(dt) {
     }
 
     if (ML.target) {
-      say(ML.locked ? "MISSILE LOCK" : "Acquiring lock " + Math.round(Math.min(1, ML.t / MISSILE.lock) * 100) + "%");
+      sayFor(ML.locked ? "MISSILE LOCK" : "Acquiring lock " + Math.round(Math.min(1, ML.t / MISSILE.lock) * 100) + "%");
     }
 
     if (c.sec && F.missileCd <= 0) {
-      if (S.msl <= 0) say("Out of missiles");
+      if ((local ? state.profile.msl : P.missileStock) <= 0) sayFor("Out of missiles");
       else {
         fireMissile(ML.locked ? ML.target : null, launcher, P);
         F.missileCd = launcher.cd;
@@ -258,13 +264,15 @@ export function updateMissiles(dt) {
     }
   }
 
-  updateMissileFlight(dt);
+  if (advanceWorld) updateMissileFlight(dt);
 }
 
 function fireMissile(target, launcher, player) {
-  const S = state.profile;
-  S.msl--;
+  // Missile stock in the saved profile belongs only to the local player (step 9).
+  const local = player === state.player;
+  const ship = local ? state.profile.ship : player.ship;
+  if (local) state.profile.msl--; else player.missileStock--;
   // The missile itself is a record (`sim/missile.js`); its body and trail are
   // render/views.js's business.
-  launchMissile(target, launcher, playerFwd(player), playerMount("missile", 0, 0, 1, player, S.ship), player);
+  launchMissile(target, launcher, playerFwd(player), playerMount("missile", 0, 0, 1, player, ship), player);
 }

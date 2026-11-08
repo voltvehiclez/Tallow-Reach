@@ -73,12 +73,12 @@ export function shieldDraw(shield) {
  * save load or a dock, the way sim/drive.js refreshes the drive. While docked the
  * new shields are filled, because the outpost services the ship.
  */
-export function refreshShield() {
-  const S = state.profile;
-  Object.assign(state.shield, shieldOf((S.loadout || {})[S.ship]));
-  const P = state.player;
+export function refreshShield(P = state.player, S = state.profile) {
+  if (P && P !== state.player && arguments.length < 2) throw new Error("Non-local fitting requires an explicit fit profile");
+  const shield = P?.shield || state.shield;
+  Object.assign(shield, shieldOf((S.loadout || {})[S.ship]));
   if (!P) return;
-  P.shMax = state.shield.cap;
+  P.shMax = shield.cap;
   P.sh = P.docked ? P.shMax : Math.min(P.sh, P.shMax);
 }
 
@@ -88,23 +88,29 @@ export function refreshShield() {
  * power to pay the bill the shields bleed away instead, and if they reach 0 they
  * stay there until the ship can supply `draw` again.
  */
-export function updateShield(dt) {
-  const P = state.player;
+export function updateShield(dt, P = state.player, sh = null, power = null) {
   if (!P) return;
-  const sh = state.shield;
+  if (P !== state.player && ((!P.configured && (!sh || !power)) || power === state.power || sh === state.shield)) {
+    throw new Error("Non-local shield updates require their own shield and power");
+  }
+  sh = sh || P.shield || state.shield;
+  power = power || P.power || state.power;
+  if (P !== state.player && (sh === state.shield || power === state.power)) {
+    throw new Error("Non-local shield updates require their own shield and power");
+  }
 
   if (P.shMax <= 0) {
     P.sh = 0;                       // no shield module: nothing to run or recharge
-    setDraw("shield", 0);
+    setDraw("shield", 0, power);
     return;
   }
 
   // One flat bill while they are up, whatever they are doing.
-  setDraw("shield", shieldDraw(sh));
+  setDraw("shield", shieldDraw(sh), power);
 
   // Cannot pay for them: the field collapses, slowly, and does not come back
   // until the ship can supply the draw again.
-  if (!hasPower(state.power.draw)) {
+  if (!hasPower(power.draw, power)) {
     P.sh = Math.max(0, P.sh - sh.drain * dt);
     return;
   }

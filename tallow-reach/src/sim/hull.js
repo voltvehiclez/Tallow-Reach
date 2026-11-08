@@ -48,11 +48,11 @@ export function hullOf(loadout) {
  * sim/shield.js refreshes the shields. The saved fraction (profile.hp[ship])
  * is applied: nothing here repairs the ship.
  */
-export function refreshHull() {
-  const S = state.profile;
+export function refreshHull(P = state.player, S = state.profile) {
+  if (P && P !== state.player && arguments.length < 2) throw new Error("Non-local fitting requires an explicit fit profile");
   const cap = hullOf((S.loadout || {})[S.ship]);
-  state.hull = { cap };
-  const P = state.player;
+  if (P) P.hullSpec = { cap };
+  else state.hull = { cap };
   if (!P) return;
   P.hullMax = cap;
   P.hull = cap * clamp(S.hp[S.ship] ?? 1, 0, 1);

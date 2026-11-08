@@ -18,3 +18,5 @@ Rules:
 - **A new entity kind is drawn here, never in `sim/`.** Give it a `kind` in its record and register its list, mesh builder, per-frame updater and
   cleanup in `views.js` (see recipe 19 in `docs/HOW_TO_ADD.md`); `tests/layers.test.mjs` fails if a `sim/` file's code names a mesh, a material
   or the scene, and `tests/views.test.mjs` counts the meshes.
+
+The current player hull and beam views follow the **local** player only; see the still-local-only table in `docs/TARGET_ARCHITECTURE.md`.

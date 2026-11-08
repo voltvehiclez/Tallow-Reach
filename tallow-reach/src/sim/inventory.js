@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: all stock, capacities and transfers use state.profile, never another pilot.
 // Inventory: where things are kept, how much room there is, and moving things.
 //
 // There are two kinds of place, and both are measured in m³:

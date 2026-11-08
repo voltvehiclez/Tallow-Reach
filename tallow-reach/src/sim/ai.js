@@ -63,17 +63,30 @@ export function spawnEnemy(id, pos) {
   return e;
 }
 
+/** Nearest active pilot, with list order breaking equal-distance ties. */
+export function nearestPlayer(pos, players = state.players) {
+  let best = null, bestDist = Infinity;
+  for (const player of players) {
+    if (!player || player.docked || player.dead) continue;
+    const d = player.pos.distanceToSquared(pos);
+    if (d < bestDist) { bestDist = d; best = player; }
+  }
+  return best;
+}
+
 /** Per-frame update for hostiles, plus the spawner that keeps them coming. */
 export function updateEnemies(dt) {
   const W = state.world,
     F = state.flight,
     S = state.profile,
-    pp = playerPos(),        // the pilot's ship is a record too (step 7b)
     E = W.enemies;
 
   for (let i = E.length - 1; i >= 0; i--) {
     const e = E[i];
     if (!e) continue;
+    const target = nearestPlayer(e.pos);
+    if (!target) continue;
+    const pp = playerPos(target);
     const def = enemyDef(e.def);
     const toPlayer = pp.clone().sub(e.pos),
       dist = toPlayer.length();
@@ -101,6 +114,9 @@ export function updateEnemies(dt) {
 
   // Spawner: hunt contracts send their target enemy in, and wandering pirates
   // show up occasionally when you are near the asteroid field.
+  // Contract and ambient spawn policy still follows the local profile (step 9).
+  if (!state.player || state.player.docked) return;
+  const pp = playerPos(state.player);
   F.spawnT -= dt;
   if (F.spawnT <= 0) {
     F.spawnT = R(4, 8);

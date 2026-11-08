@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: outfitting mutates the local profile and local ship.
 // Moving modules between the ship and storage.
 //
 // Fitting costs nothing and is done at the outpost: a part comes out of storage

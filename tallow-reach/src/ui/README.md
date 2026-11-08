@@ -4,7 +4,7 @@ Reads `state`, calls sim actions. No game rules here.
 
 | File | What it does |
 |---|---|
-| `hud.js` | In-flight HUD: bars, cargo and contract readout, lock ring, markers, and the beam progress bar with percentage (small, directly under the "left in rock" hint, shown only while the beam is cutting). Hints persist until the next sim tick so high-refresh screens do not flicker. |
+| `hud.js` | In-flight HUD (ignores hurt events for other players): bars, cargo and contract readout, lock ring, markers, and the beam progress bar with percentage (small, directly under the "left in rock" hint, shown only while the beam is cutting). Hints persist until the next sim tick so high-refresh screens do not flicker. |
 | `screens.js` | HTML for the intro and each outpost tab. Pure functions of state. `TABS` and `SCREENS` list the tabs. The Shop tab draws whatever `shopList(OUTPOST_SHOP)` returns from `data/shops.js` — its rows, prices and "N left" — so a new row is a data edit. The Inventory tab shows the station's store above one ship's hold (arrows browse the ships; `viewedShip()`), each in a compact grid of clickable item tiles with m³. Click moves one item, Shift-click moves the whole stack, and right-click opens item actions such as Sell. Selling opens a small in-game box beside the selected item to enter a quantity, defaulting to the full stack. Each hold uses a fixed 5-by-5 slot field with a three-row viewport; both grids scroll independently, even when mostly empty. |
 | `menu.js` | The outpost panel: `ACTIONS` (one function per button, `data-a` name) and the click handler. |
 | `picker.js` | Which Outfitting bay picker is open: `toggleModulePicker`, `togglePaintPicker`. Pure, one at a time, tested in `tests/picker.test.mjs`. |

@@ -1,3 +1,4 @@
+// STEP 9 LOCAL-ONLY: the player hull and beam view follow only the local player.
 // Views: one mesh per entity, built and kept in step by this file.
 //
 // Refactor step 7 moved every world entity out of `sim/` and into plain data
