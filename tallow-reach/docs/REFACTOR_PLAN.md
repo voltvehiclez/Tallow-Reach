@@ -197,7 +197,7 @@ Each slice is playable on its own. Positions are plain `{x,y,z}` data (or keep t
 vectors/quaternions as maths types, which is fine; just no meshes, scenes or materials in `sim/`).
 **Done when.** The `render/` allow-list in the layer test is empty. A new **headless sim test**
 builds a world, spawns an enemy, steps 600 ticks with no browser and checks the enemy approached and
-shot. The game plays as before.
+shot. The game plays as before. Mount points to be data-driven and named, so a model can supply them later.
 **Save.** None.
 
 ## Step 8: Fixed time step and a list of players
