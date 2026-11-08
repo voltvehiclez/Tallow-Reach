@@ -19,6 +19,36 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 9 complete and ticked — Milestone B reached
+
+- The owner reported the step 9 playtest passed. Ticked step 9 across `docs/ROADMAP.md`,
+  `docs/REFACTOR_PLAN.md`, `docs/TARGET_ARCHITECTURE.md` and `docs/HANDOFF.md`; **Milestone B**
+  (simulation-pure, fixed-step, player-aware, split-save core) is now complete.
+- No gameplay or save changes in this entry (save version remains **13**, 225 tests green). Next is
+  **Milestone C — step 10** (sector definitions and saving `world.sector`, save v14).
+
+---
+
+## 2026-11-08: Step 8 ticked; step 9 split saves (v13) and per-pilot rules — playtest pending
+
+- Closed step 8 overall after the owner validated smooth 240 Hz play without tick interpolation
+  (parking the two minor aim/respawn caveats in `docs/ROADMAP.md`), and aligned the local-only
+  ownership table in `docs/TARGET_ARCHITECTURE.md` across steps 9, 10 and 16.
+- Bumped `SAVE_VERSION` to **13** (`src/state/profile.js`, `src/state/storage.js`,
+  `src/state/state.js`): saves split into `{ v: 13, profile, world }` (`state.profile` +
+  `state.worldState`) with automatic migration from v1..v12 saves and `TR1:` codes, `sanitizeWorld`
+  walking `BASE_MODULES` directly, and pure `portableProfile` / `mergeProfile` co-op helpers.
+  Storage keys (`tr1`, `tr_s1`..`tr_s3`) and `TR1:` are unchanged.
+- Closed all five step-9-owned local-only areas across `src/sim/{inventory,fitting,economy,contracts,session,player,weapons,combat,missile,ai,step}.js`
+  and `src/ui/{hud,menu,screens}.js`: per-pilot holds, mining, crate pickup (even while local is
+  docked), outfitting, purchases, missile persistence, contract progress/spawning, kill attribution,
+  and per-pilot launch/dock without wiping another active pilot's fight.
+- Added `tests/saves/v12-real.json`, `tests/step9-save.test.mjs` and `tests/step9-local-only.test.mjs`;
+  all **225 tests** pass, and both 8b single-player oracle scripts match exactly. Rebuild required
+  (`npm run build`); owner playtest pending (`TESTING-BASELINE.md` section M).
+
+---
+
 ## 2026-11-08: Step 8c owner playtest passed
 
 - The owner reports the 8c playtest works. Ticked 8c in the roadmap and refactor plan; no code

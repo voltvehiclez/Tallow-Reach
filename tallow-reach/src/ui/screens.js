@@ -78,7 +78,7 @@ export function outpostHtml(ui) {
   return h;
 }
 
-function contractsHtml(ui) {
+function contractsHtml() {
   const m = state.profile.mission;
   if (m) {
     return `<h2>Active contract</h2><div class="row"><div>${describe(m)}<small>Progress ${m.p}/${m.n}. Reward ${m.r} cr.</small></div>${
@@ -87,7 +87,7 @@ function contractsHtml(ui) {
   }
   return (
     `<h2>Contract board</h2>` +
-    ui.board
+    state.worldState.board
       .map(
         (c, i) =>
           `<div class="row"><div>${describe(c)}<small>Threat ${c.tier} of 3. Reward ${c.r} cr.</small></div><button data-a="acc" data-b="${i}">Accept</button></div>`
@@ -98,7 +98,8 @@ function contractsHtml(ui) {
 }
 
 function hangarHtml() {
-  const S = state.profile;
+  const S = state.profile,
+    W = state.worldState;
 
   return (
     `<h2>Hangar</h2><div class="sub">Repairs and missile restock live in the Outfitting tab now.</div>` +
@@ -112,7 +113,7 @@ function hangarHtml() {
             ? `<span class="ok">In use</span>`
             : `<button data-a="sel" data-b="${id}">Fly</button>`
           : `<button data-a="buy" data-b="${id}" ${
-              S.cr < s.price || S.ships.length >= S.base.hangar + 1 ? "disabled" : ""
+              S.cr < s.price || S.ships.length >= W.base.hangar + 1 ? "disabled" : ""
             }>Buy ${s.price} cr</button>`;
         return `<div class="row"><div>${s.n}<small>${s.d} Hull HP ${hp}, hold ${s.cargo} m³.</small></div>${action}</div>`;
       })
@@ -334,6 +335,7 @@ function outfittingHtml() {
 
 function baseHtml() {
   const S = state.profile,
+    W = state.worldState,
     ship = SHIPS[S.ship],
     cargo = stockOf(S.ship);
   const load = holdLoad(),
@@ -343,29 +345,29 @@ function baseHtml() {
   // modules alike. A part fitted in a bay is in no place, so it is not for sale.
   const sellable = stock => Object.keys(stock || {}).filter(id => isItem(id) && canSell(id)).length;
   const sellHeld = sellable(cargo),
-    sellStored = sellable(S.store);
+    sellStored = sellable(W.store);
 
   let h =
     `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. Storage ${used}/${cap} m³. Refinery bonus +${Math.round(
-      REFINERY_BONUS_PER_LEVEL * 100 * S.base.refinery
+      REFINERY_BONUS_PER_LEVEL * 100 * W.base.refinery
     )}%.</div>` +
     ITEM_IDS.filter(id => !isModule(id))
       .map(
         id =>
-          `<div class="row"><div>${itemName(id)}<small>${cargo[id] || 0} in hold, ${S.store[id] || 0} stored, ${itemValue(id)} cr each</small></div></div>`
+          `<div class="row"><div>${itemName(id)}<small>${cargo[id] || 0} in hold, ${W.store[id] || 0} stored, ${itemValue(id)} cr each</small></div></div>`
       )
       .join("") +
     `<div class="row"><button data-a="dep">Store hold</button><button data-a="wd">Load stored</button><button data-a="sellh" ${
       sellHeld ? "" : "disabled"
     }>Sell hold ${valueOf(cargo)} cr</button><button data-a="sells" ${
       sellStored ? "" : "disabled"
-    }>Sell stored ${valueOf(S.store)} cr</button></div>` +
+    }>Sell stored ${valueOf(W.store)} cr</button></div>` +
     `<div class="sub">Selling takes ore, salvage and spare modules from the hold or the station, and leaves parts fitted on a ship alone.</div><h2>Base modules</h2>`;
 
   h += Object.keys(BASE_MODULES)
     .map(k => {
       const mdef = BASE_MODULES[k],
-        level = S.base[k],
+        level = W.base[k],
         cost = mdef.cost(level),
         maxed = level >= mdef.max;
       return `<div class="row"><div>${mdef.n} level ${level}<small>${mdef.d}</small></div><button data-a="up" data-b="${k}" ${
@@ -476,15 +478,22 @@ function inventoryHtml(ui) {
   );
 }
 
+function slotSummary(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const p = raw.profile && typeof raw.profile === "object" ? raw.profile : raw;
+  if (!Array.isArray(p.ships)) return null;
+  return `${Math.max(0, Math.floor(+p.cr || 0))} cr, ${p.ships.length} ships, ${Math.max(0, Math.floor(+p.done || 0))} contracts`;
+}
+
 function savesHtml(ui) {
-  const S = state.profile;
   const slotRows = Array.from({ length: SLOT_COUNT }, (_, i) => {
     const n = i + 1,
-      s = readSlot(n);
+      s = readSlot(n),
+      summary = slotSummary(s);
     return `<div class="row"><div>Slot ${n}<small>${
-      s ? `${s.cr} cr, ${s.ships.length} ships, ${s.done} contracts` : "Empty"
+      summary || "Empty"
     }</small></div><div><button data-a="sv" data-b="${n}">Save</button> <button data-a="ld" data-b="${n}" ${
-      s ? "" : "disabled"
+      summary ? "" : "disabled"
     }>Load</button> <button data-a="dl" data-b="${n}" ${s ? "" : "disabled"}>Delete</button></div></div>`;
   }).join("");
 

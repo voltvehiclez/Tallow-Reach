@@ -1,7 +1,9 @@
 // Runtime state for the current session. Persistent progress lives in
-// state.profile (see profile.js). Everything else is rebuilt on load.
+// `state.profile` (portable character) and `state.worldState` (hosted world),
+// packed together as `{ v, profile, world }` (see profile.js). Everything else
+// is rebuilt on load.
 
-import { newProfile } from "./profile.js";
+import { newProfile, newWorld, SAVE_VERSION } from "./profile.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
 import { DEFAULT_SECTOR } from "../data/sectors.js";
@@ -11,8 +13,8 @@ import { DEFAULT_SECTOR } from "../data/sectors.js";
 let pendingControls = neutralControls();
 const copyControls = c => ({ ...c, steer: { ...c.steer } });
 
-// Per-pilot runtime values. Profile, inventory and lifecycle remain local-only
-// until step 9; these fields are transient and never written into the save.
+// Per-pilot runtime values. Transient fields are never written into the save;
+// `profile` points to the pilot's persistent profile once configured.
 export function createPlayerRuntime() {
   return {
     flight: { lock: null, missileLock: { target: null, t: 0, locked: false },
@@ -21,7 +23,7 @@ export function createPlayerRuntime() {
     power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0, guns: 0, beam: 0 } },
     drive: { spd: 0, turn: 0 }, shield: { cap: 0, regen: 0, delay: 0 }, hullSpec: { cap: 0 },
     guns: [], beams: [], missiles: [], ship: DEFAULT_SHIP, weapon: "cannon", missileStock: 0,
-    aimDirection: null, warp: null, configured: false,
+    aimDirection: null, warp: null, profile: null, configured: false,
   };
 }
 
@@ -30,11 +32,44 @@ const initialRuntime = createPlayerRuntime();
 /** The player followed by the local screen, or null before it is created. */
 export const localPlayer = () => state.players[state.localPlayerIndex] || null;
 
+/**
+ * Persistent profile for `player`: `state.profile` for the local pilot (or when
+ * `player` is omitted), `player.profile` for any non-local pilot.
+ */
+export function profileOf(player = localPlayer()) {
+  if (!player || player === localPlayer()) return state.profile;
+  return player.profile || null;
+}
+
+/** Snapshot the local profile and hosted world as a combined save object. */
+export function currentSave() {
+  return {
+    v: SAVE_VERSION,
+    profile: state.profile,
+    world: state.worldState,
+  };
+}
+
+/** Install a validated `{ v, profile, world }` save into runtime state. */
+export function applySave(save) {
+  state.profile = save.profile;
+  state.worldState = save.world;
+  const local = localPlayer();
+  if (local) {
+    local.profile = state.profile;
+    local.ship = state.profile.ship;
+    local.weapon = state.profile.pw;
+    local.missileStock = state.profile.msl;
+  }
+  return save;
+}
+
 export const state = {
   profile: newProfile(),
+  worldState: newWorld(),
   players: [],         // player records, including their own controls
   localPlayerIndex: 0,  // which player this screen and its input follow
-  // Local-player compatibility alias for the local UI and step 9 systems.
+  // Local-player compatibility alias for the local UI and single-player callers.
   get player() { return localPlayer(); },
   set player(player) {
     const previous = localPlayer();
@@ -93,7 +128,12 @@ export const state = {
     tab: "m",          // m contracts, h hangar, o outfitting, i inventory, p shop, b base, s saves
     invShip: null,     // the ship whose hold the Inventory tab shows (null = the one being flown)
     toast: "",         // green message at the top of the panel
-    board: [],         // contract offers
+    get board() {
+      return state.worldState.board;
+    },
+    set board(v) {
+      state.worldState.board = Array.isArray(v) ? v : [];
+    },
     confirmReset: false,
     fit: null,         // the open picker: { kind: "module", g, i } or { kind: "paint", k }
     xcode: "",         // last exported or pasted save code
@@ -106,14 +146,13 @@ export const state = {
   },
 
   // How much a limited shop row has left: `{ "shopId:itemId": count }`, made on
-  // first use and stamped from the shop's `max` (data/shops.js). Only shops with
-  // a `max` on a row are ever in here: an unlimited row has no entry. Session
-  // state, not saved — a restock timer, event or roll later resets it through
-  // `setShopStock()` in sim/economy.js, and save step 9 moves it into the world.
+  // first use and stamped from the shop's `max` (data/shops.js). Session state,
+  // not saved — a restock timer, event or roll later resets it through
+  // `setShopStock()` in sim/economy.js.
   shops: {},
 };
 
-// Compatibility aliases for the existing local UI and local-only step 9 systems.
+// Compatibility aliases for the existing local UI and single-player callers.
 // The authoritative live runtime values belong to the selected player record.
 const runtimeFields = { flight: "flight", power: "power", drive: "drive", shield: "shield",
   hull: "hullSpec", guns: "guns", beams: "beams", missiles: "missiles" };

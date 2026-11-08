@@ -4,8 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { state } from "../src/state/state.js";
-import { newProfile, sanitizeProfile, SAVE_VERSION } from "../src/state/profile.js";
+import { state, applySave } from "../src/state/state.js";
+import { newSave, sanitizeProfile, sanitizeWorld, sanitizeSave, SAVE_VERSION } from "../src/state/profile.js";
 import { MODULES } from "../src/data/modules.js";
 import { ITEMS, itemName, itemVol, isModule } from "../src/data/items.js";
 import { SHIPS } from "../src/data/ships.js";
@@ -21,7 +21,7 @@ import {
 
 /** A new game, as if it had just booted docked at the outpost. */
 function freshGame() {
-  state.profile = newProfile();
+  applySave(newSave());
   refillPower();
   refreshDrive();
   state.player = { sh: 0, shMax: 0, last: 0, docked: true };
@@ -29,6 +29,7 @@ function freshGame() {
   return state.profile;
 }
 
+const W = () => state.worldState;
 const WASP_HOLD = SHIPS.wasp.cargo;
 const V11_SAVE = JSON.parse(readFileSync(new URL("./saves/v11-real.json", import.meta.url), "utf8"));
 
@@ -43,7 +44,7 @@ test("a new game has an empty hold per ship and an empty station", () => {
   assert.equal(p.v, SAVE_VERSION);
   assert.deepEqual(Object.keys(p.holds), ["wasp"]);
   assert.deepEqual(p.holds.wasp, {}, "a hold is one stock, empty to begin with");
-  assert.deepEqual(p.store, {}, "so is the station's storage");
+  assert.deepEqual(W().store, {}, "so is the station's storage");
   assert.equal(p.modules, undefined, "there is no separate list of spare parts any more");
   assert.equal(loadOf(STATION), 0);
   assert.equal(loadOf("wasp"), 0);
@@ -53,14 +54,15 @@ test("a new game has an empty hold per ship and an empty station", () => {
 });
 
 test("a real v11 save converts to one stock per place", () => {
-  const p = sanitizeProfile(V11_SAVE);
-  state.profile = p;                    // the place helpers read the live save
-  assert.equal(p.v, SAVE_VERSION);
+  const s = sanitizeSave(V11_SAVE);
+  applySave(s);                         // the place helpers read the live save
+  const p = s.profile;
+  assert.equal(s.v, SAVE_VERSION);
   assert.equal(p.modules, undefined, "the old modules list left the save");
   assert.equal(p.v > 11, true, "the version moved on");
 
   // Station: the old goods and the old parts list, poured into one stock.
-  assert.deepEqual(p.store, { ferrite: 12, salv: 3, beam_basic: 1, cannon_basic: 2 });
+  assert.deepEqual(s.world.store, { ferrite: 12, salv: 3, beam_basic: 1, cannon_basic: 2 });
   assert.equal(countOf(STATION, "cannon_basic"), 2, "two of the same part still stack");
   // The ship: its cargo plus the spare part it was hauling.
   assert.deepEqual(p.holds.wasp, { ferrite: 5, core: 1, thruster_basic: 1 });
@@ -70,8 +72,8 @@ test("a real v11 save converts to one stock per place", () => {
   assert.equal(p.done, 4);
   assert.equal(p.kills, 17);
   assert.deepEqual(p.loadout.wasp.primary, ["cannon_basic", null]);
-  // Converting again changes nothing: a v12 save is already one stock per place.
-  assert.deepEqual(sanitizeProfile(p), p);
+  // Converting again changes nothing.
+  assert.deepEqual(sanitizeSave(s), s);
 });
 
 test("a save from before 11 gives its single cargo to the ship being flown", () => {
@@ -79,13 +81,14 @@ test("a save from before 11 gives its single cargo to the ship being flown", () 
     v: 10, cr: 100, cargo: { ferrite: 4, core: 1 }, store: { cobalt: 7 },
     ships: ["wasp", "bulwark"], ship: "bulwark", modules: ["cannon_basic", "cannon_basic"],
   };
-  const p = sanitizeProfile(old);
-  assert.equal(p.v, SAVE_VERSION);
+  const s = sanitizeSave(old);
+  const p = s.profile;
+  assert.equal(s.v, SAVE_VERSION);
   assert.equal(p.cargo, undefined, "the old single cargo is gone");
   assert.deepEqual(p.holds.bulwark, { ferrite: 4, core: 1 }, "the flown ship carries what it was carrying");
   assert.deepEqual(p.holds.wasp, {}, "the other ship starts with an empty hold");
-  assert.equal(p.store.cobalt, 7, "station ore is untouched");
-  assert.equal(p.store.cannon_basic, 2, "and the station's parts went into the same stock (and can repeat)");
+  assert.equal(s.world.store.cobalt, 7, "station ore is untouched");
+  assert.equal(s.world.store.cannon_basic, 2, "and the station's parts went into the same stock (and can repeat)");
 });
 
 test("a new-format save round-trips, and bad stocks are cleaned", () => {
@@ -94,14 +97,14 @@ test("a new-format save round-trips, and bad stocks are cleaned", () => {
   p.holds.wasp.beam_basic = 1;
   assert.deepEqual(sanitizeProfile(JSON.parse(JSON.stringify(p))), p);
 
-  const odd = sanitizeProfile({
+  const odd = sanitizeSave({
     v: 12, ships: ["wasp"], ship: "wasp",
     holds: { wasp: { ferrite: -3, nope: 9, beam_basic: 1, junk: 2, core: 1.7 }, ghost: { ferrite: 9 } },
     store: { salv: "4", voidite: null, cannon_basic: 0 },
   });
-  assert.deepEqual(odd.holds.wasp, { beam_basic: 1, core: 1 }, "no negative counts, no unknown ids, whole numbers only");
-  assert.equal(odd.holds.ghost, undefined, "a hold with no ship is dropped");
-  assert.deepEqual(odd.store, { salv: 4 }, "a zero count is not kept, and a string becomes a number");
+  assert.deepEqual(odd.profile.holds.wasp, { beam_basic: 1, core: 1 }, "no negative counts, no unknown ids, whole numbers only");
+  assert.equal(odd.profile.holds.ghost, undefined, "a hold with no ship is dropped");
+  assert.deepEqual(odd.world.store, { salv: 4 }, "a zero count is not kept, and a string becomes a number");
 
   const notThere = sanitizeProfile({ v: 12, ships: ["wasp", "bulwark"], ship: "wasp" });
   assert.deepEqual(Object.keys(notThere.holds).sort(), ["bulwark", "wasp"], "every owned ship has a hold");
@@ -117,8 +120,8 @@ test("room is counted in m³ from the catalogue: goods at their volume, modules 
   assert.equal(loadOf("wasp"), expected);
   assert.equal(freeOf("wasp"), WASP_HOLD - expected);
 
-  p.store.cobalt = 10;
-  p.store.power_basic = 1;
+  W().store.cobalt = 10;
+  W().store.power_basic = 1;
   assert.equal(loadOf(STATION), 10 + MODULES.power_basic.vol);
 });
 
@@ -143,7 +146,7 @@ test("you can buy the same module more than once; each lands in the station", ()
 test("a purchase with no room in the station is refused and costs nothing", () => {
   const p = freshGame();
   p.cr = 5000;
-  p.store.ferrite = STORAGE_PER_LEVEL;       // the store is brim full
+  W().store.ferrite = STORAGE_PER_LEVEL;       // the store is brim full
   assert.match(buyItem("beam_basic", 900), /no room/i);
   assert.equal(p.cr, 5000, "nothing was charged");
   assert.equal(countOf(STATION, "beam_basic"), 0, "nothing was stored");
@@ -151,8 +154,8 @@ test("a purchase with no room in the station is refused and costs nothing", () =
 });
 
 test("moving goods and modules between the station and a ship respects the hold's size", () => {
-  const p = freshGame();
-  p.store.cannon_basic = 11;                      // 11 x 2 m³ = 22, a Wasp holds 20
+  freshGame();
+  W().store.cannon_basic = 11;                      // 11 x 2 m³ = 22, a Wasp holds 20
   const text = moveItem(STATION, "wasp", "cannon_basic", Infinity);
   assert.match(text, /Moved 10/);
   assert.equal(countOf("wasp", "cannon_basic"), 10);
@@ -168,14 +171,14 @@ test("moving goods and modules between the station and a ship respects the hold'
 });
 
 test("ore and modules share one hold", () => {
-  const p = freshGame();
-  p.store.ferrite = 30;
-  p.store.cannon_basic = 1;
+  freshGame();
+  W().store.ferrite = 30;
+  W().store.cannon_basic = 1;
   moveItem(STATION, "wasp", "cannon_basic", 1);      // 2 m³ of the 20
   const text = moveItem(STATION, "wasp", "ferrite", Infinity);  // as much ore as fits
   assert.match(text, /Moved 18/);
   assert.equal(countOf("wasp", "ferrite"), 18);
-  assert.equal(p.store.ferrite, 12);
+  assert.equal(W().store.ferrite, 12);
   assert.equal(freeOf("wasp"), 0);
 });
 
@@ -185,19 +188,19 @@ test("every ship has its own hold, made when first needed", () => {
   assert.deepEqual(holdOf("bulwark"), {}, "a ship bought later gets an empty hold on first use");
   assert.ok(p.holds.bulwark, "and it is kept");
 
-  p.store.ferrite = 5;
+  W().store.ferrite = 5;
   moveItem(STATION, "bulwark", "ferrite", 3);
   assert.equal(countOf("bulwark", "ferrite"), 3);
   assert.equal(countOf("wasp", "ferrite"), 0, "the Wasp's hold is separate");
-  assert.equal(p.store.ferrite, 2);
+  assert.equal(W().store.ferrite, 2);
   assert.equal(capacityOf("bulwark"), SHIPS.bulwark.cargo, "each hold is as big as its own hull");
   assert.match(moveItem("wasp", STATION, "cobalt", Infinity), /No Cobalt/i, "moving what is not there says so");
 });
 
 test("Outfitting fits every module kept in the station, as many as there are", () => {
   const p = freshGame();
-  p.store.cannon_basic = 2;
-  p.store.beam_basic = 1;
+  W().store.cannon_basic = 2;
+  W().store.beam_basic = 1;
   assert.deepEqual(storedFor("primary"), ["cannon_basic", "cannon_basic", "beam_basic"]);
 
   // The stock Wasp has one cannon in bay 0; fit a second cannon in bay 1 and the beam over it.
@@ -211,24 +214,24 @@ test("Outfitting fits every module kept in the station, as many as there are", (
 
 test("a part cannot come off a ship if the station has no room for it", () => {
   const p = freshGame();
-  p.store.ferrite = STORAGE_PER_LEVEL;                 // full
+  W().store.ferrite = STORAGE_PER_LEVEL;                 // full
   const text = unequip("power", 0);
   assert.match(text, /no room/i);
   assert.deepEqual(p.loadout.wasp.power, ["power_basic"], "the part stays fitted");
   assert.equal(countOf(STATION, "power_basic"), 0);
 
   // Room for exactly one powerplant: now it works.
-  p.store.ferrite = STORAGE_PER_LEVEL - MODULES.power_basic.vol;
+  W().store.ferrite = STORAGE_PER_LEVEL - MODULES.power_basic.vol;
   assert.match(unequip("power", 0), /storage/i);
   assert.equal(countOf(STATION, "power_basic"), 1);
 });
 
 test("the Inventory tab lists one stock: goods in catalogue order, then parts as they arrived", () => {
-  const p = freshGame();
-  p.store.beam_basic = 1;
-  p.store.cobalt = 3;
-  p.store.ferrite = 2;
-  p.store.cannon_basic = 2;
+  freshGame();
+  W().store.beam_basic = 1;
+  W().store.cobalt = 3;
+  W().store.ferrite = 2;
+  W().store.cannon_basic = 2;
   assert.deepEqual(itemsAt(STATION), [
     { id: "ferrite", n: 2 },
     { id: "cobalt", n: 3 },
@@ -239,7 +242,7 @@ test("the Inventory tab lists one stock: goods in catalogue order, then parts as
 });
 
 test("a new item is a data edit: the catalogue decides its name, size, value and stack", () => {
-  const p = freshGame();
+  freshGame();
   // The sort of line an author adds to data/items.js. Nothing else in the code
   // knows what a gizmo is; it is carried, listed, moved and sold all the same.
   ITEMS.gizmo = { n: "Gizmo", cat: "trade", v: 25, vol: 3, st: 2 };
@@ -256,7 +259,7 @@ test("a new item is a data edit: the catalogue decides its name, size, value and
   } finally {
     delete ITEMS.gizmo;
   }
-  assert.equal(p.store.gizmo, undefined, "the test left nothing behind in the game");
+  assert.equal(W().store.gizmo, undefined, "the test left nothing behind in the game");
 });
 
 test("the Inventory tab, the shop and the picker are wired up (source guards)", () => {
@@ -281,14 +284,14 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(menu, /value="\$\{stack \|\| available\}"/, "the amount field defaults to the whole stack");
   assert.doesNotMatch(menu, /window\.prompt/, "selling does not use a browser prompt");
   assert.match(economy, /sellInventoryItem/, "inventory selling uses an economy action");
-  assert.match(economy, /takeItem\(where, id, count\)/, "only the requested amount is removed");
+  assert.match(economy, /takeItem\(where, id, count/, "only the requested amount is removed");
   assert.doesNotMatch(screens, /ownsModule/, "the shop no longer hides Buy once you own one");
   assert.match(screens, /&times;\$\{n\}/, "the picker shows how many of a part there are");
   for (const action of ["mv", "invPrev", "invNext"]) {
     assert.match(menu, new RegExp(`\\b${action}\\(`), `menu.js has the ${action} action`);
     assert.match(screens, new RegExp(`data-a="${action}`), `a button in screens.js uses ${action}`);
   }
-  assert.match(economy, /buyInto\(id, row\.price, STATION, n\)/, "the shop buys through the inventory (no Owned limit)");
+  assert.match(economy, /buyInto\(id, row\.price, STATION, n/, "the shop buys through the inventory (no Owned limit)");
   assert.doesNotMatch(economy, /Store your cargo first/, "ships keep their own cargo, so switching is never refused");
 
   // The fixed list of cargo types is gone for good: no file may read the old

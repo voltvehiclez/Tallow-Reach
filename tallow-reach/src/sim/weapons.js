@@ -7,7 +7,7 @@ import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { SHIPS } from "../data/ships.js";
 
-import { state, say, msg } from "../state/state.js";
+import { state, say, msg, profileOf } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
@@ -32,9 +32,15 @@ const ASTEROID_RESPAWN_MS = 30000;
  *  slot. A slot with nothing in it — the beam unbought, or every primary bay
  *  empty — is an "Empty weapon slot": left click does nothing. */
 export function setWeapon(name, P = state.player) {
-  if (P !== state.player) { P.weapon = name; return; }
+  const prof = profileOf(P);
+  if (P !== state.player) {
+    if (prof) prof.pw = name;
+    P.weapon = name;
+    return;
+  }
   const S = state.profile;
   S.pw = name;
+  if (P) P.weapon = name;
   if (name === "beam")
     msg((state.beams || []).length > 0 ? `${moduleListName(state.beams)} equipped` : "Empty weapon slot", 1.5);
   else
@@ -45,9 +51,10 @@ export function setWeapon(name, P = state.player) {
  *  selected and one is fitted. */
 export function updatePrimary(dt, P = state.player) {
   const local = P === state.player,
+    prof = profileOf(P),
     F = P.flight, power = P.power,
-    ship = local ? state.profile.ship : P.ship,
-    weapon = local ? state.profile.pw : P.weapon,
+    ship = prof ? prof.ship : P.ship,
+    weapon = prof ? prof.pw : P.weapon,
     c = P.controls,
     d = SHIPS[ship],
     sayFor = text => { if (local) say(text); };
@@ -131,7 +138,7 @@ export function updatePrimary(dt, P = state.player) {
     }
     if (!best) {
       sayFor("No asteroid in beam range");
-    } else if (local && holdLoad() >= d.cargo) {
+    } else if (prof && holdLoad(prof) >= d.cargo) {
       sayFor("Cargo hold full");
     } else if (!hasPower(beamOtherDraw + beam.draw, power)) {
       sayFor("Not enough power");
@@ -164,11 +171,10 @@ export function updatePrimary(dt, P = state.player) {
           setTimeout(spawnAsteroid, ASTEROID_RESPAWN_MS);
           F.beamT = 0;
         }
-        // Inventory and cargo remain local-profile only until step 9.
-        while (local && P.acc >= 1 && holdLoad() < d.cargo) {
-          if (!addItem(state.profile.ship, best.type, 1)) break;   // hold or stack is full
+        while (prof && P.acc >= 1 && holdLoad(prof) < d.cargo) {
+          if (!addItem(ship, best.type, 1, prof)) break;   // hold or stack is full
           P.acc--;
-          emit("mined", { item: best.type });
+          emit("mined", { item: best.type, player: P });
         }
       }
     }
@@ -256,7 +262,9 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     }
 
     if (c.sec && F.missileCd <= 0) {
-      if ((local ? state.profile.msl : P.missileStock) <= 0) sayFor("Out of missiles");
+      const prof = profileOf(P);
+      const stock = prof ? prof.msl : P.missileStock;
+      if (stock <= 0) sayFor("Out of missiles");
       else {
         fireMissile(ML.locked ? ML.target : null, launcher, P);
         F.missileCd = launcher.cd;
@@ -268,10 +276,14 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
 }
 
 function fireMissile(target, launcher, player) {
-  // Missile stock in the saved profile belongs only to the local player (step 9).
-  const local = player === state.player;
-  const ship = local ? state.profile.ship : player.ship;
-  if (local) state.profile.msl--; else player.missileStock--;
+  const prof = profileOf(player);
+  const ship = prof ? prof.ship : player.ship;
+  if (prof) {
+    prof.msl--;
+    player.missileStock = prof.msl;
+  } else {
+    player.missileStock--;
+  }
   // The missile itself is a record (`sim/missile.js`); its body and trail are
   // render/views.js's business.
   launchMissile(target, launcher, playerFwd(player), playerMount("missile", 0, 0, 1, player, ship), player);

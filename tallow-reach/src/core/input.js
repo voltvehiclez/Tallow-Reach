@@ -1,4 +1,4 @@
-// STEP 9 LOCAL-ONLY: keyboard and mouse populate only the local pilot controls.
+// STEP 16 LOCAL-ONLY: keyboard and mouse populate only the local pilot controls.
 // Raw input. Keyboard and mouse are translated twice:
 //
 //   1. into the local pilot's own control record (`localPlayer().controls`), which is what

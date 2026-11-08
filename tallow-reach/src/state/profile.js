@@ -1,63 +1,34 @@
-// STEP 9 LOCAL-ONLY: this schema is the single local profile, not a remote player save.
-// The persistent part of a game: credits, ships, base, contracts, and stats.
-// Everything saved to disk goes through this file so old saves keep loading.
+// The persistent part of a game, split in save v13 into:
+//   - `profile`: portable character data (credits, ships, loadouts, holds, hull damage,
+//     missiles carried, selected weapon, active mission and stats)
+//   - `world`: hosted world data (station levels and storage, contract board,
+//     galaxy and current sector)
+// Everything saved to disk goes through this file so older saves and export codes keep loading.
 
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { isItem, isModule, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES } from "../data/contracts.js";
-// The missile capacity comes from the launcher module; one source of truth.
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
+import { SECTORS, DEFAULT_SECTOR } from "../data/sectors.js";
 
 // Version history:
 //   1  original prototype (no "v" field)
 //   2  adds "v"; otherwise identical shape
-//   3  adds "loadout": the modules fitted to each hull, bay by bay. Older saves
-//      get the stock fit for their bays (stockFor), so nothing is lost.
-//   4  adds "modules": the parts held in storage, ready to be fitted. Older
-//      saves simply start with an empty store.
-//   5  the basic thrusters are standard issue. Saves from before 5 have their
-//      empty thruster bay filled on load (they were made before thrusters
-//      existed, so the bay was never a choice).
-//   6  the basic shields are standard issue, the same way: saves from before 6
-//      get their shield bay filled on load, and a v6 save where the player
-//      emptied it stays shieldless.
-//   7  the basic cannons are standard issue in the first primary bay. Saves from
-//      before 7 gain them on load; weapon bays the player really left empty stay
-//      empty from version 7 onwards.
-//   8  the mining beam is a module (beam_basic) instead of the wp.beam flag. Saves
-//      from before 8 whose owner had bought the beam get one beam_basic module in
-//      storage instead; it is not auto-fitted — fit it in a primary bay. The shop
-//      sells the module now. The wp.beam flag is gone from the save.
-//   9  the missile launcher is a module (missile_basic) instead of the wp.msl
-//      flag. Saves from before 9 whose owner had bought it get one missile_basic
-//      module in storage instead; it is not auto-fitted — fit it in a secondary
-//      bay. The Shop sells the module now. The whole wp object is gone from the
-//      save. Missiles carried (msl) stay, clamped by the launcher's capacity.
-//   10 the hull is a module (hull_basic) instead of the hull's built-in hit
-//      Hull HP: the fitted module decides how many Hull HP the ship has, and
-//      no module fitted means none — any hit reaching the hull kills the ship.
-//      Saves from before 10 get hull_basic fitted into their hull bay (the bay
-//      existed but could not hold anything), like the thrusters, shields and
-//      cannons before it. A v10 save where the player emptied the bay stays
-//      hull-less — a one-shot kill waiting to happen.
-//   11 inventory. Every ship has its own hold, `holds[shipId] = { cargo, modules }`:
-//      the ore it carries and the spare modules it hauls, together limited by the
-//      hull's size in m³. This replaces the single `cargo` object, which belonged to
-//      whichever ship was being flown. Saves from before 11 hand their `cargo` to the
-//      ship they were flying; every other ship starts with an empty hold. The station
-//      keeps `store` (ore) and `modules` (parts) as before, but both now count in m³
-//      against the station's storage (data/station.js) and `modules` can be many of
-//      the same part.
-//   12 the item catalogue (data/items.js). A place is one stock, `{ itemId: count }`:
-//      the station's `store` and each ship's hold hold ore, salvage and spare
-//      modules together, instead of goods in one object and parts in a list.
-//      Which items exist, what they are worth and how big they are lives in the
-//      catalogue, not in this file. A save from before 12 pours its `modules`
-//      list into the station's stock and each hold's `modules` into that hold.
-//      Counts of zero are never kept: a stock only names what is really there.
-export const SAVE_VERSION = 12;
+//   3  adds "loadout": the modules fitted to each hull, bay by bay
+//   4  adds "modules": the parts held in storage, ready to be fitted
+//   5  basic thrusters become standard issue (auto-filled for < v5)
+//   6  basic shields become standard issue (auto-filled for < v6)
+//   7  basic cannons become standard issue in primary bay 0 (auto-filled for < v7)
+//   8  mining beam becomes module `beam_basic` (wp.beam -> stored `beam_basic`)
+//   9  missile launcher becomes module `missile_basic` (wp.msl -> stored `missile_basic`)
+//   10 hull becomes module `hull_basic` (auto-filled for < v10)
+//   11 per-ship holds `holds[shipId] = { cargo, modules }`
+//   12 item catalogue (`data/items.js`): every place is `{ itemId: count }`
+//   13 save split into portable `profile` and per-world `world` (`{ v: 13, profile, world }`);
+//      `sanitizeWorld` walks `BASE_MODULES` rather than naming base modules by hand.
+export const SAVE_VERSION = 13;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -88,15 +59,14 @@ function allStockFit() {
   return out;
 }
 
+/** Fresh portable character profile (travels with a pilot across worlds). */
 export function newProfile() {
   return {
     v: SAVE_VERSION,
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
-    store: newStock(),                 // the station's storage, same shape
     ships: [DEFAULT_SHIP],
     ship: DEFAULT_SHIP,
-    base: { ...BASE_DEFAULT },
     mission: null,
     done: 0,           // contracts completed
     kills: 0,
@@ -107,79 +77,194 @@ export function newProfile() {
   };
 }
 
+/** Fresh hosted world record (station levels and storage, contract board, galaxy and sector). */
+export function newWorld() {
+  return {
+    v: SAVE_VERSION,
+    base: { ...BASE_DEFAULT },
+    store: newStock(),
+    board: [],
+    galaxy: null,
+    sector: DEFAULT_SECTOR,
+  };
+}
+
+/** Fresh combined save (`{ v, profile, world }`). */
+export function newSave() {
+  return {
+    v: SAVE_VERSION,
+    profile: newProfile(),
+    world: newWorld(),
+  };
+}
+
+/** Validate one contract (active `profile.mission` or an offer in `world.board`). */
+function cleanContract(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (!MISSION_TYPES.includes(raw.type)) return null;
+  if (raw.o !== undefined && !isItem(raw.o)) return null;
+  const n = Math.max(1, Math.floor(+raw.n || 1));
+  const r = Math.max(0, Math.floor(+raw.r || 0));
+  const tier = Math.max(1, Math.floor(+raw.tier || 1));
+  const p = Math.max(0, Math.min(n, Math.floor(+raw.p || 0)));
+  return { ...raw, tier, n, r, p };
+}
+
 /**
- * Validates and fills in a raw save object. Throws if it is not recognisable.
- * Used for autosaves, save slots and imported codes alike.
+ * Validate and upgrade a character `profile` (either a standalone v13 profile
+ * or a legacy v1..v12 flat save). World fields (`base`, `store`, `board`,
+ * `galaxy`, `sector`) are excluded here and handled by `sanitizeWorld`.
  */
 export function sanitizeProfile(raw) {
   if (!raw || typeof raw !== "object" || !Array.isArray(raw.ships)) {
     throw new Error("not a Tallow Reach save");
   }
-  const s = Object.assign(newProfile(), raw);
-
-  s.cr = Math.max(0, +s.cr || 0);
-  s.ships = s.ships.filter(id => SHIPS[id]);
-  if (!SHIPS[s.ship]) s.ship = s.ships[0] || DEFAULT_SHIP;
-
-  const base = s.base || {};
-  s.base = {
-    store: clampLevel(base.store, 1, BASE_MODULES.store.max),
-    hangar: clampLevel(base.hangar, 1, BASE_MODULES.hangar.max),
-    refinery: clampLevel(base.refinery, 0, BASE_MODULES.refinery.max),
-  };
-
-  // The beam flag left the save in version 8, the missile flag in version 9:
-  // whether the player owns those weapons is now "does modules storage or a bay
-  // hold the module" (see ownsModule). The whole wp object is gone from the save.
-  const hadOldBeam = !!((raw.wp || {}).beam);
-  const hadOldLauncher = !!((raw.wp || {}).msl);
-  delete s.wp;
-  s.msl = Math.max(0, Math.min(MODULES.missile_basic.cap, +s.msl || 0));
-  if (s.pw !== "beam") s.pw = "cannon";
-
-  const hp = {};
-  for (const id of s.ships) {
-    const v = +(s.hp || {})[id];
-    hp[id] = v > 0 && v <= 1 ? v : 1;
-  }
-  s.hp = hp;
-
   const rawVersion = +raw.v || 1;
-  s.loadout = cleanLoadouts(raw.loadout, rawVersion);
-
-  // Storage: one stock, `{ itemId: count }`. Before version 12 the station kept
-  // goods in `store` and spare parts in a `modules` list; both are poured into
-  // the single stock now, because a part and a stack of ore are both items.
   const oldShape = rawVersion < 12;
-  s.store = cleanStock(raw.store);
-  if (oldShape) for (const id of cleanModuleList(raw.modules)) addToStock(s.store, id, 1);
-  delete s.modules;
-  // v8: the old beam purchase becomes one Basic mining beam module in storage.
-  // Not auto-fitted — the player fits it in a primary bay like any other module.
-  if (rawVersion < 8 && hadOldBeam && !s.store.beam_basic) addToStock(s.store, "beam_basic", 1);
-  // v9: the old missile launcher purchase becomes one Basic missiles module in
-  // storage. Not auto-fitted — the player fits it in a secondary bay.
-  if (rawVersion < 9 && hadOldLauncher && !s.store.missile_basic) addToStock(s.store, "missile_basic", 1);
 
-  s.done = +s.done || 0;
-  s.kills = +s.kills || 0;
-  if (s.mission && !MISSION_TYPES.includes(s.mission.type)) s.mission = null;
+  const cr = Math.max(0, Math.floor(+raw.cr || 0));
+  let ships = [...new Set(raw.ships.filter(id => SHIPS[id]))];
+  let ship = ships.includes(raw.ship) ? raw.ship : ships[0] || DEFAULT_SHIP;
 
   // Lost every ship and cannot afford another: the station lends a Wasp.
-  if (!s.ships.length && s.cr < SHIPS.wasp.price) {
-    s.ships = [DEFAULT_SHIP];
-    s.ship = DEFAULT_SHIP;
+  if (!ships.length && cr < SHIPS.wasp.price) {
+    ships = [DEFAULT_SHIP];
+    ship = DEFAULT_SHIP;
   }
+
+  const msl = Math.max(0, Math.min(MODULES.missile_basic.cap, Math.floor(+raw.msl || 0)));
+  const pw = raw.pw === "beam" ? "beam" : "cannon";
+
+  const hp = {};
+  const rawHp = raw.hp && typeof raw.hp === "object" ? raw.hp : {};
+  for (const id of ships) {
+    const v = +rawHp[id];
+    hp[id] = v > 0 && v <= 1 ? v : 1;
+  }
+
+  const loadout = cleanLoadouts(raw.loadout, rawVersion);
 
   // v11: every ship has its own hold. A save from before that carried one `cargo`
   // object for the ship being flown, so that ship gets it.
   const oldCargo = raw.holds ? null : raw.cargo;
-  delete s.cargo;
-  s.holds = cleanHolds(raw.holds, s.ships, oldShape);
-  if (oldCargo && s.holds[s.ship]) mergeStock(s.holds[s.ship], cleanStock(oldCargo));
+  const holds = cleanHolds(raw.holds, ships, oldShape);
+  if (oldCargo && holds[ship]) mergeStock(holds[ship], cleanStock(oldCargo));
 
-  s.v = SAVE_VERSION;
-  return s;
+  const done = Math.max(0, Math.floor(+raw.done || 0));
+  const kills = Math.max(0, Math.floor(+raw.kills || 0));
+  const mission = cleanContract(raw.mission);
+
+  return {
+    v: SAVE_VERSION,
+    cr,
+    holds,
+    ships,
+    ship,
+    mission,
+    done,
+    kills,
+    msl,
+    pw,
+    hp,
+    loadout,
+  };
+}
+
+/**
+ * Validate and upgrade a `world` record (either a v13 world object or the
+ * world-owned fields of a legacy v1..v12 flat save). Base modules are walked
+ * from `BASE_MODULES` rather than named by hand.
+ */
+export function sanitizeWorld(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("not a Tallow Reach save");
+  }
+  const isLegacyFlat = Array.isArray(raw.ships);
+  const rawVersion = typeof raw.v === "number" ? raw.v : isLegacyFlat ? 1 : SAVE_VERSION;
+  const oldShape = rawVersion < 12;
+
+  const rb = raw.base && typeof raw.base === "object" ? raw.base : {};
+  const base = {};
+  for (const [id, m] of Object.entries(BASE_MODULES)) {
+    const lo = BASE_DEFAULT[id] ?? 0;
+    base[id] = clampLevel(rb[id], lo, m.max);
+  }
+
+  // Station storage (`store` since v1; loose `modules` list poured in for < v12;
+  // unlocked `wp.beam` / `wp.msl` granted as a stored module for < v8 / < v9).
+  const store = cleanStock(raw.store);
+  if (oldShape) for (const id of cleanModuleList(raw.modules)) addToStock(store, id, 1);
+  const hadOldBeam = !!((raw.wp || {}).beam);
+  const hadOldLauncher = !!((raw.wp || {}).msl);
+  if (rawVersion < 8 && hadOldBeam && !store.beam_basic) addToStock(store, "beam_basic", 1);
+  if (rawVersion < 9 && hadOldLauncher && !store.missile_basic) addToStock(store, "missile_basic", 1);
+
+  const board = Array.isArray(raw.board) ? raw.board.map(cleanContract).filter(Boolean) : [];
+  const galaxy =
+    raw.galaxy && typeof raw.galaxy === "object" && !Array.isArray(raw.galaxy)
+      ? JSON.parse(JSON.stringify(raw.galaxy))
+      : null;
+  const sector = typeof raw.sector === "string" && SECTORS[raw.sector] ? raw.sector : DEFAULT_SECTOR;
+
+  return {
+    v: SAVE_VERSION,
+    base,
+    store,
+    board,
+    galaxy,
+    sector,
+  };
+}
+
+/**
+ * Validate and upgrade a complete save. Accepts both the v13 split shape
+ * `{ v: 13, profile, world }` and any legacy v1..v12 flat save object.
+ */
+export function sanitizeSave(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("not a Tallow Reach save");
+  }
+  if (raw.profile && typeof raw.profile === "object") {
+    return {
+      v: SAVE_VERSION,
+      profile: sanitizeProfile(raw.profile),
+      world: sanitizeWorld(raw.world && typeof raw.world === "object" ? raw.world : {}),
+    };
+  }
+  if (Array.isArray(raw.ships)) {
+    return {
+      v: SAVE_VERSION,
+      profile: sanitizeProfile(raw),
+      world: sanitizeWorld(raw),
+    };
+  }
+  throw new Error("not a Tallow Reach save");
+}
+
+/**
+ * Extract a deep-cloned portable `profile` from `save` — the half a guest
+ * carries into someone else's hosted world (credits, ships, loadouts, holds,
+ * hull damage, missiles, active mission and stats, with zero station/world data).
+ */
+export function portableProfile(save) {
+  const clean = sanitizeSave(save);
+  return sanitizeProfile(JSON.parse(JSON.stringify(clean.profile)));
+}
+
+/**
+ * Return a new save that merges an updated portable `profile` back into `save`
+ * while keeping `save`'s own `world` (station levels, station storage, board,
+ * galaxy and sector) untouched. Pure: neither input is mutated.
+ */
+export function mergeProfile(save, profile) {
+  const cleanSave = sanitizeSave(save);
+  const cleanProfile = sanitizeProfile(JSON.parse(JSON.stringify(profile)));
+  const cleanWorld = sanitizeWorld(JSON.parse(JSON.stringify(cleanSave.world)));
+  return {
+    v: SAVE_VERSION,
+    profile: cleanProfile,
+    world: cleanWorld,
+  };
 }
 
 /**
@@ -230,7 +315,8 @@ function cleanHolds(raw, ships, oldShape) {
 }
 
 function clampLevel(value, lo, hi) {
-  return Math.min(hi, Math.max(lo, +value || lo));
+  const n = value === undefined || value === null ? lo : Math.floor(+value || 0);
+  return Math.min(hi, Math.max(lo, n));
 }
 
 /**
@@ -240,13 +326,6 @@ function clampLevel(value, lo, hi) {
  * really left empty stays empty: only a missing hull or group falls back.
  */
 function cleanLoadouts(saved, version) {
-  // Modules arrived over several versions, and a save older than the version that
-  // introduced a group has an empty bay because the group did not exist then, not
-  // because the player emptied it. Those bays get the stock part.
-  //   version 5: thrusters      version 6: shields      version 7: cannons
-  // The hull bay is the same story as the others, from version 10: before the
-  // hull module existed the bay was empty for lack of anything to fit, not by
-  // choice. Saves from before 10 get the stock hull fitted.
   const addedLater = [];
   if (version < 5) addedLater.push("thruster");
   if (version < 6) addedLater.push("shield");

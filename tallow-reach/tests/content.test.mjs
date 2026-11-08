@@ -17,7 +17,15 @@ import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../src/data/enemies.js";
 import { FACTIONS } from "../src/data/factions.js";
 import { LOOT_TABLES } from "../src/data/loot.js";
 import { SECTORS, SECTOR_IDS, DEFAULT_SECTOR, sectorAt, nextSector, WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
-import { newProfile, sanitizeProfile, SAVE_VERSION, MISSION_TYPES } from "../src/state/profile.js";
+import {
+  newProfile,
+  newWorld,
+  sanitizeProfile,
+  sanitizeWorld,
+  sanitizeSave,
+  SAVE_VERSION,
+  MISSION_TYPES,
+} from "../src/state/profile.js";
 import { CAMERA, cameraTrail } from "../src/data/camera.js";
 import { MODULE_GROUPS, SHIP_LAYOUTS, layoutFor, slotsFor, APPEARANCE_SLOTS } from "../src/data/outfitting.js";
 import { MODULES, STOCK_FIT } from "../src/data/modules.js";
@@ -128,7 +136,7 @@ test("a spare module sells for 60% of what a shop charges for it", () => {
 });
 
 test("every base module has a cost curve and a default level, and saves keep it", () => {
-  const loaded = sanitizeProfile(newProfile()).base;
+  const loaded = sanitizeWorld(newWorld()).base;
   for (const [id, m] of Object.entries(BASE_MODULES)) {
     assert.equal(typeof m.n, "string", `${id}: n`);
     assert.equal(typeof m.d, "string", `${id}: d`);
@@ -140,7 +148,7 @@ test("every base module has a cost curve and a default level, and saves keep it"
     }
     assert.ok(
       id in loaded,
-      `${id} is not kept by sanitizeProfile in state/profile.js (add it there, bump SAVE_VERSION)`
+      `${id} is not kept by sanitizeWorld in state/profile.js`
     );
   }
 });
@@ -538,37 +546,37 @@ test("the beam loses its progress the moment contact stops", () => {
 });
 
 test("save version 8: the old mining beam purchase becomes the beam module", () => {
-  const owner = sanitizeProfile({
+  const owner = sanitizeSave({
     v: 7, ships: ["wasp"], ship: "wasp", cr: 100,
     wp: { beam: true, msl: false }, pw: "beam",
   });
   assert.equal(owner.v, SAVE_VERSION);
-  assert.equal(owner.store.beam_basic, 1, "an owner of the old beam gets one beam module in storage");
-  assert.equal(owner.wp, undefined, "the whole wp object is gone from the save");
-  assert.equal(owner.pw, "beam", "the selected slot is kept");
+  assert.equal(owner.world.store.beam_basic, 1, "an owner of the old beam gets one beam module in storage");
+  assert.equal(owner.profile.wp, undefined, "the whole wp object is gone from the save");
+  assert.equal(owner.profile.pw, "beam", "the selected slot is kept");
 
-  const never = sanitizeProfile({ v: 7, ships: ["wasp"], ship: "wasp", cr: 100, wp: { beam: false, msl: false } });
-  assert.equal(never.store.beam_basic, undefined, "a save that never bought the beam gets nothing");
+  const never = sanitizeSave({ v: 7, ships: ["wasp"], ship: "wasp", cr: 100, wp: { beam: false, msl: false } });
+  assert.equal(never.world.store.beam_basic, undefined, "a save that never bought the beam gets nothing");
 
-  const again = sanitizeProfile(owner);
-  assert.equal(again.store.beam_basic, 1, "importing keeps exactly one");
+  const again = sanitizeSave(owner);
+  assert.equal(again.world.store.beam_basic, 1, "importing keeps exactly one");
 });
 
 test("save version 9: the old missile launcher purchase becomes the missile module", () => {
-  const owner = sanitizeProfile({
+  const owner = sanitizeSave({
     v: 8, ships: ["wasp"], ship: "wasp", cr: 100,
     wp: { beam: false, msl: true }, msl: 5,
   });
   assert.equal(owner.v, SAVE_VERSION);
-  assert.equal(owner.store.missile_basic, 1, "an owner of the old launcher gets one missile module in storage");
-  assert.equal(owner.wp, undefined, "the whole wp object is gone from the save");
-  assert.equal(owner.msl, 5, "the missiles they carried stay");
+  assert.equal(owner.world.store.missile_basic, 1, "an owner of the old launcher gets one missile module in storage");
+  assert.equal(owner.profile.wp, undefined, "the whole wp object is gone from the save");
+  assert.equal(owner.profile.msl, 5, "the missiles they carried stay");
 
-  const never = sanitizeProfile({ v: 8, ships: ["wasp"], ship: "wasp", cr: 100, wp: { msl: false } });
-  assert.equal(never.store.missile_basic, undefined, "a save that never bought the launcher gets nothing");
+  const never = sanitizeSave({ v: 8, ships: ["wasp"], ship: "wasp", cr: 100, wp: { msl: false } });
+  assert.equal(never.world.store.missile_basic, undefined, "a save that never bought the launcher gets nothing");
 
-  const again = sanitizeProfile(owner);
-  assert.equal(again.store.missile_basic, 1, "importing keeps exactly one");
+  const again = sanitizeSave(owner);
+  assert.equal(again.world.store.missile_basic, 1, "importing keeps exactly one");
 
   const rich = sanitizeProfile({ v: 8, ships: ["wasp"], ship: "wasp", cr: 100, wp: { msl: true }, msl: 99 });
   assert.equal(rich.msl, 12, "carried missiles clamp to the module's capacity");

@@ -107,9 +107,12 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 
 ## Saves
 
-- Today there is one `profile` object (save version 12) holding everything. The target splits it
-  into `profile` and `world` (principle 5) inside the same save slot and export code, with a
-  migration, so old saves keep working.
+- Since step 9 (save version **13**), every save slot and `TR1:` export code stores
+  `{ v: 13, profile, world }` (principle 5), with automatic migration from flat v1..v12 saves:
+  `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
+  `pw`, `mission`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
+  station storage (`store`), base upgrades (`base`) and contract board (`board`). `portableProfile(save)`
+  and `mergeProfile(save, profile)` extract and return a guest's character without touching world state.
 - **Recommended co-op rule** (open question 6/7 in VISION.md): a guest brings their own profile
   (ship, hold, credits) into the host's world; whatever they gain simply stays in their own
   profile, which they save locally on leaving. That *is* "retrieving loot into your own world",
@@ -129,24 +132,22 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 - The host must keep the tab open and the game running (no pause in co-op).
 - What this needs from the code *today*: principles 2, 3, 4, 6, 7, 8 above. Nothing else.
 
-## Still local-only after step 8c (step 9 must close every item)
+## Still local-only after step 8c (assigned by owner step)
 
 8c has no networking and does not make a complete co-op game. The headless simulation can fly
-and fire two independent players, but the following code still assumes the local player/profile.
-**Step 9 must close every item in this table**, with save migration and tests, without silently
-crediting or changing the wrong player. It should prepare player presentation/input without
-adding network transport; networking remains step 16.
+and fire two independent players, and each remaining local-only area below is assigned to the
+refactor step that closes it:
 
-| Still local-only | Current assumption / evidence |
-| --- | --- |
-| Inventory and pickups | `sim/inventory.js`, `sim/combat.js` and `sim/weapons.js` credit only `state.profile`. Non-local mining can cut rocks, but its accumulated ore is not credited to an inventory. |
-| Economy, outfitting and saved ammunition | `sim/economy.js`, `sim/fitting.js`, `sim/weapons.js`: purchases, credits, loadouts and saved missile stock are local. Another player's missile stock is transient only. |
-| Docking and launch | `sim/session.js` operates on `state.player`; docking also clears shared transient world entities. |
-| Contracts and rewards | `sim/contracts.js`, `sim/ai.js` and `sim/combat.js`: board, progress, spawn policy and kill statistics use the local profile regardless of who caused an event. |
-| Death and recovery | `sim/player.js` and `sim/session.js`: only the local player gets profile damage saved, ship loss, recovery and docking; another player is marked dead and cannot yet recover. |
-| Saves and profiles | `state/profile.js` and `state/storage.js`: a single local profile and save slots; other players' transient runtime is not saved. |
-| Warp and sector ownership | `sim/sectors.js` and `sim/step.js`: warp and the current sector are local/shared; non-local warp transitions are not implemented. |
-| Player presentation and input | `render/views.js`, `core/input.js`: the screen draws/follows the local ship and local beam, and input only fills local controls. No guest UI, remote input or transport exists yet. |
+| Still local-only | Current assumption / evidence | Owner step |
+| --- | --- | --- |
+| Saves and profiles | **Closed in step 9 (save v13, owner-playtested):** saves split into `{ v: 13, profile, world }`; each player owns an isolated `player.profile` (`portableProfile` / `mergeProfile`). | — |
+| Inventory and pickups | **Closed in step 9 (owner-playtested):** `sim/inventory.js`, `sim/combat.js` and `sim/weapons.js` credit each pilot's own `profile.holds` while sharing the hosted world's `worldState.store`; crate pickup works across all active pilots even when the local pilot is docked. | — |
+| Economy, outfitting and saved ammunition | **Closed in step 9 (owner-playtested):** `sim/economy.js`, `sim/fitting.js` and `sim/weapons.js` operate on the acting pilot and their `profile` (`cr`, `loadout`, `ships`, `hp`, `msl`, `pw`) against `state.worldState`. | — |
+| Contracts and rewards | **Closed in step 9 (owner-playtested):** the offer board lives in `worldState.board`; `sim/contracts.js`, `sim/ai.js`, `sim/combat.js` and `sim/missile.js` track kills, mission progress, payouts and spawn policy per pilot (`profile.mission`, `profile.kills`). | — |
+| Docking and launch | **Closed in step 9 (owner-playtested):** `launch` and `dock`/`tryDock` operate on an explicit pilot and profile; `clearTransient()` only sweeps the field when no other active pilot remains in space. | — |
+| Warp and sector ownership | `sim/sectors.js` and `sim/step.js`: warp and the current sector are local/shared; non-local warp transitions are not implemented. | 10 |
+| Death and recovery | `sim/player.js` and `sim/session.js`: only the local player gets ship loss, recovery and docking on `player-dead`; another player is marked dead until multiplayer respawn rules exist. | 16 (multiplayer) |
+| Player presentation and input | `render/views.js`, `core/input.js`: the screen draws/follows the local ship and local beam, and input only fills local controls. No guest UI, remote input or transport exists yet. | 16 (multiplayer) |
 
 ## Debt today (what the refactor closes)
 
@@ -156,14 +157,14 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | --- | --- | --- |
 | `sim/` imports the screen | **Closed in 7c:** sector entry emits an event; the frame loop supplies the camera direction used for missile lock. The render-import allow-list is empty. | — |
 | Entities are three.js meshes | **Closed (steps 7a and 7b):** every entity is a record with an `id` and a `kind` — an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. `render/views.js` owns every mesh | — |
-| Variable time step | **8a in progress:** gameplay now runs at fixed 60 Hz through `sim/step.js`; camera-derived missile aim and wall-clock asteroid respawn remain frame/time dependent. Owner playtested 8a successfully; full frame-rate independence remains open. | 8 |
-| One global player | **8c complete and owner-playtested:** each active player has independent flight, power, drive, shield, hull, weapons and target state; enemies chase the nearest active player. Profile, lifecycle and other exceptions are listed in the table above. | 8 / 9 |
-| Single mixed save | `state/profile.js` holds character, station and mission together | 9 |
+| Variable time step | **Closed in step 8:** gameplay runs at fixed 60 Hz through `sim/step.js` (`SIM_DT = 1 / 60`, capped catch-up), validated by the owner on 240 Hz hardware without view interpolation. Two minor caveats (camera-sampled missile aim and `setTimeout` asteroid respawn) are parked in `docs/ROADMAP.md`. | — |
+| One global player | **8c and step 9 complete and owner-playtested:** each active player has independent runtime and portable `profile` (inventory, economy, outfitting, ammo, contracts, kills, docking/launch); remaining sector/multiplayer items belong to steps 10 and 16 above. | 10 / 16 |
+| Single mixed save | **Closed in step 9 (save v13, owner-playtested):** `state/profile.js` and `state/storage.js` split `{ profile, world }` and migrate v1..v12 saves. | — |
 | Sector geography in code | `FIELD_CENTER`, `FIELD_SECTOR` in `sim/world.js`; `launch()` in `sim/session.js` starts at the origin facing the field; `parked` rock lists in `sim/world.js` | 10 |
 | Current sector not saved | `state.sector` is runtime only | 10 |
 | Two sectors, cycled with M | `data/sectors.js` `SECTOR_IDS`, `nextSector()` | 11 |
 | One contract at a time, three types | `profile.mission`; `generateContract()` in `sim/contracts.js` | 13 |
-| `sanitizeProfile` names things by hand | base modules named in `state/profile.js` | 9 |
+| `sanitizeProfile` names things by hand | **Closed in step 9:** `sanitizeWorld` walks `BASE_MODULES` (`data/station.js`) directly instead of naming base modules by hand. | — |
 
 ## Folder shape after the refactor
 

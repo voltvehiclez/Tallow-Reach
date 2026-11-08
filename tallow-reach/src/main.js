@@ -3,8 +3,8 @@
 
 import { renderer, scene, camera, stars, planet, spin, showSector } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer } from "./state/state.js";
-import { newProfile } from "./state/profile.js";
+import { state, localPlayer, applySave } from "./state/state.js";
+import { newSave } from "./state/profile.js";
 import { loadAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
 import { installInput, syncControls } from "./core/input.js";
@@ -33,7 +33,7 @@ import { installEnemyViews, updateEnemyViews, updateEntityViews } from "./render
 // --- Boot ------------------------------------------------------------------
 
 document.body.prepend(renderer.domElement);
-state.profile = loadAutosave() || newProfile();
+applySave(loadAutosave() || newSave());
 createPlayer();
 setShip(state.profile.ship);
 populateField();

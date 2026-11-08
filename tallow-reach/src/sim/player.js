@@ -8,7 +8,7 @@ import { warpSteerEase } from "../data/sectors.js";
 import { sectorAt } from "../data/sectors.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 
-import { state, msg, localPlayer, createPlayerRuntime } from "../state/state.js";
+import { state, msg, localPlayer, profileOf, createPlayerRuntime } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
 import { refreshHull } from "./hull.js";
@@ -74,6 +74,7 @@ export function createPlayerRecord(controls = neutralControls()) {
 /** Create or replace the local ship, retaining the current input without sharing it. */
 export function createPlayer() {
   state.player = createPlayerRecord(state.controls);
+  state.player.profile = state.profile;
   return localPlayer();
 }
 
@@ -82,23 +83,46 @@ export function createPlayer() {
  * The model is the view's: it is built from `profile.ship`, so naming the new hull
  * is the whole of the sim's part (step 7b).
  */
-export function setShip(id) {
-  const P = state.player;
-  P.hullMax = 0;
-  P.hull = 0;
-  refreshHull();   // Hull HP come from the hull module fitted in the bay
+export function setShip(id, P = state.player, profile = profileOf(P)) {
+  if (P && P !== state.player && (!profile || profile === state.profile)) {
+    throw new Error("Non-local ship change requires its own profile");
+  }
+  if (P) {
+    P.ship = id;
+    P.hullMax = 0;
+    P.hull = 0;
+  }
+  refreshHull(P, profile);   // Hull HP come from the hull module fitted in the bay
 }
 
 /** Flight model. Mouse steers, WASD strafes and throttles, Shift boosts. */
 export function flight(dt, P = state.player, runtime = null) {
-  // Unconfigured non-local records cannot silently borrow the local fit.
-  if (P !== state.player && ((!P.configured && !runtime) || (!runtime && (P.drive === state.drive || P.power === state.power)) || (runtime &&
-      (!runtime.drive || !runtime.power || !runtime.profile || runtime.drive === state.drive ||
-       runtime.power === state.power || runtime.profile === state.profile)))) {
+  // Unconfigured non-local records cannot silently borrow the local fit or profile.
+  if (
+    P !== state.player &&
+    ((!P.configured && !runtime) ||
+      (!runtime &&
+        (P.drive === state.drive ||
+          P.power === state.power ||
+          !P.profile ||
+          P.profile === state.profile)) ||
+      (runtime &&
+        (!runtime.drive ||
+          !runtime.power ||
+          !runtime.profile ||
+          runtime.drive === state.drive ||
+          runtime.power === state.power ||
+          runtime.profile === state.profile)))
+  ) {
     throw new Error("Non-local flight requires its own drive, power and profile");
   }
-  const r = runtime || { drive: P.drive, power: P.power, profile: P === state.player ? state.profile : null,
-    freeCam: P === state.player ? state.freeCam : null, warp: P === state.player ? state.warp : P.warp };
+  const r = runtime || {
+    drive: P.drive,
+    power: P.power,
+    profile: P === state.player ? state.profile : P.profile,
+    freeCam: P === state.player ? state.freeCam : null,
+    warp: P === state.player ? state.warp : P.warp,
+  };
   const fc = r.freeCam || { on: false },
     c = P.controls;
 
@@ -232,11 +256,10 @@ export function flight(dt, P = state.player, runtime = null) {
 
 /** Apply `d` damage: shields first, then hull. Emits "player-dead" at zero hull. */
 export function hurt(d, P = state.player, profile = null) {
-  if (P !== state.player && ((!profile && !P.configured) || profile === state.profile)) {
+  const S = profile || profileOf(P);
+  if (P !== state.player && (!S || S === state.profile)) {
     throw new Error("Non-local damage requires its own profile");
   }
-  // Saved hull fractions are local-profile only until step 9.
-  const S = profile || (P === state.player ? state.profile : null);
   P.last = state.time;
   emit("sfx", { name: "hit" });
   if (P.sh > 0) {
@@ -248,15 +271,15 @@ export function hurt(d, P = state.player, profile = null) {
   } else {
     P.hull -= d;
   }
-  // Stamp the save with the fraction the ship is on, so damage is remembered
-  // across fit changes, hangar visits and hull switches.
+  // Stamp the pilot's profile with the fraction the ship is on, so damage is
+  // remembered across fit changes, hangar visits and hull switches.
   if (S && P.hullMax > 0) {
     const frac = clamp(P.hull / P.hullMax, 0, 1);
     S.hp[S.ship] = Math.max(REPAIR_MIN_HULL, frac);
   }
   emit("hurt", { shielded: P.sh > 0, player: P });
   if (P.hull <= 0) {
-    // Non-local death/recovery is deliberately not implemented until step 9.
+    // Non-local death recovery belongs to step 16 (multiplayer respawn).
     if (P !== state.player) P.dead = true;
     emit("player-dead", { player: P });
   }

@@ -15,14 +15,15 @@ import { SHOPS } from "../src/data/shops.js";
 
 const sim = await loadHeadless("src/sim/economy.js", {
   state: "src/state/state.js",
-  newProfile: "src/state/profile.js",
+  applySave: "src/state/state.js",
+  newSave: "src/state/profile.js",
   STATION: "src/sim/inventory.js",
   countOf: "src/sim/inventory.js",
 });
 
 /** A brand-new save docked at the outpost. */
 function freshGame() {
-  sim.state.profile = sim.newProfile();
+  sim.applySave(sim.newSave());
   sim.state.profile.cr = 0;
   // Some economy actions write the flying ship's Hull HP (see repairShip).
   sim.state.player = { hull: 10, hullMax: 10, sh: 0, shMax: 0, last: 0, docked: true };
@@ -30,6 +31,7 @@ function freshGame() {
 }
 
 const P = () => sim.state.profile;
+const W = () => sim.state.worldState;
 
 test("every item that can be sold is worth something — parts included", () => {
   for (const id of ITEM_IDS) {
@@ -50,7 +52,7 @@ test("every item that can be sold is worth something — parts included", () => 
 
 test("a single spare part sells from the station or a ship's hold", () => {
   const p = freshGame();
-  p.store.beam_basic = 2;
+  W().store.beam_basic = 2;
 
   assert.equal(sim.sellInventoryItem("beam_basic", "station", 1), "Sold 1 Basic mining beam for 540 cr.");
   assert.equal(p.cr, 540, "the credits arrived");
@@ -76,7 +78,7 @@ test("a single spare part sells from the station or a ship's hold", () => {
 
 test("a refusal changes nothing, and says why", () => {
   const p = freshGame();
-  p.store.beam_basic = 1;
+  W().store.beam_basic = 1;
   assert.match(sim.sellInventoryItem("beam_basic", "station", 5), /from 1 to 1/, "more than is there");
   assert.match(sim.sellInventoryItem("beam_basic", "station", 0), /from 1 to 1/, "zero is not a sale");
   assert.match(sim.sellInventoryItem("beam_basic", "station", 1.5), /from 1 to 1/, "whole items only");
@@ -88,8 +90,8 @@ test("a refusal changes nothing, and says why", () => {
 
 test("the refinery bonus applies to parts exactly as it does to ore", () => {
   const p = freshGame();
-  p.store.missile_basic = 1;
-  p.base.refinery = 1;                       // the 800 cr upgrade: +15%
+  W().store.missile_basic = 1;
+  W().base.refinery = 1;                       // the 800 cr upgrade: +15%
   assert.equal(sim.sellInventoryItem("missile_basic", "station", 1), "Sold 1 Basic missiles for 1035 cr.");
   assert.equal(p.cr, 1035, "900 + 15%");
 });
@@ -105,10 +107,10 @@ test("selling a whole hold takes the spare parts with the ore", () => {
 
 test("selling the station's stock takes the spare parts too", () => {
   const p = freshGame();
-  p.store = { ferrite: 5, beam_basic: 1 };
+  W().store = { ferrite: 5, beam_basic: 1 };
   assert.equal(sim.sellStored(), "Sold 6 items for 590 cr.", "5 ferrite (50) + a beam (540)");
   assert.equal(p.cr, 590);
-  assert.deepEqual(p.store, {});
+  assert.deepEqual(W().store, {});
 });
 
 test("nothing to sell says so, and pays nothing", () => {
@@ -119,14 +121,14 @@ test("nothing to sell says so, and pays nothing", () => {
   assert.equal(sim.sellStored(), "Nothing in the station can be sold.", "and it stays quiet the second time");
 
   // One item reads "1 item", not "1 items".
-  p.store.ferrite = 1;
+  W().store.ferrite = 1;
   assert.equal(sim.sellStored(), "Sold 1 item for 10 cr.");
 });
 
 test("a part fitted in a bay is never sold; only stocks are", () => {
   const p = freshGame();
   p.loadout.wasp.power = ["power_basic"];
-  p.store.power_basic = 1;
+  W().store.power_basic = 1;
   assert.equal(sim.sellStored(), "Sold 1 item for 1 cr.", "the 1 cr standard part is sellable (60% would round to nothing)");
   assert.deepEqual(p.loadout.wasp.power, ["power_basic"], "the fitted powerplant is untouched");
   assert.equal(sim.sellStored(), "Nothing in the station can be sold.", "and the fitted one never becomes sellable by asking twice");

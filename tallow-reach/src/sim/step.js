@@ -28,7 +28,7 @@ export function stepSim(dt) {
     flight(dt, player);
     updateShield(dt, player);
     updatePower(dt, player);
-    // Sector/warp transition is still local-only until step 9.
+    // Sector/warp transition ownership belongs to step 10.
     if (player === local) updateWarp(dt);
     updatePrimary(dt, player);
     updateMissiles(dt, player, false);
@@ -38,8 +38,7 @@ export function stepSim(dt) {
     updateMissileFlight(dt);
     updateEnemies(dt);
     updateBullets(dt);
-    // Inventory and pickup are intentionally local-only until step 9.
-    if (local && !local.docked) updateCrates(dt);
+    updateCrates(dt);
   }
   updateEffects(dt);
 }
