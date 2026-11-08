@@ -212,3 +212,6 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 - 2026-11-08: Follow-up feature (owner request): **come back where you logged out**. Save v15 adds
   `world.resume` (exact spot, heading, shields, boost; null while docked), with the pocket arrival
   point kept as the fallback, plus autosave on tab hide/close and every 15 s. 260 tests green.
+- 2026-11-08: Autosave interval raised **15 s -> 30 s** at the owner's request, to keep the number of
+  save writes down. One line in `src/data/simulation.js`; the save-on-close/hide behaviour is
+  unchanged, so a normal quit still loses nothing. 260 tests green.

@@ -76,7 +76,7 @@ the pocket you are in is remembered when you load. Everything else must feel exa
       the **Shop**. Go to **Saves** and press **Load** on Slot 1. **Expect:** the credit number changes
       back **on that one click**, with the message "Loaded slot 1" — no need to press Save first.
 - [ ] **4.8** Fly somewhere, then just **close the tab** and reopen the game. **Expect:** **Enter game**
-      puts you back at that spot. (The game saves on close and every 15 seconds while playing.)
+      puts you back at that spot. (The game saves on close and every 30 seconds while playing.)
 
 ## 5. Old save slot still loads
 

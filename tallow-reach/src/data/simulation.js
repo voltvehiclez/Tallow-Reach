@@ -5,5 +5,6 @@ export const MAX_FRAME_DT = 0.05;
 
 /** How often the resume point is written while playing (seconds). The game also
  *  saves when the tab is hidden or closed, so this only bounds what a crash or a
- *  force-quit can lose. */
-export const AUTOSAVE_SECONDS = 15;
+ *  force-quit can lose. Raise it to cut the number of writes; lower it to lose
+ *  less on a crash. Owner-set to 30 to keep write volume down. */
+export const AUTOSAVE_SECONDS = 30;

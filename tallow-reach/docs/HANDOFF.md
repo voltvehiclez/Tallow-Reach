@@ -38,7 +38,8 @@ stock of items (`{ itemId: count }`) from `src/data/items.js`.
   spot, heading, shields and boost — so **you come back where you logged out**, including mid-flight
   in the Meridian Station pocket (the owner's follow-up request). The arrival point is the fallback
   for old saves, damaged coordinates or a ship with no thrusters. `currentSave()` captures the live
-  position, and the game saves on tab hide/close and every `AUTOSAVE_SECONDS`. Storage keys
+  position, and the game saves on tab hide/close and every `AUTOSAVE_SECONDS` (**30 s**, owner-set to keep
+  write volume down). Storage keys
   (`tr1`, `tr_s1..tr_s3`) and `TR1:` codes unchanged. Station label renamed
   **Meridian Outpost → Meridian Station**.
 - **Playtest fixes (2026-11-08).** Three bugs the owner found: (1) sound was dead after resuming out in

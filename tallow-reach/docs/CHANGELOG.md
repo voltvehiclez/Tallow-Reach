@@ -19,6 +19,21 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Autosave every 30 seconds instead of 15
+
+Owner request: halve how often the game writes a save, to keep write volume down.
+
+- `AUTOSAVE_SECONDS` in `src/data/simulation.js` is now **30** (was 15). It is the only tuning number
+  involved; `main.js` already reads it.
+- Nothing else changes. Saving on tab hide/close, on dock, on warp arrival and on every menu click is
+  untouched, so a normal quit still loses nothing — the interval only bounds what a **crash or
+  force-quit** can lose, which is now up to 30 seconds of flying instead of 15.
+- `docs/HANDOFF.md` and `TESTING-PLACES.md` step 4.8 updated to say 30 seconds. The dated v15 entries
+  below still say 15 s because that was true when they were written.
+- **Results:** `npm test` **260/260 pass**; `npm run build` succeeded.
+
+---
+
 ## 2026-11-08: Come back where you logged out — save v15
 
 Owner request: quitting while flying in the Meridian Station pocket docked you on the way back in.
