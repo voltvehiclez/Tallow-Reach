@@ -2,7 +2,7 @@
 
 | File | What it does |
 |---|---|
-| `events.js` | Publish/subscribe bus. `emit(name, payload)`, `on(name, handler)`. The list of events is at the top of the file. |
+| `events.js` | Publish/subscribe bus. `emit(name, payload)`, `on(name, handler)`. The list of events is at the top of the file, including `sector-entered` for scenery changes. |
 | `rng.js` | The one random source: `random()` for every gameplay roll, `setSeed(n)` to make a whole run reproducible (`setSeed(null)` to go back), and `makeRng(n)` for an independent generator that a sector or an instance can be regenerated from. Nothing in `sim/` or `data/` may call `Math.random()`; `tests/rng.test.mjs` enforces it. |
 | `math.js` | Vector helpers (`V`, `fwd`, `face`), `R(a, b)` random range, `clamp`, `fmtDist`. |
 

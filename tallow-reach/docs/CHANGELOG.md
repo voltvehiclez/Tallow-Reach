@@ -19,6 +19,27 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 7c and step 7 complete and ticked
+
+- The owner playtested step 7c and reported it passed. Marked step 7c and step 7 complete in
+  `docs/ROADMAP.md`, `docs/REFACTOR_PLAN.md` and `docs/HANDOFF.md`; step 8 is next.
+- No gameplay or save changes in this entry. The 7c build and all 185 tests passed previously.
+
+---
+
+## 2026-11-08: Refactor step 7c — hull view and render-free simulation
+
+- Added `PlayerShipView` and shared named gun, missile and beam mounts in `src/data/mounts.js`;
+  the sim transforms the same offsets without reading a mesh. Existing offsets are unchanged.
+- Sector entry emits `sector-entered`, including docking resets; `main.js` updates scenery. The
+  frame loop supplies the previous camera direction for missile lock. The sim imports no render
+  files; the layer allow-list is empty. Save version remains 12.
+- Added `tests/step7c.test.mjs` and a manual checklist in `TESTING-BASELINE.md` section H.
+  `npm install`, `npm test` (185 passing) and `npm run build` succeeded. Owner playtest pending.
+  Updated architecture, roadmap, handoff, and folder READMEs; generated HTML is not included.
+
+---
+
 ## 2026-11-08: Step 7b complete and closed (docs only, no code change)
 
 - **Why:** the owner asked for the slice to be ticked and closed, and raised nothing about it, so it

@@ -31,14 +31,10 @@ runs when opened from disk.
 
 Dependencies only point downward. Lower layers never import higher ones.
 
-> **Known exception today:** `sim/` still imports `render/` (scene, models) to build and remove
-> the meshes of bullets, crates, particles, rocks and the player's ship. That is the last one, and
-> refactor step 7 closes it ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)); **7a is done**, so hostiles are
-> already plain data and no `sim/` file touches an enemy's mesh any more.
-> **`core/` is closed (step 6):** the sim emits `sfx { name }` for sound and reads
-> `state.controls` for input, so no `sim/` file imports `core/` at all. Do not add *new* upward
-> imports. `tests/layers.test.mjs` fails if a `sim/` file imports `core/` or `ui/`, and holds the
-> shrinking allow-list of `sim/` files that may still import `render/`.
+> **Layer boundary:** steps 6 and 7c removed sim imports of core, UI and render. Sector
+> scenery follows `sector-entered`, and `main.js` supplies the previous rendered camera direction
+> for missile lock. `tests/layers.test.mjs` enforces empty allow-lists. Hull mounts are shared data
+> (`data/mounts.js`), used by `sim/pilot.js` and the `PlayerShipView` in `render/views.js`.
 > The full list of debts and the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
 
 ```

@@ -16,7 +16,6 @@ import { state } from "../state/state.js";
 import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
-import { playerLocal } from "./pilot.js";
 import { addEntity, dropEntity } from "./entity.js";
 
 /**
@@ -49,9 +48,6 @@ function pointing(p, dir) {
   faceQ(q, p, p.clone().add(dir), 1);
   return q;
 }
-
-/** The point a missile leaves the ship from (5 m ahead of its middle). */
-export const missileMuzzle = scale => playerLocal(V(0, -1.2, -5 * scale));
 
 /** Move every missile, steer it, trail it and resolve its hit. */
 export function updateMissileFlight(dt) {

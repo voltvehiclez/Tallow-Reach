@@ -8,6 +8,7 @@ import { DEFAULT_SECTOR } from "../data/sectors.js";
 export const state = {
   profile: newProfile(),
   player: null,        // the flying ship (created in sim/player.js: pos, quat, velocity, hull)
+  aimDirection: { x: 0, y: 0, z: -1 }, // last rendered camera direction, supplied by the frame loop
   paused: false,
   time: 0,             // seconds of unpaused play
   sector: DEFAULT_SECTOR,   // id from data/sectors.js: the region you are flying in

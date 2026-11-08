@@ -1,7 +1,7 @@
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
-import { renderer, scene, camera, stars, planet, spin } from "./render/scene.js";
+import { renderer, scene, camera, stars, planet, spin, showSector } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
 import { state } from "./state/state.js";
 import { newProfile } from "./state/profile.js";
@@ -57,6 +57,9 @@ installCameraControls(state.freeCam, {
   getScale: () => SHIPS[state.profile.ship].sc,
 });
 
+on("sector-entered", ({ id }) => showSector(id));
+showSector(state.sector);
+
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
 
 on("action", ({ name, repeat }) => {
@@ -92,6 +95,7 @@ addEventListener("resize", () => {
 // --- Frame loop ------------------------------------------------------------
 
 let last = performance.now();
+const cameraAim = camera.position.clone();
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -121,6 +125,9 @@ function frame(now) {
   });
 
   if (!P.docked) {
+    // Preserve the previous rendered camera orientation used by lock-on.
+    const aim = cameraAim.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
     flight(dt);
     updateShield(dt);     // shields recharge after a lull in the fighting
     updatePower(dt);      // cells charge from the fitted powerplants and cells

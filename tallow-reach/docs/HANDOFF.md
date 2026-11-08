@@ -1,8 +1,8 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **182 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **185 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
-> The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
+> `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
 > **confirmed by the owner's own playtest** (2026-11-08), so they are no longer "untested".
 > This file replaces the memory of the previous chat. Read it, then **`docs/VISION.md`** (what the
@@ -37,15 +37,12 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** steps **4**, **5**, **6**, **7a** and **7b** are **ticked**, and **7b is
-  complete** (proved identical by the old-vs-new probe and then closed by the owner, who did not
-  report a problem with it). Nothing is in flight: **7c has not been started**. **Every
-  entity in the game is plain data now** — an enemy, a bullet, a missile, a crate, an explosion
-  spark, a rock and the player's own ship — and `render/views.js` draws all of them, so **no
-  `src/sim/` file holds a mesh**. **Step 7c is next**: the player hull's own view class with named
-  mount points, and then the two remaining `render/` imports in `sim/` (`sectors.js`'s `showSector`,
-  `weapons.js`'s lock-cone camera read). Step 7 ends when that allow-list in
-  `tests/layers.test.mjs` is empty. Data-only content can be added in the meantime.
+- **Next action:** **step 7 is complete and ticked**: the owner playtested 7c and reported it
+  passed on 2026-11-08. `PlayerShipView` owns the hull; named gun, missile and beam mounts come
+  from `src/data/mounts.js` and are shared with `sim/pilot.js`. `sector-entered` updates scenery
+  even on a docking reset; the frame loop supplies the last camera direction for missile lock.
+  The sim has **no render imports** and no meshes. 185 tests passed; save version remains 12.
+  **Step 8 is next**: fixed time step and a list of players.
 
 ---
 
@@ -206,7 +203,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 182 tests expected
+npm test          # 185 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 

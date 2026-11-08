@@ -106,13 +106,7 @@ const CORE_ALLOWED = new Set();
  * sim/ files that may still import render/. Step 7 empties this: it lost ai.js
  * and targeting.js in 7a, and loses the rest in 7b and 7c.
  */
-const RENDER_ALLOWED = new Set([
-  // 7b emptied this of asteroids.js, combat.js, effects.js, player.js and
-  // world.js: rocks, bullets, crates, particles and the player's ship are plain
-  // data now, and render/views.js draws them.
-  "sectors.js",    // showSector() shows and hides a sector's scenery groups (step 10)
-  "weapons.js",    // reads camera.quaternion for the missile lock cone (step 8)
-]);
+const RENDER_ALLOWED = new Set();
 
 /** sim/ files that may import ui/. None may, and none ever will (ui reads state). */
 const UI_ALLOWED = new Set();

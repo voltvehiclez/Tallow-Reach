@@ -7,7 +7,6 @@ import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { SHIPS } from "../data/ships.js";
 
-import { camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
@@ -18,18 +17,12 @@ export { gunsOf, refreshGuns } from "./guns.js";
 import { fire } from "./combat.js";
 import { boom } from "./effects.js";
 import { enemyPos } from "./enemy.js";
-import { playerPos, playerFwd, playerLocal } from "./pilot.js";
-import { launchMissile, updateMissileFlight, missileMuzzle } from "./missile.js";
+import { playerPos, playerFwd, playerMount } from "./pilot.js";
+import { launchMissile, updateMissileFlight } from "./missile.js";
 import { dropEntity } from "./entity.js";
 import { spawnAsteroid } from "./asteroids.js";
 
 const ASTEROID_RESPAWN_MS = 30000;
-// Metres between the linked barrels of a multi-barrel gun (the basic cannon links two).
-// A twin-link sits on the two fixed nose hardpoints at -1.8 m and +1.8 m, the layout
-// the cannons had before they were a module: one bolt per side of the nose. Private
-// to the firing code; how many barrels a gun has is data (`barrels` on the module).
-const BARREL_SPACING = 3.6;
-
 // The mining beam's glow and the missiles' bodies are drawn by `render/views.js`
 // (step 7b). The sim only says where the beam is and when it is on:
 // `state.flight.beamStart` / `beamEnd` / `beamOn`, which the view copies.
@@ -94,9 +87,8 @@ export function updatePrimary(dt) {
       const n = Math.max(1, g.barrels || 1),
         f = playerFwd();
       for (let b = 0; b < n; b++) {
-        const x = n > 1 ? (b - (n - 1) / 2) * BARREL_SPACING : -1.8 + 3.6 * i;
         fire(
-          playerLocal(V(x, -0.2, -5 * d.sc)),
+          playerMount("gun", i, b, n),
           f,
           g.speed,
           true,
@@ -141,7 +133,7 @@ export function updatePrimary(dt) {
     } else {
       // The beam cuts continuously. Draw it, charge for it, and bank whole ores
       // as they complete.
-      const start = playerLocal(V(0, -1, -6 * d.sc)),
+      const start = playerMount("beam"),
         end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5));
       // The sim says where the beam starts and stops; render/views.js draws it.
       F.beamOn = true;
@@ -223,7 +215,7 @@ export function updateMissiles(dt) {
     // ui/hud.js (step 6b). The sim says the angle; the HUD draws it.
     F.coneAngle = MISSILE.cone;
 
-    const cf = V(0, 0, -1).applyQuaternion(camera.quaternion),
+    const cf = V(state.aimDirection.x, state.aimDirection.y, state.aimDirection.z),
       pp = playerPos();
     let best = null,
       bestAngle = (MISSILE.cone * Math.PI) / 180;
@@ -273,5 +265,5 @@ function fireMissile(target, launcher) {
   S.msl--;
   // The missile itself is a record (`sim/missile.js`); its body and trail are
   // render/views.js's business.
-  launchMissile(target, launcher, playerFwd(), missileMuzzle(SHIPS[S.ship].sc));
+  launchMissile(target, launcher, playerFwd(), playerMount("missile"));
 }

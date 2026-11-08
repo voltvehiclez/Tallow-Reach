@@ -3,9 +3,9 @@
 Rules of the game. Reads and changes `state`, talks to other systems with events. Imports `data/`,
 `state/` and `util/`. **It holds no mesh, no material and no scene** (refactor steps 7a and 7b): an
 enemy, a bullet, a missile, a crate, a spark, a rock and the player's own ship are plain records, and
-`render/views.js` draws them. Two `render/` imports are left and neither is an entity —
-`sectors.js` calls `showSector()` for the scenery groups and `weapons.js` reads `camera.quaternion`
-for the lock cone — and `tests/layers.test.mjs` lists them by name.
+`render/views.js` draws them. Step 7c removes the remaining render imports: sector entry
+emits `sector-entered`, and missile lock reads the camera direction supplied in `state.aimDirection`
+by the frame loop. Named weapon mounts come from `data/mounts.js`, transformed by `pilot.js`.
 **It never touches the speakers or the keyboard:** a sound is `emit("sfx", { name })` (played by the
 `SFX` table in `core/audio.js`) and the pilot's intent arrives in `state.controls` (filled by
 `core/input.js`, shape in `state/controls.js`). `tests/layers.test.mjs` keeps all of that true.
@@ -34,7 +34,7 @@ for the lock cone — and `tests/layers.test.mjs` lists them by name.
 | `effects.js` | Cosmetic explosions and exhaust, as records: `{ id, kind: "fx", pos, v, l, t, col, size }`. Colour and size are data, so the view needs to invent nothing. |
 | `world.js` | Sector layout constants, `clearTransient()` (docking: hostiles, shots, missiles and sparks) and `clearWorldObjects()` (warping and loading: crates and sparks as well; rocks stay, they are the sector's). |
 | `entity.js` | **Every entity except a hostile and the pilot's ship** goes in and out of the world here (step 7b): `addEntity(list, e)` gives it an id from `util/ids.js` and emits `entity-spawned { id, kind }`, `dropEntity(list, e)` emits `entity-removed`, `clearEntities(list)` empties one. One place, so a view can never miss one. |
-| `pilot.js` | Where the player's ship is (step 7b): `playerPos`, `playerFwd`, `playerDist`, `setPlayerPos`, `facePlayer`, `playerVel`, `playerLocal`, `shipScale`. The ship is `state.player.pos` / `.quat`; `playerLocal` builds a point in the hull's own frame by hand (pos + scale + quat), never from `matrixWorld`. This is how muzzles, the missile rail, the beam and the chase camera find the ship. |
+| `pilot.js` | Where the player's ship is (step 7b): `playerPos`, `playerFwd`, `playerDist`, `setPlayerPos`, `facePlayer`, `playerVel`, `playerLocal`, `shipScale`. The ship is `state.player.pos` / `.quat`; `playerMount` resolves named mounts; `playerLocal` builds a point in the hull's own frame by hand (pos + scale + quat), never from `matrixWorld`. This is how muzzles, the missile rail, the beam and the chase camera find the ship. |
 | `missile.js` | A missile as a record `{ id, kind: "missile", pos, quat, d, sp, t, l, dmg }`: `launchMissile`, `updateMissileFlight`, and the hit that makes it explode. It homes on the hostile it locked (`t`). |
 
 Rules:

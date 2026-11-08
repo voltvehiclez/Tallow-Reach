@@ -130,3 +130,18 @@ check that nothing was left behind. Run it straight after **A** and **B**, while
    again to come back.
 
 **Pass:** every item above behaves as written, and `npm test` is green.
+
+## H. Step 7c: hull mounts, lock and sector scenery
+
+1. In the project folder run `npm install`, `npm test`, then `npm run build`. Open
+   `game/tallow-reach.html` and click **Enter the hangar**. Load an existing save or start a new game.
+2. Launch and fire the cannons: both bolts should leave the usual left and right nose positions.
+   If available, select the mining beam with **2** and mine a rock; its beam should start at the
+   ship as before. Try other owned hulls from **Outfitting** if available.
+3. With missiles fitted, keep a raider inside the dashed ring until it locks, then right click.
+   Check the missile leaves the ship and homes as before. Hold **Left Alt** to orbit: the missile
+   should not acquire a lock in free camera; release and check it can lock again.
+4. Press **M** to warp to Kestrel Hollow. Meridian and the asteroid field should disappear.
+   Warp back: they should return. Also dock after returning and launch again; the scenery should
+   still be correct. If destroyed while in Kestrel Hollow, check the outpost scenery returns on
+   respawn. Report any differences before marking 7c complete.

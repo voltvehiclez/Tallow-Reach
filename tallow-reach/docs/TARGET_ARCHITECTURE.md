@@ -51,8 +51,8 @@ cannot be bolted on to a game whose world is made of 3D-scene objects and a sing
 NOW                                  TARGET
 main.js                              main.js            boot + loop, feeds controls, runs sim steps
 ui/                                  ui/                HUD, menus, starmap (reads state, calls sim actions)
-render/   <--- sim imports these     render/            meshes, camera, FX. Listens to events. Views of entities.
-sim/      imports render/ + core/    core/              audio (listens to events), input (writes controls)
+render/                              render/            meshes, camera, FX. Listens to events. Views of entities.
+sim/                                 core/              audio (listens to events), input (writes controls)
 state/                               net/ (later)       transport, snapshots, join link
 data/                                sim/               PURE rules. Imports only data/, state/, util/.
 core/                                state/             profile, world, session, saves
@@ -135,7 +135,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 
 | Debt | Evidence | Step |
 | --- | --- | --- |
-| `sim/` imports the screen | **Closed for entities (step 7b):** bullets, missiles, crates, sparks, rocks and the player's ship are plain data and `render/views.js` draws them, so no `sim/` file holds a mesh. Two imports remain and neither is an entity: `sectors.js` calls `showSector()` to show a sector's scenery groups, and `weapons.js` reads `camera.quaternion` for the missile lock cone | 7c, 8, 10 |
+| `sim/` imports the screen | **Closed in 7c:** sector entry emits an event; the frame loop supplies the camera direction used for missile lock. The render-import allow-list is empty. | — |
 | Entities are three.js meshes | **Closed (steps 7a and 7b):** every entity is a record with an `id` and a `kind` — an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. `render/views.js` owns every mesh | — |
 | Variable time step | `main.js` `dt = Math.min(0.05, ...)` per animation frame | 8 |
 | One global player | `state.player` read in 14 files | 8 |

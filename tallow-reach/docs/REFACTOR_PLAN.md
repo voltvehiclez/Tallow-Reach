@@ -191,8 +191,9 @@ Everything plays as before.
 `render/views.js` creating, updating and removing their meshes by watching the entity lists. **7b
 (ticked 2026-11-08):** bullets, missiles, crates and particles as records (`sim/entity.js`,
 `sim/missile.js`), and — pulled forward because the rules already read them — rocks and the player's
-own ship (`sim/pilot.js`). **7c (left):** the player hull's own view class with named mount points
-(the gun muzzles and the missile rail), and then making `sectors.js` not import `render/` at all.
+own ship (`sim/pilot.js`). **7c (ticked 2026-11-08):** the player hull has its own view class with named mount points
+(the gun muzzles and the missile rail); `sectors.js` and `weapons.js` no longer import `render/`.
+The owner playtested 7c and reported it passed.
 Each slice is playable on its own. Positions are plain `{x,y,z}` data (or keep three.js
 vectors/quaternions as maths types, which is fine; just no meshes, scenes or materials in `sim/`).
 **Done when.** The `render/` allow-list in the layer test is empty. A new **headless sim test**

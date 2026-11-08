@@ -21,7 +21,6 @@ import {
 } from "../data/sectors.js";
 import { emit } from "../util/events.js";
 import { state, msg, say } from "../state/state.js";
-import { showSector } from "../render/scene.js";
 import { clearWorldObjects, swapField } from "./world.js";
 
 /** True while a warp is in progress. */
@@ -35,7 +34,7 @@ export function enterSector(id) {
   if (id === state.sector) return;
   swapField(state.sector, id);
   state.sector = id;
-  showSector(id);
+  emit("sector-entered", { id });
 }
 
 /**

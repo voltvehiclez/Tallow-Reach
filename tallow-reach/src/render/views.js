@@ -17,7 +17,7 @@
 //
 // Step 7a did hostiles and step 7b did the rest of the world (bullets, missiles,
 // crates, particles, rocks and the player's own ship, plus the mining beam);
-// step 7c will give the player's hull its own view class with named mount points.
+// step 7c gives the player hull a view class with named mount points.
 
 import * as THREE from "three";
 import { scene } from "./scene.js";
@@ -27,6 +27,7 @@ import { on } from "../util/events.js";
 import { UP } from "../util/math.js";
 import { enemyDef } from "../data/enemies.js";
 import { SHIPS } from "../data/ships.js";
+import { mountOffset } from "../data/mounts.js";
 import { buildPlayerShip } from "./models.js";
 
 /* ------------------------------------------------------------------------- */
@@ -85,8 +86,7 @@ const claim = (map, id, m) => {
 
 /**
  * Build the mesh for any of the small entities, or `null` for a kind this file
- * does not draw (rocks wait for 7c). Each entry is `[mesh, finish]`, where
- * `finish` sets whatever the mesh needs before it is added.
+ * does not draw.
  */
 function buildEntity(e) {
   switch (e.kind) {
@@ -159,19 +159,34 @@ function copyState(e, m) {
 /* The player's ship (step 7b; its model and mounts are 7c)                    */
 /* ------------------------------------------------------------------------- */
 
-/** The mesh of the ship being flown, and the hull it was built for. */
-let playerMesh = null;
-let playerHull = null;
+/** Owns the visible hull and its named, data-defined weapon mounts. */
+export class PlayerShipView {
+  constructor(hull) {
+    this.hull = hull;
+    this.mesh = buildPlayerShip(hull);
+    scene.add(this.mesh);
+  }
+  mount(name, bay = 0, barrel = 0, count = 1) {
+    return mountOffset(this.hull, name, SHIPS[this.hull].sc, bay, barrel, count);
+  }
+  update(player) {
+    const m = this.mesh;
+    m.position.copy(player.pos);
+    m.quaternion.copy(player.quat);
+    m.visible = !player.docked;
+    if (m.eng) m.eng.forEach(e => e.scale.set(1, 1, 0.5 + player.thr * 2 + player.bs * 2));
+  }
+  remove() { scene.remove(this.mesh); }
+}
 
-function ensurePlayerMesh() {
-  const P = state.player;
+let activePlayerView = null;
+function ensurePlayerView() {
   const hull = state.profile.ship;
-  if (playerMesh && playerHull === hull) return playerMesh;
-  if (playerMesh) scene.remove(playerMesh);
-  playerMesh = buildPlayerShip(hull);
-  playerHull = hull;
-  scene.add(playerMesh);
-  return playerMesh;
+  if (!activePlayerView || activePlayerView.hull !== hull) {
+    if (activePlayerView) activePlayerView.remove();
+    activePlayerView = new PlayerShipView(hull);
+  }
+  return activePlayerView;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -287,12 +302,7 @@ export function updateEntityViews() {
 function updatePlayerView() {
   const P = state.player;
   if (!P || !P.pos) return;
-  const m = ensurePlayerMesh();
-  m.position.copy(P.pos);
-  m.quaternion.copy(P.quat);
-  m.visible = !P.docked;
-  // The engine glows swell with the throttle, as they always have.
-  if (m.eng) m.eng.forEach(e => e.scale.set(1, 1, 0.5 + P.thr * 2 + P.bs * 2));
+  ensurePlayerView().update(P);
 }
 
 /** The mining beam: a cylinder from `beamStart` to `beamEnd` while it is on. */
@@ -315,4 +325,4 @@ export const enemyViewCount = () => enemies.size;
 export const entityViewCount = () => drawn.size;
 
 /** The player's mesh, for a test to look at (null before the first frame). */
-export const playerView = () => playerMesh;
+export const playerView = () => activePlayerView?.mesh || null;

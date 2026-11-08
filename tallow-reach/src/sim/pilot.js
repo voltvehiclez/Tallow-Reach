@@ -13,10 +13,11 @@
 //
 // The model is not gone: it is the *view's*, built from `profile.ship` and copied
 // from `pos`/`quat` once a frame (refactor step 7c gives the player hull its own
-// view class; until then `render/views.js` does it).
+// view class in `render/views.js`).
 
 import { V, fwdQ, faceQ } from "../util/math.js";
 import { SHIPS } from "../data/ships.js";
+import { mountOffset } from "../data/mounts.js";
 import { state } from "../state/state.js";
 
 /** Where the pilot's ship is (the live vector; move it, do not replace it). */
@@ -66,3 +67,9 @@ export const shipScale = () => SHIPS[state.profile.ship].sc;
 
 /** The pilot's own velocity (zero before `createPlayer`). */
 export const playerVel = () => state.player.v || V(0, 0, 0);
+
+/** World-space position of a named weapon mount. */
+export function playerMount(name, bay = 0, barrel = 0, count = 1) {
+  const { x, y, z } = mountOffset(state.profile.ship, name, shipScale(), bay, barrel, count);
+  return playerLocal(V(x, y, z));
+}
