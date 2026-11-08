@@ -12,6 +12,7 @@ by the frame loop. Named weapon mounts come from `data/mounts.js`, transformed b
 
 | File | What it does |
 |---|---|
+| `step.js` | `stepSim(dt)` runs the gameplay systems in order; `createSimClock()` feeds it 60 fixed ticks per simulated second and caps long frames. |
 | `player.js` | Ship setup (`setShip`), flight model and `hurt()` (shields absorb first, then the hull; the saved fraction `profile.hp[ship]` is stamped on every hull hit). A ship with no drive gets no thrust and no turn, and pressing a control warns "Equip thrusters to move". |
 | `shield.js` | The ship's shields from the fitted module: `shieldOf` a loadout, `refreshShield` after a fit, ship change, load or dock, `updateShield` each frame (off while being hit, then `regen` a second after the `delay` lull). Also charges the ship a flat `shieldDraw` MJ/s for keeping them up, and bleeds them away when the ship cannot pay. |
 | `power.js` | Ships' power budget: `powerOf` a loadout, `refreshPower`/`refillPower` after a fit change, `updatePower` each frame, and `hasPower` to ask whether the ship can pay for a demand. Writes `state.power` for the HUD; `draw` is set by the thrusters in `sim/player.js`, the shields in `sim/shield.js`, the guns and the beam in `sim/weapons.js`. |

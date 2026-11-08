@@ -35,3 +35,6 @@ export function setSeed(seed) {
 
 /** The shared random source, in [0, 1). Every gameplay roll goes through this. */
 export const random = () => (source ? source() : Math.random());
+
+/** Cosmetic randomness must not consume the seeded gameplay sequence. */
+export const cosmeticRandom = () => Math.random();

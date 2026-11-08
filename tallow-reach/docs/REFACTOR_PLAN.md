@@ -201,13 +201,14 @@ builds a world, spawns an enemy, steps 600 ticks with no browser and checks the 
 shot. The game plays as before. Mount points to be data-driven and named, so a model can supply them later.
 **Save.** None.
 
-## Step 7d: Entity view registry (owner-approved cleanup, implemented; playtest pending)
+## Step 7d: Entity view registry (ticked 2026-11-08)
 **Goal.** Make new entity views extensible without changing existing view machinery.
 **Do.** Replace the two entity-kind switches and separate enemy mesh map in `render/views.js`
 with one registry of kind-specific list, build, update and removal handlers and one live-view map.
 Keep the player hull view and beam separate. Preserve events, frame reconciliation and disposal.
 **Done when.** Existing views behave as before; a test registers a fake kind and proves its mesh
-appears, updates and disappears without editing existing kinds. Tests and build pass.
+appears, updates and disappears without editing existing kinds. Tests and build pass. The owner
+reported the playtest passed.
 **Save.** None.
 
 ## Step 8: Fixed time step and a list of players
@@ -219,6 +220,23 @@ is **settled** and must be identical: add a test comparing the position after N 
 at the old variable step and the new fixed step.
 **Done when.** Single-player plays identically at 30, 60 and 144 fps (check with the browser's frame
 rate throttle if you can). Tests green.
+**Owner-approved slices** (each gets its own tests and playtest; no networking in these slices):
+- **8a — fixed simulation tick.** Move the gameplay updates to `sim/step.js`, feed them from a
+  fixed-step accumulator, preserve pause and the existing long-frame cap, and compare flight with
+  the old loop. **Implemented, awaiting owner playtest** (`TESTING-BASELINE.md` section J). The
+  60 fps flight test matches the old loop; other old frame rates have measured differences.
+- **8b — player records and controls.** Introduce `state.players`, `localPlayer()` and an
+  independent control record for each player. Keep the existing single-player experience and
+  add tests showing that player records and controls are independent. Not started.
+- **8c — player-aware systems.** Make the relevant simulation systems act on the player passed
+  to them instead of assuming one global player. Test independent players without adding
+  multiplayer transport. Not started.
+
+**Before all of step 8 can be ticked:** resolve or explicitly validate the remaining frame-rate
+risks: missile lock currently samples the rendered camera, asteroid respawn uses a wall-clock
+timer, and views are not interpolated between ticks. The owner must playtest the slices; verify
+single-player at 30, 60 and 144 fps where possible. Do not represent the headless flight/combat
+tests as proof that the entire game is frame-rate independent.
 **Save.** None.
 
 ## Step 9: Split the save into profile and world

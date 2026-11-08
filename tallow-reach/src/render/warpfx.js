@@ -6,9 +6,10 @@
 // during the charge and falls back to 0 as the drive settles.
 
 import * as THREE from "three";
-import { R } from "../util/math.js";
 import { camera } from "./scene.js";
 import { state } from "../state/state.js";
+import { cosmeticRandom } from "../util/rng.js";
+const R = (a, b) => a + cosmeticRandom() * (b - a);
 
 const COUNT = 130;      // streaks in flight
 const NEAR = 2;         // a streak is recycled once it reaches this z

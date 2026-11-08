@@ -108,7 +108,7 @@ export const state = {
   shops: {},
 };
 
-/** Show a hint for this frame only. Call every frame to keep it visible. */
+/** Show a hint until the next simulation tick. */
 export const say = text => {
   state.hud.prompt = text;
 };

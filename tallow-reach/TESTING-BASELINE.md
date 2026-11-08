@@ -157,3 +157,19 @@ check that nothing was left behind. Run it straight after **A** and **B**, while
 4. Press **M** to warp away and back. Check scenery and rocks match the sector, and that no shots,
    raiders, crates or sparks are left floating after the warp. Dock with **G** when back at Meridian,
    then launch again and check the ship and asteroid field look normal.
+
+## J. Step 8a: fixed-tick flight and combat
+
+1. Open the 8a build, click **Enter the hangar** and launch. Fly forward, turn, strafe, reverse,
+   brake and boost; compare the feel and camera movement with your 7d baseline. Look for visible
+   judder, especially on a high-refresh screen. Press **P**, wait several seconds and resume:
+   the ship, enemies and projectiles should not jump forward from the paused time.
+2. Fly to the asteroid field; check rocks, hints and the mining beam if you have it. Fight a raider:
+   cannons, incoming fire, hits, explosions, loot and shields should work as before. If fitted,
+   acquire a missile lock and launch a missile; check the lock ring and its target.
+3. Press **M** to warp away and back, then dock with **G**. Check the scenery and flight. Launch
+   again and load an older save from the Saves tab; check the ship and equipment are still there.
+4. If you have a way to cap your display at 30, 60 and 144 frames per second, repeat the flight
+   and combat checks at each rate. If not, ordinary playtesting is useful too. Report anything
+   different, especially judder or inconsistent missile lock; the camera and asteroid respawn
+   are not yet proven frame-rate independent.

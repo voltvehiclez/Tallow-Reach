@@ -1,6 +1,7 @@
 # src/render: what you see in 3D
 
-Visual only. Reads `state` and the sim, never changes game rules.
+Visual only. Reads `state` and the sim, never changes game rules. Visual random choices use
+`cosmeticRandom` so render frame rate does not consume seeded gameplay rolls.
 
 | File | What it does |
 |---|---|

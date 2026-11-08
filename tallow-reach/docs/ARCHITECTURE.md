@@ -335,6 +335,11 @@ Each `src/` folder also has its own short `README.md`.
   string, which the panel shows as a green toast.
 - **Screens are pure functions** that return an HTML string from the current state.
   They never change state.
+- **The sim runs at 60 ticks a second** (`sim/step.js`, `data/simulation.js`); the frame loop
+  accumulates time and keeps the old 0.05-second stall cap. Pause does not advance it. Screen and
+  sound randomness use a separate cosmetic stream. Missile aim still samples the last rendered
+  camera direction and asteroid respawn still uses a wall-clock timer; full frame-rate independence
+  has not been proven. Views are not interpolated between ticks.
 - **Anything that accumulates must be multiplied by `dt`.** A constant added per frame
   (`camera.rotateZ(0.05)` every frame, say) silently depends on the frame rate: harmless on a
   60 Hz screen, a visible bug on a 240 Hz one. This bit the warp roll once. Use

@@ -4,7 +4,7 @@
 // (see the bottom of the file). The engine and ambience are driven by
 // updateAudio() once per frame.
 
-import { random } from "../util/rng.js";
+import { cosmeticRandom as random } from "../util/rng.js";
 import { on } from "../util/events.js";
 
 let ctx = null;

@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **188 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **195 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
@@ -41,9 +41,18 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
   passed on 2026-11-08. `PlayerShipView` owns the hull; named gun, missile and beam mounts come
   from `src/data/mounts.js` and are shared with `sim/pilot.js`. `sector-entered` updates scenery
   even on a docking reset; the frame loop supplies the last camera direction for missile lock.
-  The sim has **no render imports** and no meshes. 188 tests passed; save version remains 12.
-  **7d registry cleanup is implemented and awaiting the owner's playtest**: see `TESTING-BASELINE.md` section I and recipe 19 in
-  `docs/HOW_TO_ADD.md`. Step 8 follows after the cleanup is accepted.
+  The sim has **no render imports** and no meshes. 195 tests passed; save version remains 12.
+  **7d registry cleanup is complete and ticked**: the owner reported its playtest passed on
+  2026-11-08. See `TESTING-BASELINE.md` section I and recipe 19 in `docs/HOW_TO_ADD.md`.
+  **Step 8a is implemented, awaiting playtest** (`TESTING-BASELINE.md` section J). Gameplay
+  steps at 60 Hz; view and sound randomness no longer consumes the seeded gameplay RNG. The old
+  60 fps flight matches exactly in a headless test; after ten seconds, old 30 fps differs by 2.2932
+  units and old 144 fps by 1.3400 units in that scenario. **Not fully frame-independent yet:**
+  missile aim still samples the rendered camera, asteroid respawn uses wall time, and views are not
+  interpolated between ticks. No browser frame-throttle test was run. After acceptance, 8b and 8c
+  **8b** still has to deliver `state.players`, `localPlayer()` and independent per-player
+  controls. **8c** still has to make relevant systems accept the player they act on. Both need
+  tests and playtests; step 8 must not be ticked until all slices and its frame-rate checks pass.
 
 ---
 
@@ -204,7 +213,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 188 tests expected
+npm test          # 195 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 

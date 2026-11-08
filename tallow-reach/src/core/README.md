@@ -2,7 +2,7 @@
 
 | File | What it does |
 |---|---|
-| `audio.js` | All sound, synthesised with Web Audio. The **`SFX` table** says what each game sound is, played by the one `on("sfx", playSfx)` listener — the sim emits `sfx` events and never calls this file. `tone()`, `nz()`, `uiSound()`, `hoverSound()`, the warp pair `warpCharge()`/`warpBurst()`, `oreGained()` (a chime when a beam cycle banks an ore), per-frame `updateAudio()`, mute (`toggleMute`, `isMuted`) and `setAudioSuspended` for pause. |
+| `audio.js` | All sound, synthesised with Web Audio. The **`SFX` table** says what each game sound is, played by the one `on("sfx", playSfx)` listener — the sim emits `sfx` events and never calls this file. `tone()`, `nz()`, `uiSound()`, `hoverSound()`, the warp pair `warpCharge()`/`warpBurst()`, `oreGained()` (a chime when a beam cycle banks an ore), per-frame `updateAudio()`, cosmetic-only randomness, mute (`toggleMute`, `isMuted`) and `setAudioSuspended` for pause. |
 | `input.js` | The only file that knows a key code. It does two jobs: `HELD` + `syncControls()` fill the pilot's control record in `state.controls` (what `src/sim/` reads), and `BINDINGS` maps one-off keys to named `action` events handled in `main.js`. |
 
 Rules:

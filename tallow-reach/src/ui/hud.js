@@ -145,7 +145,6 @@ export function updateHud(dt) {
   // A ship with no thrusters cannot move, so say why the controls do nothing.
   el.prompt.textContent =
     H.prompt || (state.drive.spd > 0 ? "" : "No thrusters fitted: press G to dock and fit one.");
-  H.prompt = "";
 
   el.msg.textContent = H.msgT > 0 ? H.msg : "";
   if (H.msgT > 0) H.msgT -= dt;

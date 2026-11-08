@@ -1,9 +1,11 @@
 // Camera: docking orbit, chase view, free orbit (hold Alt) and screen shake.
 // Input comes in through the event bus; the sim decides when free cam is allowed.
 
-import { V, R, face, clamp, fwdQ } from "../util/math.js";
+import { V, face, clamp, fwdQ } from "../util/math.js";
 import { on } from "../util/events.js";
 import { state } from "../state/state.js";
+import { cosmeticRandom } from "../util/rng.js";
+const R = (a, b) => a + cosmeticRandom() * (b - a);
 import { FLIGHT } from "../data/ships.js";
 import { cameraTrail } from "../data/camera.js";
 import { camera } from "./scene.js";
