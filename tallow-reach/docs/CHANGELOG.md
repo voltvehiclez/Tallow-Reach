@@ -77,6 +77,9 @@ the next person must know (save version, rebuild needed, known issues).
   `src/sim/README.md`, `src/render/README.md`, `docs/{ARCHITECTURE,TARGET_ARCHITECTURE,ROADMAP,REFACTOR_PLAN,HOW_TO_ADD,HANDOFF}.md`,
   `TESTING-BASELINE.md` (new section G), this changelog and `CHANGELOG_ARCHIVE.md` (four oldest
   entries moved out, index lines added). Run `npm run build` and `npm test`.
+- **`serve.mjs` (new, testing only):** `node serve.mjs` serves `game/tallow-reach.html` over HTTP
+  with caching off, so the owner can play the current build in a browser without copying files.
+  Nothing in `src/` imports it; the game is still built to one file by `npm run build`.
 - **Next:** step 7c (the player hull's own view class and mount points), then step 8.
 
 ---

@@ -239,6 +239,10 @@ npm run build     # writes game/tallow-reach.html
   the lock and the hold fingerprinted each time — **0 differences**. The one trick it needs: call
   `updateMatrixWorld()` on the old build's ship after every teleport, or the old build fires from a
   stale transform and the shot positions differ for that reason alone. Probes are never kept.
+- **Play-testing from inside a chat:** `node serve.mjs` (then open the port it prints) serves
+  `game/tallow-reach.html` over HTTP with caching off, so a rebuild shows on refresh and the owner
+  can play the current build in the browser without copying files. It is a convenience only — no
+  `src/` file imports it, and the real build is still `npm run build` producing one HTML file.
 - Some sessions have Chromium and Playwright; check before assuming either way.
 - The user tests by clicking through the `TESTING-*.md` files. Keep them current: they are the only
   bridge between the code and someone who does not read it.
