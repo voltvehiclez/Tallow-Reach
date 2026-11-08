@@ -518,10 +518,12 @@ therefore three small pieces and no scene code in `sim/`.
    they hand out ids from `src/util/ids.js` (a counter, so spawning never disturbs the seeded random
    sequence). If docking or warping should clear it, add the list to `clearTransient()` or
    `clearWorldObjects()` in `src/sim/world.js`.
-3. **The drawing.** One `case "<kind>"` in the mesh builder in `src/render/views.js`, and one line in
-   its per-frame copy (`pos`, `quat`, and anything that changes — a fade, a scale). Copy from the
-   record; never let the view write back into it, and never read `matrixWorld` outside `render/`
-   (three.js only refreshes it at draw time, so it is last frame's transform).
+3. **The drawing.** Register the kind in `src/render/views.js` with `registerEntityView`:
+   supply `list` (returns its current world array), `build` (returns its mesh with its initial pose),
+   `update` (copies the record to the mesh each frame), and `remove` (disposes resources owned by
+   that mesh; use `noCleanup` for shared resources). The registry attaches and removes the mesh
+   and reconciles missed events; do not add another switch or edit the common view machinery.
+   Copy from the record; never write back into it or read `matrixWorld` outside `render/`.
 4. **Test it.** `tests/headless-fight.test.mjs` is the model: drive the real sim with no browser and
    assert on `state`. If the thing is drawn, add its kind to the list in `tests/layers.test.mjs`
    (the test that checks `render/views.js` knows every kind) and a mesh count to

@@ -9,8 +9,8 @@
 **Current position:** **step 7 is complete and ticked** (2026-11-08): the owner played
 and confirmed step 7c. The player hull has its own view and shared named mount data; sector
 scenery follows an event, and missile lock uses the previous camera direction supplied by
-`main.js`. The sim's render-import allow-list is empty. 185 tests passed; save version remains
-12. **Step 8 is next**: fixed time step and a list of players.
+`main.js`. The sim's render-import allow-list is empty. Owner-approved **7d registry cleanup is implemented,
+awaiting playtest**. 188 tests passed; save version remains 12. Step 8 follows after acceptance.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -47,6 +47,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 5 | Shops and prices from data | A | [x] 2026-11-08 |
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
 | 7 | Entities are data, meshes are views (7a enemies, 7b everything else in the world, 7c the hull's own view class) | B | [x] **2026-11-08: 7a, 7b and 7c complete; owner playtested 7c.** |
+| 7d | Entity view registry cleanup | B | [ ] **Implemented; awaiting owner playtest.** |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |

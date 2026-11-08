@@ -31,33 +31,7 @@ import { mountOffset } from "../data/mounts.js";
 import { buildPlayerShip } from "./models.js";
 
 /* ------------------------------------------------------------------------- */
-/* Hostiles (step 7a)                                                        */
-/* ------------------------------------------------------------------------- */
-
-/** Enemy id -> its mesh. */
-const enemies = new Map();
-
-/** Build the mesh for enemy `e` and put it in the scene. */
-function addEnemy(e) {
-  const def = enemyDef(e.def),
-    m = mkShip(def.col, def.scale, true);
-  m.position.copy(e.pos);
-  m.quaternion.copy(e.quat);
-  scene.add(m);
-  enemies.set(e.id, m);
-  return m;
-}
-
-/** Take enemy `id`'s mesh out of the scene. Doing it twice is harmless. */
-function removeEnemy(id) {
-  const m = enemies.get(id);
-  if (!m) return;
-  scene.remove(m);
-  enemies.delete(id);
-}
-
-/* ------------------------------------------------------------------------- */
-/* Bullets, missiles, crates and particles (step 7b)                          */
+/* Entity view registry                                                       */
 /* ------------------------------------------------------------------------- */
 
 const bulletGeo = new THREE.BoxGeometry(0.3, 0.3, 5);
@@ -77,81 +51,124 @@ const crateCoreMat = mm(0x3a6a7a, 0x1a5a6a);
 
 const particleGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 
-/** A crash bar: an id that somehow exists twice must not take a mesh with it. */
-const claim = (map, id, m) => {
-  const old = map.get(id);
-  if (old) scene.remove(old);
-  map.set(id, m);
-};
-
-/**
- * Build the mesh for any of the small entities, or `null` for a kind this file
- * does not draw.
- */
-function buildEntity(e) {
-  switch (e.kind) {
-    case "bullet": {
-      const m = new THREE.Mesh(bulletGeo, e.own ? playerBulletMat : enemyBulletMat);
-      m.position.copy(e.pos);
-      m.quaternion.copy(e.quat);
-      return m;
-    }
-    case "missile": {
-      const m = new THREE.Mesh(missileGeo, missileMat);
-      m.position.copy(e.pos);
-      m.quaternion.copy(e.quat);
-      return m;
-    }
-    case "crate": {
-      const m = new THREE.Mesh(crateGeo, e.item === "core" ? crateCoreMat : crateSalvMat);
-      m.position.copy(e.pos);
-      m.quaternion.copy(e.quat);
-      return m;
-    }
-    case "fx": {
-      // Each particle owns its own material, because it fades on its own.
-      const m = new THREE.Mesh(
-        particleGeo,
-        new THREE.MeshBasicMaterial({ color: e.col, transparent: true })
-      );
-      m.position.copy(e.pos);
-      m.scale.setScalar(e.size || 1);
-      return m;
-    }
-    case "rock": {
-      const m = new THREE.Mesh(rockShapeAt(e.shape || 0), mm(0x4a4540, rockGlow(e.type)));
-      m.position.copy(e.pos);
-      m.quaternion.copy(e.quat);
-      m.scale.copy(e.scale);
-      return m;
-    }
-    default:
-      return null;
-  }
-}
-
 /** A rock's faint glow by the ore inside it (the colours it always had). */
 const rockGlow = type => (type === "cobalt" ? 0x14304a : type === "voidite" ? 0x3a1a55 : 0);
 
-/** Today the small entities live in these four lists; `state.world` is the truth. */
-const smallLists = () => {
-  const W = state.world;
-  return [W.bullets, W.missiles, W.crates, W.fx, W.asteroids];
-};
+// Enemy IDs and other entity IDs come from separate counters, so a single map
+// must namespace them. `group` also preserves the two existing frame updates.
+const kinds = new Map();
+const drawn = new Map(); // group:id -> { mesh, kind, group, handler }
+const keyFor = (group, id) => `${group}:${id}`;
 
-const drawn = new Map();   // entity id -> { m, kind }
+/**
+ * Register a view kind. `list` returns its current world records; build returns
+ * a mesh, update copies per-frame state, and remove releases owned resources.
+ * Scene attachment/removal is managed centrally, not by the callbacks.
+ */
+export function registerEntityView(kind, { list, build, update, remove, group = "entity" }) {
+  if (kinds.has(kind)) throw new Error(`View kind already registered: ${kind}`);
+  if (typeof list !== "function" || typeof build !== "function" ||
+      typeof update !== "function" || typeof remove !== "function" ||
+      (group !== "entity" && group !== "enemy")) {
+    throw new Error(`Invalid view registration: ${kind}`);
+  }
+  kinds.set(kind, { list, build, update, remove, group });
+}
 
-/** Every per-frame update a mesh might need, by kind. */
-function copyState(e, m) {
-  switch (e.kind) {
-    case "fx":
-      m.material.opacity = Math.max(0, e.l / (e.t || 1));
-      break;
-    case "rock":
-      m.scale.copy(e.scale);
-      break;
-    default:
-      break;
+/** Set the initial pose before adding the mesh, just as the old builders did. */
+function initialPose(e, m) {
+  m.position.copy(e.pos);
+  if (e.quat) m.quaternion.copy(e.quat);
+  return m;
+}
+function updatePose(e, m) {
+  m.position.copy(e.pos);
+  if (e.quat) m.quaternion.copy(e.quat);
+}
+const noCleanup = () => {};
+
+registerEntityView("enemy", {
+  group: "enemy", list: () => state.world.enemies,
+  build: e => { const def = enemyDef(e.def); return initialPose(e, mkShip(def.col, def.scale, true)); },
+  update: updatePose, remove: noCleanup,
+});
+registerEntityView("bullet", {
+  list: () => state.world.bullets,
+  build: e => initialPose(e, new THREE.Mesh(bulletGeo, e.own ? playerBulletMat : enemyBulletMat)),
+  update: updatePose, remove: noCleanup,
+});
+registerEntityView("missile", {
+  list: () => state.world.missiles,
+  build: e => initialPose(e, new THREE.Mesh(missileGeo, missileMat)),
+  update: updatePose, remove: noCleanup,
+});
+registerEntityView("crate", {
+  list: () => state.world.crates,
+  build: e => initialPose(e, new THREE.Mesh(crateGeo, e.item === "core" ? crateCoreMat : crateSalvMat)),
+  update: updatePose, remove: noCleanup,
+});
+registerEntityView("fx", {
+  list: () => state.world.fx,
+  build: e => {
+    const m = initialPose(e, new THREE.Mesh(particleGeo, new THREE.MeshBasicMaterial({ color: e.col, transparent: true })));
+    m.scale.setScalar(e.size || 1);
+    return m;
+  },
+  update: (e, m) => { updatePose(e, m); m.material.opacity = Math.max(0, e.l / (e.t || 1)); },
+  remove: m => { if (m.material) m.material.dispose(); },
+});
+registerEntityView("rock", {
+  list: () => state.world.asteroids,
+  build: e => {
+    const m = initialPose(e, new THREE.Mesh(rockShapeAt(e.shape || 0), mm(0x4a4540, rockGlow(e.type))));
+    m.scale.copy(e.scale);
+    return m;
+  },
+  update: (e, m) => { updatePose(e, m); m.scale.copy(e.scale); },
+  remove: noCleanup,
+});
+
+function addView(e, handler) {
+  const key = keyFor(handler.group, e.id);
+  if (drawn.has(key)) return drawn.get(key);
+  const mesh = handler.build(e);
+  if (!mesh) return null;
+  scene.add(mesh);
+  const view = { mesh, kind: e.kind, group: handler.group, handler };
+  drawn.set(key, view);
+  return view;
+}
+function removeView(key) {
+  const view = drawn.get(key);
+  if (!view) return;
+  scene.remove(view.mesh);
+  view.handler.remove(view.mesh);
+  drawn.delete(key);
+}
+function spawnView(kind, id) {
+  const handler = kinds.get(kind);
+  if (!handler) return;
+  const e = handler.list().find(x => x.id === id && x.kind === kind);
+  if (e) addView(e, handler);
+}
+
+/** Reconcile every registered list in a group, including missed events. */
+function updateGroup(group) {
+  const seen = new Set();
+  for (const [kind, handler] of kinds) {
+    if (handler.group !== group) continue;
+    for (const e of handler.list()) {
+      if (e.kind !== kind) continue;
+      const key = keyFor(group, e.id);
+      seen.add(key);
+      const view = drawn.get(key) || addView(e, handler);
+      if (view) view.handler.update(e, view.mesh);
+    }
+  }
+  for (const [key, view] of [...drawn]) {
+    if (view.group === group && !seen.has(key)) {
+      removeView(key);
+    }
   }
 }
 
@@ -209,91 +226,20 @@ scene.add(beamMesh);
  * events from the start.
  */
 export function installEnemyViews() {
-  on("enemy-spawned", ({ id }) => {
-    const e = state.world.enemies.find(x => x.id === id);
-    if (e && !enemies.has(id)) addEnemy(e);
-  });
-  on("enemy-removed", ({ id }) => removeEnemy(id));
-
-  on("entity-spawned", ({ id }) => {
-    const e = findEntity(id);
-    if (!e || drawn.has(id)) return;
-    const m = buildEntity(e);
-    if (!m) return;
-    scene.add(m);
-    claim(drawn, id, m);
-    drawn.set(id, { m, kind: e.kind });
-  });
-
-  on("entity-removed", ({ id }) => {
-    const d = drawn.get(id);
-    if (!d) return;
-    scene.remove(d.m);
-    if (d.kind === "fx" && d.m.material) d.m.material.dispose();
-    drawn.delete(id);
-  });
+  on("enemy-spawned", ({ id }) => spawnView("enemy", id));
+  on("enemy-removed", ({ id }) => removeView(keyFor("enemy", id)));
+  on("entity-spawned", ({ id, kind }) => spawnView(kind, id));
+  on("entity-removed", ({ id }) => removeView(keyFor("entity", id)));
 }
 
-/** Where the entity with `id` is right now, from whichever list holds it. */
-function findEntity(id) {
-  for (const list of smallLists()) {
-    const e = list.find(x => x.id === id);
-    if (e) return e;
-  }
-  return null;
-}
-
-/**
- * Copy every enemy's position and rotation onto its mesh, and reconcile the two
- * lists. Call once per frame after the sim has run.
- */
+/** Reconcile hostiles at their existing point in the frame. */
 export function updateEnemyViews() {
-  const wanted = new Set();
-
-  for (const e of state.world.enemies) {
-    wanted.add(e.id);
-    const m = enemies.get(e.id) || addEnemy(e);
-    m.position.copy(e.pos);
-    m.quaternion.copy(e.quat);
-  }
-
-  // Whatever is no longer in the world loses its mesh (this covers the cases no
-  // event fired for, and a scene cleared by docking or a warp).
-  for (const id of [...enemies.keys()]) if (!wanted.has(id)) removeEnemy(id);
+  updateGroup("enemy");
 }
 
-/**
- * The same for every small entity: a mesh per bullet, missile, crate, particle
- * and rock, reconciled against the lists the sim keeps. Call once a frame.
- */
+/** Reconcile other entities, then the player hull and mining beam. */
 export function updateEntityViews() {
-  const seen = new Set();
-
-  for (const list of smallLists()) {
-    for (const e of list) {
-      seen.add(e.id);
-      let d = drawn.get(e.id);
-      if (!d) {
-        const m = buildEntity(e);
-        if (!m) continue;
-        scene.add(m);
-        claim(drawn, e.id, m);
-        d = { m, kind: e.kind };
-        drawn.set(e.id, d);
-      }
-      d.m.position.copy(e.pos);
-      if (e.quat) d.m.quaternion.copy(e.quat);
-      copyState(e, d.m);
-    }
-  }
-
-  for (const [id, d] of [...drawn]) {
-    if (seen.has(id)) continue;
-    scene.remove(d.m);
-    if (d.kind === "fx" && d.m.material) d.m.material.dispose();
-    drawn.delete(id);
-  }
-
+  updateGroup("entity");
   updatePlayerView();
   updateBeamView();
 }
@@ -319,10 +265,10 @@ function updateBeamView() {
 }
 
 /** How many enemy meshes exist (the tests check this number). */
-export const enemyViewCount = () => enemies.size;
+export const enemyViewCount = () => [...drawn.values()].filter(view => view.group === "enemy").length;
 
 /** How many small-entity meshes exist (the tests check this number). */
-export const entityViewCount = () => drawn.size;
+export const entityViewCount = () => [...drawn.values()].filter(view => view.group === "entity").length;
 
 /** The player's mesh, for a test to look at (null before the first frame). */
 export const playerView = () => activePlayerView?.mesh || null;

@@ -176,6 +176,9 @@ Each `src/` folder also has its own short `README.md`.
   are three.js `Vector3`/`Quaternion` — maths types, which the target architecture allows — and the
   mesh is `render/views.js`'s business: it listens for `enemy-spawned` / `enemy-removed` and sweeps
   the list every frame. **Never give an entity a mesh again**; add the drawing to `render/views.js`.
+  Since 7d a registry in `render/views.js` defines each kind's list, build, update and cleanup;
+  one active-view map namespaces enemy and other entity ids because their counters are separate.
+  `tests/views.test.mjs` registers a fake kind to prove the common machinery is extensible.
   Kills emit `enemy-killed { def, faction, id }`; a hunt contract names the def it counts (`e`).
 - **Every other entity is a record too (step 7b).** A bullet, a missile, a loot crate, an explosion
   spark, a rock and the player's own ship are all plain data with an `id` and a `kind`, held in

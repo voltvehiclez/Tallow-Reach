@@ -19,6 +19,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 7d — entity view registry cleanup
+
+- Replaced view-kind switches and the separate enemy map with a registry and one active-view map.
+  Each kind supplies its world list and build, update and removal handlers; enemy and other entity
+  ids are namespaced because they use separate counters. Existing events and frame sweeps remain.
+- Added fake-kind lifecycle, overlapping-id and particle cleanup tests; updated recipe 19 and the
+  render README, and added `TESTING-BASELINE.md` section I. No gameplay or save changes; save version remains 12. 188 tests pass. Owner
+  playtest pending; build and testing checklist are noted in the handoff and roadmap.
+
+---
+
 ## 2026-11-08: Step 7c and step 7 complete and ticked
 
 - The owner playtested step 7c and reported it passed. Marked step 7c and step 7 complete in

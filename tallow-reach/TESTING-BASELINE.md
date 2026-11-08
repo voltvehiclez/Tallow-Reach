@@ -145,3 +145,15 @@ check that nothing was left behind. Run it straight after **A** and **B**, while
    Warp back: they should return. Also dock after returning and launch again; the scenery should
    still be correct. If destroyed while in Kestrel Hollow, check the outpost scenery returns on
    respawn. Report any differences before marking 7c complete.
+
+## I. Step 7d: entity view registry cleanup
+
+1. Launch and fly to the asteroid field. Check rocks appear normally; if you have the mining beam,
+   mine a rock and check it shrinks and disappears when emptied.
+2. Fire the cannons at a raider. Check your shots and the raider's shots appear and disappear on
+   impact or expiry. Destroy it: the raider should vanish, sparks should fade, and loot crates
+   should appear. Fly into a crate and check it vanishes when picked up.
+3. If you have missiles, lock a raider and fire one: it should appear, fly, and disappear on impact.
+4. Press **M** to warp away and back. Check scenery and rocks match the sector, and that no shots,
+   raiders, crates or sparks are left floating after the warp. Dock with **G** when back at Meridian,
+   then launch again and check the ship and asteroid field look normal.

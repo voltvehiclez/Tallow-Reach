@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **185 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **188 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
@@ -41,8 +41,9 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
   passed on 2026-11-08. `PlayerShipView` owns the hull; named gun, missile and beam mounts come
   from `src/data/mounts.js` and are shared with `sim/pilot.js`. `sector-entered` updates scenery
   even on a docking reset; the frame loop supplies the last camera direction for missile lock.
-  The sim has **no render imports** and no meshes. 185 tests passed; save version remains 12.
-  **Step 8 is next**: fixed time step and a list of players.
+  The sim has **no render imports** and no meshes. 188 tests passed; save version remains 12.
+  **7d registry cleanup is implemented and awaiting the owner's playtest**: see `TESTING-BASELINE.md` section I and recipe 19 in
+  `docs/HOW_TO_ADD.md`. Step 8 follows after the cleanup is accepted.
 
 ---
 
@@ -203,7 +204,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 185 tests expected
+npm test          # 188 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 

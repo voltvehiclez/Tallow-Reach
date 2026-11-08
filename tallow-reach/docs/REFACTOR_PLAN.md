@@ -201,6 +201,15 @@ builds a world, spawns an enemy, steps 600 ticks with no browser and checks the 
 shot. The game plays as before. Mount points to be data-driven and named, so a model can supply them later.
 **Save.** None.
 
+## Step 7d: Entity view registry (owner-approved cleanup, implemented; playtest pending)
+**Goal.** Make new entity views extensible without changing existing view machinery.
+**Do.** Replace the two entity-kind switches and separate enemy mesh map in `render/views.js`
+with one registry of kind-specific list, build, update and removal handlers and one live-view map.
+Keep the player hull view and beam separate. Preserve events, frame reconciliation and disposal.
+**Done when.** Existing views behave as before; a test registers a fake kind and proves its mesh
+appears, updates and disappears without editing existing kinds. Tests and build pass.
+**Save.** None.
+
 ## Step 8: Fixed time step and a list of players
 **Goal.** The sim steps at a fixed rate and does not assume one player.
 **Do.** `sim/step.js` exposes `stepSim(dt)`; `main.js` feeds it fixed steps (for example 1/60 s)

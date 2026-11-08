@@ -402,6 +402,6 @@ test("the sim announces every entity, and render/views.js builds one mesh per en
     assert.match(views, new RegExp(`on\\("${name}"`), `render/views.js listens for ${name}`);
   }
   for (const kind of ["bullet", "missile", "crate", "fx", "rock"]) {
-    assert.match(views, new RegExp(`case "${kind}"`), `render/views.js knows how to draw a ${kind}`);
+    assert.match(views, new RegExp(`registerEntityView\\("${kind}"`), `render/views.js knows how to draw a ${kind}`);
   }
 });
