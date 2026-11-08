@@ -34,6 +34,8 @@ the next person must know (save version, rebuild needed, known issues).
   `renderer.setPixelRatio` on window resize (`src/main.js`).
 - Added `tests/render-interp.test.mjs`; all **226 tests** pass (both 8b single-player oracles
   unchanged), and `game/tallow-reach.html` was rebuilt via `npm run build`. Save version remains **13**.
+- **Owner playtest passed:** confirmed both the ship hull blur and the close-range locked-target
+  name-tag blur (asteroids and raiders) are completely gone during combat and warping.
 
 ---
 

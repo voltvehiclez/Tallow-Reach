@@ -4,9 +4,9 @@
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops, **step 8**
-> (now with between-tick render interpolation for 240 Hz displays) and **step 9** (save v13
-> profile/world split) are built and tested — **Milestone B is complete** pending final visual check
-> of the 240 Hz interpolation fix.
+> (including between-tick render interpolation for 240 Hz displays) and **step 9** (save v13
+> profile/world split) are all **confirmed by the owner's playtests** (2026-11-08) — **Milestone B
+> is complete**.
 > This file replaces the memory of the previous chat. Read it, then **`docs/VISION.md`** (what the
 > game is meant to become), **`docs/ROADMAP.md`** (what is done and next), `docs/ARCHITECTURE.md`
 > (the code as it is), `docs/TARGET_ARCHITECTURE.md` (where it is heading), `docs/HOW_TO_ADD.md`
