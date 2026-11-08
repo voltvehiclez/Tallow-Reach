@@ -13,6 +13,7 @@ import { state } from "../state/state.js";
 import { fire } from "./combat.js";
 import { FIELD_CENTER } from "./world.js";
 import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
+import { playerPos } from "./pilot.js";
 
 /**
  * "chase": close in quickly from far, circle once near. Used by the raider.
@@ -67,8 +68,7 @@ export function updateEnemies(dt) {
   const W = state.world,
     F = state.flight,
     S = state.profile,
-    P = state.player,
-    pp = P.m.position,
+    pp = playerPos(),        // the pilot's ship is a record too (step 7b)
     E = W.enemies;
 
   for (let i = E.length - 1; i >= 0; i--) {

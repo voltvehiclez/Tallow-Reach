@@ -139,7 +139,7 @@ export function updateHud(dt) {
     el.beamPct.textContent = `${pct}%`;
   }
 
-  if (!state.warp && sectorAt(state.sector).st && P.m.position.length() < 300) {
+  if (!state.warp && sectorAt(state.sector).st && P.pos.length() < 300) {
     say(P.v.length() < 70 ? "Press G to dock at Meridian Outpost" : "Slow below 70 m/s to dock");
   }
   // A ship with no thrusters cannot move, so say why the controls do nothing.
@@ -228,7 +228,7 @@ function mark(p, text, cls, ox, oy) {
 
   el_.style.cssText = `display:block;left:${x}px;top:${y}px`;
   el_.className = "mk " + cls;
-  el_.textContent = text === null ? "" : text + " " + fmtDist(state.player.m.position.distanceTo(p));
+  el_.textContent = text === null ? "" : text + " " + fmtDist(state.player.pos.distanceTo(p));
 }
 
 function drawMarkers() {
@@ -257,8 +257,8 @@ function drawMarkers() {
   }
 
   W.crates.forEach(c => {
-    if (c !== (lock && lock.o) && P.m.position.distanceTo(c.m.position) < 900) {
-      mark(c.m.position, "Crate", "");
+    if (c !== (lock && lock.o) && P.pos.distanceTo(c.pos) < 900) {
+      mark(c.pos, "Crate", "");
     }
   });
 

@@ -1,12 +1,13 @@
 // Target lock (F). Locks onto whatever is nearest the crosshair: hostiles,
 // rocks, crates or the outpost. Pressing F again releases the lock.
 
-import { fwd, clamp } from "../util/math.js";
+import { clamp } from "../util/math.js";
 import { itemName } from "../data/items.js";
 import { sectorAt } from "../data/sectors.js";
 import { state, msg } from "../state/state.js";
 import { STATION_POS } from "./world.js";
 import { enemyPos } from "./enemy.js";
+import { playerPos, playerFwd } from "./pilot.js";
 
 /**
  * A lock is { k, o }: k is "e" hostile, "a" asteroid, "c" crate, "s" station.
@@ -22,8 +23,8 @@ export function toggleLock() {
     return;
   }
 
-  const f = fwd(P.m),
-    pp = P.m.position;
+  const f = playerFwd(),
+    pp = playerPos();
   let best = null,
     bestScore = 0.45;
 
@@ -38,8 +39,8 @@ export function toggleLock() {
     }
   };
   for (const e of W.enemies) test("e", e, enemyPos(e), 8);
-  for (const a of W.asteroids) test("a", a, a.m.position, a.r);
-  for (const c of W.crates) test("c", c, c.m.position, 4);
+  for (const a of W.asteroids) test("a", a, a.pos, a.r);
+  for (const c of W.crates) test("c", c, c.pos, 4);
   if (sectorAt(state.sector).st) test("s", null, STATION_POS, 100);
 
   if (best) {
@@ -53,7 +54,7 @@ export function toggleLock() {
 /** Current world position of a lock target. */
 export function lockPosition(lock) {
   if (lock.k === "s") return STATION_POS;
-  return lock.k === "e" ? enemyPos(lock.o) : lock.o.m.position;
+  return lock.k === "e" ? enemyPos(lock.o) : lock.o.pos;
 }
 
 /** Label shown on the lock marker. */

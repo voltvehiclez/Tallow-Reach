@@ -3,6 +3,8 @@ import { random } from "./rng.js";
 
 export const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export const Q = () => new THREE.Quaternion();
+/** A rotation in the order `rotate.set(x, y, z)` used to set it (maths, not a mesh). */
+export const E = (x, y, z) => new THREE.Euler(x, y, z);
 export const UP = V(0, 1, 0);
 export const R = (a, b) => a + random() * (b - a);
 export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));

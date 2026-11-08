@@ -106,14 +106,18 @@ src/main.js            boot, action handling (lock, weapon, dock, pause), frame 
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
 src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
-src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
+src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers), ids.js (entity ids)
 src/core/              audio.js (synth + mute), input.js (keys -> state.controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
-src/sim/               player, power, drive, fitting, inventory, shops' purchases (economy), weapons, combat, ai, enemy (a hostile as data), loot, asteroids, targeting, contracts, session, sectors, effects, world
-src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting), views.js (a mesh per entity)
+src/sim/               player, pilot (where the ship is), power, drive, fitting, inventory, shops' purchases (economy),
+                       weapons, missile, combat, ai, enemy (a hostile as data), entity (every other entity as data),
+                       loot, asteroids, targeting, contracts, session, sectors, effects, world
+src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting),
+                       views.js (a mesh per entity, the player's ship and the mining beam)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
                        enemies.test.mjs (enemies as data), headless-sim.test.mjs (600 ticks, no browser),
+                       headless-fight.test.mjs (a whole fight, no browser: shots, crates, missiles, mining),
                        views.test.mjs (the mesh follows the entity), headless.mjs (test helper)
 docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, HANDOFF.md, CHANGELOG.md (recent + index), CHANGELOG_ARCHIVE.md (older, full text)
 ```
@@ -177,6 +181,18 @@ Each `src/` folder also has its own short `README.md`.
   mesh is `render/views.js`'s business: it listens for `enemy-spawned` / `enemy-removed` and sweeps
   the list every frame. **Never give an entity a mesh again**; add the drawing to `render/views.js`.
   Kills emit `enemy-killed { def, faction, id }`; a hunt contract names the def it counts (`e`).
+- **Every other entity is a record too (step 7b).** A bullet, a missile, a loot crate, an explosion
+  spark, a rock and the player's own ship are all plain data with an `id` and a `kind`, held in
+  `state.world` (`bullets`, `missiles`, `crates`, `fx`, `asteroids`) or on `state.player`. They are
+  added and removed only through `sim/entity.js` (`addEntity` / `dropEntity` / `clearEntities`),
+  which emits `entity-spawned` / `entity-removed { id, kind }`; ids come from `util/ids.js`, a
+  counter that never touches the seeded RNG. Positions and rotations are three.js maths types
+  (`pos`, `quat`); a rock also carries `s0` (its born size), `scale` (its drawn size, which mining
+  shrinks — the collision rule reads it) and `shape` (which lumpy model). The player's ship is read
+  only through `sim/pilot.js` (`playerPos`, `playerFwd`, `playerLocal`, `facePlayer`); `playerLocal`
+  builds a point in the ship's own frame from `pos`/`quat`, never from `matrixWorld`.
+  **`src/sim/` holds no mesh, material or scene object**; `tests/layers.test.mjs` fails if one is
+  named in a sim file's code.
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
   `vol`, `st`.
@@ -186,8 +202,10 @@ Each `src/` folder also has its own short `README.md`.
 - **`matrixWorld` is last frame's transform.** three.js only refreshes it when the scene is
   drawn, so `object.localToWorld(v)` during the frame loop silently uses where the object was
   one frame ago — an error that grows with speed. This is what made the chase camera trail
-  further the faster the ship flew. Build world points from `position` and `quaternion` by hand
-  when the result matters (see `render/camera.js`).
+  further the faster the ship flew, and it is why bolts used to leave from where the guns were
+  last frame. Build world points from a record's `pos` and `quat` by hand when the result matters
+  (`playerLocal` in `sim/pilot.js`, `chaseView` in `render/camera.js`). **No code outside
+  `render/` may read `matrixWorld` at all** — `tests/layers.test.mjs` enforces it for `sim/`.
 - **Camera trail has one home: the `CAMERA` table in `data/camera.js`** (`base` 11, `fast` 17,
   `reverse` 10.5, with the pure helper `cameraTrail(vf, fwdTop, revTop)`). It is the only thing
   that changes the chase distance with speed; the camera's easing must never see the ship's

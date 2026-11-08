@@ -19,6 +19,89 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 7b complete and closed (docs only, no code change)
+
+- **Why:** the owner asked for the slice to be ticked and closed, and raised nothing about it, so it
+  is closed the way every other step has been. Nothing is in flight; **7c has not been started**.
+  (The evidence it is right: the old-vs-new probe's 0 differences, 182 green tests, and
+  `TESTING-BASELINE.md` section G, which is the manual check if anyone wants to re-run it.)
+- **Also:** the commit was tagged **`step7b`**, so the owner can download the whole project as a zip
+  straight from GitHub without any tool of mine being involved:
+  `https://github.com/voltvehiclez/Tallow-Reach/archive/refs/tags/step7b.zip` (GitHub builds it on
+  request; it contains the prebuilt `game/tallow-reach.html` and excludes `node_modules`). GitHub
+  uploads are blocked from this sandbox's network, which is why a release asset could not be
+  attached; the tag archive needs no upload. Step 7a was tagged `step7a-ticked` the same way.
+- Files: `docs/ROADMAP.md` (status line, step-7 row, status log), `docs/HANDOFF.md` (next action),
+  this changelog. No source changed, so no rebuild is needed for this entry — the zip and the build
+  are the 7b build.
+
+---
+
+## 2026-11-08: Refactor step 7b — bullets, missiles, crates and particles become data
+
+- **Why:** after 7a a hostile was plain data, but a bullet, a missile, a loot crate and an explosion
+  spark were still three.js meshes living in `state.world`, moved and removed by the sim
+  (`combat.js`, `effects.js`, `weapons.js`, `world.js`). The sim could not run without a scene, and a
+  host could not send a guest a bullet. Step 7b removes that for every one of them.
+- **Everything transient is a record now** (`src/sim/entity.js`, `src/util/ids.js`): a bullet is
+  `{ id, kind: "bullet", pos, quat, v, own, dmg, l }`, a crate `{ id, kind: "crate", pos, quat, t,
+  item, spin }`, a spark `{ id, kind: "fx", pos, v, l, t, col, size }` and a missile
+  `{ id, kind: "missile", pos, quat, d, sp, t, l, dmg }` (`src/sim/missile.js` is new). `pos` and
+  `quat` are three.js maths types, which the target architecture allows: **no `src/sim/` file holds
+  a mesh, a material or the scene any more**.
+- **`render/views.js` draws all of them.** It listens for the new `entity-spawned` / `entity-removed`
+  events, builds one mesh per entity from its kind, copies `pos`/`quat` (and a rock's `scale`, a
+  spark's fade) once a frame, and sweeps the lists so a mesh can never be left behind. The player's
+  ship model lives here too, built from `profile.ship` and hidden while `player.docked`.
+- **The player's ship is data.** `state.player.pos` / `quat` replace `state.player.m.position` /
+  `.quaternion`; `src/sim/pilot.js` is the only way the sim reads them (`playerPos`, `playerFwd`,
+  `playerLocal`, `facePlayer`). The turn is applied to the record in the same Y-then-X-then-Z order
+  the model's `rotateY/X/Z` used.
+- **Rocks are data a step early** (they were 7c) because the rules already read them: a rock carries
+  `pos`, `quat`, `s0` (born size), `scale` (drawn size, which mining shrinks) and `shape` (which
+  lumpy model), and `render/views.js` draws it into the sector group it belongs to.
+- **The mining beam is a line of numbers:** the sim reports `state.flight.beamStart` / `beamEnd`
+  while it cuts, and the view stretches a cylinder between them.
+- **Two new sim files:** `src/sim/entity.js` (`addEntity` / `dropEntity` / `clearEntities`, and the
+  only emitter of `entity-spawned` / `entity-removed`) and `src/sim/pilot.js`. `src/util/ids.js`
+  hands out ids from a counter, so adding an entity never touches the seeded RNG.
+- **Unchanged behaviour, proven.** An old-vs-new probe ran one seeded session through the previous
+  commit and this tree (real three.js maths, a fake scene) and fingerprinted the pilot, power,
+  every hostile, bullet, missile, crate, spark, rock, the lock and the hold after each stage:
+  **flight, turning, boost, firing, hits, missiles, damage, lock-on, mining, loot, pickup and
+  clearing all identical**. The only deliberate difference: a bolt's muzzle is now built from the
+  ship's data instead of its `matrixWorld`, which three.js keeps a frame behind — so bolts no longer
+  leave from where the guns were last frame (the documented stale-transform bug). With the probe
+  refreshing `matrixWorld` first, both trees agree to the last digit.
+- **Two bugs found and fixed while porting** (both would have changed play): mining must shrink the
+  rock's *data* (`scale`), because collision reads it, not just its mesh; and a rock's random shape
+  must be rolled *before* its position, in the same order as before, or a seed builds a different
+  field. Both are now pinned by the probe and by tests.
+- **`tests/layers.test.mjs`:** `asteroids.js`, `combat.js`, `effects.js`, `player.js` and `world.js`
+  left the `render/` allow-list. Two files remain and the test now says why: `sectors.js`
+  (`showSector` — scenery groups, step 10) and `weapons.js` (`camera.quaternion` for the lock cone,
+  step 8). New rules: no sim file's *code* may mention `Mesh`/`Group`/`Geometry`/`Material`/
+  `scene`/`matrixWorld`; a rock and the pilot's ship must be plain data; and `render/views.js` must
+  know every entity kind.
+- **New tests (182 in all):** `tests/headless-fight.test.mjs` (9) — the whole fight with no browser:
+  a shot's record, a hit, a kill with loot crates, a crate picked up or expiring, a homing missile,
+  mining a rock, clearing the world, and a check that the sim makes **no scene call at all**.
+  `tests/views.test.mjs` grew five: a bullet's mesh appears and goes, crates/sparks/rocks are drawn,
+  a missile is drawn from its record, the ship's model follows its record, and the beam's numbers.
+- **Save:** unchanged, version stays **12**. **Files:** `src/sim/{entity,pilot,missile}.js` (new),
+  `src/util/{ids}.js` (new), `src/sim/{combat,effects,weapons,player,asteroids,world,ai,targeting,sectors,session}.js`,
+  `src/render/{views,camera,models}.js`, `src/ui/hud.js`, `src/main.js`, `src/state/state.js`,
+  `src/util/{events,math}.js`, `tests/{headless-fight,views,layers,headless-sim}.test.mjs`,
+  `src/sim/README.md`, `src/render/README.md`, `docs/{ARCHITECTURE,TARGET_ARCHITECTURE,ROADMAP,REFACTOR_PLAN,HOW_TO_ADD,HANDOFF}.md`,
+  `TESTING-BASELINE.md` (new section G), this changelog and `CHANGELOG_ARCHIVE.md` (four oldest
+  entries moved out, index lines added). Run `npm run build` and `npm test`.
+- **`serve.mjs` (new, testing only):** `node serve.mjs` serves `game/tallow-reach.html` over HTTP
+  with caching off, so the owner can play the current build in a browser without copying files.
+  Nothing in `src/` imports it; the game is still built to one file by `npm run build`.
+- **Next:** step 7c (the player hull's own view class and mount points), then step 8.
+
+---
+
 ## 2026-11-08: Step 7a ticked (docs only, no code change)
 
 - **Why:** the owner played the 7a build and reported that the raiders behave as usual and that
@@ -323,150 +406,12 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-07: Refactor step 4 — the item catalogue and one inventory per place (save v12)
-
-- **Why:** the game knew five cargo types by name. `data/items.js` built a fixed object with a key
-  per ore (`emptyCargo()`), the save named those keys by hand, spare modules were a separate list,
-  and every system that touched cargo looped over the same `KEYS` array. A sixth item — a trade
-  good, a second salvage type, ammo — meant editing the sim, the save and the screens.
-- **New:** one catalogue, `ITEMS` in `src/data/items.js`, with a category (`ore`, `salvage`,
-  `module`, `ammo`, `consumable`, `trade`), a sell value, a volume in m³ and a stack rule. Every
-  module is an item entry too (`beam_basic: { cat: "module" }`) whose name, volume and stats stay in
-  `data/modules.js`, so nothing is written twice. Code reads it through the helpers only
-  (`itemName`, `itemVol`, `itemValue`, `canSell`, `itemStack`, `isModule`, `isItem`).
-- **Save version 12.** A place (`profile.store`, `profile.holds[id]`) is one stock,
-  `{ itemId: count }`, instead of goods in one object plus a `modules` list — and `profile.modules`
-  is gone. Old saves convert on load: the old lists are poured in, zero counts are dropped, unknown
-  ids and negative counts are still cleaned. `tests/saves/v11-real.json` is a genuine v11 save
-  (written by the code before this step) and a test converts it.
-- **Changed:** `sim/inventory.js` (`moveItem` replaces `moveCargo` and `moveModule`; new `addItem`,
-  `takeItem`, `countOf`, `itemsAt`, `unitsOf`, `buyItem`, and `valueOf`, which moved here so it can
-  be tested without the screen), `sim/fitting.js` (bays are fitted from the one stock),
-  `sim/economy.js` (store, load and sell read the catalogue; selling or storing now touches only
-  goods, so spare parts are never swept away), `sim/combat.js` and `sim/weapons.js` (a picked-up
-  crate or a mined ore is `addItem(...)`), `ui/screens.js` and `ui/menu.js` (one tile list per place,
-  the same ORE/MOD tiles, arrows and Sell box).
-- **Nothing plays differently.** A throwaway probe ran the same 29-step session through the previous
-  commit and this one, with the screen and the speakers stubbed: buying 3 beams and 2 missiles, a
-  refused purchase, 11 cannons into a hold that only takes 10, ore across, fitting a beam, a bad bay,
-  unequipping a powerplant, buying and switching ships, storing, loading, selling the hold, selling
-  the station, selling part of a stack, and what the station is worth. **Credits, every stock, the
-  m³ in use and every fitted bay were identical after every step**; the Inventory, Shop and Base tabs
-  also render byte-identical HTML (10,332 characters). One wording change: buying an id that does
-  not exist says "Unknown item." instead of "Unknown module." — no screen can reach it.
-- **Tests:** 121 pass (was 118). `tests/inventory.test.mjs` now covers the v11 conversion, the
-  registry (a test adds a temporary item and watches it be carried, moved, listed and sold), and a
-  source guard: no file may read `profile.cargo`/`profile.modules` or import a fixed list of item
-  keys again.
-
----
-
-## 2026-11-07: Refactor step 3 — loot tables (drops and ore mix are data)
-
-- **Why:** the two drop rules were written inside the game code — one or two salvage crates and a
-  10% core in `sim/combat.js`, the ore mix in `sim/asteroids.js` — so a new drop, a second enemy's
-  loot or a new rock type meant editing the sim. Now both are tables.
-- **New:** `src/data/loot.js` (`LOOT_TABLES`, two kinds: `drops` — a line per drop with a chance `w`,
-  a count range `c` and a scatter `j`; and `pick` — one weighted choice, for a rock's ore) and
-  `src/sim/loot.js` (`rollLoot(id, rng)`, `pickLoot(id, rng)`, pure and tested). The raider table is
-  today's rule exactly: `salv` 1–2 at 100%, `core` 1 at 10% dropped on the wreck; the asteroid table
-  is ferrite 62 / cobalt 30 / voidite 8.
-- **Changed:** `src/data/enemies.js` gains `loot: "raider"`; the enemy record carries it
-  (`src/sim/ai.js`), `killHostile` rolls the table instead of hard-coding crates, `spawnAsteroid`
-  takes its ore from the table, and a crate in the world now carries **which item it holds**
-  (`{ m, t, item }`) instead of a `core` flag — `src/sim/targeting.js` reads that for its label, so
-  the marker still says "crate" / "reactor core".
-- **Nothing plays differently.** Checked against `main` before this step, both versions running on
-  the same substituted `Math.random`: **50,000 rocks gave an identical ore sequence**, and 200,000
-  kills each gave the same odds — one crate 49.80% vs 49.96%, two crates 50.20% vs 50.04%, a core
-  10.02% vs 9.85%, and in both versions every core landed exactly on the wreck. One honest detail:
-  the 50/50 crate count now maps a low die to *one* crate where the old code mapped it to *two*, so
-  individual kills can swap 1↔2 crates while the odds are unchanged. Matching that would have meant
-  writing the count range backwards in the data, which is worse than the invisible difference.
-- **New:** `tests/loot.test.mjs` (9 tests, rolls each table 10,000 times and checks the odds,
-  determinism, a 0% line never dropping, an unknown table giving nothing, and that adding a drop is
-  a data edit) and `TESTING-LOOT.md`. `tests/content.test.mjs` now checks every loot table: real item
-  ids, sane weights and ranges, every enemy's table exists, and the raider/asteroid numbers pinned.
-- **Also:** `tests/rng.test.mjs` followed the crate change (`c.core` → `c.item`).
-- **Saves:** none; still version 11, no migration.
-- **Tests:** 118 pass (108 before).
-- Files: `src/data/loot.js`, `src/sim/loot.js`, `src/data/enemies.js`, `src/sim/ai.js`,
-  `src/sim/combat.js`, `src/sim/asteroids.js`, `src/sim/targeting.js`, `tests/loot.test.mjs`,
-  `tests/content.test.mjs`, `tests/rng.test.mjs`, `TESTING-LOOT.md`, `src/data/README.md`,
-  `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md` (closed debt removed),
-  `docs/HOW_TO_ADD.md` (recipe 18 added), `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog.
-  Run `npm run build` and `npm test`.
-
----
-
-## 2026-11-07: Refactor step 2 — seeded randomness everywhere
-
-- **Why:** "same seed, same run" is the foundation for generated sectors, wormhole instances and
-  co-op. Six rolls in the simulation still called `Math.random()` directly, so seeding never covered
-  the whole game.
-- **Changed:** `src/util/rng.js` now owns everything: `makeRng(seed)` is a new independent generator
-  (same seed, same sequence, forever), `setSeed(n)` installs it for the whole game, `setSeed(null)`
-  goes back to `Math.random`, and `random()` reads `Math.random` at call time when unseeded.
-- **Changed:** the six direct rolls now go through `random()` — the raider's circling direction and
-  the two wander-spawn dice (`src/sim/ai.js`), the 1-or-2 crates and the 10% core (`src/sim/combat.js`),
-  and a rock's ore type (`src/sim/asteroids.js`). Same number of rolls, same order, same odds.
-- **New:** `tests/rng.test.mjs` — fails and names the file and line if `Math.random` appears anywhere
-  in `src/sim/` or `src/data/`; checks `makeRng` repeatability, range and independence from the shared
-  stream; and runs the real spawn, loot and asteroid code headlessly to prove `setSeed(1)` twice gives
-  the identical run.
-- **Nothing plays differently.** The old code (commit `75498f8`) and the new code were run side by side
-  with a substituted `Math.random`: 70 asteroid rocks (ore type, size, ore amount), 60 simulated
-  seconds of raiders with the hunt spawner and every bullet, and 40 kills of loot rolls all came out
-  identical.
-- **Rule for next time:** never call `Math.random()` in `src/sim/` or `src/data/` — use `random()`, or
-  `makeRng(seed)` when a thing must regenerate from its own seed. Written into `ARCHITECTURE.md`,
-  `src/sim/README.md` and `src/util/README.md`.
-- **Saves:** no change; still version 11, no migration.
-- **Tests:** 108 pass (101 before).
-- Files: `src/util/rng.js`, `src/sim/ai.js`, `src/sim/combat.js`, `src/sim/asteroids.js`,
-  `tests/rng.test.mjs`, `src/util/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`,
-  `docs/TARGET_ARCHITECTURE.md` (closed debt removed), `docs/HOW_TO_ADD.md` (recipe 12 rewritten),
-  `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog. Run `npm run build` and `npm test`.
-
----
-
-## 2026-11-07: Refactor step 1 — enemies are data (enemy registry, `enemy-killed` event)
-
-- **Why:** the Newbie Raider's numbers were written inside `sim/ai.js`, so a second enemy meant
-  editing game code. Now an enemy is one entry in `src/data/enemies.js`, which is the first piece of
-  Milestone A (content becomes data-only additions).
-- **New:** `src/data/enemies.js` (`ENEMIES`, the `raider` entry with exactly today's numbers: name,
-  plural name, 10 Hull HP, colour, scale, faction, `chase` behaviour, close/near/orbit speeds,
-  circling distance, fire/lost/hear ranges, first-shot delay, shot gap, 1 damage, 520 m/s bolt, spawn
-  distance; plus `DEFAULT_ENEMY` and `enemyDef()`), `src/data/factions.js` (`FACTIONS`: `pirates`),
-  `tests/headless.mjs` (runs `src/sim/` code in a test with the screen and sound stubbed out — no new
-  package, it uses the esbuild the build already needs), `tests/enemies.test.mjs`, `TESTING-ENEMIES.md`.
-- **Changed:** `src/sim/ai.js` — `spawnPirate(p)` is now `spawnEnemy(id, pos)`; the model, record
-  (`def`, `n`, `f`, `hp`, `mx`, fire timer) and the shot all read the def, and the behaviour comes
-  from `AI_BEHAVIOURS` (one entry, `chase`). `src/sim/combat.js` emits
-  `enemy-killed { def, faction }`; `src/util/events.js` lists it; `src/sim/contracts.js` counts only
-  the enemy a hunt contract names; `src/data/contracts.js` stores that id (`e`) and builds the wording
-  from the def's plural name, so it still reads "Destroy 3 pirate raiders".
-- **Nothing plays differently.** The same numbers were copied, not retuned, and the old and new
-  `sim/ai.js` were run side by side for 60 simulated seconds in three situations (a lone raider, the
-  wandering spawner, a hunt contract): enemy positions, Hull HP, fire timers and every bullet's
-  position and damage matched step for step. Hunt contracts still count raiders only. Contract text,
-  rewards, the lock marker ("Newbie Raider 100%") and loot are unchanged.
-- **Saves:** no change; save version still 11, no migration. A hunt contract saved by an older
-  version has no enemy id, so it keeps its old wording and still counts any hostile.
-- **Tests:** 101 pass (94 before; two `content.test.mjs` source-guards were replaced by real
-  enemy-table checks, and six headless enemy tests are new).
-- **Roadmap:** steps 0 and 1 ticked 2026-11-07 (the owner played this build; old save with a
-  Prospector loaded unchanged).
-- Files: `src/data/enemies.js`, `src/data/factions.js`, `src/sim/ai.js`, `src/sim/combat.js`,
-  `src/sim/contracts.js`, `src/data/contracts.js`, `src/util/events.js`, `tests/headless.mjs`,
-  `tests/enemies.test.mjs`, `tests/content.test.mjs`, `TESTING-ENEMIES.md`, `src/data/README.md`,
-  `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md` (two closed debts
-  removed), `docs/HOW_TO_ADD.md` (recipe 6 rewritten), `docs/HANDOFF.md`, this changelog.
-  Run `npm run build` and `npm test`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-07: Refactor step 4 — the item catalogue and one inventory per place (save v12)
+- 2026-11-07: Refactor step 3 — loot tables (drops and ore mix are data)
+- 2026-11-07: Refactor step 2 — seeded randomness everywhere
+- 2026-11-07: Refactor step 1 — enemies are data (enemy registry, `enemy-killed` event)
 - 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
 - 2026-11-07: Inventory Sell quantity uses a game-styled popover
 - 2026-11-07: Inventory Sell asks how many units to sell

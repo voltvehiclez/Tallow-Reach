@@ -20,7 +20,11 @@
 //                     draws them. ai.js, targeting.js, combat.js (its enemy code)
 //                     and world.js (the station's position) stopped importing
 //                     render/.
-//   7b, 7c            bullets, missiles, crates, particles, rocks, the player's ship.
+//   7b (done)         bullets, missiles, crates, particles, rocks and the player's
+//                     own ship are plain data too (sim/entity.js, sim/pilot.js).
+//                     asteroids.js, combat.js, effects.js, player.js and world.js
+//                     left the list; sectors.js and weapons.js stay for reasons
+//                     that are not entities (see RENDER_ALLOWED).
 //
 // Run with `npm test`.
 
@@ -103,9 +107,11 @@ const CORE_ALLOWED = new Set();
  * and targeting.js in 7a, and loses the rest in 7b and 7c.
  */
 const RENDER_ALLOWED = new Set([
-  "asteroids.js", "combat.js", "effects.js", "player.js",
-  "sectors.js", "weapons.js",
-  "world.js",      // its hostiles went in 7a; its crates, shots and sparks go in 7b/7c
+  // 7b emptied this of asteroids.js, combat.js, effects.js, player.js and
+  // world.js: rocks, bullets, crates, particles and the player's ship are plain
+  // data now, and render/views.js draws them.
+  "sectors.js",    // showSector() shows and hides a sector's scenery groups (step 10)
+  "weapons.js",    // reads camera.quaternion for the missile lock cone (step 8)
 ]);
 
 /** sim/ files that may import ui/. None may, and none ever will (ui reads state). */
@@ -331,4 +337,77 @@ test("a sound emitted with no audio context does not throw", async () => {
   // An unknown name, and no payload at all, are ignored rather than fatal.
   assert.doesNotThrow(() => playSfx({ name: "no-such-sound" }));
   assert.doesNotThrow(() => playSfx());
+});
+
+/* ------------------------------------------------------------------------- */
+/* Step 7b: every other entity is plain data too                              */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Names the sim may never use in its code again: a three.js object that used to
+ * be *stored in the world* (a mesh, a material, the scene itself), or the stale
+ * transform helpers that came with them.
+ */
+const SCENE_OBJECTS = /\b(Mesh|Group|Sprite|Geometry|Material|localToWorld|matrixWorld|scene)\b/;
+
+/**
+ * `sim/` source with its imports and comments taken out, so what is left is only
+ * the code: a comment may explain the history, and importing the scenery groups
+ * is not storing a mesh.
+ */
+function simCode(file) {
+  return readFileSync(path.join(srcDir, "sim", file), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*import\b.*$/gm, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+test("no sim/ file holds or touches a mesh, a material or the scene (step 7b)", () => {
+  const offenders = [];
+  for (const file of simFiles) {
+    const m = simCode(file).match(SCENE_OBJECTS);
+    if (m) offenders.push(`sim/${file} mentions ${m[1]}`);
+  }
+  assert.deepEqual(offenders, [], "a world entity is data; render/views.js owns the meshes");
+});
+
+test("a rock is plain data, and so is the player's own ship", () => {
+  // Both are read by rules — collision, mining, targeting, the chase camera — so
+  // neither may be a mesh (they were the last two meshes in the world).
+  const rocks = simCode("asteroids.js");
+  assert.match(rocks, /kind: "rock"/, "a rock says what kind of thing it is");
+  assert.match(rocks, /^\s*pos: /m, "a rock carries its own position");
+  assert.match(rocks, /quat,/, "and its own rotation");
+  assert.match(rocks, /s0,/, "and the size it was born at (kept so mining can shrink it)");
+  assert.match(rocks, /^\s*scale: /m, "and how big it is drawn right now");
+
+  const pilot = readFileSync(path.join(srcDir, "sim", "pilot.js"), "utf8");
+  assert.match(pilot, /export const playerPos/, "the pilot's position is read through one helper");
+  assert.match(pilot, /export function playerLocal/, "and its own frame is built from pos/quat, not matrixWorld");
+
+  const player = simCode("player.js");
+  assert.match(player, /pos: V\(0, 0, 0\)/, "the ship starts at a plain position");
+  assert.match(player, /quat: Q\(\)/, "and with a plain rotation");
+  assert.match(player, /P\.pos\.addScaledVector/, "and the flight model moves that position");
+});
+
+test("the sim announces every entity, and render/views.js builds one mesh per entity", () => {
+  // `sim/entity.js` is the one place that adds an entity to a list and takes it
+  // out again, and it says so on the bus (recipe 10).
+  const entity = simCode("entity.js");
+  assert.match(entity, /emit\("entity-spawned"/, "sim/entity.js announces a new entity");
+  assert.match(entity, /emit\("entity-removed"/, "and a departing one");
+
+  const events = readFileSync(path.join(srcDir, "util", "events.js"), "utf8");
+  for (const name of ["entity-spawned", "entity-removed"]) {
+    assert.ok(events.includes(name), `${name} is documented in the event list in util/events.js`);
+  }
+
+  const views = readFileSync(path.join(srcDir, "render", "views.js"), "utf8");
+  for (const name of ["entity-spawned", "entity-removed"]) {
+    assert.match(views, new RegExp(`on\\("${name}"`), `render/views.js listens for ${name}`);
+  }
+  for (const kind of ["bullet", "missile", "crate", "fx", "rock"]) {
+    assert.match(views, new RegExp(`case "${kind}"`), `render/views.js knows how to draw a ${kind}`);
+  }
 });

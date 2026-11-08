@@ -254,7 +254,8 @@ menu. Sounds a *screen* makes (buttons, hovers) are not game sounds: they call `
 2. Add `name  payload  description` to the list at the top of `src/util/events.js`.
 3. Listen with `on("name", handler)` wherever it is needed. Listeners must not import the emitter.
    A listener in `render/` is how drawing follows the sim: `render/views.js` listens for
-   `enemy-spawned` / `enemy-removed` and builds or removes the mesh (step 7a).
+   `enemy-spawned` / `enemy-removed` (step 7a) and for `entity-spawned` / `entity-removed`, which
+   `sim/entity.js` emits for every bullet, missile, crate, spark and rock (step 7b).
 
 `sfx` is the worked example (step 6a): the sim emits it at eleven places, and `core/audio.js`
 subscribes once. Payloads should carry **ids and plain numbers**, not objects with behaviour — that
@@ -501,3 +502,27 @@ Steps:
 
 Today: a killed raider drops one or two salvage crates (50/50) and a reactor core on one kill in
 ten; a rock is about 62% ferrite, 30% cobalt, 8% voidite.
+
+## 19. A new kind of thing in the world (a new entity kind)
+
+Everything that flies, drifts or pops in the world is a **record** (refactor steps 7a and 7b), not a
+mesh: an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. A new kind is
+therefore three small pieces and no scene code in `sim/`.
+
+1. **The record.** Give it `{ id, kind: "<kind>", pos, quat, ... }` and the fields its rules need.
+   Positions and rotations are three.js maths types — that is allowed — but **no mesh, material or
+   scene**: `tests/layers.test.mjs` fails if a `sim/` file's code names one.
+2. **Into and out of the world.** Add it to an array in `state.world` with `addEntity(list, e)`, take
+   it out with `dropEntity(list, e)`, empty a list with `clearEntities(list)` — all in
+   `src/sim/entity.js`. Those are the only places that emit `entity-spawned` / `entity-removed`, and
+   they hand out ids from `src/util/ids.js` (a counter, so spawning never disturbs the seeded random
+   sequence). If docking or warping should clear it, add the list to `clearTransient()` or
+   `clearWorldObjects()` in `src/sim/world.js`.
+3. **The drawing.** One `case "<kind>"` in the mesh builder in `src/render/views.js`, and one line in
+   its per-frame copy (`pos`, `quat`, and anything that changes — a fade, a scale). Copy from the
+   record; never let the view write back into it, and never read `matrixWorld` outside `render/`
+   (three.js only refreshes it at draw time, so it is last frame's transform).
+4. **Test it.** `tests/headless-fight.test.mjs` is the model: drive the real sim with no browser and
+   assert on `state`. If the thing is drawn, add its kind to the list in `tests/layers.test.mjs`
+   (the test that checks `render/views.js` knows every kind) and a mesh count to
+   `tests/views.test.mjs`.

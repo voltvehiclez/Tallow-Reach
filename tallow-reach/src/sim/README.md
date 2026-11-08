@@ -1,9 +1,11 @@
 # src/sim: gameplay rules
 
 Rules of the game. Reads and changes `state`, talks to other systems with events. Imports `data/`,
-`state/` and `util/`, and `render/` only to add or remove the meshes of bullets, crates, particles,
-rocks and the player's ship (refactor step 7 is closing that: **7a is done**, so hostiles are plain
-data and need no scene).
+`state/` and `util/`. **It holds no mesh, no material and no scene** (refactor steps 7a and 7b): an
+enemy, a bullet, a missile, a crate, a spark, a rock and the player's own ship are plain records, and
+`render/views.js` draws them. Two `render/` imports are left and neither is an entity —
+`sectors.js` calls `showSector()` for the scenery groups and `weapons.js` reads `camera.quaternion`
+for the lock cone — and `tests/layers.test.mjs` lists them by name.
 **It never touches the speakers or the keyboard:** a sound is `emit("sfx", { name })` (played by the
 `SFX` table in `core/audio.js`) and the pilot's intent arrives in `state.controls` (filled by
 `core/input.js`, shape in `state/controls.js`). `tests/layers.test.mjs` keeps all of that true.
@@ -19,18 +21,21 @@ data and need no scene).
 | `inventory.js` | Where things are kept and how full it is, in m³. A place is one stock, `{ itemId: count }` — the station (`profile.store`) and each ship's hold (`profile.holds[id]`), ore and spare modules alike, because both are items (`data/items.js`). `stockOf`/`holdOf` (a place), `countOf`/`itemsAt`/`unitsOf` (what is there, in the order the screens list it), `loadOf`/`capacityOf`/`freeOf`/`spaceFor` (room, from each item's `vol`), `addItem`/`takeItem`/`moveItem` (the only movers), `buyItem` (a purchase into the station), `valueOf` (what a stock sells for, with the refinery bonus). Pure: no 3D, so it is tested. |
 | `guns.js` | The guns in the primary bays: `gunsOf` a loadout (pure, one `{i, id, dmg, rate, speed, draw, barrels}` per fitted gun) and `beamsOf` (the beam modules there, with `period`/`range`/`draw`), `refreshGuns` after a fit, ship change, load or dock, and `moduleListName` — the short name for a fitted list that the HUD and the equip toast share. Own module so `fitting.js`/`economy.js` can refresh the guns without importing the shooting code. |
 | `weapons.js` | Firing the fitted guns on left click (each gun on its own 1/`rate` cooldown, one bolt per linked barrel per shot, drawing `draw` MJ/s while the trigger is held), the mining beam (per fitted `beam_basic` module: `period` seconds of continuous contact per ore, `range`, resetting the moment contact stops), missiles and lock-on (per the fitted `missile_basic` module: `dmg`, `cap`, `cd`; the missile's own flight and lock mechanics come from `data/weapons.js`). Re-exports `gunsOf`/`refreshGuns`. |
-| `combat.js` | Bullets, hostile kills, crates and pickups. What a kill drops comes from the enemy's table in `data/loot.js`; a crate carries the item id it holds. |
+| `combat.js` | Bullets, hostile kills, crates and pickups — all plain records (step 7b): a bullet `{ id, kind: "bullet", pos, quat, v, own, dmg, l }`, a crate `{ id, kind: "crate", pos, quat, t, item, spin }`. What a kill drops comes from the enemy's table in `data/loot.js`; a crate carries the item id it holds. |
 | `ai.js` | Hostiles: `spawnEnemy(id, pos)` builds one from its def in `data/enemies.js` (name, Hull HP, colour, scale, faction, every number) and `AI_BEHAVIOURS` holds the ways they fight (`chase`: close in, then circle and shoot). `updateEnemies` runs them and the spawner that brings them in. The record itself, and every access to "where is it, which way does it point", is `enemy.js`. |
 | `enemy.js` | A hostile as **plain data** (step 7a): `{ id, kind: "enemy", def, n, f, loot, hp, mx, pos, quat, v, fire, o }`. `enemyPos`, `enemyFwd`, `turnEnemy`, `enemyDist`, `enemyVel` are the only ways to read its position and rotation; `dropEnemy(e)` takes it out of the world and emits `enemy-removed`. It holds **no mesh** — `render/views.js` draws it. |
 | `loot.js` | Rolls the tables in `data/loot.js`: `rollLoot(id, rng)` returns drops `{ item, count, scatter }`, `pickLoot(id, rng)` returns one weighted item id. Pure (no screen, no state), so it is tested by rolling tables 10,000 times. |
-| `asteroids.js` | The asteroid field. A rock's ore comes from the `asteroid` table in `data/loot.js`. |
+| `asteroids.js` | The asteroid field. A rock is a record (step 7b): `{ id, kind: "rock", sector, shape, pos, quat, s0, scale, r, type, ore, max }` — `s0` is its born size, `scale` its drawn size (mining shrinks it, and the collision rule reads it), `shape` which lumpy model. Its ore comes from the `asteroid` table in `data/loot.js`. `ROCK_SHAPE_COUNT` is how many shapes exist. |
 | `targeting.js` | Target lock (F). |
 | `economy.js` | Cargo, storage, selling, repairs, every purchase. The outpost's one purchase is `buyItem(shopId, itemId, qty)` — the shop is data (`data/shops.js`) and everything it buys lands in the station's inventory through `inventory.js`; `shopList(shopId)` is what the Shop tab draws, and `shopStock()`/`setShopStock()` hold how much a limited row has left (session state, the hook a restock will use). `sellHold()`/`sellStored()` sell everything with a value in a hold or the station — goods **and** spare modules — and return what they sold; `sellInventoryItem(id, where, n)` sells part of one stack. A fitted part is in no stock, so it is never sold. Returns optional message text. |
 | `contracts.js` | Offer board and event-driven progress tracking. |
 | `session.js` | Launch, dock, die. Emits `launched`, `docked`, `died`. |
 | `sectors.js` | Warping between sectors (M): swaps the scenery and the rock list. Emits `sector-changed`. |
-| `effects.js` | Cosmetic explosions and exhaust. |
-| `world.js` | Sector layout constants and `clearTransient()`. |
+| `effects.js` | Cosmetic explosions and exhaust, as records: `{ id, kind: "fx", pos, v, l, t, col, size }`. Colour and size are data, so the view needs to invent nothing. |
+| `world.js` | Sector layout constants, `clearTransient()` (docking: hostiles, shots, missiles and sparks) and `clearWorldObjects()` (warping and loading: crates and sparks as well; rocks stay, they are the sector's). |
+| `entity.js` | **Every entity except a hostile and the pilot's ship** goes in and out of the world here (step 7b): `addEntity(list, e)` gives it an id from `util/ids.js` and emits `entity-spawned { id, kind }`, `dropEntity(list, e)` emits `entity-removed`, `clearEntities(list)` empties one. One place, so a view can never miss one. |
+| `pilot.js` | Where the player's ship is (step 7b): `playerPos`, `playerFwd`, `playerDist`, `setPlayerPos`, `facePlayer`, `playerVel`, `playerLocal`, `shipScale`. The ship is `state.player.pos` / `.quat`; `playerLocal` builds a point in the hull's own frame by hand (pos + scale + quat), never from `matrixWorld`. This is how muzzles, the missile rail, the beam and the chase camera find the ship. |
+| `missile.js` | A missile as a record `{ id, kind: "missile", pos, quat, d, sp, t, l, dmg }`: `launchMissile`, `updateMissileFlight`, and the hit that makes it explode. It homes on the hostile it locked (`t`). |
 
 Rules:
 - Use `emit`/`on` to connect systems that should not know each other.

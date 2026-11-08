@@ -135,8 +135,8 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 
 | Debt | Evidence | Step |
 | --- | --- | --- |
-| `sim/` imports the screen | six `sim/*.js` files still import `render/scene.js` / `render/models.js` to add and remove the meshes of bullets, crates, particles, rocks and the player's ship. **Speakers and keyboard are closed (step 6)**, and **enemies are closed (step 7a)**: a hostile is plain data (`sim/enemy.js`) and `render/views.js` draws it | 7b, 7c |
-| Entities are three.js meshes | **enemies are plain data now (7a)**; the player's `P.m`, crates, rocks and bullets still are | 7b, 7c |
+| `sim/` imports the screen | **Closed for entities (step 7b):** bullets, missiles, crates, sparks, rocks and the player's ship are plain data and `render/views.js` draws them, so no `sim/` file holds a mesh. Two imports remain and neither is an entity: `sectors.js` calls `showSector()` to show a sector's scenery groups, and `weapons.js` reads `camera.quaternion` for the missile lock cone | 7c, 8, 10 |
+| Entities are three.js meshes | **Closed (steps 7a and 7b):** every entity is a record with an `id` and a `kind` — an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. `render/views.js` owns every mesh | — |
 | Variable time step | `main.js` `dt = Math.min(0.05, ...)` per animation frame | 8 |
 | One global player | `state.player` read in 14 files | 8 |
 | Single mixed save | `state/profile.js` holds character, station and mission together | 9 |
