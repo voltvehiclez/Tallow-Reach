@@ -6,17 +6,18 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **Milestone A is done.** Steps 0 to 5 are ticked (steps 4 and 5 on
-2026-11-08, after the owner played `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue
-with one inventory per place (save v12), and shops and prices from data. **Step 6a is done and
-ticked** (2026-11-08): the sim no longer plays sounds, it emits `sfx` and `core/audio.js` plays
-them; the owner confirmed every sound by ear. **Step 6b (the sim stops reading the keyboard) is
-built and tested (155 green)**, waiting for the owner's playtest: `TESTING-BASELINE.md` section A
-(flight feel) and B (mining, guns, missiles) are the checks. With 6b, **no `src/sim/` file imports
-`core/` at all** — the sim reads `state.controls` — so step 6 is finished bar the tick.
-**Next after the tick: step 7**, entities become data and meshes become views: `core/input.js` fills a `controls` object in
-`state`, and `sim/{player,weapons,sectors}.js` read it instead of `keys`/`pointer`. Then the
-`tests/layers.test.mjs` allow-list loses its `input.js` line. The owner's earlier answers stand:
+**Current position:** **Milestone A is done and step 6 is done.** Steps 0 to 5 are ticked (steps 4
+and 5 on 2026-11-08, after the owner played `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item
+catalogue with one inventory per place (save v12), and shops and prices from data. **Step 6 is
+ticked in full (2026-11-08).** 6a: the sim no longer plays sounds, it emits `sfx` and
+`core/audio.js` plays them; the owner confirmed every sound by ear. 6b: the sim reads
+`state.controls` instead of the keyboard and the mouse, and the missile lock ring is sized in
+`ui/hud.js`; the owner played `TESTING-BASELINE.md` section A (flight feel) and B (mining, guns,
+missiles) and found no problems. So **no `src/sim/` file imports `core/` at all**. 155 tests green.
+**Next: step 7**, entities become data and meshes become views, in three playable slices (7a
+enemies, 7b bullets/missiles/crates/particles, 7c asteroids and the player's ship). When it is
+done the `render/` allow-list in `tests/layers.test.mjs` is empty and a headless test steps an
+enemy for 600 ticks. The owner's earlier answers stand:
 found modules do **not** get random stats, so a stock stays a plain count per item; Meridian sells
 the six standard parts for 1 cr each (beam 900, missile pod 1500); shop stock can be limited (`max`)
 but no row uses it yet, and `setShopStock()` is still the unused restock hook. Data-only content
@@ -43,7 +44,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 3 | Loot tables | A | [x] 2026-11-07 |
 | 4 | Item registry and generic inventory (save v12) | A | [x] 2026-11-08 |
 | 5 | Shops and prices from data | A | [x] 2026-11-08 |
-| 6 | Sim stops using sound and keyboard | B | [ ] **6a ticked 2026-11-08. 6b built, 155 green, waiting for playtest** |
+| 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
 | 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
@@ -130,6 +131,10 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   seven tabs render byte-identical HTML.
 - 2026-11-08: Steps 4 and 5 ticked: the owner played the Inventory tab and the Shop (including
   section 8's old-save load) and confirmed both. Milestone A is reached and the docs say so.
+- 2026-11-08: **Step 6 ticked in full.** The owner played the 6b build and found no problems with
+  the controls, so `TESTING-BASELINE.md` sections A (flight feel) and B (mining, guns, missiles) are
+  signed off and the step is closed: the sim imports no `core/` file, plays no sound and reads no
+  key. 155 tests green, save version still 12. Next is step 7 (entities as data, meshes as views).
 - 2026-11-08: Step **6b** built: the sim reads a control record (`state.controls`, shape in
   `src/state/controls.js`) instead of the keyboard, and the missile lock ring's pixel size moved
   from `sim/weapons.js` to `ui/hud.js` (the sim now reports the cone in degrees). **No `sim/` file

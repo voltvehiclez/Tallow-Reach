@@ -49,8 +49,9 @@ should arrive at the moment described — nothing missing, nothing doubled:
 
 Mute (**P**, then the sound button) still silences all of it.
 
-**Still flying the same (step 6b).** The controls were re-wired so the game reads a *control record*
-instead of the keyboard directly. Every key must still do exactly what it did — this is the check:
+**The controls (checked and signed off at step 6b, 2026-11-08).** The game reads a *control
+record* instead of the keyboard directly. The owner played this table and found no problems; it is
+kept here as the reference for any later change that touches input:
 
 | Key or mouse | Must do |
 | --- | --- |

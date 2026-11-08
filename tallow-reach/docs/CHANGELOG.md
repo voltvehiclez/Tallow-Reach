@@ -19,6 +19,22 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 6 ticked in full (docs only, no code change)
+
+- **Why:** the owner played the 6b build and reported **no problems with the controls**. That was
+  the one thing 6b was waiting for, so step 6 closes.
+- **What was signed off:** `TESTING-BASELINE.md` section A (flight feel) and section B (mining,
+  guns, missiles). The lock ring resizing with the window was checked by the owner too.
+- **State of the code, unchanged by this entry:** no `src/sim/` file imports `core/` (no sound, no
+  keys, no mouse), the sim reads `state.controls`, and the lock ring is sized in `ui/hud.js`. 155
+  tests green. Save version stays **12** (step 6 changed no saved data).
+- **Files:** `docs/ROADMAP.md` (step 6 ticked, current position and log), `docs/HANDOFF.md` (next
+  action is step 7; the layers-test row no longer says "input (until 6b)"), this changelog. No
+  source changed, so no rebuild is required: the zip and the tag are the 6b build.
+- **Next:** step 7, entities as data and meshes as views, in three playable slices.
+
+---
+
 ## 2026-11-08: Refactor step 6b — the sim stops reading the keyboard (step 6 done)
 
 - **Why:** with 6a the sim no longer played sound; it still read the keyboard and the mouse
