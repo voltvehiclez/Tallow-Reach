@@ -97,6 +97,11 @@ export const PLACES = {
   },
 };
 
+/** How far from a pocket's origin a saved position may sit and still be trusted
+ *  on load (metres). Anything beyond this, or not a finite number, is treated as
+ *  a damaged save and the pilot falls back to the pocket's arrival point. */
+export const PLACE_EXTENT = 1e7;
+
 /** Where a new game starts. It must be a pocket with a station feature. */
 export const DEFAULT_PLACE = "reach";
 

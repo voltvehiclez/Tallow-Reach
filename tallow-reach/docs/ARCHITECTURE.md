@@ -388,11 +388,11 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## State
 
-- Saved state is split in two since step 9 and carries the current pocket since step 10 (`SAVE_VERSION = 14`, `{ v: 14, profile, world }`):
+- Saved state is split in two since step 9 and carries the current pocket since step 10 (`SAVE_VERSION = 15`, `{ v: 15, profile, world }`):
   - `state.profile` is the local pilot's **portable character**: credits (`cr`), flown hull (`ship`), owned hulls (`ships`), per-ship holds (`holds`), per-hull loadouts (`loadout`), hull fractions (`hp`), missile stock (`msl`), selected primary slot (`pw`), active contract (`mission`), kills (`kills`) and completed contracts (`done`). Every player in `state.players` carries its own `player.profile` (`profileOf(player)`).
-  - `state.worldState` is the **hosted world**: station storage (`store`), base facility levels (`base`), the station's contract offer board (`board`, aliased by `state.ui.board`) and the current pocket id (`place`).
+  - `state.worldState` is the **hosted world**: station storage (`store`), base facility levels (`base`), the station's contract offer board (`board`, aliased by `state.ui.board`) the current pocket id (`place`) and the local pilot's resume point (`resume`: null while docked, else `{ pos, quat, sh, en }`).
   - `currentSave()` and `applySave(save)` join and apply both halves; `portableProfile(save)` and `mergeProfile(save, profile)` extract a guest's character and merge it back into their own save without altering their home world.
-  - Both halves are written together on dock, on successful local warp arrival, and on every outpost menu action.
+  - Both halves are written together on dock, on successful local warp arrival, on every outpost menu action, when the tab is hidden or closed, and every `AUTOSAVE_SECONDS` while playing. `currentSave()` captures the live pilot position first, so every save path records where you actually are.
 - Everything else in `state/state.js` (`players`, `places`, `world`, `place`, `time`, `shops`, `ui`) is transient session runtime, rebuilt when the game loads. `state.place`/`state.world` alias the local pilot's pocket; each pilot owns `player.place` and `player.warp`.
 - Systems read `state.*` or explicit `(player, profile, world)` parameters directly. There is no hidden global, so tests can build a state object and call a system.
 
@@ -406,7 +406,7 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## Save compatibility
 
-Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts `{ v: 14, profile, world }` objects, v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves, migrating and clamping both halves through `sanitizeProfile` and `sanitizeWorld`.
+Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts `{ v: 15, profile, world }` objects, v14 saves (no `resume`, so they keep the old dock-or-arrival behaviour), v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves, migrating and clamping both halves through `sanitizeProfile` and `sanitizeWorld`.
 
 When you change what is saved:
 
@@ -462,9 +462,10 @@ These are real, current limits. None of them is a bug in play today.
   `data/places.js` names its shop (`shop`), and `ui/screens.js` reads that feature; independent
   station storage is still future work. Do not add a second hard-coded shop pointer.
 - **Muting is not saved.** Sound starts on every time the game opens.
-- **The pocket you are in is saved** (`world.place`, save v14). A save made at a station opens
-  docked; a save made away from the station resumes flying at that pocket's arrival point. Exact
-  position/velocity are not saved yet. Only Meridian Station (`reach`) has content today: Kestrel
+- **Where you logged out is saved** (`world.place` + `world.resume`, save v15). A save made while
+  docked opens the station menu; a save made in flight returns you to the exact spot and heading,
+  with shields and boost as you left them and zero speed. The pocket's arrival point is the fallback
+  for older saves, a damaged position, or a ship with no thrusters that would be stranded. Only Meridian Station (`reach`) has content today: Kestrel
   Hollow (`hollow`) is empty, and each pocket's scenery/entities are hidden (not deleted) while you
   are away, so the field comes back as you left it within the session.
 - **A warp takes the controls for about two seconds, but not the momentum.** The throttle is

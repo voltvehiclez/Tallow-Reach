@@ -19,6 +19,35 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Come back where you logged out — save v15
+
+Owner request: quitting while flying in the Meridian Station pocket docked you on the way back in.
+`resumeFromSave` asked only "does this pocket have a station?", so any flight inside `reach` came back
+docked. The owner chose **exact spot, with the arrival point kept as the fallback**, reasoning that
+pockets may grow large and being sent back to the entry point every time would be tedious.
+
+- **Save v15** adds `world.resume`: `null` while docked, otherwise `{ pos, quat, sh, en }` — the exact
+  spot and heading plus shield and boost levels. `sanitizeWorld` rejects anything non-finite, the
+  wrong shape, or beyond `PLACE_EXTENT` (`data/places.js`), and normalises a non-unit heading, so a
+  damaged or hand-edited code can never place the ship somewhere impossible.
+- `resumeFromSave` (`sim/session.js`) returns the pilot to that spot **stationary**, with shields and
+  boost **as they left them** (the default taken where the owner did not choose — quitting is not a
+  free repair). Fallbacks: no resume point (v14 and older) keeps the old dock-or-arrival behaviour; a
+  rejected position falls back the same way; and a ship with no thrusters that would be stranded
+  outside docking range is put back at the station instead.
+- `captureResume()` in `state/state.js` is called by `currentSave()`, so **every** save path — autosave,
+  slot and export code — records the live position rather than a stale one.
+- The game now also saves when the tab is hidden or closed (`pagehide`, `visibilitychange`) and every
+  `AUTOSAVE_SECONDS` (15, in `data/simulation.js`). Previously it only saved on dock, warp arrival and
+  menu clicks, so "where you logged out" would not have held.
+- New `tests/resume-spot.test.mjs` (13 tests): the reported bug, shield/boost persistence and clamping,
+  docking clearing the spot, v14 fallback, eight kinds of damaged resume data, the no-thruster guard,
+  export round-trip, live capture, and the resume point staying out of the portable profile.
+- **Results:** `npm test` **260/260 pass** (both 8b oracles unchanged); `npm run build` succeeded.
+  Docs, VISION decision log and folder READMEs updated; `TESTING-PLACES.md` section 4 rewritten.
+
+---
+
 ## 2026-11-08: Step 10 complete and ticked — owner playtest passed
 
 - The owner played `TESTING-PLACES.md`, found the three bugs listed in the entry below, and confirmed

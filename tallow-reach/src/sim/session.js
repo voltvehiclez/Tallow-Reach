@@ -128,9 +128,10 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
 }
 
 /**
- * Resume the local pilot from the loaded save's current pocket. A save made at
- * a station opens docked; a save made anywhere else resumes flying at that
- * pocket's arrival point with a launch-style ship refresh (step 10).
+ * Resume the local pilot from the loaded save: the same pocket, and the exact
+ * spot and heading they quit at (`world.resume`). A save made while docked opens
+ * the station menu. The pocket's arrival point is the fallback for older saves,
+ * a damaged position, or a ship that cannot move.
  */
 export function resumeFromSave(P = state.player, profile = profileOf(P)) {
   const placeId = state.worldState.place || DEFAULT_PLACE;
@@ -149,18 +150,43 @@ export function resumeFromSave(P = state.player, profile = profileOf(P)) {
   refreshShield(P, profile);
   refreshGuns(P, profile);
   refreshHull(P, profile);
-  P.en = P.drive.bmax;
-  P.sh = P.shMax;
   P.flight.lock = null;
   P.flight.missileLock = { target: null, t: 0, locked: false };
-  if (stationAt(placeId)) {
-    P.docked = true;
-    P.pos.set(...stationAt(placeId).pos);
-    emit("docked", { player: P });
-  } else {
+
+  // Come back where you left off. `world.resume` is null while docked, so an
+  // older save (which has no resume point at all) keeps the old behaviour: dock
+  // if this pocket has a station, otherwise fly in at its arrival point.
+  const saved = state.worldState.resume;
+  const station = stationAt(placeId);
+
+  // Shields and boost return as they were, so quitting is not a free repair.
+  // A save without them tops up. Speed is always zero: you load stationary.
+  P.en = saved && saved.en !== null ? Math.min(saved.en, P.drive.bmax) : P.drive.bmax;
+  P.sh = saved && saved.sh !== null ? Math.min(saved.sh, P.shMax) : P.shMax;
+
+  let spot = null,
+    facing = null;
+  if (saved) {
+    // A ship with no thrusters cannot fly home. If the saved spot would strand
+    // it outside docking range, put it back at the station instead.
+    const stranded = station && !hasDrive(P.drive) &&
+      V(...saved.pos).distanceTo(V(...station.pos)) >= (station.dockRange ?? DOCK_RANGE);
+    if (!stranded) {
+      spot = saved.pos;
+      facing = saved.quat;
+    }
+  }
+  if (!spot && !station) spot = arrivalPos(placeId).toArray();   // empty pocket: the entry point
+
+  if (spot) {
     P.docked = false;
-    P.pos.copy(arrivalPos(placeId));
+    P.pos.set(...spot);
+    if (facing) P.quat.set(...facing).normalize();
     emit("launched", { player: P });
+  } else {
+    P.docked = true;
+    P.pos.set(...station.pos);
+    emit("docked", { player: P });
   }
   return P;
 }

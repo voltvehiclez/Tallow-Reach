@@ -3,9 +3,9 @@
 
 import { renderer, scene, camera, stars, showPlace, updateScenery } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer, applySave } from "./state/state.js";
+import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
-import { loadAutosave } from "./state/storage.js";
+import { loadAutosave, saveAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
@@ -25,7 +25,7 @@ import { refreshDrive } from "./sim/drive.js";
 import { refreshShield } from "./sim/shield.js";
 import { refreshHull } from "./sim/hull.js";
 import { createSimClock } from "./sim/step.js";
-import { SIM_DT, MAX_FRAME_DT } from "./data/simulation.js";
+import { SIM_DT, MAX_FRAME_DT, AUTOSAVE_SECONDS } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 import {
@@ -59,6 +59,19 @@ addEventListener("keydown", () => initAudio());
 setupHud();
 setupMenu();
 resumeFromSave();   // prepares the ship; the start screen still owns the panel
+
+// Save where the pilot is, so quitting mid-flight returns them to that spot.
+// Docking, warping and menu clicks already save; this covers simply flying off
+// and closing the tab. `pagehide` and the hidden-tab event are the ones browsers
+// actually deliver on close; the timer bounds what a crash can lose.
+const saveResumePoint = () => {
+  if (!state.ui.intro) saveAutosave(currentSave());
+};
+addEventListener("pagehide", saveResumePoint);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveResumePoint();
+});
+setInterval(saveResumePoint, AUTOSAVE_SECONDS * 1000);
 setupWarpStreaks();
 installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, rocks, the ship
 setupWarpFlash();

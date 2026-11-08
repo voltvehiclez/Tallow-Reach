@@ -42,8 +42,25 @@ export function profileOf(player = localPlayer()) {
   return player.profile || null;
 }
 
-/** Snapshot the local profile and hosted world as a combined save object. */
+/**
+ * Record where the local pilot is right now, so the next load puts them back
+ * there. Null while docked (or dead): loading then opens the station menu.
+ */
+export function captureResume() {
+  const P = localPlayer();
+  state.worldState.resume = !P || P.docked || P.dead
+    ? null
+    : { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
+  return state.worldState.resume;
+}
+
+/**
+ * Snapshot the local profile and hosted world as a combined save object.
+ * Captures the live resume point first, so every save path — autosave, slot and
+ * export code — records where the pilot actually is.
+ */
 export function currentSave() {
+  captureResume();
   return {
     v: SAVE_VERSION,
     profile: state.profile,

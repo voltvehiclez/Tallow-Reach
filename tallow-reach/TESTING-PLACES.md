@@ -53,28 +53,30 @@ the pocket you are in is remembered when you load. Everything else must feel exa
       Station, belt and planet are all back.
 - [ ] **3.7** The rock from 3.1 is **still partly mined** — the belt comes back as you left it.
 
-## 4. The pocket you are in is remembered (the main new thing)
+## 4. Coming back where you logged out (the main new thing)
 
-- [ ] **4.1** Press **M** to go to **Kestrel Hollow**. Now **reload the page** (F5) and press
-      **Enter game**. **Expect:** you resume **flying in Kestrel Hollow**, HUD says Kestrel Hollow,
-      empty space around you, ship stationary. You are **not** docked and **not** back at Meridian.
-- [ ] **4.1b** Sound works straight away in Kestrel Hollow (engine hiss when you thrust). Press **Esc**
-      and flip the sound switch off and on — it must actually mute and unmute. *(This was bug 1.)*
-- [ ] **4.1c** Press **M** to Meridian, then dock with **G**. **Expect:** the **station menu**
-      (Contracts, Hangar, Outfitting, …) — **not** the "Enter game" start screen. *(This was bug 2.)*
-- [ ] **4.2** Press **M** to return to **Meridian Station**. Fly within **300 m** of the station and
-      slow below **70 m/s** (the hint tells you), then press **G** to dock.
-- [ ] **4.3** **Reload the page** again and press **Enter game**. **Expect:** you go straight into the
-      **station menu at Meridian Station**, docked, exactly as before.
-- [ ] **4.4** While docked, open **Saves** and press **Save** on **Slot 1**.
-- [ ] **4.5** **Launch**, press **M** to Kestrel Hollow, **reload**, **Enter game** (flying in Hollow).
-      Press **M** to Meridian, dock with **G**, open **Saves**, press **Load** on **Slot 1**.
-      **Expect:** docked at Meridian Station, credits/hold as saved.
-- [ ] **4.6** **The save-load check that failed before (bug 3).** Docked, note your credits. Buy
-      something cheap in the **Shop** so the number changes (e.g. a 1 cr part). Go to **Saves** and
-      press **Load** on Slot 1. **Expect:** the credit number changes back **immediately, on that one
-      click**, and the message "Loaded slot 1" appears. You must **not** have to press Save to make it
-      take effect.
+- [ ] **4.1** Press **M** to go to **Kestrel Hollow**. Fly a little way off the entry point. **Reload
+      the page** (F5) and press **Enter game**. **Expect:** you are back at **the same spot, facing the
+      same way**, stationary, in Kestrel Hollow.
+- [ ] **4.2** **The one that was broken.** Warp back to **Meridian Station** and fly out into the
+      asteroid belt — well away from the station. **Reload**, press **Enter game**. **Expect:** you are
+      **still out in the belt at that spot**, flying. You must **not** be docked at the station.
+- [ ] **4.3** Let something shoot you first (or boost a while) so shields/boost are part-used, then
+      reload and **Enter game**. **Expect:** shields and boost are **as you left them**, not refilled —
+      quitting is not a free repair — and you are stationary.
+- [ ] **4.4** Sound works straight away (engine hiss when you thrust). Press **Esc** and flip the sound
+      switch off and on — it must actually mute and unmute.
+- [ ] **4.5** Fly within **300 m** of the station, slow below **70 m/s**, press **G** to dock. Now
+      **reload** and press **Enter game**. **Expect:** you go straight into the **station menu**,
+      docked — not the start screen, and not out in space.
+- [ ] **4.6** Docked, open **Saves**, press **Save** on **Slot 1**. **Launch**, fly out to a distinctive
+      spot, then dock again, open **Saves** and **Load** Slot 1. **Expect:** docked at the station, with
+      the credits and hold you had when you saved.
+- [ ] **4.7** **The save-load check that failed before.** Docked, note your credits. Buy a 1 cr part in
+      the **Shop**. Go to **Saves** and press **Load** on Slot 1. **Expect:** the credit number changes
+      back **on that one click**, with the message "Loaded slot 1" — no need to press Save first.
+- [ ] **4.8** Fly somewhere, then just **close the tab** and reopen the game. **Expect:** **Enter game**
+      puts you back at that spot. (The game saves on close and every 15 seconds while playing.)
 
 ## 5. Old save slot still loads
 
@@ -83,7 +85,8 @@ the pocket you are in is remembered when you load. Everything else must feel exa
 - [ ] **5.2** **Expect:** it loads with no error, and credits, ships, fitted modules, cargo and station
       storage are intact.
 - [ ] **5.3** **Expect:** if that old save was made at the station you open **docked**; if it was made
-      away from the station you resume **flying** at that pocket's arrival point.
+      away from the station you resume **flying** — old saves have no exact spot, so those use the
+      pocket's arrival point.
 
 ## 6. Old export code still loads
 
@@ -115,6 +118,7 @@ the pocket you are in is remembered when you load. Everything else must feel exa
 **Result:** pass / fail — and if fail, the step number plus what you saw.
 
 Notes on what is *intentionally* not in this version: there is no map screen (M just cycles pockets —
-the map is step 11); exact position, speed, shield and boost are not saved, so an away save puts you at
-the pocket's arrival point rather than exactly where you were; mined rocks reset when you reload the
-page (persistent place memory is step 12).
+the map is step 11). Your **position and heading are saved**, but the world around you is not: enemies
+and crates vanish and the asteroid belt is re-rolled on every page load, so you return to the same
+spot but not the same situation (persistent place memory is step 12). Old saves from before this
+version have no position, so they still use the pocket's arrival point.

@@ -4,7 +4,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 
 | File | What it holds |
 |---|---|
-| `simulation.js` | Fixed simulation tick (`SIM_DT`) and maximum accepted render-frame time (`MAX_FRAME_DT`). |
+| `simulation.js` | Fixed simulation tick (`SIM_DT`), maximum accepted render-frame time (`MAX_FRAME_DT`) and how often the resume point is autosaved (`AUTOSAVE_SECONDS`). |
 | `mounts.js` | Named hull-local gun, missile and beam mount offsets, shared by the sim and `PlayerShipView`. |
 | `ships.js` | Hulls the player can fly, and the `FLIGHT` table that scales every ship at once. A hull has no `spd`/`turn` and no Hull HP of its own: the fitted thrusters set speed and turn (`sim/drive.js`), the fitted shields set shield strength and recharge (`sim/shield.js`), the fitted hull module sets Hull HP (`sim/hull.js`), and an empty thruster bay means the ship cannot move. |
 | `items.js` | `ITEMS`: the whole item catalogue — every ore, salvage good and **module**, keyed by id, with a category (`cat`), sell value (`v`), volume in m³ (`vol`) and stack rule (`st`). A module's entry is `{ cat: "module", v: 540 }`: its name, volume and stats live in `modules.js` under the same id (`npm test` checks both directions), and `v` is what a spare part sells for — 60% of its shop price, never below 1 credit. Adding an item is one line; read them through `itemName`/`itemVol`/`itemValue`/`canSell`/`isModule`, never by hand. |
@@ -12,7 +12,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 | `shops.js` | `SHOPS`: what each shop sells and charges. Per shop a heading (`n`), its line of explanation (`d`) and `stock` — one row per item, and the only way a part appears on the screen: `id` from `items.js`, `price`, the row's own `n`/`d`, and optionally `max` (leave it out: never runs out; a number: `N left`, sells out). Optional `own: false` hides the "You own N" count. A station feature in `places.js` names its shop (`shop`). Bought through `sim/economy.js` `buyItem(shopId, itemId, qty)`. |
 | `station.js` | Base modules, their costs, storage and refinery numbers, repair and recovery fees. |
 | `contracts.js` | Contract types, generators, wording (`DESCRIBE`), board size. |
-| `places.js` | Systems (non-flyable groupings) and pockets (flyable places): `PLACES`, `PLACE_DEFS` features (station, asteroid field, spawner, planet), `DEFAULT_PLACE`, `pocketsIn`/`nextPocket`. Internal ids are save ids. |
+| `places.js` | Systems (non-flyable groupings) and pockets (flyable places): `PLACES`, `PLACE_DEFS` features (station, asteroid field, spawner, planet), `DEFAULT_PLACE`, `pocketsIn`/`nextPocket`, and `PLACE_EXTENT` (how far a saved position may sit from the origin and still be trusted on load). Internal ids are save ids. |
 | `terms.js` | Generic player-facing nouns: `TERMS.mapNode` ("system") and `TERMS.flyable` ("pocket"), each changeable in one line; `term`/`Term`/`terms` helpers. |
 | `sectors.js` | Warp timing and curves only (`WARP`, `WARP_TIME`, `warpFlashAt`, `warpPhaseAt`, `WARP_COAST`). Geography lives in `places.js`. |
 | `outfitting.js` | `MODULE_GROUPS` (name and description per bay group), `SHIP_LAYOUTS` (how many bays each hull has of each group), `layoutFor`/`slotsFor`, and `APPEARANCE_SLOTS` (the paint bays under the hull). |

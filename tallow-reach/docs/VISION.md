@@ -110,5 +110,10 @@ mention) until the owner decides. Record the decision here when made, and delete
   now; choosing among many pockets and the 100+ system starmap come in step 11. Generic words live
   in `src/data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
   Meridian is a station feature inside its pocket, not a child place; the in-game station label is
-  **Meridian Station**. Loading a save made away from the station resumes flying at that pocket's
-  arrival point. Internal place ids and old saves/export codes keep working.
+  **Meridian Station**. Internal place ids and old saves/export codes keep working.
+- **2026-11-08 — logging out mid-flight (owner, supersedes the arrival-point rule above):** you come
+  back **where you logged out** — the same pocket, the exact spot and heading. The owner's reason:
+  pockets may become large, and being sent back to the pocket entry every time you quit would be
+  tedious. The **arrival point stays as the fallback** for older saves, a damaged position, or a ship
+  that cannot move. Default taken where the owner did not choose: shields and boost return **as you
+  left them** (quitting is not a free repair) but the ship loads **stationary**. Save v15.

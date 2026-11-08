@@ -9,8 +9,8 @@
 **Current position:** **Milestone C is underway.** **Steps 0 to 10 are ticked** (step 10 owner
 playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). Step 10 delivered:
 place definitions are systems and pockets (`data/terms.js`, `data/places.js`), each pilot owns
-their place/warp, and saves are version **14** (`{ v: 14, profile, world }` with `world.place`),
-migrating v13 `world.sector` and older saves/codes. `npm test` is **247/247** (both 8b oracles
+their place/warp, and saves are version **15** (`{ v: 15, profile, world }` with `world.place` and
+`world.resume`), migrating v14/v13 and older saves/codes. `npm test` is **260/260** (both 8b oracles
 unchanged) and `npm run build` succeeded. Next: **step 11** (system map, pocket chooser, 100+
 systems, save v15) — ask VISION open questions 1 to 3 and what goes in Kestrel Hollow first.
 
@@ -112,6 +112,9 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   (design decision, undecided).
 - Salvage crates are abandoned when you warp out of a pocket. (Will be handled by place memory in step 12.)
 - Mute state is not saved.
+- The world around a resumed pilot is not saved: enemies, crates and shots are session-only and the
+  asteroid belt is re-rolled each page load, so you return to the exact spot but not the same
+  situation. Persistent place memory (and a seeded belt) is step 12.
 - Inventory is still "untested in the real game" per HANDOFF.md until the owner has played it.
 
 ## Log
@@ -206,3 +209,6 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   place/warp; save v14 `world.place`; Meridian Station label). The owner played `TESTING-PLACES.md`,
   found three bugs (dead sound after an away resume, the start screen reappearing on dock, and
   Load/Import/Reset not redrawing), all fixed and confirmed working. 247 tests green, build succeeded.
+- 2026-11-08: Follow-up feature (owner request): **come back where you logged out**. Save v15 adds
+  `world.resume` (exact spot, heading, shields, boost; null while docked), with the pocket arrival
+  point kept as the fallback, plus autosave on tab hide/close and every 15 s. 260 tests green.

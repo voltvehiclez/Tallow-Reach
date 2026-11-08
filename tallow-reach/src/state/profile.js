@@ -11,7 +11,7 @@ import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES } from "../data/contracts.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
-import { PLACES, DEFAULT_PLACE, isPocket } from "../data/places.js";
+import { PLACES, DEFAULT_PLACE, isPocket, PLACE_EXTENT } from "../data/places.js";
 
 // Version history:
 //   1  original prototype (no "v" field)
@@ -30,7 +30,11 @@ import { PLACES, DEFAULT_PLACE, isPocket } from "../data/places.js";
 //      `sanitizeWorld` walks `BASE_MODULES` rather than naming base modules by hand.
 //   14 world.sector becomes world.place (a pocket id from data/places.js); v13 and
 //      older sector ids migrate where valid, otherwise the starting pocket.
-export const SAVE_VERSION = 14;
+//   15 adds `world.resume`: null while docked, otherwise the exact spot the local
+//      pilot was flying at (`pos`, `quat`) with their shield/boost levels. v14 and
+//      older saves have none, so they keep the old behaviour (dock if the pocket
+//      has a station, else fly in at the arrival point).
+export const SAVE_VERSION = 15;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -88,6 +92,7 @@ export function newWorld() {
     board: [],
     galaxy: null,
     place: DEFAULT_PLACE,
+    resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
   };
 }
 
@@ -173,6 +178,30 @@ export function sanitizeProfile(raw) {
 }
 
 /**
+ * Validate a saved resume point. Returns null (meaning "docked, or no spot
+ * saved") for anything missing, non-finite, the wrong shape, or implausibly far
+ * from the pocket origin — a damaged or hand-edited save must never place the
+ * ship somewhere it cannot fly back from.
+ */
+function cleanResume(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const vec = (a, n) =>
+    Array.isArray(a) && a.length === n && a.every(v => typeof v === "number" && Number.isFinite(v))
+      ? a.slice()
+      : null;
+  const pos = vec(raw.pos, 3);
+  if (!pos || pos.some(v => Math.abs(v) > PLACE_EXTENT)) return null;
+  let quat = vec(raw.quat, 4);
+  if (quat) {
+    const len = Math.hypot(...quat);
+    if (len <= 1e-6) quat = [0, 0, 0, 1];
+    else if (Math.abs(len - 1) > 1e-6) quat = quat.map(v => v / len);
+  }
+  const num = v => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null);
+  return { pos, quat: quat || [0, 0, 0, 1], sh: num(raw.sh), en: num(raw.en) };
+}
+
+/**
  * Validate and upgrade a `world` record (either a v13 world object or the
  * world-owned fields of a legacy v1..v12 flat save). Base modules are walked
  * from `BASE_MODULES` rather than named by hand.
@@ -220,6 +249,7 @@ export function sanitizeWorld(raw) {
     board,
     galaxy,
     place,
+    resume: cleanResume(raw.resume),
   };
 }
 
@@ -261,7 +291,7 @@ export function portableProfile(save) {
 /**
  * Return a new save that merges an updated portable `profile` back into `save`
  * while keeping `save`'s own `world` (station levels, station storage, board,
- * galaxy and current pocket) untouched. Pure: neither input is mutated.
+ * galaxy, current pocket and resume point) untouched. Pure: neither input is mutated.
  */
 export function mergeProfile(save, profile) {
   const cleanSave = sanitizeSave(save);
