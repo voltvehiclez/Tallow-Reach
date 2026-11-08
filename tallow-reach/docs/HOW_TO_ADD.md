@@ -171,8 +171,10 @@ the items through `sim/inventory.js` (one place writes stocks). A module with `a
 ## 6. A new enemy type (data only, plus at most one behaviour function)
 
 An enemy is an entry in `src/data/enemies.js`. The sim (`sim/ai.js`) spawns it with
-`spawnEnemy(id, pos)`, builds its model with the def's `col` and `scale` (`mkShip(col, scale, true)`
-in `render/models.js`), and runs the behaviour its `ai` field names.
+`spawnEnemy(id, pos)` and runs the behaviour its `ai` field names. Since refactor step 7a a hostile
+is **plain data** (`sim/enemy.js`), and `render/views.js` builds its model from the def's `col` and
+`scale` (`mkShip(col, scale, true)` in `render/models.js`). **You never write mesh code for an
+enemy**: a new type is a data entry, and it is drawn automatically.
 
 1. Copy the `raider` entry in `src/data/enemies.js` and change what you want: `n` name,
    `pl` plural name (used in contract wording), `hp` Hull HP, `col` colour, `scale` size,
@@ -186,11 +188,13 @@ in `render/models.js`), and runs the behaviour its `ai` field names.
    means a line in that spawner.
 4. A **new kind of behaviour** (not just new numbers) is `AI_BEHAVIOURS` in `sim/ai.js`: one
    function `(e, def, toTarget, dist, dt)` that moves `e`, then name it in the def's `ai` field.
-   The raider uses `chase`.
+   The raider uses `chase`. Move an enemy with `enemyPos(e)` for its position and `turnEnemy(e,
+   target, k)` to point it — never a mesh: an enemy has none (step 7a).
 5. What it **drops** is its `loot` field: a table id from `src/data/loot.js`. See recipe 18.
 5. A new faction is one entry in `src/data/factions.js` (`n` name, `d` description).
 6. Test it: `tests/enemies.test.mjs` spawns enemies headlessly (`tests/headless.mjs` runs sim code
-   with the screen and sound stubbed out). Copy that test to check a second type quickly.
+   with the screen and sound stubbed out), and `tests/headless-sim.test.mjs` flies one for 600
+   ticks. Copy either test to check a second type quickly.
 
 ## 7. A new outpost screen (tab)
 
@@ -249,6 +253,8 @@ menu. Sounds a *screen* makes (buttons, hovers) are not game sounds: they call `
 1. `emit("name", payload)` where it happens (the sim layer).
 2. Add `name  payload  description` to the list at the top of `src/util/events.js`.
 3. Listen with `on("name", handler)` wherever it is needed. Listeners must not import the emitter.
+   A listener in `render/` is how drawing follows the sim: `render/views.js` listens for
+   `enemy-spawned` / `enemy-removed` and builds or removes the mesh (step 7a).
 
 `sfx` is the worked example (step 6a): the sim emits it at eleven places, and `core/audio.js`
 subscribes once. Payloads should carry **ids and plain numbers**, not objects with behaviour — that

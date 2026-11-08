@@ -187,7 +187,7 @@ Everything plays as before.
 
 ## Step 7: Entities become data; meshes become views
 **Goal.** `src/sim/` no longer holds any three.js object. This is the big one.
-**Do.** Slice **7a:** enemies as `{ id, kind, def, pos, vel, quat, hp... }`, with
+**Do.** Slice **7a (done 2026-11-08):** enemies as `{ id, kind, def, pos, vel, quat, hp... }`, with
 `render/views.js` creating, updating and removing their meshes by watching the entity lists. **7b:**
 bullets, missiles, crates, particles. **7c:** asteroids and the player's ship. Each slice is
 playable on its own. Positions are plain `{x,y,z}` data (or keep three.js vectors/quaternions as

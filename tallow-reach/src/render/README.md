@@ -6,6 +6,7 @@ Visual only. Reads `state` and the sim, never changes game rules.
 |---|---|
 | `scene.js` | three.js renderer, lights, stars, planet, the outpost. Each sector gets its own group: `sectorGroup(id)` to add scenery, `showSector(id)` to show one sector and hide the rest. |
 | `models.js` | Ship and asteroid meshes. `mkShip`, `buildPlayerShip(id)`, `rockShape`. |
+| `views.js` | One mesh per entity, kept in step with the sim's plain data: `installEnemyViews()` at boot, `updateEnemyViews()` once a frame. Hostiles since step 7a; bullets, crates, particles and rocks follow in 7b and 7c. Builds a mesh on `enemy-spawned`, removes it on `enemy-removed`, and sweeps the list every frame so nothing is ever left behind. |
 | `camera.js` | Docked orbit, chase camera, free orbit (Alt), screen shake, the FOV/roll kick during a warp. The chase distance behind the ship is the `CAMERA` table in `data/camera.js` and nothing else: the camera rides along with the ship's movement and only eases the offset. |
 | `warpfx.js` | The warp streaks: additive lines hanging off the camera, driven by `state.warp.fx`. Hidden when no warp is running. |
 | `shipviewer.js` | The Outfitting ship view: its own renderer, scene, lights and turntable. `setShip(id)`, `dragShip`, `zoomShip`, `resizeShipViewer`, `renderShip(dt)`. Owned by `ui/outfitting.js`. |

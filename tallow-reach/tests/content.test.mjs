@@ -823,7 +823,7 @@ test("an enemy's shot uses its own def's damage and bullet speed", () => {
   const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
   assert.match(
     src,
-    /fire\(e\.m\.position, dir, def\.bspd, false, def\.dmg\)/,
+    /fire\(e\.pos, dir, def\.bspd, false, def\.dmg\)/,
     "the shot's speed and damage come from the enemy's def"
   );
   assert.equal(ENEMIES.raider.dmg, 1, "the raider still does 1 damage a shot");

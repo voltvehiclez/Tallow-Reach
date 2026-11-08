@@ -19,6 +19,7 @@ import { gunsOf, moduleListName } from "./guns.js";
 export { gunsOf, refreshGuns } from "./guns.js";
 import { fire, hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
+import { enemyPos, enemyVel } from "./enemy.js";
 import { spawnAsteroid } from "./asteroids.js";
 
 const ASTEROID_RESPAWN_MS = 30000;
@@ -240,7 +241,7 @@ export function updateMissiles(dt) {
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!state.freeCam.on) {
       for (const e of W.enemies) {
-        const q = e.m.position.clone().sub(pp),
+        const q = enemyPos(e).clone().sub(pp),
           d = q.length();
         if (d > MISSILE.range) continue;
         const angle = Math.acos(clamp(q.dot(cf) / d, -1, 1));
@@ -310,8 +311,8 @@ function updateMissileFlight(dt) {
 
     // Steer toward the target, leading it by its velocity.
     if (s.t && W.enemies.includes(s.t)) {
-      const ep = s.t.m.position,
-        ev = s.t.v || V(0, 0, 0),
+      const ep = enemyPos(s.t),
+        ev = enemyVel(s.t),
         tt = ep.clone().sub(m.position).length() / Math.max(s.sp, 1),
         aim = ep.clone().addScaledVector(ev, tt * 0.85).sub(m.position).normalize();
       s.d.lerp(aim, Math.min(1, MISSILE.turn * dt)).normalize();
@@ -326,8 +327,8 @@ function updateMissileFlight(dt) {
 
     let end = s.l <= 0;
     for (const e of W.enemies) {
-      if (e.m.position.distanceTo(m.position) < 12) {
-        hitHostile(e, s.dmg, e.m.position);
+      if (enemyPos(e).distanceTo(m.position) < 12) {
+        hitHostile(e, s.dmg, enemyPos(e));
         end = true;
         break;
       }

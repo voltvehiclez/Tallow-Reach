@@ -14,7 +14,13 @@
 //                     and the missile lock ring's pixel size moved to ui/hud.js.
 //
 // Step 6 is finished, so CORE_ALLOWED is empty and stays empty. Step 7 then
-// empties RENDER_ALLOWED, which is the last hole in this rule.
+// empties RENDER_ALLOWED, which is the last hole in this rule:
+//
+//   7a (done)         hostiles are plain data (sim/enemy.js) and render/views.js
+//                     draws them. ai.js, targeting.js, combat.js (its enemy code)
+//                     and world.js (the station's position) stopped importing
+//                     render/.
+//   7b, 7c            bullets, missiles, crates, particles, rocks, the player's ship.
 //
 // Run with `npm test`.
 
@@ -92,10 +98,14 @@ const CORE_MODULES_ALLOWED = new Set();
 /** sim/ files that may import core/: none, and none ever will again. */
 const CORE_ALLOWED = new Set();
 
-/** sim/ files that may still import render/. Step 7 empties this. */
+/**
+ * sim/ files that may still import render/. Step 7 empties this: it lost ai.js
+ * and targeting.js in 7a, and loses the rest in 7b and 7c.
+ */
 const RENDER_ALLOWED = new Set([
-  "ai.js", "asteroids.js", "combat.js", "effects.js", "player.js",
-  "sectors.js", "targeting.js", "weapons.js", "world.js",
+  "asteroids.js", "combat.js", "effects.js", "player.js",
+  "sectors.js", "weapons.js",
+  "world.js",      // its hostiles went in 7a; its crates, shots and sparks go in 7b/7c
 ]);
 
 /** sim/ files that may import ui/. None may, and none ever will (ui reads state). */
@@ -155,6 +165,38 @@ test("no sim/ file imports the UI at all", () => {
 test("sim/ imports render/ only for meshes, and step 7 empties that list", () => {
   const offenders = importsOfLayer("render").filter(i => !i.ok);
   assert.deepEqual(offenders.map(i => `${i.file} -> ${i.to}`), []);
+});
+
+test("no sim/ file knows an enemy has a mesh (step 7a)", () => {
+  // Before 7a an enemy *was* a mesh (`e.m`). It is now a record of plain data
+  // (sim/enemy.js), and render/views.js draws it. `e.m` coming back would mean
+  // the layer above is leaking into the sim again.
+  for (const file of ["ai.js", "combat.js", "targeting.js", "weapons.js", "enemy.js", "world.js"]) {
+    const src = readFileSync(path.join(srcDir, "sim", file), "utf8");
+    assert.doesNotMatch(src, /\be\.m\b/, `sim/${file} must not touch an enemy's mesh (e.m)`);
+  }
+
+  // The enemy's record is plain data, and it is allowed to be exactly this small:
+  // a sim that holds a scene object cannot run on a host (principle 3).
+  const enemy = readFileSync(path.join(srcDir, "sim", "enemy.js"), "utf8");
+  assert.match(enemy, /kind: "enemy"/, "an entity says what kind of thing it is");
+  assert.doesNotMatch(enemy, /from\s*"\.\.\/render\//, "the enemy record imports nothing from render/");
+});
+
+test("the mesh that draws a hostile is owned by render/views.js", () => {
+  // The other half of 7a: the drawing code is in render/, it listens to the sim's
+  // events, and it is the only place that builds a hostile's mesh.
+  const views = readFileSync(path.join(srcDir, "render", "views.js"), "utf8");
+  for (const event of ["enemy-spawned", "enemy-removed"]) {
+    assert.match(views, new RegExp(`on\\("${event}"`), `render/views.js should listen for ${event}`);
+  }
+  assert.match(views, /mkShip\(/, "views.js builds the mesh");
+
+  // And nothing in sim/ builds one.
+  for (const file of simFiles) {
+    const src = readFileSync(path.join(srcDir, "sim", file), "utf8");
+    assert.doesNotMatch(src, /mkShip\(/, `sim/${file} must not build a mesh (render/views.js does)`);
+  }
 });
 
 test("the allow-lists only name sim files that really import that layer", () => {

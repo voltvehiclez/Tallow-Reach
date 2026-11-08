@@ -5,7 +5,8 @@ import { fwd, clamp } from "../util/math.js";
 import { itemName } from "../data/items.js";
 import { sectorAt } from "../data/sectors.js";
 import { state, msg } from "../state/state.js";
-import { STATION_POS } from "../render/scene.js";
+import { STATION_POS } from "./world.js";
+import { enemyPos } from "./enemy.js";
 
 /**
  * A lock is { k, o }: k is "e" hostile, "a" asteroid, "c" crate, "s" station.
@@ -36,7 +37,7 @@ export function toggleLock() {
       best = { k, o };
     }
   };
-  for (const e of W.enemies) test("e", e, e.m.position, 8);
+  for (const e of W.enemies) test("e", e, enemyPos(e), 8);
   for (const a of W.asteroids) test("a", a, a.m.position, a.r);
   for (const c of W.crates) test("c", c, c.m.position, 4);
   if (sectorAt(state.sector).st) test("s", null, STATION_POS, 100);
@@ -51,7 +52,8 @@ export function toggleLock() {
 
 /** Current world position of a lock target. */
 export function lockPosition(lock) {
-  return lock.k === "s" ? STATION_POS : lock.o.m.position;
+  if (lock.k === "s") return STATION_POS;
+  return lock.k === "e" ? enemyPos(lock.o) : lock.o.m.position;
 }
 
 /** Label shown on the lock marker. */

@@ -32,7 +32,9 @@ runs when opened from disk.
 Dependencies only point downward. Lower layers never import higher ones.
 
 > **Known exception today:** `sim/` still imports `render/` (scene, models) to build and remove
-> meshes. That is the last one, and refactor step 7 closes it ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)).
+> the meshes of bullets, crates, particles, rocks and the player's ship. That is the last one, and
+> refactor step 7 closes it ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)); **7a is done**, so hostiles are
+> already plain data and no `sim/` file touches an enemy's mesh any more.
 > **`core/` is closed (step 6):** the sim emits `sfx { name }` for sound and reads
 > `state.controls` for input, so no `sim/` file imports `core/` at all. Do not add *new* upward
 > imports. `tests/layers.test.mjs` fails if a `sim/` file imports `core/` or `ui/`, and holds the
@@ -107,11 +109,12 @@ src/data/              tuning numbers and content tables (ships, items, weapons,
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
 src/core/              audio.js (synth + mute), input.js (keys -> state.controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
-src/sim/               player, power, drive, fitting, inventory, shops' purchases (economy), weapons, combat, ai, loot, asteroids, targeting, contracts, session, sectors, effects, world
-src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
+src/sim/               player, power, drive, fitting, inventory, shops' purchases (economy), weapons, combat, ai, enemy (a hostile as data), loot, asteroids, targeting, contracts, session, sectors, effects, world
+src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting), views.js (a mesh per entity)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
-                       enemies.test.mjs (headless enemy spawn), headless.mjs (test helper)
+                       enemies.test.mjs (enemies as data), headless-sim.test.mjs (600 ticks, no browser),
+                       views.test.mjs (the mesh follows the entity), headless.mjs (test helper)
 docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, HANDOFF.md, CHANGELOG.md (recent + index), CHANGELOG_ARCHIVE.md (older, full text)
 ```
 
@@ -161,13 +164,19 @@ Each `src/` folder also has its own short `README.md`.
   below 1 credit, kept in step by a test), so `canSell()` is true for it and every selling path —
   right-click a MOD tile in Inventory, or the Base tab's Sell hold / Sell stored — treats it as an
   item. A module fitted in a bay is in **no** stock, so it is never sold; only stocks are.
-- **Enemies are data.** `data/enemies.js` (`ENEMIES`, keyed by id) holds every hostile's name,
-  plural name, Hull HP, colour, scale, faction, numbers and the id of its behaviour. `sim/ai.js`
-  spawns one with `spawnEnemy(id, pos)`, and the entity it makes carries `def` (the id) and `f`
-  (the faction id) so events and screens can name it. A def's `ai` field picks a function from
-  `AI_BEHAVIOURS` in `sim/ai.js`; adding *numbers* is a data edit, adding a *way of fighting* is
-  one function there. `tests/enemies.test.mjs` spawns a fake enemy to prove no enemy lives in code.
-  Kills emit `enemy-killed { def, faction }`; a hunt contract names the def it counts (`e`).
+- **Enemies are data, and a hostile is plain data too.** `data/enemies.js` (`ENEMIES`, keyed by
+  id) holds every hostile's name, plural name, Hull HP, colour, scale, faction, numbers and the id
+  of its behaviour. `sim/ai.js` spawns one with `spawnEnemy(id, pos)`, and the entity it makes
+  carries `def` (the id) and `f` (the faction id) so events and screens can name it. A def's `ai`
+  field picks a function from `AI_BEHAVIOURS` in `sim/ai.js`; adding *numbers* is a data edit,
+  adding a *way of fighting* is one function there. `tests/enemies.test.mjs` spawns a fake enemy to
+  prove no enemy lives in code.
+  **Since step 7a an enemy is a record, not a mesh** (`sim/enemy.js`):
+  `{ id, kind: "enemy", def, n, f, loot, hp, mx, pos, quat, v, fire, o }`. Positions and rotations
+  are three.js `Vector3`/`Quaternion` — maths types, which the target architecture allows — and the
+  mesh is `render/views.js`'s business: it listens for `enemy-spawned` / `enemy-removed` and sweeps
+  the list every frame. **Never give an entity a mesh again**; add the drawing to `render/views.js`.
+  Kills emit `enemy-killed { def, faction, id }`; a hunt contract names the def it counts (`e`).
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
   `vol`, `st`.
@@ -344,7 +353,7 @@ to gameplay from a new feature, subscribe with `on(name, handler)`. For example:
 
 ```js
 import { on } from "../util/events.js";
-on("enemy-killed", ({ def, faction }) => { /* achievements, faction reputation, ... */ });
+on("enemy-killed", ({ def, faction, id }) => { /* achievements, faction reputation, ... */ });
 ```
 
 If you add an event, add it to the list at the top of `util/events.js` in the same change.

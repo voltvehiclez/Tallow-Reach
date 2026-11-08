@@ -6,18 +6,21 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **Milestone A is done and step 6 is done.** Steps 0 to 5 are ticked (steps 4
-and 5 on 2026-11-08, after the owner played `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item
-catalogue with one inventory per place (save v12), and shops and prices from data. **Step 6 is
-ticked in full (2026-11-08).** 6a: the sim no longer plays sounds, it emits `sfx` and
-`core/audio.js` plays them; the owner confirmed every sound by ear. 6b: the sim reads
-`state.controls` instead of the keyboard and the mouse, and the missile lock ring is sized in
-`ui/hud.js`; the owner played `TESTING-BASELINE.md` section A (flight feel) and B (mining, guns,
-missiles) and found no problems. So **no `src/sim/` file imports `core/` at all**. 155 tests green.
-**Next: step 7**, entities become data and meshes become views, in three playable slices (7a
-enemies, 7b bullets/missiles/crates/particles, 7c asteroids and the player's ship). When it is
-done the `render/` allow-list in `tests/layers.test.mjs` is empty and a headless test steps an
-enemy for 600 ticks. The owner's earlier answers stand:
+**Current position:** **Milestone A is done, step 6 is done, and step 7a is built** (2026-11-08):
+a hostile is plain data (`sim/enemy.js`) and `render/views.js` draws it, so **no `src/sim/` file
+touches an enemy's mesh**. 165 tests green, save version still 12. 7a waits for one thing: the
+owner's playtest (`TESTING-BASELINE.md` sections A and B, plus a look at the raiders). **Step 7b
+is next**: bullets, missiles, crates and particles become data in the same way, then 7c does the
+rocks and the player's ship; when 7 is done the `render/` allow-list in `tests/layers.test.mjs` is
+empty.
+
+**Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
+`TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
+(save v12), and shops and prices from data. **Step 6, ticked in full (2026-11-08):** 6a, the sim
+no longer plays sounds (it emits `sfx`, `core/audio.js` plays them; the owner confirmed every sound
+by ear) and 6b, the sim reads `state.controls` instead of the keyboard and the mouse and the missile
+lock ring is sized in `ui/hud.js` (the owner played `TESTING-BASELINE.md` sections A and B and found
+no problems). So **no `src/sim/` file imports `core/` at all**. The owner's earlier answers stand:
 found modules do **not** get random stats, so a stock stays a plain count per item; Meridian sells
 the six standard parts for 1 cr each (beam 900, missile pod 1500); shop stock can be limited (`max`)
 but no row uses it yet, and `setShopStock()` is still the unused restock hook. Data-only content
@@ -45,7 +48,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 4 | Item registry and generic inventory (save v12) | A | [x] 2026-11-08 |
 | 5 | Shops and prices from data | A | [x] 2026-11-08 |
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
-| 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] |
+| 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] **7a built 2026-11-08, 165 green, waiting for playtest** |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
@@ -131,6 +134,17 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   seven tabs render byte-identical HTML.
 - 2026-11-08: Steps 4 and 5 ticked: the owner played the Inventory tab and the Shop (including
   section 8's old-save load) and confirmed both. Milestone A is reached and the docs say so.
+- 2026-11-08: Step **7a** built (hostiles become data, the mesh becomes a view). An enemy used to
+  *be* a three.js mesh (`{ m, hp, ... }`); it is now a record `{ id, kind: "enemy", def, pos, quat,
+  hp, ... }` in `src/sim/enemy.js`, and `src/render/views.js` builds a mesh per hostile, copies its
+  position and rotation onto it every frame, and removes it when the enemy leaves the world
+  (`enemy-spawned` / `enemy-removed`). **No `src/sim/` file touches an enemy's mesh any more**, and
+  the `render/` allow-list lost `ai.js` and `targeting.js`. The station's position moved from
+  `render/scene.js` to `sim/world.js` (the sim needed it and may not import render/). New headless
+  test: one raider, 600 ticks, no browser, checks it closed in, turned and shot. New view test: the
+  mesh follows the data and goes away with it. An old-vs-new probe ran one scripted fight through
+  the previous commit and this tree: **2545 of 2545 frames identical** (the only new thing is each
+  enemy's `id`). Save version unchanged (12). 165 tests green. Waiting for the owner's playtest.
 - 2026-11-08: **Step 6 ticked in full.** The owner played the 6b build and found no problems with
   the controls, so `TESTING-BASELINE.md` sections A (flight feel) and B (mining, guns, missiles) are
   signed off and the step is closed: the sim imports no `core/` file, plays no sound and reads no

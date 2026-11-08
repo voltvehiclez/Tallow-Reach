@@ -5,13 +5,13 @@ import { fmtDist } from "../util/math.js";
 import { on } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
 import { sectorAt } from "../data/sectors.js";
-import { camera, STATION_POS } from "../render/scene.js";
+import { camera } from "../render/scene.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
 import { describe } from "../sim/contracts.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
-import { FIELD_CENTER } from "../sim/world.js";
+import { FIELD_CENTER, STATION_POS } from "../sim/world.js";
 import { MISSILE } from "../data/weapons.js";
 
 const $ = id => document.getElementById(id);
@@ -246,7 +246,7 @@ function drawMarkers() {
 
   W.enemies.forEach(e => {
     if (lock && lock.o === e) return;
-    mark(e.m.position, "Hostile", lock ? "h dim" : "h", 70, -36);
+    mark(e.pos, "Hostile", lock ? "h dim" : "h", 70, -36);
   });
 
   if (lock) {

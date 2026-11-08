@@ -1,7 +1,9 @@
 # src/sim: gameplay rules
 
 Rules of the game. Reads and changes `state`, talks to other systems with events. Imports `data/`,
-`state/` and `util/`, and `render/` only to add or remove meshes (until refactor step 7).
+`state/` and `util/`, and `render/` only to add or remove the meshes of bullets, crates, particles,
+rocks and the player's ship (refactor step 7 is closing that: **7a is done**, so hostiles are plain
+data and need no scene).
 **It never touches the speakers or the keyboard:** a sound is `emit("sfx", { name })` (played by the
 `SFX` table in `core/audio.js`) and the pilot's intent arrives in `state.controls` (filled by
 `core/input.js`, shape in `state/controls.js`). `tests/layers.test.mjs` keeps all of that true.
@@ -18,7 +20,8 @@ Rules of the game. Reads and changes `state`, talks to other systems with events
 | `guns.js` | The guns in the primary bays: `gunsOf` a loadout (pure, one `{i, id, dmg, rate, speed, draw, barrels}` per fitted gun) and `beamsOf` (the beam modules there, with `period`/`range`/`draw`), `refreshGuns` after a fit, ship change, load or dock, and `moduleListName` — the short name for a fitted list that the HUD and the equip toast share. Own module so `fitting.js`/`economy.js` can refresh the guns without importing the shooting code. |
 | `weapons.js` | Firing the fitted guns on left click (each gun on its own 1/`rate` cooldown, one bolt per linked barrel per shot, drawing `draw` MJ/s while the trigger is held), the mining beam (per fitted `beam_basic` module: `period` seconds of continuous contact per ore, `range`, resetting the moment contact stops), missiles and lock-on (per the fitted `missile_basic` module: `dmg`, `cap`, `cd`; the missile's own flight and lock mechanics come from `data/weapons.js`). Re-exports `gunsOf`/`refreshGuns`. |
 | `combat.js` | Bullets, hostile kills, crates and pickups. What a kill drops comes from the enemy's table in `data/loot.js`; a crate carries the item id it holds. |
-| `ai.js` | Hostiles: `spawnEnemy(id, pos)` builds one from its def in `data/enemies.js` (name, Hull HP, colour, scale, faction, every number) and `AI_BEHAVIOURS` holds the ways they fight (`chase`: close in, then circle and shoot). `updateEnemies` runs them and the spawner that brings them in. |
+| `ai.js` | Hostiles: `spawnEnemy(id, pos)` builds one from its def in `data/enemies.js` (name, Hull HP, colour, scale, faction, every number) and `AI_BEHAVIOURS` holds the ways they fight (`chase`: close in, then circle and shoot). `updateEnemies` runs them and the spawner that brings them in. The record itself, and every access to "where is it, which way does it point", is `enemy.js`. |
+| `enemy.js` | A hostile as **plain data** (step 7a): `{ id, kind: "enemy", def, n, f, loot, hp, mx, pos, quat, v, fire, o }`. `enemyPos`, `enemyFwd`, `turnEnemy`, `enemyDist`, `enemyVel` are the only ways to read its position and rotation; `dropEnemy(e)` takes it out of the world and emits `enemy-removed`. It holds **no mesh** — `render/views.js` draws it. |
 | `loot.js` | Rolls the tables in `data/loot.js`: `rollLoot(id, rng)` returns drops `{ item, count, scatter }`, `pickLoot(id, rng)` returns one weighted item id. Pure (no screen, no state), so it is tested by rolling tables 10,000 times. |
 | `asteroids.js` | The asteroid field. A rock's ore comes from the `asteroid` table in `data/loot.js`. |
 | `targeting.js` | Target lock (F). |

@@ -4,53 +4,61 @@
 // behaviour with `ai`; AI_BEHAVIOURS is the table of those behaviours, so a new
 // enemy is a data entry and a new *way of fighting* is one function here.
 
-import { V, R, fwd, face } from "../util/math.js";
+import { V, Q, R } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { random } from "../util/rng.js";
 import { sectorAt } from "../data/sectors.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
-import { scene } from "../render/scene.js";
-import { mkShip } from "../render/models.js";
 import { state } from "../state/state.js";
 import { fire } from "./combat.js";
 import { FIELD_CENTER } from "./world.js";
+import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
 
 /**
  * "chase": close in quickly from far, circle once near. Used by the raider.
  * `toTarget` is the vector from the enemy to the player (not normalised).
  */
 function chase(e, def, toTarget, dist, dt) {
-  const f = fwd(e.m),
-    side = V(1, 0, 0).applyQuaternion(e.m.quaternion);
+  const f = enemyFwd(e),
+    side = V(1, 0, 0).applyQuaternion(e.quat);
   e.v.lerp(
     f.clone().multiplyScalar(dist > def.circleAt ? def.spdFar : def.spdNear).addScaledVector(side, e.o * def.spdOrbit),
     dt
   );
-  e.m.position.addScaledVector(e.v, dt);
+  enemyPos(e).addScaledVector(e.v, dt);
 }
 
 /** Behaviours an enemy def can name with `ai`. Add one here, then name it in data. */
 export const AI_BEHAVIOURS = { chase };
 
-/** Create enemy `id` (an entry in ENEMIES) at `pos`. Returns the new entity. */
+let nextId = 1;
+
+/**
+ * Create enemy `id` (an entry in ENEMIES) at `pos`. Returns the new entity.
+ *
+ * The record is plain data: `render/views.js` notices it and builds its mesh
+ * (step 7a). An `id` that is not in ENEMIES is recorded as the default enemy, so
+ * a bad spawn can never crash the game or an old save.
+ */
 export function spawnEnemy(id, pos) {
   const def = enemyDef(id);
-  const m = mkShip(def.col, def.scale, true);
-  m.position.copy(pos);
-  scene.add(m);
   const e = {
-    m,
+    id: nextId++,
+    kind: "enemy",
     def: ENEMIES[id] ? id : DEFAULT_ENEMY,   // the id, so saves and events can name it
     n: def.n,                                // the lock marker's label
     f: def.f,                                // faction id (data/factions.js)
     loot: def.loot,                          // table id (data/loot.js)
     hp: def.hp,
     mx: def.hp,
+    pos: V(pos.x, pos.y, pos.z),
+    quat: Q(),                               // rotation, a maths type (not a scene object)
     v: V(0, 0, 0),
     fire: def.fireDelay,                     // seconds until it may fire
     o: random() < 0.5 ? 1 : -1,              // circling direction
   };
   state.world.enemies.push(e);
+  emit("enemy-spawned", { id: e.id, def: e.def, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z } });
   return e;
 }
 
@@ -67,27 +75,26 @@ export function updateEnemies(dt) {
     const e = E[i];
     if (!e) continue;
     const def = enemyDef(e.def);
-    const toPlayer = pp.clone().sub(e.m.position),
+    const toPlayer = pp.clone().sub(e.pos),
       dist = toPlayer.length();
-    face(e.m, pp, dt * def.turn);
+    turnEnemy(e, pp, dt * def.turn);
 
     // Move by whichever behaviour the def asks for.
     (AI_BEHAVIOURS[def.ai] || AI_BEHAVIOURS.chase)(e, def, toPlayer, dist, dt);
 
     if (dist > def.lostRange) {
-      scene.remove(e.m);
-      E.splice(i, 1);
+      dropEnemy(e);          // tells render/views.js to remove its mesh
       continue;
     }
 
     e.fire -= dt;
-    if (dist < def.fireRange && fwd(e.m).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0) {
+    if (dist < def.fireRange && enemyFwd(e).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0) {
       e.fire = R(def.fireGap[0], def.fireGap[1]);
       // Small aim jitter so shots don't all land on the same line.
       const dir = toPlayer
         .add(V(R(-0.04, 0.04), R(-0.04, 0.04), R(-0.04, 0.04)))
         .normalize();
-      fire(e.m.position, dir, def.bspd, false, def.dmg);
+      fire(e.pos, dir, def.bspd, false, def.dmg);
       if (dist < def.hearRange) emit("sfx", { name: "enemy-fire" });
     }
   }

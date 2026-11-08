@@ -19,6 +19,48 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Refactor step 7a — a hostile becomes data; the mesh becomes a view
+
+- **Why:** an enemy *was* a three.js mesh (`sim/ai.js` built one with `mkShip`, and every system that
+  touched a hostile moved `e.m.position`). That is what stops the sim running on a host or in a test:
+  the rules could not run without a scene. Step 7 removes that for every entity; 7a does hostiles.
+- **A hostile is a record now** (`src/sim/enemy.js`):
+  `{ id, kind: "enemy", def, n, f, loot, hp, mx, pos, quat, v, fire, o }`. `pos` and `quat` are
+  three.js `Vector3`/`Quaternion` — maths types, which the target architecture allows — and no
+  `sim/` file holds a mesh. `enemyPos`/`enemyFwd`/`turnEnemy`/`enemyDist`/`enemyVel` are the only
+  ways to read its position and rotation, so the storage can change again in one file.
+- **`render/views.js` draws them.** It listens for `enemy-spawned` and builds the mesh from the def
+  (`mkShip(col, scale, true)`), copies `pos`/`quat` onto it once a frame, and removes it on
+  `enemy-removed` — which fires when a hostile is killed, drifts out of `lostRange`, or the field is
+  cleared by docking or a warp. A per-frame sweep reconciles the two lists so a mesh can never be
+  left behind or missing.
+- **Two files left the `render/` allow-list** in `tests/layers.test.mjs`: `ai.js` and `targeting.js`.
+  `combat.js` and `world.js` still import render/ for crates and the spark field (7b/7c).
+- **The station's position moved to the sim.** `STATION_POS` used to be exported from
+  `render/scene.js`; targeting needs it (lock the outpost) and may not import render/, so it is in
+  `sim/world.js` now and `ui/hud.js` reads it from there. It is still 0,0,0 — the outpost's mesh has
+  not moved.
+- **New tests (165 in all):** `tests/headless-sim.test.mjs` — the headless test step 7 asks for: one
+  raider, 600 ticks, no browser, checking it approached, turned to face the pilot and fired; plus
+  the kill, out-of-range and clear-the-field paths. `tests/views.test.mjs` — a mesh appears per
+  hostile from its def's colour and size, follows its data every frame, and goes away with it. Two
+  new layer tests: no `sim/` file may mention an enemy's mesh (`e.m`), and `render/views.js` is the
+  only place that builds one. `tests/headless.mjs` gained `opts.keep`, so a test can load one
+  `render/` file for real (that is how `views.js` is tested).
+- **Equivalence proof:** an old-vs-new probe ran one scripted fight (spawn, chase, shoot, kill, drop
+  loot, out-of-range removal, dock) through the previous commit and this tree, fingerprinting the
+  player and every hostile each tick: **2545 of 2545 frames identical**. The one new thing is each
+  enemy's `id`, which is what the view keys its mesh on.
+- **Save:** unchanged, version stays **12**. **Files:** `src/sim/enemy.js` (new),
+  `src/render/views.js` (new), `src/sim/{ai,combat,targeting,weapons,world}.js`, `src/util/math.js`
+  (`fwdQ`/`faceQ`), `src/util/events.js` (two events), `src/render/scene.js` (STATION_POS moved out),
+  `src/ui/hud.js`, `src/main.js`, `tests/{headless,layers,enemies,content}.test.mjs`,
+  `tests/headless-sim.test.mjs` (new), `tests/views.test.mjs` (new), `src/sim/README.md`,
+  `src/render/README.md`, `docs/{ARCHITECTURE,TARGET_ARCHITECTURE,HOW_TO_ADD,ROADMAP,HANDOFF}.md`,
+  this changelog. Run `npm run build` and `npm test`.
+
+---
+
 ## 2026-11-08: Step 6 ticked in full (docs only, no code change)
 
 - **Why:** the owner played the 6b build and reported **no problems with the controls**. That was

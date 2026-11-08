@@ -9,6 +9,7 @@ import { SHIPS } from "../data/ships.js";
 import { scene } from "../render/scene.js";
 import { mm } from "../render/models.js";
 import { state, msg, say } from "../state/state.js";
+import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { hurt } from "./player.js";
@@ -46,16 +47,14 @@ export function hitHostile(e, dmg, at) {
 }
 
 function killHostile(e) {
-  const W = state.world;
-  boom(e.m.position, 22, 0xff8a40);
-  scene.remove(e.m);
-  W.enemies.splice(W.enemies.indexOf(e), 1);
+  boom(enemyPos(e), 22, 0xff8a40);
+  dropEnemy(e);          // out of the world, and render/views.js removes its mesh
   state.profile.kills++;
-  emit("enemy-killed", { def: e.def, faction: e.f });
+  emit("enemy-killed", { def: e.def, faction: e.f, id: e.id });
 
   // Loot: whatever the enemy's table says (data/loot.js).
   for (const drop of rollLoot(e.loot)) {
-    for (let k = 0; k < drop.count; k++) spawnCrate(scattered(e.m.position, drop.scatter), drop.item);
+    for (let k = 0; k < drop.count; k++) spawnCrate(scattered(enemyPos(e), drop.scatter), drop.item);
   }
   msg("Hostile destroyed", 2);
 }
@@ -90,7 +89,7 @@ export function updateBullets(dt) {
     if (!dead && b.own) {
       for (let j = W.enemies.length - 1; j >= 0; j--) {
         const e = W.enemies[j];
-        if (e.m.position.distanceTo(b.m.position) < 9) {
+        if (enemyPos(e).distanceTo(b.m.position) < 9) {
           hitHostile(e, b.dmg, b.m.position);
           dead = true;
           break;

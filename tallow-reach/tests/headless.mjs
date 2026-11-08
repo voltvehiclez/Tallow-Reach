@@ -44,7 +44,12 @@ function stubbedNames() {
       }
       if (!p.endsWith(".js")) continue;
       const src = readFileSync(p, "utf8");
-      for (const m of src.matchAll(/import\s*(?:\*\s*as\s*\w+\s*)?\{([^}]+)\}\s*from\s*"([^"]*\/(?:render|core)\/[^"]+)"/g)) {
+      // Resolve each relative import the way the bundler will, so "./scene.js"
+      // from inside render/ counts as a render import too.
+      for (const m of src.matchAll(/import\s*(?:\*\s*as\s*\w+\s*)?\{([^}]+)\}\s*from\s*"([^"]+)"/g)) {
+        if (!m[2].startsWith(".")) continue;
+        const abs = path.resolve(path.dirname(p), m[2]);
+        if (!/[\\/]src[\\/](render|core)[\\/][^\\/]*\.js$/.test(abs)) continue;
         for (const part of m[1].split(",")) {
           const name = part.trim().split(/\s+as\s+/).pop().trim();
           if (name) names.add(name);
@@ -76,19 +81,46 @@ ${stubbedNames().map(n => `export const ${n} = stand(${JSON.stringify(n)});`).jo
 `;
 }
 
-const stubbedLayer = {
+/**
+ * Stands in for `src/render/**` and `src/core/**`. `keep` names files that must
+ * be bundled for real instead — that is how `tests/views.test.mjs` loads
+ * `render/views.js` itself (the code under test) while the scene and the mesh
+ * builders it calls stay stand-ins.
+ */
+function stubbedLayerFor(keep) {
+  const kept = new Set(keep);
+  const isKept = p => {
+    const base = p.split(/[\\/]/).pop();
+    return kept.has(base);
+  };
+  return {
   name: "tr-stub-screen-and-sound",
   setup(build) {
+    // `./scene.js` (inside render/) has no "render/" in it, so the check is done
+    // on where the import would land, not on how it is spelled.
+    const inLayer = abs => /[\\/]src[\\/](render|core)[\\/][^\\/]*\.js$/.test(abs);
+    build.onResolve({ filter: /^(\.{1,2}\/|\/)/ }, args => {
+      const abs = path.resolve(args.resolveDir, args.path);
+      if (!inLayer(abs)) return undefined;
+      if (isKept(args.path)) return undefined;
+      return { path: "stand-in", namespace: "tr-stand-in" };
+    });
     const filters = [/[\\/]render[\\/][^"']*\.js$/, /[\\/]core[\\/][^"']*\.js$/];
     for (const filter of filters) {
-      build.onResolve({ filter }, () => ({ path: "stand-in", namespace: "tr-stand-in" }));
+      // Absolute and bare paths ("../render/scene.js" from sim/, or a project
+      // file named by a test's extras) arrive here.
+      build.onResolve({ filter }, args => {
+        if (isKept(args.path)) return undefined;      // bundle the real file
+        return { path: "stand-in", namespace: "tr-stand-in" };
+      });
     }
     build.onLoad({ filter: /.*/, namespace: "tr-stand-in" }, () => ({
       contents: standInSource(),
       loader: "js",
     }));
   },
-};
+  };
+}
 
 const cache = new Map();
 
@@ -98,10 +130,15 @@ const cache = new Map();
  * reach the same live state object the bundle uses — something a plain import
  * cannot do, because the bundle has its own copy.
  *
+ * `opts.keep` is a list of file names under `src/render/` or `src/core/` that must
+ * be loaded for real instead of stubbed (default: none). `tests/views.test.mjs`
+ * uses it to test `render/views.js`, which is a render file itself.
+ *
  * Resolves to the module namespace, plus `__calls` (the recorded stand-in calls).
  */
-export async function loadHeadless(entry, extras = {}) {
-  const key = entry + "|" + JSON.stringify(extras);
+export async function loadHeadless(entry, extras = {}, opts = {}) {
+  const keep = opts.keep || [];
+  const key = entry + "|" + JSON.stringify(extras) + "|" + JSON.stringify(keep);
   if (cache.has(key)) return cache.get(key);
 
   // Stub calls are recorded here (the bundle and the test share one process).
@@ -123,7 +160,7 @@ export async function loadHeadless(entry, extras = {}) {
     format: "esm",
     platform: "node",
     logLevel: "silent",
-    plugins: [stubbedLayer],
+    plugins: [stubbedLayerFor(keep)],
   });
 
   const file = path.join(os.tmpdir(), `tallow-reach-headless-${process.pid}-${cache.size}.mjs`);

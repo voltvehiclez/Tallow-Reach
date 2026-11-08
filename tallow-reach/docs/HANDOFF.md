@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **155 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **165 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
@@ -37,13 +37,12 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** steps **4**, **5** and **6** are **ticked** (owner's playtests, 2026-11-08):
-  Milestone A is done and so is step 6. The sim reads `state.controls` instead of the keyboard, the
-  missile lock ring is sized in `ui/hud.js`, and **`src/sim/` no longer imports `core/` at all**.
-  **Step 7 is next**: entities as data, meshes as views, in three playable slices (7a enemies, 7b
-  bullets/missiles/crates/particles, 7c asteroids and the player's ship); it ends when the
-  `render/` allow-list in `tests/layers.test.mjs` is empty and a headless enemy test exists.
-  Data-only content can be added in the meantime.
+- **Next action:** steps **4**, **5** and **6** are **ticked** (owner's playtests, 2026-11-08).
+  **Step 7a is built (165 green)** and waits for the owner's playtest: a hostile is now plain data
+  (`sim/enemy.js`) and `render/views.js` draws it, so **no `src/sim/` file holds or touches a
+  mesh for an enemy**. **Step 7b is next**: bullets, missiles, crates and particles the same way;
+  then 7c (rocks and the player's ship). Step 7 ends when the `render/` allow-list in
+  `tests/layers.test.mjs` is empty. Data-only content can be added in the meantime.
 
 ---
 
@@ -112,7 +111,7 @@ that change, whether the save changes) and build them in small slices that can e
 | Hull | 10 Hull HP from `hull_basic`; damage is kept as a fraction in `profile.hp[ship]` and only repaired for credits at the outpost (Outfitting > Services); asteroid collisions deal `speed * 0.015` over 25 m/s |
 | Guns | Both primary bays fire on left click, each gun on its own cooldown; keys **1/2** cycle the primary slots (1 = guns, 2 = mining beam; an `Empty weapon slot` if nothing is fitted there). Right click = missiles (needs a launcher fitted) |
 | Mining beam | One ore per 4 s of unbroken contact; progress is lost the moment contact stops; small bar with percentage under the "left in rock" hint; chime when an ore banks |
-| Hostiles | One type, but now **data**: the **Newbie Raider** is the `raider` entry in `src/data/enemies.js` (10 Hull HP, no shields, 1 damage a shot). `spawnEnemy(id, pos)` in `sim/ai.js` builds it; `AI_BEHAVIOURS` holds the one behaviour (`chase`). Kills emit `enemy-killed { def, faction }` |
+| Hostiles | One type, but now **data**: the **Newbie Raider** is the `raider` entry in `src/data/enemies.js` (10 Hull HP, no shields, 1 damage a shot). `spawnEnemy(id, pos)` in `sim/ai.js` builds it; `AI_BEHAVIOURS` holds the one behaviour (`chase`). **A hostile is plain data since step 7a** (`sim/enemy.js`): `{ id, kind, def, pos, quat, hp, ... }`, no mesh; `render/views.js` draws it. Kills emit `enemy-killed { def, faction, id }`; leaving the world (killed, out of range, field cleared) emits `enemy-removed { id }` |
 | Items | `ITEMS` in `data/items.js`: five goods (ferrite 10 cr, cobalt 24, voidite 60, salvage 70, reactor core 350, all 1 m³) plus an entry for each module (`{ cat: "module" }`, name/volume/stats in `data/modules.js`). A place is one stock `{ itemId: count }`; `sim/inventory.js` is the only mover |
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
 | Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
@@ -202,12 +201,14 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 155 tests expected
+npm test          # 165 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 
 - `tests/headless.mjs` runs sim code (`src/sim/`) in a test with the 3D scene and the sound stubbed
-  out, so enemy behaviour can be tested with no browser. Copy its pattern for step 7's headless test.
+  out. `tests/headless-sim.test.mjs` is the worked example (step 7's headless test): one raider, 600
+  ticks, no browser, checking it closed in, turned and shot. `opts.keep: ["views.js"]` loads one
+  `render/` file for real (used by `tests/views.test.mjs` to test the drawing code itself).
 - Some AI sessions have no network. Then `npm install` fails, `node build.mjs` fails (no `esbuild`)
   and most tests fail (they import `three` through `src/util/math.js`). Say so plainly and tell
   the user to run the two commands, instead of guessing the result.
