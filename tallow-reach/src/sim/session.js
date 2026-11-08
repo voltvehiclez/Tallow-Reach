@@ -1,13 +1,14 @@
-// STEP 9 LOCAL-ONLY: launch, docking, death, recovery and autosave operate on state.player/profile.
 // Flight lifecycle: launching from the outpost, docking, and losing a ship.
-// Menus and HUD react to the events emitted here (docked, launched, died).
+// Launch and docking operate on an explicit pilot `P` and their `profile`
+// (defaulting to the local pilot). Death recovery for non-local pilots belongs
+// to step 16 (multiplayer respawn rules).
 
 import { V, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { DEFAULT_SECTOR, sectorAt } from "../data/sectors.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
-import { state, msg } from "../state/state.js";
+import { state, msg, profileOf, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { FIELD_CENTER, clearTransient } from "./world.js";
 import { setShip } from "./player.js";
@@ -22,8 +23,18 @@ import { ensureBoard } from "./contracts.js";
 import { cancelWarp, enterSector } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
 
-/** Initialise an independent transient pilot from a fit. This does not retain or save the profile. */
+function assertSessionPilot(P, profile, verb) {
+  if (P && P !== state.player && (!profile || profile === state.profile)) {
+    throw new Error(`Non-local ${verb} requires its own profile`);
+  }
+}
+
+/** Attach `profile` to `P` and initialise its fitted subsystems. */
 export function configurePlayer(P, profile) {
+  if (P !== state.player && (!profile || profile === state.profile)) {
+    throw new Error("Non-local player requires its own profile");
+  }
+  P.profile = profile;
   P.ship = profile.ship;
   P.weapon = profile.pw;
   P.missileStock = profile.msl;
@@ -40,69 +51,86 @@ const DOCK_RANGE = 300;     // metres from the outpost
 const DOCK_MAX_SPEED = 70;  // m/s
 
 /** Leave the outpost and head for the asteroid field. */
-export function launch() {
-  const P = state.player,
-    S = state.profile;
+export function launch(P = state.player, profile = profileOf(P)) {
+  assertSessionPilot(P, profile, "launch");
+  const local = P === state.player;
   P.docked = false;
+  P.ship = profile.ship;
+  P.weapon = profile.pw;
+  P.missileStock = profile.msl;
   // 200 m out is inside docking range (300), so a ship that cannot move can
   // still turn round and dock straight away. The model's visibility follows
   // `P.docked` in render/views.js (step 7b).
   P.pos.set(0, 0, 200);
-  facePlayer(FIELD_CENTER, 1);
+  facePlayer(FIELD_CENTER, 1, P);
   P.v.set(0, 0, 0);
   P.snap = true;
-  refillPower();      // launched fully charged
-  refreshDrive();     // the bays may have changed while docked
-  refreshShield();
-  refreshGuns();      // and its primary bays what fires
-  refreshHull();      // and its Hull HP follow the fitted hull module
-  P.en = state.drive.bmax;   // launched with a full boost tank
+  refillPower(P, profile);      // launched fully charged
+  refreshDrive(P, profile);     // the bays may have changed while docked
+  refreshShield(P, profile);
+  refreshGuns(P, profile);      // and its primary bays what fires
+  refreshHull(P, profile);      // and its Hull HP follow the fitted hull module
+  P.en = P.drive.bmax;          // launched with a full boost tank
 
   // Salvage contracts need their crates out in the field.
-  const m = S.mission;
+  const m = profile.mission;
   if (m && m.type === "salvage" && state.world.crates.length === 0) {
     for (let i = 0; i < m.n - m.p; i++) {
       spawnCrate(FIELD_CENTER.clone().add(V(R(-600, 600), R(-150, 150), R(-600, 600))));
     }
   }
 
-  emit("launched");
-  if (hasDrive(state.drive)) msg("Launched. Fly to the asteroid field.", 4);
-  else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
+  emit("launched", { player: P });
+  if (local) {
+    if (hasDrive(P.drive)) msg("Launched. Fly to the asteroid field.", 4);
+    else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
+  }
 }
 
-/** Dock at the outpost: clear the field, repair shields, save. */
-export function dock() {
-  const P = state.player,
-    S = state.profile;
-  state.freeCam.on = false;
-  cancelWarp();
+/** Dock at the outpost: clear the field if nobody else is flying, repair shields, save. */
+export function dock(P = state.player, profile = profileOf(P), world = state.worldState) {
+  assertSessionPilot(P, profile, "dock");
+  const local = P === state.player;
+  if (local) {
+    state.freeCam.on = false;
+    cancelWarp();
+  } else {
+    P.warp = null;
+  }
   P.docked = true;
   P.v.set(0, 0, 0);
   P.thr = 0;
-  if (S.ships.includes(S.ship) && P.hullMax > 0) {
-    S.hp[S.ship] = Math.max(REPAIR_MIN_HULL, P.hull / P.hullMax);
+  if (profile.ships.includes(profile.ship) && P.hullMax > 0) {
+    profile.hp[profile.ship] = Math.max(REPAIR_MIN_HULL, P.hull / P.hullMax);
   }
-  refillPower();      // the outpost tops the cells up
-  refreshDrive();     // and the ship may have changed (death, hangar)
-  refreshShield();    // likewise its shields
-  refreshGuns();      // and its guns what they can shoot
-  refreshHull();      // and its Hull HP
-  P.sh = P.shMax;     // and it leaves with them full
-  clearTransient();
-  state.flight.missileLock = { target: null, t: 0, locked: false };
-  state.flight.lock = null;
-  enterSector(DEFAULT_SECTOR);   // the outpost is in the starting sector
-  ensureBoard();
-  saveAutosave(S);
-  emit("docked");
+  refillPower(P, profile);      // the outpost tops the cells up
+  refreshDrive(P, profile);     // and the ship may have changed (death, hangar)
+  refreshShield(P, profile);    // likewise its shields
+  refreshGuns(P, profile);      // and its guns what they can shoot
+  refreshHull(P, profile);      // and its Hull HP
+  P.sh = P.shMax;               // and it leaves with them full
+
+  const anyOtherActive = state.players.some(p => p && p !== P && !p.docked && !p.dead);
+  if (!anyOtherActive) clearTransient();
+
+  P.flight.missileLock = { target: null, t: 0, locked: false };
+  P.flight.lock = null;
+  if (local) enterSector(DEFAULT_SECTOR);   // the outpost is in the starting sector
+  ensureBoard(world);
+  if (local) saveAutosave(currentSave());
+  emit("docked", { player: P });
 }
 
 /** Dock if close enough and slow enough. Otherwise do nothing. */
-export function tryDock() {
-  const P = state.player;
-  if (!sectorAt(state.sector).st) return;   // no outpost in this sector
-  if (P.pos.length() < DOCK_RANGE && P.v.length() < DOCK_MAX_SPEED) dock();
+export function tryDock(P = state.player, profile = profileOf(P), world = state.worldState) {
+  assertSessionPilot(P, profile, "tryDock");
+  if (!P || P.docked || P.dead) return false;
+  if (!sectorAt(state.sector).st) return false;   // no outpost in this sector
+  if (P.pos.length() < DOCK_RANGE && P.v.length() < DOCK_MAX_SPEED) {
+    dock(P, profile, world);
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -140,7 +168,6 @@ export function die() {
 }
 
 on("player-dead", ({ player } = {}) => {
-  // A death event from another pilot must never destroy the local ship.
-  // Non-local recovery is still to be implemented as part of step 8c.
+  // Non-local death recovery belongs to step 16 (multiplayer respawn).
   if (!player || player === state.player) die();
 });

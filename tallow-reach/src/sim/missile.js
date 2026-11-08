@@ -78,7 +78,7 @@ export function updateMissileFlight(dt) {
     let end = s.l <= 0;
     for (const e of W.enemies) {
       if (enemyPos(e).distanceTo(s.pos) < 12) {
-        hitHostile(e, s.dmg, enemyPos(e));
+        hitHostile(e, s.dmg, enemyPos(e), s.owner);
         end = true;
         break;
       }

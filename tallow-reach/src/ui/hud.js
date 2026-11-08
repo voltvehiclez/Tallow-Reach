@@ -6,6 +6,7 @@ import { on } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
 import { sectorAt } from "../data/sectors.js";
 import { camera } from "../render/scene.js";
+import { interpolatedPos } from "../render/views.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
@@ -62,8 +63,14 @@ export function setupHud() {
     el.cursor.style.top = e.clientY + "px";
   });
 
-  on("docked", () => (el.root.hidden = true));
-  on("launched", () => (el.root.hidden = false));
+  on("docked", ({ player } = {}) => {
+    if (player && player !== state.player) return;
+    el.root.hidden = true;
+  });
+  on("launched", ({ player } = {}) => {
+    if (player && player !== state.player) return;
+    el.root.hidden = false;
+  });
   on("hurt", ({ shielded, player }) => {
     if (player && player !== state.player) return;
     el.flash.style.opacity = shielded ? 0.25 : 0.8;
@@ -246,19 +253,19 @@ function drawMarkers() {
 
   W.enemies.forEach(e => {
     if (lock && lock.o === e) return;
-    mark(e.pos, "Hostile", lock ? "h dim" : "h", 70, -36);
+    mark(interpolatedPos(e), "Hostile", lock ? "h dim" : "h", 70, -36);
   });
 
   if (lock) {
     const hostile = lock.k === "e";
-    const pos = lockPosition(lock);
+    const pos = lock.o && lock.o.pos ? interpolatedPos(lock.o) : lockPosition(lock);
     mark(pos, "Locked " + lockName(lock), hostile ? "h lock" : "lock", 70, -36);
     mark(pos, null, hostile ? "h lk" : "lk");
   }
 
   W.crates.forEach(c => {
     if (c !== (lock && lock.o) && P.pos.distanceTo(c.pos) < 900) {
-      mark(c.pos, "Crate", "");
+      mark(interpolatedPos(c), "Crate", "");
     }
   });
 

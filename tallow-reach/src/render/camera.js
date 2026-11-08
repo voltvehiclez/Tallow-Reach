@@ -36,28 +36,29 @@ export function dockedView(time) {
 
 /**
  * Chase camera behind the ship, or the free orbit when it is active.
- * `P` is the player record; `fc` is state.freeCam; `shipScale` sets the zoom range.
+ * `P` is the player record; `fc` is state.freeCam; `pose` is the interpolated
+ * visual pose for the current display frame (defaults to `P`).
  */
-export function chaseView(dt, P, fc) {
+export function chaseView(dt, P, fc, pose = P) {
   // Built from the ship's position and quaternion by hand, not with
   // localToWorld(): matrixWorld is only refreshed when the scene is drawn, so
   // reading it here gives last frame's transform.
-  const tp = V(0, 2.6, trail(P)).applyQuaternion(P.quat).add(P.pos);
+  const tp = V(0, 2.6, trail(pose)).applyQuaternion(pose.quat).add(pose.pos);
 
   // The ship's own travel this frame. The camera is carried along by it, so the
   // easing below never sees the ship's speed; a jump (arriving in a new sector)
   // is ignored, and the camera snaps there instead.
   if (!_havePrev || fc.on) {
-    _prev.copy(P.pos);
+    _prev.copy(pose.pos);
     _havePrev = true;
   }
-  _delta.copy(P.pos).sub(_prev);
+  _delta.copy(pose.pos).sub(_prev);
   if (_delta.lengthSq() > 2500) _delta.set(0, 0, 0);
-  _prev.copy(P.pos);
+  _prev.copy(pose.pos);
 
   if (P.snap) {
     camera.position.copy(tp);
-    camera.quaternion.copy(P.quat);
+    camera.quaternion.copy(pose.quat);
     _delta.set(0, 0, 0);
     P.snap = false;
   }
@@ -65,25 +66,25 @@ export function chaseView(dt, P, fc) {
     const c = Math.cos(fc.pitch);
     const o = V(Math.sin(fc.yaw) * c, Math.sin(fc.pitch), Math.cos(fc.yaw) * c)
       .multiplyScalar(fc.dist)
-      .applyQuaternion(P.quat)
-      .add(P.pos);
+      .applyQuaternion(pose.quat)
+      .add(pose.pos);
     camera.position.copy(o);
-    face(camera, P.pos, 1);
+    face(camera, pose.pos, 1);
   } else {
     // Ride along with the ship's movement and smooth only the offset, so that
     // speed cannot push the camera back by itself: the trail above is the whole
     // of the speed effect, and nothing can exceed CAMERA.fast. Turning still
     // swings the view, because the offset is eased in world space.
-    _rel.copy(camera.position).sub(P.pos).add(_delta);
-    _want.copy(tp).sub(P.pos);
+    _rel.copy(camera.position).sub(pose.pos).add(_delta);
+    _want.copy(tp).sub(pose.pos);
     _rel.lerp(_want, 1 - Math.exp(-10 * dt));
-    camera.position.copy(P.pos).add(_rel);
-    camera.quaternion.slerp(P.quat, 1 - Math.exp(-5 * dt));
+    camera.position.copy(pose.pos).add(_rel);
+    camera.quaternion.slerp(pose.quat, 1 - Math.exp(-5 * dt));
   }
   // A warp widens the view; state.warp.fx runs 0 -> 1 -> 0. It must not turn or
   // roll the picture: nothing rotates when the drive engages.
   const warp = state.warp ? state.warp.fx : 0;
-  camera.fov += (70 + 4 * P.bs + 16 * warp - camera.fov) * Math.min(1, dt * 4);
+  camera.fov += (70 + 4 * pose.bs + 16 * warp - camera.fov) * Math.min(1, dt * 4);
   camera.updateProjectionMatrix();
 }
 

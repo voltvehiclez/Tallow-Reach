@@ -90,7 +90,7 @@ about each other, use the event bus instead.
 | Change the pause menu                | `ui/pause.js`, styles under "Pause overlay" in `styles.css` |
 | Change colours or layout of any UI   | `styles.css` (sections are labelled)           |
 | Add a sound                          | `core/audio.js` (`SFX` entry; the sim only emits `sfx`) — see HOW_TO_ADD.md recipe 9 |
-| Change what gets saved               | `state/profile.js` (bump `SAVE_VERSION`, add a migration) |
+| Change what gets saved               | `state/profile.js` (`newProfile` / `newWorld`, `sanitizeProfile` / `sanitizeWorld`, bump `SAVE_VERSION`, add a migration in `sanitizeSave`) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
 | Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
 | Add tests                            | `tests/` (`*.test.mjs`, run by `npm test`)     |
@@ -152,8 +152,8 @@ Each `src/` folder also has its own short `README.md`.
   else knows which item a crate is. Do not write a drop rule in `sim/` again.
 - **A place is one stock of items.** `ITEMS` in `data/items.js` is the catalogue: every ore, every
   salvage good and **every module** (a module's entry is just `{ cat: "module" }` — its name, volume
-  and stats stay in `data/modules.js`, keyed by the same id). A place — the station's `profile.store`,
-  a ship's `profile.holds[id]` — is `{ itemId: count }`, nothing else; there is no list of cargo keys
+  and stats stay in `data/modules.js`, keyed by the same id). A place — the hosted station's `worldState.store`,
+  a pilot's `profile.holds[id]` — is `{ itemId: count }`, nothing else; there is no list of cargo keys
   and no separate list of spare parts, and `npm test` fails if any file reads `profile.cargo`,
   `profile.modules`, `KEYS`, `emptyCargo` or `ITEM_VOL` again. `sim/inventory.js` is the only code
   that moves things between places or measures how full one is (`loadOf`/`freeOf` in m³,
@@ -312,21 +312,20 @@ Each `src/` folder also has its own short `README.md`.
 - **`FLIGHT` in `data/ships.js` still scales every ship at once**: `turn` multiplies the
   drive's turn rate, and `strafe` / `lift` / `reverse` are fractions of the drive's `spd`. The
   main drive and its 2x boost are the only directions that reach full speed.
-- **Inventory: every place is measured in m³, and `sim/inventory.js` is the one home for it.** There
-  are two kinds of place. The **station** keeps ore in `profile.store` and spare parts in
-  `profile.modules`; its room is `STORAGE_PER_LEVEL` (250) times the Storage bay level. A **ship's
-  hold** is `profile.holds[shipId] = { cargo, modules }`, every owned ship has its own, and its room
-  is the hull's `cargo`. One unit of ore is 1 m³ (`ITEM_VOL`); a module's volume is its `vol`. A
-  module fitted in a bay takes no space anywhere. Ore and parts share the same room. Purchases land
-  in the station (`buyModule`, no limit on how many of one part you can own, only on room), the
-  player moves things on demand in the Inventory tab (`moveCargo`, `moveModule`), and the Outfitting
-  bays are fitted from the **station's** parts only. Mining and crate pickup write to the flown
-  ship's hold through `cargoOf()`; nothing reads a single `profile.cargo` any more (a test guards
-  that). A ship's cargo stays in that ship when you switch to another, and a ship that is lost takes
-  its hold with it. Do not write `profile.holds`, `profile.store` or `profile.modules` outside
-  `sim/inventory.js`, `sim/fitting.js` and `sim/economy.js`.
-- **Fitting lives in one place.** `sim/fitting.js` is the only code that writes
-  `profile.loadout` or `profile.modules`, and it refreshes ship power after every change.
+- **Inventory: every place is measured in m³, and `sim/inventory.js` is the one home for it.** Since
+  step 9 (save v13), the **hosted station** keeps its stock (`{ itemId: count }`) in `worldState.store`
+  and its room is `STORAGE_PER_LEVEL` (250) times `worldState.base.store`. Each **ship's hold** is
+  `profile.holds[shipId]` (`{ itemId: count }`), owned by that pilot's portable `profile`, and its room
+  is the hull's `cargo`. One unit of ore is 1 m³; a module's volume is its `vol`. A module fitted in a
+  bay takes no space anywhere. Purchases land in the hosted station (`buyItem`, no limit on how many of
+  one part you can own, only on room), the player moves things in the Inventory tab (`moveItem`), and
+  Outfitting bays are fitted from the **station's** parts (`worldState.store`). Mining and crate pickup
+  write to the acting pilot's flown ship hold; nothing reads a single `profile.cargo` any more. A ship's
+  cargo stays in that ship when you switch to another, and a ship that is lost takes its hold with it.
+  Do not write `profile.holds` or `worldState.store` outside `sim/inventory.js`, `sim/fitting.js` and
+  `sim/economy.js`.
+- **Fitting lives in one place.** `sim/fitting.js` is the only code that writes `profile.loadout`, and
+  it refreshes the acting pilot's ship power, drive, shields, hull and guns after every change.
   Anything else that changes a bay must go through it, or the ship keeps the old numbers.
 - **Outpost actions** are functions in `ACTIONS` in `ui/menu.js`. A button carries
   `data-a="actionName"` and optionally `data-b="argument"`. After each click the panel
@@ -337,9 +336,12 @@ Each `src/` folder also has its own short `README.md`.
   They never change state.
 - **The sim runs at 60 ticks a second** (`sim/step.js`, `data/simulation.js`); the frame loop
   accumulates time and keeps the old 0.05-second stall cap. Pause does not advance it. Screen and
-  sound randomness use a separate cosmetic stream. Missile aim still samples the last rendered
-  camera direction and asteroid respawn still uses a wall-clock timer; full frame-rate independence
-  has not been proven. Views are not interpolated between ticks.
+  sound randomness use a separate cosmetic stream. Between 60 Hz ticks, `render/views.js`,
+  `render/camera.js` and `ui/hud.js` interpolate visual poses using `simClock.alpha()` (keeping
+  previous-tick poses in a render-side `WeakMap` so simulation state stays untouched and 240 Hz
+  displays see smooth per-frame motion without sawtooth jitter; teleports with `P.snap` snap
+  immediately). Missile aim still samples the last rendered camera direction and asteroid respawn
+  still uses a wall-clock timer.
 - **Anything that accumulates must be multiplied by `dt`.** A constant added per frame
   (`camera.rotateZ(0.05)` every frame, say) silently depends on the frame rate: harmless on a
   60 Hz screen, a visible bug on a 240 Hz one. This bit the warp roll once. Use
@@ -386,9 +388,13 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## State
 
-- `state.profile` is the save: credits, ships, base, contracts and stats. It is written to disk on dock and on every menu action.
-- Everything else in `state/state.js` is runtime. It is rebuilt when the game loads.
-- Systems read `state.*` directly. There is no hidden global, so tests can build a state object and call a system.
+- Saved state is split in two since step 9 (`SAVE_VERSION = 13`, `{ v: 13, profile, world }`):
+  - `state.profile` is the local pilot's **portable character**: credits (`cr`), flown hull (`ship`), owned hulls (`ships`), per-ship holds (`holds`), per-hull loadouts (`loadout`), hull fractions (`hp`), missile stock (`msl`), selected primary slot (`pw`), active contract (`mission`), kills (`kills`) and completed contracts (`done`). Every player in `state.players` carries its own `player.profile` (`profileOf(player)`).
+  - `state.worldState` is the **hosted world**: station storage (`store`), base facility levels (`base`) and the station's contract offer board (`board`, aliased by `state.ui.board`).
+  - `currentSave()` and `applySave(save)` join and apply both halves; `portableProfile(save)` and `mergeProfile(save, profile)` extract a guest's character and merge it back into their own save without altering their home world.
+  - Both halves are written together on dock and on every outpost menu action.
+- Everything else in `state/state.js` (`players`, `world`, `sector`, `time`, `shops`, `ui`) is transient session runtime, rebuilt when the game loads.
+- Systems read `state.*` or explicit `(player, profile, world)` parameters directly. There is no hidden global, so tests can build a state object and call a system.
 
 ## Replayability hooks
 
@@ -400,28 +406,23 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## Save compatibility
 
-Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeProfile` fills in defaults and clamps values, so older or partly corrupt saves still open.
+Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts both `{ v: 13, profile, world }` objects and flat v1..v12 saves, migrating and clamping both halves through `sanitizeProfile` and `sanitizeWorld`.
 
 When you change what is saved:
 
-1. Add the field with a default in `newProfile()`.
-2. Make `sanitizeProfile()` validate it (clamp numbers, drop unknown ids).
-3. Raise `SAVE_VERSION` and add a line to the "Version history" comment.
-4. If an old save needs converting rather than just defaulting, convert it in `sanitizeProfile()`.
+1. Add the field with a default in `newProfile()` (portable character) or `newWorld()` (hosted world).
+2. Make `sanitizeProfile()` or `sanitizeWorld()` validate it (clamp numbers, drop unknown ids).
+3. Raise `SAVE_VERSION` and add a line to the "Version history" comment in `state/profile.js`.
+4. If an old save needs converting rather than just defaulting, convert it in `sanitizeSave()` / `sanitizeProfile()` / `sanitizeWorld()`.
 5. Add a test in `tests/` that loads an old-shaped save.
 
 ## Known gaps (things to know before building on top)
 
-The structural gaps (the sim touching the screen, one global player, hard-coded sector geography, a
-single mixed save, fixed item keys) are tracked with their fixing step in the "Debt today" table of
+The structural gaps (hard-coded sector geography, unsaved current sector, fixed contract count) are tracked with their fixing step in the "Debt today" table of
 [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md). The list below is the gameplay-level detail.
 
 These are real, current limits. None of them is a bug in play today.
 
-- **`sanitizeProfile` lists some things by name.** The three base modules (`store`, `hangar`,
-  `refinery`) and the weapon flag (`msl`) are written out in `state/profile.js`. A new
-  base module or weapon needs a line there too. `tests/content.test.mjs` fails if a base module is missing.
-  (The `beam` flag left the save in version 8; the beam is a module.)
 - **Every hull is the same ship apart from the hold today.** Thrusters set speed and turn,
   every hull ships with the same basic drive, and the hull's combat and mining multipliers
   are 1 everywhere. The only difference between hulls is the hold, measured in m³ (one

@@ -1,23 +1,14 @@
-// STEP 9 LOCAL-ONLY: outfitting mutates the local profile and local ship.
-// Moving modules between the ship and storage.
+// Moving modules between a pilot's ship and station storage.
 //
-// Fitting costs nothing and is done at the outpost: a part comes out of storage
-// and into a bay, and whatever was in that bay goes back into storage. Every
-// change refreshes the ship's power budget (sim/power.js), its drive
-// (sim/drive.js), its shields (sim/shield.js) and its guns (sim/guns.js),
-// because that is what turns a fitted part into numbers the game uses.
-//
-// The save shape is one array per hull and group in profile.loadout (one entry
-// per bay, null = empty) and one stock in profile.store — the station's
-// inventory, where everything you buy lands, ore and spare parts alike, and where
-// every bay is fitted from (any number of the same part). The station has limited
-// room in m³, so a part coming off a ship needs space (sim/inventory.js). The
-// Outfitting screen reads both; this file is the only thing that writes them.
+// Fitting costs nothing and is done at the outpost: a part comes out of
+// `world.store` and into a bay in `profile.loadout[ship]`, and whatever was in
+// that bay goes back into `world.store`. Every change refreshes the target
+// pilot's power, drive, shields, hull and guns.
 
 import { MODULES } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { isModule, itemVol } from "../data/items.js";
-import { state } from "../state/state.js";
+import { state, profileOf } from "../state/state.js";
 import { STATION, addItem, countOf, freeOf, itemsAt, nameOf, takeItem } from "./inventory.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
@@ -25,15 +16,18 @@ import { refreshShield } from "./shield.js";
 import { refreshHull } from "./hull.js";
 import { refreshGuns } from "./guns.js";
 
-const S = () => state.profile;
-const shipId = () => S().ship;
+function assertFitTarget(P, profile) {
+  if (P && P !== state.player && (!profile || profile === state.profile)) {
+    throw new Error("Non-local fitting requires its own profile");
+  }
+}
 
 /**
- * The bay list for `group` on the ship being flown, or null if there is no such
- * bay. `i` is the bay index.
+ * The bay list for `group` on `profile`'s active ship, or null if there is no
+ * such bay. `i` is the bay index.
  */
-function bayList(group, i) {
-  const fit = S().loadout && S().loadout[shipId()];
+function bayList(group, i, profile = state.profile) {
+  const fit = profile.loadout && profile.loadout[profile.ship];
   if (!fit) return null;
   const list = fit[group];
   if (!Array.isArray(list) || !Number.isInteger(i) || i < 0 || i >= list.length) return null;
@@ -44,9 +38,9 @@ function bayList(group, i) {
  * Spare parts in storage that would fit a `group` bay, in the order they
  * arrived: one entry per part, so three beams are three "beam_basic"s.
  */
-export function storedFor(group) {
+export function storedFor(group, world = state.worldState) {
   const out = [];
-  for (const { id, n } of itemsAt(STATION)) {
+  for (const { id, n } of itemsAt(STATION, state.profile, world)) {
     if (!isModule(id) || MODULES[id].g !== group) continue;
     for (let i = 0; i < n; i++) out.push(id);
   }
@@ -54,8 +48,8 @@ export function storedFor(group) {
 }
 
 /** The module fitted in one bay, or null. */
-export function fittedAt(group, i) {
-  const list = bayList(group, i);
+export function fittedAt(group, i, profile = state.profile) {
+  const list = bayList(group, i, profile);
   return list ? list[i] || null : null;
 }
 
@@ -64,66 +58,83 @@ export function fittedAt(group, i) {
  * moves to storage. Returns a message for the panel, or undefined if the bay
  * does not exist (the screen is out of date).
  */
-export function fitModule(group, i, id) {
-  const list = bayList(group, i);
+export function fitModule(
+  group,
+  i,
+  id,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  assertFitTarget(P, profile);
+  const list = bayList(group, i, profile);
   if (!list) return undefined;
 
   const m = MODULES[id];
   if (!m || m.g !== group) return "That module does not fit in that bay.";
 
-  if (!countOf(STATION, id)) return "That module is not in storage.";
+  if (!countOf(STATION, id, profile, world)) return "That module is not in storage.";
 
   const replaced = list[i];
   // The part that comes out needs somewhere to go; the one going in frees its own space.
-  if (replaced && itemVol(replaced) > freeOf(STATION) + itemVol(id)) {
+  if (replaced && itemVol(replaced) > freeOf(STATION, profile, world) + itemVol(id)) {
     return `No room in ${nameOf(STATION)} for the ${MODULES[replaced].n}. Make space in the Inventory tab.`;
   }
-  takeItem(STATION, id, 1);
-  if (replaced) addItem(STATION, replaced, 1);
+  takeItem(STATION, id, 1, profile, world);
+  if (replaced) addItem(STATION, replaced, 1, profile, world);
   list[i] = id;
 
-  refillPower();
-  refreshDrive();
-  refreshShield();
-  refreshHull();
-  refreshGuns();
+  refillPower(P, profile);
+  refreshDrive(P, profile);
+  refreshShield(P, profile);
+  refreshHull(P, profile);
+  refreshGuns(P, profile);
   return replaced
     ? `Fitted ${m.n}. ${MODULES[replaced].n} moved to storage.`
     : `Fitted ${m.n}.`;
 }
 
 /** Take whatever is in bay `i` of `group` out and put it in storage. */
-export function unequip(group, i) {
-  const list = bayList(group, i);
+export function unequip(
+  group,
+  i,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  assertFitTarget(P, profile);
+  const list = bayList(group, i, profile);
   if (!list) return undefined;
 
   const id = list[i];
   if (!id) return "That bay is already empty.";
-  if (itemVol(id) > freeOf(STATION)) {
+  if (itemVol(id) > freeOf(STATION, profile, world)) {
     return `No room in ${nameOf(STATION)} for the ${MODULES[id].n}. Make space in the Inventory tab.`;
   }
 
   list[i] = null;
-  addItem(STATION, id, 1);
+  addItem(STATION, id, 1, profile, world);
 
-  refillPower();
-  refreshDrive();
-  refreshShield();
-  refreshHull();
-  refreshGuns();
+  refillPower(P, profile);
+  refreshDrive(P, profile);
+  refreshShield(P, profile);
+  refreshHull(P, profile);
+  refreshGuns(P, profile);
   return `${MODULES[id].n} moved to storage.`;
 }
 
 /** True when `group` is a real bay group on the ship being flown. */
-export const isBayGroup = group => Object.prototype.hasOwnProperty.call(layoutFor(shipId()), group);
+export const isBayGroup = (group, profile = state.profile) =>
+  Object.prototype.hasOwnProperty.call(layoutFor(profile.ship), group);
 
-/** How many of module `id` the player owns: in the station's storage, carried in
- *  any ship's hold, or fitted in any bay of any owned hull. */
-export function ownedCount(id) {
-  const p = S();
-  let n = (p.store && p.store[id]) || 0;
-  for (const hold of Object.values(p.holds || {})) n += (hold && hold[id]) || 0;
-  for (const fit of Object.values(p.loadout || {})) {
+/**
+ * How many of module `id` are owned across `world`'s station storage,
+ * `profile`'s ship holds, and bays of `profile`'s loadouts.
+ */
+export function ownedCount(id, profile = state.profile, world = state.worldState) {
+  let n = (world && world.store && world.store[id]) || 0;
+  for (const hold of Object.values(profile.holds || {})) n += (hold && hold[id]) || 0;
+  for (const fit of Object.values(profile.loadout || {})) {
     for (const bays of Object.values(fit || {})) {
       if (Array.isArray(bays)) n += bays.filter(m => m === id).length;
     }
@@ -131,5 +142,6 @@ export function ownedCount(id) {
   return n;
 }
 
-/** True when the player owns at least one module `id` (see ownedCount). */
-export const ownsModule = id => ownedCount(id) > 0;
+/** True when at least one module `id` is owned (see ownedCount). */
+export const ownsModule = (id, profile = state.profile, world = state.worldState) =>
+  ownedCount(id, profile, world) > 0;

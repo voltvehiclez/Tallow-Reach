@@ -9,7 +9,7 @@ import { emit } from "../util/events.js";
 import { random } from "../util/rng.js";
 import { sectorAt } from "../data/sectors.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
-import { state } from "../state/state.js";
+import { state, profileOf } from "../state/state.js";
 import { fire } from "./combat.js";
 import { FIELD_CENTER } from "./world.js";
 import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
@@ -77,8 +77,6 @@ export function nearestPlayer(pos, players = state.players) {
 /** Per-frame update for hostiles, plus the spawner that keeps them coming. */
 export function updateEnemies(dt) {
   const W = state.world,
-    F = state.flight,
-    S = state.profile,
     E = W.enemies;
 
   for (let i = E.length - 1; i >= 0; i--) {
@@ -113,34 +111,40 @@ export function updateEnemies(dt) {
   }
 
   // Spawner: hunt contracts send their target enemy in, and wandering pirates
-  // show up occasionally when you are near the asteroid field.
-  // Contract and ambient spawn policy still follows the local profile (step 9).
-  if (!state.player || state.player.docked) return;
-  const pp = playerPos(state.player);
-  F.spawnT -= dt;
-  if (F.spawnT <= 0) {
-    F.spawnT = R(4, 8);
-    const m = S.mission,
-      far = pp.length() > 600,
-      hunting = m && m.type === "hunt" && m.p < m.n,
-      nearField = pp.distanceTo(FIELD_CENTER) < 1400;
-    // Hunt contracts name the enemy they want (old saves have none: use the default).
-    const hunted = m && m.e ? m.e : DEFAULT_ENEMY;
-    let want = 0;
-    if (sectorAt(state.sector).foes) {
-      if (far && hunting) {
-        want = Math.min(3, m.n - m.p) - E.length;
-      } else if (far && nearField && E.length < 2 && random() < 0.4) {
-        want = 1 + (random() < 0.5 ? 1 : 0);
+  // show up occasionally when an active pilot is near the asteroid field.
+  const local = state.player;
+  const active = state.players.filter(p => p && !p.docked && !p.dead);
+  const ordered = local && active.includes(local) ? [local, ...active.filter(p => p !== local)] : active;
+  for (const player of ordered) {
+    const prof = profileOf(player),
+      F = player.flight;
+    if (!prof || !F) continue;
+    const pp = playerPos(player);
+    F.spawnT -= dt;
+    if (F.spawnT <= 0) {
+      F.spawnT = R(4, 8);
+      const m = prof.mission,
+        far = pp.length() > 600,
+        hunting = m && m.type === "hunt" && m.p < m.n,
+        nearField = pp.distanceTo(FIELD_CENTER) < 1400;
+      // Hunt contracts name the enemy they want (old saves have none: use the default).
+      const hunted = m && m.e ? m.e : DEFAULT_ENEMY;
+      let want = 0;
+      if (sectorAt(state.sector).foes) {
+        if (far && hunting) {
+          want = Math.min(3, m.n - m.p) - E.length;
+        } else if (far && nearField && E.length < 2 && random() < 0.4) {
+          want = 1 + (random() < 0.5 ? 1 : 0);
+        }
       }
-    }
-    for (let i = 0; i < want; i++) {
-      const id = far && hunting ? hunted : DEFAULT_ENEMY,
-        d = enemyDef(id);
-      spawnEnemy(
-        id,
-        pp.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(R(d.spawnDist[0], d.spawnDist[1])))
-      );
+      for (let i = 0; i < want; i++) {
+        const id = far && hunting ? hunted : DEFAULT_ENEMY,
+          d = enemyDef(id);
+        spawnEnemy(
+          id,
+          pp.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(R(d.spawnDist[0], d.spawnDist[1])))
+        );
+      }
     }
   }
 }

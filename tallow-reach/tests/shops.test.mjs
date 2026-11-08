@@ -18,18 +18,21 @@ import { SHOPS, OUTPOST_SHOP, isShop, shopRow } from "../src/data/shops.js";
 // temporary shop edits the same object the sim code reads.
 const sim = await loadHeadless("src/sim/economy.js", {
   state: "src/state/state.js",
-  newProfile: "src/state/profile.js",
+  applySave: "src/state/state.js",
+  newSave: "src/state/profile.js",
   SHOPS: "src/data/shops.js",
   SHOP_IDS: "src/data/shops.js",
 });
 
 /** A brand-new save with plenty of credits. */
 function freshGame(cr = 10000) {
-  sim.state.profile = sim.newProfile();
+  sim.applySave(sim.newSave());
   sim.state.profile.cr = cr;
   sim.state.shops = {};          // session state: starts empty, like a fresh page load
   return sim.state.profile;
 }
+
+const W = () => sim.state.worldState;
 
 const M = OUTPOST_SHOP;
 
@@ -106,7 +109,7 @@ test("buying the beam and the missiles behaves exactly as before", () => {
     "the message the player knows"
   );
   assert.equal(p.cr, 19100, "900 cr was charged");
-  assert.equal(p.store.beam_basic, 1, "and the beam is in the station");
+  assert.equal(W().store.beam_basic, 1, "and the beam is in the station");
 
   assert.equal(
     sim.buyItem(M, "missile_basic"),
@@ -128,36 +131,36 @@ test("a purchase that cannot happen changes nothing and says nothing", () => {
   const p = freshGame(10);
   assert.equal(sim.buyItem(M, "beam_basic"), undefined, "too poor");
   assert.equal(p.cr, 10);
-  assert.deepEqual(p.store, {});
+  assert.deepEqual(W().store, {});
 
   assert.equal(sim.buyItem("no-such-shop", "beam_basic"), undefined, "unknown shop");
   assert.equal(sim.buyItem(M, "ferrite"), undefined, "an item this shop does not sell");
   assert.equal(sim.buyItem(M, "no-such-item"), undefined, "an item that does not exist");
-  assert.deepEqual(p.store, {}, "none of it stored anything");
+  assert.deepEqual(W().store, {}, "none of it stored anything");
 
   p.cr = 10000;
-  p.store.ferrite = 250;                      // the station's storage is brim full (250 m³ at level 1)
+  W().store.ferrite = 250;                      // the station's storage is brim full (250 m³ at level 1)
   assert.match(sim.buyItem(M, "beam_basic"), /no room/i, "a full station is refused, as before");
   assert.equal(p.cr, 10000, "and nothing was charged");
-  assert.equal(p.store.beam_basic, undefined);
+  assert.equal(W().store.beam_basic, undefined);
 });
 
 test("the six standard parts can be bought back for a credit, and quantity works", () => {
   const p = freshGame();
   for (const id of ["power_basic", "cell_basic", "thruster_basic", "shield_basic", "cannon_basic", "hull_basic"]) {
     assert.equal(sim.buyItem(M, id), `${MODULES[id].n} in the station inventory. Fit it in a ${MODULES[id].g} bay to use it.`);
-    assert.equal(p.store[id], 1, `${id} is in the station`);
+    assert.equal(W().store[id], 1, `${id} is in the station`);
   }
   assert.equal(p.cr, 10000 - 6, "one credit each");
   p.cr = 100;
   assert.equal(sim.buyItem(M, "power_basic", 3), "3 Basic powerplant in the station inventory.");
-  assert.equal(p.store.power_basic, 4);
+  assert.equal(W().store.power_basic, 4);
   assert.equal(p.cr, 97, "three credits for three");
 });
 
 test("shopList() gives the screen everything it needs", () => {
-  const p = freshGame();
-  p.store.beam_basic = 2;
+  freshGame();
+  W().store.beam_basic = 2;
   const rows = sim.shopList(M);
   assert.equal(rows.length, SHOPS[M].stock.length, "one row per stock row, in data order");
   const beam = rows.find(r => r.id === "beam_basic");
@@ -193,12 +196,12 @@ test("a limited row runs out, and setShopStock is the restock hook", () => {
     assert.equal(sim.shopStock("trader", "beam_basic"), 0, "sold out");
 
     assert.equal(sim.buyItem("trader", "beam_basic"), undefined, "a sold-out row cannot be bought");
-    assert.equal(p.store.beam_basic, 2, "and nothing more was stored");
+    assert.equal(W().store.beam_basic, 2, "and nothing more was stored");
     assert.equal(p.cr, 800, "nor charged");
 
     // Unlimited rows are unaffected.
     assert.equal(sim.buyItem("trader", "ferrite", 3), "3 Ferrite in the station inventory.");
-    assert.equal(p.store.ferrite, 3);
+    assert.equal(W().store.ferrite, 3);
 
     // The future restock timer / event / roll calls this and nothing else.
     sim.setShopStock("trader", "beam_basic", 2);
@@ -216,11 +219,11 @@ test("a limited row runs out, and setShopStock is the restock hook", () => {
 test("shop stock is session state: never in the save, and reset on a new game", () => {
   const profile = readFileSync(new URL("../src/state/profile.js", import.meta.url), "utf8");
   const stateSrc = readFileSync(new URL("../src/state/state.js", import.meta.url), "utf8");
-  assert.doesNotMatch(profile, /shops?\b\s*[:=]/, "the save does not carry shop stock (save version stays 12)");
+  assert.doesNotMatch(profile, /shops?\b\s*[:=]/, "the save does not carry shop stock");
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 12, "save version unchanged by this step");
+  assert.equal(p.v, 13, "save version is 13 after profile/world split");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {

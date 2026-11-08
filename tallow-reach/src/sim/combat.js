@@ -14,7 +14,7 @@ import { rollLoot } from "./loot.js";
 import { emit } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
-import { state, msg, say, localPlayer } from "../state/state.js";
+import { state, msg, say, localPlayer, profileOf } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
@@ -53,24 +53,24 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer()) {
 }
 
 /** Apply damage to a hostile and handle its death. */
-export function hitHostile(e, dmg, at) {
+export function hitHostile(e, dmg, at, byPlayer = localPlayer()) {
   e.hp -= dmg;
   boom(at, 2, 0xffd080);
-  if (e.hp <= 0) killHostile(e);
+  if (e.hp <= 0) killHostile(e, byPlayer);
 }
 
-// Kills, rewards and contract events still update the local profile only (step 9).
-function killHostile(e) {
+function killHostile(e, byPlayer = localPlayer()) {
   boom(enemyPos(e), 22, 0xff8a40);
   dropEnemy(e);          // out of the world, and render/views.js removes its mesh
-  state.profile.kills++;
-  emit("enemy-killed", { def: e.def, faction: e.f, id: e.id });
+  const prof = byPlayer ? profileOf(byPlayer) : state.profile;
+  if (prof) prof.kills++;
+  emit("enemy-killed", { def: e.def, faction: e.f, id: e.id, player: byPlayer });
 
   // Loot: whatever the enemy's table says (data/loot.js).
   for (const drop of rollLoot(e.loot)) {
     for (let k = 0; k < drop.count; k++) spawnCrate(scattered(enemyPos(e), drop.scatter), drop.item);
   }
-  msg("Hostile destroyed", 2);
+  if (!byPlayer || byPlayer === state.player) msg("Hostile destroyed", 2);
 }
 
 /** A point up to `d` metres away from `p` in each direction (0 = exactly `p`). */
@@ -105,7 +105,7 @@ export function updateBullets(dt) {
       for (let j = W.enemies.length - 1; j >= 0; j--) {
         const e = W.enemies[j];
         if (enemyPos(e).distanceTo(b.pos) < 9) {
-          hitHostile(e, b.dmg, b.pos);
+          hitHostile(e, b.dmg, b.pos, b.owner);
           dead = true;
           break;
         }
@@ -133,17 +133,17 @@ export function updateBullets(dt) {
   }
 }
 
-/** Drift, expire and collect loot crates. */
-// Crate collection and inventory are local-profile only until step 9.
+/** Drift, expire and collect loot crates across active pilots. */
 export function updateCrates(dt) {
-  const C = state.world.crates,
-    S = state.profile,
-    pp = playerPos();
+  const C = state.world.crates;
+  const active = state.players.filter(p => p && !p.docked && !p.dead);
   for (let i = C.length - 1; i >= 0; i--) {
     const c = C[i];
     if (!c || C.indexOf(c) === -1) continue;
-    const q = pp.clone().sub(c.pos),
-      d = q.length();
+    const candidates = active.map(p => {
+      const q = playerPos(p).clone().sub(c.pos);
+      return { p, q, d: q.length() };
+    });
     // The crate turns in place, a radian a second, the way it always has: the
     // rotation is on the record now, so a view (or a guest) can simply copy it.
     c.quat.multiply(_spin.setFromAxisAngle(UP, c.spin * dt));
@@ -152,16 +152,30 @@ export function updateCrates(dt) {
       dropEntity(C, c);
       continue;
     }
-    if (d < CRATE_PULL) c.pos.addScaledVector(q.normalize(), Math.min(d, 60 * dt));
-    if (d < CRATE_PICKUP) {
-      const k = c.item;
-      if (holdLoad() >= SHIPS[S.ship].cargo || !addItem(S.ship, k, 1)) {
-        say("Cargo hold full");
+    if (!candidates.length) continue;
+
+    let nearest = candidates[0];
+    for (let k = 1; k < candidates.length; k++) {
+      if (candidates[k].d < nearest.d) nearest = candidates[k];
+    }
+    if (nearest.d < CRATE_PULL) {
+      c.pos.addScaledVector(nearest.q.normalize(), Math.min(nearest.d, 60 * dt));
+    }
+
+    const inRange = candidates.filter(x => x.d < CRATE_PICKUP).sort((a, b) => a.d - b.d);
+    for (const { p } of inRange) {
+      const prof = profileOf(p);
+      if (!prof) continue;
+      const k = c.item,
+        local = p === state.player;
+      if (holdLoad(prof) >= SHIPS[prof.ship].cargo || !addItem(prof.ship, k, 1, prof)) {
+        if (local) say("Cargo hold full");
       } else {
-        emit("pickup", { item: k });
-        msg(`Picked up ${itemName(k)}`, 2);
+        emit("pickup", { item: k, player: p });
+        if (local) msg(`Picked up ${itemName(k)}`, 2);
         emit("sfx", { name: "pickup" });
         dropEntity(C, c);
+        break;
       }
     }
   }

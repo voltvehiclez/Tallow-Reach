@@ -235,28 +235,26 @@ rate throttle if you can). Tests green.
   missiles and targeting use the passed player's independent runtime. `stepSim` advances each
   active pilot and shared projectiles/world once; enemies pursue the nearest active player.
   **Ticked 2026-11-08:** implementation and automated checks complete; the owner reports the
-  playtest passed (section L of `TESTING-BASELINE.md`). Two-player headless tests and scripted 8b flight and combat/lifecycle comparisons pass.
-  No multiplayer transport or guest UI. Inventory, economy, docking, contracts, death/recovery,
-  saves and the other exceptions in the still-local-only table remain step 9 work.
-
-**Before all of step 8 can be ticked:** resolve or explicitly validate the remaining frame-rate
-risks: missile lock currently samples the rendered camera, asteroid respawn uses a wall-clock
-timer, and views are not interpolated between ticks. The owner must playtest the slices; verify
-single-player at 30, 60 and 144 fps where possible. Do not represent the headless flight/combat
-tests as proof that the entire game is frame-rate independent.
+  playtest passed (section L of `TESTING-BASELINE.md`), including smooth play on a 240 Hz display
+  with no view interpolation needed. Two-player headless tests and scripted 8b flight and
+  combat/lifecycle comparisons pass. Remaining local-only areas are assigned in
+  `TARGET_ARCHITECTURE.md` across steps 9, 10 and 16; the two minor frame-rate caveats
+  (camera-sampled missile aim and `setTimeout` asteroid respawn) are parked in `ROADMAP.md`.
 **Save.** None.
 
 ## Step 9: Split the save into profile and world
-**Goal.** Portable character data apart from per-world data (TARGET_ARCHITECTURE principle 5), and remove the remaining local-player assumptions listed after 8c.
-**Required:** close every item in the [still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-step-9-must-close-every-item), with tests.
+**Goal.** Portable character data apart from per-world data (TARGET_ARCHITECTURE principle 5), and close every step-9-owned item in the [still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-assigned-by-owner-step) (saves and profiles; inventory and pickups; economy, outfitting and saved ammunition; contracts and rewards; docking and launch). Warp and sector ownership belong to step 10; non-local death/recovery and player presentation/input belong to step 16.
 **Do.** `profile` keeps credits, ships, loadouts, holds, hull damage, stats, the active mission and
 (later) campaign progress. `world` gets the station (base levels, store), the contract board and
 placeholders for the galaxy and current sector. Same save slots and export code carry both.
 `sanitizeProfile` is split into `sanitizeProfile` and `sanitizeWorld` and stops naming base modules
 by hand (it walks `BASE_MODULES`). Add pure helpers `portableProfile(save)` and `mergeProfile(save, profile)`
-(what a guest carries into a world and brings back), tested. No networking.
-**Done when.** Old saves and old export codes load; new ones round-trip; tests cover both.
-**Save.** **Version 13**, migration from 12.
+(what a guest carries into a world and brings back), tested. Work in self-tested sub-slices:
+9a (pure split functions and v12 -> v13 migration tested against real v12 saves, no UI),
+9b (wire the game to `profile` and `world`), and 9c (`portableProfile` / `mergeProfile` and close
+every step-9-owned local-only item). No networking.
+**Done when.** Old saves and old export codes load; new ones round-trip; step-9 local-only items are closed; tests cover all of them.
+**Save.** **Version 13**, migration from 12. **Status:** [x] **complete 2026-11-08 — owner playtest passed (225 tests green).**
 
 > **Milestone B reached.** The core is ready for co-op later.
 

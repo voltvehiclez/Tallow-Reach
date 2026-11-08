@@ -19,6 +19,56 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Fix high-refresh (240 Hz) ship blur via between-tick render interpolation
+
+- **Root cause:** the pre-built `game/tallow-reach.html` in the merged 8c branch (`74a9ab5`) had
+  never been rebuilt after step 7b, so opening it directly ran the old variable-`dt` loop at 240 Hz.
+  Rebuilding `game/tallow-reach.html` in step 9 activated step 8a's 60 Hz `simClock`, where the
+  ship mesh updated once every 4 frames (60 Hz) while `chaseView` eased the camera every frame
+  (240 Hz), causing a ~2.4 px 60 Hz sawtooth jitter/blur on the ship model during side-to-side motion.
+- **Fix:** `createSimClock` (`src/sim/step.js`) now exposes `alpha()` (`remainder / SIM_DT`) and
+  optional `beforeStep`/`afterStep` hooks. `src/render/views.js` snapshots previous-tick poses in a
+  `WeakMap` (keeping simulation records untouched) and interpolates entity meshes, the player hull,
+  the mining beam origin, HUD markers (`src/ui/hud.js`) and `chaseView` (`src/render/camera.js`)
+  across fractional frames, snapping immediately on teleports (`P.snap`). Also refreshed
+  `renderer.setPixelRatio` on window resize (`src/main.js`).
+- Added `tests/render-interp.test.mjs`; all **226 tests** pass (both 8b single-player oracles
+  unchanged), and `game/tallow-reach.html` was rebuilt via `npm run build`. Save version remains **13**.
+- **Owner playtest passed:** confirmed both the ship hull blur and the close-range locked-target
+  name-tag blur (asteroids and raiders) are completely gone during combat and warping.
+
+---
+
+## 2026-11-08: Step 9 complete and ticked — Milestone B reached
+
+- The owner reported the step 9 playtest passed. Ticked step 9 across `docs/ROADMAP.md`,
+  `docs/REFACTOR_PLAN.md`, `docs/TARGET_ARCHITECTURE.md` and `docs/HANDOFF.md`; **Milestone B**
+  (simulation-pure, fixed-step, player-aware, split-save core) is now complete.
+- No gameplay or save changes in this entry (save version remains **13**, 225 tests green). Next is
+  **Milestone C — step 10** (sector definitions and saving `world.sector`, save v14).
+
+---
+
+## 2026-11-08: Step 8 ticked; step 9 split saves (v13) and per-pilot rules — playtest pending
+
+- Closed step 8 overall after the owner validated smooth 240 Hz play without tick interpolation
+  (parking the two minor aim/respawn caveats in `docs/ROADMAP.md`), and aligned the local-only
+  ownership table in `docs/TARGET_ARCHITECTURE.md` across steps 9, 10 and 16.
+- Bumped `SAVE_VERSION` to **13** (`src/state/profile.js`, `src/state/storage.js`,
+  `src/state/state.js`): saves split into `{ v: 13, profile, world }` (`state.profile` +
+  `state.worldState`) with automatic migration from v1..v12 saves and `TR1:` codes, `sanitizeWorld`
+  walking `BASE_MODULES` directly, and pure `portableProfile` / `mergeProfile` co-op helpers.
+  Storage keys (`tr1`, `tr_s1`..`tr_s3`) and `TR1:` are unchanged.
+- Closed all five step-9-owned local-only areas across `src/sim/{inventory,fitting,economy,contracts,session,player,weapons,combat,missile,ai,step}.js`
+  and `src/ui/{hud,menu,screens}.js`: per-pilot holds, mining, crate pickup (even while local is
+  docked), outfitting, purchases, missile persistence, contract progress/spawning, kill attribution,
+  and per-pilot launch/dock without wiping another active pilot's fight.
+- Added `tests/saves/v12-real.json`, `tests/step9-save.test.mjs` and `tests/step9-local-only.test.mjs`;
+  all **225 tests** pass, and both 8b single-player oracle scripts match exactly. Rebuild required
+  (`npm run build`); owner playtest pending (`TESTING-BASELINE.md` section M).
+
+---
+
 ## 2026-11-08: Step 8c owner playtest passed
 
 - The owner reports the 8c playtest works. Ticked 8c in the roadmap and refactor plan; no code

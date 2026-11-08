@@ -6,16 +6,13 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **step 7 is complete and ticked** (2026-11-08): the owner played
-and confirmed step 7c. The player hull has its own view and shared named mount data; sector
-scenery follows an event, and missile lock uses the previous camera direction supplied by
-`main.js`. The sim's render-import allow-list is empty. **7d registry cleanup is complete and ticked** after the owner's playtest.
-**Steps 8a, 8b and 8c are ticked after the owner's playtests.** Flight, drive, power, shield, hull damage, weapons,
-missiles, targeting and nearest-player enemy AI use independent player runtime. Inventory,
-economy, docking, contracts, death/recovery, saves and the other exceptions in the
-[still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-step-9-must-close-every-item)
-remain for step 9. 216 tests pass; save version remains 12. Gameplay ticks at 60 Hz; camera-derived
-missile aim and wall-clock asteroid respawn still limit full frame-rate independence.
+**Current position:** **Milestone B is complete** — **steps 0 to 9 are all ticked** (step 9 owner
+playtest passed on 2026-11-08). Saves are version **13**, split into `{ v: 13, profile, world }`
+(`state.profile` + `state.worldState`), with automatic migration from v1..v12 saves and `TR1:`
+export codes, `portableProfile` / `mergeProfile` co-op helpers, and all five step-9-owned
+local-only areas closed across `state/` and `sim/` (225 tests passing, including both 8b
+single-player oracles). Next is **Milestone C — step 10** (sector definitions, current sector
+saved, save v14).
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -53,11 +50,11 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
 | 7 | Entities are data, meshes are views (7a enemies, 7b everything else in the world, 7c the hull's own view class) | B | [x] **2026-11-08: 7a, 7b and 7c complete; owner playtested 7c.** |
 | 7d | Entity view registry cleanup | B | [x] **2026-11-08: owner playtest passed.** |
-| 8 | Fixed time step and player-aware flight/combat | B | [ ] **8a, 8b and 8c ticked; full step 8 frame-rate validation remains.** |
+| 8 | Fixed time step and player-aware flight/combat | B | [x] **2026-11-08: 8a, 8b and 8c complete; owner validated on 240 Hz display.** |
 | 8a | Fixed simulation tick and old-versus-new flight tests | B | [x] **2026-11-08: owner playtest passed.** |
 | 8b | Player list, local player and per-player controls | B | [x] **2026-11-08: owner playtest passed.** |
 | 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [x] **2026-11-08: owner playtest passed.** |
-| 9 | Split profile/world save and close every still-local-only item (save v13) | B | [ ] |
+| 9 | Split profile/world save and close step-9 local-only items (save v13) | B | [x] **2026-11-08: owner playtest passed (Milestone B complete).** |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
 | 11 | Galaxy (100+ sectors) and starmap screen (save v15) | C | [ ] |
 | 12 | Encounters, sector templates, sector memory (save v16) | C | [ ] |
@@ -103,6 +100,14 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 
 ## Parking lot (not scheduled; from earlier notes)
 
+- Camera-sampled missile aim (`src/main.js`, `src/sim/weapons.js`): `state.aimDirection` is sampled
+  once per animation frame from the rendered camera rather than per simulation sub-tick inside
+  `stepSim`. Benign in single-player; revisit when per-player aim input arrives in multiplayer
+  (step 16) or if cross-refresh replay determinism is needed.
+- Wall-clock asteroid respawn (`src/sim/weapons.js`, `src/sim/asteroids.js`): `spawnAsteroid` uses
+  `setTimeout(..., 30000)` on wall-clock time instead of a simulation countdown, so respawn ignores
+  simulation pause and time scaling. Move onto simulation time when persistent sector state (step 10
+  / step 12) or pause/replay needs it.
 - Warp: should enemies keep shooting during the charge, or does a warp grant invulnerability?
   (design decision, undecided).
 - Salvage crates are abandoned when you warp out. (Will be handled by sector memory in step 12.)

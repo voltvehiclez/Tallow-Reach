@@ -3,8 +3,8 @@
 
 import { renderer, scene, camera, stars, planet, spin, showSector } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer } from "./state/state.js";
-import { newProfile } from "./state/profile.js";
+import { state, localPlayer, applySave } from "./state/state.js";
+import { newSave } from "./state/profile.js";
 import { loadAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
 import { installInput, syncControls } from "./core/input.js";
@@ -25,15 +25,22 @@ import { refreshDrive } from "./sim/drive.js";
 import { refreshShield } from "./sim/shield.js";
 import { refreshHull } from "./sim/hull.js";
 import { createSimClock } from "./sim/step.js";
-import { MAX_FRAME_DT } from "./data/simulation.js";
+import { SIM_DT, MAX_FRAME_DT } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
-import { installEnemyViews, updateEnemyViews, updateEntityViews } from "./render/views.js";
+import {
+  installEnemyViews,
+  updateEnemyViews,
+  updateEntityViews,
+  snapshotSimPoses,
+  snapRenderedPlayer,
+  renderPlayerPose,
+} from "./render/views.js";
 
 // --- Boot ------------------------------------------------------------------
 
 document.body.prepend(renderer.domElement);
-state.profile = loadAutosave() || newProfile();
+applySave(loadAutosave() || newSave());
 createPlayer();
 setShip(state.profile.ship);
 populateField();
@@ -86,6 +93,7 @@ on("action", ({ name, repeat }) => {
 });
 
 addEventListener("resize", () => {
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -95,7 +103,10 @@ addEventListener("resize", () => {
 
 let last = performance.now();
 const cameraAim = camera.position.clone();
-const simClock = createSimClock();
+const simClock = createSimClock( undefined, {
+  beforeStep: snapshotSimPoses,
+  afterStep: snapRenderedPlayer,
+});
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -111,7 +122,6 @@ function frame(now) {
     F = state.flight;
   planet.rotation.y += dt * 0.003;
   spin.rotation.y += dt * 0.1;
-  stars.position.copy(camera.position);
 
   updateAudio({
     time: state.time,
@@ -129,18 +139,20 @@ function frame(now) {
     Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
   }
   simClock.advance(dt);
-  updateEnemyViews();      // copy each hostile's position onto its mesh
-  updateEntityViews();     // and every bullet, missile, crate, particle, rock and the ship
-  updateWarpStreaks(dt);   // all three hide themselves when no warp is running
+  const alpha = simClock.alpha();
+  updateEnemyViews(alpha);    // interpolate each hostile's mesh between 60 Hz ticks
+  updateEntityViews(alpha);   // and every bullet, missile, crate, particle, rock and the ship
+  updateWarpStreaks(dt);      // all three hide themselves when no warp is running
   updateWarpFlash();
 
   // A hit may have docked the player during the updates above.
   if (P.docked) {
-    dockedView(state.time);
+    dockedView(state.time + alpha * SIM_DT);
   } else {
-    chaseView(dt, P, state.freeCam);
+    chaseView(dt, P, state.freeCam, renderPlayerPose(P, alpha));
     updateHud(dt);
   }
+  stars.position.copy(camera.position);
 
   const offset = shakeOffset(P, dt, SHIPS[state.profile.ship].sc);
   if (offset) camera.position.add(offset);

@@ -28,7 +28,7 @@ export function stepSim(dt) {
     flight(dt, player);
     updateShield(dt, player);
     updatePower(dt, player);
-    // Sector/warp transition is still local-only until step 9.
+    // Sector/warp transition ownership belongs to step 10.
     if (player === local) updateWarp(dt);
     updatePrimary(dt, player);
     updateMissiles(dt, player, false);
@@ -38,8 +38,7 @@ export function stepSim(dt) {
     updateMissileFlight(dt);
     updateEnemies(dt);
     updateBullets(dt);
-    // Inventory and pickup are intentionally local-only until step 9.
-    if (local && !local.docked) updateCrates(dt);
+    updateCrates(dt);
   }
   updateEffects(dt);
 }
@@ -48,8 +47,10 @@ export function stepSim(dt) {
  * Accumulate render time and call `step` in fixed increments. Long frames are
  * capped at the same 0.05 seconds as the old frame loop. Call only unpaused;
  * the fractional remainder survives a pause, but paused time is never added.
+ * `alpha()` returns the `[0, 1]` fraction between the previous and latest tick
+ * so `render/` can interpolate smoothly on high-refresh displays (e.g. 240 Hz).
  */
-export function createSimClock(step = stepSim) {
+export function createSimClock(step = stepSim, hooks = {}) {
   let remainder = 0;
   return {
     advance(frameDt) {
@@ -58,11 +59,16 @@ export function createSimClock(step = stepSim) {
       let count = 0;
       // A tiny rounding tolerance avoids losing a tick to floating-point sums.
       while (remainder + SIM_DT * 1e-9 >= SIM_DT) {
+        if (hooks.beforeStep) hooks.beforeStep();
         step(SIM_DT);
+        if (hooks.afterStep) hooks.afterStep();
         remainder = Math.max(0, remainder - SIM_DT);
         count++;
       }
       return count;
+    },
+    alpha() {
+      return Math.min(1, Math.max(0, remainder / SIM_DT));
     },
   };
 }

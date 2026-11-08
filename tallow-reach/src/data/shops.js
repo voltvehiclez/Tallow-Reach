@@ -22,9 +22,8 @@
 // session state (`state.shops`, `shopStock()` / `setShopStock()` in
 // sim/economy.js) and resets when a save is loaded or a new game starts. That is
 // deliberate: a restock timer, a restock event or a random roll later only has
-// to call `setShopStock()`, and when save step 9 splits the save into profile
-// and world, a world's shop stock moves into the world half. Nothing is written
-// into the save today, so the save version is unchanged.
+// to call `setShopStock()`, and if persistent finite stock is added later it
+// belongs in `world` alongside `store`, `base` and `board`.
 //
 // A row is the only way something appears on the shop screen: a part the ship
 // flies with is either on sale (the six standard parts at 1 cr) or not shown at

@@ -210,3 +210,33 @@ not exposed in the game, and no co-op connection has been added.
 6. If practical, repeat flight and combat with display rates capped at 30, 60 and 144 fps. Report
    any judder or missile-lock differences; the complete game's frame-rate independence remains
    unproven because camera aim, asteroid respawn timing and view interpolation are still open.
+
+## M. Step 9: split saves (`profile` + `world`, save v13)
+
+Step 9 splits every save into your **pilot profile** (credits, ships, holds, loadouts, hull damage,
+missiles, active contract, stats) and the **station world** (station storage, base upgrades,
+contract offer board) inside the same save slots and `TR1:` codes. Single-player gameplay should
+feel identical.
+
+1. **Build and open:** in the `tallow-reach` folder run `npm test` (should report **225 pass, 0 fail**)
+   and `npm run build`, then open `game/tallow-reach.html`.
+2. **Old save migration:** if you already had an autosave or a saved slot from version 12, check on
+   opening (and by clicking **Load** on an existing slot in the **Saves** tab) that your credits,
+   owned ships, fitted modules, ship hold cargo, **Station storage** items (**Inventory** tab), and
+   **Base** upgrade levels are all exactly as you left them.
+3. **Contract board & station persistence:** open **Contracts** and note the four offers on the
+   board; accept one, move an item between **Station storage** and your **Ship hold** in
+   **Inventory**, then open **Saves** and click **Save** on Slot 1. Reload the browser page (`F5`):
+   check that your active contract, the remaining offers on the board, your station storage, and
+   your ship hold all come back unchanged.
+4. **Export / Import code round-trip:** in **Saves**, click **Export save code**, copy the `TR1:...`
+   code, click **New game** (or change credits by buying a 1 cr part in **Shop**), then paste the
+   code into the import box and click **Import**: check both your pilot (credits, ship, hold) and
+   the station (storage, base levels, contract board) return to the exported state. Also paste any
+   older pre-step-9 `TR1:` code if you kept one — it should import cleanly too.
+5. **Quick flight, mine, fight and dock check:** launch, mine 1 ore or pick up 1 loot crate from a
+   raider, fire a missile if fitted, fly back within 300 m of Meridian and press **G** to dock.
+   Check your mined/picked-up item is in your ship's hold, missile count updated, hull damage (if
+   any) shows in **Outfitting > Services**, and selling cargo on **Base** or **Inventory** adds the
+   expected credits (including any Refinery bonus).
+

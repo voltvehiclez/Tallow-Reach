@@ -3,9 +3,9 @@
 
 import { on } from "../util/events.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
-import { state } from "../state/state.js";
+import { state, currentSave, applySave } from "../state/state.js";
 import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
-import { newProfile, sanitizeProfile } from "../state/profile.js";
+import { newSave, sanitizeSave } from "../state/profile.js";
 import { setShip } from "../sim/player.js";
 import { launch } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
@@ -33,11 +33,15 @@ export function setupMenu() {
     if (e.target.closest("button:not(:disabled)")) hoverSound();
   });
 
-  on("docked", () => {
+  on("docked", ({ player } = {}) => {
+    if (player && player !== state.player) return;
     state.ui.toast = "";
     render();
   });
-  on("launched", () => (panel.hidden = true));
+  on("launched", ({ player } = {}) => {
+    if (player && player !== state.player) return;
+    panel.hidden = true;
+  });
   on("died", text => {
     state.ui.toast = text;
     state.ui.tab = "h";
@@ -57,7 +61,7 @@ export function render() {
 }
 
 function save() {
-  saveAutosave(state.profile);
+  saveAutosave(currentSave());
 }
 
 function toast(text) {
@@ -192,18 +196,18 @@ const ACTIONS = {
 
   // Saves
   sv(i) {
-    toast(writeSlot(+i, state.profile) ? "Saved to slot " + i : "Could not save in this browser.");
+    toast(writeSlot(+i, currentSave()) ? "Saved to slot " + i : "Could not save in this browser.");
   },
   ld(i) {
     const raw = readSlot(+i);
     if (!raw) return;
     try {
-      state.profile = sanitizeProfile(raw);
+      applySave(sanitizeSave(raw));
     } catch (e) {
       toast("That slot could not be read.");
       return;
     }
-    afterProfileChange();
+    afterSaveChange();
     toast("Loaded slot " + i);
   },
   dl(i) {
@@ -217,13 +221,13 @@ const ACTIONS = {
     state.ui.confirmReset = false;
   },
   rs2() {
-    state.profile = newProfile();
-    afterProfileChange();
+    applySave(newSave());
+    afterSaveChange();
     state.ui.confirmReset = false;
     toast("Progress reset.");
   },
   xp() {
-    state.ui.xcode = encodeSave(state.profile);
+    state.ui.xcode = encodeSave(currentSave());
     try {
       navigator.clipboard.writeText(state.ui.xcode).catch(() => {});
     } catch (e) {
@@ -235,9 +239,9 @@ const ACTIONS = {
     const text = ($("xt") || {}).value || "";
     state.ui.xcode = text;
     try {
-      state.profile = decodeSave(text);
+      applySave(decodeSave(text));
       state.ui.xcode = "";
-      afterProfileChange();
+      afterSaveChange();
       toast("Save imported.");
     } catch (e) {
       toast("That code is not a valid save.");
@@ -264,17 +268,18 @@ function cycleInvShip(dir) {
   state.ui.invShip = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
 }
 
-/** Common work after the whole profile is replaced (load, import, reset). */
-function afterProfileChange() {
+/** Common work after the whole save is replaced (load, import, reset). */
+function afterSaveChange() {
   setShip(state.profile.ship);
   refillPower();
   refreshDrive();
   refreshShield();
   refreshHull();
   refreshGuns();
+  state.shops = {};
   state.ui.fit = null;
   state.ui.invShip = null;
-  contracts.rerollBoard();
+  contracts.ensureBoard();
   state.flight.lock = null;
   state.flight.missileLock = { target: null, t: 0, locked: false };
 }

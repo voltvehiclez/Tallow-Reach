@@ -1,0 +1,54 @@
+{
+  "v": 12,
+  "cr": 4850,
+  "holds": {
+    "wasp": { "ferrite": 14, "cobalt": 3, "thruster_basic": 1 },
+    "prospector": { "voidite": 9, "salv": 5 }
+  },
+  "store": {
+    "ferrite": 42,
+    "cobalt": 18,
+    "core": 2,
+    "beam_basic": 1,
+    "cannon_basic": 2,
+    "missile_basic": 1
+  },
+  "ships": ["wasp", "prospector"],
+  "ship": "prospector",
+  "base": { "store": 3, "hangar": 2, "refinery": 2 },
+  "mission": { "type": "mine", "tier": 2, "p": 6, "n": 15, "r": 1150, "o": "cobalt" },
+  "done": 9,
+  "kills": 17,
+  "msl": 5,
+  "pw": "beam",
+  "hp": { "wasp": 0.72, "prospector": 0.95 },
+  "loadout": {
+    "wasp": {
+      "power": ["power_basic"],
+      "cell": ["cell_basic"],
+      "thruster": ["thruster_basic"],
+      "shield": ["shield_basic"],
+      "primary": ["cannon_basic", "beam_basic"],
+      "secondary": ["missile_basic"],
+      "hull": ["hull_basic"]
+    },
+    "prospector": {
+      "power": ["power_basic"],
+      "cell": ["cell_basic"],
+      "thruster": ["thruster_basic"],
+      "shield": ["shield_basic"],
+      "primary": ["beam_basic", "cannon_basic"],
+      "secondary": [null],
+      "hull": ["hull_basic"]
+    },
+    "bulwark": {
+      "power": ["power_basic"],
+      "cell": ["cell_basic"],
+      "thruster": ["thruster_basic"],
+      "shield": ["shield_basic"],
+      "primary": ["cannon_basic", null],
+      "secondary": [null],
+      "hull": ["hull_basic"]
+    }
+  }
+}
