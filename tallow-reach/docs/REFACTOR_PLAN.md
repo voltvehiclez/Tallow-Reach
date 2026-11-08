@@ -223,11 +223,14 @@ rate throttle if you can). Tests green.
 **Owner-approved slices** (each gets its own tests and playtest; no networking in these slices):
 - **8a — fixed simulation tick.** Move the gameplay updates to `sim/step.js`, feed them from a
   fixed-step accumulator, preserve pause and the existing long-frame cap, and compare flight with
-  the old loop. **Implemented, awaiting owner playtest** (`TESTING-BASELINE.md` section J). The
-  60 fps flight test matches the old loop; other old frame rates have measured differences.
+  the old loop. **Ticked 2026-11-08:** the owner reports the playtest passed
+  (`TESTING-BASELINE.md` section J). The 60 fps flight test matches the old loop; other old frame rates have measured differences.
 - **8b — player records and controls.** Introduce `state.players`, `localPlayer()` and an
   independent control record for each player. Keep the existing single-player experience and
-  add tests showing that player records and controls are independent. Not started.
+  add tests showing that player records and controls are independent. **Ticked 2026-11-08:**
+  the owner reported the playtest passed (`TESTING-BASELINE.md` section K). Temporary local-player
+  compatibility aliases remain
+  for systems to migrate in 8c.
 - **8c — player-aware systems.** Make the relevant simulation systems act on the player passed
   to them instead of assuming one global player. Test independent players without adding
   multiplayer transport. Not started.

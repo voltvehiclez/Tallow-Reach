@@ -217,7 +217,7 @@ test("the sim reads its input from the control record, not the keys", () => {
     const src = readFileSync(path.join(srcDir, "sim", file), "utf8");
     assert.doesNotMatch(src, /\bkeys\b/, `sim/${file} must read state.controls, not keys`);
     assert.doesNotMatch(src, /\bpointer\./, `sim/${file} must read state.controls, not pointer`);
-    assert.match(src, /state\.controls/, `sim/${file} should read state.controls`);
+    assert.match(src, /P\.controls/, `sim/${file} should read the player's controls`);
   }
 });
 

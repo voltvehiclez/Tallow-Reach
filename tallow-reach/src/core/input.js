@@ -1,6 +1,6 @@
 // Raw input. Keyboard and mouse are translated twice:
 //
-//   1. into the local pilot's control record (`state.controls`), which is what
+//   1. into the local pilot's own control record (`localPlayer().controls`), which is what
 //      `src/sim/` reads — the sim never sees a key code or the screen;
 //   2. into named actions on the event bus for one-off things (dock, warp,
 //      pause, switching weapons), which `main.js` handles.
@@ -10,10 +10,10 @@
 // Nothing else needs to change.
 
 import { emit } from "../util/events.js";
-import { state } from "../state/state.js";
+import { state, localPlayer } from "../state/state.js";
 
 /**
- * What each held key contributes to `state.controls`. `axis` is the name of the
+ * What each held key contributes to the local player's controls. `axis` is the name of the
  * field it adds `amount` to (-1..1), so two keys can pull the same axis both ways.
  * Any key not listed here still has its own `keys[code]` flag, for code that
  * wants a raw key without a control of its own.
@@ -41,11 +41,11 @@ export const keys = {};
 export const pointer = { x: 0, y: 0 };
 
 /**
- * Rebuild `state.controls` from what is held right now. Called after every key or
+ * Rebuild the local player's controls from what is held right now. Called after every key or
  * mouse change, so the record is always current when the sim's frame runs.
  */
 export function syncControls() {
-  const c = state.controls;
+  const c = localPlayer()?.controls || state.controls;
   c.thrust = c.strafe = c.lift = c.roll = 0;
   c.stop = c.brake = c.boost = false;
   for (const code of Object.keys(HELD)) {

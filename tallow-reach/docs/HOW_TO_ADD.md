@@ -223,7 +223,9 @@ input, so it goes through the control record and **never through a key code in `
 2. `src/core/input.js`: add the key to `HELD`, pointing at that field
    (`KeyR: { axis: "lift", amount: 1 }`, or `{ flag: "boost" }`). `syncControls()` fills the record
    from the held keys after every change, so there is no other wiring.
-3. `src/sim/…`: read `state.controls.<field>` where the rule lives.
+3. `src/sim/…`: read the acting player's `controls.<field>` where the rule lives. Until
+   step 8c is complete, `state.player` / `state.controls` are compatibility aliases for the local
+   player, not independent global records.
 4. `tests/layers.test.mjs` will fail if a `sim/` file mentions `keys`/`pointer`, or if `HELD` sets a
    field the record does not have — that is the check, not an obstacle.
 

@@ -3,7 +3,7 @@
 
 import { renderer, scene, camera, stars, planet, spin, showSector } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state } from "./state/state.js";
+import { state, localPlayer } from "./state/state.js";
 import { newProfile } from "./state/profile.js";
 import { loadAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
@@ -52,7 +52,7 @@ setupPause();
 installInput();
 syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
-  canStart: () => !state.player.docked && !state.paused,
+  canStart: () => !localPlayer().docked && !state.paused,
   getScale: () => SHIPS[state.profile.ship].sc,
 });
 
@@ -62,7 +62,7 @@ showSector(state.sector);
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
 
 on("action", ({ name, repeat }) => {
-  const playing = !state.player.docked && !state.paused;
+  const playing = !localPlayer().docked && !state.paused;
   switch (name) {
     case "lock":
       if (playing && !repeat) toggleLock();
@@ -80,7 +80,7 @@ on("action", ({ name, repeat }) => {
       if (playing && !repeat) startWarp();
       break;
     case "pause":
-      if (!state.player.docked) setPause(!state.paused);
+      if (!localPlayer().docked) setPause(!state.paused);
       break;
   }
 });
@@ -107,7 +107,7 @@ function frame(now) {
     return;
   }
 
-  const P = state.player,
+  const P = localPlayer(),
     F = state.flight;
   planet.rotation.y += dt * 0.003;
   spin.rotation.y += dt * 0.1;

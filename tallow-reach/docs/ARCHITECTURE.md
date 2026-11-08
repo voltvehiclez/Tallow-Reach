@@ -103,7 +103,7 @@ src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
 src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers), ids.js (entity ids)
-src/core/              audio.js (synth + mute), input.js (keys -> state.controls + named actions)
+src/core/              audio.js (synth + mute), input.js (keys -> local player controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, pilot (where the ship is), power, drive, fitting, inventory, shops' purchases (economy),
                        weapons, missile, combat, ai, enemy (a hostile as data), entity (every other entity as data),
@@ -351,11 +351,12 @@ Each `src/` folder also has its own short `README.md`.
   back into `#shipview` after each render. Do not create a renderer per render, and keep
   `id="shipview"` in `outfittingHtml`.
 - **The sim never reads the keyboard.** `core/input.js` is the only file that knows a key code.
-  It fills `state.controls` (one plain record per pilot, shape in `src/state/controls.js`) and the
-  sim reads that. `docs/REFACTOR_PLAN.md` step 6 chose this shape; it is the co-op contract, so do
+  It fills `localPlayer().controls` (one plain record per pilot, shape in `src/state/controls.js`)
+  and the sim reads that. In 8b, `state.player` and `state.controls` are temporary aliases of the
+  local list entry; 8c must remove the systems' single-player assumptions. `docs/REFACTOR_PLAN.md` step 6 chose this shape; it is the co-op contract, so do
   not rename fields without saying so there: `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`,
-  `stop`, `brake`, `boost`, `fire`, `sec`. Step 8 moves it onto a per-player record and step 16
-  fills a guest's copy from the network. `tests/layers.test.mjs` fails if a `sim/` file mentions
+  `stop`, `brake`, `boost`, `fire`, `sec`. Step 8b puts it on each player; step 16 will fill a
+  guest's copy from the network. `tests/layers.test.mjs` fails if a `sim/` file mentions
   `keys`/`pointer`, or if `HELD` sets a field the record does not have.
 - **The sim never plays a sound itself.** It emits `sfx { name, ...rest }` at the moment the
   sound belongs to, and `core/audio.js` plays the matching entry of its `SFX` table (one entry per

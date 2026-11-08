@@ -173,3 +173,17 @@ check that nothing was left behind. Run it straight after **A** and **B**, while
    and combat checks at each rate. If not, ordinary playtesting is useful too. Report anything
    different, especially judder or inconsistent missile lock; the camera and asteroid respawn
    are not yet proven frame-rate independent.
+
+## K. Step 8b: the local player and their controls
+
+1. Open the 8b build, click **Enter the hangar**, and load a familiar save if you have one.
+   Launch. Check the ship appears and the camera follows it normally.
+2. Use **W/S**, **A/D**, **Space/C**, **Q/E**, mouse steering, **X**, **Ctrl** and **Shift**.
+   The ship should respond as it did in 8a. Hold **Left Alt** to orbit, then release it and steer.
+3. Shoot a raider with left click. If you have the mining beam or missiles fitted, use **2** to
+   mine and right-click after a missile lock. Check the HUD and weapon controls as before.
+4. Press **M** to warp away and back, then **G** to dock. Launch again, and check the ship and
+   controls still work. Press **P** to pause and resume. Report any differences.
+
+This slice does not add co-op or a second controllable ship; the automated tests check that two
+player records and their controls are independent. Step 8c is still needed for player-aware rules.

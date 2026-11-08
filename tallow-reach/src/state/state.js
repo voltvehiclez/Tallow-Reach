@@ -5,9 +5,32 @@ import { newProfile } from "./profile.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SECTOR } from "../data/sectors.js";
 
+// Before the local ship exists, input can still be prepared for it. Once created,
+// every pilot owns its own controls; the legacy aliases below are temporary until 8c.
+let pendingControls = neutralControls();
+const copyControls = c => ({ ...c, steer: { ...c.steer } });
+
+/** The player followed by the local screen, or null before it is created. */
+export const localPlayer = () => state.players[state.localPlayerIndex] || null;
+
 export const state = {
   profile: newProfile(),
-  player: null,        // the flying ship (created in sim/player.js: pos, quat, velocity, hull)
+  players: [],         // player records, including their own controls
+  localPlayerIndex: 0,  // which player this screen and its input follow
+  // Compatibility aliases for systems not yet made player-aware in step 8c.
+  get player() { return localPlayer(); },
+  set player(player) {
+    const previous = localPlayer();
+    if (!player) {
+      if (previous) {
+        pendingControls = copyControls(previous.controls);
+        this.players.splice(this.localPlayerIndex, 1);
+      }
+      return;
+    }
+    if (!player.controls) player.controls = copyControls(previous?.controls || pendingControls);
+    this.players[this.localPlayerIndex] = player;
+  },
   aimDirection: { x: 0, y: 0, z: -1 }, // last rendered camera direction, supplied by the frame loop
   paused: false,
   time: 0,             // seconds of unpaused play
@@ -77,11 +100,13 @@ export const state = {
 
   freeCam: { on: false, yaw: 0, pitch: 0.25, dist: 14 },
 
-  // What the local pilot is asking for this frame. `core/input.js` writes it from
-  // the keyboard and mouse; `src/sim/` reads it and never touches the keyboard.
-  // The shape (and the meanings of every field) is in state/controls.js. Step 8
-  // moves this onto a per-player record; the network fills a guest's copy.
-  controls: neutralControls(),
+  // Temporary compatibility alias: there is no separate global control record.
+  get controls() { return localPlayer()?.controls || pendingControls; },
+  set controls(controls) {
+    const player = localPlayer();
+    if (player) player.controls = controls;
+    else pendingControls = controls;
+  },
 
   ui: {
     intro: true,

@@ -59,9 +59,9 @@ export function startWarp() {
     // Where the stick is right now, from the control record: sim/player.js eases
     // it back to neutral during the warp, so the ship's turn unwinds.
     steer: {
-      x: state.freeCam.on ? 0 : state.controls.steer.x,
-      y: state.freeCam.on ? 0 : state.controls.steer.y,
-      roll: state.controls.roll,
+      x: state.freeCam.on ? 0 : P.controls.steer.x,
+      y: state.freeCam.on ? 0 : P.controls.steer.y,
+      roll: P.controls.roll,
     },
   };
 

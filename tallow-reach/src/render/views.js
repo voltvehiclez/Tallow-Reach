@@ -22,7 +22,7 @@
 import * as THREE from "three";
 import { scene } from "./scene.js";
 import { mkShip, mm, rockShapeAt } from "./models.js";
-import { state } from "../state/state.js";
+import { state, localPlayer } from "../state/state.js";
 import { on } from "../util/events.js";
 import { UP } from "../util/math.js";
 import { enemyDef } from "../data/enemies.js";
@@ -246,7 +246,7 @@ export function updateEntityViews() {
 
 /** The player's ship: its model follows `state.player.pos` / `quat`. */
 function updatePlayerView() {
-  const P = state.player;
+  const P = localPlayer();
   if (!P || !P.pos) return;
   ensurePlayerView().update(P);
 }

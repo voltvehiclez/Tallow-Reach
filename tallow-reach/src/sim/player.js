@@ -2,12 +2,13 @@
 
 import { V, Q, fwdQ, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
+import { neutralControls } from "../state/controls.js";
 import { FLIGHT } from "../data/ships.js";
 import { warpSteerEase } from "../data/sectors.js";
 import { sectorAt } from "../data/sectors.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 
-import { state, msg } from "../state/state.js";
+import { state, msg, localPlayer } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
 import { refreshHull } from "./hull.js";
@@ -43,8 +44,9 @@ function tryingToMove(c, stick) {
  * Its model belongs to `render/views.js`, which copies `pos`/`quat` onto it once a
  * frame, so no rule here needs a scene.
  */
-export function createPlayer() {
-  state.player = {
+export function createPlayerRecord(controls = neutralControls()) {
+  return {
+    controls: { ...controls, steer: { ...controls.steer } },
     kind: "ship",
     pos: V(0, 0, 0),    // where the ship is (world metres)
     quat: Q(),          // which way it points
@@ -66,7 +68,12 @@ export function createPlayer() {
     shake: 0,
     noDriveT: 0,       // seconds until the "Equip thrusters to move" warning may repeat
   };
-  return state.player;
+}
+
+/** Create or replace the local ship, retaining the current input without sharing it. */
+export function createPlayer() {
+  state.player = createPlayerRecord(state.controls);
+  return localPlayer();
 }
 
 /**
@@ -85,7 +92,7 @@ export function setShip(id) {
 export function flight(dt) {
   const P = state.player,
     fc = state.freeCam,
-    c = state.controls;
+    c = P.controls;
 
   // A warp hands the controls to the drive: the throttle is released and the
   // stick eases back to neutral, so the ship coasts down and unwinds its turn

@@ -407,8 +407,8 @@ test("a ship with no thrusters warns the player when they try to move", () => {
     /if \(!W && !powered && P\.noDriveT === 0 && tryingToMove\(c, stick\)\)/,
     "the warning fires when a control is pressed and there is no drive, and not on a warp"
   );
-  // Since step 6b-1 "a control is pressed" is read from state.controls, not keys.
-  assert.match(src, /c = state\.controls/, "the flight model reads the control record");
+  // The flight model reads the player's control record, not keys.
+  assert.match(src, /c = P\.controls/, "the flight model reads the control record");
 });
 
 test("basic cannons: 1 damage a shot, 3 a second per barrel, 2 MJ/s while firing", () => {

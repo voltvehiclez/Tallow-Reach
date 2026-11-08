@@ -7,13 +7,13 @@ enemy, a bullet, a missile, a crate, a spark, a rock and the player's own ship a
 emits `sector-entered`, and missile lock reads the camera direction supplied in `state.aimDirection`
 by the frame loop. Named weapon mounts come from `data/mounts.js`, transformed by `pilot.js`.
 **It never touches the speakers or the keyboard:** a sound is `emit("sfx", { name })` (played by the
-`SFX` table in `core/audio.js`) and the pilot's intent arrives in `state.controls` (filled by
+`SFX` table in `core/audio.js`) and the pilot's intent arrives in its `controls` record (filled for the local player by
 `core/input.js`, shape in `state/controls.js`). `tests/layers.test.mjs` keeps all of that true.
 
 | File | What it does |
 |---|---|
 | `step.js` | `stepSim(dt)` runs the gameplay systems in order; `createSimClock()` feeds it 60 fixed ticks per simulated second and caps long frames. |
-| `player.js` | Ship setup (`setShip`), flight model and `hurt()` (shields absorb first, then the hull; the saved fraction `profile.hp[ship]` is stamped on every hull hit). A ship with no drive gets no thrust and no turn, and pressing a control warns "Equip thrusters to move". |
+| `player.js` | `createPlayerRecord()` creates an independent player with its own controls; `createPlayer()` places the local one in the list. Ship setup (`setShip`), flight model and `hurt()` (shields absorb first, then the hull; the saved fraction `profile.hp[ship]` is stamped on every hull hit). A ship with no drive gets no thrust and no turn, and pressing a control warns "Equip thrusters to move". |
 | `shield.js` | The ship's shields from the fitted module: `shieldOf` a loadout, `refreshShield` after a fit, ship change, load or dock, `updateShield` each frame (off while being hit, then `regen` a second after the `delay` lull). Also charges the ship a flat `shieldDraw` MJ/s for keeping them up, and bleeds them away when the ship cannot pay. |
 | `power.js` | Ships' power budget: `powerOf` a loadout, `refreshPower`/`refillPower` after a fit change, `updatePower` each frame, and `hasPower` to ask whether the ship can pay for a demand. Writes `state.power` for the HUD; `draw` is set by the thrusters in `sim/player.js`, the shields in `sim/shield.js`, the guns and the beam in `sim/weapons.js`. |
 | `hull.js` | The Hull HP the fitted hull module grants (`hull_basic`: `hp` 10) and `refreshHull()` after a fit change, a ship change, a save load or a dock. No module fitted means no Hull HP — any hit reaching the hull kills the ship. The saved fraction in `profile.hp[ship]` is applied; nothing here repairs. |
@@ -41,7 +41,7 @@ by the frame loop. Named weapon mounts come from `data/mounts.js`, transformed b
 Rules:
 - Use `emit`/`on` to connect systems that should not know each other.
 - Never import `core/audio.js`: emit `sfx` (see `docs/HOW_TO_ADD.md` recipe 9).
-- Never read `keys`/`pointer` or `core/input.js`: read `state.controls` (recipe 8b).
+- Never read `keys`/`pointer` or `core/input.js`: read the acting player's `controls` (recipe 8b).
 - Never call `Math.random()`. Use `random()` from `util/rng.js`, so `setSeed(n)` makes a whole run
   repeat; `tests/rng.test.mjs` fails if `Math.random` appears in this folder.
 - New rules that need numbers: put the numbers in `src/data/`.

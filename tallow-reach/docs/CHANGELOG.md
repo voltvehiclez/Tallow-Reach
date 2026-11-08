@@ -19,6 +19,26 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 8b complete and ticked
+
+- The owner reported the 8b playtest passed. Updated the handoff, roadmap and refactor plan;
+  8c is next. No gameplay or save changes in this entry. The 8b build and 200 tests passed.
+
+---
+
+## 2026-11-08: Step 8a ticked; step 8b player records and controls
+
+- The owner reported the 8a playtest passed, so 8a is ticked. The frame-rate caveats remain
+  open; no separate 30/60/144 browser throttle result was reported.
+- Added `state.players`, `localPlayer()`, `createPlayerRecord()` and independent per-player
+  controls. Input and the screen follow the local player; `state.player` and `state.controls`
+  temporarily alias that entry for existing systems until 8c. Guest gameplay is not implemented.
+- Added `tests/players.test.mjs`: separate players, controls, input, replacement and local flight.
+  200 tests pass. A scripted 12-second old-vs-new flight/weapon/warp probe was identical. Save
+  remains version 12; 8b awaits playtest, and 8c is not started.
+
+---
+
 ## 2026-11-08: Step 8 slices documented
 
 - Expanded the approved 8a/8b/8c breakdown in `docs/REFACTOR_PLAN.md`, added separate status

@@ -46,7 +46,7 @@ export function updatePrimary(dt) {
   const F = state.flight,
     S = state.profile,
     P = state.player,
-    c = state.controls,
+    c = P.controls,
     d = SHIPS[S.ship];
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.
@@ -185,7 +185,7 @@ export function updateMissiles(dt) {
   const F = state.flight,
     S = state.profile,
     P = state.player,
-    c = state.controls,
+    c = P.controls,
     W = state.world,
     ML = F.missileLock;
 

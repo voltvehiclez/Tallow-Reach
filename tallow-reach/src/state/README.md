@@ -2,7 +2,7 @@
 
 | File | What it does |
 |---|---|
-| `state.js` | The single runtime `state` object (player, world lists, flight, ui, hud, `power`, `drive`, `shield`; `power.use` says who is drawing what). `time` advances on simulation ticks; HUD hints last until the next tick. `aimDirection` is the previous rendered camera direction supplied by the frame loop for missile lock. Also `msg()` and `say()` for on-screen text. |
+| `state.js` | The single runtime `state` object (`players`, local index, world lists, flight, ui, hud, `power`, `drive`, `shield`; `power.use` says who is drawing what). Each player owns `controls`; `localPlayer()` selects the player the screen follows. Temporary `state.player` and `state.controls` aliases still point at that local record until 8c; they are not independent global copies. `time` advances on simulation ticks; HUD hints last until the next tick. `aimDirection` is the previous rendered camera direction supplied by the frame loop for missile lock. Also `msg()` and `say()` for on-screen text. |
 | `profile.js` | The saved game: `newProfile()`, `sanitizeProfile()`, `SAVE_VERSION`. Everything that is saved goes through here. |
 | `storage.js` | Autosave, three save slots and text save codes. Storage keys must not change. |
 

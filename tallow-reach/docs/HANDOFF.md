@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **195 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **200 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
@@ -37,22 +37,18 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** **step 7 is complete and ticked**: the owner playtested 7c and reported it
-  passed on 2026-11-08. `PlayerShipView` owns the hull; named gun, missile and beam mounts come
-  from `src/data/mounts.js` and are shared with `sim/pilot.js`. `sector-entered` updates scenery
-  even on a docking reset; the frame loop supplies the last camera direction for missile lock.
-  The sim has **no render imports** and no meshes. 195 tests passed; save version remains 12.
-  **7d registry cleanup is complete and ticked**: the owner reported its playtest passed on
-  2026-11-08. See `TESTING-BASELINE.md` section I and recipe 19 in `docs/HOW_TO_ADD.md`.
-  **Step 8a is implemented, awaiting playtest** (`TESTING-BASELINE.md` section J). Gameplay
-  steps at 60 Hz; view and sound randomness no longer consumes the seeded gameplay RNG. The old
-  60 fps flight matches exactly in a headless test; after ten seconds, old 30 fps differs by 2.2932
-  units and old 144 fps by 1.3400 units in that scenario. **Not fully frame-independent yet:**
-  missile aim still samples the rendered camera, asteroid respawn uses wall time, and views are not
-  interpolated between ticks. No browser frame-throttle test was run. After acceptance, 8b and 8c
-  **8b** still has to deliver `state.players`, `localPlayer()` and independent per-player
-  controls. **8c** still has to make relevant systems accept the player they act on. Both need
-  tests and playtests; step 8 must not be ticked until all slices and its frame-rate checks pass.
+- **Next action:** step 7 and its 7d cleanup are ticked. **8a is ticked**: the owner reported
+  its playtest passed. The fixed gameplay clock runs at 60 Hz, and the old 60 fps flight matches
+  exactly in a headless test. The old 30 and 144 fps traces differ by 2.2932 and 1.3400 units
+  respectively after ten seconds in that scenario. Full frame-rate independence is still not
+  proved: missile aim samples the rendered camera, asteroid respawn uses wall time and views are
+  not interpolated. The owner did not report a frame-throttled browser test.
+- **8b is ticked**: the owner reported its playtest passed (`TESTING-BASELINE.md` section K).
+  `state.players` holds player records with independent controls, and `localPlayer()` selects the
+  one the screen and input follow. `state.player` and `state.controls` are temporary aliases of
+  that local entry for legacy systems; there is no multiplayer simulation yet. A 12-second
+  scripted 8a-versus-8b flight/weapon/warp comparison was identical. 200 tests passed, save
+  version 12. **8c is next**: make systems player-aware and address the remaining step-8 risks.
 
 ---
 
@@ -127,7 +123,7 @@ that change, whether the save changes) and build them in small slices that can e
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
 | Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
 | Shop | Rows, prices and wording are data (`data/shops.js`); the Shop tab just draws `shopList()`. One generic purchase, `buyItem(shopId, itemId, qty)`. A row can be limited with `max` (none is yet); `setShopStock()` is the future restock hook |
-| Input | `core/input.js` is the only file that knows a key code. It fills **`state.controls`** (`steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`, `stop`, `brake`, `boost`, `fire`, `sec`; shape in `src/state/controls.js`) and the sim reads that. The record is the co-op contract (step 8 per-player, step 16 from the network) |
+| Input | `core/input.js` is the only file that knows a key code. It fills **`localPlayer().controls`** (`steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`, `stop`, `brake`, `boost`, `fire`, `sec`; shape in `src/state/controls.js`) and the sim reads that. Each player owns a record; 8c makes systems player-aware and step 16 supplies guest input |
 | Sound | The sim **emits** `sfx { name }` at eleven places and never imports `core/audio.js`; `SFX` in `core/audio.js` holds the exact waveform for each, played by one `on("sfx", playSfx)` listener. `tests/layers.test.mjs` fails if a `sim/` file imports `core/`, `ui/` or `render/`, or if a sound name and its `SFX` entry disagree |
 | Saves | **Version 12**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds, v12 one stock per place); old saves keep working. `tests/saves/v11-real.json` is a genuine v11 save the tests convert |
 
@@ -213,7 +209,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 195 tests expected
+npm test          # 200 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 

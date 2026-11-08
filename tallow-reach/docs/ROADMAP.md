@@ -10,9 +10,8 @@
 and confirmed step 7c. The player hull has its own view and shared named mount data; sector
 scenery follows an event, and missile lock uses the previous camera direction supplied by
 `main.js`. The sim's render-import allow-list is empty. **7d registry cleanup is complete and ticked** after the owner's playtest.
-**Step 8a is implemented, awaiting playtest**; 8b and 8c remain. 195 tests pass; save version
-remains 12. Gameplay ticks at 60 Hz; camera-derived missile aim and wall-clock asteroid respawn
-still limit full frame-rate independence.
+**Steps 8a and 8b are ticked after the owner's playtests; 8c is next.** 200 tests pass; save version remains 12. Gameplay ticks at 60 Hz; camera-derived missile
+aim and wall-clock asteroid respawn still limit full frame-rate independence.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -50,9 +49,9 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
 | 7 | Entities are data, meshes are views (7a enemies, 7b everything else in the world, 7c the hull's own view class) | B | [x] **2026-11-08: 7a, 7b and 7c complete; owner playtested 7c.** |
 | 7d | Entity view registry cleanup | B | [x] **2026-11-08: owner playtest passed.** |
-| 8 | Fixed time step and a list of players | B | [ ] **8a built, awaiting playtest; 8b and 8c remain.** |
-| 8a | Fixed simulation tick and old-versus-new flight tests | B | [ ] **Implemented; awaiting owner playtest.** |
-| 8b | Player list, local player and per-player controls | B | [ ] Not started |
+| 8 | Fixed time step and a list of players | B | [ ] **8a and 8b ticked; 8c remains.** |
+| 8a | Fixed simulation tick and old-versus-new flight tests | B | [x] **2026-11-08: owner playtest passed.** |
+| 8b | Player list, local player and per-player controls | B | [x] **2026-11-08: owner playtest passed.** |
 | 8c | Player-aware simulation systems | B | [ ] Not started |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
