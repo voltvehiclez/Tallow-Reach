@@ -2,6 +2,7 @@
 // state.profile (see profile.js). Everything else is rebuilt on load.
 
 import { newProfile } from "./profile.js";
+import { neutralControls } from "./controls.js";
 import { DEFAULT_SECTOR } from "../data/sectors.js";
 
 export const state = {
@@ -25,13 +26,15 @@ export const state = {
     lock: null,                                   // { k: "e"|"a"|"c"|"s", o } or null
     missileLock: { target: null, t: 0, locked: false },
     gunCd: [],         // seconds until each fitted gun can fire again
-    gunsOn: false,     // the trigger was held and the guns could fire this frame
+    // (There is no `gunsOn` field: whether the trigger was held and the guns could
+    // fire is local to one frame of sim/weapons.js. Nothing outside it read the
+    // stored copy, and a stale value on a shared record would confuse co-op.)
     missileCd: 0,
     spawnT: 20,        // seconds until the next pirate check
     beamOn: false,
     beamT: 0,          // seconds of continuous contact toward the next ore; resets the moment contact stops
     mineFrac: 1,       // ore left in the rock being mined (drives hum pitch)
-    coneRadius: 0,     // px radius of the missile lock ring, 0 when hidden
+    coneAngle: 0,      // degrees: the missile lock cone, 0 when no ring is shown
   },
 
   // Ship power, rebuilt from the fitted modules (see sim/power.js).
@@ -70,6 +73,12 @@ export const state = {
   hull: { cap: 0 },
 
   freeCam: { on: false, yaw: 0, pitch: 0.25, dist: 14 },
+
+  // What the local pilot is asking for this frame. `core/input.js` writes it from
+  // the keyboard and mouse; `src/sim/` reads it and never touches the keyboard.
+  // The shape (and the meanings of every field) is in state/controls.js. Step 8
+  // moves this onto a per-player record; the network fills a guest's copy.
+  controls: neutralControls(),
 
   ui: {
     intro: true,

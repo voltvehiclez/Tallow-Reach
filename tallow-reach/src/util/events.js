@@ -14,7 +14,14 @@
 //   died          text               ship destroyed (after docking)
 //   mined         { item }           one unit of ore added to the hold
 //   pickup        { item }           crate picked up
-//   enemy-killed  { def, faction }   a hostile was destroyed (def and faction are ids)
+//   sfx           { name, ...rest }  a game sound the sim wants played; `name` is a key of
+//                                    SFX in core/audio.js (the sim never calls the speakers
+//                                    itself). Extra fields are that sound's arguments, e.g.
+//                                    { name: "explosion", count } or { name: "warp-charge", dur }
+//   enemy-killed  { def, faction, id } a hostile was destroyed (def, faction and id are ids)
+//   enemy-spawned { id, def, pos }   a hostile entered the world (render/views.js builds its mesh)
+//   enemy-removed { id }             a hostile left the world: killed, out of range, or the field
+//                                    was cleared (render/views.js removes its mesh)
 //   sector-changed { from, to }      the sector changed, mid-warp (see data/sectors.js)
 //   warp-start    { from, to }       a warp began: ship locked, drive charging
 //   warp-end      { from, to }       warp over (arrived, or cancelled by docking)

@@ -21,9 +21,7 @@ import {
 } from "../data/sectors.js";
 import { emit } from "../util/events.js";
 import { state, msg, say } from "../state/state.js";
-import { keys, pointer } from "../core/input.js";
 import { showSector } from "../render/scene.js";
-import { warpCharge, warpBurst } from "../core/audio.js";
 import { clearWorldObjects, swapField } from "./world.js";
 
 /** True while a warp is in progress. */
@@ -59,10 +57,12 @@ export function startWarp() {
     fx: 0,
     flash: 0,
     switched: false,
+    // Where the stick is right now, from the control record: sim/player.js eases
+    // it back to neutral during the warp, so the ship's turn unwinds.
     steer: {
-      x: state.freeCam.on ? 0 : pointer.x,
-      y: state.freeCam.on ? 0 : pointer.y,
-      roll: (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0),
+      x: state.freeCam.on ? 0 : state.controls.steer.x,
+      y: state.freeCam.on ? 0 : state.controls.steer.y,
+      roll: state.controls.roll,
     },
   };
 
@@ -75,7 +75,7 @@ export function startWarp() {
   state.flight.beamOn = false;
   state.flight.beamT = 0;
 
-  warpCharge(WARP.charge);
+  emit("sfx", { name: "warp-charge", dur: WARP.charge });
   emit("warp-start", { from, to });
   return true;
 }
@@ -138,7 +138,7 @@ function arrive(from, to) {
   P.acc = 0;
   P.snap = true;
 
-  warpBurst();
+  emit("sfx", { name: "warp-burst" });
   msg(`Warp: ${SECTORS[from].n} to ${dest.n}. ${dest.d}`, 4);
   emit("sector-changed", { from, to });
 }

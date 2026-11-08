@@ -8,8 +8,7 @@ import { SHIPS } from "../data/ships.js";
 import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
-import { keys } from "../core/input.js";
-import { tone, nz, oreGained } from "../core/audio.js";
+
 import { scene, camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
@@ -20,6 +19,7 @@ import { gunsOf, moduleListName } from "./guns.js";
 export { gunsOf, refreshGuns } from "./guns.js";
 import { fire, hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
+import { enemyPos, enemyVel } from "./enemy.js";
 import { spawnAsteroid } from "./asteroids.js";
 
 const ASTEROID_RESPAWN_MS = 30000;
@@ -62,6 +62,7 @@ export function updatePrimary(dt) {
   const F = state.flight,
     S = state.profile,
     P = state.player,
+    c = state.controls,
     d = SHIPS[S.ship];
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.
@@ -71,7 +72,6 @@ export function updatePrimary(dt) {
 
   // Weapons are offline during a warp: no cannons, no beam, and nothing is drawn.
   if (state.warp) {
-    F.gunsOn = false;
     setDraw("guns", 0);
     F.beamOn = false;
     F.beamT = 0;
@@ -84,13 +84,13 @@ export function updatePrimary(dt) {
   // its own cooldown. Firing costs 2 MJ/s a gun, and a ship with no power to spare
   // fires nothing — the same rule the thrusters and shields follow.
   const gunDraw = state.guns.reduce((sum, g) => sum + g.draw, 0);
-  const wantGuns = keys.fire && S.pw !== "beam" && state.guns.length > 0;
+  const wantGuns = c.fire && S.pw !== "beam" && state.guns.length > 0;
   // Compare against the rest of the ship's bill, so the guns are not counted twice.
   const otherDraw = state.power.draw - (state.power.use.guns || 0);
-  F.gunsOn = wantGuns && hasPower(otherDraw + gunDraw);
-  setDraw("guns", F.gunsOn ? gunDraw : 0);
+  const gunsOn = wantGuns && hasPower(otherDraw + gunDraw);
+  setDraw("guns", gunsOn ? gunDraw : 0);
 
-  if (F.gunsOn) {
+  if (gunsOn) {
     let fired = false;
     state.guns.forEach((g, i) => {
       if (F.gunCd[i] > 0) return;
@@ -114,7 +114,7 @@ export function updatePrimary(dt) {
         );
       }
     });
-    if (fired) tone(700, 120, 0.09, 0.05, "square");
+    if (fired) emit("sfx", { name: "cannon" });
   }
 
   // The mining beam: the first beam module fitted in the primary bays, in bay
@@ -127,7 +127,7 @@ export function updatePrimary(dt) {
   const beamOtherDraw = state.power.draw - (state.power.use.beam || 0);
   F.beamOn = false;
   beamMesh.visible = false;
-  if (keys.fire && S.pw === "beam" && beam) {
+  if (c.fire && S.pw === "beam" && beam) {
     // Find the nearest asteroid inside the beam cone.
     const f = fwd(P.m),
       pp = P.m.position;
@@ -171,7 +171,7 @@ export function updatePrimary(dt) {
         best.m.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
         F.mineFrac = best.ore / best.max;
         P.acc += gained;
-        oreGained();   // the beam sweep hits 100%: a resource is yours
+        emit("sfx", { name: "ore-gained" });   // the beam sweep hits 100%: a resource is yours
         if (best.ore <= 0) {
           scene.remove(best.m);
           state.world.asteroids.splice(state.world.asteroids.indexOf(best), 1);
@@ -205,6 +205,7 @@ export function updateMissiles(dt) {
   const F = state.flight,
     S = state.profile,
     P = state.player,
+    c = state.controls,
     W = state.world,
     ML = F.missileLock;
 
@@ -212,7 +213,7 @@ export function updateMissiles(dt) {
 
   // No lock-on or launches during a warp. Missiles already away keep flying.
   if (state.warp) {
-    F.coneRadius = 0;
+    F.coneAngle = 0;
     ML.target = null;
     ML.locked = false;
     ML.t = 0;
@@ -223,16 +224,16 @@ export function updateMissiles(dt) {
   // Which fitted launcher (if any) decides the damage, the stock and the reload.
   const launcher = (state.missiles || [])[0];
   if (!launcher) {
-    F.coneRadius = 0;
+    F.coneAngle = 0;
     ML.target = null;
     ML.locked = false;
     ML.t = 0;
-    if (keys.sec) say("No secondary weapon installed");
+    if (c.sec) say("No secondary weapon installed");
   } else {
-    // Radius of the lock ring on screen, matching the cone angle.
-    F.coneRadius =
-      (Math.tan((MISSILE.cone * Math.PI) / 180) / Math.tan((camera.fov * Math.PI) / 360)) *
-      innerHeight / 2;
+    // The lock cone, in degrees. The sim stops here: turning it into the ring's
+    // radius on screen needs the camera and the window size, which belong to
+    // ui/hud.js (step 6b). The sim says the angle; the HUD draws it.
+    F.coneAngle = MISSILE.cone;
 
     const cf = V(0, 0, -1).applyQuaternion(camera.quaternion),
       pp = P.m.position;
@@ -240,7 +241,7 @@ export function updateMissiles(dt) {
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!state.freeCam.on) {
       for (const e of W.enemies) {
-        const q = e.m.position.clone().sub(pp),
+        const q = enemyPos(e).clone().sub(pp),
           d = q.length();
         if (d > MISSILE.range) continue;
         const angle = Math.acos(clamp(q.dot(cf) / d, -1, 1));
@@ -255,8 +256,7 @@ export function updateMissiles(dt) {
       ML.t += dt;
       if (!ML.locked && ML.t >= MISSILE.lock) {
         ML.locked = true;
-        tone(1300, 1300, 0.1, 0.06);
-        setTimeout(() => tone(1300, 1300, 0.1, 0.06), 140);
+        emit("sfx", { name: "missile-lock" });
       }
     } else {
       ML.target = best;
@@ -268,7 +268,7 @@ export function updateMissiles(dt) {
       say(ML.locked ? "MISSILE LOCK" : "Acquiring lock " + Math.round(Math.min(1, ML.t / MISSILE.lock) * 100) + "%");
     }
 
-    if (keys.sec && F.missileCd <= 0) {
+    if (c.sec && F.missileCd <= 0) {
       if (S.msl <= 0) say("Out of missiles");
       else {
         fireMissile(ML.locked ? ML.target : null, launcher);
@@ -298,8 +298,7 @@ function fireMissile(target, launcher) {
     l: MISSILE.life,
     dmg: launcher.dmg,
   });
-  nz(0.35, 900, 0.15);
-  tone(300, 120, 0.3, 0.05, "sawtooth");
+  emit("sfx", { name: "missile-fire" });
 }
 
 function updateMissileFlight(dt) {
@@ -312,8 +311,8 @@ function updateMissileFlight(dt) {
 
     // Steer toward the target, leading it by its velocity.
     if (s.t && W.enemies.includes(s.t)) {
-      const ep = s.t.m.position,
-        ev = s.t.v || V(0, 0, 0),
+      const ep = enemyPos(s.t),
+        ev = enemyVel(s.t),
         tt = ep.clone().sub(m.position).length() / Math.max(s.sp, 1),
         aim = ep.clone().addScaledVector(ev, tt * 0.85).sub(m.position).normalize();
       s.d.lerp(aim, Math.min(1, MISSILE.turn * dt)).normalize();
@@ -328,8 +327,8 @@ function updateMissileFlight(dt) {
 
     let end = s.l <= 0;
     for (const e of W.enemies) {
-      if (e.m.position.distanceTo(m.position) < 12) {
-        hitHostile(e, s.dmg, e.m.position);
+      if (enemyPos(e).distanceTo(m.position) < 12) {
+        hitHostile(e, s.dmg, enemyPos(e));
         end = true;
         break;
       }

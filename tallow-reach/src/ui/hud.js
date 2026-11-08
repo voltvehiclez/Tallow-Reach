@@ -5,13 +5,13 @@ import { fmtDist } from "../util/math.js";
 import { on } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
 import { sectorAt } from "../data/sectors.js";
-import { camera, STATION_POS } from "../render/scene.js";
+import { camera } from "../render/scene.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
 import { describe } from "../sim/contracts.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
-import { FIELD_CENTER } from "../sim/world.js";
+import { FIELD_CENTER, STATION_POS } from "../sim/world.js";
 import { MISSILE } from "../data/weapons.js";
 
 const $ = id => document.getElementById(id);
@@ -68,6 +68,17 @@ export function setupHud() {
     el.flash.style.opacity = shielded ? 0.25 : 0.8;
     setTimeout(() => (el.flash.style.opacity = 0), 120);
   });
+}
+
+/**
+ * The missile lock ring's radius in pixels for a cone of `deg` degrees, or 0 when
+ * there is no ring. The sim says the angle (state.flight.coneAngle); turning it
+ * into pixels needs the camera's field of view and the window height, which only
+ * the screen knows. Property-tested in tests/layers.test.mjs.
+ */
+export function coneRadiusPx(deg) {
+  if (!(deg > 0)) return 0;
+  return (Math.tan((deg * Math.PI) / 180) / Math.tan((camera.fov * Math.PI) / 360)) * innerHeight / 2;
 }
 
 /** Refresh every HUD element. Call once per frame while flying. */
@@ -139,10 +150,13 @@ export function updateHud(dt) {
   el.msg.textContent = H.msgT > 0 ? H.msg : "";
   if (H.msgT > 0) H.msgT -= dt;
 
-  drawLockRing(F.missileLock, F.coneRadius);
-  el.cone.style.display = F.coneRadius > 0 ? "block" : "none";
-  if (F.coneRadius > 0) {
-    el.cone.style.width = el.cone.style.height = 2 * F.coneRadius + "px";
+  // The sim says the lock cone in degrees; the ring's size in pixels is the
+  // screen's business (step 6b). Same formula and the same numbers as before.
+  const coneRadius = coneRadiusPx(F.coneAngle);
+  drawLockRing(F.missileLock, coneRadius);
+  el.cone.style.display = coneRadius > 0 ? "block" : "none";
+  if (coneRadius > 0) {
+    el.cone.style.width = el.cone.style.height = 2 * coneRadius + "px";
   }
 
   drawMarkers();
@@ -232,7 +246,7 @@ function drawMarkers() {
 
   W.enemies.forEach(e => {
     if (lock && lock.o === e) return;
-    mark(e.m.position, "Hostile", lock ? "h dim" : "h", 70, -36);
+    mark(e.pos, "Hostile", lock ? "h dim" : "h", 70, -36);
   });
 
   if (lock) {

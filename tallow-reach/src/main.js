@@ -7,7 +7,7 @@ import { state } from "./state/state.js";
 import { newProfile } from "./state/profile.js";
 import { loadAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
-import { installInput } from "./core/input.js";
+import { installInput, syncControls } from "./core/input.js";
 import { updateAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
 import { createPlayer, setShip, flight } from "./sim/player.js";
@@ -29,6 +29,7 @@ import { refreshShield, updateShield } from "./sim/shield.js";
 import { refreshHull } from "./sim/hull.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
+import { installEnemyViews, updateEnemyViews } from "./render/views.js";
 
 // --- Boot ------------------------------------------------------------------
 
@@ -46,9 +47,11 @@ refreshGuns();   // and the primary bays decide what fires on left click
 setupHud();
 setupMenu();
 setupWarpStreaks();
+installEnemyViews();   // one mesh per hostile, built and removed by render/views.js
 setupWarpFlash();
 setupPause();
 installInput();
+syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
   canStart: () => !state.player.docked && !state.paused,
   getScale: () => SHIPS[state.profile.ship].sc,
@@ -129,6 +132,7 @@ function frame(now) {
     updateCrates(dt);
   }
   updateEffects(dt);
+  updateEnemyViews();      // copy each hostile's position onto its mesh
   updateWarpStreaks(dt);   // all three hide themselves when no warp is running
   updateWarpFlash();
 

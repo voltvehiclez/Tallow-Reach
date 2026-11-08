@@ -6,8 +6,7 @@ import { FLIGHT } from "../data/ships.js";
 import { warpSteerEase } from "../data/sectors.js";
 import { sectorAt } from "../data/sectors.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
-import { keys, pointer } from "../core/input.js";
-import { nz } from "../core/audio.js";
+
 import { scene } from "../render/scene.js";
 import { buildPlayerShip } from "../render/models.js";
 import { state, msg } from "../state/state.js";
@@ -22,11 +21,13 @@ import { STATION_KEEPOUT } from "./world.js";
  */
 const NO_DRIVE_WARN = 2.5;
 
-/** Is the player asking the ship to move, strafe, lift or turn? */
-function tryingToMove(stick) {
+/**
+ * Is the pilot asking the ship to move, strafe, lift, roll or turn? Read from the
+ * control record, not from the keyboard (step 6b).
+ */
+function tryingToMove(c, stick) {
   return !!(
-    keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || keys.Space || keys.KeyC ||
-    keys.ShiftLeft || keys.ShiftRight || keys.KeyQ || keys.KeyE ||
+    c.thrust || c.strafe || c.lift || c.boost || c.roll ||
     Math.abs(stick.x) > 0.03 || Math.abs(stick.y) > 0.03
   );
 }
@@ -72,7 +73,8 @@ export function setShip(id) {
 export function flight(dt) {
   const P = state.player,
     m = P.m,
-    fc = state.freeCam;
+    fc = state.freeCam,
+    c = state.controls;
 
   // A warp hands the controls to the drive: the throttle is released and the
   // stick eases back to neutral, so the ship coasts down and unwinds its turn
@@ -82,9 +84,9 @@ export function flight(dt) {
   const stick = W
     ? W.steer
     : {
-        x: fc.on ? 0 : pointer.x,
-        y: fc.on ? 0 : pointer.y,
-        roll: (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0),
+        x: fc.on ? 0 : c.steer.x,
+        y: fc.on ? 0 : c.steer.y,
+        roll: c.roll,
       };
 
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
@@ -97,7 +99,7 @@ export function flight(dt) {
   // it to move. The warning repeats while a control is still held, but slowly,
   // so it reads as a reminder rather than a flicker.
   P.noDriveT = Math.max(0, P.noDriveT - dt);
-  if (!W && !powered && P.noDriveT === 0 && tryingToMove(stick)) {
+  if (!W && !powered && P.noDriveT === 0 && tryingToMove(c, stick)) {
     msg("Equip thrusters to move", NO_DRIVE_WARN);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
   }
@@ -112,17 +114,17 @@ export function flight(dt) {
     // No thrusters: the throttle does nothing and the engines stay cold.
     P.thr = 0;
   } else {
-    if (keys.KeyW) P.thr = Math.min(1, P.thr + dt * 0.5);
-    if (keys.KeyS) P.thr = Math.max(-1, P.thr - dt * 0.5);
-    if (keys.KeyX) P.thr = 0;
-    if (keys.ControlLeft) {
+    if (c.thrust > 0) P.thr = Math.min(1, P.thr + dt * 0.5);
+    if (c.thrust < 0) P.thr = Math.max(-1, P.thr - dt * 0.5);
+    if (c.stop) P.thr = 0;
+    if (c.brake) {
       P.thr = P.thr > 0 ? Math.max(0, P.thr - dt * 0.9) : P.thr < 0 ? Math.min(0, P.thr + dt * 0.9) : 0;
     }
   }
 
   // A fresh boost press snaps the throttle to full forward once. Holding boost
   // does not hold the throttle there; the pilot can still change it afterward.
-  const boostKey = keys.ShiftLeft || keys.ShiftRight;
+  const boostKey = c.boost;
   if (boostKey && !P.boostKeyWasDown && powered && !W) P.thr = 1;
   P.boostKeyWasDown = boostKey;
 
@@ -146,7 +148,7 @@ export function flight(dt) {
   P.boost = P.bs >= 1;
   if (P.boost && !wasBoosting) {
     P.shake = 1;
-    nz(0.4, 500, 0.35);
+    emit("sfx", { name: "boost" });
     // The ignition: one flat gulp out of the cells, not a trickle.
     state.power.stored = Math.max(0, state.power.stored - (drv.ignite || 0));
   }
@@ -162,8 +164,8 @@ export function flight(dt) {
   const right = V(1, 0, 0).applyQuaternion(m.quaternion);
   const up = V(0, 1, 0).applyQuaternion(m.quaternion);
   // Strafe and lift are ignored while warping, so the ship only bleeds speed.
-  const strafe = W ? 0 : (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-  const lift = W ? 0 : (keys.Space ? 1 : 0) - (keys.KeyC ? 1 : 0);
+  const strafe = W ? 0 : c.strafe;
+  const lift = W ? 0 : c.lift;
 
   // Only the main drive reaches full speed; reversing is a fraction of it.
   const throttle = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
@@ -204,7 +206,7 @@ export function flight(dt) {
 export function hurt(d) {
   const P = state.player;
   P.last = state.time;
-  nz(0.25, 1500, 0.2);
+  emit("sfx", { name: "hit" });
   if (P.sh > 0) {
     P.sh -= d;
     if (P.sh < 0) {

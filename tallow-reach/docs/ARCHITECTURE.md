@@ -31,10 +31,15 @@ runs when opened from disk.
 
 Dependencies only point downward. Lower layers never import higher ones.
 
-> **Known exception today:** `sim/` imports `render/` (scene, models) and `core/` (audio, input),
-> which this rule forbids. It is the biggest structural debt and is closed by refactor steps 6 and 7
-> ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). Do not add *new* such imports. The full list of debts and
-> the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
+> **Known exception today:** `sim/` still imports `render/` (scene, models) to build and remove
+> the meshes of bullets, crates, particles, rocks and the player's ship. That is the last one, and
+> refactor step 7 closes it ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)); **7a is done**, so hostiles are
+> already plain data and no `sim/` file touches an enemy's mesh any more.
+> **`core/` is closed (step 6):** the sim emits `sfx { name }` for sound and reads
+> `state.controls` for input, so no `sim/` file imports `core/` at all. Do not add *new* upward
+> imports. `tests/layers.test.mjs` fails if a `sim/` file imports `core/` or `ui/`, and holds the
+> shrinking allow-list of `sim/` files that may still import `render/`.
+> The full list of debts and the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
 
 ```
 main.js                 boot + frame loop
@@ -71,7 +76,7 @@ about each other, use the event bus instead.
 | Change how a hostile flies or shoots | `sim/ai.js` (`AI_BEHAVIOURS`, chosen by the def's `ai` field) |
 | Add or rename a faction              | `data/factions.js` (`FACTIONS`)                |
 | Change flight feel                   | `sim/player.js` (`flight`)                     |
-| Rebind keys                          | `BINDINGS` in `core/input.js`                  |
+| Rebind keys                          | `BINDINGS` (one-off actions) and `HELD` (flight and weapons) in `core/input.js` |
 | Add an outpost screen (tab)          | `ui/screens.js` (`TABS`, `SCREENS`, a HTML function) and `ui/menu.js` (`ACTIONS`) |
 | Add a module                         | `data/modules.js` (`MODULES`, `STOCK_FIT`); see HOW_TO_ADD.md recipe 16 |
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
@@ -88,7 +93,7 @@ about each other, use the event bus instead.
 | Change the ship in the Outfitting view| `render/shipviewer.js` (camera, lights, framing); `ui/outfitting.js` (page, input) |
 | Change the pause menu                | `ui/pause.js`, styles under "Pause overlay" in `styles.css` |
 | Change colours or layout of any UI   | `styles.css` (sections are labelled)           |
-| Add a sound                          | `core/audio.js` (`tone`, `nz`, or a new graph) |
+| Add a sound                          | `core/audio.js` (`SFX` entry; the sim only emits `sfx`) — see HOW_TO_ADD.md recipe 9 |
 | Change what gets saved               | `state/profile.js` (bump `SAVE_VERSION`, add a migration) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
 | Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
@@ -102,13 +107,14 @@ src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
 src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
-src/core/              audio.js (synth + mute), input.js (keys -> named actions)
+src/core/              audio.js (synth + mute), input.js (keys -> state.controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
-src/sim/               player, power, drive, fitting, inventory, shops' purchases (economy), weapons, combat, ai, loot, asteroids, targeting, contracts, session, sectors, effects, world
-src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
+src/sim/               player, power, drive, fitting, inventory, shops' purchases (economy), weapons, combat, ai, enemy (a hostile as data), loot, asteroids, targeting, contracts, session, sectors, effects, world
+src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting), views.js (a mesh per entity)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
-                       enemies.test.mjs (headless enemy spawn), headless.mjs (test helper)
+                       enemies.test.mjs (enemies as data), headless-sim.test.mjs (600 ticks, no browser),
+                       views.test.mjs (the mesh follows the entity), headless.mjs (test helper)
 docs/                  this file, HOW_TO_ADD.md, AI_PROMPTS.md, HANDOFF.md, CHANGELOG.md (recent + index), CHANGELOG_ARCHIVE.md (older, full text)
 ```
 
@@ -158,13 +164,19 @@ Each `src/` folder also has its own short `README.md`.
   below 1 credit, kept in step by a test), so `canSell()` is true for it and every selling path —
   right-click a MOD tile in Inventory, or the Base tab's Sell hold / Sell stored — treats it as an
   item. A module fitted in a bay is in **no** stock, so it is never sold; only stocks are.
-- **Enemies are data.** `data/enemies.js` (`ENEMIES`, keyed by id) holds every hostile's name,
-  plural name, Hull HP, colour, scale, faction, numbers and the id of its behaviour. `sim/ai.js`
-  spawns one with `spawnEnemy(id, pos)`, and the entity it makes carries `def` (the id) and `f`
-  (the faction id) so events and screens can name it. A def's `ai` field picks a function from
-  `AI_BEHAVIOURS` in `sim/ai.js`; adding *numbers* is a data edit, adding a *way of fighting* is
-  one function there. `tests/enemies.test.mjs` spawns a fake enemy to prove no enemy lives in code.
-  Kills emit `enemy-killed { def, faction }`; a hunt contract names the def it counts (`e`).
+- **Enemies are data, and a hostile is plain data too.** `data/enemies.js` (`ENEMIES`, keyed by
+  id) holds every hostile's name, plural name, Hull HP, colour, scale, faction, numbers and the id
+  of its behaviour. `sim/ai.js` spawns one with `spawnEnemy(id, pos)`, and the entity it makes
+  carries `def` (the id) and `f` (the faction id) so events and screens can name it. A def's `ai`
+  field picks a function from `AI_BEHAVIOURS` in `sim/ai.js`; adding *numbers* is a data edit,
+  adding a *way of fighting* is one function there. `tests/enemies.test.mjs` spawns a fake enemy to
+  prove no enemy lives in code.
+  **Since step 7a an enemy is a record, not a mesh** (`sim/enemy.js`):
+  `{ id, kind: "enemy", def, n, f, loot, hp, mx, pos, quat, v, fire, o }`. Positions and rotations
+  are three.js `Vector3`/`Quaternion` — maths types, which the target architecture allows — and the
+  mesh is `render/views.js`'s business: it listens for `enemy-spawned` / `enemy-removed` and sweeps
+  the list every frame. **Never give an entity a mesh again**; add the drawing to `render/views.js`.
+  Kills emit `enemy-killed { def, faction, id }`; a hunt contract names the def it counts (`e`).
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
   `vol`, `st`.
@@ -231,8 +243,10 @@ Each `src/` folder also has its own short `README.md`.
   hull's `dmg` (1 on every hull — the hulls are identical apart from the hold for now), so
   the module figure is the number the game uses. While the trigger is held and the guns are firing they report
   `setDraw("guns", draw * guns fitted)`; `hasPower()` decides whether they may fire at all, the
-  same rule the thrusters follow. `state.flight.gunCd` holds one cooldown per fitted gun and
-  `state.flight.gunsOn` says whether they fired this frame.
+  same rule the thrusters follow. `state.flight.gunCd` holds one cooldown per fitted gun.
+  Whether they fired on a given frame is worked out inside `updatePrimary` and kept there — it
+  is per-frame and purely local, so it is not a field of `state.flight` (the old stored copy was
+  never read by anything outside `sim/weapons.js`).
 - **The mining beam is a module too, not a weapon flag.** `beam_basic` lives in the `primary`
   group (`period` 4 s of continuous contact per ore before the hull's `mine` multiplier,
   `range` 340 m, `draw` 2 MJ/s), sold at Meridian for 900 cr (`data/shops.js`) — buying it puts the module in
@@ -247,10 +261,18 @@ Each `src/` folder also has its own short `README.md`.
   lost** — `state.flight.beamT` (contact time) tracks it; docking, launching, a fit change
   or a warp clear it too. A small bar with the percentage (`#bm` in the HUD, directly under
   the "left in rock" hint) shows the progress while the beam is cutting; it is hidden
-  otherwise. Each completed ore plays a chime (`oreGained()` in `core/audio.js`). The beam
+  otherwise. **A full hold stops the beam before it cuts at all** (`Cargo hold full`), so there is
+  no progress to bank. Each completed ore plays a chime (the `ore-gained` entry of `SFX` in
+  `core/audio.js`, emitted once per ore the beam secures, above the loop that puts the ore in the
+  hold). The beam
   is not a gun: `gunsOf()` never returns it, so the guns and the beam slot never both fire.
   The first fitted beam (lowest bay) acts if two are fitted. Saves that owned the old shop
   beam were given one `beam_basic` in storage in save version 8 (not auto-fitted).
+- **The missile lock ring is sized by the screen, not the sim.** The sim reports the cone in
+  degrees (`state.flight.coneAngle`: `MISSILE.cone` while a launcher is fitted and no warp is
+  running, else 0) and `coneRadiusPx()` in `ui/hud.js` turns that into the ring's pixel radius
+  with the camera's field of view and the window height. Same numbers as before the move; do not
+  put the pixel maths back in `sim/`.
 - **The missile launcher is a module too — it replaced the old `wp.msl` flag.** `missile_basic`
   lives in the `secondary` group (`dmg` 8, `cap` 12, `cd` 4 s, `ammo` 8), sold at Meridian for
   1500 cr like the old launcher, and a purchase tops the rack up to the module's `ammo` (8
@@ -306,8 +328,20 @@ Each `src/` folder also has its own short `README.md`.
   canvas out of the page without destroying it; `ui/outfitting.js` puts the same canvas
   back into `#shipview` after each render. Do not create a renderer per render, and keep
   `id="shipview"` in `outfittingHtml`.
-- **Sounds** are played with `tone()` / `nz()` from `core/audio.js` and respect mute
-  automatically. UI sounds go through `uiSound()` and `hoverSound()`.
+- **The sim never reads the keyboard.** `core/input.js` is the only file that knows a key code.
+  It fills `state.controls` (one plain record per pilot, shape in `src/state/controls.js`) and the
+  sim reads that. `docs/REFACTOR_PLAN.md` step 6 chose this shape; it is the co-op contract, so do
+  not rename fields without saying so there: `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`,
+  `stop`, `brake`, `boost`, `fire`, `sec`. Step 8 moves it onto a per-player record and step 16
+  fills a guest's copy from the network. `tests/layers.test.mjs` fails if a `sim/` file mentions
+  `keys`/`pointer`, or if `HELD` sets a field the record does not have.
+- **The sim never plays a sound itself.** It emits `sfx { name, ...rest }` at the moment the
+  sound belongs to, and `core/audio.js` plays the matching entry of its `SFX` table (one entry per
+  sound, holding the exact `tone()`/`nz()` numbers). `tests/layers.test.mjs` fails if a `sim/` file
+  imports `core/audio.js`, and also if the sim emits a name with no `SFX` entry (or the table holds
+  one nothing emits). To add a sound: an `SFX` entry plus an `emit` — see HOW_TO_ADD.md recipe 9.
+  Mute and pause are handled inside `tone()`/`nz()` as before. UI sounds go through `uiSound()`
+  and `hoverSound()`, which the screens call directly (they are not game sounds).
 - **Text shown to the player** is written inline in the screen or action that shows it.
 - **Save changes** follow the rules in "Save compatibility" below.
 
@@ -319,7 +353,7 @@ to gameplay from a new feature, subscribe with `on(name, handler)`. For example:
 
 ```js
 import { on } from "../util/events.js";
-on("enemy-killed", ({ def, faction }) => { /* achievements, faction reputation, ... */ });
+on("enemy-killed", ({ def, faction, id }) => { /* achievements, faction reputation, ... */ });
 ```
 
 If you add an event, add it to the list at the top of `util/events.js` in the same change.

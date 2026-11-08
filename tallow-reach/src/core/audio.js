@@ -1,8 +1,11 @@
 // Procedural audio. Everything is synthesised with the Web Audio API, so the
-// game ships no sound files. Sounds are started by the sim through tone() and
-// nz(); the engine and ambience are driven by updateAudio() once per frame.
+// game ships no sound files. The simulation never calls the speakers itself:
+// it emits `sfx { name, ...rest }` and this file plays the matching SFX entry
+// (see the bottom of the file). The engine and ambience are driven by
+// updateAudio() once per frame.
 
 import { random } from "../util/rng.js";
+import { on } from "../util/events.js";
 
 let ctx = null;
 let master, noiseBuf, engineGain, engineFilter, engineOsc, engineOscGain;
@@ -360,3 +363,56 @@ export function updateAudio(s) {
     tone(520, 520, 0.18, 0.08, "square");
   }
 }
+
+// --- Game sounds the sim asks for -------------------------------------------
+//
+// The sim says *what happened* (it emits `sfx { name, ...rest }`); this table
+// says what that sounds like. Every entry is the same synthesis the sim used to
+// call directly, with the same numbers, so moving a sound here changed nothing
+// audible. To add a sound: add an entry, then `emit("sfx", { name: "<key>" })`
+// where it happens (docs/HOW_TO_ADD.md recipe 9). Mute and pause are handled by
+// tone()/nz() as before, and a sound emitted before the audio starts (or in a
+// test with no speakers) is simply not played.
+
+/** name -> (rest) => play it. Kept apart from the bus so it can be listed and tested. */
+export const SFX = {
+  // Cannon shot (sim/weapons.js, once per volley).
+  cannon: () => tone(700, 120, 0.09, 0.05, "square"),
+  // One ore banked by the mining beam: the warm ascending chime.
+  "ore-gained": () => oreGained(),
+  // Missile lock acquired: a two-note pip.
+  "missile-lock": () => {
+    tone(1300, 1300, 0.1, 0.06);
+    setTimeout(() => tone(1300, 1300, 0.1, 0.06), 140);
+  },
+  // Missile away: a hiss and a falling growl.
+  "missile-fire": () => {
+    nz(0.35, 900, 0.15);
+    tone(300, 120, 0.3, 0.05, "sawtooth");
+  },
+  // The boost igniting: a gulp of exhaust.
+  boost: () => nz(0.4, 500, 0.35),
+  // Something reached the player's ship (shield or hull).
+  hit: () => nz(0.25, 1500, 0.2),
+  // A loot crate was collected.
+  pickup: () => tone(880, 1320, 0.15, 0.08),
+  // An enemy fired close enough to hear it.
+  "enemy-fire": () => tone(260, 80, 0.12, 0.03, "sawtooth"),
+  // A big explosion: only the loud bursts rumbled, so the sim says how big it was.
+  explosion: ({ count }) => {
+    if (count > 10) nz(1.2, 500, 0.5);
+  },
+  // Warp drive spinning up, over `dur` seconds (the whole charge).
+  "warp-charge": ({ dur }) => warpCharge(dur),
+  // Arrival out of a warp.
+  "warp-burst": () => warpBurst(),
+};
+
+/** Play the sound `p.name` asks for. A name nobody knows is ignored. */
+export function playSfx(p) {
+  const play = p && SFX[p.name];
+  if (play) play(p);
+}
+
+// One listener for the whole game: the sim's sounds arrive here.
+on("sfx", playSfx);

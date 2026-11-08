@@ -19,6 +19,179 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 7a ticked (docs only, no code change)
+
+- **Why:** the owner played the 7a build and reported that the raiders behave as usual and that
+  they are cleared when the field is cleared on docking. That was the one thing the slice waited
+  for, so 7a closes.
+- **Also settled:** clearing raiders on docking is **not** a 7a change and not a bug. `dock()` has
+  always called `clearTransient()` (pirates, bullets and missiles go; crates stay), and it does not
+  count as a kill. Whether that should change is a gameplay decision, still open and not started.
+- **State of the code, unchanged by this entry:** an enemy is a plain-data record
+  (`src/sim/enemy.js`), `render/views.js` draws it, and no `src/sim/` file touches an enemy's mesh.
+  165 tests green. Save version stays **12** (step 7 changes no saved data).
+- **Files:** `docs/ROADMAP.md` (7a ticked, current position and log), `docs/HANDOFF.md` (next action
+  is 7b), `docs/REFACTOR_PLAN.md` (slice 7a marked ticked), this changelog. No source changed, so no
+  rebuild is needed: the zip and the tag are the 7a build.
+- **Next:** step 7b, bullets, missiles, crates and particles as data with views.
+
+---
+
+## 2026-11-08: Refactor step 7a — a hostile becomes data; the mesh becomes a view
+
+- **Why:** an enemy *was* a three.js mesh (`sim/ai.js` built one with `mkShip`, and every system that
+  touched a hostile moved `e.m.position`). That is what stops the sim running on a host or in a test:
+  the rules could not run without a scene. Step 7 removes that for every entity; 7a does hostiles.
+- **A hostile is a record now** (`src/sim/enemy.js`):
+  `{ id, kind: "enemy", def, n, f, loot, hp, mx, pos, quat, v, fire, o }`. `pos` and `quat` are
+  three.js `Vector3`/`Quaternion` — maths types, which the target architecture allows — and no
+  `sim/` file holds a mesh. `enemyPos`/`enemyFwd`/`turnEnemy`/`enemyDist`/`enemyVel` are the only
+  ways to read its position and rotation, so the storage can change again in one file.
+- **`render/views.js` draws them.** It listens for `enemy-spawned` and builds the mesh from the def
+  (`mkShip(col, scale, true)`), copies `pos`/`quat` onto it once a frame, and removes it on
+  `enemy-removed` — which fires when a hostile is killed, drifts out of `lostRange`, or the field is
+  cleared by docking or a warp. A per-frame sweep reconciles the two lists so a mesh can never be
+  left behind or missing.
+- **Two files left the `render/` allow-list** in `tests/layers.test.mjs`: `ai.js` and `targeting.js`.
+  `combat.js` and `world.js` still import render/ for crates and the spark field (7b/7c).
+- **The station's position moved to the sim.** `STATION_POS` used to be exported from
+  `render/scene.js`; targeting needs it (lock the outpost) and may not import render/, so it is in
+  `sim/world.js` now and `ui/hud.js` reads it from there. It is still 0,0,0 — the outpost's mesh has
+  not moved.
+- **New tests (165 in all):** `tests/headless-sim.test.mjs` — the headless test step 7 asks for: one
+  raider, 600 ticks, no browser, checking it approached, turned to face the pilot and fired; plus
+  the kill, out-of-range and clear-the-field paths. `tests/views.test.mjs` — a mesh appears per
+  hostile from its def's colour and size, follows its data every frame, and goes away with it. Two
+  new layer tests: no `sim/` file may mention an enemy's mesh (`e.m`), and `render/views.js` is the
+  only place that builds one. `tests/headless.mjs` gained `opts.keep`, so a test can load one
+  `render/` file for real (that is how `views.js` is tested).
+- **Equivalence proof:** an old-vs-new probe ran one scripted fight (spawn, chase, shoot, kill, drop
+  loot, out-of-range removal, dock) through the previous commit and this tree, fingerprinting the
+  player and every hostile each tick: **2545 of 2545 frames identical**. The one new thing is each
+  enemy's `id`, which is what the view keys its mesh on.
+- **Save:** unchanged, version stays **12**. **Files:** `src/sim/enemy.js` (new),
+  `src/render/views.js` (new), `src/sim/{ai,combat,targeting,weapons,world}.js`, `src/util/math.js`
+  (`fwdQ`/`faceQ`), `src/util/events.js` (two events), `src/render/scene.js` (STATION_POS moved out),
+  `src/ui/hud.js`, `src/main.js`, `tests/{headless,layers,enemies,content}.test.mjs`,
+  `tests/headless-sim.test.mjs` (new), `tests/views.test.mjs` (new), `src/sim/README.md`,
+  `src/render/README.md`, `docs/{ARCHITECTURE,TARGET_ARCHITECTURE,HOW_TO_ADD,ROADMAP,HANDOFF}.md`,
+  this changelog. Run `npm run build` and `npm test`.
+
+---
+
+## 2026-11-08: Step 6 ticked in full (docs only, no code change)
+
+- **Why:** the owner played the 6b build and reported **no problems with the controls**. That was
+  the one thing 6b was waiting for, so step 6 closes.
+- **What was signed off:** `TESTING-BASELINE.md` section A (flight feel) and section B (mining,
+  guns, missiles). The lock ring resizing with the window was checked by the owner too.
+- **State of the code, unchanged by this entry:** no `src/sim/` file imports `core/` (no sound, no
+  keys, no mouse), the sim reads `state.controls`, and the lock ring is sized in `ui/hud.js`. 155
+  tests green. Save version stays **12** (step 6 changed no saved data).
+- **Files:** `docs/ROADMAP.md` (step 6 ticked, current position and log), `docs/HANDOFF.md` (next
+  action is step 7; the layers-test row no longer says "input (until 6b)"), this changelog. No
+  source changed, so no rebuild is required: the zip and the tag are the 6b build.
+- **Next:** step 7, entities as data and meshes as views, in three playable slices.
+
+---
+
+## 2026-11-08: Refactor step 6b — the sim stops reading the keyboard (step 6 done)
+
+- **Why:** with 6a the sim no longer played sound; it still read the keyboard and the mouse
+  directly (`keys.KeyW`, `pointer.x` in `sim/player.js`, `sim/weapons.js` and `sim/sectors.js`), and
+  `sim/weapons.js` even measured the missile lock ring in **screen pixels**. That is the thing that
+  makes a second player impossible: a guest's controls arrive from the network, not from a keyboard.
+- **New `state.controls`** (`src/state/controls.js`): one plain record per pilot —
+  `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`, `stop`, `brake`, `boost`, `fire`, `sec`.
+  `core/input.js` owns the key table (`HELD`) and rebuilds the record after every key or mouse
+  change; the sim reads it and never sees a key code. **No `src/sim/` file imports `core/` any
+  more**, which is what "step 6 done" means. The shape is the co-op contract: step 8 puts it on a
+  per-player record, step 16 fills a guest's copy.
+- **The missile lock ring moved to the screen.** The sim now reports the cone in **degrees**
+  (`state.flight.coneAngle`), and `coneRadiusPx()` in `ui/hud.js` turns that into pixels with the
+  camera's field of view and the window height. Checked against the old formula at 0, 1, 10, 20, 30
+  and 45 degrees: identical to the last digit (20 deg on a 60-degree camera at 900 px is
+  283.68672218631417 px, before and after). The sim no longer reads `innerHeight`.
+- **Two small cleanups in passing**, both verified to change nothing: the stored
+  `state.flight.gunsOn` flag is gone (it was only ever read inside `sim/weapons.js`, where it is now
+  a local; a stale copy on a shared record would mislead co-op), and losing window focus now clears
+  held keys as well as releasing the free camera, so a ship cannot keep thrusting while the player
+  is in another window.
+- **New tests (`tests/layers.test.mjs` is 14 now):** no `sim/` file may import `core/` at all, none
+  may mention `keys`/`pointer`, `HELD` may only set fields the record has, the record's exact field
+  list is pinned, each record owns its own `steer` object, and the ring's pixel maths is checked.
+  `tests/content.test.mjs` gained the new source strings for the two guards it already had.
+- **Proof it plays identically.** A probe drove one scripted session through the previous commit
+  (setting `keys`/`pointer`) and this tree (setting `state.controls`), with real three.js maths and a
+  per-frame fingerprint of position, rotation, velocity, throttle, boost tank, Shield HP, Hull HP,
+  power draw, gun cooldowns, beam state, entity counts and warp state: **1010 of 1010 frames
+  identical.** The session covered throttle, steer, roll, strafe, lift, brake, stop, boost ignition,
+  six volleys, 6 seconds of mining, secondary fire and a warp with the stick easing out.
+- **No save change** (`SAVE_VERSION` stays 12) and no gameplay, balance or UI change.
+- **Tests:** 155 pass (was 150).
+- Files: `src/state/controls.js` (new), `src/state/state.js`, `src/core/input.js`,
+  `src/sim/player.js`, `src/sim/weapons.js`, `src/sim/sectors.js`, `src/ui/hud.js`,
+  `src/ui/pause.js`, `src/main.js`, `tests/layers.test.mjs`, `tests/content.test.mjs`,
+  `src/core/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md`
+  (the debt row now names only `render/`), `docs/HOW_TO_ADD.md` (recipe 8 rewritten: one-off keys
+  vs held controls), `docs/ROADMAP.md` (6a ticked, 6b logged), `TESTING-BASELINE.md`, this changelog.
+  Run `npm run build` and `npm test`.
+
+---
+
+## 2026-11-08: Refactor step 6a — the sim stops playing sounds itself
+
+- **Why:** the biggest structural debt in `docs/TARGET_ARCHITECTURE.md` is `src/sim/` importing the
+  screen, the speakers and the keyboard. Step 6 splits it in two, and this is the sound half (6a).
+  Eleven places in `src/sim/` called the synthesiser directly (`tone()`, `nz()`, `oreGained()`,
+  `warpCharge()`, `warpBurst()`), so no test could run the sim without a browser, and a co-op host
+  could never decide which machine should hear a boom.
+- **New event `sfx { name, ...rest }`.** The sim now says *what happened*; `core/audio.js` decides
+  what that sounds like. `src/sim/{weapons,player,combat,ai,effects,sectors}.js` no longer import
+  `core/audio.js` at all. Extra fields carry the moment's own numbers:
+  `{ name: "explosion", count }` (still only rumbling above 10 particles) and
+  `{ name: "warp-charge", dur }` (the warp's own charge length).
+- **`SFX` table in `src/core/audio.js`** holds one entry per sound, and these eleven names are what
+  the sim emits: `cannon`, `ore-gained`, `missile-lock`, `missile-fire`, `boost`, `hit`, `pickup`,
+  `enemy-fire`, `explosion`, `warp-charge`, `warp-burst`. One listener, `on("sfx", playSfx)`, plays
+  them. **Every waveform, frequency, duration and volume is copied unchanged** — this is a wiring
+  change, not a sound change.
+- **Deliberately not hung on existing gameplay events.** It would be tidier to play the ore chime
+  from the `mined` event and the pickup pip from `pickup`, but the sim intends the chime to fire
+  **once per ore the beam secures**, while the `mined` event fires once per ore that actually lands
+  in the hold (`weapons.js`: `emit("sfx", { name: "ore-gained" })` sits above the `while` loop that
+  emits `mined`). They are not the same moment, and a design that assumed they were would have
+  quietly coupled a sound to a cargo rule. *(Correction, same day: an earlier draft of this entry
+  justified the choice with "mining with a full hold chimes but emits no `mined`". The owner pointed
+  out that the beam never cuts when the hold is full — `updatePrimary` says "Cargo hold full" and
+  returns before the cutting branch — so that case does not arise. The separation is still right;
+  the example was wrong.)* Each `sfx` sits at the exact old call site, so the sounds are 1:1 with
+  before.
+- **New `tests/layers.test.mjs` (9 tests):** imports are parsed statement by statement, so a
+  side-effect import cannot swallow the next one. It fails if any `src/sim/` file imports
+  `core/audio.js`, `core/input.js` (that line is deleted in 6b) or `ui/`, holds a shrinking
+  allow-list of `sim/` files that may still import `render/` (step 7 empties it) and checks the
+  allow-lists only name files that really do that import. It also checks both directions between
+  the names the sim emits and `SFX`, and that playing a sound with no audio context never throws.
+  All three deliberate breakages (re-importing audio, a typo'd name, a stale allow-list entry)
+  were caught.
+- **Proof it plays identically.** A probe bundled the previous commit and this tree, ran one
+  scripted session through both with a recording Web Audio context (a fake `window.AudioContext`
+  logging every node, envelope, start/stop and the delayed `setTimeout` chimes), and compared the
+  result: **671 log lines identical**, the same 55 oscillators, 19 noise bursts and 11 delayed
+  pips, covering all eleven sounds.
+- **No save change** (`SAVE_VERSION` stays 12) and no gameplay, balance or UI change.
+- **Tests:** 150 pass (was 141).
+- Files: `src/util/events.js`, `src/core/audio.js`, `src/sim/weapons.js`, `src/sim/player.js`,
+  `src/sim/combat.js`, `src/sim/ai.js`, `src/sim/effects.js`, `src/sim/sectors.js`,
+  `tests/layers.test.mjs` (new), `TESTING-BASELINE.md` (a by-ear table), `src/core/README.md`,
+  `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md` (the debt row now
+  names only 6b/7), `docs/HOW_TO_ADD.md` (recipes 9 and 10 rewritten), `docs/ROADMAP.md` (steps 4
+  and 5 ticked after the owner's playtest; step 6a logged), this changelog.
+  Run `npm run build` and `npm test`.
+
+---
+
 ## 2026-11-07: Recorded what is and is not per-shop about shops (docs only)
 
 - **Why:** the owner asked whether the game can hold more than one **independent** shop (for
@@ -224,6 +397,8 @@ the next person must know (save version, rebuild needed, known issues).
   `docs/HOW_TO_ADD.md` (recipe 18 added), `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog.
   Run `npm run build` and `npm test`.
 
+---
+
 ## 2026-11-07: Refactor step 2 — seeded randomness everywhere
 
 - **Why:** "same seed, same run" is the foundation for generated sectors, wormhole instances and
@@ -252,6 +427,8 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/rng.test.mjs`, `src/util/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`,
   `docs/TARGET_ARCHITECTURE.md` (closed debt removed), `docs/HOW_TO_ADD.md` (recipe 12 rewritten),
   `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog. Run `npm run build` and `npm test`.
+
+---
 
 ## 2026-11-07: Refactor step 1 — enemies are data (enemy registry, `enemy-killed` event)
 
@@ -288,63 +465,13 @@ the next person must know (save version, rebuild needed, known issues).
   removed), `docs/HOW_TO_ADD.md` (recipe 6 rewritten), `docs/HANDOFF.md`, this changelog.
   Run `npm run build` and `npm test`.
 
-## 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
-
-- **Why:** the owner's plan is much bigger than the code's shape (100+ sector starmap, wormhole
-  instances, a story campaign, host-run co-op) and several different AI assistants will work on it.
-  The docs now say what the game is, where it is heading, in what order, and how to get there safely.
-- **New:** `docs/VISION.md` (scope, design pillars, open design questions with defaults),
-  `docs/TARGET_ARCHITECTURE.md` (eight principles, data model, save split, multiplayer model, a
-  "Debt today" table with evidence), `docs/ROADMAP.md` (status of every step, content to add and when),
-  `docs/REFACTOR_PLAN.md` (15 behaviour-preserving steps in 4 milestones, each with goal, work, "done
-  when", save version and how the owner runs it), `TESTING-BASELINE.md` (a 10-minute whole-game
-  click-through), root `AGENTS.md` and `CLAUDE.md` (pointers for tools that read them).
-- **Changed:** `docs/HANDOFF.md` (big picture, reading order, "keep the structure" now means keep
-  folders and conventions, restructure only through numbered steps), `docs/ARCHITECTURE.md` (reading
-  order, the `sim/` imports `render/`+`core/` exception stated honestly), `docs/AI_PROMPTS.md`
-  (model-agnostic starter prompt, refactor-step prompt, content prompt, using several AIs),
-  `docs/HOW_TO_ADD.md` (note on which recipes change), `README.md` (links).
-- **Housekeeping:** this file had 24 full entries (the limit is 15). The 15 oldest were moved
-  word for word to `CHANGELOG_ARCHIVE.md` and indexed below; 10 plus this one remain.
-- No source, data, test or save change; save version still 11. No rebuild needed.
-
-## 2026-11-07: Inventory Sell quantity uses a game-styled popover
-
-- Replaced the browser-owned quantity prompt with a small in-game box positioned beside the
-  selected inventory tile. It contains the quantity field (prefilled with the stack size),
-  inline validation, and Sell/Cancel buttons. No other inventory layout changed.
-- Files: `src/ui/menu.js`, `src/styles.css`, `tests/inventory.test.mjs`, this changelog.
-  Save version unchanged. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory Sell asks how many units to sell
-
-- Choosing Sell on a cargo stack now opens a quantity prompt, prefilled with the whole stack
-  count. Enter any whole number from 1 to the stack size to sell that partial or full amount;
-  cancelling leaves the stack unchanged. Existing prices and refinery bonus still apply.
-- Files: `src/ui/menu.js`, `src/ui/screens.js`, `src/sim/economy.js`, `src/ui/README.md`,
-  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory grids use five narrower, shorter slots per row
-
-- Set both inventory grids to exactly five columns, with narrower tiles and a 68px tile/row
-  height. The 25-slot minimum gives five rows by default; each additional item beyond 25
-  naturally adds a row. The three-row scroll viewport and independent scrolling are retained.
-- Files: `src/styles.css`, `tests/inventory.test.mjs`, this changelog. Save data unchanged.
-  Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory grids keep their size when empty, and moves no longer show status text
-
-- Each hold now always renders a 5-by-5 slot field with a fixed three-row viewport, so empty
-  slots preserve the inventory window size and scrolling can be tested even with fewer items.
-  Station and ship grids scroll independently. Moving items clears/suppresses the "Moved ..."
-  status message; other actions are unchanged.
-- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
-  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
+- 2026-11-07: Inventory Sell quantity uses a game-styled popover
+- 2026-11-07: Inventory Sell asks how many units to sell
+- 2026-11-07: Inventory grids use five narrower, shorter slots per row
+- 2026-11-07: Inventory grids keep their size when empty, and moves no longer show status text
 - 2026-11-07: Station and ship item grids scroll independently after three rows
 - 2026-11-07: Right-click inventory menu can sell a cargo stack
 - 2026-11-07: Inventory tile text restored to the more readable size

@@ -6,18 +6,24 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** Milestone A is under way. **Steps 0, 1, 2 and 3 are done** (2026-11-07).
-**Steps 4 and 5** — the item catalogue with one inventory per place (save v12), and shops and
-prices from data — are **built and tested (131 green)**, waiting for the owner's playtest before
-they are ticked: `TESTING-INVENTORY.md` (section 8, loading an old save, is the new part there) and
-the new `TESTING-SHOPS.md`. The owner's answers so far: found modules do **not** get random stats
-yet, so a stock stays a plain count per item; and Meridian also sells the **six standard parts for
-1 cr each** (a visible change the owner asked for at step 5), with the beam at 900 cr and the
-missile pod at 1500 cr unchanged. The old "Autocannons — Owned" line was removed after the owner's
-first look at the build: it listed the same part twice (the module is Basic cannons). Shop stock can be **limited** (`max` on a row) but no row uses it
-yet, and nothing restocks: `setShopStock()` is the hook, waiting for the owner to ask for the timers.
-**Next: Step 6, the sim stops using sound and the keyboard** — and the owner is free to add data-only
-content meanwhile (Milestone A is reached in everything but the tick).
+**Current position:** **Milestone A is done, step 6 is done, and step 7a is ticked** (2026-11-08):
+a hostile is plain data (`sim/enemy.js`) and `render/views.js` draws it, so **no `src/sim/` file
+touches an enemy's mesh**. The owner played the 7a build and reported the raiders behaving as usual
+and clearing on docking. 165 tests green, save version still 12. **Step 7b is next**: bullets,
+missiles, crates and particles become data in the same way, then 7c does the rocks and the player's
+ship; when 7 is done the `render/` allow-list in `tests/layers.test.mjs` is empty.
+
+**Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
+`TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
+(save v12), and shops and prices from data. **Step 6, ticked in full (2026-11-08):** 6a, the sim
+no longer plays sounds (it emits `sfx`, `core/audio.js` plays them; the owner confirmed every sound
+by ear) and 6b, the sim reads `state.controls` instead of the keyboard and the mouse and the missile
+lock ring is sized in `ui/hud.js` (the owner played `TESTING-BASELINE.md` sections A and B and found
+no problems). So **no `src/sim/` file imports `core/` at all**. The owner's earlier answers stand:
+found modules do **not** get random stats, so a stock stays a plain count per item; Meridian sells
+the six standard parts for 1 cr each (beam 900, missile pod 1500); shop stock can be limited (`max`)
+but no row uses it yet, and `setShopStock()` is still the unused restock hook. Data-only content
+(rows 1 to 8 of "Content you can add now") can go ahead in parallel.
 
 ## The order of work
 
@@ -38,10 +44,10 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 1 | Enemy registry (`data/enemies.js`, `enemy-killed` event) | A | [x] 2026-11-07 |
 | 2 | Seeded randomness everywhere | A | [x] 2026-11-07 |
 | 3 | Loot tables | A | [x] 2026-11-07 |
-| 4 | Item registry and generic inventory (save v12) | A | [ ] built, tested; waiting for playtest |
-| 5 | Shops and prices from data | A | [ ] built, tested; waiting for playtest |
-| 6 | Sim stops using sound and keyboard (6a sound, 6b input) | B | [ ] |
-| 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] |
+| 4 | Item registry and generic inventory (save v12) | A | [x] 2026-11-08 |
+| 5 | Shops and prices from data | A | [x] 2026-11-08 |
+| 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
+| 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] **7a ticked 2026-11-08. 7b and 7c to do** |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
@@ -125,6 +131,46 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   saved, so save version stays 12. 131 tests green. Compared with the previous commit by a 19-step
   scripted outpost session: identical credits, stocks, holds, loadouts and messages, and six of the
   seven tabs render byte-identical HTML.
+- 2026-11-08: Steps 4 and 5 ticked: the owner played the Inventory tab and the Shop (including
+  section 8's old-save load) and confirmed both. Milestone A is reached and the docs say so.
+- 2026-11-08: **Step 7a ticked.** The owner played the build: the raiders behave as usual and they
+  clear when the field is cleared on docking, so the slice is closed. (The clearing is not new —
+  `dock()` has always called `clearTransient()`, and it deliberately does not count as a kill.)
+  Next is **7b**: bullets, missiles, crates and particles. 165 tests green, save version 12.
+- 2026-11-08: Step **7a** built (hostiles become data, the mesh becomes a view). An enemy used to
+  *be* a three.js mesh (`{ m, hp, ... }`); it is now a record `{ id, kind: "enemy", def, pos, quat,
+  hp, ... }` in `src/sim/enemy.js`, and `src/render/views.js` builds a mesh per hostile, copies its
+  position and rotation onto it every frame, and removes it when the enemy leaves the world
+  (`enemy-spawned` / `enemy-removed`). **No `src/sim/` file touches an enemy's mesh any more**, and
+  the `render/` allow-list lost `ai.js` and `targeting.js`. The station's position moved from
+  `render/scene.js` to `sim/world.js` (the sim needed it and may not import render/). New headless
+  test: one raider, 600 ticks, no browser, checks it closed in, turned and shot. New view test: the
+  mesh follows the data and goes away with it. An old-vs-new probe ran one scripted fight through
+  the previous commit and this tree: **2545 of 2545 frames identical** (the only new thing is each
+  enemy's `id`). Save version unchanged (12). 165 tests green. Waiting for the owner's playtest.
+- 2026-11-08: **Step 6 ticked in full.** The owner played the 6b build and found no problems with
+  the controls, so `TESTING-BASELINE.md` sections A (flight feel) and B (mining, guns, missiles) are
+  signed off and the step is closed: the sim imports no `core/` file, plays no sound and reads no
+  key. 155 tests green, save version still 12. Next is step 7 (entities as data, meshes as views).
+- 2026-11-08: Step **6b** built: the sim reads a control record (`state.controls`, shape in
+  `src/state/controls.js`) instead of the keyboard, and the missile lock ring's pixel size moved
+  from `sim/weapons.js` to `ui/hud.js` (the sim now reports the cone in degrees). **No `sim/` file
+  imports `core/` any more**, so step 6's goal is met. A probe ran one scripted session through the
+  previous commit (driven by `keys`) and this tree (driven by `state.controls`): **1010 of 1010
+  frames identical**. The ring maths matches the old formula to the last digit at five angles.
+  Save version unchanged (12). 155 tests green. Waiting for the owner's playtest before ticking.
+- 2026-11-08: Step **6a ticked.** The owner played the build and confirmed the sounds by ear (all
+  eleven, unchanged), so the sound half of step 6 is closed. Same day, the owner also caught a wrong
+  claim in the 6a changelog entry: mining with a full hold is not possible, because `updatePrimary`
+  says "Cargo hold full" and returns before the beam cuts. The docs were corrected; the code was
+  already right.
+- 2026-11-08: Step **6a** (the sim stops playing sounds itself) built: the sim emits
+  `sfx { name, ...rest }`, `core/audio.js` owns an `SFX` table and one listener, and **no `sim/`
+  file imports `core/audio.js` any more**. A new `tests/layers.test.mjs` (9 tests) enforces the
+  layer rules and keeps the shrinking `render/` and `input.js` allow-lists honest. An old-vs-new
+  probe recorded every Web Audio call in one scripted session through both trees: **671 lines
+  identical**, all eleven sounds covered. Save version unchanged (12). 150 tests green.
+  Not ticked yet: the owner plays the by-ear table in `TESTING-BASELINE.md`.
 - 2026-11-07: Shop fix after the owner's look at the step 5 build: the "Autocannons — Owned" line is
   gone, so the Shop lists the cannons once, as **Basic cannons** (`src/data/shops.js` lost its `kit`
   list, the screen stopped drawing it). There is one cannon module today; more will be stock rows

@@ -135,8 +135,8 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 
 | Debt | Evidence | Step |
 | --- | --- | --- |
-| `sim/` imports the screen and speakers | `sim/*.js` import `render/scene.js`, `render/models.js`, `core/audio.js`, `core/input.js` | 6 |
-| Entities are three.js meshes | enemies `{ m, hp, ... }` in `sim/ai.js`; player `P.m`; crates, rocks, bullets likewise | 7 |
+| `sim/` imports the screen | six `sim/*.js` files still import `render/scene.js` / `render/models.js` to add and remove the meshes of bullets, crates, particles, rocks and the player's ship. **Speakers and keyboard are closed (step 6)**, and **enemies are closed (step 7a)**: a hostile is plain data (`sim/enemy.js`) and `render/views.js` draws it | 7b, 7c |
+| Entities are three.js meshes | **enemies are plain data now (7a)**; the player's `P.m`, crates, rocks and bullets still are | 7b, 7c |
 | Variable time step | `main.js` `dt = Math.min(0.05, ...)` per animation frame | 8 |
 | One global player | `state.player` read in 14 files | 8 |
 | Single mixed save | `state/profile.js` holds character, station and mission together | 9 |
@@ -155,7 +155,7 @@ src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  galaxy.js
 src/data/sector-templates.js
 src/data/campaign/   one file per mission (m01.js, m02.js, ...) + index.js listing the order
 src/sim/spawner.js  loot.js  galaxy.js  instances.js  missions.js  step.js
-src/render/views.js           builds and updates a mesh per entity
+src/render/views.js           builds and updates a mesh per entity (7a: hostiles)
 src/ui/starmap.js  missionlog.js
 src/net/                      (multiplayer step only)
 ```

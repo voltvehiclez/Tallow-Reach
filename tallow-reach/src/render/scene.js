@@ -119,5 +119,6 @@ sectorGroup(DEFAULT_SECTOR).add(stn);
   add(new THREE.BoxGeometry(8, 8, 40), 0, 0, 26, stn);
 }
 
-/** Position of Meridian Outpost. Everything else is measured from here. */
-export const STATION_POS = V(0, 0, 0);
+// Meridian Outpost is at the origin, and `stn` above is already placed there.
+// Where that is, as a number the rules can use, is `STATION_POS` in
+// `sim/world.js` (step 7a): the sim needs it and must not import this file.

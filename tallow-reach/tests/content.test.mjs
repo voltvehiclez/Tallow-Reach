@@ -404,9 +404,11 @@ test("a ship with no thrusters warns the player when they try to move", () => {
   assert.match(src, /msg\("Equip thrusters to move"/, "the warning must say exactly that");
   assert.match(
     src,
-    /if \(!W && !powered && P\.noDriveT === 0 && tryingToMove\(stick\)\)/,
+    /if \(!W && !powered && P\.noDriveT === 0 && tryingToMove\(c, stick\)\)/,
     "the warning fires when a control is pressed and there is no drive, and not on a warp"
   );
+  // Since step 6b-1 "a control is pressed" is read from state.controls, not keys.
+  assert.match(src, /c = state\.controls/, "the flight model reads the control record");
 });
 
 test("basic cannons: 1 damage a shot, 3 a second per barrel, 2 MJ/s while firing", () => {
@@ -577,7 +579,7 @@ test("the primary fire loop puts one bolt downrange per linked barrel", () => {
   const src = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
   assert.match(src, /g\.barrels/, "the number of barrels comes from the module");
   assert.match(src, /for \(let b = 0; b < n; b\+\+\)/, "one bolt per barrel, on the gun's own cooldown");
-  assert.match(src, /setDraw\("guns", F\.gunsOn \? gunDraw : 0\)/, "the power bill does not count bolts");
+  assert.match(src, /setDraw\("guns", gunsOn \? gunDraw : 0\)/, "the power bill does not count bolts");
 });
 
 test("a gun fires from whichever primary bay it is fitted in", () => {
@@ -821,7 +823,7 @@ test("an enemy's shot uses its own def's damage and bullet speed", () => {
   const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
   assert.match(
     src,
-    /fire\(e\.m\.position, dir, def\.bspd, false, def\.dmg\)/,
+    /fire\(e\.pos, dir, def\.bspd, false, def\.dmg\)/,
     "the shot's speed and damage come from the enemy's def"
   );
   assert.equal(ENEMIES.raider.dmg, 1, "the raider still does 1 damage a shot");

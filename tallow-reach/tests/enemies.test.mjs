@@ -2,6 +2,11 @@
 // enemies through the real sim code with the 3D scene and the sound stubbed out
 // (see tests/headless.mjs), so they prove that an enemy is a data entry.
 //
+// Since refactor step 7a a hostile is *plain data* (see sim/enemy.js): `spawnEnemy`
+// makes a record with a position, a rotation and its numbers, and never touches
+// the scene. `render/views.js` builds the mesh — so there is no mesh call to check
+// here any more, and `tests/views.test.mjs` checks the drawing instead.
+//
 // Run with `npm test`.
 
 import { test } from "node:test";
@@ -24,7 +29,6 @@ const sim = await loadHeadless("src/sim/ai.js", {
 });
 
 const at = { x: 0, y: 0, z: 0 };
-const lastModel = () => sim.__calls.filter(c => c.name === "mkShip").pop();
 
 test("spawnEnemy builds the raider from its def", () => {
   sim.state.world.enemies.length = 0;
@@ -39,8 +43,19 @@ test("spawnEnemy builds the raider from its def", () => {
   assert.equal(e.mx, e.hp, "enemies have no shield pool");
   assert.equal(e.fire, 2, "two seconds before the first shot, as before");
 
-  // The model is built from the def too: colour, scale, and the enemy tint.
-  assert.deepEqual(lastModel().args, [0x3a2420, 1.2, true], "mkShip(col, scale, foe) comes from the def");
+  // Step 7a: the enemy is plain data with an id and a kind, and its position is
+  // a maths vector rather than a mesh. Nothing here needed the scene.
+  assert.equal(e.kind, "enemy", "the kind names what it is");
+  assert.ok(Number.isInteger(e.id) && e.id > 0, "every enemy has its own id");
+  assert.deepEqual([e.pos.x, e.pos.y, e.pos.z], [1, 2, 3], "it stands where it was spawned");
+  assert.equal(typeof e.pos.applyQuaternion, "function", "a position is a three.js maths type, not a mesh");
+  assert.deepEqual([e.quat.x, e.quat.y, e.quat.z, e.quat.w], [0, 0, 0, 1], "it starts unrotated");
+  assert.equal(e.m, undefined, "and it holds no mesh: render/views.js owns the mesh");
+  assert.deepEqual(
+    sim.__calls.filter(c => c.name === "mkShip"),
+    [],
+    "spawning an enemy builds no mesh at all any more"
+  );
 });
 
 test("a second enemy is a data entry: add a def, spawn it, change no code", () => {
@@ -76,7 +91,8 @@ test("a second enemy is a data entry: add a def, spawn it, change no code", () =
     assert.equal(e.n, "Test Gunboat", "its own name");
     assert.equal(e.hp, 42, "its own Hull HP");
     assert.equal(e.mx, 42);
-    assert.deepEqual(lastModel().args, [0x123456, 2.5, true], "its own colour and size");
+    assert.equal(sim.enemyDef("gunboat").col, 0x123456, "its own colour (the view reads it from the def)");
+    assert.equal(sim.enemyDef("gunboat").scale, 2.5, "its own size");
   } finally {
     // The game keeps exactly one enemy type: the test's extra def goes away again.
     delete sim.ENEMIES.gunboat;
@@ -99,7 +115,12 @@ test("a kill reports which enemy and which faction died", () => {
 
   sim.hitHostile(e, 99, at);
 
-  assert.deepEqual(seen, [{ def: "raider", faction: "pirates" }], "the event carries ids, not objects");
+  assert.deepEqual(
+    seen.map(s => ({ def: s.def, faction: s.faction })),
+    [{ def: "raider", faction: "pirates" }],
+    "the event carries ids, not objects"
+  );
+  assert.equal(seen[0].id, e.id, "and the enemy's own id, so a view can find its mesh");
   assert.equal(sim.state.world.enemies.length, 0, "the dead enemy leaves the world");
   assert.equal(sim.state.profile.kills, 1, "the kill is counted, as before");
 });
@@ -145,7 +166,11 @@ test("no enemy is written into the sim code any more", () => {
   assert.match(src, /AI_BEHAVIOURS\[def\.ai\]/, "the behaviour is chosen by the def's ai field");
   assert.match(
     src,
-    /fire\(e\.m\.position, dir, def\.bspd, false, def\.dmg\)/,
+    /fire\(e\.pos, dir, def\.bspd, false, def\.dmg\)/,
     "the shot's speed and damage come from the def"
   );
+
+  // Step 7a: the AI moves data, not meshes, and needs no scene to do it.
+  assert.doesNotMatch(src, /e\.m\b/, "an enemy has no mesh any more (it is `e.pos` / `e.quat`)");
+  assert.doesNotMatch(src, /from\s*"\.\.\/render\//, "ai.js imports nothing from render/ (step 7a)");
 });

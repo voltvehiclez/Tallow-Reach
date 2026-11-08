@@ -10,6 +10,59 @@ newest stay first.
 
 ---
 
+## 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
+
+- **Why:** the owner's plan is much bigger than the code's shape (100+ sector starmap, wormhole
+  instances, a story campaign, host-run co-op) and several different AI assistants will work on it.
+  The docs now say what the game is, where it is heading, in what order, and how to get there safely.
+- **New:** `docs/VISION.md` (scope, design pillars, open design questions with defaults),
+  `docs/TARGET_ARCHITECTURE.md` (eight principles, data model, save split, multiplayer model, a
+  "Debt today" table with evidence), `docs/ROADMAP.md` (status of every step, content to add and when),
+  `docs/REFACTOR_PLAN.md` (15 behaviour-preserving steps in 4 milestones, each with goal, work, "done
+  when", save version and how the owner runs it), `TESTING-BASELINE.md` (a 10-minute whole-game
+  click-through), root `AGENTS.md` and `CLAUDE.md` (pointers for tools that read them).
+- **Changed:** `docs/HANDOFF.md` (big picture, reading order, "keep the structure" now means keep
+  folders and conventions, restructure only through numbered steps), `docs/ARCHITECTURE.md` (reading
+  order, the `sim/` imports `render/`+`core/` exception stated honestly), `docs/AI_PROMPTS.md`
+  (model-agnostic starter prompt, refactor-step prompt, content prompt, using several AIs),
+  `docs/HOW_TO_ADD.md` (note on which recipes change), `README.md` (links).
+- **Housekeeping:** this file had 24 full entries (the limit is 15). The 15 oldest were moved
+  word for word to `CHANGELOG_ARCHIVE.md` and indexed below; 10 plus this one remain.
+- No source, data, test or save change; save version still 11. No rebuild needed.
+
+## 2026-11-07: Inventory Sell quantity uses a game-styled popover
+
+- Replaced the browser-owned quantity prompt with a small in-game box positioned beside the
+  selected inventory tile. It contains the quantity field (prefilled with the stack size),
+  inline validation, and Sell/Cancel buttons. No other inventory layout changed.
+- Files: `src/ui/menu.js`, `src/styles.css`, `tests/inventory.test.mjs`, this changelog.
+  Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory Sell asks how many units to sell
+
+- Choosing Sell on a cargo stack now opens a quantity prompt, prefilled with the whole stack
+  count. Enter any whole number from 1 to the stack size to sell that partial or full amount;
+  cancelling leaves the stack unchanged. Existing prices and refinery bonus still apply.
+- Files: `src/ui/menu.js`, `src/ui/screens.js`, `src/sim/economy.js`, `src/ui/README.md`,
+  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory grids use five narrower, shorter slots per row
+
+- Set both inventory grids to exactly five columns, with narrower tiles and a 68px tile/row
+  height. The 25-slot minimum gives five rows by default; each additional item beyond 25
+  naturally adds a row. The three-row scroll viewport and independent scrolling are retained.
+- Files: `src/styles.css`, `tests/inventory.test.mjs`, this changelog. Save data unchanged.
+  Run `npm run build` and `npm test`.
+
+## 2026-11-07: Inventory grids keep their size when empty, and moves no longer show status text
+
+- Each hold now always renders a 5-by-5 slot field with a fixed three-row viewport, so empty
+  slots preserve the inventory window size and scrolling can be tested even with fewer items.
+  Station and ship grids scroll independently. Moving items clears/suppresses the "Moved ..."
+  status message; other actions are unchanged.
+- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
+  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
+
 ## 2026-11-07: Station and ship item grids scroll independently after three rows
 
 - Both inventory grids now show up to three full rows at once and scroll within their own

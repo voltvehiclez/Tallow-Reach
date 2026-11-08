@@ -171,8 +171,10 @@ the items through `sim/inventory.js` (one place writes stocks). A module with `a
 ## 6. A new enemy type (data only, plus at most one behaviour function)
 
 An enemy is an entry in `src/data/enemies.js`. The sim (`sim/ai.js`) spawns it with
-`spawnEnemy(id, pos)`, builds its model with the def's `col` and `scale` (`mkShip(col, scale, true)`
-in `render/models.js`), and runs the behaviour its `ai` field names.
+`spawnEnemy(id, pos)` and runs the behaviour its `ai` field names. Since refactor step 7a a hostile
+is **plain data** (`sim/enemy.js`), and `render/views.js` builds its model from the def's `col` and
+`scale` (`mkShip(col, scale, true)` in `render/models.js`). **You never write mesh code for an
+enemy**: a new type is a data entry, and it is drawn automatically.
 
 1. Copy the `raider` entry in `src/data/enemies.js` and change what you want: `n` name,
    `pl` plural name (used in contract wording), `hp` Hull HP, `col` colour, `scale` size,
@@ -186,11 +188,13 @@ in `render/models.js`), and runs the behaviour its `ai` field names.
    means a line in that spawner.
 4. A **new kind of behaviour** (not just new numbers) is `AI_BEHAVIOURS` in `sim/ai.js`: one
    function `(e, def, toTarget, dist, dt)` that moves `e`, then name it in the def's `ai` field.
-   The raider uses `chase`.
+   The raider uses `chase`. Move an enemy with `enemyPos(e)` for its position and `turnEnemy(e,
+   target, k)` to point it — never a mesh: an enemy has none (step 7a).
 5. What it **drops** is its `loot` field: a table id from `src/data/loot.js`. See recipe 18.
 5. A new faction is one entry in `src/data/factions.js` (`n` name, `d` description).
 6. Test it: `tests/enemies.test.mjs` spawns enemies headlessly (`tests/headless.mjs` runs sim code
-   with the screen and sound stubbed out). Copy that test to check a second type quickly.
+   with the screen and sound stubbed out), and `tests/headless-sim.test.mjs` flies one for 600
+   ticks. Copy either test to check a second type quickly.
 
 ## 7. A new outpost screen (tab)
 
@@ -199,22 +203,62 @@ in `render/models.js`), and runs the behaviour its `ai` field names.
 3. `src/ui/menu.js`: add each action to `ACTIONS`. It can call a sim function and `toast("message")`.
 4. If the screen shows saved data, see "Save compatibility".
 
-## 8. A new key binding or in-flight action
+## 8. A new key binding, a new control, or an in-flight action
+
+There are two kinds of input, and they are added differently.
+
+**a) A one-off press** (dock, warp, pause, switch weapon):
 
 1. `src/core/input.js`: add `KeyX: "actionName"` to `BINDINGS`.
 2. `src/main.js`: add `case "actionName":` in the `on("action", ...)` handler. `playing` is true only while flying and not paused.
 3. Mention the key in the hint in `src/index.html` and the controls text in `src/ui/screens.js`.
 
-## 9. A new sound
+**b) A control held while flying** (throttle, strafe, fire, boost, brake...): this is the sim's
+input, so it goes through the control record and **never through a key code in `src/sim/`**.
 
-`src/core/audio.js`: build it from `tone(f1, f2, duration, volume, wave)` and `nz(duration, filterFreq, volume)`,
-and call it from the system that needs it. Mute and pause are handled for you. Sound is switched on and off only from the pause menu.
+1. `src/state/controls.js`: add the field to `neutralControls()` (an axis starts at 0, a held flag
+   at `false`) and describe it in the comment at the top of the file. **If you add an axis, the
+   sim reads the number; do not read `keys` in `sim/`.** Renaming or removing a field is a change
+   to the co-op contract — say so in `docs/REFACTOR_PLAN.md` step 6/8 as well.
+2. `src/core/input.js`: add the key to `HELD`, pointing at that field
+   (`KeyR: { axis: "lift", amount: 1 }`, or `{ flag: "boost" }`). `syncControls()` fills the record
+   from the held keys after every change, so there is no other wiring.
+3. `src/sim/…`: read `state.controls.<field>` where the rule lives.
+4. `tests/layers.test.mjs` will fail if a `sim/` file mentions `keys`/`pointer`, or if `HELD` sets a
+   field the record does not have — that is the check, not an obstacle.
+
+## 9. A new sound (data + two lines)
+
+The sim never plays a sound. It says **what happened**; `src/core/audio.js` decides what that
+sounds like. Two steps, always both:
+
+1. **`src/core/audio.js`**: add an entry to `SFX`, named however you like
+   (`"cannon"`, `"ore-gained"`). Build it from `tone(f1, f2, duration, volume, wave)` and
+   `nz(duration, filterFreq, volume)`. An entry is `rest => { ... }`, so a sound can depend on the
+   moment: `explosion: ({ count }) => { if (count > 10) nz(1.2, 500, 0.5); }` only rumbles for big
+   bursts, and `"warp-charge": ({ dur }) => warpCharge(dur)` follows the warp's own length.
+2. **Where it happens, in `src/sim/`**: `emit("sfx", { name: "cannon" })`, plus any extra fields the
+   entry reads (`{ name: "explosion", count }`). Sound is in the sim's vocabulary, not its imports.
+
+`tests/layers.test.mjs` checks both directions: a sound the sim emits must have an `SFX` entry, and
+an `SFX` entry must be emitted somewhere. It also fails if a `src/sim/` file imports
+`core/audio.js`, so never call `tone()`/`nz()` from the sim.
+
+Mute and pause are handled inside `tone()`/`nz()`. Sound is switched on and off only from the pause
+menu. Sounds a *screen* makes (buttons, hovers) are not game sounds: they call `uiSound()` /
+`hoverSound()` directly from `ui/`.
 
 ## 10. A new event and a listener
 
 1. `emit("name", payload)` where it happens (the sim layer).
 2. Add `name  payload  description` to the list at the top of `src/util/events.js`.
 3. Listen with `on("name", handler)` wherever it is needed. Listeners must not import the emitter.
+   A listener in `render/` is how drawing follows the sim: `render/views.js` listens for
+   `enemy-spawned` / `enemy-removed` and builds or removes the mesh (step 7a).
+
+`sfx` is the worked example (step 6a): the sim emits it at eleven places, and `core/audio.js`
+subscribes once. Payloads should carry **ids and plain numbers**, not objects with behaviour — that
+is what lets a listener (sound, a mission, a network snapshot) work without knowing the emitter.
 
 ## 11. Story and scripted missions (new system)
 
