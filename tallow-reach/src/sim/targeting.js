@@ -3,9 +3,9 @@
 
 import { clamp } from "../util/math.js";
 import { itemName } from "../data/items.js";
-import { sectorAt } from "../data/sectors.js";
-import { state, msg } from "../state/state.js";
-import { STATION_POS } from "./world.js";
+import { featureOf, featureById } from "../data/places.js";
+import { state, msg, placeWorld } from "../state/state.js";
+import { V } from "../util/math.js";
 import { enemyPos } from "./enemy.js";
 import { playerPos, playerFwd } from "./pilot.js";
 
@@ -15,7 +15,7 @@ import { playerPos, playerFwd } from "./pilot.js";
  */
 export function toggleLock(P = state.player) {
   const F = P.flight,
-    W = state.world;
+    W = placeWorld(P.place || state.place);
   const notify = text => { if (P === state.player) msg(text, 1.5); };
   if (F.lock) {
     F.lock = null;
@@ -41,9 +41,12 @@ export function toggleLock(P = state.player) {
   for (const e of W.enemies) test("e", e, enemyPos(e), 8);
   for (const a of W.asteroids) test("a", a, a.pos, a.r);
   for (const c of W.crates) test("c", c, c.pos, 4);
-  if (sectorAt(state.sector).st) test("s", null, STATION_POS, 100);
+  const placeId = P.place || state.place;
+  const station = featureOf(placeId, "station");
+  if (station) test("s", { place: placeId, feature: station.id }, V(...station.pos), 100);
 
   if (best) {
+    if (best.k === "s") best.o = { place: placeId, feature: station.id };
     F.lock = best;
     notify("Target locked");
   } else {
@@ -53,7 +56,10 @@ export function toggleLock(P = state.player) {
 
 /** Current world position of a lock target. */
 export function lockPosition(lock) {
-  if (lock.k === "s") return STATION_POS;
+  if (lock.k === "s") {
+    const f = featureById(lock.o.place, lock.o.feature);
+    return V(...f.pos);
+  }
   return lock.k === "e" ? enemyPos(lock.o) : lock.o.pos;
 }
 
@@ -62,16 +68,24 @@ export function lockName(lock) {
   if (lock.k === "e") return (lock.o.n || "hostile") + " " + Math.round((lock.o.hp / lock.o.mx) * 100) + "%";
   if (lock.k === "a") return itemName(lock.o.type) + " rock, " + Math.ceil(lock.o.ore) + " left";
   if (lock.k === "c") return lock.o.item === "core" ? "reactor core" : "crate";
-  return "Meridian Outpost";
+  if (lock.k === "s") {
+    const f = featureById(lock.o.place, lock.o.feature);
+    return f ? f.n : "Station";
+  }
+  return "Target";
 }
 
 
 /** Drop the lock if its target has been destroyed or collected. */
 export function pruneLock(P = state.player) {
   const F = P.flight,
-    W = state.world,
+    W = placeWorld(P.place || state.place),
     L = F.lock;
-  if (!L || L.k === "s") return;
+  if (!L) return;
+  if (L.k === "s") {
+    if (L.o.place !== (P.place || state.place)) F.lock = null;
+    return;
+  }
   const list = L.k === "e" ? W.enemies : L.k === "a" ? W.asteroids : W.crates;
   if (!list.includes(L.o)) F.lock = null;
 }

@@ -98,7 +98,7 @@ test("single-player flight changes the local record, not a second player's recor
   const { flight } = await import("../src/sim/player.js");
   reset();
   state.profile = newProfile();
-  state.sector = "hollow";
+  state.place = "hollow";
   state.warp = null;
   state.freeCam.on = false;
   state.world.asteroids.length = 0;

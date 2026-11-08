@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { state } from '../src/state/state.js';
+import { state, resetPlaces, placeWorld } from '../src/state/state.js';
 import { createPlayer, setShip, hurt } from '../src/sim/player.js';
 import { newProfile } from '../src/state/profile.js';
 import { refillPower } from '../src/sim/power.js';
@@ -19,8 +19,8 @@ test("8b mining, combat, missiles, docking and recovery match", () => {
 const oldRandom = Math.random;
 try {
 Math.random=()=>0.5; setSeed(728);
-state.profile=newProfile(); state.profile.msl=8; state.profile.loadout.wasp.primary=['cannon_basic','beam_basic']; state.profile.loadout.wasp.secondary=['missile_basic',null];
-createPlayer();setShip('wasp');refillPower();refreshDrive();refreshShield();refreshHull();refreshGuns();state.player.docked=false;state.player.pos.set(0,0,0);state.sector='hollow';state.flight.spawnT=1e9;state.aimDirection={x:0,y:0,z:-1};
+resetPlaces();placeWorld('reach');state.places.get('reach').loaded=true;state.profile=newProfile(); state.profile.msl=8; state.profile.loadout.wasp.primary=['cannon_basic','beam_basic']; state.profile.loadout.wasp.secondary=['missile_basic',null];
+createPlayer();setShip('wasp');refillPower();refreshDrive();refreshShield();refreshHull();refreshGuns();state.place='hollow';state.player.place='hollow';state.player.docked=false;state.player.pos.set(0,0,0);state.flight.spawnT=1e9;state.aimDirection={x:0,y:0,z:-1};
 state.world.asteroids.push({kind:'rock',pos:V(0,0,-200),quat:Q(),r:20,scale:V(20,20,20),s0:V(20,20,20),ore:500,max:500,type:'ferrite'});
 spawnEnemy('raider', V(80,0,-550));
 const snapshots=[];

@@ -14,7 +14,7 @@ import { rollLoot } from "./loot.js";
 import { emit } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
-import { state, msg, say, localPlayer, profileOf } from "../state/state.js";
+import { state, msg, say, localPlayer, profileOf, placeWorld } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
@@ -34,13 +34,14 @@ const _spin = Q();           // scratch, so a frame allocates nothing
  * Spawn a bullet. Player bullets inherit the ship's velocity. Returns the new
  * record; its mesh is the view's business (step 7b).
  */
-export function fire(p, dir, speed, own, dmg, player = localPlayer()) {
+export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place) {
   // `p` may be a plain `{ x, y, z }` (the tests pass one) or a maths vector.
   const at = V(p.x, p.y, p.z);
   const quat = Q();
   faceQ(quat, at, at.clone().add(dir), 1);   // the record points the way it flies
   const e = {
     kind: "bullet",
+    place: placeId,
     pos: at,
     quat,
     v: dir.clone().multiplyScalar(speed).add(own ? playerVel(player) : V(0, 0, 0)),
@@ -49,18 +50,18 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer()) {
     dmg,
     l: 2.4,
   };
-  return addEntity(state.world.bullets, e);
+  return addEntity(placeWorld(placeId).bullets, e);
 }
 
 /** Apply damage to a hostile and handle its death. */
-export function hitHostile(e, dmg, at, byPlayer = localPlayer()) {
+export function hitHostile(e, dmg, at, byPlayer = localPlayer(), placeId = e.place || state.place) {
   e.hp -= dmg;
-  boom(at, 2, 0xffd080);
-  if (e.hp <= 0) killHostile(e, byPlayer);
+  boom(at, 2, 0xffd080, placeId);
+  if (e.hp <= 0) killHostile(e, byPlayer, placeId);
 }
 
-function killHostile(e, byPlayer = localPlayer()) {
-  boom(enemyPos(e), 22, 0xff8a40);
+function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.place) {
+  boom(enemyPos(e), 22, 0xff8a40, placeId);
   dropEnemy(e);          // out of the world, and render/views.js removes its mesh
   const prof = byPlayer ? profileOf(byPlayer) : state.profile;
   if (prof) prof.kills++;
@@ -68,7 +69,7 @@ function killHostile(e, byPlayer = localPlayer()) {
 
   // Loot: whatever the enemy's table says (data/loot.js).
   for (const drop of rollLoot(e.loot)) {
-    for (let k = 0; k < drop.count; k++) spawnCrate(scattered(enemyPos(e), drop.scatter), drop.item);
+    for (let k = 0; k < drop.count; k++) spawnCrate(scattered(enemyPos(e), drop.scatter), drop.item, placeId);
   }
   if (!byPlayer || byPlayer === state.player) msg("Hostile destroyed", 2);
 }
@@ -77,21 +78,22 @@ function killHostile(e, byPlayer = localPlayer()) {
 const scattered = (p, d) => (d > 0 ? p.clone().add(V(R(-d, d), R(-d, d), R(-d, d))) : p);
 
 /** Drop a crate holding `item` at `p`. Cores are rarer and drawn in blue. */
-export function spawnCrate(p, item = "salv") {
+export function spawnCrate(p, item = "salv", placeId = state.place) {
   const e = {
     kind: "crate",
+    place: placeId,
     pos: V(p.x, p.y, p.z),
     quat: freshQuat(),      // the sim turns it; the view copies the turn
     t: CRATE_LIFE,
     item,
     spin: CRATE_SPIN,
   };
-  return addEntity(state.world.crates, e);
+  return addEntity(placeWorld(placeId).crates, e);
 }
 
 /** Move bullets along their path and resolve hits. */
-export function updateBullets(dt) {
-  const W = state.world,
+export function updateBullets(dt, placeId = state.place) {
+  const W = placeWorld(placeId),
     B = W.bullets;
   for (let i = B.length - 1; i >= 0; i--) {
     const b = B[i];
@@ -105,7 +107,7 @@ export function updateBullets(dt) {
       for (let j = W.enemies.length - 1; j >= 0; j--) {
         const e = W.enemies[j];
         if (enemyPos(e).distanceTo(b.pos) < 9) {
-          hitHostile(e, b.dmg, b.pos, b.owner);
+          hitHostile(e, b.dmg, b.pos, b.owner, placeId);
           dead = true;
           break;
         }
@@ -121,6 +123,7 @@ export function updateBullets(dt) {
     } else if (!dead && !b.own) {
       for (const player of state.players) {
         if (!player || player.docked || player.dead) continue;
+        if ((player.place || state.place) !== placeId) continue;
         if (playerPos(player).distanceTo(b.pos) < 6) {
           hurt(b.dmg, player);
           dead = true;
@@ -134,9 +137,9 @@ export function updateBullets(dt) {
 }
 
 /** Drift, expire and collect loot crates across active pilots. */
-export function updateCrates(dt) {
-  const C = state.world.crates;
-  const active = state.players.filter(p => p && !p.docked && !p.dead);
+export function updateCrates(dt, placeId = state.place) {
+  const C = placeWorld(placeId).crates;
+  const active = state.players.filter(p => p && !p.docked && !p.dead && (p.place || state.place) === placeId);
   for (let i = C.length - 1; i >= 0; i--) {
     const c = C[i];
     if (!c || C.indexOf(c) === -1) continue;
@@ -173,7 +176,7 @@ export function updateCrates(dt) {
       } else {
         emit("pickup", { item: k, player: p });
         if (local) msg(`Picked up ${itemName(k)}`, 2);
-        emit("sfx", { name: "pickup" });
+        if (placeId === state.place) emit("sfx", { name: "pickup" });
         dropEntity(C, c);
         break;
       }

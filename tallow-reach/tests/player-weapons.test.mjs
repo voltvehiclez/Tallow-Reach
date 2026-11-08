@@ -15,7 +15,7 @@ function setup() {
   state.profile = newProfile();
   state.profile.msl = 8;
   state.profile.loadout.wasp.secondary = ["missile_basic", null];
-  state.sector = "hollow";
+  state.place = "hollow";
   state.warp = null;
   state.freeCam.on = false;
   for (const list of Object.values(state.world)) list.length = 0;

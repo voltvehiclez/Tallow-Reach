@@ -29,7 +29,7 @@
 // flies with is either on sale (the six standard parts at 1 cr) or not shown at
 // all. Do not add a second list of "already owned" lines — one entry per part.
 //
-// A new trader is one entry here plus the shop's id where the player docks.
+// A new trader is one entry here; a station feature in data/places.js names its shop id.
 // Add a row to an existing shop with one line. See docs/HOW_TO_ADD.md recipe 4.
 
 export const SHOPS = {
@@ -105,10 +105,6 @@ export const SHOP_IDS = Object.keys(SHOPS);
 
 /** What `shopDef()` returns for an id that is not in SHOPS. */
 export const DEFAULT_SHOP = SHOP_IDS[0];
-
-/** The shop at the outpost the player docks at. Meridian is the only station
- *  today; when sectors become data (step 10) this becomes a field on the sector. */
-export const OUTPOST_SHOP = "meridian";
 
 export const isShop = id => Object.prototype.hasOwnProperty.call(SHOPS, id);
 

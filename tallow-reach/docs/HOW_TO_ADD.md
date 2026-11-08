@@ -2,7 +2,7 @@
 
 > **These recipes describe the code as it is today.** Several will change during the refactor in
 > [REFACTOR_PLAN.md](REFACTOR_PLAN.md): enemies (recipe 6) became data in step 1, loot in step 3,
-> items in step 4; shops (4, 17) became data in step 5; sectors (14) in steps 10 to 12; missions and
+> items in step 4; shops (4, 17) became data in step 5; places (14) in steps 10 to 12; missions and
 > story (3, 11) in steps 13 to 15. A step that changes a recipe must rewrite it in the same change.
 > If a recipe here says "do the refactor first", check [ROADMAP.md](ROADMAP.md) to see whether that
 > step is done.
@@ -149,7 +149,7 @@ event or a random roll calls later. Restocking itself is deliberately not built 
 
 **A second trader or station.** Add an entry to `SHOPS` with its own `n`, `d` and `stock`, then
 point the counter at it. Today `OUTPOST_SHOP` in `data/shops.js` names Meridian's shop for the
-whole outpost, because there is one station; when sectors become data (step 10) a sector will name
+whole outpost, because there is one station; since step 10 a station feature names
 its shop and `ui/screens.js` passes that id to `shopList()`. `shopList(id)` and
 `buyItem(id, itemId)` already take a shop id, so a trader needs data only.
 
@@ -335,32 +335,39 @@ Forward thrust and the Shift boost are **not** in this table: they are the drive
 still, lower `turn` (0.6 = 40% slower). To give the ship stronger manoeuvring thrusters, raise
 `strafe` / `lift` / `reverse` toward `1`.
 
-## 14. A new sector (data + small code)
+## 14. A new pocket or system (data only)
 
-Sectors live in `src/data/sectors.js`. Each entry has `n` name, `d` description, `sn` arrival
-point, and three flags: `st` has the outpost, `fd` has the asteroid field, `foes` allows
-raiders. `SECTOR_IDS` is the order M warps through.
+Places live in `src/data/places.js`. A **system** is a non-flyable grouping record
+`{ id, kind: "system", n, parent: null }`. A **pocket** is a flyable place
+`{ id, kind: "pocket", def, parent, n, d, enter, leave }`; `def` names an entry in `PLACE_DEFS`,
+`parent` is the system it belongs to, and `enter.pos` is the arrival point. Generic player-facing
+nouns live in `src/data/terms.js` (`mapNode`, `flyable`); proper names live on the place records.
 
-1. Add an entry to `SECTORS` and its id to `SECTOR_IDS` (where you put it in the list is where
-   M goes next). `npm test` checks the fields and the warp cycle.
-2. That is enough for an empty sector: the player arrives at `sn` and sees only stars.
-3. If it needs its own scenery, build it into that sector's group in the render layer:
-   `sectorGroup(id).add(mesh)`. Do not add scenery straight to `scene`, or it shows up in
-   every sector. Only the starting sector has the outpost and planet today.
-4. Anything that assumes the outpost is at the origin must check `st` first, the way
-   `sim/player.js`, `sim/session.js`, `sim/targeting.js` and `ui/hud.js` do.
-5. Rocks: `FIELD_SECTOR` in `sim/world.js` decides which sector owns the asteroid field, and
-   `state.world.asteroids` only ever holds the current sector's rocks (they are parked
-   otherwise). A second field therefore means a per-sector field list, not a second constant.
-6. Do not make a second sector the start unless it has `st: true`: you dock there on boot.
-7. The warp itself is timed by `WARP` in the same file and about two seconds long. The
-   visuals follow those numbers: the 3D streaks (`render/warpfx.js`) and the overlay
-   (`ui/warpflash.js`) read `state.warp.fx` and `state.warp.flash` every frame, so there are
-   no durations to change anywhere else. Keep the overlay to plain gradients; a masked
-   gradient across the whole screen halves the frame rate.
-8. `WARP_COAST.steer` is how long the ship takes to stop turning once M is pressed, and
-   `warpSteerEase(t)` in the same file is the curve (1 -> 0). The throttle is released
-   instantly, so the speed bleeds off through the normal drag model in `sim/player.js`.
+1. Add the pocket to `PLACES` with `parent` set to its system id. M cycles every pocket of the
+   current system in data order (`pocketsIn` / `nextPocket`); there is no second list to edit and no
+   assumption that a system has exactly two pockets. `npm test` checks the fields and the cycle.
+2. Point `def` at `PLACE_DEFS.empty` for empty space, or copy `PLACE_DEFS.meridian` and edit its
+   features. A definition is a list of features: `station` (position, keep-out, dock range/speed,
+   launch point, shop id), `asteroidField` (position, radius, height, count, ore table, respawn,
+   rock sizes, salvage spread), `spawner` (enemy id, anchor feature, distances, interval, chance,
+   count) and `planet` (scenery position/radius/colour/spin). The generic loader (`sim/places.js`)
+   builds the entities; `render/scene.js` builds station/planet scenery from the same definition.
+3. The station is a **feature inside a pocket**, not a child place. Its `shop` names a `SHOPS` entry
+   (`data/shops.js`); the station heading and dock prompt use the feature's `n`.
+4. Do not hard-code positions in sim/render code. Read `featureOf(placeId, kind)` /
+   `featuresOf(placeId, kind)` / `featureById(placeId, featureId)`. Entities live in per-place
+   containers (`placeWorld(id)` in `state/state.js`); `state.world` is only the local pilot's alias.
+5. A new system is one `kind: "system"` record; give it pockets with `parent` set to its id. The
+   starting pocket is `DEFAULT_PLACE` and must contain a station feature (you dock there on boot).
+6. The warp itself is timed by `WARP` in `data/sectors.js` and about two seconds long. The visuals
+   follow those numbers: the 3D streaks (`render/warpfx.js`) and the overlay (`ui/warpflash.js`) read
+   the local pilot's `state.warp.fx` / `state.warp.flash` every frame. Keep the overlay to plain
+   gradients; a masked gradient across the whole screen halves the frame rate.
+7. `WARP_COAST.steer` is how long the ship takes to stop turning once M is pressed, and
+   `warpSteerEase(t)` is the curve (1 -> 0). The throttle is released instantly, so the speed bleeds
+   off through the normal drag model in `sim/player.js`.
+8. Internal place ids are save ids (`world.place`, save v14). Keep existing ids stable; old saves
+   and export codes migrate through `sanitizeWorld` (`world.sector` -> `world.place`).
 
 ## 15. A new module group on the Outfitting screen (data only)
 

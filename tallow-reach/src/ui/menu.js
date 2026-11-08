@@ -3,11 +3,11 @@
 
 import { on } from "../util/events.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
-import { state, currentSave, applySave } from "../state/state.js";
+import { state, currentSave, applySave, resetPlaces } from "../state/state.js";
 import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
 import { newSave, sanitizeSave } from "../state/profile.js";
 import { setShip } from "../sim/player.js";
-import { launch } from "../sim/session.js";
+import { launch, resumeFromSave } from "../sim/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -33,13 +33,17 @@ export function setupMenu() {
     if (e.target.closest("button:not(:disabled)")) hoverSound();
   });
 
+  // While the start screen is up it owns the panel: booting a save prepares the
+  // ship (docked or flying) but must not replace or hide the start screen.
   on("docked", ({ player } = {}) => {
     if (player && player !== state.player) return;
+    if (state.ui.intro) return;
     state.ui.toast = "";
     render();
   });
   on("launched", ({ player } = {}) => {
     if (player && player !== state.player) return;
+    if (state.ui.intro) return;
     panel.hidden = true;
   });
   on("died", text => {
@@ -69,10 +73,13 @@ function toast(text) {
 }
 
 const ACTIONS = {
+  // "Enter game": leave the start screen and deploy the pilot where the save put
+  // them — docked at a station, or flying at that pocket's arrival point.
   intro() {
     state.ui.intro = false;
     state.ui.tab = "m";
     initAudio();
+    resumeFromSave();
   },
   tab(name) {
     state.ui.tab = name;
@@ -201,14 +208,17 @@ const ACTIONS = {
   ld(i) {
     const raw = readSlot(+i);
     if (!raw) return;
+    let save;
     try {
-      applySave(sanitizeSave(raw));
+      save = sanitizeSave(raw);
     } catch (e) {
       toast("That slot could not be read.");
       return;
     }
+    applySave(save);
     afterSaveChange();
     toast("Loaded slot " + i);
+    render();
   },
   dl(i) {
     deleteSlot(+i);
@@ -238,14 +248,18 @@ const ACTIONS = {
   im() {
     const text = ($("xt") || {}).value || "";
     state.ui.xcode = text;
+    let save;
     try {
-      applySave(decodeSave(text));
-      state.ui.xcode = "";
-      afterSaveChange();
-      toast("Save imported.");
+      save = decodeSave(text);
     } catch (e) {
       toast("That code is not a valid save.");
+      return;
     }
+    state.ui.xcode = "";
+    applySave(save);
+    afterSaveChange();
+    toast("Save imported.");
+    render();
   },
 };
 
@@ -270,6 +284,9 @@ function cycleInvShip(dir) {
 
 /** Common work after the whole save is replaced (load, import, reset). */
 function afterSaveChange() {
+  const placeId = state.worldState.place;
+  resetPlaces();
+  state.place = placeId;
   setShip(state.profile.ship);
   refillPower();
   refreshDrive();
@@ -282,6 +299,7 @@ function afterSaveChange() {
   contracts.ensureBoard();
   state.flight.lock = null;
   state.flight.missileLock = { target: null, t: 0, locked: false };
+  resumeFromSave();
 }
 
 function openInventorySell(button) {
@@ -415,5 +433,8 @@ function onClick(e) {
   fn(arg);
   uiSound(name === "go" ? "go" : ["buy", "up", "done", "sellh", "sells", "wb", "wr", "rp"].includes(name) ? "confirm" : "click");
   save();
-  if (name !== "go") render();
+  if (name !== "go") {
+    if (!state.player || state.player.docked) render();
+    else panel.hidden = true;   // the action put the pilot back out in space
+  }
 }

@@ -46,7 +46,7 @@ export function chaseView(dt, P, fc, pose = P) {
   const tp = V(0, 2.6, trail(pose)).applyQuaternion(pose.quat).add(pose.pos);
 
   // The ship's own travel this frame. The camera is carried along by it, so the
-  // easing below never sees the ship's speed; a jump (arriving in a new sector)
+  // easing below never sees the ship's speed; a jump (arriving in a new pocket)
   // is ignored, and the camera snaps there instead.
   if (!_havePrev || fc.on) {
     _prev.copy(pose.pos);

@@ -2,7 +2,7 @@
 //   - `profile`: portable character data (credits, ships, loadouts, holds, hull damage,
 //     missiles carried, selected weapon, active mission and stats)
 //   - `world`: hosted world data (station levels and storage, contract board,
-//     galaxy and current sector)
+//     galaxy and current pocket)
 // Everything saved to disk goes through this file so older saves and export codes keep loading.
 
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
@@ -11,7 +11,7 @@ import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES } from "../data/contracts.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
-import { SECTORS, DEFAULT_SECTOR } from "../data/sectors.js";
+import { PLACES, DEFAULT_PLACE, isPocket } from "../data/places.js";
 
 // Version history:
 //   1  original prototype (no "v" field)
@@ -28,7 +28,9 @@ import { SECTORS, DEFAULT_SECTOR } from "../data/sectors.js";
 //   12 item catalogue (`data/items.js`): every place is `{ itemId: count }`
 //   13 save split into portable `profile` and per-world `world` (`{ v: 13, profile, world }`);
 //      `sanitizeWorld` walks `BASE_MODULES` rather than naming base modules by hand.
-export const SAVE_VERSION = 13;
+//   14 world.sector becomes world.place (a pocket id from data/places.js); v13 and
+//      older sector ids migrate where valid, otherwise the starting pocket.
+export const SAVE_VERSION = 14;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -77,7 +79,7 @@ export function newProfile() {
   };
 }
 
-/** Fresh hosted world record (station levels and storage, contract board, galaxy and sector). */
+/** Fresh hosted world record (station levels and storage, contract board, galaxy and current pocket). */
 export function newWorld() {
   return {
     v: SAVE_VERSION,
@@ -85,7 +87,7 @@ export function newWorld() {
     store: newStock(),
     board: [],
     galaxy: null,
-    sector: DEFAULT_SECTOR,
+    place: DEFAULT_PLACE,
   };
 }
 
@@ -113,7 +115,7 @@ function cleanContract(raw) {
 /**
  * Validate and upgrade a character `profile` (either a standalone v13 profile
  * or a legacy v1..v12 flat save). World fields (`base`, `store`, `board`,
- * `galaxy`, `sector`) are excluded here and handled by `sanitizeWorld`.
+ * `galaxy`, `place`) are excluded here and handled by `sanitizeWorld`.
  */
 export function sanitizeProfile(raw) {
   if (!raw || typeof raw !== "object" || !Array.isArray(raw.ships)) {
@@ -204,7 +206,12 @@ export function sanitizeWorld(raw) {
     raw.galaxy && typeof raw.galaxy === "object" && !Array.isArray(raw.galaxy)
       ? JSON.parse(JSON.stringify(raw.galaxy))
       : null;
-  const sector = typeof raw.sector === "string" && SECTORS[raw.sector] ? raw.sector : DEFAULT_SECTOR;
+  // v14: current pocket. v13 and older saves stored the same ids as `sector`.
+  const place = typeof raw.place === "string" && isPocket(raw.place)
+    ? raw.place
+    : typeof raw.sector === "string" && isPocket(raw.sector)
+      ? raw.sector
+      : DEFAULT_PLACE;
 
   return {
     v: SAVE_VERSION,
@@ -212,7 +219,7 @@ export function sanitizeWorld(raw) {
     store,
     board,
     galaxy,
-    sector,
+    place,
   };
 }
 
@@ -254,7 +261,7 @@ export function portableProfile(save) {
 /**
  * Return a new save that merges an updated portable `profile` back into `save`
  * while keeping `save`'s own `world` (station levels, station storage, board,
- * galaxy and sector) untouched. Pure: neither input is mutated.
+ * galaxy and current pocket) untouched. Pure: neither input is mutated.
  */
 export function mergeProfile(save, profile) {
   const cleanSave = sanitizeSave(save);

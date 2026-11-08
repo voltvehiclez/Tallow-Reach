@@ -1,4 +1,4 @@
-// Meridian Outpost: base modules and their costs.
+// Meridian Station: base modules and their costs.
 // Cost is a function of the level you are building to (1, 2, ...).
 
 export const BASE_DEFAULT = { store: 1, hangar: 1, refinery: 0 };

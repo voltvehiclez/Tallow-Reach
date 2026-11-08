@@ -7,11 +7,11 @@
 import { V, Q, R } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { random } from "../util/rng.js";
-import { sectorAt } from "../data/sectors.js";
+import { featuresOf, featureOf, featureById } from "../data/places.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
-import { state, profileOf } from "../state/state.js";
+import { profileOf } from "../state/state.js";
 import { fire } from "./combat.js";
-import { FIELD_CENTER } from "./world.js";
+import { state, placeWorld } from "../state/state.js";
 import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
 import { playerPos } from "./pilot.js";
 
@@ -41,11 +41,12 @@ let nextId = 1;
  * (step 7a). An `id` that is not in ENEMIES is recorded as the default enemy, so
  * a bad spawn can never crash the game or an old save.
  */
-export function spawnEnemy(id, pos) {
+export function spawnEnemy(id, pos, placeId = state.place) {
   const def = enemyDef(id);
   const e = {
     id: nextId++,
     kind: "enemy",
+    place: placeId,
     def: ENEMIES[id] ? id : DEFAULT_ENEMY,   // the id, so saves and events can name it
     n: def.n,                                // the lock marker's label
     f: def.f,                                // faction id (data/factions.js)
@@ -58,16 +59,17 @@ export function spawnEnemy(id, pos) {
     fire: def.fireDelay,                     // seconds until it may fire
     o: random() < 0.5 ? 1 : -1,              // circling direction
   };
-  state.world.enemies.push(e);
-  emit("enemy-spawned", { id: e.id, def: e.def, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z } });
+  placeWorld(placeId).enemies.push(e);
+  emit("enemy-spawned", { id: e.id, def: e.def, place: placeId, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z } });
   return e;
 }
 
 /** Nearest active pilot, with list order breaking equal-distance ties. */
-export function nearestPlayer(pos, players = state.players) {
+export function nearestPlayer(pos, players = state.players, placeId = null) {
   let best = null, bestDist = Infinity;
   for (const player of players) {
     if (!player || player.docked || player.dead) continue;
+    if (placeId && (player.place || state.place) !== placeId) continue;
     const d = player.pos.distanceToSquared(pos);
     if (d < bestDist) { bestDist = d; best = player; }
   }
@@ -75,14 +77,14 @@ export function nearestPlayer(pos, players = state.players) {
 }
 
 /** Per-frame update for hostiles, plus the spawner that keeps them coming. */
-export function updateEnemies(dt) {
-  const W = state.world,
+export function updateEnemies(dt, placeId = state.place) {
+  const W = placeWorld(placeId),
     E = W.enemies;
 
   for (let i = E.length - 1; i >= 0; i--) {
     const e = E[i];
     if (!e) continue;
-    const target = nearestPlayer(e.pos);
+    const target = nearestPlayer(e.pos, state.players, placeId);
     if (!target) continue;
     const pp = playerPos(target);
     const def = enemyDef(e.def);
@@ -113,8 +115,11 @@ export function updateEnemies(dt) {
   // Spawner: hunt contracts send their target enemy in, and wandering pirates
   // show up occasionally when an active pilot is near the asteroid field.
   const local = state.player;
-  const active = state.players.filter(p => p && !p.docked && !p.dead);
+  const active = state.players.filter(p => p && !p.docked && !p.dead && (p.place || state.place) === placeId);
   const ordered = local && active.includes(local) ? [local, ...active.filter(p => p !== local)] : active;
+  const spawners = featuresOf(placeId, "spawner");
+  const station = featureOf(placeId, "station");
+  const stationPos = station ? V(...station.pos) : V(0, 0, 0);
   for (const player of ordered) {
     const prof = profileOf(player),
       F = player.flight;
@@ -122,27 +127,31 @@ export function updateEnemies(dt) {
     const pp = playerPos(player);
     F.spawnT -= dt;
     if (F.spawnT <= 0) {
-      F.spawnT = R(4, 8);
+      const spawner = spawners[0];
+      F.spawnT = spawner ? R(spawner.interval[0], spawner.interval[1]) : R(4, 8);
       const m = prof.mission,
-        far = pp.length() > 600,
         hunting = m && m.type === "hunt" && m.p < m.n,
-        nearField = pp.distanceTo(FIELD_CENTER) < 1400;
-      // Hunt contracts name the enemy they want (old saves have none: use the default).
-      const hunted = m && m.e ? m.e : DEFAULT_ENEMY;
+        hunted = m && m.e ? m.e : DEFAULT_ENEMY;
       let want = 0;
-      if (sectorAt(state.sector).foes) {
+      let id = spawner ? spawner.enemy : DEFAULT_ENEMY;
+      if (spawner) {
+        const anchor = featureById(placeId, spawner.anchor),
+          anchorPos = anchor ? V(...anchor.pos) : stationPos,
+          far = pp.distanceTo(stationPos) > spawner.farFromStation,
+          nearField = pp.distanceTo(anchorPos) < spawner.nearRadius;
         if (far && hunting) {
           want = Math.min(3, m.n - m.p) - E.length;
-        } else if (far && nearField && E.length < 2 && random() < 0.4) {
-          want = 1 + (random() < 0.5 ? 1 : 0);
+          id = hunted;
+        } else if (far && nearField && E.length < spawner.maxWanderers && random() < spawner.chance) {
+          want = spawner.count[0] + (random() < 0.5 ? (spawner.count[1] - spawner.count[0]) : 0);
         }
       }
       for (let i = 0; i < want; i++) {
-        const id = far && hunting ? hunted : DEFAULT_ENEMY,
-          d = enemyDef(id);
+        const d = enemyDef(id);
         spawnEnemy(
           id,
-          pp.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(R(d.spawnDist[0], d.spawnDist[1])))
+          pp.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(R(d.spawnDist[0], d.spawnDist[1]))),
+          placeId
         );
       }
     }

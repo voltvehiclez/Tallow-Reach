@@ -5,7 +5,7 @@ import { SHIPS } from "../data/ships.js";
 import { ITEM_IDS, canSell, isItem, isModule, itemName, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
-import { OUTPOST_SHOP, shopDef } from "../data/shops.js";
+import { shopDef } from "../data/shops.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
 import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
@@ -17,6 +17,9 @@ import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/economy.js";
 import { describe } from "../sim/contracts.js";
+import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
+import { term, terms } from "../data/terms.js";
+import { stationAt } from "../sim/places.js";
 
 export const TABS = [
   ["m", "Contracts"],
@@ -42,8 +45,8 @@ const SCREENS = {
 
 export function introHtml() {
   return (
-    `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous sector. Mine it, defend it, build on it.</div>` +
-    `<p>You fly out of Meridian Outpost, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +
+    `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +
+    `<p>You fly out of ${stationAt(DEFAULT_PLACE).n}, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +
     `<h2>Controls</h2>` +
     `<p>Mouse steers (distance from centre sets turn rate). ` +
     `W/S throttle, A/D strafe, Space and C move up and down, Q/E roll, Shift boost, X all stop. ` +
@@ -55,17 +58,17 @@ export function introHtml() {
     `The mining beam and missiles are sold in the Shop. ` +
     `F locks whatever is nearest your crosshair, such as hostiles, rocks, crates or the station, and F again releases it. ` +
     `G docks when you are within 300 m of the station and slower than 70 m/s. ` +
-    `M warps to the next sector on the chart: from Tallow Reach that is empty Kestrel Hollow, and M again brings you back. ` +
+    `M warps to the next ${term("flyable")} in ${placeAt(placeAt(DEFAULT_PLACE).parent).n}: from ${placeAt(DEFAULT_PLACE).n} that is ${placeAt(nextPocket(DEFAULT_PLACE)).n}, and M cycles through the ${terms("flyable")} of the current ${term("mapNode")}. ` +
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
     `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +
-    `<button class="go" data-a="intro">Enter the hangar</button>`
+    `<button class="go" data-a="intro">Enter game</button>`
   );
 }
 
 export function outpostHtml(ui) {
   const S = state.profile;
-  let h = `<h1>Meridian Outpost</h1><div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${TABS.map(
+  let h = `<h1>${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n}</h1><div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${TABS.map(
     ([k, n]) => `<button data-a="tab" data-b="${k}" class="${ui.tab === k ? "on" : ""}">${n}</button>`
   ).join("")}</nav>`;
   if (ui.toast) h += `<div class="ok">${ui.toast}</div>`;
@@ -382,12 +385,13 @@ function shopHtml() {
   const S = state.profile;
   // The shop is data (data/shops.js) and sim/economy.js's shopList() turns it
   // into these rows; the screen only decides how a row looks.
-  const def = shopDef(OUTPOST_SHOP);
+  const shopId = (stationAt(state.place) || stationAt(DEFAULT_PLACE)).shop;
+  const def = shopDef(shopId);
   // One row per part: everything the shop offers comes from `stock`, so a part
   // is never listed twice (a part the ship already flies with is simply on sale).
   let h = `<h2>${def.n}</h2><div class="sub">${def.d}</div>`;
 
-  h += shopList(OUTPOST_SHOP)
+  h += shopList(shopId)
     .map(s => {
       // A limited row shows what is left and greys out when it is gone; an
       // unlimited row (every row today) shows nothing extra.
@@ -395,7 +399,7 @@ function shopHtml() {
       return `<div class="row"><div>${s.n}<small>${s.d} Takes ${s.vol} m³.${s.owned ? ` You own ${s.owned}.` : ""}${
         soldOut ? " Sold out." : s.left !== null ? ` ${s.left} left.` : ""
       }${s.room ? "" : " No room in the station's storage."}</small></div>` +
-        `<button data-a="wb" data-b="${OUTPOST_SHOP}:${s.id}" ${S.cr < s.price || !s.room || soldOut ? "disabled" : ""}>Buy ${s.price} cr</button></div>`;
+        `<button data-a="wb" data-b="${shopId}:${s.id}" ${S.cr < s.price || !s.room || soldOut ? "disabled" : ""}>Buy ${s.price} cr</button></div>`;
     })
     .join("");
   return h;

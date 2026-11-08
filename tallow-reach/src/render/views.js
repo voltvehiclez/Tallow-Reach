@@ -348,7 +348,7 @@ export function installEnemyViews() {
   on("entity-spawned", ({ id, kind }) => spawnView(kind, id));
   on("entity-removed", ({ id }) => removeView(keyFor("entity", id)));
   on("launched", () => snapRenderedPlayer());
-  on("sector-entered", () => snapRenderedPlayer());
+  on("place-entered", () => snapRenderedPlayer());
 }
 
 /** Reconcile hostiles at their existing point in the frame. */

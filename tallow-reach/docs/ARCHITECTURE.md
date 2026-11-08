@@ -65,7 +65,7 @@ about each other, use the event bus instead.
 | Add a second trader or station shop  | `data/shops.js` (a new `SHOPS` entry) and point the counter at it (`OUTPOST_SHOP` today); see HOW_TO_ADD.md recipe 17 |
 | Change base module costs             | `data/station.js`                              |
 | Add a contract type                  | `data/contracts.js` (list, generator, wording), plus a listener in `sim/contracts.js` |
-| Add a sector or change the warp order| `data/sectors.js`; see HOW_TO_ADD.md recipe 14 |
+| Add a pocket/system or change the warp cycle | `data/places.js` and `data/terms.js`; see HOW_TO_ADD.md recipe 14 |
 | Change the warp timing or its lockout | `WARP` in `data/sectors.js` (the look itself follows those numbers) |
 | Add an enemy, or change one's numbers, colour or size | `data/enemies.js` (`ENEMIES`); see HOW_TO_ADD.md recipe 6 |
 | Change what an enemy drops, or the ore mix of rocks | `data/loot.js` (`LOOT_TABLES`); see HOW_TO_ADD.md recipe 18 |
@@ -101,14 +101,14 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, places, terms, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers), ids.js (entity ids)
 src/core/              audio.js (synth + mute), input.js (keys -> local player controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, pilot (where the ship is), power, drive, fitting, inventory, shops' purchases (economy),
                        weapons, missile, combat, ai, enemy (a hostile as data), entity (every other entity as data),
-                       loot, asteroids, targeting, contracts, session, sectors, effects, world
-src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting),
+                       loot, asteroids, places, targeting, contracts, session, sectors (warp), effects, world
+src/render/            scene.js (including one group per place), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting),
                        views.js (a mesh per entity, the player's ship and the mining beam)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
@@ -126,9 +126,9 @@ Each `src/` folder also has its own short `README.md`.
   from `util/math.js`, which is built on it); nothing in `src/sim/` or `src/data/` may call
   `Math.random()` — `tests/rng.test.mjs` fails and names the file and line if it does.
   `setSeed(n)` makes a whole run reproducible, `setSeed(null)` goes back to `Math.random` (the
-  default), and `makeRng(n)` hands out an *independent* generator so generating a sector or an
+  default), and `makeRng(n)` hands out an *independent* generator so generating a place or an
   instance never depends on how many dice combat rolled before it. Anything that must be repeatable
-  from a seed (sectors, wormhole instances, co-op) takes a `makeRng` generator rather than reaching
+  from a seed (places, wormhole instances, co-op) takes a `makeRng` generator rather than reaching
   for the shared one.
 - **Shops are data, buying is one function.** `data/shops.js` holds `SHOPS`: per shop a heading (`n`),
   its line of explanation (`d`) and `stock`, one row per item: `id` (from `ITEMS`), `price`, the row's own wording `n`/`d`, and
@@ -388,12 +388,12 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## State
 
-- Saved state is split in two since step 9 (`SAVE_VERSION = 13`, `{ v: 13, profile, world }`):
+- Saved state is split in two since step 9 and carries the current pocket since step 10 (`SAVE_VERSION = 14`, `{ v: 14, profile, world }`):
   - `state.profile` is the local pilot's **portable character**: credits (`cr`), flown hull (`ship`), owned hulls (`ships`), per-ship holds (`holds`), per-hull loadouts (`loadout`), hull fractions (`hp`), missile stock (`msl`), selected primary slot (`pw`), active contract (`mission`), kills (`kills`) and completed contracts (`done`). Every player in `state.players` carries its own `player.profile` (`profileOf(player)`).
-  - `state.worldState` is the **hosted world**: station storage (`store`), base facility levels (`base`) and the station's contract offer board (`board`, aliased by `state.ui.board`).
+  - `state.worldState` is the **hosted world**: station storage (`store`), base facility levels (`base`), the station's contract offer board (`board`, aliased by `state.ui.board`) and the current pocket id (`place`).
   - `currentSave()` and `applySave(save)` join and apply both halves; `portableProfile(save)` and `mergeProfile(save, profile)` extract a guest's character and merge it back into their own save without altering their home world.
-  - Both halves are written together on dock and on every outpost menu action.
-- Everything else in `state/state.js` (`players`, `world`, `sector`, `time`, `shops`, `ui`) is transient session runtime, rebuilt when the game loads.
+  - Both halves are written together on dock, on successful local warp arrival, and on every outpost menu action.
+- Everything else in `state/state.js` (`players`, `places`, `world`, `place`, `time`, `shops`, `ui`) is transient session runtime, rebuilt when the game loads. `state.place`/`state.world` alias the local pilot's pocket; each pilot owns `player.place` and `player.warp`.
 - Systems read `state.*` or explicit `(player, profile, world)` parameters directly. There is no hidden global, so tests can build a state object and call a system.
 
 ## Replayability hooks
@@ -406,7 +406,7 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## Save compatibility
 
-Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts both `{ v: 13, profile, world }` objects and flat v1..v12 saves, migrating and clamping both halves through `sanitizeProfile` and `sanitizeWorld`.
+Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts `{ v: 14, profile, world }` objects, v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves, migrating and clamping both halves through `sanitizeProfile` and `sanitizeWorld`.
 
 When you change what is saved:
 
@@ -418,7 +418,7 @@ When you change what is saved:
 
 ## Known gaps (things to know before building on top)
 
-The structural gaps (hard-coded sector geography, unsaved current sector, fixed contract count) are tracked with their fixing step in the "Debt today" table of
+The structural gaps (fixed contract count, place memory, system map) are tracked with their fixing step in the "Debt today" table of
 [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md). The list below is the gameplay-level detail.
 
 These are real, current limits. None of them is a bug in play today.
@@ -451,32 +451,34 @@ These are real, current limits. None of them is a bug in play today.
   `setShopStock`), and its limited stock is keyed per shop (`"shopId:itemId"` in `state.shops`), so
   two shops never share a shelf. What is **not** independent is the destination: every purchase
   lands in the one place called `STATION` (`profile.store`), and room is checked there, so a shop in
-  another sector would still deliver into — and be blocked by — Meridian's storage. A probe with a
+  another pocket's station would still deliver into — and be blocked by — Meridian's storage. A probe with a
   second shop proved both halves: prices and stock independent, both purchases in `profile.store`,
   and a full station refusing the second shop's sale. **The owner's plan: other stations will have
   their own independent inventory.** That is **not** a shop data change; it is a new kind of
   *place*: (1) named stations with their own stock and capacity in `sim/inventory.js` (anything that
   is not `STATION` and not a ship id needs handling before `SHIPS[where]` is reached), (2) that stock
-  saved with the world (the station store, shop stock and contracts move into the world half in
-  step 9), and (3) the sector naming its station and its shop — `OUTPOST_SHOP` becomes a field on the
-  sector in step 10, which is why it is one constant today rather than a parameter threaded through
-  `ui/screens.js`. Do not add a second hard-coded shop pointer before then.
+  saved with the world (the station store, shop stock and contracts moved into the world half in
+  step 9), and (3) named stations with their own stock. Since step 10 a station feature in
+  `data/places.js` names its shop (`shop`), and `ui/screens.js` reads that feature; independent
+  station storage is still future work. Do not add a second hard-coded shop pointer.
 - **Muting is not saved.** Sound starts on every time the game opens.
-- **The sector you are in is not saved.** `state.sector` is runtime only, so you always launch
-  in Tallow Reach. Only Tallow Reach has content: Kestrel Hollow is empty, and the outpost,
-  planet and rocks are hidden (not deleted) while you are away, so the field comes back as
-  you left it.
+- **The pocket you are in is saved** (`world.place`, save v14). A save made at a station opens
+  docked; a save made away from the station resumes flying at that pocket's arrival point. Exact
+  position/velocity are not saved yet. Only Meridian Station (`reach`) has content today: Kestrel
+  Hollow (`hollow`) is empty, and each pocket's scenery/entities are hidden (not deleted) while you
+  are away, so the field comes back as you left it within the session.
 - **A warp takes the controls for about two seconds, but not the momentum.** The throttle is
   released and the stick eases to neutral (`WARP_COAST` in `data/sectors.js`), so the ship
   coasts down and unwinds its turn; weapons are offline for the whole sequence. Enemies keep
   shooting at you while it charges. Making the ship invulnerable during a warp, or letting
   enemies lose interest, is a deliberate design decision that has not been made yet.
-- **There is no star map screen yet.** M cycles through `SECTOR_IDS` in order and names the
-  destination in a centre-screen message. A screen for choosing a destination is a new tab
-  (recipe 7) once there are more than two sectors.
-- **One sector's geography is written into the code.** The field belongs to `FIELD_SECTOR`
-  (`sim/world.js`), and the outpost is always at the origin of the sector whose `st` flag is
-  true. A second populated sector needs those two made per-sector.
+- **There is no star map screen yet.** M cycles through the current system's pockets in data order
+  (`pocketsIn` / `nextPocket`) and names the destination in a centre-screen message. The system map
+  and pocket chooser are step 11.
+- **Place geography is data, but place memory is not persistent yet.** `PLACE_DEFS` features carry
+  the station, field, spawner and planet numbers; runtime containers keep rocks across visits within
+  a session. Mined-out rocks/respawn still use wall-clock `setTimeout`, and abandoned crates are
+  cleared on warp; persistent place memory is step 12.
 
 ## Keeping the docs scalable
 

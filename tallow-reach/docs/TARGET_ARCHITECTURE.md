@@ -3,7 +3,7 @@
 > **What this file is.** Where the code is *going*, so that every AI session (whichever model it is)
 > builds toward the same shape. [ARCHITECTURE.md](ARCHITECTURE.md) describes the code **as it is
 > now**; this file describes **what it must become** to carry the game in [VISION.md](VISION.md):
-> 100+ sectors, instanced wormholes, a campaign, and host-run co-op.
+> 100+ systems of flyable pockets, instanced wormholes, a campaign, and host-run co-op.
 > The steps that get there are in [REFACTOR_PLAN.md](REFACTOR_PLAN.md).
 >
 > **Rule for every AI:** whenever you add code, add it in the *target* style where that is cheap, and
@@ -19,7 +19,7 @@ cannot be bolted on to a game whose world is made of 3D-scene objects and a sing
 
 ## The eight principles
 
-1. **Content is data.** Enemies, items, modules, ships, loot tables, shop stock, sector templates,
+1. **Content is data.** Enemies, items, modules, ships, loot tables, shop stock, place definitions,
    encounters and missions are entries in `src/data/` keyed by a string id. Adding one should not
    need a code change. Code looks things up by id; it never hard-codes a specific enemy or sector.
 2. **The simulation is pure.** Everything under `src/sim/` runs with **no** access to the screen
@@ -29,12 +29,12 @@ cannot be bolted on to a game whose world is made of 3D-scene objects and a sing
 3. **Entities are plain data with ids; meshes are views.** An enemy is
    `{ id, kind, def, pos, vel, quat, hp, ... }` in `world`. `render/` builds and updates a mesh for
    each entity it sees. Nothing in `sim/` holds a three.js object.
-4. **All randomness goes through `util/rng.js`.** A sector is generated from a seed, so the same
-   seed always gives the same sector. (Required for 100+ generated sectors, wormholes and co-op.)
+4. **All randomness goes through `util/rng.js`.** A place is generated from a seed, so the same
+   seed always gives the same place. (Required for 100+ generated systems, wormholes and co-op.)
 5. **Three kinds of state, kept apart.**
    - **Profile** (the *portable* character): credits, ships owned, each ship's loadout, hull
      damage and hold, stats, campaign progress. It travels with the player into other people's worlds.
-   - **World** (belongs to *one hosted world*): the galaxy seed, what each sector remembers, the
+   - **World** (belongs to *one hosted world*): the map seed, what each place remembers, the
      station (its storage and upgrades), the contract board.
    - **Session** (runtime only): the entities currently flying around, the UI, who is connected.
 6. **Players are a list.** No code may assume exactly one player. Today's `state.player` becomes
@@ -68,37 +68,48 @@ The AI doing each refactor step decides exact field names, but must keep these i
 existing short-key style (`n`, `d`, `v`) for data tables.
 
 **Registries (all in `src/data/`, string ids).** `ITEMS`, `MODULES`, `SHIPS`, `ENEMIES`,
-`LOOT_TABLES`, `FACTIONS`, `SHOPS` (done, step 5), `SECTOR_TEMPLATES`, `ENCOUNTERS`, `MISSIONS`. A content test
+`LOOT_TABLES`, `FACTIONS`, `SHOPS` (done, step 5), `PLACES`, `PLACE_DEFS`, `ENCOUNTERS`, `MISSIONS`. A content test
 (`tests/content.test.mjs`) checks every entry is complete and every id referenced actually exists
-(an enemy's loot table exists, a mission's sector exists, ...). This test is what lets people add
+(an enemy's loot table exists, a mission's place exists, ...). This test is what lets people add
 content without reading the engine.
 
-**Galaxy.** A grid of sectors generated from a seed.
-```
-galaxy  = { seed, w, h, sectors: { "x,y": SectorRecord } }
-SectorRecord = { id, x, y, template, tier, seed, discovered, visited, memory }
-```
-`tier` is the difficulty (from distance to Meridian plus variation). `memory` is what the world
-remembers about that sector (mined-out rocks, cleared encounters, respawn timers). Meridian is a
-hand-written record; every other sector comes from `template + seed + tier`.
+**Place.** Anything the ship can fly around in is a place. A place record is
+`{ id, kind: "pocket", def, parent, enter, leave }`; `def` names a definition in `PLACE_DEFS`,
+`parent` is an optional place/system id, and `enter`/`leave` describe how the ship arrives and
+departs (today both are warp; a pocket's `enter.pos` is its arrival point). A **system** is a
+non-flyable grouping record `{ id, kind: "system", n }`; you are always in one of its pockets,
+never in the system itself. The starting system is `meridian` (shown as **Meridian System**).
+Its first pockets keep the internal ids `reach` (**Meridian Station**, station + asteroid belt)
+and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M cycles the
+current system's pockets until step 11 adds a chooser. Generic player-facing nouns live in
+`data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
 
-**Sector definition** (what a sector *contains*). A list of features, each placed by data:
-`station`, `asteroidField {pos, radius, ores}`, `spawner {enemy table, rules}`, `poi` (derelicts,
-beacons, traders), `hazard`, `wormhole`. One generic loader turns a definition into entities. There
-is no `FIELD_CENTER` constant anywhere; positions belong to the sector.
+**Place definition** (what a place *contains*). A list of features, each placed by data:
+`station`, `asteroidField {pos, radius, height, count, ore, respawnMs}`, `spawner {enemy, rules}`,
+`planet` scenery, later `poi`, `hazard`, `wormhole`. One generic loader turns a definition into
+entities and scenery events. There is no `FIELD_CENTER` / `FIELD_SECTOR` / `STATION_POS` constant
+anywhere; positions belong to the place definition. Meridian is a station feature inside its
+pocket, not a child place. The station feature names its shop.
 
-**Instance.** A temporary sector made from `(template, seed, tier)` when you enter a wormhole. It
-is not in the galaxy and is discarded on exit. Same loader, different source.
+**Map (step 11).** A 2D grid of systems generated from a seed. The map stores system coordinates,
+seed, tier and discovery; each system points at its pockets. `tier` is difficulty from distance to
+Meridian plus variation. Place memory (mined-out rocks, cleared encounters, respawn timers) belongs
+to the world half of the save and arrives in step 12. The map is not a fixed two-level container:
+pockets may later have optional child places (planet pockets, wrecks, wormhole instances) using the
+same place record.
+
+**Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole. It
+is not on the system map and is discarded on exit. Same loader, different source.
 
 **Entity.** `{ id, kind: "enemy"|"asteroid"|"crate"|"bullet"|"missile"|"ship"|..., pos, vel, quat, ... }`
-held in `world.sectorState.entities`, unique ids from a counter. The sim moves them; `render/`
-shows them.
+held in the runtime container of the place it belongs to, unique ids from a counter. The sim moves
+them; `render/` shows the local player's place. Each pilot owns a current place id and warp state.
 
 **Player.** `{ id, name, shipEntityId, controls, profile }`.
 
 **Missions.** A mission is data: `{ id, title, requires, steps: [{ objective, params }], rewards }`.
 A **mission runner** in `sim/` advances steps by listening to events (`enemy-killed`, `mined`,
-`sector-entered`, `item-picked`, ...). The campaign is an ordered list of mission ids plus flags;
+`place-entered`, `item-picked`, ...). The campaign is an ordered list of mission ids plus flags;
 "contracts" in the open world are *generated missions* run by the same runner. More than one mission
 may be active.
 
@@ -107,11 +118,13 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 
 ## Saves
 
-- Since step 9 (save version **13**), every save slot and `TR1:` export code stores
-  `{ v: 13, profile, world }` (principle 5), with automatic migration from flat v1..v12 saves:
+- Since step 10 (save version **14**), every save slot and `TR1:` export code stores
+  `{ v: 14, profile, world }` (principle 5), with automatic migration from flat v1..v12 and split
+  v13 saves:
   `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
   `pw`, `mission`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
-  station storage (`store`), base upgrades (`base`) and contract board (`board`). `portableProfile(save)`
+  station storage (`store`), base upgrades (`base`), contract board (`board`) and the current
+  pocket id (`place`, replacing v13's `sector` placeholder). `portableProfile(save)`
   and `mergeProfile(save, profile)` extract and return a guest's character without touching world state.
 - **Recommended co-op rule** (open question 6/7 in VISION.md): a guest brings their own profile
   (ship, hold, credits) into the host's world; whatever they gain simply stays in their own
@@ -145,7 +158,7 @@ refactor step that closes it:
 | Economy, outfitting and saved ammunition | **Closed in step 9 (owner-playtested):** `sim/economy.js`, `sim/fitting.js` and `sim/weapons.js` operate on the acting pilot and their `profile` (`cr`, `loadout`, `ships`, `hp`, `msl`, `pw`) against `state.worldState`. | — |
 | Contracts and rewards | **Closed in step 9 (owner-playtested):** the offer board lives in `worldState.board`; `sim/contracts.js`, `sim/ai.js`, `sim/combat.js` and `sim/missile.js` track kills, mission progress, payouts and spawn policy per pilot (`profile.mission`, `profile.kills`). | — |
 | Docking and launch | **Closed in step 9 (owner-playtested):** `launch` and `dock`/`tryDock` operate on an explicit pilot and profile; `clearTransient()` only sweeps the field when no other active pilot remains in space. | — |
-| Warp and sector ownership | `sim/sectors.js` and `sim/step.js`: warp and the current sector are local/shared; non-local warp transitions are not implemented. | 10 |
+| Warp and place ownership | **Closed in step 10 (owner-playtested):** each pilot owns `place` and `warp`; entities live in per-place containers; shared systems advance once per occupied place. Non-local presentation/input remain step 16. | — |
 | Death and recovery | `sim/player.js` and `sim/session.js`: only the local player gets ship loss, recovery and docking on `player-dead`; another player is marked dead until multiplayer respawn rules exist. | 16 (multiplayer) |
 | Player presentation and input | `render/views.js`, `core/input.js`: the screen draws/follows the local ship and local beam, and input only fills local controls. No guest UI, remote input or transport exists yet. | 16 (multiplayer) |
 
@@ -155,14 +168,14 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 
 | Debt | Evidence | Step |
 | --- | --- | --- |
-| `sim/` imports the screen | **Closed in 7c:** sector entry emits an event; the frame loop supplies the camera direction used for missile lock. The render-import allow-list is empty. | — |
+| `sim/` imports the screen | **Closed in 7c:** place entry emits an event; the frame loop supplies the camera direction used for missile lock. The render-import allow-list is empty. | — |
 | Entities are three.js meshes | **Closed (steps 7a and 7b):** every entity is a record with an `id` and a `kind` — an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. `render/views.js` owns every mesh | — |
 | Variable time step | **Closed in step 8 (+ between-tick render interpolation):** gameplay runs at fixed 60 Hz through `sim/step.js` (`SIM_DT = 1 / 60`, capped catch-up), and `render/views.js` + `render/camera.js` interpolate visual poses via `simClock.alpha()` for smooth high-refresh (240 Hz) rendering. Two minor caveats (camera-sampled missile aim and `setTimeout` asteroid respawn) are parked in `docs/ROADMAP.md`. | — |
-| One global player | **8c and step 9 complete and owner-playtested:** each active player has independent runtime and portable `profile` (inventory, economy, outfitting, ammo, contracts, kills, docking/launch); remaining sector/multiplayer items belong to steps 10 and 16 above. | 10 / 16 |
+| One global player | **8c and step 9 complete and owner-playtested:** each active player has independent runtime and portable `profile` (inventory, economy, outfitting, ammo, contracts, kills, docking/launch); remaining multiplayer presentation/input items belong to step 16 above. | 10 / 16 |
 | Single mixed save | **Closed in step 9 (save v13, owner-playtested):** `state/profile.js` and `state/storage.js` split `{ profile, world }` and migrate v1..v12 saves. | — |
-| Sector geography in code | `FIELD_CENTER`, `FIELD_SECTOR` in `sim/world.js`; `launch()` in `sim/session.js` starts at the origin facing the field; `parked` rock lists in `sim/world.js` | 10 |
-| Current sector not saved | `state.sector` is runtime only | 10 |
-| Two sectors, cycled with M | `data/sectors.js` `SECTOR_IDS`, `nextSector()` | 11 |
+| Sector geography in code | **Closed in step 10:** positions/features live in `PLACE_DEFS`; a generic loader builds per-place containers; launch/dock/scenery read the station and field features. | — |
+| Current sector not saved | **Closed in step 10 (save v14, owner-playtested):** `world.place` stores the current pocket id; v13 `sector` migrates. | — |
+| Two pockets, cycled with M | `data/places.js` `pocketsIn(systemId)`, `nextPocket()`; step 11 adds the system map and pocket chooser. | 11 |
 | One contract at a time, three types | `profile.mission`; `generateContract()` in `sim/contracts.js` | 13 |
 | `sanitizeProfile` names things by hand | **Closed in step 9:** `sanitizeWorld` walks `BASE_MODULES` (`data/station.js`) directly instead of naming base modules by hand. | — |
 
@@ -171,10 +184,10 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 Keep today's folders. **Do not rename or reshuffle for its own sake.** Additions only:
 
 ```
-src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  galaxy.js
-src/data/sector-templates.js
+src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  places.js  terms.js  galaxy.js
+src/data/place-defs.js (later templates)
 src/data/campaign/   one file per mission (m01.js, m02.js, ...) + index.js listing the order
-src/sim/spawner.js  loot.js  galaxy.js  instances.js  missions.js  step.js
+src/sim/spawner.js  loot.js  places.js  galaxy.js  instances.js  missions.js  step.js
 src/render/views.js           builds and updates a mesh per entity (7a: hostiles)
 src/ui/starmap.js  missionlog.js
 src/net/                      (multiplayer step only)
@@ -186,7 +199,7 @@ An AI can, in a fresh chat and with only the docs and the zip:
 
 - add an enemy, item, module, ship or loot table by editing one data file, and `npm test` proves it
   is complete;
-- add a sector template or an encounter without touching `sim/`;
+- add a place definition or an encounter without touching `sim/`;
 - add a campaign mission as one new data file and one line in its index;
 - run 10 minutes of the game in a unit test with no browser;
 - say where a guest's input and a host's snapshot would plug in.

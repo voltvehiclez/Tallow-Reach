@@ -27,8 +27,8 @@
 //   enemy-spawned { id, def, pos }   a hostile entered the world (render/views.js builds its mesh)
 //   enemy-removed { id }             a hostile left the world: killed, out of range, or the field
 //                                    was cleared (render/views.js removes its mesh)
-//   sector-entered { id }           scenery should show this sector (also on docking reset)
-//   sector-changed { from, to }      the sector changed, mid-warp (see data/sectors.js)
+//   place-entered { id }            scenery should show this pocket (also on docking reset)
+//   place-changed { from, to }       the pocket changed, mid-warp (see sim/sectors.js)
 //   warp-start    { from, to }       a warp began: ship locked, drive charging
 //   warp-end      { from, to }       warp over (arrived, or cancelled by docking)
 

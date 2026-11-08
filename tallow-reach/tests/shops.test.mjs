@@ -12,7 +12,9 @@ import { loadHeadless } from "./headless.mjs";
 import { ITEMS, itemVol } from "../src/data/items.js";
 import { MODULES } from "../src/data/modules.js";
 import { MISSILE } from "../src/data/weapons.js";
-import { SHOPS, OUTPOST_SHOP, isShop, shopRow } from "../src/data/shops.js";
+import { SHOPS, isShop, shopRow } from "../src/data/shops.js";
+import { DEFAULT_PLACE } from "../src/data/places.js";
+import { stationAt } from "../src/sim/places.js";
 
 // The data tables are re-exported *from the bundle*, so a test that adds a
 // temporary shop edits the same object the sim code reads.
@@ -34,7 +36,7 @@ function freshGame(cr = 10000) {
 
 const W = () => sim.state.worldState;
 
-const M = OUTPOST_SHOP;
+const M = stationAt(DEFAULT_PLACE).shop;
 
 /**
  * Run `fn` with a temporary shop, and always take it out again, so a failing
@@ -55,7 +57,7 @@ function withShop(id, def, fn) {
 }
 
 test("every shop row is complete, and names a real item", () => {
-  assert.ok(isShop(OUTPOST_SHOP), "the outpost's shop must exist in SHOPS");
+  assert.ok(isShop(M), "the outpost's shop must exist in SHOPS");
   for (const [id, shop] of Object.entries(SHOPS)) {
     assert.equal(typeof shop.n, "string", `${id}: n (the heading)`);
     assert.equal(typeof shop.d, "string", `${id}: d (the line under it)`);
@@ -223,7 +225,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 13, "save version is 13 after profile/world split");
+  assert.equal(p.v, 14, "save version is 14 after current-place persistence");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {
@@ -232,9 +234,9 @@ test("the Shop tab draws its rows from SHOPS", () => {
   const weapons = readFileSync(new URL("../src/data/weapons.js", import.meta.url), "utf8");
   assert.doesNotMatch(weapons, /SHOP_WEAPONS/, "the hard-coded shop list is gone");
   assert.doesNotMatch(screens, /SHOP_WEAPONS/, "and no screen reads it");
-  assert.match(screens, /shopList\(OUTPOST_SHOP\)/, "the rows come from the shop");
-  assert.match(screens, /shopDef\(OUTPOST_SHOP\)/, "so does the heading and the blurb");
-  assert.match(screens, /data-a="wb" data-b="\$\{OUTPOST_SHOP\}:\$\{s\.id\}"/, "a Buy button names its shop and item");
+  assert.match(screens, /shopList\(shopId\)/, "the rows come from the station's shop");
+  assert.match(screens, /shopDef\(shopId\)/, "so does the heading and the blurb");
+  assert.match(screens, /data-a="wb" data-b="\$\{shopId\}:\$\{s\.id\}"/, "a Buy button names its shop and item");
   assert.match(menu, /eco\.buyItem\(shop, id\)/, "the Buy action is the one generic purchase");
   assert.doesNotMatch(menu, /buyWeapon/, "the old special-case purchase is gone");
 });

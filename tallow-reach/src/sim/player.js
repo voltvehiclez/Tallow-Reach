@@ -5,14 +5,14 @@ import { emit } from "../util/events.js";
 import { neutralControls } from "../state/controls.js";
 import { FLIGHT } from "../data/ships.js";
 import { warpSteerEase } from "../data/sectors.js";
-import { sectorAt } from "../data/sectors.js";
+import { featureOf } from "../data/places.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 
 import { state, msg, localPlayer, profileOf, createPlayerRuntime } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
 import { refreshHull } from "./hull.js";
-import { STATION_KEEPOUT } from "./world.js";
+
 
 /**
  * How long the "Equip thrusters to move" warning stays on screen, and the gap
@@ -49,6 +49,7 @@ export function createPlayerRecord(controls = neutralControls()) {
     ...createPlayerRuntime(),
     controls: { ...controls, steer: { ...controls.steer } },
     kind: "ship",
+    place: state.place,
     pos: V(0, 0, 0),    // where the ship is (world metres)
     quat: Q(),          // which way it points
     v: V(0, 0, 0),      // current velocity
@@ -246,10 +247,17 @@ export function flight(dt, P = state.player, runtime = null) {
     }
   }
 
-  // Keep out of the outpost (only sectors that have one).
-  if (sectorAt(state.sector).st && P.pos.length() < STATION_KEEPOUT) {
-    P.pos.setLength(STATION_KEEPOUT);
-    P.v.multiplyScalar(0.5);
+  // Keep out of the station (only pockets that have one).
+  const station = featureOf(P.place || state.place, "station");
+  if (station) {
+    const at = V(...station.pos),
+      keepout = station.keepout;
+    if (P.pos.distanceTo(at) < keepout) {
+      const away = P.pos.clone().sub(at);
+      if (away.lengthSq() === 0) away.set(0, 0, 1);
+      P.pos.copy(at).add(away.setLength(keepout));
+      P.v.multiplyScalar(0.5);
+    }
   }
 
 }

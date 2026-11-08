@@ -4,7 +4,8 @@
 import { fmtDist } from "../util/math.js";
 import { on } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
-import { sectorAt } from "../data/sectors.js";
+import { placeAt, featuresOf } from "../data/places.js";
+import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
 import { interpolatedPos } from "../render/views.js";
 import { state, say } from "../state/state.js";
@@ -12,7 +13,8 @@ import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
 import { describe } from "../sim/contracts.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
-import { FIELD_CENTER, STATION_POS } from "../sim/world.js";
+import { stationAt } from "../sim/places.js";
+import { V } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 
 const $ = id => document.getElementById(id);
@@ -48,6 +50,7 @@ export function setupHud() {
     cone: $("mcone"),
     reticle: $("retc").getContext("2d"),
     flash: $("flash"),
+    warpHint: $("warp-hint"),
   };
 
   const container = $("mk");
@@ -57,6 +60,8 @@ export function setupHud() {
     container.appendChild(d);
     markers.push(d);
   }
+
+  if (el.warpHint) el.warpHint.textContent = `M warp to the next ${term("flyable")}`;
 
   addEventListener("mousemove", e => {
     el.cursor.style.left = e.clientX + "px";
@@ -68,6 +73,7 @@ export function setupHud() {
     el.root.hidden = true;
   });
   on("launched", ({ player } = {}) => {
+    if (state.ui.intro) return;
     if (player && player !== state.player) return;
     el.root.hidden = false;
   });
@@ -121,7 +127,7 @@ export function updateHud(dt) {
         : "Empty weapon slot";
 
   el.topRight.innerHTML =
-    `${sectorAt(state.sector).n}<br>` +
+    `${placeAt(state.place).n}<br>` +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
     `<span style="color:var(--amber)">${m ? describe(m) + " " + m.p + "/" + m.n : "No contract"}</span>`;
@@ -147,8 +153,9 @@ export function updateHud(dt) {
     el.beamPct.textContent = `${pct}%`;
   }
 
-  if (!state.warp && sectorAt(state.sector).st && P.pos.length() < 300) {
-    say(P.v.length() < 70 ? "Press G to dock at Meridian Outpost" : "Slow below 70 m/s to dock");
+  const station = stationAt(state.place);
+  if (!state.warp && station && P.pos.distanceTo(V(...station.pos)) < (station.dockRange ?? 300)) {
+    say(P.v.length() < (station.dockSpeed ?? 70) ? `Press G to dock at ${station.n}` : `Slow below ${station.dockSpeed ?? 70} m/s to dock`);
   }
   // A ship with no thrusters cannot move, so say why the controls do nothing.
   el.prompt.textContent =
@@ -244,9 +251,10 @@ function drawMarkers() {
     P = state.player;
   markerCount = 0;
 
-  const here = sectorAt(state.sector);
-  if (here.st && !(F.lock && F.lock.k === "s")) mark(STATION_POS, "Meridian Outpost", "i");
-  if (here.fd) mark(FIELD_CENTER, "Asteroid field", "");
+  for (const f of featuresOf(state.place, "station")) {
+    if (!(F.lock && F.lock.k === "s")) mark(V(...f.pos), f.n, "i");
+  }
+  for (const f of featuresOf(state.place, "asteroidField")) mark(V(...f.pos), f.n, "");
 
   pruneLock();
   const lock = F.lock;

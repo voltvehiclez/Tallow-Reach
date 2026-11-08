@@ -19,6 +19,87 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 10 complete and ticked — owner playtest passed
+
+- The owner played `TESTING-PLACES.md`, found the three bugs listed in the entry below, and confirmed
+  all three fixed ("Works"). **Step 10 is ticked** in `docs/ROADMAP.md`, `docs/REFACTOR_PLAN.md`,
+  `docs/TARGET_ARCHITECTURE.md` and `docs/HANDOFF.md`.
+- No code or save changes in this entry: save version stays **14**, `npm test` **247/247**,
+  `npm run build` succeeded. Published as a GitHub release with `tallow-reach-step10.zip` attached
+  (built HTML plus source, docs and the playtest guides) so it can be downloaded without building.
+- Next: **step 11** — system map, pocket chooser and the 100+ system starmap (save v15). Ask VISION
+  open questions 1 to 3 (travel rules, fog, difficulty) and what goes in Kestrel Hollow first.
+
+---
+
+## 2026-11-08: Step 10 playtest fixes — sound, start screen and loading a save
+
+Three bugs the owner found playing step 10. All three were caused by step 10's resume-on-load work.
+
+- **Load/Import/Reset did nothing visible (bug 3).** `afterSaveChange()` in `src/ui/menu.js` called
+  `resetPlaces()` but the import was never added, so it threw a `ReferenceError` *after* `applySave`
+  had already replaced the profile. The click handler aborted before its redraw, so the panel kept
+  the old numbers; the next **Save** then wrote the already-loaded profile and redrew — exactly the
+  owner's "load does nothing, then Save makes it appear" symptom. Fixed the import, split read/validate
+  failure from post-load work in `ld`/`im` (a good code is no longer reported as invalid), and made
+  both actions redraw. The click handler now only draws the panel when the pilot is docked, so
+  loading an away save no longer leaves the station menu open over the flight HUD.
+- **Docking showed the start screen (bug 2).** An away save hid the start panel but left
+  `state.ui.intro = true`, so the next `render()` (on docking) drew the intro again. The start screen
+  now owns the panel until it is dismissed: `docked`/`launched` handlers ignore events while
+  `ui.intro` is set, and the button — renamed **"Enter the hangar" → "Enter game"** — clears the flag
+  and calls `resumeFromSave()`, deploying the pilot where the save put them (docked at a station, or
+  flying at that pocket's arrival point). Nothing simulates behind the start screen, and flight keys
+  are inert until it is dismissed (`src/main.js`, `src/ui/hud.js`, `src/ui/screens.js`).
+- **No sound after resuming out in space (bug 1).** `initAudio()` was only ever called by the start
+  button, which an away save skipped, so the audio context never existed; the Esc sound switch had
+  no master gain to change and could not fix it. `src/main.js` now starts/resumes audio on the first
+  `pointerdown` or `keydown`; `initAudio()` also swallows a rejected `ctx.resume()`.
+- New `tests/step10-fixes.test.mjs` (8 tests) drives the real `ui/menu.js` against a small DOM
+  stand-in: load restores credits and redraws in the same click, an away slot resumes flying, import
+  applies a good code and rejects a bad one without changing the game, reset works, docking never
+  shows the start screen again, and sound starts on a gesture.
+- **Results:** `npm test` **247/247 pass** (both 8b oracles unchanged); `npm run build` succeeded.
+  Save version stays **14** — no save-shape change. `TESTING-PLACES.md` updated for the new button
+  and start-screen flow. Six older entries moved verbatim to `docs/CHANGELOG_ARCHIVE.md`.
+
+
+
+---
+
+## 2026-11-08: Step 10 built — place definitions (systems and pockets), save v14
+
+- Implemented the owner-approved systems/pockets model. `src/data/terms.js` holds the generic
+  player-facing nouns (`mapNode: "system"`, `flyable: "pocket"`); `src/data/places.js` holds
+  **Meridian System** and its pockets **Meridian Station** (`reach`, station + belt) and
+  **Kestrel Hollow** (`hollow`, empty). Meridian is a station feature inside `reach`, not a child
+  place. `PLACE_DEFS` carries the station, asteroid field, raider spawner and planet numbers that
+  used to be hard-coded; `sim/places.js` is the generic loader and entities live in per-place
+  containers (`state.places`, `placeWorld(id)`).
+- Each pilot owns `place` and `warp`; `sim/step.js` runs shared systems once per occupied pocket.
+  M cycles every pocket of the current system (a third data-only pocket is tested). One pilot
+  warping does not move another pilot or clear a fight another active pilot is still having.
+- Save **v14**: `world.place` replaces `world.sector`; v13 `sector` ids migrate where valid, older
+  saves default to `reach`. Storage keys and `TR1:` codes unchanged. Loading a station save opens
+  docked; loading an away save resumes flying at that pocket's arrival point with a launch-style
+  refresh. Successful local warp arrival autosaves. In-game station label renamed
+  **Meridian Outpost → Meridian Station**.
+- Files: `src/data/{terms,places,sectors,shops,station}.js`, `src/sim/{places,world,asteroids,sectors,session,step,player,ai,enemy,combat,missile,effects,weapons,targeting}.js`, `src/state/{state,profile}.js`,
+  `src/render/{scene,views,camera}.js`, `src/ui/{hud,screens,menu,warpflash}.js`, `src/main.js`,
+  `src/index.html`, `src/util/events.js`; docs and folder READMEs aligned; new
+  `tests/step10-places.test.mjs`, `tests/step10-save.test.mjs`, `tests/saves/v13-real.json`,
+  `TESTING-PLACES.md` (rewritten as a numbered step-by-step) and `TEST-OLD-CODES.txt` (two real
+  old-format `TR1:` codes — v12 flat and v13 split — so the old-save/old-code checks are playable
+  without an old build; both verified to decode to v14 with the expected docked/flying resume).
+- **Results:** `npm test` **239/239 pass** (both 8b single-player oracles unchanged);
+  `npm run build` succeeded (`game/tallow-reach.html`, 623 KB). Slice checks: 10a 226/226,
+  10b 226/226, 10c 239/239. **Owner playtest pending** (`TESTING-PLACES.md`). Next: step 11
+  system map / pocket chooser.
+
+
+
+---
+
 ## 2026-11-08: Fix high-refresh (240 Hz) ship blur via between-tick render interpolation
 
 - **Root cause:** the pre-built `game/tallow-reach.html` in the merged 8c branch (`74a9ab5`) had
@@ -37,6 +118,8 @@ the next person must know (save version, rebuild needed, known issues).
 - **Owner playtest passed:** confirmed both the ship hull blur and the close-range locked-target
   name-tag blur (asteroids and raiders) are completely gone during combat and warping.
 
+
+
 ---
 
 ## 2026-11-08: Step 9 complete and ticked — Milestone B reached
@@ -46,6 +129,8 @@ the next person must know (save version, rebuild needed, known issues).
   (simulation-pure, fixed-step, player-aware, split-save core) is now complete.
 - No gameplay or save changes in this entry (save version remains **13**, 225 tests green). Next is
   **Milestone C — step 10** (sector definitions and saving `world.sector`, save v14).
+
+
 
 ---
 
@@ -67,12 +152,16 @@ the next person must know (save version, rebuild needed, known issues).
   all **225 tests** pass, and both 8b single-player oracle scripts match exactly. Rebuild required
   (`npm run build`); owner playtest pending (`TESTING-BASELINE.md` section M).
 
+
+
 ---
 
 ## 2026-11-08: Step 8c owner playtest passed
 
 - The owner reports the 8c playtest works. Ticked 8c in the roadmap and refactor plan; no code
   or save data changed. Step 8 overall remains open pending frame-rate caveat validation.
+
+
 
 ---
 
@@ -88,6 +177,8 @@ the next person must know (save version, rebuild needed, known issues).
   the complete exceptions table is in `TARGET_ARCHITECTURE.md`, and step 9 must close every item.
   Owner playtest is pending (`TESTING-BASELINE.md` section L); full step 8 frame-rate caveats remain.
 
+
+
 ---
 
 ## 2026-11-08: Step 8c in progress — explicit flight, shields and damage
@@ -100,6 +191,8 @@ the next person must know (save version, rebuild needed, known issues).
   prior build. Save version remains 12.
 - **8c remains incomplete:** the main loop, weapons, inventory, AI, lifecycle and other systems
   still assume one player. The owner does not want to playtest before 8c is complete.
+
+
 
 ---
 
@@ -114,6 +207,8 @@ the next person must know (save version, rebuild needed, known issues).
   events still assume one player. No multiplayer sim is claimed. Frame-rate caveats remain.
   Save version stays 12; this work has not been playtested by the owner.
 
+
+
 ---
 
 ## 2026-11-08: Step 8b complete and ticked
@@ -121,72 +216,18 @@ the next person must know (save version, rebuild needed, known issues).
 - The owner reported the 8b playtest passed. Updated the handoff, roadmap and refactor plan;
   8c is next. No gameplay or save changes in this entry. The 8b build and 200 tests passed.
 
----
 
-## 2026-11-08: Step 8a ticked; step 8b player records and controls
-
-- The owner reported the 8a playtest passed, so 8a is ticked. The frame-rate caveats remain
-  open; no separate 30/60/144 browser throttle result was reported.
-- Added `state.players`, `localPlayer()`, `createPlayerRecord()` and independent per-player
-  controls. Input and the screen follow the local player; `state.player` and `state.controls`
-  temporarily alias that entry for existing systems until 8c. Guest gameplay is not implemented.
-- Added `tests/players.test.mjs`: separate players, controls, input, replacement and local flight.
-  200 tests pass. A scripted 12-second old-vs-new flight/weapon/warp probe was identical. Save
-  remains version 12; 8b awaits playtest, and 8c is not started.
-
----
-
-## 2026-11-08: Step 8 slices documented
-
-- Expanded the approved 8a/8b/8c breakdown in `docs/REFACTOR_PLAN.md`, added separate status
-  rows in `docs/ROADMAP.md`, and clarified the remaining work in `docs/HANDOFF.md`. 8a remains
-  awaiting playtest; 8b and 8c have not started. No gameplay or save changes in this entry.
-
----
-
-## 2026-11-08: Step 8a — fixed simulation tick (playtest pending)
-
-- Added `src/sim/step.js` and `src/data/simulation.js`: gameplay runs at 60 ticks per second,
-  while rendering remains per frame. The previous 0.05-second frame cap and pause semantics
-  remain. HUD hints persist across display-only frames; cosmetic visuals and audio no longer
-  consume the seeded gameplay random stream.
-- `tests/sim-step.test.mjs` checks the real flight and seeded combat at 30/60/144 display rates,
-  fixed-clock stalls, hints and the old loop. At 60 fps flight matches exactly; a 10-second test
-  differs by 2.2932 units from old 30 fps and 1.3400 units from old 144 fps. 195 tests pass.
-- Full game frame-rate independence is **not proved**: missile aim follows the rendered camera,
-  asteroid respawn uses wall time, and rendering has no tick interpolation. Browser playtest is
-  pending. 8b and 8c remain; save version stays 12. See `TESTING-BASELINE.md` section J.
-
----
-
-## 2026-11-08: Step 7d complete and ticked
-
-- The owner reported the registry cleanup playtest passed. Marked 7d complete in the handoff,
-  roadmap and refactor plan; step 8 is next. No code or save changes in this entry.
-
----
-
-## 2026-11-08: Step 7d — entity view registry cleanup
-
-- Replaced view-kind switches and the separate enemy map with a registry and one active-view map.
-  Each kind supplies its world list and build, update and removal handlers; enemy and other entity
-  ids are namespaced because they use separate counters. Existing events and frame sweeps remain.
-- Added fake-kind lifecycle, overlapping-id and particle cleanup tests; updated recipe 19 and the
-  render README, and added `TESTING-BASELINE.md` section I. No gameplay or save changes; save version remains 12. 188 tests pass. Owner
-  playtest pending; build and testing checklist are noted in the handoff and roadmap.
-
----
-
-## 2026-11-08: Step 7c and step 7 complete and ticked
-
-- The owner playtested step 7c and reported it passed. Marked step 7c and step 7 complete in
-  `docs/ROADMAP.md`, `docs/REFACTOR_PLAN.md` and `docs/HANDOFF.md`; step 8 is next.
-- No gameplay or save changes in this entry. The 7c build and all 185 tests passed previously.
 
 ---
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-08: Step 8a ticked; step 8b player records and controls
+- 2026-11-08: Step 8 slices documented
+- 2026-11-08: Step 8a — fixed simulation tick (playtest pending)
+- 2026-11-08: Step 7d complete and ticked
+- 2026-11-08: Step 7d — entity view registry cleanup
+- 2026-11-08: Step 7c and step 7 complete and ticked
 - 2026-11-08: Refactor step 7c — hull view and render-free simulation
 - 2026-11-08: Step 7b complete and closed (docs only, no code change)
 - 2026-11-08: Refactor step 7b — bullets, missiles, crates and particles become data

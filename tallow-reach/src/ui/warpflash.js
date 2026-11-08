@@ -1,5 +1,5 @@
 // The warp overlay: a tunnel vignette that fades in with the drive, and a
-// white-out at the moment the sector changes. Two full-screen gradients, held in
+// white-out at the moment the pocket changes. Two full-screen gradients, held in
 // one element, updated once a frame from the warp clock so the picture can never
 // drift from the simulation. The motion of the tunnel comes from the 3D streaks
 // in render/warpfx.js; this file only tints and flashes.

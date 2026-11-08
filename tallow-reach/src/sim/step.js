@@ -24,23 +24,29 @@ export function stepSim(dt) {
   const local = state.player;
   const active = state.players.filter(p => p && !p.docked && !p.dead);
   const ordered = local && active.includes(local) ? [local, ...active.filter(p => p !== local)] : active;
+  // Personal systems run local-first, exactly as before. A warp can move a
+  // pilot mid-tick, so shared systems are grouped by where each pilot ends up.
+  const byPlace = new Map();
   for (const player of ordered) {
     flight(dt, player);
     updateShield(dt, player);
     updatePower(dt, player);
-    // Sector/warp transition ownership belongs to step 10.
-    if (player === local) updateWarp(dt);
+    updateWarp(dt, player);
     updatePrimary(dt, player);
     updateMissiles(dt, player, false);
     if (player !== local) pruneLock(player);
+    if (!player.docked && !player.dead) {
+      const id = player.place || state.place;
+      if (!byPlace.has(id)) byPlace.set(id, true);
+    }
   }
-  if (ordered.length) {
-    updateMissileFlight(dt);
-    updateEnemies(dt);
-    updateBullets(dt);
-    updateCrates(dt);
+  for (const placeId of byPlace.keys()) {
+    updateMissileFlight(dt, placeId);
+    updateEnemies(dt, placeId);
+    updateBullets(dt, placeId);
+    updateCrates(dt, placeId);
   }
-  updateEffects(dt);
+  for (const placeId of state.places.keys()) updateEffects(dt, placeId);
 }
 
 /**
