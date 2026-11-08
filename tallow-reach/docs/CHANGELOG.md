@@ -19,6 +19,59 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Refactor step 6a — the sim stops playing sounds itself
+
+- **Why:** the biggest structural debt in `docs/TARGET_ARCHITECTURE.md` is `src/sim/` importing the
+  screen, the speakers and the keyboard. Step 6 splits it in two, and this is the sound half (6a).
+  Eleven places in `src/sim/` called the synthesiser directly (`tone()`, `nz()`, `oreGained()`,
+  `warpCharge()`, `warpBurst()`), so no test could run the sim without a browser, and a co-op host
+  could never decide which machine should hear a boom.
+- **New event `sfx { name, ...rest }`.** The sim now says *what happened*; `core/audio.js` decides
+  what that sounds like. `src/sim/{weapons,player,combat,ai,effects,sectors}.js` no longer import
+  `core/audio.js` at all. Extra fields carry the moment's own numbers:
+  `{ name: "explosion", count }` (still only rumbling above 10 particles) and
+  `{ name: "warp-charge", dur }` (the warp's own charge length).
+- **`SFX` table in `src/core/audio.js`** holds one entry per sound, and these eleven names are what
+  the sim emits: `cannon`, `ore-gained`, `missile-lock`, `missile-fire`, `boost`, `hit`, `pickup`,
+  `enemy-fire`, `explosion`, `warp-charge`, `warp-burst`. One listener, `on("sfx", playSfx)`, plays
+  them. **Every waveform, frequency, duration and volume is copied unchanged** — this is a wiring
+  change, not a sound change.
+- **Deliberately not hung on existing gameplay events.** It would be tidier to play the ore chime
+  from the `mined` event and the pickup pip from `pickup`, but the sim intends the chime to fire
+  **once per ore the beam secures**, while the `mined` event fires once per ore that actually lands
+  in the hold (`weapons.js`: `emit("sfx", { name: "ore-gained" })` sits above the `while` loop that
+  emits `mined`). They are not the same moment, and a design that assumed they were would have
+  quietly coupled a sound to a cargo rule. *(Correction, same day: an earlier draft of this entry
+  justified the choice with "mining with a full hold chimes but emits no `mined`". The owner pointed
+  out that the beam never cuts when the hold is full — `updatePrimary` says "Cargo hold full" and
+  returns before the cutting branch — so that case does not arise. The separation is still right;
+  the example was wrong.)* Each `sfx` sits at the exact old call site, so the sounds are 1:1 with
+  before.
+- **New `tests/layers.test.mjs` (9 tests):** imports are parsed statement by statement, so a
+  side-effect import cannot swallow the next one. It fails if any `src/sim/` file imports
+  `core/audio.js`, `core/input.js` (that line is deleted in 6b) or `ui/`, holds a shrinking
+  allow-list of `sim/` files that may still import `render/` (step 7 empties it) and checks the
+  allow-lists only name files that really do that import. It also checks both directions between
+  the names the sim emits and `SFX`, and that playing a sound with no audio context never throws.
+  All three deliberate breakages (re-importing audio, a typo'd name, a stale allow-list entry)
+  were caught.
+- **Proof it plays identically.** A probe bundled the previous commit and this tree, ran one
+  scripted session through both with a recording Web Audio context (a fake `window.AudioContext`
+  logging every node, envelope, start/stop and the delayed `setTimeout` chimes), and compared the
+  result: **671 log lines identical**, the same 55 oscillators, 19 noise bursts and 11 delayed
+  pips, covering all eleven sounds.
+- **No save change** (`SAVE_VERSION` stays 12) and no gameplay, balance or UI change.
+- **Tests:** 150 pass (was 141).
+- Files: `src/util/events.js`, `src/core/audio.js`, `src/sim/weapons.js`, `src/sim/player.js`,
+  `src/sim/combat.js`, `src/sim/ai.js`, `src/sim/effects.js`, `src/sim/sectors.js`,
+  `tests/layers.test.mjs` (new), `TESTING-BASELINE.md` (a by-ear table), `src/core/README.md`,
+  `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md` (the debt row now
+  names only 6b/7), `docs/HOW_TO_ADD.md` (recipes 9 and 10 rewritten), `docs/ROADMAP.md` (steps 4
+  and 5 ticked after the owner's playtest; step 6a logged), this changelog.
+  Run `npm run build` and `npm test`.
+
+---
+
 ## 2026-11-07: Recorded what is and is not per-shop about shops (docs only)
 
 - **Why:** the owner asked whether the game can hold more than one **independent** shop (for
@@ -224,6 +277,8 @@ the next person must know (save version, rebuild needed, known issues).
   `docs/HOW_TO_ADD.md` (recipe 18 added), `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog.
   Run `npm run build` and `npm test`.
 
+---
+
 ## 2026-11-07: Refactor step 2 — seeded randomness everywhere
 
 - **Why:** "same seed, same run" is the foundation for generated sectors, wormhole instances and
@@ -252,6 +307,8 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/rng.test.mjs`, `src/util/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`,
   `docs/TARGET_ARCHITECTURE.md` (closed debt removed), `docs/HOW_TO_ADD.md` (recipe 12 rewritten),
   `docs/HANDOFF.md`, `docs/ROADMAP.md`, this changelog. Run `npm run build` and `npm test`.
+
+---
 
 ## 2026-11-07: Refactor step 1 — enemies are data (enemy registry, `enemy-killed` event)
 
@@ -288,6 +345,8 @@ the next person must know (save version, rebuild needed, known issues).
   removed), `docs/HOW_TO_ADD.md` (recipe 6 rewritten), `docs/HANDOFF.md`, this changelog.
   Run `npm run build` and `npm test`.
 
+---
+
 ## 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
 
 - **Why:** the owner's plan is much bigger than the code's shape (100+ sector starmap, wormhole
@@ -308,43 +367,12 @@ the next person must know (save version, rebuild needed, known issues).
   word for word to `CHANGELOG_ARCHIVE.md` and indexed below; 10 plus this one remain.
 - No source, data, test or save change; save version still 11. No rebuild needed.
 
-## 2026-11-07: Inventory Sell quantity uses a game-styled popover
-
-- Replaced the browser-owned quantity prompt with a small in-game box positioned beside the
-  selected inventory tile. It contains the quantity field (prefilled with the stack size),
-  inline validation, and Sell/Cancel buttons. No other inventory layout changed.
-- Files: `src/ui/menu.js`, `src/styles.css`, `tests/inventory.test.mjs`, this changelog.
-  Save version unchanged. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory Sell asks how many units to sell
-
-- Choosing Sell on a cargo stack now opens a quantity prompt, prefilled with the whole stack
-  count. Enter any whole number from 1 to the stack size to sell that partial or full amount;
-  cancelling leaves the stack unchanged. Existing prices and refinery bonus still apply.
-- Files: `src/ui/menu.js`, `src/ui/screens.js`, `src/sim/economy.js`, `src/ui/README.md`,
-  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory grids use five narrower, shorter slots per row
-
-- Set both inventory grids to exactly five columns, with narrower tiles and a 68px tile/row
-  height. The 25-slot minimum gives five rows by default; each additional item beyond 25
-  naturally adds a row. The three-row scroll viewport and independent scrolling are retained.
-- Files: `src/styles.css`, `tests/inventory.test.mjs`, this changelog. Save data unchanged.
-  Run `npm run build` and `npm test`.
-
-## 2026-11-07: Inventory grids keep their size when empty, and moves no longer show status text
-
-- Each hold now always renders a 5-by-5 slot field with a fixed three-row viewport, so empty
-  slots preserve the inventory window size and scrolling can be tested even with fewer items.
-  Station and ship grids scroll independently. Moving items clears/suppresses the "Moved ..."
-  status message; other actions are unchanged.
-- Files: `src/ui/screens.js`, `src/ui/menu.js`, `src/styles.css`, `src/ui/README.md`,
-  `tests/inventory.test.mjs`, this changelog. Save version unchanged. Run `npm run build` and `npm test`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-07: Inventory Sell quantity uses a game-styled popover
+- 2026-11-07: Inventory Sell asks how many units to sell
+- 2026-11-07: Inventory grids use five narrower, shorter slots per row
+- 2026-11-07: Inventory grids keep their size when empty, and moves no longer show status text
 - 2026-11-07: Station and ship item grids scroll independently after three rows
 - 2026-11-07: Right-click inventory menu can sell a cargo stack
 - 2026-11-07: Inventory tile text restored to the more readable size

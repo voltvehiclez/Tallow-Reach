@@ -6,18 +6,18 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** Milestone A is under way. **Steps 0, 1, 2 and 3 are done** (2026-11-07).
-**Steps 4 and 5** — the item catalogue with one inventory per place (save v12), and shops and
-prices from data — are **built and tested (131 green)**, waiting for the owner's playtest before
-they are ticked: `TESTING-INVENTORY.md` (section 8, loading an old save, is the new part there) and
-the new `TESTING-SHOPS.md`. The owner's answers so far: found modules do **not** get random stats
-yet, so a stock stays a plain count per item; and Meridian also sells the **six standard parts for
-1 cr each** (a visible change the owner asked for at step 5), with the beam at 900 cr and the
-missile pod at 1500 cr unchanged. The old "Autocannons — Owned" line was removed after the owner's
-first look at the build: it listed the same part twice (the module is Basic cannons). Shop stock can be **limited** (`max` on a row) but no row uses it
-yet, and nothing restocks: `setShopStock()` is the hook, waiting for the owner to ask for the timers.
-**Next: Step 6, the sim stops using sound and the keyboard** — and the owner is free to add data-only
-content meanwhile (Milestone A is reached in everything but the tick).
+**Current position:** **Milestone A is done.** Steps 0 to 5 are ticked (steps 4 and 5 on
+2026-11-08, after the owner played `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue
+with one inventory per place (save v12), and shops and prices from data. **Step 6 is under way and
+its first half, 6a (the sim stops playing sounds itself), is built and tested (150 green)** —
+waiting for the owner's playtest, which is the by-ear table in `TESTING-BASELINE.md`, section B.
+**Next: 6b**, the sim stops reading the keyboard: `core/input.js` fills a `controls` object in
+`state`, and `sim/{player,weapons,sectors}.js` read it instead of `keys`/`pointer`. Then the
+`tests/layers.test.mjs` allow-list loses its `input.js` line. The owner's earlier answers stand:
+found modules do **not** get random stats, so a stock stays a plain count per item; Meridian sells
+the six standard parts for 1 cr each (beam 900, missile pod 1500); shop stock can be limited (`max`)
+but no row uses it yet, and `setShopStock()` is still the unused restock hook. Data-only content
+(rows 1 to 8 of "Content you can add now") can go ahead in parallel.
 
 ## The order of work
 
@@ -38,9 +38,9 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 1 | Enemy registry (`data/enemies.js`, `enemy-killed` event) | A | [x] 2026-11-07 |
 | 2 | Seeded randomness everywhere | A | [x] 2026-11-07 |
 | 3 | Loot tables | A | [x] 2026-11-07 |
-| 4 | Item registry and generic inventory (save v12) | A | [ ] built, tested; waiting for playtest |
-| 5 | Shops and prices from data | A | [ ] built, tested; waiting for playtest |
-| 6 | Sim stops using sound and keyboard (6a sound, 6b input) | B | [ ] |
+| 4 | Item registry and generic inventory (save v12) | A | [x] 2026-11-08 |
+| 5 | Shops and prices from data | A | [x] 2026-11-08 |
+| 6 | Sim stops using sound and keyboard | B | [ ] **6a built, tested (150 green); waiting for playtest. 6b next** |
 | 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
@@ -125,6 +125,15 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   saved, so save version stays 12. 131 tests green. Compared with the previous commit by a 19-step
   scripted outpost session: identical credits, stocks, holds, loadouts and messages, and six of the
   seven tabs render byte-identical HTML.
+- 2026-11-08: Steps 4 and 5 ticked: the owner played the Inventory tab and the Shop (including
+  section 8's old-save load) and confirmed both. Milestone A is reached and the docs say so.
+- 2026-11-08: Step **6a** (the sim stops playing sounds itself) built: the sim emits
+  `sfx { name, ...rest }`, `core/audio.js` owns an `SFX` table and one listener, and **no `sim/`
+  file imports `core/audio.js` any more**. A new `tests/layers.test.mjs` (9 tests) enforces the
+  layer rules and keeps the shrinking `render/` and `input.js` allow-lists honest. An old-vs-new
+  probe recorded every Web Audio call in one scripted session through both trees: **671 lines
+  identical**, all eleven sounds covered. Save version unchanged (12). 150 tests green.
+  Not ticked yet: the owner plays the by-ear table in `TESTING-BASELINE.md`.
 - 2026-11-07: Shop fix after the owner's look at the step 5 build: the "Autocannons — Owned" line is
   gone, so the Shop lists the cannons once, as **Basic cannons** (`src/data/shops.js` lost its `kit`
   list, the screen stopped drawing it). There is one cannon module today; more will be stock rows

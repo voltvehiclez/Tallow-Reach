@@ -135,7 +135,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 
 | Debt | Evidence | Step |
 | --- | --- | --- |
-| `sim/` imports the screen and speakers | `sim/*.js` import `render/scene.js`, `render/models.js`, `core/audio.js`, `core/input.js` | 6 |
+| `sim/` imports the screen and the keyboard | `sim/*.js` import `render/scene.js`, `render/models.js`, `core/input.js`. **The speakers are closed (step 6a):** the sim emits `sfx { name }` and `core/audio.js` plays it | 6b, 7 |
 | Entities are three.js meshes | enemies `{ m, hp, ... }` in `sim/ai.js`; player `P.m`; crates, rocks, bullets likewise | 7 |
 | Variable time step | `main.js` `dt = Math.min(0.05, ...)` per animation frame | 8 |
 | One global player | `state.player` read in 14 files | 8 |

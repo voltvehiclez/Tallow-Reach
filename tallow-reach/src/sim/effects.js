@@ -2,15 +2,16 @@
 
 import * as THREE from "three";
 import { V, R } from "../util/math.js";
-import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { state } from "../state/state.js";
+import { emit } from "../util/events.js";
 
 const particleGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 
 /** Burst of `count` particles from point `p`. Big bursts also make a rumble. */
 export function boom(p, count, color) {
-  if (count > 10) nz(1.2, 500, 0.5);
+  // How loud an explosion is depends on its size, so the size goes with the event.
+  if (count > 10) emit("sfx", { name: "explosion", count });
   for (let i = 0; i < count; i++) {
     const m = new THREE.Mesh(
       particleGeo,

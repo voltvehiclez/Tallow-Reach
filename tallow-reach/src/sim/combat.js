@@ -6,7 +6,6 @@ import { rollLoot } from "./loot.js";
 import { emit } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
-import { tone } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { mm } from "../render/models.js";
 import { state, msg, say } from "../state/state.js";
@@ -142,7 +141,7 @@ export function updateCrates(dt) {
       } else {
         emit("pickup", { item: k });
         msg(`Picked up ${itemName(k)}`, 2);
-        tone(880, 1320, 0.15, 0.08);
+        emit("sfx", { name: "pickup" });
         scene.remove(c.m);
         C.splice(i, 1);
       }

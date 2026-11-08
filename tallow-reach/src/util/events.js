@@ -14,6 +14,10 @@
 //   died          text               ship destroyed (after docking)
 //   mined         { item }           one unit of ore added to the hold
 //   pickup        { item }           crate picked up
+//   sfx           { name, ...rest }  a game sound the sim wants played; `name` is a key of
+//                                    SFX in core/audio.js (the sim never calls the speakers
+//                                    itself). Extra fields are that sound's arguments, e.g.
+//                                    { name: "explosion", count } or { name: "warp-charge", dur }
 //   enemy-killed  { def, faction }   a hostile was destroyed (def and faction are ids)
 //   sector-changed { from, to }      the sector changed, mid-warp (see data/sectors.js)
 //   warp-start    { from, to }       a warp began: ship locked, drive charging

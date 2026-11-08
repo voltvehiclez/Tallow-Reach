@@ -23,7 +23,6 @@ import { emit } from "../util/events.js";
 import { state, msg, say } from "../state/state.js";
 import { keys, pointer } from "../core/input.js";
 import { showSector } from "../render/scene.js";
-import { warpCharge, warpBurst } from "../core/audio.js";
 import { clearWorldObjects, swapField } from "./world.js";
 
 /** True while a warp is in progress. */
@@ -75,7 +74,7 @@ export function startWarp() {
   state.flight.beamOn = false;
   state.flight.beamT = 0;
 
-  warpCharge(WARP.charge);
+  emit("sfx", { name: "warp-charge", dur: WARP.charge });
   emit("warp-start", { from, to });
   return true;
 }
@@ -138,7 +137,7 @@ function arrive(from, to) {
   P.acc = 0;
   P.snap = true;
 
-  warpBurst();
+  emit("sfx", { name: "warp-burst" });
   msg(`Warp: ${SECTORS[from].n} to ${dest.n}. ${dest.d}`, 4);
   emit("sector-changed", { from, to });
 }

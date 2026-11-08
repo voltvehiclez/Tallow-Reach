@@ -31,6 +31,24 @@ Write down anything odd with what you did, what you expected and what happened. 
 4. Get shot a few times: Shield HP drops first, then Hull HP.
 5. If you own missiles: hold the target inside the dashed ring until it locks, right click.
 
+**Sounding right (step 6a).** The game should sound exactly as it did. Ten sounds, and each one
+should arrive at the moment described — nothing missing, nothing doubled:
+
+| What you do | What you hear |
+| --- | --- |
+| Left click with cannons fitted | a short falling blip, about three a second |
+| **Shift** boost igniting (a full tank) | a soft exhaust gulp, once |
+| An ore banked while mining | a rising three-note chime, once per ore |
+| Fly into a loot crate | a quick two-note pickup pip |
+| Take a hit from a raider | a sharp noise burst, once per hit |
+| A raider fires close to you | a low sawtooth zap, from them, not you |
+| A ship or rock explodes | a rumble — loud ones only; small puffs are silent |
+| Missile lock completes | two pips, a beat apart |
+| Right click to launch a missile | a hiss and a falling growl |
+| Press **M** to warp | a rising whine, then an arrival slam and shimmer |
+
+Mute (**P**, then the sound button) still silences all of it.
+
 ## C. Warp (1 min)
 
 1. Press **M**: about two seconds of warp effect, then the message names the new sector

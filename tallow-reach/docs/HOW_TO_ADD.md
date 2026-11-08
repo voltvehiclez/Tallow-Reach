@@ -205,16 +205,36 @@ in `render/models.js`), and runs the behaviour its `ai` field names.
 2. `src/main.js`: add `case "actionName":` in the `on("action", ...)` handler. `playing` is true only while flying and not paused.
 3. Mention the key in the hint in `src/index.html` and the controls text in `src/ui/screens.js`.
 
-## 9. A new sound
+## 9. A new sound (data + two lines)
 
-`src/core/audio.js`: build it from `tone(f1, f2, duration, volume, wave)` and `nz(duration, filterFreq, volume)`,
-and call it from the system that needs it. Mute and pause are handled for you. Sound is switched on and off only from the pause menu.
+The sim never plays a sound. It says **what happened**; `src/core/audio.js` decides what that
+sounds like. Two steps, always both:
+
+1. **`src/core/audio.js`**: add an entry to `SFX`, named however you like
+   (`"cannon"`, `"ore-gained"`). Build it from `tone(f1, f2, duration, volume, wave)` and
+   `nz(duration, filterFreq, volume)`. An entry is `rest => { ... }`, so a sound can depend on the
+   moment: `explosion: ({ count }) => { if (count > 10) nz(1.2, 500, 0.5); }` only rumbles for big
+   bursts, and `"warp-charge": ({ dur }) => warpCharge(dur)` follows the warp's own length.
+2. **Where it happens, in `src/sim/`**: `emit("sfx", { name: "cannon" })`, plus any extra fields the
+   entry reads (`{ name: "explosion", count }`). Sound is in the sim's vocabulary, not its imports.
+
+`tests/layers.test.mjs` checks both directions: a sound the sim emits must have an `SFX` entry, and
+an `SFX` entry must be emitted somewhere. It also fails if a `src/sim/` file imports
+`core/audio.js`, so never call `tone()`/`nz()` from the sim.
+
+Mute and pause are handled inside `tone()`/`nz()`. Sound is switched on and off only from the pause
+menu. Sounds a *screen* makes (buttons, hovers) are not game sounds: they call `uiSound()` /
+`hoverSound()` directly from `ui/`.
 
 ## 10. A new event and a listener
 
 1. `emit("name", payload)` where it happens (the sim layer).
 2. Add `name  payload  description` to the list at the top of `src/util/events.js`.
 3. Listen with `on("name", handler)` wherever it is needed. Listeners must not import the emitter.
+
+`sfx` is the worked example (step 6a): the sim emits it at eleven places, and `core/audio.js`
+subscribes once. Payloads should carry **ids and plain numbers**, not objects with behaviour — that
+is what lets a listener (sound, a mission, a network snapshot) work without knowing the emitter.
 
 ## 11. Story and scripted missions (new system)
 

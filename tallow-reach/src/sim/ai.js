@@ -5,10 +5,10 @@
 // enemy is a data entry and a new *way of fighting* is one function here.
 
 import { V, R, fwd, face } from "../util/math.js";
+import { emit } from "../util/events.js";
 import { random } from "../util/rng.js";
 import { sectorAt } from "../data/sectors.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
-import { tone } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { mkShip } from "../render/models.js";
 import { state } from "../state/state.js";
@@ -88,7 +88,7 @@ export function updateEnemies(dt) {
         .add(V(R(-0.04, 0.04), R(-0.04, 0.04), R(-0.04, 0.04)))
         .normalize();
       fire(e.m.position, dir, def.bspd, false, def.dmg);
-      if (dist < def.hearRange) tone(260, 80, 0.12, 0.03, "sawtooth");
+      if (dist < def.hearRange) emit("sfx", { name: "enemy-fire" });
     }
   }
 

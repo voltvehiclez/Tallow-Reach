@@ -9,7 +9,6 @@ import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
 import { keys } from "../core/input.js";
-import { tone, nz, oreGained } from "../core/audio.js";
 import { scene, camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
@@ -114,7 +113,7 @@ export function updatePrimary(dt) {
         );
       }
     });
-    if (fired) tone(700, 120, 0.09, 0.05, "square");
+    if (fired) emit("sfx", { name: "cannon" });
   }
 
   // The mining beam: the first beam module fitted in the primary bays, in bay
@@ -171,7 +170,7 @@ export function updatePrimary(dt) {
         best.m.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
         F.mineFrac = best.ore / best.max;
         P.acc += gained;
-        oreGained();   // the beam sweep hits 100%: a resource is yours
+        emit("sfx", { name: "ore-gained" });   // the beam sweep hits 100%: a resource is yours
         if (best.ore <= 0) {
           scene.remove(best.m);
           state.world.asteroids.splice(state.world.asteroids.indexOf(best), 1);
@@ -255,8 +254,7 @@ export function updateMissiles(dt) {
       ML.t += dt;
       if (!ML.locked && ML.t >= MISSILE.lock) {
         ML.locked = true;
-        tone(1300, 1300, 0.1, 0.06);
-        setTimeout(() => tone(1300, 1300, 0.1, 0.06), 140);
+        emit("sfx", { name: "missile-lock" });
       }
     } else {
       ML.target = best;
@@ -298,8 +296,7 @@ function fireMissile(target, launcher) {
     l: MISSILE.life,
     dmg: launcher.dmg,
   });
-  nz(0.35, 900, 0.15);
-  tone(300, 120, 0.3, 0.05, "sawtooth");
+  emit("sfx", { name: "missile-fire" });
 }
 
 function updateMissileFlight(dt) {

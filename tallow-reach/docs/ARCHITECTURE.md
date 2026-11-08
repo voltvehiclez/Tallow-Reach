@@ -31,10 +31,13 @@ runs when opened from disk.
 
 Dependencies only point downward. Lower layers never import higher ones.
 
-> **Known exception today:** `sim/` imports `render/` (scene, models) and `core/` (audio, input),
-> which this rule forbids. It is the biggest structural debt and is closed by refactor steps 6 and 7
-> ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). Do not add *new* such imports. The full list of debts and
-> the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
+> **Known exception today:** `sim/` still imports `render/` (scene, models) and `core/input.js`,
+> which this rule forbids. It is the biggest structural debt and is closed by refactor steps 6b and 7
+> ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). **Sound is no longer part of it:** since step 6a the sim
+> emits `sfx { name }` and only `core/audio.js` plays it. Do not add *new* such imports.
+> `tests/layers.test.mjs` fails if a `sim/` file imports `core/audio.js`, `core/input.js` (until 6b)
+> or `ui/`, and holds the shrinking allow-lists of `sim/` files that may still import `render/`.
+> The full list of debts and the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
 
 ```
 main.js                 boot + frame loop
@@ -88,7 +91,7 @@ about each other, use the event bus instead.
 | Change the ship in the Outfitting view| `render/shipviewer.js` (camera, lights, framing); `ui/outfitting.js` (page, input) |
 | Change the pause menu                | `ui/pause.js`, styles under "Pause overlay" in `styles.css` |
 | Change colours or layout of any UI   | `styles.css` (sections are labelled)           |
-| Add a sound                          | `core/audio.js` (`tone`, `nz`, or a new graph) |
+| Add a sound                          | `core/audio.js` (`SFX` entry; the sim only emits `sfx`) — see HOW_TO_ADD.md recipe 9 |
 | Change what gets saved               | `state/profile.js` (bump `SAVE_VERSION`, add a migration) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
 | Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
@@ -247,7 +250,10 @@ Each `src/` folder also has its own short `README.md`.
   lost** — `state.flight.beamT` (contact time) tracks it; docking, launching, a fit change
   or a warp clear it too. A small bar with the percentage (`#bm` in the HUD, directly under
   the "left in rock" hint) shows the progress while the beam is cutting; it is hidden
-  otherwise. Each completed ore plays a chime (`oreGained()` in `core/audio.js`). The beam
+  otherwise. **A full hold stops the beam before it cuts at all** (`Cargo hold full`), so there is
+  no progress to bank. Each completed ore plays a chime (the `ore-gained` entry of `SFX` in
+  `core/audio.js`, emitted once per ore the beam secures, above the loop that puts the ore in the
+  hold). The beam
   is not a gun: `gunsOf()` never returns it, so the guns and the beam slot never both fire.
   The first fitted beam (lowest bay) acts if two are fitted. Saves that owned the old shop
   beam were given one `beam_basic` in storage in save version 8 (not auto-fitted).
@@ -306,8 +312,13 @@ Each `src/` folder also has its own short `README.md`.
   canvas out of the page without destroying it; `ui/outfitting.js` puts the same canvas
   back into `#shipview` after each render. Do not create a renderer per render, and keep
   `id="shipview"` in `outfittingHtml`.
-- **Sounds** are played with `tone()` / `nz()` from `core/audio.js` and respect mute
-  automatically. UI sounds go through `uiSound()` and `hoverSound()`.
+- **The sim never plays a sound itself.** It emits `sfx { name, ...rest }` at the moment the
+  sound belongs to, and `core/audio.js` plays the matching entry of its `SFX` table (one entry per
+  sound, holding the exact `tone()`/`nz()` numbers). `tests/layers.test.mjs` fails if a `sim/` file
+  imports `core/audio.js`, and also if the sim emits a name with no `SFX` entry (or the table holds
+  one nothing emits). To add a sound: an `SFX` entry plus an `emit` — see HOW_TO_ADD.md recipe 9.
+  Mute and pause are handled inside `tone()`/`nz()` as before. UI sounds go through `uiSound()`
+  and `hoverSound()`, which the screens call directly (they are not game sounds).
 - **Text shown to the player** is written inline in the screen or action that shows it.
 - **Save changes** follow the rules in "Save compatibility" below.
 

@@ -7,7 +7,6 @@ import { warpSteerEase } from "../data/sectors.js";
 import { sectorAt } from "../data/sectors.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 import { keys, pointer } from "../core/input.js";
-import { nz } from "../core/audio.js";
 import { scene } from "../render/scene.js";
 import { buildPlayerShip } from "../render/models.js";
 import { state, msg } from "../state/state.js";
@@ -146,7 +145,7 @@ export function flight(dt) {
   P.boost = P.bs >= 1;
   if (P.boost && !wasBoosting) {
     P.shake = 1;
-    nz(0.4, 500, 0.35);
+    emit("sfx", { name: "boost" });
     // The ignition: one flat gulp out of the cells, not a trickle.
     state.power.stored = Math.max(0, state.power.stored - (drv.ignite || 0));
   }
@@ -204,7 +203,7 @@ export function flight(dt) {
 export function hurt(d) {
   const P = state.player;
   P.last = state.time;
-  nz(0.25, 1500, 0.2);
+  emit("sfx", { name: "hit" });
   if (P.sh > 0) {
     P.sh -= d;
     if (P.sh < 0) {
