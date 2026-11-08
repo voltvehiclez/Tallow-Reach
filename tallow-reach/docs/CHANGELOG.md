@@ -19,6 +19,24 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 7a ticked (docs only, no code change)
+
+- **Why:** the owner played the 7a build and reported that the raiders behave as usual and that
+  they are cleared when the field is cleared on docking. That was the one thing the slice waited
+  for, so 7a closes.
+- **Also settled:** clearing raiders on docking is **not** a 7a change and not a bug. `dock()` has
+  always called `clearTransient()` (pirates, bullets and missiles go; crates stay), and it does not
+  count as a kill. Whether that should change is a gameplay decision, still open and not started.
+- **State of the code, unchanged by this entry:** an enemy is a plain-data record
+  (`src/sim/enemy.js`), `render/views.js` draws it, and no `src/sim/` file touches an enemy's mesh.
+  165 tests green. Save version stays **12** (step 7 changes no saved data).
+- **Files:** `docs/ROADMAP.md` (7a ticked, current position and log), `docs/HANDOFF.md` (next action
+  is 7b), `docs/REFACTOR_PLAN.md` (slice 7a marked ticked), this changelog. No source changed, so no
+  rebuild is needed: the zip and the tag are the 7a build.
+- **Next:** step 7b, bullets, missiles, crates and particles as data with views.
+
+---
+
 ## 2026-11-08: Refactor step 7a — a hostile becomes data; the mesh becomes a view
 
 - **Why:** an enemy *was* a three.js mesh (`sim/ai.js` built one with `mkShip`, and every system that

@@ -6,13 +6,12 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **Milestone A is done, step 6 is done, and step 7a is built** (2026-11-08):
+**Current position:** **Milestone A is done, step 6 is done, and step 7a is ticked** (2026-11-08):
 a hostile is plain data (`sim/enemy.js`) and `render/views.js` draws it, so **no `src/sim/` file
-touches an enemy's mesh**. 165 tests green, save version still 12. 7a waits for one thing: the
-owner's playtest (`TESTING-BASELINE.md` sections A and B, plus a look at the raiders). **Step 7b
-is next**: bullets, missiles, crates and particles become data in the same way, then 7c does the
-rocks and the player's ship; when 7 is done the `render/` allow-list in `tests/layers.test.mjs` is
-empty.
+touches an enemy's mesh**. The owner played the 7a build and reported the raiders behaving as usual
+and clearing on docking. 165 tests green, save version still 12. **Step 7b is next**: bullets,
+missiles, crates and particles become data in the same way, then 7c does the rocks and the player's
+ship; when 7 is done the `render/` allow-list in `tests/layers.test.mjs` is empty.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -48,7 +47,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 4 | Item registry and generic inventory (save v12) | A | [x] 2026-11-08 |
 | 5 | Shops and prices from data | A | [x] 2026-11-08 |
 | 6 | Sim stops using sound and keyboard | B | [x] 2026-11-08 |
-| 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] **7a built 2026-11-08, 165 green, waiting for playtest** |
+| 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] **7a ticked 2026-11-08. 7b and 7c to do** |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
 | 10 | Sector definitions, current sector saved (save v14) | C | [ ] |
@@ -134,6 +133,10 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   seven tabs render byte-identical HTML.
 - 2026-11-08: Steps 4 and 5 ticked: the owner played the Inventory tab and the Shop (including
   section 8's old-save load) and confirmed both. Milestone A is reached and the docs say so.
+- 2026-11-08: **Step 7a ticked.** The owner played the build: the raiders behave as usual and they
+  clear when the field is cleared on docking, so the slice is closed. (The clearing is not new —
+  `dock()` has always called `clearTransient()`, and it deliberately does not count as a kill.)
+  Next is **7b**: bullets, missiles, crates and particles. 165 tests green, save version 12.
 - 2026-11-08: Step **7a** built (hostiles become data, the mesh becomes a view). An enemy used to
   *be* a three.js mesh (`{ m, hp, ... }`); it is now a record `{ id, kind: "enemy", def, pos, quat,
   hp, ... }` in `src/sim/enemy.js`, and `src/render/views.js` builds a mesh per hostile, copies its

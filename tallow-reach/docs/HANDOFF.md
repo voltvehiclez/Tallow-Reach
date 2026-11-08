@@ -37,12 +37,12 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** steps **4**, **5** and **6** are **ticked** (owner's playtests, 2026-11-08).
-  **Step 7a is built (165 green)** and waits for the owner's playtest: a hostile is now plain data
-  (`sim/enemy.js`) and `render/views.js` draws it, so **no `src/sim/` file holds or touches a
-  mesh for an enemy**. **Step 7b is next**: bullets, missiles, crates and particles the same way;
-  then 7c (rocks and the player's ship). Step 7 ends when the `render/` allow-list in
-  `tests/layers.test.mjs` is empty. Data-only content can be added in the meantime.
+- **Next action:** steps **4**, **5**, **6** and **7a** are **ticked** (owner's playtests,
+  2026-11-08). A hostile is plain data (`sim/enemy.js`) and `render/views.js` draws it, so **no
+  `src/sim/` file holds or touches a mesh for an enemy**. **Step 7b is next**: bullets, missiles,
+  crates and particles the same way; then 7c (rocks and the player's ship). Step 7 ends when the
+  `render/` allow-list in `tests/layers.test.mjs` is empty. Data-only content can be added in the
+  meantime.
 
 ---
 
