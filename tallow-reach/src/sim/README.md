@@ -1,10 +1,10 @@
 # src/sim: gameplay rules
 
 Rules of the game. Reads and changes `state`, talks to other systems with events. Imports `data/`,
-`state/` and `util/`, `core/input.js` (the keyboard, until refactor step 6b) and `render/` only to
-add or remove meshes (until step 7). **It never touches the speakers:** a sound is
-`emit("sfx", { name })`, played by the `SFX` table in `core/audio.js`. `tests/layers.test.mjs` keeps
-all of that true.
+`state/` and `util/`, and `render/` only to add or remove meshes (until refactor step 7).
+**It never touches the speakers or the keyboard:** a sound is `emit("sfx", { name })` (played by the
+`SFX` table in `core/audio.js`) and the pilot's intent arrives in `state.controls` (filled by
+`core/input.js`, shape in `state/controls.js`). `tests/layers.test.mjs` keeps all of that true.
 
 | File | What it does |
 |---|---|
@@ -32,6 +32,7 @@ all of that true.
 Rules:
 - Use `emit`/`on` to connect systems that should not know each other.
 - Never import `core/audio.js`: emit `sfx` (see `docs/HOW_TO_ADD.md` recipe 9).
+- Never read `keys`/`pointer` or `core/input.js`: read `state.controls` (recipe 8b).
 - Never call `Math.random()`. Use `random()` from `util/rng.js`, so `setSeed(n)` makes a whole run
   repeat; `tests/rng.test.mjs` fails if `Math.random` appears in this folder.
 - New rules that need numbers: put the numbers in `src/data/`.

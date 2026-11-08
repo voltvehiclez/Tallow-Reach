@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **150 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **155 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
@@ -37,12 +37,12 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** steps **4** and **5** are **ticked** (owner's playtest, 2026-11-08): Milestone A
-  is done. **Step 6a is built** — the sim no longer plays sounds; it emits `sfx { name }` and
-  `core/audio.js` plays the `SFX` table, with `tests/layers.test.mjs` keeping it that way. It waits
-  for one thing: the owner's by-ear pass over the table in `TESTING-BASELINE.md` (section B), then
-  it is ticked. **Step 6b (the sim stops reading the keyboard) is next**, and data-only content can
-  be added in the meantime.
+- **Next action:** steps **4**, **5** and **6a** are **ticked** (owner's playtests, 2026-11-08):
+  Milestone A is done and the sound half of step 6 is closed. **Step 6b is built and tested (155
+  green)**: the sim reads `state.controls` instead of the keyboard, and the missile lock ring is
+  sized in `ui/hud.js`. **`src/sim/` no longer imports `core/` at all.** It waits for one thing: the
+  owner plays `TESTING-BASELINE.md` sections A and B, then step 6 is ticked and **step 7** (entities
+  as data, meshes as views) is next. Data-only content can be added in the meantime.
 
 ---
 
@@ -116,6 +116,7 @@ that change, whether the save changes) and build them in small slices that can e
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
 | Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
 | Shop | Rows, prices and wording are data (`data/shops.js`); the Shop tab just draws `shopList()`. One generic purchase, `buyItem(shopId, itemId, qty)`. A row can be limited with `max` (none is yet); `setShopStock()` is the future restock hook |
+| Input | `core/input.js` is the only file that knows a key code. It fills **`state.controls`** (`steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`, `stop`, `brake`, `boost`, `fire`, `sec`; shape in `src/state/controls.js`) and the sim reads that. The record is the co-op contract (step 8 per-player, step 16 from the network) |
 | Sound | The sim **emits** `sfx { name }` at eleven places and never imports `core/audio.js`; `SFX` in `core/audio.js` holds the exact waveform for each, played by one `on("sfx", playSfx)` listener. `tests/layers.test.mjs` fails if a `sim/` file imports audio, input (until 6b) or `ui/`, or if a sound name and its `SFX` entry disagree |
 | Saves | **Version 12**, migrations for every change so far (v5 thrusters, v6 shields, v7 cannons, v8 beam, v9 missiles, v10 hull, v11 per-ship holds, v12 one stock per place); old saves keep working. `tests/saves/v11-real.json` is a genuine v11 save the tests convert |
 
@@ -200,7 +201,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 150 tests expected
+npm test          # 155 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 

@@ -19,6 +19,50 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Refactor step 6b — the sim stops reading the keyboard (step 6 done)
+
+- **Why:** with 6a the sim no longer played sound; it still read the keyboard and the mouse
+  directly (`keys.KeyW`, `pointer.x` in `sim/player.js`, `sim/weapons.js` and `sim/sectors.js`), and
+  `sim/weapons.js` even measured the missile lock ring in **screen pixels**. That is the thing that
+  makes a second player impossible: a guest's controls arrive from the network, not from a keyboard.
+- **New `state.controls`** (`src/state/controls.js`): one plain record per pilot —
+  `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`, `stop`, `brake`, `boost`, `fire`, `sec`.
+  `core/input.js` owns the key table (`HELD`) and rebuilds the record after every key or mouse
+  change; the sim reads it and never sees a key code. **No `src/sim/` file imports `core/` any
+  more**, which is what "step 6 done" means. The shape is the co-op contract: step 8 puts it on a
+  per-player record, step 16 fills a guest's copy.
+- **The missile lock ring moved to the screen.** The sim now reports the cone in **degrees**
+  (`state.flight.coneAngle`), and `coneRadiusPx()` in `ui/hud.js` turns that into pixels with the
+  camera's field of view and the window height. Checked against the old formula at 0, 1, 10, 20, 30
+  and 45 degrees: identical to the last digit (20 deg on a 60-degree camera at 900 px is
+  283.68672218631417 px, before and after). The sim no longer reads `innerHeight`.
+- **Two small cleanups in passing**, both verified to change nothing: the stored
+  `state.flight.gunsOn` flag is gone (it was only ever read inside `sim/weapons.js`, where it is now
+  a local; a stale copy on a shared record would mislead co-op), and losing window focus now clears
+  held keys as well as releasing the free camera, so a ship cannot keep thrusting while the player
+  is in another window.
+- **New tests (`tests/layers.test.mjs` is 14 now):** no `sim/` file may import `core/` at all, none
+  may mention `keys`/`pointer`, `HELD` may only set fields the record has, the record's exact field
+  list is pinned, each record owns its own `steer` object, and the ring's pixel maths is checked.
+  `tests/content.test.mjs` gained the new source strings for the two guards it already had.
+- **Proof it plays identically.** A probe drove one scripted session through the previous commit
+  (setting `keys`/`pointer`) and this tree (setting `state.controls`), with real three.js maths and a
+  per-frame fingerprint of position, rotation, velocity, throttle, boost tank, Shield HP, Hull HP,
+  power draw, gun cooldowns, beam state, entity counts and warp state: **1010 of 1010 frames
+  identical.** The session covered throttle, steer, roll, strafe, lift, brake, stop, boost ignition,
+  six volleys, 6 seconds of mining, secondary fire and a warp with the stick easing out.
+- **No save change** (`SAVE_VERSION` stays 12) and no gameplay, balance or UI change.
+- **Tests:** 155 pass (was 150).
+- Files: `src/state/controls.js` (new), `src/state/state.js`, `src/core/input.js`,
+  `src/sim/player.js`, `src/sim/weapons.js`, `src/sim/sectors.js`, `src/ui/hud.js`,
+  `src/ui/pause.js`, `src/main.js`, `tests/layers.test.mjs`, `tests/content.test.mjs`,
+  `src/core/README.md`, `src/sim/README.md`, `docs/ARCHITECTURE.md`, `docs/TARGET_ARCHITECTURE.md`
+  (the debt row now names only `render/`), `docs/HOW_TO_ADD.md` (recipe 8 rewritten: one-off keys
+  vs held controls), `docs/ROADMAP.md` (6a ticked, 6b logged), `TESTING-BASELINE.md`, this changelog.
+  Run `npm run build` and `npm test`.
+
+---
+
 ## 2026-11-08: Refactor step 6a — the sim stops playing sounds itself
 
 - **Why:** the biggest structural debt in `docs/TARGET_ARCHITECTURE.md` is `src/sim/` importing the
@@ -345,30 +389,9 @@ the next person must know (save version, rebuild needed, known issues).
   removed), `docs/HOW_TO_ADD.md` (recipe 6 rewritten), `docs/HANDOFF.md`, this changelog.
   Run `npm run build` and `npm test`.
 
----
-
-## 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
-
-- **Why:** the owner's plan is much bigger than the code's shape (100+ sector starmap, wormhole
-  instances, a story campaign, host-run co-op) and several different AI assistants will work on it.
-  The docs now say what the game is, where it is heading, in what order, and how to get there safely.
-- **New:** `docs/VISION.md` (scope, design pillars, open design questions with defaults),
-  `docs/TARGET_ARCHITECTURE.md` (eight principles, data model, save split, multiplayer model, a
-  "Debt today" table with evidence), `docs/ROADMAP.md` (status of every step, content to add and when),
-  `docs/REFACTOR_PLAN.md` (15 behaviour-preserving steps in 4 milestones, each with goal, work, "done
-  when", save version and how the owner runs it), `TESTING-BASELINE.md` (a 10-minute whole-game
-  click-through), root `AGENTS.md` and `CLAUDE.md` (pointers for tools that read them).
-- **Changed:** `docs/HANDOFF.md` (big picture, reading order, "keep the structure" now means keep
-  folders and conventions, restructure only through numbered steps), `docs/ARCHITECTURE.md` (reading
-  order, the `sim/` imports `render/`+`core/` exception stated honestly), `docs/AI_PROMPTS.md`
-  (model-agnostic starter prompt, refactor-step prompt, content prompt, using several AIs),
-  `docs/HOW_TO_ADD.md` (note on which recipes change), `README.md` (links).
-- **Housekeeping:** this file had 24 full entries (the limit is 15). The 15 oldest were moved
-  word for word to `CHANGELOG_ARCHIVE.md` and indexed below; 10 plus this one remain.
-- No source, data, test or save change; save version still 11. No rebuild needed.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-07: Vision, target architecture, roadmap and refactor plan (docs only, no code change)
 - 2026-11-07: Inventory Sell quantity uses a game-styled popover
 - 2026-11-07: Inventory Sell asks how many units to sell
 - 2026-11-07: Inventory grids use five narrower, shorter slots per row

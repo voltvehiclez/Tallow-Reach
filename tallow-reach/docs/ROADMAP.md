@@ -8,10 +8,13 @@
 
 **Current position:** **Milestone A is done.** Steps 0 to 5 are ticked (steps 4 and 5 on
 2026-11-08, after the owner played `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue
-with one inventory per place (save v12), and shops and prices from data. **Step 6 is under way and
-its first half, 6a (the sim stops playing sounds itself), is built and tested (150 green)** —
-waiting for the owner's playtest, which is the by-ear table in `TESTING-BASELINE.md`, section B.
-**Next: 6b**, the sim stops reading the keyboard: `core/input.js` fills a `controls` object in
+with one inventory per place (save v12), and shops and prices from data. **Step 6a is done and
+ticked** (2026-11-08): the sim no longer plays sounds, it emits `sfx` and `core/audio.js` plays
+them; the owner confirmed every sound by ear. **Step 6b (the sim stops reading the keyboard) is
+built and tested (155 green)**, waiting for the owner's playtest: `TESTING-BASELINE.md` section A
+(flight feel) and B (mining, guns, missiles) are the checks. With 6b, **no `src/sim/` file imports
+`core/` at all** — the sim reads `state.controls` — so step 6 is finished bar the tick.
+**Next after the tick: step 7**, entities become data and meshes become views: `core/input.js` fills a `controls` object in
 `state`, and `sim/{player,weapons,sectors}.js` read it instead of `keys`/`pointer`. Then the
 `tests/layers.test.mjs` allow-list loses its `input.js` line. The owner's earlier answers stand:
 found modules do **not** get random stats, so a stock stays a plain count per item; Meridian sells
@@ -40,7 +43,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 3 | Loot tables | A | [x] 2026-11-07 |
 | 4 | Item registry and generic inventory (save v12) | A | [x] 2026-11-08 |
 | 5 | Shops and prices from data | A | [x] 2026-11-08 |
-| 6 | Sim stops using sound and keyboard | B | [ ] **6a built, tested (150 green); waiting for playtest. 6b next** |
+| 6 | Sim stops using sound and keyboard | B | [ ] **6a ticked 2026-11-08. 6b built, 155 green, waiting for playtest** |
 | 7 | Entities are data, meshes are views (7a enemies, 7b projectiles/crates/FX, 7c rocks/ship) | B | [ ] |
 | 8 | Fixed time step and a list of players | B | [ ] |
 | 9 | Split the save: profile and world (save v13) | B | [ ] |
@@ -127,6 +130,18 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   seven tabs render byte-identical HTML.
 - 2026-11-08: Steps 4 and 5 ticked: the owner played the Inventory tab and the Shop (including
   section 8's old-save load) and confirmed both. Milestone A is reached and the docs say so.
+- 2026-11-08: Step **6b** built: the sim reads a control record (`state.controls`, shape in
+  `src/state/controls.js`) instead of the keyboard, and the missile lock ring's pixel size moved
+  from `sim/weapons.js` to `ui/hud.js` (the sim now reports the cone in degrees). **No `sim/` file
+  imports `core/` any more**, so step 6's goal is met. A probe ran one scripted session through the
+  previous commit (driven by `keys`) and this tree (driven by `state.controls`): **1010 of 1010
+  frames identical**. The ring maths matches the old formula to the last digit at five angles.
+  Save version unchanged (12). 155 tests green. Waiting for the owner's playtest before ticking.
+- 2026-11-08: Step **6a ticked.** The owner played the build and confirmed the sounds by ear (all
+  eleven, unchanged), so the sound half of step 6 is closed. Same day, the owner also caught a wrong
+  claim in the 6a changelog entry: mining with a full hold is not possible, because `updatePrimary`
+  says "Cargo hold full" and returns before the beam cuts. The docs were corrected; the code was
+  already right.
 - 2026-11-08: Step **6a** (the sim stops playing sounds itself) built: the sim emits
   `sfx { name, ...rest }`, `core/audio.js` owns an `SFX` table and one listener, and **no `sim/`
   file imports `core/audio.js` any more**. A new `tests/layers.test.mjs` (9 tests) enforces the

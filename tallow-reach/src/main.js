@@ -7,7 +7,7 @@ import { state } from "./state/state.js";
 import { newProfile } from "./state/profile.js";
 import { loadAutosave } from "./state/storage.js";
 import { SHIPS } from "./data/ships.js";
-import { installInput } from "./core/input.js";
+import { installInput, syncControls } from "./core/input.js";
 import { updateAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
 import { createPlayer, setShip, flight } from "./sim/player.js";
@@ -49,6 +49,7 @@ setupWarpStreaks();
 setupWarpFlash();
 setupPause();
 installInput();
+syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
   canStart: () => !state.player.docked && !state.paused,
   getScale: () => SHIPS[state.profile.ship].sc,

@@ -70,6 +70,17 @@ export function setupHud() {
   });
 }
 
+/**
+ * The missile lock ring's radius in pixels for a cone of `deg` degrees, or 0 when
+ * there is no ring. The sim says the angle (state.flight.coneAngle); turning it
+ * into pixels needs the camera's field of view and the window height, which only
+ * the screen knows. Property-tested in tests/layers.test.mjs.
+ */
+export function coneRadiusPx(deg) {
+  if (!(deg > 0)) return 0;
+  return (Math.tan((deg * Math.PI) / 180) / Math.tan((camera.fov * Math.PI) / 360)) * innerHeight / 2;
+}
+
 /** Refresh every HUD element. Call once per frame while flying. */
 export function updateHud(dt) {
   const P = state.player,
@@ -139,10 +150,13 @@ export function updateHud(dt) {
   el.msg.textContent = H.msgT > 0 ? H.msg : "";
   if (H.msgT > 0) H.msgT -= dt;
 
-  drawLockRing(F.missileLock, F.coneRadius);
-  el.cone.style.display = F.coneRadius > 0 ? "block" : "none";
-  if (F.coneRadius > 0) {
-    el.cone.style.width = el.cone.style.height = 2 * F.coneRadius + "px";
+  // The sim says the lock cone in degrees; the ring's size in pixels is the
+  // screen's business (step 6b). Same formula and the same numbers as before.
+  const coneRadius = coneRadiusPx(F.coneAngle);
+  drawLockRing(F.missileLock, coneRadius);
+  el.cone.style.display = coneRadius > 0 ? "block" : "none";
+  if (coneRadius > 0) {
+    el.cone.style.width = el.cone.style.height = 2 * coneRadius + "px";
   }
 
   drawMarkers();

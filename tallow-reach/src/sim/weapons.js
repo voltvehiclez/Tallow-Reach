@@ -8,7 +8,7 @@ import { SHIPS } from "../data/ships.js";
 import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
-import { keys } from "../core/input.js";
+
 import { scene, camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
@@ -61,6 +61,7 @@ export function updatePrimary(dt) {
   const F = state.flight,
     S = state.profile,
     P = state.player,
+    c = state.controls,
     d = SHIPS[S.ship];
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.
@@ -70,7 +71,6 @@ export function updatePrimary(dt) {
 
   // Weapons are offline during a warp: no cannons, no beam, and nothing is drawn.
   if (state.warp) {
-    F.gunsOn = false;
     setDraw("guns", 0);
     F.beamOn = false;
     F.beamT = 0;
@@ -83,13 +83,13 @@ export function updatePrimary(dt) {
   // its own cooldown. Firing costs 2 MJ/s a gun, and a ship with no power to spare
   // fires nothing — the same rule the thrusters and shields follow.
   const gunDraw = state.guns.reduce((sum, g) => sum + g.draw, 0);
-  const wantGuns = keys.fire && S.pw !== "beam" && state.guns.length > 0;
+  const wantGuns = c.fire && S.pw !== "beam" && state.guns.length > 0;
   // Compare against the rest of the ship's bill, so the guns are not counted twice.
   const otherDraw = state.power.draw - (state.power.use.guns || 0);
-  F.gunsOn = wantGuns && hasPower(otherDraw + gunDraw);
-  setDraw("guns", F.gunsOn ? gunDraw : 0);
+  const gunsOn = wantGuns && hasPower(otherDraw + gunDraw);
+  setDraw("guns", gunsOn ? gunDraw : 0);
 
-  if (F.gunsOn) {
+  if (gunsOn) {
     let fired = false;
     state.guns.forEach((g, i) => {
       if (F.gunCd[i] > 0) return;
@@ -126,7 +126,7 @@ export function updatePrimary(dt) {
   const beamOtherDraw = state.power.draw - (state.power.use.beam || 0);
   F.beamOn = false;
   beamMesh.visible = false;
-  if (keys.fire && S.pw === "beam" && beam) {
+  if (c.fire && S.pw === "beam" && beam) {
     // Find the nearest asteroid inside the beam cone.
     const f = fwd(P.m),
       pp = P.m.position;
@@ -204,6 +204,7 @@ export function updateMissiles(dt) {
   const F = state.flight,
     S = state.profile,
     P = state.player,
+    c = state.controls,
     W = state.world,
     ML = F.missileLock;
 
@@ -211,7 +212,7 @@ export function updateMissiles(dt) {
 
   // No lock-on or launches during a warp. Missiles already away keep flying.
   if (state.warp) {
-    F.coneRadius = 0;
+    F.coneAngle = 0;
     ML.target = null;
     ML.locked = false;
     ML.t = 0;
@@ -222,16 +223,16 @@ export function updateMissiles(dt) {
   // Which fitted launcher (if any) decides the damage, the stock and the reload.
   const launcher = (state.missiles || [])[0];
   if (!launcher) {
-    F.coneRadius = 0;
+    F.coneAngle = 0;
     ML.target = null;
     ML.locked = false;
     ML.t = 0;
-    if (keys.sec) say("No secondary weapon installed");
+    if (c.sec) say("No secondary weapon installed");
   } else {
-    // Radius of the lock ring on screen, matching the cone angle.
-    F.coneRadius =
-      (Math.tan((MISSILE.cone * Math.PI) / 180) / Math.tan((camera.fov * Math.PI) / 360)) *
-      innerHeight / 2;
+    // The lock cone, in degrees. The sim stops here: turning it into the ring's
+    // radius on screen needs the camera and the window size, which belong to
+    // ui/hud.js (step 6b). The sim says the angle; the HUD draws it.
+    F.coneAngle = MISSILE.cone;
 
     const cf = V(0, 0, -1).applyQuaternion(camera.quaternion),
       pp = P.m.position;
@@ -266,7 +267,7 @@ export function updateMissiles(dt) {
       say(ML.locked ? "MISSILE LOCK" : "Acquiring lock " + Math.round(Math.min(1, ML.t / MISSILE.lock) * 100) + "%");
     }
 
-    if (keys.sec && F.missileCd <= 0) {
+    if (c.sec && F.missileCd <= 0) {
       if (S.msl <= 0) say("Out of missiles");
       else {
         fireMissile(ML.locked ? ML.target : null, launcher);

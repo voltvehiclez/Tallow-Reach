@@ -1,8 +1,8 @@
-// Pause overlay. Freezes the simulation, mutes the engine, and releases held fire keys.
+// Pause overlay. Freezes the simulation, mutes the engine, and releases the trigger.
 // Layout, top to bottom: PAUSED title, resume hint, sound on/off switch, Resume button.
 // The sound switch is the only way to mute the game (there is no mute key).
 
-import { keys } from "../core/input.js";
+import { keys, syncControls } from "../core/input.js";
 import { setAudioSuspended, isMuted, toggleMute } from "../core/audio.js";
 import { state } from "../state/state.js";
 
@@ -41,7 +41,9 @@ function showSoundState() {
 export function setPause(v) {
   state.paused = v;
   overlay.hidden = !v;
+  // A trigger held when the game is paused must not fire on resume.
   keys.fire = keys.sec = 0;
+  syncControls();
   setAudioSuspended(v);
   if (v) showSoundState();
 }

@@ -31,12 +31,12 @@ runs when opened from disk.
 
 Dependencies only point downward. Lower layers never import higher ones.
 
-> **Known exception today:** `sim/` still imports `render/` (scene, models) and `core/input.js`,
-> which this rule forbids. It is the biggest structural debt and is closed by refactor steps 6b and 7
-> ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). **Sound is no longer part of it:** since step 6a the sim
-> emits `sfx { name }` and only `core/audio.js` plays it. Do not add *new* such imports.
-> `tests/layers.test.mjs` fails if a `sim/` file imports `core/audio.js`, `core/input.js` (until 6b)
-> or `ui/`, and holds the shrinking allow-lists of `sim/` files that may still import `render/`.
+> **Known exception today:** `sim/` still imports `render/` (scene, models) to build and remove
+> meshes. That is the last one, and refactor step 7 closes it ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)).
+> **`core/` is closed (step 6):** the sim emits `sfx { name }` for sound and reads
+> `state.controls` for input, so no `sim/` file imports `core/` at all. Do not add *new* upward
+> imports. `tests/layers.test.mjs` fails if a `sim/` file imports `core/` or `ui/`, and holds the
+> shrinking allow-list of `sim/` files that may still import `render/`.
 > The full list of debts and the target shape are in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md).
 
 ```
@@ -74,7 +74,7 @@ about each other, use the event bus instead.
 | Change how a hostile flies or shoots | `sim/ai.js` (`AI_BEHAVIOURS`, chosen by the def's `ai` field) |
 | Add or rename a faction              | `data/factions.js` (`FACTIONS`)                |
 | Change flight feel                   | `sim/player.js` (`flight`)                     |
-| Rebind keys                          | `BINDINGS` in `core/input.js`                  |
+| Rebind keys                          | `BINDINGS` (one-off actions) and `HELD` (flight and weapons) in `core/input.js` |
 | Add an outpost screen (tab)          | `ui/screens.js` (`TABS`, `SCREENS`, a HTML function) and `ui/menu.js` (`ACTIONS`) |
 | Add a module                         | `data/modules.js` (`MODULES`, `STOCK_FIT`); see HOW_TO_ADD.md recipe 16 |
 | Swap modules between ship and storage| `sim/fitting.js` (`fitModule`, `unequip`, `storedFor`); picker in `ui/screens.js`, actions in `ui/menu.js` |
@@ -105,7 +105,7 @@ src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
 src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, sectors, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers)
-src/core/              audio.js (synth + mute), input.js (keys -> named actions)
+src/core/              audio.js (synth + mute), input.js (keys -> state.controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, power, drive, fitting, inventory, shops' purchases (economy), weapons, combat, ai, loot, asteroids, targeting, contracts, session, sectors, effects, world
 src/render/            scene.js (including one group per sector), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting)
@@ -234,8 +234,10 @@ Each `src/` folder also has its own short `README.md`.
   hull's `dmg` (1 on every hull — the hulls are identical apart from the hold for now), so
   the module figure is the number the game uses. While the trigger is held and the guns are firing they report
   `setDraw("guns", draw * guns fitted)`; `hasPower()` decides whether they may fire at all, the
-  same rule the thrusters follow. `state.flight.gunCd` holds one cooldown per fitted gun and
-  `state.flight.gunsOn` says whether they fired this frame.
+  same rule the thrusters follow. `state.flight.gunCd` holds one cooldown per fitted gun.
+  Whether they fired on a given frame is worked out inside `updatePrimary` and kept there — it
+  is per-frame and purely local, so it is not a field of `state.flight` (the old stored copy was
+  never read by anything outside `sim/weapons.js`).
 - **The mining beam is a module too, not a weapon flag.** `beam_basic` lives in the `primary`
   group (`period` 4 s of continuous contact per ore before the hull's `mine` multiplier,
   `range` 340 m, `draw` 2 MJ/s), sold at Meridian for 900 cr (`data/shops.js`) — buying it puts the module in
@@ -257,6 +259,11 @@ Each `src/` folder also has its own short `README.md`.
   is not a gun: `gunsOf()` never returns it, so the guns and the beam slot never both fire.
   The first fitted beam (lowest bay) acts if two are fitted. Saves that owned the old shop
   beam were given one `beam_basic` in storage in save version 8 (not auto-fitted).
+- **The missile lock ring is sized by the screen, not the sim.** The sim reports the cone in
+  degrees (`state.flight.coneAngle`: `MISSILE.cone` while a launcher is fitted and no warp is
+  running, else 0) and `coneRadiusPx()` in `ui/hud.js` turns that into the ring's pixel radius
+  with the camera's field of view and the window height. Same numbers as before the move; do not
+  put the pixel maths back in `sim/`.
 - **The missile launcher is a module too — it replaced the old `wp.msl` flag.** `missile_basic`
   lives in the `secondary` group (`dmg` 8, `cap` 12, `cd` 4 s, `ammo` 8), sold at Meridian for
   1500 cr like the old launcher, and a purchase tops the rack up to the module's `ammo` (8
@@ -312,6 +319,13 @@ Each `src/` folder also has its own short `README.md`.
   canvas out of the page without destroying it; `ui/outfitting.js` puts the same canvas
   back into `#shipview` after each render. Do not create a renderer per render, and keep
   `id="shipview"` in `outfittingHtml`.
+- **The sim never reads the keyboard.** `core/input.js` is the only file that knows a key code.
+  It fills `state.controls` (one plain record per pilot, shape in `src/state/controls.js`) and the
+  sim reads that. `docs/REFACTOR_PLAN.md` step 6 chose this shape; it is the co-op contract, so do
+  not rename fields without saying so there: `steer {x,y}`, `roll`, `thrust`, `strafe`, `lift`,
+  `stop`, `brake`, `boost`, `fire`, `sec`. Step 8 moves it onto a per-player record and step 16
+  fills a guest's copy from the network. `tests/layers.test.mjs` fails if a `sim/` file mentions
+  `keys`/`pointer`, or if `HELD` sets a field the record does not have.
 - **The sim never plays a sound itself.** It emits `sfx { name, ...rest }` at the moment the
   sound belongs to, and `core/audio.js` plays the matching entry of its `SFX` table (one entry per
   sound, holding the exact `tone()`/`nz()` numbers). `tests/layers.test.mjs` fails if a `sim/` file

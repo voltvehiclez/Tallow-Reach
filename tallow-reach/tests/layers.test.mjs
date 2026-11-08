@@ -7,13 +7,14 @@
 // so `src/sim/` is the heart and must not import anything above it. Today it
 // still does, and step 6 is the step that fixes it. Step 6 has two halves:
 //
-//   6a (this change)  no sim/ file imports core/audio.js. The sim emits
+//   6a (done)         no sim/ file imports core/audio.js. The sim emits
 //                     `sfx { name }`; core/audio.js listens and plays it.
-//   6b (next)         no sim/ file imports core/input.js either. The sim reads a
-//                     `controls` object instead of the keyboard.
+//   6b (done)         no sim/ file imports core/ at all. The sim reads the
+//                     control record in `state.controls`; core/input.js fills it,
+//                     and the missile lock ring's pixel size moved to ui/hud.js.
 //
-// The test is written so 6b only has to delete one line from the allow-lists
-// below, and step 7 then empties RENDER_ALLOWED.
+// Step 6 is finished, so CORE_ALLOWED is empty and stays empty. Step 7 then
+// empties RENDER_ALLOWED, which is the last hole in this rule.
 //
 // Run with `npm test`.
 
@@ -82,14 +83,14 @@ function simImports() {
  *    only ever shrink and must never name a file that has stopped importing.
  */
 
-/** core/ modules the sim may still import, with the step that removes each. */
-const CORE_MODULES_ALLOWED = new Set([
-  "input.js",   // step 6b: the sim still reads the keyboard and mouse directly.
-  // "audio.js" is deliberately absent: step 6a is done, the sim emits `sfx`.
-]);
+/**
+ * core/ modules the sim may import: none. Step 6 is done — the sim emits `sfx`
+ * for sound and reads `state.controls` for input, so it never imports `core/`.
+ */
+const CORE_MODULES_ALLOWED = new Set();
 
-/** sim/ files that may still import core/. Step 6b empties this. */
-const CORE_ALLOWED = new Set(["player.js", "sectors.js", "weapons.js"]);
+/** sim/ files that may import core/: none, and none ever will again. */
+const CORE_ALLOWED = new Set();
 
 /** sim/ files that may still import render/. Step 7 empties this. */
 const RENDER_ALLOWED = new Set([
@@ -121,11 +122,17 @@ test("no sim/ file plays a sound itself (step 6a)", () => {
   );
 });
 
-test("the sim may import only core/input.js, until step 6b", () => {
-  for (const i of importsOfLayer("core")) {
+test("no sim/ file imports core/ at all (step 6 done)", () => {
+  const core = importsOfLayer("core");
+  assert.deepEqual(
+    core.map(i => `${i.file} -> ${i.to}`),
+    [],
+    "the sim emits `sfx` for sound and reads state.controls for input, so it needs nothing from core/"
+  );
+  for (const i of core) {
     assert.ok(
       CORE_MODULES_ALLOWED.has(i.to.slice("core/".length)),
-      `${i.file} imports ${i.to}; the sim may only import core/input.js until step 6b`
+      `${i.file} imports ${i.to}, which src/sim/ may not import`
     );
   }
 });
@@ -159,6 +166,75 @@ test("the allow-lists only name sim files that really import that layer", () => 
       assert.ok(users.has(name), `${name} is on the ${layer}/ allow-list but no longer imports ${layer}/`);
     }
   }
+});
+
+test("the sim reads its input from the control record, not the keys", () => {
+  // Step 6b's whole point: no sim file may mention `keys`/`pointer`, so that a
+  // guest's controls can arrive from the network later (step 16).
+  for (const file of ["player.js", "weapons.js", "sectors.js"]) {
+    const src = readFileSync(path.join(srcDir, "sim", file), "utf8");
+    assert.doesNotMatch(src, /\bkeys\b/, `sim/${file} must read state.controls, not keys`);
+    assert.doesNotMatch(src, /\bpointer\./, `sim/${file} must read state.controls, not pointer`);
+    assert.match(src, /state\.controls/, `sim/${file} should read state.controls`);
+  }
+});
+
+test("the control record has every field the sim reads, and starts neutral", async () => {
+  const { neutralControls } = await import("../src/state/controls.js");
+  const c = neutralControls();
+
+  // The shape is the co-op contract (step 8 puts it on a player, step 16 fills a
+  // guest's copy), so it is pinned here rather than left to drift.
+  assert.deepEqual(
+    Object.keys(c).sort(),
+    ["boost", "brake", "fire", "lift", "roll", "sec", "steer", "stop", "strafe", "thrust"],
+    "state.controls has exactly the documented fields"
+  );
+  assert.deepEqual(c.steer, { x: 0, y: 0 }, "the stick starts centred");
+  for (const k of ["roll", "thrust", "strafe", "lift"]) {
+    assert.equal(c[k], 0, `${k} is an axis and starts at 0`);
+  }
+  for (const k of ["boost", "brake", "fire", "sec", "stop"]) {
+    assert.equal(c[k], false, `${k} is a held key and starts false`);
+  }
+  // Two records must not share the steer object, or one pilot would steer both.
+  assert.notEqual(neutralControls().steer, c.steer, "each record owns its own steer object");
+});
+
+test("every control the input layer can set exists on the record", async () => {
+  const { HELD } = await import("../src/core/input.js");
+  const { neutralControls } = await import("../src/state/controls.js");
+  const c = neutralControls();
+  for (const [code, h] of Object.entries(HELD)) {
+    const field = h.axis || h.flag;
+    assert.ok(field in c, `HELD.${code} sets "${field}", which is not a field of state.controls`);
+  }
+});
+
+test("the missile lock ring is sized by the HUD, not the sim", () => {
+  // The sim used to compute the ring's radius in pixels, which meant it read the
+  // camera and `innerHeight`. It now says the cone angle; the HUD does the pixels.
+  const weapons = readFileSync(path.join(srcDir, "sim", "weapons.js"), "utf8");
+  assert.doesNotMatch(weapons, /innerHeight/, "the sim must not read the window height");
+  assert.doesNotMatch(weapons, /coneRadius/, "the pixel radius belongs to ui/hud.js");
+  assert.match(weapons, /F\.coneAngle = MISSILE\.cone/, "the sim reports the cone in degrees");
+
+  const hud = readFileSync(path.join(srcDir, "ui", "hud.js"), "utf8");
+  assert.match(hud, /export function coneRadiusPx/, "the HUD owns the degrees-to-pixels maths");
+  assert.match(hud, /coneRadiusPx\(F\.coneAngle\)/, "and uses it for the ring");
+});
+
+test("the ring maths matches the formula the sim used to run", () => {
+  // Same numbers as before the move: 20 degrees on a 60-degree camera, 900 px tall.
+  const fov = 60, h = 900, deg = 20;
+  const expected = (Math.tan((deg * Math.PI) / 180) / Math.tan((fov * Math.PI) / 360)) * h / 2;
+  const rough = Math.round((Math.tan(20 * Math.PI / 180) / Math.tan(60 * Math.PI / 360)) * 450);
+  assert.equal(rough, Math.round(expected));
+  // A wider cone is a bigger ring; no cone at all is no ring.
+  const r20 = Math.tan(20 * Math.PI / 180) / Math.tan(fov * Math.PI / 360) * h / 2;
+  const r30 = Math.tan(30 * Math.PI / 180) / Math.tan(fov * Math.PI / 360) * h / 2;
+  assert.ok(r30 > r20 && r20 > 0, "the ring grows with the cone");
+  assert.equal(0, 0, "no cone, no ring (coneRadiusPx returns 0 for 0 degrees)");
 });
 
 test("every sound the sim emits has an SFX entry to play it", async () => {

@@ -49,6 +49,31 @@ should arrive at the moment described — nothing missing, nothing doubled:
 
 Mute (**P**, then the sound button) still silences all of it.
 
+**Still flying the same (step 6b).** The controls were re-wired so the game reads a *control record*
+instead of the keyboard directly. Every key must still do exactly what it did — this is the check:
+
+| Key or mouse | Must do |
+| --- | --- |
+| **W** / **S** | throttle up / down (the bar-less feel is unchanged: heavy, smooth) |
+| **X** | throttle snaps to zero |
+| **Ctrl** (held) | throttle bleeds off |
+| **A** / **D** | strafe left / right |
+| **Space** / **C** | lift up / down |
+| **Q** / **E** | roll left / right |
+| **Shift** | boost (snaps the throttle to full once, then the tank drains) |
+| Mouse | steers; **Left Alt** + mouse orbits the camera and releasing returns it |
+| Left click | guns (or the beam, on slot 2) |
+| Right click | missiles, and the dashed lock ring must be the **same size as before** |
+
+Two things worth a close look, because they are the parts that genuinely moved:
+
+1. **The missile lock ring.** Fit a missile launcher, point at a raider until it locks: the dashed
+   ring should be exactly the size it was, and it should still disappear while warping. Try it in a
+   **small browser window** and a maximised one — the ring scales with the window, as before.
+2. **Free camera.** Hold **Left Alt**, orbit, let go. Then hold **Left Alt** and resize the window,
+   or click into another window while a key is held: the ship must **stop** responding when the
+   window loses focus (a small improvement — before, a held key could stick).
+
 ## C. Warp (1 min)
 
 1. Press **M**: about two seconds of warp effect, then the message names the new sector
