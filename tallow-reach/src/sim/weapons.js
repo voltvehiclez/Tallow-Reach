@@ -85,14 +85,15 @@ export function updatePrimary(dt) {
       // cannons fired before they were a module. A single barrel fires from its
       // bay mount as usual. Same cooldown and same power draw either way.
       const n = Math.max(1, g.barrels || 1),
-        f = playerFwd();
+        f = playerFwd(P);
       for (let b = 0; b < n; b++) {
         fire(
-          playerMount("gun", i, b, n),
+          playerMount("gun", i, b, n, P, S.ship),
           f,
           g.speed,
           true,
-          g.dmg * d.dmg
+          g.dmg * d.dmg,
+          P
         );
       }
     });
@@ -110,8 +111,8 @@ export function updatePrimary(dt) {
   F.beamOn = false;
   if (c.fire && S.pw === "beam" && beam) {
     // Find the nearest asteroid inside the beam cone.
-    const f = playerFwd(),
-      pp = playerPos();
+    const f = playerFwd(P),
+      pp = playerPos(P);
     let best = null,
       bestDist = 1e9;
     for (const a of state.world.asteroids) {
@@ -133,7 +134,7 @@ export function updatePrimary(dt) {
     } else {
       // The beam cuts continuously. Draw it, charge for it, and bank whole ores
       // as they complete.
-      const start = playerMount("beam"),
+      const start = playerMount("beam", 0, 0, 1, P, S.ship),
         end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5));
       // The sim says where the beam starts and stops; render/views.js draws it.
       F.beamOn = true;
@@ -216,7 +217,7 @@ export function updateMissiles(dt) {
     F.coneAngle = MISSILE.cone;
 
     const cf = V(state.aimDirection.x, state.aimDirection.y, state.aimDirection.z),
-      pp = playerPos();
+      pp = playerPos(P);
     let best = null,
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!state.freeCam.on) {
@@ -251,7 +252,7 @@ export function updateMissiles(dt) {
     if (c.sec && F.missileCd <= 0) {
       if (S.msl <= 0) say("Out of missiles");
       else {
-        fireMissile(ML.locked ? ML.target : null, launcher);
+        fireMissile(ML.locked ? ML.target : null, launcher, P);
         F.missileCd = launcher.cd;
       }
     }
@@ -260,10 +261,10 @@ export function updateMissiles(dt) {
   updateMissileFlight(dt);
 }
 
-function fireMissile(target, launcher) {
+function fireMissile(target, launcher, player) {
   const S = state.profile;
   S.msl--;
   // The missile itself is a record (`sim/missile.js`); its body and trail are
   // render/views.js's business.
-  launchMissile(target, launcher, playerFwd(), playerMount("missile"));
+  launchMissile(target, launcher, playerFwd(player), playerMount("missile", 0, 0, 1, player, S.ship), player);
 }

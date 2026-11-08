@@ -14,7 +14,7 @@ import { rollLoot } from "./loot.js";
 import { emit } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
-import { state, msg, say } from "../state/state.js";
+import { state, msg, say, localPlayer } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
@@ -34,7 +34,7 @@ const _spin = Q();           // scratch, so a frame allocates nothing
  * Spawn a bullet. Player bullets inherit the ship's velocity. Returns the new
  * record; its mesh is the view's business (step 7b).
  */
-export function fire(p, dir, speed, own, dmg) {
+export function fire(p, dir, speed, own, dmg, player = localPlayer()) {
   // `p` may be a plain `{ x, y, z }` (the tests pass one) or a maths vector.
   const at = V(p.x, p.y, p.z);
   const quat = Q();
@@ -43,7 +43,7 @@ export function fire(p, dir, speed, own, dmg) {
     kind: "bullet",
     pos: at,
     quat,
-    v: dir.clone().multiplyScalar(speed).add(own ? playerVel() : V(0, 0, 0)),
+    v: dir.clone().multiplyScalar(speed).add(own ? playerVel(player) : V(0, 0, 0)),
     own,
     dmg,
     l: 2.4,

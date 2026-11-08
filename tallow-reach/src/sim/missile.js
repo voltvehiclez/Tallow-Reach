@@ -12,7 +12,7 @@
 import { V, Q, faceQ } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 import { emit } from "../util/events.js";
-import { state } from "../state/state.js";
+import { state, localPlayer } from "../state/state.js";
 import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
@@ -23,8 +23,8 @@ import { addEntity, dropEntity } from "./entity.js";
  * launcher fitted as `launcher` (see sim/guns.js). `dir` is the ship's nose and
  * `muzzle` the point on the ship it leaves from.
  */
-export function launchMissile(target, launcher, dir, muzzle) {
-  const P = state.player;
+export function launchMissile(target, launcher, dir, muzzle, player = localPlayer()) {
+  const P = player;
   const m = {
     kind: "missile",
     pos: muzzle.clone(),

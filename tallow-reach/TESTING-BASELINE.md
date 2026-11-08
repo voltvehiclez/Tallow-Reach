@@ -187,3 +187,13 @@ check that nothing was left behind. Run it straight after **A** and **B**, while
 
 This slice does not add co-op or a second controllable ship; the automated tests check that two
 player records and their controls are independent. Step 8c is still needed for player-aware rules.
+
+## L. Step 8c in-progress: player-specific weapon origins
+
+1. Launch and fly as in section K. Fire the cannons while moving and turning: both bolts should
+   leave from the ship and carry its speed as before.
+2. If fitted, use the mining beam on an asteroid and launch a missile after acquiring a lock.
+   The beam and missile should start at the ship and behave as before.
+3. Press **F** to target a rock or raider, press **M** to warp away and back, then dock with **G**.
+   Report anything that looks different. This is only a regression check for the work so far;
+   step 8c is not finished and co-op is not available.

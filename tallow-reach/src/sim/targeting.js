@@ -23,8 +23,8 @@ export function toggleLock() {
     return;
   }
 
-  const f = playerFwd(),
-    pp = playerPos();
+  const f = playerFwd(P),
+    pp = playerPos(P);
   let best = null,
     bestScore = 0.45;
 

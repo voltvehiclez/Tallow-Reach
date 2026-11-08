@@ -233,7 +233,11 @@ rate throttle if you can). Tests green.
   for systems to migrate in 8c.
 - **8c — player-aware systems.** Make the relevant simulation systems act on the player passed
   to them instead of assuming one global player. Test independent players without adding
-  multiplayer transport. Not started.
+  multiplayer transport. **In progress, not complete:** pilot transforms/mounts and projectile
+  launch accept an explicit player, with two-player tests. Flight, power, shields, weapons state,
+  combat hits, inventory, AI targeting, lifecycle, shared timers/events and the simulation loop
+  still assume the local player. Do not tick 8c or claim a working two-player sim until these
+  systems are isolated and tested together.
 
 **Before all of step 8 can be ticked:** resolve or explicitly validate the remaining frame-rate
 risks: missile lock currently samples the rendered camera, asteroid respawn uses a wall-clock

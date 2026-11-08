@@ -19,6 +19,19 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 8c started — player-specific transforms and launches
+
+- `sim/pilot.js` transforms and mounts now accept an explicit player; projectile and missile
+  launch can inherit that player's velocity. Existing callers default to the local player.
+  Weapon and targeting calls pass their current player explicitly; gameplay and saves are unchanged.
+- Added two-player transform and projectile launch tests (`tests/player-aim.test.mjs`); 202 tests
+  pass. A scripted 12-second 8b-versus-current flight/weapon/warp probe was identical.
+- **8c is incomplete**: simulation systems, power, damage, inventory, targeting, lifecycle and
+  events still assume one player. No multiplayer sim is claimed. Frame-rate caveats remain.
+  Save version stays 12; this work has not been playtested by the owner.
+
+---
+
 ## 2026-11-08: Step 8b complete and ticked
 
 - The owner reported the 8b playtest passed. Updated the handoff, roadmap and refactor plan;

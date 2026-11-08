@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **200 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **202 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
@@ -37,18 +37,19 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** step 7 and its 7d cleanup are ticked. **8a is ticked**: the owner reported
-  its playtest passed. The fixed gameplay clock runs at 60 Hz, and the old 60 fps flight matches
-  exactly in a headless test. The old 30 and 144 fps traces differ by 2.2932 and 1.3400 units
-  respectively after ten seconds in that scenario. Full frame-rate independence is still not
-  proved: missile aim samples the rendered camera, asteroid respawn uses wall time and views are
-  not interpolated. The owner did not report a frame-throttled browser test.
-- **8b is ticked**: the owner reported its playtest passed (`TESTING-BASELINE.md` section K).
-  `state.players` holds player records with independent controls, and `localPlayer()` selects the
-  one the screen and input follow. `state.player` and `state.controls` are temporary aliases of
-  that local entry for legacy systems; there is no multiplayer simulation yet. A 12-second
-  scripted 8a-versus-8b flight/weapon/warp comparison was identical. 200 tests passed, save
-  version 12. **8c is next**: make systems player-aware and address the remaining step-8 risks.
+- **Next action:** step 7 and 7d, and step 8a and 8b, are ticked after the owner's playtests.
+  **8c is started but NOT complete.** `sim/pilot.js` position, rotation and mount helpers accept
+  an explicit player and projectile launch can inherit that player's velocity; old callers default
+  to the local player. `tests/player-aim.test.mjs` checks these with two different player records.
+  A scripted 12-second 8b-versus-current flight/weapon/warp comparison was identical. 202 tests
+  pass, save version 12. The user has not yet playtested this 8c work.
+- **Still required for 8c:** per-player flight, power, shields, weapon state, damage, inventory,
+  AI targeting, lifecycle and event ownership, and a sim loop that really advances multiple
+  players without sharing the local player's profile or controls. `state.player` / `state.controls`
+  remain temporary local aliases. No multiplayer simulation is implemented. Do not mark 8c or
+  step 8 complete yet. Also address or validate step 8's frame-rate caveats: missile aim samples
+  the rendered camera, asteroid respawn uses wall time, and views are not interpolated. The owner
+  has not reported a 30/60/144 fps browser throttle test.
 
 ---
 
@@ -209,7 +210,7 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 200 tests expected
+npm test          # 202 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 
