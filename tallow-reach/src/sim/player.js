@@ -1,14 +1,12 @@
 // The player's ship: flight model, Shield HP and Hull HP, and taking damage.
 
-import { V, fwd, clamp } from "../util/math.js";
+import { V, Q, fwdQ, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { FLIGHT } from "../data/ships.js";
 import { warpSteerEase } from "../data/sectors.js";
 import { sectorAt } from "../data/sectors.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 
-import { scene } from "../render/scene.js";
-import { buildPlayerShip } from "../render/models.js";
 import { state, msg } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
@@ -21,6 +19,13 @@ import { STATION_KEEPOUT } from "./world.js";
  */
 const NO_DRIVE_WARN = 2.5;
 
+// Scratch rotations for the turn, so a frame allocates nothing. The order is the
+// turn code's own: a local turn about Y, then X, then Z — exactly what the
+// model's `rotateY`, `rotateX` and `rotateZ` did (each multiplies the same
+// axis-angle quaternion onto the end, which is what `quaternion.multiply` does).
+const _qx = Q(), _qy = Q(), _qz = Q();
+const XAXIS = V(1, 0, 0), YAXIS = V(0, 1, 0), ZAXIS = V(0, 0, 1);
+
 /**
  * Is the pilot asking the ship to move, strafe, lift, roll or turn? Read from the
  * control record, not from the keyboard (step 6b).
@@ -32,11 +37,18 @@ function tryingToMove(c, stick) {
   );
 }
 
-/** Create the player record. The model is attached by setShip(). */
+/**
+ * Create the player record. Step 7b: the ship is plain data — `pos` and `quat` are
+ * where it is and which way it points, exactly like a hostile (`sim/enemy.js`).
+ * Its model belongs to `render/views.js`, which copies `pos`/`quat` onto it once a
+ * frame, so no rule here needs a scene.
+ */
 export function createPlayer() {
   state.player = {
-    m: null,
-    v: V(0, 0, 0),     // current velocity
+    kind: "ship",
+    pos: V(0, 0, 0),    // where the ship is (world metres)
+    quat: Q(),          // which way it points
+    v: V(0, 0, 0),      // current velocity
     thr: 0,            // throttle, -1..1
     hull: 0,
     sh: 0,
@@ -57,22 +69,21 @@ export function createPlayer() {
   return state.player;
 }
 
-/** Swap the flying model to ship `id`, rebuilding its Hull HP from the fit. */
+/**
+ * Swap the ship being flown to hull `id`, rebuilding its Hull HP from the fit.
+ * The model is the view's: it is built from `profile.ship`, so naming the new hull
+ * is the whole of the sim's part (step 7b).
+ */
 export function setShip(id) {
   const P = state.player;
-  if (P.m) scene.remove(P.m);
-  P.m = buildPlayerShip(id);
-  scene.add(P.m);
   P.hullMax = 0;
   P.hull = 0;
   refreshHull();   // Hull HP come from the hull module fitted in the bay
-  P.m.visible = !P.docked;
 }
 
 /** Flight model. Mouse steers, WASD strafes and throttles, Shift boosts. */
 export function flight(dt) {
   const P = state.player,
-    m = P.m,
     fc = state.freeCam,
     c = state.controls;
 
@@ -103,9 +114,11 @@ export function flight(dt) {
     msg("Equip thrusters to move", NO_DRIVE_WARN);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
   }
-  m.rotateY(-dz(stick.x * ease) * 1.6 * turn * dt);
-  m.rotateX(-dz(stick.y * ease) * 1.2 * turn * dt);
-  m.rotateZ(stick.roll * ease * 1.5 * turn * dt);
+  // The ship turns on its own record; the view copies the rotation onto the model.
+  P.quat
+    .multiply(_qy.setFromAxisAngle(YAXIS, -dz(stick.x * ease) * 1.6 * turn * dt))
+    .multiply(_qx.setFromAxisAngle(XAXIS, -dz(stick.y * ease) * 1.2 * turn * dt))
+    .multiply(_qz.setFromAxisAngle(ZAXIS, stick.roll * ease * 1.5 * turn * dt));
 
   if (W) {
     // Throttle released, like pressing X: the drag model bleeds the speed off.
@@ -160,9 +173,9 @@ export function flight(dt) {
   // With no power left there is nothing to push with.
   const spd = supply ? drv.spd : 0;
 
-  const f = fwd(m);
-  const right = V(1, 0, 0).applyQuaternion(m.quaternion);
-  const up = V(0, 1, 0).applyQuaternion(m.quaternion);
+  const f = fwdQ(P.quat);
+  const right = V(1, 0, 0).applyQuaternion(P.quat);
+  const up = V(0, 1, 0).applyQuaternion(P.quat);
   // Strafe and lift are ignored while warping, so the ship only bleeds speed.
   const strafe = W ? 0 : c.strafe;
   const lift = W ? 0 : c.lift;
@@ -176,17 +189,17 @@ export function flight(dt) {
     .addScaledVector(right, strafe * spd * FLIGHT.strafe)
     .addScaledVector(up, lift * spd * FLIGHT.lift);
   P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
-  m.position.addScaledVector(P.v, dt);
-  m.eng.forEach(e => e.scale.set(1, 1, 0.5 + P.thr * 2 + P.bs * 2));
+  P.pos.addScaledVector(P.v, dt);
 
-  // Asteroid collisions: push out of the rock and bounce off it.
+  // Asteroid collisions: push out of the rock and bounce off it. A rock's drawn
+  // size is its own `scale` (the view copies it), and `s0` the size it was born at.
   for (const a of state.world.asteroids) {
-    const q = m.position.clone().sub(a.m.position);
-    const r = a.r * Math.max(a.m.scale.x / a.s0.x, 0.4) * 0.9 + 4;
+    const q = P.pos.clone().sub(a.pos);
+    const r = a.r * Math.max(a.scale.x / a.s0.x, 0.4) * 0.9 + 4;
     const len = q.length();
     if (len < r) {
       const normal = q.divideScalar(len || 1);
-      m.position.addScaledVector(normal, r - len);
+      P.pos.addScaledVector(normal, r - len);
       const speed = P.v.length();
       P.v.reflect(normal).multiplyScalar(0.4);
       if (speed > 25) hurt(speed * 0.015);   // was 0.15 against a 100-point hull; the basic
@@ -195,8 +208,8 @@ export function flight(dt) {
   }
 
   // Keep out of the outpost (only sectors that have one).
-  if (sectorAt(state.sector).st && m.position.length() < STATION_KEEPOUT) {
-    m.position.setLength(STATION_KEEPOUT);
+  if (sectorAt(state.sector).st && P.pos.length() < STATION_KEEPOUT) {
+    P.pos.setLength(STATION_KEEPOUT);
     P.v.multiplyScalar(0.5);
   }
 

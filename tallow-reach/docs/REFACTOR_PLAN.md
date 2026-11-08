@@ -188,10 +188,13 @@ Everything plays as before.
 ## Step 7: Entities become data; meshes become views
 **Goal.** `src/sim/` no longer holds any three.js object. This is the big one.
 **Do.** Slice **7a (ticked 2026-11-08):** enemies as `{ id, kind, def, pos, vel, quat, hp... }`, with
-`render/views.js` creating, updating and removing their meshes by watching the entity lists. **7b:**
-bullets, missiles, crates, particles. **7c:** asteroids and the player's ship. Each slice is
-playable on its own. Positions are plain `{x,y,z}` data (or keep three.js vectors/quaternions as
-maths types, which is fine; just no meshes, scenes or materials in `sim/`).
+`render/views.js` creating, updating and removing their meshes by watching the entity lists. **7b
+(ticked 2026-11-08):** bullets, missiles, crates and particles as records (`sim/entity.js`,
+`sim/missile.js`), and — pulled forward because the rules already read them — rocks and the player's
+own ship (`sim/pilot.js`). **7c (left):** the player hull's own view class with named mount points
+(the gun muzzles and the missile rail), and then making `sectors.js` not import `render/` at all.
+Each slice is playable on its own. Positions are plain `{x,y,z}` data (or keep three.js
+vectors/quaternions as maths types, which is fine; just no meshes, scenes or materials in `sim/`).
 **Done when.** The `render/` allow-list in the layer test is empty. A new **headless sim test**
 builds a world, spawns an enemy, steps 600 ticks with no browser and checks the enemy approached and
 shot. The game plays as before.

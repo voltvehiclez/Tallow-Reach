@@ -1,10 +1,12 @@
-// render/views.js: one mesh per hostile, built and removed by the view
-// (refactor step 7a).
+// render/views.js: one mesh per entity, built and removed by the view
+// (refactor step 7a for hostiles, step 7b for everything else).
 //
 // The sim makes enemies as plain data and says so with `enemy-spawned` /
-// `enemy-removed`. This file checks the other half of the deal: a mesh appears
-// for each one, follows its position and rotation every frame, and goes away
-// when the enemy does. `tests/headless.mjs` stands in for the scene, so the
+// `enemy-removed`; bullets, missiles, crates, particles, rocks and the player's
+// ship are data too (step 7b), and the view watches `entity-spawned` /
+// `entity-removed` plus a per-frame sweep. This file checks the other half of the
+// deal: a mesh appears for each one, follows its data every frame, and goes away
+// when the entity does. `tests/headless.mjs` stands in for the scene, so the
 // third-party wiring (three.js objects, the scene graph) is recorded rather than
 // rendered.
 //
@@ -25,8 +27,20 @@ const views = await loadHeadless(
     spawnEnemy: "src/sim/ai.js",
     hitHostile: "src/sim/combat.js",
     clearTransient: "src/sim/world.js",
+    clearWorldObjects: "src/sim/world.js",
     dropEnemy: "src/sim/enemy.js",
     V: "src/util/math.js",
+    // Step 7b: the sim's own makers, so a test can spawn real shots and rocks.
+    fire: "src/sim/combat.js",
+    spawnCrate: "src/sim/combat.js",
+    updateBullets: "src/sim/combat.js",
+    boom: "src/sim/effects.js",
+    launchMissile: "src/sim/missile.js",
+    spawnAsteroid: "src/sim/asteroids.js",
+    populateField: "src/sim/asteroids.js",
+    createPlayer: "src/sim/player.js",
+    setShip: "src/sim/player.js",
+    newProfile: "src/state/profile.js",
   },
   { keep: ["views.js"] }
 );
@@ -34,10 +48,13 @@ const views = await loadHeadless(
 /** Names of the stand-in calls made so far, so a test can look for scene work. */
 const callsFrom = mark => views.__calls.slice(mark).map(c => c.name);
 
-/** A fresh world with no hostiles. */
+/** A fresh world with no hostiles and nothing else flying. */
 function fresh() {
-  views.state.world.enemies.length = 0;
+  const W = views.state.world;
+  W.enemies.length = 0;
   views.updateEnemyViews();          // sweep the meshes of anything left over
+  for (const k of ["bullets", "missiles", "crates", "fx", "asteroids"]) W[k].length = 0;
+  views.updateEntityViews();
   return views.state;
 }
 
@@ -128,4 +145,137 @@ test("docking clears the field, and every mesh with it", () => {
   views.clearTransient();
   assert.equal(S.world.enemies.length, 0, "the world is empty");
   assert.equal(views.enemyViewCount(), 0, "and so is the scene");
+});
+
+/* ------------------------------------------------------------------------- */
+/* Step 7b: bullets, missiles, crates, particles, rocks and the player's ship */
+/* ------------------------------------------------------------------------- */
+
+test("a bullet gets a mesh the moment it is fired, and loses it when it expires", () => {
+  const S = fresh();
+  views.installEnemyViews();       // a second install is harmless: both listen
+
+  views.createPlayer();            // a player bullet inherits the ship's speed
+  const mark = views.__calls.length;
+  const b = views.fire(views.V(10, 20, 30), views.V(0, 0, -1), 500, true, 1);
+
+  // The event did the work: no frame had to pass for the mesh to appear.
+  assert.equal(views.entityViewCount(), 1, "one mesh for the one bullet");
+  const added = views.__calls.slice(mark).filter(c => c.name === "scene.add");
+  assert.equal(added.length, 1, "and it went into the scene at once");
+
+  // It is drawn from the record, not from a mesh of its own.
+  assert.equal(b.m, undefined, "the bullet holds no mesh: render/views.js owns it");
+  assert.equal(b.kind, "bullet", "it says what kind of thing it is");
+  assert.ok(Number.isInteger(b.id) && b.id > 0, "and it has an id for the view to key on");
+
+  // A frame copies its position and rotation onto the mesh: one mesh, and the
+  // copy carries the record's new position.
+  b.pos.set(0, 0, -100);
+  const mark2 = views.__calls.length;
+  views.updateEntityViews();
+  const calls = views.__calls.slice(mark2);
+  assert.ok(calls.some(c => c.name.endsWith("position.copy")), "its mesh is moved every frame");
+  assert.equal(views.entityViewCount(), 1, "and it is still exactly one mesh for it");
+  assert.deepEqual([b.pos.x, b.pos.y, b.pos.z], [0, 0, -100], "drawing never moves the bullet");
+
+  // Expired: the mesh goes with it, and so does the scene entry.
+  b.l = 0;
+  views.updateBullets(1 / 60);
+  assert.equal(S.world.bullets.length, 0, "the bullet is out of the world");
+  views.updateEntityViews();
+  assert.equal(views.entityViewCount(), 0, "and out of the scene");
+});
+
+test("a spawned crate, party and rock are drawn, and a cleared field empties the scene", () => {
+  const S = fresh();
+  views.installEnemyViews();
+
+  views.spawnCrate(views.V(0, 0, 500), "salv");
+  views.spawnCrate(views.V(0, 0, 600), "core");
+  views.boom(views.V(0, 0, 0), 3, 0xffd080);          // three particles
+  views.spawnAsteroid();                              // one rock
+  views.updateEntityViews();
+
+  assert.equal(S.world.crates.length, 2);
+  assert.equal(S.world.fx.length, 3);
+  assert.equal(S.world.asteroids.length, 1);
+  assert.equal(views.entityViewCount(), 6, "two crates, three sparks and a rock");
+
+  // Each particle is drawn from its record: the sim names the colour, and each
+  // spark gets a mesh of its own (it fades on its own).
+  const fx = S.world.fx[0];
+  assert.equal(fx.kind, "fx");
+  assert.equal(fx.col, 0xffd080, "the explosion's colour is on the record");
+  assert.equal(fx.size, 1, "and so is its size");
+  assert.ok(Number.isInteger(fx.id), "with an id for the view to key on");
+
+  // Clearing the field the way docking and warping do empties the scene too —
+  // shots, crates and sparks go; rocks stay, because they are the sector's.
+  views.clearTransient();
+  views.clearWorldObjects();
+  views.updateEntityViews();
+  assert.equal(S.world.fx.length + S.world.crates.length, 0, "crates and sparks are gone");
+  assert.equal(S.world.asteroids.length, 1, "the rock is geography: it stays");
+  assert.equal(views.entityViewCount(), 1, "so only the rock is still drawn");
+});
+
+test("a missile is a record, flown and drawn by data", () => {
+  const S = fresh();
+  views.installEnemyViews();
+  views.createPlayer();
+  views.setShip("wasp");
+  S.player.pos.set(0, 0, 0);
+  S.player.v.set(0, 0, 0);
+
+  const m = views.launchMissile(null, { dmg: 8 }, views.V(0, 0, -1), views.V(0, -1.2, -5));
+  assert.equal(S.world.missiles.length, 1);
+  assert.equal(m.kind, "missile");
+  assert.equal(m.m, undefined, "the missile holds no mesh either");
+  assert.equal(views.entityViewCount(), 1, "and one mesh was made for it");
+  assert.equal(m.sp > 0, true, "it leaves with a speed");
+});
+
+test("the player's own ship is drawn from its record, not the other way round", () => {
+  const S = fresh();
+  views.createPlayer();
+  views.setShip("wasp");
+  S.player.pos.set(120, 30, -400);
+  S.player.quat.set(0, 0, 0, 1);
+  S.player.docked = false;
+
+  const mark = views.__calls.length;
+  views.updateEntityViews();
+  assert.ok(views.playerView(), "the ship has a mesh");
+  const pos = views.__calls.slice(mark).filter(c => c.name.endsWith("position.copy")).pop();
+  assert.deepEqual([pos.args[0].x, pos.args[0].y, pos.args[0].z], [120, 30, -400],
+    "and it sits where the record says the ship is");
+
+  // Docking hides the model through the record's own flag: `visible` is written,
+  // never read back as a game fact.
+  S.player.docked = true;
+  views.updateEntityViews();
+  assert.equal(S.player.docked, true, "the record says docked");
+  assert.deepEqual([S.player.pos.x, S.player.pos.y, S.player.pos.z], [120, 30, -400],
+    "drawing never moves the ship");
+});
+
+test("the mining beam is drawn from the sim's start and end points", () => {
+  const S = fresh();
+  views.installEnemyViews();
+  S.flight.beamOn = true;
+  S.flight.beamStart = views.V(0, 0, 0);
+  S.flight.beamEnd = views.V(0, 0, -300);
+
+  // The sim's numbers are what the view reads: start, end and the beam's length.
+  assert.equal(S.flight.beamOn, true);
+  assert.deepEqual([S.flight.beamStart.z, S.flight.beamEnd.z], [0, -300], "the sim says where the beam runs");
+  // Drawing a frame must never change them.
+  views.updateEntityViews();
+  assert.deepEqual([S.flight.beamStart.z, S.flight.beamEnd.z], [0, -300], "drawing the beam changes no rule");
+
+  // Off again the moment the sim says so.
+  S.flight.beamOn = false;
+  views.updateEntityViews();
+  assert.equal(S.flight.beamOn, false);
 });

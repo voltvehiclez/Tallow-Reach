@@ -4,11 +4,11 @@
 // enemy, step it for 600 ticks and check the enemy approached and shot. No
 // renderer, no canvas, no DOM — just the real sim code.
 //
-// It runs the AI against a stand-in player *position* (everything about the
-// player's own ship becomes plain data in 7c, so `state.player.m.position` is
-// still how the sim learns where the pilot is). The 3D scene and the sound are
-// swapped for recording stand-ins by tests/headless.mjs; nothing about an enemy
-// needs them any more, which is what step 7a changed.
+// It runs the AI against the real pilot record: since step 7b the player's ship is
+// plain data too (`state.player.pos` / `quat`, see `sim/pilot.js`), so this file
+// only needs a position and a velocity to stand in for the flying game. The 3D
+// scene and the sound are swapped for recording stand-ins by tests/headless.mjs;
+// nothing about an enemy or a shot needs them any more.
 //
 // Run with `npm test`.
 
@@ -38,7 +38,8 @@ function freshWorld() {
   S.world.bullets.length = 0;
   S.world.asteroids.length = 0;
   S.world.crates.length = 0;
-  S.player = { m: { position: sim.V(0, 0, 0) }, v: sim.V(0, 0, 0) };
+  S.player = { kind: "ship", pos: sim.V(0, 0, 0), quat: sim.V(0, 0, 0), v: sim.V(0, 0, 0) };
+  S.player.quat.w = 1;           // an unrotated quaternion, not a vector
   S.flight.spawnT = 1e9;         // no wandering pirates: this test is one raider
   S.sector = "reach";
   S.profile.mission = null;

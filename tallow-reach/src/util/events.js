@@ -19,6 +19,11 @@
 //                                    itself). Extra fields are that sound's arguments, e.g.
 //                                    { name: "explosion", count } or { name: "warp-charge", dur }
 //   enemy-killed  { def, faction, id } a hostile was destroyed (def, faction and id are ids)
+//   entity-spawned { id, kind }     any other entity entered the world: a bullet, missile,
+//                                    crate, particle or rock (render/views.js builds its mesh).
+//                                    Hostiles keep `enemy-spawned` below, from step 7a.
+//   entity-removed { id, kind }     that entity left the world: it hit, expired, was picked
+//                                    up, or the field was cleared (the view deletes its mesh)
 //   enemy-spawned { id, def, pos }   a hostile entered the world (render/views.js builds its mesh)
 //   enemy-removed { id }             a hostile left the world: killed, out of range, or the field
 //                                    was cleared (render/views.js removes its mesh)

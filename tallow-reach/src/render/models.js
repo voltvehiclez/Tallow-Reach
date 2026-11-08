@@ -86,4 +86,6 @@ const rockShapes = [...Array(6)].map((_, k) => {
   return g;
 });
 
-export const rockShape = () => rockShapes[Math.floor(R(0, 6))];
+/** The shape with index `k` (0..5). Which one a rock uses is a roll the sim makes. */
+export const rockShapeAt = k => rockShapes[Math.abs(Math.floor(k)) % rockShapes.length];
+export const ROCK_SHAPES = rockShapes.length;

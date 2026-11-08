@@ -29,7 +29,7 @@ import { refreshShield, updateShield } from "./sim/shield.js";
 import { refreshHull } from "./sim/hull.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
-import { installEnemyViews, updateEnemyViews } from "./render/views.js";
+import { installEnemyViews, updateEnemyViews, updateEntityViews } from "./render/views.js";
 
 // --- Boot ------------------------------------------------------------------
 
@@ -47,7 +47,7 @@ refreshGuns();   // and the primary bays decide what fires on left click
 setupHud();
 setupMenu();
 setupWarpStreaks();
-installEnemyViews();   // one mesh per hostile, built and removed by render/views.js
+installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, rocks, the ship
 setupWarpFlash();
 setupPause();
 installInput();
@@ -133,6 +133,7 @@ function frame(now) {
   }
   updateEffects(dt);
   updateEnemyViews();      // copy each hostile's position onto its mesh
+  updateEntityViews();     // and every bullet, missile, crate, particle, rock and the ship
   updateWarpStreaks(dt);   // all three hide themselves when no warp is running
   updateWarpFlash();
 

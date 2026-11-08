@@ -1,6 +1,6 @@
 # START HERE — handoff note for a fresh session
 
-> Updated 2026-11-08. Save version **12**. **165 tests** in `tests/`, all green as of this update
+> Updated 2026-11-08. Save version **12**. **182 tests** in `tests/`, all green as of this update
 > (run in the session that wrote it: `npm install`, `npm test` and `npm run build` all worked).
 > The zip has **no `game/` folder**: `game/tallow-reach.html` is generated, and the user builds it
 > on their own computer with `npm install` then `npm run build`. Inventory and shops are now
@@ -37,12 +37,14 @@ salvage and spare modules — is one **stock of items** (`{ itemId: count }`) fr
 - **Multiplayer:** host-run co-op joined by a link; loot is brought back to your own world; simple trading; no anti-cheat.
 - **Plan:** the code needs reorganising first (content as data, a pure simulation, split saves, sectors as
   data). That is `docs/REFACTOR_PLAN.md`, 15 steps in 4 milestones; progress is in `docs/ROADMAP.md`.
-- **Next action:** steps **4**, **5**, **6** and **7a** are **ticked** (owner's playtests,
-  2026-11-08). A hostile is plain data (`sim/enemy.js`) and `render/views.js` draws it, so **no
-  `src/sim/` file holds or touches a mesh for an enemy**. **Step 7b is next**: bullets, missiles,
-  crates and particles the same way; then 7c (rocks and the player's ship). Step 7 ends when the
-  `render/` allow-list in `tests/layers.test.mjs` is empty. Data-only content can be added in the
-  meantime.
+- **Next action:** steps **4**, **5**, **6**, **7a** and **7b** are **ticked** (7a and 7b are
+  refactors, so they need no playtest; 7b was proved identical by an old-vs-new probe). **Every
+  entity in the game is plain data now** — an enemy, a bullet, a missile, a crate, an explosion
+  spark, a rock and the player's own ship — and `render/views.js` draws all of them, so **no
+  `src/sim/` file holds a mesh**. **Step 7c is next**: the player hull's own view class with named
+  mount points, and then the two remaining `render/` imports in `sim/` (`sectors.js`'s `showSector`,
+  `weapons.js`'s lock-cone camera read). Step 7 ends when that allow-list in
+  `tests/layers.test.mjs` is empty. Data-only content can be added in the meantime.
 
 ---
 
@@ -112,6 +114,7 @@ that change, whether the save changes) and build them in small slices that can e
 | Guns | Both primary bays fire on left click, each gun on its own cooldown; keys **1/2** cycle the primary slots (1 = guns, 2 = mining beam; an `Empty weapon slot` if nothing is fitted there). Right click = missiles (needs a launcher fitted) |
 | Mining beam | One ore per 4 s of unbroken contact; progress is lost the moment contact stops; small bar with percentage under the "left in rock" hint; chime when an ore banks |
 | Hostiles | One type, but now **data**: the **Newbie Raider** is the `raider` entry in `src/data/enemies.js` (10 Hull HP, no shields, 1 damage a shot). `spawnEnemy(id, pos)` in `sim/ai.js` builds it; `AI_BEHAVIOURS` holds the one behaviour (`chase`). **A hostile is plain data since step 7a** (`sim/enemy.js`): `{ id, kind, def, pos, quat, hp, ... }`, no mesh; `render/views.js` draws it. Kills emit `enemy-killed { def, faction, id }`; leaving the world (killed, out of range, field cleared) emits `enemy-removed { id }` |
+| Shots, loot, sparks, rocks | **All plain data since step 7b.** A bullet `{ id, kind: "bullet", pos, quat, v, own, dmg, l }`, a missile `{ id, kind: "missile", pos, quat, d, sp, t, l, dmg }` (`sim/missile.js`), a crate `{ id, kind: "crate", pos, quat, t, item, spin }`, a spark `{ id, kind: "fx", pos, v, l, t, col, size }` (`sim/effects.js`), a rock `{ id, kind: "rock", sector, shape, pos, quat, s0, scale, r, type, ore, max }` (`sim/asteroids.js`). They go in and out of `state.world` only through `sim/entity.js`, which emits `entity-spawned` / `entity-removed { id, kind }`. The player's ship is `state.player.pos` / `.quat`, read only through `sim/pilot.js`. `render/views.js` owns every mesh, and draws the mining beam from `state.flight.beamStart` / `beamEnd` |
 | Items | `ITEMS` in `data/items.js`: five goods (ferrite 10 cr, cobalt 24, voidite 60, salvage 70, reactor core 350, all 1 m³) plus an entry for each module (`{ cat: "module" }`, name/volume/stats in `data/modules.js`). A place is one stock `{ itemId: count }`; `sim/inventory.js` is the only mover |
 | HUD | Top left: Shield HP, Hull HP and Boost as whole numbers, each label in its bar's colour; hold shown as `Hold 12/20 m³`; centre-bottom power block |
 | Inventory | **Inventory tab**: the station's store above one ship's hold, arrows step through the hangar, `1`/`all` buttons move ore and modules between them. Everything is in m³ (ore 1 each, modules `vol`; station `250 x Storage bay level`, a hold is the hull's `cargo`). Each ship has its own hold (`profile.holds`). Purchases land in the station and you can buy as many as there is room for; Outfitting fits from the station's parts. Code: `sim/inventory.js` |
@@ -188,7 +191,8 @@ that change, whether the save changes) and build them in small slices that can e
   Raiders no longer get tougher with the contract tier (they are all 10 HP now).
 - Kestrel Hollow is empty, and there is no star map screen (M just cycles the sectors).
   One sector's geography (outpost, field) is written into the code.
-- Salvage crates are abandoned when you warp out.
+- Salvage crates and sparks are cleared when you warp out (`clearWorldObjects()`); rocks stay,
+  because they are the sector's.
 - Current sector and mute state are not saved.
 - Paint bays are clickable but no paints exist yet.
 - Hulls differ only in hold size; ship-specific bonuses are meant to arrive later.
@@ -201,13 +205,15 @@ The user runs, in the `tallow-reach` folder:
 
 ```
 npm install       # once; needs network. node_modules is not in the zip and can be deleted any time
-npm test          # 165 tests expected
+npm test          # 182 tests expected
 npm run build     # writes game/tallow-reach.html
 ```
 
 - `tests/headless.mjs` runs sim code (`src/sim/`) in a test with the 3D scene and the sound stubbed
-  out. `tests/headless-sim.test.mjs` is the worked example (step 7's headless test): one raider, 600
-  ticks, no browser, checking it closed in, turned and shot. `opts.keep: ["views.js"]` loads one
+  out. `tests/headless-sim.test.mjs` is step 7's worked example: one raider, 600 ticks, no browser,
+  checking it closed in, turned and shot. `tests/headless-fight.test.mjs` is step 7b's: a shot's
+  record, a hit, a kill with loot, a crate picked up and one expiring, a homing missile, mining a
+  rock, clearing the world, and a check that the sim makes **no scene call at all**. `opts.keep: ["views.js"]` loads one
   `render/` file for real (used by `tests/views.test.mjs` to test the drawing code itself).
 - Some AI sessions have no network. Then `npm install` fails, `node build.mjs` fails (no `esbuild`)
   and most tests fail (they import `three` through `src/util/math.js`). Say so plainly and tell
@@ -217,16 +223,28 @@ npm run build     # writes game/tallow-reach.html
   `setShip(id)`, then step `flight(dt)` / `updatePrimary(dt)` / `updateShield(dt)` /
   `updatePower(dt)` yourself at `dt = 1/60`. Sim time is not wall time under software rendering,
   so read game state, not the clock. Rebuild probes from this description; none are kept.
+- **Never let the sim read a mesh's `matrixWorld`.** three.js only refreshes it when the scene is
+  drawn, so inside the frame loop it is *last* frame's transform. Build world points from a
+  record's `pos` and `quat` by hand (`playerLocal` in `sim/pilot.js`, `chaseView` in
+  `render/camera.js`). This is what made bolts leave from where the guns had been a frame earlier;
+  it was fixed in 7b, and `tests/layers.test.mjs` fails if a `sim/` file names `matrixWorld`.
 - For a refactor step, the strongest check is an **old-vs-new probe**: bundle the previous commit's
   tree and the working tree with esbuild (stubbing `src/render/*` and `src/core/*`, real `three`),
   run one scripted session through both, and compare state after every step. Step 4's probe did 29
   steps (buy, refuse, move, fill a hold, fit, unequip, buy and switch ships, store, load, sell) and
-  also compared the rendered Inventory/Shop/Base HTML: identical. Probes are never kept.
+  also compared the rendered Inventory/Shop/Base HTML: identical. **Step 7b's probe** did the same
+  for the flight loop: twenty scripted snapshots (start, thrust, brake, strafe, turned, boosted,
+  spawned, four and eight shots fired, missiles, hurt, two lock states, mined, beam off, cleared,
+  killed, picked up, end) with the pilot, power, every hostile, bullet, missile, crate, spark, rock,
+  the lock and the hold fingerprinted each time — **0 differences**. The one trick it needs: call
+  `updateMatrixWorld()` on the old build's ship after every teleport, or the old build fires from a
+  stale transform and the shot positions differ for that reason alone. Probes are never kept.
 - Some sessions have Chromium and Playwright; check before assuming either way.
 - The user tests by clicking through the `TESTING-*.md` files. Keep them current: they are the only
   bridge between the code and someone who does not read it.
-- Known-unverified: the Inventory tab, buying several modules, and loading old saves in the real
-  built game. Ask the user how it played if it matters to the task.
+- Known-unverified: loading old saves in the real built game (the Inventory tab, shops and the
+  whole flight loop have all been confirmed by the owner's playtests or by a probe). Ask the user
+  how it played if it matters to the task.
 
 ## To start the next session
 

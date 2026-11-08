@@ -7,7 +7,7 @@ import { DEFAULT_SECTOR } from "../data/sectors.js";
 
 export const state = {
   profile: newProfile(),
-  player: null,        // the flying ship (created in sim/player.js)
+  player: null,        // the flying ship (created in sim/player.js: pos, quat, velocity, hull)
   paused: false,
   time: 0,             // seconds of unpaused play
   sector: DEFAULT_SECTOR,   // id from data/sectors.js: the region you are flying in
@@ -32,6 +32,8 @@ export const state = {
     missileCd: 0,
     spawnT: 20,        // seconds until the next pirate check
     beamOn: false,
+    beamStart: null,   // where the mining beam starts, while it is cutting (the view draws it)
+    beamEnd: null,     // and where it stops
     beamT: 0,          // seconds of continuous contact toward the next ore; resets the moment contact stops
     mineFrac: 1,       // ore left in the rock being mined (drives hum pitch)
     coneAngle: 0,      // degrees: the missile lock cone, 0 when no ring is shown

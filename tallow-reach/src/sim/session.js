@@ -1,7 +1,7 @@
 // Flight lifecycle: launching from the outpost, docking, and losing a ship.
 // Menus and HUD react to the events emitted here (docked, launched, died).
 
-import { V, R, face } from "../util/math.js";
+import { V, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { DEFAULT_SECTOR, sectorAt } from "../data/sectors.js";
@@ -19,6 +19,7 @@ import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
 import { cancelWarp, enterSector } from "./sectors.js";
+import { facePlayer } from "./pilot.js";
 
 const DOCK_RANGE = 300;     // metres from the outpost
 const DOCK_MAX_SPEED = 70;  // m/s
@@ -28,11 +29,11 @@ export function launch() {
   const P = state.player,
     S = state.profile;
   P.docked = false;
-  P.m.visible = true;
   // 200 m out is inside docking range (300), so a ship that cannot move can
-  // still turn round and dock straight away.
-  P.m.position.set(0, 0, 200);
-  face(P.m, FIELD_CENTER, 1);
+  // still turn round and dock straight away. The model's visibility follows
+  // `P.docked` in render/views.js (step 7b).
+  P.pos.set(0, 0, 200);
+  facePlayer(FIELD_CENTER, 1);
   P.v.set(0, 0, 0);
   P.snap = true;
   refillPower();      // launched fully charged
@@ -62,7 +63,6 @@ export function dock() {
   state.freeCam.on = false;
   cancelWarp();
   P.docked = true;
-  P.m.visible = false;
   P.v.set(0, 0, 0);
   P.thr = 0;
   if (S.ships.includes(S.ship) && P.hullMax > 0) {
@@ -87,7 +87,7 @@ export function dock() {
 export function tryDock() {
   const P = state.player;
   if (!sectorAt(state.sector).st) return;   // no outpost in this sector
-  if (P.m.position.length() < DOCK_RANGE && P.v.length() < DOCK_MAX_SPEED) dock();
+  if (P.pos.length() < DOCK_RANGE && P.v.length() < DOCK_MAX_SPEED) dock();
 }
 
 /**
@@ -99,7 +99,7 @@ export function die() {
   const S = state.profile,
     lost = S.ship;
   const fee = Math.min(S.cr, RECOVERY_FEE);
-  boom(state.player.m.position, 30, 0xffa050);
+  boom(state.player.pos, 30, 0xffa050);
 
   let text = `Your ${SHIPS[lost].n} was destroyed and is gone for good. Cargo lost, ${fee} cr recovery fee.`;
   delete S.holds[lost];      // its ore and any spare modules it carried go with it

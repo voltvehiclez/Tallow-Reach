@@ -103,4 +103,30 @@ Two things worth a close look, because they are the parts that genuinely moved:
 Take the hull module off in Outfitting, launch, and let a raider shoot you once: the ship is
 destroyed, cargo is lost, a recovery fee is charged, and you are back at the outpost in another ship.
 
+## G. Step 7b: the things that moved are drawn, not missing (2 min)
+
+Step 7b moved every bullet, missile, crate, spark, rock and the player's own ship out of the sim
+and into the drawing code. Nothing should look or play any differently — this section exists to
+check that nothing was left behind. Run it straight after **A** and **B**, while you are flying.
+
+1. **Your ship is there.** In flight it sits in the middle of the screen, nose pointing where you
+   steer, same size and colour as before. In Outfitting the 3D viewer still shows it, and docking
+   hides the in-flight one (the screen does not show two ships).
+2. **Your shots are there,** and they leave from the guns: fire while turning hard — each bolt
+   should start at the gun it came from, not from where the gun was a moment ago.
+3. **Enemy shots are there:** red bolts still fly at you.
+4. **Explosions** still burst into a handful of coloured sparks that fade out, and they do not
+   linger after the wreck is gone.
+5. **Crates** still spin, drift, glow in their item's colour, and vanish when you fly through
+   them (the pickup chime plays).
+6. **Rocks** are the same lumpy shapes and sizes as before, they twinkle no differently, and when
+   you mine one it **shrinks as it empties** — and, importantly, you stop being able to fly into
+   the part that has gone: the smaller the rock, the closer you can get.
+7. **The mining beam** is still a thin line from the nose of your ship to the point on the rock it
+   is cutting, and it disappears the moment you stop firing or look away.
+8. **Missiles** still launch from under the ship, smoke, home in and burst.
+9. **Warp:** press **M** — the crates and sparks you left behind are cleared, the rocks of the
+   sector you arrive in are there, and nothing from the old sector is left floating. Press **M**
+   again to come back.
+
 **Pass:** every item above behaves as written, and `npm test` is green.

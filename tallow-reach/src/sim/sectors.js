@@ -132,7 +132,7 @@ function arrive(from, to) {
   state.flight.missileLock = { target: null, t: 0, locked: false };
 
   // Arrive at the sector's spawn point, at rest, with the camera snapped.
-  P.m.position.set(dest.sn[0], dest.sn[1], dest.sn[2]);
+  P.pos.set(dest.sn[0], dest.sn[1], dest.sn[2]);
   P.v.set(0, 0, 0);
   P.thr = 0;
   P.acc = 0;

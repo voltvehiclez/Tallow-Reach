@@ -2,9 +2,9 @@
 
 import { V } from "../util/math.js";
 import { DEFAULT_SECTOR } from "../data/sectors.js";
-import { scene } from "../render/scene.js";
 import { state } from "../state/state.js";
 import { dropEnemy } from "./enemy.js";
+import { clearEntities } from "./entity.js";
 
 /** Where Meridian Outpost is. It used to live in render/scene.js; the sim needs
  *  it (target lock, keep-out) and the sim must not import render/, so it lives
@@ -21,29 +21,26 @@ export const FIELD_SECTOR = DEFAULT_SECTOR;
 /** Ships closer than this to the outpost are pushed back out. */
 export const STATION_KEEPOUT = 120;
 
-/** Remove pirates, bullets and missiles from the scene (used when docking). */
+/**
+ * Remove hostiles, bullets and missiles from the world (used when docking).
+ * Each one announces its own departure, so `render/views.js` takes its mesh with
+ * it (step 7b: nothing here touches the scene).
+ */
 export function clearTransient() {
   const w = state.world;
   // Copies, because dropEnemy() splices the live list.
   for (const e of [...w.enemies]) dropEnemy(e);
   w.enemies.length = 0;
-  for (const b of w.bullets) scene.remove(b.m);
-  w.bullets.length = 0;
-  for (const s of w.missiles) scene.remove(s.m);
-  w.missiles.length = 0;
+  clearEntities(w.bullets);
+  clearEntities(w.missiles);
 }
 
 /** Clear transient objects plus crates and particles (used when warping away). */
 export function clearWorldObjects() {
   const w = state.world;
   clearTransient();
-  for (const c of w.crates) scene.remove(c.m);
-  w.crates.length = 0;
-  for (const f of w.fx) {
-    scene.remove(f.m);
-    f.m.material.dispose();
-  }
-  w.fx.length = 0;
+  clearEntities(w.crates);
+  clearEntities(w.fx);
 }
 
 // Rocks belong to a sector. state.world.asteroids always holds the current

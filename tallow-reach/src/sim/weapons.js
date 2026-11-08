@@ -1,15 +1,13 @@
 // Player weapons: the fitted primary modules (guns, the mining beam) and homing
 // missiles (secondary).
 
-import * as THREE from "three";
-import { V, fwd, face, UP, clamp } from "../util/math.js";
+import { V, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
-import { SHIPS } from "../data/ships.js";
 import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
-import { MODULES } from "../data/modules.js";
+import { SHIPS } from "../data/ships.js";
 
-import { scene, camera } from "../render/scene.js";
+import { camera } from "../render/scene.js";
 import { state, say, msg } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
@@ -17,9 +15,12 @@ import { setDraw, hasPower } from "./power.js";
 import { gunsOf, moduleListName } from "./guns.js";
 
 export { gunsOf, refreshGuns } from "./guns.js";
-import { fire, hitHostile } from "./combat.js";
-import { boom, puff } from "./effects.js";
-import { enemyPos, enemyVel } from "./enemy.js";
+import { fire } from "./combat.js";
+import { boom } from "./effects.js";
+import { enemyPos } from "./enemy.js";
+import { playerPos, playerFwd, playerLocal } from "./pilot.js";
+import { launchMissile, updateMissileFlight, missileMuzzle } from "./missile.js";
+import { dropEntity } from "./entity.js";
 import { spawnAsteroid } from "./asteroids.js";
 
 const ASTEROID_RESPAWN_MS = 30000;
@@ -29,19 +30,9 @@ const ASTEROID_RESPAWN_MS = 30000;
 // to the firing code; how many barrels a gun has is data (`barrels` on the module).
 const BARREL_SPACING = 3.6;
 
-const beamMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.3, 0.3, 1, 6),
-  new THREE.MeshBasicMaterial({ color: 0xffb25a, transparent: true, opacity: 0.8 })
-);
-beamMesh.visible = false;
-scene.add(beamMesh);
-
-const missileGeo = new THREE.BoxGeometry(0.5, 0.5, 3);
-const missileMat = new THREE.MeshStandardMaterial({
-  color: 0x8a8f94,
-  emissive: 0xff7a30,
-  emissiveIntensity: 0.8,
-});
+// The mining beam's glow and the missiles' bodies are drawn by `render/views.js`
+// (step 7b). The sim only says where the beam is and when it is on:
+// `state.flight.beamStart` / `beamEnd` / `beamOn`, which the view copies.
 
 /** Equip a primary weapon. Keys 1 and 2 cycle the primary slots: key 1 is the
  *  cannon slot (whatever the primary bays are holding), key 2 is the mining beam
@@ -76,8 +67,7 @@ export function updatePrimary(dt) {
     F.beamOn = false;
     F.beamT = 0;
     setDraw("beam", 0);
-    beamMesh.visible = false;
-    return;
+    return;   // render/views.js hides the beam when F.beamOn is false
   }
 
   // Guns: whichever primary bays hold a gun fire together on left click, each on
@@ -102,11 +92,11 @@ export function updatePrimary(dt) {
       // cannons fired before they were a module. A single barrel fires from its
       // bay mount as usual. Same cooldown and same power draw either way.
       const n = Math.max(1, g.barrels || 1),
-        f = fwd(P.m);
+        f = playerFwd();
       for (let b = 0; b < n; b++) {
         const x = n > 1 ? (b - (n - 1) / 2) * BARREL_SPACING : -1.8 + 3.6 * i;
         fire(
-          P.m.localToWorld(V(x, -0.2, -5 * d.sc)),
+          playerLocal(V(x, -0.2, -5 * d.sc)),
           f,
           g.speed,
           true,
@@ -126,15 +116,14 @@ export function updatePrimary(dt) {
   const beam = (state.beams || [])[0];
   const beamOtherDraw = state.power.draw - (state.power.use.beam || 0);
   F.beamOn = false;
-  beamMesh.visible = false;
   if (c.fire && S.pw === "beam" && beam) {
     // Find the nearest asteroid inside the beam cone.
-    const f = fwd(P.m),
-      pp = P.m.position;
+    const f = playerFwd(),
+      pp = playerPos();
     let best = null,
       bestDist = 1e9;
     for (const a of state.world.asteroids) {
-      const q = a.m.position.clone().sub(pp),
+      const q = a.pos.clone().sub(pp),
         along = q.dot(f);
       if (along < 5 || along > beam.range) continue;
       const off = Math.sqrt(Math.max(0, q.lengthSq() - along * along));
@@ -152,15 +141,12 @@ export function updatePrimary(dt) {
     } else {
       // The beam cuts continuously. Draw it, charge for it, and bank whole ores
       // as they complete.
-      const start = P.m.localToWorld(V(0, -1, -6 * d.sc)),
-        end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5)),
-        delta = end.clone().sub(start),
-        len = delta.length();
-      beamMesh.visible = true;
+      const start = playerLocal(V(0, -1, -6 * d.sc)),
+        end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5));
+      // The sim says where the beam starts and stops; render/views.js draws it.
       F.beamOn = true;
-      beamMesh.position.copy(start).addScaledVector(delta, 0.5);
-      beamMesh.scale.set(1, len, 1);
-      beamMesh.quaternion.setFromUnitVectors(UP, delta.normalize());
+      F.beamStart = start;
+      F.beamEnd = end;
 
       F.beamT = (F.beamT || 0) + dt * (d.mine || 1);
       const gained = Math.floor(F.beamT / beam.period);
@@ -168,14 +154,16 @@ export function updatePrimary(dt) {
       if (gained > 0) {
         F.beamT -= gained * beam.period;
         best.ore = Math.max(0, best.ore - gained);
-        best.m.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
+        // The rock shrinks as its ore leaves it. The size is the rock's own data
+        // (the view copies it, and the collision rule reads it), so it is set
+        // here, not by the drawing code.
+        best.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
         F.mineFrac = best.ore / best.max;
         P.acc += gained;
         emit("sfx", { name: "ore-gained" });   // the beam sweep hits 100%: a resource is yours
         if (best.ore <= 0) {
-          scene.remove(best.m);
-          state.world.asteroids.splice(state.world.asteroids.indexOf(best), 1);
-          boom(best.m.position, 12, 0x8a7a6a);
+          dropEntity(state.world.asteroids, best);   // removes it, and its mesh with it
+          boom(best.pos, 12, 0x8a7a6a);
           setTimeout(spawnAsteroid, ASTEROID_RESPAWN_MS);
           F.beamT = 0;
         }
@@ -236,7 +224,7 @@ export function updateMissiles(dt) {
     F.coneAngle = MISSILE.cone;
 
     const cf = V(0, 0, -1).applyQuaternion(camera.quaternion),
-      pp = P.m.position;
+      pp = playerPos();
     let best = null,
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!state.freeCam.on) {
@@ -281,70 +269,9 @@ export function updateMissiles(dt) {
 }
 
 function fireMissile(target, launcher) {
-  const S = state.profile,
-    P = state.player;
+  const S = state.profile;
   S.msl--;
-  const d = fwd(P.m),
-    p = P.m.localToWorld(V(0, -1.2, -5 * SHIPS[S.ship].sc)),
-    m = new THREE.Mesh(missileGeo, missileMat);
-  m.position.copy(p);
-  face(m, p.clone().add(d), 1);
-  scene.add(m);
-  state.world.missiles.push({
-    m,
-    d: d.clone(),
-    sp: MISSILE.sp0 + Math.max(0, P.v.dot(d)),
-    t: target,
-    l: MISSILE.life,
-    dmg: launcher.dmg,
-  });
-  emit("sfx", { name: "missile-fire" });
-}
-
-function updateMissileFlight(dt) {
-  const W = state.world,
-    MS = W.missiles;
-  for (let i = MS.length - 1; i >= 0; i--) {
-    const s = MS[i],
-      m = s.m;
-    s.l -= dt;
-
-    // Steer toward the target, leading it by its velocity.
-    if (s.t && W.enemies.includes(s.t)) {
-      const ep = enemyPos(s.t),
-        ev = enemyVel(s.t),
-        tt = ep.clone().sub(m.position).length() / Math.max(s.sp, 1),
-        aim = ep.clone().addScaledVector(ev, tt * 0.85).sub(m.position).normalize();
-      s.d.lerp(aim, Math.min(1, MISSILE.turn * dt)).normalize();
-    } else {
-      s.t = null;
-    }
-
-    s.sp = Math.min(MISSILE.max, s.sp + MISSILE.acc * dt);
-    m.position.addScaledVector(s.d, s.sp * dt);
-    face(m, m.position.clone().add(s.d), 1);
-    puff(m.position, 0xaaa090, 0.5);
-
-    let end = s.l <= 0;
-    for (const e of W.enemies) {
-      if (enemyPos(e).distanceTo(m.position) < 12) {
-        hitHostile(e, s.dmg, enemyPos(e));
-        end = true;
-        break;
-      }
-    }
-    if (!end) {
-      for (const a of W.asteroids) {
-        if (a.m.position.distanceTo(m.position) < a.r * 0.8) {
-          end = true;
-          break;
-        }
-      }
-    }
-    if (end) {
-      boom(m.position, 16, 0xffa060);
-      scene.remove(m);
-      MS.splice(i, 1);
-    }
-  }
+  // The missile itself is a record (`sim/missile.js`); its body and trail are
+  // render/views.js's business.
+  launchMissile(target, launcher, playerFwd(), missileMuzzle(SHIPS[S.ship].sc));
 }
