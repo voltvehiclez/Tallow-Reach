@@ -1,5 +1,5 @@
 // Moving between pockets. The starmap chooses an explicit destination; this
-// module rechecks the direct link before running the unchanged WARP sequence.
+// module rechecks the travel rules before running the unchanged WARP sequence.
 // Each pilot owns their warp and current pocket; shared places are instanced.
 
 import { WARP, WARP_SWITCH_AT, WARP_TIME, warpFlashAt } from "../data/sectors.js";
@@ -13,8 +13,8 @@ import { enterPlace, arrivalPos } from "./places.js";
 
 export const isWarping = (player = localPlayer()) => !!(player && player.warp);
 
-/** Begin one explicitly chosen, directly linked hop. The optional legacy
- *  sibling default remains for old headless scripts, but is also link-checked;
+/** Begin one explicitly chosen, legal hop. The optional legacy sibling default
+ *  remains for old headless scripts, but is also checked by the same travel rules;
  *  the live M key opens the map and never calls this without a destination. */
 export function startWarp(player = localPlayer(), to = null) {
   const P = player;

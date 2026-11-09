@@ -36,18 +36,22 @@ ones before changing anything, and update them when decisions or state change.
   owner-playtest-passed; **11B is built and awaiting the owner playtest** in root `TESTING-STARMAP.md`.
   Do **not** tick step 11 until that pass is reported.
 - **11A foundation:** `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/sim/travel.js`, explicit
-  `PLACE_LINKS`, and `tests/step11a-galaxy.test.mjs` (19 tests). Default seed `11082026` resolves
+  `PLACE_LINKS`, and `tests/step11a-galaxy.test.mjs` (now 23 tests). Default seed `11082026` resolves
   **121 systems / 462 pockets / 511 links**: organic scatter, 1–4 neighbours, dead ends/junctions/loops,
   one ordinary empty pocket plus one empty gate pocket per neighbour, exactly one reciprocal external
   peer per gate. Meridian keeps `reach`/`hollow`; Kestrel Hollow is not a gate.
-- **11B live slice (UI follow-up built):** `src/ui/starmap.js` opens with **M** while flying. The galaxy
+- **11B live slice (system-map follow-up built):** `src/ui/starmap.js` opens with **M** while flying. The galaxy
   web shows gate lines, current/visited/selected markers, inspect dropdown and zoom/pan/labels. Zooming
   into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) opens a derived
-  **system pocket map** with a short zoom transition: internal pocket lines plus dashed gate exit stubs
-  pointing toward the labelled neighbouring system. `sim/galaxy.js` `systemPocketLayout` is deterministic
-  and never saved; author `mapPos` overrides win. **Right-click a pocket** (or keyboard-activate its dot)
-  opens a popup with **Warp to …** only for a legal direct hop; it emits the same named travel action.
-  `main.js` calls `startWarp`, which requotes link/cost/requirements and runs the unchanged warp animation.
+  **system pocket map** with a short zoom transition. Ordinary pockets orbit a central visual-only
+  **star (95%) / black hole (5%)**; gates sit farther out with dashed stubs toward the exact neighbouring
+  system. Hover/focus the core to reveal its proper name (Meridian System → **Meridian**); it is not a
+  pocket or warp target. `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
+  win. Open-world systems allow **free warp to any local pocket** and omit internal blue lines. The data
+  opt-out `intraSystem: "links"` restores internal routes/lines for future route-only instances; the main
+  galaxy always keeps explicit gate routes. **Right-click a pocket** (or keyboard-activate its dot) opens
+  **Warp to …** only for a legal hop and emits the same named travel action. `main.js` calls `startWarp`,
+  which requotes policy/link/cost/requirements and runs the unchanged warp animation.
   Refusals emit `travel-denied` and stay visible in the chart. The right panel is a compact overview
   (system name, current pocket, plain pocket rows) with no warp buttons, tier/description cards or scrolling.
 - **Pause/input:** `isSimulationPaused()` freezes single-player flight while the chart is open;
@@ -61,12 +65,16 @@ ones before changing anything, and update them when decisions or state change.
   record current visit. A removed/unknown pocket recovers to `DEFAULT_PLACE` (`reach`) with
   `resume:null`, preserving the whole profile/cargo; intro/slot/import show a safe-recovery notice.
   A failed prepare restores the previous catalog. v15 and older saves/codes still load.
-- **Results:** `npm test` **304/304 pass** (11B map/save file now 25 tests; both 8b oracles unchanged).
-  `npm run build` succeeded: `game/tallow-reach.html` **662 KB** (677,847 bytes). Automated headless
-  DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending. Save **v16
-  is unchanged** by the UI follow-up — pocket layout is derived, not persisted.
+- **Results:** `npm test` **310/310 pass** (11A file now 23 tests, 11B map/save file 27; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **666 KB** (682,414 bytes). Automated
+  headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
+  Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
+  Default geometry retains **121 systems / 462 pockets / 511 links** with identical ids/positions/links;
+  its independent core rolls give 116 stars and 5 black holes (including Duskdrift). Meridian is a star.
 - **Known limits:** generated pockets are empty placeholders; visibility is `all`; travel is free and
-  non-empty costs are refused until a handler exists; no fuel, activated/proximity gates or supercruise.
+  non-empty route costs are refused until a handler exists; no fuel, activated/proximity gates,
+  supercruise or warping to/near a central body. Temporary instanced-system lifecycle is still step 14;
+  only its local route-policy opt-out is ready now.
   Place memory/respawn is step 12. Enemies do not shoot back beyond the existing raider behaviour; one
   enemy AI; contracts are still the step-3 placeholder; no mission framework yet. Later save versions
   are reserved: 12→17, 13→18, 15→19.
@@ -79,9 +87,9 @@ ones before changing anything, and update them when decisions or state change.
 ## What to do next
 
 1. **Owner plays `TESTING-STARMAP.md`** (project root). It covers opening/closing/pause, input release,
-   inspect/zoom/pan, zooming into system pocket maps, gate exit stubs, right-click **Warp to** travel
-   through gates, the compact right panel, empty generated pockets, save/slot/export resume, old codes
-   A/B/C, recovery notices and regression checks. Old code C is the pre-11B v15 regression fixture in
+   inspect/zoom/pan, central-body hover/focus names and non-warpability, free local hops, unchanged galaxy
+   gate routes, right-click **Warp to** travel through gates, the compact right panel, empty generated
+   pockets, save/slot/export resume, old codes A/B/C, recovery notices and regression checks. Old code C is the pre-11B v15 regression fixture in
    `TEST-OLD-CODES.txt`.
 2. If the owner reports **pass**, tick step 11 in `docs/ROADMAP.md` and `docs/REFACTOR_PLAN.md`, mark
    the guide passed, update this file and add a changelog entry. If they report a bug, fix that first;

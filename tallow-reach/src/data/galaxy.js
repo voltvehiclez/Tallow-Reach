@@ -27,9 +27,12 @@ export const GALAXY = {
   // looked up in sim/galaxy.js; the UI must not hard-code "everything visible".
   visibility: { mode: "all" },
 
-  // Empty cost/requirements today. A future fuel item or gate activation can be
-  // added as data plus one requirement handler, without rewriting the map.
-  travel: { mode: "warp", cost: {}, requires: [] },
+  // Open-world systems allow free warp between any two pockets in the same
+  // system. Set a system's `intraSystem: "links"` (author override or future
+  // instance) to require explicit internal routes again. Cross-system gate
+  // routes always stay explicit. Empty cost/requirements today; a future fuel
+  // item or gate activation can be added as data plus one requirement handler.
+  travel: { mode: "warp", cost: {}, requires: [], intraSystem: "free" },
 
   // Flat chart presentation only; radii are screen pixels at every zoom level.
   // Zooming in on the selected system past systemEntryZoom opens its pocket map.
@@ -40,12 +43,14 @@ export const GALAXY = {
     context: { width: 240, height: 112, margin: 8 },
   },
 
-  // The zoomed-in map of one system. Pockets may carry an authored 2D `mapPos`;
-  // otherwise ordinary pockets sit near the centre and gate pockets sit outward
-  // toward their peer system. These are map units, not flight coordinates.
+  // The zoomed-in map of one system. A visual-only star/black hole sits at the
+  // centre; pockets orbit it. Pockets may carry an authored 2D `mapPos`;
+  // otherwise ordinary pockets spread around the core and gate pockets sit
+  // outward toward their peer system. These are map units, not flight coords.
   systemMap: {
-    padding: 130, pocketRadius: 7, ordinaryRadius: 115, gateRadius: 250,
+    padding: 130, pocketRadius: 7, ordinaryRadius: 140, gateRadius: 280,
     exitLength: 120, minSeparation: 78, minZoom: 1, maxZoom: 3,
+    blackHoleChance: 0.05, coreRadius: 16, blackHoleRadius: 12, coreLabelOffset: 20,
   },
 };
 
@@ -54,6 +59,13 @@ export const GALAXY = {
  *
  * Move a system:
  *   places: { "sys-004": { pos: [180, -260] } }
+ *
+ * Require internal routes in a temporary instance (keep/add its internal links):
+ *   places: { "sys-004": { intraSystem: "links" } }
+ *
+ * Author its visual-only central body (never a pocket or warp destination):
+ *   places: { "sys-004": { core: { kind: "blackHole", n: "Emberfall" } } }
+ *   Core kinds are "star" and "blackHole"; omit n to use the system's proper name.
  *
  * Move a pocket on its system's zoomed-in map (2D map units, not flight pos):
  *   places: { "hollow": { mapPos: [-130, 90] } }

@@ -8,8 +8,8 @@ import { GALAXY } from "../data/galaxy.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf } from "../state/state.js";
-import { systemVisible, pocketsInSystem, systemPocketLayout } from "../sim/galaxy.js";
-import { travelQuote } from "../sim/travel.js";
+import { systemVisible, pocketsInSystem, systemPocketLayout, systemCoreName } from "../sim/galaxy.js";
+import { travelQuote, intraSystemPolicy } from "../sim/travel.js";
 import { emit, on } from "../util/events.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
@@ -30,7 +30,8 @@ export function visibleSystems(world, knowledge = {}) {
     .sort((a, b) => a.n.localeCompare(b.n) || a.id.localeCompare(b.id));
 }
 
-/** One galaxy chart line per external gate pair; internal hops draw in the system map. */
+/** One galaxy chart line per external gate pair. The galaxy always keeps routes;
+ *  only free-warp system charts omit their internal pocket-to-pocket lines. */
 export function systemEdges(world, knowledge = {}) {
   const seen = new Set();
   const edges = [];
@@ -84,22 +85,26 @@ export function pocketChoices(world, from, systemId, context = {}) {
     const peerLink = pocket.role === "gate" ? Object.values(world.links).find(l =>
       l.kind === "gate" && (l.a === pocket.id || l.b === pocket.id)) : null;
     const peer = peerLink ? world.pocketsById[peerLink.a === pocket.id ? peerLink.b : peerLink.a] : null;
+    const freeHop = quote.ok && world.pocketsById?.[from]?.parent === pocket.parent &&
+      intraSystemPolicy(world, pocket.parent) === "free";
     return {
       pocket, current, quote, peer,
       canWarp: quote.ok && !unsupportedCost,
       status: current ? "You are here" : unsupportedCost ? "Travel costs are not implemented yet."
-        : quote.ok ? "Direct route · Free" : quote.reason,
+        : quote.ok ? (freeHop ? "Free intra-system warp" : "Direct route · Free") : quote.reason,
       station: (PLACE_DEFS[pocket.def]?.features || []).some(f => f.kind === "station"),
     };
   });
 }
 
-/** Internal pocket lines plus gate exit stubs for one system's zoomed-in map.
- *  Exit stubs respect the same visibility policy as the galaxy chart. */
+/** Required internal lines (route-only systems) plus gate exit stubs. Free-warp
+ *  systems keep their link records but draw no internal lines. Exit stubs respect
+ *  the same visibility policy as the galaxy chart. The core has no travel edge. */
 export function pocketConnections(world, systemId, knowledge = {}, tuning = GALAXY.systemMap) {
   const layout = systemPocketLayout(world, systemId, tuning);
+  const policy = intraSystemPolicy(world, systemId);
   const ids = new Set(layout.nodes.map(n => n.id));
-  const edges = Object.values(world.links)
+  const edges = policy !== "links" ? [] : Object.values(world.links)
     .filter(l => l.kind === "internal" && l.enabled !== false && ids.has(l.a) && ids.has(l.b))
     .map(link => ({ id: link.id, a: link.a, b: link.b, link }));
   const exits = [];
@@ -116,7 +121,7 @@ export function pocketConnections(world, systemId, knowledge = {}, tuning = GALA
       end: [node.pos[0] + direction[0] * tuning.exitLength, node.pos[1] + direction[1] * tuning.exitLength],
     });
   }
-  return { ...layout, edges, exits };
+  return { ...layout, policy, edges, exits };
 }
 
 /** A centred local box around the pockets and their outward exit stubs. */
@@ -190,7 +195,7 @@ export function setupStarmap() {
     const view = state.ui.starmap;
     const svg = e.target.closest?.("svg.sm-chart");
     if (!svg || !view || transition || e.button !== 0) return;
-    if (e.target.closest?.("[data-system], [data-pocket], .sm-context")) return;
+    if (e.target.closest?.("[data-system], [data-pocket], [data-core], .sm-context")) return;
     drag = { mode: view.mode, x: e.clientX, y: e.clientY, pan: [...(view.mode === "system" ? view.systemPan : view.pan)],
       box: activeChartViewBox(state.galaxy, view, knowledge()) };
     svg.setPointerCapture?.(e.pointerId);
@@ -531,7 +536,24 @@ function systemMarkup(world, view, know, here, unit) {
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
     </g>`;
   }).join("");
-  return lines + exits + nodes;
+  // The core is a named chart object, not a pocket: no data-pocket, travel action,
+  // route endpoint or saved flight location. Hover/focus reveals its proper name.
+  const core = system.core || { kind: "star", n: systemCoreName(system) };
+  const blackHole = core.kind === "blackHole";
+  const radius = (blackHole ? GALAXY.systemMap.blackHoleRadius : GALAXY.systemMap.coreRadius) * unit;
+  const coreLabel = `${core.n} — ${blackHole ? "black hole" : "star"}`;
+  const coreX = ox, coreY = oy;
+  const coreMarkup = `<g class="sm-core ${blackHole ? "black-hole" : "star"}" data-core="${esc(system.id)}"
+    role="img" tabindex="0" aria-label="${esc(coreLabel)}">
+    <title>${esc(coreLabel)}</title>
+    <circle class="sm-core-glow" cx="${coreX}" cy="${coreY}" r="${radius * 2.4}"/>
+    <circle class="sm-core-ring" cx="${coreX}" cy="${coreY}" r="${radius + 5 * unit}"/>
+    <circle class="sm-core-body" cx="${coreX}" cy="${coreY}" r="${radius}"/>
+    <circle class="sm-core-hit" cx="${coreX}" cy="${coreY}" r="${radius + 10 * unit}"/>
+    <text class="sm-core-label" x="${coreX}" y="${coreY + radius + GALAXY.systemMap.coreLabelOffset * unit}"
+      text-anchor="middle" style="font-size:${12 * unit}px;stroke-width:${3 * unit}px">${esc(core.n)}</text>
+  </g>`;
+  return lines + exits + coreMarkup + nodes;
 }
 
 function render() {
@@ -582,8 +604,11 @@ function render() {
           <button type="button" data-action="zoom-in" aria-label="Zoom in">+</button>
           <button type="button" data-action="reset">Fit</button>
           <button type="button" data-action="labels">${view.labels ? "Fewer names" : "All names"}</button></div></div>`;
+  const localTravel = selected && intraSystemPolicy(world, selected.id) === "free"
+    ? `Warp to any ${esc(term("flyable"))} in this ${esc(term("mapNode"))}; no internal route is needed.`
+    : `Follow the internal route lines; this ${esc(term("mapNode"))} requires connected ${esc(term("flyable"))} hops.`;
   const help = view.mode === "system"
-    ? `Right-click a ${esc(term("flyable"))} for Warp to. Lines are direct routes; gate stubs point toward the neighbouring ${esc(term("mapNode"))}. Scroll out or Back to return.`
+    ? `Right-click a ${esc(term("flyable"))} for Warp to. ${localTravel} Gate stubs point toward the neighbouring ${esc(term("mapNode"))}. Hover or focus the central star/black hole for its name (not warpable). Scroll out or Back to return.`
     : `Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `
@@ -615,6 +640,7 @@ function render() {
   if (view.menu) root.querySelector(".sm-context button, .sm-context")?.focus();
   else if (focus?.system) root.querySelector(`[data-system="${cssEscape(focus.system)}"]`)?.focus();
   else if (focus?.pocket) root.querySelector(`[data-pocket="${cssEscape(focus.pocket)}"]`)?.focus();
+  else if (focus?.core) root.querySelector(`[data-core="${cssEscape(focus.core)}"]`)?.focus();
   else if (focus?.action) root.querySelector(`[data-action="${cssEscape(focus.action)}"]`)?.focus();
   if (transition) scheduleTransition();
 }

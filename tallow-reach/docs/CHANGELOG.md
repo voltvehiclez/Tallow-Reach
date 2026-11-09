@@ -19,6 +19,40 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 11B system-map follow-up — free local warp and named central bodies (owner playtest pending)
+
+Owner requested three changes after the zoom/right-click UI delivery. This remains inside step 11;
+the owner has not yet passed the updated root `TESTING-STARMAP.md`.
+
+- **Free open-world local travel:** `sim/travel.js` allows warp to any pocket in the same system by
+  default, including a gate, without an internal link. `travelOptions`, `findRoute` and galaxy validation
+  understand the policy. A system can opt into `intraSystem: "links"` (data override/future temporary
+  instance) to require connected internal routes again. Cross-system travel still needs the exact enabled
+  gate link and its mode/requirements. `startWarp` still requotes before the unchanged warp sequence.
+- **System-chart clarity:** `ui/starmap.js` omits internal blue lines only in free-warp system maps;
+  route-only systems still draw enabled internal links. The main galaxy's gate web is unchanged. Gate
+  stubs still point to and name their exact peer system. The compact name-only right panel is untouched.
+- **Central bodies:** `sim/galaxy.js` assigns a visual-only star/black hole per system using an independent
+  FNV-1a + seeded roll (`systemMap.blackHoleChance: 0.05`). Author `core: { kind, n }` overrides win; names
+  default to the system's proper name (Meridian System → Meridian). Pockets now orbit the empty centre:
+  ordinary radius 140, gate radius 280, with authored `mapPos` still winning. The SVG core has distinct
+  star/black-hole styling and a hover/focus name, but no pocket id, warp action or route endpoint.
+- **Data/validation:** `data/galaxy.js` documents the policy/core recipes and adds core chance/radii/label
+  tuning. Invalid policies, core kinds and tuning fail plainly. Core assignment consumes neither the
+  generator nor gameplay RNG stream. Default ids, system positions, pockets and links are unchanged:
+  **121 / 462 / 511**, with 116 stars and 5 black holes on the default seed.
+- **Tests/docs:** re-scoped old local-link refusal/layout assertions to the explicit links opt-out rather
+  than deleting them; added free-hop/gate isolation, policy connectivity, core chance/name/override,
+  non-warpable markup/focus styling and unchanged galaxy-route coverage. `step11a-galaxy.test.mjs` now
+  has 23 tests and `step11b-starmap.test.mjs` 27. Updated the root playtest guide, HANDOFF/ROADMAP/VISION/
+  REFACTOR_PLAN/ARCHITECTURE/TARGET_ARCHITECTURE/HOW_TO_ADD and data/sim/UI READMEs.
+- **Results:** `npm test` **310/310 pass**; `npm run build` succeeded (**666 KB, 682,414 bytes**).
+  **Save v16 unchanged:** no generated geography, policies, cores or layout enter saves; old saves/codes
+  and both 8b oracles still pass. No new dependencies. Automated headless checks passed; owner visual
+  browser playtest remains pending. Rebuild with `npm run build`; test with `npm test`.
+
+---
+
 ## 2026-11-08: Step 11B starmap UI follow-up — zoomed system maps, right-click warp, compact overview (owner playtest pending)
 
 Owner reviewed the first 11B build ("the map looks ok") and asked for four chart changes. This is a

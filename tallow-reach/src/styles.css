@@ -974,6 +974,20 @@ textarea {
 .sm-chart.transitioning { cursor: progress; }
 .sm-edge { stroke: #344650; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .sm-pocket-edge { stroke: #4a6a75; }
+/* Central bodies are visual chart objects, never pocket buttons. */
+.sm-core { cursor: help; outline: none; }
+.sm-core-glow, .sm-core-ring, .sm-core-body, .sm-core-label { pointer-events: none; }
+.sm-core-hit { fill: transparent; stroke: none; pointer-events: all; }
+.sm-core.star .sm-core-glow { fill: #e8b963; opacity: .09; }
+.sm-core.star .sm-core-body { fill: #ffe2a0; stroke: #fff3cf; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sm-core.star .sm-core-ring { fill: none; stroke: #dca451; opacity: .5; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sm-core.black-hole .sm-core-glow { fill: #9e87cb; opacity: .13; }
+.sm-core.black-hole .sm-core-body { fill: #020305; stroke: #ae96d6; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sm-core.black-hole .sm-core-ring { fill: none; stroke: #dfb779; stroke-width: 2; opacity: .8; vector-effect: non-scaling-stroke; }
+.sm-core:hover .sm-core-ring, .sm-core:focus .sm-core-ring { stroke: #fff; opacity: 1; stroke-width: 2; }
+.sm-core:hover .sm-core-glow, .sm-core:focus .sm-core-glow { opacity: .24; }
+.sm-core-label { opacity: 0; fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; }
+.sm-core:hover .sm-core-label, .sm-core:focus .sm-core-label { opacity: 1; }
 .sm-exit-edge { stroke: var(--amber); stroke-dasharray: 5 4; }
 .sm-exit-cap { fill: var(--amber); }
 .sm-exit text { fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; pointer-events: none; }

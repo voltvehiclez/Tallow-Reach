@@ -294,8 +294,11 @@ another pilot's place or clear their fight.
 ## Step 11: System map, pocket chooser and starmap
 **Goal.** A generated **organic 2D web** of 100+ systems, a 2D starmap to travel between connected
 pockets, and a proper way to choose among the pockets of the current system (M today only cycles them).
-**Owner decisions (2026-11-08, recorded in VISION.md):** travel only to a directly connected pocket,
-free for now; a gate pocket has exactly one external gate peer in a neighbouring system; each system
+**Owner decisions (2026-11-08, recorded in VISION.md):** free warp to any pocket within an open-world
+system by default, with a data `intraSystem: "links"` opt-out for future route-only instances; explicit
+cross-system gate hops remain. Each system chart has a non-warpable star (95%) / black hole (5%) core,
+named from the system and revealed on hover/focus; pockets orbit it and only route-only systems draw
+internal lines. A gate pocket has exactly one external gate peer in a neighbouring system; each system
 has one ordinary pocket plus one gate pocket per neighbour; Meridian keeps `reach`/`hollow` unchanged
 and gains separate new gate pockets; generated systems are empty placeholders; the whole map is
 visible through a configurable policy; difficulty is distance guidance with seeded variation, while
@@ -311,8 +314,9 @@ activated gates and supercruise are out of scope now.
   visibility and distance-tier guidance. **No live UI or save change in this slice.**
 - **11B — starmap, destination selection and saved worlds.** `ui/starmap.js` opened with **M** shows the
   system web and gate connections. Zooming into a selected system dot opens a derived **system pocket map**
-  (internal pocket lines plus gate exit stubs toward neighbouring systems); a compact right panel lists the
-  system name, current pocket and plain pocket rows. **Right-clicking a legal direct pocket** offers
+  (pockets orbiting a named visual star/black hole; internal lines only for route-only systems, plus gate
+  exit stubs toward neighbouring systems); a compact right panel lists the system name, current pocket and
+  plain pocket rows. **Right-clicking a legal pocket** offers
   **Warp to** and starts the existing warp sequence. Single-player map pauses the simulation; a future host
   keeps running. Save **v16** stores the galaxy seed and compact discovery/visit records, not generated
   geography or pocket layout, with migration from v15 and a removed-pocket fallback to the safe home station
@@ -320,10 +324,11 @@ activated gates and supercruise are out of scope now.
 **Done when.** Tests prove generation is deterministic, has at least 100 systems, every system is
 reachable, and difficulty generally rises with distance from Meridian while authored content may stay
 easy. You can click through the map, zoom into any system's pocket map, right-click among any number of
-pockets, and warp one direct hop at a time. Do not assume a system has exactly two pockets, and do not
-hard-code a two-level universe.
+pockets, and warp one hop at a time: freely within a default system, through explicit gates between
+systems. Hover/focus names the non-warpable core; a links opt-out restores internal routes/lines. Do not
+assume a system has exactly two pockets, and do not hard-code a two-level universe.
 **Save.** **Version 16**, migration from 15 (v15 is already used by the resume point).
-**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI follow-up built, owner playtest pending (`TESTING-STARMAP.md`).**
+**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI and free-local-warp/central-body follow-ups built, owner playtest pending (`TESTING-STARMAP.md`). 310 tests pass; save v16 unchanged.**
 
 ## Step 12: Encounters, place templates and place memory
 **Goal.** The open world's content is data you can pile onto.

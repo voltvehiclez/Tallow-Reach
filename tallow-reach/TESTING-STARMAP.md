@@ -1,13 +1,18 @@
-# Step 11B playtest — starmap, zoomed system maps, right-click travel and save v16
+# Step 11B playtest — free local warp, central bodies, starmap and save v16
 
 For the owner. About 20–30 minutes. No coding needed.
 
-**What changed:** **M opens a starmap** while flying. Zooming in on a system dot opens that system's
-**pocket map**: pocket-to-pocket lines, plus gate stubs pointing out toward the neighbouring system.
-**Right-click a pocket** and choose **Warp to …** to run the existing warp sequence. The right panel is
-now a compact overview (system name, current pocket, pocket names) with no warp buttons. Saves remain
-**version 16** from the previous 11B build: galaxy seed plus compact discovery/visit notes, not the
-generated map itself. Old saves and `TR1:` codes still load.
+**What changed in this follow-up:** inside an open-world system you can now **warp to any pocket**,
+including a gate, without following an internal route. Those optional internal blue lines are gone from
+the **system map only**; the main galaxy still shows its explicit gate routes. Each system has a central
+**star (95% chance) or black hole (5%)**, with pockets spread around it. Hover or keyboard-focus the
+central body to see its proper name (Meridian System → **Meridian**). It is visual only, not a warp target.
+
+**M opens the starmap** while flying; zoom into a system dot to open its pocket map. **Right-click a
+pocket** and choose **Warp to …** to run the existing warp sequence. Gate stubs still point to the exact
+neighbouring system. The right panel stays compact (system name, current pocket, pocket names), with no
+warp buttons or scrolling. Saves remain **version 16**: seed plus compact discovery/visit notes, not the
+generated map, cores or layout. Old saves and `TR1:` codes still load.
 
 **What has not changed:** flight feel, mining, combat, docking, shops, the warp animation/timing, and
 the hulls' hold-only differences. Generated systems are still empty placeholders. Fuel, activated
@@ -66,9 +71,10 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       whole web. Drag an empty part of the chart to pan; dragging must not select a system by accident.
 - [ ] **2.4** Open a **system map**: select a system dot, then scroll up several times (or press **+**
       until it opens), or simply **double-click** the dot. Expect a short zoom transition into a map of
-      that system's pockets: dots for pockets, lines for direct pocket-to-pocket routes, and dashed gate
-      stubs leaving gate pockets toward the labelled neighbouring system. **Back to galaxy** returns with
-      the reverse transition. If your browser/OS prefers reduced motion, the switch may be instant.
+      that system's pockets: a central star/black hole, ordinary pocket dots spread around it, and gate
+      dots farther out with dashed stubs toward the labelled neighbouring system. There are **no internal
+      pocket-to-pocket blue lines** in the default free-warp systems. **Back to galaxy** returns with the
+      reverse transition. If your browser/OS prefers reduced motion, the switch may be instant.
 - [ ] **2.5** Inside a system map, drag to pan, use **+**/**−** to zoom, and **Fit** to frame the pockets.
       Scrolling out at the fitted system view (or pressing **Back to galaxy**) returns to the galaxy web.
 - [ ] **2.6** Keyboard check: Tab to a system dot and press Enter/Space to select it; the zoom buttons and
@@ -77,6 +83,16 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
 - [ ] **2.7** Select a far-away system and zoom into its pocket map. Right-click one of its pockets: the
       popup explains **No direct route. Travel through connected pockets first.** and has no clickable
       **Warp to**. You cannot warp there in one jump.
+- [ ] **2.8** Open Meridian's system map. Its centre shows **Meridian**, a star, not an extra pocket row.
+      Hover the star: its ring/glow highlights and the name **Meridian** appears. Move away: the name hides.
+      Tab to the star and check the same name/highlight by keyboard focus. Click, right-click or press
+      Enter/Space on it: no warp popup or travel must occur.
+- [ ] **2.9** Return to the galaxy and open **Duskdrift** (`sys-001`, Meridian's first neighbour on the
+      default seed). Its centre is a dark **black hole** with a bright ring; hovering/focusing shows
+      **Duskdrift**. It is also absent from the pocket list and cannot be warped to. Other systems may have
+      either body; the 5% chance is per system, not a guaranteed exact count in every small sample.
+- [ ] **2.10** Return to the main galaxy chart: its system-to-system gate lines are still present. Only the
+      optional internal lines inside free-warp system maps were removed.
 
 ## 3. Legal direct-hop travel by right-click
 
@@ -90,17 +106,23 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
 - [ ] **3.3** Press **M** again, zoom into Meridian, and right-click **Meridian Station** to warp back.
       Message: **“Warp: Kestrel Hollow to Meridian Station. Meridian Station and the asteroid belt.”**
       Station, belt and planet return.
-- [ ] **3.4** From Meridian Station, warp to a **Gate to …** pocket. It is empty space. Open the Meridian
-      system map there: that gate's dashed stub points toward the neighbouring system named on the stub.
-      The stub is a direction label, not a one-click system warp. To cross, return to the galaxy, select
-      that neighbouring system, zoom in, and right-click its reciprocal **Gate to Meridian** pocket.
-      Choose **Warp to …**. Expect an empty generated pocket, not a station or belt.
+- [ ] **3.4** From **Kestrel Hollow**, right-click **Gate to Duskdrift** and warp **directly** to it:
+      no return to Meridian Station or internal route is needed. It is empty space. Open Meridian's system
+      map there: that gate's dashed stub points toward **Duskdrift**. The stub is a direction label, not a
+      one-click system warp. To cross, return to the galaxy, select Duskdrift, zoom in, and right-click its
+      reciprocal **Gate to Meridian System** pocket. Choose **Warp to …**. Expect an empty generated pocket,
+      not a station or belt. A gate never sends you to an arbitrary neighbouring system.
 - [ ] **3.5** Open the map after arriving in the generated system. The header names the pocket you entered.
       Zoom into that system to see its hub and gate stubs. After you leave, its galaxy dot keeps the
       visited colour. You can hop back through the same gate.
 - [ ] **3.6** Kestrel Hollow is still an ordinary empty pocket, **not** a gate. In the Meridian system map
-      it has an internal line to Meridian Station but no outward gate stub.
+      it sits around the central star and has no outward gate stub or internal blue line. You can warp from
+      it to any Meridian pocket, but not directly into another system's ordinary pocket.
 - [ ] **3.7** Credits do not change when warping. Travel is free in this slice.
+- [ ] **3.8** Automated opt-out check (no manual data editing needed): a system with
+      `intraSystem: "links"` requires its internal routes again, draws those routes on its system map, and
+      refuses disconnected local hops. This is the future temporary-instance option; ordinary open-world
+      systems remain free. The main galaxy's explicit gate routes are unaffected by either policy.
 
 ## 4. Saves, old codes and safe recovery
 

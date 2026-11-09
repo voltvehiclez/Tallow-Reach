@@ -44,6 +44,11 @@ organised so that most new content is **data, not code**.
 - **Meridian Station** is the home base (station, shop, hangar, storage). It is a station feature
   inside its pocket, not a separate flyable child place. The in-game station label is **Meridian
   Station** (formerly Meridian Outpost).
+- Within an open-world system, warp freely to **any pocket** by default. The main galaxy still uses
+  explicit gate routes; a future route-requiring instance can opt into `intraSystem: "links"` as data.
+  Each system's zoomed chart has a visual-only central **star (95%) or black hole (5%)**, with pockets
+  spread around it. Its proper name is the system name without the generic suffix (Meridian System →
+  **Meridian**) and appears on hover/focus. The core is not a pocket or warp destination for now.
 - Pockets contain a mix of **encounters** (friendly and hostile), **resources** (asteroids, salvage)
   and **loot**. The list of things that can appear is meant to grow indefinitely.
 - **Instanced places** are *not* on the map. You reach them through **wormholes**, which can occur
@@ -100,26 +105,38 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
-- **2026-11-08 — step 11B starmap UI follow-up (owner):** after reviewing the first 11B chart ("the map
+- **2026-11-08 — step 11B system-map travel and central bodies (owner):** open-world systems allow
+  **warp to any pocket within the same system** by default, without a forced internal route. Remove the
+  internal blue lines on the **sub-system map only**; the main galaxy keeps explicit gate routes. Provide
+  a data opt-out (`intraSystem: "links"`) for future temporary instanced systems that require routes.
+  Each system gets a central **star (95%) or black hole (5%)**, with pockets spread around it like a star
+  system. Keep the existing chart style and gate connections: a gate to Duskdrift still exits to Duskdrift.
+  The central body is **visual only and not warpable** for now (warping near it may be considered later).
+  Hover/focus reveals its name, which is the system's proper name (**Meridian System → Meridian**).
+  This supersedes the earlier internal-line and local-direct-link-only requirements below, not the gate
+  rules. Core kind/name and chart geometry are regenerated, never added to compact v16 saves.
+
+- **2026-11-08 — step 11B starmap UI follow-up (owner, superseded in part by the decision above):** after reviewing the first 11B chart ("the map
   looks ok"), the owner asked for four changes: **zooming in on a system dot opens a system pocket map**;
   that map shows **pocket-to-pocket lines** plus a **gate exit line pointing out toward the connected
   neighbouring system**; **right-clicking a pocket opens a clickable “Warp to” popup** and the right-panel
   warp buttons are removed; the right panel is a **compact overview** (system name, current pocket, plain
   pocket rows) with no scrolling or extra per-row info. Pocket layout is derived/deterministic and never
-  saved; save v16 and the existing direct-link/cost/requirement recheck in `startWarp` are unchanged.
+  saved; save v16 and the existing travel/cost/requirement recheck in `startWarp` are unchanged.
 
 - **2026-11-08 — step 11B starmap interaction and saved worlds (owner-approved slice):** **M opens a
   clickable 2D chart** instead of warping immediately. It shows visible systems, the current location,
-  gate connections and any selected system's full pocket list; only a legal directly connected pocket
-  starts the existing warp sequence. Single-player map pauses the simulation; a future hosted co-op
+  gate connections and any selected system's full pocket list; only a legal hop starts the existing
+  warp sequence (the later owner decision above makes local hops free by default). Single-player map pauses the simulation; a future hosted co-op
   world keeps running. Save **v16** stores the galaxy seed plus compact discovery/visit records, not
   generated geography; v15 and older migrate, and a removed pocket recovers to the safe home station
   without losing character/cargo. This supersedes the temporary M-cycling note below.
 
 - **2026-11-08 — step 11 starmap and travel (owner):** the map is an **organic 2D web**, not a square
   grid. Systems have scattered positions and explicit connections; some are dead ends, some have two
-  neighbours, some are junctions. Travel is only to a **directly connected pocket**, chosen on the map,
-  and costs nothing for now. A **gate pocket** has exactly one external peer: a gate pocket in a
+  neighbours, some are junctions. The original slice required a **directly connected pocket** for every
+  hop; the later system-map decision above relaxes this within free open-world systems, while cross-system
+  gate hops remain explicit. Travel costs nothing for now. A **gate pocket** has exactly one external peer: a gate pocket in a
   neighbouring system. Each system has one gate pocket per neighbouring system, plus an ordinary
   pocket that connects inward to those gates. Meridian keeps **Meridian Station** and **Kestrel Hollow**
   unchanged and gains separate new gate pockets; Kestrel Hollow is not a gate. Generated systems are

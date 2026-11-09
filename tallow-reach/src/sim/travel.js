@@ -2,11 +2,14 @@
 // reachable; the warp sequence will ask it again before starting in step 11B.
 // It reads resolved galaxy data only — no runtime state, UI, input or audio.
 //
-// A route is usable when it is enabled, directly connects the two pockets, its
-// transport mode is registered, and every data requirement passes. Costs are
-// returned as plain data for the caller to charge; today every cost is empty.
-// This module deliberately imports no other system: callers pass the resolved
-// galaxy record in, and future UI/network callers use the same pure contract.
+// Open-world systems default to free intra-system warp: any pocket in the same
+// system is reachable without an internal route. A system may opt into
+// `intraSystem: "links"` (future route-only instances) and then internal routes
+// are required again. Cross-system travel always needs an explicit enabled gate
+// link whose transport mode is registered and whose data requirements pass.
+// Costs are returned as plain data for the caller to charge; today every cost is
+// empty. This module deliberately imports no other system: callers pass the
+// resolved galaxy record in, and future UI/network callers use the same contract.
 
 /** Transport modes the rules know about. Step 11B wires "warp" to the existing
  *  sequence; a future supercruise mode registers here without changing the map. */
@@ -28,12 +31,32 @@ const directLink = (world, from, to) => {
   return all.find(l => l.enabled !== false) || all[0];
 };
 
+/** Open-world systems default to free intra-system warp. A system record may set
+ *  `intraSystem: "links"` to require explicit internal routes again (future
+ *  route-only instances). Legacy/headless galaxies without system records also
+ *  default to free, so the old authored reach <-> hollow hop still works. */
+export function intraSystemPolicy(world, systemId) {
+  const system = world?.systemsById?.[systemId] || world?.systems?.find(s => s.id === systemId);
+  const policy = system?.intraSystem ?? world?.travel?.intraSystem ?? "free";
+  return policy === "links" ? "links" : "free";
+}
+
+const sameSystem = (world, from, to) => {
+  const a = world.pocketsById?.[from], b = world.pocketsById?.[to];
+  return !!(a && b && a.parent && a.parent === b.parent);
+};
+
 /** Explain one proposed pocket-to-pocket trip without changing anything. */
 export function travelQuote(world, from, to, context = {}) {
   const deny = reason => ({ ok: false, reason, link: null, mode: null, cost: {} });
   if (!world.pocketsById?.[from]) return deny("Unknown departure pocket.");
   if (!world.pocketsById?.[to]) return deny("Unknown destination pocket.");
   if (from === to) return deny("You are already in that pocket.");
+  if (sameSystem(world, from, to) && intraSystemPolicy(world, world.pocketsById[from].parent) === "free") {
+    const mode = TRAVEL_MODES.warp;
+    if (!mode) return deny('Unknown travel mode "warp".');
+    return { ok: true, reason: "", link: directLink(world, from, to) || null, mode: mode.id, cost: {} };
+  }
   const link = directLink(world, from, to);
   if (!link) return deny("No direct route. Travel through connected pockets first.");
   return quoteLink(link, from, to, context);
@@ -56,33 +79,54 @@ function quoteLink(link, from, to, context = {}) {
 
 export const canTravel = (world, from, to, context = {}) => travelQuote(world, from, to, context).ok;
 
-/** Every direct destination with its quote, for a pocket chooser. */
+/** Every one-hop destination with its quote: explicit links, plus every other
+ *  pocket in the same system when that system allows free intra-system warp. */
 export function travelOptions(world, from, context = {}) {
-  return linksFrom(world, from).map(link => {
+  const options = new Map();
+  for (const link of linksFrom(world, from)) {
     const to = neighborOf(link, from);
-    return { to, ...travelQuote(world, from, to, context) };
-  });
+    if (to && !options.has(to)) options.set(to, { to, ...travelQuote(world, from, to, context) });
+  }
+  const pocket = world.pocketsById?.[from];
+  if (pocket && intraSystemPolicy(world, pocket.parent) === "free") {
+    for (const other of Object.values(world.pockets || {})) {
+      if (other.parent !== pocket.parent || other.id === from || options.has(other.id)) continue;
+      options.set(other.id, { to: other.id, ...travelQuote(world, from, other.id, context) });
+    }
+  }
+  return [...options.values()];
 }
 
 /** Breadth-first route ids, or null. The map may show a route; travel still only
- *  starts one direct hop at a time. Builds one adjacency index per search. */
+ *  starts one direct hop at a time. Free intra-system warp counts as a hop. */
 export function findRoute(world, from, to, context = {}) {
   if (!world.pocketsById?.[from] || !world.pocketsById?.[to]) return null;
   if (from === to) return [from];
   const adjacency = new Map();
+  const add = (a, b) => {
+    if (!adjacency.has(a)) adjacency.set(a, []);
+    adjacency.get(a).push(b);
+  };
   for (const link of Object.values(world.links || {})) {
     if (link.enabled === false) continue;
-    if (!adjacency.has(link.a)) adjacency.set(link.a, []);
-    if (!adjacency.has(link.b)) adjacency.set(link.b, []);
-    adjacency.get(link.a).push({ to: link.b, link });
-    adjacency.get(link.b).push({ to: link.a, link });
+    add(link.a, link.b);
+    add(link.b, link.a);
+  }
+  const bySystem = new Map();
+  for (const pocket of Object.values(world.pockets || {})) {
+    if (!bySystem.has(pocket.parent)) bySystem.set(pocket.parent, []);
+    bySystem.get(pocket.parent).push(pocket.id);
+  }
+  for (const [systemId, ids] of bySystem) {
+    if (intraSystemPolicy(world, systemId) !== "free") continue;
+    for (const a of ids) for (const b of ids) if (a !== b) add(a, b);
   }
   const previous = new Map([[from, null]]);
   const queue = [from];
   while (queue.length) {
     const id = queue.shift();
-    for (const { to: next, link } of adjacency.get(id) || []) {
-      if (previous.has(next) || !quoteLink(link, id, next, context).ok) continue;
+    for (const next of adjacency.get(id) || []) {
+      if (previous.has(next) || !canTravel(world, id, next, context)) continue;
       previous.set(next, id);
       if (next === to) {
         const route = [to];

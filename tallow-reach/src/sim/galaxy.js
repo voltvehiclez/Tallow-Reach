@@ -1,10 +1,10 @@
 // Pure starmap generation and author overrides (refactor step 11A).
 //
 // A resolved galaxy is plain data:
-//   { seed, generator, systems, pockets, links, systemsById, pocketsById }
-// Systems own 2D positions; pockets keep the step-10 place shape; links are
-// explicit pocket-to-pocket routes. Generation never mutates PLACES and never
-// touches runtime state, so the same seed can be regenerated on load or a host.
+//   { seed, generator, travel, systems, pockets, links, systemsById, pocketsById }
+// Systems own 2D positions, a travel policy and a visual core; pockets keep the
+// step-10 place shape; links are explicit pocket-to-pocket routes. Generation
+// never mutates PLACES or runtime state, so a seed regenerates on load or a host.
 //
 // To replace the layout algorithm, register another function with the same
 // `(seed, tuning, rng)` contract and name it in data/galaxy.js. Map/travel code
@@ -12,17 +12,27 @@
 
 import { GALAXY, GALAXY_OVERRIDES, SYSTEM_NAME_PARTS } from "../data/galaxy.js";
 import { PLACES, PLACE_LINKS, PLACE_DEFS, DEFAULT_PLACE } from "../data/places.js";
+import { term } from "../data/terms.js";
 import { makeRng } from "../util/rng.js";
+import { intraSystemPolicy } from "./travel.js";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+
+/** FNV-1a: stable presentation hashes independent of array order and RNG use. */
+function hashId(value) {
+  let hash = 0x811c9dc5;
+  const text = String(value);
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  return hash >>> 0;
+}
 
 /** Registry of layout algorithms. A generator returns { systems, pockets, links }. */
 export const GALAXY_GENERATORS = {
   "organic-web-v1": organicWeb,
 };
 
-/** Generate, apply author edits, derive advisory tiers, and validate. */
+/** Generate, apply author edits, derive policies/tiers/visual cores, and validate. */
 export function generateGalaxy(seed = GALAXY.seed, tuning = GALAXY, overrides = GALAXY_OVERRIDES) {
   const config = mergeTuning(GALAXY, tuning);
   validateTuning(config);
@@ -30,9 +40,12 @@ export function generateGalaxy(seed = GALAXY.seed, tuning = GALAXY, overrides = 
   if (typeof generator !== "function") throw new Error(`Unknown galaxy generator "${config.generator}"`);
   const world = generator(seed >>> 0, config, makeRng(seed));
   world.visibility = clone(config.visibility);
+  world.travel = clone(config.travel);
   applyOverrides(world, overrides);
   pruneDanglingLinks(world);
+  assignSystemDefaults(world, config);
   assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
+  assignCores(world, config);
   index(world);
   const errors = validateGalaxy(world);
   if (errors.length) throw new Error(`Invalid galaxy:\n- ${errors.join("\n- ")}`);
@@ -67,6 +80,15 @@ export function validateTuning(tuning) {
   }
   if (!(sub.minZoom > 0 && sub.maxZoom >= sub.minZoom)) {
     throw new Error("galaxy.systemMap zoom limits must be positive and ordered");
+  }
+  if (!(sub.blackHoleChance >= 0 && sub.blackHoleChance <= 1)) {
+    throw new Error("galaxy.systemMap.blackHoleChance must be between 0 and 1");
+  }
+  for (const key of ["coreRadius", "blackHoleRadius", "coreLabelOffset"]) {
+    if (!(sub[key] > 0)) throw new Error(`galaxy.systemMap.${key} must be positive`);
+  }
+  if (!["free", "links"].includes(tuning.travel.intraSystem)) {
+    throw new Error('galaxy.travel.intraSystem must be "free" or "links"');
   }
 }
 
@@ -270,6 +292,37 @@ export function assignTiers(world, tuning, rng) {
   }
 }
 
+/** Fill data defaults after author edits, leaving explicit per-system choices intact. */
+export function assignSystemDefaults(world, tuning = GALAXY) {
+  for (const system of world.systems) {
+    system.intraSystem ??= tuning.travel?.intraSystem ?? "free";
+  }
+}
+
+/** The central body's proper name is the system name without the generic noun:
+ *  "Meridian System" -> "Meridian"; an already-bare "Duskdrift" stays unchanged. */
+export function systemCoreName(system) {
+  const name = String(system?.n || "").trim();
+  const suffix = " " + term("mapNode");
+  if (name.toLowerCase().endsWith(suffix.toLowerCase())) return name.slice(0, -suffix.length).trim() || name;
+  return name;
+}
+
+/** Deterministic visual-only central body: 95% star / 5% black hole by default.
+ *  An authored `core: { kind, n }` override wins. Each id gets its own seeded
+ *  roll, so overrides and system order cannot shift another system's body. This
+ *  also leaves the generator's ids/links and the gameplay RNG stream untouched. */
+export function assignCores(world, tuning = GALAXY) {
+  const chance = tuning.systemMap.blackHoleChance;
+  const seed = (world.seed ?? tuning.seed) >>> 0;
+  for (const system of world.systems) {
+    const roll = makeRng((seed ^ hashId(system.id)) >>> 0)();
+    const kind = system.core?.kind ?? (roll < chance ? "blackHole" : "star");
+    const n = system.core?.n || systemCoreName(system);
+    system.core = { kind, n };
+  }
+}
+
 function index(world) {
   world.systemsById = Object.fromEntries(world.systems.map(s => [s.id, s]));
   world.pocketsById = world.pockets;
@@ -283,6 +336,15 @@ export function validateGalaxy(world) {
   for (const system of world.systems) {
     if (!Array.isArray(system.pos) || system.pos.length !== 2 || !system.pos.every(Number.isFinite)) {
       errors.push(`system ${system.id} needs a finite 2D pos`);
+    }
+    if (!["free", "links"].includes(system.intraSystem)) {
+      errors.push(`system ${system.id} needs intraSystem "free" or "links"`);
+    }
+    if (!["star", "blackHole"].includes(system.core?.kind)) {
+      errors.push(`system ${system.id} needs core.kind "star" or "blackHole"`);
+    }
+    if (typeof system.core?.n !== "string" || !system.core.n.trim()) {
+      errors.push(`system ${system.id} needs a core name`);
     }
   }
   for (const [id, pocket] of Object.entries(world.pockets)) {
@@ -320,16 +382,35 @@ export function validateGalaxy(world) {
     if (pocket.role === "gate" && n !== 1) errors.push(`gate pocket ${pocket.id} has ${n} external links; it needs exactly one`);
     if (pocket.role !== "gate" && n > 0) errors.push(`ordinary pocket ${pocket.id} has an external gate link`);
   }
-  // Every pocket must be reachable from the starting pocket through explicit links.
+  // Every pocket must be reachable through enabled links or free intra-system
+  // warp. A route-only system cannot hide a disconnected pocket behind free warp.
   if (world.pockets[DEFAULT_PLACE]) {
+    const adjacency = new Map();
+    const add = (a, b) => {
+      if (!adjacency.has(a)) adjacency.set(a, []);
+      adjacency.get(a).push(b);
+    };
+    for (const link of Object.values(world.links)) {
+      if (link.enabled === false) continue;
+      add(link.a, link.b);
+      add(link.b, link.a);
+    }
+    const bySystem = new Map();
+    for (const pocket of Object.values(world.pockets)) {
+      if (!bySystem.has(pocket.parent)) bySystem.set(pocket.parent, []);
+      bySystem.get(pocket.parent).push(pocket.id);
+    }
+    for (const system of world.systems) {
+      if (intraSystemPolicy(world, system.id) !== "free") continue;
+      const ids = bySystem.get(system.id) || [];
+      for (const a of ids) for (const b of ids) if (a !== b) add(a, b);
+    }
     const seen = new Set([DEFAULT_PLACE]);
     const queue = [DEFAULT_PLACE];
     while (queue.length) {
       const id = queue.shift();
-      for (const link of Object.values(world.links)) {
-        if (link.enabled === false) continue;
-        const next = link.a === id ? link.b : link.b === id ? link.a : null;
-        if (next && !seen.has(next)) { seen.add(next); queue.push(next); }
+      for (const next of adjacency.get(id) || []) {
+        if (!seen.has(next)) { seen.add(next); queue.push(next); }
       }
     }
     for (const id of Object.keys(world.pockets)) if (!seen.has(id)) errors.push(`pocket ${id} is unreachable from ${DEFAULT_PLACE}`);
@@ -367,10 +448,11 @@ export function systemDistance(world, a, b) {
 /**
  * Derived 2D layout for one system's zoomed-in pocket map. Map units only; this
  * never changes a pocket's flight coordinates or the saved world. An authored
- * `mapPos` wins. Otherwise the ordinary hub sits at the centre, other ordinary
- * pockets ring it, and each gate sits outward toward its peer system so its exit
- * stub can point at that neighbour. The result is deterministic for a resolved
- * galaxy and is rebuilt on demand, never persisted.
+ * `mapPos` wins. Otherwise the visual-only star/black hole sits at the centre,
+ * ordinary pockets spread around it on an inner ring, and each gate pocket sits
+ * outward toward its peer system so its exit stub points at that neighbour. The
+ * result is deterministic for a resolved galaxy and is rebuilt on demand, never
+ * persisted.
  */
 export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
   const system = world.systemsById?.[systemId] || world.systems.find(s => s.id === systemId);
@@ -378,8 +460,6 @@ export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
   const pockets = pocketsInSystem(world, systemId).sort((a, b) => a.id.localeCompare(b.id));
   const ordinary = pockets.filter(p => p.role !== "gate");
   const gates = pockets.filter(p => p.role === "gate");
-  const centerId = world.pockets[DEFAULT_PLACE]?.parent === systemId ? DEFAULT_PLACE
-    : ordinary.find(p => p.id === `${systemId}-hub`)?.id || ordinary[0]?.id || null;
   const nodes = [];
   const placed = [];
   const add = (pocket, pos, peerSystemId = null, direction = null) => {
@@ -392,8 +472,6 @@ export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
 
   // Author positions are fixed obstacles for the automatic layout.
   for (const pocket of pockets) if (validMapPos(pocket)) add(pocket, [...pocket.mapPos]);
-  const center = pockets.find(p => p.id === centerId);
-  if (center && !validMapPos(center)) add(center, [0, 0]);
 
   gates.forEach((gate, index) => {
     if (validMapPos(gate)) return;
@@ -410,9 +488,12 @@ export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
     add(gate, pos, peerSystemId, direction);
   });
 
-  const ring = ordinary.filter(p => p.id !== centerId && !validMapPos(p));
+  // Ordinary pockets orbit the central body. A stable per-system rotation keeps
+  // the spread deterministic without consuming the gameplay RNG stream.
+  const ring = ordinary.filter(p => !validMapPos(p));
+  const spin = (hashId(`${world.seed ?? tuning.seed ?? GALAXY.seed}:${system.id}`) % 360) * Math.PI / 180;
   ring.forEach((pocket, index) => {
-    const angle = Math.PI + (index / Math.max(1, ring.length)) * Math.PI * 2;
+    const angle = spin + (index / Math.max(1, ring.length)) * Math.PI * 2;
     const pos = spreadPoint([Math.cos(angle) * tuning.ordinaryRadius, Math.sin(angle) * tuning.ordinaryRadius], placed, tuning.minSeparation);
     add(pocket, pos);
   });

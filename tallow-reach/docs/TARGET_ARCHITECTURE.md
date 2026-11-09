@@ -77,8 +77,9 @@ content without reading the engine.
 `{ id, kind: "pocket", def, parent, enter, leave }`; `def` names a definition in `PLACE_DEFS`,
 `parent` is an optional place/system id, and `enter`/`leave` describe how the ship arrives and
 departs (today both are warp; a pocket's `enter.pos` is its arrival point). A **system** is a
-non-flyable grouping record `{ id, kind: "system", n }`; you are always in one of its pockets,
-never in the system itself. The starting system is `meridian` (shown as **Meridian System**).
+non-flyable grouping record `{ id, kind: "system", n, intraSystem, core }`; you are always in one of its
+pockets, never in the system itself or its visual-only central body. The starting system is `meridian`
+(shown as **Meridian System**).
 Its first pockets keep the internal ids `reach` (**Meridian Station**, station + asteroid belt)
 and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M opens the
 starmap, zooming into a system dot opens its pocket map, and right-clicking a legal pocket offers
@@ -93,22 +94,27 @@ anywhere; positions belong to the place definition. Meridian is a station featur
 pocket, not a child place. The station feature names its shop.
 
 **Map (step 11).** An **organic 2D web** of systems generated from a seed: scattered positions and
-explicit pocket-to-pocket links, not a square grid. `sim/galaxy.js` resolves `{ systems, pockets,
-links }` through a replaceable generator registry and author overrides; `sim/travel.js` reads those
-records for direct-hop quotes. A gate pocket has exactly one external gate peer in a neighbouring
-system; each system has one ordinary pocket plus one gate pocket per neighbour. Meridian keeps
+explicit cross-system gate links, not a square grid. `sim/galaxy.js` resolves `{ travel, systems, pockets,
+links }` through a replaceable generator registry and author overrides; `sim/travel.js` allows free
+same-system hops by default, or requires internal links when a system opts into `intraSystem: "links"`.
+Cross-system hops always require the exact gate link. A gate pocket has exactly one external gate peer
+in a neighbouring system; each system has one ordinary pocket plus one gate pocket per neighbour. Meridian keeps
 `reach`/`hollow` and gains separate gate pockets. The map stores seed, tier and discovery/visit records,
 not generated geography. `tier` is distance-from-Meridian guidance plus seeded variation; authored
 content may override it and decides actual danger. The save stores the seed and compact
 discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a
 policy (`all` today), not a hard-coded no-fog assumption. The zoomed-in system chart uses a derived,
-deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win) that is never saved;
-gate exit stubs point toward the peer system. Place memory (mined-out rocks, cleared encounters, respawn timers)
-belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
+deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win) that is never saved.
+Pockets orbit an independent seeded star (95%) / black hole (5%) core; its proper name comes from the
+system and appears on hover/focus, but it is not warpable. Free systems omit internal chart lines;
+route-only systems draw them. Gate exit stubs still point toward the exact peer system. Place memory
+(mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
 container: pockets may later have optional child places using the same place record.
 
 **Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole. It
-is not on the system map and is discarded on exit. Same loader, different source.
+is not on the system map and is discarded on exit. Same loader, different source. A future temporary
+instanced system that needs ordered internal travel can use the existing `intraSystem: "links"` data
+policy; instance creation/lifecycle itself is still step 14 work.
 
 **Entity.** `{ id, kind: "enemy"|"asteroid"|"crate"|"bullet"|"missile"|"ship"|..., pos, vel, quat, ... }`
 held in the runtime container of the place it belongs to, unique ids from a counter. The sim moves

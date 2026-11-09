@@ -13,7 +13,7 @@ import { createPlayer } from "../src/sim/player.js";
 import { configurePlayer, resumeFromSave } from "../src/sim/session.js";
 import { loadPlace, stationAt, fieldAt } from "../src/sim/places.js";
 import { startWarp, updateWarp } from "../src/sim/sectors.js";
-import { TRAVEL_REQUIREMENTS } from "../src/sim/travel.js";
+import { TRAVEL_REQUIREMENTS, travelQuote } from "../src/sim/travel.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import { WARP_TIME } from "../src/data/sectors.js";
 import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
@@ -235,8 +235,9 @@ test("11B: single-player chart pauses the frame gate; a future hosted world keep
   state.ui.starmap = null;
 });
 
-test("11B: warp refuses non-direct/closed/unknown-requirement routes and never charges credits", () => {
+test("11B: route-only warp refuses non-direct/closed/unknown-requirement routes and never charges credits", () => {
   const P = fresh();
+  state.galaxy.systemsById.meridian.intraSystem = "links";
   const credits = state.profile.cr;
   assert.equal(startWarp(P, "sys-001-hub"), false);
   assert.equal(P.warp, null);
@@ -256,8 +257,9 @@ test("11B: warp refuses non-direct/closed/unknown-requirement routes and never c
   assert.equal(state.profile.cr, credits);
 });
 
-test("11B: a data requirement can use pilot context without changing the map", () => {
+test("11B: a route-only data requirement can use pilot context without changing the map", () => {
   const P = fresh();
+  state.galaxy.systemsById.meridian.intraSystem = "links";
   const link = state.galaxy.links["reach-hollow"];
   TRAVEL_REQUIREMENTS["test-credits"] = ({ req, context }) => context.profile.cr >= req.min || "Not enough credits.";
   try {
@@ -281,11 +283,8 @@ test("11B: the existing warp sequence crosses one gate to its exact reciprocal p
   const internal = Object.values(state.galaxy.links).find(l => l.kind === "internal" &&
     (l.a === "hollow" || l.b === "hollow") && state.galaxy.pocketsById[l.a === "hollow" ? l.b : l.a].role === "gate");
   assert.equal(internal, undefined, "Kestrel Hollow is not a gate or internal junction");
-  assert.equal(startWarp(P, "meridian-gate-sys-001"), false);
-  assert.equal(startWarp(P, "reach"), true);
-  updateWarp(WARP_TIME);
   const gate = "meridian-gate-sys-001";
-  assert.equal(startWarp(P, gate), true);
+  assert.equal(startWarp(P, gate), true, "free local warp reaches a gate directly from Kestrel Hollow");
   updateWarp(WARP_TIME);
   assert.equal(P.place, gate);
   const external = Object.values(state.galaxy.links).find(l => l.kind === "gate" && (l.a === gate || l.b === gate));
@@ -363,8 +362,9 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   map.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
   assert.equal(ui.state.ui.starmap.mode, "system");
   assert.ok(map.innerHTML.includes('data-pocket="hollow"'));
-  assert.ok(map.innerHTML.includes("sm-pocket-edge"));
-  assert.ok(map.innerHTML.includes('data-pockets-edge="reach-hollow"'));
+  assert.ok(!map.innerHTML.includes("sm-pocket-edge"), "free local warp has no internal blue lines");
+  assert.ok(!map.innerHTML.includes('data-pockets-edge="reach-hollow"'));
+  assert.ok(map.innerHTML.includes("Warp to any pocket in this system"));
   assert.ok(map.innerHTML.includes("data-exit="));
   assert.ok(map.innerHTML.includes('data-peer-system="sys-001"'), "gate stubs name the neighbouring system");
   let prevented = false, stopped = false;
@@ -458,9 +458,15 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
   const layout = systemPocketLayout(world, "meridian");
   assert.deepEqual(layout, systemPocketLayout(world, "meridian"));
   assert.equal(layout.nodes.length, Object.values(world.pockets).filter(p => p.parent === "meridian").length);
-  assert.deepEqual(layout.byId.reach.pos, [0, 0]);
+  assert.ok(layout.nodes.every(n => Math.hypot(...n.pos) > 0), "the centre belongs to the visual core");
+  for (const node of layout.nodes) {
+    const radius = node.pocket.role === "gate" ? GALAXY.systemMap.gateRadius : GALAXY.systemMap.ordinaryRadius;
+    assert.ok(Math.abs(Math.hypot(...node.pos) - radius) < 1e-9, "pockets orbit the core on their own ring");
+  }
   const chart = pocketConnections(world, "meridian");
-  assert.ok(chart.edges.some(e => e.id === "reach-hollow"));
+  assert.equal(chart.policy, "free");
+  assert.deepEqual(chart.edges, []);
+  assert.ok(world.links["reach-hollow"], "the underlying link records remain available for an opt-out");
   const gates = Object.values(world.pockets).filter(p => p.parent === "meridian" && p.role === "gate");
   assert.equal(chart.exits.length, gates.length);
   for (const exit of chart.exits) {
@@ -492,6 +498,8 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
 test("11B: system-map lines follow enabled links and the visibility policy", () => {
   fresh();
   const world = state.galaxy;
+  assert.deepEqual(pocketConnections(world, "meridian").edges, [], "free systems omit internal lines");
+  world.systemsById.meridian.intraSystem = "links";
   const internal = world.links["reach-hollow"];
   internal.enabled = false;
   assert.ok(!pocketConnections(world, "meridian").edges.some(e => e.id === "reach-hollow"));
@@ -504,8 +512,10 @@ test("11B: system-map lines follow enabled links and the visibility policy", () 
   world.visibility.mode = "discovered";
   const fog = pocketConnections(world, "meridian", { meridian: { discovered: true } });
   assert.equal(fog.exits.length, 0, "hidden peer systems get no exit stub");
-  assert.ok(fog.edges.length > 0, "internal pocket lines remain");
+  assert.ok(fog.edges.length > 0, "required route-only pocket lines remain");
   world.visibility.mode = "all";
+  world.systemsById.meridian.intraSystem = "free";
+  assert.deepEqual(pocketConnections(world, "meridian").edges, [], "the data opt-out is reversible");
 });
 
 test("11B: galaxy/system zoom transition blends viewBoxes and can be driven headlessly", () => {
@@ -576,6 +586,103 @@ test("11B: zoom controls enter/leave the system map and illegal right-clicks can
   click({ action: "zoom-out" });
   assert.equal(ui.state.ui.starmap.mode, "galaxy", "zooming out at the system fit returns to the galaxy");
   ui.closeStarmap();
+});
+
+test("11B: stars/black holes have hover/focus names and are never warp destinations", () => {
+  const save = ui.prepareGalaxySave(ui.newSave());
+  ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach";
+  ui.state.ui.intro = false; ui.state.ui.starmap = null; ui.state.paused = false;
+  assert.equal(ui.openStarmap(), true);
+  const enter = id => mapRoot.handlers.dblclick({
+    target: { closest: () => ({ dataset: { system: id } }) }, preventDefault() {},
+  });
+  const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+  const actions = [];
+  let listening = true;
+  ui.on("action", action => { if (listening && action.name === "travel") actions.push(action); });
+  try {
+    enter("meridian");
+    assert.equal(ui.state.ui.starmap.mode, "system");
+    const core = mapRoot.innerHTML.match(/<g class="sm-core star"[\s\S]*?<\/g>/)?.[0];
+    assert.ok(core, "Meridian has a central star");
+    for (const text of ['data-core="meridian"', 'role="img"', 'tabindex="0"', 'aria-label="Meridian — star"',
+      "<title>Meridian — star</title>", 'class="sm-core-label"', ">Meridian</text>", "sm-core-glow", "sm-core-ring", "sm-core-body"]) {
+      assert.ok(core.includes(text), text);
+    }
+    assert.ok(!core.includes("data-pocket="), "the core is not a pocket target");
+    assert.ok(!core.includes("data-action="), "the core has no travel action");
+    assert.ok(!core.includes('role="button"'));
+    assert.ok(mapRoot.innerHTML.includes("Hover or focus the central star/black hole for its name (not warpable)"));
+    click({ core: "meridian" });
+    assert.equal(ui.state.ui.starmap.menu, null);
+    let prevented = false;
+    mapRoot.handlers.keydown({ key: "Enter", target: {
+      closest: sel => sel === "[data-core]" ? { dataset: { core: "meridian" } } : null,
+    }, preventDefault() { prevented = true; }, stopPropagation() {} });
+    assert.equal(prevented, false, "activating the core does not open a warp popup");
+    mapRoot.handlers.contextmenu({ target: { closest: () => null }, clientX: 100, clientY: 100,
+      preventDefault() {}, stopPropagation() {} });
+    assert.equal(ui.state.ui.starmap.menu, null);
+    assert.deepEqual(actions, []);
+    assert.equal(travelQuote(ui.state.galaxy, "reach", "meridian").ok, false);
+    const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    assert.match(css, /\.sm-core-label \{ opacity: 0;/);
+    assert.match(css, /\.sm-core:hover \.sm-core-label, \.sm-core:focus \.sm-core-label \{ opacity: 1; \}/);
+    click({ action: "back" });
+    enter("sys-001");
+    assert.ok(mapRoot.innerHTML.includes('class="sm-core black-hole"'));
+    assert.ok(mapRoot.innerHTML.includes('aria-label="Duskdrift — black hole"'));
+    assert.ok(mapRoot.innerHTML.includes(">Duskdrift</text>"));
+    assert.ok(!mapRoot.innerHTML.includes('data-pocket="sys-001"'), "the black hole is not a warpable hub");
+  } finally {
+    listening = false;
+    ui.closeStarmap();
+  }
+});
+
+test("11B: a free gate hop keeps the named action; a links opt-out restores lines and refusal", () => {
+  const save = ui.prepareGalaxySave(ui.newSave());
+  ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "hollow";
+  ui.state.ui.intro = false; ui.state.ui.starmap = null; ui.state.paused = false;
+  assert.equal(ui.openStarmap(), true);
+  const galaxyEdges = (mapRoot.innerHTML.match(/data-edge="/g) || []).length;
+  assert.ok(galaxyEdges > 0, "the galaxy keeps its explicit gate web");
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  const gate = "meridian-gate-sys-001";
+  const rightClick = id => mapRoot.handlers.contextmenu({
+    target: { closest: sel => sel === "[data-pocket]" ? { dataset: { pocket: id } } : null },
+    clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {},
+  });
+  const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+  rightClick(gate);
+  assert.ok(mapRoot.innerHTML.includes(`data-action="travel" data-to="${gate}"`));
+  assert.ok(!mapRoot.innerHTML.includes("sm-pocket-edge"));
+  assert.ok(mapRoot.innerHTML.includes("no internal route is needed"));
+  const actions = [];
+  let listening = true;
+  ui.on("action", action => { if (listening && action.name === "travel") actions.push(action); });
+  try {
+    click({ action: "travel", to: gate });
+    assert.deepEqual(actions.at(-1), { name: "travel", to: gate, repeat: false });
+    assert.equal(travelQuote(ui.state.galaxy, P.place, gate).ok, true);
+    ui.state.galaxy.systemsById.meridian.intraSystem = "links";
+    click({ action: "reset" });
+    assert.ok(mapRoot.innerHTML.includes("requires connected pocket hops"));
+    assert.ok(mapRoot.innerHTML.includes('data-pockets-edge="reach-hollow"'));
+    rightClick(gate);
+    assert.ok(mapRoot.innerHTML.includes("No direct route"));
+    assert.ok(!mapRoot.innerHTML.includes('data-action="travel"'));
+    assert.equal(travelQuote(ui.state.galaxy, P.place, gate).ok, false, "the shared quote path respects the opt-out");
+    click({ action: "back" });
+    assert.equal((mapRoot.innerHTML.match(/data-edge="/g) || []).length, galaxyEdges, "galaxy routes are unchanged");
+  } finally {
+    listening = false;
+    ui.closeStarmap();
+  }
 });
 
 // The real menu module, with its own bundled state, exercises the notices a

@@ -1,15 +1,15 @@
-// Step 11A: organic starmap generation, one-peer gates and author overrides.
-// These tests exercise pure data only. The live M key and save format are
-// deliberately unchanged until step 11B wires the map screen.
+// Step 11A: organic starmap generation, one-peer gates and author overrides,
+// plus the open-world travel/core follow-up. These tests exercise pure data only;
+// step11b-starmap.test.mjs covers the live map, warp sequence and compact saves.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GALAXY, GALAXY_OVERRIDES } from "../src/data/galaxy.js";
 import { PLACES, PLACE_LINKS, DEFAULT_PLACE } from "../src/data/places.js";
 import {
   generateGalaxy, GALAXY_GENERATORS, organicWeb, validateGalaxy, validateTuning,
-  pocketsInSystem, linksFrom, systemVisible, systemDistance,
+  pocketsInSystem, linksFrom, systemVisible, systemDistance, systemCoreName, assignCores,
 } from "../src/sim/galaxy.js";
-import { canTravel, travelQuote, travelOptions, findRoute } from "../src/sim/travel.js";
+import { canTravel, travelQuote, travelOptions, findRoute, intraSystemPolicy, TRAVEL_REQUIREMENTS, TRAVEL_MODES } from "../src/sim/travel.js";
 import { makeRng, setSeed, random } from "../src/util/rng.js";
 
 const fresh = (seed = GALAXY.seed, tuning = {}, overrides = {}) => generateGalaxy(seed, tuning, overrides);
@@ -73,7 +73,7 @@ test("11A: the web has dead ends, two-link systems and junctions, under the degr
   assert.ok(counts.many > 0, "some systems are junctions");
 });
 
-test("11A: every system and pocket is reachable through explicit enabled links", () => {
+test("11A: every system and pocket is reachable through enabled links or free local warp", () => {
   const world = fresh();
   const seenSystems = new Set([GALAXY.homeSystem]);
   const queue = [GALAXY.homeSystem];
@@ -127,7 +127,7 @@ test("11A: gate travel is one hop to the named peer, never to an arbitrary neigh
   const external = Object.values(world.links).find(l => l.kind === "gate" && (l.a === gate.id || l.b === gate.id));
   const peer = external.a === gate.id ? external.b : external.a;
   assert.ok(canTravel(world, gate.id, peer));
-  const otherGate = Object.values(world.pockets).find(p => p.role === "gate" && p.id !== gate.id && p.id !== peer);
+  const otherGate = Object.values(world.pockets).find(p => p.role === "gate" && p.parent !== gate.parent && p.id !== peer);
   assert.equal(canTravel(world, gate.id, otherGate.id), false);
   assert.match(travelQuote(world, gate.id, otherGate.id).reason, /No direct route/);
   assert.ok(travelOptions(world, gate.id).every(o => o.ok));
@@ -247,17 +247,135 @@ test("11A: generation does not mutate authored place tables or default overrides
   assert.equal(JSON.stringify(GALAXY_OVERRIDES), overridesBefore);
 });
 
-test("11A: travel costs nothing today and closed/unknown routes are refused", () => {
+test("11A: travel is free; route-only systems still refuse closed/unknown routes", () => {
   const world = fresh();
   const quote = travelQuote(world, "reach", "hollow");
   assert.equal(quote.ok, true);
   assert.deepEqual(quote.cost, {});
   assert.equal(quote.mode, "warp");
+  // Closing an optional internal link does not close an open-world system.
   world.links["reach-hollow"].enabled = false;
+  assert.equal(canTravel(world, "reach", "hollow"), true);
+  world.systemsById.meridian.intraSystem = "links";
   assert.equal(canTravel(world, "reach", "hollow"), false);
   assert.match(travelQuote(world, "reach", "hollow").reason, /closed/);
   assert.equal(canTravel(world, "reach", "missing"), false);
   assert.equal(canTravel(world, "reach", "reach"), false);
+});
+
+test("11A: free local warp needs no internal link, but never bypasses a gate", () => {
+  const world = fresh();
+  assert.equal(world.travel.intraSystem, "free");
+  assert.ok(world.systems.every(s => s.intraSystem === "free"));
+  const gate = Object.values(world.pockets).find(p => p.parent === "meridian" && p.role === "gate");
+  const external = Object.values(world.links).find(l => l.kind === "gate" && (l.a === gate.id || l.b === gate.id));
+  const peer = external.a === gate.id ? external.b : external.a;
+  assert.equal(Object.values(world.links).some(l => l.kind === "internal" &&
+    ((l.a === "hollow" && l.b === gate.id) || (l.a === gate.id && l.b === "hollow"))), false);
+  const quote = travelQuote(world, "hollow", gate.id);
+  assert.equal(quote.ok, true);
+  assert.equal(quote.link, null);
+  assert.equal(quote.mode, "warp");
+  assert.deepEqual(quote.cost, {});
+  const warpMode = TRAVEL_MODES.warp;
+  delete TRAVEL_MODES.warp;
+  assert.match(travelQuote(world, "hollow", gate.id).reason, /Unknown travel mode/);
+  TRAVEL_MODES.warp = warpMode;
+  assert.deepEqual(findRoute(world, "hollow", gate.id), ["hollow", gate.id]);
+  const options = travelOptions(world, "hollow");
+  assert.equal(options.length, pocketsInSystem(world, "meridian").length - 1);
+  assert.equal(new Set(options.map(o => o.to)).size, options.length);
+  assert.ok(options.every(o => o.ok && world.pockets[o.to].parent === "meridian"));
+  assert.ok(!options.some(o => o.to === peer));
+  assert.equal(canTravel(world, "hollow", peer), false);
+  assert.equal(canTravel(world, gate.id, peer), true);
+  external.enabled = false;
+  assert.match(travelQuote(world, gate.id, peer).reason, /closed/);
+  assert.equal(canTravel(world, gate.id, peer), false);
+  const detour = findRoute(world, "hollow", peer);
+  assert.ok(detour && detour.length > 2, "route search may use other enabled gates, never the closed edge");
+  assert.ok(detour.every((id, i) => i === 0 || canTravel(world, detour[i - 1], id)));
+  // Free hops do not inherit an optional link's future cost or requirements.
+  const local = world.links["reach-hollow"];
+  local.cost = { fuel: 7 };
+  local.requires = [{ type: "test-free-local" }];
+  TRAVEL_REQUIREMENTS["test-free-local"] = () => "Optional route is unavailable.";
+  try {
+    assert.deepEqual(travelQuote(world, "reach", "hollow").cost, {});
+    assert.equal(canTravel(world, "reach", "hollow"), true);
+    world.systemsById.meridian.intraSystem = "links";
+    assert.equal(canTravel(world, "reach", "hollow"), false);
+    assert.deepEqual(travelQuote(world, "reach", "hollow").cost, {});
+  } finally {
+    delete TRAVEL_REQUIREMENTS["test-free-local"];
+  }
+});
+
+test("11A: a route-only instance is a data opt-out and validates its internal connectivity", () => {
+  const overrides = {
+    places: {
+      meridian: { intraSystem: "links" },
+      "test-isolated": { kind: "pocket", parent: "meridian", def: "empty", n: "Isolated annex", d: "Route-only test." },
+    },
+  };
+  assert.throws(() => fresh(GALAXY.seed, {}, overrides), /test-isolated is unreachable/);
+  overrides.links = { "test-annex-route": {
+    kind: "internal", a: "hollow", b: "test-isolated", mode: "warp", cost: {}, requires: [], enabled: true,
+  } };
+  const world = fresh(GALAXY.seed, {}, overrides);
+  assert.equal(intraSystemPolicy(world, "meridian"), "links");
+  assert.equal(intraSystemPolicy(world, "sys-001"), "free", "the opt-out is per system");
+  assert.equal(canTravel(world, "reach", "test-isolated"), false);
+  assert.deepEqual(findRoute(world, "reach", "test-isolated"), ["reach", "hollow", "test-isolated"]);
+  world.links["test-annex-route"].enabled = false;
+  assert.equal(findRoute(world, "reach", "test-isolated"), null);
+  assert.match(validateGalaxy(world).join("\n"), /test-isolated is unreachable/);
+  world.links["test-annex-route"].enabled = true;
+  world.systemsById.meridian.intraSystem = "free";
+  assert.deepEqual(validateGalaxy(world), [], "free systems need no internal link to an annex");
+  assert.deepEqual(findRoute(world, "reach", "test-isolated"), ["reach", "test-isolated"]);
+  const legacy = { pocketsById: { a: { id: "a", parent: "x" }, b: { id: "b", parent: "x" } }, pockets: {}, links: {} };
+  assert.equal(intraSystemPolicy(legacy, "x"), "free");
+  assert.equal(canTravel(legacy, "a", "b"), true);
+});
+
+test("11A: core kinds/names are seeded visual data with tuning and author overrides", () => {
+  const world = fresh();
+  assert.equal(GALAXY.systemMap.blackHoleChance, 0.05);
+  assert.deepEqual(world.systemsById.meridian.core, { kind: "star", n: "Meridian" });
+  assert.deepEqual(world.systemsById["sys-001"].core, { kind: "blackHole", n: "Duskdrift" });
+  assert.ok(world.systems.every(s => ["star", "blackHole"].includes(s.core.kind) && s.core.n));
+  assert.ok(world.systems.some(s => s.core.kind === "blackHole"));
+  assert.ok(world.systems.filter(s => s.core.kind === "blackHole").length < world.systems.length / 2);
+  assert.equal(systemCoreName({ n: "Meridian SYSTEM" }), "Meridian");
+  assert.equal(systemCoreName({ n: "System" }), "System");
+  const stars = fresh(GALAXY.seed, { systemMap: { blackHoleChance: 0 } });
+  const holes = fresh(GALAXY.seed, { systemMap: { blackHoleChance: 1 } });
+  assert.ok(stars.systems.every(s => s.core.kind === "star"));
+  assert.ok(holes.systems.every(s => s.core.kind === "blackHole"));
+  assert.deepEqual(holes.systems.map(s => ({ id: s.id, pos: s.pos })), stars.systems.map(s => ({ id: s.id, pos: s.pos })));
+  assert.deepEqual(Object.keys(holes.links), Object.keys(stars.links));
+  const authored = fresh(GALAXY.seed, {}, { places: { meridian: { core: { kind: "blackHole", n: "The Lantern" } } } });
+  assert.deepEqual(authored.systemsById.meridian.core, { kind: "blackHole", n: "The Lantern" });
+  assert.deepEqual(authored.systemsById["sys-001"].core, world.systemsById["sys-001"].core);
+  const reordered = fresh();
+  reordered.systems.reverse();
+  assignCores(reordered, GALAXY);
+  assert.deepEqual(reordered.systems.map(s => s.core).reverse(), world.systems.map(s => s.core));
+  assert.equal(world.pockets.meridian, undefined, "the core is not a pocket");
+  assert.equal(canTravel(world, "reach", "meridian"), false);
+});
+
+test("11A: invalid travel policies, core kinds and presentation tuning fail plainly", () => {
+  assert.throws(() => fresh(GALAXY.seed, { travel: { intraSystem: "anything" } }), /travel.intraSystem/);
+  assert.throws(() => fresh(GALAXY.seed, {}, { places: { meridian: { intraSystem: "toll" } } }), /intraSystem/);
+  assert.throws(() => fresh(GALAXY.seed, {}, { places: { meridian: { core: { kind: "planet" } } } }), /core.kind/);
+  for (const blackHoleChance of [-0.1, 1.1, NaN]) {
+    assert.throws(() => validateTuning({ ...GALAXY, systemMap: { ...GALAXY.systemMap, blackHoleChance } }), /blackHoleChance/);
+  }
+  for (const key of ["ordinaryRadius", "gateRadius", "coreRadius", "blackHoleRadius", "coreLabelOffset"]) {
+    assert.throws(() => validateTuning({ ...GALAXY, systemMap: { ...GALAXY.systemMap, [key]: 0 } }), new RegExp(key));
+  }
 });
 
 test("11A: the organic generator itself is a pure function of seed, tuning and rng", () => {

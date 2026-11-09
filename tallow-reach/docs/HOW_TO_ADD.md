@@ -343,11 +343,11 @@ Places live in `src/data/places.js`. A **system** is a non-flyable grouping reco
 `parent` is the system it belongs to, and `enter.pos` is the arrival point. Generic player-facing
 nouns live in `src/data/terms.js` (`mapNode`, `flyable`); proper names live on the place records.
 
-1. Add the pocket to `PLACES` with `parent` set to its system id, and add at least one explicit link
-   naming it in `PLACE_LINKS` (or `GALAXY_OVERRIDES.links`). The M starmap's zoomed-in system map draws
-   every pocket of the selected system and the compact right panel lists their names; there is no second
-   UI list and no assumption that a system has exactly two pockets. Generation fails plainly if the new
-   pocket is unreachable. `npm test` checks the fields and links.
+1. Add the pocket to `PLACES` with `parent` set to its system id. A default `intraSystem: "free"` system
+   can warp to it without an internal link; a route-only (`intraSystem: "links"`) system needs a connected
+   internal link in `PLACE_LINKS` or `GALAXY_OVERRIDES.links`. The zoomed system map draws every pocket and
+   the compact right panel lists their names; there is no fixed pocket count. Generation fails plainly if
+   the new pocket is unreachable under its system's policy. `npm test` checks fields and connectivity.
 2. Point `def` at `PLACE_DEFS.empty` for empty space, or copy `PLACE_DEFS.meridian` and edit its
    features. A definition is a list of features: `station` (position, keep-out, dock range/speed,
    launch point, shop id), `asteroidField` (position, radius, height, count, ore table, respawn,
@@ -563,9 +563,38 @@ Ids, pockets and routes stay stable; only the map position and derived tier guid
 places: { "hollow": { mapPos: [-130, 90] } },
 ```
 
-Without `mapPos`, `systemPocketLayout` centres the ordinary hub, rings other ordinary pockets, and places
-gate pockets outward toward their peer system. An authored gate `mapPos` moves the dot but its exit stub
-still points toward the peer. Layout is derived and never saved.
+Without `mapPos`, `systemPocketLayout` leaves the centre to the visual star/black hole, spreads ordinary
+pockets around it at `systemMap.ordinaryRadius`, and places gates farther out at `gateRadius` toward their
+peer system. A stable seed/system-id hash rotates each orbit; authored positions remain fixed obstacles.
+An authored gate `mapPos` moves the dot but its exit stub still points toward the peer. Layout is derived
+and never saved.
+
+**Choose local travel rules.** `GALAXY.travel.intraSystem` defaults to `"free"`: any pocket in the same
+system is a legal free warp, including a gate. Cross-system travel still needs the exact enabled gate link.
+For a future route-only temporary instance, author the system with:
+
+```js
+places: { "sys-004": { intraSystem: "links" } },
+```
+
+Keep/add connected internal links for every pocket in that system. The opt-out restores internal route
+lines on its system map and the normal enabled/mode/cost/requirement checks for local hops. It does not
+remove gate lines from the main galaxy. Free local hops ignore optional internal-link restrictions and
+costs; put cross-system restrictions on the gate link. Validation and `findRoute` understand both policies.
+
+**Author a central star/black hole.** Each system gets an independent seeded core roll: the default
+`systemMap.blackHoleChance: 0.05` means 5% black holes / 95% stars, not an exact quota. The core's name strips
+the generic `term("mapNode")` suffix case-insensitively (Meridian System → Meridian; Duskdrift stays Duskdrift).
+To override it, patch the system, not the pocket table:
+
+```js
+places: { "sys-004": { core: { kind: "blackHole", n: "Emberfall" } } },
+```
+
+Use `kind: "star"` or `"blackHole"`; omit `n` to derive the proper name. Invalid kinds fail validation.
+The core is a focusable SVG image with a hover/focus name, not a `data-pocket` target, button, link endpoint
+or saved place. Warping to/near it is not implemented. Core rolls do not consume the generator or gameplay
+RNG streams, so existing system/pocket/link ids and v16 saves stay stable.
 
 **Delete a pocket.** Add its id to `GALAXY_OVERRIDES.removedPlaces`. Every link naming it is pruned.
 If the deletion disconnects the web or leaves a gate without its one peer, generation fails with a
@@ -574,22 +603,26 @@ recovers to the home station with the whole character/cargo intact.
 
 **Promote a pocket to a gate.** Patch its `role: "gate"` and add one `kind: "gate"` link naming its
 peer pocket in another system. The peer must also be a gate pocket and may have no other external gate
-link. Keep an internal link from the system's ordinary pocket to the gate so it is reachable.
+link. Keep an internal link from the system's ordinary pocket to the gate for the route-only opt-out;
+free systems can already reach it, but retaining the link makes a later policy change safe.
 
 **Add an alternative route.** Add a link record to `GALAXY_OVERRIDES.links` (or `PLACE_LINKS` in
 `src/data/places.js` for authored pockets): `{ id, kind, a, b, mode: "warp", cost: {}, requires: [],
-enabled: true }`. `kind` is `internal` inside one system or `gate` between two gate pockets.
+enabled: true }`. `kind` is `internal` inside one system or `gate` between two gate pockets. Internal
+lines are drawn only in a links-policy system; gate lines remain explicit on the galaxy in either policy.
 
 **Chart interaction.** On the galaxy web, click a system to select it; scroll up / press **+** past
 `map.systemEntryZoom`, or double-click the dot, to open its pocket map. **Back to galaxy** or scrolling out
 at the fitted system view returns. In the pocket map, right-click a pocket dot (or focus it and press
-Enter/Space/Shift+F10) for the **Warp to** popup; only a legal direct hop gets the button. The right panel
-is a read-only overview, not a travel button list.
+Enter/Space/Shift+F10) for the **Warp to** popup; only a legal hop gets the button. The right panel
+is a read-only overview, not a travel button list. Hover/focus the central body to reveal its name; it
+cannot open a warp popup. The compact panel must not gain fixed-count rows, per-row metadata or scrolling.
 
 **Change generation or chart settings.** Edit `GALAXY` in `src/data/galaxy.js`: `systemCount`,
 `graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, `travel` defaults, `map`
 (padding, screen-pixel radii, zoom limits/step, `systemEntryZoom`, `transitionMs`, popup `context`) and
-`systemMap` (padding, pocket radius, ordinary/gate radii, exit length, minimum separation, zoom limits).
+`systemMap` (padding, pocket radius, ordinary/gate orbital radii, exit length, minimum separation, zoom
+limits, `blackHoleChance`, `coreRadius`, `blackHoleRadius`, `coreLabelOffset`).
 To replace the layout algorithm, register a function in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the
 same `(seed, tuning, rng)` contract and name it in `GALAXY.generator`. The resolved record contract stays
 the same, so travel rules and the map UI do not change.
@@ -601,13 +634,14 @@ visit. Add a new policy to `VISIBILITY_POLICIES` rather than hard-coded fog in t
 **Future costs/requirements.** Keep defaults in `GALAXY.travel` and per-route overrides on links.
 Register a requirement handler in `TRAVEL_REQUIREMENTS` (`src/sim/travel.js`) as
 `({ req, link, from, to, context }) => true | "refusal reason"`. The chart and warp pass the same
-pilot/profile/world context. Costs are returned as plain data; until a cost handler is implemented,
+pilot/profile/world context. These checks apply to gate links and to internal links in route-only systems;
+default free local warp has no link cost/requirement. Costs are returned as plain data; until a cost handler is implemented,
 `startWarp` refuses any non-empty cost rather than silently charging or ignoring it. Fuel, gate
 activation and supercruise are not implemented yet.
 
 **Saves.** v16 stores only `{ seed, knowledge }` in `world.galaxy`. Boot, slot load and import call
 `prepareGalaxySave(raw)` before `applySave`; it regenerates the seed, validates ids against that live
-catalog and recovers removed pockets. Never save generated systems/pockets/links.
+catalog and recovers removed pockets. Never save generated systems/pockets/links, core assignments or chart geometry.
 
 Run `npm test` (`tests/step11a-galaxy.test.mjs` and `tests/step11b-starmap.test.mjs`) after any edit.
 They check determinism, reachability, one-peer gates, move/delete/promote examples, visibility, tier
