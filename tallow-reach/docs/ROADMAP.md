@@ -7,12 +7,15 @@
 > [HANDOFF.md](HANDOFF.md).
 
 **Current position:** **Milestone C is underway.** **Steps 0 to 10 are ticked** (step 10 owner
-playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). Step 10 delivered:
-place definitions are systems and pockets (`data/terms.js`, `data/places.js`), each pilot owns
-their place/warp, and saves are version **15** (`{ v: 15, profile, world }` with `world.place` and
-`world.resume`), migrating v14/v13 and older saves/codes. `npm test` is **260/260** (both 8b oracles
-unchanged) and `npm run build` succeeded. Next: **step 11** (system map, pocket chooser, 100+
-systems, save v15) — ask VISION open questions 1 to 3 and what goes in Kestrel Hollow first.
+playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). **Step 11 is in
+progress:** slice **11A** (organic starmap generation, one-peer gate links, author overrides and pure
+travel rules) is built and owner-playtest-passed on 2026-11-08; slice **11B** (M starmap screen, pocket chooser and save v16) is
+next. Saves are still version **15** (`{ v: 15, profile, world }` with `world.place` and `world.resume`);
+11A does not change the save format or live M-key behaviour. `npm test` is **279/279** (both 8b oracles
+unchanged) and `npm run build` succeeded. The owner's step-11 decisions are recorded in VISION.md:
+organic 2D web, free direct-hop travel, one gate pocket per neighbouring system, all map visible via a
+configurable policy, distance-tier guidance with content deciding actual danger, and modular
+move/delete/promote/generator edits.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -56,11 +59,11 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [x] **2026-11-08: owner playtest passed.** |
 | 9 | Split profile/world save and close step-9 local-only items (save v13) | B | [x] **2026-11-08: owner playtest passed (Milestone B complete).** |
 | 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
-| 11 | System map, pocket chooser and starmap (100+ systems, save v15) | C | [ ] |
-| 12 | Encounters, place templates, place memory (save v16) | C | [ ] |
-| 13 | Mission framework; contracts rebuilt on it (save v17) | D | [ ] |
+| 11 | System map, pocket chooser and starmap (100+ systems, save v16) | C | [ ] **11A built and owner playtest passed 2026-11-08; 11B pending** |
+| 12 | Encounters, place templates, place memory (save v17) | C | [ ] |
+| 13 | Mission framework; contracts rebuilt on it (save v18) | D | [ ] |
 | 14 | Instanced places and wormholes | D | [ ] |
-| 15 | Campaign scaffolding (save v18) | D | [ ] |
+| 15 | Campaign scaffolding (save v19) | D | [ ] |
 | 16 | Multiplayer (plan written when reached) | | [ ] |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table.
@@ -215,3 +218,12 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 - 2026-11-08: Autosave interval raised **15 s -> 30 s** at the owner's request, to keep the number of
   save writes down. One line in `src/data/simulation.js`; the save-on-close/hide behaviour is
   unchanged, so a normal quit still loses nothing. 260 tests green.
+- 2026-11-08: **Step 11A built** (organic starmap generation and travel rules). `data/galaxy.js`,
+  `sim/galaxy.js`, `sim/travel.js` and explicit `PLACE_LINKS` in `data/places.js`; 19 new tests cover
+  determinism, 121 systems, organic scatter, reachability, one-peer gates, move/delete/promote
+  overrides, generator replacement, visibility policy and distance-tier guidance. No live UI or save
+  change: M still cycles the current system's pockets and save stays v15. 279 tests green; build
+  succeeded. Next: **11B** starmap screen, pocket chooser and save v16.
+- 2026-11-08: **Step 11A owner playtest passed.** No bugs were reported. Step 11 remains unticked
+  until 11B is built and playtested. Packaged the full project as a backup, including source, tests,
+  docs and the built HTML; dependencies/Git internals and browser-local saves are not included.

@@ -292,22 +292,34 @@ another pilot's place or clear their fight.
 **Status:** [x] **complete 2026-11-08 — owner playtest passed (`TESTING-PLACES.md`); the three bugs it found were fixed and confirmed. 247 tests green, build succeeded.**
 
 ## Step 11: System map, pocket chooser and starmap
-**Goal.** A generated grid of 100+ systems, a 2D starmap to travel between systems, and a proper
-way to choose among the pockets of the current system (M today only cycles them).
-**Ask the owner first:** VISION.md open questions 1 to 3 (travel rules, fog, what sets difficulty)
-and what goes in Kestrel Hollow / new pockets. If unanswered, use the defaults and say so.
-**Do.** `data/galaxy.js` (grid size, seed, tier rules) and `sim/galaxy.js` (`generateGalaxy(seed)`)
-build system records; Meridian System is hand-written at a fixed cell and points at its pockets.
-A 2D **starmap screen** (`ui/starmap.js`, opened with **M**) shows the system grid, where you are,
-which neighbours you can reach, and fog per the defaults; a pocket list chooses the destination
-inside the current system. Choosing one runs the existing warp sequence. Only the seed and each
-system/pocket's `discovered/visited/memory` are saved, not the generated content. Do not assume a
-system has exactly two pockets, and do not hard-code a two-level universe: pockets may later have
-optional child places through the same place record.
+**Goal.** A generated **organic 2D web** of 100+ systems, a 2D starmap to travel between connected
+pockets, and a proper way to choose among the pockets of the current system (M today only cycles them).
+**Owner decisions (2026-11-08, recorded in VISION.md):** travel only to a directly connected pocket,
+free for now; a gate pocket has exactly one external gate peer in a neighbouring system; each system
+has one ordinary pocket plus one gate pocket per neighbour; Meridian keeps `reach`/`hollow` unchanged
+and gains separate new gate pockets; generated systems are empty placeholders; the whole map is
+visible through a configurable policy; difficulty is distance guidance with seeded variation, while
+actual content decides danger. The web must stay modular: move a system, delete a pocket, promote a
+pocket to a gate, add a route or replace the generator without rewriting map/UI/warp code. Future fuel,
+activated gates and supercruise are out of scope now.
+**Owner-approved slices:**
+- **11A — world generation and travel rules.** `data/galaxy.js` (seed, count, degree cap, visibility,
+  tier and empty travel cost/requirements), `sim/galaxy.js` (`generateGalaxy(seed)`, generator registry,
+  author overrides, validation) and `sim/travel.js` (pure direct-hop quotes/options/route search).
+  `data/places.js` gains explicit `PLACE_LINKS`. Tests prove determinism, 100+ systems, organic scatter,
+  reachability, dead ends/junctions, one-peer gates, move/delete/promote overrides, configurable
+  visibility and distance-tier guidance. **No live UI or save change in this slice.**
+- **11B — starmap, destination selection and saved worlds.** `ui/starmap.js` opened with **M** shows the
+  system web, current location, gate connections and a selected system's pocket list; only legal direct
+  destinations can start the existing warp sequence. Save **v16** stores the galaxy seed and compact
+  discovery/visit records, not generated geography, with migration from v15 and a removed-pocket
+  fallback. Map interaction tests and a numbered playtest guide.
 **Done when.** Tests prove generation is deterministic, has at least 100 systems, every system is
-reachable, and difficulty rises with distance from Meridian. You can click through the map, choose
-among any number of pockets, and warp.
-**Save.** **Version 15**, migration from 14.
+reachable, and difficulty generally rises with distance from Meridian while authored content may stay
+easy. You can click through the map, choose among any number of pockets, and warp one direct hop at a
+time. Do not assume a system has exactly two pockets, and do not hard-code a two-level universe.
+**Save.** **Version 16**, migration from 15 (v15 is already used by the resume point).
+**Status:** [ ] **11A built and owner playtest passed 2026-11-08; 11B pending.**
 
 ## Step 12: Encounters, place templates and place memory
 **Goal.** The open world's content is data you can pile onto.
@@ -318,7 +330,7 @@ the raider special cases in `sim/ai.js` (hunt-contract behaviour stays the same)
 what you did (mined-out rocks, cleared encounters) with respawn timers (open question 4).
 **Done when.** Adding an encounter is a data entry; the content test checks every reference; flying
 into a few generated pockets shows different things.
-**Save.** **Version 16**, migration from 15.
+**Save.** **Version 17**, migration from 16.
 
 > **Milestone C reached.** The open world can scale to 100+ systems of pocket content.
 
@@ -358,7 +370,7 @@ engine code; it only names things by id (enemies, items, sectors, flags).
   mission can be completed.
 - A mission survives save and load in the middle of a step; abandoning or dying mid-mission does what
   the mission's `fails` says.
-**Save.** **Version 17**: `mission` becomes `missions` (progress per active mission: current step,
+**Save.** **Version 18**: `mission` becomes `missions` (progress per active mission: current step,
 counters) plus `flags`, with migration.
 
 ## Step 14: Instanced sectors and wormholes
@@ -381,7 +393,7 @@ missions in any order for a modest reward; finishing all missions flips the play
 releases the open world; a simple brief/dialogue panel for text.
 **Done when.** A test completes a stub campaign and checks the transition and the replay rewards.
 Adding a mission is one new file and one line in `index.js`.
-**Save.** **Version 18**, migration from 17.
+**Save.** **Version 19**, migration from 18.
 
 > **Milestone D reached.** Write the campaign.
 

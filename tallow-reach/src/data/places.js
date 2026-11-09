@@ -5,8 +5,9 @@
 // Tallow Reach and is now Meridian Station; `hollow` is Kestrel Hollow.
 //
 // Generic player-facing nouns live in data/terms.js. Proper names live here.
-// Adding a pocket to a system is one entry here plus a definition; M cycles every
-// pocket of the current system, however many there are.
+// Adding a pocket to a system is one entry here plus a definition. Step 11A
+// adds explicit pocket links below for the generated starmap; the live M key
+// still cycles siblings until step 11B wires the map screen.
 
 export const PLACE_DEFS = {
   // Today's Tallow Reach: the station, the asteroid belt, the planet backdrop
@@ -94,6 +95,18 @@ export const PLACES = {
     d: "Empty space. Nothing out here yet.",
     enter: { kind: "warp", pos: [0, 0, 300] },
     leave: { kind: "warp" },
+  },
+};
+
+/** Explicit routes between authored pockets. Generated gate/internal routes are
+ *  added by sim/galaxy.js. A link is { id, kind, a, b, mode, cost, requires,
+ *  enabled }; `kind` is "internal" (same system) or "gate" (one peer in another
+ *  system). Step 11A validates these records; step 11B makes travel use them.
+ *  Meridian Station <-> Kestrel Hollow is the only authored route today. */
+export const PLACE_LINKS = {
+  "reach-hollow": {
+    id: "reach-hollow", kind: "internal", a: "reach", b: "hollow",
+    mode: "warp", cost: {}, requires: [], enabled: true,
   },
 };
 

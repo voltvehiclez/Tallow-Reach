@@ -537,3 +537,38 @@ therefore three small pieces and no scene code in `sim/`.
    assert on `state`. If the thing is drawn, add its kind to the list in `tests/layers.test.mjs`
    (the test that checks `render/views.js` knows every kind) and a mesh count to
    `tests/views.test.mjs`.
+
+## 20. Edit the starmap web (step 11A)
+
+The live M key still cycles pockets until step 11B. The resolved web and travel rules already exist:
+`data/galaxy.js` holds tuning and author overrides, `sim/galaxy.js` resolves/validates the web, and
+`sim/travel.js` answers direct-hop travel questions. Edit data, not the future map screen.
+
+**Move a system.** In `GALAXY_OVERRIDES.places` in `src/data/galaxy.js`:
+
+```js
+places: { "sys-004": { pos: [180, -260] } },
+```
+
+Ids, pockets and routes stay stable; only the map position and derived tier guidance change.
+
+**Delete a pocket.** Add its id to `GALAXY_OVERRIDES.removedPlaces`. Every link naming it is pruned.
+If the deletion disconnects the web or leaves a gate without its one peer, generation fails with a
+plain validation error instead of shipping a broken map.
+
+**Promote a pocket to a gate.** Patch its `role: "gate"` and add one `kind: "gate"` link naming its
+peer pocket in another system. The peer must also be a gate pocket and may have no other external gate
+link. Keep an internal link from the system's ordinary pocket to the gate so it is reachable.
+
+**Add an alternative route.** Add a link record to `GALAXY_OVERRIDES.links` (or `PLACE_LINKS` in
+`src/data/places.js` for authored pockets): `{ id, kind, a, b, mode: "warp", cost: {}, requires: [],
+enabled: true }`. `kind` is `internal` inside one system or `gate` between two gate pockets.
+
+**Change generation settings.** Edit `GALAXY` in `src/data/galaxy.js`: `systemCount`,
+`graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, and `travel` defaults. To replace the
+layout algorithm, register a function in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the same
+`(seed, tuning, rng)` contract and name it in `GALAXY.generator`. The resolved record contract stays
+the same, so travel rules and the future map UI do not change.
+
+Run `npm test` (`tests/step11a-galaxy.test.mjs`) after any edit. It checks determinism, reachability,
+one-peer gates, the move/delete/promote examples, visibility policy and tier guidance.

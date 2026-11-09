@@ -10,6 +10,92 @@ newest stay first.
 
 ---
 
+## 2026-11-08: Step 8 ticked; step 9 split saves (v13) and per-pilot rules — playtest pending
+
+- Closed step 8 overall after the owner validated smooth 240 Hz play without tick interpolation
+  (parking the two minor aim/respawn caveats in `docs/ROADMAP.md`), and aligned the local-only
+  ownership table in `docs/TARGET_ARCHITECTURE.md` across steps 9, 10 and 16.
+- Bumped `SAVE_VERSION` to **13** (`src/state/profile.js`, `src/state/storage.js`,
+  `src/state/state.js`): saves split into `{ v: 13, profile, world }` (`state.profile` +
+  `state.worldState`) with automatic migration from v1..v12 saves and `TR1:` codes, `sanitizeWorld`
+  walking `BASE_MODULES` directly, and pure `portableProfile` / `mergeProfile` co-op helpers.
+  Storage keys (`tr1`, `tr_s1`..`tr_s3`) and `TR1:` are unchanged.
+- Closed all five step-9-owned local-only areas across `src/sim/{inventory,fitting,economy,contracts,session,player,weapons,combat,missile,ai,step}.js`
+  and `src/ui/{hud,menu,screens}.js`: per-pilot holds, mining, crate pickup (even while local is
+  docked), outfitting, purchases, missile persistence, contract progress/spawning, kill attribution,
+  and per-pilot launch/dock without wiping another active pilot's fight.
+- Added `tests/saves/v12-real.json`, `tests/step9-save.test.mjs` and `tests/step9-local-only.test.mjs`;
+  all **225 tests** pass, and both 8b single-player oracle scripts match exactly. Rebuild required
+  (`npm run build`); owner playtest pending (`TESTING-BASELINE.md` section M).
+
+
+
+---
+
+## 2026-11-08: Step 8c owner playtest passed
+
+- The owner reports the 8c playtest works. Ticked 8c in the roadmap and refactor plan; no code
+  or save data changed. Step 8 overall remains open pending frame-rate caveat validation.
+
+
+
+---
+
+## 2026-11-08: Step 8c scoped implementation complete — playtest pending
+
+- Flight, drive, power, shield, hull, weapons, missiles and targeting use per-player runtime;
+  shared world/projectile systems run once and enemies chase the nearest active player.
+- Added two-player simulation, collision, targeting and weapon tests, plus a 12-second 8b
+  single-player oracle and a second mining/combat/lifecycle oracle. All 216 tests pass; both 8b
+  scripts match exactly. Build required;
+  save version remains 12, no new dependency or multiplayer transport.
+- Inventory, economy, docking, contracts, death/recovery and saves remain local-only as requested;
+  the complete exceptions table is in `TARGET_ARCHITECTURE.md`, and step 9 must close every item.
+  Owner playtest is pending (`TESTING-BASELINE.md` section L); full step 8 frame-rate caveats remain.
+
+
+
+---
+
+## 2026-11-08: Step 8c in progress — explicit flight, shields and damage
+
+- `flight`, shield and power updates, and `hurt` accept a player or independently supplied
+  runtime data. Non-local callers must supply their own resources. Hurt and death events name the
+  affected player; local HUD/recovery ignore other players. Single-player defaults are unchanged.
+- Added `tests/player-runtime.test.mjs` for independent motion, power, shields, profile damage and
+  death routing. 206 tests pass; a 12-second single-player flight/weapon/warp probe matched the
+  prior build. Save version remains 12.
+- **8c remains incomplete:** the main loop, weapons, inventory, AI, lifecycle and other systems
+  still assume one player. The owner does not want to playtest before 8c is complete.
+
+
+
+---
+
+## 2026-11-08: Step 8c started — player-specific transforms and launches
+
+- `sim/pilot.js` transforms and mounts now accept an explicit player; projectile and missile
+  launch can inherit that player's velocity. Existing callers default to the local player.
+  Weapon and targeting calls pass their current player explicitly; gameplay and saves are unchanged.
+- Added two-player transform and projectile launch tests (`tests/player-aim.test.mjs`); 202 tests
+  pass. A scripted 12-second 8b-versus-current flight/weapon/warp probe was identical.
+- **8c is incomplete**: simulation systems, power, damage, inventory, targeting, lifecycle and
+  events still assume one player. No multiplayer sim is claimed. Frame-rate caveats remain.
+  Save version stays 12; this work has not been playtested by the owner.
+
+
+
+---
+
+## 2026-11-08: Step 8b complete and ticked
+
+- The owner reported the 8b playtest passed. Updated the handoff, roadmap and refactor plan;
+  8c is next. No gameplay or save changes in this entry. The 8b build and 200 tests passed.
+
+
+
+---
+
 ## 2026-11-08: Step 8a ticked; step 8b player records and controls
 
 - The owner reported the 8a playtest passed, so 8a is ticked. The frame-rate caveats remain

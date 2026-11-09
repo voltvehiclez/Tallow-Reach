@@ -66,6 +66,8 @@ about each other, use the event bus instead.
 | Change base module costs             | `data/station.js`                              |
 | Add a contract type                  | `data/contracts.js` (list, generator, wording), plus a listener in `sim/contracts.js` |
 | Add a pocket/system or change the warp cycle | `data/places.js` and `data/terms.js`; see HOW_TO_ADD.md recipe 14 |
+| Change starmap generation, visibility, tiers or travel costs | `data/galaxy.js`; resolved by `sim/galaxy.js`, quoted by `sim/travel.js` (step 11A; live map in 11B) |
+| Move a system, delete/promote a pocket, add a route | `GALAXY_OVERRIDES` in `data/galaxy.js` or `PLACE_LINKS` in `data/places.js`; see HOW_TO_ADD.md recipe 20 |
 | Change the warp timing or its lockout | `WARP` in `data/sectors.js` (the look itself follows those numbers) |
 | Add an enemy, or change one's numbers, colour or size | `data/enemies.js` (`ENEMIES`); see HOW_TO_ADD.md recipe 6 |
 | Change what an enemy drops, or the ore mix of rocks | `data/loot.js` (`LOOT_TABLES`); see HOW_TO_ADD.md recipe 18 |
@@ -101,13 +103,13 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, places, terms, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, places, terms, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops, galaxy)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers), ids.js (entity ids)
 src/core/              audio.js (synth + mute), input.js (keys -> local player controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, pilot (where the ship is), power, drive, fitting, inventory, shops' purchases (economy),
                        weapons, missile, combat, ai, enemy (a hostile as data), entity (every other entity as data),
-                       loot, asteroids, places, targeting, contracts, session, sectors (warp), effects, world
+                       loot, asteroids, places, galaxy (resolved starmap web), travel (pure route quotes), targeting, contracts, session, sectors (warp), effects, world
 src/render/            scene.js (including one group per place), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting),
                        views.js (a mesh per entity, the player's ship and the mining beam)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, warpflash.js
@@ -192,6 +194,14 @@ Each `src/` folder also has its own short `README.md`.
   builds a point in the ship's own frame from `pos`/`quat`, never from `matrixWorld`.
   **`src/sim/` holds no mesh, material or scene object**; `tests/layers.test.mjs` fails if one is
   named in a sim file's code.
+- **The starmap web is resolved data, not UI geometry.** `data/galaxy.js` holds generation tuning,
+  visibility policy, advisory tier rules, empty travel costs/requirements and `GALAXY_OVERRIDES`.
+  `sim/galaxy.js` generates an organic 2D web through a replaceable generator registry, applies author
+  patches/tombstones by stable id, prunes links to deleted pockets, assigns tiers and validates.
+  A gate pocket has exactly one external gate peer; internal links join it to the system's ordinary
+  pocket. `sim/travel.js` quotes only direct enabled links and returns plain cost/mode/requirement
+  results. Moving a system, deleting a pocket, promoting a pocket to a gate or replacing the generator
+  must remain data/registry edits; do not put those rules in the map screen or warp animation.
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
   `vol`, `st`.
@@ -473,9 +483,10 @@ These are real, current limits. None of them is a bug in play today.
   coasts down and unwinds its turn; weapons are offline for the whole sequence. Enemies keep
   shooting at you while it charges. Making the ship invulnerable during a warp, or letting
   enemies lose interest, is a deliberate design decision that has not been made yet.
-- **There is no star map screen yet.** M cycles through the current system's pockets in data order
-  (`pocketsIn` / `nextPocket`) and names the destination in a centre-screen message. The system map
-  and pocket chooser are step 11.
+- **There is no star map screen yet.** M still cycles through the current system's pockets in data order
+  (`pocketsIn` / `nextPocket`) and names the destination in a centre-screen message. Step 11A adds the
+  resolved organic web (`sim/galaxy.js`) and pure travel rules (`sim/travel.js`), but they are not wired
+  into live travel yet. The system map and pocket chooser are step 11B.
 - **Place geography is data, but place memory is not persistent yet.** `PLACE_DEFS` features carry
   the station, field, spawner and planet numbers; runtime containers keep rocks across visits within
   a session. Mined-out rocks/respawn still use wall-clock `setTimeout`, and abandoned crates are
