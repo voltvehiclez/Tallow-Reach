@@ -1,13 +1,14 @@
 // The 2D starmap (step 11B). Reads the resolved galaxy and asks sim/travel.js
 // for every destination quote; it never decides adjacency or starts a warp itself.
-// A chosen pocket emits a named travel action, handled by main.js through the
-// existing sim/sectors.js sequence. Presentation numbers live in data/galaxy.js.
+// Zooming into a selected system opens a derived pocket map; right-clicking a
+// pocket proposes a named travel action, handled by main.js through the existing
+// sim/sectors.js sequence. Presentation numbers live in data/galaxy.js.
 
 import { GALAXY } from "../data/galaxy.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf } from "../state/state.js";
-import { systemVisible, pocketsInSystem } from "../sim/galaxy.js";
+import { systemVisible, pocketsInSystem, systemPocketLayout } from "../sim/galaxy.js";
 import { travelQuote } from "../sim/travel.js";
 import { emit, on } from "../util/events.js";
 import { clearControls, syncControls } from "../core/input.js";
@@ -15,9 +16,13 @@ import { setAudioSuspended, uiSound } from "../core/audio.js";
 
 let root = null;
 let drag = null;
+let transition = null;
+let transitionFrame = null;
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[c]));
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const now = () => globalThis.performance?.now?.() ?? Date.now();
 
 /** Pure view helpers (tested without a browser). */
 export function visibleSystems(world, knowledge = {}) {
@@ -25,7 +30,7 @@ export function visibleSystems(world, knowledge = {}) {
     .sort((a, b) => a.n.localeCompare(b.n) || a.id.localeCompare(b.id));
 }
 
-/** One chart line per external gate pair; internal pocket hops stay in the list. */
+/** One galaxy chart line per external gate pair; internal hops draw in the system map. */
 export function systemEdges(world, knowledge = {}) {
   const seen = new Set();
   const edges = [];
@@ -52,7 +57,7 @@ export function chartBounds(systems, padding = GALAXY.map.padding) {
 
 export function chartViewBox(world, view, knowledge = {}) {
   const [x, y, w, h] = chartBounds(visibleSystems(world, knowledge));
-  const zoom = Math.max(GALAXY.map.minZoom, Math.min(GALAXY.map.maxZoom, view.zoom || 1));
+  const zoom = clamp(view.zoom || 1, GALAXY.map.minZoom, GALAXY.map.maxZoom);
   const vw = w / zoom, vh = h / zoom;
   return [x + (w - vw) / 2 + (view.pan?.[0] || 0), y + (h - vh) / 2 + (view.pan?.[1] || 0), vw, vh];
 }
@@ -89,6 +94,68 @@ export function pocketChoices(world, from, systemId, context = {}) {
   });
 }
 
+/** Internal pocket lines plus gate exit stubs for one system's zoomed-in map.
+ *  Exit stubs respect the same visibility policy as the galaxy chart. */
+export function pocketConnections(world, systemId, knowledge = {}, tuning = GALAXY.systemMap) {
+  const layout = systemPocketLayout(world, systemId, tuning);
+  const ids = new Set(layout.nodes.map(n => n.id));
+  const edges = Object.values(world.links)
+    .filter(l => l.kind === "internal" && l.enabled !== false && ids.has(l.a) && ids.has(l.b))
+    .map(link => ({ id: link.id, a: link.a, b: link.b, link }));
+  const exits = [];
+  for (const node of layout.nodes) {
+    if (!node.peerSystemId || !systemVisible(world, node.peerSystemId, knowledge)) continue;
+    const link = Object.values(world.links).find(l =>
+      l.kind === "gate" && l.enabled !== false && (l.a === node.id || l.b === node.id));
+    if (!link) continue;
+    const to = link.a === node.id ? link.b : link.a;
+    const direction = node.direction || [1, 0];
+    exits.push({
+      id: link.id, from: node.id, to, peerPocketId: to, peerSystemId: node.peerSystemId, link,
+      start: node.pos, direction,
+      end: [node.pos[0] + direction[0] * tuning.exitLength, node.pos[1] + direction[1] * tuning.exitLength],
+    });
+  }
+  return { ...layout, edges, exits };
+}
+
+/** A centred local box around the pockets and their outward exit stubs. */
+export function systemChartBounds(chart, padding = GALAXY.systemMap.padding) {
+  const points = [...chart.nodes.map(n => n.pos), ...chart.exits.map(e => e.end)];
+  if (!points.length) return [-padding, -padding, padding * 2, padding * 2];
+  const extent = Math.max(...points.map(p => Math.max(Math.abs(p[0]), Math.abs(p[1])))) + padding;
+  return [-extent, -extent, extent * 2, extent * 2];
+}
+
+export function systemChartViewBox(world, view, knowledge = {}) {
+  const system = world.systemsById?.[view.selected];
+  if (!system) return chartViewBox(world, view, knowledge);
+  const [x, y, w, h] = systemChartBounds(pocketConnections(world, system.id, knowledge));
+  const zoom = clamp(view.systemZoom ?? 1, GALAXY.systemMap.minZoom, GALAXY.systemMap.maxZoom);
+  const vw = w / zoom, vh = h / zoom;
+  const pan = view.systemPan || [0, 0];
+  return [system.pos[0] + x + (w - vw) / 2 + pan[0], -system.pos[1] + y + (h - vh) / 2 + pan[1], vw, vh];
+}
+
+export function activeChartViewBox(world, view, knowledge = {}) {
+  return view.mode === "system" ? systemChartViewBox(world, view, knowledge) : chartViewBox(world, view, knowledge);
+}
+
+/** Linear viewBox blend; callers pass an already-eased progress value. */
+export function interpolateViewBox(from, to, t) {
+  const p = clamp(t, 0, 1);
+  return from.map((value, i) => value + (to[i] - value) * p);
+}
+
+/** Keep a right-click popup inside the chart viewport. */
+export function contextMenuPosition(x, y, viewport = { width: 800, height: 600 }, tuning = GALAXY.map.context) {
+  const width = viewport.width || 800, height = viewport.height || 600;
+  return {
+    left: clamp(x, tuning.margin, Math.max(tuning.margin, width - tuning.width - tuning.margin)),
+    top: clamp(y, tuning.margin, Math.max(tuning.margin, height - tuning.height - tuning.margin)),
+  };
+}
+
 export function setupStarmap() {
   root = document.createElement("div");
   root.id = "starmap";
@@ -98,37 +165,45 @@ export function setupStarmap() {
   root.setAttribute("aria-label", "Starmap");
   document.body.appendChild(root);
   root.addEventListener("click", onClick);
+  root.addEventListener("contextmenu", onContextMenu);
+  root.addEventListener("dblclick", e => {
+    const node = e.target.closest?.("[data-system]");
+    if (!node || !state.ui.starmap || state.ui.starmap.mode !== "galaxy") return;
+    e.preventDefault();
+    selectSystem(node.dataset.system, true);
+    enterSystem(node.dataset.system);
+  });
   root.addEventListener("change", e => {
     if (e.target.id === "sm-system") selectSystem(e.target.value);
   });
-  root.addEventListener("keydown", e => {
-    const node = e.target.closest?.("[data-system]");
-    if (node && (e.key === "Enter" || e.key === " ")) {
-      e.preventDefault();
-      e.stopPropagation();
-      selectSystem(node.dataset.system);
-    }
-  });
+  root.addEventListener("keydown", onKeydown);
   root.addEventListener("wheel", e => {
     if (!state.ui.starmap) return;
     e.preventDefault();
     e.stopPropagation();
-    zoomMap(e.deltaY < 0 ? 1 : -1);
+    const zoomIn = e.deltaY < 0;
+    const node = e.target.closest?.("[data-system]");
+    if (zoomIn && node && state.ui.starmap.mode === "galaxy") selectSystem(node.dataset.system, true);
+    zoomMap(zoomIn ? 1 : -1);
   }, { passive: false });
   root.addEventListener("pointerdown", e => {
-    const svg = e.target.closest?.("svg.sm-chart");
-    if (!svg || e.target.closest?.("[data-system]") || !state.ui.starmap) return;
     const view = state.ui.starmap;
-    drag = { x: e.clientX, y: e.clientY, pan: [...view.pan], box: chartViewBox(state.galaxy, view, knowledge()) };
+    const svg = e.target.closest?.("svg.sm-chart");
+    if (!svg || !view || transition || e.button !== 0) return;
+    if (e.target.closest?.("[data-system], [data-pocket], .sm-context")) return;
+    drag = { mode: view.mode, x: e.clientX, y: e.clientY, pan: [...(view.mode === "system" ? view.systemPan : view.pan)],
+      box: activeChartViewBox(state.galaxy, view, knowledge()) };
     svg.setPointerCapture?.(e.pointerId);
   });
   root.addEventListener("pointermove", e => {
-    if (!drag || !state.ui.starmap) return;
+    const view = state.ui.starmap;
+    if (!drag || !view || drag.mode !== view.mode) return;
     const svg = root.querySelector("svg.sm-chart");
     const rect = svg?.getBoundingClientRect?.() || { width: 800, height: 600 };
-    const scale = Math.min(rect.width / drag.box[2], rect.height / drag.box[3]) || 1;
-    state.ui.starmap.pan = [drag.pan[0] - (e.clientX - drag.x) / scale, drag.pan[1] - (e.clientY - drag.y) / scale];
-    svg?.setAttribute("viewBox", chartViewBox(state.galaxy, state.ui.starmap, knowledge()).join(" "));
+    const scale = chartPixelScale(drag.box, rect.width, rect.height);
+    const pan = [drag.pan[0] - (e.clientX - drag.x) / scale, drag.pan[1] - (e.clientY - drag.y) / scale];
+    if (view.mode === "system") view.systemPan = pan; else view.pan = pan;
+    svg?.setAttribute("viewBox", activeChartViewBox(state.galaxy, view, knowledge()).join(" "));
   });
   const endDrag = () => { drag = null; };
   root.addEventListener("pointerup", endDrag);
@@ -143,6 +218,7 @@ export function setupStarmap() {
   on("travel-denied", ({ player, reason } = {}) => {
     if (state.ui.starmap && (!player || player === localPlayer())) {
       state.ui.starmap.notice = reason || "Travel is not available.";
+      state.ui.starmap.menu = null;
       render();
     }
   });
@@ -153,10 +229,14 @@ const knowledge = () => state.worldState.galaxy?.knowledge || {};
 export function openStarmap() {
   const P = localPlayer();
   if (!root || !state.galaxy || state.ui.intro || state.paused || !P || P.docked || P.dead || P.warp) return false;
+  cancelTransition();
   const from = P.place || state.place;
   const systems = visibleSystems(state.galaxy, knowledge());
   const selected = systems.find(s => s.id === placeAt(from).parent)?.id || systems[0]?.id || null;
-  state.ui.starmap = { selected, zoom: 1, pan: [0, 0], notice: "", labels: false };
+  state.ui.starmap = {
+    selected, mode: "galaxy", zoom: 1, pan: [0, 0], systemZoom: 1, systemPan: [0, 0],
+    notice: "", labels: false, menu: null,
+  };
   clearControls();
   if (!state.multiplayer) setAudioSuspended(true);
   root.hidden = false;
@@ -170,6 +250,7 @@ export function closeStarmap() {
   if (!state.ui.starmap && (!root || root.hidden)) return false;
   state.ui.starmap = null;
   drag = null;
+  cancelTransition();
   if (root) root.hidden = true;
   setAudioSuspended(state.paused);
   syncControls();
@@ -178,63 +259,220 @@ export function closeStarmap() {
 
 export const isStarmapOpen = () => !!state.ui.starmap;
 
-function selectSystem(id) {
+function selectSystem(id, quiet = false) {
   const view = state.ui.starmap;
-  if (!view || !systemVisible(state.galaxy, id, knowledge())) return false;
+  if (!view || transition || !systemVisible(state.galaxy, id, knowledge())) return false;
   view.selected = id;
+  view.notice = "";
+  view.menu = null;
+  if (view.mode === "system") view.systemPan = [0, 0];
+  if (!quiet) uiSound("click");
+  render();
+  return true;
+}
+
+function centerOnSelected() {
+  const view = state.ui.starmap;
+  const system = state.galaxy.systemsById?.[view.selected];
+  if (!system) return;
+  const [x, y, w, h] = chartBounds(visibleSystems(state.galaxy, knowledge()));
+  view.pan = [system.pos[0] - (x + w / 2), -system.pos[1] - (y + h / 2)];
+}
+
+function zoomMap(direction) {
+  const view = state.ui.starmap;
+  if (!view || transition) return;
+  if (view.mode === "system") {
+    if (direction < 0 && view.systemZoom <= GALAXY.systemMap.minZoom) { exitSystem(); return; }
+    const factor = direction >= 0 ? GALAXY.map.zoomStep : 1 / GALAXY.map.zoomStep;
+    view.systemZoom = clamp(view.systemZoom * factor, GALAXY.systemMap.minZoom, GALAXY.systemMap.maxZoom);
+    view.menu = null;
+    render();
+    return;
+  }
+  const factor = direction >= 0 ? GALAXY.map.zoomStep : 1 / GALAXY.map.zoomStep;
+  const next = clamp(view.zoom * factor, GALAXY.map.minZoom, GALAXY.map.maxZoom);
+  if (view.selected) centerOnSelected();
+  view.zoom = next;
+  view.menu = null;
+  if (direction >= 0 && next >= GALAXY.map.systemEntryZoom && view.selected) enterSystem(view.selected);
+  else render();
+}
+
+function enterSystem(id = state.ui.starmap?.selected) {
+  const view = state.ui.starmap;
+  if (!view || transition || !systemVisible(state.galaxy, id, knowledge())) return false;
+  const fromBox = activeChartViewBox(state.galaxy, view, knowledge());
+  view.selected = id;
+  view.mode = "system";
+  view.systemZoom = 1;
+  view.systemPan = [0, 0];
+  view.menu = null;
+  view.notice = "";
+  startTransition("galaxy", "system", fromBox, systemChartViewBox(state.galaxy, view, knowledge()));
+  return true;
+}
+
+function exitSystem() {
+  const view = state.ui.starmap;
+  if (!view || transition || view.mode !== "system") return false;
+  const fromBox = activeChartViewBox(state.galaxy, view, knowledge());
+  view.mode = "galaxy";
+  view.zoom = clamp(GALAXY.map.systemEntryZoom / GALAXY.map.zoomStep, GALAXY.map.minZoom, GALAXY.map.maxZoom);
+  view.menu = null;
+  centerOnSelected();
+  startTransition("system", "galaxy", fromBox, chartViewBox(state.galaxy, view, knowledge()));
+  return true;
+}
+
+function startTransition(fromMode, toMode, fromBox, toBox) {
+  const reduced = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const duration = reduced ? 0 : GALAXY.map.transitionMs;
+  if (!(duration > 0) || !globalThis.requestAnimationFrame) {
+    transition = null;
+    render();
+    return;
+  }
+  transition = { fromMode, toMode, fromBox, toBox, start: now(), duration };
+  render();
+}
+
+function cancelTransition() {
+  if (transitionFrame != null) globalThis.cancelAnimationFrame?.(transitionFrame);
+  transitionFrame = null;
+  transition = null;
+}
+
+function scheduleTransition() {
+  if (!transition || transitionFrame != null) return;
+  const raf = globalThis.requestAnimationFrame;
+  if (!raf) { finishTransition(); return; }
+  transitionFrame = raf(tickTransition);
+}
+
+function tickTransition(timestamp) {
+  transitionFrame = null;
+  if (!transition || !state.ui.starmap) return;
+  const t = clamp((timestamp - transition.start) / transition.duration, 0, 1);
+  const eased = t * t * (3 - 2 * t);
+  const svg = root.querySelector("svg.sm-chart");
+  svg?.setAttribute("viewBox", interpolateViewBox(transition.fromBox, transition.toBox, eased).join(" "));
+  const galaxyOpacity = transition.toMode === "system" ? 1 - eased : eased;
+  const systemOpacity = transition.toMode === "system" ? eased : 1 - eased;
+  svg?.querySelector(".sm-galaxy-layer")?.setAttribute("opacity", String(galaxyOpacity));
+  svg?.querySelector(".sm-system-layer")?.setAttribute("opacity", String(systemOpacity));
+  if (t >= 1) finishTransition();
+  else scheduleTransition();
+}
+
+function finishTransition() {
+  cancelTransition();
+  render();
+}
+
+function openPocketMenu(id, x, y) {
+  const view = state.ui.starmap;
+  if (!view || view.mode !== "system") return false;
+  if (transition) finishTransition();
+  const pocket = state.galaxy.pocketsById?.[id];
+  if (!pocket || pocket.parent !== view.selected) return false;
+  view.menu = { to: id, x, y };
   view.notice = "";
   uiSound("click");
   render();
   return true;
 }
 
-function zoomMap(direction) {
+function closeMenu() {
+  const view = state.ui.starmap;
+  if (!view?.menu) return;
+  const id = view.menu.to;
+  view.menu = null;
+  render();
+  const cssEscape = globalThis.CSS?.escape || (value => value.replace(/["\\]/g, "\\$&"));
+  root.querySelector(`[data-pocket="${cssEscape(id)}"]`)?.focus();
+}
+
+function onContextMenu(e) {
+  if (!state.ui.starmap) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const node = e.target.closest?.("[data-pocket]");
+  if (!node) { closeMenu(); return; }
+  openPocketMenu(node.dataset.pocket, e.clientX, e.clientY);
+}
+
+function onKeydown(e) {
   const view = state.ui.starmap;
   if (!view) return;
-  const factor = direction >= 0 ? GALAXY.map.zoomStep : 1 / GALAXY.map.zoomStep;
-  view.zoom = Math.max(GALAXY.map.minZoom, Math.min(GALAXY.map.maxZoom, view.zoom * factor));
-  render();
+  if (e.key === "Escape" && view.menu) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu();
+    return;
+  }
+  const system = e.target.closest?.("[data-system]");
+  if (system && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectSystem(system.dataset.system);
+    return;
+  }
+  const pocket = e.target.closest?.("[data-pocket]");
+  if (pocket && (e.key === "Enter" || e.key === " " || e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.target.getBoundingClientRect?.() || root.querySelector("svg.sm-chart")?.getBoundingClientRect?.() || { left: 0, top: 0, width: 800, height: 600 };
+    openPocketMenu(pocket.dataset.pocket, (rect.left || 0) + (rect.width || 800) / 2, (rect.top || 0) + (rect.height || 600) / 2);
+  }
 }
 
 function onClick(e) {
-  const button = e.target.closest?.("button, [data-system]");
-  if (!button || button.disabled || !state.ui.starmap) return;
+  const view = state.ui.starmap;
+  if (!view) return;
+  const button = e.target.closest?.("button, [data-system], [data-pocket]");
+  const isTravel = button?.dataset?.action === "travel";
+  if (view.menu && !isTravel) {
+    view.menu = null;
+    if (!button || button.disabled) { render(); return; }
+  }
+  if (!button || button.disabled) return;
   if (button.dataset.system) { selectSystem(button.dataset.system); return; }
+  if (button.dataset.pocket) {
+    openPocketMenu(button.dataset.pocket, e.clientX ?? 0, e.clientY ?? 0);
+    return;
+  }
   const action = button.dataset.action;
   if (action === "close") { uiSound("click"); closeStarmap(); }
   else if (action === "zoom-in") zoomMap(1);
   else if (action === "zoom-out") zoomMap(-1);
+  else if (action === "back") exitSystem();
   else if (action === "reset") {
-    state.ui.starmap.zoom = 1;
-    state.ui.starmap.pan = [0, 0];
+    if (view.mode === "system") { view.systemZoom = 1; view.systemPan = [0, 0]; }
+    else { view.zoom = 1; view.pan = [0, 0]; }
+    view.menu = null;
     render();
   } else if (action === "labels") {
-    state.ui.starmap.labels = !state.ui.starmap.labels;
+    view.labels = !view.labels;
     render();
   } else if (action === "travel") {
+    const to = button.dataset.to;
+    const from = localPlayer()?.place || state.place;
+    const choice = pocketChoices(state.galaxy, from, view.selected, travelContext()).find(c => c.pocket.id === to);
+    view.menu = null;
+    if (!choice?.canWarp) {
+      view.notice = choice?.status || "Travel is not available.";
+      render();
+      return;
+    }
     // main.js rechecks through startWarp; a refusal leaves the chart open.
-    emit("action", { name: "travel", to: button.dataset.to, repeat: false });
+    emit("action", { name: "travel", to, repeat: false });
   }
 }
 
-function render() {
-  const view = state.ui.starmap;
-  if (!root || !view || !state.galaxy) return;
-  drag = null;   // a re-render replaces the SVG; never keep capturing the old one
-  const world = state.galaxy;
-  const know = knowledge();
+function galaxyMarkup(world, view, know, here, unit) {
   const systems = visibleSystems(world, know);
-  if (!systems.some(s => s.id === view.selected)) view.selected = systems[0]?.id || null;
-  const from = localPlayer()?.place || state.place;
-  const here = placeAt(from);
-  const selected = world.systemsById[view.selected];
-  const box = chartViewBox(world, view, know);
-  const edges = systemEdges(world, know);
-  const rect = root.querySelector("svg.sm-chart")?.getBoundingClientRect?.() || { width: 800, height: 600 };
-  const unit = chartPixelScale(box, rect.width, rect.height);
-  const focus = root.querySelector(":focus")?.dataset?.system || null;
-
-  const lines = edges.map(({ id, a, b }) =>
+  const lines = systemEdges(world, know).map(({ id, a, b }) =>
     `<line class="sm-edge" data-edge="${esc(id)}" x1="${a.pos[0]}" y1="${-a.pos[1]}" x2="${b.pos[0]}" y2="${-b.pos[1]}"/>`).join("");
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
@@ -244,25 +482,109 @@ function render() {
     const label = chosen || current || view.labels;
     return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${visited ? " visited" : ""}"
       data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}">
-      <title>${esc(s.n)} — advisory tier ${s.tier}</title>
+      <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
       ${chosen ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
       ${label ? `<text x="${s.pos[0] + radius + 5 * unit}" y="${-s.pos[1] + 3 * unit}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}</text>` : ""}
     </g>`;
   }).join("");
+  return lines + nodes;
+}
+
+function systemMarkup(world, view, know, here, unit) {
+  const chart = pocketConnections(world, view.selected, know);
+  const system = chart.system;
+  if (!system) return "";
+  const ox = system.pos[0], oy = -system.pos[1];
+  const point = p => [ox + p[0], oy - p[1]];
+  const lines = chart.edges.map(edge => {
+    const a = point(chart.byId[edge.a].pos), b = point(chart.byId[edge.b].pos);
+    return `<line class="sm-edge sm-pocket-edge" data-pockets-edge="${esc(edge.id)}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;
+  }).join("");
+  const exits = chart.exits.map(exit => {
+    const a = point(exit.start), b = point(exit.end);
+    const peer = world.systemsById[exit.peerSystemId];
+    const label = peer?.n || "Connected system";
+    const anchor = exit.direction[0] < -0.25 ? "end" : exit.direction[0] > 0.25 ? "start" : "middle";
+    const lx = b[0] + exit.direction[0] * 8 * unit;
+    const ly = b[1] - exit.direction[1] * 8 * unit + 3 * unit;
+    return `<g class="sm-exit" data-exit="${esc(exit.id)}" data-peer-system="${esc(exit.peerSystemId)}">
+      <line class="sm-edge sm-exit-edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>
+      <circle class="sm-exit-cap" cx="${b[0]}" cy="${b[1]}" r="${2.5 * unit}"/>
+      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(label)}</text>
+    </g>`;
+  }).join("");
+  const nodes = chart.nodes.map(node => {
+    const [x, y] = point(node.pos);
+    const current = node.id === here.id;
+    const radius = GALAXY.systemMap.pocketRadius * unit;
+    // Put names on the outward side of the dot so they do not pile up at the hub.
+    const anchor = node.pos[0] < -20 ? "end" : node.pos[0] > 20 ? "start" : "middle";
+    const lx = anchor === "end" ? x - radius - 5 * unit : anchor === "start" ? x + radius + 5 * unit : x;
+    const ly = anchor === "middle" ? y + radius + 14 * unit : y + 3 * unit;
+    return `<g class="sm-node sm-pocket-node${current ? " current" : ""}" data-pocket="${esc(node.id)}"
+      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${current ? ", current pocket" : ""}">
+      <title>${esc(node.pocket.n)}</title>
+      <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
+      <circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>
+      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
+    </g>`;
+  }).join("");
+  return lines + exits + nodes;
+}
+
+function render() {
+  const view = state.ui.starmap;
+  if (!root || !view || !state.galaxy) return;
+  drag = null;   // a re-render replaces the SVG; never keep capturing the old one
+  const world = state.galaxy;
+  const know = knowledge();
+  const systems = visibleSystems(world, know);
+  if (!systems.some(s => s.id === view.selected)) {
+    view.selected = systems[0]?.id || null;
+    if (view.mode === "system") view.mode = "galaxy";
+  }
+  const from = localPlayer()?.place || state.place;
+  const here = placeAt(from);
+  const selected = world.systemsById[view.selected];
+  const focus = root.querySelector(":focus")?.dataset || null;
+  const progress = transition ? clamp((now() - transition.start) / transition.duration, 0, 1) : 1;
+  const eased = progress * progress * (3 - 2 * progress);
+  const box = transition ? interpolateViewBox(transition.fromBox, transition.toBox, eased) : activeChartViewBox(world, view, know);
+  const rect = root.querySelector("svg.sm-chart")?.getBoundingClientRect?.() || { width: 800, height: 600 };
+  const unit = chartPixelScale(box, rect.width, rect.height);
+  const showGalaxy = view.mode === "galaxy" || !!transition;
+  const showSystem = view.mode === "system" || !!transition;
+  const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit) : "";
+  const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit) : "";
+  const galaxyOpacity = transition ? (transition.toMode === "system" ? 1 - eased : eased) : 1;
+  const systemOpacity = transition ? (transition.toMode === "system" ? eased : 1 - eased) : 1;
+  const chart = transition
+    ? `<g class="sm-galaxy-layer" opacity="${galaxyOpacity}" style="pointer-events:none">${galaxy}</g>
+       <g class="sm-system-layer" opacity="${systemOpacity}" style="pointer-events:none">${system}</g>`
+    : view.mode === "system" ? system : galaxy;
   const choices = selected ? pocketChoices(world, from, selected.id, travelContext()) : [];
-  const cards = choices.map(c => `
-    <div class="sm-pocket${c.current ? " here" : ""}">
-      <div class="sm-pocket-head"><strong>${esc(c.pocket.n)}</strong>
-        <span>${c.current ? "You are here" : c.station ? Term("station") : c.pocket.role === "gate" ? "Gate" : Term("flyable")}</span></div>
-      <p>${esc(c.pocket.d)}</p>
-      ${c.peer ? `<p class="sm-peer">Gate peer: ${esc(c.peer.n)} (${esc(world.systemsById[c.peer.parent]?.n || "")})</p>` : ""}
-      <button type="button" data-action="travel" data-to="${esc(c.pocket.id)}" ${c.canWarp ? "" : "disabled"}>
-        ${c.canWarp ? "Warp here · Free" : "Unavailable"}
-      </button>
-      <small>${esc(c.status)}</small>
-    </div>`).join("");
+  const rows = choices.map(c => `
+    <li class="sm-pocket${c.current ? " here" : ""}" data-pocket-row="${esc(c.pocket.id)}"${c.current ? ' aria-current="location"' : ""}>${esc(c.pocket.n)}</li>`).join("");
+  const rootRect = root.getBoundingClientRect?.() || { left: 0, top: 0, width: 800, height: 600 };
+  const menu = view.menu ? pocketMenuMarkup(world, view, from, rootRect) : "";
+  const tools = view.mode === "system"
+    ? `<div class="sm-tools"><strong>${esc(selected?.n || "")}</strong>
+        <div><button type="button" data-action="back">Back to galaxy</button>
+          <button type="button" data-action="zoom-out" aria-label="Zoom out">−</button>
+          <button type="button" data-action="zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" data-action="reset">Fit</button></div></div>`
+    : `<div class="sm-tools">
+        <label>Inspect <select id="sm-system">${systems.map(s =>
+          `<option value="${esc(s.id)}"${s.id === view.selected ? " selected" : ""}>${esc(s.n)}</option>`).join("")}</select></label>
+        <div><button type="button" data-action="zoom-out" aria-label="Zoom out">−</button>
+          <button type="button" data-action="zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" data-action="reset">Fit</button>
+          <button type="button" data-action="labels">${view.labels ? "Fewer names" : "All names"}</button></div></div>`;
+  const help = view.mode === "system"
+    ? `Right-click a ${esc(term("flyable"))} for Warp to. Lines are direct routes; gate stubs point toward the neighbouring ${esc(term("mapNode"))}. Scroll out or Back to return.`
+    : `Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `
     <div class="sm-shell">
@@ -273,32 +595,39 @@ function render() {
       </header>
       <div class="sm-body">
         <section class="sm-chart-panel" aria-label="${esc(Term("mapNode"))} chart">
-          <div class="sm-tools">
-            <label>Inspect <select id="sm-system">${systems.map(s =>
-              `<option value="${esc(s.id)}"${s.id === view.selected ? " selected" : ""}>${esc(s.n)}</option>`).join("")}</select></label>
-            <div><button type="button" data-action="zoom-out" aria-label="Zoom out">−</button>
-              <button type="button" data-action="zoom-in" aria-label="Zoom in">+</button>
-              <button type="button" data-action="reset">Fit</button>
-              <button type="button" data-action="labels">${view.labels ? "Fewer names" : "All names"}</button></div>
-          </div>
-          <svg class="sm-chart" viewBox="${box.join(" ")}" preserveAspectRatio="xMidYMid meet" aria-label="Connected ${esc(terms("mapNode"))}">
-            ${lines}${nodes}
+          ${tools}
+          <svg class="sm-chart${transition ? " transitioning" : ""}" data-mode="${esc(view.mode)}" viewBox="${box.join(" ")}" preserveAspectRatio="xMidYMid meet" aria-label="${view.mode === "system" ? esc(selected?.n || "") + " " + esc(terms("flyable")) : "Connected " + esc(terms("mapNode"))}">
+            ${chart}
           </svg>
-          <p class="sm-help">Click a ${esc(term("mapNode"))} to inspect it. Drag to pan; scroll or use +/− to zoom.
-            Lines show gate connections. Amber marks your ${esc(term("mapNode"))}; a ring marks your selection.</p>
+          <p class="sm-help">${help}</p>
+          ${view.notice ? `<p class="sm-status" aria-live="polite">${esc(view.notice)}</p>` : ""}
         </section>
-        <aside class="sm-details">
+        <aside class="sm-details" aria-label="System overview">
           ${selected ? `<h2>${esc(selected.n)}</h2>
-            <p class="sm-tier">Advisory tier ${selected.tier}</p>
-            <p class="sm-note">Distance guidance only. The ${esc(term("flyable"))}'s actual content decides danger.
-              Generated placeholders are empty for now.</p>
-            <h3>${esc(terms("flyable"))} · ${choices.length}</h3>
-            <p class="sm-note">Only a directly linked ${esc(term("flyable"))} can be entered. Travel through gates and junctions one hop at a time.</p>
-            <div class="sm-pockets">${cards}</div>` : `<h2>No visible ${esc(terms("mapNode"))}</h2>`}
-          <p class="sm-status" aria-live="polite">${esc(view.notice || (state.multiplayer ? "The hosted world keeps running while the map is open." : "Single-player flight is paused while the map is open."))}</p>
+            <p class="sm-current"><span>Current pocket</span> ${esc(here.n)}</p>
+            <h3>${esc(Term("flyable"))}s</h3>
+            <ul class="sm-pockets">${rows}</ul>` : `<h2>No visible ${esc(terms("mapNode"))}</h2>`}
         </aside>
       </div>
+      ${menu}
     </div>`;
   const cssEscape = globalThis.CSS?.escape || (value => value.replace(/["\\]/g, "\\$&"));
-  if (focus) root.querySelector(`[data-system="${cssEscape(focus)}"]`)?.focus();
+  if (view.menu) root.querySelector(".sm-context button, .sm-context")?.focus();
+  else if (focus?.system) root.querySelector(`[data-system="${cssEscape(focus.system)}"]`)?.focus();
+  else if (focus?.pocket) root.querySelector(`[data-pocket="${cssEscape(focus.pocket)}"]`)?.focus();
+  else if (focus?.action) root.querySelector(`[data-action="${cssEscape(focus.action)}"]`)?.focus();
+  if (transition) scheduleTransition();
+}
+
+function pocketMenuMarkup(world, view, from, rootRect) {
+  const choice = pocketChoices(world, from, view.selected, travelContext()).find(c => c.pocket.id === view.menu.to);
+  if (!choice) return "";
+  const pos = contextMenuPosition(view.menu.x - (rootRect.left || 0), view.menu.y - (rootRect.top || 0), rootRect);
+  return `<div class="sm-context" role="menu" tabindex="-1" aria-label="${esc(choice.pocket.n)}"
+    style="left:${pos.left + (rootRect.left || 0)}px;top:${pos.top + (rootRect.top || 0)}px;width:${GALAXY.map.context.width}px">
+    <strong>${esc(choice.pocket.n)}</strong>
+    ${choice.canWarp
+      ? `<button type="button" role="menuitem" data-action="travel" data-to="${esc(choice.pocket.id)}">Warp to ${esc(choice.pocket.n)}</button>`
+      : `<p class="sm-context-note">${esc(choice.status)}</p>`}
+  </div>`;
 }

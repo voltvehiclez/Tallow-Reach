@@ -32,8 +32,21 @@ export const GALAXY = {
   travel: { mode: "warp", cost: {}, requires: [] },
 
   // Flat chart presentation only; radii are screen pixels at every zoom level.
+  // Zooming in on the selected system past systemEntryZoom opens its pocket map.
   // None of these numbers affect travel rules.
-  map: { padding: 90, nodeRadius: 5, homeRadius: 8, minZoom: 0.6, maxZoom: 5, zoomStep: 1.25 },
+  map: {
+    padding: 90, nodeRadius: 5, homeRadius: 8, minZoom: 0.6, maxZoom: 5, zoomStep: 1.25,
+    systemEntryZoom: 2.5, transitionMs: 260,
+    context: { width: 240, height: 112, margin: 8 },
+  },
+
+  // The zoomed-in map of one system. Pockets may carry an authored 2D `mapPos`;
+  // otherwise ordinary pockets sit near the centre and gate pockets sit outward
+  // toward their peer system. These are map units, not flight coordinates.
+  systemMap: {
+    padding: 130, pocketRadius: 7, ordinaryRadius: 115, gateRadius: 250,
+    exitLength: 120, minSeparation: 78, minZoom: 1, maxZoom: 3,
+  },
 };
 
 /**
@@ -41,6 +54,9 @@ export const GALAXY = {
  *
  * Move a system:
  *   places: { "sys-004": { pos: [180, -260] } }
+ *
+ * Move a pocket on its system's zoomed-in map (2D map units, not flight pos):
+ *   places: { "hollow": { mapPos: [-130, 90] } }
  *
  * Delete a pocket (its links are pruned automatically):
  *   removedPlaces: ["hollow"]

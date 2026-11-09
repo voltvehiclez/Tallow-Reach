@@ -112,7 +112,7 @@ src/sim/               player, pilot (where the ship is), power, drive, fitting,
                        loot, asteroids, places, galaxy (resolved starmap web), galaxy-session (seed/save adapter), travel (pure route quotes), targeting, contracts, session, sectors (warp), effects, world
 src/render/            scene.js (including one group per place), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting),
                        views.js (a mesh per entity, the player's ship and the mining beam)
-src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, starmap.js (M chart), warpflash.js
+src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, starmap.js (M galaxy/system chart), warpflash.js
 tests/                 profile.test.mjs (saves, RNG), content.test.mjs (data completeness),
                        enemies.test.mjs (enemies as data), headless-sim.test.mjs (600 ticks, no browser),
                        headless-fight.test.mjs (a whole fight, no browser: shots, crates, missiles, mining),
@@ -203,7 +203,10 @@ Each `src/` folder also has its own short `README.md`.
   results. Moving a system, deleting a pocket, promoting a pocket to a gate or replacing the generator
   must remain data/registry edits; do not put those rules in the map screen or warp animation.
   Step 11B installs the resolved web as the live place catalog (`setPlaceCatalog`) and keeps it in
-  session `state.galaxy`. `ui/starmap.js` draws/inspects it and emits a named travel action;
+  session `state.galaxy`. `sim/galaxy.js` also derives a deterministic per-system pocket layout
+  (`systemPocketLayout`, author `mapPos` overrides win) for the zoomed-in chart; it is never saved.
+  `ui/starmap.js` draws the galaxy web and the system pocket map (internal lines plus gate exit stubs
+  toward visible peer systems), and emits a named travel action from a right-click **Warp to** popup;
   `sim/sectors.js` requotes the same direct link before running the unchanged warp sequence.
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
@@ -487,12 +490,14 @@ These are real, current limits. None of them is a bug in play today.
   shooting at you while it charges. Making the ship invulnerable during a warp, or letting
   enemies lose interest, is a deliberate design decision that has not been made yet.
 - **The starmap is live, but the generated world is still empty.** M opens `ui/starmap.js`: an organic
-  system web, gate lines, current/visited/selected markers, zoom/pan/labels and the selected system's
-  full pocket list. Only a directly linked pocket can start the existing warp; the sim rechecks the
-  quote and emits `travel-denied` on refusal. Single-player chart pauses the frame gate and suspends
-  audio; `state.multiplayer` is the future host flag that keeps a hosted world running. Generated
-  pockets are empty placeholders, visibility is `all`, and travel is free. Non-empty costs are refused
-  until a cost handler exists; fuel, activated/proximity gates and supercruise are not implemented.
+  system web with gate lines, current/visited/selected markers and zoom/pan/labels. Zooming into a
+  selected system dot opens a derived pocket map with internal route lines and gate exit stubs toward
+  neighbouring systems; the right panel is a compact system/current-pocket/pocket-row overview.
+  Right-clicking a directly linked pocket offers **Warp to**; the sim rechecks the quote and emits
+  `travel-denied` on refusal. Single-player chart pauses the frame gate and suspends audio;
+  `state.multiplayer` is the future host flag that keeps a hosted world running. Generated pockets are
+  empty placeholders, visibility is `all`, and travel is free. Non-empty costs are refused until a cost
+  handler exists; fuel, activated/proximity gates and supercruise are not implemented.
 - **Place geography is data, but place memory is not persistent yet.** `PLACE_DEFS` features carry
   the station, field, spawner and planet numbers; runtime containers keep rocks across visits within
   a session. Mined-out rocks/respawn still use wall-clock `setTimeout`, and abandoned crates are

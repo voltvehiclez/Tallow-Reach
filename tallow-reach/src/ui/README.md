@@ -10,7 +10,7 @@ Reads `state`, calls sim actions. No game rules here.
 | `picker.js` | Which Outfitting bay picker is open: `toggleModulePicker`, `togglePaintPicker`. Pure, one at a time, tested in `tests/picker.test.mjs`. |
 | `outfitting.js` | The Outfitting tab's 3D window: mounts the ship canvas into `#shipview` after every panel redraw, wires drag/zoom, draws one frame per game frame. |
 | `pause.js` | The pause overlay: PAUSED title, resume hint, sound on/off switch, Resume button. P closes an open starmap first, then pauses; Esc only closes the chart. |
-| `starmap.js` | The M chart: visible system web, gate lines, current/visited/selected markers, inspect dropdown, zoom/pan/labels, and every pocket in the selected system with travel quotes. Emits `action { name: "travel", to }`; main calls `startWarp`, which rechecks the hop. Single-player chart pauses the frame gate and releases flight input; a future hosted world keeps running. |
+| `starmap.js` | The M chart: visible system web, gate lines, current/visited/selected markers, inspect dropdown and zoom/pan/labels. Zooming into a selected system dot opens a derived pocket map (internal route lines plus gate exit stubs toward neighbouring systems) with a short zoom transition. The right panel is a compact system/current-pocket/pocket-row overview. Right-clicking a pocket dot opens a **Warp to** popup only for a legal direct hop and emits `action { name: "travel", to }`; main calls `startWarp`, which rechecks it. Single-player chart pauses the frame gate and releases flight input; a future hosted world keeps running. |
 | `warpflash.js` | The warp vignette and white-out. Two gradients, updated from `state.warp` each frame. |
 
 Rules:

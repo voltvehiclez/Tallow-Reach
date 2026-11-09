@@ -19,6 +19,36 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 11B starmap UI follow-up — zoomed system maps, right-click warp, compact overview (owner playtest pending)
+
+Owner reviewed the first 11B build ("the map looks ok") and asked for four chart changes. This is a
+follow-up inside 11B, not a new numbered step; step 11 remains unticked until `TESTING-STARMAP.md` passes.
+
+- Zooming into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) now opens a
+  **system pocket map** with a short galaxy↔system viewBox transition. `sim/galaxy.js` gains
+  `systemPocketLayout`: a deterministic, derived 2D layout (ordinary hub centred, other ordinary pockets
+  ringed, gate pockets placed outward toward their peer system). Author `mapPos` overrides are validated
+  and win; layout is never saved. `ui/starmap.js` draws internal pocket lines and dashed gate exit stubs
+  labelled with the neighbouring system, respecting enabled links and the visibility policy.
+- **Right-click a pocket** (or Enter/Space/Shift+F10 on a focused pocket dot) opens a small popup with a
+  clickable **Warp to …** only when `travelQuote` says the direct hop is legal. It emits the same
+  `action { name: "travel", to }`; `main.js`/`startWarp` still recheck link/cost/requirements and run the
+  unchanged warp animation. Illegal/current pockets show a reason and no warp button. Esc closes the
+  popup before the chart; the root handler stops propagation so the global contextmenu/fire gates stay intact.
+- The right panel is now a compact overview: system name, **Current pocket**, and plain pocket-name rows.
+  Removed the per-pocket tier/description/gate-peer/status cards and all panel warp buttons; no scrolling.
+- Tuning lives in `src/data/galaxy.js` (`map.systemEntryZoom`, `map.transitionMs`, `map.context`,
+  `systemMap` radii/padding/exit length/zoom). Updated `src/styles.css`, folder READMEs, HANDOFF/ROADMAP/
+  VISION/REFACTOR_PLAN/ARCHITECTURE/TARGET_ARCHITECTURE/HOW_TO_ADD and root `TESTING-STARMAP.md` sections 2–3.
+- Tests: updated the old map-UI assertion that expected panel warp buttons, and added layout/exit/visibility,
+  transition, zoom-entry/exit and illegal-popup coverage. `tests/step11b-starmap.test.mjs` is now 25 tests.
+- **Results:** `npm test` **304/304 pass** (both 8b oracles unchanged); `npm run build` succeeded
+  (662 KB, 677,847 bytes). **Save v16 unchanged** — pocket layout is derived, not persisted; no migration,
+  storage-key or `TR1:` change. No new dependencies. Automated headless DOM checks passed; owner visual
+  browser playtest pending. Rebuild with `npm run build`; test with `npm test`.
+
+---
+
 ## 2026-11-08: Step 11B — clickable starmap, direct-hop travel and save v16 (owner playtest pending)
 
 Owner-approved second slice of step 11. **M now opens the starmap** instead of warping immediately;

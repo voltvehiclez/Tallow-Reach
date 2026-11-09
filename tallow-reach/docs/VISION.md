@@ -100,6 +100,14 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
+- **2026-11-08 — step 11B starmap UI follow-up (owner):** after reviewing the first 11B chart ("the map
+  looks ok"), the owner asked for four changes: **zooming in on a system dot opens a system pocket map**;
+  that map shows **pocket-to-pocket lines** plus a **gate exit line pointing out toward the connected
+  neighbouring system**; **right-clicking a pocket opens a clickable “Warp to” popup** and the right-panel
+  warp buttons are removed; the right panel is a **compact overview** (system name, current pocket, plain
+  pocket rows) with no scrolling or extra per-row info. Pocket layout is derived/deterministic and never
+  saved; save v16 and the existing direct-link/cost/requirement recheck in `startWarp` are unchanged.
+
 - **2026-11-08 — step 11B starmap interaction and saved worlds (owner-approved slice):** **M opens a
   clickable 2D chart** instead of warping immediately. It shows visible systems, the current location,
   gate connections and any selected system's full pocket list; only a legal directly connected pocket

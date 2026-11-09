@@ -7,7 +7,7 @@ import { DEFAULT_PLACE, placeAt, pocketsIn, setPlaceCatalog } from "../src/data/
 import { SAVE_VERSION, newSave, sanitizeSave } from "../src/state/profile.js";
 import { state, applySave, currentSave, resetPlaces } from "../src/state/state.js";
 import { encodeSave, decodeSave, loadAutosave, saveAutosave, writeSlot, readSlot } from "../src/state/storage.js";
-import { generateGalaxy, recordSystemVisit } from "../src/sim/galaxy.js";
+import { generateGalaxy, recordSystemVisit, systemPocketLayout } from "../src/sim/galaxy.js";
 import { prepareGalaxySave } from "../src/sim/galaxy-session.js";
 import { createPlayer } from "../src/sim/player.js";
 import { configurePlayer, resumeFromSave } from "../src/sim/session.js";
@@ -17,7 +17,10 @@ import { TRAVEL_REQUIREMENTS } from "../src/sim/travel.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import { WARP_TIME } from "../src/data/sectors.js";
 import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
-import { visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices } from "../src/ui/starmap.js";
+import {
+  visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices,
+  pocketConnections, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
+} from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
 
 const V13 = JSON.parse(readFileSync(new URL("./saves/v13-real.json", import.meta.url), "utf8"));
@@ -326,7 +329,7 @@ const ui = await loadHeadless("src/ui/starmap.js", {
 });
 let mapRoot = null;
 
-test("11B: real map opens, inspects any system, zooms, emits a legal travel action and closes", () => {
+test("11B: real map opens, inspects systems, zooms into a pocket map and right-click warps", () => {
   const save = ui.prepareGalaxySave(ui.newSave());
   ui.applySave(save);
   const P = ui.configurePlayer(ui.createPlayer(), save.profile);
@@ -343,15 +346,36 @@ test("11B: real map opens, inspects any system, zooms, emits a legal travel acti
   assert.equal(ui.openStarmap(), true);
   assert.equal(map.hidden, false);
   assert.equal((map.innerHTML.match(/data-system="/g) || []).length, 121);
-  assert.ok(map.innerHTML.includes("Warp here · Free"));
+  // The right panel is a compact overview, not a stack of travel cards/buttons.
+  assert.ok(map.innerHTML.includes("Current pocket"));
+  assert.ok(map.innerHTML.includes('data-pocket-row="hollow"'));
+  for (const old of ["Warp here", "Unavailable", "Advisory tier", "Gate peer:", "sm-pocket-head"]) {
+    assert.ok(!map.innerHTML.includes(old), `panel should not contain ${old}`);
+  }
   const click = dataset => map.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
   click({ system: "sys-010" });
   assert.equal(ui.state.ui.starmap.selected, "sys-010");
-  assert.ok(map.innerHTML.includes("Unavailable"));
-  assert.ok(map.innerHTML.includes("No direct route"));
+  assert.ok(!map.innerHTML.includes('data-action="travel"'), "remote pockets have no warp buttons");
   click({ action: "zoom-in" });
   assert.ok(ui.state.ui.starmap.zoom > 1);
+  assert.equal(ui.state.ui.starmap.mode, "galaxy");
   click({ system: "meridian" });
+  map.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.ok(map.innerHTML.includes('data-pocket="hollow"'));
+  assert.ok(map.innerHTML.includes("sm-pocket-edge"));
+  assert.ok(map.innerHTML.includes('data-pockets-edge="reach-hollow"'));
+  assert.ok(map.innerHTML.includes("data-exit="));
+  assert.ok(map.innerHTML.includes('data-peer-system="sys-001"'), "gate stubs name the neighbouring system");
+  let prevented = false, stopped = false;
+  map.handlers.contextmenu({
+    target: { closest: sel => sel === "[data-pocket]" ? { dataset: { pocket: "hollow" } } : null },
+    clientX: 120, clientY: 140,
+    preventDefault() { prevented = true; }, stopPropagation() { stopped = true; },
+  });
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+  assert.ok(map.innerHTML.includes("Warp to Kestrel Hollow"));
   const actions = [];
   ui.on("action", action => actions.push(action));
   click({ action: "travel", to: "hollow" });
@@ -360,7 +384,8 @@ test("11B: real map opens, inspects any system, zooms, emits a legal travel acti
   assert.equal(map.hidden, true);
   assert.equal(ui.state.ui.starmap, null);
   assert.equal(ui.openStarmap(), true);
-  let prevented = false;
+  assert.equal(ui.state.ui.starmap.mode, "galaxy", "reopening starts at the galaxy web");
+  prevented = false;
   map.handlers.keydown({ key: "Enter", target: { closest: () => ({ dataset: { system: "sys-002" } }) },
     preventDefault() { prevented = true; }, stopPropagation() {} });
   assert.equal(prevented, true);
@@ -414,7 +439,7 @@ test("11B: real map pans by dragging and shows a late travel refusal inside the 
   assert.equal(ui.openStarmap(), true);
   const svg = { setPointerCapture() {} };
   mapRoot.handlers.pointerdown({ target: { closest: sel => sel === "svg.sm-chart" ? svg : null },
-    clientX: 100, clientY: 100, pointerId: 1 });
+    button: 0, clientX: 100, clientY: 100, pointerId: 1 });
   mapRoot.handlers.pointermove({ clientX: 140, clientY: 120 });
   const panned = [...ui.state.ui.starmap.pan];
   assert.notDeepEqual(panned, [0, 0]);
@@ -424,6 +449,132 @@ test("11B: real map pans by dragging and shows a late travel refusal inside the 
   ui.emit("travel-denied", { reason: "Gate is dormant." });
   assert.equal(ui.state.ui.starmap.notice, "Gate is dormant.");
   assert.ok(mapRoot.innerHTML.includes("Gate is dormant."));
+  ui.closeStarmap();
+});
+
+test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos is an author override", () => {
+  fresh();
+  const world = state.galaxy;
+  const layout = systemPocketLayout(world, "meridian");
+  assert.deepEqual(layout, systemPocketLayout(world, "meridian"));
+  assert.equal(layout.nodes.length, Object.values(world.pockets).filter(p => p.parent === "meridian").length);
+  assert.deepEqual(layout.byId.reach.pos, [0, 0]);
+  const chart = pocketConnections(world, "meridian");
+  assert.ok(chart.edges.some(e => e.id === "reach-hollow"));
+  const gates = Object.values(world.pockets).filter(p => p.parent === "meridian" && p.role === "gate");
+  assert.equal(chart.exits.length, gates.length);
+  for (const exit of chart.exits) {
+    const peer = world.systemsById[exit.peerSystemId];
+    const dx = peer.pos[0] - world.systemsById.meridian.pos[0];
+    const dy = peer.pos[1] - world.systemsById.meridian.pos[1];
+    assert.ok(exit.direction[0] * dx + exit.direction[1] * dy > 0, "exit stub points toward its peer system");
+    assert.ok(Math.abs(exit.end[0] - (exit.start[0] + exit.direction[0] * GALAXY.systemMap.exitLength)) < 1e-9);
+    assert.ok(Math.abs(exit.end[1] - (exit.start[1] + exit.direction[1] * GALAXY.systemMap.exitLength)) < 1e-9);
+  }
+  assert.ok(systemChartBounds(chart).every(Number.isFinite));
+  assert.ok(systemChartViewBox(world, { selected: "meridian", mode: "system", systemZoom: 1, systemPan: [0, 0] }).every(Number.isFinite));
+  const previous = GALAXY_OVERRIDES.places.hollow;
+  try {
+    GALAXY_OVERRIDES.places.hollow = { mapPos: [-130, 90] };
+    fresh();
+    const moved = systemPocketLayout(state.galaxy, "meridian");
+    assert.deepEqual(moved.byId.hollow.pos, [-130, 90]);
+    assert.ok(moved.nodes.find(n => n.pocket.role === "gate").direction, "an authored gate still knows its outward direction");
+  } finally {
+    if (previous === undefined) delete GALAXY_OVERRIDES.places.hollow; else GALAXY_OVERRIDES.places.hollow = previous;
+    fresh();
+  }
+  assert.throws(() => generateGalaxy(GALAXY.seed, GALAXY, {
+    places: { hollow: { mapPos: [1, "x"] } }, links: {}, removedPlaces: [], removedLinks: [],
+  }), /mapPos/);
+});
+
+test("11B: system-map lines follow enabled links and the visibility policy", () => {
+  fresh();
+  const world = state.galaxy;
+  const internal = world.links["reach-hollow"];
+  internal.enabled = false;
+  assert.ok(!pocketConnections(world, "meridian").edges.some(e => e.id === "reach-hollow"));
+  internal.enabled = true;
+  const gate = Object.values(world.pockets).find(p => p.parent === "meridian" && p.role === "gate");
+  const external = Object.values(world.links).find(l => l.kind === "gate" && (l.a === gate.id || l.b === gate.id));
+  external.enabled = false;
+  assert.ok(!pocketConnections(world, "meridian").exits.some(e => e.id === external.id));
+  external.enabled = true;
+  world.visibility.mode = "discovered";
+  const fog = pocketConnections(world, "meridian", { meridian: { discovered: true } });
+  assert.equal(fog.exits.length, 0, "hidden peer systems get no exit stub");
+  assert.ok(fog.edges.length > 0, "internal pocket lines remain");
+  world.visibility.mode = "all";
+});
+
+test("11B: galaxy/system zoom transition blends viewBoxes and can be driven headlessly", () => {
+  assert.deepEqual(interpolateViewBox([0, 0, 100, 100], [10, 10, 50, 50], 0), [0, 0, 100, 100]);
+  assert.deepEqual(interpolateViewBox([0, 0, 100, 100], [10, 10, 50, 50], 0.5), [5, 5, 75, 75]);
+  assert.deepEqual(interpolateViewBox([0, 0, 100, 100], [10, 10, 50, 50], 1), [10, 10, 50, 50]);
+  const pos = contextMenuPosition(9999, 9999, { width: 800, height: 600 });
+  assert.ok(pos.left <= 800 - GALAXY.map.context.width - GALAXY.map.context.margin);
+  assert.ok(pos.top <= 600 - GALAXY.map.context.height - GALAXY.map.context.margin);
+  const oldRaf = globalThis.requestAnimationFrame, oldCancel = globalThis.cancelAnimationFrame;
+  let frame = null, id = 1;
+  globalThis.requestAnimationFrame = fn => { frame = fn; return id++; };
+  globalThis.cancelAnimationFrame = () => { frame = null; };
+  const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+  try {
+    assert.equal(ui.openStarmap(), true);
+    mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+    assert.equal(ui.state.ui.starmap.mode, "system");
+    assert.ok(frame, "entering a system schedules a zoom transition");
+    assert.ok(mapRoot.innerHTML.includes("sm-galaxy-layer") && mapRoot.innerHTML.includes("sm-system-layer"));
+    assert.ok(mapRoot.innerHTML.includes("transitioning"));
+    let cb = frame; frame = null;
+    cb(performance.now() + GALAXY.map.transitionMs + 5);
+    assert.equal(frame, null);
+    assert.ok(!mapRoot.innerHTML.includes("transitioning"));
+    assert.ok(!mapRoot.innerHTML.includes("sm-galaxy-layer"));
+    assert.ok(mapRoot.innerHTML.includes('data-pocket="hollow"'));
+    click({ action: "back" });
+    assert.ok(frame, "returning to the galaxy schedules the reverse transition");
+    cb = frame; frame = null;
+    cb(performance.now() + GALAXY.map.transitionMs + 5);
+    assert.equal(ui.state.ui.starmap.mode, "galaxy");
+    assert.ok(!mapRoot.innerHTML.includes("sm-system-layer"));
+    ui.closeStarmap();
+  } finally {
+    if (oldRaf === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = oldRaf;
+    if (oldCancel === undefined) delete globalThis.cancelAnimationFrame; else globalThis.cancelAnimationFrame = oldCancel;
+    ui.closeStarmap();
+  }
+});
+
+test("11B: zoom controls enter/leave the system map and illegal right-clicks cannot warp", () => {
+  assert.equal(ui.openStarmap(), true);
+  const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+  click({ system: "meridian" });
+  for (let i = 0; i < 5; i++) click({ action: "zoom-in" });
+  assert.equal(ui.state.ui.starmap.mode, "system", "zooming in far enough opens the pocket map");
+  click({ action: "back" });
+  assert.equal(ui.state.ui.starmap.mode, "galaxy");
+  click({ system: "sys-010" });
+  click({ action: "zoom-in" });
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.equal(ui.state.ui.starmap.selected, "sys-010");
+  const hub = Object.values(ui.state.galaxy.pockets).find(p => p.parent === "sys-010" && p.role !== "gate");
+  mapRoot.handlers.contextmenu({
+    target: { closest: sel => sel === "[data-pocket]" ? { dataset: { pocket: hub.id } } : null },
+    clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {},
+  });
+  assert.ok(mapRoot.innerHTML.includes("No direct route"));
+  assert.ok(!mapRoot.innerHTML.includes('data-action="travel"'), "an illegal hop has no clickable Warp to");
+  let stopped = false;
+  mapRoot.handlers.keydown({ key: "Escape", target: { closest: () => null },
+    preventDefault() {}, stopPropagation() { stopped = true; } });
+  assert.equal(stopped, true);
+  assert.ok(ui.state.ui.starmap, "Escape closes the popup before the chart");
+  assert.equal(ui.state.ui.starmap.menu, null);
+  assert.ok(!mapRoot.innerHTML.includes("sm-context"));
+  click({ action: "zoom-out" });
+  assert.equal(ui.state.ui.starmap.mode, "galaxy", "zooming out at the system fit returns to the galaxy");
   ui.closeStarmap();
 });
 

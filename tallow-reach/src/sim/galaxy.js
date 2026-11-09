@@ -57,6 +57,17 @@ export function validateTuning(tuning) {
   if (!Number.isInteger(tuning.difficulty.variation) || tuning.difficulty.variation < 0) {
     throw new Error("galaxy.difficulty.variation must be a whole number of zero or more");
   }
+  const map = tuning.map, sub = tuning.systemMap;
+  if (!(map.systemEntryZoom > map.minZoom && map.systemEntryZoom <= map.maxZoom)) {
+    throw new Error("galaxy.map.systemEntryZoom must sit inside the galaxy zoom range");
+  }
+  if (!(map.transitionMs >= 0)) throw new Error("galaxy.map.transitionMs must be zero or more");
+  for (const key of ["padding", "pocketRadius", "ordinaryRadius", "gateRadius", "exitLength", "minSeparation"]) {
+    if (!(sub[key] > 0)) throw new Error(`galaxy.systemMap.${key} must be positive`);
+  }
+  if (!(sub.minZoom > 0 && sub.maxZoom >= sub.minZoom)) {
+    throw new Error("galaxy.systemMap zoom limits must be positive and ordered");
+  }
 }
 
 /** Merge nested tuning tables without letting an omitted table erase defaults. */
@@ -278,6 +289,9 @@ export function validateGalaxy(world) {
     if (pocket.id !== id) errors.push(`pocket ${id} carries mismatched id ${pocket.id}`);
     if (!systems.has(pocket.parent)) errors.push(`pocket ${id} names missing system ${pocket.parent}`);
     if (!PLACE_DEFS[pocket.def]) errors.push(`pocket ${id} names missing definition ${pocket.def}`);
+    if (pocket.mapPos !== undefined && (!Array.isArray(pocket.mapPos) || pocket.mapPos.length !== 2 || !pocket.mapPos.every(Number.isFinite))) {
+      errors.push(`pocket ${id} needs a finite 2D mapPos when authored`);
+    }
   }
   for (const system of world.systems) {
     if (!Object.values(world.pockets).some(p => p.parent === system.id)) {
@@ -348,6 +362,98 @@ export function systemDistance(world, a, b) {
   const sa = world.systemsById?.[a] || world.systems.find(s => s.id === a);
   const sb = world.systemsById?.[b] || world.systems.find(s => s.id === b);
   return sa && sb ? distance(sa.pos, sb.pos) : Infinity;
+}
+
+/**
+ * Derived 2D layout for one system's zoomed-in pocket map. Map units only; this
+ * never changes a pocket's flight coordinates or the saved world. An authored
+ * `mapPos` wins. Otherwise the ordinary hub sits at the centre, other ordinary
+ * pockets ring it, and each gate sits outward toward its peer system so its exit
+ * stub can point at that neighbour. The result is deterministic for a resolved
+ * galaxy and is rebuilt on demand, never persisted.
+ */
+export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
+  const system = world.systemsById?.[systemId] || world.systems.find(s => s.id === systemId);
+  if (!system) return { system: null, nodes: [], byId: {} };
+  const pockets = pocketsInSystem(world, systemId).sort((a, b) => a.id.localeCompare(b.id));
+  const ordinary = pockets.filter(p => p.role !== "gate");
+  const gates = pockets.filter(p => p.role === "gate");
+  const centerId = world.pockets[DEFAULT_PLACE]?.parent === systemId ? DEFAULT_PLACE
+    : ordinary.find(p => p.id === `${systemId}-hub`)?.id || ordinary[0]?.id || null;
+  const nodes = [];
+  const placed = [];
+  const add = (pocket, pos, peerSystemId = null, direction = null) => {
+    const node = { id: pocket.id, pocket, pos, peerSystemId, direction };
+    nodes.push(node);
+    placed.push(node);
+    return node;
+  };
+  const validMapPos = p => Array.isArray(p.mapPos) && p.mapPos.length === 2 && p.mapPos.every(Number.isFinite);
+
+  // Author positions are fixed obstacles for the automatic layout.
+  for (const pocket of pockets) if (validMapPos(pocket)) add(pocket, [...pocket.mapPos]);
+  const center = pockets.find(p => p.id === centerId);
+  if (center && !validMapPos(center)) add(center, [0, 0]);
+
+  gates.forEach((gate, index) => {
+    if (validMapPos(gate)) return;
+    const link = Object.values(world.links).find(l => l.kind === "gate" && (l.a === gate.id || l.b === gate.id));
+    const peerId = link ? (link.a === gate.id ? link.b : link.a) : null;
+    const peerSystemId = peerId ? world.pocketsById?.[peerId]?.parent || null : null;
+    const peer = peerSystemId ? world.systemsById?.[peerSystemId] : null;
+    const dx = peer ? peer.pos[0] - system.pos[0] : 0;
+    const dy = peer ? peer.pos[1] - system.pos[1] : 0;
+    const length = Math.hypot(dx, dy);
+    const fallback = (index / Math.max(1, gates.length)) * Math.PI * 2;
+    const direction = length > 0 ? [dx / length, dy / length] : [Math.cos(fallback), Math.sin(fallback)];
+    const pos = spreadPoint([direction[0] * tuning.gateRadius, direction[1] * tuning.gateRadius], placed, tuning.minSeparation);
+    add(gate, pos, peerSystemId, direction);
+  });
+
+  const ring = ordinary.filter(p => p.id !== centerId && !validMapPos(p));
+  ring.forEach((pocket, index) => {
+    const angle = Math.PI + (index / Math.max(1, ring.length)) * Math.PI * 2;
+    const pos = spreadPoint([Math.cos(angle) * tuning.ordinaryRadius, Math.sin(angle) * tuning.ordinaryRadius], placed, tuning.minSeparation);
+    add(pocket, pos);
+  });
+
+  // An authored mapPos moves the dot, not the gate's peer: its exit stub still
+  // points toward the neighbouring system. Enrich every gate after placement.
+  for (const node of nodes) {
+    if (node.pocket.role !== "gate") continue;
+    const link = Object.values(world.links).find(l => l.kind === "gate" && (l.a === node.id || l.b === node.id));
+    const peerId = link ? (link.a === node.id ? link.b : link.a) : null;
+    const peerSystemId = peerId ? world.pocketsById?.[peerId]?.parent || null : null;
+    node.peerSystemId = peerSystemId;
+    const peer = peerSystemId ? world.systemsById?.[peerSystemId] : null;
+    const dx = peer ? peer.pos[0] - system.pos[0] : 0;
+    const dy = peer ? peer.pos[1] - system.pos[1] : 0;
+    const length = Math.hypot(dx, dy);
+    if (length > 0) node.direction = [dx / length, dy / length];
+    else if (!node.direction) node.direction = [1, 0];
+  }
+  nodes.sort((a, b) => a.id.localeCompare(b.id));
+  return { system, nodes, byId: Object.fromEntries(nodes.map(n => [n.id, n])) };
+}
+
+/** Keep automatic dots apart while preserving the preferred outward direction
+ *  whenever there is room. Pure and deterministic; no RNG or runtime state. */
+function spreadPoint(pos, placed, minSeparation) {
+  const score = p => placed.length ? Math.min(...placed.map(n => distance(p, n.pos))) : Infinity;
+  if (score(pos) >= minSeparation) return pos;
+  const radius = Math.hypot(pos[0], pos[1]) || minSeparation;
+  const base = Math.atan2(pos[1], pos[0]);
+  const steps = Math.max(12, placed.length * 8);
+  let best = pos, bestScore = -Infinity;
+  for (let i = 0; i < steps; i++) {
+    const offset = i === 0 ? 0 : Math.ceil(i / 2) * (i % 2 ? 1 : -1) * (Math.PI * 2 / steps);
+    const angle = base + offset;
+    const candidate = [Math.cos(angle) * radius, Math.sin(angle) * radius];
+    const value = score(candidate);
+    if (value >= minSeparation) return candidate;
+    if (value > bestScore) { best = candidate; bestScore = value; }
+  }
+  return best;
 }
 
 function distance(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }

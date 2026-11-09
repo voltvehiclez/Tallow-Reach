@@ -81,7 +81,8 @@ non-flyable grouping record `{ id, kind: "system", n }`; you are always in one o
 never in the system itself. The starting system is `meridian` (shown as **Meridian System**).
 Its first pockets keep the internal ids `reach` (**Meridian Station**, station + asteroid belt)
 and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M opens the
-starmap/pocket chooser (step 11B built, owner playtest pending). Generic player-facing nouns live in
+starmap, zooming into a system dot opens its pocket map, and right-clicking a legal pocket offers
+**Warp to** (step 11B built, owner playtest pending). Generic player-facing nouns live in
 `data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
 
 **Place definition** (what a place *contains*). A list of features, each placed by data:
@@ -100,7 +101,9 @@ system; each system has one ordinary pocket plus one gate pocket per neighbour. 
 not generated geography. `tier` is distance-from-Meridian guidance plus seeded variation; authored
 content may override it and decides actual danger. The save stores the seed and compact
 discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a
-policy (`all` today), not a hard-coded no-fog assumption. Place memory (mined-out rocks, cleared encounters, respawn timers)
+policy (`all` today), not a hard-coded no-fog assumption. The zoomed-in system chart uses a derived,
+deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win) that is never saved;
+gate exit stubs point toward the peer system. Place memory (mined-out rocks, cleared encounters, respawn timers)
 belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
 container: pockets may later have optional child places using the same place record.
 
@@ -183,7 +186,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | Single mixed save | **Closed in step 9 (save v13, owner-playtested):** `state/profile.js` and `state/storage.js` split `{ profile, world }` and migrate v1..v12 saves. | — |
 | Sector geography in code | **Closed in step 10:** positions/features live in `PLACE_DEFS`; a generic loader builds per-place containers; launch/dock/scenery read the station and field features. | — |
 | Current sector not saved | **Closed in step 10 (save v14, owner-playtested):** `world.place` stores the current pocket id; v13 `sector` migrates. | — |
-| Two pockets, cycled with M | **Closed in 11B (built, owner playtest pending):** M opens `ui/starmap.js`; the selected system's full pocket list and direct-hop quotes replace cycling. `nextPocket()` remains only as a legacy helper for old tests/tools. | — |
+| Two pockets, cycled with M | **Closed in 11B (built, owner playtest pending):** M opens `ui/starmap.js`; zooming into a system opens its pocket map and right-click direct-hop quotes replace cycling. `nextPocket()` remains only as a legacy helper for old tests/tools. | — |
 | One contract at a time, three types | `profile.mission`; `generateContract()` in `sim/contracts.js` | 13 |
 | `sanitizeProfile` names things by hand | **Closed in step 9:** `sanitizeWorld` walks `BASE_MODULES` (`data/station.js`) directly instead of naming base modules by hand. | — |
 

@@ -1,11 +1,13 @@
-# Step 11B playtest — clickable starmap, direct-hop travel and save v16
+# Step 11B playtest — starmap, zoomed system maps, right-click travel and save v16
 
 For the owner. About 20–30 minutes. No coding needed.
 
-**What changed:** **M now opens a starmap** while flying. It no longer warps immediately. You inspect
-systems and pockets, then press **Warp here · Free** on a directly linked pocket to run the existing
-warp sequence. Saves are now **version 16**: they keep the galaxy seed and compact discovery/visit
-notes, not the generated map itself. Old saves and `TR1:` codes still load.
+**What changed:** **M opens a starmap** while flying. Zooming in on a system dot opens that system's
+**pocket map**: pocket-to-pocket lines, plus gate stubs pointing out toward the neighbouring system.
+**Right-click a pocket** and choose **Warp to …** to run the existing warp sequence. The right panel is
+now a compact overview (system name, current pocket, pocket names) with no warp buttons. Saves remain
+**version 16** from the previous 11B build: galaxy seed plus compact discovery/visit notes, not the
+generated map itself. Old saves and `TR1:` codes still load.
 
 **What has not changed:** flight feel, mining, combat, docking, shops, the warp animation/timing, and
 the hulls' hold-only differences. Generated systems are still empty placeholders. Fuel, activated
@@ -41,8 +43,8 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       - an irregular web of dots and connecting lines, not a square grid;
       - **121 systems** in the header on the default seed;
       - your current system marked in amber and your current pocket named in the header;
-      - a selected-system panel on the right;
-      - the status line says single-player flight is paused while the map is open.
+      - a compact right panel: system name, **Current pocket**, and the selected system's pocket names
+        as plain rows — no tier, descriptions, gate-peer text, warp buttons or scrolling.
 - [ ] **1.3** While the map is open, the ship does not move, weapons do not fire, and the engine
       sound is suspended. Press **M** again: the map closes and flight resumes.
 - [ ] **1.4** Hold **W** to build throttle, then press **M** without releasing W. The map opens and
@@ -53,43 +55,51 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
 - [ ] **1.6** While the map is open, holding **Left Alt** does not start the free camera, and
       **G/F/1/2** do not dock, lock or switch weapons. After closing the map, those controls work again.
 
-## 2. Inspect, zoom and pan
+## 2. Inspect, zoom into a system, and pan
 
-- [ ] **2.1** Click a few system dots. A ring marks the selection and the right panel changes to that
-      system's name, **Advisory tier**, and its full pocket list. The tier is guidance only; generated
-      placeholders are empty.
-- [ ] **2.2** Use the **Inspect** dropdown to choose a system by name. It selects the same system as
-      clicking its dot.
-- [ ] **2.3** Press **All names**. Every visible system gets a label; press **Fewer names** to return
-      to the quieter view. Current and selected systems keep their labels.
-- [ ] **2.4** Use **+**, **−** and the mouse wheel over the chart to zoom. Use **Fit** to return to the
+- [ ] **2.1** Click a few system dots, or use the **Inspect** dropdown. A ring marks the selection and
+      the right panel shows only the system name, **Current pocket**, and that system's pocket names in
+      compact rows. There are no **Advisory tier**, description, gate-peer or travel-button cards.
+- [ ] **2.2** Press **All names** on the galaxy chart. Every visible system gets a label; press
+      **Fewer names** to return to the quieter view. Current and selected systems keep their labels.
+- [ ] **2.3** Use **+**, **−** and the mouse wheel over the galaxy chart to zoom. **Fit** returns to the
       whole web. Drag an empty part of the chart to pan; dragging must not select a system by accident.
-- [ ] **2.5** Keyboard check: Tab to a system dot or the Inspect dropdown; Enter/Space activates a
-      focused dot/button. The close button is reachable by keyboard.
-- [ ] **2.6** Select a far-away system. Its pockets are listed, but their travel buttons are
-      **Unavailable** with a reason such as **No direct route. Travel through connected pockets
-      first.** You cannot warp there in one jump.
+- [ ] **2.4** Open a **system map**: select a system dot, then scroll up several times (or press **+**
+      until it opens), or simply **double-click** the dot. Expect a short zoom transition into a map of
+      that system's pockets: dots for pockets, lines for direct pocket-to-pocket routes, and dashed gate
+      stubs leaving gate pockets toward the labelled neighbouring system. **Back to galaxy** returns with
+      the reverse transition. If your browser/OS prefers reduced motion, the switch may be instant.
+- [ ] **2.5** Inside a system map, drag to pan, use **+**/**−** to zoom, and **Fit** to frame the pockets.
+      Scrolling out at the fitted system view (or pressing **Back to galaxy**) returns to the galaxy web.
+- [ ] **2.6** Keyboard check: Tab to a system dot and press Enter/Space to select it; the zoom buttons and
+      Close are reachable by keyboard. Inside a system map, Tab to a pocket dot and press Enter/Space (or
+      Shift+F10 / the Context Menu key) to open its popup. **Esc closes the popup first**, not the chart.
+- [ ] **2.7** Select a far-away system and zoom into its pocket map. Right-click one of its pockets: the
+      popup explains **No direct route. Travel through connected pockets first.** and has no clickable
+      **Warp to**. You cannot warp there in one jump.
 
-## 3. Legal direct-hop travel
+## 3. Legal direct-hop travel by right-click
 
-- [ ] **3.1** Select **Meridian System** while in **Meridian Station**. Expect pocket cards for:
-      - **Meridian Station** — marked **You are here**, travel disabled;
-      - **Kestrel Hollow** — **Warp here · Free** enabled;
-      - one or more **Gate to …** pockets — enabled, each showing its gate peer.
-- [ ] **3.2** Press **Warp here · Free** on **Kestrel Hollow**. The map closes and the usual
-      ~2-second warp runs: throttle releases, turn eases back, white flash, weapons offline. Arrival
-      message: **“Warp: Meridian Station to Kestrel Hollow. Empty space. Nothing out here yet.”**
-- [ ] **3.3** Press **M** again. The current location is now Kestrel Hollow / Meridian System.
-      Travel back to **Meridian Station** the same way. Message: **“Warp: Kestrel Hollow to Meridian
-      Station. Meridian Station and the asteroid belt.”** Station, belt and planet return.
-- [ ] **3.4** From Meridian Station, warp to a **Gate to …** pocket. It is empty space. Open the map
-      there: the gate card names its **Gate peer** in the neighbouring system. Select that neighbouring
-      system, then press **Warp here · Free** on the peer gate pocket. Expect an empty generated
-      pocket, not a station or belt.
-- [ ] **3.5** Open the map after arriving in the generated system. The current-location header names
-      the pocket you entered. After you leave that system, its dot keeps the visited colour. You can
-      hop back through the same gate.
-- [ ] **3.6** Kestrel Hollow is still an ordinary empty pocket, **not** a gate. It has no gate peer.
+- [ ] **3.1** Open the **Meridian System** pocket map while in **Meridian Station**. The right panel lists
+      **Meridian Station** (highlighted), **Kestrel Hollow**, and the **Gate to …** pockets as plain rows.
+      On the chart, right-click the **Kestrel Hollow** dot: a popup offers **Warp to Kestrel Hollow**.
+      Right-clicking your current pocket says **You are here** and offers no warp.
+- [ ] **3.2** Click **Warp to Kestrel Hollow**. The map closes and the usual ~2-second warp runs: throttle
+      releases, turn eases back, white flash, weapons offline. Arrival message: **“Warp: Meridian Station
+      to Kestrel Hollow. Empty space. Nothing out here yet.”**
+- [ ] **3.3** Press **M** again, zoom into Meridian, and right-click **Meridian Station** to warp back.
+      Message: **“Warp: Kestrel Hollow to Meridian Station. Meridian Station and the asteroid belt.”**
+      Station, belt and planet return.
+- [ ] **3.4** From Meridian Station, warp to a **Gate to …** pocket. It is empty space. Open the Meridian
+      system map there: that gate's dashed stub points toward the neighbouring system named on the stub.
+      The stub is a direction label, not a one-click system warp. To cross, return to the galaxy, select
+      that neighbouring system, zoom in, and right-click its reciprocal **Gate to Meridian** pocket.
+      Choose **Warp to …**. Expect an empty generated pocket, not a station or belt.
+- [ ] **3.5** Open the map after arriving in the generated system. The header names the pocket you entered.
+      Zoom into that system to see its hub and gate stubs. After you leave, its galaxy dot keeps the
+      visited colour. You can hop back through the same gate.
+- [ ] **3.6** Kestrel Hollow is still an ordinary empty pocket, **not** a gate. In the Meridian system map
+      it has an internal line to Meridian Station but no outward gate stub.
 - [ ] **3.7** Credits do not change when warping. Travel is free in this slice.
 
 ## 4. Saves, old codes and safe recovery

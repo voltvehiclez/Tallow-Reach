@@ -344,9 +344,10 @@ Places live in `src/data/places.js`. A **system** is a non-flyable grouping reco
 nouns live in `src/data/terms.js` (`mapNode`, `flyable`); proper names live on the place records.
 
 1. Add the pocket to `PLACES` with `parent` set to its system id, and add at least one explicit link
-   naming it in `PLACE_LINKS` (or `GALAXY_OVERRIDES.links`). The M starmap lists every pocket of the
-   selected system; there is no second UI list and no assumption that a system has exactly two pockets.
-   Generation fails plainly if the new pocket is unreachable. `npm test` checks the fields and links.
+   naming it in `PLACE_LINKS` (or `GALAXY_OVERRIDES.links`). The M starmap's zoomed-in system map draws
+   every pocket of the selected system and the compact right panel lists their names; there is no second
+   UI list and no assumption that a system has exactly two pockets. Generation fails plainly if the new
+   pocket is unreachable. `npm test` checks the fields and links.
 2. Point `def` at `PLACE_DEFS.empty` for empty space, or copy `PLACE_DEFS.meridian` and edit its
    features. A definition is a list of features: `station` (position, keep-out, dock range/speed,
    launch point, shop id), `asteroidField` (position, radius, height, count, ore table, respawn,
@@ -556,6 +557,16 @@ places: { "sys-004": { pos: [180, -260] } },
 
 Ids, pockets and routes stay stable; only the map position and derived tier guidance change.
 
+**Move a pocket on its system's zoomed-in map.** Add a 2D `mapPos` (map units, not flight coordinates):
+
+```js
+places: { "hollow": { mapPos: [-130, 90] } },
+```
+
+Without `mapPos`, `systemPocketLayout` centres the ordinary hub, rings other ordinary pockets, and places
+gate pockets outward toward their peer system. An authored gate `mapPos` moves the dot but its exit stub
+still points toward the peer. Layout is derived and never saved.
+
 **Delete a pocket.** Add its id to `GALAXY_OVERRIDES.removedPlaces`. Every link naming it is pruned.
 If the deletion disconnects the web or leaves a gate without its one peer, generation fails with a
 plain validation error instead of shipping a broken map. A save that was in the deleted pocket
@@ -569,12 +580,19 @@ link. Keep an internal link from the system's ordinary pocket to the gate so it 
 `src/data/places.js` for authored pockets): `{ id, kind, a, b, mode: "warp", cost: {}, requires: [],
 enabled: true }`. `kind` is `internal` inside one system or `gate` between two gate pockets.
 
+**Chart interaction.** On the galaxy web, click a system to select it; scroll up / press **+** past
+`map.systemEntryZoom`, or double-click the dot, to open its pocket map. **Back to galaxy** or scrolling out
+at the fitted system view returns. In the pocket map, right-click a pocket dot (or focus it and press
+Enter/Space/Shift+F10) for the **Warp to** popup; only a legal direct hop gets the button. The right panel
+is a read-only overview, not a travel button list.
+
 **Change generation or chart settings.** Edit `GALAXY` in `src/data/galaxy.js`: `systemCount`,
-`graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, `travel` defaults and `map`
-(padding, screen-pixel radii, zoom limits/step). To replace the layout algorithm, register a function
-in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the same `(seed, tuning, rng)` contract and name it in
-`GALAXY.generator`. The resolved record contract stays the same, so travel rules and the map UI do not
-change.
+`graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, `travel` defaults, `map`
+(padding, screen-pixel radii, zoom limits/step, `systemEntryZoom`, `transitionMs`, popup `context`) and
+`systemMap` (padding, pocket radius, ordinary/gate radii, exit length, minimum separation, zoom limits).
+To replace the layout algorithm, register a function in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the
+same `(seed, tuning, rng)` contract and name it in `GALAXY.generator`. The resolved record contract stays
+the same, so travel rules and the map UI do not change.
 
 **Change visibility.** `visibility.mode: "all"` shows the whole web. `"discovered"` uses the compact
 `world.galaxy.knowledge` flags; home is always discovered/visited and each local arrival records a
