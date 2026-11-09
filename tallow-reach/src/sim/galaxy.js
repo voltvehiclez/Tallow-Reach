@@ -351,3 +351,11 @@ export function systemDistance(world, a, b) {
 }
 
 function distance(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+
+/** Update compact knowledge in place; geography itself is never persisted. */
+export function recordSystemVisit(world, knowledge, pocketId) {
+  const systemId = world?.pocketsById?.[pocketId]?.parent;
+  if (!systemId || !knowledge) return null;
+  knowledge[systemId] = { discovered: true, visited: true };
+  return knowledge[systemId];
+}

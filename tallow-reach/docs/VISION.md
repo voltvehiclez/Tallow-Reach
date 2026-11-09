@@ -100,6 +100,14 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
+- **2026-11-08 — step 11B starmap interaction and saved worlds (owner-approved slice):** **M opens a
+  clickable 2D chart** instead of warping immediately. It shows visible systems, the current location,
+  gate connections and any selected system's full pocket list; only a legal directly connected pocket
+  starts the existing warp sequence. Single-player map pauses the simulation; a future hosted co-op
+  world keeps running. Save **v16** stores the galaxy seed plus compact discovery/visit records, not
+  generated geography; v15 and older migrate, and a removed pocket recovers to the safe home station
+  without losing character/cargo. This supersedes the temporary M-cycling note below.
+
 - **2026-11-08 — step 11 starmap and travel (owner):** the map is an **organic 2D web**, not a square
   grid. Systems have scattered positions and explicit connections; some are dead ends, some have two
   neighbours, some are junctions. Travel is only to a **directly connected pocket**, chosen on the map,
@@ -117,8 +125,8 @@ mention) until the owner decides. Record the decision here when made, and delete
   area is a **pocket**, named after its main point of interest. You are always in a pocket, never
   in a system itself. The starting system is **Meridian System**; its first pockets are **Meridian
   Station** (station + asteroid belt, internal id `reach`) and **Kestrel Hollow** (internal id
-  `hollow`). A system may have any number of pockets. M cycles the current system's pockets for
-  now; choosing among many pockets and the 100+ system starmap come in step 11. Generic words live
+  `hollow`). A system may have any number of pockets. M cycled the current system's pockets
+  temporarily; step 11B replaces that with the clickable starmap/pocket chooser. Generic words live
   in `src/data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
   Meridian is a station feature inside its pocket, not a child place; the in-game station label is
   **Meridian Station**. Internal place ids and old saves/export codes keep working.

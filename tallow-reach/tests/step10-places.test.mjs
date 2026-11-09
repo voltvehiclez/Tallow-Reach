@@ -56,7 +56,7 @@ test("10a: Meridian System groups pockets; the station is a feature, not a child
   assert.ok(!Object.values(PLACES).some(p => p.parent === "reach"), "no place is a child of the station pocket");
 });
 
-test("10a: a system may hold any number of pockets and M cycles all of them", () => {
+test("10a: a system may hold any number of pockets and the legacy nextPocket helper cycles all of them", () => {
   const id = "test-third-pocket";
   PLACES[id] = { id, kind: "pocket", def: "empty", parent: "meridian", n: "Third Pocket", d: "test", enter: { kind: "warp", pos: [0, 0, 300] }, leave: { kind: "warp" } };
   PLACE_IDS.push(id);

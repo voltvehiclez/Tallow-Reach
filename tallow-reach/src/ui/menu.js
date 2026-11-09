@@ -5,9 +5,10 @@ import { on } from "../util/events.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
 import { state, currentSave, applySave, resetPlaces } from "../state/state.js";
 import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
-import { newSave, sanitizeSave } from "../state/profile.js";
+import { newSave } from "../state/profile.js";
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
+import { prepareGalaxySave } from "../sim/galaxy-session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -21,6 +22,7 @@ import * as inv from "../sim/inventory.js";
 import { canSell, itemName } from "../data/items.js";
 import { introHtml, outpostHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
+import { closeStarmap } from "./starmap.js";
 
 const $ = id => document.getElementById(id);
 let panel;
@@ -72,6 +74,18 @@ function toast(text) {
   state.ui.toast = text;
 }
 
+/** Consume a safe-recovery notice once, without hiding the load/import result. */
+function recoveryNotice() {
+  if (!state.galaxyRecovery) return "";
+  state.galaxyRecovery = null;
+  return "That pocket no longer exists. Returned to Meridian Station; your character and cargo are safe.";
+}
+
+function loadedMessage(text) {
+  const notice = recoveryNotice();
+  return notice ? `${text} ${notice}` : text;
+}
+
 const ACTIONS = {
   // "Enter game": leave the start screen and deploy the pilot where the save put
   // them — docked at a station, or flying at that pocket's arrival point.
@@ -80,6 +94,11 @@ const ACTIONS = {
     state.ui.tab = "m";
     initAudio();
     resumeFromSave();
+    const notice = recoveryNotice();
+    if (notice) {
+      state.ui.toast = notice;
+      render();
+    }
   },
   tab(name) {
     state.ui.tab = name;
@@ -210,14 +229,14 @@ const ACTIONS = {
     if (!raw) return;
     let save;
     try {
-      save = sanitizeSave(raw);
+      save = prepareGalaxySave(raw);
     } catch (e) {
       toast("That slot could not be read.");
       return;
     }
     applySave(save);
     afterSaveChange();
-    toast("Loaded slot " + i);
+    toast(loadedMessage("Loaded slot " + i));
     render();
   },
   dl(i) {
@@ -231,10 +250,10 @@ const ACTIONS = {
     state.ui.confirmReset = false;
   },
   rs2() {
-    applySave(newSave());
+    applySave(prepareGalaxySave(newSave()));
     afterSaveChange();
     state.ui.confirmReset = false;
-    toast("Progress reset.");
+    toast(loadedMessage("Progress reset."));
   },
   xp() {
     state.ui.xcode = encodeSave(currentSave());
@@ -250,7 +269,7 @@ const ACTIONS = {
     state.ui.xcode = text;
     let save;
     try {
-      save = decodeSave(text);
+      save = decodeSave(text, prepareGalaxySave);
     } catch (e) {
       toast("That code is not a valid save.");
       return;
@@ -258,7 +277,7 @@ const ACTIONS = {
     state.ui.xcode = "";
     applySave(save);
     afterSaveChange();
-    toast("Save imported.");
+    toast(loadedMessage("Save imported."));
     render();
   },
 };
@@ -284,6 +303,7 @@ function cycleInvShip(dir) {
 
 /** Common work after the whole save is replaced (load, import, reset). */
 function afterSaveChange() {
+  closeStarmap();
   const placeId = state.worldState.place;
   resetPlaces();
   state.place = placeId;

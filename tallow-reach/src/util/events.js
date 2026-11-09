@@ -3,7 +3,9 @@
 // touching the code that produced the event.
 //
 // Events in use:
-//   action        { name, repeat }   key/bind pressed (see core/input.js)
+//   action        { name, repeat, key?, to? }
+//                                    key/bind pressed (see core/input.js); the
+//                                    starmap's travel action carries `to`
 //   freecam       boolean            Alt held / released
 //   look          { dx, dy }         mouse movement while orbiting
 //   wheel         deltaY             mouse wheel
@@ -27,10 +29,16 @@
 //   enemy-spawned { id, def, pos }   a hostile entered the world (render/views.js builds its mesh)
 //   enemy-removed { id }             a hostile left the world: killed, out of range, or the field
 //                                    was cleared (render/views.js removes its mesh)
-//   place-entered { id }            scenery should show this pocket (also on docking reset)
-//   place-changed { from, to }       the pocket changed, mid-warp (see sim/sectors.js)
-//   warp-start    { from, to }       a warp began: ship locked, drive charging
-//   warp-end      { from, to }       warp over (arrived, or cancelled by docking)
+//   place-entered { id, player }    scenery should show this pocket (also on docking reset)
+//   place-changed { from, to, player }
+//                                    the pocket changed, mid-warp (see sim/sectors.js)
+//   warp-start    { from, to, player }
+//                                    a warp began: ship locked, drive charging
+//   warp-end      { from, to, player }
+//                                    warp over (arrived, or cancelled by docking)
+//   travel-denied { player, from, to, reason }
+//                                    sim/sectors.js refused a proposed hop; the
+//                                    starmap shows the reason without closing
 
 const handlers = new Map();
 

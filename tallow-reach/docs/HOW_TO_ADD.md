@@ -343,9 +343,10 @@ Places live in `src/data/places.js`. A **system** is a non-flyable grouping reco
 `parent` is the system it belongs to, and `enter.pos` is the arrival point. Generic player-facing
 nouns live in `src/data/terms.js` (`mapNode`, `flyable`); proper names live on the place records.
 
-1. Add the pocket to `PLACES` with `parent` set to its system id. M cycles every pocket of the
-   current system in data order (`pocketsIn` / `nextPocket`); there is no second list to edit and no
-   assumption that a system has exactly two pockets. `npm test` checks the fields and the cycle.
+1. Add the pocket to `PLACES` with `parent` set to its system id, and add at least one explicit link
+   naming it in `PLACE_LINKS` (or `GALAXY_OVERRIDES.links`). The M starmap lists every pocket of the
+   selected system; there is no second UI list and no assumption that a system has exactly two pockets.
+   Generation fails plainly if the new pocket is unreachable. `npm test` checks the fields and links.
 2. Point `def` at `PLACE_DEFS.empty` for empty space, or copy `PLACE_DEFS.meridian` and edit its
    features. A definition is a list of features: `station` (position, keep-out, dock range/speed,
    launch point, shop id), `asteroidField` (position, radius, height, count, ore table, respawn,
@@ -363,11 +364,12 @@ nouns live in `src/data/terms.js` (`mapNode`, `flyable`); proper names live on t
    follow those numbers: the 3D streaks (`render/warpfx.js`) and the overlay (`ui/warpflash.js`) read
    the local pilot's `state.warp.fx` / `state.warp.flash` every frame. Keep the overlay to plain
    gradients; a masked gradient across the whole screen halves the frame rate.
-7. `WARP_COAST.steer` is how long the ship takes to stop turning once M is pressed, and
+7. `WARP_COAST.steer` is how long the ship takes to stop turning once a warp starts, and
    `warpSteerEase(t)` is the curve (1 -> 0). The throttle is released instantly, so the speed bleeds
    off through the normal drag model in `sim/player.js`.
-8. Internal place ids are save ids (`world.place`, save v14). Keep existing ids stable; old saves
-   and export codes migrate through `sanitizeWorld` (`world.sector` -> `world.place`).
+8. Internal place ids are save ids (`world.place`). Keep existing ids stable; old saves and export
+   codes migrate through `sanitizeWorld`/`prepareGalaxySave`. Deleting a pocket that a save was in
+   recovers the pilot to the home station without losing character/cargo.
 
 ## 15. A new module group on the Outfitting screen (data only)
 
@@ -538,11 +540,13 @@ therefore three small pieces and no scene code in `sim/`.
    (the test that checks `render/views.js` knows every kind) and a mesh count to
    `tests/views.test.mjs`.
 
-## 20. Edit the starmap web (step 11A)
+## 20. Edit the starmap web and travel rules (steps 11A/11B)
 
-The live M key still cycles pockets until step 11B. The resolved web and travel rules already exist:
-`data/galaxy.js` holds tuning and author overrides, `sim/galaxy.js` resolves/validates the web, and
-`sim/travel.js` answers direct-hop travel questions. Edit data, not the future map screen.
+The live M key opens `src/ui/starmap.js`. The resolved web and travel rules are data-driven:
+`data/galaxy.js` holds tuning and author overrides, `sim/galaxy.js` resolves/validates the web,
+`sim/galaxy-session.js` installs the saved seed as the live place catalog, and `sim/travel.js` answers
+direct-hop questions for both the chart and `startWarp`. Edit data/registries, not the map screen or
+warp animation.
 
 **Move a system.** In `GALAXY_OVERRIDES.places` in `src/data/galaxy.js`:
 
@@ -554,7 +558,8 @@ Ids, pockets and routes stay stable; only the map position and derived tier guid
 
 **Delete a pocket.** Add its id to `GALAXY_OVERRIDES.removedPlaces`. Every link naming it is pruned.
 If the deletion disconnects the web or leaves a gate without its one peer, generation fails with a
-plain validation error instead of shipping a broken map.
+plain validation error instead of shipping a broken map. A save that was in the deleted pocket
+recovers to the home station with the whole character/cargo intact.
 
 **Promote a pocket to a gate.** Patch its `role: "gate"` and add one `kind: "gate"` link naming its
 peer pocket in another system. The peer must also be a gate pocket and may have no other external gate
@@ -564,11 +569,28 @@ link. Keep an internal link from the system's ordinary pocket to the gate so it 
 `src/data/places.js` for authored pockets): `{ id, kind, a, b, mode: "warp", cost: {}, requires: [],
 enabled: true }`. `kind` is `internal` inside one system or `gate` between two gate pockets.
 
-**Change generation settings.** Edit `GALAXY` in `src/data/galaxy.js`: `systemCount`,
-`graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, and `travel` defaults. To replace the
-layout algorithm, register a function in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the same
-`(seed, tuning, rng)` contract and name it in `GALAXY.generator`. The resolved record contract stays
-the same, so travel rules and the future map UI do not change.
+**Change generation or chart settings.** Edit `GALAXY` in `src/data/galaxy.js`: `systemCount`,
+`graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, `travel` defaults and `map`
+(padding, screen-pixel radii, zoom limits/step). To replace the layout algorithm, register a function
+in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the same `(seed, tuning, rng)` contract and name it in
+`GALAXY.generator`. The resolved record contract stays the same, so travel rules and the map UI do not
+change.
 
-Run `npm test` (`tests/step11a-galaxy.test.mjs`) after any edit. It checks determinism, reachability,
-one-peer gates, the move/delete/promote examples, visibility policy and tier guidance.
+**Change visibility.** `visibility.mode: "all"` shows the whole web. `"discovered"` uses the compact
+`world.galaxy.knowledge` flags; home is always discovered/visited and each local arrival records a
+visit. Add a new policy to `VISIBILITY_POLICIES` rather than hard-coded fog in the UI.
+
+**Future costs/requirements.** Keep defaults in `GALAXY.travel` and per-route overrides on links.
+Register a requirement handler in `TRAVEL_REQUIREMENTS` (`src/sim/travel.js`) as
+`({ req, link, from, to, context }) => true | "refusal reason"`. The chart and warp pass the same
+pilot/profile/world context. Costs are returned as plain data; until a cost handler is implemented,
+`startWarp` refuses any non-empty cost rather than silently charging or ignoring it. Fuel, gate
+activation and supercruise are not implemented yet.
+
+**Saves.** v16 stores only `{ seed, knowledge }` in `world.galaxy`. Boot, slot load and import call
+`prepareGalaxySave(raw)` before `applySave`; it regenerates the seed, validates ids against that live
+catalog and recovers removed pockets. Never save generated systems/pockets/links.
+
+Run `npm test` (`tests/step11a-galaxy.test.mjs` and `tests/step11b-starmap.test.mjs`) after any edit.
+They check determinism, reachability, one-peer gates, move/delete/promote examples, visibility, tier
+guidance, live catalog lookup, map interaction, direct-hop refusal, pause and save migration/recovery.

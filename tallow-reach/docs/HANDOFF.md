@@ -27,50 +27,77 @@ ones before changing anything, and update them when decisions or state change.
   owner says the playtest passed.
 - At the end of a long chat, rewrite this file and update `docs/ROADMAP.md`. Record decisions in
   `docs/VISION.md`.
+- For simple/conversational requests, answer directly in chat; do not rebuild guides/backups unless
+  asked. Check a file exists before overwriting it.
 
 ## Where things stand (2026-11-08)
 
-- **Milestone C is underway.** Steps 0 to 10 are ticked (step 10 owner playtest passed after three
-  found bugs were fixed). **Step 11 is in progress:** slice **11A** is built and the owner playtest passed on 2026-11-08; slice **11B** is next.
-- **Step 11A added** `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/sim/travel.js`, explicit
-  `PLACE_LINKS` in `src/data/places.js`, and `tests/step11a-galaxy.test.mjs` (19 tests). It resolves an
-  organic 2D web of 121 systems by default, one ordinary empty pocket plus one empty gate pocket per
-  neighbouring system, one external gate peer per gate, author move/delete/promote/route overrides,
-  configurable visibility, advisory distance tiers and free direct-hop travel quotes.
-- **No live gameplay or save change in 11A.** The new modules are not imported by `main.js`; M still
-  cycles the current system's pockets. Saves remain **version 15** (`{ v: 15, profile, world }`,
-  `world.place`, `world.resume`, `world.galaxy: null`). Step 11B will wire the M starmap/pocket chooser
-  and migrate to **v16** (seed + compact discovery/visit records, not generated geography).
-- **Owner's step-11 decisions (VISION.md):** organic web, not a square grid; travel only to a directly
-  connected pocket, free for now; Meridian keeps `reach`/`hollow` unchanged and gains separate new gate
-  pockets; Kestrel Hollow is not a gate; generated systems are empty placeholders; whole map visible
-  through a configurable policy; difficulty is distance guidance with seeded variation while actual
-  content decides danger; construction must stay modular (move/delete/promote/generator edits, not
-  rewrites). Future fuel, activated gates and supercruise are not implemented yet.
-- **Results:** `npm ci` succeeded; `npm test` **279/279 pass** (260 baseline + 19 new; both 8b oracles
-  unchanged); `npm run build` succeeded.
-- **Known limits:** no starmap screen yet; no pocket memory/respawn; enemies do not shoot back; one
-  enemy AI; no mission framework; contracts are still the step-3 placeholder. Later save versions are
-  reserved: 11→16, 12→17, 13→18, 15→19 (v15 is already used by the resume point).
+- **Milestone C is underway.** Steps 0–10 are ticked. **Step 11 is in progress:** 11A is built and
+  owner-playtest-passed; **11B is built and awaiting the owner playtest** in root `TESTING-STARMAP.md`.
+  Do **not** tick step 11 until that pass is reported.
+- **11A foundation:** `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/sim/travel.js`, explicit
+  `PLACE_LINKS`, and `tests/step11a-galaxy.test.mjs` (19 tests). Default seed `11082026` resolves
+  **121 systems / 462 pockets / 511 links**: organic scatter, 1–4 neighbours, dead ends/junctions/loops,
+  one ordinary empty pocket plus one empty gate pocket per neighbour, exactly one reciprocal external
+  peer per gate. Meridian keeps `reach`/`hollow`; Kestrel Hollow is not a gate.
+- **11B live slice:** `src/ui/starmap.js` opens with **M** while flying. It shows the visible system
+  web, gate lines, current/visited/selected markers, inspect dropdown, zoom/pan/labels, and the selected
+  system's full pocket list with direct-hop quotes. A legal **Warp here · Free** button emits a named
+  travel action; `main.js` calls `startWarp`, which requotes the link/cost/requirements and runs the
+  unchanged warp animation. Refusals emit `travel-denied` and stay visible in the chart.
+- **Pause/input:** `isSimulationPaused()` freezes single-player flight while the chart is open;
+  `state.multiplayer` is the future host flag that keeps a hosted world running. Opening the chart
+  clears/zeroes flight controls, blocks free-cam start and dock/lock/weapon hotkeys, and suspends audio;
+  a later user-gesture audio init does not undo that suspension. M/Esc closes; P closes then pauses.
+- **Save v16:** `world.galaxy` is only `{ seed, knowledge }` (compact per-system discovery/visit flags).
+  Generated geography is session-only in `state.galaxy` and the live place catalog. Boot, slot load and
+  import call `prepareGalaxySave(raw)` before `applySave`: resolve seed → install catalog → sanitize →
+  record current visit. A removed/unknown pocket recovers to `DEFAULT_PLACE` (`reach`) with
+  `resume:null`, preserving the whole profile/cargo; intro/slot/import show a safe-recovery notice.
+  A failed prepare restores the previous catalog. v15 and older saves/codes still load.
+- **Results:** `npm test` **300/300 pass** (279 previous + 21 new 11B tests; both 8b oracles unchanged).
+  `npm run build` succeeded: `game/tallow-reach.html` **650 KB** (665,730 bytes). Automated headless
+  DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
+- **Known limits:** generated pockets are empty placeholders; visibility is `all`; travel is free and
+  non-empty costs are refused until a handler exists; no fuel, activated/proximity gates or supercruise.
+  Place memory/respawn is step 12. Enemies do not shoot back beyond the existing raider behaviour; one
+  enemy AI; contracts are still the step-3 placeholder; no mission framework yet. Later save versions
+  are reserved: 12→17, 13→18, 15→19.
+- **Backup:** the owner-approved 11A full project backup is published on GitHub:
+  `https://github.com/voltvehiclez/Tallow-Reach/archive/8df6042c4161bd65f39d4ba0fc4b7016b02e40ae.zip`
+  (verified public ZIP). Extract and open `tallow-reach/game/tallow-reach.html`. Browser-local saves
+  are not in a project ZIP; export a `TR1:` code separately. Root `tallow-reach-step11a*.zip` files are
+  local backups and must not be staged.
 
 ## What to do next
 
-0. **11A owner playtest passed on 2026-11-08.** The owner reported a pass using `TESTING-11A.md`
-   (project root); no bugs were reported. This confirms the invisible 11A slice, not the whole of
-   step 11. A full project backup is delivered as `tallow-reach-step11a-passed-backup.zip` outside
-   the project folder. It excludes dependencies, Git internals and browser-local saves; export a
-   `TR1:` code separately to back up game progress. Step 11B has not been started in this backup.
-1. **Step 11B** (owner-approved slice, not yet started): `src/ui/starmap.js` opened with **M**; show the
-   organic system web, current location, gate connections and a selected system's pocket list; only
-   legal direct destinations may start the existing warp sequence. Migrate save v15→v16 storing the
-   galaxy seed and compact discovery/visit records; removed-pocket fallback to a safe home station
-   without losing character/cargo. Add map interaction tests and `docs/TESTING-STARMAP.md`. Do not
-   tick step 11 until the owner playtest passes.
-2. Then **step 12** (encounters, place templates, place memory, save v17), asking the remaining VISION
-   open questions (respawn behaviour, faction standing, wormhole destination, etc.) first.
-3. Keep the modularity rule: moving a system, deleting a pocket, promoting a pocket to a gate, adding a
+1. **Owner plays `TESTING-STARMAP.md`** (project root). It covers opening/closing/pause, input release,
+   inspect/zoom/pan, legal direct hops through gates, empty generated pockets, save/slot/export resume,
+   old codes A/B/C, recovery notices and regression checks. Old code C is the pre-11B v15 regression
+   fixture in `TEST-OLD-CODES.txt`.
+2. If the owner reports **pass**, tick step 11 in `docs/ROADMAP.md` and `docs/REFACTOR_PLAN.md`, mark
+   the guide passed, update this file and add a changelog entry. If they report a bug, fix that first;
+   do not tick the step.
+3. Then **step 12** (encounters, place templates, place memory, save v17). Ask the remaining VISION
+   open questions first: respawn behaviour, faction standing, wormhole destination/exit, etc.
+4. Keep the modularity rule: moving a system, deleting a pocket, promoting a pocket to a gate, adding a
    route or replacing the generator must remain data/registry edits. `tests/step11a-galaxy.test.mjs`
-   proves the current examples; extend it when adding new edit shapes.
+   and `tests/step11b-starmap.test.mjs` prove the current examples; extend them for new edit shapes.
+
+## Build, test and play
+
+From the project folder (`tallow-reach/`):
+
+```sh
+npm ci        # only if node_modules is missing
+npm run build
+npm test
+node serve.mjs
+```
+
+Open `http://localhost:8080`, or double-click `game/tallow-reach.html`. The existing `serve.mjs` serves
+the built `game/` folder on `0.0.0.0:8080`; it is a testing convenience, not part of the game. If the
+embedded preview blocks localStorage, open it in its own tab or use the downloaded HTML for save tests.
 
 ## Map of the docs
 
@@ -79,11 +106,11 @@ ones before changing anything, and update them when decisions or state change.
 | `VISION.md` | The owner's intent, settled decisions and remaining open questions. Read before adding features. |
 | `ROADMAP.md` | Milestones, ordered steps, current position, change log of direction. |
 | `REFACTOR_PLAN.md` | The numbered steps in detail: goal, questions, do/done/save-version. |
-| `TARGET_ARCHITECTURE.md` | The intended end-state design and the debt register that tracks what is still hardcoded. |
+| `TARGET_ARCHITECTURE.md` | The intended end-state design and the debt register. |
 | `ARCHITECTURE.md` | How the code works **now**: layers, event flow, module responsibilities. |
 | `HOW_TO_ADD.md` | Recipes for common content changes (items, ships, weapons, places, starmap edits, ...). |
 | `CHANGELOG.md` / `CHANGELOG_ARCHIVE.md` | Recent changes / older history. Never delete entries. |
-| `TESTING-*.md` | Numbered owner playtest guides per feature. `TESTING-BASELINE.md` checks nothing regressed. |
+| `../TESTING-*.md` | Numbered owner playtest guides at the **project root**, beside `TEST-OLD-CODES.txt`. |
 | `AI_PROMPTS.md` | Prompt templates for future chats. |
 
 Each `src/` folder also has a short `README.md` listing its files and rules.

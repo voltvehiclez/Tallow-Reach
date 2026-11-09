@@ -33,10 +33,10 @@ function removeItem(key) {
   }
 }
 
-export function loadAutosave() {
+export function loadAutosave(prepare = sanitizeSave) {
   try {
     const raw = getItem(AUTOSAVE_KEY);
-    return raw ? sanitizeSave(JSON.parse(raw)) : null;
+    return raw ? prepare(JSON.parse(raw)) : null;
   } catch (e) {
     return null;
   }
@@ -71,10 +71,10 @@ export function encodeSave(save) {
   return CODE_PREFIX + btoa(bin);
 }
 
-export function decodeSave(text) {
+export function decodeSave(text, prepare = sanitizeSave) {
   const s = (text || "").trim();
   if (!s.startsWith(CODE_PREFIX)) throw new Error("missing prefix");
   const bin = atob(s.slice(CODE_PREFIX.length));
   const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
-  return sanitizeSave(JSON.parse(new TextDecoder().decode(bytes)));
+  return prepare(JSON.parse(new TextDecoder().decode(bytes)));
 }

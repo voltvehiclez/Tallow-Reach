@@ -198,7 +198,7 @@ test("every pocket has a name, description, arrival point, parent system and def
   assert.ok(stationAt(DEFAULT_PLACE), "the starting pocket has a station feature");
 });
 
-test("M cycles every pocket of the current system, however many there are", () => {
+test("legacy nextPocket helper cycles every pocket of the current system, however many there are", () => {
   const system = PLACES[DEFAULT_PLACE].parent;
   const siblings = pocketsIn(system);
   assert.ok(siblings.length >= 2);

@@ -61,7 +61,7 @@ export function setupHud() {
     markers.push(d);
   }
 
-  if (el.warpHint) el.warpHint.textContent = `M warp to the next ${term("flyable")}`;
+  if (el.warpHint) el.warpHint.textContent = "M starmap";
 
   addEventListener("mousemove", e => {
     el.cursor.style.left = e.clientX + "px";

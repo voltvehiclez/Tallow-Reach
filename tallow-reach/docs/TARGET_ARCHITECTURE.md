@@ -80,8 +80,8 @@ departs (today both are warp; a pocket's `enter.pos` is its arrival point). A **
 non-flyable grouping record `{ id, kind: "system", n }`; you are always in one of its pockets,
 never in the system itself. The starting system is `meridian` (shown as **Meridian System**).
 Its first pockets keep the internal ids `reach` (**Meridian Station**, station + asteroid belt)
-and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M cycles the
-current system's pockets until step 11 adds a chooser. Generic player-facing nouns live in
+and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M opens the
+starmap/pocket chooser (step 11B built, owner playtest pending). Generic player-facing nouns live in
 `data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
 
 **Place definition** (what a place *contains*). A list of features, each placed by data:
@@ -98,8 +98,9 @@ records for direct-hop quotes. A gate pocket has exactly one external gate peer 
 system; each system has one ordinary pocket plus one gate pocket per neighbour. Meridian keeps
 `reach`/`hollow` and gains separate gate pockets. The map stores seed, tier and discovery/visit records,
 not generated geography. `tier` is distance-from-Meridian guidance plus seeded variation; authored
-content may override it and decides actual danger. Visibility is a policy (`all` today), not a
-hard-coded no-fog assumption. Place memory (mined-out rocks, cleared encounters, respawn timers)
+content may override it and decides actual danger. The save stores the seed and compact
+discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a
+policy (`all` today), not a hard-coded no-fog assumption. Place memory (mined-out rocks, cleared encounters, respawn timers)
 belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
 container: pockets may later have optional child places using the same place record.
 
@@ -123,14 +124,15 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 
 ## Saves
 
-- Current save version is **15** (resume point); step 11B will migrate to **16** for the starmap.
+- Current save version is **16** (starmap seed + compact knowledge); v15 and older migrate on load.
   Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
-  migration from flat v1..v12 and split v13/v14 saves:
+  migration from flat v1..v12 and split v13/v14/v15 saves:
   `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
   `pw`, `mission`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
   station storage (`store`), base upgrades (`base`), contract board (`board`), current pocket id
   (`place`, replacing v13's `sector` placeholder), saved local flight state (`resume`) and galaxy
-  seed/discovery (`galaxy`, currently `null` until 11B). `portableProfile(save)`
+  seed/knowledge (`galaxy: { seed, knowledge }`). `sim/galaxy-session.js` installs the seed before
+  validation and recovers removed pockets safely to home. `portableProfile(save)`
   and `mergeProfile(save, profile)` extract and return a guest's character without touching world state.
 - **Recommended co-op rule** (open question 6/7 in VISION.md): a guest brings their own profile
   (ship, hold, credits) into the host's world; whatever they gain simply stays in their own
@@ -181,7 +183,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | Single mixed save | **Closed in step 9 (save v13, owner-playtested):** `state/profile.js` and `state/storage.js` split `{ profile, world }` and migrate v1..v12 saves. | — |
 | Sector geography in code | **Closed in step 10:** positions/features live in `PLACE_DEFS`; a generic loader builds per-place containers; launch/dock/scenery read the station and field features. | — |
 | Current sector not saved | **Closed in step 10 (save v14, owner-playtested):** `world.place` stores the current pocket id; v13 `sector` migrates. | — |
-| Two pockets, cycled with M | `data/places.js` `pocketsIn(systemId)`, `nextPocket()`; step 11A adds the resolved web and pure travel rules, step 11B wires the map screen and pocket chooser to replace M cycling. | 11B |
+| Two pockets, cycled with M | **Closed in 11B (built, owner playtest pending):** M opens `ui/starmap.js`; the selected system's full pocket list and direct-hop quotes replace cycling. `nextPocket()` remains only as a legacy helper for old tests/tools. | — |
 | One contract at a time, three types | `profile.mission`; `generateContract()` in `sim/contracts.js` | 13 |
 | `sanitizeProfile` names things by hand | **Closed in step 9:** `sanitizeWorld` walks `BASE_MODULES` (`data/station.js`) directly instead of naming base modules by hand. | — |
 
@@ -193,7 +195,7 @@ Keep today's folders. **Do not rename or reshuffle for its own sake.** Additions
 src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  places.js  terms.js  galaxy.js
 src/data/place-defs.js (later templates)
 src/data/campaign/   one file per mission (m01.js, m02.js, ...) + index.js listing the order
-src/sim/spawner.js  loot.js  places.js  galaxy.js  travel.js  instances.js  missions.js  step.js
+src/sim/spawner.js  loot.js  places.js  galaxy.js  galaxy-session.js  travel.js  instances.js  missions.js  step.js
 src/render/views.js           builds and updates a mesh per entity (7a: hostiles)
 src/ui/starmap.js  missionlog.js
 src/net/                      (multiplayer step only)

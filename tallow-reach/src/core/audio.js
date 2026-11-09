@@ -11,6 +11,7 @@ let ctx = null;
 let master, noiseBuf, engineGain, engineFilter, engineOsc, engineOscGain;
 let roarRaw, roarMid, roarCrackle, hum, humGain, droneGain, stationGain, ambGain;
 let muted = false;
+let suspended = false;   // pause/local chart owns this; a later click must not resume it
 let mechT = 0;   // next time a docking clank may play
 let alarmT = 0;  // next time the low-hull alarm may beep
 
@@ -18,14 +19,20 @@ export const isMuted = () => muted;
 
 export function initAudio() {
   if (ctx) {
-    const resumed = ctx.resume();
-    if (resumed && resumed.catch) resumed.catch(() => {});
+    if (!suspended) {
+      const resumed = ctx.resume();
+      if (resumed && resumed.catch) resumed.catch(() => {});
+    }
     return;
   }
   try {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
   } catch (e) {
     return; // no audio support: the game still runs silently
+  }
+  if (suspended) {
+    const paused = ctx.suspend();
+    if (paused && paused.catch) paused.catch(() => {});
   }
   master = ctx.createGain();
   master.gain.value = muted ? 0 : 0.5;
@@ -162,14 +169,15 @@ export function toggleMute() {
 }
 
 export function setAudioSuspended(v) {
+  suspended = !!v;
   if (!ctx) return;
-  if (v) ctx.suspend();
-  else ctx.resume();
+  const change = v ? ctx.suspend() : ctx.resume();
+  if (change && change.catch) change.catch(() => {});
 }
 
 /** Short pitch-swept blip. */
 export function tone(f1, f2, dur, vol, type) {
-  if (!ctx || muted) return;
+  if (!ctx || muted || suspended) return;
   const t = ctx.currentTime,
     osc = ctx.createOscillator(),
     g = ctx.createGain();
@@ -186,7 +194,7 @@ export function tone(f1, f2, dur, vol, type) {
 
 /** Filtered noise burst. */
 export function nz(dur, freq, vol) {
-  if (!ctx || muted) return;
+  if (!ctx || muted || suspended) return;
   const t = ctx.currentTime,
     src = ctx.createBufferSource(),
     filter = ctx.createBiquadFilter(),

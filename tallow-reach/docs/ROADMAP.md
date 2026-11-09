@@ -8,14 +8,13 @@
 
 **Current position:** **Milestone C is underway.** **Steps 0 to 10 are ticked** (step 10 owner
 playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). **Step 11 is in
-progress:** slice **11A** (organic starmap generation, one-peer gate links, author overrides and pure
-travel rules) is built and owner-playtest-passed on 2026-11-08; slice **11B** (M starmap screen, pocket chooser and save v16) is
-next. Saves are still version **15** (`{ v: 15, profile, world }` with `world.place` and `world.resume`);
-11A does not change the save format or live M-key behaviour. `npm test` is **279/279** (both 8b oracles
-unchanged) and `npm run build` succeeded. The owner's step-11 decisions are recorded in VISION.md:
-organic 2D web, free direct-hop travel, one gate pocket per neighbouring system, all map visible via a
-configurable policy, distance-tier guidance with content deciding actual danger, and modular
-move/delete/promote/generator edits.
+progress:** slice **11A** is built and owner-playtest-passed; slice **11B** (M starmap screen, pocket
+chooser, direct-hop warp and save v16) is **built and awaiting the owner playtest** in
+`TESTING-STARMAP.md`. Saves are now version **16** (`world.galaxy: { seed, knowledge }`; generated
+geography is rebuilt, not saved). M opens the clickable chart instead of warping immediately;
+single-player chart pauses, a future hosted world keeps running. `npm test` is **300/300** (both 8b
+oracles unchanged) and `npm run build` succeeded (650 KB). Step 11 remains unticked until the owner
+passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -59,7 +58,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [x] **2026-11-08: owner playtest passed.** |
 | 9 | Split profile/world save and close step-9 local-only items (save v13) | B | [x] **2026-11-08: owner playtest passed (Milestone B complete).** |
 | 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
-| 11 | System map, pocket chooser and starmap (100+ systems, save v16) | C | [ ] **11A built and owner playtest passed 2026-11-08; 11B pending** |
+| 11 | System map, pocket chooser and starmap (100+ systems, save v16) | C | [ ] **11A passed 2026-11-08; 11B built, owner playtest pending (`TESTING-STARMAP.md`)** |
 | 12 | Encounters, place templates, place memory (save v17) | C | [ ] |
 | 13 | Mission framework; contracts rebuilt on it (save v18) | D | [ ] |
 | 14 | Instanced places and wormholes | D | [ ] |
@@ -227,3 +226,8 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 - 2026-11-08: **Step 11A owner playtest passed.** No bugs were reported. Step 11 remains unticked
   until 11B is built and playtested. Packaged the full project as a backup, including source, tests,
   docs and the built HTML; dependencies/Git internals and browser-local saves are not included.
+- 2026-11-08: **Step 11B built** (clickable M starmap, pocket chooser, direct-hop warp, save v16).
+  `ui/starmap.js`, `sim/galaxy-session.js`, live place catalog, compact seed/knowledge saves,
+  removed-pocket recovery, map/input pause and release, and 21 new tests. `npm test` **300/300**;
+  build succeeded (650 KB). Root `TESTING-STARMAP.md` and old-code section C added. Step 11 stays
+  unticked until the owner playtest passes. Next after that: **step 12** questions and slice plan.

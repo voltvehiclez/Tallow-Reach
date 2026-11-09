@@ -30,6 +30,10 @@ export const GALAXY = {
   // Empty cost/requirements today. A future fuel item or gate activation can be
   // added as data plus one requirement handler, without rewriting the map.
   travel: { mode: "warp", cost: {}, requires: [] },
+
+  // Flat chart presentation only; radii are screen pixels at every zoom level.
+  // None of these numbers affect travel rules.
+  map: { padding: 90, nodeRadius: 5, homeRadius: 8, minZoom: 0.6, maxZoom: 5, zoomStep: 1.25 },
 };
 
 /**

@@ -6,10 +6,11 @@ Reads `state`, calls sim actions. No game rules here.
 |---|---|
 | `hud.js` | In-flight HUD (ignores hurt events for other players): bars, cargo and contract readout, lock ring, markers, and the beam progress bar with percentage (small, directly under the "left in rock" hint, shown only while the beam is cutting). Hints persist until the next sim tick so high-refresh screens do not flicker. |
 | `screens.js` | HTML for the intro and each outpost tab. Pure functions of state. `TABS` and `SCREENS` list the tabs. The Shop tab draws whatever `shopList(shopId)` returns from `data/shops.js` for the current station feature's `shop` — its rows, prices and "N left" — so a new row is a data edit. The Inventory tab shows the station's store above one ship's hold (arrows browse the ships; `viewedShip()`), each in a compact grid of clickable item tiles with m³. Click moves one item, Shift-click moves the whole stack, and right-click opens item actions such as Sell. Selling opens a small in-game box beside the selected item to enter a quantity, defaulting to the full stack. Each hold uses a fixed 5-by-5 slot field with a three-row viewport; both grids scroll independently, even when mostly empty. |
-| `menu.js` | The outpost panel: `ACTIONS` (one function per button, `data-a` name) and the click handler. |
+| `menu.js` | The outpost panel: `ACTIONS` (one function per button, `data-a` name) and the click handler. Boot/slot/import/reset prepare the saved seed before applying it; safe-recovery notices survive alongside load/import success messages. |
 | `picker.js` | Which Outfitting bay picker is open: `toggleModulePicker`, `togglePaintPicker`. Pure, one at a time, tested in `tests/picker.test.mjs`. |
 | `outfitting.js` | The Outfitting tab's 3D window: mounts the ship canvas into `#shipview` after every panel redraw, wires drag/zoom, draws one frame per game frame. |
-| `pause.js` | The pause overlay: PAUSED title, resume hint, sound on/off switch, Resume button. |
+| `pause.js` | The pause overlay: PAUSED title, resume hint, sound on/off switch, Resume button. P closes an open starmap first, then pauses; Esc only closes the chart. |
+| `starmap.js` | The M chart: visible system web, gate lines, current/visited/selected markers, inspect dropdown, zoom/pan/labels, and every pocket in the selected system with travel quotes. Emits `action { name: "travel", to }`; main calls `startWarp`, which rechecks the hop. Single-player chart pauses the frame gate and releases flight input; a future hosted world keeps running. |
 | `warpflash.js` | The warp vignette and white-out. Two gradients, updated from `state.warp` each frame. |
 
 Rules:

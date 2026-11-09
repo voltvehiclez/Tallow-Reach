@@ -19,6 +19,35 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 11B — clickable starmap, direct-hop travel and save v16 (owner playtest pending)
+
+Owner-approved second slice of step 11. **M now opens the starmap** instead of warping immediately;
+step 11 remains unticked until the owner passes `TESTING-STARMAP.md`.
+
+- Added `src/ui/starmap.js` (visible system web, gate lines, current/visited/selected markers, inspect
+  dropdown, zoom/pan/labels, selected system's full pocket list and travel quotes) and
+  `src/sim/galaxy-session.js` (seed resolution, live place catalog installation, compact-save
+  preparation and removed-pocket recovery). `src/data/places.js` lookups now read the live catalog;
+  `src/main.js`, `src/core/input.js`, `src/ui/menu.js`, HUD/intro text and styles wire the chart.
+- Travel buttons emit `action { name: "travel", to }`; `sim/sectors.js` requotes the direct link,
+  costs and requirements before running the unchanged warp sequence. Refusals emit `travel-denied`
+  and remain visible in the chart. Single-player chart pauses via `isSimulationPaused()` and releases
+  flight input/free cam/dock-lock-weapon hotkeys/audio; `state.multiplayer` keeps a future hosted world running.
+- **Save v16:** `world.galaxy` stores only `{ seed, knowledge }`, not generated geography. Boot, slots
+  and import prepare the saved seed before validation; v15 and older migrate. A removed/unknown pocket
+  returns the pilot to Meridian Station docked with the whole character/cargo intact and a recovery
+  notice. Failed preparation restores the previous catalog. Storage keys and `TR1:` are unchanged.
+- Added `tests/step11b-starmap.test.mjs` (21 tests) and `tests/saves/v15-pre11b.json` (pre-11B
+  regression fixture, not a new owner export). Updated intentional v16/pause expectations in the
+  existing save/resume/shop tests; legacy `nextPocket` tests remain as helper oracles. Added old-code
+  section C to `TEST-OLD-CODES.txt`, root `TESTING-STARMAP.md`, and updated HANDOFF/ROADMAP/VISION/
+  REFACTOR_PLAN/TARGET_ARCHITECTURE/ARCHITECTURE/HOW_TO_ADD and folder READMEs.
+- **Results:** `npm test` **300/300 pass** (both 8b oracles unchanged); `npm run build` succeeded
+  (650 KB, 665,730 bytes). Automated headless DOM/menu/input/audio checks passed; owner visual browser
+  playtest pending. No new dependencies. Rebuild with `npm run build`; test with `npm test`.
+
+---
+
 ## 2026-11-08: Step 11A owner playtest passed — full project backup
 
 - The owner reported the `TESTING-11A.md` playtest passed; no bugs were reported. Recorded the pass

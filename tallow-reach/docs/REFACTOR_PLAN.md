@@ -311,15 +311,16 @@ activated gates and supercruise are out of scope now.
   visibility and distance-tier guidance. **No live UI or save change in this slice.**
 - **11B — starmap, destination selection and saved worlds.** `ui/starmap.js` opened with **M** shows the
   system web, current location, gate connections and a selected system's pocket list; only legal direct
-  destinations can start the existing warp sequence. Save **v16** stores the galaxy seed and compact
-  discovery/visit records, not generated geography, with migration from v15 and a removed-pocket
-  fallback. Map interaction tests and a numbered playtest guide.
+  destinations can start the existing warp sequence. Single-player map pauses the simulation; a future
+  host keeps running. Save **v16** stores the galaxy seed and compact discovery/visit records, not
+  generated geography, with migration from v15 and a removed-pocket fallback to the safe home station
+  without losing character/cargo. Map/input/save tests and root-level `TESTING-STARMAP.md`.
 **Done when.** Tests prove generation is deterministic, has at least 100 systems, every system is
 reachable, and difficulty generally rises with distance from Meridian while authored content may stay
 easy. You can click through the map, choose among any number of pockets, and warp one direct hop at a
 time. Do not assume a system has exactly two pockets, and do not hard-code a two-level universe.
 **Save.** **Version 16**, migration from 15 (v15 is already used by the resume point).
-**Status:** [ ] **11A built and owner playtest passed 2026-11-08; 11B pending.**
+**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B built, owner playtest pending (`TESTING-STARMAP.md`).**
 
 ## Step 12: Encounters, place templates and place memory
 **Goal.** The open world's content is data you can pile onto.

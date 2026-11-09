@@ -59,6 +59,21 @@ export function syncControls() {
   c.steer.y = pointer.y;
   c.fire = !!keys.fire;
   c.sec = !!keys.sec;
+  // A local map is a modal control surface. In the future hosted case the sim
+  // may keep running, but opening the chart must not leave the host throttling.
+  if (state.ui.starmap) {
+    c.thrust = c.strafe = c.lift = c.roll = 0;
+    c.stop = c.brake = c.boost = c.fire = c.sec = false;
+    c.steer.x = c.steer.y = 0;
+  }
+}
+
+/** Release held flight input when a modal chart opens or the window loses focus. */
+export function clearControls() {
+  for (const code of Object.keys(keys)) keys[code] = 0;
+  pointer.x = pointer.y = 0;
+  syncControls();
+  emit("freecam", false);
 }
 
 // One-shot actions. Alt (free camera) is a hold action and is handled separately.
@@ -67,23 +82,25 @@ export const BINDINGS = {
   Digit1: "weapon:cannon",
   Digit2: "weapon:beam",
   KeyG: "dock",
-  KeyM: "warp",
+  KeyM: "starmap",
   KeyP: "pause",
   Escape: "pause",
 };
 
 export function installInput() {
   addEventListener("keydown", e => {
-    if (e.target.tagName === "TEXTAREA") return;
-    keys[e.code] = 1;
+    if (e.target.tagName === "TEXTAREA" || (["INPUT", "SELECT"].includes(e.target.tagName) && !["Escape", "KeyM"].includes(e.code))) return;
+    // The chart owns flight input while open. Leave Space/Enter alone so its
+    // focused buttons and system nodes still work as ordinary keyboard controls.
+    if (!state.ui.starmap) keys[e.code] = 1;
     syncControls();
-    if (e.code === "AltLeft") {
+    if (!state.ui.starmap && e.code === "AltLeft") {
       e.preventDefault();
       emit("freecam", true);
     }
-    if (e.code === "Space") e.preventDefault();
+    if (!state.ui.starmap && e.code === "Space") e.preventDefault();
     const name = BINDINGS[e.code];
-    if (name) emit("action", { name, repeat: e.repeat });
+    if (name) emit("action", { name, repeat: e.repeat, key: e.code });
   });
 
   addEventListener("keyup", e => {
@@ -95,13 +112,8 @@ export function installInput() {
     }
   });
 
-  addEventListener("blur", () => {
-    // Losing focus must not leave a control held: clear the held keys too, or a
-    // ship keeps thrusting while the player is in another window.
-    for (const code of Object.keys(keys)) keys[code] = 0;
-    syncControls();
-    emit("freecam", false);
-  });
+  // Losing focus must not leave a ship thrusting while the player is elsewhere.
+  addEventListener("blur", clearControls);
 
   addEventListener("mousemove", e => {
     pointer.x = (e.clientX / innerWidth - 0.5) * 2;
@@ -111,8 +123,8 @@ export function installInput() {
   });
 
   addEventListener("mousedown", e => {
-    if (e.button === 0) keys.fire = 1;
-    if (e.button === 2) keys.sec = 1;
+    if (!state.ui.starmap && e.button === 0) keys.fire = 1;
+    if (!state.ui.starmap && e.button === 2) keys.sec = 1;
     syncControls();
   });
   addEventListener("mouseup", e => {

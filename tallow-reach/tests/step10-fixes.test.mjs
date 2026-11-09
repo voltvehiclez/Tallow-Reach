@@ -193,6 +193,6 @@ test("fix 1: sound is started by a user gesture, not only by the start button", 
 
 test("fix 2: nothing simulates behind the start screen", () => {
   const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
-  assert.match(main, /if \(state\.paused \|\| state\.ui\.intro\)/);
+  assert.match(main, /if \(isSimulationPaused\(\)\)/);
   assert.match(main, /const playing = !state\.ui\.intro &&/);
 });

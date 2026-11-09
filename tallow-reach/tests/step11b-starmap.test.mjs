@@ -1,0 +1,593 @@
+// Step 11B: the live map, direct-hop warp, compact v16 saves and safe recovery.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { GALAXY, GALAXY_OVERRIDES } from "../src/data/galaxy.js";
+import { DEFAULT_PLACE, placeAt, pocketsIn, setPlaceCatalog } from "../src/data/places.js";
+import { SAVE_VERSION, newSave, sanitizeSave } from "../src/state/profile.js";
+import { state, applySave, currentSave, resetPlaces } from "../src/state/state.js";
+import { encodeSave, decodeSave, loadAutosave, saveAutosave, writeSlot, readSlot } from "../src/state/storage.js";
+import { generateGalaxy, recordSystemVisit } from "../src/sim/galaxy.js";
+import { prepareGalaxySave } from "../src/sim/galaxy-session.js";
+import { createPlayer } from "../src/sim/player.js";
+import { configurePlayer, resumeFromSave } from "../src/sim/session.js";
+import { loadPlace, stationAt, fieldAt } from "../src/sim/places.js";
+import { startWarp, updateWarp } from "../src/sim/sectors.js";
+import { TRAVEL_REQUIREMENTS } from "../src/sim/travel.js";
+import { isSimulationPaused } from "../src/sim/step.js";
+import { WARP_TIME } from "../src/data/sectors.js";
+import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
+import { visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices } from "../src/ui/starmap.js";
+import { loadHeadless } from "./headless.mjs";
+
+const V13 = JSON.parse(readFileSync(new URL("./saves/v13-real.json", import.meta.url), "utf8"));
+const V12 = JSON.parse(readFileSync(new URL("./saves/v12-real.json", import.meta.url), "utf8"));
+// Produced by the pre-11B (HEAD) sanitizer from the real v13 character plus a
+// v15 flying resume. No owner-exported v15 was available; this is a versioned
+// regression fixture, not a claimed new owner save.
+const V15 = JSON.parse(readFileSync(new URL("./saves/v15-pre11b.json", import.meta.url), "utf8"));
+
+function fresh(seed = GALAXY.seed) {
+  resetPlaces();
+  state.players.length = 0;
+  state.localPlayerIndex = 0;
+  state.ui.intro = false;
+  state.ui.starmap = null;
+  state.paused = false;
+  state.multiplayer = false;
+  state.freeCam.on = false;
+  const raw = newSave();
+  raw.world.galaxy.seed = seed;
+  const save = prepareGalaxySave(raw);
+  applySave(save);
+  const P = configurePlayer(createPlayer(), save.profile);
+  P.docked = false;
+  P.pos.set(0, 0, 300);
+  P.flight.spawnT = 1e9;
+  state.time = 0;
+  return P;
+}
+
+function oldV15() {
+  const s = newSave();
+  s.v = s.profile.v = s.world.v = 15;
+  s.world.galaxy = null;
+  s.world.place = "hollow";
+  s.world.resume = { pos: [120, 30, -450], quat: [0, 0, 0, 1], sh: 4, en: 2 };
+  s.profile.cr = 4850;
+  s.profile.holds.wasp.ferrite = 9;
+  return s;
+}
+
+test("11B: new saves are v16 and store only seed plus compact system knowledge", () => {
+  assert.equal(SAVE_VERSION, 16);
+  const s = newSave();
+  assert.deepEqual(Object.keys(s.world.galaxy).sort(), ["knowledge", "seed"]);
+  assert.equal(s.world.galaxy.seed, GALAXY.seed);
+  assert.deepEqual(s.world.galaxy.knowledge.meridian, { discovered: true, visited: true });
+  for (const forbidden of ["systems", "pockets", "links", "positions"]) assert.equal(forbidden in s.world.galaxy, false);
+  assert.deepEqual(sanitizeSave(s), s);
+});
+
+test("11B: a real-shaped v15 resume save migrates without losing character, cargo or spot", () => {
+  const old = oldV15();
+  const before = JSON.parse(JSON.stringify(old));
+  const s = prepareGalaxySave(old);
+  assert.equal(s.v, 16);
+  assert.equal(s.world.place, "hollow");
+  assert.deepEqual(s.world.resume, before.world.resume);
+  assert.equal(s.profile.cr, 4850);
+  assert.equal(s.profile.holds.wasp.ferrite, 9);
+  assert.equal(s.world.galaxy.seed, GALAXY.seed);
+  assert.deepEqual(old, before, "migration does not mutate the old save");
+  assert.deepEqual(decodeSave(encodeSave(s), prepareGalaxySave), s);
+});
+
+test("11B: v13 and v12 fixtures still migrate through the world-aware loader", () => {
+  for (const raw of [V13, V12]) {
+    const s = prepareGalaxySave(raw);
+    assert.equal(s.v, 16);
+    assert.equal(s.profile.cr, raw.profile?.cr ?? raw.cr);
+    assert.deepEqual(s.profile.holds, raw.profile?.holds ?? raw.holds);
+    assert.ok(state.galaxy.pocketsById[s.world.place]);
+  }
+});
+
+test("11B: a custom seed and generated-pocket resume regenerate exactly from compact data", () => {
+  fresh(42);
+  const expected = JSON.stringify(generateGalaxy(42));
+  state.worldState.place = "sys-010-hub";
+  state.player.place = "sys-010-hub";
+  state.place = "sys-010-hub";
+  state.player.pos.set(10, 20, 30);
+  recordSystemVisit(state.galaxy, state.worldState.galaxy.knowledge, "sys-010-hub");
+  const save = currentSave();
+  const compact = JSON.stringify(save.world.galaxy);
+  assert.ok(compact.length < 1000, "knowledge stays compact, not a geography dump");
+  const back = decodeSave(encodeSave(save), prepareGalaxySave);
+  assert.equal(back.world.place, "sys-010-hub");
+  assert.deepEqual(back.world.resume.pos, [10, 20, 30]);
+  assert.equal(JSON.stringify(state.galaxy), expected);
+});
+
+test("11B: a removed pocket returns the pilot to the home station with character and cargo intact", () => {
+  const saved = {
+    places: { ...GALAXY_OVERRIDES.places }, links: { ...GALAXY_OVERRIDES.links },
+    removedPlaces: [...GALAXY_OVERRIDES.removedPlaces], removedLinks: [...GALAXY_OVERRIDES.removedLinks],
+  };
+  try {
+    GALAXY_OVERRIDES.places["test-annex"] = {
+      kind: "pocket", parent: "meridian", def: "empty", n: "Test Annex", d: "Temporary test pocket.",
+      enter: { kind: "warp", pos: [0, 0, 300] }, leave: { kind: "warp" },
+    };
+    GALAXY_OVERRIDES.links["test-annex-link"] = { kind: "internal", a: "reach", b: "test-annex", mode: "warp", cost: {}, requires: [] };
+    fresh();
+    state.profile.cr = 1234;
+    state.profile.holds.wasp.ferrite = 7;
+    state.worldState.place = "test-annex";
+    state.worldState.resume = { pos: [1, 2, 3], quat: [0, 0, 0, 1], sh: 2, en: 1 };
+    const profileBefore = JSON.parse(JSON.stringify(currentSave().profile));
+    const code = encodeSave(currentSave());
+    GALAXY_OVERRIDES.removedPlaces.push("test-annex");
+    const back = decodeSave(code, prepareGalaxySave);
+    assert.equal(back.world.place, DEFAULT_PLACE);
+    assert.equal(back.world.resume, null);
+    assert.deepEqual(back.profile, profileBefore, "the whole character survives");
+    assert.deepEqual(state.galaxyRecovery, { from: "test-annex", to: "reach" });
+    applySave(back);
+    resumeFromSave(state.player);
+    assert.equal(state.player.docked, true, "the normal loader docks at the safe home station");
+    assert.deepEqual(state.player.pos.toArray(), stationAt(DEFAULT_PLACE).pos);
+    assert.equal(placeAt("test-annex").id, "reach", "live lookup also falls back safely");
+  } finally {
+    Object.assign(GALAXY_OVERRIDES, saved);
+    fresh();
+  }
+});
+
+test("11B: autosave, slots and TR1 codes keep their keys/prefix and use the same seed preparation", () => {
+  const mem = new Map();
+  const previous = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k),
+  };
+  try {
+    fresh(77);
+    state.worldState.place = "hollow";
+    const save = currentSave();
+    assert.equal(saveAutosave(save), true);
+    assert.equal(writeSlot(2, save), true);
+    assert.ok(mem.has("tr1") && mem.has("tr_s2"));
+    assert.equal(loadAutosave(prepareGalaxySave).world.galaxy.seed, 77);
+    assert.equal(prepareGalaxySave(readSlot(2)).world.galaxy.seed, 77);
+    const code = encodeSave(save);
+    assert.ok(code.startsWith("TR1:"));
+    assert.equal(decodeSave(code, prepareGalaxySave).world.galaxy.seed, 77);
+    assert.equal(JSON.parse(mem.get("tr1")).v, 16);
+  } finally {
+    if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
+  }
+});
+
+test("11B: moving a system is still a data edit in the live place catalog", () => {
+  const previous = GALAXY_OVERRIDES.places["sys-004"];
+  try {
+    GALAXY_OVERRIDES.places["sys-004"] = { pos: [180, -260] };
+    fresh();
+    assert.deepEqual(placeAt("sys-004").pos, [180, -260]);
+    assert.ok(pocketsIn("sys-004").includes("sys-004-hub"));
+    assert.ok(chartBounds(visibleSystems(state.galaxy)).every(Number.isFinite));
+  } finally {
+    if (previous === undefined) delete GALAXY_OVERRIDES.places["sys-004"]; else GALAXY_OVERRIDES.places["sys-004"] = previous;
+    fresh();
+  }
+});
+
+test("11B: visibility policy controls chart nodes and edges; pocket quotes explain non-direct hops", () => {
+  fresh();
+  const world = state.galaxy;
+  assert.equal(visibleSystems(world).length, 121);
+  assert.ok(systemEdges(world).length > 0);
+  const choices = pocketChoices(world, "reach", "sys-001");
+  assert.ok(choices.length >= 2);
+  assert.ok(choices.every(c => !c.canWarp && c.status.includes("No direct route")));
+  world.visibility.mode = "discovered";
+  assert.deepEqual(visibleSystems(world, { meridian: { discovered: true } }).map(s => s.id), ["meridian"]);
+  assert.deepEqual(systemEdges(world, { meridian: { discovered: true } }), []);
+  const home = pocketChoices(world, "reach", "meridian");
+  assert.equal(home.find(c => c.pocket.id === "hollow").canWarp, true);
+  assert.equal(home.find(c => c.pocket.id === "reach").current, true);
+  assert.ok(home.filter(c => c.pocket.role === "gate").every(c => c.canWarp && c.peer));
+  world.visibility.mode = "all";
+  const box = chartViewBox(world, { zoom: 2, pan: [10, -5] });
+  assert.ok(box.every(Number.isFinite) && box[2] > 0 && box[3] > 0);
+  assert.equal(chartPixelScale([0, 0, 2000, 1000], 800, 600), 2.5);
+});
+
+test("11B: M is a map action and an open map releases flight controls", () => {
+  const P = fresh();
+  assert.equal(BINDINGS.KeyM, "starmap");
+  keys.KeyW = 1; keys.fire = 1; pointer.x = 0.8;
+  state.ui.starmap = { selected: "meridian", zoom: 1, pan: [0, 0] };
+  syncControls();
+  assert.equal(P.controls.thrust, 0);
+  assert.equal(P.controls.fire, false);
+  assert.deepEqual(P.controls.steer, { x: 0, y: 0 });
+  clearControls();
+  state.ui.starmap = null;
+  syncControls();
+  assert.equal(P.controls.thrust, 0);
+});
+
+test("11B: single-player chart pauses the frame gate; a future hosted world keeps running", () => {
+  fresh();
+  state.ui.starmap = { selected: "meridian" };
+  assert.equal(isSimulationPaused(), true);
+  state.multiplayer = true;
+  assert.equal(isSimulationPaused(), false);
+  state.paused = true;
+  assert.equal(isSimulationPaused(), true);
+  state.paused = false;
+  state.multiplayer = false;
+  state.ui.starmap = null;
+});
+
+test("11B: warp refuses non-direct/closed/unknown-requirement routes and never charges credits", () => {
+  const P = fresh();
+  const credits = state.profile.cr;
+  assert.equal(startWarp(P, "sys-001-hub"), false);
+  assert.equal(P.warp, null);
+  assert.match(state.hud.msg, /No direct route/);
+  const link = state.galaxy.links["reach-hollow"];
+  link.enabled = false;
+  assert.equal(startWarp(P, "hollow"), false);
+  assert.match(state.hud.msg, /closed/);
+  link.enabled = true;
+  link.requires = [{ type: "not-registered" }];
+  assert.equal(startWarp(P, "hollow"), false);
+  link.requires = [];
+  link.cost = { fuel: 1 };
+  assert.equal(startWarp(P, "hollow"), false);
+  assert.match(state.hud.msg, /cost/);
+  link.cost = {};
+  assert.equal(state.profile.cr, credits);
+});
+
+test("11B: a data requirement can use pilot context without changing the map", () => {
+  const P = fresh();
+  const link = state.galaxy.links["reach-hollow"];
+  TRAVEL_REQUIREMENTS["test-credits"] = ({ req, context }) => context.profile.cr >= req.min || "Not enough credits.";
+  try {
+    link.requires = [{ type: "test-credits", min: state.profile.cr + 1 }];
+    assert.equal(startWarp(P, "hollow"), false);
+    assert.equal(state.hud.msg, "Not enough credits.");
+    link.requires = [{ type: "test-credits", min: 1 }];
+    assert.equal(startWarp(P, "hollow"), true);
+  } finally {
+    link.requires = [];
+    delete TRAVEL_REQUIREMENTS["test-credits"];
+  }
+});
+
+test("11B: the existing warp sequence crosses one gate to its exact reciprocal peer", () => {
+  const P = fresh();
+  assert.equal(startWarp(P, "hollow"), true);
+  updateWarp(WARP_TIME);
+  assert.equal(P.place, "hollow");
+  assert.equal(stationAt("hollow"), null);
+  const internal = Object.values(state.galaxy.links).find(l => l.kind === "internal" &&
+    (l.a === "hollow" || l.b === "hollow") && state.galaxy.pocketsById[l.a === "hollow" ? l.b : l.a].role === "gate");
+  assert.equal(internal, undefined, "Kestrel Hollow is not a gate or internal junction");
+  assert.equal(startWarp(P, "meridian-gate-sys-001"), false);
+  assert.equal(startWarp(P, "reach"), true);
+  updateWarp(WARP_TIME);
+  const gate = "meridian-gate-sys-001";
+  assert.equal(startWarp(P, gate), true);
+  updateWarp(WARP_TIME);
+  assert.equal(P.place, gate);
+  const external = Object.values(state.galaxy.links).find(l => l.kind === "gate" && (l.a === gate || l.b === gate));
+  const peer = external.a === gate ? external.b : external.a;
+  assert.equal(startWarp(P, peer), true);
+  updateWarp(WARP_TIME);
+  assert.equal(P.place, peer);
+  assert.equal(placeAt(peer).parent, "sys-001");
+  assert.deepEqual(state.worldState.galaxy.knowledge["sys-001"], { discovered: true, visited: true });
+  const empty = loadPlace(peer);
+  for (const list of Object.values(empty.entities)) assert.deepEqual(list, []);
+  assert.equal(stationAt(peer), null);
+  assert.equal(fieldAt(peer), null);
+  assert.equal(currentSave().world.place, peer);
+});
+
+// The real UI module against a tiny DOM. Core audio/input are the usual headless
+// stand-ins; clicks go through its actual delegated handler and event bus.
+function makeEl(tag = "div") {
+  return {
+    tag, id: "", hidden: false, innerHTML: "", dataset: {}, style: {}, handlers: {}, attrs: {},
+    addEventListener(type, fn) { this.handlers[type] = fn; },
+    setAttribute(k, v) { this.attrs[k] = v; },
+    appendChild() {}, append() {}, remove() {}, querySelector() { return null; },
+    querySelectorAll() { return []; }, focus() {}, select() {}, closest() { return null; },
+    classList: { toggle() {}, add() {}, remove() {} },
+    clientWidth: 1200, clientHeight: 800, scrollLeft: 0, scrollTop: 0,
+    setPointerCapture() {}, getBoundingClientRect() { return { width: 800, height: 600 }; },
+  };
+}
+const domEls = new Map();
+globalThis.document = {
+  createElement: makeEl,
+  getElementById: id => { if (!domEls.has(id)) domEls.set(id, makeEl(id)); return domEls.get(id); },
+  body: { appendChild() {} },
+};
+const ui = await loadHeadless("src/ui/starmap.js", {
+  state: "src/state/state.js", applySave: "src/state/state.js", newSave: "src/state/profile.js",
+  prepareGalaxySave: "src/sim/galaxy-session.js", createPlayer: "src/sim/player.js",
+  configurePlayer: "src/sim/session.js", on: "src/util/events.js", emit: "src/util/events.js",
+});
+let mapRoot = null;
+
+test("11B: real map opens, inspects any system, zooms, emits a legal travel action and closes", () => {
+  const save = ui.prepareGalaxySave(ui.newSave());
+  ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach";
+  ui.state.ui.intro = false; ui.state.ui.starmap = null; ui.state.paused = false; ui.state.multiplayer = false;
+  // Capture the real root that setupStarmap appends to the stub body.
+  const appended = [];
+  const oldAppend = document.body.appendChild;
+  document.body.appendChild = el => appended.push(el);
+  ui.setupStarmap();
+  document.body.appendChild = oldAppend;
+  const map = appended[0];
+  mapRoot = map;
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(map.hidden, false);
+  assert.equal((map.innerHTML.match(/data-system="/g) || []).length, 121);
+  assert.ok(map.innerHTML.includes("Warp here · Free"));
+  const click = dataset => map.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+  click({ system: "sys-010" });
+  assert.equal(ui.state.ui.starmap.selected, "sys-010");
+  assert.ok(map.innerHTML.includes("Unavailable"));
+  assert.ok(map.innerHTML.includes("No direct route"));
+  click({ action: "zoom-in" });
+  assert.ok(ui.state.ui.starmap.zoom > 1);
+  click({ system: "meridian" });
+  const actions = [];
+  ui.on("action", action => actions.push(action));
+  click({ action: "travel", to: "hollow" });
+  assert.deepEqual(actions.at(-1), { name: "travel", to: "hollow", repeat: false });
+  click({ action: "close" });
+  assert.equal(map.hidden, true);
+  assert.equal(ui.state.ui.starmap, null);
+  assert.equal(ui.openStarmap(), true);
+  let prevented = false;
+  map.handlers.keydown({ key: "Enter", target: { closest: () => ({ dataset: { system: "sys-002" } }) },
+    preventDefault() { prevented = true; }, stopPropagation() {} });
+  assert.equal(prevented, true);
+  assert.equal(ui.state.ui.starmap.selected, "sys-002");
+  ui.closeStarmap();
+});
+
+test("11B: composition root wires map/travel/pause and every save replacement prepares its seed", () => {
+  const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const menu = readFileSync(new URL("../src/ui/menu.js", import.meta.url), "utf8");
+  assert.match(main, /loadAutosave\(prepareGalaxySave\)/);
+  assert.match(main, /case "starmap":/);
+  assert.match(main, /startWarp\(localPlayer\(\), nameTo\)/);
+  assert.match(main, /if \(isSimulationPaused\(\)\)/);
+  assert.match(main, /const playing = .*!isStarmapOpen\(\)/);
+  assert.match(menu, /prepareGalaxySave\(raw\)/);
+  assert.match(menu, /decodeSave\(text, prepareGalaxySave\)/);
+  assert.match(menu, /prepareGalaxySave\(newSave\(\)\)/);
+});
+
+test("11B: the pre-11B v15 fixture resumes flying with its character and cargo intact", () => {
+  fresh();
+  const save = prepareGalaxySave(V15);
+  assert.equal(V15.v, 15);
+  assert.equal(save.v, 16);
+  assert.deepEqual(save.profile, { ...V15.profile, v: 16 });
+  assert.deepEqual(save.world.base, V15.world.base);
+  assert.deepEqual(save.world.store, V15.world.store);
+  assert.deepEqual(save.world.board, V15.world.board);
+  assert.deepEqual(save.world.resume, V15.world.resume);
+  assert.equal(save.world.place, "hollow");
+  applySave(save);
+  resumeFromSave(state.player);
+  assert.equal(state.player.docked, false);
+  assert.deepEqual(state.player.pos.toArray(), V15.world.resume.pos);
+  assert.equal(state.profile.cr, 4850);
+  assert.equal(state.profile.holds.wasp.ferrite, 14);
+});
+
+test("11B: an invalid save cannot leave a candidate galaxy installed behind the old world", () => {
+  fresh(42);
+  const before = state.galaxy;
+  const bad = { v: 16, profile: { v: 16, ships: "not an array" }, world: { galaxy: { seed: 999 } } };
+  assert.throws(() => prepareGalaxySave(bad), /not a Tallow Reach save/);
+  assert.equal(state.galaxy, before);
+  assert.equal(state.galaxyRecovery, null);
+  assert.deepEqual(placeAt("sys-001").pos, before.systemsById["sys-001"].pos);
+});
+
+test("11B: real map pans by dragging and shows a late travel refusal inside the chart", () => {
+  assert.equal(ui.openStarmap(), true);
+  const svg = { setPointerCapture() {} };
+  mapRoot.handlers.pointerdown({ target: { closest: sel => sel === "svg.sm-chart" ? svg : null },
+    clientX: 100, clientY: 100, pointerId: 1 });
+  mapRoot.handlers.pointermove({ clientX: 140, clientY: 120 });
+  const panned = [...ui.state.ui.starmap.pan];
+  assert.notDeepEqual(panned, [0, 0]);
+  mapRoot.handlers.pointerup({});
+  mapRoot.handlers.pointermove({ clientX: 300, clientY: 300 });
+  assert.deepEqual(ui.state.ui.starmap.pan, panned);
+  ui.emit("travel-denied", { reason: "Gate is dormant." });
+  assert.equal(ui.state.ui.starmap.notice, "Gate is dormant.");
+  assert.ok(mapRoot.innerHTML.includes("Gate is dormant."));
+  ui.closeStarmap();
+});
+
+// The real menu module, with its own bundled state, exercises the notices a
+// player actually sees after intro/slot/import recovery.
+const menuStorage = new Map();
+globalThis.localStorage = {
+  getItem: k => menuStorage.get(k) ?? null,
+  setItem: (k, v) => menuStorage.set(k, String(v)),
+  removeItem: k => menuStorage.delete(k),
+};
+const menu = await loadHeadless("src/ui/menu.js", {
+  state: "src/state/state.js", currentSave: "src/state/state.js", applySave: "src/state/state.js",
+  resetPlaces: "src/state/state.js", newSave: "src/state/profile.js",
+  prepareGalaxySave: "src/sim/galaxy-session.js", createPlayer: "src/sim/player.js",
+  configurePlayer: "src/sim/session.js", resumeFromSave: "src/sim/session.js",
+  encodeSave: "src/state/storage.js", placeAt: "src/data/places.js",
+});
+const menuPanel = document.getElementById("panel");
+function menuClick(a, b) {
+  const btn = { dataset: { a, b }, disabled: false };
+  menuPanel.handlers.click({ target: { closest: sel => sel === "button[data-a]" ? btn : null }, shiftKey: false });
+}
+function menuBoot() {
+  menu.resetPlaces();
+  menu.state.players.length = 0;
+  menu.state.localPlayerIndex = 0;
+  const save = menu.prepareGalaxySave(menu.newSave());
+  menu.applySave(save);
+  menu.configurePlayer(menu.createPlayer(), save.profile);
+  menu.state.ui.intro = true;
+  menu.state.ui.tab = "s";
+  menu.state.ui.toast = "";
+  return save;
+}
+menuBoot();
+menu.setupMenu();
+const legacyCode = raw => "TR1:" + Buffer.from(JSON.stringify(raw), "utf8").toString("base64");
+
+test("11B: intro, slot and import recovery notices survive; a bad import leaves the world alone", () => {
+  const raw = menu.newSave();
+  raw.v = raw.profile.v = raw.world.v = 15;
+  raw.world.galaxy = null;
+  raw.world.place = "removed-test-pocket";
+  raw.world.resume = { pos: [1, 2, 3], quat: [0, 0, 0, 1], sh: 2, en: 1 };
+  raw.profile.cr = 1234;
+  raw.profile.holds.wasp.ferrite = 7;
+
+  menu.applySave(menu.prepareGalaxySave(raw));
+  menu.state.ui.intro = true;
+  menuClick("intro");
+  assert.match(menu.state.ui.toast, /character and cargo are safe/);
+  assert.equal(menu.state.galaxyRecovery, null);
+  assert.equal(menu.state.player.docked, true);
+
+  menuStorage.set("tr_s1", JSON.stringify(raw));
+  menu.state.ui.intro = false;
+  menu.state.profile.cr = 1;
+  menuClick("ld", "1");
+  assert.match(menu.state.ui.toast, /^Loaded slot 1/);
+  assert.match(menu.state.ui.toast, /character and cargo are safe/);
+  assert.equal(menu.state.profile.cr, 1234);
+
+  menu.state.profile.cr = 2;
+  document.getElementById("xt").value = legacyCode(raw);
+  menuClick("im");
+  assert.match(menu.state.ui.toast, /^Save imported\./);
+  assert.match(menu.state.ui.toast, /character and cargo are safe/);
+  assert.equal(menu.state.profile.cr, 1234);
+
+  const galaxyBefore = menu.state.galaxy;
+  const bad = { v: 16, profile: { v: 16 }, world: { galaxy: { seed: 999 } } };
+  document.getElementById("xt").value = legacyCode(bad);
+  menuClick("im");
+  assert.equal(menu.state.ui.toast, "That code is not a valid save.");
+  assert.equal(menu.state.profile.cr, 1234);
+  assert.equal(menu.state.galaxy, galaxyBefore);
+  assert.deepEqual(menu.placeAt("sys-001").pos, galaxyBefore.systemsById["sys-001"].pos);
+});
+
+// Real audio module with a tiny Web Audio stand-in: a later pointer/key gesture
+// calls initAudio again and must not undo the chart's requested suspension.
+const audioContexts = [];
+function audioParam() {
+  return { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {}, linearRampToValueAtTime() {}, setTargetAtTime() {} };
+}
+function audioNode(extra = {}) { return { connect() { return this; }, ...extra }; }
+class FakeAudioContext {
+  constructor() { this.currentTime = 0; this.sampleRate = 8000; this.destination = {}; this.resumes = 0; this.suspends = 0; this.oscillators = 0; audioContexts.push(this); }
+  createGain() { return audioNode({ gain: audioParam() }); }
+  createBuffer(_channels, length) { return { getChannelData: () => new Float32Array(length) }; }
+  createBufferSource() { return audioNode({ start() {}, stop() {}, buffer: null, loop: false }); }
+  createBiquadFilter() { return audioNode({ frequency: audioParam(), Q: audioParam(), type: "" }); }
+  createOscillator() { this.oscillators++; return audioNode({ frequency: audioParam(), start() {}, stop() {}, type: "" }); }
+  createWaveShaper() { return audioNode({ curve: null }); }
+  resume() { this.resumes++; return Promise.resolve(); }
+  suspend() { this.suspends++; return Promise.resolve(); }
+}
+globalThis.window = { AudioContext: FakeAudioContext };
+const audio = await loadHeadless("src/core/audio.js", {}, { keep: ["audio.js"] });
+
+test("11B: audio stays suspended across later user-gesture init calls until the chart closes", () => {
+  audio.setAudioSuspended(true);
+  audio.initAudio();
+  const ctx = audioContexts.at(-1);
+  assert.equal(ctx.suspends, 1);
+  assert.equal(ctx.resumes, 0);
+  audio.initAudio();
+  assert.equal(ctx.resumes, 0);
+  audio.setAudioSuspended(false);
+  assert.equal(ctx.resumes, 1);
+  audio.setAudioSuspended(true);
+  audio.initAudio();
+  assert.equal(ctx.resumes, 1);
+  const oscillators = ctx.oscillators;
+  audio.uiSound("click");
+  assert.equal(ctx.oscillators, oscillators, "suspended UI clicks do not queue a burst for resume");
+  audio.warpCharge(1);
+  assert.ok(ctx.oscillators > oscillators, "the warp charge still schedules across the map-close resume");
+  audio.setAudioSuspended(false);
+  assert.equal(ctx.resumes, 2);
+});
+
+// Real input module against captured window listeners.
+const windowHandlers = {};
+globalThis.addEventListener = (type, fn) => { windowHandlers[type] = fn; };
+globalThis.innerWidth = 1000;
+globalThis.innerHeight = 800;
+const input = await loadHeadless("src/core/input.js", {
+  state: "src/state/state.js", localPlayer: "src/state/state.js",
+  createPlayer: "src/sim/player.js", configurePlayer: "src/sim/session.js",
+  on: "src/util/events.js",
+}, { keep: ["input.js"] });
+input.state.players.length = 0;
+input.state.localPlayerIndex = 0;
+const inputPlayer = input.configurePlayer(input.createPlayer(), input.state.profile);
+input.installInput();
+function key(code, tagName = "BUTTON") {
+  let prevented = 0;
+  windowHandlers.keydown({ code, repeat: false, target: { tagName }, preventDefault() { prevented++; } });
+  return prevented;
+}
+
+test("11B: an open chart leaves Space/Alt to the UI, releases flight keys and still toggles with M", () => {
+  const actions = [], freecam = [];
+  input.on("action", a => actions.push(a));
+  input.on("freecam", v => freecam.push(v));
+  input.state.ui.starmap = { selected: "meridian" };
+  key("KeyW");
+  assert.equal(input.keys.KeyW, undefined);
+  assert.equal(inputPlayer.controls.thrust, 0);
+  assert.equal(key("Space"), 0, "Space can activate a focused map button");
+  key("AltLeft");
+  assert.deepEqual(freecam, []);
+  key("KeyM", "SELECT");
+  assert.equal(actions.at(-1).name, "starmap");
+  input.state.ui.starmap = null;
+  key("KeyW");
+  assert.equal(input.keys.KeyW, 1);
+  assert.equal(inputPlayer.controls.thrust, 1);
+  assert.equal(key("Space"), 1);
+  key("AltLeft");
+  assert.equal(freecam.at(-1), true);
+  windowHandlers.keyup({ code: "KeyW", preventDefault() {} });
+  assert.equal(inputPlayer.controls.thrust, 0);
+  input.clearControls();
+});
