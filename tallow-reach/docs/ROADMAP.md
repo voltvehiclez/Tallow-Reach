@@ -9,15 +9,15 @@
 **Current position:** **Milestone C is underway.** **Steps 0 to 10 are ticked** (step 10 owner
 playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). **Step 11 is in
 progress:** slice **11A** is built and owner-playtest-passed; slice **11B** (M starmap screen, zoomed
-system pocket maps, free local warp, named star/black-hole cores, right-click travel, compact overview
+system pocket maps, free local warp, permanent star/black-hole labels, clickable gate neighbours, zoom-scaled pan/cores, click/right-click travel, compact overview
 and save v16) is **built and awaiting the owner playtest** in `TESTING-STARMAP.md`. Saves are version
 **16** (`world.galaxy: { seed, knowledge }`; generated geography, cores and pocket layout are rebuilt,
 not saved). M opens the clickable chart instead of
-warping immediately; zooming into a system dot opens its pocket map, and right-clicking a legal pocket
-offers **Warp to**. Local hops are free by default; a data `intraSystem: "links"` opt-out restores internal
+warping immediately; zooming into a system dot opens its pocket map, and clicking/right-clicking a legal
+pocket or gate-neighbour label offers **Warp to**. Local hops are free by default; a data `intraSystem: "links"` opt-out restores internal
 routes for future instances. Galaxy gate routes stay explicit. Single-player chart pauses, a future hosted
-world keeps running. `npm test` is **310/310** (both 8b oracles unchanged) and `npm run build` succeeded
-(666 KB). Step 11 remains unticked until the owner passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
+world keeps running. `npm test` is **312/312** (both 8b oracles unchanged) and `npm run build` succeeded
+(669 KB). Step 11 remains unticked until the owner passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -61,7 +61,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [x] **2026-11-08: owner playtest passed.** |
 | 9 | Split profile/world save and close step-9 local-only items (save v13) | B | [x] **2026-11-08: owner playtest passed (Milestone B complete).** |
 | 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
-| 11 | System map, pocket chooser and starmap (100+ systems, save v16) | C | [ ] **11A passed 2026-11-08; 11B + zoom/right-click and free-local-warp/central-body follow-ups built, owner playtest pending (`TESTING-STARMAP.md`)** |
+| 11 | System map, pocket chooser and starmap (100+ systems, save v16) | C | [ ] **11A passed 2026-11-08; 11B + zoom/right-click, free-local-warp/central-body and label/pan/gate-click refinements built, owner playtest pending (`TESTING-STARMAP.md`)** |
 | 12 | Encounters, place templates, place memory (save v17) | C | [ ] |
 | 13 | Mission framework; contracts rebuilt on it (save v18) | D | [ ] |
 | 14 | Instanced places and wormholes | D | [ ] |
@@ -243,7 +243,13 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 - 2026-11-08: **Step 11B system-map follow-up built** (owner's three changes). Open-world systems now
   allow free warp to any local pocket; only their sub-system charts omit internal blue lines, while the
   galaxy keeps explicit gate routes. A per-system `intraSystem: "links"` opt-out is ready for future
-  route-only instances. Pockets orbit a seeded visual-only star (95%) / black hole (5%); hover/focus shows
-  the system's proper name, and the core cannot be warped to. Gate peers, compact name-only rows, warp
+  route-only instances. Pockets orbit a seeded visual-only star (95%) / black hole (5%); the core keeps a
+  permanent proper-name/type label and cannot be warped to. Gate peers, compact name-only rows, warp
   rechecks and save v16 are unchanged. `npm test` **310/310**; build succeeded (666 KB). Step 11 still
   awaits the owner's `TESTING-STARMAP.md` pass.
+- 2026-11-08: **Step 11B starmap refinements built** (owner's six changes). Removed native hover tooltips
+  from pockets/central bodies while keeping click popups; core labels are permanent two-line name/type
+  labels. Galaxy pan keeps the previous max-zoom feel and pans farther on screen when zoomed out; system
+  cores scale with zoom. Gate pocket names avoid orange stubs/peer labels, and neighbouring-system labels
+  open the same reachability/warp popup for the reciprocal gate pocket. `npm test` **312/312**; build
+  succeeded (669 KB). Save v16 and travel rechecks unchanged; owner playtest still pending.

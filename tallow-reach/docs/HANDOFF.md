@@ -45,11 +45,15 @@ ones before changing anything, and update them when decisions or state change.
   into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) opens a derived
   **system pocket map** with a short zoom transition. Ordinary pockets orbit a central visual-only
   **star (95%) / black hole (5%)**; gates sit farther out with dashed stubs toward the exact neighbouring
-  system. Hover/focus the core to reveal its proper name (Meridian System → **Meridian**); it is not a
-  pocket or warp target. `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
+  system. The core keeps a permanent two-line proper-name/type label (Meridian System → **Meridian** /
+  **(Star)**); native hover tooltips are gone from pockets/core, while click popups remain. Core radii are
+  map units so the graphic scales with system zoom; pocket dots/labels stay screen-sized. Gate pocket names
+  sit inward clear of orange stubs, and neighbouring-system labels are clickable travel targets quoting the
+  reciprocal gate pocket. Galaxy pan keeps its max-zoom feel and scales inversely with zoom on screen.
+  `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
   win. Open-world systems allow **free warp to any local pocket** and omit internal blue lines. The data
   opt-out `intraSystem: "links"` restores internal routes/lines for future route-only instances; the main
-  galaxy always keeps explicit gate routes. **Right-click a pocket** (or keyboard-activate its dot) opens
+  galaxy always keeps explicit gate routes. **Click/right-click a pocket or gate-neighbour label** (or keyboard-activate it) opens
   **Warp to …** only for a legal hop and emits the same named travel action. `main.js` calls `startWarp`,
   which requotes policy/link/cost/requirements and runs the unchanged warp animation.
   Refusals emit `travel-denied` and stay visible in the chart. The right panel is a compact overview
@@ -65,8 +69,8 @@ ones before changing anything, and update them when decisions or state change.
   record current visit. A removed/unknown pocket recovers to `DEFAULT_PLACE` (`reach`) with
   `resume:null`, preserving the whole profile/cargo; intro/slot/import show a safe-recovery notice.
   A failed prepare restores the previous catalog. v15 and older saves/codes still load.
-- **Results:** `npm test` **310/310 pass** (11A file now 23 tests, 11B map/save file 27; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **666 KB** (682,414 bytes). Automated
+- **Results:** `npm test` **312/312 pass** (11A file now 23 tests, 11B map/save file 29; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **669 KB** (685,046 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry retains **121 systems / 462 pockets / 511 links** with identical ids/positions/links;
@@ -87,8 +91,9 @@ ones before changing anything, and update them when decisions or state change.
 ## What to do next
 
 1. **Owner plays `TESTING-STARMAP.md`** (project root). It covers opening/closing/pause, input release,
-   inspect/zoom/pan, central-body hover/focus names and non-warpability, free local hops, unchanged galaxy
-   gate routes, right-click **Warp to** travel through gates, the compact right panel, empty generated
+   inspect/zoom/pan, permanent core labels and non-warpability, zoom-scaled galaxy pan/core graphics,
+   clear gate labels, clickable gate neighbours, free local hops, unchanged galaxy gate routes,
+   click/right-click **Warp to** travel through gates, the compact right panel, empty generated
    pockets, save/slot/export resume, old codes A/B/C, recovery notices and regression checks. Old code C is the pre-11B v15 regression fixture in
    `TEST-OLD-CODES.txt`.
 2. If the owner reports **pass**, tick step 11 in `docs/ROADMAP.md` and `docs/REFACTOR_PLAN.md`, mark

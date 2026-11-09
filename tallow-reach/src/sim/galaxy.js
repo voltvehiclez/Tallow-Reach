@@ -75,6 +75,7 @@ export function validateTuning(tuning) {
     throw new Error("galaxy.map.systemEntryZoom must sit inside the galaxy zoom range");
   }
   if (!(map.transitionMs >= 0)) throw new Error("galaxy.map.transitionMs must be zero or more");
+  if (!(map.panSpeed > 0)) throw new Error("galaxy.map.panSpeed must be positive");
   for (const key of ["padding", "pocketRadius", "ordinaryRadius", "gateRadius", "exitLength", "minSeparation"]) {
     if (!(sub[key] > 0)) throw new Error(`galaxy.systemMap.${key} must be positive`);
   }
@@ -84,7 +85,7 @@ export function validateTuning(tuning) {
   if (!(sub.blackHoleChance >= 0 && sub.blackHoleChance <= 1)) {
     throw new Error("galaxy.systemMap.blackHoleChance must be between 0 and 1");
   }
-  for (const key of ["coreRadius", "blackHoleRadius", "coreLabelOffset"]) {
+  for (const key of ["coreRadius", "blackHoleRadius", "coreLabelOffset", "coreLabelLineHeight", "labelGap"]) {
     if (!(sub[key] > 0)) throw new Error(`galaxy.systemMap.${key} must be positive`);
   }
   if (!["free", "links"].includes(tuning.travel.intraSystem)) {

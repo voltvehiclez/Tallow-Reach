@@ -36,21 +36,26 @@ export const GALAXY = {
 
   // Flat chart presentation only; radii are screen pixels at every zoom level.
   // Zooming in on the selected system past systemEntryZoom opens its pocket map.
+  // panSpeed is the on-screen galaxy drag multiplier at maxZoom (the old feel).
+  // It grows as maxZoom / zoom when zooming out; system-map panning is unchanged.
   // None of these numbers affect travel rules.
   map: {
     padding: 90, nodeRadius: 5, homeRadius: 8, minZoom: 0.6, maxZoom: 5, zoomStep: 1.25,
-    systemEntryZoom: 2.5, transitionMs: 260,
+    panSpeed: 1, systemEntryZoom: 2.5, transitionMs: 260,
     context: { width: 240, height: 112, margin: 8 },
   },
 
   // The zoomed-in map of one system. A visual-only star/black hole sits at the
   // centre; pockets orbit it. Pockets may carry an authored 2D `mapPos`;
   // otherwise ordinary pockets spread around the core and gate pockets sit
-  // outward toward their peer system. These are map units, not flight coords.
+  // outward toward their peer system. Layout radii are map units, not flight
+  // coords. Core radii are map units too, so the body grows with system zoom;
+  // pocket dots and label text stay screen-sized for readability.
   systemMap: {
     padding: 130, pocketRadius: 7, ordinaryRadius: 140, gateRadius: 280,
     exitLength: 120, minSeparation: 78, minZoom: 1, maxZoom: 3,
-    blackHoleChance: 0.05, coreRadius: 16, blackHoleRadius: 12, coreLabelOffset: 20,
+    blackHoleChance: 0.05, coreRadius: 26, blackHoleRadius: 20,
+    coreLabelOffset: 14, coreLabelLineHeight: 14, labelGap: 8,
   },
 };
 

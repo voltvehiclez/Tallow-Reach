@@ -986,11 +986,15 @@ textarea {
 .sm-core.black-hole .sm-core-ring { fill: none; stroke: #dfb779; stroke-width: 2; opacity: .8; vector-effect: non-scaling-stroke; }
 .sm-core:hover .sm-core-ring, .sm-core:focus .sm-core-ring { stroke: #fff; opacity: 1; stroke-width: 2; }
 .sm-core:hover .sm-core-glow, .sm-core:focus .sm-core-glow { opacity: .24; }
-.sm-core-label { opacity: 0; fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; }
-.sm-core:hover .sm-core-label, .sm-core:focus .sm-core-label { opacity: 1; }
-.sm-exit-edge { stroke: var(--amber); stroke-dasharray: 5 4; }
-.sm-exit-cap { fill: var(--amber); }
-.sm-exit text { fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; pointer-events: none; }
+.sm-core-label { fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; }
+.sm-core-type { fill: var(--dim); }
+.sm-exit { cursor: pointer; outline: none; }
+.sm-exit-edge { stroke: var(--amber); stroke-dasharray: 5 4; pointer-events: none; }
+.sm-exit-hit { fill: transparent; stroke: none; pointer-events: all; }
+.sm-exit-cap { fill: var(--amber); pointer-events: none; }
+.sm-exit text { fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; pointer-events: auto; }
+.sm-exit:hover .sm-exit-cap, .sm-exit:focus .sm-exit-cap { fill: #fff; stroke: var(--amber); stroke-width: 2; }
+.sm-exit:hover text, .sm-exit:focus text { fill: var(--amber); }
 .sm-node { cursor: pointer; outline: none; }
 .sm-node .sm-hit { fill: transparent; stroke: none; pointer-events: all; }
 .sm-node .sm-dot { fill: #40515b; stroke: #71858f; stroke-width: 1; vector-effect: non-scaling-stroke; }

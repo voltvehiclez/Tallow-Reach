@@ -70,6 +70,29 @@ export function chartPixelScale(box, width = 800, height = 600) {
   return Math.max(box[2] / w, box[3] / h) || 1;
 }
 
+/** Requested galaxy pan multiplier in *screen* pixels: 1× at max zoom, growing
+ *  inversely as you zoom out. System-map panning does not use this. */
+export function galaxyPanSpeed(zoom, tuning = GALAXY.map) {
+  const z = clamp(zoom || 1, tuning.minZoom, tuning.maxZoom);
+  return tuning.panSpeed * (tuning.maxZoom / z);
+}
+
+/** Screen pixels → viewBox units. `speed` is the on-screen travel per mouse pixel. */
+export function panDelta(start, current, box, viewport, speed = 1) {
+  const scale = chartPixelScale(box, viewport?.width, viewport?.height);
+  return [-(current[0] - start[0]) * scale * speed, -(current[1] - start[1]) * scale * speed];
+}
+
+/** Galaxy drag anchored to the previous max-zoom feel. The old conversion moved
+ *  1 / maxScale² screen pixels per mouse pixel at max zoom; keep that anchor, then
+ *  apply galaxyPanSpeed so zooming out pans proportionally farther on screen. */
+export function galaxyPanDelta(start, current, box, viewport, zoom, tuning = GALAXY.map) {
+  const z = clamp(zoom || 1, tuning.minZoom, tuning.maxZoom);
+  const maxBox = [box[0], box[1], box[2] * z / tuning.maxZoom, box[3] * z / tuning.maxZoom];
+  const maxScale = chartPixelScale(maxBox, viewport?.width, viewport?.height);
+  return panDelta(start, current, box, viewport, galaxyPanSpeed(z, tuning) / (maxScale * maxScale));
+}
+
 export function travelContext(player = localPlayer()) {
   return { player, profile: profileOf(player), world: state.worldState };
 }
@@ -122,6 +145,36 @@ export function pocketConnections(world, systemId, knowledge = {}, tuning = GALA
     });
   }
   return { ...layout, policy, edges, exits };
+}
+
+/** The travel choice behind a clickable neighbouring-system exit. Its actual
+ *  destination is the reciprocal gate pocket, never the remote system/core. */
+export function exitChoice(world, exit, from, context = {}) {
+  const pocket = world.pocketsById?.[exit.peerPocketId];
+  if (!pocket) return null;
+  const quote = travelQuote(world, from, pocket.id, context);
+  const unsupportedCost = Object.entries(quote.cost || {}).length > 0;
+  return {
+    pocket, exit, label: world.systemsById?.[exit.peerSystemId]?.n || pocket.n,
+    canWarp: quote.ok && !unsupportedCost, quote,
+    status: unsupportedCost ? "Travel costs are not implemented yet."
+      : quote.ok ? "Direct gate route · Free" : quote.reason,
+  };
+}
+
+/** Keep a gate pocket's name on the inner side of its dot, away from the
+ *  outward orange stub and the peer-system label. Ordinary names stay outward.
+ *  Pure screen-space placement; `direction` is the gate's world-space vector. */
+export function pocketLabelPosition(node, point, radius, unit, tuning = GALAXY.systemMap) {
+  const gate = node.pocket.role === "gate" && node.direction;
+  const dx = gate ? -node.direction[0] : node.pos[0];
+  const dy = gate ? node.direction[1] : -node.pos[1];   // screen y is negated
+  const anchor = dx < -0.25 ? "end" : dx > 0.25 ? "start" : "middle";
+  const gap = radius + tuning.labelGap * unit;
+  if (anchor === "middle") {
+    return { x: point[0], y: point[1] + (dy < 0 ? -gap : gap + 6 * unit), anchor };
+  }
+  return { x: point[0] + (anchor === "end" ? -gap : gap), y: point[1] + 3 * unit, anchor };
 }
 
 /** A centred local box around the pockets and their outward exit stubs. */
@@ -195,7 +248,7 @@ export function setupStarmap() {
     const view = state.ui.starmap;
     const svg = e.target.closest?.("svg.sm-chart");
     if (!svg || !view || transition || e.button !== 0) return;
-    if (e.target.closest?.("[data-system], [data-pocket], [data-core], .sm-context")) return;
+    if (e.target.closest?.("[data-system], [data-pocket], [data-exit], [data-core], .sm-context")) return;
     drag = { mode: view.mode, x: e.clientX, y: e.clientY, pan: [...(view.mode === "system" ? view.systemPan : view.pan)],
       box: activeChartViewBox(state.galaxy, view, knowledge()) };
     svg.setPointerCapture?.(e.pointerId);
@@ -205,8 +258,14 @@ export function setupStarmap() {
     if (!drag || !view || drag.mode !== view.mode) return;
     const svg = root.querySelector("svg.sm-chart");
     const rect = svg?.getBoundingClientRect?.() || { width: 800, height: 600 };
-    const scale = chartPixelScale(drag.box, rect.width, rect.height);
-    const pan = [drag.pan[0] - (e.clientX - drag.x) / scale, drag.pan[1] - (e.clientY - drag.y) / scale];
+    let pan;
+    if (view.mode === "galaxy") {
+      const delta = galaxyPanDelta([drag.x, drag.y], [e.clientX, e.clientY], drag.box, rect, view.zoom);
+      pan = [drag.pan[0] + delta[0], drag.pan[1] + delta[1]];
+    } else {
+      const scale = chartPixelScale(drag.box, rect.width, rect.height);
+      pan = [drag.pan[0] - (e.clientX - drag.x) / scale, drag.pan[1] - (e.clientY - drag.y) / scale];
+    }
     if (view.mode === "system") view.systemPan = pan; else view.pan = pan;
     svg?.setAttribute("viewBox", activeChartViewBox(state.galaxy, view, knowledge()).join(" "));
   });
@@ -388,23 +447,50 @@ function openPocketMenu(id, x, y) {
   return true;
 }
 
+function openExitMenu(id, x, y) {
+  const view = state.ui.starmap;
+  if (!view || view.mode !== "system") return false;
+  if (transition) finishTransition();
+  const exit = pocketConnections(state.galaxy, view.selected, knowledge()).exits.find(e => e.id === id);
+  if (!exit) return false;
+  view.menu = { to: exit.peerPocketId, exitId: id, x, y };
+  view.notice = "";
+  uiSound("click");
+  render();
+  return true;
+}
+
+function menuChoice(world, view, from) {
+  const menu = view.menu;
+  if (!menu) return null;
+  if (menu.exitId) {
+    const exit = pocketConnections(world, view.selected, knowledge()).exits.find(e => e.id === menu.exitId);
+    const choice = exit ? exitChoice(world, exit, from, travelContext()) : null;
+    return choice ? { ...choice, title: choice.label } : null;
+  }
+  const choice = pocketChoices(world, from, view.selected, travelContext()).find(c => c.pocket.id === menu.to);
+  return choice ? { ...choice, title: choice.pocket.n } : null;
+}
+
 function closeMenu() {
   const view = state.ui.starmap;
   if (!view?.menu) return;
-  const id = view.menu.to;
+  const { to, exitId } = view.menu;
   view.menu = null;
   render();
   const cssEscape = globalThis.CSS?.escape || (value => value.replace(/["\\]/g, "\\$&"));
-  root.querySelector(`[data-pocket="${cssEscape(id)}"]`)?.focus();
+  const selector = exitId ? `[data-exit="${cssEscape(exitId)}"]` : `[data-pocket="${cssEscape(to)}"]`;
+  root.querySelector(selector)?.focus();
 }
 
 function onContextMenu(e) {
   if (!state.ui.starmap) return;
   e.preventDefault();
   e.stopPropagation();
-  const node = e.target.closest?.("[data-pocket]");
+  const node = e.target.closest?.("[data-pocket], [data-exit]");
   if (!node) { closeMenu(); return; }
-  openPocketMenu(node.dataset.pocket, e.clientX, e.clientY);
+  if (node.dataset.exit) openExitMenu(node.dataset.exit, e.clientX, e.clientY);
+  else openPocketMenu(node.dataset.pocket, e.clientX, e.clientY);
 }
 
 function onKeydown(e) {
@@ -423,19 +509,21 @@ function onKeydown(e) {
     selectSystem(system.dataset.system);
     return;
   }
-  const pocket = e.target.closest?.("[data-pocket]");
+  const pocket = e.target.closest?.("[data-pocket], [data-exit]");
   if (pocket && (e.key === "Enter" || e.key === " " || e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
     e.preventDefault();
     e.stopPropagation();
     const rect = e.target.getBoundingClientRect?.() || root.querySelector("svg.sm-chart")?.getBoundingClientRect?.() || { left: 0, top: 0, width: 800, height: 600 };
-    openPocketMenu(pocket.dataset.pocket, (rect.left || 0) + (rect.width || 800) / 2, (rect.top || 0) + (rect.height || 600) / 2);
+    const x = (rect.left || 0) + (rect.width || 800) / 2, y = (rect.top || 0) + (rect.height || 600) / 2;
+    if (pocket.dataset.exit) openExitMenu(pocket.dataset.exit, x, y);
+    else openPocketMenu(pocket.dataset.pocket, x, y);
   }
 }
 
 function onClick(e) {
   const view = state.ui.starmap;
   if (!view) return;
-  const button = e.target.closest?.("button, [data-system], [data-pocket]");
+  const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");
   const isTravel = button?.dataset?.action === "travel";
   if (view.menu && !isTravel) {
     view.menu = null;
@@ -443,6 +531,10 @@ function onClick(e) {
   }
   if (!button || button.disabled) return;
   if (button.dataset.system) { selectSystem(button.dataset.system); return; }
+  if (button.dataset.exit) {
+    openExitMenu(button.dataset.exit, e.clientX ?? 0, e.clientY ?? 0);
+    return;
+  }
   if (button.dataset.pocket) {
     openPocketMenu(button.dataset.pocket, e.clientX ?? 0, e.clientY ?? 0);
     return;
@@ -463,8 +555,13 @@ function onClick(e) {
   } else if (action === "travel") {
     const to = button.dataset.to;
     const from = localPlayer()?.place || state.place;
-    const choice = pocketChoices(state.galaxy, from, view.selected, travelContext()).find(c => c.pocket.id === to);
+    const choice = menuChoice(state.galaxy, view, from);
     view.menu = null;
+    if (choice && choice.pocket.id !== to) {
+      view.notice = "Travel is not available.";
+      render();
+      return;
+    }
     if (!choice?.canWarp) {
       view.notice = choice?.status || "Travel is not available.";
       render();
@@ -512,11 +609,14 @@ function systemMarkup(world, view, know, here, unit) {
     const peer = world.systemsById[exit.peerSystemId];
     const label = peer?.n || "Connected system";
     const anchor = exit.direction[0] < -0.25 ? "end" : exit.direction[0] > 0.25 ? "start" : "middle";
-    const lx = b[0] + exit.direction[0] * 8 * unit;
-    const ly = b[1] - exit.direction[1] * 8 * unit + 3 * unit;
-    return `<g class="sm-exit" data-exit="${esc(exit.id)}" data-peer-system="${esc(exit.peerSystemId)}">
+    const gap = GALAXY.systemMap.labelGap * unit;
+    const lx = b[0] + exit.direction[0] * gap;
+    const ly = b[1] - exit.direction[1] * gap + 3 * unit;
+    return `<g class="sm-exit" data-exit="${esc(exit.id)}" data-peer-system="${esc(exit.peerSystemId)}"
+      role="button" tabindex="0" aria-label="${esc(label)}, neighbouring ${esc(term("mapNode"))}">
       <line class="sm-edge sm-exit-edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>
-      <circle class="sm-exit-cap" cx="${b[0]}" cy="${b[1]}" r="${2.5 * unit}"/>
+      <circle class="sm-exit-hit" cx="${b[0]}" cy="${b[1]}" r="${GALAXY.systemMap.pocketRadius * unit + 9 * unit}"/>
+      <circle class="sm-exit-cap" cx="${b[0]}" cy="${b[1]}" r="${3.5 * unit}"/>
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(label)}</text>
     </g>`;
   }).join("");
@@ -524,34 +624,35 @@ function systemMarkup(world, view, know, here, unit) {
     const [x, y] = point(node.pos);
     const current = node.id === here.id;
     const radius = GALAXY.systemMap.pocketRadius * unit;
-    // Put names on the outward side of the dot so they do not pile up at the hub.
-    const anchor = node.pos[0] < -20 ? "end" : node.pos[0] > 20 ? "start" : "middle";
-    const lx = anchor === "end" ? x - radius - 5 * unit : anchor === "start" ? x + radius + 5 * unit : x;
-    const ly = anchor === "middle" ? y + radius + 14 * unit : y + 3 * unit;
+    const { x: lx, y: ly, anchor } = pocketLabelPosition(node, [x, y], radius, unit);
     return `<g class="sm-node sm-pocket-node${current ? " current" : ""}" data-pocket="${esc(node.id)}"
       role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${current ? ", current pocket" : ""}">
-      <title>${esc(node.pocket.n)}</title>
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
       <circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
     </g>`;
   }).join("");
   // The core is a named chart object, not a pocket: no data-pocket, travel action,
-  // route endpoint or saved flight location. Hover/focus reveals its proper name.
+  // route endpoint or saved flight location. Its two-line label is always visible;
+  // no native <title> tooltip duplicates it. Radii are map units, so zoom scales it.
   const core = system.core || { kind: "star", n: systemCoreName(system) };
   const blackHole = core.kind === "blackHole";
-  const radius = (blackHole ? GALAXY.systemMap.blackHoleRadius : GALAXY.systemMap.coreRadius) * unit;
-  const coreLabel = `${core.n} — ${blackHole ? "black hole" : "star"}`;
+  const radius = blackHole ? GALAXY.systemMap.blackHoleRadius : GALAXY.systemMap.coreRadius;
+  const type = blackHole ? "Black hole" : "Star";
+  const coreLabel = `${core.n} (${type})`;
   const coreX = ox, coreY = oy;
+  const labelY = coreY + radius + GALAXY.systemMap.coreLabelOffset * unit;
+  const lineStep = GALAXY.systemMap.coreLabelLineHeight * unit;
   const coreMarkup = `<g class="sm-core ${blackHole ? "black-hole" : "star"}" data-core="${esc(system.id)}"
     role="img" tabindex="0" aria-label="${esc(coreLabel)}">
-    <title>${esc(coreLabel)}</title>
     <circle class="sm-core-glow" cx="${coreX}" cy="${coreY}" r="${radius * 2.4}"/>
     <circle class="sm-core-ring" cx="${coreX}" cy="${coreY}" r="${radius + 5 * unit}"/>
     <circle class="sm-core-body" cx="${coreX}" cy="${coreY}" r="${radius}"/>
     <circle class="sm-core-hit" cx="${coreX}" cy="${coreY}" r="${radius + 10 * unit}"/>
-    <text class="sm-core-label" x="${coreX}" y="${coreY + radius + GALAXY.systemMap.coreLabelOffset * unit}"
+    <text class="sm-core-label sm-core-name" x="${coreX}" y="${labelY}"
       text-anchor="middle" style="font-size:${12 * unit}px;stroke-width:${3 * unit}px">${esc(core.n)}</text>
+    <text class="sm-core-label sm-core-type" x="${coreX}" y="${labelY + lineStep}"
+      text-anchor="middle" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">(${esc(type)})</text>
   </g>`;
   return lines + exits + coreMarkup + nodes;
 }
@@ -608,7 +709,7 @@ function render() {
     ? `Warp to any ${esc(term("flyable"))} in this ${esc(term("mapNode"))}; no internal route is needed.`
     : `Follow the internal route lines; this ${esc(term("mapNode"))} requires connected ${esc(term("flyable"))} hops.`;
   const help = view.mode === "system"
-    ? `Right-click a ${esc(term("flyable"))} for Warp to. ${localTravel} Gate stubs point toward the neighbouring ${esc(term("mapNode"))}. Hover or focus the central star/black hole for its name (not warpable). Scroll out or Back to return.`
+    ? `Click or right-click a ${esc(term("flyable"))} for Warp to. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route. The central star/black hole is not warpable. Scroll out or Back to return.`
     : `Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `
@@ -640,20 +741,21 @@ function render() {
   if (view.menu) root.querySelector(".sm-context button, .sm-context")?.focus();
   else if (focus?.system) root.querySelector(`[data-system="${cssEscape(focus.system)}"]`)?.focus();
   else if (focus?.pocket) root.querySelector(`[data-pocket="${cssEscape(focus.pocket)}"]`)?.focus();
+  else if (focus?.exit) root.querySelector(`[data-exit="${cssEscape(focus.exit)}"]`)?.focus();
   else if (focus?.core) root.querySelector(`[data-core="${cssEscape(focus.core)}"]`)?.focus();
   else if (focus?.action) root.querySelector(`[data-action="${cssEscape(focus.action)}"]`)?.focus();
   if (transition) scheduleTransition();
 }
 
 function pocketMenuMarkup(world, view, from, rootRect) {
-  const choice = pocketChoices(world, from, view.selected, travelContext()).find(c => c.pocket.id === view.menu.to);
+  const choice = menuChoice(world, view, from);
   if (!choice) return "";
   const pos = contextMenuPosition(view.menu.x - (rootRect.left || 0), view.menu.y - (rootRect.top || 0), rootRect);
-  return `<div class="sm-context" role="menu" tabindex="-1" aria-label="${esc(choice.pocket.n)}"
+  return `<div class="sm-context" role="menu" tabindex="-1" aria-label="${esc(choice.title)}"
     style="left:${pos.left + (rootRect.left || 0)}px;top:${pos.top + (rootRect.top || 0)}px;width:${GALAXY.map.context.width}px">
-    <strong>${esc(choice.pocket.n)}</strong>
+    <strong>${esc(choice.title)}</strong>
     ${choice.canWarp
-      ? `<button type="button" role="menuitem" data-action="travel" data-to="${esc(choice.pocket.id)}">Warp to ${esc(choice.pocket.n)}</button>`
+      ? `<button type="button" role="menuitem" data-action="travel" data-to="${esc(choice.pocket.id)}">Warp to ${esc(choice.title)}</button>`
       : `<p class="sm-context-note">${esc(choice.status)}</p>`}
   </div>`;
 }

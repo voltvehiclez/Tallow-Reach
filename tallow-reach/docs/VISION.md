@@ -48,7 +48,8 @@ organised so that most new content is **data, not code**.
   explicit gate routes; a future route-requiring instance can opt into `intraSystem: "links"` as data.
   Each system's zoomed chart has a visual-only central **star (95%) or black hole (5%)**, with pockets
   spread around it. Its proper name is the system name without the generic suffix (Meridian System →
-  **Meridian**) and appears on hover/focus. The core is not a pocket or warp destination for now.
+  **Meridian**) and is permanently labelled below the body with `(Star)` or `(Black hole)` on a second row.
+  The core is not a pocket or warp destination for now.
 - Pockets contain a mix of **encounters** (friendly and hostile), **resources** (asteroids, salvage)
   and **loot**. The list of things that can appear is meant to grow indefinitely.
 - **Instanced places** are *not* on the map. You reach them through **wormholes**, which can occur
@@ -112,9 +113,13 @@ mention) until the owner decides. Record the decision here when made, and delete
   Each system gets a central **star (95%) or black hole (5%)**, with pockets spread around it like a star
   system. Keep the existing chart style and gate connections: a gate to Duskdrift still exits to Duskdrift.
   The central body is **visual only and not warpable** for now (warping near it may be considered later).
-  Hover/focus reveals its name, which is the system's proper name (**Meridian System → Meridian**).
-  This supersedes the earlier internal-line and local-direct-link-only requirements below, not the gate
-  rules. Core kind/name and chart geometry are regenerated, never added to compact v16 saves.
+  Its name is permanently labelled below the body with the type in parentheses; the name is the system's
+  proper name (**Meridian System → Meridian**). Native hover tooltips on pockets/central bodies are removed,
+  but click popups stay. Galaxy pan keeps its max-zoom feel and scales inversely with zoom; system core
+  graphics scale with zoom. Gate pocket names avoid orange stubs/peer labels, and neighbouring-system labels
+  are clickable travel targets for the reciprocal gate pocket. This supersedes the earlier internal-line,
+  local-direct-link-only and hover-only-core requirements below, not the gate rules. Core kind/name and chart
+  geometry are regenerated, never added to compact v16 saves.
 
 - **2026-11-08 — step 11B starmap UI follow-up (owner, superseded in part by the decision above):** after reviewing the first 11B chart ("the map
   looks ok"), the owner asked for four changes: **zooming in on a system dot opens a system pocket map**;

@@ -592,7 +592,7 @@ places: { "sys-004": { core: { kind: "blackHole", n: "Emberfall" } } },
 ```
 
 Use `kind: "star"` or `"blackHole"`; omit `n` to derive the proper name. Invalid kinds fail validation.
-The core is a focusable SVG image with a hover/focus name, not a `data-pocket` target, button, link endpoint
+The core is a focusable SVG image with a permanent two-line name/type label, not a `data-pocket` target, button, link endpoint
 or saved place. Warping to/near it is not implemented. Core rolls do not consume the generator or gameplay
 RNG streams, so existing system/pocket/link ids and v16 saves stay stable.
 
@@ -613,16 +613,18 @@ lines are drawn only in a links-policy system; gate lines remain explicit on the
 
 **Chart interaction.** On the galaxy web, click a system to select it; scroll up / press **+** past
 `map.systemEntryZoom`, or double-click the dot, to open its pocket map. **Back to galaxy** or scrolling out
-at the fitted system view returns. In the pocket map, right-click a pocket dot (or focus it and press
-Enter/Space/Shift+F10) for the **Warp to** popup; only a legal hop gets the button. The right panel
-is a read-only overview, not a travel button list. Hover/focus the central body to reveal its name; it
-cannot open a warp popup. The compact panel must not gain fixed-count rows, per-row metadata or scrolling.
+at the fitted system view returns. In the pocket map, click/right-click a pocket dot or neighbouring-system
+gate label (or focus it and press Enter/Space/Shift+F10) for the **Warp to** popup; only a legal hop gets the
+button. A gate-neighbour label quotes the reciprocal gate pocket, never the remote system/core. The right panel
+is a read-only overview, not a travel button list. The central body keeps a permanent name/type label and
+cannot open a warp popup. Native hover tooltips are absent from pockets/core; click popups remain. The compact
+panel must not gain fixed-count rows, per-row metadata or scrolling.
 
 **Change generation or chart settings.** Edit `GALAXY` in `src/data/galaxy.js`: `systemCount`,
 `graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, `travel` defaults, `map`
-(padding, screen-pixel radii, zoom limits/step, `systemEntryZoom`, `transitionMs`, popup `context`) and
+(padding, screen-pixel radii, zoom limits/step, `panSpeed`, `systemEntryZoom`, `transitionMs`, popup `context`) and
 `systemMap` (padding, pocket radius, ordinary/gate orbital radii, exit length, minimum separation, zoom
-limits, `blackHoleChance`, `coreRadius`, `blackHoleRadius`, `coreLabelOffset`).
+limits, `blackHoleChance`, map-unit `coreRadius`/`blackHoleRadius`, `coreLabelOffset`, `coreLabelLineHeight`, `labelGap`).
 To replace the layout algorithm, register a function in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the
 same `(seed, tuning, rng)` contract and name it in `GALAXY.generator`. The resolved record contract stays
 the same, so travel rules and the map UI do not change.

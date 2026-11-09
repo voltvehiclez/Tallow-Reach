@@ -19,6 +19,40 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Step 11B starmap refinements — permanent core labels, zoom-scaled pan/cores, clickable gate neighbours (owner playtest pending)
+
+Owner requested six small chart changes after the free-local-warp/central-body delivery. This remains
+inside step 11; the owner has not yet passed the updated root `TESTING-STARMAP.md`.
+
+- **Tooltips/popups:** removed native `<title>` hover tooltips from pocket nodes and central bodies;
+  galaxy system dots keep their title for hidden-label inspection. The blue/orange click popups remain.
+- **Permanent core labels:** every star/black hole shows its proper name below the graphic with
+  `(Star)` / `(Black hole)` on a second row; hover/focus still highlights the ring/glow but no longer
+  gates the label. The core remains a non-warpable `role="img"` chart object.
+- **Galaxy pan:** `map.panSpeed` anchors the previous max-zoom drag feel. `galaxyPanSpeed` /
+  `galaxyPanDelta` make on-screen pan distance grow as `maxZoom / zoom` when zooming out, while
+  system-map panning stays unchanged.
+- **Gate-label clarity:** `pocketLabelPosition` puts gate pocket names inward, away from the orange
+  exit stub and peer-system label; ordinary pockets keep outward radial labels. Peer labels sit beyond
+  the stub cap with a tunable gap.
+- **Zoom-scaled cores:** `systemMap.coreRadius` / `blackHoleRadius` are now map units, so the central
+  graphic grows with system zoom. Pocket dots and label text remain screen-sized; label offset/line-height
+  and gaps are tunable (`coreLabelOffset`, `coreLabelLineHeight`, `labelGap`).
+- **Clickable gate neighbours:** exit stubs are focusable buttons. Clicking/right-clicking/keyboard-
+  activating a neighbouring-system label opens the same popup and quotes `travelQuote` to the reciprocal
+  gate pocket (`exitChoice`), never the remote system/core. Unreachable hops show **No direct route**;
+  legal hops emit the unchanged named travel action so `main.js` / `startWarp` requote before warping.
+- **Files:** `src/ui/starmap.js`, `src/styles.css`, `src/data/galaxy.js`, `src/sim/galaxy.js` validation,
+  `tests/step11a-galaxy.test.mjs`, `tests/step11b-starmap.test.mjs`, root `TESTING-STARMAP.md`, README,
+  HANDOFF/ROADMAP/VISION/REFACTOR_PLAN/ARCHITECTURE/TARGET_ARCHITECTURE/HOW_TO_ADD and data/UI READMEs.
+- **Results:** `npm test` **312/312 pass** (11A 23, 11B 29; both 8b oracles unchanged); `npm run build`
+  succeeded (**669 KB, 685,046 bytes**). **Save v16 unchanged:** no layout/pan/core presentation state enters
+  saves; default geography remains **121 / 462 / 511** with 116 stars and 5 black holes. No new dependencies.
+  Automated headless checks passed; owner visual browser playtest remains pending. Rebuild with
+  `npm run build`; test with `npm test`.
+
+---
+
 ## 2026-11-08: Step 11B system-map follow-up — free local warp and named central bodies (owner playtest pending)
 
 Owner requested three changes after the zoom/right-click UI delivery. This remains inside step 11;

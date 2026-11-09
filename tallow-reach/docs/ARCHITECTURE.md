@@ -210,7 +210,7 @@ Each `src/` folder also has its own short `README.md`.
   the visual core and gates sit farther out toward their peers. Core kind/name, policy and layout are
   resolved data, never saved. `ui/starmap.js` draws the galaxy web and system pocket map, omitting internal
   lines in free systems and retaining gate exit stubs toward visible peers. Its non-warpable core has a
-  hover/focus proper name. The right-click **Warp to** popup emits a named travel action; `sim/sectors.js`
+  permanent two-line proper-name/type label. The click/right-click **Warp to** popup emits a named travel action; `sim/sectors.js`
   requotes the same hop before running the unchanged warp sequence.
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
@@ -496,9 +496,11 @@ These are real, current limits. None of them is a bug in play today.
 - **The starmap is live, but the generated world is still empty.** M opens `ui/starmap.js`: an organic
   system web with gate lines, current/visited/selected markers and zoom/pan/labels. Zooming into a
   selected system dot opens a derived pocket map: pockets orbit a visual-only star/black hole with a
-  hover/focus name. Free systems omit internal lines; route-only systems retain them. Gate exit stubs
-  still point toward neighbouring systems, and the right panel stays a compact name-only overview.
-  Right-clicking a legal local/gate pocket offers **Warp to**; the sim rechecks the quote and emits
+  permanent two-line name/type label. Free systems omit internal lines; route-only systems retain them. Gate exit stubs
+  point toward neighbouring systems, their labels are clickable travel targets quoting the reciprocal gate pocket,
+  and the right panel stays a compact name-only overview. Galaxy pan keeps its max-zoom feel and scales inversely
+  with zoom; core radii are map units so system zoom scales the graphic. Clicking/right-clicking a legal local/gate
+  pocket or gate-neighbour label offers **Warp to**; the sim rechecks the quote and emits
   `travel-denied` on refusal. Single-player chart pauses the frame gate and suspends audio;
   `state.multiplayer` is the future host flag that keeps a hosted world running. Generated pockets are
   empty placeholders, visibility is `all`, and travel is free. Non-empty costs are refused until a cost

@@ -82,7 +82,7 @@ pockets, never in the system itself or its visual-only central body. The startin
 (shown as **Meridian System**).
 Its first pockets keep the internal ids `reach` (**Meridian Station**, station + asteroid belt)
 and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M opens the
-starmap, zooming into a system dot opens its pocket map, and right-clicking a legal pocket offers
+starmap, zooming into a system dot opens its pocket map, and clicking/right-clicking a legal pocket or gate-neighbour label offers
 **Warp to** (step 11B built, owner playtest pending). Generic player-facing nouns live in
 `data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
 
@@ -106,8 +106,9 @@ discovery/visit knowledge, not generated geography; tiers are derived on resolut
 policy (`all` today), not a hard-coded no-fog assumption. The zoomed-in system chart uses a derived,
 deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win) that is never saved.
 Pockets orbit an independent seeded star (95%) / black hole (5%) core; its proper name comes from the
-system and appears on hover/focus, but it is not warpable. Free systems omit internal chart lines;
-route-only systems draw them. Gate exit stubs still point toward the exact peer system. Place memory
+system and is permanently labelled with its type on a second row, but it is not warpable. Free systems omit internal chart lines;
+route-only systems draw them. Gate exit stubs point toward the exact peer system and their labels are clickable travel targets.
+Galaxy pan keeps its max-zoom feel and scales inversely with zoom; core graphics scale with system zoom. Place memory
 (mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
 container: pockets may later have optional child places using the same place record.
 

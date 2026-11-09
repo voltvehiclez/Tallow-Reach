@@ -373,7 +373,8 @@ test("11A: invalid travel policies, core kinds and presentation tuning fail plai
   for (const blackHoleChance of [-0.1, 1.1, NaN]) {
     assert.throws(() => validateTuning({ ...GALAXY, systemMap: { ...GALAXY.systemMap, blackHoleChance } }), /blackHoleChance/);
   }
-  for (const key of ["ordinaryRadius", "gateRadius", "coreRadius", "blackHoleRadius", "coreLabelOffset"]) {
+  assert.throws(() => validateTuning({ ...GALAXY, map: { ...GALAXY.map, panSpeed: 0 } }), /panSpeed/);
+  for (const key of ["ordinaryRadius", "gateRadius", "coreRadius", "blackHoleRadius", "coreLabelOffset", "coreLabelLineHeight", "labelGap"]) {
     assert.throws(() => validateTuning({ ...GALAXY, systemMap: { ...GALAXY.systemMap, [key]: 0 } }), new RegExp(key));
   }
 });

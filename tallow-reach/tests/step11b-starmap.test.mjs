@@ -20,6 +20,7 @@ import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/cor
 import {
   visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices,
   pocketConnections, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
+  galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, exitChoice,
 } from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
 
@@ -369,7 +370,7 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   assert.ok(map.innerHTML.includes('data-peer-system="sys-001"'), "gate stubs name the neighbouring system");
   let prevented = false, stopped = false;
   map.handlers.contextmenu({
-    target: { closest: sel => sel === "[data-pocket]" ? { dataset: { pocket: "hollow" } } : null },
+    target: { closest: sel => sel.includes("[data-pocket]") ? { dataset: { pocket: "hollow" } } : null },
     clientX: 120, clientY: 140,
     preventDefault() { prevented = true; }, stopPropagation() { stopped = true; },
   });
@@ -477,6 +478,15 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
     assert.ok(Math.abs(exit.end[0] - (exit.start[0] + exit.direction[0] * GALAXY.systemMap.exitLength)) < 1e-9);
     assert.ok(Math.abs(exit.end[1] - (exit.start[1] + exit.direction[1] * GALAXY.systemMap.exitLength)) < 1e-9);
   }
+  for (const node of chart.nodes) {
+    const point = [node.pos[0], -node.pos[1]];
+    const label = pocketLabelPosition(node, point, GALAXY.systemMap.pocketRadius, 1);
+    if (node.pocket.role !== "gate") continue;
+    const screenDirection = [node.direction[0], -node.direction[1]];
+    const offset = [label.x - point[0], label.y - point[1]];
+    assert.ok(offset[0] * screenDirection[0] + offset[1] * screenDirection[1] <= 0,
+      "a gate pocket name sits inward, away from its orange exit stub and peer label");
+  }
   assert.ok(systemChartBounds(chart).every(Number.isFinite));
   assert.ok(systemChartViewBox(world, { selected: "meridian", mode: "system", systemZoom: 1, systemPan: [0, 0] }).every(Number.isFinite));
   const previous = GALAXY_OVERRIDES.places.hollow;
@@ -571,7 +581,7 @@ test("11B: zoom controls enter/leave the system map and illegal right-clicks can
   assert.equal(ui.state.ui.starmap.selected, "sys-010");
   const hub = Object.values(ui.state.galaxy.pockets).find(p => p.parent === "sys-010" && p.role !== "gate");
   mapRoot.handlers.contextmenu({
-    target: { closest: sel => sel === "[data-pocket]" ? { dataset: { pocket: hub.id } } : null },
+    target: { closest: sel => sel.includes("[data-pocket]") ? { dataset: { pocket: hub.id } } : null },
     clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {},
   });
   assert.ok(mapRoot.innerHTML.includes("No direct route"));
@@ -588,7 +598,7 @@ test("11B: zoom controls enter/leave the system map and illegal right-clicks can
   ui.closeStarmap();
 });
 
-test("11B: stars/black holes have hover/focus names and are never warp destinations", () => {
+test("11B: stars/black holes have permanent two-line names and are never warp destinations", () => {
   const save = ui.prepareGalaxySave(ui.newSave());
   ui.applySave(save);
   const P = ui.configurePlayer(ui.createPlayer(), save.profile);
@@ -607,14 +617,32 @@ test("11B: stars/black holes have hover/focus names and are never warp destinati
     assert.equal(ui.state.ui.starmap.mode, "system");
     const core = mapRoot.innerHTML.match(/<g class="sm-core star"[\s\S]*?<\/g>/)?.[0];
     assert.ok(core, "Meridian has a central star");
-    for (const text of ['data-core="meridian"', 'role="img"', 'tabindex="0"', 'aria-label="Meridian — star"',
-      "<title>Meridian — star</title>", 'class="sm-core-label"', ">Meridian</text>", "sm-core-glow", "sm-core-ring", "sm-core-body"]) {
+    for (const text of ['data-core="meridian"', 'role="img"', 'tabindex="0"', 'aria-label="Meridian (Star)"',
+      'class="sm-core-label sm-core-name"', ">Meridian</text>", 'class="sm-core-label sm-core-type"',
+      ">(Star)</text>", "sm-core-glow", "sm-core-ring", "sm-core-body"]) {
       assert.ok(core.includes(text), text);
     }
     assert.ok(!core.includes("data-pocket="), "the core is not a pocket target");
     assert.ok(!core.includes("data-action="), "the core has no travel action");
     assert.ok(!core.includes('role="button"'));
-    assert.ok(mapRoot.innerHTML.includes("Hover or focus the central star/black hole for its name (not warpable)"));
+    assert.ok(!core.includes("<title>"), "no native hover tooltip duplicates the permanent label");
+    assert.ok(!mapRoot.innerHTML.includes("<title>"), "no chart node uses a native hover tooltip");
+    assert.ok(mapRoot.innerHTML.includes("The central star/black hole is not warpable"));
+    const nameY = Number(core.match(/sm-core-name" x="[^"]*" y="([^"]*)"/)[1]);
+    const typeY = Number(core.match(/sm-core-type" x="[^"]*" y="([^"]*)"/)[1]);
+    assert.ok(typeY > nameY, "the celestial type sits on a new row below the name");
+    const coreRadius = Number(core.match(/sm-core-body" cx="[^"]*" cy="[^"]*" r="([^"]*)"/)[1]);
+    const pocketDotRadius = html => Number(html.match(/data-pocket="reach"[\s\S]*?class="sm-dot"[^>]*r="([^"]*)"/)[1]);
+    const fitPocketRadius = pocketDotRadius(mapRoot.innerHTML);
+    const fitWidth = Number(mapRoot.innerHTML.match(/viewBox="([^"]*)"/)[1].split(" ")[2]);
+    click({ action: "zoom-in" });
+    const zoomedCore = mapRoot.innerHTML.match(/<g class="sm-core star"[\s\S]*?<\/g>/)?.[0];
+    const zoomedRadius = Number(zoomedCore.match(/sm-core-body" cx="[^"]*" cy="[^"]*" r="([^"]*)"/)[1]);
+    const zoomWidth = Number(mapRoot.innerHTML.match(/viewBox="([^"]*)"/)[1].split(" ")[2]);
+    assert.equal(zoomedRadius, coreRadius, "core radius is a map unit, so zooming enlarges its on-screen graphic");
+    assert.notEqual(pocketDotRadius(mapRoot.innerHTML), fitPocketRadius, "pocket dots stay screen-sized while the core scales");
+    assert.ok(zoomWidth < fitWidth);
+    click({ action: "reset" });
     click({ core: "meridian" });
     assert.equal(ui.state.ui.starmap.menu, null);
     let prevented = false;
@@ -628,13 +656,15 @@ test("11B: stars/black holes have hover/focus names and are never warp destinati
     assert.deepEqual(actions, []);
     assert.equal(travelQuote(ui.state.galaxy, "reach", "meridian").ok, false);
     const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-    assert.match(css, /\.sm-core-label \{ opacity: 0;/);
-    assert.match(css, /\.sm-core:hover \.sm-core-label, \.sm-core:focus \.sm-core-label \{ opacity: 1; \}/);
+    assert.match(css, /\.sm-core-label \{ fill:/);
+    assert.ok(!css.includes(".sm-core-label { opacity: 0"), "core labels are not hover-gated");
+    assert.ok(!css.includes(".sm-core:hover .sm-core-label"));
     click({ action: "back" });
     enter("sys-001");
     assert.ok(mapRoot.innerHTML.includes('class="sm-core black-hole"'));
-    assert.ok(mapRoot.innerHTML.includes('aria-label="Duskdrift — black hole"'));
+    assert.ok(mapRoot.innerHTML.includes('aria-label="Duskdrift (Black hole)"'));
     assert.ok(mapRoot.innerHTML.includes(">Duskdrift</text>"));
+    assert.ok(mapRoot.innerHTML.includes(">(Black hole)</text>"));
     assert.ok(!mapRoot.innerHTML.includes('data-pocket="sys-001"'), "the black hole is not a warpable hub");
   } finally {
     listening = false;
@@ -654,7 +684,7 @@ test("11B: a free gate hop keeps the named action; a links opt-out restores line
   mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
   const gate = "meridian-gate-sys-001";
   const rightClick = id => mapRoot.handlers.contextmenu({
-    target: { closest: sel => sel === "[data-pocket]" ? { dataset: { pocket: id } } : null },
+    target: { closest: sel => sel.includes("[data-pocket]") ? { dataset: { pocket: id } } : null },
     clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {},
   });
   const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
@@ -681,6 +711,127 @@ test("11B: a free gate hop keeps the named action; a links opt-out restores line
     assert.equal((mapRoot.innerHTML.match(/data-edge="/g) || []).length, galaxyEdges, "galaxy routes are unchanged");
   } finally {
     listening = false;
+    ui.closeStarmap();
+  }
+});
+
+test("11B: galaxy pan speed grows inversely with zoom while max zoom and system panning stay unchanged", () => {
+  assert.equal(galaxyPanSpeed(GALAXY.map.maxZoom), GALAXY.map.panSpeed);
+  assert.equal(galaxyPanSpeed(1), GALAXY.map.panSpeed * GALAXY.map.maxZoom);
+  assert.equal(galaxyPanSpeed(GALAXY.map.minZoom), GALAXY.map.panSpeed * GALAXY.map.maxZoom / GALAXY.map.minZoom);
+  assert.ok(galaxyPanSpeed(1) > galaxyPanSpeed(2.5) && galaxyPanSpeed(2.5) > galaxyPanSpeed(5));
+  const box = [0, 0, 800, 600], viewport = { width: 800, height: 600 };
+  assert.deepEqual(panDelta([100, 100], [140, 120], box, viewport), [-40, -20]);
+  assert.deepEqual(panDelta([100, 100], [140, 120], box, viewport, 5), [-200, -100]);
+  assert.equal(panDelta([100, 100], [140, 120], box, viewport, 0.5)[0], -20);
+  assert.deepEqual(panDelta([100, 100], [110, 100], [0, 0, 1600, 1200], viewport), [-20, -0]);
+  assert.deepEqual(panDelta([100, 100], [110, 100], [0, 0, 1600, 1200], viewport, 4), [-80, -0]);
+  const maxBox = [0, 0, 800, 600], wide = [0, 0, 1600, 1200];
+  assert.deepEqual(galaxyPanDelta([0, 0], [10, 0], maxBox, viewport, GALAXY.map.maxZoom), [-10, -0]);
+  assert.deepEqual(galaxyPanDelta([0, 0], [10, 0], wide, viewport, 2.5), [-40, -0]);
+
+  ui.openStarmap();
+  const svg = { setPointerCapture() {}, setAttribute() {}, getBoundingClientRect() { return viewport; } };
+  const oldQuery = mapRoot.querySelector;
+  mapRoot.querySelector = sel => sel === "svg.sm-chart" ? svg : oldQuery.call(mapRoot, sel);
+  const drag = zoom => {
+    ui.state.ui.starmap.zoom = zoom;
+    ui.state.ui.starmap.pan = [0, 0];
+    mapRoot.handlers.pointerdown({ target: { closest: sel => sel === "svg.sm-chart" ? svg : null },
+      button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+    mapRoot.handlers.pointermove({ clientX: 110, clientY: 100 });
+    // Compare on-screen travel: the viewBox conversion already changes world
+    // units per pixel, and the requested zoom multiplier amplifies that drag.
+    const box = chartViewBox(ui.state.galaxy, ui.state.ui.starmap);
+    const value = Math.abs(ui.state.ui.starmap.pan[0]) / chartPixelScale(box, viewport.width, viewport.height);
+    mapRoot.handlers.pointerup({});
+    return value;
+  };
+  const max = drag(GALAXY.map.maxZoom), middle = drag(2.5), min = drag(GALAXY.map.minZoom);
+  ui.state.ui.starmap.zoom = GALAXY.map.maxZoom;
+  const realMaxBox = chartViewBox(ui.state.galaxy, ui.state.ui.starmap);
+  const maxScale = chartPixelScale(realMaxBox, viewport.width, viewport.height);
+  const previousMax = (10 / maxScale) / maxScale; // old chart delta, then screen px
+  assert.ok(Math.abs(max - previousMax) < 1e-9, "maximum zoom keeps the previous drag distance exactly");
+  assert.ok(middle > max && min > middle);
+  assert.ok(Math.abs(middle / max - 2) < 1e-9);
+  assert.ok(Math.abs(min / max - GALAXY.map.maxZoom / GALAXY.map.minZoom) < 1e-9);
+  ui.state.ui.starmap.mode = "system";
+  ui.state.ui.starmap.selected = "meridian";
+  ui.state.ui.starmap.systemZoom = 1;
+  ui.state.ui.starmap.systemPan = [0, 0];
+  mapRoot.handlers.pointerdown({ target: { closest: sel => sel === "svg.sm-chart" ? svg : null },
+    button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+  mapRoot.handlers.pointermove({ clientX: 110, clientY: 100 });
+  const systemBox = systemChartViewBox(ui.state.galaxy, ui.state.ui.starmap);
+  const expected = -10 / chartPixelScale(systemBox, viewport.width, viewport.height);
+  assert.ok(Math.abs(ui.state.ui.starmap.systemPan[0] - expected) < 1e-9);
+  mapRoot.handlers.pointerup({});
+  mapRoot.querySelector = oldQuery;
+  ui.closeStarmap();
+});
+
+test("11B: neighbouring gate-system labels open the shared popup and warp only from their matching gate", () => {
+  const save = ui.prepareGalaxySave(ui.newSave());
+  ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach";
+  ui.state.ui.intro = false; ui.state.ui.starmap = null; ui.state.paused = false;
+  ui.openStarmap();
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  const world = ui.state.galaxy;
+  const exit = pocketConnections(world, "meridian").exits.find(e => e.peerSystemId === "sys-002");
+  assert.ok(exit);
+  assert.equal(exitChoice(world, exit, "reach").label, "Lumenveil");
+  assert.equal(exitChoice(world, exit, "reach").canWarp, false);
+  assert.equal(exitChoice(world, exit, exit.from).canWarp, true);
+  assert.equal(exitChoice(world, exit, exit.from).pocket.id, exit.peerPocketId);
+  assert.ok(mapRoot.innerHTML.includes(`data-exit="${exit.id}"`));
+  assert.ok(mapRoot.innerHTML.includes('role="button" tabindex="0" aria-label="Lumenveil, neighbouring system"'));
+  const clickExit = () => mapRoot.handlers.click({ target: {
+    closest: sel => sel.includes("[data-exit]") ? { dataset: { exit: exit.id } } : null,
+  }, clientX: 120, clientY: 140 });
+  clickExit();
+  assert.equal(ui.state.ui.starmap.menu.exitId, exit.id);
+  assert.ok(mapRoot.innerHTML.includes('class="sm-context"'));
+  assert.ok(mapRoot.innerHTML.includes("<strong>Lumenveil</strong>"));
+  assert.ok(mapRoot.innerHTML.includes("No direct route"));
+  assert.ok(!mapRoot.innerHTML.includes('data-action="travel"'));
+  let stopped = false;
+  mapRoot.handlers.keydown({ key: "Escape", target: { closest: () => null },
+    preventDefault() {}, stopPropagation() { stopped = true; } });
+  assert.ok(stopped);
+  assert.equal(ui.state.ui.starmap.menu, null);
+  assert.ok(!mapRoot.innerHTML.includes('class="sm-context"'));
+  let keyStopped = false;
+  mapRoot.handlers.keydown({ key: "Enter", target: {
+    closest: sel => sel.includes("[data-exit]") ? { dataset: { exit: exit.id } } : null,
+  }, preventDefault() {}, stopPropagation() { keyStopped = true; } });
+  assert.ok(keyStopped);
+  assert.equal(ui.state.ui.starmap.menu.exitId, exit.id, "keyboard activation uses the same exit popup");
+  mapRoot.handlers.keydown({ key: "Escape", target: { closest: () => null }, preventDefault() {}, stopPropagation() {} });
+
+  P.place = exit.from;
+  mapRoot.handlers.contextmenu({ target: {
+    closest: sel => sel.includes("[data-exit]") ? { dataset: { exit: exit.id } } : null,
+  }, clientX: 120, clientY: 140, preventDefault() {}, stopPropagation() {} });
+  assert.ok(mapRoot.innerHTML.includes(`data-action="travel" data-to="${exit.peerPocketId}"`));
+  assert.ok(mapRoot.innerHTML.includes("Warp to Lumenveil"));
+  const actions = [];
+  let listening = true;
+  ui.on("action", action => { if (listening && action.name === "travel") actions.push(action); });
+  try {
+    mapRoot.handlers.click({ target: { closest: () => ({ dataset: { action: "travel", to: exit.peerPocketId }, disabled: false }) } });
+    assert.deepEqual(actions.at(-1), { name: "travel", to: exit.peerPocketId, repeat: false });
+    assert.equal(travelQuote(world, P.place, exit.peerPocketId).ok, true);
+    assert.equal(world.pocketsById[exit.peerPocketId].parent, "sys-002");
+    // A closed gate cannot be bypassed by clicking its neighbouring-system label.
+    exit.link.enabled = false;
+    assert.equal(pocketConnections(world, "meridian").exits.some(e => e.id === exit.id), false);
+    assert.equal(travelQuote(world, P.place, exit.peerPocketId).ok, false);
+  } finally {
+    listening = false;
+    exit.link.enabled = true;
     ui.closeStarmap();
   }
 });
