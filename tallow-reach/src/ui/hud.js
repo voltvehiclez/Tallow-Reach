@@ -18,7 +18,7 @@ import { V } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
 import { localPlayer, profileOf } from "../state/state.js";
-import { routeDisplay, routeRows, escapeRouteText } from "./route-display.js";
+import { routeDisplay, routeRows, routeCurrent, escapeRouteText } from "./route-display.js";
 
 const $ = id => document.getElementById(id);
 const MARKER_POOL = 18;
@@ -203,10 +203,10 @@ export function updateHudRoute(dt, routeElement = el.route) {
     if (routeCache.remaining > 0) return;
   }
   const route = findDestinationRoute(world, place, destination, { player, profile: profileOf(player), world: state.worldState });
-  const details = routeDisplay(world, destination, route, state.worldState.galaxy?.knowledge || {});
+  const details = routeDisplay(world, destination, route, state.worldState.galaxy?.knowledge || {}, place);
   if (!details) { routeElement.hidden = true; routeCache = null; return; }
-  const html = `<h3>Route to ${escapeRouteText(details.title)}</h3>${details.available
-    ? `<ol>${routeRows(details.stops)}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}`;
+  const html = `<h3>Route to ${escapeRouteText(details.title)}</h3>${routeCurrent(details.current)}${details.available
+    ? `<ol tabindex="0" aria-label="Upcoming jumps">${routeRows(details.stops)}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}`;
   if (routeElement.innerHTML !== html) routeElement.innerHTML = html;
   routeElement.hidden = false;
   routeCache = { key, place, world, player, remaining: 0.5 };

@@ -19,6 +19,19 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Group route pockets by system and mark the current area
+
+- Owner clarified that routes should retain one row per system, with all internal pocket hops in
+  order within that row. Both the flight HUD and starmap now show the current pocket marked “here”
+  in its system row and also keep a current-area label visible above the list, including when paged
+  or no route is available. Entering another system starts a new row; a later revisit starts another.
+- The starmap measures wrapped system rows to paginate without hiding long pocket lists. The flight
+  route keeps its current-area label visible while the system rows scroll. No travel rules or saves changed.
+- Updated shared route presentation, HUD/starmap styles, regression tests and the owner checklist.
+  Targeted **42/42**, full **329/329**, build **684 KB (700,547 bytes)**. Browser playtest pending.
+
+---
+
 ## 2026-11-08: Show the active route in flight
 
 - Owner requested the route destinations beneath the left boost bar. The flight HUD now shows the

@@ -6,7 +6,7 @@
 
 import { GALAXY } from "../data/galaxy.js";
 import { chartGalaxy, straightEdgeBlockers } from "./chart-lines.js";
-import { routeDisplay, routeRows } from "./route-display.js";
+import { routeDisplay, routeRows, routeCurrent } from "./route-display.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
@@ -818,7 +818,7 @@ function render() {
     <li class="sm-pocket${c.current ? " here" : ""}" data-pocket-row="${esc(c.pocket.id)}"${c.current ? ' aria-current="location"' : ""}>${esc(c.pocket.n)}</li>`).join("");
   const rootRect = root.getBoundingClientRect?.() || { left: 0, top: 0, width: 800, height: 600 };
   const menu = view.menu ? (view.menu.systemId ? systemMenuMarkup(world, view, from, rootRect) : pocketMenuMarkup(world, view, from, rootRect)) : "";
-  const routeDetails = routeMarkup(world, view, route);
+  const routeDetails = routeMarkup(world, view, route, from);
   const tools = view.mode === "system"
     ? `<div class="sm-tools"><strong>${esc(selected?.n || "")}</strong>
         <div><button type="button" data-action="back">Back to galaxy</button>
@@ -869,11 +869,17 @@ function render() {
   const detailsRect = root.querySelector(".sm-details")?.getBoundingClientRect?.();
   const routeEl = root.querySelector(".sm-route");
   const routeRect = routeEl?.getBoundingClientRect?.();
-  const shownRows = routeEl?.querySelectorAll?.("li")?.length || 0;
+  const visibleList = routeEl?.querySelector?.(".sm-route-list");
+  const shownRows = visibleList?.querySelectorAll?.("li")?.length || 0;
   if (shownRows && routeRect && detailsRect && Number.isFinite(detailsRect.bottom) &&
       Number.isFinite(routeRect.top) && Number.isFinite(routeRect.height)) {
-    const overhead = Math.max(0, routeRect.height - shownRows * 22);
-    const size = Math.max(1, Math.floor((detailsRect.bottom - 15 - routeRect.top - overhead) / 22));
+    // Every system is one logical row, but its pocket names may wrap. Measure
+    // all rows in a hidden copy and use the tallest to keep every page inside.
+    const measured = [...(routeEl.querySelectorAll?.(".sm-route-measure li") || [])];
+    const rowHeight = Math.max(22, ...measured.map(row => (row.getBoundingClientRect?.().height || 18) + 4));
+    const listHeight = visibleList.getBoundingClientRect?.().height || shownRows * rowHeight;
+    const overhead = Math.max(0, routeRect.height - listHeight);
+    const size = Math.max(1, Math.floor((detailsRect.bottom - 15 - routeRect.top - overhead + 4) / rowHeight));
     if (view.routePageSize !== size) { view.routePageSize = size; render(); return; }
   }
   const cssEscape = globalThis.CSS?.escape || (value => value.replace(/["\\]/g, "\\$&"));
@@ -916,9 +922,9 @@ function systemMenuMarkup(world, view, from, rootRect) {
   </div>`;
 }
 
-/** Show system arrivals and the exact target pocket; paginate only when needed. */
-function routeMarkup(world, view, route) {
-  const details = routeDisplay(world, state.ui.destination, route, knowledge());
+/** Group pocket hops by system and paginate only when needed. */
+function routeMarkup(world, view, route, from) {
+  const details = routeDisplay(world, state.ui.destination, route, knowledge(), from);
   if (!details) return "";
   const { title, stops } = details;
   const pageSize = view.routePageSize || Math.max(1, stops.length);
@@ -926,7 +932,7 @@ function routeMarkup(world, view, route) {
   view.routePage = Math.min(view.routePage || 0, pages - 1);
   const rows = routeRows(stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize));
   return `<section class="sm-route" aria-label="Route"><h3>Route to ${esc(title)}</h3>
-    ${route ? `<ol>${rows}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}
+    ${routeCurrent(details.current)}${route ? `<ol class="sm-route-list">${rows}</ol><ol class="sm-route-measure" aria-hidden="true">${routeRows(stops)}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}
     <div class="sm-route-actions">${pages > 1 ? `<button type="button" data-action="route-prev" ${view.routePage === 0 ? "disabled" : ""}>‹</button><span>${view.routePage + 1} / ${pages}</span><button type="button" data-action="route-next" ${view.routePage === pages - 1 ? "disabled" : ""}>›</button>` : ""}
     <button type="button" data-action="clear-destination">Clear</button></div></section>`;
 }

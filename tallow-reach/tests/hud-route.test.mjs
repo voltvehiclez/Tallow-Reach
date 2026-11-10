@@ -20,11 +20,23 @@ test("flight route display follows destination and remaining stops and hides on 
   assert.match(el.innerHTML, /Route to /);
   assert.ok(el.innerHTML.includes(target.n));
   assert.match(el.innerHTML, /J · next warp/);
+  assert.ok(el.innerHTML.includes(`Current:</strong> ${world.pocketsById[player.place].n}`));
   const route = hud.findDestinationRoute(world, player.place, target.id, { player, profile: state.profile, world: state.worldState });
   assert.ok(route.length > 1);
+  const expected = route.map(id => world.pocketsById[id].n);
+  const model = routeDisplay(world, target.id, route, {});
+  assert.deepEqual(model.stops.flatMap(stop => stop.pockets.map(p => p.name)), expected, "every local and gate hop appears in order");
+  assert.ok(route.some((id, i) => i > 0 && world.pocketsById[id].parent === world.pocketsById[route[i - 1]].parent), "covers a local pocket jump");
+  for (const id of route.slice(1)) assert.ok(el.innerHTML.includes(world.pocketsById[id].n), `shows jump to ${id}`);
+  player.place = route[1];
+  hud.updateHudRoute(0, el);
+  assert.ok(el.innerHTML.includes(`Current:</strong> ${world.pocketsById[player.place].n}`), "current area updates on a hop");
+  player.place = route[0];
+  hud.updateHudRoute(0, el);
   for (const link of Object.values(world.links)) if (link.kind === "gate") link.enabled = false;
   hud.updateHudRoute(0.6, el);
   assert.match(el.innerHTML, /No route available/);
+  assert.ok(el.innerHTML.includes(`Current:</strong> ${world.pocketsById[player.place].n}`), "current area remains visible when blocked");
   for (const link of Object.values(world.links)) if (link.kind === "gate") link.enabled = true;
   hud.updateHudRoute(0.6, el);
   assert.match(el.innerHTML, /J · next warp/);
@@ -33,7 +45,8 @@ test("flight route display follows destination and remaining stops and hides on 
   assert.ok(el.innerHTML.includes(world.pocketsById[route.at(-1)].n), "exact pocket target refreshes immediately");
   player.place = route.at(-1);
   hud.updateHudRoute(0, el);
-  assert.doesNotMatch(el.innerHTML, /<li>/, "remaining stops update immediately after arriving");
+  assert.equal((el.innerHTML.match(/<li>/g) || []).length, 1, "only the current system remains after arriving");
+  assert.ok(el.innerHTML.includes(`Current:</strong> ${world.pocketsById[player.place].n}`));
   state.ui.destination = null;
   hud.updateHudRoute(0, el);
   assert.equal(el.hidden, true);
@@ -45,11 +58,27 @@ test("route summary shows exact pockets, conceals undiscovered stops and escapes
   const target = Object.values(world.pocketsById).find(p => p.parent !== start.parent);
   const destination = { pocketId: target.id };
   const summary = routeDisplay(world, destination, [start.id, target.id], {});
-  assert.equal(summary.stops.at(-1).pocket, target.n);
+  assert.equal(summary.stops.at(-1).pockets.at(-1).name, target.n);
   assert.match(summary.title, /\(/);
   const hiddenWorld = { ...world, visibility: { mode: "discovered" } };
-  assert.deepEqual(routeDisplay(hiddenWorld, destination, [start.id, target.id], {}).stops,
-    [{ system: "Undiscovered system", pocket: null }]);
-  assert.match(routeRows([{system: '<unsafe>', pocket: '&"'}]), /&lt;unsafe&gt;.*&amp;&quot;/);
+  assert.deepEqual(routeDisplay(hiddenWorld, destination, [start.id, target.id], {}).stops.at(-1).pockets,
+    [{ name: "Undiscovered pocket", current: false }]);
+  assert.match(routeRows([{system: '<unsafe>', pockets: [{name: '&"'}]}]), /&lt;unsafe&gt;.*&amp;&quot;/);
   assert.equal(routeDisplay(world, destination, null, {}).available, false);
+});
+
+
+test("system rows group consecutive pockets in route order and mark the current pocket", () => {
+  const world = hud.generateGalaxy(), start = world.pocketsById.hollow;
+  const local = Object.values(world.pocketsById).find(p => p.parent === start.parent && p.id !== start.id);
+  const remote = Object.values(world.pocketsById).find(p => p.parent !== start.parent);
+  const again = Object.values(world.pocketsById).find(p => p.parent === remote.parent && p.id !== remote.id);
+  const route = [start.id, local.id, remote.id, again.id, start.id];
+  const summary = routeDisplay(world, { pocketId: start.id }, route, {});
+  assert.equal(summary.stops.length, 3, "each contiguous system is one row, including revisits");
+  assert.deepEqual(summary.stops.map(row => row.pockets.map(p => p.name)),
+    [[start.n, local.n], [remote.n, again.n], [start.n]]);
+  assert.equal(summary.stops[0].pockets[0].current, true);
+  assert.ok(summary.stops.flatMap(row => row.pockets).slice(1).every(p => !p.current));
+  assert.match(routeRows(summary.stops), /aria-current="location"[^>]*>.* \(here\)/);
 });

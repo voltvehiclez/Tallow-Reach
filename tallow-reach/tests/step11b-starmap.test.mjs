@@ -617,19 +617,29 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
   let panelBottom = 300;
   mapRoot.querySelector = function(sel) {
     if (sel === ".sm-details") return { getBoundingClientRect: () => ({ bottom: panelBottom }) };
-    if (sel === ".sm-route") return { getBoundingClientRect: () => ({ top: 200, height: 60 + 22 * ((mapRoot.innerHTML.match(/<li><span aria-hidden=/g) || []).length) }),
-      querySelectorAll: () => Array((mapRoot.innerHTML.match(/<li><span aria-hidden=/g) || []).length).fill({}) };
+    if (sel === ".sm-route") {
+      const html = mapRoot.innerHTML.match(/<ol class="sm-route-list">([\s\S]*?)<\/ol>/)?.[1] || "";
+      const count = (html.match(/<li><span aria-hidden=/g) || []).length;
+      return { getBoundingClientRect: () => ({ top: 200, height: 60 + 22 * count }),
+        querySelector: () => ({ querySelectorAll: () => Array(count).fill({}), getBoundingClientRect: () => ({ height: 22 * count }) }),
+        querySelectorAll: () => [] };
+    }
     return oldQuery.call(this, sel);
   };
   click("labels");
   assert.ok(mapRoot.innerHTML.includes('data-action="route-next"'), "small panel enables paging");
   click("route-next"); assert.equal(ui.state.ui.starmap.routePage, 1);
   assert.ok(mapRoot.innerHTML.includes('data-action="route-prev"'));
+  assert.ok(mapRoot.innerHTML.includes(`Current:</strong> ${world.pocketsById[P.place].n}`), "current pocket stays visible across pages");
   panelBottom = 1200; click("labels");
   assert.ok(!mapRoot.innerHTML.includes('data-action="route-next"'), "growing the panel shows all stops again");
   const currentRoute = findRouteToSystem(world, P.place, target.id);
-  const stopCount = currentRoute.filter((id, i) => i > 0 && world.pocketsById[id].parent !== world.pocketsById[currentRoute[i - 1]].parent).length;
-  assert.equal((mapRoot.innerHTML.match(/<li><span aria-hidden=/g) || []).length, stopCount);
+  const stopCount = 1 + currentRoute.slice(1).filter((id, i) => world.pocketsById[id].parent !== world.pocketsById[currentRoute[i]].parent).length;
+  assert.ok(mapRoot.innerHTML.includes(`Current:</strong> ${world.pocketsById[P.place].n}`));
+  const routeList = mapRoot.innerHTML.match(/<ol class="sm-route-list">([\s\S]*?)<\/ol>/)[1];
+  for (const id of currentRoute.slice(1)) assert.ok(routeList.includes(world.pocketsById[id].n), `shows pocket ${id}`);
+  assert.equal((routeList.match(/<li><span aria-hidden=/g) || []).length, stopCount);
+  assert.match(routeList, /aria-current="location"/);
   const gates = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
   gates.forEach(l => { l.enabled = false; });
   ui.closeStarmap();
