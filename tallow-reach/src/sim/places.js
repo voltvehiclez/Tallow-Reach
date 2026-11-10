@@ -7,6 +7,7 @@ import { emit } from "../util/events.js";
 import { state, placeWorld } from "../state/state.js";
 import { placeAt, placeDef, featureOf, featureById, isPocket } from "../data/places.js";
 import { populateField } from "./asteroids.js";
+import { recordSystemVisit } from "./galaxy.js";
 
 /** Build a place's entities once per session. Safe to call repeatedly. */
 export function loadPlace(id) {
@@ -26,6 +27,7 @@ export function enterPlace(id, player = state.player) {
   if (!isPocket(id)) return false;
   loadPlace(id);
   const local = player === state.player;
+  if (local) recordSystemVisit(state.galaxy, state.worldState.galaxy?.knowledge, id);
   if ((player ? player.place : state.place) === id) {
     if (local) state.place = id;
     return true;

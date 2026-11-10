@@ -16,6 +16,9 @@ import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
 import { V } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
+import { findDestinationRoute } from "../sim/travel.js";
+import { localPlayer, profileOf } from "../state/state.js";
+import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
 
 const $ = id => document.getElementById(id);
 const MARKER_POOL = 18;
@@ -25,6 +28,7 @@ const MARKER_MARGIN_Y = 30;
 let markers = [];
 let markerCount = 0;
 let el = {};
+let routeCache = null;
 
 export function setupHud() {
   el = {
@@ -33,6 +37,7 @@ export function setupHud() {
     hull: $("b2"),
     boost: $("b3"),
     boostVal: $("boost-val"),
+    route: $("hud-route"),
     shieldVal: $("sh-val"),
     hullVal: $("hull-val"),
     topRight: $("tr"),
@@ -53,6 +58,7 @@ export function setupHud() {
     warpHint: $("warp-hint"),
   };
 
+  routeCache = null;
   const container = $("mk");
   for (let i = 0; i < MARKER_POOL; i++) {
     const d = document.createElement("div");
@@ -61,7 +67,11 @@ export function setupHud() {
     markers.push(d);
   }
 
-  if (el.warpHint) el.warpHint.textContent = `M warp to the next ${term("flyable")}`;
+  // Scrolling or clicking the route must not zoom the camera or fire weapons.
+  el.route?.addEventListener("wheel", e => e.stopPropagation());
+  el.route?.addEventListener("mousedown", e => e.stopPropagation());
+
+  if (el.warpHint) el.warpHint.textContent = "M starmap";
 
   addEventListener("mousemove", e => {
     el.cursor.style.left = e.clientX + "px";
@@ -111,6 +121,8 @@ export function updateHud(dt) {
   el.shieldVal.textContent = P.shMax > 0 ? `${Math.round(P.sh)} / ${Math.round(P.shMax)}` : "none";
   el.hullVal.textContent = P.hullMax > 0 ? `${Math.round(P.hull)} / ${Math.round(P.hullMax)}` : "none";
   el.boostVal.textContent = P.enMax > 0 ? `${Math.round(P.en)} / ${Math.round(P.enMax)}` : "none";
+
+  updateHudRoute(dt);
 
   // The primary line names what left click will do, using the names of the
   // equipped modules: the fitted beams for the beam slot, the fitted guns for the
@@ -174,6 +186,40 @@ export function updateHud(dt) {
   }
 
   drawMarkers();
+}
+
+/** Refresh the route immediately on destination/place changes and periodically for
+ * changed travel rules, without running a path search on every animation frame. */
+export function updateHudRoute(dt, routeElement = el.route) {
+  if (!routeElement) return;
+  const destination = state.ui.destination, player = localPlayer(), world = state.galaxy;
+  const place = player?.place || state.place;
+  const key = typeof destination === "string" ? `system:${destination}` : destination?.pocketId ? `pocket:${destination.pocketId}` : "";
+  if (!key || !world || !player) {
+    routeElement.hidden = true; routeCache = null; return;
+  }
+  if (routeCache && routeCache.key === key && routeCache.place === place && routeCache.world === world && routeCache.player === player) {
+    routeCache.remaining -= Math.max(0, dt || 0);
+    if (routeCache.remaining > 0) return;
+  }
+  const route = findDestinationRoute(world, place, destination, { player, profile: profileOf(player), world: state.worldState });
+  const details = routeDisplay(world, destination, route, state.worldState.galaxy?.knowledge || {}, place);
+  if (!details) { routeElement.hidden = true; routeCache = null; return; }
+  // The current system is listed for orientation but is not a system left to travel to.
+  const remaining = Math.max(0, details.stops.length - 1);
+  const count = details.available ? ` (${remaining} ${remaining === 1 ? "system" : "systems"})` : "";
+  const html = `<h3>Route to ${escapeRouteText(details.title)}${count}</h3>${details.available
+    ? `<ol tabindex="0" aria-label="Route systems">${flightRouteRows(details.stops)}</ol>`
+    : `${details.current ? `<p class="route-here" aria-current="location">${escapeRouteText(details.current.system)}</p>` : ""}<p>No route available.</p>`}`;
+  if (routeElement.innerHTML !== html) {
+    const oldList = routeElement.querySelector?.("ol"), oldScroll = oldList?.scrollTop || 0;
+    const placeChanged = !routeCache || routeCache.place !== place || routeCache.key !== key;
+    routeElement.innerHTML = html;
+    const list = routeElement.querySelector?.("ol"), current = list?.querySelector?.(".route-here");
+    if (list) list.scrollTop = placeChanged && current ? Math.max(0, current.offsetTop - list.offsetTop) : oldScroll;
+  }
+  routeElement.hidden = false;
+  routeCache = { key, place, world, player, remaining: 0.5 };
 }
 
 /** One decimal at most, so 10 does not print as 10.0 and 0.25 does not print as 0. */

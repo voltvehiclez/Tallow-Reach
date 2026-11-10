@@ -225,7 +225,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 15, "save version is 15 after the resume point");
+  assert.equal(p.v, 16, "save version is 16 after the starmap");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {

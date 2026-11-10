@@ -33,9 +33,10 @@ organised so that most new content is **data, not code**.
 
 ### 1. Open world (the majority of the game; built first)
 
-- A **starmap** of **systems** laid out as a **2D grid**, like the map in FTL. **100+ systems**
-  is the target. A system groups **pockets**: flyable areas of space named after their main point
-  of interest. You are always in a pocket, never "in" the system itself.
+- A **starmap** of **systems** laid out as an **organic 2D web**: scattered positions and explicit
+  connections, with dead ends, two-link systems and junctions rather than a square grid. **100+
+  systems** is the target. A system groups **pockets**: flyable areas of space named after their main
+  point of interest. You are always in a pocket, never "in" the system itself.
 - The starting system is **Meridian System**. Its first two pockets are **Meridian Station**
   (the station and asteroid belt; internal id `reach`, formerly shown as Tallow Reach) and
   **Kestrel Hollow** (internal id `hollow`, still empty). More pockets can be added to a system;
@@ -43,14 +44,21 @@ organised so that most new content is **data, not code**.
 - **Meridian Station** is the home base (station, shop, hangar, storage). It is a station feature
   inside its pocket, not a separate flyable child place. The in-game station label is **Meridian
   Station** (formerly Meridian Outpost).
+- Within an open-world system, warp freely to **any pocket** by default. The main galaxy still uses
+  explicit gate routes; a future route-requiring instance can opt into `intraSystem: "links"` as data.
+  Each system's zoomed chart has a visual-only central **star (95%) or black hole (5%)**, with pockets
+  spread around it. Its proper name is the system name without the generic suffix (Meridian System →
+  **Meridian**) and is permanently labelled below the body with `(Star)` or `(Black hole)` on a second row.
+  The core is not a pocket or warp destination for now.
 - Pockets contain a mix of **encounters** (friendly and hostile), **resources** (asteroids, salvage)
   and **loot**. The list of things that can appear is meant to grow indefinitely.
 - **Instanced places** are *not* on the map. You reach them through **wormholes**, which can occur
   naturally or be spawned by the player. They are generated when you enter and are the hardest,
   most rewarding content. The same place model supports them; no fixed two-level hierarchy is
   assumed.
-- **Difficulty** rises steeply: the start is easy, the far map and the wormholes are not. Risk
-  versus reward is the main source of replayability.
+- **Difficulty** generally rises with distance from Meridian, with seeded variation, but the actual
+  content of a system decides how dangerous it is. A far system may be deliberately easy. Risk versus
+  reward is the main source of replayability.
 - **Death** = the ship and its whole hold are gone for good (today's rule; the recovery fee and the
   loaned Wasp remain).
 
@@ -88,26 +96,73 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 | # | Question | Default until decided |
 | --- | --- | --- |
-| 1 | **Starmap travel rules.** Can you warp to any sector, or only to adjacent ones? Does a warp cost something (fuel, a charge, time)? | Adjacent sectors only. A warp costs a consumable (fuel), so mining has a purpose. |
-| 2 | **Map knowledge.** Is the whole map visible from the start, or do you discover it? | Fog: Meridian and its neighbours are known; sectors reveal as you reach or scan them. |
-| 3 | **What sets a sector's difficulty?** | Its distance from Meridian on the grid (a "tier"), plus a bit of random variation. |
-| 4 | **Do sectors remember what you did?** (rocks mined out, enemies killed, crates taken) | Yes for map sectors, saved with the world; resources and encounters slowly respawn. Instanced sectors are forgotten when you leave. |
+| 4 | **Do pockets remember what you did?** (rocks mined out, enemies killed, crates taken) | Yes for map pockets, saved with the world; resources and encounters slowly respawn. Instanced places are forgotten when you leave. |
 | 5 | **Wormholes.** What does it take to spawn one, and can you leave an instance with loot at any time? | A consumable item opens one; you can always leave through the entry wormhole; dying inside loses everything, as everywhere. |
 | 6 | **Whose ship do guests fly in a host's world?** | Their **own** ship and hold, brought with them (so the risk is real). What they gain stays in their own save, and returns to their own world automatically. |
 | 7 | **Guests and the host's station.** Can a guest dock at the host's Meridian, shop and repair? | Yes, with the host's prices. A guest's *storage* stays in their own save. |
 | 8 | **Campaign ships.** Do campaign missions use your own ship or a ship the story gives you? | The story gives a fixed ship per mission (keeps missions balanced and replayable). |
 | 9 | **Pausing in co-op.** | Pause only exists in single player; in co-op the game keeps running. |
 | 10 | **Joining technology** (how a link connects two browsers without a server). | Decided at the multiplayer step, not now. See TARGET_ARCHITECTURE.md. It may need to relax the "no new dependencies" rule. |
-| 11 | **What goes in Kestrel Hollow and later pockets/systems?** | Kestrel Hollow stays empty until the owner adds content. New pockets are data entries under a system; the place model allows deeper optional parents later without assuming a fixed depth. |
 
 ## Decisions made
 
+- **2026-11-08 — sparse, clearer starmap (owner):** gate lines should be straight and should not pass through unrelated systems;
+  outer systems should need at least 10 jumps, and route lists should show all stops that fit, with arrows
+  only when necessary. Apply the new connections to existing saves: if an old generated gate pocket is
+  removed, recover to a safe ordinary pocket in the same system without losing character/cargo. This
+  explicitly supersedes the earlier instruction to preserve the original gate connections below.
+
+- **2026-11-08 — step 11B system-map travel and central bodies (owner):** open-world systems allow
+  **warp to any pocket within the same system** by default, without a forced internal route. Remove the
+  internal blue lines on the **sub-system map only**; the main galaxy keeps explicit gate routes. Provide
+  a data opt-out (`intraSystem: "links"`) for future temporary instanced systems that require routes.
+  Each system gets a central **star (95%) or black hole (5%)**, with pockets spread around it like a star
+  system. Keep the existing chart style and gate connections: a gate to Duskdrift still exits to Duskdrift.
+  The central body is **visual only and not warpable** for now (warping near it may be considered later).
+  Its name is permanently labelled below the body with the type in parentheses; the name is the system's
+  proper name (**Meridian System → Meridian**). Native hover tooltips on pockets/central bodies are removed,
+  but click popups stay. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out; system core
+  graphics scale with zoom. Gate pocket names avoid orange stubs/peer labels, and neighbouring-system labels
+  are clickable travel targets for the reciprocal gate pocket. This supersedes the earlier internal-line,
+  local-direct-link-only and hover-only-core requirements below, not the gate rules. Core kind/name and chart
+  geometry are regenerated, never added to compact v16 saves.
+
+- **2026-11-08 — step 11B starmap UI follow-up (owner, superseded in part by the decision above):** after reviewing the first 11B chart ("the map
+  looks ok"), the owner asked for four changes: **zooming in on a system dot opens a system pocket map**;
+  that map shows **pocket-to-pocket lines** plus a **gate exit line pointing out toward the connected
+  neighbouring system**; **right-clicking a pocket opens a clickable “Warp to” popup** and the right-panel
+  warp buttons are removed; the right panel is a **compact overview** (system name, current pocket, plain
+  pocket rows) with no scrolling or extra per-row info. Pocket layout is derived/deterministic and never
+  saved; save v16 and the existing travel/cost/requirement recheck in `startWarp` are unchanged.
+
+- **2026-11-08 — step 11B starmap interaction and saved worlds (owner-approved slice):** **M opens a
+  clickable 2D chart** instead of warping immediately. It shows visible systems, the current location,
+  gate connections and any selected system's full pocket list; only a legal hop starts the existing
+  warp sequence (the later owner decision above makes local hops free by default). Single-player map pauses the simulation; a future hosted co-op
+  world keeps running. Save **v16** stores the galaxy seed plus compact discovery/visit records, not
+  generated geography; v15 and older migrate, and a removed pocket recovers to the safe home station
+  without losing character/cargo. This supersedes the temporary M-cycling note below.
+
+- **2026-11-08 — step 11 starmap and travel (owner):** the map is an **organic 2D web**, not a square
+  grid. Systems have scattered positions and explicit connections; some are dead ends, some have two
+  neighbours, some are junctions. The original slice required a **directly connected pocket** for every
+  hop; the later system-map decision above relaxes this within free open-world systems, while cross-system
+  gate hops remain explicit. Travel costs nothing for now. A **gate pocket** has exactly one external peer: a gate pocket in a
+  neighbouring system. Each system has one gate pocket per neighbouring system, plus an ordinary
+  pocket that connects inward to those gates. Meridian keeps **Meridian Station** and **Kestrel Hollow**
+  unchanged and gains separate new gate pockets; Kestrel Hollow is not a gate. Generated systems are
+  empty placeholders for now. The whole map is visible through a configurable visibility policy (no
+  hard-coded permanent no-fog). Difficulty is distance-from-Meridian guidance with seeded variation;
+  actual content decides danger, so far systems may be easy. The construction must stay modular:
+  moving a system, deleting a pocket, promoting a pocket to a gate, adding a route or replacing the
+  generator are data/registry edits, not map/UI/warp rewrites. Future fuel, proximity-activated gates
+  and supercruise/warp-space travel are explicitly not implemented yet.
 - **2026-11-08 — universe grouping and names (owner):** the map level is a **system**; a flyable
   area is a **pocket**, named after its main point of interest. You are always in a pocket, never
   in a system itself. The starting system is **Meridian System**; its first pockets are **Meridian
   Station** (station + asteroid belt, internal id `reach`) and **Kestrel Hollow** (internal id
-  `hollow`). A system may have any number of pockets. M cycles the current system's pockets for
-  now; choosing among many pockets and the 100+ system starmap come in step 11. Generic words live
+  `hollow`). A system may have any number of pockets. M cycled the current system's pockets
+  temporarily; step 11B replaces that with the clickable starmap/pocket chooser. Generic words live
   in `src/data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
   Meridian is a station feature inside its pocket, not a child place; the in-game station label is
   **Meridian Station**. Internal place ids and old saves/export codes keep working.

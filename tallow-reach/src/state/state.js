@@ -72,6 +72,9 @@ export function currentSave() {
 export function applySave(save) {
   state.profile = save.profile;
   state.worldState = save.world;
+  // Chart presentation belongs to this runtime session, not a loaded save.
+  state.ui.starmapMemory = null;
+  state.ui.destination = null;
   state.place = save.world.place || DEFAULT_PLACE;
   const local = localPlayer();
   if (local) {
@@ -87,6 +90,9 @@ export function applySave(save) {
 export const state = {
   profile: newProfile(),
   worldState: newWorld(),
+  galaxy: null,         // resolved geography (session only; never saved)
+  galaxyRecovery: null, // { from, to } when a removed pocket required safe recovery
+  multiplayer: false,   // step 16 sets true for a hosted session; map must not pause a host
   players: [],         // player records, including their own controls
   localPlayerIndex: 0,  // which player this screen and its input follow
   // Local-player compatibility alias for the local UI and single-player callers.
@@ -144,6 +150,9 @@ export const state = {
 
   ui: {
     intro: true,
+    starmap: null,     // active chart; null while closed
+    starmapMemory: null, // last chart presentation, session-only and never saved
+    destination: null, // system id or { pocketId }, session-only
     tab: "m",          // m contracts, h hangar, o outfitting, i inventory, p shop, b base, s saves
     invShip: null,     // the ship whose hold the Inventory tab shows (null = the one being flown)
     toast: "",         // green message at the top of the panel

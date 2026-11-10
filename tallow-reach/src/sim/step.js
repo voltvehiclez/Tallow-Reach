@@ -13,6 +13,12 @@ import { updateBullets, updateCrates } from "./combat.js";
 import { updateEffects } from "./effects.js";
 import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 
+/** The frame loop's pause gate. A hosted multiplayer world never pauses merely
+ *  because the host opened a local chart; explicit pause still stops this session. */
+export function isSimulationPaused() {
+  return state.paused || state.ui.intro || (!!state.ui.starmap && !state.multiplayer);
+}
+
 /** One simulation tick. Caller does not step while paused. */
 export function stepSim(dt) {
   state.time += dt;

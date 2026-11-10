@@ -5,8 +5,21 @@
 // Tallow Reach and is now Meridian Station; `hollow` is Kestrel Hollow.
 //
 // Generic player-facing nouns live in data/terms.js. Proper names live here.
-// Adding a pocket to a system is one entry here plus a definition; M cycles every
-// pocket of the current system, however many there are.
+// Adding an authored pocket is one entry here plus a definition. Step 11B
+// installs a resolved galaxy as the live lookup catalog; these tables remain
+// the author source and the fallback for legacy/headless callers.
+
+// Derived runtime catalog, never saved. sim/galaxy-session.js replaces it when
+// a seed is loaded. Keeping lookup here lets existing sim/render callers use
+// generated pockets without importing the map screen or knowing the generator.
+let livePlaces = null;
+export function setPlaceCatalog(galaxy = null) {
+  livePlaces = galaxy ? {
+    ...Object.fromEntries(galaxy.systems.map(s => [s.id, s])),
+    ...galaxy.pockets,
+  } : null;
+}
+const catalog = () => livePlaces || PLACES;
 
 export const PLACE_DEFS = {
   // Today's Tallow Reach: the station, the asteroid belt, the planet backdrop
@@ -97,6 +110,18 @@ export const PLACES = {
   },
 };
 
+/** Explicit routes between authored pockets. Generated gate/internal routes are
+ *  added by sim/galaxy.js. A link is { id, kind, a, b, mode, cost, requires,
+ *  enabled }; `kind` is "internal" (same system) or "gate" (one peer in another
+ *  system). sim/travel.js validates these records before every live warp.
+ *  Meridian Station <-> Kestrel Hollow is the only authored route today. */
+export const PLACE_LINKS = {
+  "reach-hollow": {
+    id: "reach-hollow", kind: "internal", a: "reach", b: "hollow",
+    mode: "warp", cost: {}, requires: [], enabled: true,
+  },
+};
+
 /** How far from a pocket's origin a saved position may sit and still be trusted
  *  on load (metres). Anything beyond this, or not a finite number, is treated as
  *  a damaged save and the pilot falls back to the pocket's arrival point. */
@@ -107,12 +132,12 @@ export const DEFAULT_PLACE = "reach";
 
 export const PLACE_IDS = Object.keys(PLACES);
 
-export const isPlace = id => Object.prototype.hasOwnProperty.call(PLACES, id);
-export const isPocket = id => isPlace(id) && PLACES[id].kind === "pocket";
-export const isSystem = id => isPlace(id) && PLACES[id].kind === "system";
+export const isPlace = id => typeof id === "string" && Object.prototype.hasOwnProperty.call(catalog(), id);
+export const isPocket = id => isPlace(id) && catalog()[id].kind === "pocket";
+export const isSystem = id => isPlace(id) && catalog()[id].kind === "system";
 
 /** The place record for `id`, falling back to the starting pocket. */
-export const placeAt = id => PLACES[id] || PLACES[DEFAULT_PLACE];
+export const placeAt = id => (isPlace(id) ? catalog()[id] : null) || catalog()[DEFAULT_PLACE] || PLACES[DEFAULT_PLACE];
 
 /** The definition named by a place record (empty when it has none). */
 export const placeDef = id => PLACE_DEFS[placeAt(id).def] || { features: [] };
@@ -136,9 +161,9 @@ export function systemOf(id) {
 }
 
 /** Every pocket whose parent is system `systemId`, in data order. Never assumes two. */
-export const pocketsIn = systemId => PLACE_IDS.filter(id => PLACES[id].kind === "pocket" && PLACES[id].parent === systemId);
+export const pocketsIn = systemId => Object.keys(catalog()).filter(id => catalog()[id].kind === "pocket" && catalog()[id].parent === systemId);
 
-/** The pocket M warps to next inside the current system. */
+/** Legacy sibling-cycle helper (kept for old tests/tools). Live M opens the map. */
 export function nextPocket(id) {
   const here = placeAt(id);
   const siblings = pocketsIn(here.parent);

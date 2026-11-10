@@ -1,24 +1,41 @@
-// Moving between pockets. M starts a warp to the next pocket of the current
-// system (data/places.js). The sequence is timed by WARP in data/sectors.js.
+// Moving between pockets. The starmap chooses an explicit destination; this
+// module rechecks the travel rules before running the unchanged WARP sequence.
 // Each pilot owns their warp and current pocket; shared places are instanced.
 
 import { WARP, WARP_SWITCH_AT, WARP_TIME, warpFlashAt } from "../data/sectors.js";
-import { placeAt, nextPocket } from "../data/places.js";
+import { PLACES, PLACE_LINKS, placeAt, nextPocket } from "../data/places.js";
+import { travelQuote } from "./travel.js";
 import { emit } from "../util/events.js";
-import { state, localPlayer, msg, say, currentSave } from "../state/state.js";
+import { state, localPlayer, profileOf, msg, say, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { clearWorldObjects } from "./world.js";
 import { enterPlace, arrivalPos } from "./places.js";
 
 export const isWarping = (player = localPlayer()) => !!(player && player.warp);
 
-/** Begin a warp to the next pocket in the current system. */
+/** Begin one explicitly chosen, legal hop. The optional legacy sibling default
+ *  remains for old headless scripts, but is also checked by the same travel rules;
+ *  the live M key opens the map and never calls this without a destination. */
 export function startWarp(player = localPlayer(), to = null) {
   const P = player;
   if (!P || P.warp || P.docked || P.dead) return false;
   const from = P.place || state.place;
   to = to || nextPocket(from);
-  if (to === from) return false;
+  // Direct legacy callers (old tests/tools) have no resolved session galaxy.
+  // Their authored reach/hollow link still works; live play always uses state.galaxy.
+  const galaxy = state.galaxy || { pockets: PLACES, pocketsById: PLACES, links: PLACE_LINKS };
+  const quote = travelQuote(galaxy, from, to, { player: P, profile: profileOf(P), world: state.worldState });
+  if (!quote.ok) {
+    if (P === localPlayer()) msg(quote.reason, 4);
+    emit("travel-denied", { player: P, from, to, reason: quote.reason });
+    return false;
+  }
+  if (Object.entries(quote.cost).length) {
+    const reason = "This route has a travel cost, but no cost handler is registered yet.";
+    if (P === localPlayer()) msg(reason, 4);
+    emit("travel-denied", { player: P, from, to, reason });
+    return false;
+  }
 
   P.warp = {
     from, to, t: 0, fx: 0, flash: 0, switched: false,

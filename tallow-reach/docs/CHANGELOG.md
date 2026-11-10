@@ -19,253 +19,164 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-08: Autosave every 30 seconds instead of 15
+## 2026-11-08: Remove destination diamond
 
-Owner request: halve how often the game writes a save, to keep write volume down.
-
-- `AUTOSAVE_SECONDS` in `src/data/simulation.js` is now **30** (was 15). It is the only tuning number
-  involved; `main.js` already reads it.
-- Nothing else changes. Saving on tab hide/close, on dock, on warp arrival and on every menu click is
-  untouched, so a normal quit still loses nothing — the interval only bounds what a **crash or
-  force-quit** can lose, which is now up to 30 seconds of flying instead of 15.
-- `docs/HANDOFF.md` and `TESTING-PLACES.md` step 4.8 updated to say 30 seconds. The dated v15 entries
-  below still say 15 s because that was true when they were written.
-- **Results:** `npm test` **260/260 pass**; `npm run build` succeeded.
+- Owner requested removing the diamond from the destination system. Both route lists retain the
+  amber bold destination styling, arrows and blue current-system styling; an accessible destination
+  label remains. No navigation or save changes.
+- Updated route markup, styles, tests and checklist. Targeted **44/44**, full **331/331**, build
+  **684 KB (700,815 bytes)**. Browser playtest pending.
 
 ---
 
-## 2026-11-08: Come back where you logged out — save v15
+## 2026-11-08: Mark the route destination and simplify the starmap list
 
-Owner request: quitting while flying in the Meridian Station pocket docked you on the way back in.
-`resumeFromSave` asked only "does this pocket have a station?", so any flight inside `reach` came back
-docked. The owner chose **exact spot, with the arrival point kept as the fallback**, reasoning that
-pockets may grow large and being sent back to the entry point every time would be tedious.
-
-- **Save v15** adds `world.resume`: `null` while docked, otherwise `{ pos, quat, sh, en }` — the exact
-  spot and heading plus shield and boost levels. `sanitizeWorld` rejects anything non-finite, the
-  wrong shape, or beyond `PLACE_EXTENT` (`data/places.js`), and normalises a non-unit heading, so a
-  damaged or hand-edited code can never place the ship somewhere impossible.
-- `resumeFromSave` (`sim/session.js`) returns the pilot to that spot **stationary**, with shields and
-  boost **as they left them** (the default taken where the owner did not choose — quitting is not a
-  free repair). Fallbacks: no resume point (v14 and older) keeps the old dock-or-arrival behaviour; a
-  rejected position falls back the same way; and a ship with no thrusters that would be stranded
-  outside docking range is put back at the station instead.
-- `captureResume()` in `state/state.js` is called by `currentSave()`, so **every** save path — autosave,
-  slot and export code — records the live position rather than a stale one.
-- The game now also saves when the tab is hidden or closed (`pagehide`, `visibilitychange`) and every
-  `AUTOSAVE_SECONDS` (15, in `data/simulation.js`). Previously it only saved on dock, warp arrival and
-  menu clicks, so "where you logged out" would not have held.
-- New `tests/resume-spot.test.mjs` (13 tests): the reported bug, shield/boost persistence and clamping,
-  docking clearing the spot, v14 fallback, eight kinds of damaged resume data, the no-thruster guard,
-  export round-trip, live capture, and the resume point staying out of the portable profile.
-- **Results:** `npm test` **260/260 pass** (both 8b oracles unchanged); `npm run build` succeeded.
-  Docs, VISION decision log and folder READMEs updated; `TESTING-PLACES.md` section 4 rewritten.
+- Owner requested the final system stand out, and that starmap route rows show only systems and arrows
+  like the flight HUD, without grey gate-to-gate pocket details. Both lists now highlight the destination
+  in amber with a diamond; the current system stays blue, even when it is also the destination. The map
+  still shows the exact pocket target in the heading, and its paging and highlighted graph remain intact.
+  Neither list shows completed systems; unused session-only route-history tracking was removed.
+- Updated route presentation, starmap, styles, tests and checklist. Targeted **44/44**, full **331/331**,
+  build **685 KB (700,929 bytes)**. No travel or save changes; browser playtest pending.
 
 ---
 
-## 2026-11-08: Step 10 complete and ticked — owner playtest passed
+## 2026-11-08: Add route arrows to the flight HUD
 
-- The owner played `TESTING-PLACES.md`, found the three bugs listed in the entry below, and confirmed
-  all three fixed ("Works"). **Step 10 is ticked** in `docs/ROADMAP.md`, `docs/REFACTOR_PLAN.md`,
-  `docs/TARGET_ARCHITECTURE.md` and `docs/HANDOFF.md`.
-- No code or save changes in this entry: save version stays **14**, `npm test` **247/247**,
-  `npm run build` succeeded. Published as a GitHub release with `tallow-reach-step10.zip` attached
-  (built HTML plus source, docs and the playtest guides) so it can be downloaded without building.
-- Next: **step 11** — system map, pocket chooser and the 100+ system starmap (save v15). Ask VISION
-  open questions 1 to 3 (travel rules, fog, difficulty) and what goes in Kestrel Hollow first.
+- Owner requested the starmap-style arrows beside the flight route's system names. Each remaining
+  system now has an amber arrow; the current system name stays blue. The count and starmap are unchanged.
+- Updated route markup, HUD style, tests and checklist. Targeted **44/44**, full **331/331**, build
+  **686 KB (702,025 bytes)**. No save or travel changes; browser playtest pending.
 
 ---
 
-## 2026-11-08: Step 10 playtest fixes — sound, start screen and loading a save
+## 2026-11-08: Simplify the flight route to system names
 
-Three bugs the owner found playing step 10. All three were caused by step 10's resume-on-load work.
-
-- **Load/Import/Reset did nothing visible (bug 3).** `afterSaveChange()` in `src/ui/menu.js` called
-  `resetPlaces()` but the import was never added, so it threw a `ReferenceError` *after* `applySave`
-  had already replaced the profile. The click handler aborted before its redraw, so the panel kept
-  the old numbers; the next **Save** then wrote the already-loaded profile and redrew — exactly the
-  owner's "load does nothing, then Save makes it appear" symptom. Fixed the import, split read/validate
-  failure from post-load work in `ld`/`im` (a good code is no longer reported as invalid), and made
-  both actions redraw. The click handler now only draws the panel when the pilot is docked, so
-  loading an away save no longer leaves the station menu open over the flight HUD.
-- **Docking showed the start screen (bug 2).** An away save hid the start panel but left
-  `state.ui.intro = true`, so the next `render()` (on docking) drew the intro again. The start screen
-  now owns the panel until it is dismissed: `docked`/`launched` handlers ignore events while
-  `ui.intro` is set, and the button — renamed **"Enter the hangar" → "Enter game"** — clears the flag
-  and calls `resumeFromSave()`, deploying the pilot where the save put them (docked at a station, or
-  flying at that pocket's arrival point). Nothing simulates behind the start screen, and flight keys
-  are inert until it is dismissed (`src/main.js`, `src/ui/hud.js`, `src/ui/screens.js`).
-- **No sound after resuming out in space (bug 1).** `initAudio()` was only ever called by the start
-  button, which an away save skipped, so the audio context never existed; the Esc sound switch had
-  no master gain to change and could not fix it. `src/main.js` now starts/resumes audio on the first
-  `pointerdown` or `keydown`; `initAudio()` also swallows a rejected `ctx.resume()`.
-- New `tests/step10-fixes.test.mjs` (8 tests) drives the real `ui/menu.js` against a small DOM
-  stand-in: load restores credits and redraws in the same click, an away slot resumes flying, import
-  applies a good code and rejects a bad one without changing the game, reset works, docking never
-  shows the start screen again, and sound starts on a gesture.
-- **Results:** `npm test` **247/247 pass** (both 8b oracles unchanged); `npm run build` succeeded.
-  Save version stays **14** — no save-shape change. `TESTING-PLACES.md` updated for the new button
-  and start-screen flow. Six older entries moved verbatim to `docs/CHANGELOG_ARCHIVE.md`.
-
-
+- Owner requested only remaining system names in flight, with the current system highlighted blue,
+  no completed ticks, and “Route to … (N systems)” showing how many system entries remain beyond
+  the current system. An exact pocket destination remains named in the heading. If routing is blocked,
+  no count is guessed; the current system and no-route message remain visible. The detailed starmap,
+  including its pocket names and completed-system history, is unchanged.
+- Updated the shared route renderer and HUD, tests, and owner checklist. Targeted **44/44**,
+  full **331/331**, build **685 KB (701,942 bytes)**; browser playtest pending. No save or travel changes.
 
 ---
 
-## 2026-11-08: Step 10 built — place definitions (systems and pockets), save v14
+## 2026-11-08: Compact flight route with journey progress
 
-- Implemented the owner-approved systems/pockets model. `src/data/terms.js` holds the generic
-  player-facing nouns (`mapNode: "system"`, `flyable: "pocket"`); `src/data/places.js` holds
-  **Meridian System** and its pockets **Meridian Station** (`reach`, station + belt) and
-  **Kestrel Hollow** (`hollow`, empty). Meridian is a station feature inside `reach`, not a child
-  place. `PLACE_DEFS` carries the station, asteroid field, raider spawner and planet numbers that
-  used to be hard-coded; `sim/places.js` is the generic loader and entities live in per-place
-  containers (`state.places`, `placeWorld(id)`).
-- Each pilot owns `place` and `warp`; `sim/step.js` runs shared systems once per occupied pocket.
-  M cycles every pocket of the current system (a third data-only pocket is tested). One pilot
-  warping does not move another pilot or clear a fight another active pilot is still having.
-- Save **v14**: `world.place` replaces `world.sector`; v13 `sector` ids migrate where valid, older
-  saves default to `reach`. Storage keys and `TR1:` codes unchanged. Loading a station save opens
-  docked; loading an away save resumes flying at that pocket's arrival point with a launch-style
-  refresh. Successful local warp arrival autosaves. In-game station label renamed
-  **Meridian Outpost → Meridian Station**.
-- Files: `src/data/{terms,places,sectors,shops,station}.js`, `src/sim/{places,world,asteroids,sectors,session,step,player,ai,enemy,combat,missile,effects,weapons,targeting}.js`, `src/state/{state,profile}.js`,
-  `src/render/{scene,views,camera}.js`, `src/ui/{hud,screens,menu,warpflash}.js`, `src/main.js`,
-  `src/index.html`, `src/util/events.js`; docs and folder READMEs aligned; new
-  `tests/step10-places.test.mjs`, `tests/step10-save.test.mjs`, `tests/saves/v13-real.json`,
-  `TESTING-PLACES.md` (rewritten as a numbered step-by-step) and `TEST-OLD-CODES.txt` (two real
-  old-format `TR1:` codes — v12 flat and v13 split — so the old-save/old-code checks are playable
-  without an old build; both verified to decode to v14 with the expected docked/flying resume).
-- **Results:** `npm test` **239/239 pass** (both 8b single-player oracles unchanged);
-  `npm run build` succeeded (`game/tallow-reach.html`, 623 KB). Slice checks: 10a 226/226,
-  10b 226/226, 10c 239/239. **Owner playtest pending** (`TESTING-PLACES.md`). Next: step 11
-  system map / pocket chooser.
-
-
+- Owner chose the compact system-list idea: in flight, show one row per system and its remaining
+  departures, with pocket names only in the current system. The current pocket is marked “here”.
+  Actually crossed systems are retained and checked off, including manual detours/revisits; the rest
+  replans from the current pocket. Counts mean warp jumps departing that system (including its gate
+  crossing), so a system destination may show zero. The current row scrolls into view on a hop.
+- The starmap retains full pocket details and also shows checked-off systems. Journey history is
+  session-only, reset when a destination is replaced, cleared, reached or a save is loaded. The
+  navigation rules, one-hop J and saved data are unchanged; a blocked route shows its current area
+  and no-route message until it becomes available again.
+- Updated HUD, shared route display, transient state, starmap and regression tests. Targeted **43/43**,
+  full **330/330**, build **686 KB (702,040 bytes)**. Browser playtest pending.
 
 ---
 
-## 2026-11-08: Fix high-refresh (240 Hz) ship blur via between-tick render interpolation
+## 2026-11-08: Group route pockets by system and mark the current area
 
-- **Root cause:** the pre-built `game/tallow-reach.html` in the merged 8c branch (`74a9ab5`) had
-  never been rebuilt after step 7b, so opening it directly ran the old variable-`dt` loop at 240 Hz.
-  Rebuilding `game/tallow-reach.html` in step 9 activated step 8a's 60 Hz `simClock`, where the
-  ship mesh updated once every 4 frames (60 Hz) while `chaseView` eased the camera every frame
-  (240 Hz), causing a ~2.4 px 60 Hz sawtooth jitter/blur on the ship model during side-to-side motion.
-- **Fix:** `createSimClock` (`src/sim/step.js`) now exposes `alpha()` (`remainder / SIM_DT`) and
-  optional `beforeStep`/`afterStep` hooks. `src/render/views.js` snapshots previous-tick poses in a
-  `WeakMap` (keeping simulation records untouched) and interpolates entity meshes, the player hull,
-  the mining beam origin, HUD markers (`src/ui/hud.js`) and `chaseView` (`src/render/camera.js`)
-  across fractional frames, snapping immediately on teleports (`P.snap`). Also refreshed
-  `renderer.setPixelRatio` on window resize (`src/main.js`).
-- Added `tests/render-interp.test.mjs`; all **226 tests** pass (both 8b single-player oracles
-  unchanged), and `game/tallow-reach.html` was rebuilt via `npm run build`. Save version remains **13**.
-- **Owner playtest passed:** confirmed both the ship hull blur and the close-range locked-target
-  name-tag blur (asteroids and raiders) are completely gone during combat and warping.
-
-
+- Owner clarified that routes should retain one row per system, with all internal pocket hops in
+  order within that row. Both the flight HUD and starmap now show the current pocket marked “here”
+  in its system row and also keep a current-area label visible above the list, including when paged
+  or no route is available. Entering another system starts a new row; a later revisit starts another.
+- The starmap measures wrapped system rows to paginate without hiding long pocket lists. The flight
+  route keeps its current-area label visible while the system rows scroll. No travel rules or saves changed.
+- Updated shared route presentation, HUD/starmap styles, regression tests and the owner checklist.
+  Targeted **42/42**, full **329/329**, build **684 KB (700,547 bytes)**. Browser playtest pending.
 
 ---
 
-## 2026-11-08: Step 9 complete and ticked — Milestone B reached
+## 2026-11-08: Show the active route in flight
 
-- The owner reported the step 9 playtest passed. Ticked step 9 across `docs/ROADMAP.md`,
-  `docs/REFACTOR_PLAN.md`, `docs/TARGET_ARCHITECTURE.md` and `docs/HANDOFF.md`; **Milestone B**
-  (simulation-pure, fixed-step, player-aware, split-save core) is now complete.
-- No gameplay or save changes in this entry (save version remains **13**, 225 tests green). Next is
-  **Milestone C — step 10** (sector definitions and saving `world.sector`, save v14).
-
-
-
----
-
-## 2026-11-08: Step 8 ticked; step 9 split saves (v13) and per-pilot rules — playtest pending
-
-- Closed step 8 overall after the owner validated smooth 240 Hz play without tick interpolation
-  (parking the two minor aim/respawn caveats in `docs/ROADMAP.md`), and aligned the local-only
-  ownership table in `docs/TARGET_ARCHITECTURE.md` across steps 9, 10 and 16.
-- Bumped `SAVE_VERSION` to **13** (`src/state/profile.js`, `src/state/storage.js`,
-  `src/state/state.js`): saves split into `{ v: 13, profile, world }` (`state.profile` +
-  `state.worldState`) with automatic migration from v1..v12 saves and `TR1:` codes, `sanitizeWorld`
-  walking `BASE_MODULES` directly, and pure `portableProfile` / `mergeProfile` co-op helpers.
-  Storage keys (`tr1`, `tr_s1`..`tr_s3`) and `TR1:` are unchanged.
-- Closed all five step-9-owned local-only areas across `src/sim/{inventory,fitting,economy,contracts,session,player,weapons,combat,missile,ai,step}.js`
-  and `src/ui/{hud,menu,screens}.js`: per-pilot holds, mining, crate pickup (even while local is
-  docked), outfitting, purchases, missile persistence, contract progress/spawning, kill attribution,
-  and per-pilot launch/dock without wiping another active pilot's fight.
-- Added `tests/saves/v12-real.json`, `tests/step9-save.test.mjs` and `tests/step9-local-only.test.mjs`;
-  all **225 tests** pass, and both 8b single-player oracle scripts match exactly. Rebuild required
-  (`npm run build`); owner playtest pending (`TESTING-BASELINE.md` section M).
-
-
+- Owner requested the route destinations beneath the left boost bar. The flight HUD now shows the
+  same remaining system stops and exact-pocket destination as the starmap, plus the J hint or no-route
+  status. Long lists scroll independently; mouse wheel and clicks on the list do not control the ship.
+  It hides when cleared or reached, updates immediately on place/destination changes and rechecks
+  travel conditions twice a second. Route display does not change travel, progress or save data.
+- Added shared `src/ui/route-display.js`, HUD markup/styles and `tests/hud-route.test.mjs`.
+  Targeted **41/41**, full **328/328**, build **683 KB (699,351 bytes)**. Browser playtest pending.
 
 ---
 
-## 2026-11-08: Step 8c owner playtest passed
+## 2026-11-08: Straight starmap lines with attached endpoints
 
-- The owner reports the 8c playtest works. Ticked 8c in the roadmap and refactor plan; no code
-  or save data changed. Step 8 overall remains open pending frame-rate caveat validation.
-
-
-
----
-
-## 2026-11-08: Step 8c scoped implementation complete — playtest pending
-
-- Flight, drive, power, shield, hull, weapons, missiles and targeting use per-player runtime;
-  shared world/projectile systems run once and enemies chase the nearest active player.
-- Added two-player simulation, collision, targeting and weapon tests, plus a 12-second 8b
-  single-player oracle and a second mining/combat/lifecycle oracle. All 216 tests pass; both 8b
-  scripts match exactly. Build required;
-  save version remains 12, no new dependency or multiplayer transport.
-- Inventory, economy, docking, contracts, death/recovery and saves remain local-only as requested;
-  the complete exceptions table is in `TARGET_ARCHITECTURE.md`, and step 9 must close every item.
-  Owner playtest is pending (`TESTING-BASELINE.md` section L); full step 8 frame-rate caveats remain.
-
-
+- Owner asked for straight lines without unrelated-dot intersections, and asked about light-blue systems.
+  Light blue denotes a system marked visited in saved discovery knowledge; orange is the current system.
+- Replaced bent lines and the blanket endpoint mask with a cached, chart-only layout that nudges unrelated
+  dots away from straight gate segments. Paths and highlighted routes use the same single straight segment;
+  connected endpoint dots are never globally masked. In unusually crowded or extreme-zoom layouts, an
+  individual line masks only its unrelated obstructing dots. Chart positions never mutate simulation
+  geography, graph, saves or authored positions; the layout is recalculated on graph/position changes,
+  not when gates are merely closed or reopened. The pocket view and zoom centering use the same chart
+  projection. All system identities and connections remain unchanged.
+- `src/ui/chart-lines.js`, `src/ui/starmap.js`, starmap regression tests and documentation updated.
+  Targeted **64/64**, `npm test` **326/326**, build **681 KB (697,419 bytes)**. No dependencies or save
+  version changes; browser playtest remains pending.
 
 ---
 
-## 2026-11-08: Step 8c in progress — explicit flight, shields and damage
+## 2026-11-08: Clearer, sparser starmap and adaptive route list
 
-- `flight`, shield and power updates, and `hurt` accept a player or independently supplied
-  runtime data. Non-local callers must supply their own resources. Hurt and death events name the
-  affected player; local HUD/recovery ignore other players. Single-player defaults are unchanged.
-- Added `tests/player-runtime.test.mjs` for independent motion, power, shields, profile damage and
-  death routing. 206 tests pass; a 12-second single-player flight/weapon/warp probe matched the
-  prior build. Save version remains 12.
-- **8c remains incomplete:** the main loop, weapons, inventory, AI, lifecycle and other systems
-  still assume one player. The owner does not want to playtest before 8c is complete.
-
-
-
----
-
-## 2026-11-08: Step 8c started — player-specific transforms and launches
-
-- `sim/pilot.js` transforms and mounts now accept an explicit player; projectile and missile
-  launch can inherit that player's velocity. Existing callers default to the local player.
-  Weapon and targeting calls pass their current player explicitly; gameplay and saves are unchanged.
-- Added two-player transform and projectile launch tests (`tests/player-aim.test.mjs`); 202 tests
-  pass. A scripted 12-second 8b-versus-current flight/weapon/warp probe was identical.
-- **8c is incomplete**: simulation systems, power, damage, inventory, targeting, lifecycle and
-  events still assume one player. No multiplayer sim is claimed. Frame-rate caveats remain.
-  Save version stays 12; this work has not been playtested by the owner.
-
-
+- Owner asked for galaxy connections not to pass through unrelated system dots, route stops to use the
+  available vertical space before paging, and outer systems to need at least 10 jumps. Owner explicitly
+  chose to update existing saves too, safely relocating removed gate-pocket saves within the same system.
+- `organic-web-v2` retains seeded system ids, names, positions and core rolls but builds a sparse radial-
+  depth tree, default `extraChance: 0` and `depthRadiusFraction: 0.08`. Default seed: 121 systems,
+  362 pockets, 361 links, 120 gate links; its outer 80%-radius systems need at least 10 gate crossings
+  (11+ across 500 sampled seeds). Custom graph tuning/overrides may change this. The v1 generator is
+  retained to identify prior generated gate IDs. `prepareGalaxySave` moves a removed old gate to an
+  ordinary pocket in its same system, clears old coordinates and preserves profile/cargo; truly unknown
+  pockets still recover home. Recovery notices name the destination; save schema remains v16.
+- `src/ui/chart-lines.js` finds chart-only polylines around system dots, with an SVG dot mask for extreme
+  overlaps. Highlighted routes use exactly the same paths; connections and travel rules remain data-driven.
+  The right route list measures available space and shows all stops that fit; arrow pages only appear if
+  needed, including after resize. The overview panel does not scroll.
+- Added seeded distance/geometry and legacy-save recovery tests; updated map/playtest docs and removed
+  tests' assumptions about old neighbours. Targeted 63/63, full `npm test` **325/325**; build **681 KB
+  (696,881 bytes)**. No visual browser verification; owner playtest remains pending. No new dependencies.
 
 ---
 
-## 2026-11-08: Step 8b complete and ticked
+## 2026-11-08: Set exact pocket destinations
 
-- The owner reported the 8b playtest passed. Updated the handoff, roadmap and refactor plan;
-  8c is next. No gameplay or save changes in this entry. The 8b build and 200 tests passed.
-
-
+- Pocket and gate-neighbour popups now offer **Set destination** below the Warp button or refusal note,
+  including for a pocket that cannot be reached in one hop. The neighbour label selects its reciprocal
+  gate pocket. Selecting the current pocket or an unreachable pocket reports why without replacing a route.
+- Shared executable breadth-first search now also finds the fewest legal, cost-supported warp hops to
+  an exact pocket. `J` still starts one checked hop and replans each time. Pocket destinations stay active
+  on entry to their system and clear only when the exact pocket is reached. The route list names that final
+  pocket; galaxy-system destinations and their arrival-gate behaviour remain unchanged.
+- `src/sim/travel.js`, `src/sim/navigation.js`, `src/ui/starmap.js`, `src/state/state.js`, tests, playtest
+  guide and architecture notes updated. Session-only destination remains outside save v16. Targeted tests
+  **60/60**, full `npm test` **322/322**, build **677 KB (693,443 bytes)**; browser playtest pending.
 
 ---
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-08: Plot system destinations and jump the route with J
+- 2026-11-08: Remember starmap view across closing and travel
+- 2026-11-08: Align newly fired cannon visuals with the interpolated hull
+- 2026-11-08: Tame galaxy chart drag speed
+- 2026-11-08: Step 11B starmap refinements — permanent core labels, zoom-scaled pan/cores, clickable gate neighbours (owner playtest pending)
+- 2026-11-08: Step 11B system-map follow-up — free local warp and named central bodies (owner playtest pending)
+- 2026-11-08: Step 11B starmap UI follow-up — zoomed system maps, right-click warp, compact overview (owner playtest pending)
+- 2026-11-08: Step 11B — clickable starmap, direct-hop travel and save v16 (owner playtest pending)
+- 2026-11-08: Step 11A owner playtest passed — full project backup
+- 2026-11-08: Step 11A owner playtest guide and live browser preview
+- 2026-11-08: Step 11A — organic starmap web, one-peer gates and editable travel rules
+- 2026-11-08: Autosave every 30 seconds instead of 15
+- 2026-11-08: Come back where you logged out — save v15
+- 2026-11-08: Step 10 complete and ticked — owner playtest passed
+- 2026-11-08: Step 10 playtest fixes — sound, start screen and loading a save
+- 2026-11-08: Step 10 built — place definitions (systems and pockets), save v14
+- 2026-11-08: Fix high-refresh (240 Hz) ship blur via between-tick render interpolation
+- 2026-11-08: Step 9 complete and ticked — Milestone B reached
 - 2026-11-08: Step 8a ticked; step 8b player records and controls
 - 2026-11-08: Step 8 slices documented
 - 2026-11-08: Step 8a — fixed simulation tick (playtest pending)
@@ -323,6 +234,12 @@ Three bugs the owner found playing step 10. All three were caused by step 10's r
 - 2026-11-06: Basic cannons fire two bolts per shot again (twin-linked barrels)
 - 2026-11-06: Basic cannons are a module you can fit in either primary bay; raiders are Newbie Raiders with 10 hull
 - 2026-11-06: The boost tank has numbers: 10 units, 2 a second out, 1 a second back
+- 2026-11-08: Step 8 ticked; step 9 split saves (v13) and per-pilot rules — playtest pending
+- 2026-11-08: Step 8c owner playtest passed
+- 2026-11-08: Step 8c scoped implementation complete — playtest pending
+- 2026-11-08: Step 8c in progress — explicit flight, shields and damage
+- 2026-11-08: Step 8c started — player-specific transforms and launches
+- 2026-11-08: Step 8b complete and ticked
 - 2026-11-06: Shield power made simple: a flat 2 MJ/s, and shields bleed when it is not there
 - 2026-11-06: Shields cost power: 1 MJ/s up, 2 MJ/s while recharging
 - 2026-11-06: Smaller shield numbers: 10 points, 1 a second, 1 damage a shot

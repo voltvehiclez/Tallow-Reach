@@ -16,15 +16,18 @@ import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
 import { tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
+import { jumpRoute } from "./sim/navigation.js";
+import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
+import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
 import { updateOutfitting } from "./ui/outfitting.js";
 import { refillPower } from "./sim/power.js";
 import { refreshDrive } from "./sim/drive.js";
 import { refreshShield } from "./sim/shield.js";
 import { refreshHull } from "./sim/hull.js";
-import { createSimClock } from "./sim/step.js";
+import { createSimClock, isSimulationPaused } from "./sim/step.js";
 import { SIM_DT, MAX_FRAME_DT, AUTOSAVE_SECONDS } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
@@ -40,7 +43,7 @@ import {
 // --- Boot ------------------------------------------------------------------
 
 document.body.prepend(renderer.domElement);
-applySave(loadAutosave() || newSave());
+applySave(loadAutosave(prepareGalaxySave) || prepareGalaxySave(newSave()));
 createPlayer();
 setShip(state.profile.ship);
 loadPlace(state.place);
@@ -76,10 +79,11 @@ setupWarpStreaks();
 installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, rocks, the ship
 setupWarpFlash();
 setupPause();
+setupStarmap();
 installInput();
 syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
-  canStart: () => !localPlayer().docked && !state.paused,
+  canStart: () => !localPlayer().docked && !state.paused && !isStarmapOpen(),
   getScale: () => SHIPS[state.profile.ship].sc,
 });
 
@@ -88,8 +92,9 @@ showPlace(state.place);
 
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
 
-on("action", ({ name, repeat }) => {
-  const playing = !state.ui.intro && !localPlayer().docked && !state.paused;
+on("action", ({ name, repeat, to: nameTo, key }) => {
+  const pauseKey = key !== "Escape";
+  const playing = !state.ui.intro && !localPlayer().docked && !state.paused && !isStarmapOpen();
   switch (name) {
     case "lock":
       if (playing && !repeat) toggleLock();
@@ -103,11 +108,25 @@ on("action", ({ name, repeat }) => {
     case "dock":
       if (playing && !state.warp) tryDock();
       break;
-    case "warp":
-      if (playing && !repeat) startWarp();
+    case "starmap":
+      if (!repeat) {
+        if (isStarmapOpen()) closeStarmap();
+        else if (playing) openStarmap();
+      }
+      break;
+    case "route:jump":
+      if (!repeat && playing) jumpRoute(localPlayer());
+      break;
+    case "travel":
+      // The map only proposes a destination. The sim rechecks the direct link,
+      // costs and requirements, then runs the existing warp animation on success.
+      if (!state.ui.intro && !state.paused && !localPlayer().docked) startWarp(localPlayer(), nameTo);
       break;
     case "pause":
-      if (!state.ui.intro && !localPlayer().docked) setPause(!state.paused);
+      if (isStarmapOpen()) {
+        closeStarmap();
+        if (name === "pause" && pauseKey) setPause(true);
+      } else if (!state.ui.intro && !localPlayer().docked) setPause(!state.paused);
       break;
   }
 });
@@ -134,7 +153,7 @@ function frame(now) {
   last = now;
 
   // Nothing simulates behind the start screen or the pause overlay.
-  if (state.paused || state.ui.intro) {
+  if (isSimulationPaused()) {
     renderer.render(scene, camera);
     return;
   }

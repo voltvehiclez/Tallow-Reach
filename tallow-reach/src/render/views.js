@@ -266,7 +266,24 @@ function spawnView(kind, id) {
   const handler = kinds.get(kind);
   if (!handler) return;
   const e = handler.list().find(x => x.id === id && x.kind === kind);
-  if (e) addView(e, handler);
+  if (!e) return;
+  addView(e, handler);
+  // A shot is created after flight has advanced the ship, but the hull is
+  // drawn between the previous and current tick. Start its first rendered
+  // segment at the corresponding previous hull-local muzzle position; the
+  // next snapshot resumes ordinary world-space projectile interpolation.
+  // This affects presentation only, not the shot's position or velocity.
+  const owner = e.kind === "bullet" && e.own && e.owner === localPlayer() ? e.owner : null;
+  const previous = owner && prevPoses.get(owner);
+  if (previous?.quat && !owner.snap && !owner.docked &&
+      previous.pos.distanceToSquared(owner.pos) <= TELEPORT_DIST_SQ) {
+    const shotPose = prevPoses.get(e);
+    if (shotPose) {
+      shotPose.pos.copy(e.pos).sub(owner.pos)
+        .applyQuaternion(owner.quat.clone().invert())
+        .applyQuaternion(previous.quat).add(previous.pos);
+    }
+  }
 }
 
 /** Reconcile every registered list in a group, including missed events. */

@@ -77,11 +77,13 @@ content without reading the engine.
 `{ id, kind: "pocket", def, parent, enter, leave }`; `def` names a definition in `PLACE_DEFS`,
 `parent` is an optional place/system id, and `enter`/`leave` describe how the ship arrives and
 departs (today both are warp; a pocket's `enter.pos` is its arrival point). A **system** is a
-non-flyable grouping record `{ id, kind: "system", n }`; you are always in one of its pockets,
-never in the system itself. The starting system is `meridian` (shown as **Meridian System**).
+non-flyable grouping record `{ id, kind: "system", n, intraSystem, core }`; you are always in one of its
+pockets, never in the system itself or its visual-only central body. The starting system is `meridian`
+(shown as **Meridian System**).
 Its first pockets keep the internal ids `reach` (**Meridian Station**, station + asteroid belt)
-and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M cycles the
-current system's pockets until step 11 adds a chooser. Generic player-facing nouns live in
+and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M opens the
+starmap, zooming into a system dot opens its pocket map, and clicking/right-clicking a legal pocket or gate-neighbour label offers
+**Warp to** (step 11B built, owner playtest pending). Generic player-facing nouns live in
 `data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
 
 **Place definition** (what a place *contains*). A list of features, each placed by data:
@@ -91,15 +93,29 @@ entities and scenery events. There is no `FIELD_CENTER` / `FIELD_SECTOR` / `STAT
 anywhere; positions belong to the place definition. Meridian is a station feature inside its
 pocket, not a child place. The station feature names its shop.
 
-**Map (step 11).** A 2D grid of systems generated from a seed. The map stores system coordinates,
-seed, tier and discovery; each system points at its pockets. `tier` is difficulty from distance to
-Meridian plus variation. Place memory (mined-out rocks, cleared encounters, respawn timers) belongs
-to the world half of the save and arrives in step 12. The map is not a fixed two-level container:
-pockets may later have optional child places (planet pockets, wrecks, wormhole instances) using the
-same place record.
+**Map (step 11).** An **organic 2D web** of systems generated from a seed: scattered positions and
+explicit cross-system gate links, not a square grid. `sim/galaxy.js` resolves `{ travel, systems, pockets,
+links }` through a replaceable generator registry and author overrides; `sim/travel.js` allows free
+same-system hops by default, or requires internal links when a system opts into `intraSystem: "links"`.
+Cross-system hops always require the exact gate link. A gate pocket has exactly one external gate peer
+in a neighbouring system; each system has one ordinary pocket plus one gate pocket per neighbour. Meridian keeps
+`reach`/`hollow` and gains separate gate pockets. The map stores seed, tier and discovery/visit records,
+not generated geography. `tier` is distance-from-Meridian guidance plus seeded variation; authored
+content may override it and decides actual danger. The save stores the seed and compact
+discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a
+policy (`all` today), not a hard-coded no-fog assumption. The zoomed-in system chart uses a derived,
+deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win) that is never saved.
+Pockets orbit an independent seeded star (95%) / black hole (5%) core; its proper name comes from the
+system and is permanently labelled with its type on a second row, but it is not warpable. Free systems omit internal chart lines;
+route-only systems draw them. Gate exit stubs point toward the exact peer system and their labels are clickable travel targets.
+Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out; core graphics scale with system zoom. Place memory
+(mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
+container: pockets may later have optional child places using the same place record.
 
 **Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole. It
-is not on the system map and is discarded on exit. Same loader, different source.
+is not on the system map and is discarded on exit. Same loader, different source. A future temporary
+instanced system that needs ordered internal travel can use the existing `intraSystem: "links"` data
+policy; instance creation/lifecycle itself is still step 14 work.
 
 **Entity.** `{ id, kind: "enemy"|"asteroid"|"crate"|"bullet"|"missile"|"ship"|..., pos, vel, quat, ... }`
 held in the runtime container of the place it belongs to, unique ids from a counter. The sim moves
@@ -118,13 +134,15 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 
 ## Saves
 
-- Since step 10 (save version **14**), every save slot and `TR1:` export code stores
-  `{ v: 14, profile, world }` (principle 5), with automatic migration from flat v1..v12 and split
-  v13 saves:
+- Current save version is **16** (starmap seed + compact knowledge); v15 and older migrate on load.
+  Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
+  migration from flat v1..v12 and split v13/v14/v15 saves:
   `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
   `pw`, `mission`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
-  station storage (`store`), base upgrades (`base`), contract board (`board`) and the current
-  pocket id (`place`, replacing v13's `sector` placeholder). `portableProfile(save)`
+  station storage (`store`), base upgrades (`base`), contract board (`board`), current pocket id
+  (`place`, replacing v13's `sector` placeholder), saved local flight state (`resume`) and galaxy
+  seed/knowledge (`galaxy: { seed, knowledge }`). `sim/galaxy-session.js` installs the seed before
+  validation and recovers removed pockets safely to home. `portableProfile(save)`
   and `mergeProfile(save, profile)` extract and return a guest's character without touching world state.
 - **Recommended co-op rule** (open question 6/7 in VISION.md): a guest brings their own profile
   (ship, hold, credits) into the host's world; whatever they gain simply stays in their own
@@ -175,7 +193,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | Single mixed save | **Closed in step 9 (save v13, owner-playtested):** `state/profile.js` and `state/storage.js` split `{ profile, world }` and migrate v1..v12 saves. | — |
 | Sector geography in code | **Closed in step 10:** positions/features live in `PLACE_DEFS`; a generic loader builds per-place containers; launch/dock/scenery read the station and field features. | — |
 | Current sector not saved | **Closed in step 10 (save v14, owner-playtested):** `world.place` stores the current pocket id; v13 `sector` migrates. | — |
-| Two pockets, cycled with M | `data/places.js` `pocketsIn(systemId)`, `nextPocket()`; step 11 adds the system map and pocket chooser. | 11 |
+| Two pockets, cycled with M | **Closed in 11B (built, owner playtest pending):** M opens `ui/starmap.js`; zooming into a system opens its pocket map and right-click direct-hop quotes replace cycling. `nextPocket()` remains only as a legacy helper for old tests/tools. | — |
 | One contract at a time, three types | `profile.mission`; `generateContract()` in `sim/contracts.js` | 13 |
 | `sanitizeProfile` names things by hand | **Closed in step 9:** `sanitizeWorld` walks `BASE_MODULES` (`data/station.js`) directly instead of naming base modules by hand. | — |
 
@@ -187,7 +205,7 @@ Keep today's folders. **Do not rename or reshuffle for its own sake.** Additions
 src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  places.js  terms.js  galaxy.js
 src/data/place-defs.js (later templates)
 src/data/campaign/   one file per mission (m01.js, m02.js, ...) + index.js listing the order
-src/sim/spawner.js  loot.js  places.js  galaxy.js  instances.js  missions.js  step.js
+src/sim/spawner.js  loot.js  places.js  galaxy.js  galaxy-session.js  travel.js  instances.js  missions.js  step.js
 src/render/views.js           builds and updates a mesh per entity (7a: hostiles)
 src/ui/starmap.js  missionlog.js
 src/net/                      (multiplayer step only)
