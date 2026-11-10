@@ -9,7 +9,7 @@ Flight HUD route: “Route to” shows the destination and count of systems stil
 by remaining system names with amber arrows; the current system is blue and the destination is bold amber
 (current stays blue when both). A blocked route shows no count. The starmap route list
 also shows only remaining systems and arrows, with measured pagination; exact pocket destinations
-remain in its title. Destinations persist across relogs and future routes are replanned. Owner browser
+remain in its wrapping title. System pocket maps show directed orange overlays for each planned local hop. Destinations persist across relogs and future routes are replanned. Owner browser
 playtest is pending.
 
 ## Ground rules from the owner (do not break these)
@@ -99,8 +99,8 @@ playtest is pending.
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **333/333 pass** (11A file 23 tests, 11B map/save file 41, layout file 2; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **685 KB** (701,251 bytes). Automated
+- **Results:** `npm test` **334/334 pass** (11A file 23 tests, 11B map/save file 42, layout file 2; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **686 KB** (702,037 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v17** persists only the destination; policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry has **121 systems / 362 pockets / 361 links**; system ids/names/positions stay stable, gate connections change;

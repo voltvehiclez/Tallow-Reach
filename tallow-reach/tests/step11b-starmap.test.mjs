@@ -19,7 +19,7 @@ import { WARP_TIME } from "../src/data/sectors.js";
 import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
 import {
   visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices,
-  pocketConnections, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
+  pocketConnections, systemRouteSegments, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
   galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, exitChoice,
 } from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
@@ -397,6 +397,7 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   assert.equal(ui.state.ui.starmap.mode, "system");
   assert.ok(map.innerHTML.includes('data-pocket="hollow"'));
   assert.ok(!map.innerHTML.includes("sm-pocket-edge"), "free local warp has no internal blue lines");
+  assert.ok(!map.innerHTML.includes("sm-system-route"), "no route overlay without a destination");
   assert.ok(!map.innerHTML.includes('data-pockets-edge="reach-hollow"'));
   assert.ok(map.innerHTML.includes("Warp to any pocket in this system"));
   assert.ok(map.innerHTML.includes("data-exit="));
@@ -665,6 +666,25 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
   ui.closeStarmap(); ui.state.ui.starmapMemory = null; mapRoot.querySelector = oldQuery;
 });
 
+test("11B: local route segments contain only consecutive pocket hops in the selected system", () => {
+  const world = generateGalaxy();
+  const chart = pocketConnections(world, "meridian");
+  const a = chart.nodes[0], b = chart.nodes[1], c = chart.nodes[2];
+  const other = Object.values(world.pocketsById).find(p => p.parent !== "meridian");
+  assert.ok(a && b && c && other);
+  assert.deepEqual(systemRouteSegments(chart, [a.id, b.id, other.id, c.id, a.id]).map(s => [s.from, s.to]),
+    [[a.id, b.id], [c.id, a.id]], "no invented lines across systems or past nonconsecutive pockets");
+  assert.deepEqual(systemRouteSegments(chart, null), []);
+  assert.deepEqual(systemRouteSegments(chart, [a.id]), []);
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const heading = css.match(/\.sm-route h3\s*\{([^}]+)\}/)[1];
+  const pocket = css.match(/\.sm-pocket\s*\{([^}]+)\}/)[1];
+  assert.match(heading, /white-space:\s*normal/);
+  assert.match(heading, /overflow-wrap:\s*anywhere/);
+  assert.doesNotMatch(pocket, /ellipsis|white-space:\s*nowrap/);
+  assert.match(css, /\.sm-system-route\s*\{[^}]*pointer-events:\s*none/);
+});
+
 test("11B: pocket destination follows J all the way past a remote arrival gate", () => {
   const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
   const P = ui.configurePlayer(ui.createPlayer(), save.profile);
@@ -686,7 +706,15 @@ test("11B: pocket destination follows J all the way past a remote arrival gate",
   assert.equal(route.at(-1), target.id);
   assert.ok(route.length > 2);
   assert.equal(world.pocketsById[route.at(-2)].parent, target.parent, "last hop begins in target system");
-  assert.ok(mapRoot.innerHTML.includes(target.n), "exact pocket appears in route list");
+  assert.ok(mapRoot.innerHTML.includes(target.n), "exact pocket appears in route title");
+  const entry = route.at(-2);
+  assert.ok(mapRoot.innerHTML.includes(`data-route-from="${entry}" data-route-to="${target.id}"`), "remote target map shows its final internal hop");
+  assert.match(mapRoot.innerHTML, /class="sm-system-route-arrow"/, "local hop has a directional arrow");
+  const gates = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
+  gates.forEach(l => { l.enabled = false; }); click("labels");
+  assert.ok(!mapRoot.innerHTML.includes('class="sm-system-route"'), "blocked route draws no stale local line");
+  gates.forEach(l => { l.enabled = true; }); click("labels");
+  assert.ok(mapRoot.innerHTML.includes(`data-route-from="${entry}" data-route-to="${target.id}"`));
   assert.deepEqual(ui.currentSave().world.destination, { pocketId: target.id });
   ui.closeStarmap();
   for (let i = 1; i < route.length; i++) {
@@ -716,7 +744,11 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   assert.ok(mapRoot.innerHTML.indexOf('data-action="travel"') < mapRoot.innerHTML.indexOf('data-action="set-pocket-destination"'));
   click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" });
+  assert.ok(mapRoot.innerHTML.includes('data-route-from="reach" data-route-to="hollow"'), "free local hop is highlighted in route order");
   assert.ok(mapRoot.innerHTML.includes("Kestrel Hollow"));
+  click({ action: "clear-destination" });
+  assert.ok(!mapRoot.innerHTML.includes('class="sm-system-route"'), "clearing removes local route overlays");
+  click({ pocket: "hollow" }); click({ action: "set-pocket-destination" });
   click({ pocket: "reach" }); click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "current pocket cannot replace an existing route");
   assert.ok(mapRoot.innerHTML.includes("You are already in that pocket."));

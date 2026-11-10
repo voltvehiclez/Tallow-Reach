@@ -148,6 +148,17 @@ export function pocketConnections(world, systemId, knowledge = {}, tuning = GALA
   return { ...layout, policy, edges, exits };
 }
 
+/** Directed local hops from the executable route, never unrelated links or gate crossings. */
+export function systemRouteSegments(chart, route) {
+  if (!Array.isArray(route)) return [];
+  const segments = [];
+  for (let i = 1; i < route.length; i++) {
+    const a = chart.byId[route[i - 1]], b = chart.byId[route[i]];
+    if (a && b && a.id !== b.id) segments.push({ from: a.id, to: b.id, a: a.pos, b: b.pos });
+  }
+  return segments;
+}
+
 /** The travel choice behind a clickable neighbouring-system exit. Its actual
  *  destination is the reciprocal gate pocket, never the remote system/core. */
 export function exitChoice(world, exit, from, context = {}) {
@@ -720,7 +731,7 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
   return `<defs>${masks.join("")}</defs>` + lines + routeLines + nodes;
 }
 
-function systemMarkup(world, view, know, here, unit) {
+function systemMarkup(world, view, know, here, unit, route = null) {
   const chart = pocketConnections(world, view.selected, know);
   const system = chart.system;
   if (!system) return "";
@@ -729,6 +740,15 @@ function systemMarkup(world, view, know, here, unit) {
   const lines = chart.edges.map(edge => {
     const a = point(chart.byId[edge.a].pos), b = point(chart.byId[edge.b].pos);
     return `<line class="sm-edge sm-pocket-edge" data-pockets-edge="${esc(edge.id)}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;
+  }).join("");
+  const routeLines = systemRouteSegments(chart, route).map(segment => {
+    const a = point(segment.a), b = point(segment.b);
+    const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+    // A small filled arrow at 70% of the segment makes the direction clear.
+    const ux = length ? dx / length : 0, uy = length ? dy / length : 0;
+    const x = a[0] + dx * 0.7, y = a[1] + dy * 0.7, size = 5 * unit;
+    const arrow = length ? `<path class="sm-system-route-arrow" d="M${x + ux * size} ${y + uy * size} L${x - ux * size - uy * size * 0.65} ${y - uy * size + ux * size * 0.65} L${x - ux * size + uy * size * 0.65} ${y - uy * size - ux * size * 0.65} Z"/>` : "";
+    return `<g class="sm-system-route" data-route-from="${esc(segment.from)}" data-route-to="${esc(segment.to)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>${arrow}</g>`;
   }).join("");
   const exits = chart.exits.map(exit => {
     const a = point(exit.start), b = point(exit.end);
@@ -780,7 +800,7 @@ function systemMarkup(world, view, know, here, unit) {
     <text class="sm-core-label sm-core-type" x="${coreX}" y="${labelY + lineStep}"
       text-anchor="middle" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">(${esc(type)})</text>
   </g>`;
-  return lines + exits + coreMarkup + nodes;
+  return lines + exits + coreMarkup + routeLines + nodes;
 }
 
 function render() {
@@ -807,7 +827,7 @@ function render() {
   const showSystem = view.mode === "system" || !!transition;
   const route = state.ui.destination ? findDestinationRoute(world, from, state.ui.destination, travelContext()) : null;
   const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route) : "";
-  const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit) : "";
+  const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit, route) : "";
   const galaxyOpacity = transition ? (transition.toMode === "system" ? 1 - eased : eased) : 1;
   const systemOpacity = transition ? (transition.toMode === "system" ? eased : 1 - eased) : 1;
   const chart = transition

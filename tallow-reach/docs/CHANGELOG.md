@@ -19,6 +19,19 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Wrap destination names and show local route hops
+
+- Owner requested long starmap destination names wrap instead of truncating, and orange route lines
+  between pockets on each relevant system map. The route heading and pocket rows can wrap; the panel
+  remains non-scrolling and existing route pagination measures the available space. An arrowed orange
+  segment represents each consecutive same-system pocket hop in the currently executable route,
+  including free-warp and route-only systems. Cross-system hops do not invent internal lines. Overlay
+  updates as routes change, disappears if unavailable/cleared, and does not intercept clicks.
+- Updated starmap markup, styles, regression tests and playtest guide. Full **334/334**, build
+  **686 KB (702,037 bytes)**. Save v17 and one-checked-warp-per-J rules unchanged; browser playtest pending.
+
+---
+
 ## 2026-11-08: Remember route destinations across relogs
 
 - Owner reported that destinations were lost on relog and requested an in-chat playtest. Save **v17**

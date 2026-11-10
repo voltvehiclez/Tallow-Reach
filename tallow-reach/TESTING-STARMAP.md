@@ -201,6 +201,11 @@ asking the remaining VISION questions.
       system should stand out in bold amber without a diamond on both lists. The starmap list should also
       show only systems and arrows (no gate-to-gate text or completed ticks); check paging. Test a pocket
       destination, a blocked route (no count), a detour, and a long route (scroll without zooming or firing).
+- [ ] Set a long-named destination such as Kestreldrift Expanse: the starmap route heading and
+      pocket names should wrap, not end in an ellipsis. Open a system the route passes through:
+      each planned local pocket-to-pocket hop should have an orange arrow showing its direction.
+      Check a local pocket destination, a remote destination, and an unrelated system; clear or block
+      the route and verify the orange lines disappear. Pocket and gate interactions should still work.
 - [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
       in an ordinary pocket of the same system, with character and cargo intact, and see a recovery notice.
       Importing replaces your current game, so export your current save first.
