@@ -16,8 +16,8 @@ not saved). M opens the clickable chart instead of
 warping immediately; zooming into a system dot opens its pocket map, and clicking/right-clicking a legal
 pocket or gate-neighbour label offers **Warp to**. Local hops are free by default; a data `intraSystem: "links"` opt-out restores internal
 routes for future instances. Galaxy gate routes stay explicit. Single-player chart pauses, a future hosted
-world keeps running. Galaxy drag is now bounded to 0.5–1 screen pixels per pointer pixel across zoom levels. `npm test` is **314/314** (both 8b oracles unchanged) and `npm run build` succeeded
-(669 KB). Step 11 remains unticked until the owner passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
+world keeps running. The map remembers its last view in-session and pocket view follows cross-system travel. Galaxy drag is now bounded to 0.5–1 screen pixels per pointer pixel across zoom levels. `npm test` is **316/316** (both 8b oracles unchanged) and `npm run build` succeeded
+(670 KB). Step 11 remains unticked until the owner passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place

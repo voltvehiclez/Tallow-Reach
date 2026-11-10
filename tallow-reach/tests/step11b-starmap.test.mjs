@@ -326,6 +326,7 @@ const ui = await loadHeadless("src/ui/starmap.js", {
   state: "src/state/state.js", applySave: "src/state/state.js", newSave: "src/state/profile.js",
   prepareGalaxySave: "src/sim/galaxy-session.js", createPlayer: "src/sim/player.js",
   configurePlayer: "src/sim/session.js", on: "src/util/events.js", emit: "src/util/events.js",
+  startWarp: "src/sim/sectors.js", updateWarp: "src/sim/sectors.js", currentSave: "src/state/state.js",
 });
 let mapRoot = null;
 
@@ -385,13 +386,95 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   assert.equal(map.hidden, true);
   assert.equal(ui.state.ui.starmap, null);
   assert.equal(ui.openStarmap(), true);
-  assert.equal(ui.state.ui.starmap.mode, "galaxy", "reopening starts at the galaxy web");
+  assert.equal(ui.state.ui.starmap.mode, "system", "reopening restores the pocket map");
+  click({ action: "back" });
   prevented = false;
   map.handlers.keydown({ key: "Enter", target: { closest: () => ({ dataset: { system: "sys-002" } }) },
     preventDefault() { prevented = true; }, stopPropagation() {} });
   assert.equal(prevented, true);
   assert.equal(ui.state.ui.starmap.selected, "sys-002");
   ui.closeStarmap();
+});
+
+test("11B: map remembers its view and follows actual cross-system warps without saving presentation", () => {
+  const save = ui.prepareGalaxySave(ui.newSave());
+  ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach";
+  ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+  assert.equal(ui.openStarmap(), true);
+  ui.state.ui.starmap.zoom = 1.5;
+  ui.state.ui.starmap.pan = [4, 7];
+  ui.closeStarmap();
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(ui.state.ui.starmap.mode, "galaxy");
+  assert.equal(ui.state.ui.starmap.zoom, 1.5);
+  assert.deepEqual(ui.state.ui.starmap.pan, [4, 7]);
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  ui.state.ui.starmap.systemZoom = 2;
+  ui.state.ui.starmap.systemPan = [3, 5];
+  ui.state.ui.starmap.notice = "stale";
+  ui.state.ui.starmap.menu = { pocketId: "hollow" };
+  ui.closeStarmap();
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.equal(ui.state.ui.starmap.selected, "meridian");
+  assert.equal(ui.state.ui.starmap.systemZoom, 2);
+  assert.deepEqual(ui.state.ui.starmap.systemPan, [3, 5]);
+  assert.equal(ui.state.ui.starmap.notice, "");
+  assert.equal(ui.state.ui.starmap.menu, null);
+
+  const exit = pocketConnections(ui.state.galaxy, "meridian").exits.find(e => e.peerSystemId === "sys-002");
+  // In-system warp closes the chart but retains its system and framing.
+  assert.equal(ui.startWarp(P, exit.from), true);
+  ui.updateWarp(WARP_TIME + 1, P);
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(ui.state.ui.starmap.selected, "meridian");
+  assert.equal(ui.state.ui.starmap.systemZoom, 2);
+  // A real gate warp closes the open chart and switches the remembered system.
+  assert.equal(ui.startWarp(P, exit.peerPocketId), true);
+  assert.equal(ui.state.ui.starmap, null);
+  ui.updateWarp(WARP_TIME + 1, P);
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.equal(ui.state.ui.starmap.selected, exit.peerSystemId);
+  assert.equal(ui.state.ui.starmap.systemZoom, 1);
+  assert.deepEqual(ui.state.ui.starmap.systemPan, [0, 0]);
+  assert.ok(mapRoot.innerHTML.includes(`data-pocket="${exit.peerPocketId}"`));
+  assert.ok(!JSON.stringify(ui.currentSave()).includes("starmapMemory"));
+  click({ action: "back" });
+  ui.closeStarmap();
+  assert.equal(ui.startWarp(P, exit.from), true);
+  ui.updateWarp(WARP_TIME + 1, P);
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(ui.state.ui.starmap.mode, "galaxy", "galaxy view stays a galaxy after a system change");
+  ui.closeStarmap();
+  ui.applySave(save);
+  assert.equal(ui.state.ui.starmapMemory, null, "loading a save resets session presentation");
+});
+
+test("11B: map memory ignores other pilots and follows the local system even without an event", () => {
+  const save = ui.prepareGalaxySave(ui.newSave());
+  ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach";
+  ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  const exit = pocketConnections(ui.state.galaxy, "meridian").exits.find(e => e.peerSystemId === "sys-002");
+  assert.equal(ui.openStarmap(), true);
+  // Inspection can be of a system other than the one the pilot occupies.
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "sys-010" } }) }, preventDefault() {} });
+  ui.closeStarmap();
+  ui.emit("place-changed", { from: exit.from, to: exit.peerPocketId, player: {} });
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(ui.state.ui.starmap.selected, "sys-010", "another pilot cannot change local map memory");
+  ui.closeStarmap();
+  P.place = exit.peerPocketId; // e.g. a location change without a place-changed event
+  assert.equal(ui.openStarmap(), true);
+  assert.equal(ui.state.ui.starmap.selected, exit.peerSystemId);
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  ui.closeStarmap();
+  ui.state.ui.starmapMemory = null;
 });
 
 test("11B: composition root wires map/travel/pause and every save replacement prepares its seed", () => {
@@ -541,6 +624,7 @@ test("11B: galaxy/system zoom transition blends viewBoxes and can be driven head
   globalThis.cancelAnimationFrame = () => { frame = null; };
   const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
   try {
+    ui.state.ui.starmapMemory = null;
     assert.equal(ui.openStarmap(), true);
     mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
     assert.equal(ui.state.ui.starmap.mode, "system");

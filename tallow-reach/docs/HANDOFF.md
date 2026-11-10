@@ -58,6 +58,11 @@ ones before changing anything, and update them when decisions or state change.
   which requotes policy/link/cost/requirements and runs the unchanged warp animation.
   Refusals emit `travel-denied` and stay visible in the chart. The right panel is a compact overview
   (system name, current pocket, plain pocket rows) with no warp buttons, tier/description cards or scrolling.
+- **Map view memory:** closing the chart keeps its session-only galaxy/system mode, selection, zoom,
+  pan and labels; reopening clears popup/notice. On local cross-system travel a remembered pocket view
+  follows the new system and resets its pocket framing; a galaxy view remains a galaxy view. Same-system
+  travel keeps framing, other pilots cannot change local memory, and loading a save resets it. No save
+  schema changes. Owner playtest of this follow-up is pending.
 - **Pause/input:** `isSimulationPaused()` freezes single-player flight while the chart is open;
   `state.multiplayer` is the future host flag that keeps a hosted world running. Opening the chart
   clears/zeroes flight controls, blocks free-cam start and dock/lock/weapon hotkeys, and suspends audio;
@@ -72,9 +77,9 @@ ones before changing anything, and update them when decisions or state change.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
-  inherit ship velocity, so drift after leaving the muzzle is expected. Browser verification is pending.
-- **Results:** `npm test` **314/314 pass** (11A file now 23 tests, 11B map/save file 29; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **669 KB** (685,250 bytes). Automated
+  inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
+- **Results:** `npm test` **316/316 pass** (11A file now 23 tests, 11B map/save file 31; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **670 KB** (686,176 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry retains **121 systems / 462 pockets / 511 links** with identical ids/positions/links;

@@ -76,6 +76,9 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       At maximum, middle and minimum zoom, try short and long drags: the map should move smoothly,
       never farther than the pointer moves on screen. Zooming out makes it pan a little farther;
       repeat after resizing the browser or using a different viewport shape.
+- [ ] **2.3a** With the galaxy web visible, press **M** twice: it reopens as the galaxy web with its
+      previous zoom/pan. Open a system's pocket map, zoom/pan, then press **M** twice: the same system
+      and framing return. The popup and old notices should not reopen.
 - [ ] **2.4** Open a **system map**: select a system dot, then scroll up several times (or press **+**
       until it opens), or simply **double-click** the dot. Expect a short zoom transition into a map of
       that system's pockets: a central star/black hole, ordinary pocket dots spread around it, and gate
@@ -117,7 +120,8 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
 - [ ] **3.2** Click **Warp to Kestrel Hollow**. The map closes and the usual ~2-second warp runs: throttle
       releases, turn eases back, white flash, weapons offline. Arrival message: **“Warp: Meridian Station
       to Kestrel Hollow. Empty space. Nothing out here yet.”**
-- [ ] **3.3** Press **M** again, zoom into Meridian, and click/right-click **Meridian Station** to warp back.
+- [ ] **3.3** Press **M** again. The Meridian pocket map should reopen as before; click/right-click
+      **Meridian Station** to warp back.
       Message: **“Warp: Kestrel Hollow to Meridian Station. Meridian Station and the asteroid belt.”**
       Station, belt and planet return.
 - [ ] **3.4** From **Kestrel Hollow**, click/right-click **Gate to Duskdrift** and warp **directly** to it:
@@ -129,6 +133,9 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       Meridian Station or Kestrel Hollow, clicking a neighbouring-system name such as **Lumenveil** or
       **Duskdrift** instead says **No direct route** and offers no warp. You can also cross via the galaxy's
       reciprocal gate pocket. A gate never sends you to an arbitrary neighbouring system.
+- [ ] **3.4a** After crossing into Duskdrift in 3.4, press **M**: the pocket map should now show
+      Duskdrift, not Meridian. Inside one system, warping to another pocket keeps that system's framing.
+      Return to the galaxy web, close it, cross a gate, then reopen: it should stay at galaxy level.
 - [ ] **3.5** Open the map after arriving in the generated system. The header names the pocket you entered.
       Zoom into that system to see its central body and gate stubs. After you leave, its galaxy dot keeps the
       visited colour. You can hop back through the same gate.

@@ -19,6 +19,21 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Remember starmap view across closing and travel
+
+- Owner confirmed the cannon visual follow-up works. Map M-close/reopen now restores the last galaxy or
+  system view, selection, zoom/pan and label setting; popup/notice/transition/drag do not persist.
+  A local cross-system `place-changed` makes a remembered pocket view follow the destination system and
+  resets its pocket framing, while galaxy mode remains galaxy mode. Local same-system hops preserve
+  framing; other pilots do not alter local memory. Reopen also checks current location as a fallback.
+  Hidden systems are not exposed. Save replacement resets memory; it is session-only, not in save v16.
+- Changed `src/ui/starmap.js`, `src/state/state.js`, `tests/step11b-starmap.test.mjs`, root playtest
+  guide and architecture/handoff notes. Headless tests cover both views, real local and gate warps,
+  stale menus, cross-player isolation, fallback and save reset. `npm test` **316/316**, build **670 KB
+  (686,176 bytes)**. Browser playtest pending; step 11 remains unticked.
+
+---
+
 ## 2026-11-08: Align newly fired cannon visuals with the interpolated hull
 
 - Owner reported cannon output visually offset when thrusting and turning. The local hull renders

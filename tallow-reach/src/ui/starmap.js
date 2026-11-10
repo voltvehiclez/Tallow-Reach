@@ -273,8 +273,26 @@ export function setupStarmap() {
   on("warp-start", ({ player } = {}) => { if (!player || player === localPlayer()) closeStarmap(); });
   on("docked", ({ player } = {}) => { if (!player || player === localPlayer()) closeStarmap(); });
   on("died", () => closeStarmap());
-  on("place-changed", ({ player } = {}) => {
-    if (state.ui.starmap && (!player || player === localPlayer())) render();
+  on("place-changed", ({ from, to, player } = {}) => {
+    if (player && player !== localPlayer()) return;
+    const before = state.galaxy?.pocketsById?.[from]?.parent;
+    const after = state.galaxy?.pocketsById?.[to]?.parent;
+    if (before && after && before !== after) {
+      for (const view of [state.ui.starmapMemory, state.ui.starmap]) {
+        if (!view) continue;
+        view.playerSystem = after;
+        if (view.mode === "system") {
+          if (systemVisible(state.galaxy, after, knowledge())) view.selected = after;
+          else view.mode = "galaxy"; // never reveal a hidden system
+          view.systemZoom = 1;
+          view.systemPan = [0, 0];
+          view.menu = null;
+          view.notice = "";
+        }
+      }
+      cancelTransition();
+    }
+    if (state.ui.starmap) render();
   });
   on("travel-denied", ({ player, reason } = {}) => {
     if (state.ui.starmap && (!player || player === localPlayer())) {
@@ -293,10 +311,19 @@ export function openStarmap() {
   cancelTransition();
   const from = P.place || state.place;
   const systems = visibleSystems(state.galaxy, knowledge());
-  const selected = systems.find(s => s.id === placeAt(from).parent)?.id || systems[0]?.id || null;
+  const playerSystem = state.galaxy.pocketsById?.[from]?.parent || placeAt(from).parent;
+  const selected = systems.find(s => s.id === playerSystem)?.id || systems[0]?.id || null;
+  const saved = state.ui.starmapMemory;
+  const visible = id => systems.some(s => s.id === id);
+  const changedSystem = saved && saved.playerSystem !== playerSystem;
+  const rememberedSelected = saved?.mode === "system" && changedSystem ? selected : saved?.selected;
   state.ui.starmap = {
-    selected, mode: "galaxy", zoom: 1, pan: [0, 0], systemZoom: 1, systemPan: [0, 0],
-    notice: "", labels: false, menu: null,
+    selected: visible(rememberedSelected) ? rememberedSelected : selected,
+    mode: saved?.mode === "system" && visible(rememberedSelected || selected) ? "system" : "galaxy",
+    zoom: saved?.zoom ?? 1, pan: saved?.pan ? [...saved.pan] : [0, 0],
+    systemZoom: changedSystem ? 1 : (saved?.systemZoom ?? 1),
+    systemPan: !changedSystem && saved?.systemPan ? [...saved.systemPan] : [0, 0],
+    playerSystem, notice: "", labels: saved?.labels ?? false, menu: null,
   };
   clearControls();
   if (!state.multiplayer) setAudioSuspended(true);
@@ -309,6 +336,14 @@ export function openStarmap() {
 
 export function closeStarmap() {
   if (!state.ui.starmap && (!root || root.hidden)) return false;
+  if (state.ui.starmap) {
+    const view = state.ui.starmap;
+    state.ui.starmapMemory = {
+      selected: view.selected, mode: view.mode, zoom: view.zoom, pan: [...view.pan],
+      systemZoom: view.systemZoom, systemPan: [...view.systemPan], labels: view.labels,
+      playerSystem: state.galaxy?.pocketsById?.[localPlayer()?.place || state.place]?.parent || view.playerSystem,
+    };
+  }
   state.ui.starmap = null;
   drag = null;
   cancelTransition();
