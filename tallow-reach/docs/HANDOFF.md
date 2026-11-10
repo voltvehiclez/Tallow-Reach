@@ -6,7 +6,7 @@ what to run and what to click. These docs are the project's memory across chats:
 ones before changing anything, and update them when decisions or state change.
 
 Flight HUD route: “Route to” shows the destination and count of systems still to enter, followed
-by only the remaining system names; the current system is highlighted blue. A blocked route shows no
+by only the remaining system names with amber arrows; the current system is highlighted blue. A blocked route shows no
 count. The starmap retains full pocket detail, completed-system history and measured pagination. History
 is session-only and resets on destination change, clear, arrival or loading a save; future routes are
 replanned. Owner browser playtest is pending.
@@ -98,7 +98,7 @@ replanned. Owner browser playtest is pending.
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
 - **Results:** `npm test` **331/331 pass** (11A file 23 tests, 11B map/save file 39, layout file 2; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **685 KB** (701,942 bytes). Automated
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **686 KB** (702,025 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry has **121 systems / 362 pockets / 361 links**; system ids/names/positions stay stable, gate connections change;

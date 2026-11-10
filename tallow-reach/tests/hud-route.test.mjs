@@ -23,8 +23,9 @@ test("flight route shows only remaining systems, highlights current and counts f
   assert.ok(route.length > 1);
   assert.equal(el.hidden, false);
   assert.ok(el.innerHTML.includes(`Route to ${target.n} (${model.stops.length - 1} systems)`));
-  assert.ok(el.innerHTML.includes(`aria-current="location">${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
+  assert.ok(el.innerHTML.includes(`aria-current="location"><span aria-hidden="true">→</span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
   assert.doesNotMatch(el.innerHTML, /route-done|✓|<small>|\d+ jumps?/);
+  assert.equal((el.innerHTML.match(/<span aria-hidden="true">→<\/span>/g) || []).length, model.stops.length, "every system has a route arrow");
   assert.equal((el.innerHTML.match(/<li(?: [^>]*)?>/g) || []).length, model.stops.length);
   assert.ok(!el.innerHTML.includes(world.pocketsById[player.place].n), "no pocket names in list");
   const remoteHop = route.find(id => world.pocketsById[id].parent !== world.pocketsById[player.place].parent);
@@ -33,7 +34,7 @@ test("flight route shows only remaining systems, highlights current and counts f
   const remaining = hud.findDestinationRoute(world, player.place, target.id, { player, profile: state.profile, world: state.worldState });
   const currentModel = routeDisplay(world, target.id, remaining, {});
   assert.ok(el.innerHTML.includes(`(${currentModel.stops.length - 1} ${currentModel.stops.length === 2 ? "system" : "systems"})`));
-  assert.ok(el.innerHTML.includes(`aria-current="location">${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
+  assert.ok(el.innerHTML.includes(`aria-current="location"><span aria-hidden="true">→</span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
   player.place = route[0]; hud.updateHudRoute(0, el);
   for (const link of Object.values(world.links)) if (link.kind === "gate") link.enabled = false;
   hud.updateHudRoute(0.6, el);

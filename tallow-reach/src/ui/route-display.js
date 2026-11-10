@@ -44,7 +44,7 @@ export function routeCurrent(current) {
 export function flightRouteRows(stops) {
   return stops.filter(stop => !stop.completed).map(stop => {
     const current = stop.pockets.some(p => p.current);
-    return `<li${current ? ' class="route-here" aria-current="location"' : ""}>${escapeRouteText(stop.system)}</li>`;
+    return `<li${current ? ' class="route-here" aria-current="location"' : ""}><span aria-hidden="true">→</span> ${escapeRouteText(stop.system)}</li>`;
   }).join("");
 }
 

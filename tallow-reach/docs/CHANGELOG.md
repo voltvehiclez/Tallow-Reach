@@ -19,6 +19,15 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Add route arrows to the flight HUD
+
+- Owner requested the starmap-style arrows beside the flight route's system names. Each remaining
+  system now has an amber arrow; the current system name stays blue. The count and starmap are unchanged.
+- Updated route markup, HUD style, tests and checklist. Targeted **44/44**, full **331/331**, build
+  **686 KB (702,025 bytes)**. No save or travel changes; browser playtest pending.
+
+---
+
 ## 2026-11-08: Simplify the flight route to system names
 
 - Owner requested only remaining system names in flight, with the current system highlighted blue,

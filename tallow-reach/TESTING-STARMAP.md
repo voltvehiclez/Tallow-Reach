@@ -194,7 +194,7 @@ asking the remaining VISION questions.
       unrelated system dots. Previously visited systems should appear light blue; the current system is orange. Set a destination near the
       outer edge and check that the route has at least ten system-to-system gate crossings.
 - [ ] With a route set, close the map and check the remaining stops below Boost. Press J for each
-      hop: flight should show only the remaining system names, highlight your current system blue,
+      hop: flight should show arrows beside the remaining system names, highlight your current system blue,
       and show a count of systems still to enter next to the destination (excluding your current
       system). No completed ticks, pocket names or jump counts should appear in the list. The list
       updates after each jump and disappears at the destination or when cleared. The starmap retains
