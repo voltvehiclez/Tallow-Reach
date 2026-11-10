@@ -9,7 +9,7 @@ Flight HUD route: “Route to” shows the destination and count of systems stil
 by remaining system names with amber arrows; the current system is blue and the destination is bold amber
 (current stays blue when both). A blocked route shows no count. The starmap route list
 also shows only remaining systems and arrows, with measured pagination; exact pocket destinations
-remain in its title. Route selection is session-only and future routes are replanned. Owner browser
+remain in its wrapping title. System pocket maps show directed orange overlays for each planned local hop. Destinations persist across relogs and future routes are replanned. Owner browser
 playtest is pending.
 
 ## Ground rules from the owner (do not break these)
@@ -75,8 +75,7 @@ playtest is pending.
   **Set destination**; `findRouteToPocket` plans to that exact pocket, and entering its system does not
   clear it before reaching the pocket. `J` in flight starts one
   ordinary hop at a time via `jumpRoute` -> `startWarp` and requotes; no destination shows **No destination
-  set**. Route recomputes from current location, clears on arrival or Clear, and is session-only (save
-  replacement resets it). Map and J browser playtest pending.
+  set**. Route recomputes from current location, clears on arrival or Clear, and its destination persists in the saved world. Map and J browser playtest pending.
 - **Map view memory:** closing the chart keeps its session-only galaxy/system mode, selection, zoom,
   pan and labels; reopening clears popup/notice. On local cross-system travel a remembered pocket view
   follows the new system and resets its pocket framing; a galaxy view remains a galaxy view. Same-system
@@ -87,7 +86,9 @@ playtest is pending.
   clears/zeroes flight controls, blocks free-cam start and dock/lock/weapon hotkeys, and suspends audio;
   a later user-gesture audio init does not undo that suspension. M closes the chart; Esc closes an open
   pocket popup first, then the chart; P closes the chart then pauses.
-- **Save v16:** `world.galaxy` is only `{ seed, knowledge }` (compact per-system discovery/visit flags).
+- **Save v17:** `world.destination` stores the local system or exact pocket target; it autosaves immediately
+  when changed, and validation drops invalid or already-reached targets. Older saves default to none.
+  The v16 `world.galaxy` is only `{ seed, knowledge }` (compact per-system discovery/visit flags).
   Generated geography is session-only in `state.galaxy` and the live place catalog. Boot, slot load and
   import call `prepareGalaxySave(raw)` before `applySave`: resolve seed → install catalog → sanitize →
   record current visit. A removed v1 generated gate recovers to an ordinary pocket in the same system;
@@ -98,10 +99,10 @@ playtest is pending.
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **331/331 pass** (11A file 23 tests, 11B map/save file 39, layout file 2; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **684 KB** (700,815 bytes). Automated
+- **Results:** `npm test` **334/334 pass** (11A file 23 tests, 11B map/save file 42, layout file 2; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **686 KB** (702,037 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
-  Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
+  Save **v17** persists only the destination; policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry has **121 systems / 362 pockets / 361 links**; system ids/names/positions stay stable, gate connections change;
   its independent core rolls give 116 stars and 5 black holes (including Duskdrift). Meridian is a star.
 - **Known limits:** generated pockets are empty placeholders; visibility is `all`; travel is free and

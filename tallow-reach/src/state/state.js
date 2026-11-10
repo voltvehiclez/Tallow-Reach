@@ -61,6 +61,7 @@ export function captureResume() {
  */
 export function currentSave() {
   captureResume();
+  state.worldState.destination = state.ui.destination;
   return {
     v: SAVE_VERSION,
     profile: state.profile,
@@ -74,7 +75,7 @@ export function applySave(save) {
   state.worldState = save.world;
   // Chart presentation belongs to this runtime session, not a loaded save.
   state.ui.starmapMemory = null;
-  state.ui.destination = null;
+  state.ui.destination = save.world.destination || null;
   state.place = save.world.place || DEFAULT_PLACE;
   const local = localPlayer();
   if (local) {
@@ -152,7 +153,7 @@ export const state = {
     intro: true,
     starmap: null,     // active chart; null while closed
     starmapMemory: null, // last chart presentation, session-only and never saved
-    destination: null, // system id or { pocketId }, session-only
+    destination: null, // system id or { pocketId }, saved with the local world
     tab: "m",          // m contracts, h hangar, o outfitting, i inventory, p shop, b base, s saves
     invShip: null,     // the ship whose hold the Inventory tab shows (null = the one being flown)
     toast: "",         // green message at the top of the panel

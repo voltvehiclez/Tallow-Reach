@@ -152,7 +152,7 @@ export function findRouteToPocket(world, from, pocketId, context = {}) {
   return findExecutableRoute(world, from, pocket => pocket.id === pocketId, context);
 }
 
-/** Session destinations use system ids or an explicit { pocketId } target. */
+/** Destinations use system ids or an explicit { pocketId } target. */
 export function findDestinationRoute(world, from, destination, context = {}) {
   return typeof destination === "string" ? findRouteToSystem(world, from, destination, context)
     : destination?.pocketId ? findRouteToPocket(world, from, destination.pocketId, context) : null;

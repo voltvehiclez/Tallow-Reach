@@ -1,4 +1,4 @@
-// Step 11B: the live map, direct-hop warp, compact v16 saves and safe recovery.
+// Step 11B: the live map, direct-hop warp, compact v17 saves and safe recovery.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,7 +19,7 @@ import { WARP_TIME } from "../src/data/sectors.js";
 import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
 import {
   visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices,
-  pocketConnections, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
+  pocketConnections, systemRouteSegments, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
   galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, exitChoice,
 } from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
@@ -63,8 +63,8 @@ function oldV15() {
   return s;
 }
 
-test("11B: new saves are v16 and store only seed plus compact system knowledge", () => {
-  assert.equal(SAVE_VERSION, 16);
+test("11B: new saves are v17 and store only seed plus compact system knowledge", () => {
+  assert.equal(SAVE_VERSION, 17);
   const s = newSave();
   assert.deepEqual(Object.keys(s.world.galaxy).sort(), ["knowledge", "seed"]);
   assert.equal(s.world.galaxy.seed, GALAXY.seed);
@@ -77,7 +77,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
   const old = oldV15();
   const before = JSON.parse(JSON.stringify(old));
   const s = prepareGalaxySave(old);
-  assert.equal(s.v, 16);
+  assert.equal(s.v, 17);
   assert.equal(s.world.place, "hollow");
   assert.deepEqual(s.world.resume, before.world.resume);
   assert.equal(s.profile.cr, 4850);
@@ -90,7 +90,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
 test("11B: v13 and v12 fixtures still migrate through the world-aware loader", () => {
   for (const raw of [V13, V12]) {
     const s = prepareGalaxySave(raw);
-    assert.equal(s.v, 16);
+    assert.equal(s.v, 17);
     assert.equal(s.profile.cr, raw.profile?.cr ?? raw.cr);
     assert.deepEqual(s.profile.holds, raw.profile?.holds ?? raw.holds);
     assert.ok(state.galaxy.pocketsById[s.world.place]);
@@ -197,7 +197,7 @@ test("11B: autosave, slots and TR1 codes keep their keys/prefix and use the same
     const code = encodeSave(save);
     assert.ok(code.startsWith("TR1:"));
     assert.equal(decodeSave(code, prepareGalaxySave).world.galaxy.seed, 77);
-    assert.equal(JSON.parse(mem.get("tr1")).v, 16);
+    assert.equal(JSON.parse(mem.get("tr1")).v, 17);
   } finally {
     if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
   }
@@ -397,6 +397,7 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   assert.equal(ui.state.ui.starmap.mode, "system");
   assert.ok(map.innerHTML.includes('data-pocket="hollow"'));
   assert.ok(!map.innerHTML.includes("sm-pocket-edge"), "free local warp has no internal blue lines");
+  assert.ok(!map.innerHTML.includes("sm-system-route"), "no route overlay without a destination");
   assert.ok(!map.innerHTML.includes('data-pockets-edge="reach-hollow"'));
   assert.ok(map.innerHTML.includes("Warp to any pocket in this system"));
   assert.ok(map.innerHTML.includes("data-exit="));
@@ -582,7 +583,7 @@ test("11B: system destination popup, route display and J follow ordinary checked
   assert.match(mapRoot.innerHTML, /J · next warp/);
   const expected = findRouteToSystem(world, P.place, target.id);
   assert.ok(expected.length > 2);
-  assert.ok(!JSON.stringify(ui.currentSave()).includes('"destination"'));
+  assert.equal(ui.currentSave().world.destination, target.id);
   ui.closeStarmap();
   for (let i = 1; i < expected.length; i++) {
     assert.equal(ui.jumpRoute(P), true, `J starts hop ${i}`);
@@ -665,6 +666,25 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
   ui.closeStarmap(); ui.state.ui.starmapMemory = null; mapRoot.querySelector = oldQuery;
 });
 
+test("11B: local route segments contain only consecutive pocket hops in the selected system", () => {
+  const world = generateGalaxy();
+  const chart = pocketConnections(world, "meridian");
+  const a = chart.nodes[0], b = chart.nodes[1], c = chart.nodes[2];
+  const other = Object.values(world.pocketsById).find(p => p.parent !== "meridian");
+  assert.ok(a && b && c && other);
+  assert.deepEqual(systemRouteSegments(chart, [a.id, b.id, other.id, c.id, a.id]).map(s => [s.from, s.to]),
+    [[a.id, b.id], [c.id, a.id]], "no invented lines across systems or past nonconsecutive pockets");
+  assert.deepEqual(systemRouteSegments(chart, null), []);
+  assert.deepEqual(systemRouteSegments(chart, [a.id]), []);
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const heading = css.match(/\.sm-route h3\s*\{([^}]+)\}/)[1];
+  const pocket = css.match(/\.sm-pocket\s*\{([^}]+)\}/)[1];
+  assert.match(heading, /white-space:\s*normal/);
+  assert.match(heading, /overflow-wrap:\s*anywhere/);
+  assert.doesNotMatch(pocket, /ellipsis|white-space:\s*nowrap/);
+  assert.match(css, /\.sm-system-route\s*\{[^}]*pointer-events:\s*none/);
+});
+
 test("11B: pocket destination follows J all the way past a remote arrival gate", () => {
   const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
   const P = ui.configurePlayer(ui.createPlayer(), save.profile);
@@ -686,8 +706,16 @@ test("11B: pocket destination follows J all the way past a remote arrival gate",
   assert.equal(route.at(-1), target.id);
   assert.ok(route.length > 2);
   assert.equal(world.pocketsById[route.at(-2)].parent, target.parent, "last hop begins in target system");
-  assert.ok(mapRoot.innerHTML.includes(target.n), "exact pocket appears in route list");
-  assert.ok(!JSON.stringify(ui.currentSave()).includes('pocketId'));
+  assert.ok(mapRoot.innerHTML.includes(target.n), "exact pocket appears in route title");
+  const entry = route.at(-2);
+  assert.ok(mapRoot.innerHTML.includes(`data-route-from="${entry}" data-route-to="${target.id}"`), "remote target map shows its final internal hop");
+  assert.match(mapRoot.innerHTML, /class="sm-system-route-arrow"/, "local hop has a directional arrow");
+  const gates = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
+  gates.forEach(l => { l.enabled = false; }); click("labels");
+  assert.ok(!mapRoot.innerHTML.includes('class="sm-system-route"'), "blocked route draws no stale local line");
+  gates.forEach(l => { l.enabled = true; }); click("labels");
+  assert.ok(mapRoot.innerHTML.includes(`data-route-from="${entry}" data-route-to="${target.id}"`));
+  assert.deepEqual(ui.currentSave().world.destination, { pocketId: target.id });
   ui.closeStarmap();
   for (let i = 1; i < route.length; i++) {
     assert.equal(ui.jumpRoute(P), true);
@@ -716,7 +744,11 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   assert.ok(mapRoot.innerHTML.indexOf('data-action="travel"') < mapRoot.innerHTML.indexOf('data-action="set-pocket-destination"'));
   click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" });
+  assert.ok(mapRoot.innerHTML.includes('data-route-from="reach" data-route-to="hollow"'), "free local hop is highlighted in route order");
   assert.ok(mapRoot.innerHTML.includes("Kestrel Hollow"));
+  click({ action: "clear-destination" });
+  assert.ok(!mapRoot.innerHTML.includes('class="sm-system-route"'), "clearing removes local route overlays");
+  click({ pocket: "hollow" }); click({ action: "set-pocket-destination" });
   click({ pocket: "reach" }); click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "current pocket cannot replace an existing route");
   assert.ok(mapRoot.innerHTML.includes("You are already in that pocket."));
@@ -735,7 +767,68 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   assert.equal(ui.state.hud.msg, "No route to destination.");
   assert.deepEqual(ui.state.ui.destination, { pocketId: exit.peerPocketId });
   blocked.forEach(l => { l.enabled = true; });
-  ui.applySave(save); assert.equal(ui.state.ui.destination, null);
+  ui.applySave(ui.prepareGalaxySave(ui.newSave())); assert.equal(ui.state.ui.destination, null);
+});
+
+test("route destinations autosave immediately, survive relog and clear on arrival", () => {
+  const mem = new Map(), previous = globalThis.localStorage;
+  globalThis.localStorage = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k) };
+  try {
+    ui.state.players.length = 0; ui.state.localPlayerIndex = 0;
+    const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+    const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+    P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+    const target = ui.state.galaxy.systems.find(s => s.id !== "meridian");
+    const click = data => mapRoot.handlers.click({ target: { closest: () => ({ dataset: data, disabled: false }) } });
+    const context = id => mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-system]") ? { dataset: { system: id } } : null }, clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+    ui.openStarmap(); context(target.id); click({ action: "set-destination" });
+    assert.equal(JSON.parse(mem.get("tr1")).world.destination, target.id, "setting saves immediately while map is open");
+    ui.closeStarmap();
+    ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
+    assert.equal(ui.state.ui.destination, target.id, "system target restored after relog");
+    assert.ok(ui.openStarmap()); assert.match(mapRoot.innerHTML, /Route to/);
+    click({ action: "clear-destination" });
+    assert.equal(JSON.parse(mem.get("tr1")).world.destination, null, "clearing saves immediately");
+    ui.closeStarmap(); ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
+    assert.equal(ui.state.ui.destination, null);
+    ui.openStarmap();
+    mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+    click({ pocket: "hollow" }); click({ action: "set-pocket-destination" });
+    assert.deepEqual(JSON.parse(mem.get("tr1")).world.destination, { pocketId: "hollow" });
+    ui.closeStarmap(); ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
+    assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "exact pocket target restored");
+    assert.equal(ui.jumpRoute(P), true); ui.updateWarp(WARP_TIME + 1, P);
+    assert.equal(ui.state.ui.destination, null);
+    assert.equal(JSON.parse(mem.get("tr1")).world.destination, null, "arrival persists the cleared target");
+    ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
+    assert.equal(ui.state.ui.destination, null, "arrival does not resurrect after reload");
+  } finally {
+    ui.closeStarmap(); ui.state.ui.starmapMemory = null;
+    if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
+  }
+});
+
+test("v17: destination migration, validation, slot and export round trips", () => {
+  const old = JSON.parse(JSON.stringify(V15)); old.v = old.profile.v = old.world.v = 16;
+  const migrated = prepareGalaxySave(old);
+  assert.equal(migrated.world.destination, null);
+  assert.deepEqual(migrated.profile.holds, old.profile.holds);
+  const other = state.galaxy.systems.find(s => s.id !== state.galaxy.pocketsById[migrated.world.place].parent);
+  for (const destination of [other.id, { pocketId: Object.values(state.galaxy.pockets).find(p => p.parent === other.id).id }]) {
+    const save = JSON.parse(JSON.stringify(migrated)); save.world.destination = destination;
+    assert.deepEqual(prepareGalaxySave(save).world.destination, destination);
+    assert.deepEqual(decodeSave(encodeSave(save), prepareGalaxySave).world.destination, destination);
+    const mem = new Map(), previous = globalThis.localStorage;
+    globalThis.localStorage = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+    try { assert.equal(writeSlot(1, save), true); assert.deepEqual(prepareGalaxySave(readSlot(1)).world.destination, destination); }
+    finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
+  }
+  for (const invalid of ["missing", "hollow", { pocketId: "meridian" }, { pocketId: "missing" }, [], 42]) {
+    const save = JSON.parse(JSON.stringify(migrated)); save.world.destination = invalid;
+    assert.equal(prepareGalaxySave(save).world.destination, null);
+  }
+  const reached = JSON.parse(JSON.stringify(migrated)); reached.world.destination = { pocketId: reached.world.place };
+  assert.equal(prepareGalaxySave(reached).world.destination, null, "already reached targets are not resurrected");
 });
 
 test("11B: galaxy system popup only offers direct gate warp from the matching gate", () => {
@@ -780,8 +873,8 @@ test("11B: the pre-11B v15 fixture resumes flying with its character and cargo i
   fresh();
   const save = prepareGalaxySave(V15);
   assert.equal(V15.v, 15);
-  assert.equal(save.v, 16);
-  assert.deepEqual(save.profile, { ...V15.profile, v: 16 });
+  assert.equal(save.v, 17);
+  assert.deepEqual(save.profile, { ...V15.profile, v: 17 });
   assert.deepEqual(save.world.base, V15.world.base);
   assert.deepEqual(save.world.store, V15.world.store);
   assert.deepEqual(save.world.board, V15.world.board);
