@@ -16,6 +16,9 @@ const app = await loadHeadless(
     createSimClock: "src/sim/step.js",
     V: "src/util/math.js",
     fwdQ: "src/util/math.js",
+    playerMount: "src/sim/pilot.js",
+    fire: "src/sim/combat.js",
+    updateBullets: "src/sim/combat.js",
     FLIGHT: "src/data/ships.js",
     cameraTrail: "src/data/camera.js",
   },
@@ -104,4 +107,57 @@ test("240 Hz render interpolation eliminates 60 Hz sawtooth jumps when moving si
   P.snap = true;
   const snapped = app.renderPlayerPose(P, 0.5);
   assert.equal(snapped.pos.z, -5000);
+});
+
+
+test("new cannon shots render from the interpolated moving and turning hull without changing ballistics", () => {
+  app.applySave(app.newSave());
+  for (const list of Object.values(app.state.world)) list.length = 0;
+  app.createPlayer();
+  app.setShip("wasp");
+  const P = app.localPlayer();
+  P.docked = false;
+  P.snap = false;
+  for (const turn of [-0.4, 0.4]) {
+    for (const speed of [0, 180]) {
+      for (const b of [...app.state.world.bullets]) b.l = 0;
+      app.updateBullets(0);
+      P.pos.set(0, 0, 0);
+      P.quat.identity();
+      P.v.set(0, 0, -speed);
+      app.snapshotSimPoses();
+      const oldMount = app.playerMount("gun", 0, 0, 2, P);
+      P.pos.set(0, 0, -speed / 60);
+      P.quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn);
+      const muzzle = app.playerMount("gun", 0, 0, 2, P);
+      const forward = app.fwdQ(P.quat);
+      const b = app.fire(muzzle, forward, 500, true, 1, P);
+      assert.ok(b.pos.distanceTo(muzzle) < 1e-9, "simulation still spawns at the current muzzle");
+      assert.ok(b.v.distanceTo(forward.clone().multiplyScalar(500).add(P.v)) < 1e-9, "velocity is unchanged");
+      assert.ok(app.interpolatedPos(b, 0).distanceTo(oldMount) < 1e-9, "first rendered point follows the previous hull pose");
+      app.updateBullets(1 / 60);
+      assert.ok(app.interpolatedPos(b, 1).distanceTo(b.pos) < 1e-9, "shot reaches its true simulated position");
+      const midpoint = oldMount.clone().lerp(b.pos, 0.5);
+      assert.ok(app.interpolatedPos(b, 0.5).distanceTo(midpoint) < 1e-9, "first segment interpolates smoothly");
+      app.snapshotSimPoses();
+      assert.ok(app.interpolatedPos(b, 0).distanceTo(b.pos) < 1e-9, "later ticks use ordinary projectile interpolation");
+    }
+  }
+});
+
+test("new-shot visual correction is skipped for teleports and non-player shots", () => {
+  const P = app.localPlayer();
+  P.docked = false;
+  P.snap = false;
+  P.pos.set(0, 0, 0);
+  P.quat.identity();
+  app.snapshotSimPoses();
+  P.pos.set(100, 0, 0);
+  const muzzle = app.playerMount("gun", 0, 0, 2, P);
+  const teleported = app.fire(muzzle, app.fwdQ(P.quat), 500, true, 1, P);
+  assert.ok(app.interpolatedPos(teleported, 0).distanceTo(muzzle) < 1e-9);
+  app.snapshotSimPoses();
+  P.pos.x += 2;
+  const enemyShot = app.fire(app.V(10, 20, 30), app.V(0, 0, -1), 500, false, 1, P);
+  assert.ok(app.interpolatedPos(enemyShot, 0).distanceTo(enemyShot.pos) < 1e-9);
 });

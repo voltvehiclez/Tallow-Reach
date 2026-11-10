@@ -183,3 +183,11 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
 After a pass, step 11 can be marked complete in `docs/ROADMAP.md` and `docs/REFACTOR_PLAN.md`.
 The next planned refactor is step 12 (encounters, place templates and place memory), which starts by
 asking the remaining VISION questions.
+
+
+## Cannon visual regression check
+
+- [ ] In open space, hold fire with basic cannons while thrusting forward and turning left, then right.
+      Watch both barrels: new bolts should appear at the gun muzzles rather than visibly offset to one side.
+      Repeat while stationary and while flying straight. Fired bolts still inherit ship velocity, so they
+      may drift after leaving the guns during a turn. Check that shooting and damage still work normally.

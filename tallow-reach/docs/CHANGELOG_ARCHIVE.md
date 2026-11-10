@@ -10,6 +10,150 @@ newest stay first.
 
 ---
 
+## 2026-11-08: Come back where you logged out — save v15
+
+Owner request: quitting while flying in the Meridian Station pocket docked you on the way back in.
+`resumeFromSave` asked only "does this pocket have a station?", so any flight inside `reach` came back
+docked. The owner chose **exact spot, with the arrival point kept as the fallback**, reasoning that
+pockets may grow large and being sent back to the entry point every time would be tedious.
+
+- **Save v15** adds `world.resume`: `null` while docked, otherwise `{ pos, quat, sh, en }` — the exact
+  spot and heading plus shield and boost levels. `sanitizeWorld` rejects anything non-finite, the
+  wrong shape, or beyond `PLACE_EXTENT` (`data/places.js`), and normalises a non-unit heading, so a
+  damaged or hand-edited code can never place the ship somewhere impossible.
+- `resumeFromSave` (`sim/session.js`) returns the pilot to that spot **stationary**, with shields and
+  boost **as they left them** (the default taken where the owner did not choose — quitting is not a
+  free repair). Fallbacks: no resume point (v14 and older) keeps the old dock-or-arrival behaviour; a
+  rejected position falls back the same way; and a ship with no thrusters that would be stranded
+  outside docking range is put back at the station instead.
+- `captureResume()` in `state/state.js` is called by `currentSave()`, so **every** save path — autosave,
+  slot and export code — records the live position rather than a stale one.
+- The game now also saves when the tab is hidden or closed (`pagehide`, `visibilitychange`) and every
+  `AUTOSAVE_SECONDS` (15, in `data/simulation.js`). Previously it only saved on dock, warp arrival and
+  menu clicks, so "where you logged out" would not have held.
+- New `tests/resume-spot.test.mjs` (13 tests): the reported bug, shield/boost persistence and clamping,
+  docking clearing the spot, v14 fallback, eight kinds of damaged resume data, the no-thruster guard,
+  export round-trip, live capture, and the resume point staying out of the portable profile.
+- **Results:** `npm test` **260/260 pass** (both 8b oracles unchanged); `npm run build` succeeded.
+  Docs, VISION decision log and folder READMEs updated; `TESTING-PLACES.md` section 4 rewritten.
+
+---
+
+## 2026-11-08: Step 10 complete and ticked — owner playtest passed
+
+- The owner played `TESTING-PLACES.md`, found the three bugs listed in the entry below, and confirmed
+  all three fixed ("Works"). **Step 10 is ticked** in `docs/ROADMAP.md`, `docs/REFACTOR_PLAN.md`,
+  `docs/TARGET_ARCHITECTURE.md` and `docs/HANDOFF.md`.
+- No code or save changes in this entry: save version stays **14**, `npm test` **247/247**,
+  `npm run build` succeeded. Published as a GitHub release with `tallow-reach-step10.zip` attached
+  (built HTML plus source, docs and the playtest guides) so it can be downloaded without building.
+- Next: **step 11** — system map, pocket chooser and the 100+ system starmap (save v15). Ask VISION
+  open questions 1 to 3 (travel rules, fog, difficulty) and what goes in Kestrel Hollow first.
+
+---
+
+## 2026-11-08: Step 10 playtest fixes — sound, start screen and loading a save
+
+Three bugs the owner found playing step 10. All three were caused by step 10's resume-on-load work.
+
+- **Load/Import/Reset did nothing visible (bug 3).** `afterSaveChange()` in `src/ui/menu.js` called
+  `resetPlaces()` but the import was never added, so it threw a `ReferenceError` *after* `applySave`
+  had already replaced the profile. The click handler aborted before its redraw, so the panel kept
+  the old numbers; the next **Save** then wrote the already-loaded profile and redrew — exactly the
+  owner's "load does nothing, then Save makes it appear" symptom. Fixed the import, split read/validate
+  failure from post-load work in `ld`/`im` (a good code is no longer reported as invalid), and made
+  both actions redraw. The click handler now only draws the panel when the pilot is docked, so
+  loading an away save no longer leaves the station menu open over the flight HUD.
+- **Docking showed the start screen (bug 2).** An away save hid the start panel but left
+  `state.ui.intro = true`, so the next `render()` (on docking) drew the intro again. The start screen
+  now owns the panel until it is dismissed: `docked`/`launched` handlers ignore events while
+  `ui.intro` is set, and the button — renamed **"Enter the hangar" → "Enter game"** — clears the flag
+  and calls `resumeFromSave()`, deploying the pilot where the save put them (docked at a station, or
+  flying at that pocket's arrival point). Nothing simulates behind the start screen, and flight keys
+  are inert until it is dismissed (`src/main.js`, `src/ui/hud.js`, `src/ui/screens.js`).
+- **No sound after resuming out in space (bug 1).** `initAudio()` was only ever called by the start
+  button, which an away save skipped, so the audio context never existed; the Esc sound switch had
+  no master gain to change and could not fix it. `src/main.js` now starts/resumes audio on the first
+  `pointerdown` or `keydown`; `initAudio()` also swallows a rejected `ctx.resume()`.
+- New `tests/step10-fixes.test.mjs` (8 tests) drives the real `ui/menu.js` against a small DOM
+  stand-in: load restores credits and redraws in the same click, an away slot resumes flying, import
+  applies a good code and rejects a bad one without changing the game, reset works, docking never
+  shows the start screen again, and sound starts on a gesture.
+- **Results:** `npm test` **247/247 pass** (both 8b oracles unchanged); `npm run build` succeeded.
+  Save version stays **14** — no save-shape change. `TESTING-PLACES.md` updated for the new button
+  and start-screen flow. Six older entries moved verbatim to `docs/CHANGELOG_ARCHIVE.md`.
+
+
+
+---
+
+## 2026-11-08: Step 10 built — place definitions (systems and pockets), save v14
+
+- Implemented the owner-approved systems/pockets model. `src/data/terms.js` holds the generic
+  player-facing nouns (`mapNode: "system"`, `flyable: "pocket"`); `src/data/places.js` holds
+  **Meridian System** and its pockets **Meridian Station** (`reach`, station + belt) and
+  **Kestrel Hollow** (`hollow`, empty). Meridian is a station feature inside `reach`, not a child
+  place. `PLACE_DEFS` carries the station, asteroid field, raider spawner and planet numbers that
+  used to be hard-coded; `sim/places.js` is the generic loader and entities live in per-place
+  containers (`state.places`, `placeWorld(id)`).
+- Each pilot owns `place` and `warp`; `sim/step.js` runs shared systems once per occupied pocket.
+  M cycles every pocket of the current system (a third data-only pocket is tested). One pilot
+  warping does not move another pilot or clear a fight another active pilot is still having.
+- Save **v14**: `world.place` replaces `world.sector`; v13 `sector` ids migrate where valid, older
+  saves default to `reach`. Storage keys and `TR1:` codes unchanged. Loading a station save opens
+  docked; loading an away save resumes flying at that pocket's arrival point with a launch-style
+  refresh. Successful local warp arrival autosaves. In-game station label renamed
+  **Meridian Outpost → Meridian Station**.
+- Files: `src/data/{terms,places,sectors,shops,station}.js`, `src/sim/{places,world,asteroids,sectors,session,step,player,ai,enemy,combat,missile,effects,weapons,targeting}.js`, `src/state/{state,profile}.js`,
+  `src/render/{scene,views,camera}.js`, `src/ui/{hud,screens,menu,warpflash}.js`, `src/main.js`,
+  `src/index.html`, `src/util/events.js`; docs and folder READMEs aligned; new
+  `tests/step10-places.test.mjs`, `tests/step10-save.test.mjs`, `tests/saves/v13-real.json`,
+  `TESTING-PLACES.md` (rewritten as a numbered step-by-step) and `TEST-OLD-CODES.txt` (two real
+  old-format `TR1:` codes — v12 flat and v13 split — so the old-save/old-code checks are playable
+  without an old build; both verified to decode to v14 with the expected docked/flying resume).
+- **Results:** `npm test` **239/239 pass** (both 8b single-player oracles unchanged);
+  `npm run build` succeeded (`game/tallow-reach.html`, 623 KB). Slice checks: 10a 226/226,
+  10b 226/226, 10c 239/239. **Owner playtest pending** (`TESTING-PLACES.md`). Next: step 11
+  system map / pocket chooser.
+
+
+
+---
+
+## 2026-11-08: Fix high-refresh (240 Hz) ship blur via between-tick render interpolation
+
+- **Root cause:** the pre-built `game/tallow-reach.html` in the merged 8c branch (`74a9ab5`) had
+  never been rebuilt after step 7b, so opening it directly ran the old variable-`dt` loop at 240 Hz.
+  Rebuilding `game/tallow-reach.html` in step 9 activated step 8a's 60 Hz `simClock`, where the
+  ship mesh updated once every 4 frames (60 Hz) while `chaseView` eased the camera every frame
+  (240 Hz), causing a ~2.4 px 60 Hz sawtooth jitter/blur on the ship model during side-to-side motion.
+- **Fix:** `createSimClock` (`src/sim/step.js`) now exposes `alpha()` (`remainder / SIM_DT`) and
+  optional `beforeStep`/`afterStep` hooks. `src/render/views.js` snapshots previous-tick poses in a
+  `WeakMap` (keeping simulation records untouched) and interpolates entity meshes, the player hull,
+  the mining beam origin, HUD markers (`src/ui/hud.js`) and `chaseView` (`src/render/camera.js`)
+  across fractional frames, snapping immediately on teleports (`P.snap`). Also refreshed
+  `renderer.setPixelRatio` on window resize (`src/main.js`).
+- Added `tests/render-interp.test.mjs`; all **226 tests** pass (both 8b single-player oracles
+  unchanged), and `game/tallow-reach.html` was rebuilt via `npm run build`. Save version remains **13**.
+- **Owner playtest passed:** confirmed both the ship hull blur and the close-range locked-target
+  name-tag blur (asteroids and raiders) are completely gone during combat and warping.
+
+
+
+---
+
+## 2026-11-08: Step 9 complete and ticked — Milestone B reached
+
+- The owner reported the step 9 playtest passed. Ticked step 9 across `docs/ROADMAP.md`,
+  `docs/REFACTOR_PLAN.md`, `docs/TARGET_ARCHITECTURE.md` and `docs/HANDOFF.md`; **Milestone B**
+  (simulation-pure, fixed-step, player-aware, split-save core) is now complete.
+- No gameplay or save changes in this entry (save version remains **13**, 225 tests green). Next is
+  **Milestone C — step 10** (sector definitions and saving `world.sector`, save v14).
+
+
+
+---
+
 ## 2026-11-08: Step 8 ticked; step 9 split saves (v13) and per-pilot rules — playtest pending
 
 - Closed step 8 overall after the owner validated smooth 240 Hz play without tick interpolation
