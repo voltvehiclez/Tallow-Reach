@@ -19,6 +19,21 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Set exact pocket destinations
+
+- Pocket and gate-neighbour popups now offer **Set destination** below the Warp button or refusal note,
+  including for a pocket that cannot be reached in one hop. The neighbour label selects its reciprocal
+  gate pocket. Selecting the current pocket or an unreachable pocket reports why without replacing a route.
+- Shared executable breadth-first search now also finds the fewest legal, cost-supported warp hops to
+  an exact pocket. `J` still starts one checked hop and replans each time. Pocket destinations stay active
+  on entry to their system and clear only when the exact pocket is reached. The route list names that final
+  pocket; galaxy-system destinations and their arrival-gate behaviour remain unchanged.
+- `src/sim/travel.js`, `src/sim/navigation.js`, `src/ui/starmap.js`, `src/state/state.js`, tests, playtest
+  guide and architecture notes updated. Session-only destination remains outside save v16. Targeted tests
+  **60/60**, full `npm test` **322/322**, build **677 KB (693,443 bytes)**; browser playtest pending.
+
+---
+
 ## 2026-11-08: Plot system destinations and jump the route with J
 
 - Right-click a visible galaxy system for **Set destination** and, only when the current pocket has an

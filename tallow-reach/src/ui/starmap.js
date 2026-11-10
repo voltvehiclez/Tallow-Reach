@@ -9,7 +9,7 @@ import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
 import { systemVisible, pocketsInSystem, systemPocketLayout, systemCoreName } from "../sim/galaxy.js";
-import { travelQuote, intraSystemPolicy, travelOptions, findRouteToSystem } from "../sim/travel.js";
+import { travelQuote, intraSystemPolicy, travelOptions, findRouteToSystem, findDestinationRoute } from "../sim/travel.js";
 import { emit, on } from "../util/events.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
@@ -292,7 +292,8 @@ export function setupStarmap() {
       }
       cancelTransition();
     }
-    if (state.ui.destination && after === state.ui.destination) {
+    const destination = state.ui.destination;
+    if (destination && (typeof destination === "string" ? after === destination : destination.pocketId === to)) {
       state.ui.destination = null;
       msg("Destination reached.");
     }
@@ -587,7 +588,7 @@ function onClick(e) {
   const view = state.ui.starmap;
   if (!view) return;
   const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");
-  const menuAction = ["travel", "set-destination", "system-warp"].includes(button?.dataset?.action);
+  const menuAction = ["travel", "set-destination", "set-pocket-destination", "system-warp"].includes(button?.dataset?.action);
   if (view.menu && !menuAction) {
     view.menu = null;
     if (!button || button.disabled) { render(); return; }
@@ -624,6 +625,18 @@ function onClick(e) {
     if (!route) view.notice = "No route to that system.";
     else if (route.length < 2) view.notice = "You are already in that system.";
     else { state.ui.destination = id; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    render();
+  } else if (action === "set-pocket-destination") {
+    const from = localPlayer()?.place || state.place;
+    const choice = menuChoice(state.galaxy, view, from);
+    const target = choice?.pocket?.id;
+    if (!target) return;
+    const destination = { pocketId: target };
+    const route = findDestinationRoute(state.galaxy, from, destination, travelContext());
+    view.menu = null;
+    if (!route) view.notice = "No route to that pocket.";
+    else if (route.length < 2) view.notice = "You are already in that pocket.";
+    else { state.ui.destination = destination; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
@@ -768,7 +781,7 @@ function render() {
   const unit = chartPixelScale(box, rect.width, rect.height);
   const showGalaxy = view.mode === "galaxy" || !!transition;
   const showSystem = view.mode === "system" || !!transition;
-  const route = state.ui.destination ? findRouteToSystem(world, from, state.ui.destination, travelContext()) : null;
+  const route = state.ui.destination ? findDestinationRoute(world, from, state.ui.destination, travelContext()) : null;
   const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route) : "";
   const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit) : "";
   const galaxyOpacity = transition ? (transition.toMode === "system" ? 1 - eased : eased) : 1;
@@ -800,7 +813,7 @@ function render() {
     ? `Warp to any ${esc(term("flyable"))} in this ${esc(term("mapNode"))}; no internal route is needed.`
     : `Follow the internal route lines; this ${esc(term("mapNode"))} requires connected ${esc(term("flyable"))} hops.`;
   const help = view.mode === "system"
-    ? `Click or right-click a ${esc(term("flyable"))} for Warp to. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route. The central star/black hole is not warpable. Scroll out or Back to return.`
+    ? `Click or right-click a ${esc(term("flyable"))} to warp or set a destination. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route. The central star/black hole is not warpable. Scroll out or Back to return.`
     : `Right-click a system to set a destination. Press J in flight for the next warp. Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `
@@ -841,13 +854,15 @@ function render() {
 function pocketMenuMarkup(world, view, from, rootRect) {
   const choice = menuChoice(world, view, from);
   if (!choice) return "";
-  const pos = contextMenuPosition(view.menu.x - (rootRect.left || 0), view.menu.y - (rootRect.top || 0), rootRect);
+  const tuning = { ...GALAXY.map.context, height: 165 };
+  const pos = contextMenuPosition(view.menu.x - (rootRect.left || 0), view.menu.y - (rootRect.top || 0), rootRect, tuning);
   return `<div class="sm-context" role="menu" tabindex="-1" aria-label="${esc(choice.title)}"
     style="left:${pos.left + (rootRect.left || 0)}px;top:${pos.top + (rootRect.top || 0)}px;width:${GALAXY.map.context.width}px">
     <strong>${esc(choice.title)}</strong>
     ${choice.canWarp
       ? `<button type="button" role="menuitem" data-action="travel" data-to="${esc(choice.pocket.id)}">Warp to ${esc(choice.title)}</button>`
       : `<p class="sm-context-note">${esc(choice.status)}</p>`}
+    <button type="button" role="menuitem" data-action="set-pocket-destination">Set destination</button>
   </div>`;
 }
 
@@ -868,21 +883,26 @@ function systemMenuMarkup(world, view, from, rootRect) {
 
 /** Show system arrivals, not internal pocket hops. Pages keep the panel compact. */
 function routeMarkup(world, view, route) {
-  const destination = state.ui.destination && world.systemsById[state.ui.destination];
-  if (!destination) return "";
+  const destination = state.ui.destination;
+  const targetPocket = typeof destination === "object" && destination ? world.pocketsById[destination.pocketId] : null;
+  const targetSystem = world.systemsById[targetPocket?.parent || destination];
+  if (!targetSystem) return "";
   const stops = [];
   if (route) for (let i = 1; i < route.length; i++) {
     const pocket = world.pocketsById[route[i]], previous = world.pocketsById[route[i - 1]];
-    if (pocket && previous && pocket.parent !== previous.parent) stops.push(pocket);
+    if (!pocket || !previous) continue;
+    if (pocket.parent !== previous.parent || (targetPocket && pocket.id === targetPocket.id)) stops.push(pocket);
   }
   const pageSize = 4, pages = Math.max(1, Math.ceil(stops.length / pageSize));
   view.routePage = Math.min(view.routePage || 0, pages - 1);
   const rows = stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize).map(p => {
     const system = world.systemsById[p.parent];
     const visible = systemVisible(world, p.parent, knowledge());
-    return `<li><span aria-hidden="true">→</span> ${esc(visible ? (system?.n || p.parent) : "Undiscovered system")}${visible && p.parent === destination.id ? ` <small>· ${esc(p.n)}</small>` : ""}</li>`;
+    const showPocket = p.id === targetPocket?.id || (!targetPocket && p.parent === targetSystem.id);
+    return `<li><span aria-hidden="true">→</span> ${esc(visible ? (system?.n || p.parent) : "Undiscovered system")}${visible && showPocket ? ` <small>· ${esc(p.n)}</small>` : ""}</li>`;
   }).join("");
-  return `<section class="sm-route" aria-label="Route"><h3>Route to ${esc(destination.n)}</h3>
+  const title = targetPocket ? `${targetPocket.n} (${targetSystem.n})` : targetSystem.n;
+  return `<section class="sm-route" aria-label="Route"><h3>Route to ${esc(title)}</h3>
     ${route ? `<ol>${rows}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}
     <div class="sm-route-actions">${pages > 1 ? `<button type="button" data-action="route-prev" ${view.routePage === 0 ? "disabled" : ""}>‹</button><span>${view.routePage + 1} / ${pages}</span><button type="button" data-action="route-next" ${view.routePage === pages - 1 ? "disabled" : ""}>›</button>` : ""}
     <button type="button" data-action="clear-destination">Clear</button></div></section>`;

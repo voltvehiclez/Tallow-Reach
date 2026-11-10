@@ -13,7 +13,7 @@ import { createPlayer } from "../src/sim/player.js";
 import { configurePlayer, resumeFromSave } from "../src/sim/session.js";
 import { loadPlace, stationAt, fieldAt } from "../src/sim/places.js";
 import { startWarp, updateWarp } from "../src/sim/sectors.js";
-import { TRAVEL_REQUIREMENTS, travelQuote, findRoute, findRouteToSystem } from "../src/sim/travel.js";
+import { TRAVEL_REQUIREMENTS, travelQuote, findRoute, findRouteToSystem, findRouteToPocket, findDestinationRoute } from "../src/sim/travel.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import { WARP_TIME } from "../src/data/sectors.js";
 import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
@@ -578,6 +578,79 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
   assert.equal(ui.state.ui.destination, null);
   assert.ok(!mapRoot.innerHTML.includes('class="sm-route-edge"'));
   ui.closeStarmap(); ui.state.ui.starmapMemory = null;
+});
+
+test("11B: pocket destination follows J all the way past a remote arrival gate", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  const world = ui.state.galaxy;
+  const target = Object.values(world.pockets).find(p => p.parent === "sys-002" && p.role !== "gate");
+  assert.ok(target);
+  assert.equal(ui.openStarmap(), true);
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: target.parent } }) }, preventDefault() {} });
+  const context = id => mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-pocket]") ? { dataset: { pocket: id } } : null }, clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+  const click = action => mapRoot.handlers.click({ target: { closest: () => ({ dataset: { action }, disabled: false }) } });
+  context(target.id);
+  assert.ok(mapRoot.innerHTML.includes("No direct route"));
+  assert.ok(mapRoot.innerHTML.includes('data-action="set-pocket-destination"'), "unreachable in one hop can still be plotted");
+  click("set-pocket-destination");
+  assert.deepEqual(ui.state.ui.destination, { pocketId: target.id });
+  assert.ok(mapRoot.innerHTML.includes(`Route to ${target.n}`));
+  const route = findDestinationRoute(world, P.place, ui.state.ui.destination);
+  assert.equal(route.at(-1), target.id);
+  assert.ok(route.length > 2);
+  assert.equal(world.pocketsById[route.at(-2)].parent, target.parent, "last hop begins in target system");
+  assert.ok(mapRoot.innerHTML.includes(target.n), "exact pocket appears in route list");
+  assert.ok(!JSON.stringify(ui.currentSave()).includes('pocketId'));
+  ui.closeStarmap();
+  for (let i = 1; i < route.length; i++) {
+    assert.equal(ui.jumpRoute(P), true);
+    assert.equal(P.warp.to, route[i]);
+    ui.updateWarp(WARP_TIME + 1, P);
+    if (i < route.length - 1) assert.deepEqual(ui.state.ui.destination, { pocketId: target.id }, "do not clear on entering the target system");
+  }
+  assert.equal(P.place, target.id);
+  assert.equal(ui.state.ui.destination, null);
+  assert.equal(ui.state.hud.msg, "Destination reached.");
+  ui.applySave(save); ui.state.ui.starmapMemory = null;
+});
+
+test("11B: local pocket and gate-label popups plot exact pockets and retain rechecks", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  const world = ui.state.galaxy;
+  assert.deepEqual(findRouteToPocket(world, "reach", "hollow"), ["reach", "hollow"]);
+  assert.deepEqual(findRouteToPocket(world, "reach", "reach"), ["reach"]);
+  assert.equal(findRouteToPocket(world, "reach", "missing"), null);
+  assert.equal(ui.openStarmap(), true);
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  const click = data => mapRoot.handlers.click({ target: { closest: () => ({ dataset: data, disabled: false }) } });
+  click({ pocket: "hollow" });
+  assert.ok(mapRoot.innerHTML.indexOf('data-action="travel"') < mapRoot.innerHTML.indexOf('data-action="set-pocket-destination"'));
+  click({ action: "set-pocket-destination" });
+  assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" });
+  assert.ok(mapRoot.innerHTML.includes("Kestrel Hollow"));
+  click({ pocket: "reach" }); click({ action: "set-pocket-destination" });
+  assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "current pocket cannot replace an existing route");
+  assert.ok(mapRoot.innerHTML.includes("You are already in that pocket."));
+  ui.closeStarmap();
+  assert.equal(ui.jumpRoute(P), true); assert.equal(P.warp.to, "hollow");
+  ui.updateWarp(WARP_TIME + 1, P); assert.equal(ui.state.ui.destination, null);
+  // A gate-peer label represents its reciprocal pocket, not the star/system.
+  assert.equal(ui.openStarmap(), true);
+  const exit = pocketConnections(world, "meridian").exits[0];
+  click({ exit: exit.id }); click({ action: "set-pocket-destination" });
+  assert.deepEqual(ui.state.ui.destination, { pocketId: exit.peerPocketId });
+  ui.closeStarmap();
+  const blocked = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
+  blocked.forEach(l => { l.enabled = false; });
+  assert.equal(ui.jumpRoute(P), false);
+  assert.equal(ui.state.hud.msg, "No route to destination.");
+  assert.deepEqual(ui.state.ui.destination, { pocketId: exit.peerPocketId });
+  blocked.forEach(l => { l.enabled = true; });
+  ui.applySave(save); assert.equal(ui.state.ui.destination, null);
 });
 
 test("11B: galaxy system popup only offers direct gate warp from the matching gate", () => {

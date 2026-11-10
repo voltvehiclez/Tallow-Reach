@@ -60,9 +60,11 @@ ones before changing anything, and update them when decisions or state change.
   (system name, current pocket, plain pocket rows) with no warp buttons, tier/description cards or scrolling.
 - **Destination navigation:** right-click a galaxy node for **Set destination** and, if currently at
   its directly connected gate, **Warp to**. `findRouteToSystem` searches minimum executable warp hops
-  to any destination pocket (normally the arrival gate), respecting policies, enabled links, modes,
+  to any pocket in a destination system (normally the arrival gate), respecting policies, enabled links, modes,
   requirements and currently unsupported costs. The galaxy highlights the route; a paged arrow list
-  below pocket rows shows remaining system stops and the final arrival pocket. `J` in flight starts one
+  below pocket rows shows remaining system stops and the final arrival pocket. Pocket popups also offer
+  **Set destination**; `findRouteToPocket` plans to that exact pocket, and entering its system does not
+  clear it before reaching the pocket. `J` in flight starts one
   ordinary hop at a time via `jumpRoute` -> `startWarp` and requotes; no destination shows **No destination
   set**. Route recomputes from current location, clears on arrival or Clear, and is session-only (save
   replacement resets it). Map and J browser playtest pending.
@@ -86,8 +88,8 @@ ones before changing anything, and update them when decisions or state change.
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **320/320 pass** (11A file now 23 tests, 11B map/save file 35; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **676 KB** (692,538 bytes). Automated
+- **Results:** `npm test` **322/322 pass** (11A file now 23 tests, 11B map/save file 37; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **677 KB** (693,443 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry retains **121 systems / 462 pockets / 511 links** with identical ids/positions/links;

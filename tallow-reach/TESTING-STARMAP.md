@@ -201,6 +201,13 @@ asking the remaining VISION questions.
 - [ ] Close the map. Press **J** once: you should warp only to the next pocket on the route. If that is
       your local gate, press **J** again after the warp completes to cross into the next system. Reopen
       the map to check the remaining route updates, then continue until arrival clears the destination.
+- [ ] Open a system pocket map. Click a local pocket and check that **Set destination** appears below
+      **Warp to**. Set it, close the map and press **J**; it should warp to that exact pocket and clear
+      the route. Try the pocket you are already in: it should say you are already there.
+- [ ] Inspect a remote system's pocket map and click a non-gate pocket. Even though it says **No direct
+      route**, choose **Set destination**. The route should list the target pocket after the system stops.
+      Use J one hop at a time: entering the target system must not clear the route; it clears only when
+      you arrive in the chosen pocket. A gate-neighbour popup targets the reciprocal gate pocket.
 - [ ] From a gate pocket, right-click its neighbouring system on the galaxy web: the popup offers both
       **Set destination** and **Warp to …**. From a different pocket it must not offer that direct warp.
       Check **Clear** removes a plotted route. Route selection is session-only and resets on loading a save.
