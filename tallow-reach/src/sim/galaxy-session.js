@@ -52,6 +52,13 @@ export function prepareGalaxySave(raw) {
     throw error;
   }
   state.galaxyRecovery = recovery;
+  // An old autosave may have been written during arrival before the destination
+  // was cleared. Never resurrect a route that is already complete.
+  const destination = save.world.destination;
+  const here = galaxy.pocketsById[save.world.place];
+  if (destination && (typeof destination === "string" ? here?.parent === destination : here?.id === destination.pocketId)) {
+    save.world.destination = null;
+  }
   save.world.galaxy.seed = seed;
   recordSystemVisit(galaxy, save.world.galaxy.knowledge, save.world.place);
   state.galaxy = galaxy;

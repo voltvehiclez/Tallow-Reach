@@ -19,6 +19,19 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Remember route destinations across relogs
+
+- Owner reported that destinations were lost on relog and requested an in-chat playtest. Save **v17**
+  stores `world.destination` (system id or `{ pocketId }`, null if unset). Setting/clearing a target
+  autosaves immediately; slot saves and export codes include it. The route itself is recalculated from
+  the restored location, and J still performs exactly one checked warp. Arrival clears and autosaves it.
+- `prepareGalaxySave` validates against the saved seed, drops invalid/removed targets and already-reached
+  destinations, and migrates v16 and earlier with no destination; existing cargo/progress remain intact.
+  Chart framing is still session-only. Added save/restore and actual map/J/arrival regression coverage.
+- `npm test` **333/333**, build **685 KB (701,251 bytes)**; live preview provided, owner playtest pending.
+
+---
+
 ## 2026-11-08: Remove destination diamond
 
 - Owner requested removing the diamond from the destination system. Both route lists retain the

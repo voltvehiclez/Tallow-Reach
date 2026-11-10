@@ -10,6 +10,7 @@ import { routeDisplay, flightRouteRows } from "./route-display.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
+import { setDestination } from "../state/destination.js";
 import { systemVisible, pocketsInSystem, systemPocketLayout, systemCoreName } from "../sim/galaxy.js";
 import { travelQuote, intraSystemPolicy, travelOptions, findRouteToSystem, findDestinationRoute } from "../sim/travel.js";
 import { emit, on } from "../util/events.js";
@@ -299,7 +300,7 @@ export function setupStarmap() {
     }
     const destination = state.ui.destination;
     if (destination && (typeof destination === "string" ? after === destination : destination.pocketId === to)) {
-      state.ui.destination = null;
+      setDestination(null);
       msg("Destination reached.");
     }
     if (state.ui.starmap) render();
@@ -630,7 +631,7 @@ function onClick(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that system.";
     else if (route.length < 2) view.notice = "You are already in that system.";
-    else { state.ui.destination = id; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { setDestination(id); view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
     render();
   } else if (action === "set-pocket-destination") {
     const from = localPlayer()?.place || state.place;
@@ -642,7 +643,7 @@ function onClick(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that pocket.";
     else if (route.length < 2) view.notice = "You are already in that pocket.";
-    else { state.ui.destination = destination; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { setDestination(destination); view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
@@ -651,7 +652,7 @@ function onClick(e) {
     if (!to) { view.notice = "No direct route."; render(); return; }
     emit("action", { name: "travel", to, repeat: false });
   } else if (action === "clear-destination") {
-    state.ui.destination = null; view.routePage = 0; render();
+    setDestination(null); view.routePage = 0; render();
   } else if (action === "route-prev" || action === "route-next") {
     view.routePage = Math.max(0, (view.routePage || 0) + (action === "route-next" ? 1 : -1)); render();
   } else if (action === "travel") {

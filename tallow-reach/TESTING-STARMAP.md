@@ -1,4 +1,4 @@
-# Step 11B playtest — free local warp, central bodies, starmap and save v16
+# Step 11B playtest — free local warp, central bodies, starmap and save v17
 
 For the owner. About 20–30 minutes. No coding needed.
 
@@ -160,7 +160,7 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
 - [ ] **4.5** Import old code **B**. Expect 4850 cr and flying in Kestrel Hollow at the arrival point.
 - [ ] **4.6** Import old code **C** (the pre-11B v15 regression code). Expect 4850 cr and flying in
       Kestrel Hollow at the saved spot, not the arrival point. Cargo, fittings, mission and station
-      storage are preserved. Exporting again produces a current v16 code.
+      storage are preserved. Exporting again produces a current v17 code.
 - [ ] **4.7** Removed-pocket recovery is covered by the automated tests: a save whose pocket was
       deleted returns the pilot to **Meridian Station docked**, keeps the whole character/cargo, and
       shows a safe-recovery notice on intro/load/import. No manual data editing is needed for this
@@ -222,7 +222,9 @@ asking the remaining VISION questions.
       you arrive in the chosen pocket. A gate-neighbour popup targets the reciprocal gate pocket.
 - [ ] From a gate pocket, right-click its neighbouring system on the galaxy web: the popup offers both
       **Set destination** and **Warp to …**. From a different pocket it must not offer that direct warp.
-      Check **Clear** removes a plotted route. Route selection is session-only and resets on loading a save.
+      Check **Clear** removes a plotted route. Set a system destination, refresh/relog immediately, and
+      check the route and J still work. Repeat for an exact pocket; Clear or reach the destination,
+      refresh, and confirm it stays cleared. Check slot/export load restores the target too.
 
 ---
 

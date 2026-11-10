@@ -10,14 +10,14 @@
 playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). **Step 11 is in
 progress:** slice **11A** is built and owner-playtest-passed; slice **11B** (M starmap screen, zoomed
 system pocket maps, free local warp, permanent star/black-hole labels, clickable gate neighbours, zoom-scaled pan/cores, click/right-click travel, compact overview
-and save v16) is **built and awaiting the owner playtest** in `TESTING-STARMAP.md`. Saves are version
-**16** (`world.galaxy: { seed, knowledge }`; generated geography, cores and pocket layout are rebuilt,
+and save v17) is **built and awaiting the owner playtest** in `TESTING-STARMAP.md`. Saves are version
+**17** (`world.destination` stores the target; `world.galaxy: { seed, knowledge }`; generated geography, cores and pocket layout are rebuilt,
 not saved). M opens the clickable chart instead of
 warping immediately; zooming into a system dot opens its pocket map, and clicking/right-clicking a legal
 pocket or gate-neighbour label offers **Warp to**. Local hops are free by default; a data `intraSystem: "links"` opt-out restores internal
 routes for future instances. Galaxy gate routes stay explicit. Single-player chart pauses, a future hosted
-world keeps running. The sparser v2 web lays out dots clear of straight lines and makes outer systems at least ten gate crossings away on the default seed; old removed gate saves recover in the same system. The map remembers its last view in-session and pocket view follows cross-system travel; system or exact pocket destinations plot the fewest warp hops and J advances one hop at a time. Galaxy drag is now bounded to 0.5–1 screen pixels per pointer pixel across zoom levels. `npm test` is **326/326** (both 8b oracles unchanged) and `npm run build` succeeded
-(681 KB). Step 11 remains unticked until the owner passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
+world keeps running. The sparser v2 web lays out dots clear of straight lines and makes outer systems at least ten gate crossings away on the default seed; old removed gate saves recover in the same system. The map remembers its last view in-session and pocket view follows cross-system travel; system or exact pocket destinations plot the fewest warp hops and J advances one hop at a time. Galaxy drag is now bounded to 0.5–1 screen pixels per pointer pixel across zoom levels. `npm test` is **333/333** (both 8b oracles unchanged) and `npm run build` succeeded
+(685 KB). Step 11 remains unticked until the owner passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
