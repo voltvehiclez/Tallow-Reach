@@ -58,7 +58,7 @@ export function introHtml() {
     `The mining beam and missiles are sold in the Shop. ` +
     `F locks whatever is nearest your crosshair, such as hostiles, rocks, crates or the station, and F again releases it. ` +
     `G docks when you are within 300 m of the station and slower than 70 m/s. ` +
-    `M opens the starmap: inspect any visible ${term("mapNode")}, then choose a directly linked ${term("flyable")} to warp there. The map pauses single-player flight; M or Esc closes it. ` +
+    `M opens the starmap: right-click a system to set a destination, then press J while flying for each next warp. You can also choose individual pockets to warp to. The map pauses single-player flight; M or Esc closes it. ` +
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
     `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +

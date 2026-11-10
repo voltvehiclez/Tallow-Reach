@@ -83,6 +83,7 @@ export const BINDINGS = {
   Digit2: "weapon:beam",
   KeyG: "dock",
   KeyM: "starmap",
+  KeyJ: "route:jump",
   KeyP: "pause",
   Escape: "pause",
 };

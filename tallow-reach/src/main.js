@@ -16,6 +16,7 @@ import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
 import { tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
+import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
@@ -112,6 +113,9 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
         if (isStarmapOpen()) closeStarmap();
         else if (playing) openStarmap();
       }
+      break;
+    case "route:jump":
+      if (!repeat && playing) jumpRoute(localPlayer());
       break;
     case "travel":
       // The map only proposes a destination. The sim rechecks the direct link,

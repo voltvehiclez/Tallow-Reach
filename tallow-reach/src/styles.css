@@ -1027,3 +1027,15 @@ textarea {
   .sm-header p { font-size: 13px; }
   .sm-pockets { grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); }
 }
+
+/* Navigation remains compact without making the system overview scroll. */
+.sm-route-edge { stroke: var(--amber); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.sm-route { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--line); }
+.sm-route h3 { overflow-wrap: anywhere; }
+.sm-route ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sm-route li { color: var(--ink); font-size: 13px; line-height: 1.25; overflow-wrap: anywhere; }
+.sm-route li span { color: var(--amber); }
+.sm-route li small { color: var(--dim); }
+.sm-route p { margin: 6px 0; color: var(--dim); font-size: 12px; }
+.sm-route-actions { display: flex; align-items: center; gap: 6px; }
+.sm-route-actions button { padding: 3px 8px; }

@@ -329,7 +329,7 @@ explicit gates between systems. A permanent two-line label names the non-warpabl
 core graphics scale with zoom; a links opt-out restores internal routes/lines. Do not
 assume a system has exactly two pockets, and do not hard-code a two-level universe.
 **Save.** **Version 16**, migration from 15 (v15 is already used by the resume point).
-**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI, free-local-warp/central-body and label/pan/gate-click refinements built, owner playtest pending (`TESTING-STARMAP.md`). 316 tests pass; save v16 unchanged.**
+**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI, free-local-warp/central-body and label/pan/gate-click refinements built, owner playtest pending (`TESTING-STARMAP.md`). 320 tests pass; save v16 unchanged.**
 
 ## Step 12: Encounters, place templates and place memory
 **Goal.** The open world's content is data you can pile onto.

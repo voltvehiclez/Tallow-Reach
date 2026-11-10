@@ -13,7 +13,7 @@ import { createPlayer } from "../src/sim/player.js";
 import { configurePlayer, resumeFromSave } from "../src/sim/session.js";
 import { loadPlace, stationAt, fieldAt } from "../src/sim/places.js";
 import { startWarp, updateWarp } from "../src/sim/sectors.js";
-import { TRAVEL_REQUIREMENTS, travelQuote } from "../src/sim/travel.js";
+import { TRAVEL_REQUIREMENTS, travelQuote, findRoute, findRouteToSystem } from "../src/sim/travel.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import { WARP_TIME } from "../src/data/sectors.js";
 import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
@@ -327,6 +327,7 @@ const ui = await loadHeadless("src/ui/starmap.js", {
   prepareGalaxySave: "src/sim/galaxy-session.js", createPlayer: "src/sim/player.js",
   configurePlayer: "src/sim/session.js", on: "src/util/events.js", emit: "src/util/events.js",
   startWarp: "src/sim/sectors.js", updateWarp: "src/sim/sectors.js", currentSave: "src/state/state.js",
+  jumpRoute: "src/sim/navigation.js",
 });
 let mapRoot = null;
 
@@ -477,11 +478,138 @@ test("11B: map memory ignores other pilots and follows the local system even wit
   ui.state.ui.starmapMemory = null;
 });
 
+test("11B: system routes use the fewest executable pocket hops and end at the arrival gate", () => {
+  const world = generateGalaxy(GALAXY.seed);
+  const target = world.systems.find(s => s.n === "Galerest") || world.systems.find(s => s.id === "sys-010");
+  const route = findRouteToSystem(world, "reach", target.id);
+  assert.ok(route?.length > 1);
+  assert.equal(world.pocketsById[route.at(-1)].parent, target.id);
+  assert.equal(world.pocketsById[route.at(-1)].role, "gate");
+  if (target.n === "Galerest") assert.equal(world.pocketsById[route.at(-1)].n, "Gate to Palefall");
+  for (let i = 1; i < route.length; i++) assert.equal(travelQuote(world, route[i - 1], route[i]).ok, true);
+  for (const pocket of Object.values(world.pockets).filter(p => p.parent === target.id)) {
+    const alternative = findRoute(world, "reach", pocket.id);
+    if (alternative) assert.ok(route.length <= alternative.length, "no pocket in the destination needs fewer hops");
+  }
+  assert.deepEqual(findRouteToSystem(world, "reach", "meridian"), ["reach"]);
+  assert.equal(findRouteToSystem(world, "missing", target.id), null);
+  assert.equal(findRouteToSystem(world, "reach", "missing"), null);
+  const gate = pocketConnections(world, "meridian").exits[0];
+  const original = { mode: gate.link.mode, cost: gate.link.cost, requires: gate.link.requires };
+  // Remove all alternative exits so the effect of the one gate is observable.
+  for (const link of Object.values(world.links)) if (link.kind === "gate" && link !== gate.link) link.enabled = false;
+  const destination = gate.peerSystemId;
+  assert.ok(findRouteToSystem(world, gate.from, destination));
+  gate.link.cost = { fuel: 1 };
+  assert.equal(findRouteToSystem(world, gate.from, destination), null, "unpayable costs are not plotted");
+  gate.link.cost = original.cost; gate.link.mode = "unknown";
+  assert.equal(findRouteToSystem(world, gate.from, destination), null, "unknown transport modes are not plotted");
+  gate.link.mode = original.mode; gate.link.requires = [{ type: "unknown" }];
+  assert.equal(findRouteToSystem(world, gate.from, destination), null, "unmet requirements are not plotted");
+  gate.link.requires = original.requires; gate.link.enabled = false;
+  assert.equal(findRouteToSystem(world, gate.from, destination), null, "closed gate is not plotted");
+});
+
+test("11B: system destination popup, route display and J follow ordinary checked warp hops", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false;
+  ui.state.ui.starmap = null;
+  assert.equal(ui.jumpRoute(P), false);
+  assert.equal(ui.state.hud.msg, "No destination set");
+  assert.equal(ui.openStarmap(), true);
+  const world = ui.state.galaxy;
+  const target = world.systems.find(s => s.n === "Galerest") || world.systems.find(s => s.id === "sys-010");
+  const click = dataset => mapRoot.handlers.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+  const context = id => mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-system]") ? { dataset: { system: id } } : null }, clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+  context(target.id);
+  assert.match(mapRoot.innerHTML, /Set destination/);
+  assert.ok(!mapRoot.innerHTML.includes('data-action="system-warp"'), "remote systems have no direct warp");
+  click({ action: "set-destination" });
+  assert.equal(ui.state.ui.destination, target.id);
+  assert.match(mapRoot.innerHTML, /class="sm-route-edge"/);
+  assert.match(mapRoot.innerHTML, /Route to/);
+  assert.match(mapRoot.innerHTML, /J · next warp/);
+  const expected = findRouteToSystem(world, P.place, target.id);
+  assert.ok(expected.length > 2);
+  assert.ok(!JSON.stringify(ui.currentSave()).includes('"destination"'));
+  ui.closeStarmap();
+  for (let i = 1; i < expected.length; i++) {
+    assert.equal(ui.jumpRoute(P), true, `J starts hop ${i}`);
+    assert.equal(P.warp.to, expected[i]);
+    assert.equal(ui.jumpRoute(P), false, "J cannot start another warp while warping");
+    ui.updateWarp(WARP_TIME + 1, P);
+    assert.equal(P.place, expected[i]);
+    if (i < expected.length - 1) assert.equal(ui.state.ui.destination, target.id);
+  }
+  assert.equal(ui.state.ui.destination, null);
+  assert.equal(ui.state.hud.msg, "Destination reached.");
+  ui.applySave(save);
+});
+
+test("11B: long routes page through all stops, can be cleared, and replan when links change", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false;
+  ui.state.ui.starmap = null;
+  const world = ui.state.galaxy;
+  const target = world.systems.find(s => {
+    const route = findRouteToSystem(world, P.place, s.id);
+    return route && route.filter((id, i) => i > 0 && world.pocketsById[id].parent !== world.pocketsById[route[i - 1]].parent).length > 4;
+  });
+  assert.ok(target, "the generated web has a multipage route");
+  ui.openStarmap();
+  const context = id => mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-system]") ? { dataset: { system: id } } : null }, clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+  const click = action => mapRoot.handlers.click({ target: { closest: () => ({ dataset: { action }, disabled: false }) } });
+  context(target.id); click("set-destination");
+  assert.ok(mapRoot.innerHTML.includes('data-action="route-next"'));
+  click("route-next"); assert.equal(ui.state.ui.starmap.routePage, 1);
+  assert.ok(mapRoot.innerHTML.includes('data-action="route-prev"'));
+  const gates = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
+  gates.forEach(l => { l.enabled = false; });
+  ui.closeStarmap();
+  assert.equal(ui.jumpRoute(P), false);
+  assert.equal(ui.state.hud.msg, "No route to destination.");
+  assert.equal(ui.state.ui.destination, target.id, "destination remains set for a future replan");
+  assert.equal(ui.openStarmap(), true);
+  assert.ok(mapRoot.innerHTML.includes("No route available."));
+  gates.forEach(l => { l.enabled = true; });
+  click("clear-destination");
+  assert.equal(ui.state.ui.destination, null);
+  assert.ok(!mapRoot.innerHTML.includes('class="sm-route-edge"'));
+  ui.closeStarmap(); ui.state.ui.starmapMemory = null;
+});
+
+test("11B: galaxy system popup only offers direct gate warp from the matching gate", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false;
+  ui.state.ui.starmap = null;
+  const exit = pocketConnections(ui.state.galaxy, "meridian").exits[0];
+  assert.equal(ui.openStarmap(), true);
+  const context = () => mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-system]") ? { dataset: { system: exit.peerSystemId } } : null }, clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+  context(); assert.ok(!mapRoot.innerHTML.includes('data-action="system-warp"'));
+  P.place = exit.from; context();
+  assert.ok(mapRoot.innerHTML.includes('data-action="system-warp"'));
+  const actions = []; let listening = true;
+  ui.on("action", a => { if (listening) actions.push(a); });
+  mapRoot.handlers.click({ target: { closest: () => ({ dataset: { action: "system-warp" }, disabled: false }) } });
+  assert.deepEqual(actions.at(-1), { name: "travel", to: exit.peerPocketId, repeat: false });
+  // The direct button is rechecked if the gate closes after opening the popup.
+  context(); exit.link.enabled = false;
+  mapRoot.handlers.click({ target: { closest: () => ({ dataset: { action: "system-warp" }, disabled: false }) } });
+  assert.equal(actions.length, 1);
+  assert.match(mapRoot.innerHTML, /No direct route/);
+  exit.link.enabled = true; listening = false; ui.closeStarmap(); ui.state.ui.starmapMemory = null;
+});
+
 test("11B: composition root wires map/travel/pause and every save replacement prepares its seed", () => {
   const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
   const menu = readFileSync(new URL("../src/ui/menu.js", import.meta.url), "utf8");
   assert.match(main, /loadAutosave\(prepareGalaxySave\)/);
   assert.match(main, /case "starmap":/);
+  assert.match(main, /case "route:jump":/);
+  assert.equal(BINDINGS.KeyJ, "route:jump");
   assert.match(main, /startWarp\(localPlayer\(\), nameTo\)/);
   assert.match(main, /if \(isSimulationPaused\(\)\)/);
   assert.match(main, /const playing = .*!isStarmapOpen\(\)/);

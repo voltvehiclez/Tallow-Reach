@@ -19,6 +19,25 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Plot system destinations and jump the route with J
+
+- Right-click a visible galaxy system for **Set destination** and, only when the current pocket has an
+  executable direct gate to that system, **Warp to**. Keyboard context-menu keys work too. A highlighted
+  galaxy path and arrowed remaining system stops (including the destination arrival gate) appear below
+  the pocket rows. Long routes use paging so the panel need not scroll; Clear removes the destination.
+- `findRouteToSystem` does a breadth-first search over executable pocket hops, ending at whichever pocket
+  reaches the target system in the fewest warps. It respects free/local link policy, enabled links,
+  registered warp mode, requirements and unsupported costs. `J` in flight calls `jumpRoute`, recalculates
+  the route and calls `startWarp` for **one** hop; local gate and crossing are separate presses. Warp
+  animation and rechecks remain unchanged. No destination/route gives HUD feedback; arrival clears the
+  destination. Unreachable destinations do not replace an existing one. No auto-chaining.
+- Destination is session-only and resets on save replacement; save v16 and dependencies are unchanged.
+  Changed `src/sim/travel.js`, new `src/sim/navigation.js`, map/input/main/state/styles/help, tests and
+  root `TESTING-STARMAP.md`. `npm test` **320/320** and build **676 KB (692,538 bytes)**; browser
+  playtest remains pending, and step 11 is still unticked.
+
+---
+
 ## 2026-11-08: Remember starmap view across closing and travel
 
 - Owner confirmed the cannon visual follow-up works. Map M-close/reopen now restores the last galaxy or

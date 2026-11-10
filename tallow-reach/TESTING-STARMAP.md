@@ -192,6 +192,21 @@ The next planned refactor is step 12 (encounters, place templates and place memo
 asking the remaining VISION questions.
 
 
+## Destination route and J shortcut
+
+- [ ] While flying with no destination, press **J**. Expect **No destination set** and no warp.
+- [ ] Press **M** for the galaxy web. Right-click a remote system (for example Galerest), choose
+      **Set destination**, and check the highlighted route and the arrowed stops below the pocket list.
+      Use the ‹/› buttons if the route has more than one page; the last stop includes its arrival gate.
+- [ ] Close the map. Press **J** once: you should warp only to the next pocket on the route. If that is
+      your local gate, press **J** again after the warp completes to cross into the next system. Reopen
+      the map to check the remaining route updates, then continue until arrival clears the destination.
+- [ ] From a gate pocket, right-click its neighbouring system on the galaxy web: the popup offers both
+      **Set destination** and **Warp to …**. From a different pocket it must not offer that direct warp.
+      Check **Clear** removes a plotted route. Route selection is session-only and resets on loading a save.
+
+---
+
 ## Cannon visual regression check
 
 - [ ] In open space, hold fire with basic cannons while thrusting forward and turning left, then right.

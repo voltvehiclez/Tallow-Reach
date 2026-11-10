@@ -7,9 +7,9 @@
 import { GALAXY } from "../data/galaxy.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
-import { state, localPlayer, profileOf } from "../state/state.js";
+import { state, localPlayer, profileOf, msg } from "../state/state.js";
 import { systemVisible, pocketsInSystem, systemPocketLayout, systemCoreName } from "../sim/galaxy.js";
-import { travelQuote, intraSystemPolicy } from "../sim/travel.js";
+import { travelQuote, intraSystemPolicy, travelOptions, findRouteToSystem } from "../sim/travel.js";
 import { emit, on } from "../util/events.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
@@ -292,6 +292,10 @@ export function setupStarmap() {
       }
       cancelTransition();
     }
+    if (state.ui.destination && after === state.ui.destination) {
+      state.ui.destination = null;
+      msg("Destination reached.");
+    }
     if (state.ui.starmap) render();
   });
   on("travel-denied", ({ player, reason } = {}) => {
@@ -323,7 +327,7 @@ export function openStarmap() {
     zoom: saved?.zoom ?? 1, pan: saved?.pan ? [...saved.pan] : [0, 0],
     systemZoom: changedSystem ? 1 : (saved?.systemZoom ?? 1),
     systemPan: !changedSystem && saved?.systemPan ? [...saved.systemPan] : [0, 0],
-    playerSystem, notice: "", labels: saved?.labels ?? false, menu: null,
+    playerSystem, notice: "", labels: saved?.labels ?? false, menu: null, routePage: 0,
   };
   clearControls();
   if (!state.multiplayer) setAudioSuspended(true);
@@ -492,6 +496,26 @@ function openExitMenu(id, x, y) {
   return true;
 }
 
+function openSystemMenu(id, x, y) {
+  const view = state.ui.starmap;
+  if (!view || view.mode !== "galaxy" || !systemVisible(state.galaxy, id, knowledge())) return false;
+  if (transition) finishTransition();
+  view.selected = id;
+  view.menu = { systemId: id, x, y };
+  view.notice = "";
+  uiSound("click");
+  render();
+  return true;
+}
+
+/** A direct cross-system gate hop to this system, if one is executable now. */
+export function directSystemWarp(world, from, systemId, context = {}) {
+  if (world.pocketsById?.[from]?.parent === systemId) return null;
+  return travelOptions(world, from, context).find(o => o.ok && o.mode === "warp" &&
+    !Object.keys(o.cost).length && o.link?.kind === "gate" &&
+    world.pocketsById[o.to]?.parent === systemId)?.to || null;
+}
+
 function menuChoice(world, view, from) {
   const menu = view.menu;
   if (!menu) return null;
@@ -507,11 +531,11 @@ function menuChoice(world, view, from) {
 function closeMenu() {
   const view = state.ui.starmap;
   if (!view?.menu) return;
-  const { to, exitId } = view.menu;
+  const { to, exitId, systemId } = view.menu;
   view.menu = null;
   render();
   const cssEscape = globalThis.CSS?.escape || (value => value.replace(/["\\]/g, "\\$&"));
-  const selector = exitId ? `[data-exit="${cssEscape(exitId)}"]` : `[data-pocket="${cssEscape(to)}"]`;
+  const selector = systemId ? `[data-system="${cssEscape(systemId)}"]` : exitId ? `[data-exit="${cssEscape(exitId)}"]` : `[data-pocket="${cssEscape(to)}"]`;
   root.querySelector(selector)?.focus();
 }
 
@@ -519,9 +543,10 @@ function onContextMenu(e) {
   if (!state.ui.starmap) return;
   e.preventDefault();
   e.stopPropagation();
-  const node = e.target.closest?.("[data-pocket], [data-exit]");
+  const node = e.target.closest?.("[data-system], [data-pocket], [data-exit]");
   if (!node) { closeMenu(); return; }
-  if (node.dataset.exit) openExitMenu(node.dataset.exit, e.clientX, e.clientY);
+  if (node.dataset.system) openSystemMenu(node.dataset.system, e.clientX, e.clientY);
+  else if (node.dataset.exit) openExitMenu(node.dataset.exit, e.clientX, e.clientY);
   else openPocketMenu(node.dataset.pocket, e.clientX, e.clientY);
 }
 
@@ -535,6 +560,12 @@ function onKeydown(e) {
     return;
   }
   const system = e.target.closest?.("[data-system]");
+  if (system && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
+    e.preventDefault(); e.stopPropagation();
+    const rect = e.target.getBoundingClientRect?.() || { left: 0, top: 0, width: 800, height: 600 };
+    openSystemMenu(system.dataset.system, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return;
+  }
   if (system && (e.key === "Enter" || e.key === " ")) {
     e.preventDefault();
     e.stopPropagation();
@@ -556,8 +587,8 @@ function onClick(e) {
   const view = state.ui.starmap;
   if (!view) return;
   const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");
-  const isTravel = button?.dataset?.action === "travel";
-  if (view.menu && !isTravel) {
+  const menuAction = ["travel", "set-destination", "system-warp"].includes(button?.dataset?.action);
+  if (view.menu && !menuAction) {
     view.menu = null;
     if (!button || button.disabled) { render(); return; }
   }
@@ -584,6 +615,26 @@ function onClick(e) {
   } else if (action === "labels") {
     view.labels = !view.labels;
     render();
+  } else if (action === "set-destination") {
+    const id = view.menu?.systemId;
+    const from = localPlayer()?.place || state.place;
+    if (!id || !systemVisible(state.galaxy, id, knowledge())) return;
+    const route = findRouteToSystem(state.galaxy, from, id, travelContext());
+    view.menu = null;
+    if (!route) view.notice = "No route to that system.";
+    else if (route.length < 2) view.notice = "You are already in that system.";
+    else { state.ui.destination = id; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    render();
+  } else if (action === "system-warp") {
+    const id = view.menu?.systemId;
+    const to = id && directSystemWarp(state.galaxy, localPlayer()?.place || state.place, id, travelContext());
+    view.menu = null;
+    if (!to) { view.notice = "No direct route."; render(); return; }
+    emit("action", { name: "travel", to, repeat: false });
+  } else if (action === "clear-destination") {
+    state.ui.destination = null; view.routePage = 0; render();
+  } else if (action === "route-prev" || action === "route-next") {
+    view.routePage = Math.max(0, (view.routePage || 0) + (action === "route-next" ? 1 : -1)); render();
   } else if (action === "travel") {
     const to = button.dataset.to;
     const from = localPlayer()?.place || state.place;
@@ -604,10 +655,16 @@ function onClick(e) {
   }
 }
 
-function galaxyMarkup(world, view, know, here, unit) {
+function galaxyMarkup(world, view, know, here, unit, route = null) {
   const systems = visibleSystems(world, know);
   const lines = systemEdges(world, know).map(({ id, a, b }) =>
     `<line class="sm-edge" data-edge="${esc(id)}" x1="${a.pos[0]}" y1="${-a.pos[1]}" x2="${b.pos[0]}" y2="${-b.pos[1]}"/>`).join("");
+  const routeLines = (route || []).slice(1).map((id, i) => {
+    const a = world.systemsById[world.pocketsById[route[i]]?.parent];
+    const b = world.systemsById[world.pocketsById[id]?.parent];
+    if (!a || !b || a.id === b.id || !systemVisible(world, a.id, know) || !systemVisible(world, b.id, know)) return "";
+    return `<line class="sm-route-edge" x1="${a.pos[0]}" y1="${-a.pos[1]}" x2="${b.pos[0]}" y2="${-b.pos[1]}"/>`;
+  }).join("");
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
     const chosen = s.id === view.selected;
@@ -623,7 +680,7 @@ function galaxyMarkup(world, view, know, here, unit) {
       ${label ? `<text x="${s.pos[0] + radius + 5 * unit}" y="${-s.pos[1] + 3 * unit}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}</text>` : ""}
     </g>`;
   }).join("");
-  return lines + nodes;
+  return lines + routeLines + nodes;
 }
 
 function systemMarkup(world, view, know, here, unit) {
@@ -711,7 +768,8 @@ function render() {
   const unit = chartPixelScale(box, rect.width, rect.height);
   const showGalaxy = view.mode === "galaxy" || !!transition;
   const showSystem = view.mode === "system" || !!transition;
-  const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit) : "";
+  const route = state.ui.destination ? findRouteToSystem(world, from, state.ui.destination, travelContext()) : null;
+  const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route) : "";
   const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit) : "";
   const galaxyOpacity = transition ? (transition.toMode === "system" ? 1 - eased : eased) : 1;
   const systemOpacity = transition ? (transition.toMode === "system" ? eased : 1 - eased) : 1;
@@ -723,7 +781,8 @@ function render() {
   const rows = choices.map(c => `
     <li class="sm-pocket${c.current ? " here" : ""}" data-pocket-row="${esc(c.pocket.id)}"${c.current ? ' aria-current="location"' : ""}>${esc(c.pocket.n)}</li>`).join("");
   const rootRect = root.getBoundingClientRect?.() || { left: 0, top: 0, width: 800, height: 600 };
-  const menu = view.menu ? pocketMenuMarkup(world, view, from, rootRect) : "";
+  const menu = view.menu ? (view.menu.systemId ? systemMenuMarkup(world, view, from, rootRect) : pocketMenuMarkup(world, view, from, rootRect)) : "";
+  const routeDetails = routeMarkup(world, view, route);
   const tools = view.mode === "system"
     ? `<div class="sm-tools"><strong>${esc(selected?.n || "")}</strong>
         <div><button type="button" data-action="back">Back to galaxy</button>
@@ -742,7 +801,7 @@ function render() {
     : `Follow the internal route lines; this ${esc(term("mapNode"))} requires connected ${esc(term("flyable"))} hops.`;
   const help = view.mode === "system"
     ? `Click or right-click a ${esc(term("flyable"))} for Warp to. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route. The central star/black hole is not warpable. Scroll out or Back to return.`
-    : `Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
+    : `Right-click a system to set a destination. Press J in flight for the next warp. Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `
     <div class="sm-shell">
@@ -764,7 +823,7 @@ function render() {
           ${selected ? `<h2>${esc(selected.n)}</h2>
             <p class="sm-current"><span>Current pocket</span> ${esc(here.n)}</p>
             <h3>${esc(Term("flyable"))}s</h3>
-            <ul class="sm-pockets">${rows}</ul>` : `<h2>No visible ${esc(terms("mapNode"))}</h2>`}
+            <ul class="sm-pockets">${rows}</ul>${routeDetails}` : `<h2>No visible ${esc(terms("mapNode"))}</h2>`}
         </aside>
       </div>
       ${menu}
@@ -790,4 +849,41 @@ function pocketMenuMarkup(world, view, from, rootRect) {
       ? `<button type="button" role="menuitem" data-action="travel" data-to="${esc(choice.pocket.id)}">Warp to ${esc(choice.title)}</button>`
       : `<p class="sm-context-note">${esc(choice.status)}</p>`}
   </div>`;
+}
+
+
+function systemMenuMarkup(world, view, from, rootRect) {
+  const id = view.menu.systemId, system = world.systemsById[id];
+  if (!system || !systemVisible(world, id, knowledge())) return "";
+  const direct = directSystemWarp(world, from, id, travelContext());
+  const tuning = { ...GALAXY.map.context, height: 165 };
+  const pos = contextMenuPosition(view.menu.x - (rootRect.left || 0), view.menu.y - (rootRect.top || 0), rootRect, tuning);
+  return `<div class="sm-context" role="menu" tabindex="-1" aria-label="${esc(system.n)}"
+    style="left:${pos.left + (rootRect.left || 0)}px;top:${pos.top + (rootRect.top || 0)}px;width:${tuning.width}px">
+    <strong>${esc(system.n)}</strong>
+    <button type="button" role="menuitem" data-action="set-destination">Set destination</button>
+    ${direct ? `<button type="button" role="menuitem" data-action="system-warp">Warp to ${esc(system.n)}</button>` : ""}
+  </div>`;
+}
+
+/** Show system arrivals, not internal pocket hops. Pages keep the panel compact. */
+function routeMarkup(world, view, route) {
+  const destination = state.ui.destination && world.systemsById[state.ui.destination];
+  if (!destination) return "";
+  const stops = [];
+  if (route) for (let i = 1; i < route.length; i++) {
+    const pocket = world.pocketsById[route[i]], previous = world.pocketsById[route[i - 1]];
+    if (pocket && previous && pocket.parent !== previous.parent) stops.push(pocket);
+  }
+  const pageSize = 4, pages = Math.max(1, Math.ceil(stops.length / pageSize));
+  view.routePage = Math.min(view.routePage || 0, pages - 1);
+  const rows = stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize).map(p => {
+    const system = world.systemsById[p.parent];
+    const visible = systemVisible(world, p.parent, knowledge());
+    return `<li><span aria-hidden="true">→</span> ${esc(visible ? (system?.n || p.parent) : "Undiscovered system")}${visible && p.parent === destination.id ? ` <small>· ${esc(p.n)}</small>` : ""}</li>`;
+  }).join("");
+  return `<section class="sm-route" aria-label="Route"><h3>Route to ${esc(destination.n)}</h3>
+    ${route ? `<ol>${rows}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}
+    <div class="sm-route-actions">${pages > 1 ? `<button type="button" data-action="route-prev" ${view.routePage === 0 ? "disabled" : ""}>‹</button><span>${view.routePage + 1} / ${pages}</span><button type="button" data-action="route-next" ${view.routePage === pages - 1 ? "disabled" : ""}>›</button>` : ""}
+    <button type="button" data-action="clear-destination">Clear</button></div></section>`;
 }

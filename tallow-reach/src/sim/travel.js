@@ -139,3 +139,47 @@ export function findRoute(world, from, to, context = {}) {
   }
   return null;
 }
+
+/** Fewest currently executable warp hops to any pocket in a system. The final
+ *  pocket is the arrival gate when entering from another system. Re-evaluate
+ *  after every hop; startWarp still requotes before performing any travel. */
+export function findRouteToSystem(world, from, systemId, context = {}) {
+  if (!world?.pocketsById?.[from] || !world?.systemsById?.[systemId]) return null;
+  const neighbors = new Map(), bySystem = new Map();
+  const add = (a, b, link) => {
+    if (!neighbors.has(a)) neighbors.set(a, new Map());
+    if (!neighbors.get(a).has(b)) neighbors.get(a).set(b, link);
+  };
+  for (const link of Object.values(world.links || {})) {
+    if (link.enabled === false) continue;
+    add(link.a, link.b, link); add(link.b, link.a, link);
+  }
+  for (const pocket of Object.values(world.pockets || {})) {
+    if (!bySystem.has(pocket.parent)) bySystem.set(pocket.parent, []);
+    bySystem.get(pocket.parent).push(pocket.id);
+  }
+  for (const [system, ids] of bySystem) {
+    if (intraSystemPolicy(world, system) !== "free") continue;
+    for (const a of ids) for (const b of ids) if (a !== b) add(a, b, null);
+  }
+  const previous = new Map([[from, null]]), queue = [from];
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i];
+    if (world.pocketsById[id]?.parent === systemId) {
+      const route = [];
+      for (let p = id; p !== null; p = previous.get(p)) route.push(p);
+      return route.reverse();
+    }
+    for (const [to, link] of neighbors.get(id) || []) {
+      if (previous.has(to) || !world.pocketsById[to]) continue;
+      const localFree = sameSystem(world, id, to) && intraSystemPolicy(world, world.pocketsById[id].parent) === "free";
+      const quote = localFree ? { ok: !!TRAVEL_MODES.warp, mode: "warp", cost: {} }
+        : link ? quoteLink(link, id, to, context) : { ok: false };
+      // startWarp currently supports only free warp, never unhandled costs.
+      if (!quote.ok || quote.mode !== "warp" || Object.keys(quote.cost).length) continue;
+      previous.set(to, id);
+      queue.push(to);
+    }
+  }
+  return null;
+}
