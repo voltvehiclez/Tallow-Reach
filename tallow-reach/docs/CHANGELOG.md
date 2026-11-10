@@ -19,6 +19,18 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Simplify the flight route to system names
+
+- Owner requested only remaining system names in flight, with the current system highlighted blue,
+  no completed ticks, and “Route to … (N systems)” showing how many system entries remain beyond
+  the current system. An exact pocket destination remains named in the heading. If routing is blocked,
+  no count is guessed; the current system and no-route message remain visible. The detailed starmap,
+  including its pocket names and completed-system history, is unchanged.
+- Updated the shared route renderer and HUD, tests, and owner checklist. Targeted **44/44**,
+  full **331/331**, build **685 KB (701,942 bytes)**; browser playtest pending. No save or travel changes.
+
+---
+
 ## 2026-11-08: Compact flight route with journey progress
 
 - Owner chose the compact system-list idea: in flight, show one row per system and its remaining

@@ -56,7 +56,7 @@ canvas {
 #tl .tl-label span {
   font-variant-numeric: tabular-nums;
 }
-/* System rows with pocket jumps while flying. Long routes scroll independently. */
+/* Remaining system names while flying. Long routes scroll independently. */
 #hud-route {
   margin-top: 12px;
   pointer-events: auto;
@@ -68,12 +68,9 @@ canvas {
 #hud-route h3 { margin: 0 0 5px; color: var(--amber); font-size: 13px; overflow-wrap: anywhere; }
 #hud-route ol { list-style: none; margin: 0; padding: 0; max-height: max(60px, calc(100vh - 270px)); overflow-y: auto; scrollbar-width: thin; }
 #hud-route li { line-height: 18px; overflow-wrap: anywhere; }
-#hud-route li span { color: var(--amber); }
-#hud-route li small { color: var(--dim); }
-#hud-route .route-done, .sm-route .route-done { color: var(--dim); opacity: .7; }
-#hud-route .route-here { color: var(--ice); }
-#hud-route .route-count { white-space: nowrap; }
-#hud-route li strong, .sm-route li strong { color: var(--amber); }
+#hud-route .route-here, #hud-route p.route-here { color: var(--ice); }
+.sm-route .route-done { color: var(--dim); opacity: .7; }
+.sm-route li strong { color: var(--amber); }
 #hud-route p { margin: 5px 0; color: var(--dim); font-size: 12px; }
 #hud-route .route-current, .sm-route .route-current { color: var(--ink); overflow-wrap: anywhere; }
 #hud-route .route-current strong, .sm-route .route-current strong { color: var(--amber); }

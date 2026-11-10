@@ -39,13 +39,21 @@ export function routeCurrent(current) {
   return current ? `<p class="route-current"><strong>Current:</strong> ${escapeRouteText(current.pocket)} <small>· ${escapeRouteText(current.system)}</small></p>` : "";
 }
 
-export function routeRows(stops, { compact = false } = {}) {
+// The flight HUD shows only the current and future systems. Completed history
+// and pocket details remain available in the starmap's fuller route display.
+export function flightRouteRows(stops) {
+  return stops.filter(stop => !stop.completed).map(stop => {
+    const current = stop.pockets.some(p => p.current);
+    return `<li${current ? ' class="route-here" aria-current="location"' : ""}>${escapeRouteText(stop.system)}</li>`;
+  }).join("");
+}
+
+export function routeRows(stops) {
   return stops.map(stop => {
     const isCurrent = stop.pockets.some(p => p.current);
-    const names = (!compact || isCurrent) && stop.pockets.length
+    const names = stop.pockets.length
       ? ` <small>· ${stop.pockets.map(pocket => pocket.current
         ? `<strong aria-current="location">${escapeRouteText(pocket.name)} (here)</strong>` : escapeRouteText(pocket.name)).join(' → ')}</small>` : "";
-    const count = compact && !stop.completed ? ` <small class="route-count" title="Jumps departing this system">${stop.jumps} ${stop.jumps === 1 ? "jump" : "jumps"}</small>` : "";
-    return `<li${stop.completed ? ` class="route-done" aria-label="Completed: ${escapeRouteText(stop.system)}"` : isCurrent ? ' class="route-here"' : ""}><span aria-hidden="true">${stop.completed ? "✓" : "→"}</span> ${escapeRouteText(stop.system)}${count}${names}</li>`;
+    return `<li${stop.completed ? ` class="route-done" aria-label="Completed: ${escapeRouteText(stop.system)}"` : isCurrent ? ' class="route-here"' : ""}><span aria-hidden="true">${stop.completed ? "✓" : "→"}</span> ${escapeRouteText(stop.system)}${names}</li>`;
   }).join("");
 }

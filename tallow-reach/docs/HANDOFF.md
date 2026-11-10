@@ -5,11 +5,11 @@ code. Give them complete files or exact find-and-replace edits with full file pa
 what to run and what to click. These docs are the project's memory across chats: read the relevant
 ones before changing anything, and update them when decisions or state change.
 
-Flight HUD route: one row per system, checked-off actually traversed systems, counts of remaining
-jumps departing each system, and pocket names only for the current system (current pocket marked
-“here”). Current row is scrolled into view after travel; lists scroll when long. Starmap retains full
-pocket detail and measured pagination. Route history is session-only and resets on destination change,
-clear, arrival or loading a save; future route is replanned. Owner browser playtest is pending.
+Flight HUD route: “Route to” shows the destination and count of systems still to enter, followed
+by only the remaining system names; the current system is highlighted blue. A blocked route shows no
+count. The starmap retains full pocket detail, completed-system history and measured pagination. History
+is session-only and resets on destination change, clear, arrival or loading a save; future routes are
+replanned. Owner browser playtest is pending.
 
 ## Ground rules from the owner (do not break these)
 
@@ -97,8 +97,8 @@ clear, arrival or loading a save; future route is replanned. Owner browser playt
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **330/330 pass** (11A file 23 tests, 11B map/save file 39, layout file 2; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **686 KB** (702,040 bytes). Automated
+- **Results:** `npm test` **331/331 pass** (11A file 23 tests, 11B map/save file 39, layout file 2; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **685 KB** (701,942 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry has **121 systems / 362 pockets / 361 links**; system ids/names/positions stay stable, gate connections change;

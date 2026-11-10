@@ -18,7 +18,7 @@ import { V } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
 import { localPlayer, profileOf } from "../state/state.js";
-import { routeDisplay, routeRows, routeCurrent, escapeRouteText } from "./route-display.js";
+import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
 
 const $ = id => document.getElementById(id);
 const MARKER_POOL = 18;
@@ -203,11 +203,14 @@ export function updateHudRoute(dt, routeElement = el.route) {
     if (routeCache.remaining > 0) return;
   }
   const route = findDestinationRoute(world, place, destination, { player, profile: profileOf(player), world: state.worldState });
-  const details = routeDisplay(world, destination, route, state.worldState.galaxy?.knowledge || {}, place,
-    state.ui.routeProgress?.destination === destination ? state.ui.routeProgress.completed : []);
+  const details = routeDisplay(world, destination, route, state.worldState.galaxy?.knowledge || {}, place);
   if (!details) { routeElement.hidden = true; routeCache = null; return; }
-  const html = `<h3>Route to ${escapeRouteText(details.title)}</h3>${details.available
-    ? `<ol tabindex="0" aria-label="Route systems">${routeRows(details.stops, { compact: true })}</ol><p>J · next warp</p>` : `${routeCurrent(details.current)}<p>No route available.</p>`}`;
+  // The current system is listed for orientation but is not a system left to travel to.
+  const remaining = Math.max(0, details.stops.length - 1);
+  const count = details.available ? ` (${remaining} ${remaining === 1 ? "system" : "systems"})` : "";
+  const html = `<h3>Route to ${escapeRouteText(details.title)}${count}</h3>${details.available
+    ? `<ol tabindex="0" aria-label="Route systems">${flightRouteRows(details.stops)}</ol>`
+    : `${details.current ? `<p class="route-here" aria-current="location">${escapeRouteText(details.current.system)}</p>` : ""}<p>No route available.</p>`}`;
   if (routeElement.innerHTML !== html) {
     const oldList = routeElement.querySelector?.("ol"), oldScroll = oldList?.scrollTop || 0;
     const placeChanged = !routeCache || routeCache.place !== place || routeCache.key !== key;
