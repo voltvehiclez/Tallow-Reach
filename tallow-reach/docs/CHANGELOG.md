@@ -19,6 +19,16 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Remove destination diamond
+
+- Owner requested removing the diamond from the destination system. Both route lists retain the
+  amber bold destination styling, arrows and blue current-system styling; an accessible destination
+  label remains. No navigation or save changes.
+- Updated route markup, styles, tests and checklist. Targeted **44/44**, full **331/331**, build
+  **684 KB (700,815 bytes)**. Browser playtest pending.
+
+---
+
 ## 2026-11-08: Mark the route destination and simplify the starmap list
 
 - Owner requested the final system stand out, and that starmap route rows show only systems and arrows
@@ -147,138 +157,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-08: Plot system destinations and jump the route with J
-
-- Right-click a visible galaxy system for **Set destination** and, only when the current pocket has an
-  executable direct gate to that system, **Warp to**. Keyboard context-menu keys work too. A highlighted
-  galaxy path and arrowed remaining system stops (including the destination arrival gate) appear below
-  the pocket rows. Long routes use paging so the panel need not scroll; Clear removes the destination.
-- `findRouteToSystem` does a breadth-first search over executable pocket hops, ending at whichever pocket
-  reaches the target system in the fewest warps. It respects free/local link policy, enabled links,
-  registered warp mode, requirements and unsupported costs. `J` in flight calls `jumpRoute`, recalculates
-  the route and calls `startWarp` for **one** hop; local gate and crossing are separate presses. Warp
-  animation and rechecks remain unchanged. No destination/route gives HUD feedback; arrival clears the
-  destination. Unreachable destinations do not replace an existing one. No auto-chaining.
-- Destination is session-only and resets on save replacement; save v16 and dependencies are unchanged.
-  Changed `src/sim/travel.js`, new `src/sim/navigation.js`, map/input/main/state/styles/help, tests and
-  root `TESTING-STARMAP.md`. `npm test` **320/320** and build **676 KB (692,538 bytes)**; browser
-  playtest remains pending, and step 11 is still unticked.
-
----
-
-## 2026-11-08: Remember starmap view across closing and travel
-
-- Owner confirmed the cannon visual follow-up works. Map M-close/reopen now restores the last galaxy or
-  system view, selection, zoom/pan and label setting; popup/notice/transition/drag do not persist.
-  A local cross-system `place-changed` makes a remembered pocket view follow the destination system and
-  resets its pocket framing, while galaxy mode remains galaxy mode. Local same-system hops preserve
-  framing; other pilots do not alter local memory. Reopen also checks current location as a fallback.
-  Hidden systems are not exposed. Save replacement resets memory; it is session-only, not in save v16.
-- Changed `src/ui/starmap.js`, `src/state/state.js`, `tests/step11b-starmap.test.mjs`, root playtest
-  guide and architecture/handoff notes. Headless tests cover both views, real local and gate warps,
-  stale menus, cross-player isolation, fallback and save reset. `npm test` **316/316**, build **670 KB
-  (686,176 bytes)**. Browser playtest pending; step 11 remains unticked.
-
----
-
-## 2026-11-08: Align newly fired cannon visuals with the interpolated hull
-
-- Owner reported cannon output visually offset when thrusting and turning. The local hull renders
-  between ticks, while a new bullet was first rendered from the already-advanced simulation muzzle.
-  The view now initializes its first previous pose at the corresponding previous hull-local muzzle,
-  then interpolates to the real projectile position. Subsequent ticks use normal projectile interpolation;
-  teleports and enemy shots are excluded. This is presentation only: ship velocity inheritance, firing,
-  damage, collision and saves are unchanged. Inherited velocity can still cause drift after firing.
-- Added moving/stationary, left/right, first/subsequent tick, teleport and enemy-shot headless checks in
-  `tests/render-interp.test.mjs` and a browser check in root `TESTING-STARMAP.md`. `npm test` **314/314**;
-  `npm run build` **669 KB (685,250 bytes)**. Visual browser verification remains pending.
-
----
-
-## 2026-11-08: Tame galaxy chart drag speed
-
-- Owner reported that tiny drags moved the map far too much at every zoom. Removed the old
-  viewport-dependent inverse-square amplification: `galaxyPanDelta` now converts pointer movement
-  to viewBox units once. `map.panSpeed` sets the maximum screen travel per pointer pixel (default 1);
-  the multiplier rises smoothly from 0.5 at maximum zoom to 1 at minimum zoom. Thus zooming out still
-  pans farther, but no default drag moves the chart farther on screen than the pointer. System-map
-  panning, travel, saves and dependencies are unchanged.
-- Updated the starmap regression test to check screen-space travel across zooms and different viewport
-  shapes, and updated `TESTING-STARMAP.md` and current architecture/handoff notes. `npm test`: 312/312;
-  `npm run build`: 669 KB (684,972 bytes). Owner visual playtest remains pending.
-
----
-
-## 2026-11-08: Step 11B starmap refinements — permanent core labels, zoom-scaled pan/cores, clickable gate neighbours (owner playtest pending)
-
-Owner requested six small chart changes after the free-local-warp/central-body delivery. This remains
-inside step 11; the owner has not yet passed the updated root `TESTING-STARMAP.md`.
-
-- **Tooltips/popups:** removed native `<title>` hover tooltips from pocket nodes and central bodies;
-  galaxy system dots keep their title for hidden-label inspection. The blue/orange click popups remain.
-- **Permanent core labels:** every star/black hole shows its proper name below the graphic with
-  `(Star)` / `(Black hole)` on a second row; hover/focus still highlights the ring/glow but no longer
-  gates the label. The core remains a non-warpable `role="img"` chart object.
-- **Galaxy pan:** `map.panSpeed` anchors the previous max-zoom drag feel. `galaxyPanSpeed` /
-  `galaxyPanDelta` make on-screen pan distance grow as `maxZoom / zoom` when zooming out, while
-  system-map panning stays unchanged.
-- **Gate-label clarity:** `pocketLabelPosition` puts gate pocket names inward, away from the orange
-  exit stub and peer-system label; ordinary pockets keep outward radial labels. Peer labels sit beyond
-  the stub cap with a tunable gap.
-- **Zoom-scaled cores:** `systemMap.coreRadius` / `blackHoleRadius` are now map units, so the central
-  graphic grows with system zoom. Pocket dots and label text remain screen-sized; label offset/line-height
-  and gaps are tunable (`coreLabelOffset`, `coreLabelLineHeight`, `labelGap`).
-- **Clickable gate neighbours:** exit stubs are focusable buttons. Clicking/right-clicking/keyboard-
-  activating a neighbouring-system label opens the same popup and quotes `travelQuote` to the reciprocal
-  gate pocket (`exitChoice`), never the remote system/core. Unreachable hops show **No direct route**;
-  legal hops emit the unchanged named travel action so `main.js` / `startWarp` requote before warping.
-- **Files:** `src/ui/starmap.js`, `src/styles.css`, `src/data/galaxy.js`, `src/sim/galaxy.js` validation,
-  `tests/step11a-galaxy.test.mjs`, `tests/step11b-starmap.test.mjs`, root `TESTING-STARMAP.md`, README,
-  HANDOFF/ROADMAP/VISION/REFACTOR_PLAN/ARCHITECTURE/TARGET_ARCHITECTURE/HOW_TO_ADD and data/UI READMEs.
-- **Results:** `npm test` **312/312 pass** (11A 23, 11B 29; both 8b oracles unchanged); `npm run build`
-  succeeded (**669 KB, 685,046 bytes**). **Save v16 unchanged:** no layout/pan/core presentation state enters
-  saves; default geography remains **121 / 462 / 511** with 116 stars and 5 black holes. No new dependencies.
-  Automated headless checks passed; owner visual browser playtest remains pending. Rebuild with
-  `npm run build`; test with `npm test`.
-
----
-
-## 2026-11-08: Step 11B system-map follow-up — free local warp and named central bodies (owner playtest pending)
-
-Owner requested three changes after the zoom/right-click UI delivery. This remains inside step 11;
-the owner has not yet passed the updated root `TESTING-STARMAP.md`.
-
-- **Free open-world local travel:** `sim/travel.js` allows warp to any pocket in the same system by
-  default, including a gate, without an internal link. `travelOptions`, `findRoute` and galaxy validation
-  understand the policy. A system can opt into `intraSystem: "links"` (data override/future temporary
-  instance) to require connected internal routes again. Cross-system travel still needs the exact enabled
-  gate link and its mode/requirements. `startWarp` still requotes before the unchanged warp sequence.
-- **System-chart clarity:** `ui/starmap.js` omits internal blue lines only in free-warp system maps;
-  route-only systems still draw enabled internal links. The main galaxy's gate web is unchanged. Gate
-  stubs still point to and name their exact peer system. The compact name-only right panel is untouched.
-- **Central bodies:** `sim/galaxy.js` assigns a visual-only star/black hole per system using an independent
-  FNV-1a + seeded roll (`systemMap.blackHoleChance: 0.05`). Author `core: { kind, n }` overrides win; names
-  default to the system's proper name (Meridian System → Meridian). Pockets now orbit the empty centre:
-  ordinary radius 140, gate radius 280, with authored `mapPos` still winning. The SVG core has distinct
-  star/black-hole styling and a hover/focus name, but no pocket id, warp action or route endpoint.
-- **Data/validation:** `data/galaxy.js` documents the policy/core recipes and adds core chance/radii/label
-  tuning. Invalid policies, core kinds and tuning fail plainly. Core assignment consumes neither the
-  generator nor gameplay RNG stream. Default ids, system positions, pockets and links are unchanged:
-  **121 / 462 / 511**, with 116 stars and 5 black holes on the default seed.
-- **Tests/docs:** re-scoped old local-link refusal/layout assertions to the explicit links opt-out rather
-  than deleting them; added free-hop/gate isolation, policy connectivity, core chance/name/override,
-  non-warpable markup/focus styling and unchanged galaxy-route coverage. `step11a-galaxy.test.mjs` now
-  has 23 tests and `step11b-starmap.test.mjs` 27. Updated the root playtest guide, HANDOFF/ROADMAP/VISION/
-  REFACTOR_PLAN/ARCHITECTURE/TARGET_ARCHITECTURE/HOW_TO_ADD and data/sim/UI READMEs.
-- **Results:** `npm test` **310/310 pass**; `npm run build` succeeded (**666 KB, 682,414 bytes**).
-  **Save v16 unchanged:** no generated geography, policies, cores or layout enter saves; old saves/codes
-  and both 8b oracles still pass. No new dependencies. Automated headless checks passed; owner visual
-  browser playtest remains pending. Rebuild with `npm run build`; test with `npm test`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-08: Plot system destinations and jump the route with J
+- 2026-11-08: Remember starmap view across closing and travel
+- 2026-11-08: Align newly fired cannon visuals with the interpolated hull
+- 2026-11-08: Tame galaxy chart drag speed
+- 2026-11-08: Step 11B starmap refinements — permanent core labels, zoom-scaled pan/cores, clickable gate neighbours (owner playtest pending)
+- 2026-11-08: Step 11B system-map follow-up — free local warp and named central bodies (owner playtest pending)
 - 2026-11-08: Step 11B starmap UI follow-up — zoomed system maps, right-click warp, compact overview (owner playtest pending)
 - 2026-11-08: Step 11B — clickable starmap, direct-hop travel and save v16 (owner playtest pending)
 - 2026-11-08: Step 11A owner playtest passed — full project backup

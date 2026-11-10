@@ -72,7 +72,6 @@ canvas {
 #hud-route .route-here, #hud-route p.route-here, .sm-route li.route-here { color: var(--ice); }
 #hud-route li.route-destination, .sm-route li.route-destination { color: var(--amber); font-weight: bold; }
 #hud-route li.route-here.route-destination, .sm-route li.route-here.route-destination { color: var(--ice); }
-#hud-route li .route-goal, .sm-route li .route-goal { color: var(--amber); }
 #hud-route p { margin: 5px 0; color: var(--dim); font-size: 12px; }
 #tr {
   right: 20px;

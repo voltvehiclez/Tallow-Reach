@@ -36,7 +36,6 @@ export function flightRouteRows(stops) {
   return stops.map(stop => {
     const current = stop.pockets.some(p => p.current);
     const classes = [current ? "route-here" : "", stop.destination ? "route-destination" : ""].filter(Boolean).join(" ");
-    const marker = stop.destination ? ' <span class="route-goal" role="img" aria-label="Destination">◆</span>' : "";
-    return `<li${classes ? ` class="${classes}"` : ""}${current ? ' aria-current="location"' : ""}><span aria-hidden="true">→</span> ${escapeRouteText(stop.system)}${marker}</li>`;
+    return `<li${classes ? ` class="${classes}"` : ""}${current ? ' aria-current="location"' : ""}${stop.destination ? ` aria-label="${escapeRouteText(stop.system)}, destination"` : ""}><span aria-hidden="true">→</span> ${escapeRouteText(stop.system)}</li>`;
   }).join("");
 }

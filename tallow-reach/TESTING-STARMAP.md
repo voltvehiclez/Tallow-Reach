@@ -198,7 +198,7 @@ asking the remaining VISION questions.
       and show a count of systems still to enter next to the destination (excluding your current
       system). No completed ticks, pocket names or jump counts should appear in the list. The list
       updates after each jump and disappears at the destination or when cleared. The destination
-      system should stand out in amber with a diamond on both lists. The starmap list should also
+      system should stand out in bold amber without a diamond on both lists. The starmap list should also
       show only systems and arrows (no gate-to-gate text or completed ticks); check paging. Test a pocket
       destination, a blocked route (no count), a detour, and a long route (scroll without zooming or firing).
 - [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
@@ -208,7 +208,7 @@ asking the remaining VISION questions.
 - [ ] Press **M** for the galaxy web. Right-click a remote system (for example Galerest), choose
       **Set destination**, and check the highlighted route and the arrowed stops below the pocket list.
       All stops that fit should be visible without arrows. Reduce the window height: ‹/› appear only
-      if needed; the destination system has a diamond.
+      if needed; the destination system is bold amber.
 - [ ] Close the map. Press **J** once: you should warp only to the next pocket on the route. If that is
       your local gate, press **J** again after the warp completes to cross into the next system. Reopen
       the map to check the remaining route updates, then continue until arrival clears the destination.

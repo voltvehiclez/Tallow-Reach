@@ -92,7 +92,8 @@ test("route rows omit pockets and mark the final destination", () => {
   assert.doesNotMatch(rows, /route-done|✓|<small>/);
   assert.match(rows, /class="route-here" aria-current="location"/);
   assert.match(rows, /class="route-destination"/);
-  assert.match(rows, /aria-label="Destination"/);
+  assert.match(rows, /aria-label="[^"]+, destination"/);
+  assert.doesNotMatch(rows, /◆|route-goal/);
   assert.ok(!rows.includes(local.n));
   assert.ok(!rows.includes(remoteLocal.n));
   assert.equal((rows.match(/<li(?: [^>]*)?>/g) || []).length, 2);
