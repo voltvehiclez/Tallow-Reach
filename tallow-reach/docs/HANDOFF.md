@@ -43,7 +43,7 @@ ones before changing anything, and update them when decisions or state change.
   least 10 gate crossings (11+ in tested seeds). 500 seeds checked; custom tuning can change this.
   Meridian keeps `reach`/`hollow`; Kestrel Hollow is not a gate.
 - **11B live slice (system-map follow-up built):** `src/ui/starmap.js` opens with **M** while flying. The galaxy
-  web shows gate lines routed around unrelated system dots (plus an SVG dot mask), current/visited/selected markers, inspect dropdown and zoom/pan/labels. Zooming
+  web shows straight gate lines and a derived chart-only node layout nudging dots away from unrelated lines, current/visited/selected markers, inspect dropdown and zoom/pan/labels. Light blue means previously visited; orange is current. In unusually crowded views, only obstructing unrelated dots mask their individual line; connected endpoints are not masked. Zooming
   into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) opens a derived
   **system pocket map** with a short zoom transition. Ordinary pockets orbit a central visual-only
   **star (95%) / black hole (5%)**; gates sit farther out with dashed stubs toward the exact neighbouring
@@ -91,8 +91,8 @@ ones before changing anything, and update them when decisions or state change.
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **325/325 pass** (11A file 23 tests, 11B map/save file 38, layout file 2; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **681 KB** (696,881 bytes). Automated
+- **Results:** `npm test` **326/326 pass** (11A file 23 tests, 11B map/save file 39, layout file 2; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **681 KB** (697,419 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry has **121 systems / 362 pockets / 361 links**; system ids/names/positions stay stable, gate connections change;

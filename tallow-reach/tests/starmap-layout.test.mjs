@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GALAXY } from "../src/data/galaxy.js";
 import { generateGalaxy } from "../src/sim/galaxy.js";
-import { routeSystemEdge, segmentDistanceSquared, svgEdgePath } from "../src/ui/chart-lines.js";
+import { chartGalaxy, segmentDistanceSquared, straightEdgeBlockers } from "../src/ui/chart-lines.js";
 
 function distances(world) {
   const graph = new Map(world.systems.map(s => [s.id, []]));
@@ -31,25 +31,36 @@ test("sparser seeded webs preserve scatter and put outer systems at least ten ga
   }
 });
 
-test("system lines route around unrelated dots at multiple zoom scales", () => {
-  const a = { id: "a", pos: [0, 0] }, b = { id: "b", pos: [100, 0] }, c = { id: "c", pos: [50, 0] };
-  const path = routeSystemEdge(a, b, [a, b, c], 10);
-  assert.ok(path.length > 2);
-  assert.ok(path.slice(1).every((p, i) => segmentDistanceSquared([50, 0], path[i], p) >= 100 - 1e-7));
-  assert.match(svgEdgePath(path), /^M/);
-  for (const seed of [GALAXY.seed, 42]) {
-    const world = generateGalaxy(seed);
-    for (const radius of [12, 36, 72]) for (const link of Object.values(world.links).filter(l => l.kind === "gate")) {
-      const a = world.systemsById[world.pockets[link.a].parent], b = world.systemsById[world.pockets[link.b].parent];
-      const points = routeSystemEdge(a, b, world.systems, radius);
-      assert.deepEqual(points[0], [a.pos[0], -a.pos[1]]);
-      assert.deepEqual(points.at(-1), [b.pos[0], -b.pos[1]]);
-      for (const s of world.systems) {
-        if (s === a || s === b) continue;
-        const dot = [s.pos[0], -s.pos[1]], r2 = radius * radius;
-        if (segmentDistanceSquared(dot, points[0], points[0]) <= r2 || segmentDistanceSquared(dot, points.at(-1), points.at(-1)) <= r2) continue;
-        assert.ok(points.slice(1).every((p, i) => segmentDistanceSquared(dot, points[i], p) >= r2 - 1e-6), `${a.id} → ${b.id} overlaps ${s.id}`);
-      }
+test("straight chart links avoid unrelated dots without changing the world or its connections", () => {
+  const original = generateGalaxy();
+  const snapshot = structuredClone(original);
+  const world = chartGalaxy(original);
+  assert.equal(chartGalaxy(original), world, "chart layout is cached");
+  assert.notEqual(world, original);
+  assert.deepEqual(original, snapshot, "chart layout never mutates simulation or save geography");
+  assert.deepEqual(Object.keys(world.links), Object.keys(original.links));
+  const xs = world.systems.map(s => s.pos[0]), ys = world.systems.map(s => s.pos[1]);
+  const minZoomScale = Math.max((Math.max(...xs) - Math.min(...xs) + 2 * GALAXY.map.padding) / (GALAXY.map.minZoom * 800),
+    (Math.max(...ys) - Math.min(...ys) + 2 * GALAXY.map.padding) / (GALAXY.map.minZoom * 600));
+  for (const link of Object.values(world.links).filter(l => l.kind === "gate")) {
+    const a = world.systemsById[world.pockets[link.a].parent], b = world.systemsById[world.pockets[link.b].parent];
+    assert.equal(straightEdgeBlockers(a, b, world.systems, s =>
+      ((s.id === "meridian" ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) + 2) * minZoomScale).length, 0,
+    "the default chart needs no line masking even at minimum zoom in an 800×600 viewport");
+    for (const s of world.systems) {
+      if (s.id === a.id || s.id === b.id) continue;
+      assert.ok(segmentDistanceSquared(s.pos, a.pos, b.pos) >= 65 ** 2, `${a.id} → ${b.id} overlaps ${s.id}`);
     }
   }
+  // A changed graph or authored position invalidates the derived chart, but
+  // does not modify the stable names or the underlying world positions.
+  const gate = Object.values(original.links).find(l => l.kind === "gate");
+  gate.enabled = false;
+  assert.equal(chartGalaxy(original), world, "closing a gate does not move chart systems");
+  delete original.links[gate.id];
+  assert.notEqual(chartGalaxy(original), world, "changing the graph invalidates the layout");
+  const a = { id: "a", pos: [0, 0] }, b = { id: "b", pos: [100, 0] };
+  const blocker = { id: "blocker", pos: [50, 0] }, distant = { id: "distant", pos: [50, 40] };
+  assert.deepEqual(straightEdgeBlockers(a, b, [a, b, blocker, distant], () => 10).map(x => x.system.id), ["blocker"],
+    "fallback masking excludes connected endpoints and all non-obstructing dots");
 });

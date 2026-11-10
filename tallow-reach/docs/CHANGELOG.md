@@ -19,6 +19,23 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Straight starmap lines with attached endpoints
+
+- Owner asked for straight lines without unrelated-dot intersections, and asked about light-blue systems.
+  Light blue denotes a system marked visited in saved discovery knowledge; orange is the current system.
+- Replaced bent lines and the blanket endpoint mask with a cached, chart-only layout that nudges unrelated
+  dots away from straight gate segments. Paths and highlighted routes use the same single straight segment;
+  connected endpoint dots are never globally masked. In unusually crowded or extreme-zoom layouts, an
+  individual line masks only its unrelated obstructing dots. Chart positions never mutate simulation
+  geography, graph, saves or authored positions; the layout is recalculated on graph/position changes,
+  not when gates are merely closed or reopened. The pocket view and zoom centering use the same chart
+  projection. All system identities and connections remain unchanged.
+- `src/ui/chart-lines.js`, `src/ui/starmap.js`, starmap regression tests and documentation updated.
+  Targeted **64/64**, `npm test` **326/326**, build **681 KB (697,419 bytes)**. No dependencies or save
+  version changes; browser playtest remains pending.
+
+---
+
 ## 2026-11-08: Clearer, sparser starmap and adaptive route list
 
 - Owner asked for galaxy connections not to pass through unrelated system dots, route stops to use the

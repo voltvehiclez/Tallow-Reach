@@ -429,6 +429,19 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   ui.closeStarmap();
 });
 
+test("11B: visited systems are light blue while the current system remains orange", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  ui.state.worldState.galaxy.knowledge["sys-001"] = { discovered: true, visited: true };
+  assert.equal(ui.openStarmap(), true);
+  assert.match(mapRoot.innerHTML, /class="sm-node[^"]*visited[^"]*"\s+data-system="sys-001"/);
+  assert.match(mapRoot.innerHTML, /class="sm-node[^"]*current[^"]*"\s+data-system="meridian"/);
+  assert.doesNotMatch(mapRoot.innerHTML, /class="sm-node[^"]*visited[^"]*"\s+data-system="sys-002"/);
+  assert.equal(ui.currentSave().world.galaxy.knowledge["sys-001"].visited, true);
+  ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
+});
+
 test("11B: map remembers its view and follows actual cross-system warps without saving presentation", () => {
   const save = ui.prepareGalaxySave(ui.newSave());
   ui.applySave(save);
@@ -562,7 +575,9 @@ test("11B: system destination popup, route display and J follow ordinary checked
   const connectionPaths = [...mapRoot.innerHTML.matchAll(/class="sm-edge" data-edge="[^"]+" d="([^"]+)"/g)].map(m => m[1]);
   const highlightedPaths = [...mapRoot.innerHTML.matchAll(/class="sm-route-edge" d="([^"]+)"/g)].map(m => m[1]);
   assert.ok(highlightedPaths.length > 0 && highlightedPaths.every(path => connectionPaths.includes(path)), "highlight follows the same bent connection lines");
-  assert.ok(mapRoot.innerHTML.includes('mask="url(#sm-system-mask)"'));
+  assert.ok(!mapRoot.innerHTML.includes('id="sm-system-mask"'), "there is no blanket mask cutting gaps at every endpoint");
+  assert.ok(!mapRoot.innerHTML.includes('id="sm-edge-mask-'), "default chart has uninterrupted lines at normal zoom");
+  assert.ok(connectionPaths.every(path => /^M[^L]+ L[^L]+$/.test(path)), "each system connection is straight");
   assert.match(mapRoot.innerHTML, /Route to/);
   assert.match(mapRoot.innerHTML, /J · next warp/);
   const expected = findRouteToSystem(world, P.place, target.id);

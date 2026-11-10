@@ -190,8 +190,8 @@ asking the remaining VISION questions.
 
 ## Destination route and J shortcut
 
-- [ ] Inspect the galaxy at several zooms: blue gate lines and highlighted routes should bend around
-      unrelated system dots rather than appearing to connect through them. Set a destination near the
+- [ ] Inspect the galaxy at several zooms: blue gate lines and highlighted routes should be straight, meet their connected dots, and avoid
+      unrelated system dots. Previously visited systems should appear light blue; the current system is orange. Set a destination near the
       outer edge and check that the route has at least ten system-to-system gate crossings.
 - [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
       in an ordinary pocket of the same system, with character and cargo intact, and see a recovery notice.

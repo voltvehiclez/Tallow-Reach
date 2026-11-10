@@ -555,7 +555,8 @@ warp animation.
 places: { "sys-004": { pos: [180, -260] } },
 ```
 
-Ids, pockets and routes stay stable; only the map position and derived tier guidance change.
+Ids, pockets and routes stay stable; the system position and derived tier guidance change. The UI may
+nudge the displayed dot away from unrelated straight edges, without changing the authored position.
 
 **Move a pocket on its system's zoomed-in map.** Add a 2D `mapPos` (map units, not flight coordinates):
 
