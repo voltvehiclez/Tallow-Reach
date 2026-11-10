@@ -193,6 +193,9 @@ asking the remaining VISION questions.
 - [ ] Inspect the galaxy at several zooms: blue gate lines and highlighted routes should be straight, meet their connected dots, and avoid
       unrelated system dots. Previously visited systems should appear light blue; the current system is orange. Set a destination near the
       outer edge and check that the route has at least ten system-to-system gate crossings.
+- [ ] With a route set, close the map and check the remaining stops below Boost. Press J for each
+      hop: the list should update on arrival and disappear at the destination or when cleared. Test
+      a pocket destination and a long route (scroll the list without zooming or firing).
 - [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
       in an ordinary pocket of the same system, with character and cargo intact, and see a recovery notice.
       Importing replaces your current game, so export your current save first.

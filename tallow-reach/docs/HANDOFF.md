@@ -5,6 +5,9 @@ code. Give them complete files or exact find-and-replace edits with full file pa
 what to run and what to click. These docs are the project's memory across chats: read the relevant
 ones before changing anything, and update them when decisions or state change.
 
+Flight HUD follow-up: an active route is shown below Boost, using the same stop names as the starmap.
+It updates after travel, hides on arrival/clear, and long lists scroll; owner browser playtest is pending.
+
 ## Ground rules from the owner (do not break these)
 
 - No new npm dependencies. Plain ES modules only. The sole planned exception is a small networking
@@ -91,8 +94,8 @@ ones before changing anything, and update them when decisions or state change.
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **326/326 pass** (11A file 23 tests, 11B map/save file 39, layout file 2; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **681 KB** (697,419 bytes). Automated
+- **Results:** `npm test` **328/328 pass** (11A file 23 tests, 11B map/save file 39, layout file 2; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **681 KB** (699,351 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry has **121 systems / 362 pockets / 361 links**; system ids/names/positions stay stable, gate connections change;

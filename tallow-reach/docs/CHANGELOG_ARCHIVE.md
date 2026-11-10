@@ -8,6 +8,133 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-08: Step 11B starmap UI follow-up — zoomed system maps, right-click warp, compact overview (owner playtest pending)
+
+Owner reviewed the first 11B build ("the map looks ok") and asked for four chart changes. This is a
+follow-up inside 11B, not a new numbered step; step 11 remains unticked until `TESTING-STARMAP.md` passes.
+
+- Zooming into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) now opens a
+  **system pocket map** with a short galaxy↔system viewBox transition. `sim/galaxy.js` gains
+  `systemPocketLayout`: a deterministic, derived 2D layout (ordinary hub centred, other ordinary pockets
+  ringed, gate pockets placed outward toward their peer system). Author `mapPos` overrides are validated
+  and win; layout is never saved. `ui/starmap.js` draws internal pocket lines and dashed gate exit stubs
+  labelled with the neighbouring system, respecting enabled links and the visibility policy.
+- **Right-click a pocket** (or Enter/Space/Shift+F10 on a focused pocket dot) opens a small popup with a
+  clickable **Warp to …** only when `travelQuote` says the direct hop is legal. It emits the same
+  `action { name: "travel", to }`; `main.js`/`startWarp` still recheck link/cost/requirements and run the
+  unchanged warp animation. Illegal/current pockets show a reason and no warp button. Esc closes the
+  popup before the chart; the root handler stops propagation so the global contextmenu/fire gates stay intact.
+- The right panel is now a compact overview: system name, **Current pocket**, and plain pocket-name rows.
+  Removed the per-pocket tier/description/gate-peer/status cards and all panel warp buttons; no scrolling.
+- Tuning lives in `src/data/galaxy.js` (`map.systemEntryZoom`, `map.transitionMs`, `map.context`,
+  `systemMap` radii/padding/exit length/zoom). Updated `src/styles.css`, folder READMEs, HANDOFF/ROADMAP/
+  VISION/REFACTOR_PLAN/ARCHITECTURE/TARGET_ARCHITECTURE/HOW_TO_ADD and root `TESTING-STARMAP.md` sections 2–3.
+- Tests: updated the old map-UI assertion that expected panel warp buttons, and added layout/exit/visibility,
+  transition, zoom-entry/exit and illegal-popup coverage. `tests/step11b-starmap.test.mjs` is now 25 tests.
+- **Results:** `npm test` **304/304 pass** (both 8b oracles unchanged); `npm run build` succeeded
+  (662 KB, 677,847 bytes). **Save v16 unchanged** — pocket layout is derived, not persisted; no migration,
+  storage-key or `TR1:` change. No new dependencies. Automated headless DOM checks passed; owner visual
+  browser playtest pending. Rebuild with `npm run build`; test with `npm test`.
+
+---
+
+## 2026-11-08: Step 11B — clickable starmap, direct-hop travel and save v16 (owner playtest pending)
+
+Owner-approved second slice of step 11. **M now opens the starmap** instead of warping immediately;
+step 11 remains unticked until the owner passes `TESTING-STARMAP.md`.
+
+- Added `src/ui/starmap.js` (visible system web, gate lines, current/visited/selected markers, inspect
+  dropdown, zoom/pan/labels, selected system's full pocket list and travel quotes) and
+  `src/sim/galaxy-session.js` (seed resolution, live place catalog installation, compact-save
+  preparation and removed-pocket recovery). `src/data/places.js` lookups now read the live catalog;
+  `src/main.js`, `src/core/input.js`, `src/ui/menu.js`, HUD/intro text and styles wire the chart.
+- Travel buttons emit `action { name: "travel", to }`; `sim/sectors.js` requotes the direct link,
+  costs and requirements before running the unchanged warp sequence. Refusals emit `travel-denied`
+  and remain visible in the chart. Single-player chart pauses via `isSimulationPaused()` and releases
+  flight input/free cam/dock-lock-weapon hotkeys/audio; `state.multiplayer` keeps a future hosted world running.
+- **Save v16:** `world.galaxy` stores only `{ seed, knowledge }`, not generated geography. Boot, slots
+  and import prepare the saved seed before validation; v15 and older migrate. A removed/unknown pocket
+  returns the pilot to Meridian Station docked with the whole character/cargo intact and a recovery
+  notice. Failed preparation restores the previous catalog. Storage keys and `TR1:` are unchanged.
+- Added `tests/step11b-starmap.test.mjs` (21 tests) and `tests/saves/v15-pre11b.json` (pre-11B
+  regression fixture, not a new owner export). Updated intentional v16/pause expectations in the
+  existing save/resume/shop tests; legacy `nextPocket` tests remain as helper oracles. Added old-code
+  section C to `TEST-OLD-CODES.txt`, root `TESTING-STARMAP.md`, and updated HANDOFF/ROADMAP/VISION/
+  REFACTOR_PLAN/TARGET_ARCHITECTURE/ARCHITECTURE/HOW_TO_ADD and folder READMEs.
+- **Results:** `npm test` **300/300 pass** (both 8b oracles unchanged); `npm run build` succeeded
+  (650 KB, 665,730 bytes). Automated headless DOM/menu/input/audio checks passed; owner visual browser
+  playtest pending. No new dependencies. Rebuild with `npm run build`; test with `npm test`.
+
+---
+
+## 2026-11-08: Step 11A owner playtest passed — full project backup
+
+- The owner reported the `TESTING-11A.md` playtest passed; no bugs were reported. Recorded the pass
+  in the guide, HANDOFF, ROADMAP and REFACTOR_PLAN. **Step 11 remains unticked:** only slice 11A is
+  confirmed; 11B has not started. No source, gameplay or save-format change; saves remain v15.
+- Delivered `tallow-reach-step11a-passed-backup.zip` outside the project folder: full source, tests,
+  docs, package files, reference and the built HTML, excluding installed dependencies and Git internals.
+  Browser-local saves are not in a project ZIP; use Saves -> Export for a separate `TR1:` progress backup.
+- Latest recorded verification before this docs/backup change: build succeeded (625 KB), **279/279
+  tests passed**. Moved the six oldest full entries below to the archive verbatim, leaving ten.
+
+---
+
+## 2026-11-08: Step 11A owner playtest guide and live browser preview
+
+- Added `TESTING-11A.md` (project root, beside the other playtest guides): a numbered regression
+  checklist for the 11A build. 11A is invisible by design, so the guide checks that nothing changed —
+  M still warps directly (no map screen), Kestrel Hollow stays empty and is not a gate, saves stay v15,
+  old codes A/B still import — plus flight, mining, combat, station business and console-error checks.
+- Started the existing `node serve.mjs` preview server (port 8080) so the owner can play the built game
+  in the browser. No source or gameplay change; `serve.mjs` is unchanged.
+- Re-ran `npm ci` (sandbox had lost `node_modules`), `npm run build` (625 KB) and `npm test`:
+  **279/279 pass**. Awaiting owner playtest results before starting step 11B.
+
+---
+
+## 2026-11-08: Step 11A — organic starmap web, one-peer gates and editable travel rules
+
+Owner-approved first slice of step 11. The map is an organic 2D web, not a square grid; construction
+must stay modular so moving a system, deleting a pocket, promoting a pocket to a gate, adding a route
+or replacing the generator does not require rewriting map/UI/warp code.
+
+- Added `src/data/galaxy.js` (seed, 121-system target, degree cap, organic layout, visibility policy,
+  advisory distance tiers, empty travel cost/requirements, `GALAXY_OVERRIDES`, name parts),
+  `src/sim/galaxy.js` (replaceable generator registry, resolved system/pocket/link records, author
+  patches/tombstones, validation, visibility policies) and `src/sim/travel.js` (pure direct-hop
+  quotes/options/route search with registered modes/requirements). `src/data/places.js` gains explicit
+  `PLACE_LINKS` for the authored Meridian Station <-> Kestrel Hollow route.
+- Each generated system has one ordinary empty pocket and one empty gate pocket per neighbouring
+  system; every gate pocket has exactly one external gate peer. Meridian keeps `reach`/`hollow`
+  unchanged and gains separate new gate pockets. Kestrel Hollow is not a gate.
+- Added `tests/step11a-galaxy.test.mjs` (19 tests): determinism, independent RNG, organic scatter,
+  dead ends/junctions, reachability, one-peer gates, move/delete/promote overrides, generator
+  replacement, configurable visibility, tier guidance, tuning changes and free/closed travel.
+- **No live gameplay or save change:** M still cycles the current system's pockets, save stays **v15**,
+  and the new modules are not imported by `main.js`. Step 11B will wire the M starmap/pocket chooser and
+  save v16. Updated VISION decisions, ROADMAP, REFACTOR_PLAN, TARGET_ARCHITECTURE, ARCHITECTURE,
+  HOW_TO_ADD recipe 20 and the data/sim folder READMEs.
+- **Results:** `npm ci` succeeded; `npm test` **279/279 pass** (260 baseline + 19 new; both 8b oracles
+  unchanged); `npm run build` succeeded.
+
+---
+
+## 2026-11-08: Autosave every 30 seconds instead of 15
+
+Owner request: halve how often the game writes a save, to keep write volume down.
+
+- `AUTOSAVE_SECONDS` in `src/data/simulation.js` is now **30** (was 15). It is the only tuning number
+  involved; `main.js` already reads it.
+- Nothing else changes. Saving on tab hide/close, on dock, on warp arrival and on every menu click is
+  untouched, so a normal quit still loses nothing — the interval only bounds what a **crash or
+  force-quit** can lose, which is now up to 30 seconds of flying instead of 15.
+- `docs/HANDOFF.md` and `TESTING-PLACES.md` step 4.8 updated to say 30 seconds. The dated v15 entries
+  below still say 15 s because that was true when they were written.
+- **Results:** `npm test` **260/260 pass**; `npm run build` succeeded.
+
+---
+
 ---
 
 ## 2026-11-08: Come back where you logged out — save v15

@@ -6,6 +6,7 @@
 
 import { GALAXY } from "../data/galaxy.js";
 import { chartGalaxy, straightEdgeBlockers } from "./chart-lines.js";
+import { routeDisplay, routeRows } from "./route-display.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
@@ -917,26 +918,13 @@ function systemMenuMarkup(world, view, from, rootRect) {
 
 /** Show system arrivals and the exact target pocket; paginate only when needed. */
 function routeMarkup(world, view, route) {
-  const destination = state.ui.destination;
-  const targetPocket = typeof destination === "object" && destination ? world.pocketsById[destination.pocketId] : null;
-  const targetSystem = world.systemsById[targetPocket?.parent || destination];
-  if (!targetSystem) return "";
-  const stops = [];
-  if (route) for (let i = 1; i < route.length; i++) {
-    const pocket = world.pocketsById[route[i]], previous = world.pocketsById[route[i - 1]];
-    if (!pocket || !previous) continue;
-    if (pocket.parent !== previous.parent || (targetPocket && pocket.id === targetPocket.id)) stops.push(pocket);
-  }
+  const details = routeDisplay(world, state.ui.destination, route, knowledge());
+  if (!details) return "";
+  const { title, stops } = details;
   const pageSize = view.routePageSize || Math.max(1, stops.length);
   const pages = Math.max(1, Math.ceil(stops.length / pageSize));
   view.routePage = Math.min(view.routePage || 0, pages - 1);
-  const rows = stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize).map(p => {
-    const system = world.systemsById[p.parent];
-    const visible = systemVisible(world, p.parent, knowledge());
-    const showPocket = p.id === targetPocket?.id || (!targetPocket && p.parent === targetSystem.id);
-    return `<li><span aria-hidden="true">→</span> ${esc(visible ? (system?.n || p.parent) : "Undiscovered system")}${visible && showPocket ? ` <small>· ${esc(p.n)}</small>` : ""}</li>`;
-  }).join("");
-  const title = targetPocket ? `${targetPocket.n} (${targetSystem.n})` : targetSystem.n;
+  const rows = routeRows(stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize));
   return `<section class="sm-route" aria-label="Route"><h3>Route to ${esc(title)}</h3>
     ${route ? `<ol>${rows}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}
     <div class="sm-route-actions">${pages > 1 ? `<button type="button" data-action="route-prev" ${view.routePage === 0 ? "disabled" : ""}>‹</button><span>${view.routePage + 1} / ${pages}</span><button type="button" data-action="route-next" ${view.routePage === pages - 1 ? "disabled" : ""}>›</button>` : ""}
