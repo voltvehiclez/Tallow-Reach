@@ -70,11 +70,13 @@ export function chartPixelScale(box, width = 800, height = 600) {
   return Math.max(box[2] / w, box[3] / h) || 1;
 }
 
-/** Requested galaxy pan multiplier in *screen* pixels: 1× at max zoom, growing
- *  inversely as you zoom out. System-map panning does not use this. */
+/** Galaxy screen-pixel travel per pointer pixel: gently increase from half
+ *  speed at maximum zoom to full speed at minimum zoom. */
 export function galaxyPanSpeed(zoom, tuning = GALAXY.map) {
   const z = clamp(zoom || 1, tuning.minZoom, tuning.maxZoom);
-  return tuning.panSpeed * (tuning.maxZoom / z);
+  const range = tuning.maxZoom - tuning.minZoom;
+  const zoomOut = range > 0 ? (tuning.maxZoom - z) / range : 0;
+  return tuning.panSpeed * (0.5 + 0.5 * zoomOut);
 }
 
 /** Screen pixels → viewBox units. `speed` is the on-screen travel per mouse pixel. */
@@ -83,14 +85,9 @@ export function panDelta(start, current, box, viewport, speed = 1) {
   return [-(current[0] - start[0]) * scale * speed, -(current[1] - start[1]) * scale * speed];
 }
 
-/** Galaxy drag anchored to the previous max-zoom feel. The old conversion moved
- *  1 / maxScale² screen pixels per mouse pixel at max zoom; keep that anchor, then
- *  apply galaxyPanSpeed so zooming out pans proportionally farther on screen. */
+/** Convert pointer motion once, without amplifying it by viewport-dependent scale. */
 export function galaxyPanDelta(start, current, box, viewport, zoom, tuning = GALAXY.map) {
-  const z = clamp(zoom || 1, tuning.minZoom, tuning.maxZoom);
-  const maxBox = [box[0], box[1], box[2] * z / tuning.maxZoom, box[3] * z / tuning.maxZoom];
-  const maxScale = chartPixelScale(maxBox, viewport?.width, viewport?.height);
-  return panDelta(start, current, box, viewport, galaxyPanSpeed(z, tuning) / (maxScale * maxScale));
+  return panDelta(start, current, box, viewport, galaxyPanSpeed(zoom, tuning));
 }
 
 export function travelContext(player = localPlayer()) {

@@ -108,7 +108,7 @@ deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win
 Pockets orbit an independent seeded star (95%) / black hole (5%) core; its proper name comes from the
 system and is permanently labelled with its type on a second row, but it is not warpable. Free systems omit internal chart lines;
 route-only systems draw them. Gate exit stubs point toward the exact peer system and their labels are clickable travel targets.
-Galaxy pan keeps its max-zoom feel and scales inversely with zoom; core graphics scale with system zoom. Place memory
+Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out; core graphics scale with system zoom. Place memory
 (mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
 container: pockets may later have optional child places using the same place record.
 

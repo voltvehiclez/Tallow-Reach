@@ -36,8 +36,8 @@ export const GALAXY = {
 
   // Flat chart presentation only; radii are screen pixels at every zoom level.
   // Zooming in on the selected system past systemEntryZoom opens its pocket map.
-  // panSpeed is the on-screen galaxy drag multiplier at maxZoom (the old feel).
-  // It grows as maxZoom / zoom when zooming out; system-map panning is unchanged.
+  // panSpeed is the maximum screen-pixel travel per pointer pixel (at minZoom).
+  // Galaxy drag increases smoothly from half speed at maxZoom; system panning is unchanged.
   // None of these numbers affect travel rules.
   map: {
     padding: 90, nodeRadius: 5, homeRadius: 8, minZoom: 0.6, maxZoom: 5, zoomStep: 1.25,

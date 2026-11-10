@@ -49,7 +49,7 @@ ones before changing anything, and update them when decisions or state change.
   **(Star)**); native hover tooltips are gone from pockets/core, while click popups remain. Core radii are
   map units so the graphic scales with system zoom; pocket dots/labels stay screen-sized. Gate pocket names
   sit inward clear of orange stubs, and neighbouring-system labels are clickable travel targets quoting the
-  reciprocal gate pocket. Galaxy pan keeps its max-zoom feel and scales inversely with zoom on screen.
+  reciprocal gate pocket. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out.
   `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
   win. Open-world systems allow **free warp to any local pocket** and omit internal blue lines. The data
   opt-out `intraSystem: "links"` restores internal routes/lines for future route-only instances; the main
@@ -70,7 +70,7 @@ ones before changing anything, and update them when decisions or state change.
   `resume:null`, preserving the whole profile/cargo; intro/slot/import show a safe-recovery notice.
   A failed prepare restores the previous catalog. v15 and older saves/codes still load.
 - **Results:** `npm test` **312/312 pass** (11A file now 23 tests, 11B map/save file 29; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **669 KB** (685,046 bytes). Automated
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **669 KB** (684,972 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
   Default geometry retains **121 systems / 462 pockets / 511 links** with identical ids/positions/links;

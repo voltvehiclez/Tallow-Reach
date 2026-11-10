@@ -19,6 +19,20 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Tame galaxy chart drag speed
+
+- Owner reported that tiny drags moved the map far too much at every zoom. Removed the old
+  viewport-dependent inverse-square amplification: `galaxyPanDelta` now converts pointer movement
+  to viewBox units once. `map.panSpeed` sets the maximum screen travel per pointer pixel (default 1);
+  the multiplier rises smoothly from 0.5 at maximum zoom to 1 at minimum zoom. Thus zooming out still
+  pans farther, but no default drag moves the chart farther on screen than the pointer. System-map
+  panning, travel, saves and dependencies are unchanged.
+- Updated the starmap regression test to check screen-space travel across zooms and different viewport
+  shapes, and updated `TESTING-STARMAP.md` and current architecture/handoff notes. `npm test`: 312/312;
+  `npm run build`: 669 KB (684,972 bytes). Owner visual playtest remains pending.
+
+---
+
 ## 2026-11-08: Step 11B starmap refinements — permanent core labels, zoom-scaled pan/cores, clickable gate neighbours (owner playtest pending)
 
 Owner requested six small chart changes after the free-local-warp/central-body delivery. This remains

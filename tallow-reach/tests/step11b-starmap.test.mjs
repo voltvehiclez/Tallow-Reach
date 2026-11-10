@@ -715,10 +715,9 @@ test("11B: a free gate hop keeps the named action; a links opt-out restores line
   }
 });
 
-test("11B: galaxy pan speed grows inversely with zoom while max zoom and system panning stay unchanged", () => {
-  assert.equal(galaxyPanSpeed(GALAXY.map.maxZoom), GALAXY.map.panSpeed);
-  assert.equal(galaxyPanSpeed(1), GALAXY.map.panSpeed * GALAXY.map.maxZoom);
-  assert.equal(galaxyPanSpeed(GALAXY.map.minZoom), GALAXY.map.panSpeed * GALAXY.map.maxZoom / GALAXY.map.minZoom);
+test("11B: galaxy pan stays bounded in screen pixels while increasing gently as zoom decreases", () => {
+  assert.equal(galaxyPanSpeed(GALAXY.map.maxZoom), GALAXY.map.panSpeed * 0.5);
+  assert.equal(galaxyPanSpeed(GALAXY.map.minZoom), GALAXY.map.panSpeed);
   assert.ok(galaxyPanSpeed(1) > galaxyPanSpeed(2.5) && galaxyPanSpeed(2.5) > galaxyPanSpeed(5));
   const box = [0, 0, 800, 600], viewport = { width: 800, height: 600 };
   assert.deepEqual(panDelta([100, 100], [140, 120], box, viewport), [-40, -20]);
@@ -727,8 +726,8 @@ test("11B: galaxy pan speed grows inversely with zoom while max zoom and system 
   assert.deepEqual(panDelta([100, 100], [110, 100], [0, 0, 1600, 1200], viewport), [-20, -0]);
   assert.deepEqual(panDelta([100, 100], [110, 100], [0, 0, 1600, 1200], viewport, 4), [-80, -0]);
   const maxBox = [0, 0, 800, 600], wide = [0, 0, 1600, 1200];
-  assert.deepEqual(galaxyPanDelta([0, 0], [10, 0], maxBox, viewport, GALAXY.map.maxZoom), [-10, -0]);
-  assert.deepEqual(galaxyPanDelta([0, 0], [10, 0], wide, viewport, 2.5), [-40, -0]);
+  assert.deepEqual(galaxyPanDelta([0, 0], [10, 0], maxBox, viewport, GALAXY.map.maxZoom), [-5, -0]);
+  assert.ok(Math.abs(galaxyPanDelta([0, 0], [10, 0], wide, viewport, 2.5)[0] + 20 * galaxyPanSpeed(2.5)) < 1e-9);
 
   ui.openStarmap();
   const svg = { setPointerCapture() {}, setAttribute() {}, getBoundingClientRect() { return viewport; } };
@@ -748,14 +747,18 @@ test("11B: galaxy pan speed grows inversely with zoom while max zoom and system 
     return value;
   };
   const max = drag(GALAXY.map.maxZoom), middle = drag(2.5), min = drag(GALAXY.map.minZoom);
-  ui.state.ui.starmap.zoom = GALAXY.map.maxZoom;
-  const realMaxBox = chartViewBox(ui.state.galaxy, ui.state.ui.starmap);
-  const maxScale = chartPixelScale(realMaxBox, viewport.width, viewport.height);
-  const previousMax = (10 / maxScale) / maxScale; // old chart delta, then screen px
-  assert.ok(Math.abs(max - previousMax) < 1e-9, "maximum zoom keeps the previous drag distance exactly");
+  assert.ok(Math.abs(max - 5) < 1e-9);
   assert.ok(middle > max && min > middle);
-  assert.ok(Math.abs(middle / max - 2) < 1e-9);
-  assert.ok(Math.abs(min / max - GALAXY.map.maxZoom / GALAXY.map.minZoom) < 1e-9);
+  assert.ok(Math.abs(min - 10) < 1e-9, "at most one screen pixel per pointer pixel");
+  // The bound must hold for different chart aspect ratios and viewport sizes.
+  for (const vp of [{ width: 320, height: 900 }, { width: 1920, height: 400 }]) {
+    for (const zoom of [GALAXY.map.minZoom, 1, 2.5, GALAXY.map.maxZoom]) {
+      const box = [0, 0, 1600 / zoom, 1200 / zoom];
+      const delta = galaxyPanDelta([0, 0], [10, 0], box, vp, zoom);
+      const screenTravel = Math.abs(delta[0]) / chartPixelScale(box, vp.width, vp.height);
+      assert.ok(screenTravel >= 5 && screenTravel <= 10 + 1e-9);
+    }
+  }
   ui.state.ui.starmap.mode = "system";
   ui.state.ui.starmap.selected = "meridian";
   ui.state.ui.starmap.systemZoom = 1;

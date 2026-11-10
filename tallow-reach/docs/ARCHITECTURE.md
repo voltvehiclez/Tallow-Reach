@@ -498,8 +498,8 @@ These are real, current limits. None of them is a bug in play today.
   selected system dot opens a derived pocket map: pockets orbit a visual-only star/black hole with a
   permanent two-line name/type label. Free systems omit internal lines; route-only systems retain them. Gate exit stubs
   point toward neighbouring systems, their labels are clickable travel targets quoting the reciprocal gate pocket,
-  and the right panel stays a compact name-only overview. Galaxy pan keeps its max-zoom feel and scales inversely
-  with zoom; core radii are map units so system zoom scales the graphic. Clicking/right-clicking a legal local/gate
+  and the right panel stays a compact name-only overview. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently
+  when zoomed out; core radii are map units so system zoom scales the graphic. Clicking/right-clicking a legal local/gate
   pocket or gate-neighbour label offers **Warp to**; the sim rechecks the quote and emits
   `travel-denied` on refusal. Single-player chart pauses the frame gate and suspends audio;
   `state.multiplayer` is the future host flag that keeps a hosted world running. Generated pockets are

@@ -115,7 +115,7 @@ mention) until the owner decides. Record the decision here when made, and delete
   The central body is **visual only and not warpable** for now (warping near it may be considered later).
   Its name is permanently labelled below the body with the type in parentheses; the name is the system's
   proper name (**Meridian System → Meridian**). Native hover tooltips on pockets/central bodies are removed,
-  but click popups stay. Galaxy pan keeps its max-zoom feel and scales inversely with zoom; system core
+  but click popups stay. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out; system core
   graphics scale with zoom. Gate pocket names avoid orange stubs/peer labels, and neighbouring-system labels
   are clickable travel targets for the reciprocal gate pocket. This supersedes the earlier internal-line,
   local-direct-link-only and hover-only-core requirements below, not the gate rules. Core kind/name and chart

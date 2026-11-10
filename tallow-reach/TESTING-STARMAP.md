@@ -7,8 +7,8 @@ including a gate, without following an internal route. Optional internal blue li
 **system map only**; the main galaxy still shows its explicit gate routes. Each system has a central
 **star (95% chance) or black hole (5%)** with a **permanent two-line label** below it: the proper name,
 then `(Star)` or `(Black hole)`. The small native hover tooltips on pockets and central bodies are gone,
-but the blue/orange **click popups remain**. Galaxy panning keeps its previous max-zoom feel and pans
-proportionally farther when zoomed out. System-map star/black-hole graphics now scale with zoom. Gate
+but the blue/orange **click popups remain**. Galaxy panning now follows the pointer at a restrained speed and pans
+a little farther when zoomed out. System-map star/black-hole graphics now scale with zoom. Gate
 pocket names sit clear of the orange exit stubs, and the neighbouring-system name at a stub is clickable.
 
 **M opens the starmap** while flying; zoom into a system dot to open its pocket map. **Click or
@@ -73,8 +73,9 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       **Fewer names** to return to the quieter view. Current and selected systems keep their labels.
 - [ ] **2.3** Use **+**, **−** and the mouse wheel over the galaxy chart to zoom. **Fit** returns to the
       whole web. Drag an empty part of the chart to pan; dragging must not select a system by accident.
-      At maximum zoom the drag feel should match the previous build. Zoom out and drag the same mouse
-      distance: the chart should travel proportionally farther on screen.
+      At maximum, middle and minimum zoom, try short and long drags: the map should move smoothly,
+      never farther than the pointer moves on screen. Zooming out makes it pan a little farther;
+      repeat after resizing the browser or using a different viewport shape.
 - [ ] **2.4** Open a **system map**: select a system dot, then scroll up several times (or press **+**
       until it opens), or simply **double-click** the dot. Expect a short zoom transition into a map of
       that system's pockets: a central star/black hole, ordinary pocket dots spread around it, and gate
