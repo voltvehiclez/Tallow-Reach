@@ -197,8 +197,9 @@ asking the remaining VISION questions.
       hop: flight should show arrows beside the remaining system names, highlight your current system blue,
       and show a count of systems still to enter next to the destination (excluding your current
       system). No completed ticks, pocket names or jump counts should appear in the list. The list
-      updates after each jump and disappears at the destination or when cleared. The starmap retains
-      full pocket details and completed systems; check paging with long names. Test a pocket
+      updates after each jump and disappears at the destination or when cleared. The destination
+      system should stand out in amber with a diamond on both lists. The starmap list should also
+      show only systems and arrows (no gate-to-gate text or completed ticks); check paging. Test a pocket
       destination, a blocked route (no count), a detour, and a long route (scroll without zooming or firing).
 - [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
       in an ordinary pocket of the same system, with character and cargo intact, and see a recovery notice.
@@ -207,7 +208,7 @@ asking the remaining VISION questions.
 - [ ] Press **M** for the galaxy web. Right-click a remote system (for example Galerest), choose
       **Set destination**, and check the highlighted route and the arrowed stops below the pocket list.
       All stops that fit should be visible without arrows. Reduce the window height: ‹/› appear only
-      if needed; the last stop includes its arrival gate.
+      if needed; the destination system has a diamond.
 - [ ] Close the map. Press **J** once: you should warp only to the next pocket on the route. If that is
       your local gate, press **J** again after the warp completes to cross into the next system. Reopen
       the map to check the remaining route updates, then continue until arrival clears the destination.
@@ -215,7 +216,8 @@ asking the remaining VISION questions.
       **Warp to**. Set it, close the map and press **J**; it should warp to that exact pocket and clear
       the route. Try the pocket you are already in: it should say you are already there.
 - [ ] Inspect a remote system's pocket map and click a non-gate pocket. Even though it says **No direct
-      route**, choose **Set destination**. The route should list the target pocket after the system stops.
+      route**, choose **Set destination**. The heading should name the exact target pocket; the list
+      should show its destination system rather than individual pockets.
       Use J one hop at a time: entering the target system must not clear the route; it clears only when
       you arrive in the chosen pocket. A gate-neighbour popup targets the reciprocal gate pocket.
 - [ ] From a gate pocket, right-click its neighbouring system on the galaxy web: the popup offers both

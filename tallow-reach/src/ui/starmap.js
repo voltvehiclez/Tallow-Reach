@@ -6,7 +6,7 @@
 
 import { GALAXY } from "../data/galaxy.js";
 import { chartGalaxy, straightEdgeBlockers } from "./chart-lines.js";
-import { routeDisplay, routeRows, routeCurrent } from "./route-display.js";
+import { routeDisplay, flightRouteRows } from "./route-display.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
@@ -283,11 +283,6 @@ export function setupStarmap() {
     const before = state.galaxy?.pocketsById?.[from]?.parent;
     const after = state.galaxy?.pocketsById?.[to]?.parent;
     if (before && after && before !== after) {
-      const destination = state.ui.destination;
-      if (destination) {
-        if (state.ui.routeProgress?.destination !== destination) state.ui.routeProgress = { destination, completed: [] };
-        state.ui.routeProgress.completed.push(before);
-      }
       for (const view of [state.ui.starmapMemory, state.ui.starmap]) {
         if (!view) continue;
         view.playerSystem = after;
@@ -305,7 +300,6 @@ export function setupStarmap() {
     const destination = state.ui.destination;
     if (destination && (typeof destination === "string" ? after === destination : destination.pocketId === to)) {
       state.ui.destination = null;
-      state.ui.routeProgress = null;
       msg("Destination reached.");
     }
     if (state.ui.starmap) render();
@@ -636,7 +630,7 @@ function onClick(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that system.";
     else if (route.length < 2) view.notice = "You are already in that system.";
-    else { state.ui.destination = id; state.ui.routeProgress = { destination: id, completed: [] }; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { state.ui.destination = id; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
     render();
   } else if (action === "set-pocket-destination") {
     const from = localPlayer()?.place || state.place;
@@ -648,7 +642,7 @@ function onClick(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that pocket.";
     else if (route.length < 2) view.notice = "You are already in that pocket.";
-    else { state.ui.destination = destination; state.ui.routeProgress = { destination, completed: [] }; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { state.ui.destination = destination; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
@@ -657,7 +651,7 @@ function onClick(e) {
     if (!to) { view.notice = "No direct route."; render(); return; }
     emit("action", { name: "travel", to, repeat: false });
   } else if (action === "clear-destination") {
-    state.ui.destination = null; state.ui.routeProgress = null; view.routePage = 0; render();
+    state.ui.destination = null; view.routePage = 0; render();
   } else if (action === "route-prev" || action === "route-next") {
     view.routePage = Math.max(0, (view.routePage || 0) + (action === "route-next" ? 1 : -1)); render();
   } else if (action === "travel") {
@@ -879,7 +873,7 @@ function render() {
   const shownRows = visibleList?.querySelectorAll?.("li")?.length || 0;
   if (shownRows && routeRect && detailsRect && Number.isFinite(detailsRect.bottom) &&
       Number.isFinite(routeRect.top) && Number.isFinite(routeRect.height)) {
-    // Every system is one logical row, but its pocket names may wrap. Measure
+    // System names may wrap. Measure
     // all rows in a hidden copy and use the tallest to keep every page inside.
     const measured = [...(routeEl.querySelectorAll?.(".sm-route-measure li") || [])];
     const rowHeight = Math.max(22, ...measured.map(row => (row.getBoundingClientRect?.().height || 18) + 4));
@@ -928,18 +922,17 @@ function systemMenuMarkup(world, view, from, rootRect) {
   </div>`;
 }
 
-/** Group pocket hops by system and paginate only when needed. */
+/** List remaining systems and paginate only when needed. */
 function routeMarkup(world, view, route, from) {
-  const details = routeDisplay(world, state.ui.destination, route, knowledge(), from,
-    state.ui.routeProgress?.destination === state.ui.destination ? state.ui.routeProgress.completed : []);
+  const details = routeDisplay(world, state.ui.destination, route, knowledge(), from);
   if (!details) return "";
   const { title, stops } = details;
   const pageSize = view.routePageSize || Math.max(1, stops.length);
   const pages = Math.max(1, Math.ceil(stops.length / pageSize));
   view.routePage = Math.min(view.routePage || 0, pages - 1);
-  const rows = routeRows(stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize));
+  const rows = flightRouteRows(stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize));
   return `<section class="sm-route" aria-label="Route"><h3>Route to ${esc(title)}</h3>
-    ${routeCurrent(details.current)}${route ? `<ol class="sm-route-list">${rows}</ol><ol class="sm-route-measure" aria-hidden="true">${routeRows(stops)}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}
+    ${route ? `<ol class="sm-route-list">${rows}</ol><ol class="sm-route-measure" aria-hidden="true">${flightRouteRows(stops)}</ol><p>J · next warp</p>` : '<p>No route available.</p>'}
     <div class="sm-route-actions">${pages > 1 ? `<button type="button" data-action="route-prev" ${view.routePage === 0 ? "disabled" : ""}>‹</button><span>${view.routePage + 1} / ${pages}</span><button type="button" data-action="route-next" ${view.routePage === pages - 1 ? "disabled" : ""}>›</button>` : ""}
     <button type="button" data-action="clear-destination">Clear</button></div></section>`;
 }

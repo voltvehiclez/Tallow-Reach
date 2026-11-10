@@ -11,6 +11,6 @@ export function jumpRoute(player = localPlayer()) {
   const route = findDestinationRoute(state.galaxy, player.place || state.place, destination,
     { player, profile: profileOf(player), world: state.worldState });
   if (!route) { msg("No route to destination."); return false; }
-  if (route.length < 2) { state.ui.destination = null; state.ui.routeProgress = null; msg("Destination reached."); return false; }
+  if (route.length < 2) { state.ui.destination = null; msg("Destination reached."); return false; }
   return startWarp(player, route[1]);
 }

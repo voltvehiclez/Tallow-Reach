@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadHeadless } from "./headless.mjs";
-import { routeDisplay, routeRows, flightRouteRows } from "../src/ui/route-display.js";
+import { routeDisplay, flightRouteRows } from "../src/ui/route-display.js";
 
 const hud = await loadHeadless("src/ui/hud.js", {
   state: "src/state/state.js", generateGalaxy: "src/sim/galaxy.js", findDestinationRoute: "src/sim/travel.js",
@@ -14,8 +14,6 @@ test("flight route shows only remaining systems, highlights current and counts f
   state.worldState.galaxy = { knowledge: {} };
   const target = world.systems.find(s => s.id !== "meridian");
   state.ui.destination = target.id;
-  // Historical systems are retained by the starmap but must not leak into the HUD.
-  state.ui.routeProgress = { destination: target.id, completed: [target.id] };
   const el = { hidden: true, innerHTML: "" };
   hud.updateHudRoute(0, el);
   const route = hud.findDestinationRoute(world, player.place, target.id, { player, profile: state.profile, world: state.worldState });
@@ -63,7 +61,7 @@ test("route summary shows exact pockets, conceals undiscovered stops and escapes
   const hiddenWorld = { ...world, visibility: { mode: "discovered" } };
   assert.deepEqual(routeDisplay(hiddenWorld, destination, [start.id, target.id], {}).stops.at(-1).pockets,
     [{ name: "Undiscovered pocket", current: false }]);
-  assert.match(routeRows([{system: '<unsafe>', pockets: [{name: '&"'}]}]), /&lt;unsafe&gt;.*&amp;&quot;/);
+  assert.match(flightRouteRows([{system: '<unsafe>', pockets: []}]), /&lt;unsafe&gt;/);
   assert.equal(routeDisplay(world, destination, null, {}).available, false);
 });
 
@@ -80,27 +78,26 @@ test("system rows group consecutive pockets in route order and mark the current 
     [[start.n, local.n], [remote.n, again.n], [start.n]]);
   assert.equal(summary.stops[0].pockets[0].current, true);
   assert.ok(summary.stops.flatMap(row => row.pockets).slice(1).every(p => !p.current));
-  assert.match(routeRows(summary.stops), /aria-current="location"[^>]*>.* \(here\)/);
+  assert.match(flightRouteRows(summary.stops), /aria-current="location"/);
 });
 
 
-test("flight systems omit completed and pocket detail while starmap retains both", () => {
+test("route rows omit pockets and mark the final destination", () => {
   const world = hud.generateGalaxy(), start = world.pocketsById.hollow;
   const local = Object.values(world.pocketsById).find(p => p.parent === start.parent && p.id !== start.id);
   const remote = Object.values(world.pocketsById).find(p => p.parent !== start.parent);
   const remoteLocal = Object.values(world.pocketsById).find(p => p.parent === remote.parent && p.id !== remote.id);
-  const detail = routeDisplay(world, { pocketId: remoteLocal.id }, [start.id, local.id, remote.id, remoteLocal.id], {}, start.id, [remote.parent]);
-  const compact = flightRouteRows(detail.stops);
-  assert.doesNotMatch(compact, /route-done|✓|<small>/);
-  assert.match(compact, /class="route-here" aria-current="location"/);
-  assert.ok(!compact.includes(local.n));
-  assert.ok(!compact.includes(remoteLocal.n));
-  assert.equal((compact.match(/<li(?: [^>]*)?>/g) || []).length, 2);
-  const full = routeRows(detail.stops);
-  assert.match(full, /class="route-done"/);
-  assert.ok(full.includes(local.n));
-  assert.ok(full.includes(remoteLocal.n), "starmap retains full pocket details");
-  assert.match(flightRouteRows([{system:'<unsafe>', pockets:[], completed:false}]), /&lt;unsafe&gt;/);
+  const detail = routeDisplay(world, { pocketId: remoteLocal.id }, [start.id, local.id, remote.id, remoteLocal.id], {}, start.id);
+  const rows = flightRouteRows(detail.stops);
+  assert.doesNotMatch(rows, /route-done|✓|<small>/);
+  assert.match(rows, /class="route-here" aria-current="location"/);
+  assert.match(rows, /class="route-destination"/);
+  assert.match(rows, /aria-label="Destination"/);
+  assert.ok(!rows.includes(local.n));
+  assert.ok(!rows.includes(remoteLocal.n));
+  assert.equal((rows.match(/<li(?: [^>]*)?>/g) || []).length, 2);
+  const localRoute = routeDisplay(world, { pocketId: local.id }, [start.id, local.id], {});
+  assert.match(flightRouteRows(localRoute.stops), /class="route-here route-destination" aria-current="location"/);
 });
 
 test("system count excludes the current system and handles singular and local targets", () => {

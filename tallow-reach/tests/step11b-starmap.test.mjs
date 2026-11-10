@@ -593,16 +593,15 @@ test("11B: system destination popup, route display and J follow ordinary checked
     if (i < expected.length - 1) {
       assert.equal(ui.state.ui.destination, target.id);
       const systemsPassed = expected.slice(1, i + 1).filter((id, j) => world.pocketsById[id].parent !== world.pocketsById[expected[j]].parent);
-      assert.equal(ui.state.ui.routeProgress.completed.length, systemsPassed.length, "only crossed systems are marked complete");
       if (systemsPassed.length === 1 && world.pocketsById[expected[i]].parent !== world.pocketsById[expected[i - 1]].parent) {
         assert.equal(ui.openStarmap(), true);
-        assert.match(mapRoot.innerHTML, /class="route-done" aria-label="Completed:/);
+        const visibleRoute = mapRoot.innerHTML.match(/<ol class="sm-route-list">([\s\S]*?)<\/ol>/)[1];
+        assert.doesNotMatch(visibleRoute, /route-done|✓|<small>/);
         ui.closeStarmap();
       }
     }
   }
   assert.equal(ui.state.ui.destination, null);
-  assert.equal(ui.state.ui.routeProgress, null);
   assert.equal(ui.state.hud.msg, "Destination reached.");
   ui.applySave(save);
 });
@@ -629,7 +628,7 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
     if (sel === ".sm-details") return { getBoundingClientRect: () => ({ bottom: panelBottom }) };
     if (sel === ".sm-route") {
       const html = mapRoot.innerHTML.match(/<ol class="sm-route-list">([\s\S]*?)<\/ol>/)?.[1] || "";
-      const count = (html.match(/<li(?: class="[^"]+")?><span aria-hidden=/g) || []).length;
+      const count = (html.match(/<li(?: [^>]*)?><span aria-hidden=/g) || []).length;
       return { getBoundingClientRect: () => ({ top: 200, height: 60 + 22 * count }),
         querySelector: () => ({ querySelectorAll: () => Array(count).fill({}), getBoundingClientRect: () => ({ height: 22 * count }) }),
         querySelectorAll: () => [] };
@@ -640,15 +639,16 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
   assert.ok(mapRoot.innerHTML.includes('data-action="route-next"'), "small panel enables paging");
   click("route-next"); assert.equal(ui.state.ui.starmap.routePage, 1);
   assert.ok(mapRoot.innerHTML.includes('data-action="route-prev"'));
-  assert.ok(mapRoot.innerHTML.includes(`Current:</strong> ${world.pocketsById[P.place].n}`), "current pocket stays visible across pages");
+
   panelBottom = 1200; click("labels");
   assert.ok(!mapRoot.innerHTML.includes('data-action="route-next"'), "growing the panel shows all stops again");
   const currentRoute = findRouteToSystem(world, P.place, target.id);
   const stopCount = 1 + currentRoute.slice(1).filter((id, i) => world.pocketsById[id].parent !== world.pocketsById[currentRoute[i]].parent).length;
-  assert.ok(mapRoot.innerHTML.includes(`Current:</strong> ${world.pocketsById[P.place].n}`));
   const routeList = mapRoot.innerHTML.match(/<ol class="sm-route-list">([\s\S]*?)<\/ol>/)[1];
-  for (const id of currentRoute.slice(1)) assert.ok(routeList.includes(world.pocketsById[id].n), `shows pocket ${id}`);
-  assert.equal((routeList.match(/<li(?: class="[^"]+")?><span aria-hidden=/g) || []).length, stopCount);
+  for (const id of currentRoute) assert.ok(routeList.includes(world.systemsById[world.pocketsById[id].parent].n), `shows system for ${id}`);
+  assert.doesNotMatch(routeList, /<small>|Gate to |route-done|✓/);
+  assert.match(routeList, /class="route-destination"/);
+  assert.equal((routeList.match(/<li(?: [^>]*)?><span aria-hidden=/g) || []).length, stopCount);
   assert.match(routeList, /aria-current="location"/);
   const gates = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
   gates.forEach(l => { l.enabled = false; });
@@ -661,7 +661,6 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
   gates.forEach(l => { l.enabled = true; });
   click("clear-destination");
   assert.equal(ui.state.ui.destination, null);
-  assert.equal(ui.state.ui.routeProgress, null);
   assert.ok(!mapRoot.innerHTML.includes('class="sm-route-edge"'));
   ui.closeStarmap(); ui.state.ui.starmapMemory = null; mapRoot.querySelector = oldQuery;
 });

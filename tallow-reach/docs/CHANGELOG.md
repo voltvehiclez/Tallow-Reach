@@ -19,6 +19,18 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Mark the route destination and simplify the starmap list
+
+- Owner requested the final system stand out, and that starmap route rows show only systems and arrows
+  like the flight HUD, without grey gate-to-gate pocket details. Both lists now highlight the destination
+  in amber with a diamond; the current system stays blue, even when it is also the destination. The map
+  still shows the exact pocket target in the heading, and its paging and highlighted graph remain intact.
+  Neither list shows completed systems; unused session-only route-history tracking was removed.
+- Updated route presentation, starmap, styles, tests and checklist. Targeted **44/44**, full **331/331**,
+  build **685 KB (700,929 bytes)**. No travel or save changes; browser playtest pending.
+
+---
+
 ## 2026-11-08: Add route arrows to the flight HUD
 
 - Owner requested the starmap-style arrows beside the flight route's system names. Each remaining
