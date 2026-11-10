@@ -104,8 +104,7 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       tooltip box; the ring/glow may still highlight. Tab to the star and check the same label/highlight by
       keyboard focus. Click, right-click or press Enter/Space on it: no warp popup or travel must occur.
       Hover a pocket dot: no native tooltip box; clicking it still opens the usual popup.
-- [ ] **2.9** Return to the galaxy and open **Duskdrift** (`sys-001`, Meridian's first neighbour on the
-      default seed). Its centre is a dark **black hole** with a bright ring and the permanent label
+- [ ] **2.9** Return to the galaxy and open **Duskdrift** (`sys-001`, use the Inspect dropdown on the default seed). Its centre is a dark **black hole** with a bright ring and the permanent label
       **Duskdrift** / **(Black hole)**. It is also absent from the pocket list and cannot be warped to. Other systems may have
       either body; the 5% chance is per system, not a guaranteed exact count in every small sample.
 - [ ] **2.10** Return to the main galaxy chart: its system-to-system gate lines are still present. Only the
@@ -124,18 +123,15 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       **Meridian Station** to warp back.
       Message: **“Warp: Kestrel Hollow to Meridian Station. Meridian Station and the asteroid belt.”**
       Station, belt and planet return.
-- [ ] **3.4** From **Kestrel Hollow**, click/right-click **Gate to Duskdrift** and warp **directly** to it:
-      no return to Meridian Station or internal route is needed. It is empty space. Open Meridian's system
-      map there: the gate pocket's name sits inward, clear of the dashed orange stub, and the stub points
-      toward **Duskdrift**. Click the neighbouring-system name **Duskdrift**: the popup offers
-      **Warp to Duskdrift** and sends you to the reciprocal **Gate to Meridian System** pocket in Duskdrift
-      (an empty generated pocket, not a station or belt). From an ordinary Meridian pocket such as
-      Meridian Station or Kestrel Hollow, clicking a neighbouring-system name such as **Lumenveil** or
-      **Duskdrift** instead says **No direct route** and offers no warp. You can also cross via the galaxy's
-      reciprocal gate pocket. A gate never sends you to an arbitrary neighbouring system.
-- [ ] **3.4a** After crossing into Duskdrift in 3.4, press **M**: the pocket map should now show
-      Duskdrift, not Meridian. Inside one system, warping to another pocket keeps that system's framing.
-      Return to the galaxy web, close it, cross a gate, then reopen: it should stay at galaxy level.
+- [ ] **3.4** From **Meridian Station** or **Kestrel Hollow**, click/right-click **Gate to Galereach**
+      (Meridian's neighbour on the default seed) and warp directly to it. It is empty space. Open Meridian's
+      system map there: the gate pocket's name sits clear of the dashed orange stub, which points toward
+      **Galereach**. Click **Galereach** and choose **Warp to Galereach**: you arrive at its reciprocal
+      **Gate to Meridian System** pocket. From an ordinary Meridian pocket, clicking that peer label instead
+      says **No direct route**. A gate never sends you to an arbitrary neighbouring system.
+- [ ] **3.4a** After crossing into Galereach, press **M**: the pocket map should now show Galereach, not
+      Meridian. Inside one system, warping to another pocket keeps that system's framing. Return to the
+      galaxy web, close it, cross a gate, then reopen: it should stay at galaxy level.
 - [ ] **3.5** Open the map after arriving in the generated system. The header names the pocket you entered.
       Zoom into that system to see its central body and gate stubs. After you leave, its galaxy dot keeps the
       visited colour. You can hop back through the same gate.
@@ -194,10 +190,17 @@ asking the remaining VISION questions.
 
 ## Destination route and J shortcut
 
+- [ ] Inspect the galaxy at several zooms: blue gate lines and highlighted routes should bend around
+      unrelated system dots rather than appearing to connect through them. Set a destination near the
+      outer edge and check that the route has at least ten system-to-system gate crossings.
+- [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
+      in an ordinary pocket of the same system, with character and cargo intact, and see a recovery notice.
+      Importing replaces your current game, so export your current save first.
 - [ ] While flying with no destination, press **J**. Expect **No destination set** and no warp.
 - [ ] Press **M** for the galaxy web. Right-click a remote system (for example Galerest), choose
       **Set destination**, and check the highlighted route and the arrowed stops below the pocket list.
-      Use the ‹/› buttons if the route has more than one page; the last stop includes its arrival gate.
+      All stops that fit should be visible without arrows. Reduce the window height: ‹/› appear only
+      if needed; the last stop includes its arrival gate.
 - [ ] Close the map. Press **J** once: you should warp only to the next pocket on the route. If that is
       your local gate, press **J** again after the warp completes to cross into the next system. Reopen
       the map to check the remaining route updates, then continue until arrival clears the destination.

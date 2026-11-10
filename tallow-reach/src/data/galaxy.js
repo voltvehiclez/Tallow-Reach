@@ -9,15 +9,15 @@
 
 export const GALAXY = {
   seed: 11082026,
-  generator: "organic-web-v1",
+  generator: "organic-web-v2",
   systemCount: 121,
   homeSystem: "meridian",
 
   // Best-candidate scattering: organic positions, not rows and columns.
   layout: { radius: 1200, candidates: 24 },
 
-  // A connected tree first, then a few short alternative routes.
-  graph: { maxNeighbors: 4, extraChance: 0.35, extraRange: 300 },
+  // A sparse connected tree, with long paths to the outer reaches.
+  graph: { maxNeighbors: 4, extraChance: 0, extraRange: 300, depthRadiusFraction: 0.08 },
 
   // Advisory only. Content may override a system's tier; no enemy is scaled by
   // this number in step 11. Variation is a whole-number +/- range.

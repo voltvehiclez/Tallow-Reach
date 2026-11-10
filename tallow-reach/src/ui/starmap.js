@@ -5,6 +5,7 @@
 // sim/sectors.js sequence. Presentation numbers live in data/galaxy.js.
 
 import { GALAXY } from "../data/galaxy.js";
+import { routeSystemEdge, svgEdgePath } from "./chart-lines.js";
 import { PLACE_DEFS, placeAt } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
@@ -232,6 +233,7 @@ export function setupStarmap() {
     if (e.target.id === "sm-system") selectSystem(e.target.value);
   });
   root.addEventListener("keydown", onKeydown);
+  globalThis.addEventListener?.("resize", () => { if (state.ui.starmap) render(); });
   root.addEventListener("wheel", e => {
     if (!state.ui.starmap) return;
     e.preventDefault();
@@ -670,13 +672,19 @@ function onClick(e) {
 
 function galaxyMarkup(world, view, know, here, unit, route = null) {
   const systems = visibleSystems(world, know);
-  const lines = systemEdges(world, know).map(({ id, a, b }) =>
-    `<line class="sm-edge" data-edge="${esc(id)}" x1="${a.pos[0]}" y1="${-a.pos[1]}" x2="${b.pos[0]}" y2="${-b.pos[1]}"/>`).join("");
+  const paths = new Map();
+  const lines = systemEdges(world, know).map(({ id, a, b }) => {
+    const points = routeSystemEdge(a, b, systems, (Math.max(GALAXY.map.homeRadius, GALAXY.map.nodeRadius) + 4) * unit);
+    const path = svgEdgePath(points);
+    paths.set([a.id, b.id].sort().join("__"), path);
+    return `<path class="sm-edge" data-edge="${esc(id)}" d="${path}"/>`;
+  }).join("");
   const routeLines = (route || []).slice(1).map((id, i) => {
     const a = world.systemsById[world.pocketsById[route[i]]?.parent];
     const b = world.systemsById[world.pocketsById[id]?.parent];
-    if (!a || !b || a.id === b.id || !systemVisible(world, a.id, know) || !systemVisible(world, b.id, know)) return "";
-    return `<line class="sm-route-edge" x1="${a.pos[0]}" y1="${-a.pos[1]}" x2="${b.pos[0]}" y2="${-b.pos[1]}"/>`;
+    if (!a || !b || a.id === b.id) return "";
+    const path = paths.get([a.id, b.id].sort().join("__"));
+    return path ? `<path class="sm-route-edge" d="${path}"/>` : "";
   }).join("");
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
@@ -693,7 +701,15 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
       ${label ? `<text x="${s.pos[0] + radius + 5 * unit}" y="${-s.pos[1] + 3 * unit}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}</text>` : ""}
     </g>`;
   }).join("");
-  return lines + routeLines + nodes;
+  // Even at extreme zoom, where two dots can overlap and no geometric route
+  // exists, never paint a connection over an unrelated system dot.
+  const maskRadius = (Math.max(GALAXY.map.homeRadius, GALAXY.map.nodeRadius) + 3) * unit;
+  const [mx, my, mw, mh] = chartBounds(systems, GALAXY.map.padding + maskRadius * 10);
+  const mask = `<defs><mask id="sm-system-mask" maskUnits="userSpaceOnUse" x="${mx}" y="${my}" width="${mw}" height="${mh}">
+    <rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="white"/>
+    ${systems.map(s => `<circle cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${maskRadius}" fill="black"/>`).join("")}
+  </mask></defs>`;
+  return mask + `<g mask="url(#sm-system-mask)">${lines}${routeLines}</g>` + nodes;
 }
 
 function systemMarkup(world, view, know, here, unit) {
@@ -841,6 +857,18 @@ function render() {
       </div>
       ${menu}
     </div>`;
+  // Measure the actual space below the pocket list. Show every stop that fits;
+  // only introduce page controls when the panel really needs them.
+  const detailsRect = root.querySelector(".sm-details")?.getBoundingClientRect?.();
+  const routeEl = root.querySelector(".sm-route");
+  const routeRect = routeEl?.getBoundingClientRect?.();
+  const shownRows = routeEl?.querySelectorAll?.("li")?.length || 0;
+  if (shownRows && routeRect && detailsRect && Number.isFinite(detailsRect.bottom) &&
+      Number.isFinite(routeRect.top) && Number.isFinite(routeRect.height)) {
+    const overhead = Math.max(0, routeRect.height - shownRows * 22);
+    const size = Math.max(1, Math.floor((detailsRect.bottom - 15 - routeRect.top - overhead) / 22));
+    if (view.routePageSize !== size) { view.routePageSize = size; render(); return; }
+  }
   const cssEscape = globalThis.CSS?.escape || (value => value.replace(/["\\]/g, "\\$&"));
   if (view.menu) root.querySelector(".sm-context button, .sm-context")?.focus();
   else if (focus?.system) root.querySelector(`[data-system="${cssEscape(focus.system)}"]`)?.focus();
@@ -881,7 +909,7 @@ function systemMenuMarkup(world, view, from, rootRect) {
   </div>`;
 }
 
-/** Show system arrivals, not internal pocket hops. Pages keep the panel compact. */
+/** Show system arrivals and the exact target pocket; paginate only when needed. */
 function routeMarkup(world, view, route) {
   const destination = state.ui.destination;
   const targetPocket = typeof destination === "object" && destination ? world.pocketsById[destination.pocketId] : null;
@@ -893,7 +921,8 @@ function routeMarkup(world, view, route) {
     if (!pocket || !previous) continue;
     if (pocket.parent !== previous.parent || (targetPocket && pocket.id === targetPocket.id)) stops.push(pocket);
   }
-  const pageSize = 4, pages = Math.max(1, Math.ceil(stops.length / pageSize));
+  const pageSize = view.routePageSize || Math.max(1, stops.length);
+  const pages = Math.max(1, Math.ceil(stops.length / pageSize));
   view.routePage = Math.min(view.routePage || 0, pages - 1);
   const rows = stops.slice(view.routePage * pageSize, (view.routePage + 1) * pageSize).map(p => {
     const system = world.systemsById[p.parent];

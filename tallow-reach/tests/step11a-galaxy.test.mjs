@@ -293,8 +293,8 @@ test("11A: free local warp needs no internal link, but never bypasses a gate", (
   assert.match(travelQuote(world, gate.id, peer).reason, /closed/);
   assert.equal(canTravel(world, gate.id, peer), false);
   const detour = findRoute(world, "hollow", peer);
-  assert.ok(detour && detour.length > 2, "route search may use other enabled gates, never the closed edge");
-  assert.ok(detour.every((id, i) => i === 0 || canTravel(world, detour[i - 1], id)));
+  assert.ok(!detour || detour.length > 2, "if a detour exists it cannot use the closed gate");
+  assert.ok(!detour || detour.every((id, i) => i === 0 || canTravel(world, detour[i - 1], id)));
   // Free hops do not inherit an optional link's future cost or requirements.
   const local = world.links["reach-hollow"];
   local.cost = { fuel: 7 };

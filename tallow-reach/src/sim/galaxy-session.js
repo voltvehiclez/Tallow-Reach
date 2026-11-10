@@ -23,26 +23,35 @@ export function prepareGalaxySave(raw) {
   // Check the id the save actually asked for. sanitizeSave deliberately falls
   // back to home for an unknown id, which would otherwise hide the recovery.
   const missingPocket = requested !== null && !Object.prototype.hasOwnProperty.call(galaxy.pocketsById, requested);
+  // Old generated gate ids encode their system pair. Resolve the old seeded
+  // catalog before sanitization so a removed gate can move to its own system's
+  // ordinary pocket instead of stranding the player or losing their character.
+  let recovery = null, input = raw;
+  if (missingPocket) {
+    const legacy = generateGalaxy(seed, { generator: "organic-web-v1", graph: { maxNeighbors: 4, extraChance: 0.35, extraRange: 300 } }, {});
+    const old = legacy.pocketsById[requested];
+    const local = old?.role === "gate" && galaxy.systemsById[old.parent]
+      ? Object.values(galaxy.pockets).find(p => p.parent === old.parent && p.role !== "gate") : null;
+    const to = local?.id || DEFAULT_PLACE;
+    input = JSON.parse(JSON.stringify(raw));
+    const inputWorld = input?.profile && typeof input.profile === "object" ? input.world : input;
+    inputWorld.place = to;
+    inputWorld.resume = null;
+    recovery = { from: requested, to };
+  }
   let save;
   try {
     // Validation must see the candidate seed's pockets. A bad save must not leave
     // that candidate installed behind the still-running old world.
     setPlaceCatalog(galaxy);
-    save = sanitizeSave(raw);
+    save = sanitizeSave(input);
   } catch (error) {
     setPlaceCatalog(previousGalaxy);
     state.galaxy = previousGalaxy;
     state.galaxyRecovery = previousRecovery;
     throw error;
   }
-  state.galaxyRecovery = null;
-  if (missingPocket) {
-    // Never keep coordinates from a different pocket, and never touch the pilot's
-    // ships, fittings, credits or hold while recovering the world location.
-    save.world.place = DEFAULT_PLACE;
-    save.world.resume = null;
-    state.galaxyRecovery = { from: requested, to: DEFAULT_PLACE };
-  }
+  state.galaxyRecovery = recovery;
   save.world.galaxy.seed = seed;
   recordSystemVisit(galaxy, save.world.galaxy.knowledge, save.world.place);
   state.galaxy = galaxy;

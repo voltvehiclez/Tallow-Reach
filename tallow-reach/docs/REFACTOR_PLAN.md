@@ -325,11 +325,13 @@ activated gates and supercruise are out of scope now.
 reachable, and difficulty generally rises with distance from Meridian while authored content may stay
 easy. You can click through the map, zoom into any system's pocket map, click/right-click among any number
 of pockets or gate-neighbour labels, and warp one hop at a time: freely within a default system, through
-explicit gates between systems. A permanent two-line label names the non-warpable core; galaxy pan and
+explicit gates between systems. A sparse radial-depth web makes outer reaches at least ten gate crossings away on the default seed;
+chart lines bend around unrelated dots and route lists page only when space is insufficient.
+A permanent two-line label names the non-warpable core; galaxy pan and
 core graphics scale with zoom; a links opt-out restores internal routes/lines. Do not
 assume a system has exactly two pockets, and do not hard-code a two-level universe.
 **Save.** **Version 16**, migration from 15 (v15 is already used by the resume point).
-**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI, free-local-warp/central-body and label/pan/gate-click refinements built, owner playtest pending (`TESTING-STARMAP.md`). 322 tests pass; save v16 unchanged.**
+**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI, free-local-warp/central-body and label/pan/gate-click refinements built, owner playtest pending (`TESTING-STARMAP.md`). 325 tests pass; save v16 unchanged.**
 
 ## Step 12: Encounters, place templates and place memory
 **Goal.** The open world's content is data you can pile onto.

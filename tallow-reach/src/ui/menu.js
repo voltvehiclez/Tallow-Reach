@@ -77,8 +77,10 @@ function toast(text) {
 /** Consume a safe-recovery notice once, without hiding the load/import result. */
 function recoveryNotice() {
   if (!state.galaxyRecovery) return "";
+  const to = state.galaxyRecovery.to;
   state.galaxyRecovery = null;
-  return "That pocket no longer exists. Returned to Meridian Station; your character and cargo are safe.";
+  const place = state.galaxy?.pocketsById?.[to];
+  return `That pocket no longer exists. Returned to ${place?.n || "Meridian Station"}; your character and cargo are safe.`;
 }
 
 function loadedMessage(text) {

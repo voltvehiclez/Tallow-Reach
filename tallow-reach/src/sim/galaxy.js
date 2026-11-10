@@ -30,6 +30,7 @@ function hashId(value) {
 /** Registry of layout algorithms. A generator returns { systems, pockets, links }. */
 export const GALAXY_GENERATORS = {
   "organic-web-v1": organicWeb,
+  "organic-web-v2": sparseOrganicWeb,
 };
 
 /** Generate, apply author edits, derive policies/tiers/visual cores, and validate. */
@@ -63,6 +64,7 @@ export function validateTuning(tuning) {
   if (!Number.isInteger(tuning.layout.candidates) || tuning.layout.candidates < 1) {
     throw new Error("galaxy.layout.candidates must be a whole number of at least 1");
   }
+  if (!(tuning.graph.depthRadiusFraction > 0)) throw new Error("galaxy.graph.depthRadiusFraction must be positive");
   if (!(tuning.graph.extraRange >= 0)) throw new Error("galaxy.graph.extraRange must be zero or more");
   if (!(tuning.graph.extraChance >= 0 && tuning.graph.extraChance <= 1)) {
     throw new Error("galaxy.graph.extraChance must be between 0 and 1");
@@ -153,22 +155,42 @@ export function organicWeb(seed, tuning, rng) {
   }
   for (const link of Object.values(PLACE_LINKS)) links[link.id] = clone(link);
 
-  // Connected tree. Each new system attaches to the nearest earlier system with
-  // a free slot, so every system is reachable without forcing a grid or cycle.
+  // V1 is retained for identifying legacy saved gate pockets during migration.
+  // V2 connects from inner to outer radii, favouring a target depth so the
+  // outer reaches require a longer sequence of actual cross-system gates.
   const degree = new Map(systems.map(s => [s.id, 0]));
   const systemLinks = [];
-  for (let i = 1; i < systems.length; i++) {
-    const to = systems[i];
-    let best = null;
-    for (let j = 0; j < i; j++) {
-      const from = systems[j];
-      if (degree.get(from.id) >= max) continue;
-      const d = distance(from.pos, to.pos);
-      if (!best || d < best.d) best = { from, d };
+  if (tuning.generator === "organic-web-v2") {
+    const ordered = systems.slice().sort((a, b) => distance(a.pos, home.pos) - distance(b.pos, home.pos) || a.id.localeCompare(b.id));
+    const depth = new Map([[home.id, 0]]);
+    for (let i = 1; i < ordered.length; i++) {
+      const to = ordered[i];
+      const desired = Math.ceil(distance(to.pos, home.pos) / (tuning.layout.radius * tuning.graph.depthRadiusFraction));
+      let best = null;
+      for (let j = 0; j < i; j++) {
+        const from = ordered[j];
+        if (degree.get(from.id) >= max) continue;
+        const error = Math.abs(depth.get(from.id) + 1 - desired);
+        const d = distance(from.pos, to.pos);
+        if (!best || error < best.error || (error === best.error && d < best.d)) best = { from, error, d };
+      }
+      if (!best) throw new Error("Galaxy generation could not connect every system; raise graph.maxNeighbors");
+      connectSystems(best.from, to, pockets, links, systemLinks, degree, tuning);
+      depth.set(to.id, depth.get(best.from.id) + 1);
     }
-    // With max >= 2 and a tree, a free slot always exists among earlier nodes.
-    if (!best) throw new Error("Galaxy generation could not connect every system; raise graph.maxNeighbors");
-    connectSystems(best.from, to, pockets, links, systemLinks, degree, tuning);
+  } else {
+    for (let i = 1; i < systems.length; i++) {
+      const to = systems[i];
+      let best = null;
+      for (let j = 0; j < i; j++) {
+        const from = systems[j];
+        if (degree.get(from.id) >= max) continue;
+        const d = distance(from.pos, to.pos);
+        if (!best || d < best.d) best = { from, d };
+      }
+      if (!best) throw new Error("Galaxy generation could not connect every system; raise graph.maxNeighbors");
+      connectSystems(best.from, to, pockets, links, systemLinks, degree, tuning);
+    }
   }
 
   // A few short extra edges create loops/alternative routes. Candidate order is
@@ -190,6 +212,11 @@ export function organicWeb(seed, tuning, rng) {
   }
 
   return { seed: seed >>> 0, generator: tuning.generator, systems, pockets, links };
+}
+
+/** V2 shares the seeded names/scatter with V1, but connects the radial tree differently. */
+export function sparseOrganicWeb(seed, tuning, rng) {
+  return organicWeb(seed, tuning, rng);
 }
 
 function connectSystems(a, b, pockets, links, systemLinks, degree, tuning) {

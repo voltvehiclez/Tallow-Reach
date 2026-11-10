@@ -19,6 +19,28 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Clearer, sparser starmap and adaptive route list
+
+- Owner asked for galaxy connections not to pass through unrelated system dots, route stops to use the
+  available vertical space before paging, and outer systems to need at least 10 jumps. Owner explicitly
+  chose to update existing saves too, safely relocating removed gate-pocket saves within the same system.
+- `organic-web-v2` retains seeded system ids, names, positions and core rolls but builds a sparse radial-
+  depth tree, default `extraChance: 0` and `depthRadiusFraction: 0.08`. Default seed: 121 systems,
+  362 pockets, 361 links, 120 gate links; its outer 80%-radius systems need at least 10 gate crossings
+  (11+ across 500 sampled seeds). Custom graph tuning/overrides may change this. The v1 generator is
+  retained to identify prior generated gate IDs. `prepareGalaxySave` moves a removed old gate to an
+  ordinary pocket in its same system, clears old coordinates and preserves profile/cargo; truly unknown
+  pockets still recover home. Recovery notices name the destination; save schema remains v16.
+- `src/ui/chart-lines.js` finds chart-only polylines around system dots, with an SVG dot mask for extreme
+  overlaps. Highlighted routes use exactly the same paths; connections and travel rules remain data-driven.
+  The right route list measures available space and shows all stops that fit; arrow pages only appear if
+  needed, including after resize. The overview panel does not scroll.
+- Added seeded distance/geometry and legacy-save recovery tests; updated map/playtest docs and removed
+  tests' assumptions about old neighbours. Targeted 63/63, full `npm test` **325/325**; build **681 KB
+  (696,881 bytes)**. No visual browser verification; owner playtest remains pending. No new dependencies.
+
+---
+
 ## 2026-11-08: Set exact pocket destinations
 
 - Pocket and gate-neighbour popups now offer **Set destination** below the Warp button or refusal note,

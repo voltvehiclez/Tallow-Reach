@@ -37,11 +37,13 @@ ones before changing anything, and update them when decisions or state change.
   Do **not** tick step 11 until that pass is reported.
 - **11A foundation:** `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/sim/travel.js`, explicit
   `PLACE_LINKS`, and `tests/step11a-galaxy.test.mjs` (now 23 tests). Default seed `11082026` resolves
-  **121 systems / 462 pockets / 511 links**: organic scatter, 1–4 neighbours, dead ends/junctions/loops,
+  **121 systems / 362 pockets / 361 links**: organic scatter, 1–4 neighbours, a sparse tree with dead ends and junctions,
   one ordinary empty pocket plus one empty gate pocket per neighbour, exactly one reciprocal external
-  peer per gate. Meridian keeps `reach`/`hollow`; Kestrel Hollow is not a gate.
+  peer per gate. V2 orders nodes radially and favours depth; default outer 80% radius systems need at
+  least 10 gate crossings (11+ in tested seeds). 500 seeds checked; custom tuning can change this.
+  Meridian keeps `reach`/`hollow`; Kestrel Hollow is not a gate.
 - **11B live slice (system-map follow-up built):** `src/ui/starmap.js` opens with **M** while flying. The galaxy
-  web shows gate lines, current/visited/selected markers, inspect dropdown and zoom/pan/labels. Zooming
+  web shows gate lines routed around unrelated system dots (plus an SVG dot mask), current/visited/selected markers, inspect dropdown and zoom/pan/labels. Zooming
   into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) opens a derived
   **system pocket map** with a short zoom transition. Ordinary pockets orbit a central visual-only
   **star (95%) / black hole (5%)**; gates sit farther out with dashed stubs toward the exact neighbouring
@@ -61,8 +63,8 @@ ones before changing anything, and update them when decisions or state change.
 - **Destination navigation:** right-click a galaxy node for **Set destination** and, if currently at
   its directly connected gate, **Warp to**. `findRouteToSystem` searches minimum executable warp hops
   to any pocket in a destination system (normally the arrival gate), respecting policies, enabled links, modes,
-  requirements and currently unsupported costs. The galaxy highlights the route; a paged arrow list
-  below pocket rows shows remaining system stops and the final arrival pocket. Pocket popups also offer
+  requirements and currently unsupported costs. The galaxy highlights the route; an adaptive arrow list
+  below pocket rows shows all remaining stops that fit, adding page arrows only when needed. Pocket popups also offer
   **Set destination**; `findRouteToPocket` plans to that exact pocket, and entering its system does not
   clear it before reaching the pocket. `J` in flight starts one
   ordinary hop at a time via `jumpRoute` -> `startWarp` and requotes; no destination shows **No destination
@@ -81,18 +83,19 @@ ones before changing anything, and update them when decisions or state change.
 - **Save v16:** `world.galaxy` is only `{ seed, knowledge }` (compact per-system discovery/visit flags).
   Generated geography is session-only in `state.galaxy` and the live place catalog. Boot, slot load and
   import call `prepareGalaxySave(raw)` before `applySave`: resolve seed → install catalog → sanitize →
-  record current visit. A removed/unknown pocket recovers to `DEFAULT_PLACE` (`reach`) with
-  `resume:null`, preserving the whole profile/cargo; intro/slot/import show a safe-recovery notice.
+  record current visit. A removed v1 generated gate recovers to an ordinary pocket in the same system;
+  other unknown pockets recover to `DEFAULT_PLACE` (`reach`). Recovery clears `resume` and preserves
+  profile/cargo; intro/slot/import show a safe-recovery notice naming the new pocket.
   A failed prepare restores the previous catalog. v15 and older saves/codes still load.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **322/322 pass** (11A file now 23 tests, 11B map/save file 37; both 8b oracles
-  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **677 KB** (693,443 bytes). Automated
+- **Results:** `npm test` **325/325 pass** (11A file 23 tests, 11B map/save file 38, layout file 2; both 8b oracles
+  unchanged). `npm run build` succeeded: `game/tallow-reach.html` **681 KB** (696,881 bytes). Automated
   headless DOM/menu/input/audio checks passed; the owner's visual browser playtest is still pending.
   Save **v16 is unchanged** — policies, core kind/name and pocket layout are resolved, not persisted.
-  Default geometry retains **121 systems / 462 pockets / 511 links** with identical ids/positions/links;
+  Default geometry has **121 systems / 362 pockets / 361 links**; system ids/names/positions stay stable, gate connections change;
   its independent core rolls give 116 stars and 5 black holes (including Duskdrift). Meridian is a star.
 - **Known limits:** generated pockets are empty placeholders; visibility is `all`; travel is free and
   non-empty route costs are refused until a handler exists; no fuel, activated/proximity gates,

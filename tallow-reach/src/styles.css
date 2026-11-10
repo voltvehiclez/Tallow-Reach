@@ -972,7 +972,7 @@ textarea {
 .sm-chart { flex: 1; min-height: 0; width: 100%; cursor: grab; touch-action: none; user-select: none; }
 .sm-chart:active { cursor: grabbing; }
 .sm-chart.transitioning { cursor: progress; }
-.sm-edge { stroke: #344650; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.sm-edge { fill: none; stroke: #344650; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .sm-pocket-edge { stroke: #4a6a75; }
 /* Central bodies are visual chart objects, never pocket buttons. */
 .sm-core { cursor: help; outline: none; }
@@ -1029,11 +1029,11 @@ textarea {
 }
 
 /* Navigation remains compact without making the system overview scroll. */
-.sm-route-edge { stroke: var(--amber); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.sm-route-edge { fill: none; stroke: var(--amber); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .sm-route { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--line); }
-.sm-route h3 { overflow-wrap: anywhere; }
+.sm-route h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sm-route ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.sm-route li { color: var(--ink); font-size: 13px; line-height: 1.25; overflow-wrap: anywhere; }
+.sm-route li { color: var(--ink); font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sm-route li span { color: var(--amber); }
 .sm-route li small { color: var(--dim); }
 .sm-route p { margin: 6px 0; color: var(--dim); font-size: 12px; }

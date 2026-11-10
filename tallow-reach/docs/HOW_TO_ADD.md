@@ -621,13 +621,14 @@ cannot open a warp popup. Native hover tooltips are absent from pockets/core; cl
 panel must not gain fixed-count rows, per-row metadata or scrolling.
 
 **Change generation or chart settings.** Edit `GALAXY` in `src/data/galaxy.js`: `systemCount`,
-`graph.maxNeighbors`, `layout`, `difficulty`, `visibility.mode`, `travel` defaults, `map`
+`graph.maxNeighbors`, `graph.depthRadiusFraction`, `graph.extraChance`, `layout`, `difficulty`, `visibility.mode`, `travel` defaults, `map`
 (padding, screen-pixel radii, zoom limits/step, `panSpeed`, `systemEntryZoom`, `transitionMs`, popup `context`) and
 `systemMap` (padding, pocket radius, ordinary/gate orbital radii, exit length, minimum separation, zoom
 limits, `blackHoleChance`, map-unit `coreRadius`/`blackHoleRadius`, `coreLabelOffset`, `coreLabelLineHeight`, `labelGap`).
 To replace the layout algorithm, register a function in `GALAXY_GENERATORS` (`src/sim/galaxy.js`) with the
 same `(seed, tuning, rng)` contract and name it in `GALAXY.generator`. The resolved record contract stays
-the same, so travel rules and the map UI do not change.
+the same, so travel rules and the map UI do not change. Changing graph links may remove old generated gate
+pockets: `prepareGalaxySave` uses the retained v1 generator to recover those saves in their original system.
 
 **Change visibility.** `visibility.mode: "all"` shows the whole web. `"discovered"` uses the compact
 `world.galaxy.knowledge` flags; home is always discovered/visited and each local arrival records a

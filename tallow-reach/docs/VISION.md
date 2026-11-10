@@ -106,6 +106,12 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
+- **2026-11-08 — sparse, clearer starmap (owner):** gate lines should not pass through unrelated systems;
+  outer systems should need at least 10 jumps, and route lists should show all stops that fit, with arrows
+  only when necessary. Apply the new connections to existing saves: if an old generated gate pocket is
+  removed, recover to a safe ordinary pocket in the same system without losing character/cargo. This
+  explicitly supersedes the earlier instruction to preserve the original gate connections below.
+
 - **2026-11-08 — step 11B system-map travel and central bodies (owner):** open-world systems allow
   **warp to any pocket within the same system** by default, without a forced internal route. Remove the
   internal blue lines on the **sub-system map only**; the main galaxy keeps explicit gate routes. Provide
