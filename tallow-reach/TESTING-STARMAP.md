@@ -194,11 +194,12 @@ asking the remaining VISION questions.
       unrelated system dots. Previously visited systems should appear light blue; the current system is orange. Set a destination near the
       outer edge and check that the route has at least ten system-to-system gate crossings.
 - [ ] With a route set, close the map and check the remaining stops below Boost. Press J for each
-      hop: each system should have one row with its pocket hops in order, and the current pocket
-      should be marked “here” in its row and shown above the list. The list should update after each
-      jump and disappear at the destination or when cleared. Check the same rows on the starmap,
-      including paging with long names, and test a pocket destination and a long route (scroll the
-      flight list without zooming or firing).
+      hop: flight should show one row per system, check off systems already crossed, mark your current
+      pocket “here”, and show pocket names only for your current system. Jump counts are departures
+      from each system, including gate crossings. The list should update after each jump and disappear
+      at the destination or when cleared. The starmap still shows full pocket details; check paging
+      with long names. Test a pocket destination and a long route (scroll without zooming or firing),
+      and a manual detour or blocked route: completed systems should reflect where you actually went.
 - [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
       in an ordinary pocket of the same system, with character and cargo intact, and see a recovery notice.
       Importing replaces your current game, so export your current save first.

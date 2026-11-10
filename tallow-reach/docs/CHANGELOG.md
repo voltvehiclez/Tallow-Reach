@@ -19,6 +19,22 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-08: Compact flight route with journey progress
+
+- Owner chose the compact system-list idea: in flight, show one row per system and its remaining
+  departures, with pocket names only in the current system. The current pocket is marked “here”.
+  Actually crossed systems are retained and checked off, including manual detours/revisits; the rest
+  replans from the current pocket. Counts mean warp jumps departing that system (including its gate
+  crossing), so a system destination may show zero. The current row scrolls into view on a hop.
+- The starmap retains full pocket details and also shows checked-off systems. Journey history is
+  session-only, reset when a destination is replaced, cleared, reached or a save is loaded. The
+  navigation rules, one-hop J and saved data are unchanged; a blocked route shows its current area
+  and no-route message until it becomes available again.
+- Updated HUD, shared route display, transient state, starmap and regression tests. Targeted **43/43**,
+  full **330/330**, build **686 KB (702,040 bytes)**. Browser playtest pending.
+
+---
+
 ## 2026-11-08: Group route pockets by system and mark the current area
 
 - Owner clarified that routes should retain one row per system, with all internal pocket hops in

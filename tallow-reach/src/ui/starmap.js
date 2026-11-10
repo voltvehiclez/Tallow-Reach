@@ -283,6 +283,11 @@ export function setupStarmap() {
     const before = state.galaxy?.pocketsById?.[from]?.parent;
     const after = state.galaxy?.pocketsById?.[to]?.parent;
     if (before && after && before !== after) {
+      const destination = state.ui.destination;
+      if (destination) {
+        if (state.ui.routeProgress?.destination !== destination) state.ui.routeProgress = { destination, completed: [] };
+        state.ui.routeProgress.completed.push(before);
+      }
       for (const view of [state.ui.starmapMemory, state.ui.starmap]) {
         if (!view) continue;
         view.playerSystem = after;
@@ -300,6 +305,7 @@ export function setupStarmap() {
     const destination = state.ui.destination;
     if (destination && (typeof destination === "string" ? after === destination : destination.pocketId === to)) {
       state.ui.destination = null;
+      state.ui.routeProgress = null;
       msg("Destination reached.");
     }
     if (state.ui.starmap) render();
@@ -630,7 +636,7 @@ function onClick(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that system.";
     else if (route.length < 2) view.notice = "You are already in that system.";
-    else { state.ui.destination = id; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { state.ui.destination = id; state.ui.routeProgress = { destination: id, completed: [] }; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
     render();
   } else if (action === "set-pocket-destination") {
     const from = localPlayer()?.place || state.place;
@@ -642,7 +648,7 @@ function onClick(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that pocket.";
     else if (route.length < 2) view.notice = "You are already in that pocket.";
-    else { state.ui.destination = destination; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { state.ui.destination = destination; state.ui.routeProgress = { destination, completed: [] }; view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
@@ -651,7 +657,7 @@ function onClick(e) {
     if (!to) { view.notice = "No direct route."; render(); return; }
     emit("action", { name: "travel", to, repeat: false });
   } else if (action === "clear-destination") {
-    state.ui.destination = null; view.routePage = 0; render();
+    state.ui.destination = null; state.ui.routeProgress = null; view.routePage = 0; render();
   } else if (action === "route-prev" || action === "route-next") {
     view.routePage = Math.max(0, (view.routePage || 0) + (action === "route-next" ? 1 : -1)); render();
   } else if (action === "travel") {
@@ -924,7 +930,8 @@ function systemMenuMarkup(world, view, from, rootRect) {
 
 /** Group pocket hops by system and paginate only when needed. */
 function routeMarkup(world, view, route, from) {
-  const details = routeDisplay(world, state.ui.destination, route, knowledge(), from);
+  const details = routeDisplay(world, state.ui.destination, route, knowledge(), from,
+    state.ui.routeProgress?.destination === state.ui.destination ? state.ui.routeProgress.completed : []);
   if (!details) return "";
   const { title, stops } = details;
   const pageSize = view.routePageSize || Math.max(1, stops.length);
