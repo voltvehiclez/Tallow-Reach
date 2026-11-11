@@ -58,13 +58,9 @@ function routeMarkerMarkup(x, y, radius, role, unit) {
   if (!role) return "";
   const rings = role.destination
     ? `<circle class="sm-route-marker sm-route-marker-destination-outer" cx="${x}" cy="${y}" r="${radius + 7 * unit * ROUTE_ICON_SCALE}"/>
-       <circle class="sm-route-marker sm-route-marker-destination-inner" cx="${x}" cy="${y}" r="${radius + 3 * unit * ROUTE_ICON_SCALE}"/>
        <path class="sm-route-marker sm-route-marker-destination-check" d="M${x - 3.5 * unit * ROUTE_ICON_SCALE} ${y} L${x - 1 * unit * ROUTE_ICON_SCALE} ${y + 3 * unit * ROUTE_ICON_SCALE} L${x + 4.5 * unit * ROUTE_ICON_SCALE} ${y - 4 * unit * ROUTE_ICON_SCALE}"/>`
     : "";
-  const start = role.start && !role.destination
-    ? `<circle class="sm-route-marker sm-route-marker-start" cx="${x}" cy="${y}" r="${radius + 4 * unit * ROUTE_ICON_SCALE}"/>`
-    : "";
-  return rings + start;
+  return rings;
 }
 
 /** Pure view helpers (tested without a browser). */
@@ -518,9 +514,9 @@ export function setupStarmap() {
     }
     if (state.ui.starmap) render();
   });
-  on("travel-denied", ({ player, reason } = {}) => {
+  on("travel-denied", ({ player } = {}) => {
     if (state.ui.starmap && (!player || player === localPlayer())) {
-      state.ui.starmap.notice = reason || "Travel is not available.";
+      state.ui.starmap.notice = "";
       state.ui.starmap.menu = null;
       render();
     }
@@ -890,9 +886,8 @@ function onClickNow(e) {
     if (!id || !systemVisible(state.galaxy, id, knowledge())) return;
     const route = findRouteToSystem(state.galaxy, from, id, travelContext());
     view.menu = null;
-    if (!route) view.notice = "No route to that system.";
-    else if (route.length < 2) view.notice = "You are already in that system.";
-    else { setDestination(id); view.routePage = 0; view.notice = ""; }
+    if (route?.length >= 2) { setDestination(id); view.routePage = 0; }
+    view.notice = "";
     render();
   } else if (action === "set-pocket-destination") {
     const from = localPlayer()?.place || state.place;
@@ -902,15 +897,14 @@ function onClickNow(e) {
     const destination = { pocketId: target };
     const route = findDestinationRoute(state.galaxy, from, destination, travelContext());
     view.menu = null;
-    if (!route) view.notice = "No route to that pocket.";
-    else if (route.length < 2) view.notice = "You are already in that pocket.";
-    else { setDestination(destination); view.routePage = 0; view.notice = ""; }
+    if (route?.length >= 2) { setDestination(destination); view.routePage = 0; }
+    view.notice = "";
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
     const to = id && directSystemWarp(state.galaxy, localPlayer()?.place || state.place, id, travelContext());
     view.menu = null;
-    if (!to) { view.notice = "No direct route."; render(); return; }
+    if (!to) { view.notice = ""; render(); return; }
     emit("action", { name: "travel", to, repeat: false });
   } else if (action === "clear-destination") {
     setDestination(null); view.routePage = 0; render();
@@ -922,12 +916,12 @@ function onClickNow(e) {
     const choice = menuChoice(state.galaxy, view, from);
     view.menu = null;
     if (choice && choice.pocket.id !== to) {
-      view.notice = "Travel is not available.";
+      view.notice = "";
       render();
       return;
     }
     if (!choice?.canWarp) {
-      view.notice = choice?.status || "Travel is not available.";
+      view.notice = "";
       render();
       return;
     }
@@ -978,14 +972,17 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
     const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
     const marker = routeMarkerMarkup(s.pos[0], -s.pos[1], radius, role, unit);
     const label = chosen || current || view.labels;
+    const labelX = s.pos[0] + radius + 5 * unit;
+    const labelY = -s.pos[1] + 3 * unit;
+    const hereLabel = current ? `<tspan class="sm-here-label" x="${labelX}" dy="${12 * unit}">(You are here)</tspan>` : "";
     return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${roleClass}"
       data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}">
       <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
       ${marker}
-      ${chosen ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
-      ${label ? `<text x="${s.pos[0] + radius + 5 * unit}" y="${-s.pos[1] + 3 * unit}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}</text>` : ""}
+      ${chosen && !current ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
+      ${label ? `<text x="${labelX}" y="${labelY}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}${hereLabel}</text>` : ""}
     </g>`;
   }).join("");
   return `<defs>${masks.join("")}</defs>` + lines + routeLines + nodes;
@@ -1048,13 +1045,14 @@ function systemMarkup(world, view, know, here, unit, route = null) {
       ? `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`
       : `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
     const peerAttr = node.peerSystemId ? ` data-peer-system="${esc(node.peerSystemId)}"` : "";
+    const hereLabel = current ? `<tspan class="sm-here-label" x="${lx}" dy="${12 * unit}">(You are here)</tspan>` : "";
     return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}${roleClass}" data-pocket="${esc(node.id)}"${peerAttr}
       role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
       ${labelLink}
       ${dot}
       ${marker}
-      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
+      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}${hereLabel}</text>
     </g>`;
   }).join("");
   // The core is a named chart object, not a pocket: no data-pocket, travel action,
@@ -1153,7 +1151,6 @@ function render() {
             ${chart}
           </svg>
           <p class="sm-help">${help}</p>
-          ${view.notice ? `<p class="sm-status" aria-live="polite">${esc(view.notice)}</p>` : ""}
         </section>
         <aside class="sm-details" aria-label="System overview">
           ${selected ? `<h2>${esc(selected.n)}</h2>

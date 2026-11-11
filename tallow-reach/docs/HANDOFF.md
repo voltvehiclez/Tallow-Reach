@@ -6,14 +6,14 @@ what to run and what to click. These docs are the project's memory across chats:
 ones before changing anything, and update them when decisions or state change.
 
 Flight HUD route: “Route to” shows the destination and count of systems still to enter, followed
-by the complete remaining system list with start, blue-intermediate and amber destination markers; the current system is blue and the destination is bold amber with a small orange tick, two orange rings and a dotted outer ring
+by the complete remaining system list with start, blue-intermediate and amber destination markers; the current system is blue and the destination is bold amber with a dark center, small orange tick and one dotted outer ring
 (current stays blue when both). The current/start and destination icons are about 20% smaller. The ship HUD route has no inner scrollbar. A blocked route shows no count. The starmap route list
 also shows only remaining systems and those markers, with measured pagination; exact pocket destinations
-remain in its wrapping title and add the pocket in small parentheses on the final system row only.
+remain in its wrapping `Route to System (Pocket)` title and add the pocket in small parentheses on the final system row only.
 System destinations remain system-only. System pocket maps show solid directed orange overlays for planned
 local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist
 across relogs and future routes are replanned. Pocket menus open beside the pointer with **Set destination**
-first; successful destinations do not show the generic bottom confirmation in either map mode, while useful refusals remain.
+first; successful destinations and refusals do not render a bottom map notice in either map mode.
 The owner live-browser confirmation for these latest refinements is still pending before Step 12 can be marked complete;
 the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
 
@@ -91,7 +91,7 @@ the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
   ordinary hop at a time via `jumpRoute` -> `startWarp` and requotes; no destination shows **No destination
   set**. Route recomputes from current location, clears on arrival or Clear, and its destination persists in the saved world. The owner passed the map/J follow-up playtest.
 - **Map view memory:** closing the chart keeps its session-only galaxy/system mode, selection, zoom,
-  pan and labels; reopening clears popup/notice. On local cross-system travel a remembered pocket view
+  pan and labels; reopening clears popup state. Map charts have no bottom status/refusal notice. On local cross-system travel a remembered pocket view
   follows the new system and resets its pocket framing; a galaxy view remains a galaxy view. Same-system
   travel keeps framing, other pilots cannot change local memory, and loading a save resets it. No save
   schema changes; this follow-up was included in the passed Step 11B playtest.

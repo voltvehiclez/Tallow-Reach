@@ -16,8 +16,8 @@ back to its dot, including the close Galereach/Galedrift gate labels such as Sab
 **M opens the starmap** while flying; zoom into a system dot to open its pocket map. **Right-click a
 pocket** and choose **Set destination** (the first menu action) or **Warp to …** to run the existing warp
 sequence; the popup opens immediately to the pointer's right and left-clicking a pocket is inert.
-A successful destination updates the route without the generic bottom confirmation notice in either map mode;
-useful refusal/error notices still appear. Gate stubs point to the exact neighbouring system; double-clicking the
+A successful destination updates the route without a bottom confirmation, and starmap/pocket-map charts do not show
+bottom status/refusal warnings. Gate stubs point to the exact neighbouring system; double-clicking the
 gate dot/name opens that peer's map, while right-clicking it opens the existing travel popup for its reciprocal gate pocket. The right panel stays compact (system name, current pocket, pocket names), with no warp
 buttons or scrolling. Saves remain **version 16**: seed plus compact discovery/visit notes, not the
 generated map, cores or layout. Old saves and `TR1:` codes still load.
@@ -206,8 +206,8 @@ asking the remaining VISION questions.
       only the final system row should add its pocket in a small parenthetical, for example
       `Galereach (Sablewatch)`; a system destination must stay system-only. Both lists should use the
       filled amber start marker, small blue intermediate marker and a destination marker about 20% smaller,
-      with a small orange tick, two orange rings and a dotted outer ring; the starmap should still show only systems
-      (no gate-to-gate text or completed ticks); check paging. Test a pocket destination, a blocked route (no count),
+      with a dark center, small orange tick and one dotted outer ring; the starmap should still show only systems
+      (no gate-to-gate text or completed-system ticks); check paging. Test a pocket destination, a blocked route (no count),
       a detour, and a long route (the ship HUD shows every route row without an inner scrollbar).
 - [ ] Set a long-named destination such as Kestreldrift Expanse: the starmap route heading and
       pocket names should wrap, not end in an ellipsis. Open a system the route passes through:
@@ -229,7 +229,7 @@ asking the remaining VISION questions.
       the map to check the remaining route updates, then continue until arrival clears the destination.
 - [ ] Open a system pocket map. Right-click a local pocket and check that **Set destination** appears first,
       above **Warp to**; a left-click alone must not open a menu. Set it, close the map and press **J**; it should
-      warp to that exact pocket and clear the route. Try the pocket you are already in: it should say you are already there.
+      warp to that exact pocket and clear the route. Try the pocket you are already in: it should not add a bottom warning.
 - [ ] Inspect a remote system's pocket map and right-click a non-gate pocket. Even though it says **No direct
       route**, choose **Set destination**. The heading should name the exact target pocket; the list
       should show its destination system rather than individual pockets.

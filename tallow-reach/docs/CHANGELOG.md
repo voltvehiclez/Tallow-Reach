@@ -19,6 +19,15 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Simplify map markers and current-location labels
+
+- Removed the extra orange start ring around the current galaxy system and current pocket, including station squares; current labels now add a second `(You are here)` line.
+- Removed bottom starmap/pocket-map status warnings, including already-there and late travel-denied messages. Route rows in both the ship HUD and starmap now have a faint connecting line between their markers.
+- Simplified destination markers to a very dark filled circle with an orange check and one dotted orange ring. Exact pocket route headings now use `Route to System (Pocket)`.
+- Targeted starmap/HUD tests pass **50/50**; full `npm test` passes **347/347**; `npm run build` succeeds at **706 KB**. The refreshed preview is in `/tmp/tallow-reach-preview/game/tallow-reach.html` and returns HTTP 200 on the existing preview server.
+
+---
+
 ## 2026-11-10: Refine destination marker rings and icon scale
 
 - Destination icons now use a small orange tick, two orange rings and a dotted outer orange ring, matching the supplied reference more closely in route rows and galaxy/system pocket SVG maps.

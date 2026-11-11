@@ -213,9 +213,9 @@ Each `src/` folder also has its own short `README.md`.
   permanent two-line proper-name/type label, while `pocketLabelLayout` collision-checks pocket names and
   nearby dots, drawing a connector when a crowded label is nudged or moved to the clearer side. The click/right-click popup opens just to the right of
   the pointer with **Set destination** first; it emits a named travel action for **Warp to**, and `sim/sectors.js`
-  requotes the same hop before running the unchanged warp sequence. Setting a destination keeps refusal
-  notices but omits the generic bottom confirmation in both map modes. `route-display.js` is shared by the HUD and starmap;
-  only the final system row for an exact `{ pocketId: ... }` destination gets a small parenthetical pocket name.
+  requotes the same hop before running the unchanged warp sequence. Starmap and pocket-map charts do not render
+  bottom status/refusal notices. `route-display.js` is shared by the HUD and starmap;
+  an exact `{ pocketId: ... }` destination uses a `System (Pocket)` route title and gets a small parenthetical pocket name on the final system row.
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
   `vol`, `st`.
@@ -511,8 +511,7 @@ These are real, current limits. None of them is a bug in play today.
   when legal. The sim rechecks the quote and emits `travel-denied` on refusal; successful destinations do not
   add the generic bottom confirmation in either map mode. The shared route list shows a small destination
   pocket parenthetical on the final row only for pocket targets; route rows use distinct start, intermediate and
-  destination markers, with a small orange tick, two orange rings and a dotted outer ring in the destination marker.
-  Current/start and destination icons are about 20% smaller. The ship HUD renders every route row without an inner scrollbar. Single-player chart pauses the
+  destination markers, with a dark center, small orange tick and one dotted outer ring. Current/start and destination icons are about 20% smaller. The ship HUD renders every route row without an inner scrollbar. Single-player chart pauses the
   frame gate and suspends audio; `state.multiplayer` is the future host flag that keeps a hosted world running.
   Generated gate traders are removed from gate pockets and receive their own station pocket/internal link;
   explicit `allowStation`, `stationPlacement: "gate"` or feature records can deliberately co-locate one.

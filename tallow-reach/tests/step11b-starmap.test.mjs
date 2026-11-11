@@ -402,6 +402,7 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   map.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
   assert.equal(ui.state.ui.starmap.mode, "system");
   assert.ok(map.innerHTML.includes('data-pocket="hollow"'));
+  assert.match(map.innerHTML, /class="sm-here-label"[^>]*>\(You are here\)<\/tspan>/);
   assert.ok(!map.innerHTML.includes("sm-pocket-edge"), "free local warp has no internal blue lines");
   assert.ok(!map.innerHTML.includes("sm-system-route"), "no route overlay without a destination");
   assert.ok(!map.innerHTML.includes('data-pockets-edge="reach-hollow"'));
@@ -648,9 +649,12 @@ test("11B: system destination popup, route display and J follow ordinary checked
   assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
     "system destinations also do not add the generic bottom confirmation notice");
   assert.match(mapRoot.innerHTML, /class="sm-route-edge"/);
+  assert.match(mapRoot.innerHTML, /class="sm-here-label"[^>]*>\(You are here\)<\/tspan>/);
   assert.match(mapRoot.innerHTML, /class="route-marker route-marker-start"/);
   assert.match(mapRoot.innerHTML, /class="route-marker route-marker-intermediate"/);
   assert.match(mapRoot.innerHTML, /class="route-marker route-marker-destination"/);
+  assert.match(mapRoot.innerHTML, /class="sm-route-marker sm-route-marker-destination-check"/);
+  assert.doesNotMatch(mapRoot.innerHTML, /sm-route-marker-start|sm-route-marker-destination-inner/);
   const connectionPaths = [...mapRoot.innerHTML.matchAll(/class="sm-edge" data-edge="[^"]+" d="([^"]+)"/g)].map(m => m[1]);
   const highlightedPaths = [...mapRoot.innerHTML.matchAll(/class="sm-route-edge" d="([^"]+)"/g)].map(m => m[1]);
   assert.ok(highlightedPaths.length > 0 && highlightedPaths.every(path => connectionPaths.includes(path)), "highlight follows the same bent connection lines");
@@ -826,6 +830,10 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   assert.match(css, /\.route-marker-destination-tick\s*\{[^}]*border-width:\s*0 2px 2px 0/);
   assert.match(css, /\.sm-route-marker-destination-outer\s*\{[^}]*stroke-dasharray:\s*1 3/);
   assert.match(css, /\.sm-route-marker-destination-check\s*\{[^}]*stroke:\s*var\(--amber\)/);
+  assert.doesNotMatch(css, /sm-route-marker-destination-inner|sm-route-marker-start/);
+  assert.match(css, /#hud-route ol:has\(li \+ li\)::before, \.sm-route-list:has\(li \+ li\)::before/);
+  assert.match(css, /\.sm-here-label\s*\{/);
+  assert.doesNotMatch(css, /\.sm-status\s*\{/);
   const hudRouteList = css.match(/#hud-route ol\s*\{([^}]+)\}/)?.[1] || "";
   assert.doesNotMatch(hudRouteList, /max-height|overflow-y|scrollbar-width/);
 });
@@ -848,7 +856,7 @@ test("11B: pocket destination follows J all the way past a remote arrival gate",
   assert.deepEqual(ui.state.ui.destination, { pocketId: target.id });
   assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
     "pocket-map destinations do not add the bottom confirmation notice");
-  assert.ok(mapRoot.innerHTML.includes(`Route to ${target.n}`));
+  assert.ok(mapRoot.innerHTML.includes(`Route to ${world.systemsById[target.parent].n} (${target.n})`));
   const route = findDestinationRoute(world, P.place, ui.state.ui.destination);
   assert.equal(route.at(-1), target.id);
   assert.ok(route.length > 2);
@@ -908,7 +916,7 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   rightClickPocket("hollow"); click({ action: "set-pocket-destination" });
   rightClickPocket("reach"); click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "current pocket cannot replace an existing route");
-  assert.ok(mapRoot.innerHTML.includes("You are already in that pocket."));
+  assert.doesNotMatch(mapRoot.innerHTML, /You are already in that pocket\.|sm-status/);
   ui.closeStarmap();
   assert.equal(ui.jumpRoute(P), true); assert.equal(P.warp.to, "hollow");
   ui.updateWarp(WARP_TIME + 1, P); assert.equal(ui.state.ui.destination, null);
@@ -1011,7 +1019,7 @@ test("11B: galaxy system popup only offers direct gate warp from the matching ga
   context(); exit.link.enabled = false;
   mapRoot.handlers.click({ target: { closest: () => ({ dataset: { action: "system-warp" }, disabled: false }) } });
   assert.equal(actions.length, 1);
-  assert.match(mapRoot.innerHTML, /No direct route/);
+  assert.doesNotMatch(mapRoot.innerHTML, /No direct route|sm-status/);
   exit.link.enabled = true; listening = false; ui.closeStarmap(); ui.state.ui.starmapMemory = null;
 });
 
@@ -1071,8 +1079,8 @@ test("11B: real map pans by dragging and shows a late travel refusal inside the 
   mapRoot.handlers.pointermove({ clientX: 300, clientY: 300 });
   assert.deepEqual(ui.state.ui.starmap.pan, panned);
   ui.emit("travel-denied", { reason: "Gate is dormant." });
-  assert.equal(ui.state.ui.starmap.notice, "Gate is dormant.");
-  assert.ok(mapRoot.innerHTML.includes("Gate is dormant."));
+  assert.equal(ui.state.ui.starmap.notice, "");
+  assert.doesNotMatch(mapRoot.innerHTML, /Gate is dormant\.|sm-status/);
   ui.closeStarmap();
 });
 
