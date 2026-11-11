@@ -22,7 +22,10 @@ export function routeDisplay(world, destination, route, knowledge = {}, from = r
     }
     row.pockets.push({ name: visible ? pocket.n : "Undiscovered pocket", current: i === 0 });
   }
-  if (route?.length && stops.length) stops.at(-1).destination = true;
+  if (route?.length && stops.length) {
+    stops.at(-1).destination = true;
+    if (targetPocket) stops.at(-1).destinationPocket = targetPocket.n;
+  }
   return { title: targetPocket ? `${targetPocket.n} (${targetSystem.n})` : targetSystem.n,
     current, stops, available: !!route };
 }
@@ -36,6 +39,9 @@ export function flightRouteRows(stops) {
   return stops.map(stop => {
     const current = stop.pockets.some(p => p.current);
     const classes = [current ? "route-here" : "", stop.destination ? "route-destination" : ""].filter(Boolean).join(" ");
-    return `<li${classes ? ` class="${classes}"` : ""}${current ? ' aria-current="location"' : ""}${stop.destination ? ` aria-label="${escapeRouteText(stop.system)}, destination"` : ""}><span aria-hidden="true">→</span> ${escapeRouteText(stop.system)}</li>`;
+    const destinationPocket = stop.destinationPocket ? `(${escapeRouteText(stop.destinationPocket)})` : "";
+    const pocket = stop.destinationPocket ? ` <small>${destinationPocket}</small>` : "";
+    const destinationLabel = stop.destination ? ` aria-label="${escapeRouteText(stop.system)}${stop.destinationPocket ? ` ${destinationPocket}` : ""}, destination"` : "";
+    return `<li${classes ? ` class="${classes}"` : ""}${current ? ' aria-current="location"' : ""}${destinationLabel}><span aria-hidden="true">→</span> ${escapeRouteText(stop.system)}${pocket}</li>`;
   }).join("");
 }

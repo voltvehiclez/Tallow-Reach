@@ -19,6 +19,15 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Clarify pocket menus, labels and exact route destinations
+
+- Pocket-map context menus now open immediately to the right of the pointer with **Set destination** as the nearest action; existing legality checks, Warp actions, refusal notices and double-click navigation remain intact. Successful exact pocket destinations no longer add the generic bottom `Destination set. Press J for the next warp.` notice.
+- `pocketLabelLayout` separates colliding pocket names and draws a connector from a nudged name back to its dot, keeping crowded gate labels such as the Galereach/Galedrift Sablewatch and Fallowwatch labels readable.
+- The shared HUD/starmap route rows append the destination pocket in a small parenthetical on the final system row only for `{ pocketId: ... }` destinations; system destinations remain system-only.
+- Added menu, notice, label-layout and route-row regressions. Full `npm test` passes **347/347**; `npm run build` succeeds at **702 KB**. The refreshed browser copy is in `/tmp/tallow-reach-preview/game/tallow-reach.html`; owner live-browser confirmation is still pending.
+
+---
+
 ## 2026-11-10: Make local route lines solid and pocket menus right-click-only
 
 - Destination overlays on the large galaxy map are solid orange with directional arrows again. On a system pocket map, planned local pocket-to-pocket hops are solid orange; only the cross-system gate exit stubs remain orange dashed, including the incoming stub highlighted in reverse when viewing an intermediate system.

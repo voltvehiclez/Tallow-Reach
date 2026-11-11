@@ -10,11 +10,15 @@ then `(Star)` or `(Black hole)`. The small native hover tooltips on pockets and 
 but the blue/orange **right-click popups remain**. Galaxy panning now follows the pointer at a restrained speed and pans
 a little farther when zoomed out. System-map star/black-hole graphics now scale with zoom. Gate
 pocket names sit clear of the orange exit stubs, and the neighbouring-system name at a stub is clickable.
+Crowded pocket names are separated automatically; a nudged name has a small connector back to its dot,
+including the close Galereach/Galedrift gate labels such as Sablewatch and Fallowwatch.
 
 **M opens the starmap** while flying; zoom into a system dot to open its pocket map. **Right-click a
-pocket** and choose **Warp to …** to run the existing warp sequence; left-clicking a pocket is inert.
-Gate stubs point to the exact neighbouring system; double-clicking the gate dot/name opens that peer's map,
-while right-clicking it opens the existing travel popup for its reciprocal gate pocket. The right panel stays compact (system name, current pocket, pocket names), with no warp
+pocket** and choose **Set destination** (the first menu action) or **Warp to …** to run the existing warp
+sequence; the popup opens immediately to the pointer's right and left-clicking a pocket is inert.
+A successful pocket destination updates the route without the generic bottom confirmation notice; useful
+refusal/error notices still appear. Gate stubs point to the exact neighbouring system; double-clicking the
+gate dot/name opens that peer's map, while right-clicking it opens the existing travel popup for its reciprocal gate pocket. The right panel stays compact (system name, current pocket, pocket names), with no warp
 buttons or scrolling. Saves remain **version 16**: seed plus compact discovery/visit notes, not the
 generated map, cores or layout. Old saves and `TR1:` codes still load.
 
@@ -198,7 +202,9 @@ asking the remaining VISION questions.
       and show a count of systems still to enter next to the destination (excluding your current
       system). No completed ticks, pocket names or jump counts should appear in the list. The list
       updates after each jump and disappears at the destination or when cleared. The destination
-      system should stand out in bold amber without a diamond on both lists. The starmap list should also
+      system should stand out in bold amber without a diamond on both lists. For a pocket destination,
+      only the final system row should add its pocket in a small parenthetical, for example
+      `Galereach (Sablewatch)`; a system destination must stay system-only. The starmap list should also
       show only systems and arrows (no gate-to-gate text or completed ticks); check paging. Test a pocket
       destination, a blocked route (no count), a detour, and a long route (scroll without zooming or firing).
 - [ ] Set a long-named destination such as Kestreldrift Expanse: the starmap route heading and

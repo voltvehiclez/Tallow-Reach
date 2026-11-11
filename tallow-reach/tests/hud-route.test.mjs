@@ -89,13 +89,13 @@ test("route rows omit pockets and mark the final destination", () => {
   const remoteLocal = Object.values(world.pocketsById).find(p => p.parent === remote.parent && p.id !== remote.id);
   const detail = routeDisplay(world, { pocketId: remoteLocal.id }, [start.id, local.id, remote.id, remoteLocal.id], {}, start.id);
   const rows = flightRouteRows(detail.stops);
-  assert.doesNotMatch(rows, /route-done|✓|<small>/);
+  assert.doesNotMatch(rows, /route-done|✓/);
   assert.match(rows, /class="route-here" aria-current="location"/);
   assert.match(rows, /class="route-destination"/);
   assert.match(rows, /aria-label="[^"]+, destination"/);
+  assert.ok(rows.includes(`<small>(${remoteLocal.n})</small>`), "only the final system names the destination pocket");
   assert.doesNotMatch(rows, /◆|route-goal/);
   assert.ok(!rows.includes(local.n));
-  assert.ok(!rows.includes(remoteLocal.n));
   assert.equal((rows.match(/<li(?: [^>]*)?>/g) || []).length, 2);
   const localRoute = routeDisplay(world, { pocketId: local.id }, [start.id, local.id], {});
   assert.match(flightRouteRows(localRoute.stops), /class="route-here route-destination" aria-current="location"/);

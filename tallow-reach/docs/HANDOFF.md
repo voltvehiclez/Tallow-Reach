@@ -9,7 +9,13 @@ Flight HUD route: “Route to” shows the destination and count of systems stil
 by remaining system names with amber arrows; the current system is blue and the destination is bold amber
 (current stays blue when both). A blocked route shows no count. The starmap route list
 also shows only remaining systems and arrows, with measured pagination; exact pocket destinations
-remain in its wrapping title. System pocket maps show solid directed orange overlays for planned local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist across relogs and future routes are replanned. The owner passed the Step 11B starmap playtest; the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
+remain in its wrapping title and add the pocket in small parentheses on the final system row only.
+System destinations remain system-only. System pocket maps show solid directed orange overlays for planned
+local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist
+across relogs and future routes are replanned. Pocket menus open beside the pointer with **Set destination**
+first; successful pocket destinations do not show the generic bottom confirmation, while useful refusals remain.
+The owner live-browser confirmation for these latest refinements is still pending before Step 12 can be marked complete;
+the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
 
 ## Ground rules from the owner (do not break these)
 

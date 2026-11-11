@@ -210,8 +210,12 @@ Each `src/` folder also has its own short `README.md`.
   the visual core and gates sit farther out toward their peers. Core kind/name, policy and layout are
   resolved data, never saved. `ui/starmap.js` draws the galaxy web and system pocket map, omitting internal
   lines in free systems and retaining gate exit stubs toward visible peers. Its non-warpable core has a
-  permanent two-line proper-name/type label. The click/right-click **Warp to** popup emits a named travel action; `sim/sectors.js`
-  requotes the same hop before running the unchanged warp sequence.
+  permanent two-line proper-name/type label, while `pocketLabelLayout` collision-checks pocket names and
+  draws a connector when a crowded label is nudged. The click/right-click popup opens just to the right of
+  the pointer with **Set destination** first; it emits a named travel action for **Warp to**, and `sim/sectors.js`
+  requotes the same hop before running the unchanged warp sequence. Setting a pocket destination keeps refusal
+  notices but omits the generic bottom confirmation. `route-display.js` is shared by the HUD and starmap;
+  only the final system row for an exact `{ pocketId: ... }` destination gets a small parenthetical pocket name.
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
   `vol`, `st`.
@@ -498,12 +502,15 @@ These are real, current limits. None of them is a bug in play today.
   gate pocket, and double-clicking either one opens that peer system map directly. Station pockets render as
   squares and generated trader features/station pockets use deterministic varied names; the right panel stays
   a compact name-only overview. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing
-  gently when zoomed out; core radii are map units so system zoom scales the graphic. An active destination
+  gently when zoomed out; core radii are map units so system zoom scales the graphic. Pocket names are laid
+  out without collisions and crowded labels get a small connector back to their dot. An active destination
   draws solid orange overlays and small directional arrows on galaxy links and local pocket hops; only
   cross-system gate exit stubs are orange dashed, including an incoming stub highlighted in reverse when an
   intermediate system is viewed. Left-clicking a pocket-map pocket is inert; right-clicking a legal local/gate
-  pocket or gate-neighbour label offers **Warp to** and **Set destination**. The sim rechecks the quote and emits
-  `travel-denied` on refusal. Single-player chart pauses the
+  pocket or gate-neighbour label opens an adjacent popup with **Set destination** first and **Warp to** only
+  when legal. The sim rechecks the quote and emits `travel-denied` on refusal; successful exact pocket
+  destinations do not add the generic bottom confirmation. The shared route list shows a small destination
+  pocket parenthetical on the final row only for pocket targets. Single-player chart pauses the
   frame gate and suspends audio; `state.multiplayer` is the future host flag that keeps a hosted world running.
   Generated gate traders are removed from gate pockets and receive their own station pocket/internal link;
   explicit `allowStation`, `stationPlacement: "gate"` or feature records can deliberately co-locate one.

@@ -20,7 +20,7 @@ import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/cor
 import {
   visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices,
   pocketConnections, systemRouteSegments, systemRouteExits, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
-  galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, exitChoice,
+  galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, pocketLabelLayout, exitChoice,
 } from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
 
@@ -827,6 +827,8 @@ test("11B: pocket destination follows J all the way past a remote arrival gate",
   assert.ok(mapRoot.innerHTML.includes('data-action="set-pocket-destination"'), "unreachable in one hop can still be plotted");
   click("set-pocket-destination");
   assert.deepEqual(ui.state.ui.destination, { pocketId: target.id });
+  assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
+    "pocket-map destinations do not add the bottom confirmation notice");
   assert.ok(mapRoot.innerHTML.includes(`Route to ${target.n}`));
   const route = findDestinationRoute(world, P.place, ui.state.ui.destination);
   assert.equal(route.at(-1), target.id);
@@ -873,9 +875,12 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   click({ pocket: "hollow" });
   assert.equal(ui.state.ui.starmap.menu, null, "left-clicking a pocket is inert");
   rightClickPocket("hollow");
-  assert.ok(mapRoot.innerHTML.indexOf('data-action="travel"') < mapRoot.innerHTML.indexOf('data-action="set-pocket-destination"'));
+  assert.ok(mapRoot.innerHTML.indexOf('data-action="set-pocket-destination"') < mapRoot.innerHTML.indexOf('data-action="travel"'),
+    "Set destination is the nearest pocket-menu action");
   click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" });
+  assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
+    "pocket destinations do not add the generic bottom confirmation notice");
   assert.ok(mapRoot.innerHTML.includes('data-route-from="reach" data-route-to="hollow"'), "free local hop is highlighted in route order");
   assert.ok(mapRoot.innerHTML.includes("Kestrel Hollow"));
   click({ action: "clear-destination" });
@@ -1085,6 +1090,18 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
     assert.ok(offset[0] * screenDirection[0] + offset[1] * screenDirection[1] <= 0,
       "a gate pocket name sits inward, away from its orange exit stub and peer label");
   }
+  const galedrift = world.systems.find(system => system.n === "Galedrift");
+  assert.ok(galedrift);
+  const denseLabels = pocketLabelLayout(pocketConnections(world, galedrift.id), p => [p[0], -p[1]],
+    GALAXY.systemMap.pocketRadius, 1);
+  const labelValues = [...denseLabels.values()];
+  for (let i = 0; i < labelValues.length; i++) for (let j = i + 1; j < labelValues.length; j++) {
+    const a = labelValues[i].box, b = labelValues[j].box;
+    assert.ok(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top,
+      `${labelValues[i].node.pocket.n} and ${labelValues[j].node.pocket.n} do not overlap`);
+  }
+  assert.ok(labelValues.some(label => label.node.pocket.n === "Gate to Fallowwatch" && label.moved),
+    "the crowded Galedrift gate label is nudged away and can be connected to its dot");
   assert.ok(systemChartBounds(chart).every(Number.isFinite));
   assert.ok(systemChartViewBox(world, { selected: "meridian", mode: "system", systemZoom: 1, systemPan: [0, 0] }).every(Number.isFinite));
   const previous = GALAXY_OVERRIDES.places.hollow;
@@ -1130,6 +1147,9 @@ test("11B: galaxy/system zoom transition blends viewBoxes and can be driven head
   assert.deepEqual(interpolateViewBox([0, 0, 100, 100], [10, 10, 50, 50], 0), [0, 0, 100, 100]);
   assert.deepEqual(interpolateViewBox([0, 0, 100, 100], [10, 10, 50, 50], 0.5), [5, 5, 75, 75]);
   assert.deepEqual(interpolateViewBox([0, 0, 100, 100], [10, 10, 50, 50], 1), [10, 10, 50, 50]);
+  const near = contextMenuPosition(100, 100, { width: 800, height: 600 }, { ...GALAXY.map.context, height: 165 });
+  assert.equal(near.left, 100 + GALAXY.map.context.offsetX, "the popup opens just to the right of the pointer");
+  assert.equal(near.top, 100 - GALAXY.map.context.anchorY, "the first action is vertically aligned with the pointer");
   const pos = contextMenuPosition(9999, 9999, { width: 800, height: 600 });
   assert.ok(pos.left <= 800 - GALAXY.map.context.width - GALAXY.map.context.margin);
   assert.ok(pos.top <= 600 - GALAXY.map.context.height - GALAXY.map.context.margin);

@@ -221,6 +221,47 @@ export function pocketLabelPosition(node, point, radius, unit, tuning = GALAXY.s
   return { x: point[0] + (anchor === "end" ? -gap : gap), y: point[1] + 3 * unit, anchor };
 }
 
+/** Place pocket labels in screen-readable boxes, nudging colliding names along
+ *  the tangent of their orbit. A connector is rendered for every nudge so a
+ *  moved label remains unambiguously attached to its pocket dot. */
+export function pocketLabelLayout(chart, point, radius, unit, tuning = GALAXY.systemMap) {
+  const gap = 4 * unit;
+  const labels = chart.nodes.map(node => {
+    const dot = point(node.pos);
+    const base = pocketLabelPosition(node, dot, radius, unit, tuning);
+    const width = Math.max(8 * unit, String(node.pocket.n || "").length * 6.4 * unit);
+    const height = 14 * unit;
+    return { node, dot, base, x: base.x, y: base.y, anchor: base.anchor, width, height, moved: false };
+  });
+  const boxFor = label => {
+    const left = label.anchor === "end" ? label.x - label.width : label.anchor === "middle" ? label.x - label.width / 2 : label.x;
+    return { left, right: left + label.width, top: label.y - 11 * unit, bottom: label.y + 4 * unit };
+  };
+  const overlaps = (a, b) => a.left < b.right + gap && a.right > b.left - gap &&
+    a.top < b.bottom + gap && a.bottom > b.top - gap;
+  const placed = [];
+  for (const label of labels) {
+    const horizontal = label.anchor !== "middle";
+    const step = Math.max((horizontal ? label.height : label.width) + gap, 0.01);
+    let chosen = null;
+    // There is no viewport constraint on label text. Keep widening the tangent
+    // search until a finite set of earlier boxes cannot collide with it; this
+    // guarantees that a crowded chart never falls back to overlapping names.
+    for (let i = 0; !chosen; i++) {
+      const offset = i === 0 ? 0 : (i % 2 ? -1 : 1) * Math.ceil(i / 2) * step;
+      const candidate = { ...label,
+        x: label.base.x + (horizontal ? 0 : offset),
+        y: label.base.y + (horizontal ? offset : 0),
+      };
+      const box = boxFor(candidate);
+      if (!placed.some(other => overlaps(box, other.box))) chosen = { ...candidate, box };
+    }
+    chosen.moved = Math.abs(chosen.x - chosen.base.x) > 1e-9 || Math.abs(chosen.y - chosen.base.y) > 1e-9;
+    placed.push(chosen);
+  }
+  return new Map(placed.map(label => [label.node.id, label]));
+}
+
 /** A centred local box around the pockets and their outward exit stubs. */
 export function systemChartBounds(chart, padding = GALAXY.systemMap.padding) {
   const points = [...chart.nodes.map(n => n.pos), ...chart.exits.map(e => e.end)];
@@ -253,9 +294,13 @@ export function interpolateViewBox(from, to, t) {
 /** Keep a right-click popup inside the chart viewport. */
 export function contextMenuPosition(x, y, viewport = { width: 800, height: 600 }, tuning = GALAXY.map.context) {
   const width = viewport.width || 800, height = viewport.height || 600;
+  const offsetX = Number.isFinite(tuning.offsetX) ? tuning.offsetX : 8;
+  const anchorY = Number.isFinite(tuning.anchorY) ? tuning.anchorY : 42;
   return {
-    left: clamp(x, tuning.margin, Math.max(tuning.margin, width - tuning.width - tuning.margin)),
-    top: clamp(y, tuning.margin, Math.max(tuning.margin, height - tuning.height - tuning.margin)),
+    // Keep the menu just to the right of the pointer so its first action is
+    // reachable with a small horizontal movement rather than a long downward one.
+    left: clamp(x + offsetX, tuning.margin, Math.max(tuning.margin, width - tuning.width - tuning.margin)),
+    top: clamp(y - anchorY, tuning.margin, Math.max(tuning.margin, height - tuning.height - tuning.margin)),
   };
 }
 
@@ -786,7 +831,7 @@ function onClickNow(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that pocket.";
     else if (route.length < 2) view.notice = "You are already in that pocket.";
-    else { setDestination(destination); view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { setDestination(destination); view.routePage = 0; view.notice = ""; }
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
@@ -900,12 +945,18 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const a = point(start), b = point(end);
     return `<g class="sm-system-route sm-system-route-exit" data-route-from="${esc(from)}" data-route-to="${esc(to)}"><line class="sm-route-exit-edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><path class="sm-system-route-arrow" d="${arrowPath(a, b, 0.7, 5 * unit)}"/></g>`;
   }).join("");
+  const pocketRadius = GALAXY.systemMap.pocketRadius * unit;
+  const labels = pocketLabelLayout(chart, point, pocketRadius, unit);
   const nodes = chart.nodes.map(node => {
     const [x, y] = point(node.pos);
     const current = node.id === here.id;
     const station = placeDef(node.pocket.id).features.some(feature => feature.kind === "station");
-    const radius = GALAXY.systemMap.pocketRadius * unit;
-    const { x: lx, y: ly, anchor } = pocketLabelPosition(node, [x, y], radius, unit);
+    const label = labels.get(node.id);
+    const radius = pocketRadius;
+    const { x: lx, y: ly, anchor } = label;
+    const labelLink = label.moved
+      ? `<line class="sm-label-link" x1="${x}" y1="${y}" x2="${lx}" y2="${ly}"/>`
+      : "";
     const dot = station
       ? `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`
       : `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
@@ -913,6 +964,7 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}" data-pocket="${esc(node.id)}"${peerAttr}
       role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
+      ${labelLink}
       ${dot}
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
     </g>`;
@@ -1060,10 +1112,10 @@ function pocketMenuMarkup(world, view, from, rootRect) {
   return `<div class="sm-context" role="menu" tabindex="-1" aria-label="${esc(choice.title)}"
     style="left:${pos.left + (rootRect.left || 0)}px;top:${pos.top + (rootRect.top || 0)}px;width:${GALAXY.map.context.width}px">
     <strong>${esc(choice.title)}</strong>
+    <button type="button" role="menuitem" data-action="set-pocket-destination">Set destination</button>
     ${choice.canWarp
       ? `<button type="button" role="menuitem" data-action="travel" data-to="${esc(choice.pocket.id)}">Warp to ${esc(choice.title)}</button>`
       : `<p class="sm-context-note">${esc(choice.status)}</p>`}
-    <button type="button" role="menuitem" data-action="set-pocket-destination">Set destination</button>
   </div>`;
 }
 

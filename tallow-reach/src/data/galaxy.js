@@ -51,7 +51,7 @@ export const GALAXY = {
   map: {
     padding: 90, nodeRadius: 5, homeRadius: 8, minZoom: 0.6, maxZoom: 5, zoomStep: 1.25,
     panSpeed: 1, systemEntryZoom: 2.5, transitionMs: 260,
-    context: { width: 240, height: 112, margin: 8 },
+    context: { width: 240, height: 112, margin: 8, offsetX: 8, anchorY: 42 },
   },
 
   // The zoomed-in map of one system. A visual-only star/black hole sits at the
