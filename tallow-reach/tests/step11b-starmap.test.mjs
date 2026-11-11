@@ -645,6 +645,8 @@ test("11B: system destination popup, route display and J follow ordinary checked
   assert.ok(!mapRoot.innerHTML.includes('data-action="system-warp"'), "remote systems have no direct warp");
   click({ action: "set-destination" });
   assert.equal(ui.state.ui.destination, target.id);
+  assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
+    "system destinations also do not add the generic bottom confirmation notice");
   assert.match(mapRoot.innerHTML, /class="sm-route-edge"/);
   const connectionPaths = [...mapRoot.innerHTML.matchAll(/class="sm-edge" data-edge="[^"]+" d="([^"]+)"/g)].map(m => m[1]);
   const highlightedPaths = [...mapRoot.innerHTML.matchAll(/class="sm-route-edge" d="([^"]+)"/g)].map(m => m[1]);
@@ -1100,8 +1102,9 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
     assert.ok(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top,
       `${labelValues[i].node.pocket.n} and ${labelValues[j].node.pocket.n} do not overlap`);
   }
-  assert.ok(labelValues.some(label => label.node.pocket.n === "Gate to Fallowwatch" && label.moved),
-    "the crowded Galedrift gate label is nudged away and can be connected to its dot");
+  const fallowLabel = labelValues.find(label => label.node.pocket.n === "Gate to Fallowwatch");
+  assert.ok(fallowLabel?.moved && fallowLabel.anchor === "start" && fallowLabel.x > fallowLabel.dot[0],
+    "the crowded Galedrift Fallowwatch label moves to the dot's right and can be connected to it");
   assert.ok(systemChartBounds(chart).every(Number.isFinite));
   assert.ok(systemChartViewBox(world, { selected: "meridian", mode: "system", systemZoom: 1, systemPan: [0, 0] }).every(Number.isFinite));
   const previous = GALAXY_OVERRIDES.places.hollow;

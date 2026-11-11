@@ -10,14 +10,14 @@ then `(Star)` or `(Black hole)`. The small native hover tooltips on pockets and 
 but the blue/orange **right-click popups remain**. Galaxy panning now follows the pointer at a restrained speed and pans
 a little farther when zoomed out. System-map star/black-hole graphics now scale with zoom. Gate
 pocket names sit clear of the orange exit stubs, and the neighbouring-system name at a stub is clickable.
-Crowded pocket names are separated automatically; a nudged name has a small connector back to its dot,
-including the close Galereach/Galedrift gate labels such as Sablewatch and Fallowwatch.
+Crowded pocket names avoid nearby dots and are separated automatically; a moved name has a small connector
+back to its dot, including the close Galereach/Galedrift gate labels such as Sablewatch and Fallowwatch.
 
 **M opens the starmap** while flying; zoom into a system dot to open its pocket map. **Right-click a
 pocket** and choose **Set destination** (the first menu action) or **Warp to …** to run the existing warp
 sequence; the popup opens immediately to the pointer's right and left-clicking a pocket is inert.
-A successful pocket destination updates the route without the generic bottom confirmation notice; useful
-refusal/error notices still appear. Gate stubs point to the exact neighbouring system; double-clicking the
+A successful destination updates the route without the generic bottom confirmation notice in either map mode;
+useful refusal/error notices still appear. Gate stubs point to the exact neighbouring system; double-clicking the
 gate dot/name opens that peer's map, while right-clicking it opens the existing travel popup for its reciprocal gate pocket. The right panel stays compact (system name, current pocket, pocket names), with no warp
 buttons or scrolling. Saves remain **version 16**: seed plus compact discovery/visit notes, not the
 generated map, cores or layout. Old saves and `TR1:` codes still load.

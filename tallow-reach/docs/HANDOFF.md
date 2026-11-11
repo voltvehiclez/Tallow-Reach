@@ -13,7 +13,7 @@ remain in its wrapping title and add the pocket in small parentheses on the fina
 System destinations remain system-only. System pocket maps show solid directed orange overlays for planned
 local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist
 across relogs and future routes are replanned. Pocket menus open beside the pointer with **Set destination**
-first; successful pocket destinations do not show the generic bottom confirmation, while useful refusals remain.
+first; successful destinations do not show the generic bottom confirmation in either map mode, while useful refusals remain.
 The owner live-browser confirmation for these latest refinements is still pending before Step 12 can be marked complete;
 the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
 

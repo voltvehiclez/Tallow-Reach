@@ -226,6 +226,7 @@ export function pocketLabelPosition(node, point, radius, unit, tuning = GALAXY.s
  *  moved label remains unambiguously attached to its pocket dot. */
 export function pocketLabelLayout(chart, point, radius, unit, tuning = GALAXY.systemMap) {
   const gap = 4 * unit;
+  const edgeGap = radius + tuning.labelGap * unit;
   const labels = chart.nodes.map(node => {
     const dot = point(node.pos);
     const base = pocketLabelPosition(node, dot, radius, unit, tuning);
@@ -239,24 +240,58 @@ export function pocketLabelLayout(chart, point, radius, unit, tuning = GALAXY.sy
   };
   const overlaps = (a, b) => a.left < b.right + gap && a.right > b.left - gap &&
     a.top < b.bottom + gap && a.bottom > b.top - gap;
+  // Keep text away from every visible pocket/exit dot, not only from other text.
+  // A little extra padding prevents a nearby label from looking attached to the
+  // wrong gate when two exit pockets are close together.
+  const dotPadding = radius + 4 * unit;
+  const dotBoxes = [...chart.nodes.map(node => point(node.pos)), ...(chart.exits || []).map(exit => point(exit.end))]
+    .map(([x, y]) => ({ left: x - dotPadding, right: x + dotPadding, top: y - dotPadding, bottom: y + dotPadding }));
+  const overlapsDot = box => dotBoxes.some(dot => box.left < dot.right && box.right > dot.left &&
+    box.top < dot.bottom && box.bottom > dot.top);
   const placed = [];
   for (const label of labels) {
-    const horizontal = label.anchor !== "middle";
-    const step = Math.max((horizontal ? label.height : label.width) + gap, 0.01);
-    let chosen = null;
-    // There is no viewport constraint on label text. Keep widening the tangent
-    // search until a finite set of earlier boxes cannot collide with it; this
-    // guarantees that a crowded chart never falls back to overlapping names.
-    for (let i = 0; !chosen; i++) {
-      const offset = i === 0 ? 0 : (i % 2 ? -1 : 1) * Math.ceil(i / 2) * step;
-      const candidate = { ...label,
-        x: label.base.x + (horizontal ? 0 : offset),
-        y: label.base.y + (horizontal ? offset : 0),
-      };
-      const box = boxFor(candidate);
-      if (!placed.some(other => overlaps(box, other.box))) chosen = { ...candidate, box };
+    const horizontal = label.base.anchor !== "middle";
+    const tangentStep = Math.max((horizontal ? label.height : label.width) + gap, 0.01);
+    const candidateOffsets = count => {
+      const offsets = [0];
+      for (let i = 1; i < count; i++) offsets.push((i % 2 ? -1 : 1) * Math.ceil(i / 2) * tangentStep);
+      return offsets;
+    };
+    const candidates = [];
+    const addSide = (anchor, y, offset) => {
+      const x = anchor === "middle" ? label.dot[0] + offset
+        : label.dot[0] + (anchor === "start" ? edgeGap : -edgeGap);
+      candidates.push({ ...label, x, y: y + (anchor === "middle" ? 0 : offset), anchor });
+    };
+    if (horizontal) {
+      // Try the inward/original side first, but flip to the other side before
+      // stacking when that is what keeps the label away from another dot.
+      const opposite = label.base.anchor === "start" ? "end" : "start";
+      addSide(label.base.anchor, label.base.y, 0);
+      addSide(opposite, label.base.y, 0);
+      for (const offset of candidateOffsets(16).slice(1)) {
+        addSide(label.base.anchor, label.base.y, offset);
+        addSide(opposite, label.base.y, offset);
+      }
+    } else {
+      // Vertical labels keep their centred reading first, then use tangent
+      // shifts, followed by a side anchor if a neighbouring dot requires it.
+      for (const offset of candidateOffsets(32)) addSide("middle", label.base.y, offset);
+      addSide("start", label.base.y, 0);
+      addSide("end", label.base.y, 0);
     }
-    chosen.moved = Math.abs(chosen.x - chosen.base.x) > 1e-9 || Math.abs(chosen.y - chosen.base.y) > 1e-9;
+    let chosen = null;
+    // There is no viewport constraint on label text. If the preferred finite
+    // candidates are all occupied, keep extending along the tangent until a
+    // finite set of boxes cannot collide with it.
+    for (let i = 0; !chosen; i++) {
+      const candidate = candidates[i] || (horizontal
+        ? { ...label, x: label.dot[0] + (i % 2 ? -edgeGap : edgeGap), y: label.base.y + Math.ceil(i / 2) * tangentStep, anchor: i % 2 ? "end" : "start" }
+        : { ...label, x: label.base.x + (i % 2 ? -1 : 1) * Math.ceil(i / 2) * tangentStep, y: label.base.y, anchor: "middle" });
+      const box = boxFor(candidate);
+      if (!overlapsDot(box) && !placed.some(other => overlaps(box, other.box))) chosen = { ...candidate, box };
+    }
+    chosen.moved = Math.abs(chosen.x - chosen.base.x) > 1e-9 || Math.abs(chosen.y - chosen.base.y) > 1e-9 || chosen.anchor !== chosen.base.anchor;
     placed.push(chosen);
   }
   return new Map(placed.map(label => [label.node.id, label]));
@@ -819,7 +854,7 @@ function onClickNow(e) {
     view.menu = null;
     if (!route) view.notice = "No route to that system.";
     else if (route.length < 2) view.notice = "You are already in that system.";
-    else { setDestination(id); view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    else { setDestination(id); view.routePage = 0; view.notice = ""; }
     render();
   } else if (action === "set-pocket-destination") {
     const from = localPlayer()?.place || state.place;
