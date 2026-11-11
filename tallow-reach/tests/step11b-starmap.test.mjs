@@ -485,7 +485,7 @@ test("11B: gate exits are blue, station pockets are square, and a remote label o
   ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
 });
 
-test("11B: a real double-click reaches a gate dot before its single-click menu renders", () => {
+test("11B: a real double-click still reaches a gate dot after immediate system selection", () => {
   const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
   const P = ui.configurePlayer(ui.createPlayer(), save.profile);
   P.docked = false; P.place = "reach";
@@ -495,9 +495,9 @@ test("11B: a real double-click reaches a gate dot before its single-click menu r
   assert.ok(galereach);
   const systemTarget = { dataset: { system: galereach.id }, disabled: false };
   const eventFor = target => ({ target: { closest: () => target }, detail: 1, clientX: 150, clientY: 150 });
-  // Click one is held back rather than replacing the SVG node with a menu.
+  // A galaxy system selects immediately; double-click navigation still follows.
   mapRoot.handlers.click(eventFor(systemTarget));
-  assert.equal(ui.state.ui.starmap.selected, "meridian");
+  assert.equal(ui.state.ui.starmap.selected, galereach.id);
   mapRoot.handlers.click({ ...eventFor(systemTarget), detail: 2 });
   mapRoot.handlers.dblclick({ target: { closest: () => systemTarget }, preventDefault() {} });
   assert.equal(ui.state.ui.starmap.mode, "system");
@@ -648,6 +648,9 @@ test("11B: system destination popup, route display and J follow ordinary checked
   assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
     "system destinations also do not add the generic bottom confirmation notice");
   assert.match(mapRoot.innerHTML, /class="sm-route-edge"/);
+  assert.match(mapRoot.innerHTML, /class="route-marker route-marker-start"/);
+  assert.match(mapRoot.innerHTML, /class="route-marker route-marker-intermediate"/);
+  assert.match(mapRoot.innerHTML, /class="route-marker route-marker-destination"/);
   const connectionPaths = [...mapRoot.innerHTML.matchAll(/class="sm-edge" data-edge="[^"]+" d="([^"]+)"/g)].map(m => m[1]);
   const highlightedPaths = [...mapRoot.innerHTML.matchAll(/class="sm-route-edge" d="([^"]+)"/g)].map(m => m[1]);
   assert.ok(highlightedPaths.length > 0 && highlightedPaths.every(path => connectionPaths.includes(path)), "highlight follows the same bent connection lines");
@@ -710,6 +713,9 @@ test("11B: a routed system map separates solid local hops from dotted gate exits
   const galaxyMarkup = mapRoot.innerHTML;
   assert.match(galaxyMarkup, /class="sm-route-edge"/);
   assert.match(galaxyMarkup, /class="sm-route-arrow"/);
+  assert.match(galaxyMarkup, /class="sm-node[^"]*route-start/);
+  assert.match(galaxyMarkup, /class="sm-node[^"]*route-intermediate/);
+  assert.match(galaxyMarkup, /class="sm-node[^"]*route-destination/);
   mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: galereach.id } }) }, preventDefault() {} });
   const html = mapRoot.innerHTML;
   const incomingFrom = route[1], incomingTo = route[2], localFrom = route[2], localTo = route[3], outgoingFrom = route[3], outgoingTo = route[4];
@@ -745,7 +751,7 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
     if (sel === ".sm-details") return { getBoundingClientRect: () => ({ bottom: panelBottom }) };
     if (sel === ".sm-route") {
       const html = mapRoot.innerHTML.match(/<ol class="sm-route-list">([\s\S]*?)<\/ol>/)?.[1] || "";
-      const count = (html.match(/<li(?: [^>]*)?><span aria-hidden=/g) || []).length;
+      const count = (html.match(/<li(?: [^>]*)?><span class="route-marker[^"]*" aria-hidden=/g) || []).length;
       return { getBoundingClientRect: () => ({ top: 200, height: 60 + 22 * count }),
         querySelector: () => ({ querySelectorAll: () => Array(count).fill({}), getBoundingClientRect: () => ({ height: 22 * count }) }),
         querySelectorAll: () => [] };
@@ -765,7 +771,7 @@ test("11B: long routes page through all stops, can be cleared, and replan when l
   for (const id of currentRoute) assert.ok(routeList.includes(world.systemsById[world.pocketsById[id].parent].n), `shows system for ${id}`);
   assert.doesNotMatch(routeList, /<small>|Gate to |route-done|✓/);
   assert.match(routeList, /class="route-destination"/);
-  assert.equal((routeList.match(/<li(?: [^>]*)?><span aria-hidden=/g) || []).length, stopCount);
+  assert.equal((routeList.match(/<li(?: [^>]*)?><span class="route-marker[^"]*" aria-hidden=/g) || []).length, stopCount);
   assert.match(routeList, /aria-current="location"/);
   const gates = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
   gates.forEach(l => { l.enabled = false; });
@@ -811,6 +817,9 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   assert.doesNotMatch(css, /\.sm-route-edge\s*\{[^}]*stroke-dasharray/);
   assert.match(css, /\.sm-route-exit-edge\s*\{[^}]*stroke-dasharray:\s*5 4/);
   assert.match(css, /\.sm-route-arrow/);
+  assert.match(css, /\.route-marker-start/);
+  assert.match(css, /\.route-marker-intermediate/);
+  assert.match(css, /\.route-marker-destination/);
 });
 
 test("11B: pocket destination follows J all the way past a remote arrival gate", () => {
@@ -840,6 +849,7 @@ test("11B: pocket destination follows J all the way past a remote arrival gate",
   const entry = route.at(-2);
   assert.ok(mapRoot.innerHTML.includes(`data-route-from="${entry}" data-route-to="${target.id}"`), "remote target map shows its final internal hop");
   assert.match(mapRoot.innerHTML, /class="sm-system-route-arrow"/, "local hop has a directional arrow");
+  assert.match(mapRoot.innerHTML, /class="sm-node[^"]*route-destination/, "the pocket target uses the destination marker");
   const gates = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
   gates.forEach(l => { l.enabled = false; }); click("labels");
   assert.ok(!mapRoot.innerHTML.includes('class="sm-system-route"'), "blocked route draws no stale local line");

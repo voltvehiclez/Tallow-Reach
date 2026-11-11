@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Add route markers and instant galaxy selection
+
+- Shared HUD and starmap route rows now use a filled amber start marker, small blue intermediate markers and a concentric amber destination marker. The same roles are drawn on route systems and route pockets, preserving the existing solid/dotted route lines.
+- Selecting a system with one click in the large galaxy chart is immediate; pocket/gate double-click protection remains in place.
+- Added marker and immediate-selection regressions. Full `npm test` passes **347/347**; `npm run build` succeeds at **706 KB**. The refreshed browser preview is in `/tmp/tallow-reach-preview/game/tallow-reach.html` and still needs the next live check.
+
+---
+
 ## 2026-11-10: Clarify pocket menus, labels and exact route destinations
 
 - Pocket-map context menus now open immediately to the right of the pointer with **Set destination** as the nearest action; existing legality checks, Warp actions, refusal notices and double-click navigation remain intact. Successful destinations in either map mode no longer add the generic bottom `Destination set. Press J for the next warp.` notice.

@@ -6,9 +6,9 @@ what to run and what to click. These docs are the project's memory across chats:
 ones before changing anything, and update them when decisions or state change.
 
 Flight HUD route: “Route to” shows the destination and count of systems still to enter, followed
-by remaining system names with amber arrows; the current system is blue and the destination is bold amber
+by remaining system names with start, blue-intermediate and amber destination markers; the current system is blue and the destination is bold amber
 (current stays blue when both). A blocked route shows no count. The starmap route list
-also shows only remaining systems and arrows, with measured pagination; exact pocket destinations
+also shows only remaining systems and those markers, with measured pagination; exact pocket destinations
 remain in its wrapping title and add the pocket in small parentheses on the final system row only.
 System destinations remain system-only. System pocket maps show solid directed orange overlays for planned
 local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist
@@ -68,9 +68,9 @@ the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
   Station pockets use square map icons and varied generated station names; core radii are map units so the
   graphic scales with system zoom; pocket dots/labels stay screen-sized. Gate pocket names
   sit inward clear of orange stubs, and neighbouring-system labels are clickable travel targets quoting the
-  reciprocal gate pocket. Real first clicks on system/gate nodes wait briefly before rendering their single-click
-  selection/menu so a browser double-click reaches the original SVG target; double-clicking Galereach or a gate
-  exit opens the peer system map. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out.
+  reciprocal gate pocket. Galaxy system clicks select immediately; pocket/gate first clicks still wait briefly before
+  rendering their single-click menu so a browser double-click reaches the original SVG target. Double-clicking
+  Galereach or a gate exit opens the peer system map. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out.
   `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
   win. Open-world systems allow **free warp to any local pocket** and omit internal blue lines. The data
   opt-out `intraSystem: "links"` restores internal routes/lines for future route-only instances; the main
@@ -84,7 +84,7 @@ the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
 - **Destination navigation:** right-click a galaxy node for **Set destination** and, if currently at
   its directly connected gate, **Warp to**. `findRouteToSystem` searches minimum executable warp hops
   to any pocket in a destination system (normally the arrival gate), respecting policies, enabled links, modes,
-  requirements and currently unsupported costs. The galaxy highlights the route; an adaptive arrow list
+  requirements and currently unsupported costs. The galaxy highlights the route; a shared route-marker list
   below pocket rows shows all remaining stops that fit, adding page arrows only when needed. Pocket popups also offer
   **Set destination**; `findRouteToPocket` plans to that exact pocket, and entering its system does not
   clear it before reaching the pocket. `J` in flight starts one

@@ -198,14 +198,15 @@ asking the remaining VISION questions.
       unrelated system dots. Previously visited systems should appear light blue; the current system is orange. Set a destination near the
       outer edge and check that the route has at least ten system-to-system gate crossings.
 - [ ] With a route set, close the map and check the remaining stops below Boost. Press J for each
-      hop: flight should show arrows beside the remaining system names, highlight your current system blue,
+      hop: flight should show start/intermediate/destination markers beside the remaining system names, highlight your current system blue,
       and show a count of systems still to enter next to the destination (excluding your current
       system). No completed ticks, pocket names or jump counts should appear in the list. The list
       updates after each jump and disappears at the destination or when cleared. The destination
       system should stand out in bold amber without a diamond on both lists. For a pocket destination,
       only the final system row should add its pocket in a small parenthetical, for example
-      `Galereach (Sablewatch)`; a system destination must stay system-only. The starmap list should also
-      show only systems and arrows (no gate-to-gate text or completed ticks); check paging. Test a pocket
+      `Galereach (Sablewatch)`; a system destination must stay system-only. Both lists should use the
+      filled amber start marker, small blue intermediate marker and concentric amber destination marker;
+      the starmap should still show only systems (no gate-to-gate text or completed ticks); check paging. Test a pocket
       destination, a blocked route (no count), a detour, and a long route (scroll without zooming or firing).
 - [ ] Set a long-named destination such as Kestreldrift Expanse: the starmap route heading and
       pocket names should wrap, not end in an ellipsis. Open a system the route passes through:
@@ -219,14 +220,14 @@ asking the remaining VISION questions.
       Importing replaces your current game, so export your current save first.
 - [ ] While flying with no destination, press **J**. Expect **No destination set** and no warp.
 - [ ] Press **M** for the galaxy web. Right-click a remote system (for example Galerest), choose
-      **Set destination**, and check the highlighted route and the arrowed stops below the pocket list.
-      All stops that fit should be visible without arrows. Reduce the window height: ‹/› appear only
+      **Set destination**, and check the highlighted route and the marked stops below the pocket list.
+      All stops that fit should be visible without paging controls. Reduce the window height: ‹/› appear only
       if needed; the destination system is bold amber.
 - [ ] Close the map. Press **J** once: you should warp only to the next pocket on the route. If that is
       your local gate, press **J** again after the warp completes to cross into the next system. Reopen
       the map to check the remaining route updates, then continue until arrival clears the destination.
-- [ ] Open a system pocket map. Right-click a local pocket and check that **Set destination** appears below
-      **Warp to**; a left-click alone must not open a menu. Set it, close the map and press **J**; it should
+- [ ] Open a system pocket map. Right-click a local pocket and check that **Set destination** appears first,
+      above **Warp to**; a left-click alone must not open a menu. Set it, close the map and press **J**; it should
       warp to that exact pocket and clear the route. Try the pocket you are already in: it should say you are already there.
 - [ ] Inspect a remote system's pocket map and right-click a non-gate pocket. Even though it says **No direct
       route**, choose **Set destination**. The heading should name the exact target pocket; the list

@@ -38,6 +38,33 @@ function arrowPath(a, b, fraction = 0.68, size = 6) {
   return `M${x + ux * size} ${y + uy * size} L${x - ux * size - uy * size * 0.65} ${y - uy * size + ux * size * 0.65} L${x - ux * size + uy * size * 0.65} ${y - uy * size - ux * size * 0.65} Z`;
 }
 
+function routeSystemIds(world, route) {
+  if (!Array.isArray(route)) return [];
+  const ids = [];
+  for (const pocketId of route) {
+    const systemId = world.pocketsById?.[pocketId]?.parent;
+    if (systemId && ids.at(-1) !== systemId) ids.push(systemId);
+  }
+  return ids;
+}
+
+function routeRole(id, routeIds, startId, destinationId) {
+  if (!routeIds.has(id)) return null;
+  return { start: id === startId, destination: id === destinationId, intermediate: id !== startId && id !== destinationId };
+}
+
+function routeMarkerMarkup(x, y, radius, role, unit) {
+  if (!role) return "";
+  const rings = role.destination
+    ? `<circle class="sm-route-marker sm-route-marker-destination-outer" cx="${x}" cy="${y}" r="${radius + 7 * unit}"/>
+       <circle class="sm-route-marker sm-route-marker-destination-inner" cx="${x}" cy="${y}" r="${radius + 3 * unit}"/>`
+    : "";
+  const start = role.start && !role.destination
+    ? `<circle class="sm-route-marker sm-route-marker-start" cx="${x}" cy="${y}" r="${radius + 4 * unit}"/>`
+    : "";
+  return rings + start;
+}
+
 /** Pure view helpers (tested without a browser). */
 export function visibleSystems(world, knowledge = {}) {
   return world.systems.filter(s => systemVisible(world, s.id, knowledge))
@@ -797,9 +824,18 @@ function onClick(e) {
   if (!view) return;
   const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");
   const target = navigationTarget(button, view);
-  // A real first click must not re-render a delegated SVG target before the
-  // browser has a chance to emit dblclick. Headless tests call this handler
-  // without `detail`, so their immediate single-click semantics remain intact.
+  // Galaxy selection is deliberately immediate. The second click still reaches
+  // the delegated dblclick handler because the selected system is rendered at
+  // the same chart location; pocket/gate targets retain their protected delay.
+  if (target?.kind === "system" && view.mode === "galaxy" && e.detail === 1) {
+    clearPendingNavigationClick();
+    performSingleNavigationClick({ ...target, mode: view.mode });
+    return;
+  }
+  // A real first click on a pocket-map navigation target must not re-render its
+  // delegated SVG node before the browser has a chance to emit dblclick.
+  // Headless tests call this handler without `detail`, so their immediate
+  // single-click semantics remain intact.
   if (target && (e.detail === 1 || e.detail === 2)) {
     if (e.detail === 2) {
       clearPendingNavigationClick();
@@ -928,15 +964,22 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
     const mask = line.maskId ? ` mask="url(#${line.maskId})"` : "";
     return `<path class="sm-route-edge" d="${line.path}"${mask}/><path class="sm-route-arrow" d="${arrowPath(start, end, 0.68, 6 * unit)}"${mask}/>`;
   }).join("");
+  const routeIds = new Set(routeSystemIds(world, route));
+  const routeStart = [...routeIds][0];
+  const routeDestination = [...routeIds].at(-1);
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
     const chosen = s.id === view.selected;
     const radius = (current ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) * unit;
+    const role = routeRole(s.id, routeIds, routeStart, routeDestination);
+    const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
+    const marker = routeMarkerMarkup(s.pos[0], -s.pos[1], radius, role, unit);
     const label = chosen || current || view.labels;
-    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}"
+    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${roleClass}"
       data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}">
       <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
+      ${marker}
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
       ${chosen ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
       ${label ? `<text x="${s.pos[0] + radius + 5 * unit}" y="${-s.pos[1] + 3 * unit}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}</text>` : ""}
@@ -980,6 +1023,9 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const a = point(start), b = point(end);
     return `<g class="sm-system-route sm-system-route-exit" data-route-from="${esc(from)}" data-route-to="${esc(to)}"><line class="sm-route-exit-edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><path class="sm-system-route-arrow" d="${arrowPath(a, b, 0.7, 5 * unit)}"/></g>`;
   }).join("");
+  const routePocketIds = new Set(Array.isArray(route) ? route : []);
+  const routeStartPocket = Array.isArray(route) ? route[0] : null;
+  const routeDestinationPocket = Array.isArray(route) ? route.at(-1) : null;
   const pocketRadius = GALAXY.systemMap.pocketRadius * unit;
   const labels = pocketLabelLayout(chart, point, pocketRadius, unit);
   const nodes = chart.nodes.map(node => {
@@ -988,6 +1034,9 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const station = placeDef(node.pocket.id).features.some(feature => feature.kind === "station");
     const label = labels.get(node.id);
     const radius = pocketRadius;
+    const role = routeRole(node.id, routePocketIds, routeStartPocket, routeDestinationPocket);
+    const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
+    const marker = routeMarkerMarkup(x, y, radius, role, unit);
     const { x: lx, y: ly, anchor } = label;
     const labelLink = label.moved
       ? `<line class="sm-label-link" x1="${x}" y1="${y}" x2="${lx}" y2="${ly}"/>`
@@ -996,9 +1045,10 @@ function systemMarkup(world, view, know, here, unit, route = null) {
       ? `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`
       : `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
     const peerAttr = node.peerSystemId ? ` data-peer-system="${esc(node.peerSystemId)}"` : "";
-    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}" data-pocket="${esc(node.id)}"${peerAttr}
+    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}${roleClass}" data-pocket="${esc(node.id)}"${peerAttr}
       role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
+      ${marker}
       ${labelLink}
       ${dot}
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
