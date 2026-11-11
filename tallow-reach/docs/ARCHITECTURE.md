@@ -499,9 +499,11 @@ These are real, current limits. None of them is a bug in play today.
   squares and generated trader features/station pockets use deterministic varied names; the right panel stays
   a compact name-only overview. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing
   gently when zoomed out; core radii are map units so system zoom scales the graphic. An active destination
-  draws orange dashed overlays and small directional arrows on the relevant galaxy links, local pocket hops
-  and the outward gate exit. Clicking/right-clicking a legal local/gate pocket or gate-neighbour label offers
-  **Warp to**; the sim rechecks the quote and emits `travel-denied` on refusal. Single-player chart pauses the
+  draws solid orange overlays and small directional arrows on galaxy links and local pocket hops; only
+  cross-system gate exit stubs are orange dashed, including an incoming stub highlighted in reverse when an
+  intermediate system is viewed. Left-clicking a pocket-map pocket is inert; right-clicking a legal local/gate
+  pocket or gate-neighbour label offers **Warp to** and **Set destination**. The sim rechecks the quote and emits
+  `travel-denied` on refusal. Single-player chart pauses the
   frame gate and suspends audio; `state.multiplayer` is the future host flag that keeps a hosted world running.
   Generated gate traders are removed from gate pockets and receive their own station pocket/internal link;
   explicit `allowStation`, `stationPlacement: "gate"` or feature records can deliberately co-locate one.

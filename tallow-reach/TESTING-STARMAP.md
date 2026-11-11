@@ -7,14 +7,14 @@ including a gate, without following an internal route. Optional internal blue li
 **system map only**; the main galaxy still shows its explicit gate routes. Each system has a central
 **star (95% chance) or black hole (5%)** with a **permanent two-line label** below it: the proper name,
 then `(Star)` or `(Black hole)`. The small native hover tooltips on pockets and central bodies are gone,
-but the blue/orange **click popups remain**. Galaxy panning now follows the pointer at a restrained speed and pans
+but the blue/orange **right-click popups remain**. Galaxy panning now follows the pointer at a restrained speed and pans
 a little farther when zoomed out. System-map star/black-hole graphics now scale with zoom. Gate
 pocket names sit clear of the orange exit stubs, and the neighbouring-system name at a stub is clickable.
 
-**M opens the starmap** while flying; zoom into a system dot to open its pocket map. **Click or
-right-click a pocket** and choose **Warp to …** to run the existing warp sequence. Gate stubs point to the
-exact neighbouring system; clicking that system's name opens the same travel popup for its reciprocal
-gate pocket. The right panel stays compact (system name, current pocket, pocket names), with no warp
+**M opens the starmap** while flying; zoom into a system dot to open its pocket map. **Right-click a
+pocket** and choose **Warp to …** to run the existing warp sequence; left-clicking a pocket is inert.
+Gate stubs point to the exact neighbouring system; double-clicking the gate dot/name opens that peer's map,
+while right-clicking it opens the existing travel popup for its reciprocal gate pocket. The right panel stays compact (system name, current pocket, pocket names), with no warp
 buttons or scrolling. Saves remain **version 16**: seed plus compact discovery/visit notes, not the
 generated map, cores or layout. Old saves and `TR1:` codes still load.
 
@@ -95,15 +95,15 @@ everything passes, say **“11B playtest passed”** so step 11 can be ticked.
       Close are reachable by keyboard. Inside a system map, Tab to a pocket dot or a neighbouring-system
       gate label and press Enter/Space (or Shift+F10 / the Context Menu key) to open its popup.
       **Esc closes the popup first**, not the chart.
-- [ ] **2.7** Select a far-away system and zoom into its pocket map. Click or right-click one of its
-      pockets, or a neighbouring-system name at a gate stub: the popup explains **No direct route.
+- [ ] **2.7** Select a far-away system and zoom into its pocket map. Right-click one of its pockets,
+      or a neighbouring-system name at a gate stub: the popup explains **No direct route.
       Travel through connected pockets first.** and has no clickable **Warp to**. You cannot warp there
       in one jump.
 - [ ] **2.8** Open Meridian's system map. Its centre shows a star with the permanent label **Meridian**
       and, on the next row, **(Star)** — not an extra pocket row. Hovering does not show a small native
       tooltip box; the ring/glow may still highlight. Tab to the star and check the same label/highlight by
       keyboard focus. Click, right-click or press Enter/Space on it: no warp popup or travel must occur.
-      Hover a pocket dot: no native tooltip box; clicking it still opens the usual popup.
+      Hover a pocket dot: no native tooltip box; left-clicking it does nothing and right-clicking opens the usual popup.
 - [ ] **2.9** Return to the galaxy and open **Duskdrift** (`sys-001`, use the Inspect dropdown on the default seed). Its centre is a dark **black hole** with a bright ring and the permanent label
       **Duskdrift** / **(Black hole)**. It is also absent from the pocket list and cannot be warped to. Other systems may have
       either body; the 5% chance is per system, not a guaranteed exact count in every small sample.
@@ -203,7 +203,9 @@ asking the remaining VISION questions.
       destination, a blocked route (no count), a detour, and a long route (scroll without zooming or firing).
 - [ ] Set a long-named destination such as Kestreldrift Expanse: the starmap route heading and
       pocket names should wrap, not end in an ellipsis. Open a system the route passes through:
-      each planned local pocket-to-pocket hop should have an orange arrow showing its direction.
+      each planned local pocket-to-pocket hop should be a solid orange line with a directional arrow.
+      The incoming and outgoing gate exit stubs should be dotted orange, including the incoming stub
+      highlighted in reverse. On the large galaxy map, every route connection should be a solid orange line.
       Check a local pocket destination, a remote destination, and an unrelated system; clear or block
       the route and verify the orange lines disappear. Pocket and gate interactions should still work.
 - [ ] If you have a backup saved at a gate removed by the map change, import it: the pilot should resume
@@ -217,10 +219,10 @@ asking the remaining VISION questions.
 - [ ] Close the map. Press **J** once: you should warp only to the next pocket on the route. If that is
       your local gate, press **J** again after the warp completes to cross into the next system. Reopen
       the map to check the remaining route updates, then continue until arrival clears the destination.
-- [ ] Open a system pocket map. Click a local pocket and check that **Set destination** appears below
-      **Warp to**. Set it, close the map and press **J**; it should warp to that exact pocket and clear
-      the route. Try the pocket you are already in: it should say you are already there.
-- [ ] Inspect a remote system's pocket map and click a non-gate pocket. Even though it says **No direct
+- [ ] Open a system pocket map. Right-click a local pocket and check that **Set destination** appears below
+      **Warp to**; a left-click alone must not open a menu. Set it, close the map and press **J**; it should
+      warp to that exact pocket and clear the route. Try the pocket you are already in: it should say you are already there.
+- [ ] Inspect a remote system's pocket map and right-click a non-gate pocket. Even though it says **No direct
       route**, choose **Set destination**. The heading should name the exact target pocket; the list
       should show its destination system rather than individual pockets.
       Use J one hop at a time: entering the target system must not clear the route; it clears only when

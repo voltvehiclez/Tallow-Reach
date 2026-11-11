@@ -9,7 +9,7 @@ Flight HUD route: “Route to” shows the destination and count of systems stil
 by remaining system names with amber arrows; the current system is blue and the destination is bold amber
 (current stays blue when both). A blocked route shows no count. The starmap route list
 also shows only remaining systems and arrows, with measured pagination; exact pocket destinations
-remain in its wrapping title. System pocket maps show directed orange overlays for each planned local hop. Destinations persist across relogs and future routes are replanned. The owner passed the Step 11B starmap playtest; the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
+remain in its wrapping title. System pocket maps show solid directed orange overlays for planned local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist across relogs and future routes are replanned. The owner passed the Step 11B starmap playtest; the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
 
 ## Ground rules from the owner (do not break these)
 
@@ -68,11 +68,11 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
   win. Open-world systems allow **free warp to any local pocket** and omit internal blue lines. The data
   opt-out `intraSystem: "links"` restores internal routes/lines for future route-only instances; the main
-  galaxy always keeps explicit gate routes. Active destinations draw orange dashed overlays with small arrows
-  on galaxy links, local pocket hops and the outward gate exit that leaves the current system. **Click/right-click
-  a pocket or gate-neighbour label** (or keyboard-activate it) opens **Warp to …** only for a legal hop and
-  emits the same named travel action. `main.js` calls `startWarp`, which requotes policy/link/cost/requirements
-  and runs the unchanged warp animation.
+  galaxy always keeps explicit gate routes. Active destinations draw solid orange overlays with small arrows
+  on galaxy links and local pocket hops; the outward/incoming cross-system gate exits remain orange dashed.
+  **Right-click a pocket or gate-neighbour label** (or keyboard-activate it) opens **Warp to …** only for a
+  legal hop and emits the same named travel action; left-clicking a pocket-map pocket is inert. `main.js` calls
+  `startWarp`, which requotes policy/link/cost/requirements and runs the unchanged warp animation.
   Refusals emit `travel-denied` and stay visible in the chart. The right panel is a compact overview
   (system name, current pocket, plain pocket rows) with no warp buttons, tier/description cards or scrolling.
 - **Destination navigation:** right-click a galaxy node for **Set destination** and, if currently at
@@ -113,7 +113,7 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **346/346 pass** (including the generated station-local inventory and starmap/station-separation tests;
+- **Results:** `npm test` **347/347 pass** (including the generated station-local inventory and starmap/station-separation tests;
   existing 8B/11B and Step 12 oracles remain green). `npm run build` succeeded: the generated bundle is
   **701 KB** (the tracked HTML must be restored after validation and is not part of this source patch).
   The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save

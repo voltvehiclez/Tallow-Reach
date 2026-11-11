@@ -1048,9 +1048,10 @@ textarea {
 
 /* Navigation remains compact without making the system overview scroll. */
 .sm-system-route { pointer-events: none; }
-.sm-system-route line { stroke: var(--amber); stroke-width: 3; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.sm-system-route line { stroke: var(--amber); stroke-width: 3; vector-effect: non-scaling-stroke; }
 .sm-system-route-arrow, .sm-route-arrow { fill: var(--amber); pointer-events: none; }
-.sm-route-edge, .sm-route-exit-edge { fill: none; stroke: var(--amber); stroke-width: 3; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.sm-route-edge { fill: none; stroke: var(--amber); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.sm-route-exit-edge { fill: none; stroke: var(--amber); stroke-width: 3; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .sm-route { position: relative; margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--line); }
 .sm-route h3 { white-space: normal; overflow-wrap: anywhere; }
 .sm-route ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

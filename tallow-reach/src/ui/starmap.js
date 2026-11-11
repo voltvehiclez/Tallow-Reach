@@ -171,14 +171,22 @@ export function systemRouteSegments(chart, route) {
 }
 
 /** Directed gate exits in the selected system that are consecutive steps in
- *  the executable route. The remote pocket is not a chart node, so these are
- *  separate from systemRouteSegments. */
+ *  the executable route. Incoming route steps are reversed against the local
+ *  exit geometry so the arrival stub is highlighted too. The remote pocket is
+ *  not a chart node, so these are separate from systemRouteSegments. */
 export function systemRouteExits(chart, route) {
   if (!Array.isArray(route)) return [];
   const exits = [];
   for (let i = 1; i < route.length; i++) {
-    const exit = chart.exits.find(candidate => candidate.from === route[i - 1] && candidate.to === route[i]);
-    if (exit) exits.push({ from: exit.from, to: exit.to, exit, a: exit.start, b: exit.end });
+    const from = route[i - 1], to = route[i];
+    let exit = chart.exits.find(candidate => candidate.from === from && candidate.to === to);
+    let reversed = false;
+    if (!exit) {
+      exit = chart.exits.find(candidate => candidate.from === to && candidate.to === from);
+      reversed = !!exit;
+    }
+    if (exit) exits.push({ from, to, exit, reversed,
+      a: reversed ? exit.end : exit.start, b: reversed ? exit.start : exit.end });
   }
   return exits;
 }
@@ -251,10 +259,11 @@ export function contextMenuPosition(x, y, viewport = { width: 800, height: 600 }
   };
 }
 
-/** Targets that have a double-click navigation action. The first click still
- *  keeps its existing select/menu meaning, but it is delayed briefly so the
- *  browser can deliver a real second click to the same SVG node. Rendering a
- *  popup on click one replaces that node and prevents the native dblclick from
+/** Targets that have a double-click navigation action. Galaxy system dots keep
+ *  their single-click selection; pocket-map left clicks stay inert and their
+ *  existing menus are opened by contextmenu. The real click is delayed briefly
+ *  so the browser can deliver a second click to the same SVG node. Rendering a
+ *  popup on click one replaces that node and prevents native dblclick from
  *  reaching this delegated root. */
 function navigationTarget(button, view = state.ui.starmap) {
   if (!button || !view) return null;
@@ -280,9 +289,10 @@ function clearPendingNavigationClick() {
 function performSingleNavigationClick(pending) {
   const view = state.ui.starmap;
   if (!view || view.mode !== pending.mode) return;
+  // Pocket-map left clicks are intentionally inert. Right-clicking the same
+  // node still opens the existing travel/destination menu, while a double
+  // click on a gate target is handled by navigateDoubleClick().
   if (pending.kind === "system") selectSystem(pending.id);
-  else if (pending.kind === "exit") openExitMenu(pending.id, pending.x, pending.y);
-  else openPocketMenu(pending.id, pending.x, pending.y);
 }
 
 function flushPendingNavigationClick() {
@@ -717,12 +727,7 @@ function onClick(e) {
     }
     if (pendingNavigationClick && pendingNavigationClick.key !== target.key) flushPendingNavigationClick();
     clearPendingNavigationClick();
-    const pending = {
-      ...target,
-      mode: view.mode,
-      x: e.clientX ?? 0,
-      y: e.clientY ?? 0,
-    };
+    const pending = { ...target, mode: view.mode };
     pending.timer = setTimeout(() => {
       if (pendingNavigationClick === pending) {
         pendingNavigationClick = null;
@@ -747,14 +752,7 @@ function onClickNow(e) {
   }
   if (!button || button.disabled) return;
   if (button.dataset.system) { selectSystem(button.dataset.system); return; }
-  if (button.dataset.exit) {
-    openExitMenu(button.dataset.exit, e.clientX ?? 0, e.clientY ?? 0);
-    return;
-  }
-  if (button.dataset.pocket) {
-    openPocketMenu(button.dataset.pocket, e.clientX ?? 0, e.clientY ?? 0);
-    return;
-  }
+  if (view.mode === "system" && (button.dataset.exit || button.dataset.pocket)) return;
   const action = button.dataset.action;
   if (action === "close") { uiSound("click"); closeStarmap(); }
   else if (action === "zoom-in") zoomMap(1);
@@ -898,8 +896,8 @@ function systemMarkup(world, view, know, here, unit, route = null) {
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(label)}</text>
     </g>`;
   }).join("");
-  const routeExitLines = systemRouteExits(chart, route).map(({ from, to, exit }) => {
-    const a = point(exit.start), b = point(exit.end);
+  const routeExitLines = systemRouteExits(chart, route).map(({ from, to, a: start, b: end }) => {
+    const a = point(start), b = point(end);
     return `<g class="sm-system-route sm-system-route-exit" data-route-from="${esc(from)}" data-route-to="${esc(to)}"><line class="sm-route-exit-edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><path class="sm-system-route-arrow" d="${arrowPath(a, b, 0.7, 5 * unit)}"/></g>`;
   }).join("");
   const nodes = chart.nodes.map(node => {

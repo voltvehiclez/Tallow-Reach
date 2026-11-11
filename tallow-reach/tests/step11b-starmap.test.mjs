@@ -690,6 +690,37 @@ test("11B: system destination popup, route display and J follow ordinary checked
   ui.applySave(save);
 });
 
+test("11B: a routed system map separates solid local hops from dotted gate exits", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  const world = ui.state.galaxy;
+  const galereach = world.systems.find(system => system.n === "Galereach");
+  const galedrift = world.systems.find(system => system.n === "Galedrift");
+  assert.ok(galereach && galedrift);
+  const route = findRouteToSystem(world, P.place, galedrift.id);
+  assert.deepEqual(route.slice(0, 5).map(id => world.pocketsById[id].parent),
+    ["meridian", "meridian", galereach.id, galereach.id, galedrift.id]);
+  assert.equal(ui.openStarmap(), true);
+  mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-system]") ? { dataset: { system: galedrift.id } } : null },
+    clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+  mapRoot.handlers.click({ target: { closest: () => ({ dataset: { action: "set-destination" }, disabled: false }) } });
+  const galaxyMarkup = mapRoot.innerHTML;
+  assert.match(galaxyMarkup, /class="sm-route-edge"/);
+  assert.match(galaxyMarkup, /class="sm-route-arrow"/);
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: galereach.id } }) }, preventDefault() {} });
+  const html = mapRoot.innerHTML;
+  const incomingFrom = route[1], incomingTo = route[2], localFrom = route[2], localTo = route[3], outgoingFrom = route[3], outgoingTo = route[4];
+  assert.match(html, new RegExp(`class="sm-system-route sm-system-route-exit" data-route-from="${incomingFrom}" data-route-to="${incomingTo}"`),
+    "the incoming Meridian gate exit is highlighted in reverse");
+  assert.match(html, new RegExp(`class="sm-system-route sm-system-route-exit" data-route-from="${outgoingFrom}" data-route-to="${outgoingTo}"`),
+    "the outgoing Galedrift gate exit is highlighted");
+  assert.match(html, new RegExp(`class="sm-system-route" data-route-from="${localFrom}" data-route-to="${localTo}"`),
+    "the local gate-to-gate hop is highlighted as a full line");
+  assert.equal((html.match(/class="sm-route-exit-edge"/g) || []).length, 2);
+  ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
+});
+
 test("11B: long routes page through all stops, can be cleared, and replan when links change", () => {
   const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
   const P = ui.configurePlayer(ui.createPlayer(), save.profile);
@@ -762,7 +793,9 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   const exit = chart.exits[0];
   assert.ok(exit);
   assert.deepEqual(systemRouteExits(chart, [exit.from, exit.to]).map(s => [s.from, s.to]), [[exit.from, exit.to]]);
-  assert.deepEqual(systemRouteExits(chart, [exit.to, exit.from]), [], "the exit overlay is directional");
+  const reverseExit = systemRouteExits(chart, [exit.to, exit.from]);
+  assert.deepEqual(reverseExit.map(s => [s.from, s.to]), [[exit.to, exit.from]], "arrival exits are highlighted in reverse");
+  assert.equal(reverseExit[0].reversed, true);
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const heading = css.match(/\.sm-route h3\s*\{([^}]+)\}/)[1];
   const pocket = css.match(/\.sm-pocket\s*\{([^}]+)\}/)[1];
@@ -770,7 +803,11 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   assert.match(heading, /overflow-wrap:\s*anywhere/);
   assert.doesNotMatch(pocket, /ellipsis|white-space:\s*nowrap/);
   assert.match(css, /\.sm-system-route\s*\{[^}]*pointer-events:\s*none/);
-  assert.match(css, /\.sm-route-edge, \.sm-route-exit-edge\s*\{[^}]*stroke-dasharray:\s*5 4/);
+  assert.match(css, /\.sm-system-route line\s*\{[^}]*stroke:\s*var\(--amber\)/);
+  assert.doesNotMatch(css, /\.sm-system-route line\s*\{[^}]*stroke-dasharray/);
+  assert.match(css, /\.sm-route-edge\s*\{[^}]*stroke:\s*var\(--amber\)/);
+  assert.doesNotMatch(css, /\.sm-route-edge\s*\{[^}]*stroke-dasharray/);
+  assert.match(css, /\.sm-route-exit-edge\s*\{[^}]*stroke-dasharray:\s*5 4/);
   assert.match(css, /\.sm-route-arrow/);
 });
 
@@ -829,7 +866,13 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   assert.equal(ui.openStarmap(), true);
   mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
   const click = data => mapRoot.handlers.click({ target: { closest: () => ({ dataset: data, disabled: false }) } });
+  const rightClickPocket = id => mapRoot.handlers.contextmenu({
+    target: { closest: sel => sel.includes("[data-pocket]") ? { dataset: { pocket: id } } : null },
+    clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {},
+  });
   click({ pocket: "hollow" });
+  assert.equal(ui.state.ui.starmap.menu, null, "left-clicking a pocket is inert");
+  rightClickPocket("hollow");
   assert.ok(mapRoot.innerHTML.indexOf('data-action="travel"') < mapRoot.innerHTML.indexOf('data-action="set-pocket-destination"'));
   click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" });
@@ -837,8 +880,8 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   assert.ok(mapRoot.innerHTML.includes("Kestrel Hollow"));
   click({ action: "clear-destination" });
   assert.ok(!mapRoot.innerHTML.includes('class="sm-system-route"'), "clearing removes local route overlays");
-  click({ pocket: "hollow" }); click({ action: "set-pocket-destination" });
-  click({ pocket: "reach" }); click({ action: "set-pocket-destination" });
+  rightClickPocket("hollow"); click({ action: "set-pocket-destination" });
+  rightClickPocket("reach"); click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "current pocket cannot replace an existing route");
   assert.ok(mapRoot.innerHTML.includes("You are already in that pocket."));
   ui.closeStarmap();
@@ -847,7 +890,9 @@ test("11B: local pocket and gate-label popups plot exact pockets and retain rech
   // A gate-peer label represents its reciprocal pocket, not the star/system.
   assert.equal(ui.openStarmap(), true);
   const exit = pocketConnections(world, "meridian").exits[0];
-  click({ exit: exit.id }); click({ action: "set-pocket-destination" });
+  mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-exit]") ? { dataset: { exit: exit.id } } : null },
+    clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+  click({ action: "set-pocket-destination" });
   assert.deepEqual(ui.state.ui.destination, { pocketId: exit.peerPocketId });
   ui.closeStarmap();
   const blocked = Object.values(world.links).filter(l => l.kind === "gate" && l.enabled !== false);
@@ -882,7 +927,9 @@ test("route destinations autosave immediately, survive relog and clear on arriva
     assert.equal(ui.state.ui.destination, null);
     ui.openStarmap();
     mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
-    click({ pocket: "hollow" }); click({ action: "set-pocket-destination" });
+    mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-pocket]") ? { dataset: { pocket: "hollow" } } : null },
+      clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
+    click({ action: "set-pocket-destination" });
     assert.deepEqual(JSON.parse(mem.get("tr1")).world.destination, { pocketId: "hollow" });
     ui.closeStarmap(); ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
     assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "exact pocket target restored");
@@ -1352,6 +1399,12 @@ test("11B: neighbouring gate-system labels open the shared popup and warp only f
     closest: sel => sel.includes("[data-exit]") ? { dataset: { exit: exit.id } } : null,
   }, clientX: 120, clientY: 140 });
   clickExit();
+  assert.equal(ui.state.ui.starmap.menu, null, "left-clicking a pocket-map gate exit is inert");
+  assert.ok(!mapRoot.innerHTML.includes('class="sm-context"'));
+  const rightClickExit = () => mapRoot.handlers.contextmenu({ target: {
+    closest: sel => sel.includes("[data-exit]") ? { dataset: { exit: exit.id } } : null,
+  }, clientX: 120, clientY: 140, preventDefault() {}, stopPropagation() {} });
+  rightClickExit();
   assert.equal(ui.state.ui.starmap.menu.exitId, exit.id);
   assert.ok(mapRoot.innerHTML.includes('class="sm-context"'));
   assert.ok(mapRoot.innerHTML.includes(`<strong>${peerName}</strong>`));

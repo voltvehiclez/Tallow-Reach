@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Make local route lines solid and pocket menus right-click-only
+
+- Destination overlays on the large galaxy map are solid orange with directional arrows again. On a system pocket map, planned local pocket-to-pocket hops are solid orange; only the cross-system gate exit stubs remain orange dashed, including the incoming stub highlighted in reverse when viewing an intermediate system.
+- Left-clicking a pocket or gate exit in a pocket map is now inert. Right-clicking still opens the existing Warp/Set destination menu, and double-clicking gate targets still opens the adjacent system map.
+- Added exact Meridian → Galereach → Galedrift overlay coverage and left/right-click menu coverage. Step 11B passes **45/45**; full `npm test` passes **347/347** and `npm run build` succeeds at **701 KB**.
+
+---
+
 ## 2026-11-10: Preserve real double-click navigation on starmap dots
 
 - A first click on a galaxy system, gate exit dot or gate pocket no longer immediately replaces the SVG target with a popup. The short single-click delay lets the browser deliver the second click to the same node, so double-clicking Galereach or another adjacent gate now opens that system map; a single click still selects or opens its existing menu.
