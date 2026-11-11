@@ -207,7 +207,7 @@ asking the remaining VISION questions.
       `Galereach (Sablewatch)`; a system destination must stay system-only. Both lists should use the
       filled amber start marker, small blue intermediate marker and concentric amber destination marker;
       the starmap should still show only systems (no gate-to-gate text or completed ticks); check paging. Test a pocket
-      destination, a blocked route (no count), a detour, and a long route (scroll without zooming or firing).
+      destination, a blocked route (no count), a detour, and a long route (the ship HUD shows every route row without an inner scrollbar). The destination circle contains a visible tick in both map route markers.
 - [ ] Set a long-named destination such as Kestreldrift Expanse: the starmap route heading and
       pocket names should wrap, not end in an ellipsis. Open a system the route passes through:
       each planned local pocket-to-pocket hop should be a solid orange line with a directional arrow.

@@ -67,8 +67,7 @@ export function setupHud() {
     markers.push(d);
   }
 
-  // Scrolling or clicking the route must not zoom the camera or fire weapons.
-  el.route?.addEventListener("wheel", e => e.stopPropagation());
+  // Clicking the route must not fire weapons.
   el.route?.addEventListener("mousedown", e => e.stopPropagation());
 
   if (el.warpHint) el.warpHint.textContent = "M starmap";
@@ -209,15 +208,9 @@ export function updateHudRoute(dt, routeElement = el.route) {
   const remaining = Math.max(0, details.stops.length - 1);
   const count = details.available ? ` (${remaining} ${remaining === 1 ? "system" : "systems"})` : "";
   const html = `<h3>Route to ${escapeRouteText(details.title)}${count}</h3>${details.available
-    ? `<ol tabindex="0" aria-label="Route systems">${flightRouteRows(details.stops)}</ol>`
+    ? `<ol aria-label="Route systems">${flightRouteRows(details.stops)}</ol>`
     : `${details.current ? `<p class="route-here" aria-current="location">${escapeRouteText(details.current.system)}</p>` : ""}<p>No route available.</p>`}`;
-  if (routeElement.innerHTML !== html) {
-    const oldList = routeElement.querySelector?.("ol"), oldScroll = oldList?.scrollTop || 0;
-    const placeChanged = !routeCache || routeCache.place !== place || routeCache.key !== key;
-    routeElement.innerHTML = html;
-    const list = routeElement.querySelector?.("ol"), current = list?.querySelector?.(".route-here");
-    if (list) list.scrollTop = placeChanged && current ? Math.max(0, current.offsetTop - list.offsetTop) : oldScroll;
-  }
+  if (routeElement.innerHTML !== html) routeElement.innerHTML = html;
   routeElement.hidden = false;
   routeCache = { key, place, world, player, remaining: 0.5 };
 }

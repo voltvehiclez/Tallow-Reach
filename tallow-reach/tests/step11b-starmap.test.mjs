@@ -716,6 +716,7 @@ test("11B: a routed system map separates solid local hops from dotted gate exits
   assert.match(galaxyMarkup, /class="sm-node[^"]*route-start/);
   assert.match(galaxyMarkup, /class="sm-node[^"]*route-intermediate/);
   assert.match(galaxyMarkup, /class="sm-node[^"]*route-destination/);
+  assert.match(galaxyMarkup, /class="sm-route-marker sm-route-marker-destination-check"/);
   mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: galereach.id } }) }, preventDefault() {} });
   const html = mapRoot.innerHTML;
   const incomingFrom = route[1], incomingTo = route[2], localFrom = route[2], localTo = route[3], outgoingFrom = route[3], outgoingTo = route[4];
@@ -820,6 +821,10 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   assert.match(css, /\.route-marker-start/);
   assert.match(css, /\.route-marker-intermediate/);
   assert.match(css, /\.route-marker-destination/);
+  assert.match(css, /\.route-marker-destination::after\s*\{[^}]*border-width:\s*0 2px 2px 0/);
+  assert.match(css, /\.sm-route-marker-destination-check\s*\{/);
+  const hudRouteList = css.match(/#hud-route ol\s*\{([^}]+)\}/)?.[1] || "";
+  assert.doesNotMatch(hudRouteList, /max-height|overflow-y|scrollbar-width/);
 });
 
 test("11B: pocket destination follows J all the way past a remote arrival gate", () => {

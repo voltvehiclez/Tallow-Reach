@@ -511,7 +511,8 @@ These are real, current limits. None of them is a bug in play today.
   when legal. The sim rechecks the quote and emits `travel-denied` on refusal; successful destinations do not
   add the generic bottom confirmation in either map mode. The shared route list shows a small destination
   pocket parenthetical on the final row only for pocket targets; route rows use distinct start, intermediate and
-  destination markers. Single-player chart pauses the
+  destination markers, with a tick inside the concentric destination marker. The ship HUD renders every route row
+  without an inner scrollbar. Single-player chart pauses the
   frame gate and suspends audio; `state.multiplayer` is the future host flag that keeps a hosted world running.
   Generated gate traders are removed from gate pockets and receive their own station pocket/internal link;
   explicit `allowStation`, `stationPlacement: "gate"` or feature records can deliberately co-locate one.

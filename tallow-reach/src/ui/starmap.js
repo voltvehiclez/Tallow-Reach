@@ -57,7 +57,8 @@ function routeMarkerMarkup(x, y, radius, role, unit) {
   if (!role) return "";
   const rings = role.destination
     ? `<circle class="sm-route-marker sm-route-marker-destination-outer" cx="${x}" cy="${y}" r="${radius + 7 * unit}"/>
-       <circle class="sm-route-marker sm-route-marker-destination-inner" cx="${x}" cy="${y}" r="${radius + 3 * unit}"/>`
+       <circle class="sm-route-marker sm-route-marker-destination-inner" cx="${x}" cy="${y}" r="${radius + 3 * unit}"/>
+       <path class="sm-route-marker sm-route-marker-destination-check" d="M${x - 3.5 * unit} ${y} L${x - 1 * unit} ${y + 3 * unit} L${x + 4.5 * unit} ${y - 4 * unit}"/>`
     : "";
   const start = role.start && !role.destination
     ? `<circle class="sm-route-marker sm-route-marker-start" cx="${x}" cy="${y}" r="${radius + 4 * unit}"/>`
@@ -979,8 +980,8 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
       data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}">
       <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
-      ${marker}
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
+      ${marker}
       ${chosen ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
       ${label ? `<text x="${s.pos[0] + radius + 5 * unit}" y="${-s.pos[1] + 3 * unit}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}</text>` : ""}
     </g>`;
@@ -1048,9 +1049,9 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}${roleClass}" data-pocket="${esc(node.id)}"${peerAttr}
       role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
-      ${marker}
       ${labelLink}
       ${dot}
+      ${marker}
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
     </g>`;
   }).join("");
