@@ -19,7 +19,7 @@ import { WARP_TIME } from "../src/data/sectors.js";
 import { BINDINGS, keys, pointer, syncControls, clearControls } from "../src/core/input.js";
 import {
   visibleSystems, systemEdges, chartBounds, chartViewBox, chartPixelScale, pocketChoices,
-  pocketConnections, systemRouteSegments, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
+  pocketConnections, systemRouteSegments, systemRouteExits, systemChartBounds, systemChartViewBox, interpolateViewBox, contextMenuPosition,
   galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, exitChoice,
 } from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
@@ -50,6 +50,11 @@ function fresh(seed = GALAXY.seed) {
   P.flight.spawnT = 1e9;
   state.time = 0;
   return P;
+}
+
+function firstRouteExitIndex(world, route, systemId = "meridian") {
+  return route.findIndex((id, i) => i > 0 && world.pocketsById[route[i - 1]]?.parent === systemId &&
+    world.pocketsById[id]?.parent !== systemId);
 }
 
 function oldV15() {
@@ -459,6 +464,7 @@ test("11B: gate exits are blue, station pockets are square, and a remote label o
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /\.sm-exit-edge\s*\{[^}]*stroke:\s*#5a7a86/);
   assert.match(css, /\.sm-exit-cap\s*\{[^}]*fill:\s*#5a7a86/);
+  assert.match(mapRoot.innerHTML, new RegExp(`data-pocket="${exit.from}" data-peer-system="${exit.peerSystemId}"`));
   assert.match(mapRoot.innerHTML, /data-pocket="reach"[\s\S]*class="sm-dot sm-station-dot"/);
   mapRoot.handlers.dblclick({
     target: { closest: () => ({ dataset: { exit: exit.id, peerSystem: exit.peerSystemId } }) },
@@ -467,6 +473,15 @@ test("11B: gate exits are blue, station pockets are square, and a remote label o
   assert.equal(ui.state.ui.starmap.mode, "system");
   assert.equal(ui.state.ui.starmap.selected, exit.peerSystemId);
   assert.ok(mapRoot.innerHTML.includes(`data-pocket="${exit.peerPocketId}"`), "the adjacent system map is open");
+  // The gate pocket itself is also a direct adjacent-system target, not only
+  // the remote label at the end of its exit stub.
+  ui.state.ui.starmap.selected = "meridian";
+  ui.state.ui.starmap.mode = "system";
+  mapRoot.handlers.dblclick({
+    target: { closest: () => ({ dataset: { pocket: exit.from, peerSystem: exit.peerSystemId } }) },
+    preventDefault() {},
+  });
+  assert.equal(ui.state.ui.starmap.selected, exit.peerSystemId, "double-clicking the gate pocket opens its peer map");
   ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
 });
 
@@ -603,6 +618,16 @@ test("11B: system destination popup, route display and J follow ordinary checked
   const connectionPaths = [...mapRoot.innerHTML.matchAll(/class="sm-edge" data-edge="[^"]+" d="([^"]+)"/g)].map(m => m[1]);
   const highlightedPaths = [...mapRoot.innerHTML.matchAll(/class="sm-route-edge" d="([^"]+)"/g)].map(m => m[1]);
   assert.ok(highlightedPaths.length > 0 && highlightedPaths.every(path => connectionPaths.includes(path)), "highlight follows the same bent connection lines");
+  assert.match(mapRoot.innerHTML, /class="sm-route-arrow"/, "the galaxy route shows direction");
+  const firstExitIndex = firstRouteExitIndex(world, findRouteToSystem(world, P.place, target.id));
+  if (firstExitIndex > 0) {
+    const route = findRouteToSystem(world, P.place, target.id);
+    const fromPocket = route[firstExitIndex - 1], toPocket = route[firstExitIndex];
+    mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+    assert.ok(mapRoot.innerHTML.includes(`data-route-from="${fromPocket}" data-route-to="${toPocket}"`), "the active gate exit is part of the local route");
+    assert.match(mapRoot.innerHTML, /class="sm-route-exit-edge"/);
+    ui.closeStarmap();
+  }
   assert.ok(!mapRoot.innerHTML.includes('id="sm-system-mask"'), "there is no blanket mask cutting gaps at every endpoint");
   assert.ok(!mapRoot.innerHTML.includes('id="sm-edge-mask-'), "default chart has uninterrupted lines at normal zoom");
   assert.ok(connectionPaths.every(path => /^M[^L]+ L[^L]+$/.test(path)), "each system connection is straight");
@@ -703,6 +728,10 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
     [[a.id, b.id], [c.id, a.id]], "no invented lines across systems or past nonconsecutive pockets");
   assert.deepEqual(systemRouteSegments(chart, null), []);
   assert.deepEqual(systemRouteSegments(chart, [a.id]), []);
+  const exit = chart.exits[0];
+  assert.ok(exit);
+  assert.deepEqual(systemRouteExits(chart, [exit.from, exit.to]).map(s => [s.from, s.to]), [[exit.from, exit.to]]);
+  assert.deepEqual(systemRouteExits(chart, [exit.to, exit.from]), [], "the exit overlay is directional");
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const heading = css.match(/\.sm-route h3\s*\{([^}]+)\}/)[1];
   const pocket = css.match(/\.sm-pocket\s*\{([^}]+)\}/)[1];
@@ -710,6 +739,8 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   assert.match(heading, /overflow-wrap:\s*anywhere/);
   assert.doesNotMatch(pocket, /ellipsis|white-space:\s*nowrap/);
   assert.match(css, /\.sm-system-route\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(css, /\.sm-route-edge, \.sm-route-exit-edge\s*\{[^}]*stroke-dasharray:\s*5 4/);
+  assert.match(css, /\.sm-route-arrow/);
 });
 
 test("11B: pocket destination follows J all the way past a remote arrival gate", () => {

@@ -104,8 +104,8 @@ same-system hops by default, or requires internal links when a system opts into 
 Cross-system hops always require the exact gate link. A gate pocket has exactly one external gate peer
 in a neighbouring system; each system has an ordinary hub plus any detached station pockets and one gate
 pocket per neighbour. Meridian keeps `reach`/`hollow` and gains separate gate pockets. Generated gate
-traders move to their own station pockets by default; explicit author station features/placement flags can
-co-locate them. The map stores seed, tier and discovery/visit records,
+traders move to their own station pockets by default; generated station names use varied deterministic
+styles and explicit author station features/placement flags can co-locate them. The map stores seed, tier and discovery/visit records,
 not generated geography. `tier` is distance-from-Meridian guidance plus seeded variation; authored
 content may override it and decides actual danger. The save stores the seed and compact
 discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a

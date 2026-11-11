@@ -48,6 +48,7 @@ export function generateGalaxy(seed = GALAXY.seed, tuning = GALAXY, overrides = 
   assignSystemDefaults(world, config);
   assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
   addDetachedStationPockets(world, config);
+  nameGeneratedStations(world, config);
   // The new pockets need the same resolved tier as their source gate. Systems
   // already have tiers, so this second pass only fills the pocket records.
   assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
@@ -263,17 +264,67 @@ function addDetachedStationPockets(world, tuning) {
       if (existing.some(feature => feature.kind === "station")) continue;
       throw new Error(`Generated station pocket id "${stationId}" is already in use`);
     }
-    const stationName = `${system.n} Station`;
     world.pockets[stationId] = emptyPocket(
       stationId,
       gate.parent,
-      stationName,
+      `${system.n} Station`,
       `A station pocket serving ${system.n}.`,
       "station",
       gate.template,
     );
     const hub = gate.parent === tuning.homeSystem ? DEFAULT_PLACE : `${gate.parent}-hub`;
     addLink(world.links, `${stationId}-inner`, "internal", hub, stationId, tuning);
+  }
+}
+
+/** Give generated trader features names that are useful in the HUD, station
+ *  screen and map, not just the generic encounter name. Authored station
+ *  features keep their own names; generated ones get a stable, varied style. */
+function nameGeneratedStations(world, tuning) {
+  const configured = Array.isArray(tuning.stationNameStyles)
+    ? tuning.stationNameStyles.filter(style => typeof style === "string" && style.trim())
+    : [];
+  const styles = configured.length ? configured : ["Station", "Outpost", "Trading Hub"];
+  const usedNames = new Set(Object.values(world.pockets)
+    .filter(pocket => !(pocket.template && pocket.role === "station"))
+    .map(pocket => pocket.n)
+    .filter(Boolean));
+  for (const pocket of Object.values(world.pockets)) {
+    const explicit = pocket.template
+      ? [
+          ...(Array.isArray(pocket.features) ? pocket.features : []),
+          ...(Array.isArray(pocket.extraFeatures) ? pocket.extraFeatures : []),
+        ]
+      : (PLACE_DEFS[pocket.def]?.features || []);
+    for (const feature of explicit) if (feature?.kind === "station" && feature.n) usedNames.add(feature.n);
+  }
+  for (const pocket of Object.values(world.pockets).sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!pocket.template) continue;
+    const explicitIds = new Set([
+      ...(Array.isArray(pocket.features) ? pocket.features : []),
+      ...(Array.isArray(pocket.extraFeatures) ? pocket.extraFeatures : []),
+    ].filter(feature => feature?.kind === "station").map(feature => feature.id));
+    const features = templateFeatures(pocket.template, pocket).features;
+    const generated = features.find(feature => feature.kind === "station" && !explicitIds.has(feature.id));
+    if (!generated) continue;
+    const system = world.systems.find(candidate => candidate.id === pocket.parent);
+    if (!system) continue;
+    const base = systemCoreName(system);
+    const start = hashId(pocket.id) % styles.length;
+    let name = null;
+    for (let offset = 0; offset < styles.length; offset++) {
+      const suffix = styles[(start + offset) % styles.length].trim();
+      const candidate = `${base} ${suffix}`;
+      if (!usedNames.has(candidate)) { name = candidate; break; }
+    }
+    if (!name) {
+      let serial = 2;
+      do name = `${base} ${styles[start].trim()} ${serial++}`;
+      while (usedNames.has(name));
+    }
+    pocket.stationName = name;
+    if (pocket.role === "station") pocket.n = name;
+    usedNames.add(name);
   }
 }
 

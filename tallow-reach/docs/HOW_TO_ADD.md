@@ -609,9 +609,11 @@ free systems can already reach it, but retaining the link makes a later policy c
 
 **Place a station near a generated gate.** By default, a friendly trader selected by a gate template is
 removed from that gate's resolved features and gets a generated `${gateId}-station` pocket with an internal
-link to the system hub. To deliberately co-locate a station in a gate pocket, add an explicit station
-feature through the pocket override's `features`/`extraFeatures` array, or set `allowStation: true` or
-`stationPlacement: "gate"`; those are author choices and are not detached.
+link to the system hub. Generated trader features and station pockets receive stable varied names from
+`GALAXY.stationNameStyles`; the generator avoids duplicates, while an authored station `n` remains unchanged.
+To deliberately co-locate a station in a gate pocket, add an explicit station feature through the pocket
+override's `features`/`extraFeatures` array, or set `allowStation: true` or `stationPlacement: "gate"`; those
+are author choices and are not detached.
 
 **Add an alternative route.** Add a link record to `GALAXY_OVERRIDES.links` (or `PLACE_LINKS` in
 `src/data/places.js` for authored pockets): `{ id, kind, a, b, mode: "warp", cost: {}, requires: [],
@@ -622,7 +624,8 @@ lines are drawn only in a links-policy system; gate lines remain explicit on the
 `map.systemEntryZoom`, or double-click the dot, to open its pocket map. **Back to galaxy** or scrolling out
 at the fitted system view returns. In the pocket map, click/right-click a pocket dot or neighbouring-system
 gate label (or focus it and press Enter/Space/Shift+F10) for the **Warp to** popup; only a legal hop gets the
-button. A gate-neighbour label quotes the reciprocal gate pocket, never the remote system/core. The right panel
+button. Double-clicking the gate pocket or its neighbouring-system label opens that peer system map directly.
+A gate-neighbour label quotes the reciprocal gate pocket, never the remote system/core. The right panel
 is a read-only overview, not a travel button list. The central body keeps a permanent name/type label and
 cannot open a warp popup. Native hover tooltips are absent from pockets/core; click popups remain. The compact
 panel must not gain fixed-count rows, per-row metadata or scrolling.

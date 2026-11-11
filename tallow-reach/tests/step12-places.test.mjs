@@ -83,6 +83,15 @@ test("generated stations are separate from gates while explicit gate co-location
     "default gate pockets do not carry stations");
   const stations = Object.values(world.pockets).filter(place => placeDef(place.id).features.some(feature => feature.kind === "station"));
   assert.ok(stations.some(place => place.role === "station"), "a moved station gets its own station pocket");
+  const stationNames = stations.map(place => place.n);
+  assert.equal(new Set(stationNames).size, stationNames.length, "station pockets have unique names");
+  const allStationFeatureNames = stations.map(place => placeDef(place.id).features.find(feature => feature.kind === "station").n);
+  assert.equal(new Set(allStationFeatureNames).size, allStationFeatureNames.length, "station features have unique HUD names");
+  const generatedStationNames = stations.filter(place => place.template).map(place =>
+    placeDef(place.id).features.find(feature => feature.kind === "station").n);
+  assert.equal(new Set(generatedStationNames).size, generatedStationNames.length, "generated station features have unique HUD names");
+  assert.ok(generatedStationNames.some(name => /Outpost|Hideout|Trading Hub|Waystation|Freeport|Exchange/.test(name)),
+    "generated stations use varied names rather than only the generic Station suffix");
   for (const place of stations.filter(candidate => candidate.role === "station")) {
     assert.notEqual(place.role, "gate");
     assert.ok(Object.values(world.links).some(link => link.kind === "internal" &&

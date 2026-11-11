@@ -27,6 +27,15 @@ const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const now = () => globalThis.performance?.now?.() ?? Date.now();
 
+/** A small filled arrow centered at a fraction of a directed chart segment. */
+function arrowPath(a, b, fraction = 0.68, size = 6) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+  if (!(length > 0)) return "";
+  const ux = dx / length, uy = dy / length;
+  const x = a[0] + dx * fraction, y = a[1] + dy * fraction;
+  return `M${x + ux * size} ${y + uy * size} L${x - ux * size - uy * size * 0.65} ${y - uy * size + ux * size * 0.65} L${x - ux * size + uy * size * 0.65} ${y - uy * size - ux * size * 0.65} Z`;
+}
+
 /** Pure view helpers (tested without a browser). */
 export function visibleSystems(world, knowledge = {}) {
   return world.systems.filter(s => systemVisible(world, s.id, knowledge))
@@ -159,6 +168,19 @@ export function systemRouteSegments(chart, route) {
   return segments;
 }
 
+/** Directed gate exits in the selected system that are consecutive steps in
+ *  the executable route. The remote pocket is not a chart node, so these are
+ *  separate from systemRouteSegments. */
+export function systemRouteExits(chart, route) {
+  if (!Array.isArray(route)) return [];
+  const exits = [];
+  for (let i = 1; i < route.length; i++) {
+    const exit = chart.exits.find(candidate => candidate.from === route[i - 1] && candidate.to === route[i]);
+    if (exit) exits.push({ from: exit.from, to: exit.to, exit, a: exit.start, b: exit.end });
+  }
+  return exits;
+}
+
 /** The travel choice behind a clickable neighbouring-system exit. Its actual
  *  destination is the reciprocal gate pocket, never the remote system/core. */
 export function exitChoice(world, exit, from, context = {}) {
@@ -243,6 +265,16 @@ export function setupStarmap() {
     const exit = e.target.closest?.("[data-exit]");
     if (exit && view.mode === "system") {
       const peerSystemId = exit.dataset.peerSystem;
+      if (!peerSystemId || !systemVisible(state.galaxy, peerSystemId, knowledge())) return;
+      e.preventDefault();
+      enterSystem(peerSystemId);
+      return;
+    }
+    // The remote label is not the only useful target: the blue gate pocket
+    // itself should also open the adjacent system when double-clicked.
+    const gate = e.target.closest?.("[data-pocket][data-peer-system]");
+    if (gate && view.mode === "system") {
+      const peerSystemId = gate.dataset.peerSystem;
       if (!peerSystemId || !systemVisible(state.galaxy, peerSystemId, knowledge())) return;
       e.preventDefault();
       enterSystem(peerSystemId);
@@ -430,7 +462,10 @@ function zoomMap(direction) {
 
 function enterSystem(id = state.ui.starmap?.selected) {
   const view = state.ui.starmap;
-  if (!view || transition || !systemVisible(state.galaxy, id, knowledge())) return false;
+  if (!view || !systemVisible(state.galaxy, id, knowledge())) return false;
+  // A fast double-click can arrive while the short zoom animation is still
+  // running. Finish that presentation first rather than dropping the request.
+  if (transition) finishTransition();
   // A remote gate label is already on a system chart. Move directly to the
   // peer chart instead of briefly returning to the galaxy overview.
   if (view.mode === "system") {
@@ -732,7 +767,10 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
     const b = world.systemsById[world.pocketsById[id]?.parent];
     if (!a || !b || a.id === b.id) return "";
     const line = paths.get([a.id, b.id].sort().join("__"));
-    return line ? `<path class="sm-route-edge" d="${line.path}"${line.maskId ? ` mask="url(#${line.maskId})"` : ""}/>` : "";
+    if (!line) return "";
+    const start = [a.pos[0], -a.pos[1]], end = [b.pos[0], -b.pos[1]];
+    const mask = line.maskId ? ` mask="url(#${line.maskId})"` : "";
+    return `<path class="sm-route-edge" d="${line.path}"${mask}/><path class="sm-route-arrow" d="${arrowPath(start, end, 0.68, 6 * unit)}"${mask}/>`;
   }).join("");
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
@@ -763,12 +801,8 @@ function systemMarkup(world, view, know, here, unit, route = null) {
   }).join("");
   const routeLines = systemRouteSegments(chart, route).map(segment => {
     const a = point(segment.a), b = point(segment.b);
-    const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
-    // A small filled arrow at 70% of the segment makes the direction clear.
-    const ux = length ? dx / length : 0, uy = length ? dy / length : 0;
-    const x = a[0] + dx * 0.7, y = a[1] + dy * 0.7, size = 5 * unit;
-    const arrow = length ? `<path class="sm-system-route-arrow" d="M${x + ux * size} ${y + uy * size} L${x - ux * size - uy * size * 0.65} ${y - uy * size + ux * size * 0.65} L${x - ux * size + uy * size * 0.65} ${y - uy * size - ux * size * 0.65} Z"/>` : "";
-    return `<g class="sm-system-route" data-route-from="${esc(segment.from)}" data-route-to="${esc(segment.to)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>${arrow}</g>`;
+    const arrow = arrowPath(a, b, 0.7, 5 * unit);
+    return `<g class="sm-system-route" data-route-from="${esc(segment.from)}" data-route-to="${esc(segment.to)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><path class="sm-system-route-arrow" d="${arrow}"/></g>`;
   }).join("");
   const exits = chart.exits.map(exit => {
     const a = point(exit.start), b = point(exit.end);
@@ -786,6 +820,10 @@ function systemMarkup(world, view, know, here, unit, route = null) {
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(label)}</text>
     </g>`;
   }).join("");
+  const routeExitLines = systemRouteExits(chart, route).map(({ from, to, exit }) => {
+    const a = point(exit.start), b = point(exit.end);
+    return `<g class="sm-system-route sm-system-route-exit" data-route-from="${esc(from)}" data-route-to="${esc(to)}"><line class="sm-route-exit-edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><path class="sm-system-route-arrow" d="${arrowPath(a, b, 0.7, 5 * unit)}"/></g>`;
+  }).join("");
   const nodes = chart.nodes.map(node => {
     const [x, y] = point(node.pos);
     const current = node.id === here.id;
@@ -795,8 +833,9 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const dot = station
       ? `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`
       : `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
-    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}" data-pocket="${esc(node.id)}"
-      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
+    const peerAttr = node.peerSystemId ? ` data-peer-system="${esc(node.peerSystemId)}"` : "";
+    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}" data-pocket="${esc(node.id)}"${peerAttr}
+      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
       ${dot}
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
@@ -824,7 +863,7 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     <text class="sm-core-label sm-core-type" x="${coreX}" y="${labelY + lineStep}"
       text-anchor="middle" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">(${esc(type)})</text>
   </g>`;
-  return lines + exits + coreMarkup + routeLines + nodes;
+  return lines + exits + routeExitLines + coreMarkup + routeLines + nodes;
 }
 
 function render() {
@@ -881,7 +920,7 @@ function render() {
     ? `Warp to any ${esc(term("flyable"))} in this ${esc(term("mapNode"))}; no internal route is needed.`
     : `Follow the internal route lines; this ${esc(term("mapNode"))} requires connected ${esc(term("flyable"))} hops.`;
   const help = view.mode === "system"
-    ? `Click or right-click a ${esc(term("flyable"))} to warp or set a destination. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route; double-click its label to open that map directly. The central star/black hole is not warpable. Scroll out or Back to return.`
+    ? `Click or right-click a ${esc(term("flyable"))} to warp or set a destination. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route; double-click the gate or its label to open that map directly. The central star/black hole is not warpable. Scroll out or Back to return.`
     : `Right-click a system to set a destination. Press J in flight for the next warp. Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `

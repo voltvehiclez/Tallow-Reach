@@ -8,6 +8,101 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-08: Set exact pocket destinations
+
+- Pocket and gate-neighbour popups now offer **Set destination** below the Warp button or refusal note,
+  including for a pocket that cannot be reached in one hop. The neighbour label selects its reciprocal
+  gate pocket. Selecting the current pocket or an unreachable pocket reports why without replacing a route.
+- Shared executable breadth-first search now also finds the fewest legal, cost-supported warp hops to
+  an exact pocket. `J` still starts one checked hop and replans each time. Pocket destinations stay active
+  on entry to their system and clear only when the exact pocket is reached. The route list names that final
+  pocket; galaxy-system destinations and their arrival-gate behaviour remain unchanged.
+- `src/sim/travel.js`, `src/sim/navigation.js`, `src/ui/starmap.js`, `src/state/state.js`, tests, playtest
+  guide and architecture notes updated. Session-only destination remains outside save v16. Targeted tests
+  **60/60**, full `npm test` **322/322**, build **677 KB (693,443 bytes)**; browser playtest pending.
+
+---
+
+## 2026-11-08: Clearer, sparser starmap and adaptive route list
+
+- Owner asked for galaxy connections not to pass through unrelated system dots, route stops to use the
+  available vertical space before paging, and outer systems to need at least 10 jumps. Owner explicitly
+  chose to update existing saves too, safely relocating removed gate-pocket saves within the same system.
+- `organic-web-v2` retains seeded system ids, names, positions and core rolls but builds a sparse radial-
+  depth tree, default `extraChance: 0` and `depthRadiusFraction: 0.08`. Default seed: 121 systems,
+  362 pockets, 361 links, 120 gate links; its outer 80%-radius systems need at least 10 gate crossings
+  (11+ across 500 sampled seeds). Custom graph tuning/overrides may change this. The v1 generator is
+  retained to identify prior generated gate IDs. `prepareGalaxySave` moves a removed old gate to an
+  ordinary pocket in its same system, clears old coordinates and preserves profile/cargo; truly unknown
+  pockets still recover home. Recovery notices name the destination; save schema remains v16.
+- `src/ui/chart-lines.js` finds chart-only polylines around system dots, with an SVG dot mask for extreme
+  overlaps. Highlighted routes use exactly the same paths; connections and travel rules remain data-driven.
+  The right route list measures available space and shows all stops that fit; arrow pages only appear if
+  needed, including after resize. The overview panel does not scroll.
+- Added seeded distance/geometry and legacy-save recovery tests; updated map/playtest docs and removed
+  tests' assumptions about old neighbours. Targeted 63/63, full `npm test` **325/325**; build **681 KB
+  (696,881 bytes)**. No visual browser verification; owner playtest remains pending. No new dependencies.
+
+---
+
+## 2026-11-08: Straight starmap lines with attached endpoints
+
+- Owner asked for straight lines without unrelated-dot intersections, and asked about light-blue systems.
+  Light blue denotes a system marked visited in saved discovery knowledge; orange is the current system.
+- Replaced bent lines and the blanket endpoint mask with a cached, chart-only layout that nudges unrelated
+  dots away from straight gate segments. Paths and highlighted routes use the same single straight segment;
+  connected endpoint dots are never globally masked. In unusually crowded or extreme-zoom layouts, an
+  individual line masks only its unrelated obstructing dots. Chart positions never mutate simulation
+  geography, graph, saves or authored positions; the layout is recalculated on graph/position changes,
+  not when gates are merely closed or reopened. The pocket view and zoom centering use the same chart
+  projection. All system identities and connections remain unchanged.
+- `src/ui/chart-lines.js`, `src/ui/starmap.js`, starmap regression tests and documentation updated.
+  Targeted **64/64**, `npm test` **326/326**, build **681 KB (697,419 bytes)**. No dependencies or save
+  version changes; browser playtest remains pending.
+
+---
+
+## 2026-11-08: Show the active route in flight
+
+- Owner requested the route destinations beneath the left boost bar. The flight HUD now shows the
+  same remaining system stops and exact-pocket destination as the starmap, plus the J hint or no-route
+  status. Long lists scroll independently; mouse wheel and clicks on the list do not control the ship.
+  It hides when cleared or reached, updates immediately on place/destination changes and rechecks
+  travel conditions twice a second. Route display does not change travel, progress or save data.
+- Added shared `src/ui/route-display.js`, HUD markup/styles and `tests/hud-route.test.mjs`.
+  Targeted **41/41**, full **328/328**, build **683 KB (699,351 bytes)**. Browser playtest pending.
+
+---
+
+## 2026-11-08: Group route pockets by system and mark the current area
+
+- Owner clarified that routes should retain one row per system, with all internal pocket hops in
+  order within that row. Both the flight HUD and starmap now show the current pocket marked “here”
+  in its system row and also keep a current-area label visible above the list, including when paged
+  or no route is available. Entering another system starts a new row; a later revisit starts another.
+- The starmap measures wrapped system rows to paginate without hiding long pocket lists. The flight
+  route keeps its current-area label visible while the system rows scroll. No travel rules or saves changed.
+- Updated shared route presentation, HUD/starmap styles, regression tests and the owner checklist.
+  Targeted **42/42**, full **329/329**, build **684 KB (700,547 bytes)**. Browser playtest pending.
+
+---
+
+## 2026-11-08: Compact flight route with journey progress
+
+- Owner chose the compact system-list idea: in flight, show one row per system and its remaining
+  departures, with pocket names only in the current system. The current pocket is marked “here”.
+  Actually crossed systems are retained and checked off, including manual detours/revisits; the rest
+  replans from the current pocket. Counts mean warp jumps departing that system (including its gate
+  crossing), so a system destination may show zero. The current row scrolls into view on a hop.
+- The starmap retains full pocket details and also shows checked-off systems. Journey history is
+  session-only, reset when a destination is replaced, cleared, reached or a save is loaded. The
+  navigation rules, one-hop J and saved data are unchanged; a blocked route shows its current area
+  and no-route message until it becomes available again.
+- Updated HUD, shared route display, transient state, starmap and regression tests. Targeted **43/43**,
+  full **330/330**, build **686 KB (702,040 bytes)**. Browser playtest pending.
+
+---
+
 ## 2026-11-08: Step 11B starmap UI follow-up — zoomed system maps, right-click warp, compact overview (owner playtest pending)
 
 Owner reviewed the first 11B build ("the map looks ok") and asked for four chart changes. This is a

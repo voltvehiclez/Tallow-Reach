@@ -19,6 +19,15 @@ export const GALAXY = {
   // A sparse connected tree, with long paths to the outer reaches.
   graph: { maxNeighbors: 4, extraChance: 0, extraRange: 300, depthRadiusFraction: 0.08 },
 
+  // Generated trader pockets use these data-defined name styles. The generator
+  // picks a stable style from the pocket id and avoids every name already in the
+  // resolved catalog, so several stations in one system still read differently.
+  stationNameStyles: [
+    "Station", "Outpost", "Hideout", "Trading Hub", "Waystation", "Depot",
+    "Exchange", "Relay", "Freeport", "Refuge", "Harbor", "Lookout",
+    "Rest", "Enclave", "Landing", "Market",
+  ],
+
   // Advisory only. Content may override a system's tier; no enemy is scaled by
   // this number in step 11. Variation is a whole-number +/- range.
   difficulty: { base: 1, perDistance: 0.004, variation: 1 },

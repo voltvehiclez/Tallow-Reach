@@ -173,7 +173,7 @@ export function templateFeatures(templateId, place = {}) {
       features.push({
         kind: "station",
         id: featureId,
-        n: encounter.n,
+        n: place.stationName || encounter.n,
         pos,
         keepout: station.keepout,
         dockRange: station.dockRange,

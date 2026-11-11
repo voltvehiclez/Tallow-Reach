@@ -46,28 +46,31 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   **121 systems / 445 pockets / 444 links**: organic scatter, 1–4 neighbours, a sparse tree with dead ends and junctions,
   an ordinary hub plus any detached station pockets and one gate pocket per neighbour, exactly one reciprocal
   external peer per gate. Generated gate traders are moved to `${gateId}-station` pockets with an internal
-  link; explicit `allowStation`, `stationPlacement: "gate"` or feature records can still co-locate a
-  station deliberately. V2 orders nodes radially and favours depth; default outer 80% radius systems need at
-  least 10 gate crossings (11+ in tested seeds). 500 seeds checked; custom tuning can change this.
+  link and deterministic varied names from `GALAXY.stationNameStyles`; explicit `allowStation`,
+  `stationPlacement: "gate"` or feature records can still co-locate a station deliberately. V2 orders nodes
+  radially and favours depth; default outer 80% radius systems need at least 10 gate crossings (11+ in tested
+  seeds). 500 seeds checked; custom tuning can change this.
   Meridian keeps `reach`/`hollow`; Kestrel Hollow is not a gate.
 - **11B live slice (system-map follow-up built):** `src/ui/starmap.js` opens with **M** while flying. The galaxy
   web shows straight gate lines and a derived chart-only node layout nudging dots away from unrelated lines, current/selected markers, inspect dropdown and zoom/pan/labels. Visited knowledge remains saved but has no separate light-blue presentation; orange is current. In unusually crowded views, only obstructing unrelated dots mask their individual line; connected endpoints are not masked. Zooming
   into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) opens a derived
   **system pocket map** with a short zoom transition. Ordinary pockets orbit a central visual-only
   **star (95%) / black hole (5%)**; gates sit farther out with blue dashed stubs and blue remote endpoint dots toward
-  the exact neighbouring system. Double-clicking a gate/remote-system label switches directly to that peer's
-  system map. The core keeps a permanent two-line proper-name/type label (Meridian System → **Meridian** /
-  **(Star)**); native hover tooltips are gone from pockets/core, while click popups remain. Station pockets use
-  square map icons; core radii are
-  map units so the graphic scales with system zoom; pocket dots/labels stay screen-sized. Gate pocket names
+  the exact neighbouring system. Double-clicking a gate pocket or its remote-system label switches directly
+  to that peer's system map. The core keeps a permanent two-line proper-name/type label (Meridian System →
+  **Meridian** / **(Star)**); native hover tooltips are gone from pockets/core, while click popups remain.
+  Station pockets use square map icons and varied generated station names; core radii are map units so the
+  graphic scales with system zoom; pocket dots/labels stay screen-sized. Gate pocket names
   sit inward clear of orange stubs, and neighbouring-system labels are clickable travel targets quoting the
   reciprocal gate pocket. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out.
   `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
   win. Open-world systems allow **free warp to any local pocket** and omit internal blue lines. The data
   opt-out `intraSystem: "links"` restores internal routes/lines for future route-only instances; the main
-  galaxy always keeps explicit gate routes. **Click/right-click a pocket or gate-neighbour label** (or keyboard-activate it) opens
-  **Warp to …** only for a legal hop and emits the same named travel action. `main.js` calls `startWarp`,
-  which requotes policy/link/cost/requirements and runs the unchanged warp animation.
+  galaxy always keeps explicit gate routes. Active destinations draw orange dashed overlays with small arrows
+  on galaxy links, local pocket hops and the outward gate exit that leaves the current system. **Click/right-click
+  a pocket or gate-neighbour label** (or keyboard-activate it) opens **Warp to …** only for a legal hop and
+  emits the same named travel action. `main.js` calls `startWarp`, which requotes policy/link/cost/requirements
+  and runs the unchanged warp animation.
   Refusals emit `travel-denied` and stay visible in the chart. The right panel is a compact overview
   (system name, current pocket, plain pocket rows) with no warp buttons, tier/description cards or scrolling.
 - **Destination navigation:** right-click a galaxy node for **Set destination** and, if currently at
@@ -110,7 +113,7 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
 - **Results:** `npm test` **345/345 pass** (including the generated station-local inventory and starmap/station-separation tests;
   existing 8B/11B and Step 12 oracles remain green). `npm run build` succeeded: the generated bundle is
-  **698 KB** (the tracked HTML must be restored after validation and is not part of this source patch).
+  **700 KB** (the tracked HTML must be restored after validation and is not part of this source patch).
   The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save
   **v18** persists destination, place memory and station-local stocks; policies, core kind/name, pocket
   templates and layout are resolved, not persisted. Default geometry is **121 systems / 445 pockets / 444 links**

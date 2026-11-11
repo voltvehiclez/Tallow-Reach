@@ -495,18 +495,20 @@ These are real, current limits. None of them is a bug in play today.
   pockets orbit a visual-only star/black hole with a permanent two-line name/type label. Free systems omit
   internal lines; route-only systems retain them. Gate exit stubs point toward neighbouring systems with blue
   dashed lines and blue remote endpoint dots; their labels are clickable travel targets quoting the reciprocal
-  gate pocket, and double-clicking one opens that peer system map directly. Station pockets render as squares;
-  the right panel stays a compact name-only overview. Galaxy pan is bounded to 0.5–1 screen pixels per pointer
-  pixel, increasing gently when zoomed out; core radii are map units so system zoom scales the graphic.
-  Clicking/right-clicking a legal local/gate pocket or gate-neighbour label offers **Warp to**; the sim rechecks
-  the quote and emits `travel-denied` on refusal. Single-player chart pauses the frame gate and suspends audio;
-  `state.multiplayer` is the future host flag that keeps a hosted world running. Generated gate traders are
-  removed from gate pockets and receive their own station pocket/internal link; explicit `allowStation`,
-  `stationPlacement: "gate"` or feature records can deliberately co-locate one. Generated pockets resolve
-  `frontier`, `trade_lane` or `salvage_yard` templates; their tier selects hostile patrols, traders,
-  derelicts and caches, and pocket descriptions use the selected template rather than the old empty
-  placeholder. Non-empty travel costs are refused until a cost handler exists; fuel, activated/proximity
-  gates and supercruise are not implemented.
+  gate pocket, and double-clicking either one opens that peer system map directly. Station pockets render as
+  squares and generated trader features/station pockets use deterministic varied names; the right panel stays
+  a compact name-only overview. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing
+  gently when zoomed out; core radii are map units so system zoom scales the graphic. An active destination
+  draws orange dashed overlays and small directional arrows on the relevant galaxy links, local pocket hops
+  and the outward gate exit. Clicking/right-clicking a legal local/gate pocket or gate-neighbour label offers
+  **Warp to**; the sim rechecks the quote and emits `travel-denied` on refusal. Single-player chart pauses the
+  frame gate and suspends audio; `state.multiplayer` is the future host flag that keeps a hosted world running.
+  Generated gate traders are removed from gate pockets and receive their own station pocket/internal link;
+  explicit `allowStation`, `stationPlacement: "gate"` or feature records can deliberately co-locate one.
+  Generated pockets resolve `frontier`, `trade_lane` or `salvage_yard` templates; their tier selects hostile
+  patrols, traders, derelicts and caches, and pocket descriptions use the selected template rather than the
+  old empty placeholder. Non-empty travel costs are refused until a cost handler exists; fuel,
+  activated/proximity gates and supercruise are not implemented.
 - **Place memory is persistent simulation state.** `PLACE_DEFS` and generated templates carry station,
   field, spawner, planet and encounter data; runtime containers keep active entities. Stable asteroid
   slots and cleared one-shot encounter feature ids are recorded in `world.placeMemory` with remaining
