@@ -1,8 +1,8 @@
-// Cargo, storage, the refinery, repairs and every purchase at the outpost.
-// Station levels (`base`) and station storage (`store`) belong to `world`
-// (`state.worldState`); credits, ships, holds, hull damage, loadouts and
-// missiles belong to `profile` (`state.profile` by default, or an explicit
-// pilot's `profile`).
+// Cargo, storage, the refinery, repairs and every purchase at a dockable station.
+// Station levels (`base`) and station-local storage (`stationStores`) belong to
+// `world` (`state.worldState`); `world.store` is the backward-compatible home
+// alias. Credits, ships, holds, hull damage, loadouts and missiles belong to
+// `profile` (`state.profile` by default, or an explicit pilot's `profile`).
 
 import { state, profileOf } from "../state/state.js";
 import { SHIPS } from "../data/ships.js";

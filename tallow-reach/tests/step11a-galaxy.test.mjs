@@ -91,20 +91,21 @@ test("11A: every system and pocket is reachable through enabled links or free lo
   for (const pocket of Object.keys(world.pockets)) assert.ok(findRoute(world, DEFAULT_PLACE, pocket), pocket);
 });
 
-test("11A: each generated system has one ordinary hub and one gate pocket per neighbour", () => {
+test("11A: each generated system has an ordinary hub, detached station pockets when needed, and one gate per neighbour", () => {
   const world = fresh();
   const degree = systemDegrees(world);
   for (const system of world.systems) {
     const pockets = pocketsInSystem(world, system.id);
     const gates = pockets.filter(p => p.role === "gate");
+    const ordinary = pockets.filter(p => p.role !== "gate");
     assert.equal(gates.length, degree.get(system.id), system.id);
     if (system.id === GALAXY.homeSystem) {
       assert.ok(pockets.some(p => p.id === "reach"));
       assert.ok(pockets.some(p => p.id === "hollow"));
-      assert.equal(pockets.filter(p => p.role !== "gate").length, 2, "Meridian keeps both existing ordinary pockets");
+      assert.ok(ordinary.length >= 2, "Meridian keeps both existing ordinary pockets");
     } else {
-      assert.equal(pockets.filter(p => p.role !== "gate").length, 1, system.id);
-      assert.ok(world.pockets[`${system.id}-hub`]);
+      assert.ok(ordinary.some(p => p.id === `${system.id}-hub`), system.id);
+      assert.ok(ordinary.length >= 1, system.id);
     }
     for (const gate of gates) {
       const external = Object.values(world.links).filter(l => l.kind === "gate" && (l.a === gate.id || l.b === gate.id));

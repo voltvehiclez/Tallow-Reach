@@ -8,5 +8,7 @@
   station world and exact resume spot. The matching import code is section C of
   `../../TEST-OLD-CODES.txt`.
 
-Current saves are v17. The local destination is saved in `world.destination`. The world's `galaxy` field stores only `{ seed, knowledge }`; generated
-systems/pockets/links are rebuilt by `src/sim/galaxy-session.js` and are never fixtures here.
+Current saves are v18. The local destination is saved in `world.destination`. `world.placeMemory` stores
+only positive remaining simulation-second cooldowns for mined rocks and cleared encounters. The world's
+`galaxy` field stores only `{ seed, knowledge }`; generated systems/pockets/links are rebuilt by
+`src/sim/galaxy-session.js` and are never fixtures here.

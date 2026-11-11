@@ -7,7 +7,7 @@
 import { GALAXY } from "../data/galaxy.js";
 import { chartGalaxy, straightEdgeBlockers } from "./chart-lines.js";
 import { routeDisplay, flightRouteRows } from "./route-display.js";
-import { PLACE_DEFS, placeAt } from "../data/places.js";
+import { placeAt, placeDef } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
 import { setDestination } from "../state/destination.js";
@@ -21,11 +21,47 @@ let root = null;
 let drag = null;
 let transition = null;
 let transitionFrame = null;
+let pendingNavigationClick = null;
+const DOUBLE_CLICK_DELAY = 500;
+const ROUTE_ICON_SCALE = 0.8;
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[c]));
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const now = () => globalThis.performance?.now?.() ?? Date.now();
+
+/** A small filled arrow centered at a fraction of a directed chart segment. */
+function arrowPath(a, b, fraction = 0.68, size = 6) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+  if (!(length > 0)) return "";
+  const ux = dx / length, uy = dy / length;
+  const x = a[0] + dx * fraction, y = a[1] + dy * fraction;
+  return `M${x + ux * size} ${y + uy * size} L${x - ux * size - uy * size * 0.65} ${y - uy * size + ux * size * 0.65} L${x - ux * size + uy * size * 0.65} ${y - uy * size - ux * size * 0.65} Z`;
+}
+
+function routeSystemIds(world, route) {
+  if (!Array.isArray(route)) return [];
+  const ids = [];
+  for (const pocketId of route) {
+    const systemId = world.pocketsById?.[pocketId]?.parent;
+    if (systemId && ids.at(-1) !== systemId) ids.push(systemId);
+  }
+  return ids;
+}
+
+function routeRole(id, routeIds, startId, destinationId) {
+  if (!routeIds.has(id)) return null;
+  return { start: id === startId, destination: id === destinationId, intermediate: id !== startId && id !== destinationId };
+}
+
+function routeMarkerMarkup(x, y, radius, role, unit) {
+  if (!role) return "";
+  const rings = role.destination
+    ? `<circle class="sm-route-marker sm-route-marker-destination-outer" cx="${x}" cy="${y}" r="${radius + 7 * unit * ROUTE_ICON_SCALE}"/>
+       <path class="sm-route-marker sm-route-marker-destination-check" d="M${x - 3.5 * unit * ROUTE_ICON_SCALE} ${y} L${x - 1 * unit * ROUTE_ICON_SCALE} ${y + 3 * unit * ROUTE_ICON_SCALE} L${x + 4.5 * unit * ROUTE_ICON_SCALE} ${y - 4 * unit * ROUTE_ICON_SCALE}"/>`
+    : "";
+  return rings;
+}
 
 /** Pure view helpers (tested without a browser). */
 export function visibleSystems(world, knowledge = {}) {
@@ -116,7 +152,7 @@ export function pocketChoices(world, from, systemId, context = {}) {
       canWarp: quote.ok && !unsupportedCost,
       status: current ? "You are here" : unsupportedCost ? "Travel costs are not implemented yet."
         : quote.ok ? (freeHop ? "Free intra-system warp" : "Direct route · Free") : quote.reason,
-      station: (PLACE_DEFS[pocket.def]?.features || []).some(f => f.kind === "station"),
+      station: placeDef(pocket.id).features.some(f => f.kind === "station"),
     };
   });
 }
@@ -159,6 +195,27 @@ export function systemRouteSegments(chart, route) {
   return segments;
 }
 
+/** Directed gate exits in the selected system that are consecutive steps in
+ *  the executable route. Incoming route steps are reversed against the local
+ *  exit geometry so the arrival stub is highlighted too. The remote pocket is
+ *  not a chart node, so these are separate from systemRouteSegments. */
+export function systemRouteExits(chart, route) {
+  if (!Array.isArray(route)) return [];
+  const exits = [];
+  for (let i = 1; i < route.length; i++) {
+    const from = route[i - 1], to = route[i];
+    let exit = chart.exits.find(candidate => candidate.from === from && candidate.to === to);
+    let reversed = false;
+    if (!exit) {
+      exit = chart.exits.find(candidate => candidate.from === to && candidate.to === from);
+      reversed = !!exit;
+    }
+    if (exit) exits.push({ from, to, exit, reversed,
+      a: reversed ? exit.end : exit.start, b: reversed ? exit.start : exit.end });
+  }
+  return exits;
+}
+
 /** The travel choice behind a clickable neighbouring-system exit. Its actual
  *  destination is the reciprocal gate pocket, never the remote system/core. */
 export function exitChoice(world, exit, from, context = {}) {
@@ -187,6 +244,88 @@ export function pocketLabelPosition(node, point, radius, unit, tuning = GALAXY.s
     return { x: point[0], y: point[1] + (dy < 0 ? -gap : gap + 6 * unit), anchor };
   }
   return { x: point[0] + (anchor === "end" ? -gap : gap), y: point[1] + 3 * unit, anchor };
+}
+
+/** Place pocket labels in screen-readable boxes, nudging colliding names along
+ *  the tangent of their orbit. A connector is rendered for every nudge so a
+ *  moved label remains unambiguously attached to its pocket dot. */
+export function pocketLabelLayout(chart, point, radius, unit, tuning = GALAXY.systemMap) {
+  const gap = 4 * unit;
+  const edgeGap = radius + tuning.labelGap * unit;
+  const labels = chart.nodes.map(node => {
+    const dot = point(node.pos);
+    const base = pocketLabelPosition(node, dot, radius, unit, tuning);
+    const width = Math.max(8 * unit, String(node.pocket.n || "").length * 6.4 * unit);
+    const height = 14 * unit;
+    return { node, dot, base, x: base.x, y: base.y, anchor: base.anchor, width, height, moved: false };
+  });
+  const boxFor = label => {
+    const left = label.anchor === "end" ? label.x - label.width : label.anchor === "middle" ? label.x - label.width / 2 : label.x;
+    return { left, right: left + label.width, top: label.y - 11 * unit, bottom: label.y + 4 * unit };
+  };
+  const overlaps = (a, b) => a.left < b.right + gap && a.right > b.left - gap &&
+    a.top < b.bottom + gap && a.bottom > b.top - gap;
+  // Keep text away from every visible pocket/exit dot, not only from other text.
+  // A little extra padding prevents a nearby label from looking attached to the
+  // wrong gate when two exit pockets are close together.
+  const dotPadding = radius + 4 * unit;
+  const dotBoxes = [...chart.nodes.map(node => point(node.pos)), ...(chart.exits || []).map(exit => point(exit.end))]
+    .map(([x, y]) => ({ left: x - dotPadding, right: x + dotPadding, top: y - dotPadding, bottom: y + dotPadding }));
+  const overlapsDot = box => dotBoxes.some(dot => box.left < dot.right && box.right > dot.left &&
+    box.top < dot.bottom && box.bottom > dot.top);
+  const placed = [];
+  for (const label of labels) {
+    const horizontal = label.base.anchor !== "middle";
+    // Horizontal labels stack by a line height; centred labels move along the
+    // tangent in small increments so a nearby dot nudges them only as far as
+    // necessary instead of jumping an entire label width.
+    const tangentStep = Math.max(horizontal ? label.height + gap : gap, 0.01);
+    const candidateOffsets = count => {
+      const offsets = [0];
+      for (let i = 1; i < count; i++) offsets.push((i % 2 ? -1 : 1) * Math.ceil(i / 2) * tangentStep);
+      return offsets;
+    };
+    const candidates = [];
+    const addSide = (anchor, y, offset) => {
+      const x = anchor === "middle" ? label.dot[0] + offset
+        : label.dot[0] + (anchor === "start" ? edgeGap : -edgeGap);
+      candidates.push({ ...label, x, y: y + (anchor === "middle" ? 0 : offset), anchor });
+    };
+    if (horizontal) {
+      // Try the inward/original side first, but flip to the other side before
+      // stacking when that is what keeps the label away from another dot.
+      const opposite = label.base.anchor === "start" ? "end" : "start";
+      addSide(label.base.anchor, label.base.y, 0);
+      addSide(opposite, label.base.y, 0);
+      for (const offset of candidateOffsets(16).slice(1)) {
+        addSide(label.base.anchor, label.base.y, offset);
+        addSide(opposite, label.base.y, offset);
+      }
+    } else {
+      // Vertical labels keep their centred reading first. At each small tangent
+      // shift also try the two side anchors, so a crowded label can move just
+      // far enough rather than exhausting a long row of centred positions.
+      for (const offset of candidateOffsets(32)) {
+        addSide("middle", label.base.y, offset);
+        addSide("start", label.base.y, offset);
+        addSide("end", label.base.y, offset);
+      }
+    }
+    let chosen = null;
+    // There is no viewport constraint on label text. If the preferred finite
+    // candidates are all occupied, keep extending along the tangent until a
+    // finite set of boxes cannot collide with it.
+    for (let i = 0; !chosen; i++) {
+      const candidate = candidates[i] || (horizontal
+        ? { ...label, x: label.dot[0] + (i % 2 ? -edgeGap : edgeGap), y: label.base.y + Math.ceil(i / 2) * tangentStep, anchor: i % 2 ? "end" : "start" }
+        : { ...label, x: label.base.x + (i % 2 ? -1 : 1) * Math.ceil(i / 2) * tangentStep, y: label.base.y, anchor: "middle" });
+      const box = boxFor(candidate);
+      if (!overlapsDot(box) && !placed.some(other => overlaps(box, other.box))) chosen = { ...candidate, box };
+    }
+    chosen.moved = Math.abs(chosen.x - chosen.base.x) > 1e-9 || Math.abs(chosen.y - chosen.base.y) > 1e-9 || chosen.anchor !== chosen.base.anchor;
+    placed.push(chosen);
+  }
+  return new Map(placed.map(label => [label.node.id, label]));
 }
 
 /** A centred local box around the pockets and their outward exit stubs. */
@@ -221,10 +360,75 @@ export function interpolateViewBox(from, to, t) {
 /** Keep a right-click popup inside the chart viewport. */
 export function contextMenuPosition(x, y, viewport = { width: 800, height: 600 }, tuning = GALAXY.map.context) {
   const width = viewport.width || 800, height = viewport.height || 600;
+  const offsetX = Number.isFinite(tuning.offsetX) ? tuning.offsetX : 8;
+  const anchorY = Number.isFinite(tuning.anchorY) ? tuning.anchorY : 42;
   return {
-    left: clamp(x, tuning.margin, Math.max(tuning.margin, width - tuning.width - tuning.margin)),
-    top: clamp(y, tuning.margin, Math.max(tuning.margin, height - tuning.height - tuning.margin)),
+    // Keep the menu just to the right of the pointer so its first action is
+    // reachable with a small horizontal movement rather than a long downward one.
+    left: clamp(x + offsetX, tuning.margin, Math.max(tuning.margin, width - tuning.width - tuning.margin)),
+    top: clamp(y - anchorY, tuning.margin, Math.max(tuning.margin, height - tuning.height - tuning.margin)),
   };
+}
+
+/** Targets that have a double-click navigation action. Galaxy system dots keep
+ *  their single-click selection; pocket-map left clicks stay inert and their
+ *  existing menus are opened by contextmenu. The real click is delayed briefly
+ *  so the browser can deliver a second click to the same SVG node. Rendering a
+ *  popup on click one replaces that node and prevents native dblclick from
+ *  reaching this delegated root. */
+function navigationTarget(button, view = state.ui.starmap) {
+  if (!button || !view) return null;
+  if (view.mode === "galaxy" && button.dataset.system) {
+    return { key: `system:${button.dataset.system}`, kind: "system", id: button.dataset.system };
+  }
+  if (view.mode !== "system") return null;
+  if (button.dataset.exit) {
+    return { key: `exit:${button.dataset.exit}`, kind: "exit", id: button.dataset.exit };
+  }
+  if (button.dataset.pocket && button.dataset.peerSystem) {
+    return { key: `gate:${button.dataset.pocket}`, kind: "gate", id: button.dataset.pocket,
+      peerSystem: button.dataset.peerSystem };
+  }
+  return null;
+}
+
+function clearPendingNavigationClick() {
+  if (pendingNavigationClick?.timer != null) clearTimeout(pendingNavigationClick.timer);
+  pendingNavigationClick = null;
+}
+
+function performSingleNavigationClick(pending) {
+  const view = state.ui.starmap;
+  if (!view || view.mode !== pending.mode) return;
+  // Pocket-map left clicks are intentionally inert. Right-clicking the same
+  // node still opens the existing travel/destination menu, while a double
+  // click on a gate target is handled by navigateDoubleClick().
+  if (pending.kind === "system") selectSystem(pending.id);
+}
+
+function flushPendingNavigationClick() {
+  const pending = pendingNavigationClick;
+  clearPendingNavigationClick();
+  if (pending) performSingleNavigationClick(pending);
+}
+
+function navigateDoubleClick(button) {
+  const view = state.ui.starmap;
+  const target = navigationTarget(button, view);
+  if (!target) return false;
+  clearPendingNavigationClick();
+  if (target.kind === "system") {
+    if (!selectSystem(target.id, true)) return false;
+    return enterSystem(target.id);
+  }
+  if (target.kind === "exit") {
+    const exit = pocketConnections(state.galaxy, view.selected, knowledge()).exits
+      .find(candidate => candidate.id === target.id);
+    if (!exit || !systemVisible(state.galaxy, exit.peerSystemId, knowledge())) return false;
+    return enterSystem(exit.peerSystemId);
+  }
+  if (!systemVisible(state.galaxy, target.peerSystem, knowledge())) return false;
+  return enterSystem(target.peerSystem);
 }
 
 export function setupStarmap() {
@@ -238,11 +442,11 @@ export function setupStarmap() {
   root.addEventListener("click", onClick);
   root.addEventListener("contextmenu", onContextMenu);
   root.addEventListener("dblclick", e => {
-    const node = e.target.closest?.("[data-system]");
-    if (!node || !state.ui.starmap || state.ui.starmap.mode !== "galaxy") return;
+    if (!state.ui.starmap) return;
+    const button = e.target.closest?.("[data-system], [data-pocket], [data-exit]");
+    if (!navigateDoubleClick(button)) return;
     e.preventDefault();
-    selectSystem(node.dataset.system, true);
-    enterSystem(node.dataset.system);
+    e.stopPropagation?.();
   });
   root.addEventListener("change", e => {
     if (e.target.id === "sm-system") selectSystem(e.target.value);
@@ -316,9 +520,9 @@ export function setupStarmap() {
     }
     if (state.ui.starmap) render();
   });
-  on("travel-denied", ({ player, reason } = {}) => {
+  on("travel-denied", ({ player } = {}) => {
     if (state.ui.starmap && (!player || player === localPlayer())) {
-      state.ui.starmap.notice = reason || "Travel is not available.";
+      state.ui.starmap.notice = "";
       state.ui.starmap.menu = null;
       render();
     }
@@ -330,6 +534,7 @@ const knowledge = () => state.worldState.galaxy?.knowledge || {};
 export function openStarmap() {
   const P = localPlayer();
   if (!root || !state.galaxy || state.ui.intro || state.paused || !P || P.docked || P.dead || P.warp) return false;
+  clearPendingNavigationClick();
   cancelTransition();
   const from = P.place || state.place;
   const systems = visibleSystems(state.galaxy, knowledge());
@@ -368,6 +573,7 @@ export function closeStarmap() {
   }
   state.ui.starmap = null;
   drag = null;
+  clearPendingNavigationClick();
   cancelTransition();
   if (root) root.hidden = true;
   setAudioSuspended(state.paused);
@@ -420,7 +626,21 @@ function zoomMap(direction) {
 
 function enterSystem(id = state.ui.starmap?.selected) {
   const view = state.ui.starmap;
-  if (!view || transition || !systemVisible(state.galaxy, id, knowledge())) return false;
+  if (!view || !systemVisible(state.galaxy, id, knowledge())) return false;
+  // A fast double-click can arrive while the short zoom animation is still
+  // running. Finish that presentation first rather than dropping the request.
+  if (transition) finishTransition();
+  // A remote gate label is already on a system chart. Move directly to the
+  // peer chart instead of briefly returning to the galaxy overview.
+  if (view.mode === "system") {
+    view.selected = id;
+    view.systemZoom = 1;
+    view.systemPan = [0, 0];
+    view.menu = null;
+    view.notice = "";
+    render();
+    return true;
+  }
   const fromBox = activeChartViewBox(state.galaxy, view, knowledge());
   view.selected = id;
   view.mode = "system";
@@ -560,6 +780,7 @@ function closeMenu() {
 
 function onContextMenu(e) {
   if (!state.ui.starmap) return;
+  clearPendingNavigationClick();
   e.preventDefault();
   e.stopPropagation();
   const node = e.target.closest?.("[data-system], [data-pocket], [data-exit]");
@@ -606,6 +827,44 @@ function onClick(e) {
   const view = state.ui.starmap;
   if (!view) return;
   const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");
+  const target = navigationTarget(button, view);
+  // Galaxy selection is deliberately immediate. The second click still reaches
+  // the delegated dblclick handler because the selected system is rendered at
+  // the same chart location; pocket/gate targets retain their protected delay.
+  if (target?.kind === "system" && view.mode === "galaxy" && e.detail === 1) {
+    clearPendingNavigationClick();
+    performSingleNavigationClick({ ...target, mode: view.mode });
+    return;
+  }
+  // A real first click on a pocket-map navigation target must not re-render its
+  // delegated SVG node before the browser has a chance to emit dblclick.
+  // Headless tests call this handler without `detail`, so their immediate
+  // single-click semantics remain intact.
+  if (target && (e.detail === 1 || e.detail === 2)) {
+    if (e.detail === 2) {
+      clearPendingNavigationClick();
+      return;
+    }
+    if (pendingNavigationClick && pendingNavigationClick.key !== target.key) flushPendingNavigationClick();
+    clearPendingNavigationClick();
+    const pending = { ...target, mode: view.mode };
+    pending.timer = setTimeout(() => {
+      if (pendingNavigationClick === pending) {
+        pendingNavigationClick = null;
+        performSingleNavigationClick(pending);
+      }
+    }, DOUBLE_CLICK_DELAY);
+    pendingNavigationClick = pending;
+    return;
+  }
+  if (pendingNavigationClick && (!target || pendingNavigationClick.key !== target.key)) flushPendingNavigationClick();
+  onClickNow(e);
+}
+
+function onClickNow(e) {
+  const view = state.ui.starmap;
+  if (!view) return;
+  const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");
   const menuAction = ["travel", "set-destination", "set-pocket-destination", "system-warp"].includes(button?.dataset?.action);
   if (view.menu && !menuAction) {
     view.menu = null;
@@ -613,14 +872,7 @@ function onClick(e) {
   }
   if (!button || button.disabled) return;
   if (button.dataset.system) { selectSystem(button.dataset.system); return; }
-  if (button.dataset.exit) {
-    openExitMenu(button.dataset.exit, e.clientX ?? 0, e.clientY ?? 0);
-    return;
-  }
-  if (button.dataset.pocket) {
-    openPocketMenu(button.dataset.pocket, e.clientX ?? 0, e.clientY ?? 0);
-    return;
-  }
+  if (view.mode === "system" && (button.dataset.exit || button.dataset.pocket)) return;
   const action = button.dataset.action;
   if (action === "close") { uiSound("click"); closeStarmap(); }
   else if (action === "zoom-in") zoomMap(1);
@@ -640,9 +892,8 @@ function onClick(e) {
     if (!id || !systemVisible(state.galaxy, id, knowledge())) return;
     const route = findRouteToSystem(state.galaxy, from, id, travelContext());
     view.menu = null;
-    if (!route) view.notice = "No route to that system.";
-    else if (route.length < 2) view.notice = "You are already in that system.";
-    else { setDestination(id); view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    if (route?.length >= 2) { setDestination(id); view.routePage = 0; }
+    view.notice = "";
     render();
   } else if (action === "set-pocket-destination") {
     const from = localPlayer()?.place || state.place;
@@ -652,15 +903,14 @@ function onClick(e) {
     const destination = { pocketId: target };
     const route = findDestinationRoute(state.galaxy, from, destination, travelContext());
     view.menu = null;
-    if (!route) view.notice = "No route to that pocket.";
-    else if (route.length < 2) view.notice = "You are already in that pocket.";
-    else { setDestination(destination); view.routePage = 0; view.notice = "Destination set. Press J for the next warp."; }
+    if (route?.length >= 2) { setDestination(destination); view.routePage = 0; }
+    view.notice = "";
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
     const to = id && directSystemWarp(state.galaxy, localPlayer()?.place || state.place, id, travelContext());
     view.menu = null;
-    if (!to) { view.notice = "No direct route."; render(); return; }
+    if (!to) { view.notice = ""; render(); return; }
     emit("action", { name: "travel", to, repeat: false });
   } else if (action === "clear-destination") {
     setDestination(null); view.routePage = 0; render();
@@ -672,12 +922,12 @@ function onClick(e) {
     const choice = menuChoice(state.galaxy, view, from);
     view.menu = null;
     if (choice && choice.pocket.id !== to) {
-      view.notice = "Travel is not available.";
+      view.notice = "";
       render();
       return;
     }
     if (!choice?.canWarp) {
-      view.notice = choice?.status || "Travel is not available.";
+      view.notice = "";
       render();
       return;
     }
@@ -711,21 +961,34 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
     const b = world.systemsById[world.pocketsById[id]?.parent];
     if (!a || !b || a.id === b.id) return "";
     const line = paths.get([a.id, b.id].sort().join("__"));
-    return line ? `<path class="sm-route-edge" d="${line.path}"${line.maskId ? ` mask="url(#${line.maskId})"` : ""}/>` : "";
+    if (!line) return "";
+    const start = [a.pos[0], -a.pos[1]], end = [b.pos[0], -b.pos[1]];
+    const mask = line.maskId ? ` mask="url(#${line.maskId})"` : "";
+    return `<path class="sm-route-edge" d="${line.path}"${mask}/><path class="sm-route-arrow" d="${arrowPath(start, end, 0.68, 6 * unit)}"${mask}/>`;
   }).join("");
+  const routeIds = new Set(routeSystemIds(world, route));
+  const routeStart = [...routeIds][0];
+  const routeDestination = [...routeIds].at(-1);
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
     const chosen = s.id === view.selected;
-    const visited = know[s.id]?.visited;
-    const radius = (current ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) * unit;
+    const role = routeRole(s.id, routeIds, routeStart, routeDestination);
+    const iconScale = role?.start || role?.destination || current ? ROUTE_ICON_SCALE : 1;
+    const radius = (current ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) * iconScale * unit;
+    const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
+    const marker = routeMarkerMarkup(s.pos[0], -s.pos[1], radius, role, unit);
     const label = chosen || current || view.labels;
-    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${visited ? " visited" : ""}"
+    const labelX = s.pos[0] + radius + 5 * unit;
+    const labelY = -s.pos[1] + 3 * unit;
+    const hereLabel = current ? `<tspan class="sm-here-label" x="${labelX}" dy="${12 * unit}">(You are here)</tspan>` : "";
+    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${roleClass}"
       data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}">
       <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
-      ${chosen ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
-      ${label ? `<text x="${s.pos[0] + radius + 5 * unit}" y="${-s.pos[1] + 3 * unit}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}</text>` : ""}
+      ${marker}
+      ${chosen && !current ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
+      ${label ? `<text x="${labelX}" y="${labelY}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}${hereLabel}</text>` : ""}
     </g>`;
   }).join("");
   return `<defs>${masks.join("")}</defs>` + lines + routeLines + nodes;
@@ -743,12 +1006,8 @@ function systemMarkup(world, view, know, here, unit, route = null) {
   }).join("");
   const routeLines = systemRouteSegments(chart, route).map(segment => {
     const a = point(segment.a), b = point(segment.b);
-    const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
-    // A small filled arrow at 70% of the segment makes the direction clear.
-    const ux = length ? dx / length : 0, uy = length ? dy / length : 0;
-    const x = a[0] + dx * 0.7, y = a[1] + dy * 0.7, size = 5 * unit;
-    const arrow = length ? `<path class="sm-system-route-arrow" d="M${x + ux * size} ${y + uy * size} L${x - ux * size - uy * size * 0.65} ${y - uy * size + ux * size * 0.65} L${x - ux * size + uy * size * 0.65} ${y - uy * size - ux * size * 0.65} Z"/>` : "";
-    return `<g class="sm-system-route" data-route-from="${esc(segment.from)}" data-route-to="${esc(segment.to)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>${arrow}</g>`;
+    const arrow = arrowPath(a, b, 0.7, 5 * unit);
+    return `<g class="sm-system-route" data-route-from="${esc(segment.from)}" data-route-to="${esc(segment.to)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><path class="sm-system-route-arrow" d="${arrow}"/></g>`;
   }).join("");
   const exits = chart.exits.map(exit => {
     const a = point(exit.start), b = point(exit.end);
@@ -766,16 +1025,40 @@ function systemMarkup(world, view, know, here, unit, route = null) {
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(label)}</text>
     </g>`;
   }).join("");
+  const routeExitLines = systemRouteExits(chart, route).map(({ from, to, a: start, b: end }) => {
+    const a = point(start), b = point(end);
+    return `<g class="sm-system-route sm-system-route-exit" data-route-from="${esc(from)}" data-route-to="${esc(to)}"><line class="sm-route-exit-edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><path class="sm-system-route-arrow" d="${arrowPath(a, b, 0.7, 5 * unit)}"/></g>`;
+  }).join("");
+  const routePocketIds = new Set(Array.isArray(route) ? route : []);
+  const routeStartPocket = Array.isArray(route) ? route[0] : null;
+  const routeDestinationPocket = Array.isArray(route) ? route.at(-1) : null;
+  const pocketRadius = GALAXY.systemMap.pocketRadius * unit;
+  const labels = pocketLabelLayout(chart, point, pocketRadius, unit);
   const nodes = chart.nodes.map(node => {
     const [x, y] = point(node.pos);
     const current = node.id === here.id;
-    const radius = GALAXY.systemMap.pocketRadius * unit;
-    const { x: lx, y: ly, anchor } = pocketLabelPosition(node, [x, y], radius, unit);
-    return `<g class="sm-node sm-pocket-node${current ? " current" : ""}" data-pocket="${esc(node.id)}"
-      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${current ? ", current pocket" : ""}">
+    const station = placeDef(node.pocket.id).features.some(feature => feature.kind === "station");
+    const label = labels.get(node.id);
+    const role = routeRole(node.id, routePocketIds, routeStartPocket, routeDestinationPocket);
+    const radius = (role?.start || role?.destination ? ROUTE_ICON_SCALE : 1) * pocketRadius;
+    const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
+    const marker = routeMarkerMarkup(x, y, radius, role, unit);
+    const { x: lx, y: ly, anchor } = label;
+    const labelLink = label.moved
+      ? `<line class="sm-label-link" x1="${x}" y1="${y}" x2="${lx}" y2="${ly}"/>`
+      : "";
+    const dot = station
+      ? `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`
+      : `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
+    const peerAttr = node.peerSystemId ? ` data-peer-system="${esc(node.peerSystemId)}"` : "";
+    const hereLabel = current ? `<tspan class="sm-here-label" x="${lx}" dy="${12 * unit}">(You are here)</tspan>` : "";
+    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}${roleClass}" data-pocket="${esc(node.id)}"${peerAttr}
+      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
-      <circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>
-      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
+      ${labelLink}
+      ${dot}
+      ${marker}
+      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}${hereLabel}</text>
     </g>`;
   }).join("");
   // The core is a named chart object, not a pocket: no data-pocket, travel action,
@@ -800,7 +1083,7 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     <text class="sm-core-label sm-core-type" x="${coreX}" y="${labelY + lineStep}"
       text-anchor="middle" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">(${esc(type)})</text>
   </g>`;
-  return lines + exits + coreMarkup + routeLines + nodes;
+  return lines + exits + routeExitLines + coreMarkup + routeLines + nodes;
 }
 
 function render() {
@@ -857,7 +1140,7 @@ function render() {
     ? `Warp to any ${esc(term("flyable"))} in this ${esc(term("mapNode"))}; no internal route is needed.`
     : `Follow the internal route lines; this ${esc(term("mapNode"))} requires connected ${esc(term("flyable"))} hops.`;
   const help = view.mode === "system"
-    ? `Click or right-click a ${esc(term("flyable"))} to warp or set a destination. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route. The central star/black hole is not warpable. Scroll out or Back to return.`
+    ? `Click or right-click a ${esc(term("flyable"))} to warp or set a destination. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route; double-click the gate or its label to open that map directly. The central star/black hole is not warpable. Scroll out or Back to return.`
     : `Right-click a system to set a destination. Press J in flight for the next warp. Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `
@@ -874,7 +1157,6 @@ function render() {
             ${chart}
           </svg>
           <p class="sm-help">${help}</p>
-          ${view.notice ? `<p class="sm-status" aria-live="polite">${esc(view.notice)}</p>` : ""}
         </section>
         <aside class="sm-details" aria-label="System overview">
           ${selected ? `<h2>${esc(selected.n)}</h2>
@@ -921,10 +1203,10 @@ function pocketMenuMarkup(world, view, from, rootRect) {
   return `<div class="sm-context" role="menu" tabindex="-1" aria-label="${esc(choice.title)}"
     style="left:${pos.left + (rootRect.left || 0)}px;top:${pos.top + (rootRect.top || 0)}px;width:${GALAXY.map.context.width}px">
     <strong>${esc(choice.title)}</strong>
+    <button type="button" role="menuitem" data-action="set-pocket-destination">Set destination</button>
     ${choice.canWarp
       ? `<button type="button" role="menuitem" data-action="travel" data-to="${esc(choice.pocket.id)}">Warp to ${esc(choice.title)}</button>`
       : `<p class="sm-context-note">${esc(choice.status)}</p>`}
-    <button type="button" role="menuitem" data-action="set-pocket-destination">Set destination</button>
   </div>`;
 }
 

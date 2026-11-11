@@ -15,12 +15,22 @@
 //   launched                         player left the outpost
 //   died          text               ship destroyed (after docking)
 //   mined         { item }           one unit of ore added to the hold
-//   pickup        { item }           crate picked up
+//   pickup        { item, player, place, encounter, encounterType }
+//                                    crate picked up; encounter fields are null for ordinary loot
+//   encounter-cleared { place, id, encounter }
+//                                    final crate/patrol member was cleared and a cooldown began
+//   encounter-spawned { place, id, encounter }
+//                                    a static encounter rebuilt its crate content
+//   place-memory-ready { placeId, kind, id, forced }
+//                                    a rock/encounter cooldown expired or was overridden
+//   respawn-place  { placeId, kind, id }
+//                                    story/event hook to clear one place-memory cooldown
 //   sfx           { name, ...rest }  a game sound the sim wants played; `name` is a key of
 //                                    SFX in core/audio.js (the sim never calls the speakers
 //                                    itself). Extra fields are that sound's arguments, e.g.
 //                                    { name: "explosion", count } or { name: "warp-charge", dur }
-//   enemy-killed  { def, faction, id } a hostile was destroyed (def, faction and id are ids)
+//   enemy-killed  { def, faction, id, player, place, encounter }
+//                                    a hostile was destroyed; encounter is null for ordinary enemies
 //   entity-spawned { id, kind }     any other entity entered the world: a bullet, missile,
 //                                    crate, particle or rock (render/views.js builds its mesh).
 //                                    Hostiles keep `enemy-spawned` below, from step 7a.

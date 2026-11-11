@@ -65,7 +65,14 @@ function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.pla
   dropEnemy(e);          // out of the world, and render/views.js removes its mesh
   const prof = byPlayer ? profileOf(byPlayer) : state.profile;
   if (prof) prof.kills++;
-  emit("enemy-killed", { def: e.def, faction: e.f, id: e.id, player: byPlayer });
+  emit("enemy-killed", {
+    def: e.def,
+    faction: e.f,
+    id: e.id,
+    player: byPlayer,
+    place: placeId,
+    encounter: e.encounter || null,
+  });
 
   // Loot: whatever the enemy's table says (data/loot.js).
   for (const drop of rollLoot(e.loot)) {
@@ -78,10 +85,12 @@ function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.pla
 const scattered = (p, d) => (d > 0 ? p.clone().add(V(R(-d, d), R(-d, d), R(-d, d))) : p);
 
 /** Drop a crate holding `item` at `p`. Cores are rarer and drawn in blue. */
-export function spawnCrate(p, item = "salv", placeId = state.place) {
+export function spawnCrate(p, item = "salv", placeId = state.place, encounter = null, encounterType = null) {
   const e = {
     kind: "crate",
     place: placeId,
+    encounter,
+    encounterType,
     pos: V(p.x, p.y, p.z),
     quat: freshQuat(),      // the sim turns it; the view copies the turn
     t: CRATE_LIFE,
@@ -174,10 +183,18 @@ export function updateCrates(dt, placeId = state.place) {
       if (holdLoad(prof) >= SHIPS[prof.ship].cargo || !addItem(prof.ship, k, 1, prof)) {
         if (local) say("Cargo hold full");
       } else {
-        emit("pickup", { item: k, player: p });
+        // Remove it before announcing pickup so a place-memory listener can see
+        // whether this was the encounter's last crate.
+        dropEntity(C, c);
+        emit("pickup", {
+          item: k,
+          player: p,
+          place: placeId,
+          encounter: c.encounter,
+          encounterType: c.encounterType || null,
+        });
         if (local) msg(`Picked up ${itemName(k)}`, 2);
         if (placeId === state.place) emit("sfx", { name: "pickup" });
-        dropEntity(C, c);
         break;
       }
     }

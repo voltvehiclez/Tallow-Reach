@@ -12,6 +12,7 @@
 
 import { GALAXY, GALAXY_OVERRIDES, SYSTEM_NAME_PARTS } from "../data/galaxy.js";
 import { PLACES, PLACE_LINKS, PLACE_DEFS, DEFAULT_PLACE } from "../data/places.js";
+import { isPlaceTemplate, templateAt, templateFeatures, templateForPlace } from "../data/place-templates.js";
 import { term } from "../data/terms.js";
 import { makeRng } from "../util/rng.js";
 import { intraSystemPolicy } from "./travel.js";
@@ -45,6 +46,11 @@ export function generateGalaxy(seed = GALAXY.seed, tuning = GALAXY, overrides = 
   applyOverrides(world, overrides);
   pruneDanglingLinks(world);
   assignSystemDefaults(world, config);
+  assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
+  addDetachedStationPockets(world, config);
+  nameGeneratedStations(world, config);
+  // The new pockets need the same resolved tier as their source gate. Systems
+  // already have tiers, so this second pass only fills the pocket records.
   assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
   assignCores(world, config);
   index(world);
@@ -234,9 +240,102 @@ function connectSystems(a, b, pockets, links, systemLinks, degree, tuning) {
   degree.set(b.id, degree.get(b.id) + 1);
 }
 
-function emptyPocket(id, parent, n, d, role = null) {
+/**
+ * A friendly trader selected by a generated gate template belongs in its own
+ * pocket. The gate keeps its scenery and encounter content, but not the
+ * template-derived station. An authored `allowStation`/`stationPlacement` or
+ * explicit feature record is left alone so deliberate gate co-location stays
+ * available to future content authors.
+ */
+function addDetachedStationPockets(world, tuning) {
+  const systemsById = Object.fromEntries(world.systems.map(system => [system.id, system]));
+  const gates = Object.values(world.pockets).filter(pocket => pocket.role === "gate" && pocket.template);
+  for (const gate of gates) {
+    const gateFeatures = templateFeatures(gate.template, gate).features;
+    if (gateFeatures.some(feature => feature.kind === "station")) continue;
+    const stationFeatures = templateFeatures(gate.template, { ...gate, role: "station" }).features
+      .filter(feature => feature.kind === "station");
+    if (!stationFeatures.length) continue;
+    const system = systemsById[gate.parent];
+    if (!system) continue;
+    const stationId = `${gate.id}-station`;
+    if (world.pockets[stationId]) {
+      const existing = templateFeatures(world.pockets[stationId].template, world.pockets[stationId]).features;
+      if (existing.some(feature => feature.kind === "station")) continue;
+      throw new Error(`Generated station pocket id "${stationId}" is already in use`);
+    }
+    world.pockets[stationId] = emptyPocket(
+      stationId,
+      gate.parent,
+      `${system.n} Station`,
+      `A station pocket serving ${system.n}.`,
+      "station",
+      gate.template,
+    );
+    const hub = gate.parent === tuning.homeSystem ? DEFAULT_PLACE : `${gate.parent}-hub`;
+    addLink(world.links, `${stationId}-inner`, "internal", hub, stationId, tuning);
+  }
+}
+
+/** Give generated trader features names that are useful in the HUD, station
+ *  screen and map, not just the generic encounter name. Authored station
+ *  features keep their own names; generated ones get a stable, varied style. */
+function nameGeneratedStations(world, tuning) {
+  const configured = Array.isArray(tuning.stationNameStyles)
+    ? tuning.stationNameStyles.filter(style => typeof style === "string" && style.trim())
+    : [];
+  const styles = configured.length ? configured : ["Station", "Outpost", "Trading Hub"];
+  const usedNames = new Set(Object.values(world.pockets)
+    .filter(pocket => !(pocket.template && pocket.role === "station"))
+    .map(pocket => pocket.n)
+    .filter(Boolean));
+  for (const pocket of Object.values(world.pockets)) {
+    const explicit = pocket.template
+      ? [
+          ...(Array.isArray(pocket.features) ? pocket.features : []),
+          ...(Array.isArray(pocket.extraFeatures) ? pocket.extraFeatures : []),
+        ]
+      : (PLACE_DEFS[pocket.def]?.features || []);
+    for (const feature of explicit) if (feature?.kind === "station" && feature.n) usedNames.add(feature.n);
+  }
+  for (const pocket of Object.values(world.pockets).sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!pocket.template) continue;
+    const explicitIds = new Set([
+      ...(Array.isArray(pocket.features) ? pocket.features : []),
+      ...(Array.isArray(pocket.extraFeatures) ? pocket.extraFeatures : []),
+    ].filter(feature => feature?.kind === "station").map(feature => feature.id));
+    const features = templateFeatures(pocket.template, pocket).features;
+    const generated = features.find(feature => feature.kind === "station" && !explicitIds.has(feature.id));
+    if (!generated) continue;
+    const system = world.systems.find(candidate => candidate.id === pocket.parent);
+    if (!system) continue;
+    const base = systemCoreName(system);
+    const start = hashId(pocket.id) % styles.length;
+    let name = null;
+    for (let offset = 0; offset < styles.length; offset++) {
+      const suffix = styles[(start + offset) % styles.length].trim();
+      const candidate = `${base} ${suffix}`;
+      if (!usedNames.has(candidate)) { name = candidate; break; }
+    }
+    if (!name) {
+      let serial = 2;
+      do name = `${base} ${styles[start].trim()} ${serial++}`;
+      while (usedNames.has(name));
+    }
+    pocket.stationName = name;
+    if (pocket.role === "station") pocket.n = name;
+    usedNames.add(name);
+  }
+}
+
+function emptyPocket(id, parent, n, d, role = null, templateId = null) {
+  const template = templateId || templateForPlace(id, role || "hub");
+  // The map inherited the old placeholder label/description. Keep a useful
+  // gate or system-specific name, but expose the selected template's authored
+  // description so generated pockets are not still presented as empty.
+  const description = templateAt(template).d || d;
   const pocket = {
-    id, kind: "pocket", def: "empty", parent, n, d,
+    id, kind: "pocket", def: "empty", template, parent, n, d: description,
     enter: { kind: "warp", pos: [0, 0, 300] },
     leave: { kind: "warp" },
   };
@@ -318,6 +417,12 @@ export function assignTiers(world, tuning, rng) {
     const vary = Math.floor(rng() * (tuning.difficulty.variation * 2 + 1)) - tuning.difficulty.variation;
     system.tier = Math.max(1, Math.round(tuning.difficulty.base + distance(system.pos, origin) * tuning.difficulty.perDistance + vary));
   }
+  // Generated pockets inherit the advisory tier so their data template can pull
+  // the right encounter pool. Authored pockets remain free to omit it.
+  for (const pocket of Object.values(world.pockets)) {
+    const system = world.systems.find(s => s.id === pocket.parent);
+    if (system && pocket.template) pocket.tier = system.tier;
+  }
 }
 
 /** Fill data defaults after author edits, leaving explicit per-system choices intact. */
@@ -378,7 +483,9 @@ export function validateGalaxy(world) {
   for (const [id, pocket] of Object.entries(world.pockets)) {
     if (pocket.id !== id) errors.push(`pocket ${id} carries mismatched id ${pocket.id}`);
     if (!systems.has(pocket.parent)) errors.push(`pocket ${id} names missing system ${pocket.parent}`);
-    if (!PLACE_DEFS[pocket.def]) errors.push(`pocket ${id} names missing definition ${pocket.def}`);
+    if (pocket.template ? !isPlaceTemplate(pocket.template) : !PLACE_DEFS[pocket.def]) {
+      errors.push(`pocket ${id} names missing definition/template ${pocket.template || pocket.def}`);
+    }
     if (pocket.mapPos !== undefined && (!Array.isArray(pocket.mapPos) || pocket.mapPos.length !== 2 || !pocket.mapPos.every(Number.isFinite))) {
       errors.push(`pocket ${id} needs a finite 2D mapPos when authored`);
     }

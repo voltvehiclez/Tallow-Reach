@@ -11,6 +11,7 @@ import { pruneLock } from "./targeting.js";
 import { updateEnemies } from "./ai.js";
 import { updateBullets, updateCrates } from "./combat.js";
 import { updateEffects } from "./effects.js";
+import { updatePlaceMemory } from "./place-memory.js";
 import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 
 /** The frame loop's pause gate. A hosted multiplayer world never pauses merely
@@ -22,6 +23,7 @@ export function isSimulationPaused() {
 /** One simulation tick. Caller does not step while paused. */
 export function stepSim(dt) {
   state.time += dt;
+  updatePlaceMemory(dt);
   // A hint lasts until the next sim tick, not just a display frame. This keeps
   // it visible when a display renders more than once between sim ticks.
   state.hud.prompt = "";

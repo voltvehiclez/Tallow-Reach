@@ -225,7 +225,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 17, "save version includes the persisted route destination");
+  assert.equal(p.v, 18, "save version remains reserved for Step 13 while station stores migrate");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {

@@ -21,9 +21,9 @@ test("flight route shows only remaining systems, highlights current and counts f
   assert.ok(route.length > 1);
   assert.equal(el.hidden, false);
   assert.ok(el.innerHTML.includes(`Route to ${target.n} (${model.stops.length - 1} systems)`));
-  assert.ok(el.innerHTML.includes(`aria-current="location"><span aria-hidden="true">→</span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
+  assert.ok(el.innerHTML.includes(`aria-current="location"><span class="route-marker route-marker-start" aria-hidden="true"></span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
   assert.doesNotMatch(el.innerHTML, /route-done|✓|<small>|\d+ jumps?/);
-  assert.equal((el.innerHTML.match(/<span aria-hidden="true">→<\/span>/g) || []).length, model.stops.length, "every system has a route arrow");
+  assert.equal((el.innerHTML.match(/class="route-marker /g) || []).length, model.stops.length, "every system has a route marker");
   assert.equal((el.innerHTML.match(/<li(?: [^>]*)?>/g) || []).length, model.stops.length);
   assert.ok(!el.innerHTML.includes(world.pocketsById[player.place].n), "no pocket names in list");
   const remoteHop = route.find(id => world.pocketsById[id].parent !== world.pocketsById[player.place].parent);
@@ -32,7 +32,7 @@ test("flight route shows only remaining systems, highlights current and counts f
   const remaining = hud.findDestinationRoute(world, player.place, target.id, { player, profile: state.profile, world: state.worldState });
   const currentModel = routeDisplay(world, target.id, remaining, {});
   assert.ok(el.innerHTML.includes(`(${currentModel.stops.length - 1} ${currentModel.stops.length === 2 ? "system" : "systems"})`));
-  assert.ok(el.innerHTML.includes(`aria-current="location"><span aria-hidden="true">→</span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
+  assert.ok(el.innerHTML.includes(`aria-current="location"><span class="route-marker route-marker-start" aria-hidden="true"></span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
   player.place = route[0]; hud.updateHudRoute(0, el);
   for (const link of Object.values(world.links)) if (link.kind === "gate") link.enabled = false;
   hud.updateHudRoute(0.6, el);
@@ -57,7 +57,7 @@ test("route summary shows exact pockets, conceals undiscovered stops and escapes
   const destination = { pocketId: target.id };
   const summary = routeDisplay(world, destination, [start.id, target.id], {});
   assert.equal(summary.stops.at(-1).pockets.at(-1).name, target.n);
-  assert.match(summary.title, /\(/);
+  assert.equal(summary.title, `${world.systemsById[target.parent].n} (${target.n})`);
   const hiddenWorld = { ...world, visibility: { mode: "discovered" } };
   assert.deepEqual(routeDisplay(hiddenWorld, destination, [start.id, target.id], {}).stops.at(-1).pockets,
     [{ name: "Undiscovered pocket", current: false }]);
@@ -89,13 +89,14 @@ test("route rows omit pockets and mark the final destination", () => {
   const remoteLocal = Object.values(world.pocketsById).find(p => p.parent === remote.parent && p.id !== remote.id);
   const detail = routeDisplay(world, { pocketId: remoteLocal.id }, [start.id, local.id, remote.id, remoteLocal.id], {}, start.id);
   const rows = flightRouteRows(detail.stops);
-  assert.doesNotMatch(rows, /route-done|✓|<small>/);
+  assert.doesNotMatch(rows, /route-done|✓/);
   assert.match(rows, /class="route-here" aria-current="location"/);
   assert.match(rows, /class="route-destination"/);
   assert.match(rows, /aria-label="[^"]+, destination"/);
+  assert.match(rows, /route-marker-destination-tick/, "the destination marker contains a tick");
+  assert.ok(rows.includes(`<small>(${remoteLocal.n})</small>`), "only the final system names the destination pocket");
   assert.doesNotMatch(rows, /◆|route-goal/);
   assert.ok(!rows.includes(local.n));
-  assert.ok(!rows.includes(remoteLocal.n));
   assert.equal((rows.match(/<li(?: [^>]*)?>/g) || []).length, 2);
   const localRoute = routeDisplay(world, { pocketId: local.id }, [start.id, local.id], {});
   assert.match(flightRouteRows(localRoute.stops), /class="route-here route-destination" aria-current="location"/);

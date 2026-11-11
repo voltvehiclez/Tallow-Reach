@@ -12,6 +12,8 @@
 // Derived runtime catalog, never saved. sim/galaxy-session.js replaces it when
 // a seed is loaded. Keeping lookup here lets existing sim/render callers use
 // generated pockets without importing the map screen or knowing the generator.
+import { templateAt, templateFeatures } from "./place-templates.js";
+
 let livePlaces = null;
 export function setPlaceCatalog(galaxy = null) {
   livePlaces = galaxy ? {
@@ -47,16 +49,17 @@ export const PLACE_DEFS = {
         height: 250,           // vertical spread
         count: 70,
         ore: "asteroid",       // loot table id (data/loot.js)
-        respawnMs: 30000,      // wall-clock respawn delay (step 12 moves this to sim time)
+        respawnSec: 420,       // seven minutes of simulation time; events may respawn it sooner
+        stable: true,           // field slots keep their shape/ore/position across loads
         rock: { rMin: 18, rMax: 70, orePerR: 1.6 },
         salvage: { spread: [600, 150, 600] },
       },
       {
         kind: "spawner",
         id: "raiders",
-        enemy: "raider",
-        // Wandering raiders appear when an active pilot is far from the station
-        // and near the field. Hunt contracts use the same rules as before.
+        encounter: "hostile_patrol",
+        // The generic patrol spawner keeps today's wandering behaviour. Hunt
+        // contracts still override its enemy and desired count in sim/ai.js.
         anchor: "field",
         nearRadius: 1400,
         farFromStation: 600,
@@ -64,6 +67,7 @@ export const PLACE_DEFS = {
         chance: 0.4,
         maxWanderers: 2,
         count: [1, 2],
+        once: false,
       },
       {
         kind: "planet",
@@ -139,10 +143,36 @@ export const isSystem = id => isPlace(id) && catalog()[id].kind === "system";
 /** The place record for `id`, falling back to the starting pocket. */
 export const placeAt = id => (isPlace(id) ? catalog()[id] : null) || catalog()[DEFAULT_PLACE] || PLACES[DEFAULT_PLACE];
 
-/** The definition named by a place record (empty when it has none). */
-export const placeDef = id => PLACE_DEFS[placeAt(id).def] || { features: [] };
+/**
+ * The definition named by a place record. Generated pockets retain the legacy
+ * `def: "empty"` marker for old map/save tools, so their explicit `template`
+ * wins when present; authored definitions keep their original behaviour.
+ */
+export function placeDef(id) {
+  const place = placeAt(id);
+  if (place.template && templateAt(place.template)) return templateFeatures(place.template, place);
+  const definition = PLACE_DEFS[place.def] || { features: [] };
+  const explicit = [
+    ...(Array.isArray(place.features) ? place.features : []),
+    ...(Array.isArray(place.extraFeatures) ? place.extraFeatures : []),
+  ];
+  if (!explicit.length) return definition;
+  const additions = JSON.parse(JSON.stringify(explicit));
+  return { ...definition, features: [...(definition.features || []).map(feature => ({ ...feature })), ...additions] };
+}
 
-/** Every feature of one kind in a place definition, in data order. */
+/** Stable inventory key for the station feature in a pocket. Generated station
+ * ids are namespaced by their pocket, so two traders with the same encounter
+ * kind never share storage. The home key is also exposed through the legacy
+ * `world.store` alias for old saves and callers. */
+export function stationKeyAt(id = DEFAULT_PLACE) {
+  if (!isPocket(id)) return null;
+  const place = placeAt(id);
+  const station = placeDef(place.id).features.find(feature => feature.kind === "station");
+  return station?.id ? `${place.id}:${station.id}` : null;
+}
+
+/** Every feature of one kind, in data order. */
 export const featuresOf = (id, kind) => placeDef(id).features.filter(f => f.kind === kind);
 
 /** The first feature of one kind, or null. */

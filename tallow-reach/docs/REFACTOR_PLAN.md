@@ -238,8 +238,8 @@ rate throttle if you can). Tests green.
   playtest passed (section L of `TESTING-BASELINE.md`), including smooth play on a 240 Hz display
   with no view interpolation needed. Two-player headless tests and scripted 8b flight and
   combat/lifecycle comparisons pass. Remaining local-only areas are assigned in
-  `TARGET_ARCHITECTURE.md` across steps 9, 10 and 16; the two minor frame-rate caveats
-  (camera-sampled missile aim and `setTimeout` asteroid respawn) are parked in `ROADMAP.md`.
+  `TARGET_ARCHITECTURE.md` across steps 9, 10 and 16; camera-sampled missile aim remains parked
+  in `ROADMAP.md`, while the old wall-clock asteroid respawn caveat was closed by Step 12 place memory.
 **Save.** None.
 
 ## Step 9: Split the save into profile and world
@@ -299,9 +299,10 @@ system by default, with a data `intraSystem: "links"` opt-out for future route-o
 cross-system gate hops remain. Each system chart has a non-warpable star (95%) / black hole (5%) core,
 named from the system with a permanent two-line name/type label; pockets orbit it and only route-only systems draw
 internal lines. A gate pocket has exactly one external gate peer in a neighbouring system; each system
-has one ordinary pocket plus one gate pocket per neighbour; Meridian keeps `reach`/`hollow` unchanged
-and gains separate new gate pockets; generated systems are empty placeholders; the whole map is
-visible through a configurable policy; difficulty is distance guidance with seeded variation, while
+has an ordinary hub plus any detached station pockets and one gate pocket per neighbour; Meridian keeps
+`reach`/`hollow` unchanged and gains separate new gate pockets. Generated gate trader stations are
+moved to their own station pockets by default, while explicit author features/placement flags can
+co-locate a station. The whole map is visible through a configurable policy; difficulty is distance guidance with seeded variation, while
 actual content decides danger. The web must stay modular: move a system, delete a pocket, promote a
 pocket to a gate, add a route or replace the generator without rewriting map/UI/warp code. Future fuel,
 activated gates and supercruise are out of scope now.
@@ -318,9 +319,10 @@ activated gates and supercruise are out of scope now.
   exit stubs toward neighbouring systems); a compact right panel lists the system name, current pocket and
   plain pocket rows. **Clicking/right-clicking a legal pocket or gate-neighbour label** offers
   **Warp to** and starts the existing warp sequence. Single-player map pauses the simulation; a future host
-  keeps running. Save **v16** stores the galaxy seed and compact discovery/visit records, not generated
-  geography or pocket layout, with migration from v15 and a removed-pocket fallback to the safe home station
-  without losing character/cargo. Map/input/save tests and root-level `TESTING-STARMAP.md`.
+  keeps running. The initial save slice was v16; the destination follow-up made the final Step 11 save
+  **v17**, storing the galaxy seed/knowledge and route destination, not generated geography or pocket layout,
+  with migration from v15/v16 and a removed-pocket fallback to the safe home station without losing
+  character/cargo. Map/input/save tests and root-level `TESTING-STARMAP.md`.
 **Done when.** Tests prove generation is deterministic, has at least 100 systems, every system is
 reachable, and difficulty generally rises with distance from Meridian while authored content may stay
 easy. You can click through the map, zoom into any system's pocket map, click/right-click among any number
@@ -330,8 +332,8 @@ chart-only dot positions are adjusted so straight lines avoid unrelated dots and
 A permanent two-line label names the non-warpable core; galaxy pan and
 core graphics scale with zoom; a links opt-out restores internal routes/lines. Do not
 assume a system has exactly two pockets, and do not hard-code a two-level universe.
-**Save.** **Version 16**, migration from 15 (v15 is already used by the resume point).
-**Status:** [ ] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI, free-local-warp/central-body and label/pan/gate-click refinements built, owner playtest pending (`TESTING-STARMAP.md`). 334 tests pass; save v17 persists destinations and system pocket maps show local route hops.**
+**Save.** **Version 17**, migration from 16 (v15 is already used by the resume point).
+**Status:** [x] **11A owner playtest passed 2026-11-08; 11B + zoom/right-click UI, free-local-warp/central-body and label/pan/gate-click refinements built and owner playtest passed. Save v17 persists destinations and system pocket maps show local route hops.**
 
 ## Step 12: Encounters, place templates and place memory
 **Goal.** The open world's content is data you can pile onto.
@@ -339,10 +341,11 @@ assume a system has exactly two pockets, and do not hard-code a two-level univer
 **four encounter kinds** as proof (for example a hostile patrol, a friendly trader using `SHOPS`, a
 derelict with loot, a resource cache). Templates pull encounters by tier. A generic spawner replaces
 the raider special cases in `sim/ai.js` (hunt-contract behaviour stays the same). Places remember
-what you did (mined-out rocks, cleared encounters) with respawn timers (open question 4).
+what you did (mined-out rocks, cleared encounters) with slow simulation-time respawn timers and event overrides (owner decision recorded in VISION.md). Every dockable station also resolves a stable `${placeId}:${featureId}` storage key; trader stations reuse Meridian's `SHOPS` definitions but never share stock.
 **Done when.** Adding an encounter is a data entry; the content test checks every reference; flying
-into a few generated pockets shows different things.
-**Save.** **Version 17**, migration from 16.
+into a few generated pockets shows different things and station-local inventory survives switching and reload.
+**Save.** **Version 18**, migration from 17 (the destination follow-up used v17); station-local stores are an optional v18 extension so Step 13 remains v19.
+**Status:** [ ] **Built 2026-11-10; owner playtest pending (`TESTING-12-PLACES.md`).**
 
 > **Milestone C reached.** The open world can scale to 100+ systems of pocket content.
 
@@ -382,7 +385,7 @@ engine code; it only names things by id (enemies, items, sectors, flags).
   mission can be completed.
 - A mission survives save and load in the middle of a step; abandoning or dying mid-mission does what
   the mission's `fails` says.
-**Save.** **Version 18**: `mission` becomes `missions` (progress per active mission: current step,
+**Save.** **Version 19**: `mission` becomes `missions` (progress per active mission: current step,
 counters) plus `flags`, with migration.
 
 ## Step 14: Instanced sectors and wormholes
@@ -405,7 +408,7 @@ missions in any order for a modest reward; finishing all missions flips the play
 releases the open world; a simple brief/dialogue panel for text.
 **Done when.** A test completes a stub campaign and checks the transition and the replay rewards.
 Adding a mission is one new file and one line in `index.js`.
-**Save.** **Version 19**, migration from 18.
+**Save.** **Version 20**, migration from 19.
 
 > **Milestone D reached.** Write the campaign.
 

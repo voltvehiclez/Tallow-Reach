@@ -16,6 +16,8 @@ import { CONTRACT, CONTRACT_TYPES, DESCRIBE, CONTRACTS_PER_BOARD } from "../src/
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../src/data/enemies.js";
 import { FACTIONS } from "../src/data/factions.js";
 import { LOOT_TABLES } from "../src/data/loot.js";
+import { ENCOUNTERS, ENCOUNTER_IDS, encounterDef } from "../src/data/encounters.js";
+import { PLACE_TEMPLATES, PLACE_TEMPLATE_IDS, encounterIdsFor, templateEncounterIds, templateFeatures, isPlaceTemplate } from "../src/data/place-templates.js";
 import { WARP, WARP_TIME, WARP_SWITCH_AT, WARP_FLASH_RAMP, WARP_FLASH_FADE, WARP_COAST, warpPhaseAt, warpFlashAt, warpSteerEase } from "../src/data/sectors.js";
 import { PLACES, PLACE_IDS, DEFAULT_PLACE, placeAt, nextPocket, pocketsIn, isPocket } from "../src/data/places.js";
 import { stationAt } from "../src/sim/places.js";
@@ -670,6 +672,56 @@ test("every loot table is complete and names real items", () => {
 
   const ore = LOOT_TABLES.asteroid.entries;
   assert.deepEqual(ore.map(e => `${e.i}:${e.w}`), ["ferrite:62", "cobalt:30", "voidite:8"], "the ore mix");
+});
+
+test("encounters are four data-defined kinds and every reference resolves", () => {
+  assert.equal(ENCOUNTER_IDS.length, Object.keys(ENCOUNTERS).length);
+  const kinds = new Set();
+  for (const [id, encounter] of Object.entries(ENCOUNTERS)) {
+    assert.ok(typeof encounter.kind === "string" && encounter.kind.length > 0, `${id}: kind`);
+    kinds.add(encounter.kind);
+    assert.ok(typeof encounter.n === "string" && encounter.n.length > 0, `${id}: n`);
+    assert.ok(typeof encounter.d === "string" && encounter.d.length > 0, `${id}: d`);
+    assert.ok(isNum(encounter.respawnSec) && encounter.respawnSec >= 0, `${id}: respawnSec`);
+    if (encounter.enemy) assert.ok(ENEMIES[encounter.enemy], `${id}: enemy ${encounter.enemy}`);
+    if (encounter.faction) assert.ok(FACTIONS[encounter.faction], `${id}: faction ${encounter.faction}`);
+    if (encounter.shop) assert.ok(isShop(encounter.shop), `${id}: shop ${encounter.shop}`);
+    if (encounter.loot) assert.ok(LOOT_TABLES[encounter.loot], `${id}: loot ${encounter.loot}`);
+    if (encounter.item) assert.ok(isItem(encounter.item), `${id}: item ${encounter.item}`);
+    if (encounter.count) assert.ok(Array.isArray(encounter.count) && encounter.count[0] <= encounter.count[1], `${id}: count range`);
+    if (encounter.interval) assert.ok(Array.isArray(encounter.interval) && encounter.interval[0] < encounter.interval[1], `${id}: interval`);
+    assert.equal(encounterDef(id), encounter, `${id}: lookup returns the data entry`);
+  }
+  assert.deepEqual(
+    [...kinds].sort(),
+    ["derelict", "friendlyTrader", "hostilePatrol", "resourceCache"].sort(),
+    "the proof content has the four planned encounter kinds"
+  );
+  for (const id of ["no-such-encounter"]) assert.equal(encounterDef(id), ENCOUNTERS.hostile_patrol);
+});
+
+test("place templates are tiered, complete and data-only", () => {
+  assert.ok(PLACE_TEMPLATE_IDS.length >= 3, "step 12 needs at least three templates");
+  const all = new Set(ENCOUNTER_IDS);
+  for (const [id, template] of Object.entries(PLACE_TEMPLATES)) {
+    assert.ok(template.n && template.d, `${id}: name and description`);
+    assert.ok(Array.isArray(template.features), `${id}: features`);
+    assert.ok(Object.keys(template.tiers || {}).length >= 3, `${id}: encounters by tier`);
+    for (const tier of [1, 2, 3]) {
+      const ids = encounterIdsFor(id, tier);
+      assert.ok(ids.length > 0, `${id} tier ${tier}: at least one encounter`);
+      for (const encounter of ids) assert.ok(all.has(encounter), `${id} tier ${tier}: unknown encounter ${encounter}`);
+    }
+    for (const encounter of templateEncounterIds(id)) assert.ok(all.has(encounter), `${id}: unknown encounter ${encounter}`);
+    const resolved = templateFeatures(id, { id: `test-${id}`, tier: 2 });
+    for (const feature of resolved.features) {
+      if (feature.kind === "asteroidField") assert.ok(LOOT_TABLES[feature.ore], `${id}: asteroid ore table`);
+      if (feature.kind === "station") assert.ok(isShop(feature.shop), `${id}: station shop ${feature.shop}`);
+      if (feature.kind === "spawner") assert.ok(all.has(feature.encounter), `${id}: spawner encounter`);
+      if (feature.kind === "encounter") assert.ok(all.has(feature.encounter), `${id}: static encounter`);
+    }
+    assert.ok(isPlaceTemplate(id));
+  }
 });
 
 test("an unknown enemy id resolves to the default enemy instead of blowing up", () => {

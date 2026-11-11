@@ -96,7 +96,6 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 | # | Question | Default until decided |
 | --- | --- | --- |
-| 4 | **Do pockets remember what you did?** (rocks mined out, enemies killed, crates taken) | Yes for map pockets, saved with the world; resources and encounters slowly respawn. Instanced places are forgotten when you leave. |
 | 5 | **Wormholes.** What does it take to spawn one, and can you leave an instance with loot at any time? | A consumable item opens one; you can always leave through the entry wormhole; dying inside loses everything, as everywhere. |
 | 6 | **Whose ship do guests fly in a host's world?** | Their **own** ship and hold, brought with them (so the risk is real). What they gain stays in their own save, and returns to their own world automatically. |
 | 7 | **Guests and the host's station.** Can a guest dock at the host's Meridian, shop and repair? | Yes, with the host's prices. A guest's *storage* stays in their own save. |
@@ -105,6 +104,8 @@ mention) until the owner decides. Record the decision here when made, and delete
 | 10 | **Joining technology** (how a link connects two browsers without a server). | Decided at the multiplayer step, not now. See TARGET_ARCHITECTURE.md. It may need to relax the "no new dependencies" rule. |
 
 ## Decisions made
+
+- **2026-11-10 — Step 12 place content and memory (owner):** generated pockets are filled immediately, not deferred. Use a slow default respawn of roughly 5–10 simulation minutes; paused simulation must not advance it. Asteroid memory keeps a slow timer for now, but `respawn-place` events may force or override it later. The trader proof is a dockable station feature that reuses existing `SHOPS`; every dockable station now has independent persistent storage keyed by its place and feature id. Save v18 remains in use so the reserved Step 13 v19 and Step 15 v20 slots stay intact.
 
 - **2026-11-08 — sparse, clearer starmap (owner):** gate lines should be straight and should not pass through unrelated systems;
   outer systems should need at least 10 jumps, and route lists should show all stops that fit, with arrows

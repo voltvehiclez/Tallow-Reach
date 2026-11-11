@@ -607,6 +607,14 @@ peer pocket in another system. The peer must also be a gate pocket and may have 
 link. Keep an internal link from the system's ordinary pocket to the gate for the route-only opt-out;
 free systems can already reach it, but retaining the link makes a later policy change safe.
 
+**Place a station near a generated gate.** By default, a friendly trader selected by a gate template is
+removed from that gate's resolved features and gets a generated `${gateId}-station` pocket with an internal
+link to the system hub. Generated trader features and station pockets receive stable varied names from
+`GALAXY.stationNameStyles`; the generator avoids duplicates, while an authored station `n` remains unchanged.
+To deliberately co-locate a station in a gate pocket, add an explicit station feature through the pocket
+override's `features`/`extraFeatures` array, or set `allowStation: true` or `stationPlacement: "gate"`; those
+are author choices and are not detached.
+
 **Add an alternative route.** Add a link record to `GALAXY_OVERRIDES.links` (or `PLACE_LINKS` in
 `src/data/places.js` for authored pockets): `{ id, kind, a, b, mode: "warp", cost: {}, requires: [],
 enabled: true }`. `kind` is `internal` inside one system or `gate` between two gate pockets. Internal
@@ -616,7 +624,8 @@ lines are drawn only in a links-policy system; gate lines remain explicit on the
 `map.systemEntryZoom`, or double-click the dot, to open its pocket map. **Back to galaxy** or scrolling out
 at the fitted system view returns. In the pocket map, click/right-click a pocket dot or neighbouring-system
 gate label (or focus it and press Enter/Space/Shift+F10) for the **Warp to** popup; only a legal hop gets the
-button. A gate-neighbour label quotes the reciprocal gate pocket, never the remote system/core. The right panel
+button. Double-clicking the gate pocket or its neighbouring-system label opens that peer system map directly.
+A gate-neighbour label quotes the reciprocal gate pocket, never the remote system/core. The right panel
 is a read-only overview, not a travel button list. The central body keeps a permanent name/type label and
 cannot open a warp popup. Native hover tooltips are absent from pockets/core; click popups remain. The compact
 panel must not gain fixed-count rows, per-row metadata or scrolling.
@@ -643,10 +652,65 @@ default free local warp has no link cost/requirement. Costs are returned as plai
 `startWarp` refuses any non-empty cost rather than silently charging or ignoring it. Fuel, gate
 activation and supercruise are not implemented yet.
 
-**Saves.** v16 stores only `{ seed, knowledge }` in `world.galaxy`. Boot, slot load and import call
-`prepareGalaxySave(raw)` before `applySave`; it regenerates the seed, validates ids against that live
-catalog and recovers removed pockets. Never save generated systems/pockets/links, core assignments or chart geometry.
+**Saves.** v18 stores only `{ seed, knowledge }` for generated geography in `world.galaxy`, plus
+`world.destination` and positive remaining simulation-second entries in `world.placeMemory`. Boot, slot
+load and import call `prepareGalaxySave(raw)` before `applySave`; it regenerates the seed, validates ids
+against that live catalog and recovers removed pockets. Never save generated systems/pockets/links, core
+assignments or chart geometry.
 
 Run `npm test` (`tests/step11a-galaxy.test.mjs` and `tests/step11b-starmap.test.mjs`) after any edit.
 They check determinism, reachability, one-peer gates, move/delete/promote examples, visibility, tier
 guidance, live catalog lookup, map interaction, direct-hop refusal, pause and save migration/recovery.
+
+## 21. Add a place-template encounter (Step 12)
+
+Generated pocket content is data. Do not add a new `if (placeId === ...)` branch to a sim file.
+The current registries are `src/data/place-templates.js` and `src/data/encounters.js`.
+
+**Add another instance of an existing encounter kind.** Add an entry to `ENCOUNTERS` in
+`src/data/encounters.js`, then reference its id in a template tier in `PLACE_TEMPLATES`:
+
+```js
+// src/data/encounters.js
+rescue_cache: {
+  kind: "resourceCache",
+  n: "Rescue cache",
+  d: "A sealed emergency cache.",
+  item: "cobalt",
+  count: [2, 5],
+  respawnSec: 420,
+},
+
+// src/data/place-templates.js
+frontier: {
+  // ...existing fields...
+  tiers: {
+    1: ["hostile_patrol", "resource_cache", "rescue_cache"],
+    2: ["hostile_patrol", "derelict", "rescue_cache"],
+    3: ["hostile_patrol", "derelict", "resource_cache", "rescue_cache"],
+  },
+},
+```
+
+Use the fields belonging to the kind:
+
+- `hostilePatrol`: `enemy`, `faction`, `count`, `interval`, `chance`, `nearRadius`,
+  `farFromStation`, `spawnDist`, `maxActive`, `once`, `respawnSec`.
+- `friendlyTrader`: `shop` must be an existing id in `src/data/shops.js`; `station` contains the
+  dock/launch tuning. The station feature receives a stable `${placeId}:${featureId}` inventory key;
+  it reuses the named shop's rows/economy but never another station's stock.
+- `derelict`: `loot` must be a `kind: "drops"` table in `src/data/loot.js`.
+- `resourceCache`: `item` must be a real `ITEMS` id and `count` is an inclusive `[min, max]` range.
+
+A template's `tiers` table is selected by the highest tier not above the pocket's derived tier. Add
+positions to `encounterPositions` when the default placement is not suitable. Asteroid fields use
+`stable: true`, `respawnSec` and a field `id`; stable slots are stored as keys such as `field:3` in
+`world.placeMemory`.
+
+The existing generic code handles every instance of these four kinds: `placeDef()` expands the
+features, `sim/ai.js` spawns patrols, `sim/encounters.js` builds static loot, and
+`sim/place-memory.js` decrements cooldowns in simulation seconds. `emit("respawn-place", { placeId,
+kind, id })` is the event hook for a future story or world event to force one cooldown early. Run
+`npm test`; `tests/content.test.mjs` checks every encounter/template/loot/shop/item reference and
+`tests/step12-places.test.mjs` checks generated filling, hunt behavior, persistence, pause safety and
+forced respawn.

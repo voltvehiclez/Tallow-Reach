@@ -340,7 +340,8 @@ function baseHtml() {
   const S = state.profile,
     W = state.worldState,
     ship = SHIPS[S.ship],
-    cargo = stockOf(S.ship);
+    cargo = stockOf(S.ship),
+    station = stockOf(STATION);
   const load = holdLoad(),
     used = storedUnits(),
     cap = storageCap();
@@ -348,24 +349,24 @@ function baseHtml() {
   // modules alike. A part fitted in a bay is in no place, so it is not for sale.
   const sellable = stock => Object.keys(stock || {}).filter(id => isItem(id) && canSell(id)).length;
   const sellHeld = sellable(cargo),
-    sellStored = sellable(W.store);
+    sellStored = sellable(station);
 
   let h =
-    `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. Storage ${used}/${cap} m³. Refinery bonus +${Math.round(
+    `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. ${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n} storage ${used}/${cap} m³. Refinery bonus +${Math.round(
       REFINERY_BONUS_PER_LEVEL * 100 * W.base.refinery
     )}%.</div>` +
     ITEM_IDS.filter(id => !isModule(id))
       .map(
         id =>
-          `<div class="row"><div>${itemName(id)}<small>${cargo[id] || 0} in hold, ${W.store[id] || 0} stored, ${itemValue(id)} cr each</small></div></div>`
+          `<div class="row"><div>${itemName(id)}<small>${cargo[id] || 0} in hold, ${station[id] || 0} stored, ${itemValue(id)} cr each</small></div></div>`
       )
       .join("") +
     `<div class="row"><button data-a="dep">Store hold</button><button data-a="wd">Load stored</button><button data-a="sellh" ${
       sellHeld ? "" : "disabled"
     }>Sell hold ${valueOf(cargo)} cr</button><button data-a="sells" ${
       sellStored ? "" : "disabled"
-    }>Sell stored ${valueOf(W.store)} cr</button></div>` +
-    `<div class="sub">Selling takes ore, salvage and spare modules from the hold or the station, and leaves parts fitted on a ship alone.</div><h2>Base modules</h2>`;
+    }>Sell stored ${valueOf(station)} cr</button></div>` +
+    `<div class="sub">Selling takes ore, salvage and spare modules from the current station or hold, and leaves parts fitted on a ship alone.</div><h2>Base modules</h2>`;
 
   h += Object.keys(BASE_MODULES)
     .map(k => {

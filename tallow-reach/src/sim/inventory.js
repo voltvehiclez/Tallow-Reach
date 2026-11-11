@@ -1,8 +1,9 @@
 // Inventory: where things are kept, how much room there is, and moving things.
 //
 // There are two kinds of place, and both are measured in m³:
-//   - the STATION: `world.store` — the station's storage. The room is
-//     `storageCap()` — the Storage bay base module (data/station.js).
+//   - the STATION: the current pocket's station store. Every station uses its
+//     own entry in `world.stationStores`, keyed by `${placeId}:${featureId}`;
+//     Meridian's enumerable `world.store` is a backward-compatible alias.
 //   - a SHIP's hold: `profile.holds[shipId]`. The room is the hull's `cargo`
 //     (data/ships.js). Every owned ship has its own hold.
 //
@@ -11,18 +12,46 @@
 // default, or an explicit pilot's `profile`).
 
 import { state } from "../state/state.js";
+import { DEFAULT_PLACE, stationKeyAt } from "../data/places.js";
 import { SHIPS } from "../data/ships.js";
 import { ITEMS, isItem, isModule, itemName, itemStack, itemValue, itemVol, newStock } from "../data/items.js";
 import { REFINERY_BONUS_PER_LEVEL, STORAGE_PER_LEVEL } from "../data/station.js";
 
-/** The id that means "the station" wherever a place is asked for. */
+/** The id that means "the current station" wherever a place is asked for. */
 export const STATION = "station";
+const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
 
 const isStation = where => where === STATION;
 
+function activePlace(world, placeId) {
+  if (placeId) return placeId;
+  // Runtime state is authoritative for the local pilot; explicit test/load worlds
+  // use their saved pocket when they are not the installed world object.
+  if (world === state.worldState) return state.place || world?.place || DEFAULT_PLACE;
+  return world?.place || state.place || DEFAULT_PLACE;
+}
+
+/** The stable key of the station in the local pilot's current pocket. */
+export function currentStationKey(world = state.worldState) {
+  return stationKeyAt(activePlace(world)) || HOME_STATION_KEY;
+}
+
+/** What a station keeps: `{ itemId: count }`, made on first use. */
+export function stationStock(world = state.worldState, placeId = null) {
+  const key = stationKeyAt(activePlace(world, placeId));
+  const stores = world.stationStores || (world.stationStores = {});
+  if (!stores[key]) {
+    // A caller holding an unsanitized legacy world may still provide only
+    // `world.store`; attach that one stock to the active station once. Normal
+    // saves reach this function through sanitizeWorld and already have keys.
+    stores[key] = world.store && Object.keys(stores).length === 0 ? world.store : newStock();
+  }
+  return stores[key];
+}
+
 /** What a place keeps: `{ itemId: count }`, made on first use. */
 export function stockOf(where, profile = state.profile, world = state.worldState) {
-  if (isStation(where)) return world.store || (world.store = newStock());
+  if (isStation(where)) return stationStock(world);
   const holds = profile.holds || (profile.holds = {});
   return holds[where] || (holds[where] = newStock());
 }
