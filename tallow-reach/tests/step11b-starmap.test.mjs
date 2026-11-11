@@ -431,16 +431,42 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   ui.closeStarmap();
 });
 
-test("11B: visited systems are light blue while the current system remains orange", () => {
+test("11B: visited knowledge remains saved without a light-blue system presentation", () => {
   const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
   const P = ui.configurePlayer(ui.createPlayer(), save.profile);
   P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
   ui.state.worldState.galaxy.knowledge["sys-001"] = { discovered: true, visited: true };
   assert.equal(ui.openStarmap(), true);
-  assert.match(mapRoot.innerHTML, /class="sm-node[^"]*visited[^"]*"\s+data-system="sys-001"/);
+  assert.doesNotMatch(mapRoot.innerHTML, /class="sm-node[^"]*visited[^"]*"\s+data-system="sys-001"/);
   assert.match(mapRoot.innerHTML, /class="sm-node[^"]*current[^"]*"\s+data-system="meridian"/);
   assert.doesNotMatch(mapRoot.innerHTML, /class="sm-node[^"]*visited[^"]*"\s+data-system="sys-002"/);
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.doesNotMatch(css, /\.sm-node\.visited/);
   assert.equal(ui.currentSave().world.galaxy.knowledge["sys-001"].visited, true);
+  ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
+});
+
+test("11B: gate exits are blue, station pockets are square, and a remote label opens its peer map", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  assert.equal(ui.openStarmap(), true);
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  const exit = pocketConnections(ui.state.galaxy, "meridian").exits[0];
+  assert.ok(exit);
+  assert.match(mapRoot.innerHTML, /class="sm-edge sm-exit-edge"/);
+  assert.match(mapRoot.innerHTML, /class="sm-exit-cap"/);
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.sm-exit-edge\s*\{[^}]*stroke:\s*#5a7a86/);
+  assert.match(css, /\.sm-exit-cap\s*\{[^}]*fill:\s*#5a7a86/);
+  assert.match(mapRoot.innerHTML, /data-pocket="reach"[\s\S]*class="sm-dot sm-station-dot"/);
+  mapRoot.handlers.dblclick({
+    target: { closest: () => ({ dataset: { exit: exit.id, peerSystem: exit.peerSystemId } }) },
+    preventDefault() {},
+  });
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.equal(ui.state.ui.starmap.selected, exit.peerSystemId);
+  assert.ok(mapRoot.innerHTML.includes(`data-pocket="${exit.peerPocketId}"`), "the adjacent system map is open");
   ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
 });
 
@@ -1096,7 +1122,11 @@ test("11B: stars/black holes have permanent two-line names and are never warp de
     const typeY = Number(core.match(/sm-core-type" x="[^"]*" y="([^"]*)"/)[1]);
     assert.ok(typeY > nameY, "the celestial type sits on a new row below the name");
     const coreRadius = Number(core.match(/sm-core-body" cx="[^"]*" cy="[^"]*" r="([^"]*)"/)[1]);
-    const pocketDotRadius = html => Number(html.match(/data-pocket="reach"[\s\S]*?class="sm-dot"[^>]*r="([^"]*)"/)[1]);
+    const pocketDotRadius = html => {
+      const dot = html.match(/data-pocket="reach"[\s\S]*?class="sm-dot[^"]*"[^>]*(?:r="([^"]*)"|width="([^"]*)")/);
+      assert.ok(dot, "the station pocket has a visible dot");
+      return Number(dot[1] ?? dot[2] / 2);
+    };
     const fitPocketRadius = pocketDotRadius(mapRoot.innerHTML);
     const fitWidth = Number(mapRoot.innerHTML.match(/viewBox="([^"]*)"/)[1].split(" ")[2]);
     click({ action: "zoom-in" });

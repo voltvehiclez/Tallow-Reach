@@ -83,10 +83,26 @@ unless the checklist tells you to export it first.
 - [ ] **4.2** Fly within the station ring, slow below the displayed docking speed and press **G**. The
       HUD/menu should dock at the generated trader, not send you back to Meridian or show the intro.
 - [ ] **4.3** Open **Shop**. Its rows and prices should be the existing Meridian `SHOPS` stock, and a
-      purchase should use the normal station storage/economy flow. This slice intentionally does not
-      create independent storage for each station.
-- [ ] **4.4** Launch from the generated station. The ship should appear at that station's launch point,
-      not at Meridian, and the local asteroid field/planet scenery should remain in the same pocket.
+      purchase should use the normal station storage/economy flow. Buy one useful module (for example
+      the Basic mining beam) and leave it in the trader's **Station** inventory; do not fit it yet.
+- [ ] **4.4** Use **Inventory** at the trader to confirm the purchased module is listed only in that
+      station's column. If convenient, mine one ore, dock again and use **Store hold** so this station
+      has both a module and cargo.
+- [ ] **4.5** Launch from the generated station. The ship should appear at that station's launch point,
+      not at Meridian, and the local asteroid field/planet scenery should remain in the same pocket. Use
+      the map's legal route to return to Meridian Station.
+- [ ] **4.6** At Meridian, open **Inventory**, **Shop** and **Outfitting**. The trader's stored module/
+      cargo must not appear in Meridian's station column, shop ownership count, fitting picker or sell-
+      stored action. The station's capacity and room message must describe Meridian's own stock only.
+- [ ] **4.7** Return to the same generated trader. Its module and cargo must still be there. Fit the
+      module, unequip it, and confirm it returns to this trader's storage; switching back to Meridian
+      must still not expose it. Selling stored cargo at the trader must not sell Meridian stock.
+- [ ] **4.8** Save/export while the trader is docked, reload/import the code, and revisit both stations.
+      Each station must retain only its own inventory. This is also the point to verify that a normal
+      `TR1:` export preserves station-local stock.
+- [ ] **4.9** Confirm that a station with a full storage bay refuses a purchase or transfer without
+      charging credits or consuming cargo, while another station with room still accepts it.
+      Automated tests cover this if the browser route makes a full bay inconvenient.
 
 ## 5. Generic patrol and hunt contract regression
 

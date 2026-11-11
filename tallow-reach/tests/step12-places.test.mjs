@@ -74,6 +74,35 @@ test("generated pockets resolve three varied templates and fill their data-defin
   assert.equal(trader.shop, "meridian", "the trader uses existing SHOPS stock rather than a second storage system");
 });
 
+test("generated stations are separate from gates while explicit gate co-location remains possible", () => {
+  const world = generateGalaxy();
+  setPlaceCatalog(world);
+  const gates = Object.values(world.pockets).filter(place => place.role === "gate");
+  assert.ok(gates.length > 0);
+  assert.ok(gates.every(place => !placeDef(place.id).features.some(feature => feature.kind === "station")),
+    "default gate pockets do not carry stations");
+  const stations = Object.values(world.pockets).filter(place => placeDef(place.id).features.some(feature => feature.kind === "station"));
+  assert.ok(stations.some(place => place.role === "station"), "a moved station gets its own station pocket");
+  for (const place of stations.filter(candidate => candidate.role === "station")) {
+    assert.notEqual(place.role, "gate");
+    assert.ok(Object.values(world.links).some(link => link.kind === "internal" &&
+      (link.a === place.id || link.b === place.id)), `${place.id} is reachable through an internal link`);
+  }
+
+  // An author can deliberately place a station on a gate by adding an explicit
+  // feature record; the generated detachment does not override that choice.
+  const gate = gates.find(place => place.template === "trade_lane") || gates[0];
+  const explicit = {
+    kind: "station", id: "author-station", n: "Author Station", pos: [0, 0, 0],
+    keepout: 90, dockRange: 260, dockSpeed: 70, launch: { pos: [0, 0, 220] }, shop: "meridian",
+  };
+  const authored = generateGalaxy(undefined, {}, { places: { [gate.id]: { features: [explicit] } } });
+  setPlaceCatalog(authored);
+  assert.ok(placeDef(gate.id).features.some(feature => feature.id === "author-station"));
+  assert.equal(authored.pockets[`${gate.id}-station`], undefined, "explicit co-location keeps the station on the gate");
+  setPlaceCatalog(null);
+});
+
 test("a generated hostile patrol is a generic encounter and still serves hunt contracts", () => {
   const player = fresh(12013);
   const place = generatedPocket(definition => definition.features.some(feature => feature.kind === "spawner"));
@@ -151,7 +180,7 @@ test("cleared static encounters stay absent, save their cooldown and respond to 
   assert.ok(world.crates.some(crate => crate.encounter === feature.id), "a future event can force the encounter back early");
 });
 
-test("save version 18 preserves place memory and older saves migrate with an empty record", () => {
+test("save version 18 preserves place memory and station stores, while older saves migrate", () => {
   const save = newSave();
   save.world.placeMemory = {
     hollow: { rocks: { "field:3": 12.5 }, encounters: { "derelict-0": 300 } },

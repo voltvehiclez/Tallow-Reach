@@ -238,8 +238,18 @@ export function setupStarmap() {
   root.addEventListener("click", onClick);
   root.addEventListener("contextmenu", onContextMenu);
   root.addEventListener("dblclick", e => {
+    const view = state.ui.starmap;
+    if (!view) return;
+    const exit = e.target.closest?.("[data-exit]");
+    if (exit && view.mode === "system") {
+      const peerSystemId = exit.dataset.peerSystem;
+      if (!peerSystemId || !systemVisible(state.galaxy, peerSystemId, knowledge())) return;
+      e.preventDefault();
+      enterSystem(peerSystemId);
+      return;
+    }
     const node = e.target.closest?.("[data-system]");
-    if (!node || !state.ui.starmap || state.ui.starmap.mode !== "galaxy") return;
+    if (!node || view.mode !== "galaxy") return;
     e.preventDefault();
     selectSystem(node.dataset.system, true);
     enterSystem(node.dataset.system);
@@ -421,6 +431,17 @@ function zoomMap(direction) {
 function enterSystem(id = state.ui.starmap?.selected) {
   const view = state.ui.starmap;
   if (!view || transition || !systemVisible(state.galaxy, id, knowledge())) return false;
+  // A remote gate label is already on a system chart. Move directly to the
+  // peer chart instead of briefly returning to the galaxy overview.
+  if (view.mode === "system") {
+    view.selected = id;
+    view.systemZoom = 1;
+    view.systemPan = [0, 0];
+    view.menu = null;
+    view.notice = "";
+    render();
+    return true;
+  }
   const fromBox = activeChartViewBox(state.galaxy, view, knowledge());
   view.selected = id;
   view.mode = "system";
@@ -716,10 +737,9 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
     const chosen = s.id === view.selected;
-    const visited = know[s.id]?.visited;
     const radius = (current ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) * unit;
     const label = chosen || current || view.labels;
-    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${visited ? " visited" : ""}"
+    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}"
       data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}">
       <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
@@ -769,12 +789,16 @@ function systemMarkup(world, view, know, here, unit, route = null) {
   const nodes = chart.nodes.map(node => {
     const [x, y] = point(node.pos);
     const current = node.id === here.id;
+    const station = placeDef(node.pocket.id).features.some(feature => feature.kind === "station");
     const radius = GALAXY.systemMap.pocketRadius * unit;
     const { x: lx, y: ly, anchor } = pocketLabelPosition(node, [x, y], radius, unit);
-    return `<g class="sm-node sm-pocket-node${current ? " current" : ""}" data-pocket="${esc(node.id)}"
-      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${current ? ", current pocket" : ""}">
+    const dot = station
+      ? `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`
+      : `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
+    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}" data-pocket="${esc(node.id)}"
+      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
-      <circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>
+      ${dot}
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}</text>
     </g>`;
   }).join("");
@@ -857,7 +881,7 @@ function render() {
     ? `Warp to any ${esc(term("flyable"))} in this ${esc(term("mapNode"))}; no internal route is needed.`
     : `Follow the internal route lines; this ${esc(term("mapNode"))} requires connected ${esc(term("flyable"))} hops.`;
   const help = view.mode === "system"
-    ? `Click or right-click a ${esc(term("flyable"))} to warp or set a destination. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route. The central star/black hole is not warpable. Scroll out or Back to return.`
+    ? `Click or right-click a ${esc(term("flyable"))} to warp or set a destination. ${localTravel} Click a neighbouring ${esc(term("mapNode"))} at a gate stub to check that gate route; double-click its label to open that map directly. The central star/black hole is not warpable. Scroll out or Back to return.`
     : `Right-click a system to set a destination. Press J in flight for the next warp. Click a ${esc(term("mapNode"))} to select it. Scroll up or double-click to open its ${esc(term("flyable"))} map. Drag to pan; +/− zoom.`;
 
   root.innerHTML = `

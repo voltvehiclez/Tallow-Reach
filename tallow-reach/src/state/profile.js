@@ -11,8 +11,29 @@ import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES } from "../data/contracts.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
-import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT } from "../data/places.js";
+import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
+
+const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
+
+/** Keep the old enumerable world.store API as an alias for Meridian while the
+ * canonical runtime/save collection is keyed by station identity. */
+function worldWithStationStores(fields, stationStores) {
+  const stores = stationStores && typeof stationStores === "object" && !Array.isArray(stationStores)
+    ? stationStores
+    : {};
+  if (!stores[HOME_STATION_KEY] || typeof stores[HOME_STATION_KEY] !== "object" || Array.isArray(stores[HOME_STATION_KEY])) {
+    stores[HOME_STATION_KEY] = newStock();
+  }
+  const world = { ...fields, stationStores: stores };
+  Object.defineProperty(world, "store", {
+    enumerable: true,
+    configurable: true,
+    get: () => stores[HOME_STATION_KEY],
+    set: value => { stores[HOME_STATION_KEY] = value && typeof value === "object" && !Array.isArray(value) ? value : newStock(); },
+  });
+  return world;
+}
 
 // Version history:
 //   1  original prototype (no "v" field)
@@ -40,6 +61,8 @@ import { GALAXY } from "../data/galaxy.js";
 //   17 saves the local route destination in world.destination; older saves default to none.
 //   18 adds world.placeMemory: remaining simulation-time cooldowns for mined rocks
 //      and cleared encounters. v17 and older start with an empty memory record.
+//   18 also accepts station-local inventory records in world.stationStores;
+//      older v18 saves migrate their legacy world.store to the relevant station.
 export const SAVE_VERSION = 18;
 
 // A saved contract with a type not listed here is dropped on load, so this
@@ -91,17 +114,16 @@ export function newProfile() {
 
 /** Fresh hosted world record (station levels and storage, contract board, galaxy and current pocket). */
 export function newWorld() {
-  return {
+  return worldWithStationStores({
     v: SAVE_VERSION,
     base: { ...BASE_DEFAULT },
-    store: newStock(),
     board: [],
     galaxy: newGalaxyRecord(),
     place: DEFAULT_PLACE,
     destination: null, // local session destination, saved with this world
     resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
-  };
+  }, { [HOME_STATION_KEY]: newStock() });
 }
 
 /** Compact map knowledge. No positions, pockets, links or generated content. */
@@ -263,6 +285,19 @@ function cleanPlaceMemory(raw) {
   return out;
 }
 
+/** Clean each station's independent stock. Unknown station keys are retained
+ * as namespaced save records so a catalog can be regenerated before use. */
+function cleanStationStores(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [station, stock] of Object.entries(raw)) {
+    if (!station || !stock || typeof stock !== "object" || Array.isArray(stock)) continue;
+    const clean = cleanStock(stock);
+    if (Object.keys(clean).length) out[station] = clean;
+  }
+  return out;
+}
+
 /**
  * Validate and upgrade a `world` record (either a v13 world object or the
  * world-owned fields of a legacy v1..v12 flat save). Base modules are walked
@@ -285,35 +320,79 @@ export function sanitizeWorld(raw) {
 
   // Station storage (`store` since v1; loose `modules` list poured in for < v12;
   // unlocked `wp.beam` / `wp.msl` granted as a stored module for < v8 / < v9).
-  const store = cleanStock(raw.store);
+  // Before station-local storage every station shared `store`. A pre-extension
+  // save has no `stationStores`, so migrate that stock to the station at the
+  // saved pocket when it has one; this preserves a save made at a generated
+  // trader instead of silently moving its stock to Meridian.
+  let store = cleanStock(raw.store);
+  let stationStores = cleanStationStores(raw.stationStores);
+  const hasStationStores = !!raw.stationStores && typeof raw.stationStores === "object" && !Array.isArray(raw.stationStores);
+  const homeStation = HOME_STATION_KEY;
+  const savedPlace = typeof raw.place === "string" && isPocket(raw.place)
+    ? raw.place
+    : typeof raw.sector === "string" && isPocket(raw.sector)
+      ? raw.sector
+      : DEFAULT_PLACE;
+  const localStation = stationKeyAt(savedPlace);
+  // Before gate/station separation, a generated trader could live directly on
+  // a gate pocket. A docked save at that old pocket now resumes in the newly
+  // generated station pocket, and any already-keyed stock follows the same
+  // station feature onto its new pocket. Flying saves keep their exact gate
+  // location and are not silently moved.
+  const detachedPlace = `${savedPlace}-station`;
+  const detachedStation = !localStation && isPocket(detachedPlace) ? stationKeyAt(detachedPlace) : null;
+  const relocateDockedStation = !!detachedStation && raw.resume == null;
+  const savedStation = localStation || detachedStation || homeStation;
   if (oldShape) for (const id of cleanModuleList(raw.modules)) addToStock(store, id, 1);
   const hadOldBeam = !!((raw.wp || {}).beam);
   const hadOldLauncher = !!((raw.wp || {}).msl);
   if (rawVersion < 8 && hadOldBeam && !store.beam_basic) addToStock(store, "beam_basic", 1);
   if (rawVersion < 9 && hadOldLauncher && !store.missile_basic) addToStock(store, "missile_basic", 1);
 
+  if (detachedStation && hasStationStores) {
+    const oldPrefix = `${savedPlace}:`;
+    for (const [key, stock] of Object.entries(stationStores)) {
+      if (!key.startsWith(oldPrefix)) continue;
+      stationStores[detachedStation] = mergeStock(stationStores[detachedStation] || newStock(), stock);
+      delete stationStores[key];
+    }
+  }
+
+  if (!hasStationStores && savedStation !== homeStation) {
+    // A legacy world.store represented the station where the save was made.
+    stationStores[savedStation] = store;
+    store = newStock();
+  }
+  // `world.store` is an old compatibility alias. If a save contains both forms,
+  // keep the union in the canonical home key rather than duplicating stock.
+  const homeStore = stationStores[homeStation] || newStock();
+  for (const [id, count] of Object.entries(store)) {
+    homeStore[id] = Math.max(homeStore[id] || 0, count);
+  }
+  stationStores[homeStation] = homeStore;
+
   const board = Array.isArray(raw.board) ? raw.board.map(cleanContract).filter(Boolean) : [];
   // v15 and older had galaxy:null. Never trust/save generated geography here;
   // galaxy-session installs the seed's catalog before this validation runs.
   const galaxy = cleanGalaxyRecord(raw.galaxy);
   // v14: current pocket. v13 and older saves stored the same ids as `sector`.
-  const place = typeof raw.place === "string" && isPocket(raw.place)
-    ? raw.place
-    : typeof raw.sector === "string" && isPocket(raw.sector)
-      ? raw.sector
-      : DEFAULT_PLACE;
+  const place = relocateDockedStation ? detachedPlace
+    : typeof raw.place === "string" && isPocket(raw.place)
+      ? raw.place
+      : typeof raw.sector === "string" && isPocket(raw.sector)
+        ? raw.sector
+        : DEFAULT_PLACE;
 
-  return {
+  return worldWithStationStores({
     v: SAVE_VERSION,
     base,
-    store,
     board,
     galaxy,
     place,
     destination: cleanDestination(raw.destination),
     resume: cleanResume(raw.resume),
     placeMemory: cleanPlaceMemory(raw.placeMemory),
-  };
+  }, stationStores);
 }
 
 /**

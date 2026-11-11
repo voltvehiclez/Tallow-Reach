@@ -43,18 +43,22 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   `TESTING-12-PLACES.md`; do not tick Step 12 until that pass is reported.
 - **11A foundation:** `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/sim/travel.js`, explicit
   `PLACE_LINKS`, and `tests/step11a-galaxy.test.mjs` (now 23 tests). Default seed `11082026` resolves
-  **121 systems / 362 pockets / 361 links**: organic scatter, 1–4 neighbours, a sparse tree with dead ends and junctions,
-  one ordinary empty pocket plus one empty gate pocket per neighbour, exactly one reciprocal external
-  peer per gate. V2 orders nodes radially and favours depth; default outer 80% radius systems need at
+  **121 systems / 445 pockets / 444 links**: organic scatter, 1–4 neighbours, a sparse tree with dead ends and junctions,
+  an ordinary hub plus any detached station pockets and one gate pocket per neighbour, exactly one reciprocal
+  external peer per gate. Generated gate traders are moved to `${gateId}-station` pockets with an internal
+  link; explicit `allowStation`, `stationPlacement: "gate"` or feature records can still co-locate a
+  station deliberately. V2 orders nodes radially and favours depth; default outer 80% radius systems need at
   least 10 gate crossings (11+ in tested seeds). 500 seeds checked; custom tuning can change this.
   Meridian keeps `reach`/`hollow`; Kestrel Hollow is not a gate.
 - **11B live slice (system-map follow-up built):** `src/ui/starmap.js` opens with **M** while flying. The galaxy
-  web shows straight gate lines and a derived chart-only node layout nudging dots away from unrelated lines, current/visited/selected markers, inspect dropdown and zoom/pan/labels. Light blue means previously visited; orange is current. In unusually crowded views, only obstructing unrelated dots mask their individual line; connected endpoints are not masked. Zooming
+  web shows straight gate lines and a derived chart-only node layout nudging dots away from unrelated lines, current/selected markers, inspect dropdown and zoom/pan/labels. Visited knowledge remains saved but has no separate light-blue presentation; orange is current. In unusually crowded views, only obstructing unrelated dots mask their individual line; connected endpoints are not masked. Zooming
   into a selected system dot (wheel/+ past `map.systemEntryZoom`, or double-click) opens a derived
   **system pocket map** with a short zoom transition. Ordinary pockets orbit a central visual-only
-  **star (95%) / black hole (5%)**; gates sit farther out with dashed stubs toward the exact neighbouring
-  system. The core keeps a permanent two-line proper-name/type label (Meridian System → **Meridian** /
-  **(Star)**); native hover tooltips are gone from pockets/core, while click popups remain. Core radii are
+  **star (95%) / black hole (5%)**; gates sit farther out with blue dashed stubs and blue remote endpoint dots toward
+  the exact neighbouring system. Double-clicking a gate/remote-system label switches directly to that peer's
+  system map. The core keeps a permanent two-line proper-name/type label (Meridian System → **Meridian** /
+  **(Star)**); native hover tooltips are gone from pockets/core, while click popups remain. Station pockets use
+  square map icons; core radii are
   map units so the graphic scales with system zoom; pocket dots/labels stay screen-sized. Gate pocket names
   sit inward clear of orange stubs, and neighbouring-system labels are clickable travel targets quoting the
   reciprocal gate pocket. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out.
@@ -87,30 +91,34 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   pocket popup first, then the chart; P closes the chart then pauses.
 - **Save v18:** `world.destination` stores the local system or exact pocket target and
   `world.placeMemory` stores only positive remaining simulation-second cooldowns for mined rock slots
-  and cleared one-shot encounters. It autosaves immediately when changed; validation drops invalid or
-  already-reached destinations and sanitizes memory. Older saves default to no place memory. The v16
-  `world.galaxy` is only `{ seed, knowledge }` (compact per-system discovery/visit flags); generated
-  geography, templates and layout remain session-only in `state.galaxy` and the live place catalog.
-  Boot, slot load and import call `prepareGalaxySave(raw)` before `applySave`: resolve seed → install
-  catalog → sanitize → record current visit. A removed v1 generated gate recovers to an ordinary pocket
-  in the same system; other unknown pockets recover to `DEFAULT_PLACE` (`reach`). Recovery clears
-  `resume` and preserves profile/cargo; intro/slot/import show a safe-recovery notice naming the new
-  pocket. A failed prepare restores the previous catalog. v15 and older saves/codes still load.
+  and cleared one-shot encounters. `world.stationStores` keeps one stock per stable
+  `${placeId}:${featureId}` station key; `world.store` remains the enumerable home-station alias.
+  Legacy v18 saves without `stationStores` migrate their stock to the saved station when possible.
+  This optional v18 extension keeps the reserved Step 13 v19 and Step 15 v20 slots intact.
+  It autosaves immediately when changed; validation drops invalid or already-reached destinations and
+  sanitizes memory. Older saves default to no place memory. The v16 `world.galaxy` is only
+  `{ seed, knowledge }` (compact per-system discovery/visit flags); generated geography, templates and
+  layout remain session-only in `state.galaxy` and the live place catalog. Boot, slot load and import
+  call `prepareGalaxySave(raw)` before `applySave`: resolve seed → install catalog → sanitize → record
+  current visit. A removed v1 generated gate recovers to an ordinary pocket in the same system; other
+  unknown pockets recover to `DEFAULT_PLACE` (`reach`). Recovery clears `resume` and preserves
+  profile/cargo; intro/slot/import show a safe-recovery notice naming the new pocket. A failed prepare
+  restores the previous catalog. v15 and older saves/codes still load.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **341/341 pass** (including the five new Step 12 runtime tests;
-  existing 8b/11B oracles remain green). `npm run build` succeeded: the generated bundle is **694 KB**
-  (the tracked HTML is restored after validation and is not part of this source patch). The owner passed
-  the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v18** persists the
-  destination and place memory; policies, core kind/name, pocket templates and layout are resolved, not
-  persisted. Default geometry remains **121 systems / 362 pockets / 361 links**; system ids/names/positions
-  stay stable, gate connections change; independent core rolls give 116 stars and 5 black holes (including
-  Duskdrift). Meridian is a star.
+- **Results:** `npm test` **345/345 pass** (including the generated station-local inventory and starmap/station-separation tests;
+  existing 8B/11B and Step 12 oracles remain green). `npm run build` succeeded: the generated bundle is
+  **698 KB** (the tracked HTML must be restored after validation and is not part of this source patch).
+  The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save
+  **v18** persists destination, place memory and station-local stocks; policies, core kind/name, pocket
+  templates and layout are resolved, not persisted. Default geometry is **121 systems / 445 pockets / 444 links**
+  (including detached station pockets); system ids/names/positions stay stable, gate connections change; independent core rolls
+  give 116 stars and 5 black holes (including Duskdrift). Meridian is a star.
 - **Known limits:** generated pockets now resolve the `frontier`, `trade_lane` and `salvage_yard`
   templates, with four encounter kinds; derelicts/caches are represented by crates and trader stations
-  reuse Meridian's `SHOPS`/storage. Visibility is `all`; travel is free and non-empty route costs are
+  reuse Meridian's `SHOPS` definitions with independent station-local storage. Visibility is `all`; travel is free and non-empty route costs are
   refused until a handler exists; no fuel, activated/proximity gates, supercruise or warping to/near a
   central body. Temporary instanced-system lifecycle is still step 14. Stable asteroid slots and cleared
   one-shot encounters use pause-safe simulation-time memory with a 420-second default and a

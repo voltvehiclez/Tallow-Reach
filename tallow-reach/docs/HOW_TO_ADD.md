@@ -607,6 +607,12 @@ peer pocket in another system. The peer must also be a gate pocket and may have 
 link. Keep an internal link from the system's ordinary pocket to the gate for the route-only opt-out;
 free systems can already reach it, but retaining the link makes a later policy change safe.
 
+**Place a station near a generated gate.** By default, a friendly trader selected by a gate template is
+removed from that gate's resolved features and gets a generated `${gateId}-station` pocket with an internal
+link to the system hub. To deliberately co-locate a station in a gate pocket, add an explicit station
+feature through the pocket override's `features`/`extraFeatures` array, or set `allowStation: true` or
+`stationPlacement: "gate"`; those are author choices and are not detached.
+
 **Add an alternative route.** Add a link record to `GALAXY_OVERRIDES.links` (or `PLACE_LINKS` in
 `src/data/places.js` for authored pockets): `{ id, kind, a, b, mode: "warp", cost: {}, requires: [],
 enabled: true }`. `kind` is `internal` inside one system or `gate` between two gate pockets. Internal
@@ -688,7 +694,8 @@ Use the fields belonging to the kind:
 - `hostilePatrol`: `enemy`, `faction`, `count`, `interval`, `chance`, `nearRadius`,
   `farFromStation`, `spawnDist`, `maxActive`, `once`, `respawnSec`.
 - `friendlyTrader`: `shop` must be an existing id in `src/data/shops.js`; `station` contains the
-  dock/launch tuning. Independent station storage is not implemented yet.
+  dock/launch tuning. The station feature receives a stable `${placeId}:${featureId}` inventory key;
+  it reuses the named shop's rows/economy but never another station's stock.
 - `derelict`: `loot` must be a `kind: "drops"` table in `src/data/loot.js`.
 - `resourceCache`: `item` must be a real `ITEMS` id and `count` is an inclusive `[min, max]` range.
 

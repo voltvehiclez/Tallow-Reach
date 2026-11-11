@@ -12,7 +12,7 @@
 
 import { GALAXY, GALAXY_OVERRIDES, SYSTEM_NAME_PARTS } from "../data/galaxy.js";
 import { PLACES, PLACE_LINKS, PLACE_DEFS, DEFAULT_PLACE } from "../data/places.js";
-import { isPlaceTemplate, templateAt, templateForPlace } from "../data/place-templates.js";
+import { isPlaceTemplate, templateAt, templateFeatures, templateForPlace } from "../data/place-templates.js";
 import { term } from "../data/terms.js";
 import { makeRng } from "../util/rng.js";
 import { intraSystemPolicy } from "./travel.js";
@@ -46,6 +46,10 @@ export function generateGalaxy(seed = GALAXY.seed, tuning = GALAXY, overrides = 
   applyOverrides(world, overrides);
   pruneDanglingLinks(world);
   assignSystemDefaults(world, config);
+  assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
+  addDetachedStationPockets(world, config);
+  // The new pockets need the same resolved tier as their source gate. Systems
+  // already have tiers, so this second pass only fills the pocket records.
   assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
   assignCores(world, config);
   index(world);
@@ -235,8 +239,46 @@ function connectSystems(a, b, pockets, links, systemLinks, degree, tuning) {
   degree.set(b.id, degree.get(b.id) + 1);
 }
 
-function emptyPocket(id, parent, n, d, role = null) {
-  const template = templateForPlace(id, role || "hub");
+/**
+ * A friendly trader selected by a generated gate template belongs in its own
+ * pocket. The gate keeps its scenery and encounter content, but not the
+ * template-derived station. An authored `allowStation`/`stationPlacement` or
+ * explicit feature record is left alone so deliberate gate co-location stays
+ * available to future content authors.
+ */
+function addDetachedStationPockets(world, tuning) {
+  const systemsById = Object.fromEntries(world.systems.map(system => [system.id, system]));
+  const gates = Object.values(world.pockets).filter(pocket => pocket.role === "gate" && pocket.template);
+  for (const gate of gates) {
+    const gateFeatures = templateFeatures(gate.template, gate).features;
+    if (gateFeatures.some(feature => feature.kind === "station")) continue;
+    const stationFeatures = templateFeatures(gate.template, { ...gate, role: "station" }).features
+      .filter(feature => feature.kind === "station");
+    if (!stationFeatures.length) continue;
+    const system = systemsById[gate.parent];
+    if (!system) continue;
+    const stationId = `${gate.id}-station`;
+    if (world.pockets[stationId]) {
+      const existing = templateFeatures(world.pockets[stationId].template, world.pockets[stationId]).features;
+      if (existing.some(feature => feature.kind === "station")) continue;
+      throw new Error(`Generated station pocket id "${stationId}" is already in use`);
+    }
+    const stationName = `${system.n} Station`;
+    world.pockets[stationId] = emptyPocket(
+      stationId,
+      gate.parent,
+      stationName,
+      `A station pocket serving ${system.n}.`,
+      "station",
+      gate.template,
+    );
+    const hub = gate.parent === tuning.homeSystem ? DEFAULT_PLACE : `${gate.parent}-hub`;
+    addLink(world.links, `${stationId}-inner`, "internal", hub, stationId, tuning);
+  }
+}
+
+function emptyPocket(id, parent, n, d, role = null, templateId = null) {
+  const template = templateId || templateForPlace(id, role || "hub");
   // The map inherited the old placeholder label/description. Keep a useful
   // gate or system-specific name, but expose the selected template's authored
   // description so generated pockets are not still presented as empty.

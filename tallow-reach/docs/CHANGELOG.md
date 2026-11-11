@@ -19,6 +19,22 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Refine system-map exits and separate generated station pockets
+
+- System-map gate exit stubs and their remote endpoint dots now use the pocket blue instead of amber. Visited knowledge remains saved, but visited systems no longer receive a light-blue visual treatment. Double-clicking a neighbouring-system gate label while in a system map switches directly to that peer's map.
+- Generated friendly traders selected by gate templates are removed from gate pockets and placed in deterministic `${gateId}-station` pockets with an internal hub link. Explicit station feature records, `allowStation: true` or `stationPlacement: "gate"` preserve deliberate future gate co-location. Station pockets render as square map icons.
+- Added regression coverage for colors, visited presentation, direct remote-map navigation, square station icons, default station/gate separation, explicit co-location and old docked gate-station save migration. Save version remains **18**; `npm test` now passes **345/345** and `npm run build` succeeds at **698 KB**. Step 12 remains unticked pending the owner visual playtest.
+
+---
+
+## 2026-11-10: Give every dockable station local persistent inventory
+
+- Station storage is now keyed by the stable `${placeId}:${featureId}` identity of the active dockable station. Inventory transfers, purchases, sales, fitting/unequipping, storage capacity, shop ownership/room presentation and station switching all resolve the active station stock; trader stations still use Meridian's `SHOPS` definitions and economy rules.
+- `world.stationStores` is saved for every station, while the enumerable `world.store` remains a home-station compatibility alias. Existing v18 saves without `stationStores` migrate their old stock to the saved station where possible. Save version remains **18** so the reserved Step 13 v19 and Step 15 v20 slots stay intact; `tr1`, `tr_s1..tr_s3` and `TR1:` are unchanged.
+- Added `tests/station-inventory.test.mjs` for cross-station isolation, shop/capacity/sell behavior, fitting context, export/reload and legacy migration. `npm test` passes **343/343** and `npm run build` succeeds at **696 KB**. Step 12 remains unticked pending owner confirmation.
+
+---
+
 ## 2026-11-10: Build Step 12 encounter templates and persistent place memory
 
 - Generated pockets now resolve three data templates with tier-selected `hostile_patrol`, `friendly_trader`, `derelict` and `resource_cache` encounters. They are filled on load; trader stations are dockable and reuse Meridian's existing `SHOPS` stock. Generic AI spawning keeps hunt-contract selection without a raider-only branch.

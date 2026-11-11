@@ -150,6 +150,16 @@ export function encounterIdsFor(templateId, tier = 1) {
 export function templateFeatures(templateId, place = {}) {
   const template = templateAt(templateId);
   const features = JSON.parse(JSON.stringify(template.features || []));
+  const explicitFeatures = [
+    ...(Array.isArray(place.features) ? place.features : []),
+    ...(Array.isArray(place.extraFeatures) ? place.extraFeatures : []),
+  ].map(feature => JSON.parse(JSON.stringify(feature)));
+  // Generated gate pockets keep their gate role and scenery, but a trader is
+  // detached into a station pocket by the galaxy generator. `allowStation` or
+  // `stationPlacement: "gate"` is an explicit author opt-in for future
+  // co-location; explicit feature records are also always retained below.
+  const suppressTemplateStations = place.role === "gate" &&
+    place.allowStation !== true && place.stationPlacement !== "gate";
   const ids = encounterIdsFor(templateId, place.tier || 1);
   const positions = template.encounterPositions || [];
   ids.forEach((encounterId, index) => {
@@ -157,6 +167,7 @@ export function templateFeatures(templateId, place = {}) {
     const pos = positions[index] ? [...positions[index]] : [0, 0, 0];
     const featureId = `${encounterId}-${index}`;
     if (encounter.kind === "friendlyTrader") {
+      if (suppressTemplateStations) return;
       const station = encounter.station || {};
       const launch = station.launch || { pos: [0, 0, 220], face: "field" };
       features.push({
@@ -199,6 +210,7 @@ export function templateFeatures(templateId, place = {}) {
       pos,
     });
   });
+  features.push(...explicitFeatures);
   return { ...template, features };
 }
 

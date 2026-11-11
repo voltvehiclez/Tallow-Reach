@@ -45,7 +45,7 @@ test("9a: SAVE_VERSION is 18 and profile/world halves stay strictly separate", (
   for (const forbidden of ["base", "store", "board", "galaxy", "sector", "place", "resume", "wp", "cargo", "modules"]) {
     assert.equal(forbidden in s.profile, false, `profile must not carry ${forbidden}`);
   }
-  assert.deepEqual(Object.keys(s.world).sort(), ["base", "board", "destination", "galaxy", "place", "placeMemory", "resume", "store", "v"]);
+  assert.deepEqual(Object.keys(s.world).sort(), ["base", "board", "destination", "galaxy", "place", "placeMemory", "resume", "stationStores", "store", "v"]);
   assert.deepEqual(s.world.galaxy, { seed: GALAXY.seed, knowledge: { meridian: { discovered: true, visited: true } } });
   assert.equal(s.world.place, "reach");
   assert.deepEqual(s.world.board, []);

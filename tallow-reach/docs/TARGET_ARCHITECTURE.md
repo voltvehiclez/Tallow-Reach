@@ -102,8 +102,10 @@ explicit cross-system gate links, not a square grid. `sim/galaxy.js` resolves `{
 links }` through a replaceable generator registry and author overrides; `sim/travel.js` allows free
 same-system hops by default, or requires internal links when a system opts into `intraSystem: "links"`.
 Cross-system hops always require the exact gate link. A gate pocket has exactly one external gate peer
-in a neighbouring system; each system has one ordinary pocket plus one gate pocket per neighbour. Meridian keeps
-`reach`/`hollow` and gains separate gate pockets. The map stores seed, tier and discovery/visit records,
+in a neighbouring system; each system has an ordinary hub plus any detached station pockets and one gate
+pocket per neighbour. Meridian keeps `reach`/`hollow` and gains separate gate pockets. Generated gate
+traders move to their own station pockets by default; explicit author station features/placement flags can
+co-locate them. The map stores seed, tier and discovery/visit records,
 not generated geography. `tier` is distance-from-Meridian guidance plus seeded variation; authored
 content may override it and decides actual danger. The save stores the seed and compact
 discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a
@@ -139,12 +141,12 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 
 ## Saves
 
-- Current save version is **18** (starmap seed/knowledge, destination and place memory); v17 and older migrate on load.
+- Current save version is **18** (starmap seed/knowledge, destination, place memory and optional station-local stores); v17 and older migrate on load. Legacy v18 worlds containing only `world.store` are assigned to their saved station when possible; v19 remains reserved for Step 13.
   Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
   migration from flat v1..v12 and split v13 through v17 saves:
   `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
   `pw`, `mission`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
-  station storage (`store`), base upgrades (`base`), contract board (`board`), current pocket id
+  station-local storage (`stationStores[placeId:featureId]`, with the legacy home `store` alias), base upgrades (`base`), contract board (`board`), current pocket id
   (`place`, replacing v13's `sector` placeholder), saved local flight state (`resume`), route
   destination and galaxy seed/knowledge (`galaxy: { seed, knowledge }`). `placeMemory` stores only
   remaining simulation-second cooldowns for stable rock slots and cleared encounter features.

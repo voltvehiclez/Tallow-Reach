@@ -1006,19 +1006,20 @@ textarea {
 .sm-core-label { fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; }
 .sm-core-type { fill: var(--dim); }
 .sm-exit { cursor: pointer; outline: none; }
-.sm-exit-edge { stroke: var(--amber); stroke-dasharray: 5 4; pointer-events: none; }
+/* Gate exits and their remote endpoint are the same blue as a pocket dot. */
+.sm-exit-edge { stroke: #5a7a86; stroke-dasharray: 5 4; pointer-events: none; }
 .sm-exit-hit { fill: transparent; stroke: none; pointer-events: all; }
-.sm-exit-cap { fill: var(--amber); pointer-events: none; }
+.sm-exit-cap { fill: #5a7a86; pointer-events: none; }
 .sm-exit text { fill: var(--ice); paint-order: stroke; stroke: #07090b; stroke-linejoin: round; pointer-events: auto; }
-.sm-exit:hover .sm-exit-cap, .sm-exit:focus .sm-exit-cap { fill: #fff; stroke: var(--amber); stroke-width: 2; }
-.sm-exit:hover text, .sm-exit:focus text { fill: var(--amber); }
+.sm-exit:hover .sm-exit-cap, .sm-exit:focus .sm-exit-cap { fill: #fff; stroke: #5a7a86; stroke-width: 2; }
+.sm-exit:hover text, .sm-exit:focus text { fill: #5a7a86; }
 .sm-node { cursor: pointer; outline: none; }
 .sm-node .sm-hit { fill: transparent; stroke: none; pointer-events: all; }
 .sm-node .sm-dot { fill: #40515b; stroke: #71858f; stroke-width: 1; vector-effect: non-scaling-stroke; }
-.sm-node.visited .sm-dot { fill: var(--ice); stroke: var(--ice); }
 .sm-node.current .sm-dot { fill: var(--amber); stroke: var(--amber); }
 .sm-pocket-node .sm-dot { fill: #5a7a86; stroke: var(--ice); }
 .sm-pocket-node.current .sm-dot { fill: var(--amber); stroke: var(--amber); }
+.sm-station-dot { shape-rendering: geometricPrecision; }
 .sm-node .sm-ring { fill: none; stroke: var(--ink); stroke-dasharray: 3 3; pointer-events: none; }
 .sm-node:hover .sm-dot, .sm-node:focus .sm-dot { stroke: #fff; stroke-width: 2; }
 .sm-node text { fill: var(--ink); font-size: 11px; paint-order: stroke; stroke: #07090b; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }

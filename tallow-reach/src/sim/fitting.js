@@ -1,9 +1,9 @@
-// Moving modules between a pilot's ship and station storage.
+// Moving modules between a pilot's ship and the current station's storage.
 //
-// Fitting costs nothing and is done at the outpost: a part comes out of
-// `world.store` and into a bay in `profile.loadout[ship]`, and whatever was in
-// that bay goes back into `world.store`. Every change refreshes the target
-// pilot's power, drive, shields, hull and guns.
+// Fitting costs nothing and is done while docked: a part comes out of the
+// current station inventory and into a bay in `profile.loadout[ship]`, and
+// whatever was in that bay goes back into that same station. Every change
+// refreshes the target pilot's power, drive, shields, hull and guns.
 
 import { MODULES } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
@@ -132,7 +132,7 @@ export const isBayGroup = (group, profile = state.profile) =>
  * `profile`'s ship holds, and bays of `profile`'s loadouts.
  */
 export function ownedCount(id, profile = state.profile, world = state.worldState) {
-  let n = (world && world.store && world.store[id]) || 0;
+  let n = countOf(STATION, id, profile, world);
   for (const hold of Object.values(profile.holds || {})) n += (hold && hold[id]) || 0;
   for (const fit of Object.values(profile.loadout || {})) {
     for (const bays of Object.values(fit || {})) {

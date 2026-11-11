@@ -299,9 +299,10 @@ system by default, with a data `intraSystem: "links"` opt-out for future route-o
 cross-system gate hops remain. Each system chart has a non-warpable star (95%) / black hole (5%) core,
 named from the system with a permanent two-line name/type label; pockets orbit it and only route-only systems draw
 internal lines. A gate pocket has exactly one external gate peer in a neighbouring system; each system
-has one ordinary pocket plus one gate pocket per neighbour; Meridian keeps `reach`/`hollow` unchanged
-and gains separate new gate pockets; the initial 11B slice used empty generated placeholders (Step 12
-fills them); the whole map is visible through a configurable policy; difficulty is distance guidance with seeded variation, while
+has an ordinary hub plus any detached station pockets and one gate pocket per neighbour; Meridian keeps
+`reach`/`hollow` unchanged and gains separate new gate pockets. Generated gate trader stations are
+moved to their own station pockets by default, while explicit author features/placement flags can
+co-locate a station. The whole map is visible through a configurable policy; difficulty is distance guidance with seeded variation, while
 actual content decides danger. The web must stay modular: move a system, delete a pocket, promote a
 pocket to a gate, add a route or replace the generator without rewriting map/UI/warp code. Future fuel,
 activated gates and supercruise are out of scope now.
@@ -340,10 +341,10 @@ assume a system has exactly two pockets, and do not hard-code a two-level univer
 **four encounter kinds** as proof (for example a hostile patrol, a friendly trader using `SHOPS`, a
 derelict with loot, a resource cache). Templates pull encounters by tier. A generic spawner replaces
 the raider special cases in `sim/ai.js` (hunt-contract behaviour stays the same). Places remember
-what you did (mined-out rocks, cleared encounters) with slow simulation-time respawn timers and event overrides (owner decision recorded in VISION.md).
+what you did (mined-out rocks, cleared encounters) with slow simulation-time respawn timers and event overrides (owner decision recorded in VISION.md). Every dockable station also resolves a stable `${placeId}:${featureId}` storage key; trader stations reuse Meridian's `SHOPS` definitions but never share stock.
 **Done when.** Adding an encounter is a data entry; the content test checks every reference; flying
-into a few generated pockets shows different things.
-**Save.** **Version 18**, migration from 17 (the destination follow-up used v17).
+into a few generated pockets shows different things and station-local inventory survives switching and reload.
+**Save.** **Version 18**, migration from 17 (the destination follow-up used v17); station-local stores are an optional v18 extension so Step 13 remains v19.
 **Status:** [ ] **Built 2026-11-10; owner playtest pending (`TESTING-12-PLACES.md`).**
 
 > **Milestone C reached.** The open world can scale to 100+ systems of pocket content.

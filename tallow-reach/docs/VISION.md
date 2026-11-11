@@ -105,7 +105,7 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
-- **2026-11-10 — Step 12 place content and memory (owner):** generated pockets are filled immediately, not deferred. Use a slow default respawn of roughly 5–10 simulation minutes; paused simulation must not advance it. Asteroid memory keeps a slow timer for now, but `respawn-place` events may force or override it later. The trader proof is a dockable station feature that reuses existing `SHOPS`; independent station storage remains future work.
+- **2026-11-10 — Step 12 place content and memory (owner):** generated pockets are filled immediately, not deferred. Use a slow default respawn of roughly 5–10 simulation minutes; paused simulation must not advance it. Asteroid memory keeps a slow timer for now, but `respawn-place` events may force or override it later. The trader proof is a dockable station feature that reuses existing `SHOPS`; every dockable station now has independent persistent storage keyed by its place and feature id. Save v18 remains in use so the reserved Step 13 v19 and Step 15 v20 slots stay intact.
 
 - **2026-11-08 — sparse, clearer starmap (owner):** gate lines should be straight and should not pass through unrelated systems;
   outer systems should need at least 10 jumps, and route lists should show all stops that fit, with arrows

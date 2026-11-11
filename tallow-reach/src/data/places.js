@@ -151,10 +151,28 @@ export const placeAt = id => (isPlace(id) ? catalog()[id] : null) || catalog()[D
 export function placeDef(id) {
   const place = placeAt(id);
   if (place.template && templateAt(place.template)) return templateFeatures(place.template, place);
-  return PLACE_DEFS[place.def] || { features: [] };
+  const definition = PLACE_DEFS[place.def] || { features: [] };
+  const explicit = [
+    ...(Array.isArray(place.features) ? place.features : []),
+    ...(Array.isArray(place.extraFeatures) ? place.extraFeatures : []),
+  ];
+  if (!explicit.length) return definition;
+  const additions = JSON.parse(JSON.stringify(explicit));
+  return { ...definition, features: [...(definition.features || []).map(feature => ({ ...feature })), ...additions] };
 }
 
-/** Every feature of one kind in a place definition, in data order. */
+/** Stable inventory key for the station feature in a pocket. Generated station
+ * ids are namespaced by their pocket, so two traders with the same encounter
+ * kind never share storage. The home key is also exposed through the legacy
+ * `world.store` alias for old saves and callers. */
+export function stationKeyAt(id = DEFAULT_PLACE) {
+  if (!isPocket(id)) return null;
+  const place = placeAt(id);
+  const station = placeDef(place.id).features.find(feature => feature.kind === "station");
+  return station?.id ? `${place.id}:${station.id}` : null;
+}
+
+/** Every feature of one kind, in data order. */
 export const featuresOf = (id, kind) => placeDef(id).features.filter(f => f.kind === kind);
 
 /** The first feature of one kind, or null. */
