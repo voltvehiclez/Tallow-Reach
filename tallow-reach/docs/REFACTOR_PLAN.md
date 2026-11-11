@@ -244,7 +244,7 @@ rate throttle if you can). Tests green.
 
 ## Step 9: Split the save into profile and world
 **Goal.** Portable character data apart from per-world data (TARGET_ARCHITECTURE principle 5), and close every step-9-owned item in the [still-local-only table](TARGET_ARCHITECTURE.md#still-local-only-after-step-8c-assigned-by-owner-step) (saves and profiles; inventory and pickups; economy, outfitting and saved ammunition; contracts and rewards; docking and launch). Warp and sector ownership belong to step 10; non-local death/recovery and player presentation/input belong to step 16.
-**Do.** `profile` keeps credits, ships, loadouts, holds, hull damage, stats, the active mission and
+**Do.** `profile` keeps credits, ships, loadouts, holds, hull damage, stats, active missions and
 (later) campaign progress. `world` gets the station (base levels, store), the contract board and
 placeholders for the galaxy and current sector. Same save slots and export code carry both.
 `sanitizeProfile` is split into `sanitizeProfile` and `sanitizeWorld` and stops naming base modules
@@ -387,6 +387,8 @@ engine code; it only names things by id (enemies, items, sectors, flags).
   the mission's `fails` says.
 **Save.** **Version 19**: `mission` becomes `missions` (progress per active mission: current step,
 counters) plus `flags`, with migration.
+**Status:** [~] **13a built 2026-11-10; owner playtest pending (`TESTING-13-MISSIONS.md`).**
+13b (dialogue/scripts/flags/branching/parallel/failures) and 13c (dialogue and mission-log screens) remain.
 
 ## Step 14: Instanced sectors and wormholes
 **Goal.** Temporary, generated, harder sectors reached through wormholes.

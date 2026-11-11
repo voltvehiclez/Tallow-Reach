@@ -14,7 +14,7 @@
 //   docked                           player docked at the outpost
 //   launched                         player left the outpost
 //   died          text               ship destroyed (after docking)
-//   mined         { item }           one unit of ore added to the hold
+//   mined         { item, player }   one unit of ore added to the acting pilot's hold
 //   pickup        { item, player, place, encounter, encounterType }
 //                                    crate picked up; encounter fields are null for ordinary loot
 //   encounter-cleared { place, id, encounter }
@@ -49,6 +49,17 @@
 //   travel-denied { player, from, to, reason }
 //                                    sim/sectors.js refused a proposed hop; the
 //                                    starmap shows the reason without closing
+//   delivered     { item?, target?, place?, player }
+//                                    a mission delivery objective reached its target
+//   mission-tick  { dt, player }     one unpaused simulation tick for survive objectives
+//   mission-progress { mission, event, payload, player }
+//                                    the data-driven runner advanced an objective
+//   mission-completed { mission, player }
+//                                    all steps are complete; reward collection is still explicit
+//   mission-rewarded { mission, reward, player }
+//                                    the pilot collected a completed mission reward
+//   mission-abandoned { mission, player }
+//                                    the pilot removed an active mission
 
 const handlers = new Map();
 

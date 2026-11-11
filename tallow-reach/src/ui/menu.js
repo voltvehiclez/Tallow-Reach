@@ -120,11 +120,13 @@ const ACTIONS = {
   ref() {
     contracts.rerollBoard();
   },
-  drop() {
-    contracts.abandonContract();
+  drop(i) {
+    // Abandon used to be silent; keep that contract-board behavior while the
+    // generic runner removes the selected active mission.
+    contracts.abandonContract(i === undefined ? undefined : +i);
   },
-  done() {
-    toast(contracts.completeContract());
+  done(i) {
+    toast(contracts.completeContract(i === undefined ? undefined : +i));
   },
 
   // Hangar

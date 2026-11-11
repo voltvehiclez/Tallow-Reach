@@ -6,16 +6,18 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **Milestone C is underway.** **Steps 0 to 11 are ticked** (11B owner playtest
-passed, as recorded in VISION.md). **Step 12 is built and awaiting the owner playtest** in
-`TESTING-12-PLACES.md`. Saves are version **18**: `world.destination` remains in the world half and
-`world.placeMemory` now stores remaining simulation-second cooldowns for stable mined-rock slots and
-cleared one-shot encounters; v17 and older saves migrate with empty memory. Generated pockets are
-filled immediately by three data templates (`frontier`, `trade_lane`, `salvage_yard`) with tier-selected
-encounters: hostile patrols, a dockable trader reusing Meridian's `SHOPS`, derelicts and resource caches.
-The generic spawner preserves hunt-contract selection. Timers do not advance while the simulation is
-paused, and `respawn-place` can force a future event-driven respawn. `npm test` and the build are the
-local checks for this slice; the owner visual playtest is still pending.
+**Current position:** **Milestone C is built and Milestone D has started.** **Steps 0 to 11 are ticked**
+(11B owner playtest passed, as recorded in VISION.md). **Step 12 is built and awaiting the owner
+playtest** in `TESTING-12-PLACES.md`. Step **13a** is built and awaiting the owner playtest in
+`TESTING-13-MISSIONS.md`; the dialogue/script screens in 13b/13c are not started. Saves are version
+**19**: `world.destination` and place memory remain in the world half, while `profile.missions` and
+`profile.flags` replace the single contract slot. v18 and older active contracts migrate into the
+one-step mission runner. Generated pockets are filled immediately by three data templates
+(`frontier`, `trade_lane`, `salvage_yard`) with tier-selected encounters: hostile patrols, a dockable
+trader reusing Meridian's `SHOPS`, derelicts and resource caches. The generic spawner preserves
+hunt-contract selection. Timers do not advance while the simulation is paused, and `respawn-place` can
+force a future event-driven respawn. `npm test` and the build are the local checks for this slice; the
+owner visual playtests are still pending.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -61,7 +63,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
 | 11 | System map, pocket chooser and starmap (100+ systems, save v17) | C | [x] **2026-11-10: 11A/11B owner playtest passed.** |
 | 12 | Encounters, place templates, place memory (save v18) | C | [ ] **Built 2026-11-10; owner playtest pending (`TESTING-12-PLACES.md`).** |
-| 13 | Mission framework; contracts rebuilt on it (save v19) | D | [ ] |
+| 13 | Mission framework; contracts rebuilt on it (save v19) | D | [~] **13a built 2026-11-10; owner playtest pending (`TESTING-13-MISSIONS.md`); 13b/13c remain.** |
 | 14 | Instanced places and wormholes | D | [ ] |
 | 15 | Campaign scaffolding (save v20) | D | [ ] |
 | 16 | Multiplayer (plan written when reached) | | [ ] |
@@ -124,6 +126,7 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 
 ## Log
 
+- 2026-11-10: **Step 13a built; owner playtest pending.** Added `src/data/missions/` and the generic `sim/missions.js` runner. Mine, hunt and salvage contracts now instantiate one-step data missions, several can be active together, and kill/mine/collect/reach/deliver/survive objective events advance the same runner. Save v18 active contracts migrate to v19 `profile.missions`; `profile.flags` is ready for the choice branch planned in 13b. Added `tests/step13-missions.test.mjs` and `TESTING-13-MISSIONS.md`; 13b dialogue/script steps and 13c screens remain.
 - 2026-11-10: **Step 12 built; owner playtest pending.** Generated pockets now resolve three data templates with tier-selected encounters (`hostile_patrol`, `friendly_trader`, `derelict`, `resource_cache`), and are filled on load. Generic AI spawners preserve hunt contracts; trader stations reuse Meridian's `SHOPS` definitions with independent station-local storage. Stable asteroid slots, static loot encounters and one-shot patrols use `world.placeMemory` with 420 simulation-second defaults, pause-safe countdowns and `respawn-place` event overrides. `world.stationStores` uses stable station keys and keeps the old v18 `world.store` saves compatible without consuming reserved v19/v20 slots. Added `tests/step12-places.test.mjs`, `tests/station-inventory.test.mjs`, content reference checks and `TESTING-12-PLACES.md`. Step 11 was ticked after the owner confirmed its playtest; Step 12 remains unticked until this new playtest passes.
 - 2026-11-07: Vision, target architecture, roadmap and refactor plan written (docs only).
 - 2026-11-07: Step 1 (enemy registry) built: enemies are entries in `src/data/enemies.js`, factions in

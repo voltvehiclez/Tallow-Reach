@@ -1,6 +1,6 @@
 // The persistent part of a game, split in save v13 into:
 //   - `profile`: portable character data (credits, ships, loadouts, holds, hull damage,
-//     missiles carried, selected weapon, active mission and stats)
+//     missiles carried, selected weapon, active missions and stats)
 //   - `world`: hosted world data (station levels and storage, contract board,
 //     galaxy and current pocket)
 // Everything saved to disk goes through this file so older saves and export codes keep loading.
@@ -8,7 +8,8 @@
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { isItem, isModule, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
-import { CONTRACT_TYPES } from "../data/contracts.js";
+import { CONTRACT_TYPES, missionFromContract } from "../data/contracts.js";
+import { isMissionKind, isMissionStepKind } from "../data/missions/index.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
@@ -63,7 +64,10 @@ function worldWithStationStores(fields, stationStores) {
 //      and cleared encounters. v17 and older start with an empty memory record.
 //   18 also accepts station-local inventory records in world.stationStores;
 //      older v18 saves migrate their legacy world.store to the relevant station.
-export const SAVE_VERSION = 18;
+//   19 replaces the single profile.mission slot with profile.missions and adds
+//      remembered flags; v18 and older active contracts migrate into the runner's
+//      one-step mission shape.
+export const SAVE_VERSION = 19;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -94,22 +98,58 @@ function allStockFit() {
   return out;
 }
 
+/**
+ * Keep the old singular property as a non-enumerable compatibility view. Old
+ * callers can still assign `profile.mission` or read its compact `{ type, p,
+ * n, r, ... }` shape, while every saved active mission lives in `missions`.
+ */
+function legacyMissionView(mission) {
+  if (!mission) return null;
+  const step = mission.steps?.[mission.step < mission.steps.length ? mission.step : mission.steps.length - 1];
+  const progress = mission.step >= mission.steps.length
+    ? step?.count || mission.n || 0
+    : mission.counters?.[step?.id || "objective"] ?? mission.p ?? 0;
+  const out = {
+    type: mission.type,
+    tier: mission.tier || 1,
+    p: Math.max(0, Math.floor(progress)),
+    n: mission.n || step?.count || 1,
+    r: mission.r ?? mission.rewards?.credits ?? 0,
+  };
+  if (mission.o !== undefined || step?.item !== undefined) out.o = mission.o ?? step.item;
+  if (mission.e !== undefined || step?.enemy !== undefined) out.e = mission.e ?? step.enemy;
+  return out;
+}
+
+function attachMissionCompat(profile) {
+  Object.defineProperty(profile, "mission", {
+    enumerable: false,
+    configurable: true,
+    get: () => profile.missions[0] ? legacyMissionView(profile.missions[0]) : null,
+    set: value => {
+      profile.missions = value ? [cleanMission(value)].filter(Boolean) : [];
+    },
+  });
+  return profile;
+}
+
 /** Fresh portable character profile (travels with a pilot across worlds). */
 export function newProfile() {
-  return {
+  return attachMissionCompat({
     v: SAVE_VERSION,
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
     ships: [DEFAULT_SHIP],
     ship: DEFAULT_SHIP,
-    mission: null,
-    done: 0,           // contracts completed
+    missions: [],       // active mission records; several may run at once
+    flags: {},          // remembered story facts (used by later mission slices)
+    done: 0,            // contracts completed
     kills: 0,
-    msl: 0,            // missiles carried
+    msl: 0,             // missiles carried
     pw: "cannon",      // equipped primary
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
     loadout: allStockFit(),      // fitted modules per hull, group -> bay array
-  };
+  });
 }
 
 /** Fresh hosted world record (station levels and storage, contract board, galaxy and current pocket). */
@@ -155,7 +195,7 @@ export function newSave() {
   };
 }
 
-/** Validate one contract (active `profile.mission` or an offer in `world.board`). */
+/** Validate one compact contract offer in `world.board`. */
 function cleanContract(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   if (!MISSION_TYPES.includes(raw.type)) return null;
@@ -165,6 +205,79 @@ function cleanContract(raw) {
   const tier = Math.max(1, Math.floor(+raw.tier || 1));
   const p = Math.max(0, Math.min(n, Math.floor(+raw.p || 0)));
   return { ...raw, tier, n, r, p };
+}
+
+const cleanFlags = raw => {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [id, value] of Object.entries(raw)) {
+    if (!id || !/^[A-Za-z0-9_.:-]+$/.test(id)) continue;
+    if (["boolean", "string", "number"].includes(typeof value) && (typeof value !== "number" || Number.isFinite(value))) {
+      out[id] = value;
+    }
+  }
+  return out;
+};
+
+function cleanMissionStep(raw, index) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
+  const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
+  const step = { id, kind: raw.kind };
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "lines", "choices", "action", "set", "test", "steps"]) {
+    if (raw[key] !== undefined) step[key] = raw[key];
+  }
+  const count = Number(raw.count ?? raw.seconds ?? 1);
+  step.count = Number.isFinite(count) && count > 0 ? count : 1;
+  return step;
+}
+
+function cleanMission(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  // v18 and older stored a compact contract directly in `profile.mission`.
+  if (!raw.kind && MISSION_TYPES.includes(raw.type)) {
+    return missionFromContract({ ...raw }, raw.id || `contract:${raw.type}:legacy`);
+  }
+  if (!isMissionKind(raw.kind) || !Array.isArray(raw.steps)) return null;
+  const steps = raw.steps.map(cleanMissionStep).filter(Boolean);
+  if (!steps.length) return null;
+  const step = Math.max(0, Math.min(steps.length, Math.floor(+raw.step || +raw.current || 0)));
+  const counters = {};
+  const source = raw.counters && typeof raw.counters === "object" ? raw.counters : {};
+  for (const item of steps) {
+    const value = Number(source[item.id]);
+    counters[item.id] = Number.isFinite(value) && value >= 0 ? Math.min(item.count, value) : 0;
+  }
+  // Contract records generated by the data factory retain their compact fields;
+  // use them to seed a v18 mission that did not yet have counters.
+  if (raw.type && MISSION_TYPES.includes(raw.type) && raw.p !== undefined && counters[steps[0].id] === 0) {
+    counters[steps[0].id] = Math.min(steps[0].count, Math.max(0, Math.floor(+raw.p || 0)));
+  }
+  const current = step >= steps.length ? steps.length : step;
+  const rewards = raw.rewards && typeof raw.rewards === "object" ? {
+    credits: Math.max(0, Math.floor(+raw.rewards.credits || 0)),
+  } : { credits: Math.max(0, Math.floor(+raw.r || 0)) };
+  const mission = {
+    id: typeof raw.id === "string" && raw.id ? raw.id : `mission:${raw.type || "unknown"}`,
+    title: typeof raw.title === "string" && raw.title ? raw.title : String(raw.type || "Mission"),
+    kind: raw.kind,
+    requires: Array.isArray(raw.requires) ? raw.requires.filter(id => typeof id === "string") : [],
+    steps,
+    rewards,
+    fails: raw.fails && typeof raw.fails === "object" ? { ...raw.fails } : {},
+    step: current,
+    current,
+    counters,
+  };
+  for (const key of ["type", "tier", "n", "r", "o", "e", "faction"]) {
+    if (raw[key] !== undefined) mission[key] = raw[key];
+  }
+  if (mission.type && MISSION_TYPES.includes(mission.type)) {
+    mission.tier = Math.max(1, Math.floor(+mission.tier || 1));
+    mission.n = Math.max(1, Math.floor(+mission.n || steps[0].count));
+    mission.r = Math.max(0, Math.floor(Number.isFinite(+mission.r) ? +mission.r : rewards.credits));
+  }
+  mission.p = Math.floor(counters[steps[Math.min(current, steps.length - 1)].id] || 0);
+  return mission;
 }
 
 /**
@@ -209,22 +322,28 @@ export function sanitizeProfile(raw) {
 
   const done = Math.max(0, Math.floor(+raw.done || 0));
   const kills = Math.max(0, Math.floor(+raw.kills || 0));
-  const mission = cleanContract(raw.mission);
+  const rawMissions = Array.isArray(raw.missions)
+    ? raw.missions
+    : raw.mission
+      ? [raw.mission]
+      : [];
+  const missions = rawMissions.map(cleanMission).filter(Boolean);
 
-  return {
+  return attachMissionCompat({
     v: SAVE_VERSION,
     cr,
     holds,
     ships,
     ship,
-    mission,
+    missions,
+    flags: cleanFlags(raw.flags),
     done,
     kills,
     msl,
     pw,
     hp,
     loadout,
-  };
+  });
 }
 
 /**

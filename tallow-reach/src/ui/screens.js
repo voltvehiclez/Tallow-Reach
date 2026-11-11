@@ -16,7 +16,12 @@ import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/economy.js";
-import { describe } from "../sim/contracts.js";
+import {
+  describe,
+  activeMissions,
+  isMissionComplete,
+  missionProgress,
+} from "../sim/contracts.js";
 import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
 import { term, terms } from "../data/terms.js";
 import { stationAt } from "../sim/places.js";
@@ -82,13 +87,19 @@ export function outpostHtml(ui) {
 }
 
 function contractsHtml() {
-  const m = state.profile.mission;
-  if (m) {
-    return `<h2>Active contract</h2><div class="row"><div>${describe(m)}<small>Progress ${m.p}/${m.n}. Reward ${m.r} cr.</small></div>${
-      m.p >= m.n ? `<button data-a="done">Collect reward</button>` : `<button data-a="drop">Abandon</button>`
-    }</div>`;
-  }
+  const active = activeMissions();
+  const activeHtml = active.length
+    ? `<h2>Active missions</h2>` + active.map((m, i) => {
+        const progress = missionProgress(m);
+        return `<div class="row"><div>${describe(m)}<small>Progress ${progress.done}/${progress.total}. Reward ${m.rewards?.credits ?? m.r ?? 0} cr.</small></div>${
+          isMissionComplete(m)
+            ? `<button data-a="done" data-b="${i}">Collect reward</button>`
+            : `<button data-a="drop" data-b="${i}">Abandon</button>`
+        }</div>`;
+      }).join("")
+    : `<p>No active missions.</p>`;
   return (
+    activeHtml +
     `<h2>Contract board</h2>` +
     state.worldState.board
       .map(

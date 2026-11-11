@@ -263,19 +263,22 @@ menu. Sounds a *screen* makes (buttons, hovers) are not game sounds: they call `
 subscribes once. Payloads should carry **ids and plain numbers**, not objects with behaviour — that
 is what lets a listener (sound, a mission, a network snapshot) work without knowing the emitter.
 
-## 11. Story and scripted missions (new system)
+## 11. Story and scripted missions
 
-There is no story system yet. Recommended shape, so it fits the current design:
+Step 13a provides the shared foundation. A mission file under `src/data/missions/` is plain data with
+`{ id, title, kind: "contract" | "story", requires, steps, rewards, fails }`; it names ids but
+never imports simulation or rendering code. Active records live in `profile.missions`, and
+`sim/missions.js` advances the current step from events. The runner currently supports `kill`, `mine`,
+`collect`, `reach`, `deliver` and `survive` objectives, including several active missions at once.
+The old singular `profile.mission` property is only a non-enumerable compatibility view of the first
+active mission; do not build new code around it.
 
-- `src/data/story.js`: the chapters as data. Each step has an `id`, a `when` event (`"docked"`, `"enemy-killed"`, ...),
-  an optional condition, the text to show, and an optional reward.
-- `src/sim/story.js`: subscribes with `on(...)`, advances the player's step, shows text with `msg()`,
-  and pays rewards through the profile. Keep its imports to `util/events.js`, `data/`, and `state/` so it can be tested without any 3D.
-- Saved progress: a new `profile.story = { step: 0, flags: {} }`. That is a save change:
-  default in `newProfile`, validate in `sanitizeProfile`, bump `SAVE_VERSION`.
-- Show it: a "Log" tab (recipe 7) that lists unlocked entries.
-- Test: build a state, `emit` the events in order, check the step advances (`tests/story.test.mjs`).
-- Keep it separate from `profile.mission`. That slot holds the one active contract.
+To add a contract, edit `src/data/missions/contracts.js`: add its type, generator, one-line wording,
+and a template step, then expose it through the contract board facade in `src/sim/contracts.js`.
+Preserve compact compatibility fields if old saves or UI callers need them. To add a story mission,
+add a data record with `kind: "story"`; dialogue, choices, scripts, waits, flags, branching and
+parallel steps are reserved for 13b, and the dialogue/mission-log UI is 13c. Add headless event tests
+beside `tests/step13-missions.test.mjs`, plus a save migration test if the shape changes.
 
 ## 12. Seeded sectors and daily challenges
 

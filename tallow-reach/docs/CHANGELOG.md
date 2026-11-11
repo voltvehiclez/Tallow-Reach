@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Start Step 13 mission framework with data-driven contracts
+
+- Built Step 13a: `src/data/missions/` defines the mission vocabulary and contract templates, while `src/sim/missions.js` advances kill, mine, collect, reach, deliver and survive objectives from gameplay events. Mine, hunt and salvage contracts now run through the same one-step mission records, and several missions can be active at once without changing their wording, rewards or spawn behavior.
+- Save version is **19**. `profile.missions` and `profile.flags` replace the old single active contract slot; v18 and older active contracts migrate, and the non-enumerable `profile.mission` view keeps old callers/exported character checks compatible. Dialogue/script steps and mission-log/dialogue screens remain for 13b/13c.
+- Added `tests/step13-missions.test.mjs` and `TESTING-13-MISSIONS.md`. Full `npm test` passes **352/352**; `npm run build` succeeds with a **713 KB** bundle (the generated HTML is restored after validation).
+
+---
+
 ## 2026-11-10: Simplify map markers and current-location labels
 
 - Removed the extra orange start ring around the current galaxy system and current pocket, including station squares; current labels now add a second `(You are here)` line.

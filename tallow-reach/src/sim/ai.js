@@ -12,6 +12,7 @@ import { featuresOf, featureOf, featureById } from "../data/places.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
 import { encounterDef, encounterRespawn } from "../data/encounters.js";
 import { profileOf } from "../state/state.js";
+import { missionForObjective, remainingObjective } from "./missions.js";
 import { state, placeWorld } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
 import { fire } from "./combat.js";
@@ -131,9 +132,9 @@ export function updateEnemies(dt, placeId = state.place) {
     const spawner = spawners[0];
     const encounter = spawner ? encounterDef(spawner.encounter) : null;
     F.spawnT = spawner ? R(spawner.interval?.[0] ?? encounter?.interval?.[0] ?? 4, spawner.interval?.[1] ?? encounter?.interval?.[1] ?? 8) : R(4, 8);
-    const m = prof.mission,
-      hunting = m && m.type === "hunt" && m.p < m.n,
-      hunted = m && m.e ? m.e : DEFAULT_ENEMY;
+    const hunt = missionForObjective(prof, "kill"),
+      hunting = !!hunt,
+      hunted = hunt?.steps?.[hunt.step]?.enemy || hunt?.e || DEFAULT_ENEMY;
     let want = 0;
     let id = spawner?.enemy || encounter?.enemy || DEFAULT_ENEMY;
     let encounterKey = spawner?.id || null;
@@ -149,7 +150,7 @@ export function updateEnemies(dt, placeId = state.place) {
       // This is intentionally the old hunt rule: the active contract chooses
       // its enemy, and the remaining target count is capped at three minus E.
       if (far && hunting && !cooling) {
-        want = Math.min(3, m.n - m.p) - E.length;
+        want = Math.min(3, remainingObjective(hunt)) - E.length;
         id = hunted;
       } else if (!cooling && far && nearField && (once ? groupCount < (spawner.maxWanderers ?? encounter?.maxActive ?? 1) : E.length < (spawner.maxWanderers ?? encounter?.maxActive ?? 2)) && random() < (spawner.chance ?? encounter?.chance ?? 0)) {
         const count = spawner.count || encounter?.count || [1, 1];

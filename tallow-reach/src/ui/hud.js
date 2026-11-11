@@ -11,7 +11,7 @@ import { interpolatedPos } from "../render/views.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
-import { describe } from "../sim/contracts.js";
+import { activeMissions, missionDescription, missionProgress } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
 import { V } from "../util/math.js";
@@ -111,7 +111,8 @@ export function updateHud(dt) {
     F = state.flight,
     H = state.hud,
     d = SHIPS[S.ship],
-    m = S.mission;
+    m = activeMissions(S)[0],
+    mp = m ? missionProgress(m) : null;
 
   el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
   el.hull.style.width = (P.hullMax > 0 ? Math.max(0, P.hull / P.hullMax) * 100 : 0) + "%";
@@ -141,7 +142,7 @@ export function updateHud(dt) {
     `${placeAt(state.place).n}<br>` +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
-    `<span style="color:var(--amber)">${m ? describe(m) + " " + m.p + "/" + m.n : "No contract"}</span>`;
+    `<span style="color:var(--amber)">${m ? missionDescription(m) + " " + mp.done + "/" + mp.total : "No contract"}</span>`;
 
   el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
 

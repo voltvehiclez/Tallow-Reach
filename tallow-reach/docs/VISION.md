@@ -105,7 +105,9 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
-- **2026-11-10 — Step 12 place content and memory (owner):** generated pockets are filled immediately, not deferred. Use a slow default respawn of roughly 5–10 simulation minutes; paused simulation must not advance it. Asteroid memory keeps a slow timer for now, but `respawn-place` events may force or override it later. The trader proof is a dockable station feature that reuses existing `SHOPS`; every dockable station now has independent persistent storage keyed by its place and feature id. Save v18 remains in use so the reserved Step 13 v19 and Step 15 v20 slots stay intact.
+- **2026-11-10 — Step 13a mission framework (owner):** story choices may affect later missions, so mission data keeps remembered `profile.flags` and simple dialogue-choice hooks available without forcing every mission to use them. Contracts and story missions share one data shape and runner; several missions may be active at once. Step 13a covers objective events and preserves the existing contract behavior; dialogue/scripts and mission screens are later slices 13b/13c. Save v19 replaces the old singular active-contract slot with `profile.missions` plus `flags` and migrates older saves.
+
+- **2026-11-10 — Step 12 place content and memory (owner):** generated pockets are filled immediately, not deferred. Use a slow default respawn of roughly 5–10 simulation minutes; paused simulation must not advance it. Asteroid memory keeps a slow timer for now, but `respawn-place` events may force or override it later. The trader proof is a dockable station feature that reuses existing `SHOPS`; every dockable station now has independent persistent storage keyed by its place and feature id. Save v18 introduced place memory and station-local storage; current save v19 retains those fields alongside mission progress.
 
 - **2026-11-08 — sparse, clearer starmap (owner):** gate lines should be straight and should not pass through unrelated systems;
   outer systems should need at least 10 jumps, and route lists should show all stops that fit, with arrows

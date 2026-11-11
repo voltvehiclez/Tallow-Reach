@@ -1,0 +1,28 @@
+// Mission data vocabulary. Definitions contain ids and plain values only: the
+// runner in sim/missions.js owns event handling, counters and rewards.
+
+export const MISSION_KINDS = ["contract", "story"];
+
+export const MISSION_STEP_KINDS = [
+  "kill",
+  "mine",
+  "collect",
+  "reach",
+  "reach-sector",
+  "deliver",
+  "survive",
+  "dialogue",
+  "script",
+  "wait",
+  "flags",
+  "parallel",
+];
+
+export const CONTRACT_OBJECTIVE_KINDS = {
+  mine: "mine",
+  hunt: "kill",
+  salvage: "collect",
+};
+
+export const isMissionKind = kind => MISSION_KINDS.includes(kind);
+export const isMissionStepKind = kind => MISSION_STEP_KINDS.includes(kind);

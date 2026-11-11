@@ -64,7 +64,7 @@ about each other, use the event bus instead.
 | Add a shop row, change a price, or make a row run out | `data/shops.js` (`SHOPS`); see HOW_TO_ADD.md recipe 4 |
 | Add a second trader or station shop  | `data/shops.js` (a new `SHOPS` entry) and point the counter at it (`OUTPOST_SHOP` today); see HOW_TO_ADD.md recipe 17 |
 | Change base module costs             | `data/station.js`                              |
-| Add a contract type                  | `data/contracts.js` (list, generator, wording), plus a listener in `sim/contracts.js` |
+| Add a contract type                  | `data/missions/contracts.js` (list, generator, wording and mission template), plus the generic listener in `sim/missions.js` |
 | Add an authored pocket/system | `data/places.js` and `data/terms.js`; see HOW_TO_ADD.md recipe 14 |
 | Change starmap generation, visibility, tiers, chart look or travel costs | `data/galaxy.js`; resolved by `sim/galaxy.js`, installed by `sim/galaxy-session.js`, quoted by `sim/travel.js`, drawn by `ui/starmap.js` |
 | Move a system, delete/promote a pocket, add a route | `GALAXY_OVERRIDES` in `data/galaxy.js` or `PLACE_LINKS` in `data/places.js`; see HOW_TO_ADD.md recipe 20 |
@@ -103,13 +103,13 @@ about each other, use the event bus instead.
 src/main.js            boot, action handling (lock, weapon, dock, starmap, travel, pause), frame loop
 src/index.html         page shell: HUD elements, outpost panel, hint text
 src/styles.css         all styling, in labelled sections
-src/data/              tuning numbers and content tables (ships, items, weapons, station, contracts, places, terms, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops, galaxy)
+src/data/              tuning numbers and content tables (ships, items, weapons, station, missions/contracts, places, terms, camera, outfitting bays and paint slots, modules, enemies, factions, loot tables, shops, galaxy)
 src/util/              events.js (bus), rng.js (seedable random), math.js (vectors, helpers), ids.js (entity ids)
 src/core/              audio.js (synth + mute), input.js (keys -> local player controls + named actions)
 src/state/             state.js (runtime), profile.js (saved data), storage.js (slots, codes)
 src/sim/               player, pilot (where the ship is), power, drive, fitting, inventory, shops' purchases (economy),
                        weapons, missile, combat, ai, enemy (a hostile as data), entity (every other entity as data),
-                       loot, asteroids, places, galaxy (resolved starmap web), galaxy-session (seed/save adapter), travel (pure route quotes), targeting, contracts, session, sectors (warp), effects, world
+                       loot, asteroids, places, galaxy (resolved starmap web), galaxy-session (seed/save adapter), travel (pure route quotes), targeting, missions, contracts (board facade), session, sectors (warp), effects, world
 src/render/            scene.js (including one group per place), models.js, camera.js, warpfx.js, shipviewer.js (Outfitting),
                        views.js (a mesh per entity, the player's ship and the mining beam)
 src/ui/                hud.js, menu.js (button actions), screens.js (outpost HTML), outfitting.js (ship window), picker.js (open bay), pause.js, starmap.js (M galaxy/system chart), warpflash.js
@@ -412,9 +412,9 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## State
 
-- Saved state is split in two since step 9, carries the current pocket since step 10 and the compact galaxy record since step 11B (`SAVE_VERSION = 18`, `{ v: 18, profile, world }`):
-  - `state.profile` is the local pilot's **portable character**: credits (`cr`), flown hull (`ship`), owned hulls (`ships`), per-ship holds (`holds`), per-hull loadouts (`loadout`), hull fractions (`hp`), missile stock (`msl`), selected primary slot (`pw`), active contract (`mission`), kills (`kills`) and completed contracts (`done`). Every player in `state.players` carries its own `player.profile` (`profileOf(player)`).
-  - `state.worldState` is the **hosted world**: station-local storage (`stationStores[placeId:featureId]`), the legacy enumerable home alias (`store`), base facility levels (`base`), the station's contract offer board (`board`, aliased by `state.ui.board`), the current pocket id (`place`), the local pilot's resume point (`resume`: null while docked, else `{ pos, quat, sh, en }`) , `destination` (the local system or exact pocket target) and `galaxy: { seed, knowledge }`. Knowledge is compact per-system discovery/visit flags; generated systems/pockets/links are never saved. A legacy v18 save with only `world.store` migrates that stock to its saved station when one exists; v19 remains reserved for Step 13.
+- Saved state is split in two since step 9, carries the current pocket since step 10 and the compact galaxy record since step 11B (`SAVE_VERSION = 19`, `{ v: 19, profile, world }`):
+  - `state.profile` is the local pilot's **portable character**: credits (`cr`), flown hull (`ship`), owned hulls (`ships`), per-ship holds (`holds`), per-hull loadouts (`loadout`), hull fractions (`hp`), missile stock (`msl`), selected primary slot (`pw`), active data missions (`missions`), remembered story flags (`flags`), kills (`kills`) and completed contracts (`done`). `profile.mission` remains a non-enumerable compact compatibility view of the first active mission. Every player in `state.players` carries its own `player.profile` (`profileOf(player)`).
+  - `state.worldState` is the **hosted world**: station-local storage (`stationStores[placeId:featureId]`), the legacy enumerable home alias (`store`), base facility levels (`base`), the station's contract offer board (`board`, aliased by `state.ui.board`), the current pocket id (`place`), the local pilot's resume point (`resume`: null while docked, else `{ pos, quat, sh, en }`) , `destination` (the local system or exact pocket target) and `galaxy: { seed, knowledge }`. Knowledge is compact per-system discovery/visit flags; generated systems/pockets/links are never saved. Legacy v18 and older saves migrate their active contract and station/world data into the v19 shape.
   - `currentSave()` and `applySave(save)` join and apply both halves; `portableProfile(save)` and `mergeProfile(save, profile)` extract a guest's character and merge it back into their own save without altering their home world.
   - Both halves are written together on dock, on successful local warp arrival, on every outpost menu action, when the tab is hidden or closed, and every `AUTOSAVE_SECONDS` while playing. `currentSave()` captures the live pilot position first, so every save path records where you actually are.
 - Everything else in `state/state.js` (`players`, `places`, `world`, `place`, `time`, `shops`, `ui`, `galaxy`, `galaxyRecovery`, `multiplayer`) is transient session runtime, rebuilt when the game loads. `ui.destination` mirrors saved `world.destination`, is replanned to a reachable system entry or exact pocket, and clears on arrival or Clear; destination changes autosave immediately. The sparse v2 graph changes gate links but preserves seeded system names/positions; removed legacy generated gate saves recover to an ordinary pocket in their old system. `ui.starmap` is the open chart view; `ui.starmapMemory` holds session-only chart presentation across closures, resets on save replacement and follows local cross-system travel in pocket mode; `multiplayer` is the future host flag that keeps the world running while a local chart is open. `state.place`/`state.world` alias the local pilot's pocket; each pilot owns `player.place` and `player.warp`.
@@ -426,11 +426,11 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
   ore, the contract board and the audio noise buffers all draw from it. `setSeed(n)` makes a run
   reproducible; `makeRng(n)` gives an independent stream for anything that must be regenerated from
   its own seed.
-- `data/contracts.js`: contract generators take a random source, so they can be seeded in the same way.
+- `data/missions/contracts.js`: contract generators take a random source, so board rolls can be seeded; the same file turns each offer into the data mission shape consumed by `sim/missions.js`.
 
 ## Save compatibility
 
-Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts current `{ v: 18, profile, world }` objects, v18 saves without `stationStores` (legacy `world.store` is assigned to the saved station or home), v17 saves (missing `placeMemory` defaults to `{}`), v16 saves, v15 saves (`galaxy:null` becomes the default seed plus home knowledge), v14 saves (no `resume`, so they keep the old dock-or-arrival behaviour), v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves. Boot, slot load and import call `prepareGalaxySave` first: it installs the saved seed's catalog, validates pocket/knowledge ids against it, and recovers a removed/unknown pocket to the home station with `resume:null` while preserving the whole profile. A failed prepare restores the previous catalog. `world.stationStores` is world state, not portable profile state; its keys are stable `${placeId}:${featureId}` values and its stocks are cleaned through `sanitizeWorld`. `world.placeMemory` stores only positive, finite remaining simulation seconds under each place's `rocks` and `encounters` buckets; it is world state, not portable profile state.
+Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` emits current `{ v: 19, profile, world }` objects, migrating v18 saves (including active `profile.mission` and worlds without `stationStores`), v17 saves (missing `placeMemory` defaults to `{}`), v16 saves, v15 saves (`galaxy:null` becomes the default seed plus home knowledge), v14 saves (no `resume`, so they keep the old dock-or-arrival behaviour), v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves. Boot, slot load and import call `prepareGalaxySave` first: it installs the saved seed's catalog, validates pocket/knowledge ids against it, and recovers a removed/unknown pocket to the home station with `resume:null` while preserving the whole profile. A failed prepare restores the previous catalog. `profile.missions` stores data mission definitions plus step/counter progress; `profile.flags` stores simple remembered values for later story choices. `world.stationStores` is world state, not portable profile state; its keys are stable `${placeId}:${featureId}` values and its stocks are cleaned through `sanitizeWorld`. `world.placeMemory` stores only positive, finite remaining simulation seconds under each place's `rocks` and `encounters` buckets; it is world state, not portable profile state.
 
 When you change what is saved:
 
@@ -467,8 +467,10 @@ These are real, current limits. None of them is a bug in play today.
   an item with a value), but there is no "move everything" button, and fitting in the field is not
   possible. Cargo no longer travels with you between ships: it stays in the ship you
   left it in, and the Base screen's Store/Load/Sell buttons act on the ship being flown.
-- **One active contract at a time** (`profile.mission`), and contract tiers are fixed at 1 to 3
-  (`generateContract` in `sim/contracts.js`, wording in `ui/screens.js`).
+- **Mission screens and story steps are still incomplete** (13b/13c). Step 13a now closes the old
+  one-contract structural gap: `profile.missions` can hold several data missions, and
+  `sim/missions.js` advances their objective steps from gameplay events. Contract tiers remain fixed
+  at 1 to 3 (`generateContract` in `sim/contracts.js`, definitions in `data/missions/contracts.js`).
 - **Shops and station storage are separate data concerns.** Any number of shops are content entries
   in `data/shops.js` with their own heading, rows, prices and `max` limits, addressed by `shopId`
   everywhere (`shopList`, `buyItem`, `shopStock`, `setShopStock`); limited stock is keyed per shop
@@ -479,7 +481,7 @@ These are real, current limits. None of them is a bug in play today.
   existing `SHOPS` definition and economy rules; they do not share Meridian's inventory. Do not add
   a second hard-coded shop pointer or a place-specific simulation branch.
 - **Muting is not saved.** Sound starts on every time the game opens.
-- **Where you logged out is saved** (`world.place` + `world.resume`, save v18). A save made while
+- **Where you logged out is saved** (`world.place` + `world.resume`, save v19). A save made while
   docked opens the station menu; a save made in flight returns you to the exact spot and heading,
   with shields and boost as you left them and zero speed. The pocket's arrival point is the fallback
   for older saves, a damaged position, or a ship with no thrusters that would be stranded. Generated
@@ -522,7 +524,7 @@ These are real, current limits. None of them is a bug in play today.
 - **Place memory is persistent simulation state.** `PLACE_DEFS` and generated templates carry station,
   field, spawner, planet and encounter data; runtime containers keep active entities. Stable asteroid
   slots and cleared one-shot encounter feature ids are recorded in `world.placeMemory` with remaining
-  simulation seconds (save v18). `sim/place-memory.js` decrements them only from unpaused ticks and
+  simulation seconds (save v19). `sim/place-memory.js` decrements them only from unpaused ticks and
   emits readiness events for `sim/places.js`; `respawn-place` is the future story/event override hook.
   Abandoned crates are still cleared on warp and are not counted as cleared until their encounter's
   final crate is collected.
