@@ -12,6 +12,7 @@
 
 import { GALAXY, GALAXY_OVERRIDES, SYSTEM_NAME_PARTS } from "../data/galaxy.js";
 import { PLACES, PLACE_LINKS, PLACE_DEFS, DEFAULT_PLACE } from "../data/places.js";
+import { isPlaceTemplate, templateAt, templateForPlace } from "../data/place-templates.js";
 import { term } from "../data/terms.js";
 import { makeRng } from "../util/rng.js";
 import { intraSystemPolicy } from "./travel.js";
@@ -235,8 +236,13 @@ function connectSystems(a, b, pockets, links, systemLinks, degree, tuning) {
 }
 
 function emptyPocket(id, parent, n, d, role = null) {
+  const template = templateForPlace(id, role || "hub");
+  // The map inherited the old placeholder label/description. Keep a useful
+  // gate or system-specific name, but expose the selected template's authored
+  // description so generated pockets are not still presented as empty.
+  const description = templateAt(template).d || d;
   const pocket = {
-    id, kind: "pocket", def: "empty", parent, n, d,
+    id, kind: "pocket", def: "empty", template, parent, n, d: description,
     enter: { kind: "warp", pos: [0, 0, 300] },
     leave: { kind: "warp" },
   };
@@ -318,6 +324,12 @@ export function assignTiers(world, tuning, rng) {
     const vary = Math.floor(rng() * (tuning.difficulty.variation * 2 + 1)) - tuning.difficulty.variation;
     system.tier = Math.max(1, Math.round(tuning.difficulty.base + distance(system.pos, origin) * tuning.difficulty.perDistance + vary));
   }
+  // Generated pockets inherit the advisory tier so their data template can pull
+  // the right encounter pool. Authored pockets remain free to omit it.
+  for (const pocket of Object.values(world.pockets)) {
+    const system = world.systems.find(s => s.id === pocket.parent);
+    if (system && pocket.template) pocket.tier = system.tier;
+  }
 }
 
 /** Fill data defaults after author edits, leaving explicit per-system choices intact. */
@@ -378,7 +390,9 @@ export function validateGalaxy(world) {
   for (const [id, pocket] of Object.entries(world.pockets)) {
     if (pocket.id !== id) errors.push(`pocket ${id} carries mismatched id ${pocket.id}`);
     if (!systems.has(pocket.parent)) errors.push(`pocket ${id} names missing system ${pocket.parent}`);
-    if (!PLACE_DEFS[pocket.def]) errors.push(`pocket ${id} names missing definition ${pocket.def}`);
+    if (pocket.template ? !isPlaceTemplate(pocket.template) : !PLACE_DEFS[pocket.def]) {
+      errors.push(`pocket ${id} names missing definition/template ${pocket.template || pocket.def}`);
+    }
     if (pocket.mapPos !== undefined && (!Array.isArray(pocket.mapPos) || pocket.mapPos.length !== 2 || !pocket.mapPos.every(Number.isFinite))) {
       errors.push(`pocket ${id} needs a finite 2D mapPos when authored`);
     }

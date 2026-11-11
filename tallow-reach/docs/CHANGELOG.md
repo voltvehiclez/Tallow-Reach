@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Build Step 12 encounter templates and persistent place memory
+
+- Generated pockets now resolve three data templates with tier-selected `hostile_patrol`, `friendly_trader`, `derelict` and `resource_cache` encounters. They are filled on load; trader stations are dockable and reuse Meridian's existing `SHOPS` stock. Generic AI spawning keeps hunt-contract selection without a raider-only branch.
+- Stable asteroid field slots, cleared static loot encounters and one-shot patrol groups use `world.placeMemory` with a 420-second simulation-time default. Pausing does not advance timers; `respawn-place` can force a future event-driven respawn. Save version is **18**, with v17-and-older migration defaults.
+- Added `tests/step12-places.test.mjs`, expanded content-reference checks, `TESTING-12-PLACES.md`, and updated architecture/roadmap/handoff documentation. `npm test` **341/341**; `npm run build` succeeded (**694 KB**). Owner playtest is pending; Step 12 is not ticked yet.
+
+---
+
 ## 2026-11-08: Wrap destination names and show local route hops
 
 - Owner requested long starmap destination names wrap instead of truncating, and orange route lines

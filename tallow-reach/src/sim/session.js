@@ -121,7 +121,10 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
 
   P.flight.missileLock = { target: null, t: 0, locked: false };
   P.flight.lock = null;
-  if (local) enterPlace(DEFAULT_PLACE, P);   // the home station is in the starting pocket
+  // Preserve the old fallback for empty pockets: docking there returns home.
+  // A real station feature — including a generated friendly trader — keeps its
+  // own pocket so its named shop can be used.
+  if (local) enterPlace(stationAt(placeId) ? placeId : DEFAULT_PLACE, P);
   ensureBoard(world);
   if (local) saveAutosave(currentSave());
   emit("docked", { player: P });

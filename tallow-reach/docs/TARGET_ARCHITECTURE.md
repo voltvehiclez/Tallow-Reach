@@ -83,15 +83,19 @@ pockets, never in the system itself or its visual-only central body. The startin
 Its first pockets keep the internal ids `reach` (**Meridian Station**, station + asteroid belt)
 and `hollow` (**Kestrel Hollow**, empty). A system may have any number of pockets; M opens the
 starmap, zooming into a system dot opens its pocket map, and clicking/right-clicking a legal pocket or gate-neighbour label offers
-**Warp to** (step 11B built, owner playtest pending). Generic player-facing nouns live in
+**Warp to** (step 11B built and owner-playtest-passed). Generic player-facing nouns live in
 `data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
 
 **Place definition** (what a place *contains*). A list of features, each placed by data:
-`station`, `asteroidField {pos, radius, height, count, ore, respawnMs}`, `spawner {enemy, rules}`,
-`planet` scenery, later `poi`, `hazard`, `wormhole`. One generic loader turns a definition into
-entities and scenery events. There is no `FIELD_CENTER` / `FIELD_SECTOR` / `STATION_POS` constant
-anywhere; positions belong to the place definition. Meridian is a station feature inside its
-pocket, not a child place. The station feature names its shop.
+`station`, `asteroidField {pos, radius, height, count, ore, respawnSec, stable}`, `spawner {encounter, rules}`,
+`planet` scenery and `encounter` features. Reusable generated definitions live in
+`data/place-templates.js`; encounter ids come from `data/encounters.js` and are selected by the
+place's derived tier. One generic loader turns a definition into entities and scenery events. There
+is no `FIELD_CENTER` / `FIELD_SECTOR` / `STATION_POS` constant anywhere; positions belong to the
+place definition. Meridian is a station feature inside its pocket, not a child place. The station
+feature names its shop. `sim/place-memory.js` records stable rock-slot and one-shot encounter
+cooldowns in `world.placeMemory`; timers use simulation seconds and `respawn-place` is the event hook
+for future story overrides.
 
 **Map (step 11).** An **organic 2D web** of systems generated from a seed: scattered positions and
 explicit cross-system gate links, not a square grid. `sim/galaxy.js` resolves `{ travel, systems, pockets,
@@ -109,8 +113,9 @@ Pockets orbit an independent seeded star (95%) / black hole (5%) core; its prope
 system and is permanently labelled with its type on a second row, but it is not warpable. Free systems omit internal chart lines;
 route-only systems draw them. Gate exit stubs point toward the exact peer system and their labels are clickable travel targets.
 Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out; core graphics scale with system zoom. Place memory
-(mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save and arrives in step 12. The map is not a fixed two-level
-container: pockets may later have optional child places using the same place record.
+(mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save and is
+implemented in save v18. The map is not a fixed two-level container: pockets may later have optional
+child places using the same place record.
 
 **Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole. It
 is not on the system map and is discarded on exit. Same loader, different source. A future temporary
@@ -134,16 +139,18 @@ faction, byPlayer }`), so missions, achievements and sound can subscribe without
 
 ## Saves
 
-- Current save version is **16** (starmap seed + compact knowledge); v15 and older migrate on load.
+- Current save version is **18** (starmap seed/knowledge, destination and place memory); v17 and older migrate on load.
   Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
-  migration from flat v1..v12 and split v13/v14/v15 saves:
+  migration from flat v1..v12 and split v13 through v17 saves:
   `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
   `pw`, `mission`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
   station storage (`store`), base upgrades (`base`), contract board (`board`), current pocket id
-  (`place`, replacing v13's `sector` placeholder), saved local flight state (`resume`) and galaxy
-  seed/knowledge (`galaxy: { seed, knowledge }`). `sim/galaxy-session.js` installs the seed before
-  validation and recovers removed pockets safely to home. `portableProfile(save)`
-  and `mergeProfile(save, profile)` extract and return a guest's character without touching world state.
+  (`place`, replacing v13's `sector` placeholder), saved local flight state (`resume`), route
+  destination and galaxy seed/knowledge (`galaxy: { seed, knowledge }`). `placeMemory` stores only
+  remaining simulation-second cooldowns for stable rock slots and cleared encounter features.
+  `sim/galaxy-session.js` installs the seed before validation and recovers removed pockets safely to
+  home. `portableProfile(save)` and `mergeProfile(save, profile)` extract and return a guest's
+  character without touching world state.
 - **Recommended co-op rule** (open question 6/7 in VISION.md): a guest brings their own profile
   (ship, hold, credits) into the host's world; whatever they gain simply stays in their own
   profile, which they save locally on leaving. That *is* "retrieving loot into your own world",
@@ -188,7 +195,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | --- | --- | --- |
 | `sim/` imports the screen | **Closed in 7c:** place entry emits an event; the frame loop supplies the camera direction used for missile lock. The render-import allow-list is empty. | — |
 | Entities are three.js meshes | **Closed (steps 7a and 7b):** every entity is a record with an `id` and a `kind` — an enemy, a bullet, a missile, a crate, a spark, a rock, the player's ship. `render/views.js` owns every mesh | — |
-| Variable time step | **Closed in step 8 (+ between-tick render interpolation):** gameplay runs at fixed 60 Hz through `sim/step.js` (`SIM_DT = 1 / 60`, capped catch-up), and `render/views.js` + `render/camera.js` interpolate visual poses via `simClock.alpha()` for smooth high-refresh (240 Hz) rendering. Two minor caveats (camera-sampled missile aim and `setTimeout` asteroid respawn) are parked in `docs/ROADMAP.md`. | — |
+| Variable time step | **Closed in step 8 (+ between-tick render interpolation):** gameplay runs at fixed 60 Hz through `sim/step.js` (`SIM_DT = 1 / 60`, capped catch-up), and place-memory timers use those same simulation ticks; `render/views.js` + `render/camera.js` interpolate visual poses via `simClock.alpha()` for smooth high-refresh (240 Hz) rendering. Camera-sampled missile aim remains a deliberate parking-lot item. | — |
 | One global player | **8c and step 9 complete and owner-playtested:** each active player has independent runtime and portable `profile` (inventory, economy, outfitting, ammo, contracts, kills, docking/launch); remaining multiplayer presentation/input items belong to step 16 above. | 10 / 16 |
 | Single mixed save | **Closed in step 9 (save v13, owner-playtested):** `state/profile.js` and `state/storage.js` split `{ profile, world }` and migrate v1..v12 saves. | — |
 | Sector geography in code | **Closed in step 10:** positions/features live in `PLACE_DEFS`; a generic loader builds per-place containers; launch/dock/scenery read the station and field features. | — |
@@ -202,10 +209,9 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 Keep today's folders. **Do not rename or reshuffle for its own sake.** Additions only:
 
 ```
-src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  places.js  terms.js  galaxy.js
-src/data/place-defs.js (later templates)
+src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  place-templates.js  places.js  terms.js  galaxy.js
 src/data/campaign/   one file per mission (m01.js, m02.js, ...) + index.js listing the order
-src/sim/spawner.js  loot.js  places.js  galaxy.js  galaxy-session.js  travel.js  instances.js  missions.js  step.js
+src/sim/encounters.js  place-memory.js  loot.js  places.js  asteroids.js  galaxy.js  galaxy-session.js  travel.js  instances.js  missions.js  step.js
 src/render/views.js           builds and updates a mesh per entity (7a: hostiles)
 src/ui/starmap.js  missionlog.js
 src/net/                      (multiplayer step only)

@@ -20,7 +20,8 @@ import { enemyPos } from "./enemy.js";
 import { playerPos, playerFwd, playerMount } from "./pilot.js";
 import { launchMissile, updateMissileFlight } from "./missile.js";
 import { dropEntity } from "./entity.js";
-import { spawnAsteroid } from "./asteroids.js";
+import { rockMemoryId } from "./asteroids.js";
+import { markRockMined } from "./place-memory.js";
 import { fieldAt } from "./places.js";
 
 // The mining beam's glow and the missiles' bodies are drawn by `render/views.js`
@@ -169,7 +170,14 @@ export function updatePrimary(dt, P = state.player) {
           dropEntity(placeWorld(P.place || state.place).asteroids, best);   // removes it, and its mesh with it
           boom(best.pos, 12, 0x8a7a6a, P.place || state.place);
           const placeId = best.place || P.place || state.place, field = fieldAt(placeId);
-          setTimeout(() => spawnAsteroid(placeId, field), field.respawnMs);
+          // The depleted slot is remembered with the world. Simulation time,
+          // rather than wall-clock callbacks, keeps pause/save/load correct; an
+          // event may clear this timer early through the place-memory bus.
+          if (field && best.memoryId) {
+            markRockMined(placeId, best.memoryId, field.respawnSec ?? ((field.respawnMs || 0) / 1000));
+          } else if (field && best.slot !== undefined) {
+            markRockMined(placeId, rockMemoryId(field, best.slot), field.respawnSec ?? ((field.respawnMs || 0) / 1000));
+          }
           F.beamT = 0;
         }
         while (prof && P.acc >= 1 && holdLoad(prof) < d.cargo) {

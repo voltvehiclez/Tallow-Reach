@@ -7,7 +7,7 @@
 import { GALAXY } from "../data/galaxy.js";
 import { chartGalaxy, straightEdgeBlockers } from "./chart-lines.js";
 import { routeDisplay, flightRouteRows } from "./route-display.js";
-import { PLACE_DEFS, placeAt } from "../data/places.js";
+import { placeAt, placeDef } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
 import { setDestination } from "../state/destination.js";
@@ -116,7 +116,7 @@ export function pocketChoices(world, from, systemId, context = {}) {
       canWarp: quote.ok && !unsupportedCost,
       status: current ? "You are here" : unsupportedCost ? "Travel costs are not implemented yet."
         : quote.ok ? (freeHop ? "Free intra-system warp" : "Direct route · Free") : quote.reason,
-      station: (PLACE_DEFS[pocket.def]?.features || []).some(f => f.kind === "station"),
+      station: placeDef(pocket.id).features.some(f => f.kind === "station"),
     };
   });
 }

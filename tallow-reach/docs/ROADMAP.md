@@ -6,18 +6,16 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-**Current position:** **Milestone C is underway.** **Steps 0 to 10 are ticked** (step 10 owner
-playtest passed on 2026-11-08, after three found bugs were fixed and confirmed). **Step 11 is in
-progress:** slice **11A** is built and owner-playtest-passed; slice **11B** (M starmap screen, zoomed
-system pocket maps, free local warp, permanent star/black-hole labels, clickable gate neighbours, zoom-scaled pan/cores, click/right-click travel, compact overview
-and save v17) is **built and awaiting the owner playtest** in `TESTING-STARMAP.md`. Saves are version
-**17** (`world.destination` stores the target; `world.galaxy: { seed, knowledge }`; generated geography, cores and pocket layout are rebuilt,
-not saved). M opens the clickable chart instead of
-warping immediately; zooming into a system dot opens its pocket map, and clicking/right-clicking a legal
-pocket or gate-neighbour label offers **Warp to**. Local hops are free by default; a data `intraSystem: "links"` opt-out restores internal
-routes for future instances. Galaxy gate routes stay explicit. Single-player chart pauses, a future hosted
-world keeps running. The sparser v2 web lays out dots clear of straight lines and makes outer systems at least ten gate crossings away on the default seed; old removed gate saves recover in the same system. The map remembers its last view in-session and pocket view follows cross-system travel; system or exact pocket destinations plot the fewest warp hops and J advances one hop at a time. Galaxy drag is now bounded to 0.5–1 screen pixels per pointer pixel across zoom levels. `npm test` is **334/334** (both 8b oracles unchanged) and `npm run build` succeeded
-(686 KB). Step 11 remains unticked until the owner passes the 11B playtest. The owner's step-11 decisions are recorded in VISION.md.
+**Current position:** **Milestone C is underway.** **Steps 0 to 11 are ticked** (11B owner playtest
+passed, as recorded in VISION.md). **Step 12 is built and awaiting the owner playtest** in
+`TESTING-12-PLACES.md`. Saves are version **18**: `world.destination` remains in the world half and
+`world.placeMemory` now stores remaining simulation-second cooldowns for stable mined-rock slots and
+cleared one-shot encounters; v17 and older saves migrate with empty memory. Generated pockets are
+filled immediately by three data templates (`frontier`, `trade_lane`, `salvage_yard`) with tier-selected
+encounters: hostile patrols, a dockable trader reusing Meridian's `SHOPS`, derelicts and resource caches.
+The generic spawner preserves hunt-contract selection. Timers do not advance while the simulation is
+paused, and `respawn-place` can force a future event-driven respawn. `npm test` and the build are the
+local checks for this slice; the owner visual playtest is still pending.
 
 **Already ticked:** steps 0 to 5 (steps 4 and 5 on 2026-11-08, after the owner played
 `TESTING-INVENTORY.md` and `TESTING-SHOPS.md`): the item catalogue with one inventory per place
@@ -61,11 +59,11 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 8c | Player-aware flight, combat, targeting and nearest-player AI | B | [x] **2026-11-08: owner playtest passed.** |
 | 9 | Split profile/world save and close step-9 local-only items (save v13) | B | [x] **2026-11-08: owner playtest passed (Milestone B complete).** |
 | 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
-| 11 | System map, pocket chooser and starmap (100+ systems, save v16) | C | [ ] **11A passed 2026-11-08; 11B + zoom/right-click, free-local-warp/central-body and label/pan/gate-click refinements built, owner playtest pending (`TESTING-STARMAP.md`)** |
-| 12 | Encounters, place templates, place memory (save v17) | C | [ ] |
-| 13 | Mission framework; contracts rebuilt on it (save v18) | D | [ ] |
+| 11 | System map, pocket chooser and starmap (100+ systems, save v17) | C | [x] **2026-11-10: 11A/11B owner playtest passed.** |
+| 12 | Encounters, place templates, place memory (save v18) | C | [ ] **Built 2026-11-10; owner playtest pending (`TESTING-12-PLACES.md`).** |
+| 13 | Mission framework; contracts rebuilt on it (save v19) | D | [ ] |
 | 14 | Instanced places and wormholes | D | [ ] |
-| 15 | Campaign scaffolding (save v19) | D | [ ] |
+| 15 | Campaign scaffolding (save v20) | D | [ ] |
 | 16 | Multiplayer (plan written when reached) | | [ ] |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table.
@@ -109,21 +107,24 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   once per animation frame from the rendered camera rather than per simulation sub-tick inside
   `stepSim`. Benign in single-player; revisit when per-player aim input arrives in multiplayer
   (step 16) or if cross-refresh replay determinism is needed.
-- Wall-clock asteroid respawn (`src/sim/weapons.js`, `src/sim/asteroids.js`): `spawnAsteroid` uses
-  `setTimeout(..., field.respawnMs)` on wall-clock time instead of a simulation countdown, so respawn
-  ignores simulation pause and time scaling. Move onto simulation time when persistent place memory
-  (step 12) or pause/replay needs it.
+- **Closed in step 12:** wall-clock asteroid respawn was replaced by stable field slots plus
+  `world.placeMemory` simulation-second cooldowns. A loaded place rebuilds an expired slot through
+  `place-memory-ready`; `respawn-place` can override a timer. Static encounter crates and one-shot
+  patrol groups use the same world memory shape.
 - Warp: should enemies keep shooting during the charge, or does a warp grant invulnerability?
   (design decision, undecided).
-- Salvage crates are abandoned when you warp out of a pocket. (Will be handled by place memory in step 12.)
+- Salvage crates are abandoned when you warp out of a pocket. They are session entities and are not
+  counted as a cleared encounter until their final crate is actually collected; the static encounter
+  rebuilds on a later visit unless its saved cooldown has started.
 - Mute state is not saved.
-- The world around a resumed pilot is not saved: enemies, crates and shots are session-only and the
-  asteroid belt is re-rolled each page load, so you return to the exact spot but not the same
-  situation. Persistent place memory (and a seeded belt) is step 12.
+- The world around a resumed pilot is not saved: enemies, crates and shots are session-only, but stable
+  asteroid slots and cleared one-shot encounters are preserved in `world.placeMemory`. You return to
+  the exact spot with the current place memory, not the same active-entity situation.
 - Inventory is still "untested in the real game" per HANDOFF.md until the owner has played it.
 
 ## Log
 
+- 2026-11-10: **Step 12 built; owner playtest pending.** Generated pockets now resolve three data templates with tier-selected encounters (`hostile_patrol`, `friendly_trader`, `derelict`, `resource_cache`), and are filled on load. Generic AI spawners preserve hunt contracts; trader stations reuse Meridian's shop. Stable asteroid slots, static loot encounters and one-shot patrols use `world.placeMemory` with 420 simulation-second defaults, pause-safe countdowns, save v18 migration and `respawn-place` event overrides. Added `tests/step12-places.test.mjs`, content reference checks and `TESTING-12-PLACES.md`. Step 11 was ticked after the owner confirmed its playtest; Step 12 remains unticked until this new playtest passes.
 - 2026-11-07: Vision, target architecture, roadmap and refactor plan written (docs only).
 - 2026-11-07: Step 1 (enemy registry) built: enemies are entries in `src/data/enemies.js`, factions in
   `src/data/factions.js`, kills emit `enemy-killed { def, faction }`, plus a headless sim test harness

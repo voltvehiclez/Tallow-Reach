@@ -360,8 +360,8 @@ Each `src/` folder also has its own short `README.md`.
   `render/camera.js` and `ui/hud.js` interpolate visual poses using `simClock.alpha()` (keeping
   previous-tick poses in a render-side `WeakMap` so simulation state stays untouched and 240 Hz
   displays see smooth per-frame motion without sawtooth jitter; teleports with `P.snap` snap
-  immediately). Missile aim still samples the last rendered camera direction and asteroid respawn
-  still uses a wall-clock timer.
+  immediately). Missile aim still samples the last rendered camera direction; stable asteroid and
+  encounter cooldowns use simulation-time place memory instead of wall-clock callbacks.
 - **Anything that accumulates must be multiplied by `dt`.** A constant added per frame
   (`camera.rotateZ(0.05)` every frame, say) silently depends on the frame rate: harmless on a
   60 Hz screen, a visible bug on a 240 Hz one. This bit the warp roll once. Use
@@ -426,7 +426,7 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## Save compatibility
 
-Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts `{ v: 16, profile, world }` objects, v15 saves (`galaxy:null` becomes the default seed plus home knowledge), v14 saves (no `resume`, so they keep the old dock-or-arrival behaviour), v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves. Boot, slot load and import call `prepareGalaxySave` first: it installs the saved seed's catalog, validates pocket/knowledge ids against it, and recovers a removed/unknown pocket to the home station with `resume:null` while preserving the whole profile. A failed prepare restores the previous catalog.
+Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` accepts current `{ v: 18, profile, world }` objects, v17 saves (missing `placeMemory` defaults to `{}`), v16 saves, v15 saves (`galaxy:null` becomes the default seed plus home knowledge), v14 saves (no `resume`, so they keep the old dock-or-arrival behaviour), v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves. Boot, slot load and import call `prepareGalaxySave` first: it installs the saved seed's catalog, validates pocket/knowledge ids against it, and recovers a removed/unknown pocket to the home station with `resume:null` while preserving the whole profile. A failed prepare restores the previous catalog. `world.placeMemory` stores only positive, finite remaining simulation seconds under each place's `rocks` and `encounters` buckets; it is world state, not portable profile state.
 
 When you change what is saved:
 
@@ -482,18 +482,21 @@ These are real, current limits. None of them is a bug in play today.
   `data/places.js` names its shop (`shop`), and `ui/screens.js` reads that feature; independent
   station storage is still future work. Do not add a second hard-coded shop pointer.
 - **Muting is not saved.** Sound starts on every time the game opens.
-- **Where you logged out is saved** (`world.place` + `world.resume`, save v16). A save made while
+- **Where you logged out is saved** (`world.place` + `world.resume`, save v18). A save made while
   docked opens the station menu; a save made in flight returns you to the exact spot and heading,
   with shields and boost as you left them and zero speed. The pocket's arrival point is the fallback
-  for older saves, a damaged position, or a ship with no thrusters that would be stranded. Only Meridian Station (`reach`) has content today: Kestrel
-  Hollow (`hollow`) is empty, and each pocket's scenery/entities are hidden (not deleted) while you
-  are away, so the field comes back as you left it within the session.
+  for older saves, a damaged position, or a ship with no thrusters that would be stranded. Generated
+  pockets now resolve one of three data templates with tier-selected encounters: asteroid fields use
+  stable field slots, static derelicts/caches become loot crates, and trade lanes can have a dockable
+  friendly-trader station using an existing `SHOPS` entry. A field slot or cleared one-shot encounter
+  is remembered in `world.placeMemory` and its slow timer advances only on simulation ticks; a
+  `respawn-place` event can override it. Independent station storage is still future work.
 - **A warp takes the controls for about two seconds, but not the momentum.** The throttle is
   released and the stick eases to neutral (`WARP_COAST` in `data/sectors.js`), so the ship
   coasts down and unwinds its turn; weapons are offline for the whole sequence. Enemies keep
   shooting at you while it charges. Making the ship invulnerable during a warp, or letting
   enemies lose interest, is a deliberate design decision that has not been made yet.
-- **The starmap is live, but the generated world is still empty.** M opens `ui/starmap.js`: an organic
+- **The starmap is live and generated pockets are filled.** M opens `ui/starmap.js`: an organic
   system web with gate lines, current/visited/selected markers and zoom/pan/labels. Zooming into a
   selected system dot opens a derived pocket map: pockets orbit a visual-only star/black hole with a
   permanent two-line name/type label. Free systems omit internal lines; route-only systems retain them. Gate exit stubs
@@ -502,13 +505,18 @@ These are real, current limits. None of them is a bug in play today.
   when zoomed out; core radii are map units so system zoom scales the graphic. Clicking/right-clicking a legal local/gate
   pocket or gate-neighbour label offers **Warp to**; the sim rechecks the quote and emits
   `travel-denied` on refusal. Single-player chart pauses the frame gate and suspends audio;
-  `state.multiplayer` is the future host flag that keeps a hosted world running. Generated pockets are
-  empty placeholders, visibility is `all`, and travel is free. Non-empty costs are refused until a cost
-  handler exists; fuel, activated/proximity gates and supercruise are not implemented.
-- **Place geography is data, but place memory is not persistent yet.** `PLACE_DEFS` features carry
-  the station, field, spawner and planet numbers; runtime containers keep rocks across visits within
-  a session. Mined-out rocks/respawn still use wall-clock `setTimeout`, and abandoned crates are
-  cleared on warp; persistent place memory is step 12.
+  `state.multiplayer` is the future host flag that keeps a hosted world running. Generated pockets resolve
+  `frontier`, `trade_lane` or `salvage_yard` templates; their tier selects hostile patrols, traders,
+  derelicts and caches, and pocket descriptions use the selected template rather than the old empty
+  placeholder. Non-empty travel costs are refused until a cost handler exists; fuel, activated/proximity
+  gates and supercruise are not implemented.
+- **Place memory is persistent simulation state.** `PLACE_DEFS` and generated templates carry station,
+  field, spawner, planet and encounter data; runtime containers keep active entities. Stable asteroid
+  slots and cleared one-shot encounter feature ids are recorded in `world.placeMemory` with remaining
+  simulation seconds (save v18). `sim/place-memory.js` decrements them only from unpaused ticks and
+  emits readiness events for `sim/places.js`; `respawn-place` is the future story/event override hook.
+  Abandoned crates are still cleared on warp and are not counted as cleared until their encounter's
+  final crate is collected.
 
 ## Keeping the docs scalable
 

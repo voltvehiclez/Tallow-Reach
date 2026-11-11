@@ -32,6 +32,15 @@ export const LOOT_TABLES = {
     ],
   },
 
+  // A derelict is a larger, guaranteed salvage cache with a rarer core.
+  derelict: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [2, 4], w: 1, j: 18 },
+      { i: "core", c: [1, 1], w: 0.25, j: 0 },
+    ],
+  },
+
   // The ore a rock is made of: about six in ten ferrite, three in ten cobalt and
   // eight in a hundred voidite.
   asteroid: {
