@@ -21,6 +21,8 @@ let root = null;
 let drag = null;
 let transition = null;
 let transitionFrame = null;
+let pendingNavigationClick = null;
+const DOUBLE_CLICK_DELAY = 500;
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[c]));
@@ -249,6 +251,65 @@ export function contextMenuPosition(x, y, viewport = { width: 800, height: 600 }
   };
 }
 
+/** Targets that have a double-click navigation action. The first click still
+ *  keeps its existing select/menu meaning, but it is delayed briefly so the
+ *  browser can deliver a real second click to the same SVG node. Rendering a
+ *  popup on click one replaces that node and prevents the native dblclick from
+ *  reaching this delegated root. */
+function navigationTarget(button, view = state.ui.starmap) {
+  if (!button || !view) return null;
+  if (view.mode === "galaxy" && button.dataset.system) {
+    return { key: `system:${button.dataset.system}`, kind: "system", id: button.dataset.system };
+  }
+  if (view.mode !== "system") return null;
+  if (button.dataset.exit) {
+    return { key: `exit:${button.dataset.exit}`, kind: "exit", id: button.dataset.exit };
+  }
+  if (button.dataset.pocket && button.dataset.peerSystem) {
+    return { key: `gate:${button.dataset.pocket}`, kind: "gate", id: button.dataset.pocket,
+      peerSystem: button.dataset.peerSystem };
+  }
+  return null;
+}
+
+function clearPendingNavigationClick() {
+  if (pendingNavigationClick?.timer != null) clearTimeout(pendingNavigationClick.timer);
+  pendingNavigationClick = null;
+}
+
+function performSingleNavigationClick(pending) {
+  const view = state.ui.starmap;
+  if (!view || view.mode !== pending.mode) return;
+  if (pending.kind === "system") selectSystem(pending.id);
+  else if (pending.kind === "exit") openExitMenu(pending.id, pending.x, pending.y);
+  else openPocketMenu(pending.id, pending.x, pending.y);
+}
+
+function flushPendingNavigationClick() {
+  const pending = pendingNavigationClick;
+  clearPendingNavigationClick();
+  if (pending) performSingleNavigationClick(pending);
+}
+
+function navigateDoubleClick(button) {
+  const view = state.ui.starmap;
+  const target = navigationTarget(button, view);
+  if (!target) return false;
+  clearPendingNavigationClick();
+  if (target.kind === "system") {
+    if (!selectSystem(target.id, true)) return false;
+    return enterSystem(target.id);
+  }
+  if (target.kind === "exit") {
+    const exit = pocketConnections(state.galaxy, view.selected, knowledge()).exits
+      .find(candidate => candidate.id === target.id);
+    if (!exit || !systemVisible(state.galaxy, exit.peerSystemId, knowledge())) return false;
+    return enterSystem(exit.peerSystemId);
+  }
+  if (!systemVisible(state.galaxy, target.peerSystem, knowledge())) return false;
+  return enterSystem(target.peerSystem);
+}
+
 export function setupStarmap() {
   root = document.createElement("div");
   root.id = "starmap";
@@ -260,31 +321,11 @@ export function setupStarmap() {
   root.addEventListener("click", onClick);
   root.addEventListener("contextmenu", onContextMenu);
   root.addEventListener("dblclick", e => {
-    const view = state.ui.starmap;
-    if (!view) return;
-    const exit = e.target.closest?.("[data-exit]");
-    if (exit && view.mode === "system") {
-      const peerSystemId = exit.dataset.peerSystem;
-      if (!peerSystemId || !systemVisible(state.galaxy, peerSystemId, knowledge())) return;
-      e.preventDefault();
-      enterSystem(peerSystemId);
-      return;
-    }
-    // The remote label is not the only useful target: the blue gate pocket
-    // itself should also open the adjacent system when double-clicked.
-    const gate = e.target.closest?.("[data-pocket][data-peer-system]");
-    if (gate && view.mode === "system") {
-      const peerSystemId = gate.dataset.peerSystem;
-      if (!peerSystemId || !systemVisible(state.galaxy, peerSystemId, knowledge())) return;
-      e.preventDefault();
-      enterSystem(peerSystemId);
-      return;
-    }
-    const node = e.target.closest?.("[data-system]");
-    if (!node || view.mode !== "galaxy") return;
+    if (!state.ui.starmap) return;
+    const button = e.target.closest?.("[data-system], [data-pocket], [data-exit]");
+    if (!navigateDoubleClick(button)) return;
     e.preventDefault();
-    selectSystem(node.dataset.system, true);
-    enterSystem(node.dataset.system);
+    e.stopPropagation?.();
   });
   root.addEventListener("change", e => {
     if (e.target.id === "sm-system") selectSystem(e.target.value);
@@ -372,6 +413,7 @@ const knowledge = () => state.worldState.galaxy?.knowledge || {};
 export function openStarmap() {
   const P = localPlayer();
   if (!root || !state.galaxy || state.ui.intro || state.paused || !P || P.docked || P.dead || P.warp) return false;
+  clearPendingNavigationClick();
   cancelTransition();
   const from = P.place || state.place;
   const systems = visibleSystems(state.galaxy, knowledge());
@@ -410,6 +452,7 @@ export function closeStarmap() {
   }
   state.ui.starmap = null;
   drag = null;
+  clearPendingNavigationClick();
   cancelTransition();
   if (root) root.hidden = true;
   setAudioSuspended(state.paused);
@@ -616,6 +659,7 @@ function closeMenu() {
 
 function onContextMenu(e) {
   if (!state.ui.starmap) return;
+  clearPendingNavigationClick();
   e.preventDefault();
   e.stopPropagation();
   const node = e.target.closest?.("[data-system], [data-pocket], [data-exit]");
@@ -659,6 +703,40 @@ function onKeydown(e) {
 }
 
 function onClick(e) {
+  const view = state.ui.starmap;
+  if (!view) return;
+  const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");
+  const target = navigationTarget(button, view);
+  // A real first click must not re-render a delegated SVG target before the
+  // browser has a chance to emit dblclick. Headless tests call this handler
+  // without `detail`, so their immediate single-click semantics remain intact.
+  if (target && (e.detail === 1 || e.detail === 2)) {
+    if (e.detail === 2) {
+      clearPendingNavigationClick();
+      return;
+    }
+    if (pendingNavigationClick && pendingNavigationClick.key !== target.key) flushPendingNavigationClick();
+    clearPendingNavigationClick();
+    const pending = {
+      ...target,
+      mode: view.mode,
+      x: e.clientX ?? 0,
+      y: e.clientY ?? 0,
+    };
+    pending.timer = setTimeout(() => {
+      if (pendingNavigationClick === pending) {
+        pendingNavigationClick = null;
+        performSingleNavigationClick(pending);
+      }
+    }, DOUBLE_CLICK_DELAY);
+    pendingNavigationClick = pending;
+    return;
+  }
+  if (pendingNavigationClick && (!target || pendingNavigationClick.key !== target.key)) flushPendingNavigationClick();
+  onClickNow(e);
+}
+
+function onClickNow(e) {
   const view = state.ui.starmap;
   if (!view) return;
   const button = e.target.closest?.("button, [data-system], [data-pocket], [data-exit]");

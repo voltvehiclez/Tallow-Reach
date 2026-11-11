@@ -19,6 +19,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Preserve real double-click navigation on starmap dots
+
+- A first click on a galaxy system, gate exit dot or gate pocket no longer immediately replaces the SVG target with a popup. The short single-click delay lets the browser deliver the second click to the same node, so double-clicking Galereach or another adjacent gate now opens that system map; a single click still selects or opens its existing menu.
+- Added a regression that sends real click details through both the Galereach system dot and a Meridian gate exit. Full `npm test` passes **346/346**; Step 11B passes **44/44**; `npm run build` succeeds at **701 KB**.
+
+---
+
 ## 2026-11-10: Vary station names and clarify routed gate navigation
 
 - Generated trader features and their station pockets now receive deterministic, varied names such as Outpost, Hideout, Trading Hub, Waystation, Exchange and Freeport. Names remain unique across the resolved catalog while authored station names stay intact.

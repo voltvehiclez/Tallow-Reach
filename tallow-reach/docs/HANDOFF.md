@@ -62,7 +62,9 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   Station pockets use square map icons and varied generated station names; core radii are map units so the
   graphic scales with system zoom; pocket dots/labels stay screen-sized. Gate pocket names
   sit inward clear of orange stubs, and neighbouring-system labels are clickable travel targets quoting the
-  reciprocal gate pocket. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out.
+  reciprocal gate pocket. Real first clicks on system/gate nodes wait briefly before rendering their single-click
+  selection/menu so a browser double-click reaches the original SVG target; double-clicking Galereach or a gate
+  exit opens the peer system map. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out.
   `systemPocketLayout` is deterministic and never saved; author `mapPos` overrides
   win. Open-world systems allow **free warp to any local pocket** and omit internal blue lines. The data
   opt-out `intraSystem: "links"` restores internal routes/lines for future route-only instances; the main
@@ -111,9 +113,9 @@ remain in its wrapping title. System pocket maps show directed orange overlays f
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **345/345 pass** (including the generated station-local inventory and starmap/station-separation tests;
+- **Results:** `npm test` **346/346 pass** (including the generated station-local inventory and starmap/station-separation tests;
   existing 8B/11B and Step 12 oracles remain green). `npm run build` succeeded: the generated bundle is
-  **700 KB** (the tracked HTML must be restored after validation and is not part of this source patch).
+  **701 KB** (the tracked HTML must be restored after validation and is not part of this source patch).
   The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save
   **v18** persists destination, place memory and station-local stocks; policies, core kind/name, pocket
   templates and layout are resolved, not persisted. Default geometry is **121 systems / 445 pockets / 444 links**

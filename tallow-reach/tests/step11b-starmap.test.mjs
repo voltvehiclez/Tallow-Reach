@@ -485,6 +485,37 @@ test("11B: gate exits are blue, station pockets are square, and a remote label o
   ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
 });
 
+test("11B: a real double-click reaches a gate dot before its single-click menu renders", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach";
+  ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null;
+  assert.equal(ui.openStarmap(), true);
+  const galereach = ui.state.galaxy.systems.find(system => system.n === "Galereach");
+  assert.ok(galereach);
+  const systemTarget = { dataset: { system: galereach.id }, disabled: false };
+  const eventFor = target => ({ target: { closest: () => target }, detail: 1, clientX: 150, clientY: 150 });
+  // Click one is held back rather than replacing the SVG node with a menu.
+  mapRoot.handlers.click(eventFor(systemTarget));
+  assert.equal(ui.state.ui.starmap.selected, "meridian");
+  mapRoot.handlers.click({ ...eventFor(systemTarget), detail: 2 });
+  mapRoot.handlers.dblclick({ target: { closest: () => systemTarget }, preventDefault() {} });
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.equal(ui.state.ui.starmap.selected, galereach.id);
+
+  ui.closeStarmap(); ui.state.ui.starmapMemory = null;
+  assert.equal(ui.openStarmap(), true);
+  const exit = pocketConnections(ui.state.galaxy, "meridian").exits[0];
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  const exitTarget = { dataset: { exit: exit.id, peerSystem: exit.peerSystemId }, disabled: false };
+  mapRoot.handlers.click(eventFor(exitTarget));
+  assert.doesNotMatch(mapRoot.innerHTML, /class="sm-context"/);
+  mapRoot.handlers.click({ ...eventFor(exitTarget), detail: 2 });
+  mapRoot.handlers.dblclick({ target: { closest: () => exitTarget }, preventDefault() {} });
+  assert.equal(ui.state.ui.starmap.selected, exit.peerSystemId);
+  ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
+});
+
 test("11B: map remembers its view and follows actual cross-system warps without saving presentation", () => {
   const save = ui.prepareGalaxySave(ui.newSave());
   ui.applySave(save);
