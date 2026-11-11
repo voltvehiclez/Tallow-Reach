@@ -526,6 +526,15 @@ test("moduleListName names the equipped modules for the HUD and the toast", () =
   assert.equal(moduleListName(undefined), "");
 });
 
+test("the flight HUD lists every active mission with its progress", () => {
+  const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
+  assert.match(hud, /missions\.map\(mission =>/, "the top-right HUD renders every active mission");
+  assert.match(hud, /class="hud-missions"/, "missions have a dedicated HUD block");
+  assert.doesNotMatch(hud, /activeMissions\(S\)\[0\]/, "the HUD must not discard missions after the first");
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /#tr \.hud-mission/, "each active mission has a readable top-right style");
+});
+
 test("the shield and hull bars show numbers with their HP units", () => {
   const html = readFileSync(new URL("../src/index.html", import.meta.url), "utf8");
   assert.match(html, /Shield HP/, "the shield bar is labelled Shield HP");

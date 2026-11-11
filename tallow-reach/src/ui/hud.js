@@ -1,4 +1,4 @@
-// In-flight HUD: shield, hull and boost bars, cargo and contract readout,
+// In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
 import { fmtDist } from "../util/math.js";
@@ -105,14 +105,21 @@ export function coneRadiusPx(deg) {
 }
 
 /** Refresh every HUD element. Call once per frame while flying. */
+function missionsHtml(missions) {
+  if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
+  return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
+    const progress = missionProgress(mission);
+    return `<div class="hud-mission"><span>${missionDescription(mission)}</span> <small>${progress.done}/${progress.total}</small></div>`;
+  }).join("")}</div>`;
+}
+
 export function updateHud(dt) {
   const P = state.player,
     S = state.profile,
     F = state.flight,
     H = state.hud,
     d = SHIPS[S.ship],
-    m = activeMissions(S)[0],
-    mp = m ? missionProgress(m) : null;
+    missions = activeMissions(S);
 
   el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
   el.hull.style.width = (P.hullMax > 0 ? Math.max(0, P.hull / P.hullMax) * 100 : 0) + "%";
@@ -142,7 +149,7 @@ export function updateHud(dt) {
     `${placeAt(state.place).n}<br>` +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
-    `<span style="color:var(--amber)">${m ? missionDescription(m) + " " + mp.done + "/" + mp.total : "No contract"}</span>`;
+    missionsHtml(missions);
 
   el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
 

@@ -19,6 +19,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Show every active mission in the flight HUD
+
+- The top-right Ship HUD now renders every active mission with its individual progress, instead of only the first mission. Added compact styling for multiple mission rows and a regression in `tests/content.test.mjs`.
+- The current mission framework, save format and contract behavior are unchanged. Rebuild with `npm run build`; the owner should refresh the playtest preview and check two or more accepted missions in flight.
+
+---
+
 ## 2026-11-10: Start Step 13 mission framework with data-driven contracts
 
 - Built Step 13a: `src/data/missions/` defines the mission vocabulary and contract templates, while `src/sim/missions.js` advances kill, mine, collect, reach, deliver and survive objectives from gameplay events. Mine, hunt and salvage contracts now run through the same one-step mission records, and several missions can be active at once without changing their wording, rewards or spawn behavior.
