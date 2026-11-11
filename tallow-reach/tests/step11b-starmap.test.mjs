@@ -1131,6 +1131,11 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
   const fallowLabel = labelValues.find(label => label.node.pocket.n === "Gate to Fallowwatch");
   assert.ok(fallowLabel?.moved && fallowLabel.anchor === "start" && fallowLabel.x > fallowLabel.dot[0],
     "the crowded Galedrift Fallowwatch label moves to the dot's right and can be connected to it");
+  const zoomedLabels = [...pocketLabelLayout(pocketConnections(world, galedrift.id), p => [p[0], -p[1]],
+    GALAXY.systemMap.pocketRadius * 2.5, 2.5).values()];
+  const sableLabel = zoomedLabels.find(label => label.node.pocket.n === "Gate to Sablewatch");
+  assert.ok(sableLabel && Math.abs(sableLabel.x - sableLabel.dot[0]) < sableLabel.width,
+    "a crowded centred gate label nudges locally instead of jumping an entire label width");
   assert.ok(systemChartBounds(chart).every(Number.isFinite));
   assert.ok(systemChartViewBox(world, { selected: "meridian", mode: "system", systemZoom: 1, systemPan: [0, 0] }).every(Number.isFinite));
   const previous = GALAXY_OVERRIDES.places.hollow;

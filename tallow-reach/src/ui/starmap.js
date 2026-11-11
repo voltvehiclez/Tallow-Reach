@@ -276,7 +276,10 @@ export function pocketLabelLayout(chart, point, radius, unit, tuning = GALAXY.sy
   const placed = [];
   for (const label of labels) {
     const horizontal = label.base.anchor !== "middle";
-    const tangentStep = Math.max((horizontal ? label.height : label.width) + gap, 0.01);
+    // Horizontal labels stack by a line height; centred labels move along the
+    // tangent in small increments so a nearby dot nudges them only as far as
+    // necessary instead of jumping an entire label width.
+    const tangentStep = Math.max(horizontal ? label.height + gap : gap, 0.01);
     const candidateOffsets = count => {
       const offsets = [0];
       for (let i = 1; i < count; i++) offsets.push((i % 2 ? -1 : 1) * Math.ceil(i / 2) * tangentStep);
@@ -299,11 +302,14 @@ export function pocketLabelLayout(chart, point, radius, unit, tuning = GALAXY.sy
         addSide(opposite, label.base.y, offset);
       }
     } else {
-      // Vertical labels keep their centred reading first, then use tangent
-      // shifts, followed by a side anchor if a neighbouring dot requires it.
-      for (const offset of candidateOffsets(32)) addSide("middle", label.base.y, offset);
-      addSide("start", label.base.y, 0);
-      addSide("end", label.base.y, 0);
+      // Vertical labels keep their centred reading first. At each small tangent
+      // shift also try the two side anchors, so a crowded label can move just
+      // far enough rather than exhausting a long row of centred positions.
+      for (const offset of candidateOffsets(32)) {
+        addSide("middle", label.base.y, offset);
+        addSide("start", label.base.y, offset);
+        addSide("end", label.base.y, offset);
+      }
     }
     let chosen = null;
     // There is no viewport constraint on label text. If the preferred finite
