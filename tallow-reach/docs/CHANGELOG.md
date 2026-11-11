@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Refine destination marker rings and icon scale
+
+- Destination icons now use a small orange tick, two orange rings and a dotted outer orange ring, matching the supplied reference more closely in route rows and galaxy/system pocket SVG maps.
+- Current/start and destination route icons are about 20% smaller; intermediate markers and route behavior are unchanged.
+- Targeted starmap/HUD tests pass **50/50**; full `npm test` passes **347/347**; `npm run build` succeeds at **706 KB**. The refreshed preview is in `/tmp/tallow-reach-preview/game/tallow-reach.html` and returns HTTP 200 on the existing preview server.
+
+---
+
 ## 2026-11-10: Mark destination completion and remove HUD route scrolling
 
 - Destination markers now include a bright tick inside the concentric amber target in both the HUD/starmap route rows and the galaxy/system pocket maps; the filled amber start marker is unchanged.

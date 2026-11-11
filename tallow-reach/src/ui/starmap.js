@@ -23,6 +23,7 @@ let transition = null;
 let transitionFrame = null;
 let pendingNavigationClick = null;
 const DOUBLE_CLICK_DELAY = 500;
+const ROUTE_ICON_SCALE = 0.8;
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[c]));
@@ -56,12 +57,12 @@ function routeRole(id, routeIds, startId, destinationId) {
 function routeMarkerMarkup(x, y, radius, role, unit) {
   if (!role) return "";
   const rings = role.destination
-    ? `<circle class="sm-route-marker sm-route-marker-destination-outer" cx="${x}" cy="${y}" r="${radius + 7 * unit}"/>
-       <circle class="sm-route-marker sm-route-marker-destination-inner" cx="${x}" cy="${y}" r="${radius + 3 * unit}"/>
-       <path class="sm-route-marker sm-route-marker-destination-check" d="M${x - 3.5 * unit} ${y} L${x - 1 * unit} ${y + 3 * unit} L${x + 4.5 * unit} ${y - 4 * unit}"/>`
+    ? `<circle class="sm-route-marker sm-route-marker-destination-outer" cx="${x}" cy="${y}" r="${radius + 7 * unit * ROUTE_ICON_SCALE}"/>
+       <circle class="sm-route-marker sm-route-marker-destination-inner" cx="${x}" cy="${y}" r="${radius + 3 * unit * ROUTE_ICON_SCALE}"/>
+       <path class="sm-route-marker sm-route-marker-destination-check" d="M${x - 3.5 * unit * ROUTE_ICON_SCALE} ${y} L${x - 1 * unit * ROUTE_ICON_SCALE} ${y + 3 * unit * ROUTE_ICON_SCALE} L${x + 4.5 * unit * ROUTE_ICON_SCALE} ${y - 4 * unit * ROUTE_ICON_SCALE}"/>`
     : "";
   const start = role.start && !role.destination
-    ? `<circle class="sm-route-marker sm-route-marker-start" cx="${x}" cy="${y}" r="${radius + 4 * unit}"/>`
+    ? `<circle class="sm-route-marker sm-route-marker-start" cx="${x}" cy="${y}" r="${radius + 4 * unit * ROUTE_ICON_SCALE}"/>`
     : "";
   return rings + start;
 }
@@ -971,8 +972,9 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
   const nodes = systems.map(s => {
     const current = s.id === here.parent;
     const chosen = s.id === view.selected;
-    const radius = (current ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) * unit;
     const role = routeRole(s.id, routeIds, routeStart, routeDestination);
+    const iconScale = role?.start || role?.destination || current ? ROUTE_ICON_SCALE : 1;
+    const radius = (current ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) * iconScale * unit;
     const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
     const marker = routeMarkerMarkup(s.pos[0], -s.pos[1], radius, role, unit);
     const label = chosen || current || view.labels;
@@ -1034,8 +1036,8 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const current = node.id === here.id;
     const station = placeDef(node.pocket.id).features.some(feature => feature.kind === "station");
     const label = labels.get(node.id);
-    const radius = pocketRadius;
     const role = routeRole(node.id, routePocketIds, routeStartPocket, routeDestinationPocket);
+    const radius = (role?.start || role?.destination ? ROUTE_ICON_SCALE : 1) * pocketRadius;
     const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
     const marker = routeMarkerMarkup(x, y, radius, role, unit);
     const { x: lx, y: ly, anchor } = label;

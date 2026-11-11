@@ -43,7 +43,8 @@ export function flightRouteRows(stops) {
     const pocket = stop.destinationPocket ? ` <small>${destinationPocket}</small>` : "";
     const destinationLabel = stop.destination ? ` aria-label="${escapeRouteText(stop.system)}${stop.destinationPocket ? ` ${destinationPocket}` : ""}, destination"` : "";
     const markerClasses = ["route-marker", stop.destination ? "route-marker-destination" : current ? "route-marker-start" : "route-marker-intermediate"].filter(Boolean).join(" ");
-    const marker = `<span class="${markerClasses}" aria-hidden="true"></span>`;
+    const tick = stop.destination ? `<span class="route-marker-destination-tick" aria-hidden="true"></span>` : "";
+    const marker = `<span class="${markerClasses}" aria-hidden="true">${tick}</span>`;
     return `<li${classes ? ` class="${classes}"` : ""}${current ? ' aria-current="location"' : ""}${destinationLabel}>${marker} ${escapeRouteText(stop.system)}${pocket}</li>`;
   }).join("");
 }

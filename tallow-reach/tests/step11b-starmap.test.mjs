@@ -821,8 +821,11 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   assert.match(css, /\.route-marker-start/);
   assert.match(css, /\.route-marker-intermediate/);
   assert.match(css, /\.route-marker-destination/);
-  assert.match(css, /\.route-marker-destination::after\s*\{[^}]*border-width:\s*0 2px 2px 0/);
-  assert.match(css, /\.sm-route-marker-destination-check\s*\{/);
+  assert.match(css, /\.route-marker\s*\{[^}]*width:\s*12px[^}]*height:\s*12px/);
+  assert.match(css, /\.route-marker-destination::after\s*\{[^}]*border:\s*1px dotted var\(--amber\)/);
+  assert.match(css, /\.route-marker-destination-tick\s*\{[^}]*border-width:\s*0 2px 2px 0/);
+  assert.match(css, /\.sm-route-marker-destination-outer\s*\{[^}]*stroke-dasharray:\s*1 3/);
+  assert.match(css, /\.sm-route-marker-destination-check\s*\{[^}]*stroke:\s*var\(--amber\)/);
   const hudRouteList = css.match(/#hud-route ol\s*\{([^}]+)\}/)?.[1] || "";
   assert.doesNotMatch(hudRouteList, /max-height|overflow-y|scrollbar-width/);
 });
