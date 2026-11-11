@@ -240,6 +240,12 @@ function cleanMission(raw) {
   if (!isMissionKind(raw.kind) || !Array.isArray(raw.steps)) return null;
   const steps = raw.steps.map(cleanMissionStep).filter(Boolean);
   if (!steps.length) return null;
+  // Salvage contracts from the first 13a build counted any pickup. Keep their
+  // progress, but make the required hand-in item explicit when they are saved again.
+  if (raw.type === "salvage") {
+    const collect = steps.find(step => step.kind === "collect");
+    if (collect && !collect.item) collect.item = "salv";
+  }
   const step = Math.max(0, Math.min(steps.length, Math.floor(+raw.step || +raw.current || 0)));
   const counters = {};
   const source = raw.counters && typeof raw.counters === "object" ? raw.counters : {};

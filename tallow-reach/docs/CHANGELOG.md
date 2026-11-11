@@ -19,6 +19,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Require salvage delivery before paying recover contracts
+
+- Recover contracts now count only `salv` items from derelict crates. Claiming the reward requires the requested number in the current station or current ship hold; the items are consumed only when the hand-in succeeds, and an incomplete delivery leaves the mission claimable without paying.
+- Existing saved salvage missions gain the explicit delivery item during v19 sanitization. Added headless coverage for missing stock, mixed station/ship stock, consumption and reward payout; the owner playtest checklist now covers the hand-in rule.
+
+---
+
 ## 2026-11-10: Show every active mission in the flight HUD
 
 - The top-right Ship HUD now renders every active mission with its individual progress, instead of only the first mission. Added compact styling for multiple mission rows and a regression in `tests/content.test.mjs`.

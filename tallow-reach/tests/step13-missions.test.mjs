@@ -18,6 +18,7 @@ import {
   missionProgress,
 } from "../src/sim/missions.js";
 import { emit } from "../src/util/events.js";
+import { state } from "../src/state/state.js";
 
 const playerFor = profile => ({ profile });
 
@@ -59,6 +60,33 @@ test("13a: multiple active contracts advance independently from gameplay events"
   assert.equal(activeMissions(profile).length, 1);
   assert.equal(completeMission(undefined, profile), `Paid 400 cr.`);
   assert.equal(activeMissions(profile).length, 0);
+});
+
+test("13a: salvage rewards require and consume the recovered items at hand-in", () => {
+  const profile = newProfile();
+  const station = state.worldState.store;
+  const previous = station.salv;
+  delete station.salv;
+  try {
+    const mission = missionFromContract({ type: "salvage", tier: 1, p: 2, n: 2, r: 700 }, "salvage-hand-in");
+    assert.equal(mission.steps[0].item, "salv");
+    profile.missions.push(mission);
+    const before = profile.cr;
+    assert.equal(completeMission(0, profile), "Need 2 Salvage in this station or your ship.");
+    assert.equal(profile.cr, before, "a missing delivery does not pay the reward");
+    assert.equal(profile.missions.length, 1, "the completed objective stays claimable");
+
+    station.salv = 1;
+    profile.holds.wasp.salv = 1;
+    assert.equal(completeMission(0, profile), "Paid 700 cr.");
+    assert.equal(profile.cr, before + 700);
+    assert.equal(station.salv, undefined, "station delivery stock is consumed");
+    assert.equal(profile.holds.wasp.salv, undefined, "ship delivery stock is consumed");
+    assert.equal(profile.missions.length, 0);
+  } finally {
+    if (previous === undefined) delete station.salv;
+    else station.salv = previous;
+  }
 });
 
 test("13a: the runner supports reach, deliver and survive objective events", () => {

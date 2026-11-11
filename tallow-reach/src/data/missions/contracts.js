@@ -57,7 +57,7 @@ export const CONTRACT_MISSION_TEMPLATES = {
     title: "Salvage contract",
     kind: "contract",
     requires: [],
-    steps: [{ id: "objective", kind: "collect" }],
+    steps: [{ id: "objective", kind: "collect", item: "salv" }],
     rewards: { credits: "$reward" },
     fails: { abandon: "abandoned" },
   },
@@ -81,6 +81,7 @@ export function missionFromContract(contract, id = `contract:${contract?.type ||
   const step = clone(template.steps[0]);
   step.count = n;
   if (type === "mine") step.item = contract.o;
+  if (type === "salvage") step.item = "salv";
   if (type === "hunt") {
     // Generated offers name the current enemy. Pre-step-1 saves omitted `e`,
     // which deliberately meant that any hostile counted, so preserve that

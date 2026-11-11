@@ -4,7 +4,9 @@
 
 import { on, emit } from "../util/events.js";
 import { missionFromContract, describeMission } from "../data/missions/contracts.js";
+import { itemName } from "../data/items.js";
 import { state, profileOf } from "../state/state.js";
+import { STATION, countOf, takeItem } from "./inventory.js";
 
 let nextMissionId = 0;
 
@@ -137,9 +139,33 @@ export function missionAt(indexOrId, profile = state.profile) {
   return list.find(mission => mission.id === indexOrId);
 }
 
+function deliveryRequirement(mission, profile) {
+  if (mission?.type !== "salvage") return null;
+  const step = mission.steps?.find(item => item.kind === "collect") || mission.steps?.[0];
+  const item = step?.item || "salv";
+  const count = Math.max(1, Math.floor(+mission.n || +step?.count || 1));
+  const station = countOf(STATION, item, profile, state.worldState);
+  const hold = countOf(profile.ship, item, profile, state.worldState);
+  return { item, count, station, hold };
+}
+
+function consumeDelivery(mission, profile) {
+  const requirement = deliveryRequirement(mission, profile);
+  if (!requirement) return null;
+  if (requirement.station + requirement.hold < requirement.count) {
+    return `Need ${requirement.count} ${itemName(requirement.item)} in this station or your ship.`;
+  }
+  let left = requirement.count;
+  left -= takeItem(STATION, requirement.item, left, profile, state.worldState);
+  if (left > 0) takeItem(profile.ship, requirement.item, left, profile, state.worldState);
+  return null;
+}
+
 export function completeMission(indexOrId, profile = state.profile) {
   const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(isMissionComplete);
   if (!mission || !isMissionComplete(mission)) return undefined;
+  const deliveryError = consumeDelivery(mission, profile);
+  if (deliveryError) return deliveryError;
   const reward = Math.max(0, Math.floor(+mission.rewards?.credits || +mission.r || 0));
   profile.cr += reward;
   profile.done = Math.max(0, Math.floor(+profile.done || 0)) + 1;

@@ -120,24 +120,27 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b/13c have not starte
 - **13a mission framework:** `src/data/missions/index.js` defines the extensible mission/step vocabulary;
   `src/data/missions/contracts.js` keeps the three contract generators, wording and rewards data-only;
   `src/sim/missions.js` listens for `enemy-killed`, `mined`, `pickup`, `place-entered`, `delivered` and
-  `mission-tick`, and advances kill, mine, collect, reach, deliver and survive objectives. `sim/contracts.js`
-  remains the contract-board facade. `sim/ai.js` uses an active kill mission to select hunt targets and
-  `sim/session.js` spawns the combined outstanding salvage need. The current contract screen lists several
-  active missions and retains Accept, Refresh, Abandon and Collect reward actions. Dialogue, choices,
+  `mission-tick`, and advances kill, mine, collect, reach, deliver and survive objectives. Recover
+  contracts filter collection to `salv` and consume the required station/ship items only when their
+  reward is claimed. `sim/contracts.js` remains the contract-board facade. `sim/ai.js` uses an active
+  kill mission to select hunt targets and `sim/session.js` spawns the combined outstanding salvage need.
+  The current contract screen lists several active missions and retains Accept, Refresh, Abandon and
+  Collect reward actions. Dialogue, choices,
   scripts, waits, branching, parallel steps and the dialogue/log screens are 13b/13c work.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **352/352 pass** (including the Step 13a mission tests, generated station-local
-  inventory, starmap/station-separation tests, existing 8B/11B and Step 12 oracles). `npm run build`
-  succeeded: the generated bundle is **713 KB** (the tracked HTML was restored after validation and is
-  not part of this source patch). The owner passed the Step 11B visual playtest; the Step 12 and Step 13a
-  visual playtests are still pending. Save **v19** persists destination, place memory, station-local
-  stocks and portable mission progress; policies, core kind/name, pocket templates and layout are resolved,
-  not persisted. Default geometry is **121 systems / 445 pockets / 444 links** (including detached station
-  pockets); system ids/names/positions stay stable, gate connections change; independent core rolls give
-  116 stars and 5 black holes (including Duskdrift). Meridian is a star.
+- **Results:** `npm test` **354/354 pass** (including the Step 13a mission tests, salvage hand-in and
+  HUD regressions, generated station-local inventory, starmap/station-separation tests, existing 8B/11B
+  and Step 12 oracles). `npm run build` succeeded: the generated bundle is **714 KB** (the tracked HTML
+  was restored after validation and is not part of this source patch). The owner passed the first 13a
+  playtest and reported the salvage hand-in bug; the corrected playtest is pending. The owner passed the
+  Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists
+  destination, place memory, station-local stocks and portable mission progress; policies, core kind/name,
+  pocket templates and layout are resolved, not persisted. Default geometry is **121 systems / 445 pockets /
+  444 links** (including detached station pockets); system ids/names/positions stay stable, gate connections
+  change; independent core rolls give 116 stars and 5 black holes (including Duskdrift). Meridian is a star.
 - **Known limits:** generated pockets now resolve the `frontier`, `trade_lane` and `salvage_yard`
   templates, with four encounter kinds; derelicts/caches are represented by crates and trader stations
   reuse Meridian's `SHOPS` definitions with independent station-local storage. Visibility is `all`; travel is free and non-empty route costs are

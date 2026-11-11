@@ -122,13 +122,13 @@ test("9c (inventory & pickups): crate pickup works while local is docked and ski
   guest.pos.set(100, 0, 0);
   guestProfile.mission = { type: "salvage", tier: 1, p: 0, n: 1, r: 500 };
 
-  spawnCrate(V(105, 0, 0), "core");
+  spawnCrate(V(105, 0, 0), "salv");
   stepSim(1 / 60);
 
   assert.equal(state.world.crates.length, 0, "guest picked up crate while local was docked");
-  assert.equal(guestProfile.holds.wasp.core, 1, "reactor core added to guest hold");
+  assert.equal(guestProfile.holds.wasp.salv, 1, "derelict salvage added to guest hold");
   assert.equal(guestProfile.mission.p, 1, "guest salvage contract progressed");
-  assert.equal(state.profile.holds.wasp.core, undefined);
+  assert.equal(state.profile.holds.wasp.salv, undefined);
 
   // Now undock local at (300,0,0) with a FULL hold, put guest at (312,0,0) with room,
   // and spawn a crate at (305,0,0) within pickup range of both (outside station keep-out).
@@ -141,7 +141,7 @@ test("9c (inventory & pickups): crate pickup works while local is docked and ski
   spawnCrate(V(305, 0, 0), "salv");
   stepSim(1 / 60);
   assert.equal(state.world.crates.length, 0);
-  assert.equal(guestProfile.holds.wasp.salv, 1, "pilot with free hold room collected the crate");
+  assert.equal(guestProfile.holds.wasp.salv, 2, "pilot with free hold room collected the crate");
 });
 
 test("9c (economy, outfitting & saved ammo): guest purchases, fits, repairs, weapon switches and missile shots stay on guest profile", () => {

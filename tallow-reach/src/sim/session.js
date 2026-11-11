@@ -80,7 +80,7 @@ export function launch(P = state.player, profile = profileOf(P)) {
   // salvage missions share one field; spawn only the combined outstanding need.
   const field = fieldAt(placeId),
     salvageNeed = activeMissions(profile)
-      .filter(m => !isMissionComplete(m) && m.steps?.[m.step]?.kind === "collect")
+      .filter(m => m.type === "salvage" && !isMissionComplete(m) && m.steps?.[m.step]?.kind === "collect")
       .reduce((sum, m) => sum + missionProgress(m).total - missionProgress(m).done, 0);
   if (salvageNeed > 0 && field && placeWorld(placeId).crates.length === 0) {
     const [sx, sy, sz] = field.salvage.spread;
