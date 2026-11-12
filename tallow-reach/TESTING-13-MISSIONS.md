@@ -77,10 +77,12 @@ Do this section if a salvage offer is active. If not, accept one before launchin
       duplicate crates just because two missions are active.
 - [ ] **4.2** Collect crates normally. The HUD progress should advance from pickup events, while cargo
       limits, pickup sound and item counts remain unchanged.
-- [ ] **4.3** Finish the requested number, dock and open **Contracts**. The mission should not pay
-      unless the required `Salvage` items are in the current station or the current ship's hold.
-- [ ] **4.4** Click **Collect reward**. The required Salvage items should be removed from the station/
-      ship inventory and the advertised reward should be paid once. The crates should not reappear merely
+- [ ] **4.3** Finish the requested number, dock and open **Contracts**. The mission text should say
+      `N crates required`, not `Progress N/N`. If the required `Salvage` items are missing from the
+      current station and current ship, the action button must say **Abandon**, not **Collect reward**.
+- [ ] **4.4** Put the required items in the current station or ship. The button should change to
+      **Collect reward**. Click it: the required Salvage items should be removed from the station/ship
+      inventory and the advertised reward should be paid once. The crates should not reappear merely
       because the mission was completed or the place was refreshed.
 - [ ] **4.5** Abandon one unfinished active mission with its **Abandon** button. It should disappear
       silently and stop receiving progress; another active mission must remain intact.

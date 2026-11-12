@@ -139,18 +139,45 @@ export function missionAt(indexOrId, profile = state.profile) {
   return list.find(mission => mission.id === indexOrId);
 }
 
-function deliveryRequirement(mission, profile) {
-  if (mission?.type !== "salvage") return null;
-  const step = mission.steps?.find(item => item.kind === "collect") || mission.steps?.[0];
-  const item = step?.item || "salv";
-  const count = Math.max(1, Math.floor(+mission.n || +step?.count || 1));
-  const station = countOf(STATION, item, profile, state.worldState);
-  const hold = countOf(profile.ship, item, profile, state.worldState);
-  return { item, count, station, hold };
+function itemRequirement(mission) {
+  if (mission?.type === "salvage") {
+    const step = mission.steps?.find(item => item.kind === "collect") || mission.steps?.[0];
+    return {
+      item: step?.item || "salv",
+      count: Math.max(1, Math.floor(+mission.n || +step?.count || 1)),
+      label: "crates",
+    };
+  }
+  const step = mission?.steps?.find(item => item.kind === "deliver" && item.item);
+  if (!step) return null;
+  return {
+    item: step.item,
+    count: Math.max(1, Math.floor(+step.count || 1)),
+    label: itemName(step.item),
+  };
+}
+
+export function missionRequirementText(mission) {
+  const requirement = itemRequirement(mission);
+  return requirement ? `${requirement.count} ${requirement.label} required` : null;
+}
+
+export function missionDeliveryRequirement(mission, profile = state.profile) {
+  const requirement = itemRequirement(mission);
+  if (!requirement) return null;
+  const station = countOf(STATION, requirement.item, profile, state.worldState);
+  const hold = countOf(profile.ship, requirement.item, profile, state.worldState);
+  return { ...requirement, station, hold };
+}
+
+export function canCollectMissionReward(mission, profile = state.profile) {
+  if (!isMissionComplete(mission)) return false;
+  const requirement = missionDeliveryRequirement(mission, profile);
+  return !requirement || requirement.station + requirement.hold >= requirement.count;
 }
 
 function consumeDelivery(mission, profile) {
-  const requirement = deliveryRequirement(mission, profile);
+  const requirement = missionDeliveryRequirement(mission, profile);
   if (!requirement) return null;
   if (requirement.station + requirement.hold < requirement.count) {
     return `Need ${requirement.count} ${itemName(requirement.item)} in this station or your ship.`;

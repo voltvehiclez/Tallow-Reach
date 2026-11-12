@@ -125,7 +125,8 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b/13c have not starte
   reward is claimed. `sim/contracts.js` remains the contract-board facade. `sim/ai.js` uses an active
   kill mission to select hunt targets and `sim/session.js` spawns the combined outstanding salvage need.
   The current contract screen lists several active missions and retains Accept, Refresh, Abandon and
-  Collect reward actions. Dialogue, choices,
+  inventory-gated Collect reward actions; salvage rows say `N crates required` instead of progress.
+  Dialogue, choices,
   scripts, waits, branching, parallel steps and the dialogue/log screens are 13b/13c work.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
@@ -133,7 +134,7 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b/13c have not starte
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
 - **Results:** `npm test` **354/354 pass** (including the Step 13a mission tests, salvage hand-in and
   HUD regressions, generated station-local inventory, starmap/station-separation tests, existing 8B/11B
-  and Step 12 oracles). `npm run build` succeeded: the generated bundle is **714 KB** (the tracked HTML
+  and Step 12 oracles). `npm run build` succeeded: the generated bundle is **715 KB** (the tracked HTML
   was restored after validation and is not part of this source patch). The owner passed the first 13a
   playtest and reported the salvage hand-in bug; the corrected playtest is pending. The owner passed the
   Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists

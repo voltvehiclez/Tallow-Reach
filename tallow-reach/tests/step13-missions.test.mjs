@@ -13,9 +13,11 @@ import {
   activeMissions,
   acceptMission,
   advanceMissions,
+  canCollectMissionReward,
   completeMission,
   isMissionComplete,
   missionProgress,
+  missionRequirementText,
 } from "../src/sim/missions.js";
 import { emit } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
@@ -70,14 +72,17 @@ test("13a: salvage rewards require and consume the recovered items at hand-in", 
   try {
     const mission = missionFromContract({ type: "salvage", tier: 1, p: 2, n: 2, r: 700 }, "salvage-hand-in");
     assert.equal(mission.steps[0].item, "salv");
+    assert.equal(missionRequirementText(mission), "2 crates required");
     profile.missions.push(mission);
     const before = profile.cr;
+    assert.equal(canCollectMissionReward(mission, profile), false);
     assert.equal(completeMission(0, profile), "Need 2 Salvage in this station or your ship.");
     assert.equal(profile.cr, before, "a missing delivery does not pay the reward");
     assert.equal(profile.missions.length, 1, "the completed objective stays claimable");
 
     station.salv = 1;
     profile.holds.wasp.salv = 1;
+    assert.equal(canCollectMissionReward(mission, profile), true);
     assert.equal(completeMission(0, profile), "Paid 700 cr.");
     assert.equal(profile.cr, before + 700);
     assert.equal(station.salv, undefined, "station delivery stock is consumed");

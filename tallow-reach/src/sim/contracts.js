@@ -9,9 +9,11 @@ import {
   acceptMission,
   abandonMission,
   completeMission,
+  canCollectMissionReward,
   isMissionComplete,
   missionDescription,
   missionProgress,
+  missionRequirementText,
   missionAt,
   missionForObjective,
   remainingObjective,
@@ -63,8 +65,10 @@ export function completeContract(index, profile = state.profile) {
 
 export {
   activeMissions,
+  canCollectMissionReward,
   isMissionComplete,
   missionProgress,
+  missionRequirementText,
   missionAt,
   missionForObjective,
   remainingObjective,

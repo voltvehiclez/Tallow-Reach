@@ -533,6 +533,9 @@ test("the flight HUD lists every active mission with its progress", () => {
   assert.doesNotMatch(hud, /activeMissions\(S\)\[0\]/, "the HUD must not discard missions after the first");
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /#tr \.hud-mission/, "each active mission has a readable top-right style");
+  const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
+  assert.match(screens, /missionRequirementText\(m\)/, "item missions show their hand-in requirement");
+  assert.match(screens, /canCollectMissionReward\(m\)/, "reward collection checks current inventories");
 });
 
 test("the shield and hull bars show numbers with their HP units", () => {

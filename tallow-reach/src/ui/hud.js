@@ -11,7 +11,7 @@ import { interpolatedPos } from "../render/views.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
-import { activeMissions, missionDescription, missionProgress } from "../sim/missions.js";
+import { activeMissions, missionDescription, missionProgress, missionRequirementText } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
 import { V } from "../util/math.js";
@@ -108,8 +108,9 @@ export function coneRadiusPx(deg) {
 function missionsHtml(missions) {
   if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
   return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
-    const progress = missionProgress(mission);
-    return `<div class="hud-mission"><span>${missionDescription(mission)}</span> <small>${progress.done}/${progress.total}</small></div>`;
+    const progress = missionProgress(mission),
+      detail = missionRequirementText(mission) || `${progress.done}/${progress.total}`;
+    return `<div class="hud-mission"><span>${missionDescription(mission)}</span> <small>${detail}</small></div>`;
   }).join("")}</div>`;
 }
 
