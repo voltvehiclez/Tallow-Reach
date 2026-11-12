@@ -3,7 +3,7 @@
 
 import { state, placeWorld } from "../state/state.js";
 import { dropEnemy } from "./enemy.js";
-import { clearEntities } from "./entity.js";
+import { clearEntities, dropEntity } from "./entity.js";
 
 /** Remove hostiles, bullets and missiles from one place (used when docking). */
 export function clearTransient(placeId = state.place) {
@@ -18,6 +18,9 @@ export function clearTransient(placeId = state.place) {
 export function clearWorldObjects(placeId = state.place) {
   const w = placeWorld(placeId);
   clearTransient(placeId);
-  clearEntities(w.crates);
+  // Mission drops are physical objectives, not transient scenery: they remain
+  // in this pocket across a warp until the owning mission is abandoned or a
+  // pilot actually picks them up.
+  for (const crate of [...w.crates]) if (!crate.persistent) dropEntity(w.crates, crate);
   clearEntities(w.fx);
 }

@@ -461,6 +461,39 @@ function primeReachStep(mission, payload = {}) {
   return true;
 }
 
+function missionPickupMatches(step, mission, payload = {}) {
+  const requiredPlace = step?.place || step?.sector || step?.requiresPlace;
+  const actualPlace = payload.player?.place || payload.place || payload.id;
+  return step?.kind === "collect" && step.missionItem === true &&
+    payload.missionId === mission.id &&
+    payload.missionItem === true &&
+    (!step.item || step.item === payload.item) &&
+    (!requiredPlace || requiredPlace === actualPlace) &&
+    payload.player?.docked !== true;
+}
+
+/** Remember a mission-tagged pickup even if the story has not reached its
+ * collect step yet. The physical crate is gone once picked up, so losing that
+ * event would leave a valid mission permanently waiting for an item that cannot
+ * respawn. Current collect/parallel steps handle their own events below. */
+function rememberMissionPickup(mission, event, payload = {}) {
+  if (event !== "pickup") return false;
+  ensureCounters(mission);
+  const current = missionStep(mission);
+  const currentHandles = current?.kind === "collect"
+    ? missionPickupMatches(current, mission, payload)
+    : current?.kind === "parallel" && (current.steps || []).some(child => missionPickupMatches(child, mission, payload));
+  if (currentHandles) return false;
+  const index = mission.steps.findIndex((step, i) => i > mission.step && missionPickupMatches(step, mission, payload));
+  if (index < 0) return false;
+  const step = mission.steps[index];
+  const before = counterValue(mission, step.id);
+  const after = Math.min(stepCount(step), before + 1);
+  if (after === before) return false;
+  mission.counters[step.id] = after;
+  return true;
+}
+
 /** Run zero-length story steps immediately after a mission starts or advances. */
 function activateAutomatic(mission, profile, payload = {}) {
   let changed = false;
@@ -469,6 +502,14 @@ function activateAutomatic(mission, profile, payload = {}) {
     if (!step) break;
     if (primeReachStep(mission, payload)) {
       changed = true;
+      continue;
+    }
+    // A mission pickup can happen before a later collect step becomes current.
+    // Once its counter is recorded, completing that objective is still a
+    // deterministic no-op rather than asking the pilot to find a crate twice.
+    if (step.kind === "collect" && counterValue(mission, step.id) >= stepCount(step)) {
+      changed = true;
+      moveToStep(mission, nextStepIndex(mission, step), payload);
       continue;
     }
     if (step.kind === "script") {
@@ -491,7 +532,7 @@ function activateAutomatic(mission, profile, payload = {}) {
   return changed;
 }
 
-function objectiveMatches(step, event, payload = {}) {
+function objectiveMatches(step, event, payload = {}, mission = null) {
   if (!step) return false;
   const requiredPlace = step.place || step.sector || step.requiresPlace;
   const actualPlace = payload.player?.place || payload.place || payload.id || payload.target;
@@ -500,7 +541,10 @@ function objectiveMatches(step, event, payload = {}) {
     return (!step.enemy || step.enemy === payload.def) && (!step.faction || step.faction === payload.faction);
   }
   if (step.kind === "mine") return !step.item || step.item === payload.item;
-  if (step.kind === "collect") return !step.item || step.item === payload.item;
+  if (step.kind === "collect") return (!step.item || step.item === payload.item) &&
+    (step.missionItem !== true || (payload.missionItem === true &&
+      payload.missionId === mission?.id && payload.player?.docked !== true));
+
   if (step.kind === "reach" || step.kind === "reach-sector") {
     const target = step.place || step.sector || step.target;
     return !target || target === payload.id || target === payload.place || target === payload.player?.place;
@@ -558,7 +602,7 @@ function advanceParallel(mission, step, event, payload) {
   let changed = false;
   for (const child of step.steps || []) {
     const id = parallelKey(step, child), total = stepCount(child), before = counterValue(mission, id);
-    if (before >= total || !objectiveMatches(child, event, payload)) continue;
+    if (before >= total || !objectiveMatches(child, event, payload, mission)) continue;
     const amount = child.kind === "survive" || (child.kind === "wait" && event === "mission-tick")
       ? Math.max(0, Number(payload.dt) || 0) : 1;
     mission.counters[id] = Math.min(total, before + amount);
@@ -577,7 +621,9 @@ function advanceParallel(mission, step, event, payload) {
 
 /** Advance one current objective. Returns true when the mission changed. */
 export function advanceMission(mission, event, payload = {}) {
-  if (!mission || isMissionComplete(mission) || isMissionFailed(mission) || !missionStep(mission)) return false;
+  if (!mission || isMissionFailed(mission) || !missionStep(mission)) return false;
+  const rememberedPickup = rememberMissionPickup(mission, event, payload);
+  if (isMissionComplete(mission)) return rememberedPickup;
   // Mission-spawned trigger events are scoped to the mission that emitted them;
   // otherwise a wave-clear from one story could wake every waiting story.
   if (event === "mission-trigger" && payload.mission && payload.mission !== mission.id) return false;
@@ -599,7 +645,7 @@ export function advanceMission(mission, event, payload = {}) {
     if (changed) emitProgress(mission, event, payload);
     return changed;
   }
-  if (!objectiveMatches(step, event, payload)) return false;
+  if (!objectiveMatches(step, event, payload, mission)) return false;
 
   const before = counterValue(mission, step.id);
   const amount = step.kind === "survive" || (step.kind === "wait" && event === "mission-tick")

@@ -19,6 +19,12 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Make Border Signal's beacon a persistent physical drop
+
+- The Border Signal's authored salvage item now drops from the first patrol ship at that ship's defeat position instead of being silently granted by a mission script. Ordinary raider loot remains additive, while the authored crate is mission-tagged and visually/physically collectible.
+- The mission crate survives leaving Hollow, world clearing and v19 save/load, restores once at its saved position, remains present when the hold is full, and marks itself collected only after a successful non-docked pickup. Abandoning or rewarding the mission removes its saved marker and runtime content.
+- Added headless coverage for physical pickup gating, defeat-position placement, full-hold retry, duplicate-free save/load restoration, collected-drop suppression, old-save fallback and cleanup. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
 ## 2026-11-10: Make Border Signal handoffs resource-safe
 
 - A full cargo hold now pauses the beacon handoff with an actionable **Make room in your hold to continue.** instruction. Inventory changes and docking retry pending item scripts, but the beacon remains a Hollow retrieval: unloading at the station cannot complete a remote handoff; return and finish the arrival warp to collect it.

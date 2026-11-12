@@ -13,6 +13,7 @@ import { V, Q, R, faceQ, UP } from "../util/math.js";
 import { rollLoot } from "./loot.js";
 import { emit } from "../util/events.js";
 import { itemName } from "../data/items.js";
+import { placeAt } from "../data/places.js";
 import { SHIPS } from "../data/ships.js";
 import { state, msg, say, localPlayer, profileOf, placeWorld } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
@@ -29,6 +30,112 @@ const CRATE_PICKUP = 20;     // within this distance you collect it
 const CRATE_SPIN = 1;        // radians a second the crate turns in place
 
 const _spin = Q();           // scratch, so a frame allocates nothing
+
+function missionDropList(placeId, create = true) {
+  const world = state.worldState;
+  const states = world.missionState;
+  if (!create && (!states || typeof states !== "object" || Array.isArray(states))) return [];
+  if (!world.missionState || typeof world.missionState !== "object" || Array.isArray(world.missionState)) {
+    world.missionState = {};
+  }
+  const place = world.missionState[placeId];
+  if (!create && (!place || typeof place !== "object" || Array.isArray(place))) return [];
+  if (!place || typeof place !== "object" || Array.isArray(place)) {
+    world.missionState[placeId] = {};
+  }
+  const record = world.missionState[placeId];
+  if (!Array.isArray(record.drops)) {
+    if (!create) return [];
+    record.drops = [];
+  }
+  return record.drops;
+}
+
+function missionDropFor(placeId, missionId, item) {
+  return missionDropList(placeId, false).find(drop =>
+    drop && drop.missionId === missionId && drop.item === item
+  ) || null;
+}
+
+function missionDropPosition(drop) {
+  return Array.isArray(drop?.pos) && drop.pos.length === 3 && drop.pos.every(Number.isFinite)
+    ? V(drop.pos[0], drop.pos[1], drop.pos[2])
+    : null;
+}
+
+function rememberMissionDrop(placeId, missionId, item, pos) {
+  const drops = missionDropList(placeId);
+  const existing = drops.find(drop => drop?.missionId === missionId && drop?.item === item);
+  if (existing) return existing;
+  const record = {
+    missionId,
+    item,
+    pos: [Number(pos.x) || 0, Number(pos.y) || 0, Number(pos.z) || 0],
+    collected: false,
+  };
+  drops.push(record);
+  return record;
+}
+
+function saveMissionDropPosition(crate) {
+  if (!crate?.missionId || !crate.persistent) return;
+  const drops = missionDropList(crate.place || state.place, false);
+  const record = drops.find(drop => drop?.missionId === crate.missionId && drop?.item === crate.item);
+  if (record && record.collected !== true) {
+    record.pos = [Number(crate.pos.x) || 0, Number(crate.pos.y) || 0, Number(crate.pos.z) || 0];
+  }
+}
+
+/** Mark a mission crate collected, or remove it when its mission is abandoned. */
+export function removeMissionDrop(crate, collected = false) {
+  if (!crate?.missionId || !crate.persistent) return;
+  const drops = missionDropList(crate.place || state.place, false);
+  const index = drops.findIndex(drop => drop?.missionId === crate.missionId && drop?.item === crate.item);
+  if (index < 0) return;
+  if (collected) drops[index].collected = true;
+  else drops.splice(index, 1);
+}
+
+/** Remove all persisted drops owned by one mission, including already-collected markers. */
+export function clearMissionDrops(missionId) {
+  if (!missionId) return;
+  const stateByPlace = state.worldState?.missionState;
+  if (!stateByPlace || typeof stateByPlace !== "object" || Array.isArray(stateByPlace)) return;
+  for (const place of Object.keys(stateByPlace)) {
+    const drops = stateByPlace[place]?.drops;
+    if (Array.isArray(drops)) {
+      stateByPlace[place].drops = drops.filter(drop => drop?.missionId !== missionId);
+      if (!stateByPlace[place].drops.length) delete stateByPlace[place].drops;
+    }
+  }
+}
+
+/** Rebuild uncollected mission crates when a saved pocket is loaded. */
+export function restoreMissionDrops(placeId = state.place) {
+  const W = placeWorld(placeId);
+  const drops = missionDropList(placeId, false);
+  for (const drop of [...drops]) {
+    if (!drop || drop.collected || !drop.missionId || !drop.item) continue;
+    if (W.crates.some(crate => crate.missionId === drop.missionId && crate.item === drop.item && crate.persistent)) continue;
+    const pos = missionDropPosition(drop);
+    if (pos) spawnCrate(pos, drop.item, placeId, null, null, drop.missionId);
+  }
+
+  // A pre-physical-flow v19 save can already be waiting at Border Signal's
+  // collect step without a mission-drop record: the old script handed the item
+  // out directly and never saved a defeat position. Give that save one safe,
+  // deterministic crate at the pocket arrival point rather than soft-locking it.
+  for (const mission of state.profile?.missions || []) {
+    if (mission.failed || mission.completed) continue;
+    const step = mission.steps?.[mission.step ?? mission.current];
+    if (step?.kind !== "collect" || step.missionItem !== true || step.place !== placeId || !step.item) continue;
+    if (drops.some(drop => drop?.missionId === mission.id && drop.item === step.item)) continue;
+    if (W.crates.some(crate => crate.missionId === mission.id && crate.item === step.item && crate.persistent)) continue;
+    const arrival = placeAt(placeId)?.enter?.pos;
+    const pos = Array.isArray(arrival) && arrival.length === 3 ? V(...arrival) : V(0, 0, 0);
+    spawnCrate(pos, step.item, placeId, null, null, mission.id);
+  }
+}
 
 /**
  * Spawn a bullet. Player bullets inherit the ship's velocity. Returns the new
@@ -75,15 +182,32 @@ function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.pla
     encounter: e.encounter || null,
   });
 
-  // Loot: whatever the enemy's table says (data/loot.js). Keep loot from a
-  // mission-spawned hostile tagged separately from ordinary encounter crates,
-  // so abandoning the mission can remove it without touching place memory.
+  // Every hostile keeps its ordinary authored loot. A mission's authored item is
+  // additive: it is another physical crate at this wreck, tagged so it can be
+  // persisted and matched to the mission's collect objective.
   const missionId = String(e.encounter || "").startsWith("mission:")
     ? String(e.encounter).slice("mission:".length)
     : null;
+  const authoredDrops = Array.isArray(e.dropOnDefeat)
+    ? e.dropOnDefeat
+    : e.dropOnDefeat && typeof e.dropOnDefeat === "object"
+      ? [e.dropOnDefeat]
+      : [];
   for (const drop of rollLoot(e.loot)) {
-    for (let k = 0; k < drop.count; k++) {
-      spawnCrate(scattered(enemyPos(e), drop.scatter), drop.item, placeId, null, null, missionId);
+    const count = Math.max(1, Math.floor(+drop.count || 1));
+    const scatter = Math.max(0, Number(drop.scatter) || 0);
+    for (let k = 0; k < count; k++) {
+      // Ordinary loot remains ordinary loot even when it came from a mission
+      // wave. It keeps the normal expiry and pickup behavior, while its mission
+      // tag still lets abandonment clear the scripted wave's leftovers.
+      spawnCrate(scattered(enemyPos(e), scatter), drop.item, placeId, null, null, missionId, false);
+    }
+  }
+  for (const drop of authoredDrops) {
+    const count = Math.max(1, Math.floor(+drop.count || 1));
+    const scatter = Math.max(0, Number(drop.scatter) || 0);
+    for (let k = 0; k < count; k++) {
+      spawnCrate(scattered(enemyPos(e), scatter), drop.item, placeId, null, null, missionId, true);
     }
   }
   if (!byPlayer || byPlayer === state.player) msg("Hostile destroyed", 2);
@@ -92,21 +216,45 @@ function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.pla
 /** A point up to `d` metres away from `p` in each direction (0 = exactly `p`). */
 const scattered = (p, d) => (d > 0 ? p.clone().add(V(R(-d, d), R(-d, d), R(-d, d))) : p);
 
-/** Drop a crate holding `item` at `p`. Cores are rarer and drawn in blue. */
-export function spawnCrate(p, item = "salv", placeId = state.place, encounter = null, encounterType = null, missionId = null) {
+/** Drop a crate holding `item` at `p`. Cores are rarer and drawn in blue.
+ * `missionId` owns a crate for abandonment cleanup; `persistent` is true only
+ * for an authored mission objective, which survives warps and saves. */
+export function spawnCrate(
+  p,
+  item = "salv",
+  placeId = state.place,
+  encounter = null,
+  encounterType = null,
+  missionId = null,
+  persistent = !!missionId,
+) {
+  const W = placeWorld(placeId);
+  let at = V(p.x, p.y, p.z);
+  if (missionId && persistent) {
+    const saved = missionDropFor(placeId, missionId, item);
+    if (saved?.collected) return null;
+    const existing = W.crates.find(crate =>
+      crate.missionId === missionId && crate.item === item && crate.persistent
+    );
+    if (existing) return existing;
+    const savedPos = missionDropPosition(saved);
+    if (savedPos) at = savedPos;
+    else rememberMissionDrop(placeId, missionId, item, at);
+  }
   const e = {
     kind: "crate",
     place: placeId,
     encounter,
     encounterType,
     missionId,
-    pos: V(p.x, p.y, p.z),
+    persistent: !!missionId && persistent,
+    pos: at,
     quat: freshQuat(),      // the sim turns it; the view copies the turn
-    t: CRATE_LIFE,
+    t: missionId && persistent ? Infinity : CRATE_LIFE,
     item,
     spin: CRATE_SPIN,
   };
-  return addEntity(placeWorld(placeId).crates, e);
+  return addEntity(W.crates, e);
 }
 
 /** Move bullets along their path and resolve hits. */
@@ -181,6 +329,7 @@ export function updateCrates(dt, placeId = state.place) {
     }
     if (nearest.d < CRATE_PULL) {
       c.pos.addScaledVector(nearest.q.normalize(), Math.min(nearest.d, 60 * dt));
+      saveMissionDropPosition(c);
     }
 
     const inRange = candidates.filter(x => x.d < CRATE_PICKUP).sort((a, b) => a.d - b.d);
@@ -193,12 +342,17 @@ export function updateCrates(dt, placeId = state.place) {
         if (local) say("Cargo hold full");
       } else {
         // Remove it before announcing pickup so a place-memory listener can see
-        // whether this was the encounter's last crate.
+        // whether this was the encounter's last crate. Mission records keep a
+        // consumed marker until the mission is rewarded or abandoned, preventing
+        // a retry or reload from recreating the same physical item.
+        if (c.missionId) removeMissionDrop(c, true);
         dropEntity(C, c);
         emit("pickup", {
           item: k,
           player: p,
           place: placeId,
+          missionId: c.missionId || null,
+          missionItem: !!c.persistent,
           encounter: c.encounter,
           encounterType: c.encounterType || null,
         });

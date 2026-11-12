@@ -15,7 +15,7 @@ import { profileOf } from "../state/state.js";
 import { missionForObjective, remainingObjective } from "./missions.js";
 import { state, placeWorld } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
-import { fire } from "./combat.js";
+import { clearMissionDrops, fire, removeMissionDrop } from "./combat.js";
 import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
 import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
@@ -44,8 +44,9 @@ let nextId = 1;
  * `encounter` is the stable spawner feature id, when this enemy belongs to a
  * generated one-shot patrol; old callers may omit it.
  */
-export function spawnEnemy(id, pos, placeId = state.place, encounter = null) {
+export function spawnEnemy(id, pos, placeId = state.place, encounter = null, options = {}) {
   const def = enemyDef(id);
+  const hasLootOverride = Object.prototype.hasOwnProperty.call(options || {}, "loot");
   const e = {
     id: nextId++,
     kind: "enemy",
@@ -54,7 +55,8 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null) {
     def: ENEMIES[id] ? id : DEFAULT_ENEMY,
     n: def.n,
     f: def.f,
-    loot: def.loot,
+    loot: hasLootOverride ? options.loot : def.loot,
+    dropOnDefeat: options?.dropOnDefeat || null,
     hp: def.hp,
     mx: def.hp,
     pos: V(pos.x, pos.y, pos.z),
@@ -191,14 +193,19 @@ function clearMissionContents(missionId) {
       if (bullet.missionId === tag) dropEntity(W.bullets, bullet);
     }
     for (const crate of [...W.crates]) {
-      if (crate.missionId === tag) dropEntity(W.crates, crate);
+      if (crate.missionId === tag) {
+        removeMissionDrop(crate);
+        dropEntity(W.crates, crate);
+      }
     }
   }
+  clearMissionDrops(tag);
 }
 
 // Abandoning a mission removes its scripted wave and any mission loot/shots,
 // but leaves ordinary patrols, derelicts and other place content untouched.
 on("mission-abandoned", ({ mission } = {}) => clearMissionContents(mission?.id));
+on("mission-rewarded", ({ mission } = {}) => clearMissionContents(mission?.id));
 on("mission-failed", ({ mission, action } = {}) => {
   if (action === "abandon") clearMissionContents(mission?.id);
 });
@@ -242,9 +249,23 @@ on("mission-script", ({ action, player, place, mission } = {}) => {
   const def = enemyDef(enemy);
   const requested = kind === "spawn-ship" ? 1 : Math.max(1, Math.floor(+action.count || 1));
   const range = Array.isArray(action.spawnDist) ? action.spawnDist : def.spawnDist;
+  const dropOnDefeat = action.dropOnDefeat && typeof action.dropOnDefeat === "object"
+    ? { ...action.dropOnDefeat }
+    : null;
+  const options = {
+    loot: action.loot === false ? null : action.loot,
+    ...(dropOnDefeat ? { dropOnDefeat } : {}),
+  };
+  if (action.loot === undefined) delete options.loot;
   for (let i = 0; i < requested; i++) {
     const distance = R(range[0], range[1]);
     const pos = origin.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(distance));
-    spawnEnemy(enemy, pos, placeId, `mission:${mission?.id || "story"}`);
+    // The authored courier is the first member of the wave; its mission drop
+    // is a single physical crate, while the remaining patrol ships are ordinary
+    // hostiles unless their action supplies another drop plan.
+    spawnEnemy(enemy, pos, placeId, `mission:${mission?.id || "story"}`, {
+      ...options,
+      ...(dropOnDefeat && i > 0 ? { dropOnDefeat: null } : {}),
+    });
   }
 });

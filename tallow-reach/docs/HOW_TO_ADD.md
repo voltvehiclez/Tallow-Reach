@@ -272,8 +272,11 @@ never imports simulation or rendering code. Active records live in `profile.miss
 `kill`, `mine`, `collect`, `reach`, `deliver` and `survive`, plus story `dialogue`, `script`, `wait`,
 `flags` and `parallel` steps. Dialogue choices can set remembered `profile.flags` and jump to a named
 step; scripts can request a wave/ship, set saved per-place state, give/take an item, play a sound or
-warp a pilot. The old singular `profile.mission` property is only a non-enumerable compatibility view
-of the first active mission; do not build new code around it.
+warp a pilot. A `spawn-wave`/`spawn-ship` action may also define `dropOnDefeat: { item, count, scatter }`;
+the authored drop is a physical mission crate, while ordinary enemy loot remains additive. Persistent
+mission crates are saved in the world half with their place, item and position, restored on pocket load,
+and collected only from a successful non-docked pickup. The old singular `profile.mission` property is
+only a non-enumerable compatibility view of the first active mission; do not build new code around it.
 
 To add a contract, edit `src/data/missions/contracts.js`: add its type, generator, one-line wording,
 and a template step, then expose it through the contract board facade in `src/sim/contracts.js`.

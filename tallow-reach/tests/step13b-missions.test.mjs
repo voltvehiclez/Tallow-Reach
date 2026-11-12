@@ -23,7 +23,9 @@ import {
 import { emit, on } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
 import "../src/sim/ai.js";
-import { fire, hitHostile, spawnCrate } from "../src/sim/combat.js";
+import { loadPlace } from "../src/sim/places.js";
+import { fire, hitHostile, spawnCrate, updateCrates } from "../src/sim/combat.js";
+import { clearWorldObjects } from "../src/sim/world.js";
 import { V } from "../src/util/math.js";
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -66,6 +68,8 @@ test("13b: story data names valid ids and every top-level step is reachable", ()
       if (step.enemy) assert.ok(ENEMIES[step.enemy], `${mission.id} enemy ${step.enemy} exists`);
       for (const action of (Array.isArray(step.action) ? step.action : step.action ? [step.action] : [])) {
         if (action.item) assert.equal(isItem(action.item), true, `${mission.id} script item ${action.item} exists`);
+        if (action.dropOnDefeat?.item) assert.equal(isItem(action.dropOnDefeat.item), true,
+          `${mission.id} authored defeat item ${action.dropOnDefeat.item} exists`);
         if (action.enemy) assert.ok(ENEMIES[action.enemy], `${mission.id} script enemy ${action.enemy} exists`);
         const place = action.place || action.sector;
         if (place) assert.equal(isPocket(place), true, `${mission.id} script place ${place} exists`);
@@ -130,10 +134,15 @@ test("13b: dialogue choice changes the next step and the worked mission complete
     assert.equal(mission.step, 6);
     assert.equal(missionProgress(mission).done, 1, "one parallel objective is complete");
     emit("mission-tick", { dt: 2, player, profile });
-    assert.equal(mission.step, 9, "parallel objectives and the flag branch advance the story");
-    assert.equal(profile.holds.wasp.salv, 1, "the script gives the story item");
-    assert.equal(missionDialogue(mission).speaker, "Archivist Vale");
-    assert.equal(missionDialogue(mission).requiresDock, false, "the beacon handoff can continue in the field");
+    assert.equal(mission.step, 8, "parallel objectives and the flag branch advance to the physical retrieval");
+    assert.equal(mission.steps[mission.step].kind, "collect");
+    assert.equal(mission.steps[mission.step].missionItem, true, "the authored reward is a mission-tagged pickup");
+    assert.equal(profile.holds.wasp.salv || 0, 0, "the item is not silently awarded by the mission script");
+    assert.equal(missionDialogue(mission), null, "the physical retrieval has no scripted handoff dialogue");
+
+    profile.holds.wasp.salv = 1;
+    emit("pickup", { item: "salv", missionId: mission.id, missionItem: true, place: "hollow", player, profile });
+    assert.equal(mission.step, 9, "only the successful mission pickup advances the story");
     advanceMission(mission, "dialogue-next", { player });
     assert.equal(isMissionComplete(mission), true);
   } finally {
@@ -159,6 +168,9 @@ test("13b: a completed mission remains claimable after leaving its origin sector
     emit("place-entered", { id: "hollow", player, profile });
     emit("mission-trigger", { trigger: "wave-clear", mission: mission.id, player, profile });
     emit("mission-tick", { dt: 2, player, profile });
+    assert.equal(mission.steps[mission.step].id, "reward-item");
+    profile.holds.wasp.salv = 1;
+    emit("pickup", { item: "salv", missionId: mission.id, missionItem: true, place: "hollow", player, profile });
     advanceMission(mission, "dialogue-next", { player });
     assert.equal(isMissionComplete(mission), true);
 
@@ -203,7 +215,7 @@ test("13b: a mission wave emits wave-clear and preserves an already-reached sear
     assert.equal(mission.steps[mission.step].id, "search", "holding position in the wrong place does not advance the search");
     player.place = "hollow";
     emit("mission-tick", { dt: 2, player, profile });
-    assert.equal(mission.steps[mission.step].id, "finish", "returning to the signal resumes the pending hold");
+    assert.equal(mission.steps[mission.step].id, "reward-item", "returning to the signal resumes the pending hold before the physical pickup");
   } finally {
     state.worldState = previousWorld;
     state.place = previousPlace;
@@ -290,14 +302,21 @@ test("13b: arrival waits for warp-end before changing the remote world", () => {
   }
 });
 
-test("13b: a full hold pauses the beacon handoff instead of abandoning the mission", () => {
+test("13b: a full hold leaves the physical beacon in Hollow until it is picked up", () => {
   const { profile, mission, player } = freshStory();
   const previousWorld = state.worldState;
   const previousPlace = state.place;
   const previousPlaces = state.places;
+  const previousPlayers = state.players;
+  const previousProfile = state.profile;
   state.worldState = newSave().world;
   state.place = "hollow";
   state.places = new Map();
+  state.profile = profile;
+  player.pos = V(0, 0, 0);
+  player.dead = false;
+  state.players = [player];
+  state.localPlayerIndex = 0;
   try {
     advanceMission(mission, "dialogue-next", { player });
     chooseMission(mission.id, "help", profile, player);
@@ -310,38 +329,157 @@ test("13b: a full hold pauses the beacon handoff instead of abandoning the missi
     assert.equal(mission.steps[mission.step].id, "wait", "the patrol starts after entering Hollow, not from a dialogue click");
     const wave = [...state.places.get("hollow").entities.enemies];
     assert.equal(wave.length, 2);
+    const carrierPosition = wave[0].pos.clone();
     profile.holds.wasp.salv = 20; // fill the 20 m³ hold before the two kills
     for (const enemy of wave) hitHostile(enemy, 999, enemy.pos, player, "hollow");
     emit("mission-tick", { dt: 2, player, profile });
 
-    assert.equal(mission.steps[mission.step].id, "reward-item", "the blocked handoff remains the current step");
+    const W = state.places.get("hollow").entities;
+    const missionCrate = W.crates.find(crate => crate.missionId === mission.id && crate.persistent);
+    assert.ok(missionCrate, "the relevant hostile leaves one mission-tagged crate at its defeat position");
+    assert.equal(W.crates.filter(crate => crate.missionId === mission.id && crate.persistent).length, 1,
+      "the authored mission item is dropped exactly once");
+    assert.equal(missionCrate.pos.distanceTo(carrierPosition), 0, "the mission crate is dropped at the defeating NPC's location");
+    assert.equal(mission.steps[mission.step].id, "reward-item", "the physical retrieval is the current objective");
     assert.equal(activeMissions(profile).length, 1, "a full hold does not abandon the mission");
-    assert.equal(missionNextText(mission, profile), "Make room in your hold to continue.");
+    player.pos.copy(missionCrate.pos);
+    updateCrates(1, "hollow");
+    assert.ok(W.crates.includes(missionCrate), "a full hold cannot collect the mission crate");
+    assert.equal(profile.holds.wasp.salv, 20, "a blocked pickup adds no item");
 
     player.place = "reach";
     player.docked = true;
     state.place = "reach";
     emit("place-changed", { from: "hollow", to: "reach", player, profile });
-    assert.equal(activeMissions(profile).length, 1, "returning to the station does not fail the pending handoff");
     delete profile.holds.wasp.salv;
     emit("mission-inventory-changed", { player, profile });
-    assert.equal(mission.steps[mission.step].id, "reward-item", "freeing cargo at the station cannot retrieve a remote item");
-    assert.equal(profile.holds.wasp.salv || 0, 0, "the pending beacon remains in Hollow");
+    assert.equal(mission.steps[mission.step].id, "reward-item", "station unloading cannot complete a remote physical objective");
+    assert.equal(profile.holds.wasp.salv || 0, 0, "the mission item was not silently moved into cargo");
+    assert.ok(W.crates.includes(missionCrate), "the crate remains in Hollow while the pilot is away");
 
     player.place = "hollow";
     player.docked = false;
     player.warp = { from: "reach", to: "hollow" };
     state.place = "hollow";
     emit("place-entered", { id: "hollow", player, profile });
-    assert.equal(mission.steps[mission.step].id, "reward-item", "arrival waits for warp to finish before retrieving the beacon");
+    assert.equal(mission.steps[mission.step].id, "reward-item", "arrival alone does not collect the crate");
     player.warp = null;
     emit("warp-end", { from: "reach", to: "hollow", player, profile });
-    assert.equal(mission.steps[mission.step].id, "finish", "the beacon is retrieved only after returning to Hollow");
-    assert.equal(profile.holds.wasp.salv, 1, "the beacon is delivered exactly once");
+    player.pos.copy(missionCrate.pos);
+    // Remove ordinary patrol loot from this focused pickup check; the physical
+    // mission crate itself is still the only object being collected here.
+    W.crates = [missionCrate];
+    updateCrates(0, "hollow");
+    assert.equal(mission.steps[mission.step].id, "finish", "the mission advances only after the physical pickup");
+    assert.equal(profile.holds.wasp.salv, 1, "one successful pickup adds exactly one mission item");
+    assert.equal(W.crates.length, 0, "the collected crate leaves the world");
   } finally {
     state.worldState = previousWorld;
     state.place = previousPlace;
     state.places = previousPlaces;
+    state.players = previousPlayers;
+    state.profile = previousProfile;
+  }
+});
+
+test("13b: a mission crate survives departure, save/load and re-entry without duplication", () => {
+  const profile = newProfile();
+  const mission = clone(BORDER_SIGNAL_MISSION);
+  mission.step = 8;
+  mission.current = 8;
+  mission.counters = {};
+  profile.missions.push(mission);
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  const previousPlaces = state.places;
+  const previousPlayers = state.players;
+  const previousProfile = state.profile;
+  state.worldState = newSave().world;
+  state.profile = profile;
+  state.place = "hollow";
+  state.places = new Map();
+  const player = { profile, place: "hollow", docked: false, dead: false, pos: V(0, 0, 0) };
+  state.players = [player];
+  state.localPlayerIndex = 0;
+  try {
+    const crate = spawnCrate(V(123, -4, 567), "salv", "hollow", null, null, mission.id);
+    assert.ok(crate, "the authored mission item is a physical crate");
+    assert.deepEqual(crate.pos.toArray(), [123, -4, 567], "the crate starts at the authored defeat position");
+    assert.equal(state.worldState.missionState.hollow.drops.length, 1, "the defeat creates one saved mission drop");
+
+    clearWorldObjects("hollow");
+    assert.equal(state.places.get("hollow").entities.crates.length, 1, "warping away does not erase the mission crate");
+    const save = sanitizeSave(JSON.parse(JSON.stringify({ v: 19, profile, world: state.worldState })));
+    assert.equal(save.world.missionState.hollow.drops[0].collected, false, "the uncollected drop is part of the save");
+
+    state.profile = save.profile;
+    state.worldState = save.world;
+    state.place = "hollow";
+    state.places = new Map();
+    player.profile = save.profile;
+    loadPlace("hollow");
+    loadPlace("hollow");
+    const restored = state.places.get("hollow").entities.crates;
+    assert.equal(restored.length, 1, "re-entry rebuilds one visible mission crate, not a duplicate");
+    assert.deepEqual(restored[0].pos.toArray(), [123, -4, 567], "save/load keeps the defeat position");
+
+    player.pos.copy(restored[0].pos);
+    updateCrates(0, "hollow");
+    assert.equal(restored.length, 0, "the crate leaves only after a physical pickup");
+    assert.equal(save.profile.holds.wasp.salv, 1, "pickup uses the normal one-unit cargo transfer");
+    assert.equal(mission.step, 8, "the old object is not used to advance a different in-memory mission");
+    assert.equal(save.profile.missions[0].step, 9, "the saved mission advances from the normal pickup event");
+    assert.equal(save.world.missionState.hollow.drops[0].collected, true, "the consumed marker prevents a retry drop");
+
+    state.places = new Map();
+    loadPlace("hollow");
+    assert.equal(state.places.get("hollow").entities.crates.length, 0, "a collected mission item is not recreated on reload");
+  } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
+    state.places = previousPlaces;
+    state.players = previousPlayers;
+    state.profile = previousProfile;
+  }
+});
+
+test("13b: a pre-physical Border Signal save gets a fallback crate instead of soft-locking", () => {
+  const profile = newProfile();
+  const legacyMission = clone(BORDER_SIGNAL_MISSION);
+  legacyMission.steps[8] = {
+    id: "reward-item",
+    kind: "script",
+    place: "hollow",
+    action: { kind: "give-item", target: "ship", item: "salv", count: 1 },
+    next: "finish",
+  };
+  legacyMission.step = 8;
+  legacyMission.current = 8;
+  legacyMission.counters = {};
+  profile.missions.push(legacyMission);
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  const previousPlaces = state.places;
+  const previousProfile = state.profile;
+  const save = sanitizeSave(JSON.parse(JSON.stringify({ v: 19, profile, world: newSave().world })));
+  const mission = save.profile.missions[0];
+  state.worldState = save.world;
+  state.profile = save.profile;
+  state.place = "hollow";
+  state.places = new Map();
+  try {
+    loadPlace("hollow");
+    const crates = state.places.get("hollow").entities.crates;
+    assert.equal(mission.steps[mission.step].kind, "collect", "the old script step migrates to a physical collect objective");
+    assert.equal(crates.length, 1, "an older save waiting for the handoff receives one recoverable crate");
+    assert.equal(crates[0].missionId, mission.id);
+    assert.equal(crates[0].persistent, true);
+    assert.equal(state.worldState.missionState.hollow.drops.length, 1, "the fallback gets the same saved-drop bookkeeping");
+  } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
+    state.places = previousPlaces;
+    state.profile = previousProfile;
   }
 });
 
@@ -413,6 +551,9 @@ test("13b: abandoning a story mission removes its scripted wave", () => {
     assert.equal(W.enemies.length, 0, "abandoning the mission removes its NPCs");
     assert.equal(W.bullets.length, 0, "abandoning the mission removes its shots");
     assert.equal(W.crates.length, 0, "abandoning the mission removes its loot");
+    assert.equal(state.worldState.missionState.hollow?.drops, undefined, "abandoning removes the persisted mission item too");
+    assert.ok(spawnCrate(V(0, 0, 0), "salv", "hollow", null, null, mission.id),
+      "a later retry can create one fresh mission item instead of inheriting a stale marker");
   } finally {
     state.worldState = previousWorld;
     state.place = previousPlace;

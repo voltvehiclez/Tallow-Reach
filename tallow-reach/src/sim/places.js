@@ -8,6 +8,7 @@ import { state, placeWorld } from "../state/state.js";
 import { placeAt, placeDef, featureOf, featureById, isPocket } from "../data/places.js";
 import { populateField, spawnAsteroid } from "./asteroids.js";
 import { spawnStaticEncounter } from "./encounters.js";
+import { restoreMissionDrops } from "./combat.js";
 import { recordSystemVisit } from "./galaxy.js";
 
 /** Build a place's entities once per session. Safe to call repeatedly. */
@@ -15,6 +16,7 @@ export function loadPlace(id) {
   const container = state.places.get(id) || (placeWorld(id), state.places.get(id));
   if (container.loaded) {
     refreshPlace(id);
+    restoreMissionDrops(id);
     return container;
   }
   for (const feature of placeDef(id).features) {
@@ -24,6 +26,7 @@ export function loadPlace(id) {
     // scenery is built by render/ from the same definition on place-entered.
   }
   container.loaded = true;
+  restoreMissionDrops(id);
   return container;
 }
 

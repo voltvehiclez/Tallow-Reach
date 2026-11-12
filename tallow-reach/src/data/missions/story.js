@@ -59,7 +59,15 @@ export const BORDER_SIGNAL_MISSION = {
       requiresFlying: true,
       log: "A distant patrol is responding to the signal.",
       objective: "Investigate the signal in Kestrel Hollow.",
-      action: { kind: "spawn-wave", place: "hollow", enemy: "raider", count: 2, spawnDist: [800, 1000] },
+      action: {
+        kind: "spawn-wave",
+        place: "hollow",
+        enemy: "raider",
+        count: 2,
+        spawnDist: [800, 1000],
+        // The existing salvage catalogue id is the physical beacon cargo.
+        dropOnDefeat: { item: "salv", count: 1, scatter: 0 },
+      },
       next: "wait",
     },
     { id: "wait", kind: "wait", trigger: "wave-clear", count: 1, log: "Wait for the patrol wave to clear.", objective: "Investigate the signal in Kestrel Hollow.", next: "search" },
@@ -85,12 +93,14 @@ export const BORDER_SIGNAL_MISSION = {
     },
     {
       id: "reward-item",
-      kind: "script",
+      kind: "collect",
       place: "hollow",
       requiresFlying: true,
+      missionItem: true,
+      item: "salv",
+      count: 1,
       log: "Retrieve the beacon from the signal.",
       objective: "Return to Kestrel Hollow to retrieve the beacon.",
-      action: { kind: "give-item", target: "ship", item: "salv", count: 1 },
       next: "finish",
     },
     {

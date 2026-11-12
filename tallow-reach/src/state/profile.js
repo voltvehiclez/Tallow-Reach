@@ -235,8 +235,15 @@ function cleanScriptAction(raw) {
   if (typeof raw === "string") return raw;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const action = {};
-  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to"]) {
+  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to", "loot"]) {
     if (raw[key] !== undefined) action[key] = raw[key];
+  }
+  if (raw.dropOnDefeat && typeof raw.dropOnDefeat === "object" && !Array.isArray(raw.dropOnDefeat)) {
+    action.dropOnDefeat = {
+      item: raw.dropOnDefeat.item,
+      count: raw.dropOnDefeat.count,
+      scatter: raw.dropOnDefeat.scatter,
+    };
   }
   if (Array.isArray(raw.spawnDist)) action.spawnDist = raw.spawnDist.slice(0, 2).map(Number);
   if (raw.set && typeof raw.set === "object" && !Array.isArray(raw.set)) action.set = cleanFlags(raw.set);
@@ -249,7 +256,7 @@ function cleanMissionStep(raw, index) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
   const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
   const step = { id, kind: raw.kind };
-  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "missionItem", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
     if (raw[key] !== undefined) step[key] = raw[key];
   }
   if (raw.lines !== undefined) {
@@ -502,6 +509,20 @@ function cleanPlaceMemory(raw) {
   return out;
 }
 
+/** A mission crate is the one entity that belongs in the saved world half:
+ * its place, item and defeat position are enough to rebuild the visible crate;
+ * the runtime id, quaternion and timer are session details. */
+function cleanMissionDrop(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const missionId = typeof raw.missionId === "string" && raw.missionId ? raw.missionId : null;
+  const item = typeof raw.item === "string" && isItem(raw.item) ? raw.item : null;
+  const pos = Array.isArray(raw.pos) && raw.pos.length === 3 && raw.pos.every(value =>
+    typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= PLACE_EXTENT
+  ) ? raw.pos.slice() : null;
+  if (!missionId || !item || !pos) return null;
+  return { missionId, item, pos, collected: raw.collected === true };
+}
+
 /** Clean small, data-only state written by story scripts for each place. */
 function cleanMissionState(raw) {
   const out = {};
@@ -510,6 +531,17 @@ function cleanMissionState(raw) {
     if (!place || !values || typeof values !== "object" || Array.isArray(values)) continue;
     const clean = {};
     for (const [key, value] of Object.entries(values)) {
+      if (key === "drops") {
+        if (!Array.isArray(value)) continue;
+        const drops = [];
+        for (const rawDrop of value) {
+          const drop = cleanMissionDrop(rawDrop);
+          if (!drop || drops.some(existing => existing.missionId === drop.missionId && existing.item === drop.item)) continue;
+          drops.push(drop);
+        }
+        if (drops.length) clean.drops = drops;
+        continue;
+      }
       if (!key || !["boolean", "string", "number"].includes(typeof value)) continue;
       if (typeof value !== "number" || Number.isFinite(value)) clean[key] = value;
     }
