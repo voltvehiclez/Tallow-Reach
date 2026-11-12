@@ -9,7 +9,7 @@ import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { isItem, isModule, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES, missionFromContract } from "../data/contracts.js";
-import { isMissionKind, isMissionStepKind } from "../data/missions/index.js";
+import { isMissionKind, isMissionStepKind, STORY_MISSIONS } from "../data/missions/index.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
@@ -249,7 +249,7 @@ function cleanMissionStep(raw, index) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
   const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
   const step = { id, kind: raw.kind };
-  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
     if (raw[key] !== undefined) step[key] = raw[key];
   }
   if (raw.lines !== undefined) {
@@ -279,6 +279,19 @@ function cleanMission(raw) {
   if (!isMissionKind(raw.kind) || !Array.isArray(raw.steps)) return null;
   const steps = raw.steps.map(cleanMissionStep).filter(Boolean);
   if (!steps.length) return null;
+  // Older saves contain the authored story steps but not newer presentation
+  // metadata. Restore that data-only metadata by step id without changing
+  // dialogue progress or any mission state.
+  const definition = STORY_MISSIONS.find(item => item.id === raw.id);
+  if (definition) {
+    for (const step of steps) {
+      const saved = raw.steps.find(item => item?.id === step.id);
+      const authored = definition.steps.find(item => item.id === step.id);
+      if (saved?.requiresDock === undefined && authored?.requiresDock !== undefined) {
+        step.requiresDock = authored.requiresDock;
+      }
+    }
+  }
   // Salvage contracts from the first 13a build counted any pickup. Keep their
   // progress, but make the required hand-in item explicit when they are saved again.
   if (raw.type === "salvage") {

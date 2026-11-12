@@ -610,6 +610,9 @@ export function missionDialogue(mission) {
     lines: [...lines],
     choices: Array.isArray(step.choices) ? step.choices.map(choice => ({ ...choice })) : [],
     waitingForChoice: Array.isArray(step.choices) && lineIndex >= lines.length - 1,
+    // Only authored station-contact conversations require docking. In-field
+    // mission dialogue stays actionable while flying.
+    requiresDock: step.requiresDock === true,
     pause: step.pause === true || mission.pause === true,
   };
 }
@@ -719,6 +722,13 @@ on("place-changed", payload => {
   const profile = profileFor(payload);
   for (const mission of [...missionsOf(profile)]) {
     const sector = mission.fails?.sector || mission.origin;
-    if (sector && payload.from === sector && payload.to !== sector) failMission(mission, "left-sector", profile, payload);
+    // Leaving while a conversation is open is not an intentional mission
+    // failure: station conversations remain pending until redocking, while
+    // in-field dialogue can travel with the pilot. This also prevents the
+    // final Border Signal line from abandoning the mission during the return
+    // warp just because the player has not clicked Close yet.
+    if (sector && payload.from === sector && payload.to !== sector && !missionDialogue(mission)) {
+      failMission(mission, "left-sector", profile, payload);
+    }
   }
 });

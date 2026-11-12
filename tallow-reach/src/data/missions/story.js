@@ -13,6 +13,7 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "intro",
       kind: "dialogue",
+      requiresDock: true,
       speaker: "Archivist Vale",
       portrait: "archivist-vale",
       log: "Hear Archivist Vale's request and choose whether to investigate.",
@@ -34,6 +35,7 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "brief",
       kind: "dialogue",
+      requiresDock: true,
       speaker: "Archivist Vale",
       portrait: "archivist-vale",
       log: "Listen to the signal briefing.",
@@ -81,6 +83,7 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "finish",
       kind: "dialogue",
+      requiresDock: false,
       speaker: "Archivist Vale",
       portrait: "archivist-vale",
       log: "Hear the final briefing and return with the beacon.",
@@ -91,6 +94,7 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "declined",
       kind: "dialogue",
+      requiresDock: true,
       speaker: "Archivist Vale",
       portrait: "archivist-vale",
       log: "Close the conversation.",

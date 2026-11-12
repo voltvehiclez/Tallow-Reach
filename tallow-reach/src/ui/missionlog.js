@@ -32,7 +32,8 @@ const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
 export function dialogueHtml(mission, { blocked = false } = {}) {
   const dialogue = missionDialogue(mission);
   if (!dialogue) return "";
-  const choices = blocked
+  const locked = blocked && dialogue.requiresDock;
+  const choices = locked
     ? `<p class="dialogue-locked">Redock to continue talking.</p>`
     : dialogue.waitingForChoice && dialogue.choices.length
       ? dialogue.choices.map(choice =>
@@ -138,7 +139,7 @@ export function renderDialogue() {
     missionPause = true;
     setPause(true);
   }
-  const blocked = !!state.player && !state.player.docked;
+  const blocked = dialogue.requiresDock && !!state.player && !state.player.docked;
   root.innerHTML = dialogueHtml(mission, { blocked });
   root.hidden = false;
 }
@@ -148,9 +149,10 @@ function onDialogueClick(event) {
   if (!button) return;
   const mission = dialogueMission();
   if (!mission) return;
-  // A conversation belongs to the outpost. Do not let a stale overlay finish
-  // a dialogue after launch and trigger a mission script in the player's face.
-  if (state.player && !state.player.docked) {
+  const dialogue = missionDialogue(mission);
+  // Only station-contact conversations are gated. In-field dialogue, such as
+  // the beacon handoff, remains actionable during flight and after a warp.
+  if (dialogue?.requiresDock && state.player && !state.player.docked) {
     renderDialogue();
     return;
   }

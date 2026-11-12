@@ -27,8 +27,13 @@ test("13c: the dialogue panel renders a portrait slot, speaker, data text and ch
   assert.match(first, /A weak signal is repeating beyond Kestrel Hollow\./, "dialogue renders the data line");
   assert.match(first, /data-dialogue-next/, "the first line can advance without pausing the world");
   const blocked = dialogueHtml(mission, { blocked: true });
-  assert.match(blocked, /Redock to continue talking\./, "an undocked dialogue asks the pilot to return to the station");
-  assert.doesNotMatch(blocked, /data-dialogue-next|data-dialogue-choice/, "an undocked dialogue cannot advance or choose");
+  assert.match(blocked, /Redock to continue talking\./, "an undocked station dialogue asks the pilot to return");
+  assert.doesNotMatch(blocked, /data-dialogue-next|data-dialogue-choice/, "an undocked station dialogue cannot advance or choose");
+  const beacon = storyMission();
+  beacon.step = 8;
+  const inField = dialogueHtml(beacon, { blocked: true });
+  assert.match(inField, /data-dialogue-next/, "an in-field beacon dialogue remains actionable while flying");
+  assert.doesNotMatch(inField, /Redock to continue talking\./, "only station-contact dialogue is dock-gated");
   assert.equal(missionDialogue(mission).pause, false, "dialogue does not pause unless mission data asks it to");
 
   const profile = newProfile();
@@ -96,6 +101,14 @@ test("13c: dialogue presentation fields survive the existing v19 save round trip
   assert.equal(step.portrait, "archivist-vale");
   assert.equal(step.log, "Hear Archivist Vale's request and choose whether to investigate.");
   assert.equal(step.objective, "Hear Archivist Vale's request.");
+  assert.equal(step.requiresDock, true, "station dialogue keeps its dock requirement through v19 saves");
   assert.equal(loaded.profile.missions[0].steps[8].portrait, "archivist-vale");
   assert.equal(loaded.profile.missions[0].steps[8].objective, "Return to Meridian Station.");
+  assert.equal(loaded.profile.missions[0].steps[8].requiresDock, false, "the beacon dialogue remains in-field after a save");
+
+  const oldSave = JSON.parse(JSON.stringify(save));
+  for (const savedStep of oldSave.profile.missions[0].steps) delete savedStep.requiresDock;
+  const migrated = sanitizeSave(oldSave);
+  assert.equal(migrated.profile.missions[0].steps[0].requiresDock, true, "old station dialogue saves regain the authored dock gate");
+  assert.equal(migrated.profile.missions[0].steps[8].requiresDock, false, "old beacon dialogue saves remain actionable in flight");
 });

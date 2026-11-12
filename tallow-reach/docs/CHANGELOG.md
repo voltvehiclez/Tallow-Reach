@@ -22,8 +22,9 @@ the next person must know (save version, rebuild needed, known issues).
 ## 2026-11-10: Clean up abandoned mission content and gate dialogue
 
 - Mission-spawned hostiles, their hostile shots and their loot now carry the mission identity. Abandoning a mission removes those records and their views without clearing ordinary patrols, derelicts or other place content.
-- Live mission dialogue now becomes **Redock to continue talking.** as soon as the pilot undocks. Continue and choice controls are blocked until docking again, preventing a stale dialogue overlay from activating a story spawn during flight.
-- Added regressions for scripted-wave cleanup and the undocked dialogue gate. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+- Authored station-contact dialogue becomes **Redock to continue talking.** when the pilot undocks, with Continue and choice controls blocked until docking again. In-field dialogue remains actionable during flight, including the Border Signal beacon handoff.
+- Leaving a mission sector while a dialogue line is open no longer interprets the open panel as mission abandonment. This keeps a pending station conversation resumable after redocking and lets the beacon line survive a return warp before Close is clicked.
+- Added regressions for scripted-wave cleanup, dialogue scope, save metadata and the warp-before-Close case. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
 
 ---
 

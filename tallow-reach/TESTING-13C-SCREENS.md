@@ -44,10 +44,12 @@ continuing with the browser pass.
 - [ ] **2.3** Choose either response. The panel should close or update as the story advances, the
       Mission log should show the changed objective, and no story text should be missing or replaced by
       a hard-coded placeholder.
-- [ ] **2.4** If the dialogue is still open, launch and confirm the panel changes to **Redock to continue
-      talking.** with no active Continue/choice control. Redock and confirm the conversation controls return.
-      Normal throttle, boost, mining/combat, docking and pause behavior must still work; the dialogue panel
-      is an overlay and does not automatically pause flight.
+- [ ] **2.4** If the station-contact dialogue is still open, launch and confirm the panel changes to
+      **Redock to continue talking.** with no active Continue/choice control. Redock and confirm the
+      conversation controls return. In-field dialogue, such as the beacon handoff, must remain actionable
+      while flying. Warp away before clicking Close and confirm the mission remains active. Normal throttle,
+      boost, mining/combat, docking and pause behavior must still work; the dialogue panel is an overlay and
+      does not automatically pause flight.
 
 ## 3. Save and mission-log consistency
 

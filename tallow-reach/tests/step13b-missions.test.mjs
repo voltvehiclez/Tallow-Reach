@@ -103,6 +103,7 @@ test("13b: dialogue choice changes the next step and the worked mission complete
   on("mission-script", capture);
   try {
     assert.equal(missionDialogue(mission).line, "A weak signal is repeating beyond Kestrel Hollow.");
+    assert.equal(missionDialogue(mission).requiresDock, true, "the station contact is explicitly dock-gated");
     assert.equal(advanceMission(mission, "dialogue-next", { player }), true);
     assert.equal(chooseMission(mission.id, "help", profile), true);
     assert.equal(profile.flags["story.border.helped"], true);
@@ -122,6 +123,7 @@ test("13b: dialogue choice changes the next step and the worked mission complete
     assert.equal(mission.step, 8, "parallel objectives and the flag branch advance the story");
     assert.equal(profile.holds.wasp.salv, 1, "the script gives the story item");
     assert.equal(missionDialogue(mission).speaker, "Archivist Vale");
+    assert.equal(missionDialogue(mission).requiresDock, false, "the beacon handoff can continue in the field");
     advanceMission(mission, "dialogue-next", { player });
     assert.equal(isMissionComplete(mission), true);
   } finally {
@@ -330,6 +332,19 @@ test("13b: a mission saves dialogue progress and story state in the middle of a 
   assert.equal(missionDialogue(loaded.profile.missions[0]).line, "Will you find its source before it fades?");
 });
 
+test("13b: leaving while dialogue is open does not abandon the mission", () => {
+  const station = freshStory();
+  emit("place-changed", { from: "hollow", to: "reach", player: station.player, profile: station.profile });
+  assert.equal(isMissionFailed(station.mission), false, "a pending station conversation can be resumed after redocking");
+  assert.equal(activeMissions(station.profile).length, 1);
+
+  const beacon = freshStory();
+  beacon.mission.step = 8;
+  emit("place-changed", { from: "hollow", to: "reach", player: beacon.player, profile: beacon.profile });
+  assert.equal(isMissionFailed(beacon.mission), false, "warping with the beacon line open does not lose the mission");
+  assert.equal(activeMissions(beacon.profile).length, 1);
+});
+
 test("13b: configured death failure removes the mission and reports its declared outcome", () => {
   const { profile, mission, player } = freshStory();
   const failures = [];
@@ -343,6 +358,7 @@ test("13b: configured death failure removes the mission and reports its declared
 
 test("13b: the same declared failure policy handles leaving the sector and timing out", () => {
   const left = freshStory();
+  left.mission.step = 3; // a non-dialogue objective still honors the authored leave policy
   emit("place-changed", { from: "hollow", to: "reach", player: left.player, profile: left.profile });
   assert.equal(isMissionFailed(left.mission), true);
   assert.equal(left.profile.missions.length, 0);
