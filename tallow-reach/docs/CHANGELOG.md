@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Stabilize story mission completion and scripted hand-offs
+
+- Fixed completed story missions being treated as failed on a later sector change, timeout or death. The Border Signal now remains active and claimable after the pilot returns from Kestrel Hollow, instead of disappearing and reappearing as a fresh **Start** offer.
+- Mission-tagged trigger events are now scoped to their owning mission, and scripted item transfers no longer advance when the ship or station cannot take the full amount. Added regressions for the return-home flow, trigger isolation and a blocked beacon hand-off.
+- Save version remains **19**. The mission-focused tests and full suite now pass **371/371**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
 ## 2026-11-10: Add pause exit and split the main menu actions
 
 - The pause overlay now places **Exit to main menu** below **Resume**. It saves the current resume point, unpauses and emits the existing UI event path that restores the title screen and hides flight/dialogue overlays.

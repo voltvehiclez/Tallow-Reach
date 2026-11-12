@@ -26,6 +26,9 @@ npm run build
 - [ ] **2.4** A trigger wait, a reach objective and a timed survive objective complete a parallel block.
 - [ ] **2.5** Dialogue position, flags, mission counters, timers and per-place script state survive save/load.
 - [ ] **2.6** Death, leaving the declared sector and the mission timeout apply the declared abandon outcome.
+- [ ] **2.7** After the Border Signal final dialogue is closed, leaving Kestrel Hollow must not reset the
+      completed mission. It should remain active and claimable at the home station; if a scripted item
+      hand-off lacks cargo room, the mission must wait rather than silently consuming the step.
 
 ## 3. Scope note
 

@@ -9,8 +9,10 @@ import { featureById, isPocket } from "../src/data/places.js";
 import { newProfile, newSave, sanitizeSave } from "../src/state/profile.js";
 import {
   advanceMission,
+  advanceMissions,
   activeMissions,
   chooseMission,
+  completeMission,
   isMissionComplete,
   isMissionFailed,
   missionDialogue,
@@ -125,6 +127,36 @@ test("13b: dialogue choice changes the next step and the worked mission complete
   }
 });
 
+test("13b: a completed mission remains claimable after leaving its origin sector", () => {
+  const { profile, mission, player } = freshStory();
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  const previousPlaces = state.places;
+  state.worldState = newSave().world;
+  state.place = "hollow";
+  state.places = new Map();
+  try {
+    advanceMission(mission, "dialogue-next", { player });
+    chooseMission(mission.id, "help", profile);
+    advanceMission(mission, "dialogue-next", { player });
+    emit("mission-trigger", { trigger: "wave-clear", mission: mission.id, player, profile });
+    emit("place-entered", { id: "hollow", player, profile });
+    emit("mission-tick", { dt: 2, player, profile });
+    advanceMission(mission, "dialogue-next", { player });
+    assert.equal(isMissionComplete(mission), true);
+
+    emit("place-changed", { from: "hollow", to: "reach", player, profile });
+    assert.equal(isMissionFailed(mission), false, "returning home cannot fail a completed mission");
+    assert.equal(activeMissions(profile).length, 1, "the completed mission stays available to collect");
+    assert.equal(completeMission(0, profile), "Paid 300 cr.");
+    assert.equal(activeMissions(profile).length, 0);
+  } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
+    state.places = previousPlaces;
+  }
+});
+
 test("13b: a mission wave emits wave-clear and preserves an already-reached search place", () => {
   const { profile, mission, player } = freshStory();
   const previousWorld = state.worldState;
@@ -149,6 +181,65 @@ test("13b: a mission wave emits wave-clear and preserves an already-reached sear
     state.worldState = previousWorld;
     state.place = previousPlace;
     state.places = previousPlaces;
+  }
+});
+
+test("13b: mission-scoped triggers do not advance another waiting mission", () => {
+  const makeWaiter = id => ({
+    id,
+    title: id,
+    kind: "story",
+    steps: [{ id: "wait", kind: "wait", trigger: "wave-clear", count: 1 }],
+    rewards: { credits: 0 },
+    fails: {},
+    step: 0,
+    current: 0,
+    counters: {},
+  });
+  const profile = newProfile();
+  const first = makeWaiter("story.first");
+  const second = makeWaiter("story.second");
+  profile.missions.push(first, second);
+  advanceMissions("mission-trigger", { trigger: "wave-clear", mission: first.id, profile });
+  assert.equal(isMissionComplete(first), true);
+  assert.equal(isMissionComplete(second), false, "the other story does not consume the first story's wave");
+});
+
+test("13b: a blocked item script waits instead of silently losing the item", () => {
+  const profile = newProfile();
+  const player = playerFor(profile);
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  state.worldState = newSave().world;
+  state.place = "reach";
+  profile.holds.wasp.ferrite = 25;
+  const mission = {
+    id: "blocked-item-script",
+    title: "Blocked item script",
+    kind: "story",
+    steps: [
+      { id: "give", kind: "script", action: { kind: "give-item", target: "ship", item: "salv", count: 1 }, next: "done" },
+      { id: "done", kind: "dialogue", lines: ["Done."] },
+    ],
+    rewards: { credits: 0 },
+    fails: {},
+    step: 0,
+    current: 0,
+    counters: {},
+  };
+  profile.missions.push(mission);
+  try {
+    assert.equal(advanceMission(mission, "mission-tick", { dt: 1, player, profile }), false);
+    assert.equal(mission.step, 0);
+    assert.equal(profile.holds.wasp.salv, undefined);
+
+    delete profile.holds.wasp.ferrite;
+    assert.equal(advanceMission(mission, "mission-tick", { dt: 1, player, profile }), true);
+    assert.equal(mission.steps[mission.step].id, "done");
+    assert.equal(profile.holds.wasp.salv, 1);
+  } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
   }
 });
 

@@ -8,7 +8,7 @@ import { itemName } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
 import { placeAt } from "../data/places.js";
 import { state, profileOf } from "../state/state.js";
-import { STATION, addItem, countOf, takeItem } from "./inventory.js";
+import { STATION, addItem, countOf, hasRoomFor, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos } from "./places.js";
 
 let nextMissionId = 0;
@@ -273,7 +273,10 @@ function executeScriptAction(action, mission, profile, payload = {}) {
     emit(kind === "give-item" ? "mission-item-given" : "mission-item-taken", {
       mission, item, count: changed, target: action.target || "ship", player,
     });
-    return changed > 0;
+    // A script must not silently move on when an item could not be transferred.
+    // In particular, a full ship hold used to let a story hand-out disappear
+    // while the dialogue advanced as if the player had received it.
+    return changed >= count;
   }
   if (kind === "set-sector-state") {
     const values = action.set || action.state || (action.key ? { [action.key]: action.value } : {});
@@ -302,10 +305,22 @@ function executeScriptAction(action, mission, profile, payload = {}) {
   return false;
 }
 
+function scriptActionReady(action, profile) {
+  const kind = scriptKind(action);
+  if (kind !== "give-item" && kind !== "take-item") return true;
+  const item = action.item;
+  const count = Math.max(1, Math.floor(+action.count || 1));
+  const where = action.target === "station" ? STATION : profile.ship;
+  return kind === "give-item"
+    ? hasRoomFor(where, item, count, profile, state.worldState)
+    : countOf(where, item, profile, state.worldState) >= count;
+}
+
 function executeScriptStep(step, mission, profile, payload = {}) {
-  let changed = false;
-  for (const action of scriptActions(step)) changed = executeScriptAction(action, mission, profile, payload) || changed;
-  return changed;
+  const actions = scriptActions(step);
+  if (!actions.length) return true;
+  if (!actions.every(action => scriptActionReady(action, profile))) return false;
+  return actions.every(action => executeScriptAction(action, mission, profile, payload));
 }
 
 /** Count a reach objective immediately when a later step starts in its target
@@ -357,7 +372,7 @@ function activateAutomatic(mission, profile, payload = {}) {
       continue;
     }
     if (step.kind === "script") {
-      executeScriptStep(step, mission, profile, payload);
+      if (!executeScriptStep(step, mission, profile, payload)) break;
       changed = true;
       moveToStep(mission, nextStepIndex(mission, step), payload);
       continue;
@@ -452,6 +467,9 @@ function advanceParallel(mission, step, event, payload) {
 /** Advance one current objective. Returns true when the mission changed. */
 export function advanceMission(mission, event, payload = {}) {
   if (!mission || isMissionComplete(mission) || isMissionFailed(mission) || !missionStep(mission)) return false;
+  // Mission-spawned trigger events are scoped to the mission that emitted them;
+  // otherwise a wave-clear from one story could wake every waiting story.
+  if (event === "mission-trigger" && payload.mission && payload.mission !== mission.id) return false;
   const profile = profileFor(payload);
   ensureCounters(mission);
   const prepared = activateAutomatic(mission, profile, payload);
@@ -518,7 +536,10 @@ function failureAction(rule, mission) {
 
 /** Mark a configured story mission failure and apply its declared outcome. */
 export function failMission(mission, reason, profile = state.profile, payload = {}) {
-  if (!mission || isMissionFailed(mission)) return false;
+  // Completed missions remain active until the player collects their reward.
+  // They must survive a later timeout, death or sector change instead of being
+  // marked failed and removed while the player is returning home.
+  if (!mission || isMissionFailed(mission) || isMissionComplete(mission)) return false;
   const rule = failureRule(mission, reason);
   if (!rule) return false;
   mission.failed = true;

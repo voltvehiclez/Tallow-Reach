@@ -128,7 +128,9 @@ await the browser checks in `TESTING-13C-SCREENS.md`.
   death/leave/timeout failures. Recover contracts still filter collection to `salv` and consume the
   required station/ship items only when their reward is claimed. `sim/contracts.js` remains the
   contract-board facade; `sim/ai.js` handles mission spawn scripts. Story progress, flags, timers and
-  `world.missionState` survive v19 save/load. The current contract screen lists several active missions
+  `world.missionState` survive v19 save/load. Completed missions remain claimable through later sector
+  changes, timeouts or death; mission-scoped triggers cannot wake another mission, and scripted item
+  hand-offs wait until the full amount fits. The current contract screen lists several active missions
   and retains Accept, Refresh, Abandon and inventory-gated Collect reward actions; Destroy mission rows
   show their live progress again, while Recover/mining item rows keep the concise mission title and
   reward without an extra item-requirement line. Mining and Recover hand-ins consume the required
@@ -143,9 +145,10 @@ await the browser checks in `TESTING-13C-SCREENS.md`.
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **368/368 pass** (including the Step 13a/13b/13c mission tests, pause/main-menu
-  navigation, salvage hand-in, mission dialogue/script/branch/failure coverage, HUD regressions, generated
-  station-local inventory, starmap/station-separation tests, existing 8B/11B and Step 12 oracles).
+- **Results:** `npm test` **371/371 pass** (including the Step 13a/13b/13c mission tests, pause/main-menu
+  navigation, completed-story return-home, trigger isolation and blocked hand-off regressions, salvage
+  hand-in, mission dialogue/script/branch/failure coverage, HUD regressions, generated station-local
+  inventory, starmap/station-separation tests, existing 8B/11B and Step 12 oracles).
   `npm run build` succeeded: the generated bundle is **735 KB** and is included in the latest playable
   build. The complete-project `tallow-reach-latest-build.zip` is refreshed with that source and build.
   The owner
