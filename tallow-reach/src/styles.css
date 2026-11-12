@@ -303,6 +303,111 @@ canvas {
   overflow: auto;
 }
 
+/* ---- Mission log and live dialogue (step 13c) ---- */
+#dialogue-panel {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 60;
+  width: min(680px, calc(100% - 40px));
+  pointer-events: auto;
+}
+#dialogue-panel[hidden] { display: none; }
+.dialogue-shell {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--amber);
+  background: rgba(7,9,11,.94);
+  box-shadow: 0 8px 28px rgba(0,0,0,.5);
+}
+.dialogue-portrait {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  color: var(--ice);
+  background: radial-gradient(circle, rgba(127,183,196,.16), rgba(13,18,21,.85));
+  text-align: center;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.dialogue-body { min-width: 0; }
+.dialogue-meta,
+.dialogue-body h2 {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dialogue-meta {
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+.dialogue-body h2 {
+  margin: 4px 0 4px;
+  color: var(--amber);
+  font-size: 20px;
+}
+.dialogue-text {
+  min-height: 2.8em;
+  margin: 8px 0 12px;
+  color: var(--ink);
+}
+.dialogue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dialogue-choice,
+.dialogue-next { padding: 6px 12px; }
+.mission-log-card {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: rgba(20,27,32,.45);
+}
+.mission-log-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mission-log-card h3 {
+  margin: 0;
+  color: var(--ice);
+  font-size: 17px;
+}
+.mission-log-card header span,
+.mission-log-status,
+.mission-log-dialogue {
+  color: var(--dim);
+  font-size: 13px;
+}
+.mission-log-status { margin: 5px 0 4px; }
+.mission-log-status span { color: var(--dim); }
+.mission-log-bar {
+  height: 4px;
+  margin: 6px 0 9px;
+  background: #141b20;
+}
+.mission-log-bar i {
+  display: block;
+  height: 100%;
+  background: var(--amber);
+}
+.mission-log-dialogue {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--ice);
+}
+.mission-log-dialogue strong { color: var(--ice); }
+.mission-log-next { margin: 8px 0; }
+.mission-log-next strong { color: var(--amber); }
+.mission-log-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* ---- Shared text and buttons ---- */
 h1 {
   font-size: 30px;

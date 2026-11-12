@@ -249,7 +249,7 @@ function cleanMissionStep(raw, index) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
   const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
   const step = { id, kind: raw.kind };
-  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "pause", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
     if (raw[key] !== undefined) step[key] = raw[key];
   }
   if (raw.lines !== undefined) {

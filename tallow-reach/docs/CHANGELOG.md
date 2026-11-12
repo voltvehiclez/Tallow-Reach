@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Build Step 13c mission screens
+
+- Added `src/ui/missionlog.js` with a data-driven Mission log tab for active missions, current step/progress and next-action guidance, plus a live dialogue panel with portrait slot, speaker, text, line controls and choices.
+- Story missions can be started from the Mission log's data-defined story list. Dialogue advances through the shared runner and autosaves; the world keeps running unless a mission dialogue step explicitly sets `pause: true`.
+- Added v19 round-trip coverage in `tests/step13c-ui.test.mjs`, the browser guide `TESTING-13C-SCREENS.md`, and rebuilt the generated game bundle. Save version remains **19** because the new presentation fields are optional within the existing mission shape.
+
+---
+
 ## 2026-11-10: Require mining ore hand-in before contract payout
 
 - Mining contracts now use the same station/ship hand-in path as delivery and Recover contracts. The mined ore must still be available when the reward is collected, then the exact amount is consumed before payout; missing ore keeps the completed mission unpaid and claimable.

@@ -26,9 +26,11 @@ import {
 import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
 import { term, terms } from "../data/terms.js";
 import { stationAt } from "../sim/places.js";
+import { missionLogHtml } from "./missionlog.js";
 
 export const TABS = [
   ["m", "Contracts"],
+  ["l", "Mission log"],
   ["h", "Hangar"],
   ["o", "Outfitting"],
   ["i", "Inventory"],
@@ -41,6 +43,7 @@ export const TABS = [
 // function that returns HTML, and list it here under the same key.
 const SCREENS = {
   m: contractsHtml,
+  l: missionLogHtml,
   h: hangarHtml,
   o: outfittingHtml,
   i: inventoryHtml,

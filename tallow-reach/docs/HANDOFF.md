@@ -16,7 +16,8 @@ across relogs and future routes are replanned. Pocket menus open beside the poin
 first; successful destinations and refusals do not render a bottom map notice in either map mode.
 The owner live-browser confirmation for these latest refinements is still pending before Step 12 can be marked complete;
 the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`. Step 13a is also built and
-awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime is built and 13c screens have not started.
+awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime and 13c screens are built and
+await the browser checks in `TESTING-13C-SCREENS.md`.
 
 ## Ground rules from the owner (do not break these)
 
@@ -49,8 +50,9 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime is built an
   because the owner passed the 11B playtest. **Step 12 is built but awaiting the owner playtest** in
   root `TESTING-12-PLACES.md`; do not tick Step 12 until that pass is reported. **Step 13a is built
   but awaiting its owner playtest** in `TESTING-13-MISSIONS.md`; do not tick Step 13 until that pass
-  is reported. The Step 13b runtime is now built and headlessly covered in
-  `TESTING-13B-MISSIONS.md`; 13c screens remain unbuilt.
+  is reported. The Step 13b runtime is built and headlessly covered in
+  `TESTING-13B-MISSIONS.md`; the Step 13c screens are built and await the browser pass in
+  `TESTING-13C-SCREENS.md`.
 - **11A foundation:** `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/sim/travel.js`, explicit
   `PLACE_LINKS`, and `tests/step11a-galaxy.test.mjs` (now 23 tests). Default seed `11082026` resolves
   **121 systems / 445 pockets / 444 links**: organic scatter, 1–4 neighbours, a sparse tree with dead ends and junctions,
@@ -130,17 +132,19 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime is built an
   and retains Accept, Refresh, Abandon and inventory-gated Collect reward actions; Destroy mission rows
   show their live progress again, while Recover/mining item rows keep the concise mission title and
   reward without an extra item-requirement line. Mining and Recover hand-ins consume the required
-  current station/ship items before payout. The dialogue panel and mission-log tab remain 13c work.
+  current station/ship items before payout. Step 13c now adds the data-driven Mission log tab and
+  live dialogue panel; the story offer list can start `The Border Signal`, and dialogue choices save
+  through the existing v19 mission shape without pausing flight by default.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **361/361 pass** (including the Step 13a/13b mission tests, salvage hand-in,
-  mission dialogue/script/branch/failure coverage, HUD regressions, generated station-local inventory,
-  starmap/station-separation tests, existing 8B/11B and Step 12 oracles). `npm run build` succeeded:
-  the generated bundle is **724 KB** and is included in the latest playable build. The owner passed the
-  first 13a playtest and reported the salvage hand-in bug; the corrected playtest is pending. The owner
-  passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists
+- **Results:** `npm test` **365/365 pass** (including the Step 13a/13b/13c mission tests, salvage
+  hand-in, mission dialogue/script/branch/failure coverage, HUD regressions, generated station-local
+  inventory, starmap/station-separation tests, existing 8B/11B and Step 12 oracles). `npm run build`
+  succeeded: the generated bundle is **734 KB** and is included in the latest playable build. The owner
+  passed the first 13a playtest and reported the salvage hand-in bug; the corrected playtest is pending.
+  The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists
   destination, place memory, station-local stocks, story-script place state and portable mission progress;
   policies, core kind/name, pocket templates and layout are resolved, not persisted. Default geometry is
   **121 systems / 445 pockets / 444 links** (including detached station pockets); system ids/names/positions
@@ -155,8 +159,8 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime is built an
   `respawn-place` event hook. Enemies keep the existing chase behaviour. Mission 13a supports the
   three legacy contract types plus generic objective events; 13b adds data-only story dialogue,
   scripts, waits, flags/branching, parallel work and failure outcomes, with `The Border Signal` as a
-  worked example. The mission-log/dialogue screens are not implemented yet. Later save version 20
-  remains reserved for Step 15.
+  worked example. Step 13c now provides the Mission log tab and live dialogue panel; the owner browser
+  pass remains pending in `TESTING-13C-SCREENS.md`. Later save version 20 remains reserved for Step 15.
 - **Backup:** the owner-approved 11A full project backup is published on GitHub:
   `https://github.com/voltvehiclez/Tallow-Reach/archive/8df6042c4161bd65f39d4ba0fc4b7016b02e40ae.zip`
   (verified public ZIP). Extract and open `tallow-reach/game/tallow-reach.html`. Browser-local saves
@@ -169,7 +173,8 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime is built an
    slice passes. Step 12 covers generated templates, mining/place memory, static loot, trader stations,
    generic patrols and the old-save regression. Step 13a covers multiple active contracts, mine/hunt/
    salvage progress, reward/abandon actions, v18→v19 migration and mission save round trips. The 13b
-   headless checks are in `TESTING-13B-MISSIONS.md`; 13c will make its dialogue visible in-game. Export
+   headless checks are in `TESTING-13B-MISSIONS.md`; 13c screen checks are in
+   `TESTING-13C-SCREENS.md`. Export
    a current `TR1:` code before each guide.
 2. If the owner reports **pass** for Step 12, tick Step 12 in `docs/ROADMAP.md` and `docs/REFACTOR_PLAN.md`,
    mark the guide passed, update this file and add a changelog entry. If 13a also passes, tick the 13a

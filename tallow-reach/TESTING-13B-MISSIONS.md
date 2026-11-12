@@ -1,7 +1,7 @@
 # Step 13b headless playtest — story mission runtime
 
-Step 13b adds the story-side mission runtime without adding the dialogue panel or mission-log tab.
-Those screens are Step 13c. The worked data mission is `The Border Signal` in
+Step 13b adds the story-side mission runtime. The dialogue panel and Mission log tab are now the
+Step 13c screen slice, tested separately in `TESTING-13C-SCREENS.md`. The worked data mission is `The Border Signal` in
 `src/data/missions/story.js`.
 
 ## 1. Run the checks
@@ -29,9 +29,9 @@ npm run build
 
 ## 3. Scope note
 
-There is intentionally no new browser panel to click yet. The dialogue panel and mission-log tab that
-make story missions visible in-game are the next Step 13c slice. Do not tick all of Step 13 until the
-owner has also played the 13a contract guide and the 13c screens.
+The runtime checks intentionally do not replace the browser screen pass. The dialogue panel and
+Mission log tab are covered by `TESTING-13C-SCREENS.md`. Do not tick all of Step 13 until the owner has
+also played the 13a contract guide and the 13c screens.
 
 ## 4. Result
 

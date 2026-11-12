@@ -279,10 +279,12 @@ To add a contract, edit `src/data/missions/contracts.js`: add its type, generato
 and a template step, then expose it through the contract board facade in `src/sim/contracts.js`.
 Preserve compact compatibility fields if old saves or UI callers need them. To add a story mission,
 add a data record with `kind: "story"`; use named step ids for `next`/`then`/`else`/choice targets,
-keep all story text and action ids in the data file, and declare `fails.on` plus an outcome for death,
-sector departure or timeout when needed. `The Border Signal` in `src/data/missions/story.js` is the
-worked example. Add headless event tests beside `tests/step13b-missions.test.mjs`, plus a save test if
-the shape changes; the dialogue/mission-log UI is 13c.
+keep all story text, portrait ids, log guidance and action ids in the data file, and declare `fails.on`
+plus an outcome for death, sector departure or timeout when needed. `The Border Signal` in
+`src/data/missions/story.js` is the worked example. Add headless event tests beside
+`tests/step13b-missions.test.mjs`, a screen test beside `tests/step13c-ui.test.mjs`, plus a save test if
+the shape changes. The generic 13c presentation lives in `src/ui/missionlog.js`; do not put mission
+names, dialogue or branch text in that UI module.
 
 ## 12. Seeded sectors and daily challenges
 

@@ -387,8 +387,8 @@ engine code; it only names things by id (enemies, items, sectors, flags).
   the mission's `fails` says.
 **Save.** **Version 19**: `mission` becomes `missions` (progress per active mission: current step,
 counters) plus `flags`, with migration.
-**Status:** [~] **13a built 2026-11-10; 13b runtime built 2026-11-10; owner 13a playtest pending (`TESTING-13-MISSIONS.md`).**
-13b headless coverage is in `tests/step13b-missions.test.mjs`; 13c (dialogue and mission-log screens) remains.
+**Status:** [~] **13a/13b/13c built 2026-11-10; owner browser playtests pending (`TESTING-13-MISSIONS.md` and `TESTING-13C-SCREENS.md`).**
+13b headless coverage is in `tests/step13b-missions.test.mjs`; 13c UI coverage is in `tests/step13c-ui.test.mjs`. The step remains unticked until the owner plays the screens.
 
 ## Step 14: Instanced sectors and wormholes
 **Goal.** Temporary, generated, harder sectors reached through wormholes.

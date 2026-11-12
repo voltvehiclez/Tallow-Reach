@@ -65,7 +65,9 @@
 //                                    a script changed a ship or station inventory
 //   mission-warp { mission, from, to, player }
 //                                    a script moved a pilot to another pocket
-//   mission-progress { mission, event, payload, player }
+//   mission-accepted { mission, player }
+//                                    a contract or story mission entered a pilot's active list
+//   mission-progress  { mission, event, payload, player }
 //                                    the data-driven runner advanced an objective
 //   mission-completed { mission, player }
 //                                    all steps are complete; reward collection is still explicit
@@ -75,6 +77,8 @@
 //                                    the pilot collected a completed mission reward
 //   mission-abandoned { mission, player }
 //                                    the pilot removed an active mission
+//   mission-ui-refresh {}
+//                                    a non-mission screen transition changed dialogue visibility
 
 const handlers = new Map();
 

@@ -1,7 +1,7 @@
 // The outpost panel: renders the current screen and runs the actions behind
 // its buttons. Buttons carry a data-a action name and an optional data-b argument.
 
-import { on } from "../util/events.js";
+import { on, emit } from "../util/events.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
 import { state, currentSave, applySave, resetPlaces } from "../state/state.js";
 import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
@@ -20,6 +20,7 @@ import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
 import { canSell, itemName } from "../data/items.js";
+import { storyMission } from "../data/missions/index.js";
 import { introHtml, outpostHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
@@ -96,6 +97,7 @@ const ACTIONS = {
     state.ui.tab = "m";
     initAudio();
     resumeFromSave();
+    emit("mission-ui-refresh", {});
     const notice = recoveryNotice();
     if (notice) {
       state.ui.toast = notice;
@@ -127,6 +129,18 @@ const ACTIONS = {
   },
   done(i) {
     toast(contracts.completeContract(i === undefined ? undefined : +i));
+  },
+  story(id) {
+    const definition = storyMission(id);
+    if (!definition) {
+      toast("That story mission is not available.");
+      return;
+    }
+    if (contracts.activeMissions().some(mission => mission.id === definition.id)) {
+      toast("That story mission is already active.");
+      return;
+    }
+    toast(contracts.acceptMission(definition) ? "Story mission accepted." : "Could not start that story mission.");
   },
 
   // Hangar

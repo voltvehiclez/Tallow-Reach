@@ -5,6 +5,8 @@
 import { on, emit } from "../util/events.js";
 import { missionFromContract, describeMission } from "../data/missions/contracts.js";
 import { itemName } from "../data/items.js";
+import { enemyDef } from "../data/enemies.js";
+import { placeAt } from "../data/places.js";
 import { state, profileOf } from "../state/state.js";
 import { STATION, addItem, countOf, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos } from "./places.js";
@@ -82,6 +84,48 @@ export function missionProgress(mission) {
 export function remainingObjective(mission) {
   const progress = missionProgress(mission);
   return Math.max(0, progress.total - progress.done);
+}
+
+/** Generic mission-log guidance. Story-specific wording can be supplied by a
+ * data step's optional `log` field; the fallback only describes the vocabulary
+ * of the current step and never names a story or hard-codes its dialogue. */
+export function missionNextText(mission) {
+  if (!mission) return "No mission selected.";
+  if (isMissionFailed(mission)) return mission.failureMessage || "Mission failed.";
+  if (isMissionComplete(mission)) return "Mission complete. Return to a station to collect the reward.";
+  const step = missionStep(mission);
+  if (!step) return "No current objective.";
+  if (typeof step.log === "string" && step.log) return step.log;
+  const progress = missionProgress(mission);
+  const left = Math.max(0, progress.total - progress.done);
+  const target = step.place || step.sector || step.target;
+  const placeName = target ? placeAt(target)?.n || target : "the target area";
+  switch (step.kind) {
+    case "dialogue":
+      return missionDialogue(mission)?.waitingForChoice ? "Choose a response." : "Continue the conversation.";
+    case "kill":
+      return `Destroy ${left} ${enemyDef(step.enemy).pl || "hostiles"}.`;
+    case "mine":
+      return `Mine ${left} ${itemName(step.item)}.`;
+    case "collect":
+      return `Collect ${left} ${itemName(step.item)}.`;
+    case "reach":
+    case "reach-sector":
+      return `Reach ${placeName}.`;
+    case "deliver":
+      return `Deliver ${left} ${itemName(step.item)}${target ? ` to ${placeName}` : ""}.`;
+    case "survive":
+      return `Survive for ${Math.ceil(left)} seconds.`;
+    case "wait":
+      return step.trigger && step.trigger !== "timer" ? `Wait for ${step.trigger}.` : `Wait ${Math.ceil(left)} seconds.`;
+    case "parallel":
+      return `Complete all ${(step.steps || []).length} objectives.`;
+    case "script":
+    case "flags":
+      return "Follow the mission instruction.";
+    default:
+      return `Complete the ${step.kind} objective.`;
+  }
 }
 
 export function missionForObjective(profile, kind) {
@@ -461,6 +505,7 @@ export function acceptMission(offer, profile = state.profile) {
   if (!mission) return undefined;
   missionsOf(profile).push(mission);
   activateAutomatic(mission, profile, { profile });
+  emit("mission-accepted", { mission, player: profile === state.profile ? state.player : undefined });
   return mission;
 }
 
@@ -478,19 +523,35 @@ export function missionDialogue(mission) {
   const lineIndex = Math.min(Math.max(0, counterValue(mission, step.id)), Math.max(0, lines.length - 1));
   return {
     speaker: step.speaker || "",
+    portrait: step.portrait || mission.portrait || "",
     line: lines[lineIndex] || "",
     lineIndex,
     lines: [...lines],
     choices: Array.isArray(step.choices) ? step.choices.map(choice => ({ ...choice })) : [],
     waitingForChoice: Array.isArray(step.choices) && lineIndex >= lines.length - 1,
+    pause: step.pause === true || mission.pause === true,
   };
+}
+
+/** Advance the current dialogue line without making the UI know step internals. */
+export function nextMissionDialogue(indexOrId, profile = state.profile) {
+  const mission = missionAt(indexOrId, profile);
+  if (!mission) return false;
+  return advanceMission(mission, "dialogue-next", {
+    profile,
+    player: profile === state.profile ? state.player : undefined,
+  });
 }
 
 /** Select a current dialogue choice without making the UI know step internals. */
 export function chooseMission(indexOrId, choiceId, profile = state.profile) {
   const mission = missionAt(indexOrId, profile);
   if (!mission) return false;
-  return advanceMission(mission, "dialogue-choice", { choice: choiceId, profile });
+  return advanceMission(mission, "dialogue-choice", {
+    choice: choiceId,
+    profile,
+    player: profile === state.profile ? state.player : undefined,
+  });
 }
 
 function itemRequirement(mission) {

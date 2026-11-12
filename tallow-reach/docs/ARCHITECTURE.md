@@ -467,12 +467,13 @@ These are real, current limits. None of them is a bug in play today.
   an item with a value), but there is no "move everything" button, and fitting in the field is not
   possible. Cargo no longer travels with you between ships: it stays in the ship you
   left it in, and the Base screen's Store/Load/Sell buttons act on the ship being flown.
-- **Mission screens are still incomplete (13c).** Step 13a closes the old one-contract structural
-  gap: `profile.missions` can hold several data missions, and `sim/missions.js` advances their
-  objective steps from gameplay events. Step 13b adds data-only story dialogue/choices, scripts,
-  waits, flags/branches, parallel objectives and configured failures; `story.js` contains the worked
-  example. Contract tiers remain fixed at 1 to 3 (`generateContract` in `sim/contracts.js`, definitions
-  in `data/missions/contracts.js`).
+- **Mission screens are built in 13c, pending the owner browser pass.** Step 13a closes the old
+  one-contract structural gap: `profile.missions` can hold several data missions, and
+  `sim/missions.js` advances their objective steps from gameplay events. Step 13b adds data-only story
+  dialogue/choices, scripts, waits, flags/branches, parallel objectives and configured failures;
+  `story.js` contains the worked example. `ui/missionlog.js` renders the docked Mission log tab and
+  live dialogue panel without moving story text into UI code. Contract tiers remain fixed at 1 to 3
+  (`generateContract` in `sim/contracts.js`, definitions in `data/missions/contracts.js`).
 - **Shops and station storage are separate data concerns.** Any number of shops are content entries
   in `data/shops.js` with their own heading, rows, prices and `max` limits, addressed by `shopId`
   everywhere (`shopList`, `buyItem`, `shopStock`, `setShopStock`); limited stock is keyed per shop

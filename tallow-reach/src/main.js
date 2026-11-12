@@ -21,6 +21,7 @@ import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
+import { setupMissionLog } from "./ui/missionlog.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
 import { updateOutfitting } from "./ui/outfitting.js";
 import { refillPower } from "./sim/power.js";
@@ -79,6 +80,7 @@ setupWarpStreaks();
 installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, rocks, the ship
 setupWarpFlash();
 setupPause();
+setupMissionLog();
 setupStarmap();
 installInput();
 syncControls();   // the control record starts in sync with the (unpressed) keys

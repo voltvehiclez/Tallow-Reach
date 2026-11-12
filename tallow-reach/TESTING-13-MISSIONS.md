@@ -107,8 +107,8 @@ Do this section if a salvage offer is active. If not, accept one before launchin
 
 - [ ] **6.1** Recheck launch, flight, boost, mining beam, cannons, missiles, targeting, docking, Shop,
       Inventory, Outfitting, starmap, route warp, pause, save/import and generated-pocket behavior.
-- [ ] **6.2** Confirm there is no new dialogue panel or mission-log tab yet. That is expected for 13a,
-      not a failure; those are 13b/13c.
+- [ ] **6.2** Do not assess the Step 13c dialogue panel or Mission log here; this guide only checks the
+      legacy contract behavior. Their separate browser checks are in `TESTING-13C-SCREENS.md`.
 - [ ] **6.3** Check the browser console after accepting, advancing, completing, abandoning, saving and
       importing missions. There should be no red errors.
 
