@@ -8,7 +8,6 @@ export const BORDER_SIGNAL_MISSION = {
   kind: "story",
   requires: [],
   origin: "hollow",
-  timeout: 180,
   steps: [
     {
       id: "intro",
@@ -20,17 +19,9 @@ export const BORDER_SIGNAL_MISSION = {
       objective: "Hear Archivist Vale's request.",
       lines: ["A weak signal is repeating beyond Kestrel Hollow.", "Will you find its source before it fades?"],
       choices: [
-        { id: "help", text: "I will investigate.", set: { "story.border.helped": true }, next: "prepare" },
+        { id: "help", text: "I will investigate.", set: { "story.border.helped": true }, next: "brief" },
         { id: "decline", text: "Not today.", set: { "story.border.helped": false }, next: "declined" },
       ],
-    },
-    {
-      id: "prepare",
-      kind: "script",
-      log: "Activate the border signal sector.",
-      objective: "Follow the signal lead.",
-      action: { kind: "set-sector-state", place: "hollow", set: { borderSignal: "active" } },
-      next: "brief",
     },
     {
       id: "brief",
@@ -41,14 +32,30 @@ export const BORDER_SIGNAL_MISSION = {
       log: "Listen to the signal briefing.",
       objective: "Investigate the signal in Kestrel Hollow.",
       lines: ["The signal is inside the hollow. Stay with it until the patrol reveals the beacon."],
+      next: "travel",
+    },
+    {
+      id: "travel",
+      kind: "reach-sector",
+      place: "hollow",
+      log: "Follow the signal into Kestrel Hollow.",
+      objective: "Follow the signal into Kestrel Hollow.",
+      next: "prepare",
+    },
+    {
+      id: "prepare",
+      kind: "script",
+      log: "Activate the border signal sector.",
+      objective: "Investigate the signal in Kestrel Hollow.",
+      action: { kind: "set-sector-state", place: "hollow", set: { borderSignal: "active" } },
       next: "spawn",
     },
     {
       id: "spawn",
       kind: "script",
-      log: "Prepare for the patrol wave.",
-      objective: "Follow the signal into Kestrel Hollow.",
-      action: { kind: "spawn-wave", place: "hollow", enemy: "raider", count: 2 },
+      log: "A distant patrol is responding to the signal.",
+      objective: "Investigate the signal in Kestrel Hollow.",
+      action: { kind: "spawn-wave", place: "hollow", enemy: "raider", count: 2, spawnDist: [800, 1000] },
       next: "wait",
     },
     { id: "wait", kind: "wait", trigger: "wave-clear", count: 1, log: "Wait for the patrol wave to clear.", objective: "Investigate the signal in Kestrel Hollow.", next: "search" },
@@ -89,7 +96,7 @@ export const BORDER_SIGNAL_MISSION = {
       log: "Hear the final briefing and return with the beacon.",
       objective: "Return to Meridian Station.",
       lines: ["The beacon is yours. Bring it home and we can learn who sent the signal."],
-      next: 10,
+      next: 11,
     },
     {
       id: "declined",
@@ -104,10 +111,9 @@ export const BORDER_SIGNAL_MISSION = {
   ],
   rewards: { credits: 300 },
   fails: {
-    on: ["player-dead", "left-sector", "timeout"],
-    sector: "hollow",
+    on: ["player-dead"],
     action: "abandon",
-    message: "The border signal mission was lost.",
+    message: "The border signal mission was lost because the ship was destroyed.",
   },
 };
 

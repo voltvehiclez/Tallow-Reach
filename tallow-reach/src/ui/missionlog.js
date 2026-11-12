@@ -84,7 +84,7 @@ function missionStatus(mission, index, profile) {
     `<p class="mission-log-status">${stateText}${progressText}</p>` +
     progressBar +
     preview +
-    `<p class="mission-log-next"><strong>Next:</strong> ${esc(missionNextText(mission))}</p>` +
+    `<p class="mission-log-next"><strong>Next:</strong> ${esc(missionNextText(mission, profile))}</p>` +
     `<div class="mission-log-actions">${action}</div>` +
     `</article>`
   );
@@ -185,6 +185,7 @@ export function setupMissionLog() {
     "mission-failed",
     "mission-rewarded",
     "mission-abandoned",
+    "mission-inventory-changed",
     "mission-ui-refresh",
     "main-menu",
     "docked",

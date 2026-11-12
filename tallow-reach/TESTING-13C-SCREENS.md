@@ -43,7 +43,8 @@ continuing with the browser pass.
       **I will investigate.** and **Not today.**, should replace Continue.
 - [ ] **2.3** Choose either response. The panel should close or update as the story advances, the
       Mission log should show the changed objective, and no story text should be missing or replaced by
-      a hard-coded placeholder.
+      a hard-coded placeholder. Choosing **I will investigate.** must only open the station briefing;
+      it must not spawn the patrol while the player is still docked.
 - [ ] **2.4** If the station-contact dialogue is still open, launch and confirm the panel changes to
       **Redock to continue talking.** with no active Continue/choice control. Redock and confirm the
       conversation controls return. In-field dialogue, such as the beacon handoff, must remain actionable
@@ -58,10 +59,17 @@ continuing with the browser pass.
       dialogue line, choice state and Next instruction should be restored.
 - [ ] **3.2** Confirm all active contracts and the story mission remain visible in the Mission log and
       the flight HUD. Completing or abandoning one must remove only that mission from the active list.
-- [ ] **3.3** Choose **I will investigate.**, fly to Kestrel Hollow and destroy the two mission raiders.
-      The final raider should automatically clear the wave wait. Because you are already in Hollow, the
-      search step should start with its reach objective complete; the log should show the remaining
+- [ ] **3.3** Choose **I will investigate.**, leave the station and enter Kestrel Hollow. The mission
+      should activate the signal sector and spawn the two distant mission raiders only on arrival. Destroy
+      them; the final raider should automatically clear the wave wait. Because you are already in Hollow,
+      the search step should start with its reach objective complete; the log should show the remaining
       hold-position objective and its progress instead of waiting forever for a second Hollow entry.
+- [ ] **3.4** Repeat the encounter with a full hold. Defeating both raiders must not abandon the mission.
+      The mission should wait at the beacon handoff and tell you to make room. Return to the station,
+      move or sell cargo, and confirm the handoff retries and the beacon is delivered once.
+- [ ] **3.5** Complete the available dialogue branch far enough to reach an objective. Verify the log
+      changes from the dialogue instruction to the objective instruction and the current progress bar
+      follows the runner.
 - [ ] **3.4** Complete the available dialogue branch far enough to reach an objective. Verify the log
       changes from the dialogue instruction to the objective instruction and the current progress bar
       follows the runner.

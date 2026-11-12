@@ -101,17 +101,35 @@ function formatMissionObjective(text, step, progress) {
   return text.replace(/\{(remaining|count|item|enemy|place)\}/g, (_, key) => values[key]);
 }
 
+/** Explain a resource-blocked script instead of leaving a vague generic step. */
+function blockedScriptText(step, profile = state.profile) {
+  for (const action of scriptActions(step)) {
+    const kind = scriptKind(action);
+    if ((kind !== "give-item" && kind !== "take-item") || scriptActionReady(action, profile)) continue;
+    const station = action.target === "station";
+    if (kind === "give-item") return station
+      ? "Make room in station storage to continue."
+      : "Make room in your hold to continue.";
+    return station
+      ? "Keep the required item in station storage to continue."
+      : "Keep the required item in your hold to continue.";
+  }
+  return "";
+}
+
 /** Generic mission-log/HUD guidance. Every mission may supply a spoiler-safe
  * `objective` in its data step. The older `log` field remains in saved mission
  * data for compatibility, but is deliberately never shown here: procedural
  * logs can reveal a future ambush or another step's implementation detail. */
-export function missionNextText(mission) {
+export function missionNextText(mission, profile = state.profile) {
   if (!mission) return "No mission selected.";
   if (isMissionFailed(mission)) return mission.failureMessage || "Mission failed.";
   if (isMissionComplete(mission)) return "Mission complete. Return to a station to collect the reward.";
   const step = missionStep(mission);
   if (!step) return "No current objective.";
   const progress = missionProgress(mission);
+  const resourceHint = step.kind === "script" ? blockedScriptText(step, profile) : "";
+  if (resourceHint) return resourceHint;
   if (typeof step.objective === "string" && step.objective) {
     return formatMissionObjective(step.objective, step, progress);
   }
@@ -315,8 +333,13 @@ function executeScriptAction(action, mission, profile, payload = {}) {
     return true;
   }
   // Spawn actions are handled by the simulation adapter in sim/ai.js. Keeping
-  // them as an event means mission data does not import an enemy system.
+  // them as an event means mission data does not import an enemy system. A
+  // world-changing spawn waits until the acting pilot is actually flying in
+  // the requested place; advancing a station conversation cannot create a
+  // fight somewhere else.
   if (kind === "spawn-wave" || kind === "spawn-ship") {
+    if (!player || player.docked === true || player.dead === true || player.warp ||
+        (player.place || state.place) !== place) return false;
     emit("mission-script", { mission, action: { ...action, kind }, place, player, profile });
     return true;
   }
@@ -437,6 +460,10 @@ function objectiveMatches(step, event, payload = {}) {
 }
 
 function advanceDialogue(mission, step, event, payload, profile) {
+  // The UI also hides these controls, but keep the rule in the runner so a
+  // stale click or another caller cannot advance a station conversation while
+  // the pilot is in flight.
+  if (step.requiresDock === true && payload.player && payload.player.docked !== true) return false;
   const lines = Array.isArray(step.lines) ? step.lines : step.lines == null ? [] : [String(step.lines)];
   const current = counterValue(mission, step.id);
   if (event === "dialogue-choice") {
@@ -714,6 +741,11 @@ on("place-entered", payload => advanceMissions("place-entered", payload));
 on("delivered", payload => advanceMissions("delivered", payload));
 on("mission-trigger", payload => advanceMissions("mission-trigger", payload));
 on("mission-tick", payload => advanceMissions("mission-tick", payload));
+// Resource-blocked scripts retry when the player changes inventory or returns
+// to a station. The pending step, not the button click, decides whether it can
+// now continue.
+on("mission-inventory-changed", payload => advanceMissions("inventory-changed", payload));
+on("docked", payload => advanceMissions("docked", payload));
 on("mission-dialogue-next", payload => advanceMissions("dialogue-next", payload));
 on("mission-dialogue-choice", payload => advanceMissions("dialogue-choice", payload));
 on("player-dead", payload => failMissionsFor("player-dead", payload));

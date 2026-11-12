@@ -81,6 +81,11 @@ function toast(text) {
   state.ui.toast = text;
 }
 
+/** Let pending mission hand-offs retry after the player changes cargo. */
+function inventoryChanged() {
+  emit("mission-inventory-changed", { profile: state.profile, player: state.player });
+}
+
 /** Consume a safe-recovery notice once, without hiding the load/import result. */
 function recoveryNotice() {
   if (!state.galaxyRecovery) return "";
@@ -170,6 +175,7 @@ const ACTIONS = {
     const [shop, id] = String(arg || "").split(":");
     const msgText = eco.buyItem(shop, id);
     if (msgText) toast(msgText);
+    inventoryChanged();
   },
   wr() {
     toast(eco.restockMissiles());
@@ -203,6 +209,7 @@ const ACTIONS = {
     const count = n === "all" ? Infinity : Math.max(1, +n || 1);
     state.ui.toast = "";
     inv.moveItem(from, to, id, count);
+    inventoryChanged();
   },
 
 
@@ -221,26 +228,32 @@ const ACTIONS = {
     if (!open || open.kind !== "module") return;
     const text = fitting.fitModule(open.g, open.i, id);
     if (text) toast(text);
+    inventoryChanged();
   },
   unfit() {
     const open = state.ui.fit;
     if (!open || open.kind !== "module") return;
     const text = fitting.unequip(open.g, open.i);
     if (text) toast(text);
+    inventoryChanged();
   },
 
   // Base
   dep() {
     toast(eco.storeHold());
+    inventoryChanged();
   },
   wd() {
     eco.withdrawStored();
+    inventoryChanged();
   },
   sellh() {
     toast(eco.sellHold());
+    inventoryChanged();
   },
   sells() {
     toast(eco.sellStored());
+    inventoryChanged();
   },
   up(mod) {
     eco.upgradeBase(mod);
@@ -405,6 +418,7 @@ function confirmInventorySell(button) {
   }
   const text = eco.sellInventoryItem(id, source, amount);
   if (text) toast(text);
+  inventoryChanged();
   uiSound("confirm");
   save();
   render();

@@ -19,6 +19,15 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Make Border Signal handoffs resource-safe
+
+- A full cargo hold now pauses the beacon handoff with an actionable **Make room in your hold to continue.** instruction. Inventory changes and docking retry pending item scripts; the beacon is delivered once space exists instead of being lost or abandoning the mission.
+- Border Signal no longer auto-fails for leaving Kestrel Hollow or for an undisplayed timeout. Its only automatic failure is the clear, reported cause of ship destruction; explicit player abandonment remains the destructive choice.
+- The station briefing now leads to a travel objective. The mission activates its sector and spawns the distant, mission-tagged patrol only after the pilot enters Kestrel Hollow, never because a dialogue button was clicked.
+- Added resource, interruption, arrival-order and no-spawn-on-dialogue regressions. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
 ## 2026-11-10: Clean up abandoned mission content and gate dialogue
 
 - Mission-spawned hostiles, their hostile shots and their loot now carry the mission identity. Abandoning a mission removes those records and their views without clearing ordinary patrols, derelicts or other place content.
