@@ -534,8 +534,12 @@ test("the flight HUD lists every active mission by title", () => {
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /#tr \.hud-mission/, "each active mission has a readable top-right style");
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
-  assert.doesNotMatch(hud, /missionRequirementText|Progress/, "the HUD keeps mission rows concise");
-  assert.doesNotMatch(screens, /missionRequirementText|Progress/, "contract rows keep mission details concise");
+  assert.doesNotMatch(hud, /missionRequirementText/, "the HUD has no obsolete item-requirement text");
+  assert.doesNotMatch(screens, /missionRequirementText/, "contract rows have no obsolete item-requirement text");
+  assert.match(hud, /mission\.type === "hunt"/, "Destroy missions show their progress in flight");
+  assert.match(hud, /missionProgress\(mission\)/, "the flight HUD renders Destroy progress");
+  assert.match(screens, /m\.type === "hunt"/, "Destroy missions show their progress while docked");
+  assert.match(screens, /missionProgress\(m\)/, "the Contracts screen renders Destroy progress");
   assert.match(screens, /canCollectMissionReward\(m\)/, "reward collection checks current inventories");
 });
 

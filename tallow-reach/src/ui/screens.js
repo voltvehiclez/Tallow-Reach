@@ -21,6 +21,7 @@ import {
   activeMissions,
   canCollectMissionReward,
   isMissionComplete,
+  missionProgress,
 } from "../sim/contracts.js";
 import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
 import { term, terms } from "../data/terms.js";
@@ -90,8 +91,10 @@ function contractsHtml() {
   const active = activeMissions();
   const activeHtml = active.length
     ? `<h2>Active missions</h2>` + active.map((m, i) => {
-        const ready = isMissionComplete(m) && canCollectMissionReward(m);
-        return `<div class="row"><div>${describe(m)}<small>Reward ${m.rewards?.credits ?? m.r ?? 0} cr.</small></div>${
+        const ready = isMissionComplete(m) && canCollectMissionReward(m),
+          progress = m.type === "hunt" ? missionProgress(m) : null,
+          detail = `${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
+        return `<div class="row"><div>${describe(m)}<small>${detail}</small></div>${
           ready
             ? `<button data-a="done" data-b="${i}">Collect reward</button>`
             : `<button data-a="drop" data-b="${i}">Abandon</button>`

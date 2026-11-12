@@ -19,6 +19,12 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Restore Destroy contract progress readout
+
+- Destroy contracts now show their live `done/total` progress again in both the in-flight Ship HUD and docked Contracts screen. Recover/item missions keep the concise title and reward presentation; inventory-gated reward collection is unchanged.
+
+---
+
 ## 2026-11-10: Start Step 13b story mission runtime
 
 - Extended the data-only mission vocabulary and runner with dialogue lines and choices, script actions (spawn wave/ship, sector state, inventory, sound and warp), trigger/timer/area waits, remembered flags with branches, parallel objectives and configured death/leave/timeout failures.

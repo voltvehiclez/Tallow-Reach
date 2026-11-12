@@ -34,7 +34,8 @@ number, what you expected and what happened. Do not tick Step 13 until this play
       offers with the familiar `Mine ...`, `Destroy ...` and `Recover ...` wording, threat tier and
       credit reward.
 - [ ] **1.2** Accept one mine, hunt or salvage offer. The board should refresh as before, and the new
-      offer should appear above it under **Active missions** with `Progress 0/N` and the same reward.
+      offer should appear above it under **Active missions** with its same reward. A Destroy offer should
+      also show `Progress 0/N`; mining and Recover rows stay concise with their title and reward.
 - [ ] **1.3** Accept a second offer before completing or abandoning the first. Both must remain listed
       as separate active missions. Accept a third only if it makes the next checks easier.
 - [ ] **1.4** Launch. The flight HUD should still show the first active objective and its progress; the
@@ -48,8 +49,8 @@ one.
 - [ ] **2.1** Read the requested ore and count in the contract text. In an asteroid field, mine that ore
       until the HUD objective advances. The HUD count should increase once per unit, not every render
       frame, and mining another ore must not advance this mission.
-- [ ] **2.2** Return to a station and open **Contracts**. The active mission should show the same
-      progress seen in flight. Other active missions must keep their own progress.
+- [ ] **2.2** Return to a station and open **Contracts**. The mining row should remain concise with
+      its title and reward. Any active Destroy row should show its own current progress.
 - [ ] **2.3** Mine the remaining amount. The mission should become complete without disappearing.
 - [ ] **2.4** Click **Collect reward** once. Credits and Contracts done should increase by the advertised
       amount, the completed mission should leave the active list, and clicking again must not pay twice.
