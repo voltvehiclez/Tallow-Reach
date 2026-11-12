@@ -16,6 +16,7 @@ import {
   canCollectMissionReward,
   completeMission,
   isMissionComplete,
+  missionNextText,
   missionProgress,
 } from "../src/sim/missions.js";
 import { emit } from "../src/util/events.js";
@@ -30,11 +31,18 @@ test("13a: every contract is a mission-data template with a runner objective", (
     assert.equal(template.kind, "contract");
     assert.ok(Array.isArray(template.steps) && template.steps.length > 0);
     assert.ok(MISSION_STEP_KINDS.includes(template.steps[0].kind));
+    assert.equal(typeof template.steps[0].objective, "string", `${type} has player-facing objective data`);
     const mission = missionFromContract({ type, tier: 1, n: 3, p: 0, r: 500, o: "ferrite", e: "raider" }, `test:${type}`);
     assert.equal(mission.id, `test:${type}`);
     assert.equal(mission.steps[0].count, 3);
     assert.equal(mission.rewards.credits, 500);
     assert.equal(isMissionComplete(mission), false);
+    const expected = {
+      mine: "Mine 3 Ferrite.",
+      hunt: "Destroy 3 pirate raiders.",
+      salvage: "Recover 3 derelict crates.",
+    }[type];
+    assert.equal(missionNextText(mission), expected, `${type} objective placeholders are player-facing`);
   }
 });
 

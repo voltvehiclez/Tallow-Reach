@@ -25,8 +25,9 @@ continuing with the browser pass.
       that story mission is not already active. Start it once. It should enter the active list without
       changing the existing contract board.
 - [ ] **1.4** While flying, check the top-right HUD. Every active mission should show its title and a
-      direct current objective, such as **Go to Kestrel Hollow and defeat the two raiders** or
-      **Reach the signal and hold position for two seconds**. Multiple active missions must all remain
+      direct, spoiler-safe objective, such as **Investigate the signal in Kestrel Hollow** or
+      **Stay with the signal in Kestrel Hollow**. It should not reveal an encounter before it happens.
+      Multiple active missions must all remain
       visible. Then press **P** or **Esc** to open the pause overlay. **Resume** must be above
       **Exit to main menu**. Click **Exit to main menu** and confirm gameplay closes to the title screen,
       where **Campaign** is first and disabled and **Open World** is second. Click **Open World** and

@@ -50,6 +50,7 @@ test("13b: story data names valid ids and every top-level step is reachable", ()
     const ids = new Set(mission.steps.map(step => step.id));
     assert.equal(ids.size, mission.steps.length, `${mission.id} has unique step ids`);
     for (const step of mission.steps) {
+      assert.equal(typeof step.objective, "string", `${mission.id} step ${step.id} has spoiler-safe objective data`);
       for (const target of targetIds(step)) {
         assert.ok(ids.has(target) || Number(target) === mission.steps.length, `${mission.id} target ${target} exists`);
       }

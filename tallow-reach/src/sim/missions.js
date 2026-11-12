@@ -86,17 +86,35 @@ export function remainingObjective(mission) {
   return Math.max(0, progress.total - progress.done);
 }
 
-/** Generic mission-log guidance. Story-specific wording can be supplied by a
- * data step's optional `log` field; the fallback only describes the vocabulary
- * of the current step and never names a story or hard-codes its dialogue. */
+/** Replace the small set of data-only placeholders used by contract
+ * objectives. Story objectives are normally complete sentences and need no
+ * interpolation. */
+function formatMissionObjective(text, step, progress) {
+  const target = step.place || step.sector || step.target;
+  const values = {
+    remaining: Math.max(0, progress.total - progress.done),
+    count: progress.total,
+    item: step.item ? itemName(step.item) : "the required item",
+    enemy: step.enemy ? enemyDef(step.enemy).pl || "hostiles" : "hostiles",
+    place: target ? placeAt(target)?.n || target : "the target area",
+  };
+  return text.replace(/\{(remaining|count|item|enemy|place)\}/g, (_, key) => values[key]);
+}
+
+/** Generic mission-log/HUD guidance. Every mission may supply a spoiler-safe
+ * `objective` in its data step. The older `log` field remains in saved mission
+ * data for compatibility, but is deliberately never shown here: procedural
+ * logs can reveal a future ambush or another step's implementation detail. */
 export function missionNextText(mission) {
   if (!mission) return "No mission selected.";
   if (isMissionFailed(mission)) return mission.failureMessage || "Mission failed.";
   if (isMissionComplete(mission)) return "Mission complete. Return to a station to collect the reward.";
   const step = missionStep(mission);
   if (!step) return "No current objective.";
-  if (typeof step.log === "string" && step.log) return step.log;
   const progress = missionProgress(mission);
+  if (typeof step.objective === "string" && step.objective) {
+    return formatMissionObjective(step.objective, step, progress);
+  }
   const left = Math.max(0, progress.total - progress.done);
   const target = step.place || step.sector || step.target;
   const placeName = target ? placeAt(target)?.n || target : "the target area";
@@ -117,14 +135,14 @@ export function missionNextText(mission) {
     case "survive":
       return `Survive for ${Math.ceil(left)} seconds.`;
     case "wait":
-      return step.trigger && step.trigger !== "timer" ? `Wait for ${step.trigger}.` : `Wait ${Math.ceil(left)} seconds.`;
+      return step.place || step.sector ? `Go to ${placeName}.` : "Continue following the mission lead.";
     case "parallel":
-      return `Complete all ${(step.steps || []).length} objectives.`;
     case "script":
+      return "Continue following the mission lead.";
     case "flags":
-      return "Follow the mission instruction.";
+      return "Decide how to proceed.";
     default:
-      return `Complete the ${step.kind} objective.`;
+      return "Continue following the mission lead.";
   }
 }
 

@@ -1,5 +1,7 @@
 // Mission data vocabulary. Definitions contain ids and plain values only: the
-// runner in sim/missions.js owns event handling, counters and rewards.
+// runner in sim/missions.js owns event handling, counters and rewards. Each
+// player-facing step may provide a spoiler-safe `objective` sentence; internal
+// `log` text is not a HUD or Mission-log objective.
 
 export const MISSION_KINDS = ["contract", "story"];
 

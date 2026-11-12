@@ -279,8 +279,10 @@ To add a contract, edit `src/data/missions/contracts.js`: add its type, generato
 and a template step, then expose it through the contract board facade in `src/sim/contracts.js`.
 Preserve compact compatibility fields if old saves or UI callers need them. To add a story mission,
 add a data record with `kind: "story"`; use named step ids for `next`/`then`/`else`/choice targets,
-keep all story text, portrait ids, log guidance and action ids in the data file, and declare `fails.on`
-plus an outcome for death, sector departure or timeout when needed. `The Border Signal` in
+keep all story text, portrait ids, spoiler-safe `objective` guidance, compatibility `log` text and action ids
+in the data file, and declare `fails.on` plus an outcome for death, sector departure or timeout when needed.
+The `objective` is what the HUD and Mission log show: hint at the player's next action without revealing
+encounters or scripted reveals that have not happened yet. The runner never displays `log` text. `The Border Signal` in
 `src/data/missions/story.js` is the worked example. Add headless event tests beside
 `tests/step13b-missions.test.mjs`, a screen test beside `tests/step13c-ui.test.mjs`, plus a save test if
 the shape changes. The generic 13c presentation lives in `src/ui/missionlog.js`; do not put mission
