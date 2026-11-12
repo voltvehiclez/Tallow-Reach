@@ -79,8 +79,8 @@ test("13c: mission log lists active missions, objective, progress and next actio
     "the HUD objective updates from the story data after the wave without exposing the encounter");
   const beacon = storyMission();
   beacon.step = 8;
-  assert.equal(missionNextText(beacon), "Secure what the signal reveals.",
-    "the HUD objective hints at the scripted handoff without spoiling it");
+  assert.equal(missionNextText(beacon), "Return to Kestrel Hollow to retrieve the beacon.",
+    "the HUD objective directs the pilot back to the authored retrieval place");
   const returning = storyMission();
   returning.step = 9;
   assert.equal(missionNextText(returning), "Return to Meridian Station.",
@@ -119,8 +119,8 @@ test("13c: old Border Signal saves migrate by step id to the resumable flow", ()
   assert.equal(mission.steps.find(step => step.id === "prepare").requiresFlying, true, "world scripts regain their state requirement");
   assert.equal(mission.steps.find(step => step.id === "search").steps[1].place, "hollow", "nested objective requirements survive migration");
   const rewardStep = mission.steps.find(step => step.id === "reward-item");
-  assert.equal(rewardStep.place, undefined, "the portable beacon handoff is not tied to a stale sector");
-  assert.equal(rewardStep.requiresFlying, undefined, "a saved reward can resume safely after docking or reload");
+  assert.equal(rewardStep.place, "hollow", "the beacon remains at its authored retrieval place");
+  assert.equal(rewardStep.requiresFlying, true, "a saved reward resumes only when the pilot returns to the field");
   assert.deepEqual(mission.fails.on, ["player-dead"], "old automatic leave and timeout failure is removed");
   assert.equal(mission.timeout, undefined);
 });

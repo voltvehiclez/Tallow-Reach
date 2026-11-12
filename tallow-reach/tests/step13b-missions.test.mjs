@@ -320,11 +320,23 @@ test("13b: a full hold pauses the beacon handoff instead of abandoning the missi
 
     player.place = "reach";
     player.docked = true;
+    state.place = "reach";
     emit("place-changed", { from: "hollow", to: "reach", player, profile });
     assert.equal(activeMissions(profile).length, 1, "returning to the station does not fail the pending handoff");
     delete profile.holds.wasp.salv;
     emit("mission-inventory-changed", { player, profile });
-    assert.equal(mission.steps[mission.step].id, "finish", "freeing cargo retries the pending handoff");
+    assert.equal(mission.steps[mission.step].id, "reward-item", "freeing cargo at the station cannot retrieve a remote item");
+    assert.equal(profile.holds.wasp.salv || 0, 0, "the pending beacon remains in Hollow");
+
+    player.place = "hollow";
+    player.docked = false;
+    player.warp = { from: "reach", to: "hollow" };
+    state.place = "hollow";
+    emit("place-entered", { id: "hollow", player, profile });
+    assert.equal(mission.steps[mission.step].id, "reward-item", "arrival waits for warp to finish before retrieving the beacon");
+    player.warp = null;
+    emit("warp-end", { from: "reach", to: "hollow", player, profile });
+    assert.equal(mission.steps[mission.step].id, "finish", "the beacon is retrieved only after returning to Hollow");
     assert.equal(profile.holds.wasp.salv, 1, "the beacon is delivered exactly once");
   } finally {
     state.worldState = previousWorld;

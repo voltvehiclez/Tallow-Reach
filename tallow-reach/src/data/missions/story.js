@@ -86,8 +86,10 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "reward-item",
       kind: "script",
-      log: "Receive the beacon from the signal.",
-      objective: "Secure what the signal reveals.",
+      place: "hollow",
+      requiresFlying: true,
+      log: "Retrieve the beacon from the signal.",
+      objective: "Return to Kestrel Hollow to retrieve the beacon.",
       action: { kind: "give-item", target: "ship", item: "salv", count: 1 },
       next: "finish",
     },
