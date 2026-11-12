@@ -856,7 +856,7 @@ test("11B: pocket destination follows J all the way past a remote arrival gate",
   assert.deepEqual(ui.state.ui.destination, { pocketId: target.id });
   assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
     "pocket-map destinations do not add the bottom confirmation notice");
-  assert.ok(mapRoot.innerHTML.includes(`Route to ${world.systemsById[target.parent].n} (${target.n})`));
+  assert.ok(mapRoot.innerHTML.includes(`Route to ${target.n}`));
   const route = findDestinationRoute(world, P.place, ui.state.ui.destination);
   assert.equal(route.at(-1), target.id);
   assert.ok(route.length > 2);

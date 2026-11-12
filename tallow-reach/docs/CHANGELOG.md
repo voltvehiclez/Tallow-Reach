@@ -19,6 +19,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Simplify exact pocket route titles
+
+- Starmap and ship HUD route headings now say `Route to Pocket` for exact pocket destinations instead of `Route to System (Pocket)`. Route rows, system destinations and all travel behavior remain unchanged.
+- Updated route-display regression coverage and rebuilt the playable bundle after validation.
+
+---
+
 ## 2026-11-10: Require salvage delivery before paying recover contracts
 
 - Recover contracts now count only `salv` items from derelict crates. The Contract screen and flight HUD keep active mission rows concise by showing the mission title rather than an extra progress or crate-requirement line; **Collect reward** appears only when the current station/ship has enough items, otherwise the action remains **Abandon**.

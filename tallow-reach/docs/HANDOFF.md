@@ -9,7 +9,7 @@ Flight HUD route: “Route to” shows the destination and count of systems stil
 by the complete remaining system list with start, blue-intermediate and amber destination markers; the current system is blue and the destination is bold amber with a dark center, small orange tick and one dotted outer ring
 (current stays blue when both). The current/start and destination icons are about 20% smaller. The ship HUD route has no inner scrollbar. A blocked route shows no count. The starmap route list
 also shows only remaining systems and those markers, with measured pagination; exact pocket destinations
-remain in its wrapping `Route to System (Pocket)` title and add the pocket in small parentheses on the final system row only.
+use the pocket name in their wrapping `Route to ...` title and still add the pocket in small parentheses on the final system row only.
 System destinations remain system-only. System pocket maps show solid directed orange overlays for planned
 local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist
 across relogs and future routes are replanned. Pocket menus open beside the pointer with **Set destination**

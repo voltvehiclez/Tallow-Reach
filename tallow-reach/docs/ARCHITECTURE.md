@@ -215,7 +215,7 @@ Each `src/` folder also has its own short `README.md`.
   the pointer with **Set destination** first; it emits a named travel action for **Warp to**, and `sim/sectors.js`
   requotes the same hop before running the unchanged warp sequence. Starmap and pocket-map charts do not render
   bottom status/refusal notices. `route-display.js` is shared by the HUD and starmap;
-  an exact `{ pocketId: ... }` destination uses a `System (Pocket)` route title and gets a small parenthetical pocket name on the final system row.
+  an exact `{ pocketId: ... }` destination uses the pocket name in its route title and still gets a small parenthetical pocket name on the final system row.
 - **Data tables use short keys.** Ships: `n` name, `d` description, `cargo`, `dmg`,
   `mine`, `sc`, `price`, `col` (Hull HP come from the fitted hull module). Items: `n`, `cat`, `v`,
   `vol`, `st`.

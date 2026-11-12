@@ -57,7 +57,7 @@ test("route summary shows exact pockets, conceals undiscovered stops and escapes
   const destination = { pocketId: target.id };
   const summary = routeDisplay(world, destination, [start.id, target.id], {});
   assert.equal(summary.stops.at(-1).pockets.at(-1).name, target.n);
-  assert.equal(summary.title, `${world.systemsById[target.parent].n} (${target.n})`);
+  assert.equal(summary.title, target.n);
   const hiddenWorld = { ...world, visibility: { mode: "discovered" } };
   assert.deepEqual(routeDisplay(hiddenWorld, destination, [start.id, target.id], {}).stops.at(-1).pockets,
     [{ name: "Undiscovered pocket", current: false }]);
