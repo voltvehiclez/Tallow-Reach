@@ -19,6 +19,143 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Name the Border Signal object and consume story hand-ins
+
+- Added a dedicated `beacon` catalogue item named **Beacon**. Border Signal's authored defeat drop, collect objective, dialogue wording and objective now refer to that id; ordinary hostile `salv` loot remains unchanged.
+- Mission reward hand-in detection now covers item-bearing `collect`, `deliver` and `mine` objectives, including story missions and nested parallel objectives. The exact required quantity is taken from the current station first and then the active ship hold before payout; missing stock leaves the completed mission active and unpaid.
+- Existing Border Signal mission records that used `salv` are migrated to `beacon` where they describe the authored persistent drop. Save version remains **19**.
+- Verification: `npm test` passes **381/381**, `npm run build` produces a **746 KB** bundle, the ZIP passes `unzip -t`, and the preview serves HTTP 200.
+
+## 2026-11-10: Make Border Signal's beacon a persistent physical drop
+
+- The Border Signal's authored Beacon now drops from the first patrol ship at that ship's defeat position instead of being silently granted by a mission script. Ordinary raider salvage loot remains additive, while the authored crate is mission-tagged and visually/physically collectible.
+- The mission crate survives leaving Hollow, world clearing and v19 save/load, restores once at its saved position, remains present when the hold is full, and marks itself collected only after a successful non-docked pickup. Abandoning or rewarding the mission removes its saved marker and runtime content.
+- Added headless coverage for physical pickup gating, defeat-position placement, full-hold retry, duplicate-free save/load restoration, collected-drop suppression, old-save fallback and cleanup. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+## 2026-11-10: Make Border Signal handoffs resource-safe
+
+- A full cargo hold now pauses the beacon handoff with an actionable **Make room in your hold to continue.** instruction. Inventory changes and docking retry pending item scripts, but the beacon remains a Hollow retrieval: unloading at the station cannot complete a remote handoff; return and finish the arrival warp to collect it.
+- Multi-action item scripts preflight their combined capacity and resources, so a blocked batch cannot partially transfer an earlier item and duplicate it on retry. Station-gated dialogue also refuses stale calls without a current docked pilot.
+- Border Signal no longer auto-fails for leaving Kestrel Hollow or for an undisplayed timeout. Its only automatic failure is the clear, reported cause of ship destruction; explicit player abandonment remains the destructive choice.
+- The station briefing now uses spoiler-safe investigation wording and leads to a travel objective. The mission activates its sector and spawns the distant, mission-tagged patrol only after the pilot enters Kestrel Hollow, never because a dialogue button was clicked.
+- v19 save sanitization now restores new situation requirements, preserves nested parallel counters, and migrates older Border Signal saves by stable step id without reviving timeout/leave failure. Documented the enforcement plan and known limits for all eight architecture principles in `docs/REFACTOR_PLAN.md`. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Clean up abandoned mission content and gate dialogue
+
+- Mission-spawned hostiles, their hostile shots and their loot now carry the mission identity. Abandoning a mission removes those records and their views without clearing ordinary patrols, derelicts or other place content.
+- Authored station-contact dialogue becomes **Redock to continue talking.** when the pilot undocks, with Continue and choice controls blocked until docking again. In-field dialogue remains actionable during flight, including the Border Signal beacon handoff.
+- Leaving a mission sector while a dialogue line is open no longer interprets the open panel as mission abandonment. This keeps a pending station conversation resumable after redocking and lets the beacon line survive a return warp before Close is clicked.
+- Added regressions for scripted-wave cleanup, dialogue scope, save metadata and the warp-before-Close case. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Remove unexplained mission progress counters
+
+- Removed the ambiguous `Progress 0/2` display from story missions. It was counting the two lines in the current dialogue, not overall mission completion, so dialogue-line counts and non-quantitative story-step bars are no longer shown in the Mission log.
+- Quantitative contract missions retain a clearly labelled `Objective progress: 0 of N` count, and hunt progress in the flight HUD now says `0 of N defeated` instead of an unexplained fraction.
+- Added UI regression coverage and updated the browser checklist. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Keep mission objectives spoiler-safe
+
+- Separated player-facing `objective` text from compatibility/internal `log` text. The HUD and Mission log now use only the data-defined objective, so a procedural trigger such as `wave-clear` cannot reveal a future encounter.
+- The Border Signal now tells the player to **Investigate the signal in Kestrel Hollow** and later **Stay with the signal in Kestrel Hollow**, then uses discovery-oriented wording before the return home. Contract templates use data-defined objective placeholders without changing their known requirements.
+- Objective text survives the existing v19 save sanitization, and fallback wording for missions without an authored objective no longer exposes internal triggers or step counts. Focused mission/UI tests pass **21/21**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Show player-facing mission objectives in the flight HUD
+
+- Removed internal `Step X of Y` numbering from the Mission log. Active missions now present a clear player-facing status, progress and **Next** instruction instead of exposing the runner's implementation steps.
+- The top-right flight HUD now lists every active mission as its title plus the current `missionNextText()` objective. Updated The Border Signal's data-defined text for the Hollow patrol, signal search, beacon retrieval and return to Meridian Station; mission persistence, dialogue, rewards and scripted beacon transfer remain unchanged.
+- Added UI/content regressions for hidden step numbering and objective updates across the story flow. Save version remains **19**. Focused UI/content tests pass **61/61**, full `npm test` passes **371/371**, `npm run build` produces a **736 KB** bundle, and the complete-project ZIP is refreshed. Browser validation remains pending in `TESTING-13C-SCREENS.md`.
+
+---
+
+## 2026-11-10: Stabilize story mission completion and scripted hand-offs
+
+- Fixed completed story missions being treated as failed on a later sector change, timeout or death. The Border Signal now remains active and claimable after the pilot returns from Kestrel Hollow, instead of disappearing and reappearing as a fresh **Start** offer.
+- Mission-tagged trigger events are now scoped to their owning mission, and scripted item transfers no longer advance when the ship or station cannot take the full amount. Added regressions for the return-home flow, trigger isolation and a blocked beacon hand-off.
+- Save version remains **19**. The mission-focused tests and full suite now pass **371/371**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Add pause exit and split the main menu actions
+
+- The pause overlay now places **Exit to main menu** below **Resume**. It saves the current resume point, unpauses and emits the existing UI event path that restores the title screen and hides flight/dialogue overlays.
+- The title screen now shows a disabled **Campaign** button followed by **Open World**. Open World deliberately uses the existing `intro` action, so the current open-world resume/deploy behavior is unchanged.
+- Added headless menu and pause-navigation regressions, updated the Step 13c browser checklist, and kept save version **19** unchanged. Full `npm test` passes **368/368**; `npm run build` produces a **735 KB** bundle, and the complete-project ZIP is refreshed alongside it.
+
+---
+
+## 2026-11-10: Advance Border Signal after its mission wave
+
+- Mission-spawned waves now emit the configured `wave-clear` trigger automatically when their last ship is destroyed. The runner also counts a reach objective when a later step begins in a place the pilot already occupies, so The Border Signal can proceed after the two Hollow raiders are defeated instead of waiting forever.
+- Added regression coverage in `tests/step13b-missions.test.mjs` for the real mission-wave tag, automatic trigger and already-reached search place. Full `npm test` passes **366/366** and the rebuilt bundle is **735 KB**.
+
+---
+
+## 2026-11-10: Build Step 13c mission screens
+
+- Added `src/ui/missionlog.js` with a data-driven Mission log tab for active missions, current step/progress and next-action guidance, plus a live dialogue panel with portrait slot, speaker, text, line controls and choices.
+- Story missions can be started from the Mission log's data-defined story list. Dialogue advances through the shared runner and autosaves; the world keeps running unless a mission dialogue step explicitly sets `pause: true`.
+- Added v19 round-trip coverage in `tests/step13c-ui.test.mjs`, the browser guide `TESTING-13C-SCREENS.md`, and rebuilt the generated game bundle. Save version remains **19** because the new presentation fields are optional within the existing mission shape.
+
+---
+
+## 2026-11-10: Require mining ore hand-in before contract payout
+
+- Mining contracts now use the same station/ship hand-in path as delivery and Recover contracts. The mined ore must still be available when the reward is collected, then the exact amount is consumed before payout; missing ore keeps the completed mission unpaid and claimable.
+- Added regression coverage for missing ore, mixed station/ship stock, payout and consumption.
+
+---
+
+## 2026-11-10: Restore Destroy contract progress readout
+
+- Destroy contracts now show their live `done/total` progress again in both the in-flight Ship HUD and docked Contracts screen. Recover/item missions keep the concise title and reward presentation; inventory-gated reward collection is unchanged.
+
+---
+
+## 2026-11-10: Start Step 13b story mission runtime
+
+- Extended the data-only mission vocabulary and runner with dialogue lines and choices, script actions (spawn wave/ship, sector state, inventory, sound and warp), trigger/timer/area waits, remembered flags with branches, parallel objectives and configured death/leave/timeout failures.
+- Added `src/data/missions/story.js` with the ten-step `The Border Signal` worked example. Story progress, dialogue position, flags, timers and per-place script state survive v19 save/load; the future dialogue panel and mission-log tab remain 13c.
+- Added headless reference/reachability/completion/failure coverage in `tests/step13b-missions.test.mjs`. Full `npm test` passes **361/361**; `npm run build` succeeds at **724 KB**.
+
+---
+
+## 2026-11-10: Simplify exact pocket route titles
+
+- Starmap and ship HUD route headings now say `Route to Pocket` for exact pocket destinations instead of `Route to System (Pocket)`. Route rows, system destinations and all travel behavior remain unchanged.
+- Updated route-display regression coverage and rebuilt the playable bundle after validation.
+
+---
+
+## 2026-11-10: Require salvage delivery before paying recover contracts
+
+- Recover contracts now count only `salv` items from derelict crates. The Contract screen and flight HUD keep active mission rows concise by showing the mission title rather than an extra progress or crate-requirement line; **Collect reward** appears only when the current station/ship has enough items, otherwise the action remains **Abandon**.
+- Claiming the reward requires the requested number in the current station or current ship hold; the items are consumed only when the hand-in succeeds, and an incomplete delivery leaves the mission claimable without paying. Existing saved salvage missions gain the explicit delivery item during v19 sanitization. Added headless coverage for missing stock, mixed station/ship stock, consumption and reward payout; the owner playtest checklist now covers the hand-in rule.
+
+---
+
+## 2026-11-10: Show every active mission in the flight HUD
+
+- The top-right Ship HUD now renders every active mission with its individual progress, instead of only the first mission. Added compact styling for multiple mission rows and a regression in `tests/content.test.mjs`.
+- The current mission framework, save format and contract behavior are unchanged. Rebuild with `npm run build`; the owner should refresh the playtest preview and check two or more accepted missions in flight.
+
+---
+
+## 2026-11-10: Start Step 13 mission framework with data-driven contracts
+
+- Built Step 13a: `src/data/missions/` defines the mission vocabulary and contract templates, while `src/sim/missions.js` advances kill, mine, collect, reach, deliver and survive objectives from gameplay events. Mine, hunt and salvage contracts now run through the same one-step mission records, and several missions can be active at once without changing their wording, rewards or spawn behavior.
+- Save version is **19**. `profile.missions` and `profile.flags` replace the old single active contract slot; v18 and older active contracts migrate, and the non-enumerable `profile.mission` view keeps old callers/exported character checks compatible. Dialogue/script steps and mission-log/dialogue screens remain for 13b/13c.
+- Added `tests/step13-missions.test.mjs` and `TESTING-13-MISSIONS.md`. Full `npm test` passes **352/352**; `npm run build` succeeds with a **713 KB** bundle (the generated HTML is restored after validation).
+
+---
+
 ## 2026-11-10: Simplify map markers and current-location labels
 
 - Removed the extra orange start ring around the current galaxy system and current pocket, including station squares; current labels now add a second `(You are here)` line.
@@ -61,125 +198,20 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-10: Make local route lines solid and pocket menus right-click-only
-
-- Destination overlays on the large galaxy map are solid orange with directional arrows again. On a system pocket map, planned local pocket-to-pocket hops are solid orange; only the cross-system gate exit stubs remain orange dashed, including the incoming stub highlighted in reverse when viewing an intermediate system.
-- Left-clicking a pocket or gate exit in a pocket map is now inert. Right-clicking still opens the existing Warp/Set destination menu, and double-clicking gate targets still opens the adjacent system map.
-- Added exact Meridian → Galereach → Galedrift overlay coverage and left/right-click menu coverage. Step 11B passes **45/45**; full `npm test` passes **347/347** and `npm run build` succeeds at **701 KB**.
-
----
-
-## 2026-11-10: Preserve real double-click navigation on starmap dots
-
-- A first click on a galaxy system, gate exit dot or gate pocket no longer immediately replaces the SVG target with a popup. The short single-click delay lets the browser deliver the second click to the same node, so double-clicking Galereach or another adjacent gate now opens that system map; a single click still selects or opens its existing menu.
-- Added a regression that sends real click details through both the Galereach system dot and a Meridian gate exit. Full `npm test` passes **346/346**; Step 11B passes **44/44**; `npm run build` succeeds at **701 KB**.
-
----
-
-## 2026-11-10: Vary station names and clarify routed gate navigation
-
-- Generated trader features and their station pockets now receive deterministic, varied names such as Outpost, Hideout, Trading Hub, Waystation, Exchange and Freeport. Names remain unique across the resolved catalog while authored station names stay intact.
-- Double-clicking either a neighbouring-system label or the gate pocket itself now opens that adjacent system's pocket map, including rapid clicks during the zoom transition.
-- Active destinations now draw orange dashed route overlays with small directional arrows on galaxy links, local pocket hops and the gate exit that leaves the current system. Added regression coverage for station-name uniqueness, gate-pocket navigation and directed route overlays.
-- Full `npm test` passes **345/345**; `npm run build` succeeds at **700 KB**. Save version and route rules remain unchanged; the owner browser playtest is still pending.
-
----
-
-## 2026-11-10: Refine system-map exits and separate generated station pockets
-
-- System-map gate exit stubs and their remote endpoint dots now use the pocket blue instead of amber. Visited knowledge remains saved, but visited systems no longer receive a light-blue visual treatment. Double-clicking a neighbouring-system gate label while in a system map switches directly to that peer's map.
-- Generated friendly traders selected by gate templates are removed from gate pockets and placed in deterministic `${gateId}-station` pockets with an internal hub link. Explicit station feature records, `allowStation: true` or `stationPlacement: "gate"` preserve deliberate future gate co-location. Station pockets render as square map icons.
-- Added regression coverage for colors, visited presentation, direct remote-map navigation, square station icons, default station/gate separation, explicit co-location and old docked gate-station save migration. Save version remains **18**; `npm test` now passes **345/345** and `npm run build` succeeds at **698 KB**. Step 12 remains unticked pending the owner visual playtest.
-
----
-
-## 2026-11-10: Give every dockable station local persistent inventory
-
-- Station storage is now keyed by the stable `${placeId}:${featureId}` identity of the active dockable station. Inventory transfers, purchases, sales, fitting/unequipping, storage capacity, shop ownership/room presentation and station switching all resolve the active station stock; trader stations still use Meridian's `SHOPS` definitions and economy rules.
-- `world.stationStores` is saved for every station, while the enumerable `world.store` remains a home-station compatibility alias. Existing v18 saves without `stationStores` migrate their old stock to the saved station where possible. Save version remains **18** so the reserved Step 13 v19 and Step 15 v20 slots stay intact; `tr1`, `tr_s1..tr_s3` and `TR1:` are unchanged.
-- Added `tests/station-inventory.test.mjs` for cross-station isolation, shop/capacity/sell behavior, fitting context, export/reload and legacy migration. `npm test` passes **343/343** and `npm run build` succeeds at **696 KB**. Step 12 remains unticked pending owner confirmation.
-
----
-
-## 2026-11-10: Build Step 12 encounter templates and persistent place memory
-
-- Generated pockets now resolve three data templates with tier-selected `hostile_patrol`, `friendly_trader`, `derelict` and `resource_cache` encounters. They are filled on load; trader stations are dockable and reuse Meridian's existing `SHOPS` stock. Generic AI spawning keeps hunt-contract selection without a raider-only branch.
-- Stable asteroid field slots, cleared static loot encounters and one-shot patrol groups use `world.placeMemory` with a 420-second simulation-time default. Pausing does not advance timers; `respawn-place` can force a future event-driven respawn. Save version is **18**, with v17-and-older migration defaults.
-- Added `tests/step12-places.test.mjs`, expanded content-reference checks, `TESTING-12-PLACES.md`, and updated architecture/roadmap/handoff documentation. `npm test` **341/341**; `npm run build` succeeded (**694 KB**). Owner playtest is pending; Step 12 is not ticked yet.
-
----
-
-## 2026-11-08: Wrap destination names and show local route hops
-
-- Owner requested long starmap destination names wrap instead of truncating, and orange route lines
-  between pockets on each relevant system map. The route heading and pocket rows can wrap; the panel
-  remains non-scrolling and existing route pagination measures the available space. An arrowed orange
-  segment represents each consecutive same-system pocket hop in the currently executable route,
-  including free-warp and route-only systems. Cross-system hops do not invent internal lines. Overlay
-  updates as routes change, disappears if unavailable/cleared, and does not intercept clicks.
-- Updated starmap markup, styles, regression tests and playtest guide. Full **334/334**, build
-  **686 KB (702,037 bytes)**. Save v17 and one-checked-warp-per-J rules unchanged; browser playtest pending.
-
----
-
-## 2026-11-08: Remember route destinations across relogs
-
-- Owner reported that destinations were lost on relog and requested an in-chat playtest. Save **v17**
-  stores `world.destination` (system id or `{ pocketId }`, null if unset). Setting/clearing a target
-  autosaves immediately; slot saves and export codes include it. The route itself is recalculated from
-  the restored location, and J still performs exactly one checked warp. Arrival clears and autosaves it.
-- `prepareGalaxySave` validates against the saved seed, drops invalid/removed targets and already-reached
-  destinations, and migrates v16 and earlier with no destination; existing cargo/progress remain intact.
-  Chart framing is still session-only. Added save/restore and actual map/J/arrival regression coverage.
-- `npm test` **333/333**, build **685 KB (701,251 bytes)**; live preview provided, owner playtest pending.
-
----
-
-## 2026-11-08: Remove destination diamond
-
-- Owner requested removing the diamond from the destination system. Both route lists retain the
-  amber bold destination styling, arrows and blue current-system styling; an accessible destination
-  label remains. No navigation or save changes.
-- Updated route markup, styles, tests and checklist. Targeted **44/44**, full **331/331**, build
-  **684 KB (700,815 bytes)**. Browser playtest pending.
-
----
-
-## 2026-11-08: Mark the route destination and simplify the starmap list
-
-- Owner requested the final system stand out, and that starmap route rows show only systems and arrows
-  like the flight HUD, without grey gate-to-gate pocket details. Both lists now highlight the destination
-  in amber with a diamond; the current system stays blue, even when it is also the destination. The map
-  still shows the exact pocket target in the heading, and its paging and highlighted graph remain intact.
-  Neither list shows completed systems; unused session-only route-history tracking was removed.
-- Updated route presentation, starmap, styles, tests and checklist. Targeted **44/44**, full **331/331**,
-  build **685 KB (700,929 bytes)**. No travel or save changes; browser playtest pending.
-
----
-
-## 2026-11-08: Add route arrows to the flight HUD
-
-- Owner requested the starmap-style arrows beside the flight route's system names. Each remaining
-  system now has an amber arrow; the current system name stays blue. The count and starmap are unchanged.
-- Updated route markup, HUD style, tests and checklist. Targeted **44/44**, full **331/331**, build
-  **686 KB (702,025 bytes)**. No save or travel changes; browser playtest pending.
-
----
-
-## 2026-11-08: Simplify the flight route to system names
-
-- Owner requested only remaining system names in flight, with the current system highlighted blue,
-  no completed ticks, and “Route to … (N systems)” showing how many system entries remain beyond
-  the current system. An exact pocket destination remains named in the heading. If routing is blocked,
-  no count is guessed; the current system and no-route message remain visible. The detailed starmap,
-  including its pocket names and completed-system history, is unchanged.
-- Updated the shared route renderer and HUD, tests, and owner checklist. Targeted **44/44**,
-  full **331/331**, build **685 KB (701,942 bytes)**; browser playtest pending. No save or travel changes.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-10: Make local route lines solid and pocket menus right-click-only
+- 2026-11-10: Preserve real double-click navigation on starmap dots
+- 2026-11-10: Vary station names and clarify routed gate navigation
+- 2026-11-10: Refine system-map exits and separate generated station pockets
+- 2026-11-10: Give every dockable station local persistent inventory
+- 2026-11-10: Build Step 12 encounter templates and persistent place memory
+- 2026-11-08: Wrap destination names and show local route hops
+- 2026-11-08: Remember route destinations across relogs
+- 2026-11-08: Remove destination diamond
+- 2026-11-08: Mark the route destination and simplify the starmap list
+- 2026-11-08: Add route arrows to the flight HUD
+- 2026-11-08: Simplify the flight route to system names
 - 2026-11-08: Set exact pocket destinations
 - 2026-11-08: Clearer, sparser starmap and adaptive route list
 - 2026-11-08: Straight starmap lines with attached endpoints

@@ -1,4 +1,4 @@
-// Step 11B: the live map, direct-hop warp, compact v18 saves and safe recovery.
+// Step 11B: the live map, direct-hop warp, compact v19 saves and safe recovery.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -68,8 +68,8 @@ function oldV15() {
   return s;
 }
 
-test("11B: new saves are v18 and store only seed plus compact system knowledge", () => {
-  assert.equal(SAVE_VERSION, 18);
+test("11B: new saves are v19 and store only seed plus compact system knowledge", () => {
+  assert.equal(SAVE_VERSION, 19);
   const s = newSave();
   assert.deepEqual(Object.keys(s.world.galaxy).sort(), ["knowledge", "seed"]);
   assert.equal(s.world.galaxy.seed, GALAXY.seed);
@@ -82,7 +82,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
   const old = oldV15();
   const before = JSON.parse(JSON.stringify(old));
   const s = prepareGalaxySave(old);
-  assert.equal(s.v, 18);
+  assert.equal(s.v, 19);
   assert.equal(s.world.place, "hollow");
   assert.deepEqual(s.world.resume, before.world.resume);
   assert.equal(s.profile.cr, 4850);
@@ -95,7 +95,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
 test("11B: v13 and v12 fixtures still migrate through the world-aware loader", () => {
   for (const raw of [V13, V12]) {
     const s = prepareGalaxySave(raw);
-    assert.equal(s.v, 18);
+    assert.equal(s.v, 19);
     assert.equal(s.profile.cr, raw.profile?.cr ?? raw.cr);
     assert.deepEqual(s.profile.holds, raw.profile?.holds ?? raw.holds);
     assert.ok(state.galaxy.pocketsById[s.world.place]);
@@ -202,7 +202,7 @@ test("11B: autosave, slots and TR1 codes keep their keys/prefix and use the same
     const code = encodeSave(save);
     assert.ok(code.startsWith("TR1:"));
     assert.equal(decodeSave(code, prepareGalaxySave).world.galaxy.seed, 77);
-    assert.equal(JSON.parse(mem.get("tr1")).v, 18);
+    assert.equal(JSON.parse(mem.get("tr1")).v, 19);
   } finally {
     if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
   }
@@ -812,6 +812,9 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const heading = css.match(/\.sm-route h3\s*\{([^}]+)\}/)[1];
   const pocket = css.match(/\.sm-pocket\s*\{([^}]+)\}/)[1];
+  const hudRouteCount = css.match(/#hud-route \.route-count\s*\{([^}]+)\}/)?.[1] || "";
+  assert.match(hudRouteCount, /display:\s*inline-block/);
+  assert.match(hudRouteCount, /white-space:\s*nowrap/);
   assert.match(heading, /white-space:\s*normal/);
   assert.match(heading, /overflow-wrap:\s*anywhere/);
   assert.doesNotMatch(pocket, /ellipsis|white-space:\s*nowrap/);
@@ -856,7 +859,7 @@ test("11B: pocket destination follows J all the way past a remote arrival gate",
   assert.deepEqual(ui.state.ui.destination, { pocketId: target.id });
   assert.doesNotMatch(mapRoot.innerHTML, /Destination set\. Press J for the next warp\./,
     "pocket-map destinations do not add the bottom confirmation notice");
-  assert.ok(mapRoot.innerHTML.includes(`Route to ${world.systemsById[target.parent].n} (${target.n})`));
+  assert.ok(mapRoot.innerHTML.includes(`Route to ${target.n}`));
   const route = findDestinationRoute(world, P.place, ui.state.ui.destination);
   assert.equal(route.at(-1), target.id);
   assert.ok(route.length > 2);
@@ -977,7 +980,7 @@ test("route destinations autosave immediately, survive relog and clear on arriva
   }
 });
 
-test("v17 to v18: destination migration, validation, slot and export round trips", () => {
+test("v17 to v19: destination migration, validation, slot and export round trips", () => {
   const old = JSON.parse(JSON.stringify(V15)); old.v = old.profile.v = old.world.v = 16;
   const migrated = prepareGalaxySave(old);
   assert.equal(migrated.world.destination, null);
@@ -1042,8 +1045,13 @@ test("11B: the pre-11B v15 fixture resumes flying with its character and cargo i
   fresh();
   const save = prepareGalaxySave(V15);
   assert.equal(V15.v, 15);
-  assert.equal(save.v, 18);
-  assert.deepEqual(save.profile, { ...V15.profile, v: 18 });
+  assert.equal(save.v, 19);
+  assert.equal(save.profile.v, 19);
+  assert.equal(save.profile.missions.length, 1);
+  assert.deepEqual(save.profile.mission, V15.profile.mission, "the singular compatibility view keeps the old contract");
+  assert.deepEqual(save.profile.flags, {});
+  assert.deepEqual(save.profile.holds, V15.profile.holds);
+  assert.deepEqual(save.profile.loadout, V15.profile.loadout);
   assert.deepEqual(save.world.base, V15.world.base);
   assert.deepEqual(save.world.store, V15.world.store);
   assert.deepEqual(save.world.board, V15.world.board);

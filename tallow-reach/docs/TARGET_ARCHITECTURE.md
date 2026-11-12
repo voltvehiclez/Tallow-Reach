@@ -109,14 +109,18 @@ styles and explicit author station features/placement flags can co-locate them. 
 not generated geography. `tier` is distance-from-Meridian guidance plus seeded variation; authored
 content may override it and decides actual danger. The save stores the seed and compact
 discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a
-policy (`all` today), not a hard-coded no-fog assumption. The zoomed-in system chart uses a derived,
+policy (`all` today), not a hard-coded no-fog assumption. Mission data lives under `src/data/missions/`
+with the shape `{ id, title, kind, requires, steps, rewards, fails }`; `sim/missions.js` consumes
+objective and story events without hard-coding story text. 13b now implements dialogue/choices,
+scripts, waits, flags/branching, parallel work and configured failure outcomes; contracts use the same
+record shape. The zoomed-in system chart uses a derived,
 deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win) that is never saved.
 Pockets orbit an independent seeded star (95%) / black hole (5%) core; its proper name comes from the
 system and is permanently labelled with its type on a second row, but it is not warpable. Free systems omit internal chart lines;
 route-only systems draw them. Gate exit stubs point toward the exact peer system and their labels are clickable travel targets.
 Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out; core graphics scale with system zoom. Place memory
-(mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save and is
-implemented in save v18. The map is not a fixed two-level container: pockets may later have optional
+(mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save; it was
+introduced in v18 and is retained in current save v19 alongside mission progress. The map is not a fixed two-level container: pockets may later have optional
 child places using the same place record.
 
 **Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole. It
@@ -130,22 +134,22 @@ them; `render/` shows the local player's place. Each pilot owns a current place 
 
 **Player.** `{ id, name, shipEntityId, controls, profile }`.
 
-**Missions.** A mission is data: `{ id, title, requires, steps: [{ objective, params }], rewards }`.
-A **mission runner** in `sim/` advances steps by listening to events (`enemy-killed`, `mined`,
-`place-entered`, `item-picked`, ...). The campaign is an ordered list of mission ids plus flags;
+**Missions.** A mission is data: `{ id, title, kind: "contract" | "story", requires, steps,
+rewards, fails }`; objective steps carry `{ id, kind, ...filters, count }`. A **mission runner** in
+`sim/` advances steps by listening to events (`enemy-killed`, `mined`, `pickup`, `place-entered`,
+`delivered`, `mission-tick`). The campaign is an ordered list of mission ids plus remembered flags;
 "contracts" in the open world are *generated missions* run by the same runner. More than one mission
 may be active.
 
-**Events** (see `util/events.js`) get payloads that carry ids (`enemy-killed { enemyId, def,
-faction, byPlayer }`), so missions, achievements and sound can subscribe without the sim knowing.
+**Events** (see `util/events.js`) get payloads that carry ids (`enemy-killed { def, faction, id,
+player }`), so missions, achievements and sound can subscribe without the sim knowing.
 
 ## Saves
 
-- Current save version is **18** (starmap seed/knowledge, destination, place memory and optional station-local stores); v17 and older migrate on load. Legacy v18 worlds containing only `world.store` are assigned to their saved station when possible; v19 remains reserved for Step 13.
-  Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
-  migration from flat v1..v12 and split v13 through v17 saves:
+- Current save version is **19** (starmap seed/knowledge, destination, place memory, station-local stores and data-driven mission progress); v18 and older migrate on load. Legacy worlds containing only `world.store` are assigned to their saved station when possible. Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
+  migration from flat v1..v12 and split v13 through v18 saves:
   `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
-  `pw`, `mission`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
+  `pw`, `missions`, `flags`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's
   station-local storage (`stationStores[placeId:featureId]`, with the legacy home `store` alias), base upgrades (`base`), contract board (`board`), current pocket id
   (`place`, replacing v13's `sector` placeholder), saved local flight state (`resume`), route
   destination and galaxy seed/knowledge (`galaxy: { seed, knowledge }`). `placeMemory` stores only
@@ -183,7 +187,7 @@ refactor step that closes it:
 | Saves and profiles | **Closed in step 9 (save v13, owner-playtested):** saves split into `{ v: 13, profile, world }`; each player owns an isolated `player.profile` (`portableProfile` / `mergeProfile`). | — |
 | Inventory and pickups | **Closed in step 9 (owner-playtested):** `sim/inventory.js`, `sim/combat.js` and `sim/weapons.js` credit each pilot's own `profile.holds` while sharing the hosted world's `worldState.store`; crate pickup works across all active pilots even when the local pilot is docked. | — |
 | Economy, outfitting and saved ammunition | **Closed in step 9 (owner-playtested):** `sim/economy.js`, `sim/fitting.js` and `sim/weapons.js` operate on the acting pilot and their `profile` (`cr`, `loadout`, `ships`, `hp`, `msl`, `pw`) against `state.worldState`. | — |
-| Contracts and rewards | **Closed in step 9 (owner-playtested):** the offer board lives in `worldState.board`; `sim/contracts.js`, `sim/ai.js`, `sim/combat.js` and `sim/missile.js` track kills, mission progress, payouts and spawn policy per pilot (`profile.mission`, `profile.kills`). | — |
+| Contracts and rewards | **13a/13b/13c built (browser playtests pending):** the offer board remains in `worldState.board`; `data/missions/contracts.js` defines the three generated contract missions and `sim/missions.js` tracks objective progress, payouts, story steps and failure outcomes per pilot (`profile.missions`, `profile.flags`). `ui/missionlog.js` presents active missions and data-defined dialogue; the singular `profile.mission` view is compatibility-only. | Owner playtest |
 | Docking and launch | **Closed in step 9 (owner-playtested):** `launch` and `dock`/`tryDock` operate on an explicit pilot and profile; `clearTransient()` only sweeps the field when no other active pilot remains in space. | — |
 | Warp and place ownership | **Closed in step 10 (owner-playtested):** each pilot owns `place` and `warp`; entities live in per-place containers; shared systems advance once per occupied place. Non-local presentation/input remain step 16. | — |
 | Death and recovery | `sim/player.js` and `sim/session.js`: only the local player gets ship loss, recovery and docking on `player-dead`; another player is marked dead until multiplayer respawn rules exist. | 16 (multiplayer) |
@@ -203,7 +207,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | Sector geography in code | **Closed in step 10:** positions/features live in `PLACE_DEFS`; a generic loader builds per-place containers; launch/dock/scenery read the station and field features. | — |
 | Current sector not saved | **Closed in step 10 (save v14, owner-playtested):** `world.place` stores the current pocket id; v13 `sector` migrates. | — |
 | Two pockets, cycled with M | **Closed in 11B (built, owner playtest pending):** M opens `ui/starmap.js`; zooming into a system opens its pocket map and right-click direct-hop quotes replace cycling. `nextPocket()` remains only as a legacy helper for old tests/tools. | — |
-| One contract at a time, three types | `profile.mission`; `generateContract()` in `sim/contracts.js` | 13 |
+| One contract at a time, three types | **Closed structurally in 13a:** `profile.missions` accepts several active data missions; `generateContract()` remains the legacy board facade over `data/missions/contracts.js`, and `sim/missions.js` is the shared runner. 13b now uses that runner for story steps and failures too. | 13c screens |
 | `sanitizeProfile` names things by hand | **Closed in step 9:** `sanitizeWorld` walks `BASE_MODULES` (`data/station.js`) directly instead of naming base modules by hand. | — |
 
 ## Folder shape after the refactor
@@ -212,6 +216,7 @@ Keep today's folders. **Do not rename or reshuffle for its own sake.** Additions
 
 ```
 src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  place-templates.js  places.js  terms.js  galaxy.js
+src/data/missions/   mission vocabulary and generated contract templates
 src/data/campaign/   one file per mission (m01.js, m02.js, ...) + index.js listing the order
 src/sim/encounters.js  place-memory.js  loot.js  places.js  asteroids.js  galaxy.js  galaxy-session.js  travel.js  instances.js  missions.js  step.js
 src/render/views.js           builds and updates a mesh per entity (7a: hostiles)

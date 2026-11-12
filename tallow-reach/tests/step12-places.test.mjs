@@ -189,20 +189,20 @@ test("cleared static encounters stay absent, save their cooldown and respond to 
   assert.ok(world.crates.some(crate => crate.encounter === feature.id), "a future event can force the encounter back early");
 });
 
-test("save version 18 preserves place memory and station stores, while older saves migrate", () => {
+test("save version 19 preserves place memory and station stores, while older saves migrate", () => {
   const save = newSave();
   save.world.placeMemory = {
     hollow: { rocks: { "field:3": 12.5 }, encounters: { "derelict-0": 300 } },
   };
   const clean = sanitizeSave(save);
-  assert.equal(SAVE_VERSION, 18);
+  assert.equal(SAVE_VERSION, 19);
   assert.deepEqual(clean.world.placeMemory, save.world.placeMemory);
 
   const old = JSON.parse(JSON.stringify(save));
   old.v = old.profile.v = old.world.v = 17;
   delete old.world.placeMemory;
   const migrated = sanitizeSave(old);
-  assert.equal(migrated.v, 18);
+  assert.equal(migrated.v, 19);
   assert.deepEqual(migrated.world.placeMemory, {});
 
   const bad = JSON.parse(JSON.stringify(save));

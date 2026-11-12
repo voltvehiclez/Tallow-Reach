@@ -1,6 +1,7 @@
 // The gameplay tick (step 8a). The browser controls how often it renders; this
 // module runs only the sim, in the old update order and without a screen.
 import { state } from "../state/state.js";
+import { emit } from "../util/events.js";
 import { flight } from "./player.js";
 import { updateShield } from "./shield.js";
 import { updatePower } from "./power.js";
@@ -42,6 +43,7 @@ export function stepSim(dt) {
     updateWarp(dt, player);
     updatePrimary(dt, player);
     updateMissiles(dt, player, false);
+    emit("mission-tick", { dt, player });
     if (player !== local) pruneLock(player);
     if (!player.docked && !player.dead) {
       const id = player.place || state.place;

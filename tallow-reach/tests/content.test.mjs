@@ -72,7 +72,8 @@ test("every item is complete, and the catalogue agrees with the module table", (
     assert.ok(ITEM_CATEGORIES.includes(it.cat), `${id}: cat must be one of ${ITEM_CATEGORIES.join(", ")}`);
     if (it.cat === "module") continue;    // a module's name, volume and value live in data/modules.js
     assert.equal(typeof it.n, "string", `${id}: n (name)`);
-    assert.ok(isNum(it.v) && it.v > 0, `${id}: v (value) must be positive`);
+    assert.ok(isNum(it.v) && (it.cat === "mission" ? it.v >= 0 : it.v > 0),
+      `${id}: v (value) must be positive unless it is a non-sellable mission object`);
     assert.ok(it.vol == null || (isNum(it.vol) && it.vol > 0), `${id}: vol (m³) must be above 0`);
     assert.ok(it.st == null || (Number.isInteger(it.st) && it.st > 0), `${id}: st (stack) must be a whole number above 0`);
   }
@@ -94,6 +95,8 @@ test("every item is complete, and the catalogue agrees with the module table", (
   assert.equal(canSell("core"), true);
   assert.equal(canSell("beam_basic"), true, "a spare module sells like any other item");
   assert.equal(itemStack("ferrite"), Infinity, "nothing has a stack limit yet");
+  assert.equal(itemName("beacon"), "Beacon", "the story object has its own player-facing name");
+  assert.equal(canSell("beacon"), false, "the mission Beacon is not ordinary salvage for sale");
   assert.equal(itemName("no-such-thing"), "no-such-thing", "an unknown id does not crash a screen");
   assert.equal(itemVol("no-such-thing"), 0);
 });
@@ -524,6 +527,25 @@ test("moduleListName names the equipped modules for the HUD and the toast", () =
   assert.equal(moduleListName([beam, cannon]), "Basic mining beam + Basic cannons");
   assert.equal(moduleListName([]), "");
   assert.equal(moduleListName(undefined), "");
+});
+
+test("the flight HUD lists every active mission by title", () => {
+  const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
+  assert.match(hud, /missions\.map\(mission =>/, "the top-right HUD renders every active mission");
+  assert.match(hud, /class="hud-missions"/, "missions have a dedicated HUD block");
+  assert.match(hud, /missionNextText\(mission\)/, "the top-right HUD shows each mission's current objective");
+  assert.match(hud, /hud-mission-objective/, "the current objective has its own HUD line");
+  assert.doesNotMatch(hud, /activeMissions\(S\)\[0\]/, "the HUD must not discard missions after the first");
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /#tr \.hud-mission/, "each active mission has a readable top-right style");
+  const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
+  assert.doesNotMatch(hud, /missionRequirementText/, "the HUD has no obsolete item-requirement text");
+  assert.doesNotMatch(screens, /missionRequirementText/, "contract rows have no obsolete item-requirement text");
+  assert.match(hud, /mission\.type === "hunt"/, "Destroy missions show their progress in flight");
+  assert.match(hud, /missionProgress\(mission\)/, "the flight HUD renders Destroy progress");
+  assert.match(screens, /m\.type === "hunt"/, "Destroy missions show their progress while docked");
+  assert.match(screens, /missionProgress\(m\)/, "the Contracts screen renders Destroy progress");
+  assert.match(screens, /canCollectMissionReward\(m\)/, "reward collection checks current inventories");
 });
 
 test("the shield and hull bars show numbers with their HP units", () => {

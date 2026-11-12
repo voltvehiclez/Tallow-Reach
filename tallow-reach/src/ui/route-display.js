@@ -26,7 +26,7 @@ export function routeDisplay(world, destination, route, knowledge = {}, from = r
     stops.at(-1).destination = true;
     if (targetPocket) stops.at(-1).destinationPocket = targetPocket.n;
   }
-  return { title: targetPocket ? `${targetSystem.n} (${targetPocket.n})` : targetSystem.n,
+  return { title: targetPocket ? targetPocket.n : targetSystem.n,
     current, stops, available: !!route };
 }
 

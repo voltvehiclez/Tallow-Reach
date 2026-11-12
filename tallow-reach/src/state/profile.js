@@ -1,6 +1,6 @@
 // The persistent part of a game, split in save v13 into:
 //   - `profile`: portable character data (credits, ships, loadouts, holds, hull damage,
-//     missiles carried, selected weapon, active mission and stats)
+//     missiles carried, selected weapon, active missions and stats)
 //   - `world`: hosted world data (station levels and storage, contract board,
 //     galaxy and current pocket)
 // Everything saved to disk goes through this file so older saves and export codes keep loading.
@@ -8,7 +8,8 @@
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { isItem, isModule, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
-import { CONTRACT_TYPES } from "../data/contracts.js";
+import { CONTRACT_TYPES, missionFromContract } from "../data/contracts.js";
+import { isMissionKind, isMissionStepKind, STORY_MISSIONS } from "../data/missions/index.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
@@ -63,7 +64,10 @@ function worldWithStationStores(fields, stationStores) {
 //      and cleared encounters. v17 and older start with an empty memory record.
 //   18 also accepts station-local inventory records in world.stationStores;
 //      older v18 saves migrate their legacy world.store to the relevant station.
-export const SAVE_VERSION = 18;
+//   19 replaces the single profile.mission slot with profile.missions and adds
+//      remembered flags; v18 and older active contracts migrate into the runner's
+//      one-step mission shape.
+export const SAVE_VERSION = 19;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -94,22 +98,58 @@ function allStockFit() {
   return out;
 }
 
+/**
+ * Keep the old singular property as a non-enumerable compatibility view. Old
+ * callers can still assign `profile.mission` or read its compact `{ type, p,
+ * n, r, ... }` shape, while every saved active mission lives in `missions`.
+ */
+function legacyMissionView(mission) {
+  if (!mission) return null;
+  const step = mission.steps?.[mission.step < mission.steps.length ? mission.step : mission.steps.length - 1];
+  const progress = mission.step >= mission.steps.length
+    ? step?.count || mission.n || 0
+    : mission.counters?.[step?.id || "objective"] ?? mission.p ?? 0;
+  const out = {
+    type: mission.type,
+    tier: mission.tier || 1,
+    p: Math.max(0, Math.floor(progress)),
+    n: mission.n || step?.count || 1,
+    r: mission.r ?? mission.rewards?.credits ?? 0,
+  };
+  if (mission.o !== undefined || step?.item !== undefined) out.o = mission.o ?? step.item;
+  if (mission.e !== undefined || step?.enemy !== undefined) out.e = mission.e ?? step.enemy;
+  return out;
+}
+
+function attachMissionCompat(profile) {
+  Object.defineProperty(profile, "mission", {
+    enumerable: false,
+    configurable: true,
+    get: () => profile.missions[0] ? legacyMissionView(profile.missions[0]) : null,
+    set: value => {
+      profile.missions = value ? [cleanMission(value)].filter(Boolean) : [];
+    },
+  });
+  return profile;
+}
+
 /** Fresh portable character profile (travels with a pilot across worlds). */
 export function newProfile() {
-  return {
+  return attachMissionCompat({
     v: SAVE_VERSION,
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
     ships: [DEFAULT_SHIP],
     ship: DEFAULT_SHIP,
-    mission: null,
-    done: 0,           // contracts completed
+    missions: [],       // active mission records; several may run at once
+    flags: {},          // remembered story facts (used by later mission slices)
+    done: 0,            // contracts completed
     kills: 0,
-    msl: 0,            // missiles carried
+    msl: 0,             // missiles carried
     pw: "cannon",      // equipped primary
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
     loadout: allStockFit(),      // fitted modules per hull, group -> bay array
-  };
+  });
 }
 
 /** Fresh hosted world record (station levels and storage, contract board, galaxy and current pocket). */
@@ -123,6 +163,7 @@ export function newWorld() {
     destination: null, // local session destination, saved with this world
     resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
+    missionState: {},  // story-script state keyed by place id
   }, { [HOME_STATION_KEY]: newStock() });
 }
 
@@ -155,7 +196,7 @@ export function newSave() {
   };
 }
 
-/** Validate one contract (active `profile.mission` or an offer in `world.board`). */
+/** Validate one compact contract offer in `world.board`. */
 function cleanContract(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   if (!MISSION_TYPES.includes(raw.type)) return null;
@@ -165,6 +206,183 @@ function cleanContract(raw) {
   const tier = Math.max(1, Math.floor(+raw.tier || 1));
   const p = Math.max(0, Math.min(n, Math.floor(+raw.p || 0)));
   return { ...raw, tier, n, r, p };
+}
+
+const cleanFlags = raw => {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [id, value] of Object.entries(raw)) {
+    if (!id || !/^[A-Za-z0-9_.:-]+$/.test(id)) continue;
+    if (["boolean", "string", "number"].includes(typeof value) && (typeof value !== "number" || Number.isFinite(value))) {
+      out[id] = value;
+    }
+  }
+  return out;
+};
+
+function cleanMissionChoice(raw, index) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const id = typeof raw.id === "string" && raw.id ? raw.id : `choice-${index + 1}`;
+  const text = typeof raw.text === "string" ? raw.text : id;
+  const choice = { id, text };
+  for (const key of ["next", "goto"]) if (raw[key] !== undefined) choice[key] = raw[key];
+  const set = raw.set || raw.flags;
+  if (set && typeof set === "object" && !Array.isArray(set)) choice.set = cleanFlags(set);
+  return choice;
+}
+
+function cleanScriptAction(raw) {
+  if (typeof raw === "string") return raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const action = {};
+  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to", "loot"]) {
+    if (raw[key] !== undefined) action[key] = raw[key];
+  }
+  if (raw.dropOnDefeat && typeof raw.dropOnDefeat === "object" && !Array.isArray(raw.dropOnDefeat)) {
+    action.dropOnDefeat = {
+      item: raw.dropOnDefeat.item,
+      count: raw.dropOnDefeat.count,
+      scatter: raw.dropOnDefeat.scatter,
+    };
+  }
+  if (Array.isArray(raw.spawnDist)) action.spawnDist = raw.spawnDist.slice(0, 2).map(Number);
+  if (raw.set && typeof raw.set === "object" && !Array.isArray(raw.set)) action.set = cleanFlags(raw.set);
+  if (raw.state && typeof raw.state === "object" && !Array.isArray(raw.state)) action.state = cleanFlags(raw.state);
+  if (raw.args && typeof raw.args === "object" && !Array.isArray(raw.args)) action.args = { ...raw.args };
+  return action;
+}
+
+function cleanMissionStep(raw, index) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
+  const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
+  const step = { id, kind: raw.kind };
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "missionItem", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
+    if (raw[key] !== undefined) step[key] = raw[key];
+  }
+  if (raw.lines !== undefined) {
+    const lines = Array.isArray(raw.lines) ? raw.lines : [raw.lines];
+    step.lines = lines.filter(line => typeof line === "string").map(String);
+  }
+  if (Array.isArray(raw.choices)) step.choices = raw.choices.map(cleanMissionChoice).filter(Boolean);
+  if (raw.action !== undefined) {
+    const actions = Array.isArray(raw.action) ? raw.action : [raw.action];
+    step.action = actions.map(cleanScriptAction).filter(Boolean);
+  }
+  if (Array.isArray(raw.actions)) step.actions = raw.actions.map(cleanScriptAction).filter(Boolean);
+  if (raw.set && typeof raw.set === "object" && !Array.isArray(raw.set)) step.set = cleanFlags(raw.set);
+  if (raw.test !== undefined) step.test = raw.test;
+  if (Array.isArray(raw.steps)) step.steps = raw.steps.map(cleanMissionStep).filter(Boolean);
+  const count = Number(raw.count ?? raw.seconds ?? (step.kind === "dialogue" ? step.lines?.length : 1));
+  step.count = Number.isFinite(count) && count > 0 ? count : 1;
+  return step;
+}
+
+function restoreAuthoredStepMetadata(step, saved, authored) {
+  if (!step || !authored) return;
+  for (const key of ["requiresDock", "requiresFlying", "requiresPlace", "place"]) {
+    if (saved?.[key] === undefined && authored?.[key] !== undefined) step[key] = authored[key];
+  }
+  for (const child of step.steps || []) {
+    const savedChild = (saved?.steps || []).find(item => item?.id === child.id);
+    const authoredChild = (authored?.steps || []).find(item => item?.id === child.id);
+    restoreAuthoredStepMetadata(child, savedChild, authoredChild);
+  }
+}
+
+function cleanMission(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  // v18 and older stored a compact contract directly in `profile.mission`.
+  if (!raw.kind && MISSION_TYPES.includes(raw.type)) {
+    return missionFromContract({ ...raw }, raw.id || `contract:${raw.type}:legacy`);
+  }
+  if (!isMissionKind(raw.kind) || !Array.isArray(raw.steps)) return null;
+  let steps = raw.steps.map(cleanMissionStep).filter(Boolean);
+  if (!steps.length) return null;
+  const definition = STORY_MISSIONS.find(item => item.id === raw.id);
+  const rawStep = Math.max(0, Math.floor(+raw.step || +raw.current || 0));
+  const savedStepId = rawStep < steps.length ? steps[rawStep]?.id : null;
+  const savedComplete = raw.completed === true || rawStep >= steps.length;
+  let currentStep = rawStep;
+  // Border Signal changed its authored order in v19 without changing the save
+  // version. Rebuild that authored story's step array by stable step id so an
+  // older v19 save cannot retain the old timeout/leave failure or run a
+  // dialogue-to-spawn shortcut. Do this even when the step count happens to
+  // match: authored order is not save state. Counters remain keyed by stable
+  // ids below.
+  if (definition?.id === "story.border-signal") {
+    steps = definition.steps.map(cleanMissionStep).filter(Boolean);
+    currentStep = savedComplete ? steps.length : Math.max(0, steps.findIndex(step => step.id === savedStepId));
+  }
+  // Older saves contain authored story steps but not newer presentation or
+  // situation metadata. Restore that data-only metadata by step id without
+  // changing dialogue progress or any mission state.
+  if (definition) {
+    for (const step of steps) {
+      const saved = raw.steps.find(item => item?.id === step.id);
+      const authored = definition.steps.find(item => item.id === step.id);
+      restoreAuthoredStepMetadata(step, saved, authored);
+    }
+  }
+  // Salvage contracts from the first 13a build counted any pickup. Keep their
+  // progress, but make the required hand-in item explicit when they are saved again.
+  if (raw.type === "salvage") {
+    const collect = steps.find(step => step.kind === "collect");
+    if (collect && !collect.item) collect.item = "salv";
+  }
+  const step = Math.max(0, Math.min(steps.length, currentStep));
+  const counters = {};
+  const source = raw.counters && typeof raw.counters === "object" ? raw.counters : {};
+  for (const item of steps) {
+    if (item.kind === "parallel") {
+      for (const child of item.steps || []) {
+        const id = `${item.id}.${child.id}`;
+        const value = Number(source[id]);
+        counters[id] = Number.isFinite(value) && value >= 0 ? Math.min(child.count, value) : 0;
+      }
+      continue;
+    }
+    const value = Number(source[item.id]);
+    counters[item.id] = Number.isFinite(value) && value >= 0 ? Math.min(item.count, value) : 0;
+  }
+  // Contract records generated by the data factory retain their compact fields;
+  // use them to seed a v18 mission that did not yet have counters.
+  if (raw.type && MISSION_TYPES.includes(raw.type) && raw.p !== undefined && counters[steps[0].id] === 0) {
+    counters[steps[0].id] = Math.min(steps[0].count, Math.max(0, Math.floor(+raw.p || 0)));
+  }
+  const current = step >= steps.length ? steps.length : step;
+  const rewards = raw.rewards && typeof raw.rewards === "object" ? {
+    credits: Math.max(0, Math.floor(+raw.rewards.credits || 0)),
+  } : { credits: Math.max(0, Math.floor(+raw.r || 0)) };
+  const borderDefinition = definition?.id === "story.border-signal" ? definition : null;
+  const authoredFails = borderDefinition?.fails
+    ? { ...borderDefinition.fails, on: Array.isArray(borderDefinition.fails.on) ? [...borderDefinition.fails.on] : borderDefinition.fails.on }
+    : null;
+  const mission = {
+    id: typeof raw.id === "string" && raw.id ? raw.id : `mission:${raw.type || "unknown"}`,
+    title: typeof raw.title === "string" && raw.title ? raw.title : String(raw.type || "Mission"),
+    kind: raw.kind,
+    requires: Array.isArray(raw.requires) ? raw.requires.filter(id => typeof id === "string") : [],
+    steps,
+    rewards,
+    fails: authoredFails || (raw.fails && typeof raw.fails === "object" ? { ...raw.fails } : {}),
+    step: current,
+    current,
+    counters,
+  };
+  for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "timeout", "elapsed", "failed", "failure", "failureMessage"]) {
+    if (raw[key] !== undefined && !(borderDefinition && key === "timeout")) mission[key] = raw[key];
+  }
+  if (borderDefinition) {
+    mission.origin = borderDefinition.origin;
+    delete mission.timeout;
+  }
+  if (mission.type && MISSION_TYPES.includes(mission.type)) {
+    mission.tier = Math.max(1, Math.floor(+mission.tier || 1));
+    mission.n = Math.max(1, Math.floor(+mission.n || steps[0].count));
+    mission.r = Math.max(0, Math.floor(Number.isFinite(+mission.r) ? +mission.r : rewards.credits));
+  }
+  mission.p = Math.floor(counters[steps[Math.min(current, steps.length - 1)].id] || 0);
+  return mission;
 }
 
 /**
@@ -209,22 +427,28 @@ export function sanitizeProfile(raw) {
 
   const done = Math.max(0, Math.floor(+raw.done || 0));
   const kills = Math.max(0, Math.floor(+raw.kills || 0));
-  const mission = cleanContract(raw.mission);
+  const rawMissions = Array.isArray(raw.missions)
+    ? raw.missions
+    : raw.mission
+      ? [raw.mission]
+      : [];
+  const missions = rawMissions.map(cleanMission).filter(Boolean);
 
-  return {
+  return attachMissionCompat({
     v: SAVE_VERSION,
     cr,
     holds,
     ships,
     ship,
-    mission,
+    missions,
+    flags: cleanFlags(raw.flags),
     done,
     kills,
     msl,
     pw,
     hp,
     loadout,
-  };
+  });
 }
 
 /**
@@ -281,6 +505,51 @@ function cleanPlaceMemory(raw) {
       }
     }
     if (Object.keys(clean.rocks).length || Object.keys(clean.encounters).length) out[placeId] = clean;
+  }
+  return out;
+}
+
+/** A mission crate is the one entity that belongs in the saved world half:
+ * its place, item and defeat position are enough to rebuild the visible crate;
+ * the runtime id, quaternion and timer are session details. */
+function cleanMissionDrop(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const missionId = typeof raw.missionId === "string" && raw.missionId ? raw.missionId : null;
+  // Before the physical-drop follow-up, Border Signal called its authored
+  // object `salv`. Ordinary salvage keeps that id; only the authored record is
+  // migrated to the now-catalogued Beacon.
+  const savedItem = raw.missionId === "story.border-signal" && raw.item === "salv" ? "beacon" : raw.item;
+  const item = typeof savedItem === "string" && isItem(savedItem) ? savedItem : null;
+  const pos = Array.isArray(raw.pos) && raw.pos.length === 3 && raw.pos.every(value =>
+    typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= PLACE_EXTENT
+  ) ? raw.pos.slice() : null;
+  if (!missionId || !item || !pos) return null;
+  return { missionId, item, pos, collected: raw.collected === true };
+}
+
+/** Clean small, data-only state written by story scripts for each place. */
+function cleanMissionState(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [place, values] of Object.entries(raw)) {
+    if (!place || !values || typeof values !== "object" || Array.isArray(values)) continue;
+    const clean = {};
+    for (const [key, value] of Object.entries(values)) {
+      if (key === "drops") {
+        if (!Array.isArray(value)) continue;
+        const drops = [];
+        for (const rawDrop of value) {
+          const drop = cleanMissionDrop(rawDrop);
+          if (!drop || drops.some(existing => existing.missionId === drop.missionId && existing.item === drop.item)) continue;
+          drops.push(drop);
+        }
+        if (drops.length) clean.drops = drops;
+        continue;
+      }
+      if (!key || !["boolean", "string", "number"].includes(typeof value)) continue;
+      if (typeof value !== "number" || Number.isFinite(value)) clean[key] = value;
+    }
+    if (Object.keys(clean).length) out[place] = clean;
   }
   return out;
 }
@@ -392,6 +661,7 @@ export function sanitizeWorld(raw) {
     destination: cleanDestination(raw.destination),
     resume: cleanResume(raw.resume),
     placeMemory: cleanPlaceMemory(raw.placeMemory),
+    missionState: cleanMissionState(raw.missionState),
   }, stationStores);
 }
 

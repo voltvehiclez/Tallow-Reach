@@ -12,10 +12,12 @@ import { featuresOf, featureOf, featureById } from "../data/places.js";
 import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
 import { encounterDef, encounterRespawn } from "../data/encounters.js";
 import { profileOf } from "../state/state.js";
+import { missionForObjective, remainingObjective } from "./missions.js";
 import { state, placeWorld } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
-import { fire } from "./combat.js";
+import { clearMissionDrops, fire, removeMissionDrop } from "./combat.js";
 import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
+import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
 
 /**
@@ -42,8 +44,9 @@ let nextId = 1;
  * `encounter` is the stable spawner feature id, when this enemy belongs to a
  * generated one-shot patrol; old callers may omit it.
  */
-export function spawnEnemy(id, pos, placeId = state.place, encounter = null) {
+export function spawnEnemy(id, pos, placeId = state.place, encounter = null, options = {}) {
   const def = enemyDef(id);
+  const hasLootOverride = Object.prototype.hasOwnProperty.call(options || {}, "loot");
   const e = {
     id: nextId++,
     kind: "enemy",
@@ -52,7 +55,8 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null) {
     def: ENEMIES[id] ? id : DEFAULT_ENEMY,
     n: def.n,
     f: def.f,
-    loot: def.loot,
+    loot: hasLootOverride ? options.loot : def.loot,
+    dropOnDefeat: options?.dropOnDefeat || null,
     hp: def.hp,
     mx: def.hp,
     pos: V(pos.x, pos.y, pos.z),
@@ -109,7 +113,14 @@ export function updateEnemies(dt, placeId = state.place) {
       const dir = toPlayer
         .add(V(R(-0.04, 0.04), R(-0.04, 0.04), R(-0.04, 0.04)))
         .normalize();
-      fire(e.pos, dir, def.bspd, false, def.dmg);
+      const missionId = String(e.encounter || "").startsWith("mission:")
+        ? String(e.encounter).slice("mission:".length)
+        : null;
+      const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
+      // Keep the projectile's place and mission ownership explicit even when
+      // the generic fire helper defaults to the local pilot's place.
+      shot.place = placeId;
+      shot.missionId = missionId;
       if (dist < def.hearRange) emit("sfx", { name: "enemy-fire" });
     }
   }
@@ -131,9 +142,9 @@ export function updateEnemies(dt, placeId = state.place) {
     const spawner = spawners[0];
     const encounter = spawner ? encounterDef(spawner.encounter) : null;
     F.spawnT = spawner ? R(spawner.interval?.[0] ?? encounter?.interval?.[0] ?? 4, spawner.interval?.[1] ?? encounter?.interval?.[1] ?? 8) : R(4, 8);
-    const m = prof.mission,
-      hunting = m && m.type === "hunt" && m.p < m.n,
-      hunted = m && m.e ? m.e : DEFAULT_ENEMY;
+    const hunt = missionForObjective(prof, "kill"),
+      hunting = !!hunt,
+      hunted = hunt?.steps?.[hunt.step]?.enemy || hunt?.e || DEFAULT_ENEMY;
     let want = 0;
     let id = spawner?.enemy || encounter?.enemy || DEFAULT_ENEMY;
     let encounterKey = spawner?.id || null;
@@ -149,7 +160,7 @@ export function updateEnemies(dt, placeId = state.place) {
       // This is intentionally the old hunt rule: the active contract chooses
       // its enemy, and the remaining target count is capped at three minus E.
       if (far && hunting && !cooling) {
-        want = Math.min(3, m.n - m.p) - E.length;
+        want = Math.min(3, remainingObjective(hunt)) - E.length;
         id = hunted;
       } else if (!cooling && far && nearField && (once ? groupCount < (spawner.maxWanderers ?? encounter?.maxActive ?? 1) : E.length < (spawner.maxWanderers ?? encounter?.maxActive ?? 2)) && random() < (spawner.chance ?? encounter?.chance ?? 0)) {
         const count = spawner.count || encounter?.count || [1, 1];
@@ -168,15 +179,93 @@ export function updateEnemies(dt, placeId = state.place) {
   }
 }
 
+/** Remove entities created by one mission without clearing ordinary place content. */
+function clearMissionContents(missionId) {
+  if (!missionId) return;
+  const tag = String(missionId);
+  const encounter = `mission:${tag}`;
+  for (const placeId of state.places.keys()) {
+    const W = placeWorld(placeId);
+    for (const enemy of [...W.enemies]) {
+      if (enemy.encounter === encounter) dropEnemy(enemy, placeId);
+    }
+    for (const bullet of [...W.bullets]) {
+      if (bullet.missionId === tag) dropEntity(W.bullets, bullet);
+    }
+    for (const crate of [...W.crates]) {
+      if (crate.missionId === tag) {
+        removeMissionDrop(crate);
+        dropEntity(W.crates, crate);
+      }
+    }
+  }
+  clearMissionDrops(tag);
+}
+
+// Abandoning a mission removes its scripted wave and any mission loot/shots,
+// but leaves ordinary patrols, derelicts and other place content untouched.
+on("mission-abandoned", ({ mission } = {}) => clearMissionContents(mission?.id));
+on("mission-rewarded", ({ mission } = {}) => clearMissionContents(mission?.id));
+on("mission-failed", ({ mission, action } = {}) => {
+  if (action === "abandon") clearMissionContents(mission?.id);
+});
+
 // A generated patrol is clear only after its last member is destroyed. The
 // encounter feature id, not the enemy type, is what is remembered in the world.
-on("enemy-killed", ({ place, encounter } = {}) => {
+on("enemy-killed", ({ place, encounter, player } = {}) => {
   if (!place || !encounter) return;
+  const W = placeWorld(place);
+  // Mission waves use their mission id as an encounter tag. When the last
+  // member dies, wake a matching data-defined wait step instead of requiring
+  // the UI or a test harness to inject `mission-trigger` by hand.
+  if (String(encounter).startsWith("mission:")) {
+    if (!W.enemies.some(enemy => enemy.encounter === encounter)) {
+      const missionId = String(encounter).slice("mission:".length);
+      emit("mission-trigger", { trigger: "wave-clear", mission: missionId, place, player });
+    }
+    return;
+  }
   const feature = featureById(place, encounter);
   // Ordinary authored wandering patrols retain their old repeat behaviour. Only
   // one-shot encounter features become persistent cleared-place memory.
   if (!feature?.once) return;
-  const W = placeWorld(place);
   if (W.enemies.some(enemy => enemy.encounter === encounter)) return;
   markEncounterCleared(place, encounter, encounterRespawn(encounterIdFromFeature(encounter)));
+});
+
+// Story scripts ask for a wave or ship through the event bus, keeping mission
+// data independent from the hostile simulation. The ordinary encounter spawner
+// above remains unchanged; these enemies belong to the mission that requested
+// them and disappear through the normal enemy rules.
+on("mission-script", ({ action, player, place, mission } = {}) => {
+  const kind = action?.kind || action?.action;
+  if (kind !== "spawn-wave" && kind !== "spawn-ship") return;
+  const placeId = place || player?.place || state.place;
+  const feature = featureById(placeId, action.feature || action.anchor);
+  const origin = feature?.pos
+    ? V(...feature.pos)
+    : player?.pos?.clone?.() || V(0, 0, 0);
+  const enemy = action.enemy || action.ship || DEFAULT_ENEMY;
+  const def = enemyDef(enemy);
+  const requested = kind === "spawn-ship" ? 1 : Math.max(1, Math.floor(+action.count || 1));
+  const range = Array.isArray(action.spawnDist) ? action.spawnDist : def.spawnDist;
+  const dropOnDefeat = action.dropOnDefeat && typeof action.dropOnDefeat === "object"
+    ? { ...action.dropOnDefeat }
+    : null;
+  const options = {
+    loot: action.loot === false ? null : action.loot,
+    ...(dropOnDefeat ? { dropOnDefeat } : {}),
+  };
+  if (action.loot === undefined) delete options.loot;
+  for (let i = 0; i < requested; i++) {
+    const distance = R(range[0], range[1]);
+    const pos = origin.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(distance));
+    // The authored courier is the first member of the wave; its mission drop
+    // is a single physical crate, while the remaining patrol ships are ordinary
+    // hostiles unless their action supplies another drop plan.
+    spawnEnemy(enemy, pos, placeId, `mission:${mission?.id || "story"}`, {
+      ...options,
+      ...(dropOnDefeat && i > 0 ? { dropOnDefeat: null } : {}),
+    });
+  }
 });

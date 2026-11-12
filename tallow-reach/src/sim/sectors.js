@@ -91,14 +91,17 @@ function arrive(P, from, to) {
   // Do not erase a fight another active pilot is still having in the old pocket.
   const others = state.players.some(o => o !== P && !o.docked && !o.dead && (o.place || state.place) === from);
   if (!others) clearWorldObjects(from);
-  enterPlace(to, P);
-  P.flight.lock = null;
-  P.flight.missileLock = { target: null, t: 0, locked: false };
+  // Update the pilot's actual arrival state before `place-entered` listeners
+  // run. Mission scripts must never see the old pocket's position and spawn
+  // content relative to stale coordinates.
   P.pos.copy(arrivalPos(to));
   P.v.set(0, 0, 0);
   P.thr = 0;
   P.acc = 0;
   P.snap = true;
+  P.flight.lock = null;
+  P.flight.missileLock = { target: null, t: 0, locked: false };
+  enterPlace(to, P);
   if (P === localPlayer()) {
     emit("sfx", { name: "warp-burst" });
     msg(`Warp: ${placeAt(from).n} to ${dest.n}. ${dest.d}`, 4);

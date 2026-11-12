@@ -51,7 +51,7 @@ appears automatically. It uses the standard hull model coloured by `col` and siz
 Optional: a visible add-on (like the Prospector's drill) goes in `buildPlayerShip(id)` in
 `src/render/models.js`.
 
-## 2. A new item: ore, salvage or a trade good (data only)
+## 2. A new item: ore, salvage, mission object or trade good (data only)
 
 Every item lives in `ITEMS` in `src/data/items.js`. One line is all it takes:
 
@@ -60,8 +60,8 @@ voidglass: { n: "Void glass", cat: "salvage", v: 120, vol: 2 },
 ```
 
 - `n` name (the screens use it everywhere), `cat` one of `ITEM_CATEGORIES` (`ore`, `salvage`,
-  `module`, `ammo`, `consumable`, `trade`), `v` credits a unit sells for (leave it out and the item
-  cannot be sold at all — every sellable item has one), `vol` m³ a unit takes up (1 if you leave it out), `st` most that fit in one stack
+  `mission`, `module`, `ammo`, `consumable`, `trade`), `v` credits a unit sells for (a mission object may
+  use `v: 0` and is not sellable), `vol` m³ a unit takes up (1 if you leave it out), `st` most that fit in one stack
   (no limit if you leave it out — nothing uses a limit yet).
 - Holds, the station's storage, moving, selling, the Base screen, the Inventory tab and the save all
   read the catalogue, so nothing else changes. Old saves simply have none of it, and `npm test`
@@ -263,19 +263,36 @@ menu. Sounds a *screen* makes (buttons, hovers) are not game sounds: they call `
 subscribes once. Payloads should carry **ids and plain numbers**, not objects with behaviour — that
 is what lets a listener (sound, a mission, a network snapshot) work without knowing the emitter.
 
-## 11. Story and scripted missions (new system)
+## 11. Story and scripted missions
 
-There is no story system yet. Recommended shape, so it fits the current design:
+Step 13a/13b provides the shared foundation. A mission file under `src/data/missions/` is plain data
+with `{ id, title, kind: "contract" | "story", requires, steps, rewards, fails }`; it names ids but
+never imports simulation or rendering code. Active records live in `profile.missions`, and
+`sim/missions.js` advances the current step from events. The runner supports contract objectives
+`kill`, `mine`, `collect`, `reach`, `deliver` and `survive`, plus story `dialogue`, `script`, `wait`,
+`flags` and `parallel` steps. Dialogue choices can set remembered `profile.flags` and jump to a named
+step; scripts can request a wave/ship, set saved per-place state, give/take an item, play a sound or
+warp a pilot. A `spawn-wave`/`spawn-ship` action may also define `dropOnDefeat: { item, count, scatter }`;
+the authored drop is a physical mission crate, while ordinary enemy loot remains additive. Persistent
+mission crates are saved in the world half with their place, item and position, restored on pocket load,
+and collected only from a successful non-docked pickup. Item-bearing `collect`, `deliver` and `mine`
+objectives are handed in through the same station-first/ship-hold inventory path; the exact quantity is
+consumed only when the reward succeeds, so a completed mission with missing stock remains claimable.
+The old singular `profile.mission` property is
+only a non-enumerable compatibility view of the first active mission; do not build new code around it.
 
-- `src/data/story.js`: the chapters as data. Each step has an `id`, a `when` event (`"docked"`, `"enemy-killed"`, ...),
-  an optional condition, the text to show, and an optional reward.
-- `src/sim/story.js`: subscribes with `on(...)`, advances the player's step, shows text with `msg()`,
-  and pays rewards through the profile. Keep its imports to `util/events.js`, `data/`, and `state/` so it can be tested without any 3D.
-- Saved progress: a new `profile.story = { step: 0, flags: {} }`. That is a save change:
-  default in `newProfile`, validate in `sanitizeProfile`, bump `SAVE_VERSION`.
-- Show it: a "Log" tab (recipe 7) that lists unlocked entries.
-- Test: build a state, `emit` the events in order, check the step advances (`tests/story.test.mjs`).
-- Keep it separate from `profile.mission`. That slot holds the one active contract.
+To add a contract, edit `src/data/missions/contracts.js`: add its type, generator, one-line wording,
+and a template step, then expose it through the contract board facade in `src/sim/contracts.js`.
+Preserve compact compatibility fields if old saves or UI callers need them. To add a story mission,
+add a data record with `kind: "story"`; use named step ids for `next`/`then`/`else`/choice targets,
+keep all story text, portrait ids, spoiler-safe `objective` guidance, compatibility `log` text and action ids
+in the data file, and declare `fails.on` plus an outcome for death, sector departure or timeout when needed.
+The `objective` is what the HUD and Mission log show: hint at the player's next action without revealing
+encounters or scripted reveals that have not happened yet. The runner never displays `log` text. `The Border Signal` in
+`src/data/missions/story.js` is the worked example. Add headless event tests beside
+`tests/step13b-missions.test.mjs`, a screen test beside `tests/step13c-ui.test.mjs`, plus a save test if
+the shape changes. The generic 13c presentation lives in `src/ui/missionlog.js`; do not put mission
+names, dialogue or branch text in that UI module.
 
 ## 12. Seeded sectors and daily challenges
 

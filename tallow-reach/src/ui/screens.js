@@ -16,13 +16,21 @@ import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/economy.js";
-import { describe } from "../sim/contracts.js";
+import {
+  describe,
+  activeMissions,
+  canCollectMissionReward,
+  isMissionComplete,
+  missionProgress,
+} from "../sim/contracts.js";
 import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
 import { term, terms } from "../data/terms.js";
 import { stationAt } from "../sim/places.js";
+import { missionLogHtml } from "./missionlog.js";
 
 export const TABS = [
   ["m", "Contracts"],
+  ["l", "Mission log"],
   ["h", "Hangar"],
   ["o", "Outfitting"],
   ["i", "Inventory"],
@@ -35,6 +43,7 @@ export const TABS = [
 // function that returns HTML, and list it here under the same key.
 const SCREENS = {
   m: contractsHtml,
+  l: missionLogHtml,
   h: hangarHtml,
   o: outfittingHtml,
   i: inventoryHtml,
@@ -62,7 +71,10 @@ export function introHtml() {
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
     `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +
-    `<button class="go" data-a="intro">Enter game</button>`
+    `<div class="main-menu-actions">` +
+    `<button class="go" data-a="campaign" disabled>Campaign</button>` +
+    `<button class="go" data-a="intro">Open World</button>` +
+    `</div>`
   );
 }
 
@@ -82,13 +94,21 @@ export function outpostHtml(ui) {
 }
 
 function contractsHtml() {
-  const m = state.profile.mission;
-  if (m) {
-    return `<h2>Active contract</h2><div class="row"><div>${describe(m)}<small>Progress ${m.p}/${m.n}. Reward ${m.r} cr.</small></div>${
-      m.p >= m.n ? `<button data-a="done">Collect reward</button>` : `<button data-a="drop">Abandon</button>`
-    }</div>`;
-  }
+  const active = activeMissions();
+  const activeHtml = active.length
+    ? `<h2>Active missions</h2>` + active.map((m, i) => {
+        const ready = isMissionComplete(m) && canCollectMissionReward(m),
+          progress = m.type === "hunt" ? missionProgress(m) : null,
+          detail = `${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
+        return `<div class="row"><div>${describe(m)}<small>${detail}</small></div>${
+          ready
+            ? `<button data-a="done" data-b="${i}">Collect reward</button>`
+            : `<button data-a="drop" data-b="${i}">Abandon</button>`
+        }</div>`;
+      }).join("")
+    : `<p>No active missions.</p>`;
   return (
+    activeHtml +
     `<h2>Contract board</h2>` +
     state.worldState.board
       .map(

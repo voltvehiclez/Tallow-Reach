@@ -1,7 +1,7 @@
 // The outpost panel: renders the current screen and runs the actions behind
 // its buttons. Buttons carry a data-a action name and an optional data-b argument.
 
-import { on } from "../util/events.js";
+import { on, emit } from "../util/events.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
 import { state, currentSave, applySave, resetPlaces } from "../state/state.js";
 import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
@@ -20,6 +20,7 @@ import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
 import { canSell, itemName } from "../data/items.js";
+import { storyMission } from "../data/missions/index.js";
 import { introHtml, outpostHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
@@ -53,6 +54,12 @@ export function setupMenu() {
     state.ui.tab = "h";
     render();
   });
+  on("main-menu", () => {
+    state.ui.intro = true;
+    state.ui.tab = "m";
+    state.ui.toast = "";
+    render();
+  });
 
   contracts.ensureBoard();
   render();
@@ -74,6 +81,11 @@ function toast(text) {
   state.ui.toast = text;
 }
 
+/** Let pending mission hand-offs retry after the player changes cargo. */
+function inventoryChanged() {
+  emit("mission-inventory-changed", { profile: state.profile, player: state.player });
+}
+
 /** Consume a safe-recovery notice once, without hiding the load/import result. */
 function recoveryNotice() {
   if (!state.galaxyRecovery) return "";
@@ -89,13 +101,16 @@ function loadedMessage(text) {
 }
 
 const ACTIONS = {
-  // "Enter game": leave the start screen and deploy the pilot where the save put
-  // them — docked at a station, or flying at that pocket's arrival point.
+  // "Open World": leave the start screen and deploy the pilot where the save put
+  // them — docked at a station, or flying at that pocket's arrival point. The
+  // existing `intro` action is deliberately kept as the Open World button's
+  // implementation.
   intro() {
     state.ui.intro = false;
     state.ui.tab = "m";
     initAudio();
     resumeFromSave();
+    emit("mission-ui-refresh", {});
     const notice = recoveryNotice();
     if (notice) {
       state.ui.toast = notice;
@@ -120,11 +135,25 @@ const ACTIONS = {
   ref() {
     contracts.rerollBoard();
   },
-  drop() {
-    contracts.abandonContract();
+  drop(i) {
+    // Abandon used to be silent; keep that contract-board behavior while the
+    // generic runner removes the selected active mission.
+    contracts.abandonContract(i === undefined ? undefined : +i);
   },
-  done() {
-    toast(contracts.completeContract());
+  done(i) {
+    toast(contracts.completeContract(i === undefined ? undefined : +i));
+  },
+  story(id) {
+    const definition = storyMission(id);
+    if (!definition) {
+      toast("That story mission is not available.");
+      return;
+    }
+    if (contracts.activeMissions().some(mission => mission.id === definition.id)) {
+      toast("That story mission is already active.");
+      return;
+    }
+    toast(contracts.acceptMission(definition) ? "Story mission accepted." : "Could not start that story mission.");
   },
 
   // Hangar
@@ -146,6 +175,7 @@ const ACTIONS = {
     const [shop, id] = String(arg || "").split(":");
     const msgText = eco.buyItem(shop, id);
     if (msgText) toast(msgText);
+    inventoryChanged();
   },
   wr() {
     toast(eco.restockMissiles());
@@ -179,6 +209,7 @@ const ACTIONS = {
     const count = n === "all" ? Infinity : Math.max(1, +n || 1);
     state.ui.toast = "";
     inv.moveItem(from, to, id, count);
+    inventoryChanged();
   },
 
 
@@ -197,26 +228,32 @@ const ACTIONS = {
     if (!open || open.kind !== "module") return;
     const text = fitting.fitModule(open.g, open.i, id);
     if (text) toast(text);
+    inventoryChanged();
   },
   unfit() {
     const open = state.ui.fit;
     if (!open || open.kind !== "module") return;
     const text = fitting.unequip(open.g, open.i);
     if (text) toast(text);
+    inventoryChanged();
   },
 
   // Base
   dep() {
     toast(eco.storeHold());
+    inventoryChanged();
   },
   wd() {
     eco.withdrawStored();
+    inventoryChanged();
   },
   sellh() {
     toast(eco.sellHold());
+    inventoryChanged();
   },
   sells() {
     toast(eco.sellStored());
+    inventoryChanged();
   },
   up(mod) {
     eco.upgradeBase(mod);
@@ -381,6 +418,7 @@ function confirmInventorySell(button) {
   }
   const text = eco.sellInventoryItem(id, source, amount);
   if (text) toast(text);
+  inventoryChanged();
   uiSound("confirm");
   save();
   render();

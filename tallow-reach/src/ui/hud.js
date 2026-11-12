@@ -1,4 +1,4 @@
-// In-flight HUD: shield, hull and boost bars, cargo and contract readout,
+// In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
 import { fmtDist } from "../util/math.js";
@@ -11,7 +11,7 @@ import { interpolatedPos } from "../render/views.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
-import { describe } from "../sim/contracts.js";
+import { activeMissions, missionDescription, missionNextText, missionProgress } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
 import { V } from "../util/math.js";
@@ -86,6 +86,10 @@ export function setupHud() {
     if (player && player !== state.player) return;
     el.root.hidden = false;
   });
+  on("main-menu", () => {
+    el.root.hidden = true;
+    routeCache = null;
+  });
   on("hurt", ({ shielded, player }) => {
     if (player && player !== state.player) return;
     el.flash.style.opacity = shielded ? 0.25 : 0.8;
@@ -105,13 +109,32 @@ export function coneRadiusPx(deg) {
 }
 
 /** Refresh every HUD element. Call once per frame while flying. */
+const escHud = value => String(value ?? "").replace(/[&<>\"']/g, c => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '\"': "&quot;",
+  "'": "&#39;",
+}[c]));
+
+function missionsHtml(missions) {
+  if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
+  return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
+    const progress = mission.type === "hunt" ? missionProgress(mission) : null;
+    return `<div class="hud-mission"><strong>${escHud(missionDescription(mission))}:</strong>` +
+      `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
+        progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""
+      }</div>`;
+  }).join("")}</div>`;
+}
+
 export function updateHud(dt) {
   const P = state.player,
     S = state.profile,
     F = state.flight,
     H = state.hud,
     d = SHIPS[S.ship],
-    m = S.mission;
+    missions = activeMissions(S);
 
   el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
   el.hull.style.width = (P.hullMax > 0 ? Math.max(0, P.hull / P.hullMax) * 100 : 0) + "%";
@@ -141,7 +164,7 @@ export function updateHud(dt) {
     `${placeAt(state.place).n}<br>` +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
-    `<span style="color:var(--amber)">${m ? describe(m) + " " + m.p + "/" + m.n : "No contract"}</span>`;
+    missionsHtml(missions);
 
   el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
 
@@ -206,8 +229,10 @@ export function updateHudRoute(dt, routeElement = el.route) {
   if (!details) { routeElement.hidden = true; routeCache = null; return; }
   // The current system is listed for orientation but is not a system left to travel to.
   const remaining = Math.max(0, details.stops.length - 1);
-  const count = details.available ? ` (${remaining} ${remaining === 1 ? "system" : "systems"})` : "";
-  const html = `<h3>Route to ${escapeRouteText(details.title)}${count}</h3>${details.available
+  const count = details.available
+    ? `<span class="route-count">(${remaining} ${remaining === 1 ? "system" : "systems"})</span>`
+    : "";
+  const html = `<h3>Route to ${escapeRouteText(details.title)}${count ? ` ${count}` : ""}</h3>${details.available
     ? `<ol aria-label="Route systems">${flightRouteRows(details.stops)}</ol>`
     : `${details.current ? `<p class="route-here" aria-current="location">${escapeRouteText(details.current.system)}</p>` : ""}<p>No route available.</p>`}`;
   if (routeElement.innerHTML !== html) routeElement.innerHTML = html;

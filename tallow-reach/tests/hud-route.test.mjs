@@ -20,7 +20,8 @@ test("flight route shows only remaining systems, highlights current and counts f
   const model = routeDisplay(world, target.id, route, {});
   assert.ok(route.length > 1);
   assert.equal(el.hidden, false);
-  assert.ok(el.innerHTML.includes(`Route to ${target.n} (${model.stops.length - 1} systems)`));
+  assert.ok(el.innerHTML.includes(`Route to ${target.n}`));
+  assert.ok(el.innerHTML.includes(`class="route-count">(${model.stops.length - 1} systems)</span>`));
   assert.ok(el.innerHTML.includes(`aria-current="location"><span class="route-marker route-marker-start" aria-hidden="true"></span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
   assert.doesNotMatch(el.innerHTML, /route-done|✓|<small>|\d+ jumps?/);
   assert.equal((el.innerHTML.match(/class="route-marker /g) || []).length, model.stops.length, "every system has a route marker");
@@ -57,7 +58,7 @@ test("route summary shows exact pockets, conceals undiscovered stops and escapes
   const destination = { pocketId: target.id };
   const summary = routeDisplay(world, destination, [start.id, target.id], {});
   assert.equal(summary.stops.at(-1).pockets.at(-1).name, target.n);
-  assert.equal(summary.title, `${world.systemsById[target.parent].n} (${target.n})`);
+  assert.equal(summary.title, target.n);
   const hiddenWorld = { ...world, visibility: { mode: "discovered" } };
   assert.deepEqual(routeDisplay(hiddenWorld, destination, [start.id, target.id], {}).stops.at(-1).pockets,
     [{ name: "Undiscovered pocket", current: false }]);

@@ -21,6 +21,7 @@ import { refreshHull } from "./hull.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
+import { activeMissions, missionProgress, isMissionComplete } from "./missions.js";
 import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
 
@@ -75,12 +76,15 @@ export function launch(P = state.player, profile = profileOf(P)) {
   refreshHull(P, profile);      // and its Hull HP follow the fitted hull module
   P.en = P.drive.bmax;          // launched with a full boost tank
 
-  // Salvage contracts need their crates out in the field.
-  const m = profile.mission,
-    field = fieldAt(placeId);
-  if (m && m.type === "salvage" && field && placeWorld(placeId).crates.length === 0) {
+  // Collect objectives need their crates out in the field. Several active
+  // salvage missions share one field; spawn only the combined outstanding need.
+  const field = fieldAt(placeId),
+    salvageNeed = activeMissions(profile)
+      .filter(m => m.type === "salvage" && !isMissionComplete(m) && m.steps?.[m.step]?.kind === "collect")
+      .reduce((sum, m) => sum + missionProgress(m).total - missionProgress(m).done, 0);
+  if (salvageNeed > 0 && field && placeWorld(placeId).crates.length === 0) {
     const [sx, sy, sz] = field.salvage.spread;
-    for (let i = 0; i < m.n - m.p; i++) {
+    for (let i = 0; i < salvageNeed; i++) {
       spawnCrate(V(...field.pos).add(V(R(-sx, sx), R(-sy, sy), R(-sz, sz))), undefined, placeId);
     }
   }

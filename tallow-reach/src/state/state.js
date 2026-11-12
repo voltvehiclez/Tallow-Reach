@@ -154,7 +154,7 @@ export const state = {
     starmap: null,     // active chart; null while closed
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
-    tab: "m",          // m contracts, h hangar, o outfitting, i inventory, p shop, b base, s saves
+    tab: "m",          // m contracts, l mission log, h hangar, o outfitting, i inventory, p shop, b base, s saves
     invShip: null,     // the ship whose hold the Inventory tab shows (null = the one being flown)
     toast: "",         // green message at the top of the panel
     get board() {

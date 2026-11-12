@@ -9,13 +9,15 @@ Flight HUD route: “Route to” shows the destination and count of systems stil
 by the complete remaining system list with start, blue-intermediate and amber destination markers; the current system is blue and the destination is bold amber with a dark center, small orange tick and one dotted outer ring
 (current stays blue when both). The current/start and destination icons are about 20% smaller. The ship HUD route has no inner scrollbar. A blocked route shows no count. The starmap route list
 also shows only remaining systems and those markers, with measured pagination; exact pocket destinations
-remain in its wrapping `Route to System (Pocket)` title and add the pocket in small parentheses on the final system row only.
+use the pocket name in their wrapping `Route to ...` title and still add the pocket in small parentheses on the final system row only.
 System destinations remain system-only. System pocket maps show solid directed orange overlays for planned
 local hops and dashed orange overlays for incoming/outgoing cross-system gate exits. Destinations persist
 across relogs and future routes are replanned. Pocket menus open beside the pointer with **Set destination**
 first; successful destinations and refusals do not render a bottom map notice in either map mode.
 The owner live-browser confirmation for these latest refinements is still pending before Step 12 can be marked complete;
-the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
+the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`. Step 13a is also built and
+awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime and 13c screens are built and
+await the browser checks in `TESTING-13C-SCREENS.md`.
 
 ## Ground rules from the owner (do not break these)
 
@@ -44,9 +46,13 @@ the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
 
 ## Where things stand (2026-11-10)
 
-- **Milestone C is underway.** Steps 0–10 are ticked. **Step 11 is ticked** because the owner passed
-  the 11B playtest. **Step 12 is built but awaiting the owner playtest** in root
-  `TESTING-12-PLACES.md`; do not tick Step 12 until that pass is reported.
+- **Milestone C is built and Milestone D has started.** Steps 0–10 are ticked. **Step 11 is ticked**
+  because the owner passed the 11B playtest. **Step 12 is built but awaiting the owner playtest** in
+  root `TESTING-12-PLACES.md`; do not tick Step 12 until that pass is reported. **Step 13a is built
+  but awaiting its owner playtest** in `TESTING-13-MISSIONS.md`; do not tick Step 13 until that pass
+  is reported. The Step 13b runtime is built and headlessly covered in
+  `TESTING-13B-MISSIONS.md`; the Step 13c screens are built and await the browser pass in
+  `TESTING-13C-SCREENS.md`.
 - **11A foundation:** `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/sim/travel.js`, explicit
   `PLACE_LINKS`, and `tests/step11a-galaxy.test.mjs` (now 23 tests). Default seed `11082026` resolves
   **121 systems / 445 pockets / 444 links**: organic scatter, 1–4 neighbours, a sparse tree with dead ends and junctions,
@@ -100,41 +106,80 @@ the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
   clears/zeroes flight controls, blocks free-cam start and dock/lock/weapon hotkeys, and suspends audio;
   a later user-gesture audio init does not undo that suspension. M closes the chart; Esc closes an open
   pocket popup first, then the chart; P closes the chart then pauses.
-- **Save v18:** `world.destination` stores the local system or exact pocket target and
+- **Save v19:** `world.destination` stores the local system or exact pocket target and
   `world.placeMemory` stores only positive remaining simulation-second cooldowns for mined rock slots
   and cleared one-shot encounters. `world.stationStores` keeps one stock per stable
   `${placeId}:${featureId}` station key; `world.store` remains the enumerable home-station alias.
-  Legacy v18 saves without `stationStores` migrate their stock to the saved station when possible.
-  This optional v18 extension keeps the reserved Step 13 v19 and Step 15 v20 slots intact.
-  It autosaves immediately when changed; validation drops invalid or already-reached destinations and
-  sanitizes memory. Older saves default to no place memory. The v16 `world.galaxy` is only
-  `{ seed, knowledge }` (compact per-system discovery/visit flags); generated geography, templates and
-  layout remain session-only in `state.galaxy` and the live place catalog. Boot, slot load and import
-  call `prepareGalaxySave(raw)` before `applySave`: resolve seed → install catalog → sanitize → record
-  current visit. A removed v1 generated gate recovers to an ordinary pocket in the same system; other
-  unknown pockets recover to `DEFAULT_PLACE` (`reach`). Recovery clears `resume` and preserves
-  profile/cargo; intro/slot/import show a safe-recovery notice naming the new pocket. A failed prepare
-  restores the previous catalog. v15 and older saves/codes still load.
+  `profile.missions` stores several active data missions with current step/counters, and `profile.flags`
+  stores remembered story values. Legacy v18 and older `profile.mission` contracts migrate to the
+  one-step mission shape; a non-enumerable singular view remains for old callers. The v16
+  `world.galaxy` is only `{ seed, knowledge }` (compact per-system discovery/visit flags); generated
+  geography, templates and layout remain session-only in `state.galaxy` and the live place catalog.
+  Boot, slot load and import call `prepareGalaxySave(raw)` before `applySave`: resolve seed → install
+  catalog → sanitize → record current visit. A removed v1 generated gate recovers to an ordinary pocket
+  in the same system; other unknown pockets recover to `DEFAULT_PLACE` (`reach`). Recovery clears
+  `resume` and preserves profile/cargo; intro/slot/import show a safe-recovery notice naming the new
+  pocket. A failed prepare restores the previous catalog. v15 and older saves/codes still load.
+- **13a/13b mission framework:** `src/data/missions/index.js` defines the extensible vocabulary;
+  `contracts.js` keeps the three contract generators data-only and `story.js` contains the ten-step
+  `The Border Signal` worked example. `sim/missions.js` listens for contract events plus story
+  triggers/dialogue actions, and now runs dialogue lines/choices, scripts (wave/ship requests, saved
+  place state, inventory, sound and warp), waits, flags/branches, parallel objectives and configured
+  death/leave/timeout failures. Recover contracts still filter collection to `salv`, while the
+  Border Signal uses its dedicated `beacon` item named **Beacon**; ordinary salvage loot stays `salv`.
+  Every item-bearing `collect`, `deliver` and `mine` objective consumes its exact required quantity from
+  current station stock first and then the ship hold only when its reward is claimed. `sim/contracts.js`
+  remains the contract-board facade; `sim/ai.js` handles mission spawn scripts. Story progress, flags,
+  timers and `world.missionState` survive v19 save/load. Authored Border Signal loot is now a physical,
+  mission-tagged persistent crate saved with its item and position; it restores once on pocket load,
+  requires a successful non-docked pickup, and is removed on abandonment/reward. Completed missions remain
+  claimable through later sector changes, timeouts or death; mission-scoped triggers cannot wake another
+  mission, and scripted item hand-offs wait until the full amount fits. Existing authored Border Signal
+  `salv` drop records migrate to `beacon`. The current contract screen lists several active missions
+  and retains Accept, Refresh, Abandon and inventory-gated Collect reward actions; Destroy mission rows
+  show their live progress again, while Recover/mining item rows keep the concise mission title and
+  reward without an extra item-requirement line. Mission-spawned waves now emit `wave-clear` when their
+  last hostile dies, and a later reach objective recognizes the pilot's current place. Step 13c now
+  adds the data-driven Mission log tab and live dialogue panel; the story offer list can start
+  `The Border Signal`, and dialogue choices save through the existing v19 mission shape without
+  pausing flight by default. The pause overlay now offers **Exit to main menu** below **Resume**;
+  it saves the current resume point and returns to a title screen with disabled **Campaign** first and
+  **Open World** second, while Open World retains the existing `intro` action.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **347/347 pass** (including the generated station-local inventory and starmap/station-separation tests;
-  existing 8B/11B and Step 12 oracles remain green). `npm run build` succeeded: the generated bundle is
-  **701 KB** (the tracked HTML must be restored after validation and is not part of this source patch).
-  The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save
-  **v18** persists destination, place memory and station-local stocks; policies, core kind/name, pocket
-  templates and layout are resolved, not persisted. Default geometry is **121 systems / 445 pockets / 444 links**
-  (including detached station pockets); system ids/names/positions stay stable, gate connections change; independent core rolls
-  give 116 stars and 5 black holes (including Duskdrift). Meridian is a star.
+- **Results:** `npm test` **381/381 pass** (including the Step 13a/13b/13c mission tests, physical
+  Beacon-drop persistence/pickup/cleanup regressions, old `salv` migration, missing-item retry and
+  story hand-in consumption, pause/main-menu navigation, completed-story return-home, trigger isolation
+  and blocked hand-off regressions, salvage hand-in, mission dialogue/script/branch/failure coverage,
+  HUD regressions, generated station-local inventory, starmap/station-separation tests, existing 8B/11B
+  and Step 12 oracles). `npm run build` succeeded: the generated bundle is **746 KB** and is included
+  in the latest playable build. The complete-project `tallow-reach-latest-build.zip` is refreshed with
+  that source and build.
+  The owner
+  passed the first 13a playtest and reported the salvage hand-in bug; the corrected playtest is pending.
+  The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists
+  destination, place memory, station-local stocks, story-script place state and portable mission progress;
+  policies, core kind/name, pocket templates and layout are resolved, not persisted. Default geometry is
+  **121 systems / 445 pockets / 444 links** (including detached station pockets); system ids/names/positions
+  stay stable, gate connections change; independent core rolls give 116 stars and 5 black holes (including
+  Duskdrift). Meridian is a star.
+- **Current package:** `tallow-reach/tallow-reach-latest-build.zip` is the complete project directory,
+  including source, tests, docs and generated HTML, excluding only `node_modules`, Git internals,
+  `.arena` data and the nested prior archive. Browser-local saves are not packaged; export a `TR1:` code
+  separately.
 - **Known limits:** generated pockets now resolve the `frontier`, `trade_lane` and `salvage_yard`
   templates, with four encounter kinds; derelicts/caches are represented by crates and trader stations
   reuse Meridian's `SHOPS` definitions with independent station-local storage. Visibility is `all`; travel is free and non-empty route costs are
   refused until a handler exists; no fuel, activated/proximity gates, supercruise or warping to/near a
   central body. Temporary instanced-system lifecycle is still step 14. Stable asteroid slots and cleared
   one-shot encounters use pause-safe simulation-time memory with a 420-second default and a
-  `respawn-place` event hook. Enemies keep the existing chase behaviour; no mission framework yet.
-  Later save versions are reserved: 12→18, 13→19, 15→20.
+  `respawn-place` event hook. Enemies keep the existing chase behaviour. Mission 13a supports the
+  three legacy contract types plus generic objective events; 13b adds data-only story dialogue,
+  scripts, waits, flags/branching, parallel work and failure outcomes, with `The Border Signal` as a
+  worked example. Step 13c now provides the Mission log tab and live dialogue panel; the owner browser
+  pass remains pending in `TESTING-13C-SCREENS.md`. Later save version 20 remains reserved for Step 15.
 - **Backup:** the owner-approved 11A full project backup is published on GitHub:
   `https://github.com/voltvehiclez/Tallow-Reach/archive/8df6042c4161bd65f39d4ba0fc4b7016b02e40ae.zip`
   (verified public ZIP). Extract and open `tallow-reach/game/tallow-reach.html`. Browser-local saves
@@ -143,16 +188,21 @@ the Step 12 place-content playtest is pending in `TESTING-12-PLACES.md`.
 
 ## What to do next
 
-1. **Owner plays `TESTING-12-PLACES.md`** (project root). It covers build/test, generated templates,
-   varied asteroid fields, mining and pause-safe simulation timers, save/reload memory, static loot,
-   trader docking/Shop/launch, generic patrols and hunt-contract regression, old-save migration and
-   baseline checks. Export a current `TR1:` code before starting.
-2. If the owner reports **pass**, tick Step 12 in `docs/ROADMAP.md` and `docs/REFACTOR_PLAN.md`, mark
-   the guide passed, update this file and add a changelog entry. If they report a bug, fix that first;
-   do not tick the step.
-3. Keep the modularity rule: adding an encounter or template must remain a data/registry edit.
-   `tests/content.test.mjs` and `tests/step12-places.test.mjs` prove the current references and runtime
-   behavior; extend them for new content. The earlier `TESTING-STARMAP.md` remains the Step 11 record.
+1. **Owner plays `TESTING-12-PLACES.md`** (project root), then `TESTING-13-MISSIONS.md` if the place
+   slice passes. Step 12 covers generated templates, mining/place memory, static loot, trader stations,
+   generic patrols and the old-save regression. Step 13a covers multiple active contracts, mine/hunt/
+   salvage progress, reward/abandon actions, v18→v19 migration and mission save round trips. The 13b
+   headless checks are in `TESTING-13B-MISSIONS.md`; 13c screen checks are in
+   `TESTING-13C-SCREENS.md`. Export
+   a current `TR1:` code before each guide.
+2. If the owner reports **pass** for Step 12, tick Step 12 in `docs/ROADMAP.md` and `docs/REFACTOR_PLAN.md`,
+   mark the guide passed, update this file and add a changelog entry. If 13a also passes, tick the 13a
+   slice only in the same places; do not mark all of Step 13 complete until 13b/13c are built and played.
+   If the owner reports a bug, fix it first and do not tick the affected slice.
+3. Keep the modularity rule: adding an encounter, template, contract or story mission must remain a
+   data/registry edit. `tests/content.test.mjs`, `tests/step12-places.test.mjs` and
+   `tests/step13-missions.test.mjs` prove the current references and runtime behavior; extend them for
+   new content. The earlier `TESTING-STARMAP.md` remains the Step 11 record.
 
 ## Build, test and play
 

@@ -14,7 +14,7 @@
 //   docked                           player docked at the outpost
 //   launched                         player left the outpost
 //   died          text               ship destroyed (after docking)
-//   mined         { item }           one unit of ore added to the hold
+//   mined         { item, player }   one unit of ore added to the acting pilot's hold
 //   pickup        { item, player, place, encounter, encounterType }
 //                                    crate picked up; encounter fields are null for ordinary loot
 //   encounter-cleared { place, id, encounter }
@@ -49,6 +49,41 @@
 //   travel-denied { player, from, to, reason }
 //                                    sim/sectors.js refused a proposed hop; the
 //                                    starmap shows the reason without closing
+//   delivered     { item?, target?, place?, player }
+//                                    a mission delivery objective reached its target
+//   mission-tick  { dt, player }     one unpaused simulation tick for survive/wait objectives
+//   mission-trigger { trigger, mission?, place?, player }
+//                                    a story trigger woke a wait step (mission waves emit wave-clear automatically);
+//                                    a supplied mission id scopes the trigger to that mission
+//   mission-dialogue-next { player } advance the current dialogue line
+//   mission-dialogue-choice { choice, player }
+//                                    select a current dialogue choice
+//   mission-script { mission, action, player, place }
+//                                    a story script asks a sim adapter to perform an action
+//   mission-sector-state { mission, place, state, player }
+//                                    a script changed remembered state for one place
+//   mission-item-given / mission-item-taken { mission, item, count, target, player }
+//                                    a script changed a ship or station inventory
+//   mission-warp { mission, from, to, player }
+//                                    a script moved a pilot to another pocket
+//   mission-accepted { mission, player }
+//                                    a contract or story mission entered a pilot's active list
+//   mission-progress  { mission, event, payload, player }
+//                                    the data-driven runner advanced an objective
+//   mission-completed { mission, player }
+//                                    all steps are complete; reward collection is still explicit
+//   mission-failed { mission, reason, action, message, player }
+//                                    a configured death, departure or timeout outcome ran
+//   mission-rewarded { mission, reward, player }
+//                                    the pilot collected a completed mission reward
+//   mission-abandoned { mission, player }
+//                                    the pilot removed an active mission
+//   mission-inventory-changed { profile, player }
+//                                    a station inventory action may unblock a pending mission item script
+//   mission-ui-refresh {}
+//                                    a non-mission screen transition changed dialogue visibility
+//   main-menu {}
+//                                    the pause menu returned the local screen to the title menu
 
 const handlers = new Map();
 
