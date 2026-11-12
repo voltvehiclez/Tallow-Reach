@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Remove unexplained mission progress counters
+
+- Removed the ambiguous `Progress 0/2` display from story missions. It was counting the two lines in the current dialogue, not overall mission completion, so dialogue-line counts and non-quantitative story-step bars are no longer shown in the Mission log.
+- Quantitative contract missions retain a clearly labelled `Objective progress: 0 of N` count, and hunt progress in the flight HUD now says `0 of N defeated` instead of an unexplained fraction.
+- Added UI regression coverage and updated the browser checklist. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
 ## 2026-11-10: Keep mission objectives spoiler-safe
 
 - Separated player-facing `objective` text from compatibility/internal `log` text. The HUD and Mission log now use only the data-defined objective, so a procedural trigger such as `wave-clear` cannot reveal a future encounter.

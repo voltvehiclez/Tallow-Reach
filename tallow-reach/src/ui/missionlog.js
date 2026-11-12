@@ -65,12 +65,21 @@ function missionStatus(mission, index, profile) {
   const preview = dialogue
     ? `<p class="mission-log-dialogue"><strong>${esc(dialogue.speaker || "Mission contact")}:</strong> ${esc(dialogue.line)}</p>`
     : "";
-  const width = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  // A dialogue's 0/2 is the number of lines in the current conversation, not
+  // mission completion. Keep that implementation detail out of the log; only
+  // show a labelled numeric count for contracts with a meaningful target.
+  const showProgress = mission.kind === "contract" && progress.total > 1;
+  const progressText = showProgress
+    ? ` <span>· Objective progress: ${progress.done} of ${progress.total}</span>`
+    : "";
+  const progressBar = showProgress
+    ? `<div class="mission-log-bar"><i style="width:${Math.round((progress.done / progress.total) * 100)}%"></i></div>`
+    : "";
   return (
     `<article class="mission-log-card">` +
     `<header><h3>${esc(mission.title || "Mission")}</h3><span>${esc(mission.kind || "mission")}</span></header>` +
-    `<p class="mission-log-status">${stateText} <span>· Progress ${progress.done}/${progress.total}</span></p>` +
-    `<div class="mission-log-bar"><i style="width:${width}%"></i></div>` +
+    `<p class="mission-log-status">${stateText}${progressText}</p>` +
+    progressBar +
     preview +
     `<p class="mission-log-next"><strong>Next:</strong> ${esc(missionNextText(mission))}</p>` +
     `<div class="mission-log-actions">${action}</div>` +

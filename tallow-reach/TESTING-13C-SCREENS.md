@@ -18,8 +18,9 @@ continuing with the browser pass.
 
 - [ ] **1.1** Open the built game or live preview and check the browser console for red errors.
 - [ ] **1.2** Enter the game, dock at the home station and open the **Mission log** tab. It should show
-      the active missions, their current objective, progress and a **Next** instruction without exposing
-      internal `Step X of Y` numbering. The existing **Contracts** tab remains available with its board,
+      the active missions, their current objective and a **Next** instruction without exposing internal
+      step or dialogue-line counts. Quantitative contracts may show a clearly labelled objective count.
+      The existing **Contracts** tab remains available with its board,
       active rows, Accept, Refresh, Abandon and inventory-gated Collect reward actions.
 - [ ] **1.3** The Mission log should list a **Story missions** section with **The Border Signal** when
       that story mission is not already active. Start it once. It should enter the active list without

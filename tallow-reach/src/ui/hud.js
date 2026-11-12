@@ -123,7 +123,7 @@ function missionsHtml(missions) {
     const progress = mission.type === "hunt" ? missionProgress(mission) : null;
     return `<div class="hud-mission"><strong>${escHud(missionDescription(mission))}:</strong>` +
       `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
-        progress ? `<small>${progress.done}/${progress.total}</small>` : ""
+        progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""
       }</div>`;
   }).join("")}</div>`;
 }

@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BORDER_SIGNAL_MISSION } from "../src/data/missions/story.js";
+import { missionFromContract } from "../src/data/missions/contracts.js";
 import { newProfile, newSave, sanitizeSave } from "../src/state/profile.js";
 import {
   advanceMission,
@@ -49,8 +50,15 @@ test("13c: mission log lists active missions, objective, progress and next actio
   assert.match(html, /The Border Signal/, "the active mission title is shown");
   assert.match(html, /Active/, "the mission is presented as active without exposing internal step numbering");
   assert.doesNotMatch(html, /Step \d+ of \d+/, "internal step numbering is not shown to players");
-  assert.match(html, /Progress 0\/2/, "the current dialogue progress is shown");
+  assert.doesNotMatch(html, /Progress \d+\/\d+|mission-log-bar/, "dialogue line counts are not shown as unexplained mission progress");
   assert.match(html, /Hear Archivist Vale(?:&#39;|')s request\./, "the next action comes from spoiler-safe mission data");
+
+  const contractProfile = newProfile();
+  contractProfile.missions.push(missionFromContract(
+    { type: "hunt", tier: 1, p: 0, n: 2, r: 100, e: "raider" },
+    "contract:test-hunt",
+  ));
+  assert.match(missionLogHtml(contractProfile), /Objective progress: 0 of 2/, "known contract counts have a clear label");
   assert.match(html, /A weak signal is repeating beyond Kestrel Hollow\./, "the current dialogue preview is shown");
 
   const waiting = storyMission();
