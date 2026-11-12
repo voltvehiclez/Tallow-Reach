@@ -31,7 +31,7 @@ export const BORDER_SIGNAL_MISSION = {
       portrait: "archivist-vale",
       log: "Listen to the signal briefing.",
       objective: "Investigate the signal in Kestrel Hollow.",
-      lines: ["The signal is inside the hollow. Stay with it until the patrol reveals the beacon."],
+      lines: ["The signal is inside the hollow. Follow it and report what you find."],
       next: "travel",
     },
     {
@@ -45,6 +45,8 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "prepare",
       kind: "script",
+      place: "hollow",
+      requiresFlying: true,
       log: "Activate the border signal sector.",
       objective: "Investigate the signal in Kestrel Hollow.",
       action: { kind: "set-sector-state", place: "hollow", set: { borderSignal: "active" } },
@@ -53,6 +55,8 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "spawn",
       kind: "script",
+      place: "hollow",
+      requiresFlying: true,
       log: "A distant patrol is responding to the signal.",
       objective: "Investigate the signal in Kestrel Hollow.",
       action: { kind: "spawn-wave", place: "hollow", enemy: "raider", count: 2, spawnDist: [800, 1000] },
@@ -66,7 +70,7 @@ export const BORDER_SIGNAL_MISSION = {
       objective: "Stay with the signal in Kestrel Hollow.",
       steps: [
         { id: "reach-signal", kind: "reach", place: "hollow", count: 1 },
-        { id: "hold-position", kind: "survive", count: 2 },
+        { id: "hold-position", kind: "survive", place: "hollow", count: 2 },
       ],
       next: "check-help",
     },

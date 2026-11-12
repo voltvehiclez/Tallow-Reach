@@ -22,7 +22,7 @@ import {
 import { emit } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
 
-const playerFor = profile => ({ profile });
+const playerFor = profile => ({ profile, docked: true });
 
 test("13a: every contract is a mission-data template with a runner objective", () => {
   assert.deepEqual([...CONTRACT_TYPES].sort(), ["hunt", "mine", "salvage"]);

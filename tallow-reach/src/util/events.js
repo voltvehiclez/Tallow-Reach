@@ -78,10 +78,10 @@
 //                                    the pilot collected a completed mission reward
 //   mission-abandoned { mission, player }
 //                                    the pilot removed an active mission
-  //   mission-inventory-changed { profile, player }
-  //                                    a station inventory action may unblock a pending mission item script
-  //   mission-ui-refresh {}
-  //                                    a non-mission screen transition changed dialogue visibility
+//   mission-inventory-changed { profile, player }
+//                                    a station inventory action may unblock a pending mission item script
+//   mission-ui-refresh {}
+//                                    a non-mission screen transition changed dialogue visibility
 //   main-menu {}
 //                                    the pause menu returned the local screen to the title menu
 

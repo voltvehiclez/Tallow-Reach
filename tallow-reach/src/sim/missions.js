@@ -4,11 +4,11 @@
 
 import { on, emit } from "../util/events.js";
 import { missionFromContract, describeMission } from "../data/missions/contracts.js";
-import { itemName } from "../data/items.js";
+import { itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
 import { placeAt } from "../data/places.js";
 import { state, profileOf } from "../state/state.js";
-import { STATION, addItem, countOf, hasRoomFor, takeItem } from "./inventory.js";
+import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stockOf, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos } from "./places.js";
 
 let nextMissionId = 0;
@@ -357,10 +357,69 @@ function scriptActionReady(action, profile) {
     : countOf(where, item, profile, state.worldState) >= count;
 }
 
+function scriptActionsReady(actions, profile, payload = {}) {
+  const planned = new Map();
+  const player = payload.player || (profile === state.profile ? state.player : null);
+  const stockFor = where => {
+    if (!planned.has(where)) {
+      planned.set(where, {
+        counts: { ...stockOf(where, profile, state.worldState) },
+        load: loadOf(where, profile, state.worldState),
+      });
+    }
+    return planned.get(where);
+  };
+  for (const action of actions) {
+    const kind = scriptKind(action);
+    if (kind === "give-item" || kind === "take-item") {
+      const item = action.item;
+      const count = Math.max(1, Math.floor(+action.count || 1));
+      const where = action.target === "station" ? STATION : profile.ship;
+      const stock = stockFor(where);
+      const have = Math.max(0, Number(stock.counts[item]) || 0);
+      if (kind === "take-item") {
+        if (have < count) return false;
+        stock.counts[item] = have - count;
+        stock.load = Math.max(0, stock.load - count * itemVol(item));
+        continue;
+      }
+      const volume = itemVol(item);
+      if (!(volume > 0) || stock.load + count * volume > capacityOf(where, profile, state.worldState) ||
+          have + count > itemStack(item)) return false;
+      stock.counts[item] = have + count;
+      stock.load += count * volume;
+      continue;
+    }
+    if (kind === "spawn-wave" || kind === "spawn-ship") {
+      const place = action.place || action.sector || player?.place || state.place;
+      if (!player || player.docked === true || player.dead === true || player.warp ||
+          (player.place || state.place) !== place) return false;
+    }
+    if (kind === "warp-player" && (!player || !(action.to || action.place || action.sector))) return false;
+  }
+  return true;
+}
+
+function stepSituationReady(step, profile, payload = {}) {
+  if (payload.fromDialogue) return false;
+  const player = payload.player || (profile === state.profile ? state.player : null);
+  const requiredPlace = step.place || step.sector || step.requiresPlace;
+  if (requiredPlace && (!player || player.place !== requiredPlace)) return false;
+  if (state.loading || player?.loading || player?.dead || player?.warp ||
+      (player?.inCombat && step.allowCombat !== true)) return false;
+  if (step.requiresDock === true && player?.docked !== true) return false;
+  if (step.requiresFlying === true && (!player || player.docked === true)) return false;
+  return true;
+}
+
 function executeScriptStep(step, mission, profile, payload = {}) {
+  if (!stepSituationReady(step, profile, payload)) return false;
   const actions = scriptActions(step);
   if (!actions.length) return true;
-  if (!actions.every(action => scriptActionReady(action, profile))) return false;
+  // Preflight the complete batch. This prevents a multi-action hand-off from
+  // applying its first item transfer and then getting stuck on a later full
+  // hold, which would duplicate that first transfer on every retry.
+  if (!scriptActionsReady(actions, profile, payload)) return false;
   return actions.every(action => executeScriptAction(action, mission, profile, payload));
 }
 
@@ -434,6 +493,9 @@ function activateAutomatic(mission, profile, payload = {}) {
 
 function objectiveMatches(step, event, payload = {}) {
   if (!step) return false;
+  const requiredPlace = step.place || step.sector || step.requiresPlace;
+  const actualPlace = payload.player?.place || payload.place || payload.id || payload.target;
+  if (requiredPlace && requiredPlace !== actualPlace) return false;
   if (step.kind === "kill") {
     return (!step.enemy || step.enemy === payload.def) && (!step.faction || step.faction === payload.faction);
   }
@@ -441,18 +503,19 @@ function objectiveMatches(step, event, payload = {}) {
   if (step.kind === "collect") return !step.item || step.item === payload.item;
   if (step.kind === "reach" || step.kind === "reach-sector") {
     const target = step.place || step.sector || step.target;
-    return !target || target === payload.id || target === payload.place;
+    return !target || target === payload.id || target === payload.place || target === payload.player?.place;
   }
   if (step.kind === "deliver") {
     const target = step.target || step.place;
-    return (!target || target === payload.target || target === payload.place) &&
+    if (target === "station" && payload.player && payload.player.docked !== true) return false;
+    return (!target || target === payload.target || target === payload.place || target === payload.player?.place) &&
       (!step.item || step.item === payload.item);
   }
   if (step.kind === "wait") {
     if (event === "mission-trigger") return !step.trigger || step.trigger === payload.trigger || step.trigger === payload.id;
     if (event === "place-entered") {
       const target = step.place || step.sector || step.target;
-      return !!target && target === (payload.id || payload.place);
+      return !!target && target === (payload.id || payload.place || payload.player?.place);
     }
     return event === "mission-tick" && (step.timer === true || step.trigger === "timer" || step.seconds !== undefined);
   }
@@ -463,7 +526,10 @@ function advanceDialogue(mission, step, event, payload, profile) {
   // The UI also hides these controls, but keep the rule in the runner so a
   // stale click or another caller cannot advance a station conversation while
   // the pilot is in flight.
-  if (step.requiresDock === true && payload.player && payload.player.docked !== true) return false;
+  const player = payload.player || (profile === state.profile ? state.player : null);
+  if (!player || state.loading || player.loading || player.dead || player.warp ||
+      (player.inCombat && step.allowCombat !== true) ||
+      (step.requiresDock === true && player.docked !== true)) return false;
   const lines = Array.isArray(step.lines) ? step.lines : step.lines == null ? [] : [String(step.lines)];
   const current = counterValue(mission, step.id);
   if (event === "dialogue-choice") {
@@ -474,7 +540,7 @@ function advanceDialogue(mission, step, event, payload, profile) {
     applyFlags(profile, choice.set || choice.flags);
     const target = choice.next ?? choice.goto;
     moveToStep(mission, target === undefined ? mission.step + 1 : stepIndex(mission, target), payload);
-    activateAutomatic(mission, profile, payload);
+    activateAutomatic(mission, profile, { ...payload, fromDialogue: true });
     return true;
   }
   if (event !== "dialogue-next") return false;
@@ -484,7 +550,7 @@ function advanceDialogue(mission, step, event, payload, profile) {
     return true;
   }
   moveToStep(mission, nextStepIndex(mission, step), payload);
-  activateAutomatic(mission, profile, payload);
+  activateAutomatic(mission, profile, { ...payload, fromDialogue: true });
   return true;
 }
 
@@ -645,24 +711,17 @@ export function missionDialogue(mission) {
 }
 
 /** Advance the current dialogue line without making the UI know step internals. */
-export function nextMissionDialogue(indexOrId, profile = state.profile) {
+export function nextMissionDialogue(indexOrId, profile = state.profile, player = profile === state.profile ? state.player : undefined) {
   const mission = missionAt(indexOrId, profile);
   if (!mission) return false;
-  return advanceMission(mission, "dialogue-next", {
-    profile,
-    player: profile === state.profile ? state.player : undefined,
-  });
+  return advanceMission(mission, "dialogue-next", { profile, player });
 }
 
 /** Select a current dialogue choice without making the UI know step internals. */
-export function chooseMission(indexOrId, choiceId, profile = state.profile) {
+export function chooseMission(indexOrId, choiceId, profile = state.profile, player = profile === state.profile ? state.player : undefined) {
   const mission = missionAt(indexOrId, profile);
   if (!mission) return false;
-  return advanceMission(mission, "dialogue-choice", {
-    choice: choiceId,
-    profile,
-    player: profile === state.profile ? state.player : undefined,
-  });
+  return advanceMission(mission, "dialogue-choice", { choice: choiceId, profile, player });
 }
 
 function itemRequirement(mission) {
@@ -707,7 +766,10 @@ function consumeDelivery(mission, profile) {
   return null;
 }
 
-export function completeMission(indexOrId, profile = state.profile) {
+export function completeMission(indexOrId, profile = state.profile, player = profile === state.profile ? state.player : undefined) {
+  if (player && (state.loading || player.loading || player.dead || player.warp || player.inCombat || player.docked !== true)) {
+    return "Dock at a station to collect the reward.";
+  }
   const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(isMissionComplete);
   if (!mission || !isMissionComplete(mission)) return undefined;
   const deliveryError = consumeDelivery(mission, profile);
@@ -741,6 +803,9 @@ on("place-entered", payload => advanceMissions("place-entered", payload));
 on("delivered", payload => advanceMissions("delivered", payload));
 on("mission-trigger", payload => advanceMissions("mission-trigger", payload));
 on("mission-tick", payload => advanceMissions("mission-tick", payload));
+// Arrival enters the new pocket while the warp animation is still active;
+// retry world-changing steps once the pilot is actually out of warp.
+on("warp-end", payload => advanceMissions("warp-end", payload));
 // Resource-blocked scripts retry when the player changes inventory or returns
 // to a station. The pending step, not the button click, decides whether it can
 // now continue.

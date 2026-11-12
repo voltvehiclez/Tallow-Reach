@@ -22,9 +22,10 @@ the next person must know (save version, rebuild needed, known issues).
 ## 2026-11-10: Make Border Signal handoffs resource-safe
 
 - A full cargo hold now pauses the beacon handoff with an actionable **Make room in your hold to continue.** instruction. Inventory changes and docking retry pending item scripts; the beacon is delivered once space exists instead of being lost or abandoning the mission.
+- Multi-action item scripts preflight their combined capacity and resources, so a blocked batch cannot partially transfer an earlier item and duplicate it on retry. Station-gated dialogue also refuses stale calls without a current docked pilot.
 - Border Signal no longer auto-fails for leaving Kestrel Hollow or for an undisplayed timeout. Its only automatic failure is the clear, reported cause of ship destruction; explicit player abandonment remains the destructive choice.
-- The station briefing now leads to a travel objective. The mission activates its sector and spawns the distant, mission-tagged patrol only after the pilot enters Kestrel Hollow, never because a dialogue button was clicked.
-- Added resource, interruption, arrival-order and no-spawn-on-dialogue regressions. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+- The station briefing now uses spoiler-safe investigation wording and leads to a travel objective. The mission activates its sector and spawns the distant, mission-tagged patrol only after the pilot enters Kestrel Hollow, never because a dialogue button was clicked.
+- v19 save sanitization now restores new situation requirements, preserves nested parallel counters, and migrates older Border Signal saves by stable step id without reviving timeout/leave failure. Documented the enforcement plan and known limits for all eight architecture principles in `docs/REFACTOR_PLAN.md`. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
 
 ---
 

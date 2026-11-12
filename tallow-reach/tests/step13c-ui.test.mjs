@@ -37,7 +37,7 @@ test("13c: the dialogue panel renders a portrait slot, speaker, data text and ch
   assert.equal(missionDialogue(mission).pause, false, "dialogue does not pause unless mission data asks it to");
 
   const profile = newProfile();
-  advanceMission(mission, "dialogue-next", { profile });
+  advanceMission(mission, "dialogue-next", { profile, player: { docked: true, place: "reach" } });
   const second = dialogueHtml(mission);
   assert.match(second, /data-dialogue-choice="help"/, "the help choice is data-driven");
   assert.match(second, /data-dialogue-choice="decline"/, "the decline choice is data-driven");
@@ -91,6 +91,38 @@ test("13c: mission log lists active missions, objective, progress and next actio
   assert.match(screens, /\["l", "Mission log"\]/, "the mission log is an outpost tab");
   assert.match(screens, /l: missionLogHtml/, "the tab is wired to the mission-log renderer");
   assert.doesNotMatch(ui, /Archivist Vale|Kestrel Hollow|I will investigate/, "story text stays in mission data");
+});
+
+test("13c: old Border Signal saves migrate by step id to the resumable flow", () => {
+  const old = JSON.parse(JSON.stringify(BORDER_SIGNAL_MISSION));
+  const oldIds = ["intro", "prepare", "brief", "spawn", "wait", "search", "check-help", "reward-item", "finish", "declined"];
+  old.steps = oldIds.map(id => old.steps.find(step => step.id === id));
+  old.steps[0].choices[0].next = "prepare";
+  old.steps[2].next = "spawn";
+  old.steps[8].next = 10;
+  old.timeout = 180;
+  old.fails = { on: ["player-dead", "left-sector", "timeout"], sector: "hollow", action: "abandon" };
+  old.step = 2;
+  old.current = 2;
+  old.counters = { intro: 2 };
+  for (const step of old.steps) {
+    delete step.requiresFlying;
+    if (step.id === "prepare" || step.id === "spawn") delete step.place;
+  }
+  delete old.steps.find(step => step.id === "search").steps[1].place;
+  const save = newSave();
+  save.profile.missions = [old];
+  const loaded = sanitizeSave(save);
+  const mission = loaded.profile.missions[0];
+  assert.equal(mission.steps[mission.step].id, "brief", "the pending dialogue keeps its stable step id");
+  assert.equal(mission.steps.some(step => step.id === "travel"), true, "the new travel step is restored");
+  assert.equal(mission.steps.find(step => step.id === "prepare").requiresFlying, true, "world scripts regain their state requirement");
+  assert.equal(mission.steps.find(step => step.id === "search").steps[1].place, "hollow", "nested objective requirements survive migration");
+  const rewardStep = mission.steps.find(step => step.id === "reward-item");
+  assert.equal(rewardStep.place, undefined, "the portable beacon handoff is not tied to a stale sector");
+  assert.equal(rewardStep.requiresFlying, undefined, "a saved reward can resume safely after docking or reload");
+  assert.deepEqual(mission.fails.on, ["player-dead"], "old automatic leave and timeout failure is removed");
+  assert.equal(mission.timeout, undefined);
 });
 
 test("13c: dialogue presentation fields survive the existing v19 save round trip", () => {

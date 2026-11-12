@@ -249,7 +249,7 @@ function cleanMissionStep(raw, index) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
   const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
   const step = { id, kind: raw.kind };
-  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
     if (raw[key] !== undefined) step[key] = raw[key];
   }
   if (raw.lines !== undefined) {
@@ -270,6 +270,18 @@ function cleanMissionStep(raw, index) {
   return step;
 }
 
+function restoreAuthoredStepMetadata(step, saved, authored) {
+  if (!step || !authored) return;
+  for (const key of ["requiresDock", "requiresFlying", "requiresPlace", "place"]) {
+    if (saved?.[key] === undefined && authored?.[key] !== undefined) step[key] = authored[key];
+  }
+  for (const child of step.steps || []) {
+    const savedChild = (saved?.steps || []).find(item => item?.id === child.id);
+    const authoredChild = (authored?.steps || []).find(item => item?.id === child.id);
+    restoreAuthoredStepMetadata(child, savedChild, authoredChild);
+  }
+}
+
 function cleanMission(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   // v18 and older stored a compact contract directly in `profile.mission`.
@@ -277,19 +289,31 @@ function cleanMission(raw) {
     return missionFromContract({ ...raw }, raw.id || `contract:${raw.type}:legacy`);
   }
   if (!isMissionKind(raw.kind) || !Array.isArray(raw.steps)) return null;
-  const steps = raw.steps.map(cleanMissionStep).filter(Boolean);
+  let steps = raw.steps.map(cleanMissionStep).filter(Boolean);
   if (!steps.length) return null;
-  // Older saves contain the authored story steps but not newer presentation
-  // metadata. Restore that data-only metadata by step id without changing
-  // dialogue progress or any mission state.
   const definition = STORY_MISSIONS.find(item => item.id === raw.id);
+  const rawStep = Math.max(0, Math.floor(+raw.step || +raw.current || 0));
+  const savedStepId = rawStep < steps.length ? steps[rawStep]?.id : null;
+  const savedComplete = raw.completed === true || rawStep >= steps.length;
+  let currentStep = rawStep;
+  // Border Signal changed its authored order in v19 without changing the save
+  // version. Rebuild that authored story's step array by stable step id so an
+  // older v19 save cannot retain the old timeout/leave failure or run a
+  // dialogue-to-spawn shortcut. Do this even when the step count happens to
+  // match: authored order is not save state. Counters remain keyed by stable
+  // ids below.
+  if (definition?.id === "story.border-signal") {
+    steps = definition.steps.map(cleanMissionStep).filter(Boolean);
+    currentStep = savedComplete ? steps.length : Math.max(0, steps.findIndex(step => step.id === savedStepId));
+  }
+  // Older saves contain authored story steps but not newer presentation or
+  // situation metadata. Restore that data-only metadata by step id without
+  // changing dialogue progress or any mission state.
   if (definition) {
     for (const step of steps) {
       const saved = raw.steps.find(item => item?.id === step.id);
       const authored = definition.steps.find(item => item.id === step.id);
-      if (saved?.requiresDock === undefined && authored?.requiresDock !== undefined) {
-        step.requiresDock = authored.requiresDock;
-      }
+      restoreAuthoredStepMetadata(step, saved, authored);
     }
   }
   // Salvage contracts from the first 13a build counted any pickup. Keep their
@@ -298,10 +322,18 @@ function cleanMission(raw) {
     const collect = steps.find(step => step.kind === "collect");
     if (collect && !collect.item) collect.item = "salv";
   }
-  const step = Math.max(0, Math.min(steps.length, Math.floor(+raw.step || +raw.current || 0)));
+  const step = Math.max(0, Math.min(steps.length, currentStep));
   const counters = {};
   const source = raw.counters && typeof raw.counters === "object" ? raw.counters : {};
   for (const item of steps) {
+    if (item.kind === "parallel") {
+      for (const child of item.steps || []) {
+        const id = `${item.id}.${child.id}`;
+        const value = Number(source[id]);
+        counters[id] = Number.isFinite(value) && value >= 0 ? Math.min(child.count, value) : 0;
+      }
+      continue;
+    }
     const value = Number(source[item.id]);
     counters[item.id] = Number.isFinite(value) && value >= 0 ? Math.min(item.count, value) : 0;
   }
@@ -314,6 +346,10 @@ function cleanMission(raw) {
   const rewards = raw.rewards && typeof raw.rewards === "object" ? {
     credits: Math.max(0, Math.floor(+raw.rewards.credits || 0)),
   } : { credits: Math.max(0, Math.floor(+raw.r || 0)) };
+  const borderDefinition = definition?.id === "story.border-signal" ? definition : null;
+  const authoredFails = borderDefinition?.fails
+    ? { ...borderDefinition.fails, on: Array.isArray(borderDefinition.fails.on) ? [...borderDefinition.fails.on] : borderDefinition.fails.on }
+    : null;
   const mission = {
     id: typeof raw.id === "string" && raw.id ? raw.id : `mission:${raw.type || "unknown"}`,
     title: typeof raw.title === "string" && raw.title ? raw.title : String(raw.type || "Mission"),
@@ -321,13 +357,17 @@ function cleanMission(raw) {
     requires: Array.isArray(raw.requires) ? raw.requires.filter(id => typeof id === "string") : [],
     steps,
     rewards,
-    fails: raw.fails && typeof raw.fails === "object" ? { ...raw.fails } : {},
+    fails: authoredFails || (raw.fails && typeof raw.fails === "object" ? { ...raw.fails } : {}),
     step: current,
     current,
     counters,
   };
   for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "timeout", "elapsed", "failed", "failure", "failureMessage"]) {
-    if (raw[key] !== undefined) mission[key] = raw[key];
+    if (raw[key] !== undefined && !(borderDefinition && key === "timeout")) mission[key] = raw[key];
+  }
+  if (borderDefinition) {
+    mission.origin = borderDefinition.origin;
+    delete mission.timeout;
   }
   if (mission.type && MISSION_TYPES.includes(mission.type)) {
     mission.tier = Math.max(1, Math.floor(+mission.tier || 1));

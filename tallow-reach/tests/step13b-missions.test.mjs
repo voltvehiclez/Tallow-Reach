@@ -106,9 +106,11 @@ test("13b: dialogue choice changes the next step and the worked mission complete
     assert.equal(missionDialogue(mission).line, "A weak signal is repeating beyond Kestrel Hollow.");
     assert.equal(missionDialogue(mission).requiresDock, true, "the station contact is explicitly dock-gated");
     assert.equal(advanceMission(mission, "dialogue-next", { player }), true);
-    assert.equal(chooseMission(mission.id, "help", profile), true);
+    assert.equal(chooseMission(mission.id, "help", profile, player), true);
     assert.equal(profile.flags["story.border.helped"], true);
     assert.equal(mission.step, 1, "the choice opens the station briefing without changing the world");
+    assert.equal(missionDialogue(mission).line, "The signal is inside the hollow. Follow it and report what you find.",
+      "the briefing gives a spoiler-safe investigation instruction");
     assert.equal(state.worldState.missionState.hollow, undefined, "the briefing does not activate the remote sector");
 
     advanceMission(mission, "dialogue-next", { player });
@@ -150,7 +152,7 @@ test("13b: a completed mission remains claimable after leaving its origin sector
   state.places = new Map();
   try {
     advanceMission(mission, "dialogue-next", { player });
-    chooseMission(mission.id, "help", profile);
+    chooseMission(mission.id, "help", profile, player);
     advanceMission(mission, "dialogue-next", { player });
     player.place = "hollow";
     player.docked = false;
@@ -182,7 +184,7 @@ test("13b: a mission wave emits wave-clear and preserves an already-reached sear
   state.places = new Map();
   try {
     advanceMission(mission, "dialogue-next", { player });
-    chooseMission(mission.id, "help", profile);
+    chooseMission(mission.id, "help", profile, player);
     advanceMission(mission, "dialogue-next", { player });
     assert.equal(mission.steps[mission.step].id, "travel", "the story waits for the player to enter Hollow");
     player.place = "hollow";
@@ -196,6 +198,91 @@ test("13b: a mission wave emits wave-clear and preserves an already-reached sear
     for (const enemy of wave) hitHostile(enemy, 999, enemy.pos, player, "hollow");
     assert.equal(mission.steps[mission.step].id, "search", "the last mission ship wakes the wave-clear wait");
     assert.equal(missionProgress(mission).done, 1, "being in Hollow already satisfies the reach half of search");
+    player.place = "reach";
+    emit("mission-tick", { dt: 2, player, profile });
+    assert.equal(mission.steps[mission.step].id, "search", "holding position in the wrong place does not advance the search");
+    player.place = "hollow";
+    emit("mission-tick", { dt: 2, player, profile });
+    assert.equal(mission.steps[mission.step].id, "finish", "returning to the signal resumes the pending hold");
+  } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
+    state.places = previousPlaces;
+  }
+});
+
+test("13b: dialogue cannot execute a following world script", () => {
+  const profile = newProfile();
+  const player = playerFor(profile);
+  const previousWorld = state.worldState;
+  state.worldState = newSave().world;
+  const mission = {
+    id: "dialogue-world-gate",
+    title: "Dialogue world gate",
+    kind: "story",
+    steps: [
+      {
+        id: "talk",
+        kind: "dialogue",
+        requiresDock: true,
+        lines: ["Ready?", "Go."],
+        choices: [{ id: "go", text: "Go", next: "world" }],
+      },
+      {
+        id: "world",
+        kind: "script",
+        place: "hollow",
+        action: { kind: "set-sector-state", place: "hollow", set: { tested: true } },
+        next: "done",
+      },
+      { id: "done", kind: "dialogue", requiresDock: false, lines: ["Done."] },
+    ],
+    rewards: { credits: 0 },
+    fails: {},
+    step: 0,
+    current: 0,
+    counters: {},
+  };
+  profile.missions.push(mission);
+  try {
+    advanceMission(mission, "dialogue-next", { player });
+    assert.equal(chooseMission(mission.id, "go", profile, player), true);
+    assert.equal(mission.steps[mission.step].id, "world");
+    assert.equal(state.worldState.missionState?.hollow, undefined,
+      "the dialogue choice only changes conversation state");
+    player.place = "hollow";
+    player.docked = false;
+    emit("place-entered", { id: "hollow", player, profile });
+    assert.equal(state.worldState.missionState.hollow.tested, true,
+      "the arrival event executes the pending world script");
+  } finally {
+    state.worldState = previousWorld;
+  }
+});
+
+test("13b: arrival waits for warp-end before changing the remote world", () => {
+  const { profile, mission, player } = freshStory();
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  const previousPlaces = state.places;
+  state.worldState = newSave().world;
+  state.place = "reach";
+  state.places = new Map();
+  try {
+    advanceMission(mission, "dialogue-next", { player });
+    chooseMission(mission.id, "help", profile, player);
+    advanceMission(mission, "dialogue-next", { player });
+    player.place = "hollow";
+    player.docked = false;
+    player.warp = { from: "reach", to: "hollow" };
+    emit("place-entered", { id: "hollow", player, profile });
+    assert.equal(mission.steps[mission.step].id, "prepare", "arrival does not run world scripts during warp");
+    assert.equal(state.worldState.missionState.hollow, undefined);
+    player.warp = null;
+    emit("warp-end", { from: "reach", to: "hollow", player, profile });
+    assert.equal(mission.steps[mission.step].id, "wait", "the pending arrival work resumes after warp");
+    assert.equal(state.worldState.missionState.hollow.borderSignal, "active");
+    assert.equal(state.places.get("hollow").entities.enemies.length, 2);
   } finally {
     state.worldState = previousWorld;
     state.place = previousPlace;
@@ -213,7 +300,7 @@ test("13b: a full hold pauses the beacon handoff instead of abandoning the missi
   state.places = new Map();
   try {
     advanceMission(mission, "dialogue-next", { player });
-    chooseMission(mission.id, "help", profile);
+    chooseMission(mission.id, "help", profile, player);
     advanceMission(mission, "dialogue-next", { player });
     assert.equal(mission.steps[mission.step].id, "travel", "the briefing only gives the player a travel objective");
 
@@ -231,6 +318,8 @@ test("13b: a full hold pauses the beacon handoff instead of abandoning the missi
     assert.equal(activeMissions(profile).length, 1, "a full hold does not abandon the mission");
     assert.equal(missionNextText(mission, profile), "Make room in your hold to continue.");
 
+    player.place = "reach";
+    player.docked = true;
     emit("place-changed", { from: "hollow", to: "reach", player, profile });
     assert.equal(activeMissions(profile).length, 1, "returning to the station does not fail the pending handoff");
     delete profile.holds.wasp.salv;
@@ -244,6 +333,47 @@ test("13b: a full hold pauses the beacon handoff instead of abandoning the missi
   }
 });
 
+test("13b: a multi-action resource handoff preflights as one unit", () => {
+  const profile = newProfile();
+  profile.holds.wasp.salv = 19;
+  const mission = {
+    id: "batch-handoff",
+    title: "Batch handoff",
+    kind: "story",
+    steps: [
+      {
+        id: "handoff",
+        kind: "script",
+        objective: "Secure the recovered items.",
+        action: [
+          { kind: "give-item", target: "ship", item: "salv", count: 1 },
+          { kind: "give-item", target: "ship", item: "core", count: 1 },
+        ],
+        next: "done",
+      },
+      { id: "done", kind: "dialogue", lines: ["Done."] },
+    ],
+    rewards: { credits: 0 },
+    fails: {},
+    step: 0,
+    current: 0,
+    counters: {},
+  };
+  profile.missions.push(mission);
+  const player = playerFor(profile);
+  player.place = "hollow";
+  player.docked = false;
+  assert.equal(advanceMission(mission, "mission-tick", { dt: 0, player, profile }), false,
+    "the whole handoff waits when the combined batch does not fit");
+  assert.equal(profile.holds.wasp.salv, 19, "a blocked batch does not partially transfer its first item");
+  assert.equal(profile.holds.wasp.core || 0, 0);
+  delete profile.holds.wasp.salv;
+  emit("mission-inventory-changed", { player, profile });
+  assert.equal(mission.steps[mission.step].id, "done");
+  assert.equal(profile.holds.wasp.salv, 1);
+  assert.equal(profile.holds.wasp.core, 1);
+});
+
 test("13b: abandoning a story mission removes its scripted wave", () => {
   const { profile, mission, player } = freshStory();
   const previousWorld = state.worldState;
@@ -254,7 +384,7 @@ test("13b: abandoning a story mission removes its scripted wave", () => {
   state.places = new Map();
   try {
     advanceMission(mission, "dialogue-next", { player });
-    chooseMission(mission.id, "help", profile);
+    chooseMission(mission.id, "help", profile, player);
     advanceMission(mission, "dialogue-next", { player });
     player.place = "hollow";
     player.docked = false;
@@ -340,7 +470,7 @@ test("13b: a blocked item script waits instead of silently losing the item", () 
 test("13b: the alternate dialogue choice takes the decline branch", () => {
   const { profile, mission, player } = freshStory();
   advanceMission(mission, "dialogue-next", { player });
-  assert.equal(chooseMission(mission.id, "decline", profile), true);
+  assert.equal(chooseMission(mission.id, "decline", profile, player), true);
   assert.equal(profile.flags["story.border.helped"], false);
   assert.equal(mission.steps[mission.step].id, "declined");
   assert.equal(isMissionComplete(mission), false);
@@ -370,6 +500,7 @@ test("13b: wait steps support a timer and a player entering an area", () => {
   assert.equal(mission.step, 1);
   advanceMission(mission, "place-entered", { id: "reach", player });
   assert.equal(mission.step, 1);
+  player.place = "hollow";
   advanceMission(mission, "place-entered", { id: "hollow", player });
   assert.equal(isMissionComplete(mission), true);
 });
@@ -403,7 +534,8 @@ test("13b: leaving while dialogue is open does not abandon the mission", () => {
   assert.equal(activeMissions(station.profile).length, 1);
 
   const beacon = freshStory();
-  beacon.mission.step = 8;
+  beacon.mission.step = 9;
+  beacon.player.docked = false;
   emit("place-changed", { from: "hollow", to: "reach", player: beacon.player, profile: beacon.profile });
   assert.equal(isMissionFailed(beacon.mission), false, "warping with the beacon line open does not lose the mission");
   assert.equal(activeMissions(beacon.profile).length, 1);
