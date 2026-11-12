@@ -812,6 +812,9 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const heading = css.match(/\.sm-route h3\s*\{([^}]+)\}/)[1];
   const pocket = css.match(/\.sm-pocket\s*\{([^}]+)\}/)[1];
+  const hudRouteCount = css.match(/#hud-route \.route-count\s*\{([^}]+)\}/)?.[1] || "";
+  assert.match(hudRouteCount, /display:\s*inline-block/);
+  assert.match(hudRouteCount, /white-space:\s*nowrap/);
   assert.match(heading, /white-space:\s*normal/);
   assert.match(heading, /overflow-wrap:\s*anywhere/);
   assert.doesNotMatch(pocket, /ellipsis|white-space:\s*nowrap/);

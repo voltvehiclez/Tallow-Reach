@@ -213,8 +213,10 @@ export function updateHudRoute(dt, routeElement = el.route) {
   if (!details) { routeElement.hidden = true; routeCache = null; return; }
   // The current system is listed for orientation but is not a system left to travel to.
   const remaining = Math.max(0, details.stops.length - 1);
-  const count = details.available ? ` (${remaining} ${remaining === 1 ? "system" : "systems"})` : "";
-  const html = `<h3>Route to ${escapeRouteText(details.title)}${count}</h3>${details.available
+  const count = details.available
+    ? `<span class="route-count">(${remaining} ${remaining === 1 ? "system" : "systems"})</span>`
+    : "";
+  const html = `<h3>Route to ${escapeRouteText(details.title)}${count ? ` ${count}` : ""}</h3>${details.available
     ? `<ol aria-label="Route systems">${flightRouteRows(details.stops)}</ol>`
     : `${details.current ? `<p class="route-here" aria-current="location">${escapeRouteText(details.current.system)}</p>` : ""}<p>No route available.</p>`}`;
   if (routeElement.innerHTML !== html) routeElement.innerHTML = html;

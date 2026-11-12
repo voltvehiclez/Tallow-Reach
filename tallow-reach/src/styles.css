@@ -65,6 +65,7 @@ canvas {
 }
 #hud-route[hidden] { display: none; }
 #hud-route h3 { margin: 0 0 5px; color: var(--amber); font-size: 13px; overflow-wrap: anywhere; }
+#hud-route .route-count { display: inline-block; white-space: nowrap; overflow-wrap: normal; }
 #hud-route ol, .sm-route-list { list-style: none; margin: 0; padding: 0; position: relative; }
 #hud-route li { line-height: 18px; overflow-wrap: anywhere; }
 #hud-route ol:has(li + li)::before, .sm-route-list:has(li + li)::before { content: ""; position: absolute; z-index: 0; left: 8px; top: 7px; bottom: 7px; border-left: 1px solid rgba(224,164,88,.35); pointer-events: none; }

@@ -20,7 +20,8 @@ test("flight route shows only remaining systems, highlights current and counts f
   const model = routeDisplay(world, target.id, route, {});
   assert.ok(route.length > 1);
   assert.equal(el.hidden, false);
-  assert.ok(el.innerHTML.includes(`Route to ${target.n} (${model.stops.length - 1} systems)`));
+  assert.ok(el.innerHTML.includes(`Route to ${target.n}`));
+  assert.ok(el.innerHTML.includes(`class="route-count">(${model.stops.length - 1} systems)</span>`));
   assert.ok(el.innerHTML.includes(`aria-current="location"><span class="route-marker route-marker-start" aria-hidden="true"></span> ${world.systemsById[world.pocketsById[player.place].parent].n}</li>`));
   assert.doesNotMatch(el.innerHTML, /route-done|✓|<small>|\d+ jumps?/);
   assert.equal((el.innerHTML.match(/class="route-marker /g) || []).length, model.stops.length, "every system has a route marker");
