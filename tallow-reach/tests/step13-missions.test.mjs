@@ -59,7 +59,10 @@ test("13a: multiple active contracts advance independently from gameplay events"
   assert.equal(completeMission(1, profile), `Paid 500 cr.`);
   assert.equal(profile.cr, before + 500);
   assert.equal(activeMissions(profile).length, 1);
+  profile.holds.wasp.ferrite = 2;
+  assert.equal(canCollectMissionReward(mine, profile), true, "mined ore can be handed in from the ship hold");
   assert.equal(completeMission(undefined, profile), `Paid 400 cr.`);
+  assert.equal(profile.holds.wasp.ferrite, undefined, "mined ore is consumed at hand-in");
   assert.equal(activeMissions(profile).length, 0);
 });
 
@@ -89,6 +92,33 @@ test("13a: salvage rewards require and consume the recovered items at hand-in", 
   } finally {
     if (previous === undefined) delete station.salv;
     else station.salv = previous;
+  }
+});
+
+test("13a: mining rewards require and consume the mined ore at hand-in", () => {
+  const profile = newProfile();
+  const station = state.worldState.store;
+  const previous = station.ferrite;
+  delete station.ferrite;
+  try {
+    const mission = missionFromContract({ type: "mine", tier: 1, p: 2, n: 2, r: 400, o: "ferrite" }, "mine-hand-in");
+    profile.missions.push(mission);
+    const before = profile.cr;
+    assert.equal(canCollectMissionReward(mission, profile), false);
+    assert.equal(completeMission(0, profile), "Need 2 Ferrite in this station or your ship.");
+    assert.equal(profile.cr, before);
+    assert.equal(profile.missions.length, 1);
+
+    station.ferrite = 1;
+    profile.holds.wasp.ferrite = 1;
+    assert.equal(canCollectMissionReward(mission, profile), true);
+    assert.equal(completeMission(0, profile), "Paid 400 cr.");
+    assert.equal(profile.cr, before + 400);
+    assert.equal(station.ferrite, undefined);
+    assert.equal(profile.holds.wasp.ferrite, undefined);
+  } finally {
+    if (previous === undefined) delete station.ferrite;
+    else station.ferrite = previous;
   }
 });
 

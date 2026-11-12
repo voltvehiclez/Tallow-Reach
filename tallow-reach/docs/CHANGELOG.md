@@ -19,6 +19,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Require mining ore hand-in before contract payout
+
+- Mining contracts now use the same station/ship hand-in path as delivery and Recover contracts. The mined ore must still be available when the reward is collected, then the exact amount is consumed before payout; missing ore keeps the completed mission unpaid and claimable.
+- Added regression coverage for missing ore, mixed station/ship stock, payout and consumption.
+
+---
+
 ## 2026-11-10: Restore Destroy contract progress readout
 
 - Destroy contracts now show their live `done/total` progress again in both the in-flight Ship HUD and docked Contracts screen. Recover/item missions keep the concise title and reward presentation; inventory-gated reward collection is unchanged.

@@ -501,7 +501,7 @@ function itemRequirement(mission) {
       count: Math.max(1, Math.floor(+mission.n || +step?.count || 1)),
     };
   }
-  const step = mission?.steps?.find(item => item.kind === "deliver" && item.item);
+  const step = mission?.steps?.find(item => (item.kind === "deliver" || item.kind === "mine") && item.item);
   if (!step) return null;
   return {
     item: step.item,

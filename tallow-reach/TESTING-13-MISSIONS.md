@@ -52,8 +52,10 @@ one.
 - [ ] **2.2** Return to a station and open **Contracts**. The mining row should remain concise with
       its title and reward. Any active Destroy row should show its own current progress.
 - [ ] **2.3** Mine the remaining amount. The mission should become complete without disappearing.
-- [ ] **2.4** Click **Collect reward** once. Credits and Contracts done should increase by the advertised
-      amount, the completed mission should leave the active list, and clicking again must not pay twice.
+- [ ] **2.4** If the mined ore is missing from the current station and ship, the completed row should
+      say **Abandon**, not **Collect reward**, and no credits should be paid. Put the requested ore in
+      the station/ship, click **Collect reward** once, and verify the exact ore amount is consumed,
+      credits and Contracts done increase by the advertised amount, and clicking again cannot pay twice.
 
 ## 3. Hunt and complete a hunt mission
 

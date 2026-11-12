@@ -128,8 +128,9 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b runtime is built an
   contract-board facade; `sim/ai.js` handles mission spawn scripts. Story progress, flags, timers and
   `world.missionState` survive v19 save/load. The current contract screen lists several active missions
   and retains Accept, Refresh, Abandon and inventory-gated Collect reward actions; Destroy mission rows
-  show their live progress again, while Recover/item rows keep the concise mission title and reward
-  without an extra crate-requirement line. The dialogue panel and mission-log tab remain 13c work.
+  show their live progress again, while Recover/mining item rows keep the concise mission title and
+  reward without an extra item-requirement line. Mining and Recover hand-ins consume the required
+  current station/ship items before payout. The dialogue panel and mission-log tab remain 13c work.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
