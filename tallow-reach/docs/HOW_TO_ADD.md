@@ -51,7 +51,7 @@ appears automatically. It uses the standard hull model coloured by `col` and siz
 Optional: a visible add-on (like the Prospector's drill) goes in `buildPlayerShip(id)` in
 `src/render/models.js`.
 
-## 2. A new item: ore, salvage or a trade good (data only)
+## 2. A new item: ore, salvage, mission object or trade good (data only)
 
 Every item lives in `ITEMS` in `src/data/items.js`. One line is all it takes:
 
@@ -60,8 +60,8 @@ voidglass: { n: "Void glass", cat: "salvage", v: 120, vol: 2 },
 ```
 
 - `n` name (the screens use it everywhere), `cat` one of `ITEM_CATEGORIES` (`ore`, `salvage`,
-  `module`, `ammo`, `consumable`, `trade`), `v` credits a unit sells for (leave it out and the item
-  cannot be sold at all — every sellable item has one), `vol` m³ a unit takes up (1 if you leave it out), `st` most that fit in one stack
+  `mission`, `module`, `ammo`, `consumable`, `trade`), `v` credits a unit sells for (a mission object may
+  use `v: 0` and is not sellable), `vol` m³ a unit takes up (1 if you leave it out), `st` most that fit in one stack
   (no limit if you leave it out — nothing uses a limit yet).
 - Holds, the station's storage, moving, selling, the Base screen, the Inventory tab and the save all
   read the catalogue, so nothing else changes. Old saves simply have none of it, and `npm test`
@@ -275,7 +275,10 @@ step; scripts can request a wave/ship, set saved per-place state, give/take an i
 warp a pilot. A `spawn-wave`/`spawn-ship` action may also define `dropOnDefeat: { item, count, scatter }`;
 the authored drop is a physical mission crate, while ordinary enemy loot remains additive. Persistent
 mission crates are saved in the world half with their place, item and position, restored on pocket load,
-and collected only from a successful non-docked pickup. The old singular `profile.mission` property is
+and collected only from a successful non-docked pickup. Item-bearing `collect`, `deliver` and `mine`
+objectives are handed in through the same station-first/ship-hold inventory path; the exact quantity is
+consumed only when the reward succeeds, so a completed mission with missing stock remains claimable.
+The old singular `profile.mission` property is
 only a non-enumerable compatibility view of the first active mission; do not build new code around it.
 
 To add a contract, edit `src/data/missions/contracts.js`: add its type, generator, one-line wording,

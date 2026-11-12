@@ -22,15 +22,16 @@ npm run build
 
 - [ ] **2.1** Dialogue lines advance and the help choice jumps through the named branch.
 - [ ] **2.2** The decline choice reaches a different dialogue step and sets the remembered flag.
-- [ ] **2.3** Script actions set saved per-place state and request a hostile wave; the wave leaves one physical, mission-tagged story item at the carrier's defeat position.
-- [ ] **2.4** A trigger wait, a reach objective and a timed survive objective complete a parallel block, then flying into the physical crate advances the retrieval step.
+- [ ] **2.3** Script actions set saved per-place state and request a hostile wave; the wave leaves one physical, mission-tagged **Beacon** at the carrier's defeat position, while ordinary salvage loot remains separate.
+- [ ] **2.4** A trigger wait, a reach objective and a timed survive objective complete a parallel block, then flying into the physical Beacon advances the retrieval step.
 - [ ] **2.5** Dialogue position, flags, mission counters, timers and per-place script state survive save/load.
 - [ ] **2.6** Death, leaving the declared sector and the mission timeout apply the declared abandon outcome.
 - [ ] **2.7** The mission crate remains in Hollow across a warp and v19 save/load, restores at its saved
       position without duplicating, and is not recreated after pickup. A full hold leaves it in space until
       the pilot makes room and physically returns to it.
 - [ ] **2.8** After the Border Signal final dialogue is closed, leaving Kestrel Hollow must not reset the
-      completed mission. It should remain active and claimable at the home station; unrelated scripted item
+      completed mission. It should remain active and claimable at the home station; a missing Beacon must
+      not pay or remove it, and a later claim must consume exactly one Beacon. Unrelated scripted item
       hand-offs must still wait rather than silently consuming a blocked step.
 
 ## 3. Scope note

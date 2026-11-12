@@ -770,20 +770,28 @@ export function chooseMission(indexOrId, choiceId, profile = state.profile, play
   return advanceMission(mission, "dialogue-choice", { choice: choiceId, profile, player });
 }
 
-function itemRequirement(mission) {
-  if (mission?.type === "salvage") {
-    const step = mission.steps?.find(item => item.kind === "collect") || mission.steps?.[0];
-    return {
-      item: step?.item || "salv",
-      count: Math.max(1, Math.floor(+mission.n || +step?.count || 1)),
-    };
+function itemRequirementStep(steps = []) {
+  for (const step of steps) {
+    if (step?.item && ["collect", "deliver", "mine"].includes(step.kind)) return step;
+    const nested = step?.kind === "parallel" ? itemRequirementStep(step.steps) : null;
+    if (nested) return nested;
   }
-  const step = mission?.steps?.find(item => (item.kind === "deliver" || item.kind === "mine") && item.item);
-  if (!step) return null;
-  return {
-    item: step.item,
-    count: Math.max(1, Math.floor(+step.count || 1)),
-  };
+  return null;
+}
+
+function itemRequirement(mission) {
+  // Collect objectives are hand-ins too: a physical story pickup reaches the
+  // pilot's hold first, then the completed mission consumes it at the station.
+  // Search nested parallel objectives as well, so every item-bearing objective
+  // uses the same reward hand-in path. Keep the legacy salvage fallback for
+  // unsanitized v18/early-v19 records that did not store their explicit item id.
+  const step = itemRequirementStep(mission?.steps);
+  if (!step && mission?.type !== "salvage") return null;
+  const item = step?.item || "salv";
+  const count = mission?.type === "salvage"
+    ? Math.max(1, Math.floor(+mission.n || +step?.count || 1))
+    : Math.max(1, Math.floor(+step.count || 1));
+  return { item, count };
 }
 
 export function missionDeliveryRequirement(mission, profile = state.profile) {

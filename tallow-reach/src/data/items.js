@@ -1,10 +1,10 @@
 // The item catalogue. Everything that can sit in a hold, in the station's
 // storage or in a loot crate is an entry here, keyed by a short id: ore,
-// salvage, spare modules, and later ammo, consumables and trade goods.
+// salvage, mission objects, spare modules, and later ammo, consumables and trade goods.
 //
 //   n     name shown in the screens
 //   cat   category: one of ITEM_CATEGORIES
-//   v     sell value in credits per unit (no `v` = cannot be sold)
+//   v     sell value in credits per unit (mission objects may use 0 and cannot be sold)
 //   vol   m³ one unit takes up (1 unless the entry says otherwise)
 //   st    most that fit in one stack (no limit unless the entry says otherwise)
 //
@@ -22,12 +22,13 @@
 // 1 cr, where 60% would round to nothing). Change a shop price in data/shops.js
 // and the sell value here together — `npm test` checks the two agree.
 //
-// Adding an ore, a salvage good or a trade good is one line here and nowhere
-// else. Read it through the helpers below rather than reaching into ITEMS.
+// Adding an ore, a salvage good, a mission object or a trade good is one line
+// here and nowhere else. Read it through the helpers below rather than reaching
+// into ITEMS.
 
 import { MODULES } from "./modules.js";
 
-export const ITEM_CATEGORIES = ["ore", "salvage", "module", "ammo", "consumable", "trade"];
+export const ITEM_CATEGORIES = ["ore", "salvage", "mission", "module", "ammo", "consumable", "trade"];
 
 export const ITEMS = {
   ferrite: { n: "Ferrite", cat: "ore", v: 10 },
@@ -35,6 +36,7 @@ export const ITEMS = {
   voidite: { n: "Voidite", cat: "ore", v: 60 },
   salv: { n: "Salvage", cat: "salvage", v: 70 },
   core: { n: "Reactor core", cat: "salvage", v: 350 },
+  beacon: { n: "Beacon", cat: "mission", v: 0 },
 
   // Modules: the stats live in data/modules.js under the same id; `v` is what a
   // spare part sells for (60% of the shop price, see the note at the top).

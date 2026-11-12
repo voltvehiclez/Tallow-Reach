@@ -125,18 +125,20 @@ await the browser checks in `TESTING-13C-SCREENS.md`.
   `The Border Signal` worked example. `sim/missions.js` listens for contract events plus story
   triggers/dialogue actions, and now runs dialogue lines/choices, scripts (wave/ship requests, saved
   place state, inventory, sound and warp), waits, flags/branches, parallel objectives and configured
-  death/leave/timeout failures. Recover contracts still filter collection to `salv` and consume the
-  required station/ship items only when their reward is claimed. `sim/contracts.js` remains the
-  contract-board facade; `sim/ai.js` handles mission spawn scripts. Story progress, flags, timers and
-  `world.missionState` survive v19 save/load. Authored Border Signal loot is now a physical, mission-tagged
-  persistent crate saved with its item and position; it restores once on pocket load, requires a successful
-  non-docked pickup, and is removed on abandonment/reward. Completed missions remain claimable through later
-  sector changes, timeouts or death; mission-scoped triggers cannot wake another mission, and scripted item
-  hand-offs wait until the full amount fits. The current contract screen lists several active missions
+  death/leave/timeout failures. Recover contracts still filter collection to `salv`, while the
+  Border Signal uses its dedicated `beacon` item named **Beacon**; ordinary salvage loot stays `salv`.
+  Every item-bearing `collect`, `deliver` and `mine` objective consumes its exact required quantity from
+  current station stock first and then the ship hold only when its reward is claimed. `sim/contracts.js`
+  remains the contract-board facade; `sim/ai.js` handles mission spawn scripts. Story progress, flags,
+  timers and `world.missionState` survive v19 save/load. Authored Border Signal loot is now a physical,
+  mission-tagged persistent crate saved with its item and position; it restores once on pocket load,
+  requires a successful non-docked pickup, and is removed on abandonment/reward. Completed missions remain
+  claimable through later sector changes, timeouts or death; mission-scoped triggers cannot wake another
+  mission, and scripted item hand-offs wait until the full amount fits. Existing authored Border Signal
+  `salv` drop records migrate to `beacon`. The current contract screen lists several active missions
   and retains Accept, Refresh, Abandon and inventory-gated Collect reward actions; Destroy mission rows
   show their live progress again, while Recover/mining item rows keep the concise mission title and
-  reward without an extra item-requirement line. Mining and Recover hand-ins consume the required
-  current station/ship items before payout. Mission-spawned waves now emit `wave-clear` when their
+  reward without an extra item-requirement line. Mission-spawned waves now emit `wave-clear` when their
   last hostile dies, and a later reach objective recognizes the pilot's current place. Step 13c now
   adds the data-driven Mission log tab and live dialogue panel; the story offer list can start
   `The Border Signal`, and dialogue choices save through the existing v19 mission shape without
@@ -147,13 +149,14 @@ await the browser checks in `TESTING-13C-SCREENS.md`.
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **380/380 pass** (including the Step 13a/13b/13c mission tests, physical
-  mission-drop persistence/pickup/cleanup regressions, pause/main-menu navigation, completed-story
-  return-home, trigger isolation and blocked hand-off regressions, salvage hand-in, mission
-  dialogue/script/branch/failure coverage, HUD regressions, generated station-local inventory,
-  starmap/station-separation tests, existing 8B/11B and Step 12 oracles).
-  `npm run build` succeeded: the generated bundle is **735 KB** and is included in the latest playable
-  build. The complete-project `tallow-reach-latest-build.zip` is refreshed with that source and build.
+- **Results:** `npm test` **381/381 pass** (including the Step 13a/13b/13c mission tests, physical
+  Beacon-drop persistence/pickup/cleanup regressions, old `salv` migration, missing-item retry and
+  story hand-in consumption, pause/main-menu navigation, completed-story return-home, trigger isolation
+  and blocked hand-off regressions, salvage hand-in, mission dialogue/script/branch/failure coverage,
+  HUD regressions, generated station-local inventory, starmap/station-separation tests, existing 8B/11B
+  and Step 12 oracles). `npm run build` succeeded: the generated bundle is **746 KB** and is included
+  in the latest playable build. The complete-project `tallow-reach-latest-build.zip` is refreshed with
+  that source and build.
   The owner
   passed the first 13a playtest and reported the salvage hand-in bug; the corrected playtest is pending.
   The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists

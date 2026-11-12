@@ -72,7 +72,8 @@ test("every item is complete, and the catalogue agrees with the module table", (
     assert.ok(ITEM_CATEGORIES.includes(it.cat), `${id}: cat must be one of ${ITEM_CATEGORIES.join(", ")}`);
     if (it.cat === "module") continue;    // a module's name, volume and value live in data/modules.js
     assert.equal(typeof it.n, "string", `${id}: n (name)`);
-    assert.ok(isNum(it.v) && it.v > 0, `${id}: v (value) must be positive`);
+    assert.ok(isNum(it.v) && (it.cat === "mission" ? it.v >= 0 : it.v > 0),
+      `${id}: v (value) must be positive unless it is a non-sellable mission object`);
     assert.ok(it.vol == null || (isNum(it.vol) && it.vol > 0), `${id}: vol (m³) must be above 0`);
     assert.ok(it.st == null || (Number.isInteger(it.st) && it.st > 0), `${id}: st (stack) must be a whole number above 0`);
   }
@@ -94,6 +95,8 @@ test("every item is complete, and the catalogue agrees with the module table", (
   assert.equal(canSell("core"), true);
   assert.equal(canSell("beam_basic"), true, "a spare module sells like any other item");
   assert.equal(itemStack("ferrite"), Infinity, "nothing has a stack limit yet");
+  assert.equal(itemName("beacon"), "Beacon", "the story object has its own player-facing name");
+  assert.equal(canSell("beacon"), false, "the mission Beacon is not ordinary salvage for sale");
   assert.equal(itemName("no-such-thing"), "no-such-thing", "an unknown id does not crash a screen");
   assert.equal(itemVol("no-such-thing"), 0);
 });

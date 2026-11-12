@@ -19,9 +19,16 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Name the Border Signal object and consume story hand-ins
+
+- Added a dedicated `beacon` catalogue item named **Beacon**. Border Signal's authored defeat drop, collect objective, dialogue wording and objective now refer to that id; ordinary hostile `salv` loot remains unchanged.
+- Mission reward hand-in detection now covers item-bearing `collect`, `deliver` and `mine` objectives, including story missions and nested parallel objectives. The exact required quantity is taken from the current station first and then the active ship hold before payout; missing stock leaves the completed mission active and unpaid.
+- Existing Border Signal mission records that used `salv` are migrated to `beacon` where they describe the authored persistent drop. Save version remains **19**.
+- Verification: `npm test` passes **381/381**, `npm run build` produces a **746 KB** bundle, the ZIP passes `unzip -t`, and the preview serves HTTP 200.
+
 ## 2026-11-10: Make Border Signal's beacon a persistent physical drop
 
-- The Border Signal's authored salvage item now drops from the first patrol ship at that ship's defeat position instead of being silently granted by a mission script. Ordinary raider loot remains additive, while the authored crate is mission-tagged and visually/physically collectible.
+- The Border Signal's authored Beacon now drops from the first patrol ship at that ship's defeat position instead of being silently granted by a mission script. Ordinary raider salvage loot remains additive, while the authored crate is mission-tagged and visually/physically collectible.
 - The mission crate survives leaving Hollow, world clearing and v19 save/load, restores once at its saved position, remains present when the hold is full, and marks itself collected only after a successful non-docked pickup. Abandoning or rewarding the mission removes its saved marker and runtime content.
 - Added headless coverage for physical pickup gating, defeat-position placement, full-hold retry, duplicate-free save/load restoration, collected-drop suppression, old-save fallback and cleanup. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
 

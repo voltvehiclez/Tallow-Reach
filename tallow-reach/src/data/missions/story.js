@@ -65,8 +65,8 @@ export const BORDER_SIGNAL_MISSION = {
         enemy: "raider",
         count: 2,
         spawnDist: [800, 1000],
-        // The existing salvage catalogue id is the physical beacon cargo.
-        dropOnDefeat: { item: "salv", count: 1, scatter: 0 },
+        // The authored mission object is a Beacon, not ordinary salvage.
+        dropOnDefeat: { item: "beacon", count: 1, scatter: 0 },
       },
       next: "wait",
     },
@@ -97,7 +97,7 @@ export const BORDER_SIGNAL_MISSION = {
       place: "hollow",
       requiresFlying: true,
       missionItem: true,
-      item: "salv",
+      item: "beacon",
       count: 1,
       log: "Retrieve the beacon from the signal.",
       objective: "Return to Kestrel Hollow to retrieve the beacon.",

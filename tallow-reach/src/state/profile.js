@@ -515,7 +515,11 @@ function cleanPlaceMemory(raw) {
 function cleanMissionDrop(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const missionId = typeof raw.missionId === "string" && raw.missionId ? raw.missionId : null;
-  const item = typeof raw.item === "string" && isItem(raw.item) ? raw.item : null;
+  // Before the physical-drop follow-up, Border Signal called its authored
+  // object `salv`. Ordinary salvage keeps that id; only the authored record is
+  // migrated to the now-catalogued Beacon.
+  const savedItem = raw.missionId === "story.border-signal" && raw.item === "salv" ? "beacon" : raw.item;
+  const item = typeof savedItem === "string" && isItem(savedItem) ? savedItem : null;
   const pos = Array.isArray(raw.pos) && raw.pos.length === 3 && raw.pos.every(value =>
     typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= PLACE_EXTENT
   ) ? raw.pos.slice() : null;
