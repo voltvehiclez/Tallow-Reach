@@ -26,6 +26,9 @@ test("13c: the dialogue panel renders a portrait slot, speaker, data text and ch
   assert.match(first, /Archivist Vale/, "dialogue renders the data speaker");
   assert.match(first, /A weak signal is repeating beyond Kestrel Hollow\./, "dialogue renders the data line");
   assert.match(first, /data-dialogue-next/, "the first line can advance without pausing the world");
+  const blocked = dialogueHtml(mission, { blocked: true });
+  assert.match(blocked, /Redock to continue talking\./, "an undocked dialogue asks the pilot to return to the station");
+  assert.doesNotMatch(blocked, /data-dialogue-next|data-dialogue-choice/, "an undocked dialogue cannot advance or choose");
   assert.equal(missionDialogue(mission).pause, false, "dialogue does not pause unless mission data asks it to");
 
   const profile = newProfile();

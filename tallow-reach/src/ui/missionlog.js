@@ -29,14 +29,16 @@ const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
 }[c]));
 
 /** Render the live dialogue card for one active mission. */
-export function dialogueHtml(mission) {
+export function dialogueHtml(mission, { blocked = false } = {}) {
   const dialogue = missionDialogue(mission);
   if (!dialogue) return "";
-  const choices = dialogue.waitingForChoice && dialogue.choices.length
-    ? dialogue.choices.map(choice =>
-        `<button class="dialogue-choice" data-dialogue-choice="${esc(choice.id)}">${esc(choice.text || choice.id)}</button>`
-      ).join("")
-    : `<button class="dialogue-next" data-dialogue-next="true">${dialogue.lineIndex + 1 < dialogue.lines.length ? "Continue" : "Close"}</button>`;
+  const choices = blocked
+    ? `<p class="dialogue-locked">Redock to continue talking.</p>`
+    : dialogue.waitingForChoice && dialogue.choices.length
+      ? dialogue.choices.map(choice =>
+          `<button class="dialogue-choice" data-dialogue-choice="${esc(choice.id)}">${esc(choice.text || choice.id)}</button>`
+        ).join("")
+      : `<button class="dialogue-next" data-dialogue-next="true">${dialogue.lineIndex + 1 < dialogue.lines.length ? "Continue" : "Close"}</button>`;
   const portrait = dialogue.portrait || "Portrait";
   return (
     `<div class="dialogue-shell">` +
@@ -136,7 +138,8 @@ export function renderDialogue() {
     missionPause = true;
     setPause(true);
   }
-  root.innerHTML = dialogueHtml(mission);
+  const blocked = !!state.player && !state.player.docked;
+  root.innerHTML = dialogueHtml(mission, { blocked });
   root.hidden = false;
 }
 
@@ -145,6 +148,12 @@ function onDialogueClick(event) {
   if (!button) return;
   const mission = dialogueMission();
   if (!mission) return;
+  // A conversation belongs to the outpost. Do not let a stale overlay finish
+  // a dialogue after launch and trigger a mission script in the player's face.
+  if (state.player && !state.player.docked) {
+    renderDialogue();
+    return;
+  }
   const changed = button.dataset.dialogueChoice
     ? chooseMission(mission.id, button.dataset.dialogueChoice)
     : nextMissionDialogue(mission.id);

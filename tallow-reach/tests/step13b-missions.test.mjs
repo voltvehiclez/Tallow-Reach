@@ -8,6 +8,7 @@ import { isItem } from "../src/data/items.js";
 import { featureById, isPocket } from "../src/data/places.js";
 import { newProfile, newSave, sanitizeSave } from "../src/state/profile.js";
 import {
+  abandonMission,
   advanceMission,
   advanceMissions,
   activeMissions,
@@ -21,7 +22,8 @@ import {
 import { emit, on } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
 import "../src/sim/ai.js";
-import { hitHostile } from "../src/sim/combat.js";
+import { fire, hitHostile, spawnCrate } from "../src/sim/combat.js";
+import { V } from "../src/util/math.js";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const playerFor = profile => ({ profile, place: "hollow" });
@@ -178,6 +180,37 @@ test("13b: a mission wave emits wave-clear and preserves an already-reached sear
     for (const enemy of wave) hitHostile(enemy, 999, enemy.pos, player, "hollow");
     assert.equal(mission.steps[mission.step].id, "search", "the last mission ship wakes the wave-clear wait");
     assert.equal(missionProgress(mission).done, 1, "being in Hollow already satisfies the reach half of search");
+  } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
+    state.places = previousPlaces;
+  }
+});
+
+test("13b: abandoning a story mission removes its scripted wave", () => {
+  const { profile, mission, player } = freshStory();
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  const previousPlaces = state.places;
+  state.worldState = newSave().world;
+  state.place = "hollow";
+  state.places = new Map();
+  try {
+    advanceMission(mission, "dialogue-next", { player });
+    chooseMission(mission.id, "help", profile);
+    advanceMission(mission, "dialogue-next", { player });
+    const W = state.places.get("hollow").entities;
+    assert.equal(W.enemies.length, 2, "the mission has a live scripted wave before abandonment");
+    fire(W.enemies[0].pos, V(0, 0, -1), 1, false, 1, null, "hollow", mission.id);
+    spawnCrate(V(0, 0, 0), "salv", "hollow", null, null, mission.id);
+    assert.equal(W.bullets.length, 1, "mission hostile shots carry the mission identity");
+    assert.equal(W.crates.length, 1, "mission loot carries the mission identity");
+
+    assert.equal(abandonMission(mission.id, profile), "Mission abandoned.");
+    assert.equal(activeMissions(profile).length, 0);
+    assert.equal(W.enemies.length, 0, "abandoning the mission removes its NPCs");
+    assert.equal(W.bullets.length, 0, "abandoning the mission removes its shots");
+    assert.equal(W.crates.length, 0, "abandoning the mission removes its loot");
   } finally {
     state.worldState = previousWorld;
     state.place = previousPlace;

@@ -373,6 +373,12 @@ canvas {
 }
 .dialogue-choice,
 .dialogue-next { padding: 6px 12px; }
+.dialogue-locked {
+  margin: 0;
+  padding: 6px 0;
+  color: var(--amber);
+  font-style: italic;
+}
 .mission-log-card {
   margin: 10px 0;
   padding: 12px;

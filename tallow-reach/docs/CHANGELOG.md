@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Clean up abandoned mission content and gate dialogue
+
+- Mission-spawned hostiles, their hostile shots and their loot now carry the mission identity. Abandoning a mission removes those records and their views without clearing ordinary patrols, derelicts or other place content.
+- Live mission dialogue now becomes **Redock to continue talking.** as soon as the pilot undocks. Continue and choice controls are blocked until docking again, preventing a stale dialogue overlay from activating a story spawn during flight.
+- Added regressions for scripted-wave cleanup and the undocked dialogue gate. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
 ## 2026-11-10: Remove unexplained mission progress counters
 
 - Removed the ambiguous `Progress 0/2` display from story missions. It was counting the two lines in the current dialogue, not overall mission completion, so dialogue-line counts and non-quantitative story-step bars are no longer shown in the Mission log.

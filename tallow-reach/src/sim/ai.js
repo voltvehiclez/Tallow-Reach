@@ -17,6 +17,7 @@ import { state, placeWorld } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
 import { fire } from "./combat.js";
 import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
+import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
 
 /**
@@ -110,7 +111,14 @@ export function updateEnemies(dt, placeId = state.place) {
       const dir = toPlayer
         .add(V(R(-0.04, 0.04), R(-0.04, 0.04), R(-0.04, 0.04)))
         .normalize();
-      fire(e.pos, dir, def.bspd, false, def.dmg);
+      const missionId = String(e.encounter || "").startsWith("mission:")
+        ? String(e.encounter).slice("mission:".length)
+        : null;
+      const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
+      // Keep the projectile's place and mission ownership explicit even when
+      // the generic fire helper defaults to the local pilot's place.
+      shot.place = placeId;
+      shot.missionId = missionId;
       if (dist < def.hearRange) emit("sfx", { name: "enemy-fire" });
     }
   }
@@ -168,6 +176,32 @@ export function updateEnemies(dt, placeId = state.place) {
     }
   }
 }
+
+/** Remove entities created by one mission without clearing ordinary place content. */
+function clearMissionContents(missionId) {
+  if (!missionId) return;
+  const tag = String(missionId);
+  const encounter = `mission:${tag}`;
+  for (const placeId of state.places.keys()) {
+    const W = placeWorld(placeId);
+    for (const enemy of [...W.enemies]) {
+      if (enemy.encounter === encounter) dropEnemy(enemy, placeId);
+    }
+    for (const bullet of [...W.bullets]) {
+      if (bullet.missionId === tag) dropEntity(W.bullets, bullet);
+    }
+    for (const crate of [...W.crates]) {
+      if (crate.missionId === tag) dropEntity(W.crates, crate);
+    }
+  }
+}
+
+// Abandoning a mission removes its scripted wave and any mission loot/shots,
+// but leaves ordinary patrols, derelicts and other place content untouched.
+on("mission-abandoned", ({ mission } = {}) => clearMissionContents(mission?.id));
+on("mission-failed", ({ mission, action } = {}) => {
+  if (action === "abandon") clearMissionContents(mission?.id);
+});
 
 // A generated patrol is clear only after its last member is destroyed. The
 // encounter feature id, not the enemy type, is what is remembered in the world.

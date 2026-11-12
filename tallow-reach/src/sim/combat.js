@@ -34,7 +34,7 @@ const _spin = Q();           // scratch, so a frame allocates nothing
  * Spawn a bullet. Player bullets inherit the ship's velocity. Returns the new
  * record; its mesh is the view's business (step 7b).
  */
-export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place) {
+export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place, missionId = null) {
   // `p` may be a plain `{ x, y, z }` (the tests pass one) or a maths vector.
   const at = V(p.x, p.y, p.z);
   const quat = Q();
@@ -42,6 +42,7 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = 
   const e = {
     kind: "bullet",
     place: placeId,
+    missionId,
     pos: at,
     quat,
     v: dir.clone().multiplyScalar(speed).add(own ? playerVel(player) : V(0, 0, 0)),
@@ -74,9 +75,16 @@ function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.pla
     encounter: e.encounter || null,
   });
 
-  // Loot: whatever the enemy's table says (data/loot.js).
+  // Loot: whatever the enemy's table says (data/loot.js). Keep loot from a
+  // mission-spawned hostile tagged separately from ordinary encounter crates,
+  // so abandoning the mission can remove it without touching place memory.
+  const missionId = String(e.encounter || "").startsWith("mission:")
+    ? String(e.encounter).slice("mission:".length)
+    : null;
   for (const drop of rollLoot(e.loot)) {
-    for (let k = 0; k < drop.count; k++) spawnCrate(scattered(enemyPos(e), drop.scatter), drop.item, placeId);
+    for (let k = 0; k < drop.count; k++) {
+      spawnCrate(scattered(enemyPos(e), drop.scatter), drop.item, placeId, null, null, missionId);
+    }
   }
   if (!byPlayer || byPlayer === state.player) msg("Hostile destroyed", 2);
 }
@@ -85,12 +93,13 @@ function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.pla
 const scattered = (p, d) => (d > 0 ? p.clone().add(V(R(-d, d), R(-d, d), R(-d, d))) : p);
 
 /** Drop a crate holding `item` at `p`. Cores are rarer and drawn in blue. */
-export function spawnCrate(p, item = "salv", placeId = state.place, encounter = null, encounterType = null) {
+export function spawnCrate(p, item = "salv", placeId = state.place, encounter = null, encounterType = null, missionId = null) {
   const e = {
     kind: "crate",
     place: placeId,
     encounter,
     encounterType,
+    missionId,
     pos: V(p.x, p.y, p.z),
     quat: freshQuat(),      // the sim turns it; the view copies the turn
     t: CRATE_LIFE,
