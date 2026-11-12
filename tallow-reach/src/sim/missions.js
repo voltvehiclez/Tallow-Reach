@@ -308,12 +308,54 @@ function executeScriptStep(step, mission, profile, payload = {}) {
   return changed;
 }
 
+/** Count a reach objective immediately when a later step starts in its target
+ * place. This matters for scripted sequences such as "fight, then search":
+ * entering the place before the fight still satisfies the reach half. */
+function primeReachStep(mission, payload = {}) {
+  const place = payload.player?.place || payload.place || payload.id;
+  if (!place) return false;
+  ensureCounters(mission);
+  const matches = step => {
+    if (!step || (step.kind !== "reach" && step.kind !== "reach-sector")) return false;
+    const target = step.place || step.sector || step.target;
+    return !!target && target === place;
+  };
+  const step = missionStep(mission);
+  if (matches(step)) {
+    const total = stepCount(step);
+    mission.counters[step.id] = total;
+    mission.p = total;
+    moveToStep(mission, nextStepIndex(mission, step), payload);
+    return true;
+  }
+  if (step?.kind !== "parallel") return false;
+  let changed = false;
+  for (const child of step.steps || []) {
+    if (!matches(child)) continue;
+    const id = parallelKey(step, child), total = stepCount(child);
+    if (counterValue(mission, id) < total) {
+      mission.counters[id] = total;
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  mission.p = (step.steps || []).filter(child => counterValue(mission, parallelKey(step, child)) >= stepCount(child)).length;
+  if ((step.steps || []).every(child => counterValue(mission, parallelKey(step, child)) >= stepCount(child))) {
+    moveToStep(mission, nextStepIndex(mission, step), payload);
+  }
+  return true;
+}
+
 /** Run zero-length story steps immediately after a mission starts or advances. */
 function activateAutomatic(mission, profile, payload = {}) {
   let changed = false;
   for (let guard = 0; guard < 100 && !isMissionComplete(mission) && !isMissionFailed(mission); guard++) {
     const step = missionStep(mission);
     if (!step) break;
+    if (primeReachStep(mission, payload)) {
+      changed = true;
+      continue;
+    }
     if (step.kind === "script") {
       executeScriptStep(step, mission, profile, payload);
       changed = true;

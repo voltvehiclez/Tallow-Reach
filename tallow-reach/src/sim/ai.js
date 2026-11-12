@@ -171,13 +171,23 @@ export function updateEnemies(dt, placeId = state.place) {
 
 // A generated patrol is clear only after its last member is destroyed. The
 // encounter feature id, not the enemy type, is what is remembered in the world.
-on("enemy-killed", ({ place, encounter } = {}) => {
+on("enemy-killed", ({ place, encounter, player } = {}) => {
   if (!place || !encounter) return;
+  const W = placeWorld(place);
+  // Mission waves use their mission id as an encounter tag. When the last
+  // member dies, wake a matching data-defined wait step instead of requiring
+  // the UI or a test harness to inject `mission-trigger` by hand.
+  if (String(encounter).startsWith("mission:")) {
+    if (!W.enemies.some(enemy => enemy.encounter === encounter)) {
+      const missionId = String(encounter).slice("mission:".length);
+      emit("mission-trigger", { trigger: "wave-clear", mission: missionId, place, player });
+    }
+    return;
+  }
   const feature = featureById(place, encounter);
   // Ordinary authored wandering patrols retain their old repeat behaviour. Only
   // one-shot encounter features become persistent cleared-place memory.
   if (!feature?.once) return;
-  const W = placeWorld(place);
   if (W.enemies.some(enemy => enemy.encounter === encounter)) return;
   markEncounterCleared(place, encounter, encounterRespawn(encounterIdFromFeature(encounter)));
 });

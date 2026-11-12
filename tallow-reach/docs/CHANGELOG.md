@@ -19,6 +19,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Advance Border Signal after its mission wave
+
+- Mission-spawned waves now emit the configured `wave-clear` trigger automatically when their last ship is destroyed. The runner also counts a reach objective when a later step begins in a place the pilot already occupies, so The Border Signal can proceed after the two Hollow raiders are defeated instead of waiting forever.
+- Added regression coverage in `tests/step13b-missions.test.mjs` for the real mission-wave tag, automatic trigger and already-reached search place. Full `npm test` passes **366/366** and the rebuilt bundle is **735 KB**.
+
+---
+
 ## 2026-11-10: Build Step 13c mission screens
 
 - Added `src/ui/missionlog.js` with a data-driven Mission log tab for active missions, current step/progress and next-action guidance, plus a live dialogue panel with portrait slot, speaker, text, line controls and choices.

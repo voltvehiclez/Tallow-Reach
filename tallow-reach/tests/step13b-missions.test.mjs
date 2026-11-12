@@ -18,6 +18,8 @@ import {
 } from "../src/sim/missions.js";
 import { emit, on } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
+import "../src/sim/ai.js";
+import { hitHostile } from "../src/sim/combat.js";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const playerFor = profile => ({ profile, place: "hollow" });
@@ -120,6 +122,33 @@ test("13b: dialogue choice changes the next step and the worked mission complete
   } finally {
     state.worldState = previousWorld;
     state.place = previousPlace;
+  }
+});
+
+test("13b: a mission wave emits wave-clear and preserves an already-reached search place", () => {
+  const { profile, mission, player } = freshStory();
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  const previousPlaces = state.places;
+  state.worldState = newSave().world;
+  state.place = "hollow";
+  state.places = new Map();
+  try {
+    advanceMission(mission, "dialogue-next", { player });
+    chooseMission(mission.id, "help", profile);
+    advanceMission(mission, "dialogue-next", { player });
+    assert.equal(mission.steps[mission.step].id, "wait", "the story waits for the spawned wave");
+    const wave = [...state.places.get("hollow").entities.enemies];
+    assert.equal(wave.length, 2, "the mission script spawns both patrol ships");
+    assert.ok(wave.every(enemy => enemy.encounter === `mission:${mission.id}`), "the wave is tagged to its mission");
+
+    for (const enemy of wave) hitHostile(enemy, 999, enemy.pos, player, "hollow");
+    assert.equal(mission.steps[mission.step].id, "search", "the last mission ship wakes the wave-clear wait");
+    assert.equal(missionProgress(mission).done, 1, "being in Hollow already satisfies the reach half of search");
+  } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
+    state.places = previousPlaces;
   }
 });
 

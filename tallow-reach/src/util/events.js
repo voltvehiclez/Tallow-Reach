@@ -52,8 +52,8 @@
 //   delivered     { item?, target?, place?, player }
 //                                    a mission delivery objective reached its target
 //   mission-tick  { dt, player }     one unpaused simulation tick for survive/wait objectives
-//   mission-trigger { trigger, player }
-//                                    a story trigger woke a wait step
+//   mission-trigger { trigger, mission?, place?, player }
+//                                    a story trigger woke a wait step (mission waves emit wave-clear automatically)
 //   mission-dialogue-next { player } advance the current dialogue line
 //   mission-dialogue-choice { choice, player }
 //                                    select a current dialogue choice

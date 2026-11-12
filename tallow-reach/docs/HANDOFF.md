@@ -132,17 +132,19 @@ await the browser checks in `TESTING-13C-SCREENS.md`.
   and retains Accept, Refresh, Abandon and inventory-gated Collect reward actions; Destroy mission rows
   show their live progress again, while Recover/mining item rows keep the concise mission title and
   reward without an extra item-requirement line. Mining and Recover hand-ins consume the required
-  current station/ship items before payout. Step 13c now adds the data-driven Mission log tab and
-  live dialogue panel; the story offer list can start `The Border Signal`, and dialogue choices save
-  through the existing v19 mission shape without pausing flight by default.
+  current station/ship items before payout. Mission-spawned waves now emit `wave-clear` when their
+  last hostile dies, and a later reach objective recognizes the pilot's current place. Step 13c now
+  adds the data-driven Mission log tab and live dialogue panel; the story offer list can start
+  `The Border Signal`, and dialogue choices save through the existing v19 mission shape without
+  pausing flight by default.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **365/365 pass** (including the Step 13a/13b/13c mission tests, salvage
+- **Results:** `npm test` **366/366 pass** (including the Step 13a/13b/13c mission tests, salvage
   hand-in, mission dialogue/script/branch/failure coverage, HUD regressions, generated station-local
   inventory, starmap/station-separation tests, existing 8B/11B and Step 12 oracles). `npm run build`
-  succeeded: the generated bundle is **734 KB** and is included in the latest playable build. The owner
+  succeeded: the generated bundle is **735 KB** and is included in the latest playable build. The owner
   passed the first 13a playtest and reported the salvage hand-in bug; the corrected playtest is pending.
   The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists
   destination, place memory, station-local stocks, story-script place state and portable mission progress;
