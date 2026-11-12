@@ -265,20 +265,24 @@ is what lets a listener (sound, a mission, a network snapshot) work without know
 
 ## 11. Story and scripted missions
 
-Step 13a provides the shared foundation. A mission file under `src/data/missions/` is plain data with
-`{ id, title, kind: "contract" | "story", requires, steps, rewards, fails }`; it names ids but
+Step 13a/13b provides the shared foundation. A mission file under `src/data/missions/` is plain data
+with `{ id, title, kind: "contract" | "story", requires, steps, rewards, fails }`; it names ids but
 never imports simulation or rendering code. Active records live in `profile.missions`, and
-`sim/missions.js` advances the current step from events. The runner currently supports `kill`, `mine`,
-`collect`, `reach`, `deliver` and `survive` objectives, including several active missions at once.
-The old singular `profile.mission` property is only a non-enumerable compatibility view of the first
-active mission; do not build new code around it.
+`sim/missions.js` advances the current step from events. The runner supports contract objectives
+`kill`, `mine`, `collect`, `reach`, `deliver` and `survive`, plus story `dialogue`, `script`, `wait`,
+`flags` and `parallel` steps. Dialogue choices can set remembered `profile.flags` and jump to a named
+step; scripts can request a wave/ship, set saved per-place state, give/take an item, play a sound or
+warp a pilot. The old singular `profile.mission` property is only a non-enumerable compatibility view
+of the first active mission; do not build new code around it.
 
 To add a contract, edit `src/data/missions/contracts.js`: add its type, generator, one-line wording,
 and a template step, then expose it through the contract board facade in `src/sim/contracts.js`.
 Preserve compact compatibility fields if old saves or UI callers need them. To add a story mission,
-add a data record with `kind: "story"`; dialogue, choices, scripts, waits, flags, branching and
-parallel steps are reserved for 13b, and the dialogue/mission-log UI is 13c. Add headless event tests
-beside `tests/step13-missions.test.mjs`, plus a save migration test if the shape changes.
+add a data record with `kind: "story"`; use named step ids for `next`/`then`/`else`/choice targets,
+keep all story text and action ids in the data file, and declare `fails.on` plus an outcome for death,
+sector departure or timeout when needed. `The Border Signal` in `src/data/missions/story.js` is the
+worked example. Add headless event tests beside `tests/step13b-missions.test.mjs`, plus a save test if
+the shape changes; the dialogue/mission-log UI is 13c.
 
 ## 12. Seeded sectors and daily challenges
 

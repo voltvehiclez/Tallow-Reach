@@ -181,3 +181,26 @@ on("enemy-killed", ({ place, encounter } = {}) => {
   if (W.enemies.some(enemy => enemy.encounter === encounter)) return;
   markEncounterCleared(place, encounter, encounterRespawn(encounterIdFromFeature(encounter)));
 });
+
+// Story scripts ask for a wave or ship through the event bus, keeping mission
+// data independent from the hostile simulation. The ordinary encounter spawner
+// above remains unchanged; these enemies belong to the mission that requested
+// them and disappear through the normal enemy rules.
+on("mission-script", ({ action, player, place, mission } = {}) => {
+  const kind = action?.kind || action?.action;
+  if (kind !== "spawn-wave" && kind !== "spawn-ship") return;
+  const placeId = place || player?.place || state.place;
+  const feature = featureById(placeId, action.feature || action.anchor);
+  const origin = feature?.pos
+    ? V(...feature.pos)
+    : player?.pos?.clone?.() || V(0, 0, 0);
+  const enemy = action.enemy || action.ship || DEFAULT_ENEMY;
+  const def = enemyDef(enemy);
+  const requested = kind === "spawn-ship" ? 1 : Math.max(1, Math.floor(+action.count || 1));
+  const range = Array.isArray(action.spawnDist) ? action.spawnDist : def.spawnDist;
+  for (let i = 0; i < requested; i++) {
+    const distance = R(range[0], range[1]);
+    const pos = origin.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(distance));
+    spawnEnemy(enemy, pos, placeId, `mission:${mission?.id || "story"}`);
+  }
+});

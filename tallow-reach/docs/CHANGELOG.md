@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Start Step 13b story mission runtime
+
+- Extended the data-only mission vocabulary and runner with dialogue lines and choices, script actions (spawn wave/ship, sector state, inventory, sound and warp), trigger/timer/area waits, remembered flags with branches, parallel objectives and configured death/leave/timeout failures.
+- Added `src/data/missions/story.js` with the ten-step `The Border Signal` worked example. Story progress, dialogue position, flags, timers and per-place script state survive v19 save/load; the future dialogue panel and mission-log tab remain 13c.
+- Added headless reference/reachability/completion/failure coverage in `tests/step13b-missions.test.mjs`. Full `npm test` passes **361/361**; `npm run build` succeeds at **724 KB**.
+
+---
+
 ## 2026-11-10: Simplify exact pocket route titles
 
 - Starmap and ship HUD route headings now say `Route to Pocket` for exact pocket destinations instead of `Route to System (Pocket)`. Route rows, system destinations and all travel behavior remain unchanged.
@@ -90,125 +98,20 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-10: Make local route lines solid and pocket menus right-click-only
-
-- Destination overlays on the large galaxy map are solid orange with directional arrows again. On a system pocket map, planned local pocket-to-pocket hops are solid orange; only the cross-system gate exit stubs remain orange dashed, including the incoming stub highlighted in reverse when viewing an intermediate system.
-- Left-clicking a pocket or gate exit in a pocket map is now inert. Right-clicking still opens the existing Warp/Set destination menu, and double-clicking gate targets still opens the adjacent system map.
-- Added exact Meridian → Galereach → Galedrift overlay coverage and left/right-click menu coverage. Step 11B passes **45/45**; full `npm test` passes **347/347** and `npm run build` succeeds at **701 KB**.
-
----
-
-## 2026-11-10: Preserve real double-click navigation on starmap dots
-
-- A first click on a galaxy system, gate exit dot or gate pocket no longer immediately replaces the SVG target with a popup. The short single-click delay lets the browser deliver the second click to the same node, so double-clicking Galereach or another adjacent gate now opens that system map; a single click still selects or opens its existing menu.
-- Added a regression that sends real click details through both the Galereach system dot and a Meridian gate exit. Full `npm test` passes **346/346**; Step 11B passes **44/44**; `npm run build` succeeds at **701 KB**.
-
----
-
-## 2026-11-10: Vary station names and clarify routed gate navigation
-
-- Generated trader features and their station pockets now receive deterministic, varied names such as Outpost, Hideout, Trading Hub, Waystation, Exchange and Freeport. Names remain unique across the resolved catalog while authored station names stay intact.
-- Double-clicking either a neighbouring-system label or the gate pocket itself now opens that adjacent system's pocket map, including rapid clicks during the zoom transition.
-- Active destinations now draw orange dashed route overlays with small directional arrows on galaxy links, local pocket hops and the gate exit that leaves the current system. Added regression coverage for station-name uniqueness, gate-pocket navigation and directed route overlays.
-- Full `npm test` passes **345/345**; `npm run build` succeeds at **700 KB**. Save version and route rules remain unchanged; the owner browser playtest is still pending.
-
----
-
-## 2026-11-10: Refine system-map exits and separate generated station pockets
-
-- System-map gate exit stubs and their remote endpoint dots now use the pocket blue instead of amber. Visited knowledge remains saved, but visited systems no longer receive a light-blue visual treatment. Double-clicking a neighbouring-system gate label while in a system map switches directly to that peer's map.
-- Generated friendly traders selected by gate templates are removed from gate pockets and placed in deterministic `${gateId}-station` pockets with an internal hub link. Explicit station feature records, `allowStation: true` or `stationPlacement: "gate"` preserve deliberate future gate co-location. Station pockets render as square map icons.
-- Added regression coverage for colors, visited presentation, direct remote-map navigation, square station icons, default station/gate separation, explicit co-location and old docked gate-station save migration. Save version remains **18**; `npm test` now passes **345/345** and `npm run build` succeeds at **698 KB**. Step 12 remains unticked pending the owner visual playtest.
-
----
-
-## 2026-11-10: Give every dockable station local persistent inventory
-
-- Station storage is now keyed by the stable `${placeId}:${featureId}` identity of the active dockable station. Inventory transfers, purchases, sales, fitting/unequipping, storage capacity, shop ownership/room presentation and station switching all resolve the active station stock; trader stations still use Meridian's `SHOPS` definitions and economy rules.
-- `world.stationStores` is saved for every station, while the enumerable `world.store` remains a home-station compatibility alias. Existing v18 saves without `stationStores` migrate their old stock to the saved station where possible. Save version remains **18** so the reserved Step 13 v19 and Step 15 v20 slots stay intact; `tr1`, `tr_s1..tr_s3` and `TR1:` are unchanged.
-- Added `tests/station-inventory.test.mjs` for cross-station isolation, shop/capacity/sell behavior, fitting context, export/reload and legacy migration. `npm test` passes **343/343** and `npm run build` succeeds at **696 KB**. Step 12 remains unticked pending owner confirmation.
-
----
-
-## 2026-11-10: Build Step 12 encounter templates and persistent place memory
-
-- Generated pockets now resolve three data templates with tier-selected `hostile_patrol`, `friendly_trader`, `derelict` and `resource_cache` encounters. They are filled on load; trader stations are dockable and reuse Meridian's existing `SHOPS` stock. Generic AI spawning keeps hunt-contract selection without a raider-only branch.
-- Stable asteroid field slots, cleared static loot encounters and one-shot patrol groups use `world.placeMemory` with a 420-second simulation-time default. Pausing does not advance timers; `respawn-place` can force a future event-driven respawn. Save version is **18**, with v17-and-older migration defaults.
-- Added `tests/step12-places.test.mjs`, expanded content-reference checks, `TESTING-12-PLACES.md`, and updated architecture/roadmap/handoff documentation. `npm test` **341/341**; `npm run build` succeeded (**694 KB**). Owner playtest is pending; Step 12 is not ticked yet.
-
----
-
-## 2026-11-08: Wrap destination names and show local route hops
-
-- Owner requested long starmap destination names wrap instead of truncating, and orange route lines
-  between pockets on each relevant system map. The route heading and pocket rows can wrap; the panel
-  remains non-scrolling and existing route pagination measures the available space. An arrowed orange
-  segment represents each consecutive same-system pocket hop in the currently executable route,
-  including free-warp and route-only systems. Cross-system hops do not invent internal lines. Overlay
-  updates as routes change, disappears if unavailable/cleared, and does not intercept clicks.
-- Updated starmap markup, styles, regression tests and playtest guide. Full **334/334**, build
-  **686 KB (702,037 bytes)**. Save v17 and one-checked-warp-per-J rules unchanged; browser playtest pending.
-
----
-
-## 2026-11-08: Remember route destinations across relogs
-
-- Owner reported that destinations were lost on relog and requested an in-chat playtest. Save **v17**
-  stores `world.destination` (system id or `{ pocketId }`, null if unset). Setting/clearing a target
-  autosaves immediately; slot saves and export codes include it. The route itself is recalculated from
-  the restored location, and J still performs exactly one checked warp. Arrival clears and autosaves it.
-- `prepareGalaxySave` validates against the saved seed, drops invalid/removed targets and already-reached
-  destinations, and migrates v16 and earlier with no destination; existing cargo/progress remain intact.
-  Chart framing is still session-only. Added save/restore and actual map/J/arrival regression coverage.
-- `npm test` **333/333**, build **685 KB (701,251 bytes)**; live preview provided, owner playtest pending.
-
----
-
-## 2026-11-08: Remove destination diamond
-
-- Owner requested removing the diamond from the destination system. Both route lists retain the
-  amber bold destination styling, arrows and blue current-system styling; an accessible destination
-  label remains. No navigation or save changes.
-- Updated route markup, styles, tests and checklist. Targeted **44/44**, full **331/331**, build
-  **684 KB (700,815 bytes)**. Browser playtest pending.
-
----
-
-## 2026-11-08: Mark the route destination and simplify the starmap list
-
-- Owner requested the final system stand out, and that starmap route rows show only systems and arrows
-  like the flight HUD, without grey gate-to-gate pocket details. Both lists now highlight the destination
-  in amber with a diamond; the current system stays blue, even when it is also the destination. The map
-  still shows the exact pocket target in the heading, and its paging and highlighted graph remain intact.
-  Neither list shows completed systems; unused session-only route-history tracking was removed.
-- Updated route presentation, starmap, styles, tests and checklist. Targeted **44/44**, full **331/331**,
-  build **685 KB (700,929 bytes)**. No travel or save changes; browser playtest pending.
-
----
-
-## 2026-11-08: Add route arrows to the flight HUD
-
-- Owner requested the starmap-style arrows beside the flight route's system names. Each remaining
-  system now has an amber arrow; the current system name stays blue. The count and starmap are unchanged.
-- Updated route markup, HUD style, tests and checklist. Targeted **44/44**, full **331/331**, build
-  **686 KB (702,025 bytes)**. No save or travel changes; browser playtest pending.
-
----
-
-## 2026-11-08: Simplify the flight route to system names
-
-- Owner requested only remaining system names in flight, with the current system highlighted blue,
-  no completed ticks, and “Route to … (N systems)” showing how many system entries remain beyond
-  the current system. An exact pocket destination remains named in the heading. If routing is blocked,
-  no count is guessed; the current system and no-route message remain visible. The detailed starmap,
-  including its pocket names and completed-system history, is unchanged.
-- Updated the shared route renderer and HUD, tests, and owner checklist. Targeted **44/44**,
-  full **331/331**, build **685 KB (701,942 bytes)**; browser playtest pending. No save or travel changes.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-10: Make local route lines solid and pocket menus right-click-only
+- 2026-11-10: Preserve real double-click navigation on starmap dots
+- 2026-11-10: Vary station names and clarify routed gate navigation
+- 2026-11-10: Refine system-map exits and separate generated station pockets
+- 2026-11-10: Give every dockable station local persistent inventory
+- 2026-11-10: Build Step 12 encounter templates and persistent place memory
+- 2026-11-08: Wrap destination names and show local route hops
+- 2026-11-08: Remember route destinations across relogs
+- 2026-11-08: Remove destination diamond
+- 2026-11-08: Mark the route destination and simplify the starmap list
+- 2026-11-08: Add route arrows to the flight HUD
+- 2026-11-08: Simplify the flight route to system names
 - 2026-11-08: Set exact pocket destinations
 - 2026-11-08: Clearer, sparser starmap and adaptive route list
 - 2026-11-08: Straight starmap lines with attached endpoints

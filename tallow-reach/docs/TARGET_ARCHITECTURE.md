@@ -111,8 +111,8 @@ content may override it and decides actual danger. The save stores the seed and 
 discovery/visit knowledge, not generated geography; tiers are derived on resolution. Visibility is a
 policy (`all` today), not a hard-coded no-fog assumption. Mission data lives under `src/data/missions/`
 with the shape `{ id, title, kind, requires, steps, rewards, fails }`; `sim/missions.js` consumes
-objective events without hard-coding story text. The runner reserves step kinds for dialogue, choices,
-scripts, waits, flags, branching and parallel work in 13b, while contracts already use the same
+objective and story events without hard-coding story text. 13b now implements dialogue/choices,
+scripts, waits, flags/branching, parallel work and configured failure outcomes; contracts use the same
 record shape. The zoomed-in system chart uses a derived,
 deterministic pocket layout (`systemPocketLayout`; author `mapPos` overrides win) that is never saved.
 Pockets orbit an independent seeded star (95%) / black hole (5%) core; its proper name comes from the
@@ -187,7 +187,7 @@ refactor step that closes it:
 | Saves and profiles | **Closed in step 9 (save v13, owner-playtested):** saves split into `{ v: 13, profile, world }`; each player owns an isolated `player.profile` (`portableProfile` / `mergeProfile`). | — |
 | Inventory and pickups | **Closed in step 9 (owner-playtested):** `sim/inventory.js`, `sim/combat.js` and `sim/weapons.js` credit each pilot's own `profile.holds` while sharing the hosted world's `worldState.store`; crate pickup works across all active pilots even when the local pilot is docked. | — |
 | Economy, outfitting and saved ammunition | **Closed in step 9 (owner-playtested):** `sim/economy.js`, `sim/fitting.js` and `sim/weapons.js` operate on the acting pilot and their `profile` (`cr`, `loadout`, `ships`, `hp`, `msl`, `pw`) against `state.worldState`. | — |
-| Contracts and rewards | **13a built (owner playtest pending):** the offer board remains in `worldState.board`; `data/missions/contracts.js` defines the three generated contract missions and `sim/missions.js` tracks objective progress, payouts and spawn policy per pilot (`profile.missions`, `profile.kills`). The singular `profile.mission` view is compatibility-only. | 13b/13c for story steps and screens |
+| Contracts and rewards | **13a built (owner playtest pending), 13b runtime built:** the offer board remains in `worldState.board`; `data/missions/contracts.js` defines the three generated contract missions and `sim/missions.js` tracks objective progress, payouts, story steps and failure outcomes per pilot (`profile.missions`, `profile.flags`). The singular `profile.mission` view is compatibility-only. | 13c for story screens |
 | Docking and launch | **Closed in step 9 (owner-playtested):** `launch` and `dock`/`tryDock` operate on an explicit pilot and profile; `clearTransient()` only sweeps the field when no other active pilot remains in space. | — |
 | Warp and place ownership | **Closed in step 10 (owner-playtested):** each pilot owns `place` and `warp`; entities live in per-place containers; shared systems advance once per occupied place. Non-local presentation/input remain step 16. | — |
 | Death and recovery | `sim/player.js` and `sim/session.js`: only the local player gets ship loss, recovery and docking on `player-dead`; another player is marked dead until multiplayer respawn rules exist. | 16 (multiplayer) |
@@ -207,7 +207,7 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 | Sector geography in code | **Closed in step 10:** positions/features live in `PLACE_DEFS`; a generic loader builds per-place containers; launch/dock/scenery read the station and field features. | — |
 | Current sector not saved | **Closed in step 10 (save v14, owner-playtested):** `world.place` stores the current pocket id; v13 `sector` migrates. | — |
 | Two pockets, cycled with M | **Closed in 11B (built, owner playtest pending):** M opens `ui/starmap.js`; zooming into a system opens its pocket map and right-click direct-hop quotes replace cycling. `nextPocket()` remains only as a legacy helper for old tests/tools. | — |
-| One contract at a time, three types | **Closed structurally in 13a:** `profile.missions` accepts several active data missions; `generateContract()` remains the legacy board facade over `data/missions/contracts.js`, and `sim/missions.js` is the shared runner. | 13b/13c |
+| One contract at a time, three types | **Closed structurally in 13a:** `profile.missions` accepts several active data missions; `generateContract()` remains the legacy board facade over `data/missions/contracts.js`, and `sim/missions.js` is the shared runner. 13b now uses that runner for story steps and failures too. | 13c screens |
 | `sanitizeProfile` names things by hand | **Closed in step 9:** `sanitizeWorld` walks `BASE_MODULES` (`data/station.js`) directly instead of naming base modules by hand. | — |
 
 ## Folder shape after the refactor

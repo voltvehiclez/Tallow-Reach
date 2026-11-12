@@ -51,11 +51,26 @@
 //                                    starmap shows the reason without closing
 //   delivered     { item?, target?, place?, player }
 //                                    a mission delivery objective reached its target
-//   mission-tick  { dt, player }     one unpaused simulation tick for survive objectives
+//   mission-tick  { dt, player }     one unpaused simulation tick for survive/wait objectives
+//   mission-trigger { trigger, player }
+//                                    a story trigger woke a wait step
+//   mission-dialogue-next { player } advance the current dialogue line
+//   mission-dialogue-choice { choice, player }
+//                                    select a current dialogue choice
+//   mission-script { mission, action, player, place }
+//                                    a story script asks a sim adapter to perform an action
+//   mission-sector-state { mission, place, state, player }
+//                                    a script changed remembered state for one place
+//   mission-item-given / mission-item-taken { mission, item, count, target, player }
+//                                    a script changed a ship or station inventory
+//   mission-warp { mission, from, to, player }
+//                                    a script moved a pilot to another pocket
 //   mission-progress { mission, event, payload, player }
 //                                    the data-driven runner advanced an objective
 //   mission-completed { mission, player }
 //                                    all steps are complete; reward collection is still explicit
+//   mission-failed { mission, reason, action, message, player }
+//                                    a configured death, departure or timeout outcome ran
 //   mission-rewarded { mission, reward, player }
 //                                    the pilot collected a completed mission reward
 //   mission-abandoned { mission, player }

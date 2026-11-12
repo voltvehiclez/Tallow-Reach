@@ -163,6 +163,7 @@ export function newWorld() {
     destination: null, // local session destination, saved with this world
     resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
+    missionState: {},  // story-script state keyed by place id
   }, { [HOME_STATION_KEY]: newStock() });
 }
 
@@ -219,14 +220,52 @@ const cleanFlags = raw => {
   return out;
 };
 
+function cleanMissionChoice(raw, index) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const id = typeof raw.id === "string" && raw.id ? raw.id : `choice-${index + 1}`;
+  const text = typeof raw.text === "string" ? raw.text : id;
+  const choice = { id, text };
+  for (const key of ["next", "goto"]) if (raw[key] !== undefined) choice[key] = raw[key];
+  const set = raw.set || raw.flags;
+  if (set && typeof set === "object" && !Array.isArray(set)) choice.set = cleanFlags(set);
+  return choice;
+}
+
+function cleanScriptAction(raw) {
+  if (typeof raw === "string") return raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const action = {};
+  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to"]) {
+    if (raw[key] !== undefined) action[key] = raw[key];
+  }
+  if (Array.isArray(raw.spawnDist)) action.spawnDist = raw.spawnDist.slice(0, 2).map(Number);
+  if (raw.set && typeof raw.set === "object" && !Array.isArray(raw.set)) action.set = cleanFlags(raw.set);
+  if (raw.state && typeof raw.state === "object" && !Array.isArray(raw.state)) action.state = cleanFlags(raw.state);
+  if (raw.args && typeof raw.args === "object" && !Array.isArray(raw.args)) action.args = { ...raw.args };
+  return action;
+}
+
 function cleanMissionStep(raw, index) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
   const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
   const step = { id, kind: raw.kind };
-  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "lines", "choices", "action", "set", "test", "steps"]) {
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
     if (raw[key] !== undefined) step[key] = raw[key];
   }
-  const count = Number(raw.count ?? raw.seconds ?? 1);
+  if (raw.lines !== undefined) {
+    const lines = Array.isArray(raw.lines) ? raw.lines : [raw.lines];
+    step.lines = lines.filter(line => typeof line === "string").map(String);
+  }
+  if (Array.isArray(raw.choices)) step.choices = raw.choices.map(cleanMissionChoice).filter(Boolean);
+  if (raw.action !== undefined) {
+    const actions = Array.isArray(raw.action) ? raw.action : [raw.action];
+    step.action = actions.map(cleanScriptAction).filter(Boolean);
+  }
+  if (Array.isArray(raw.actions)) step.actions = raw.actions.map(cleanScriptAction).filter(Boolean);
+  if (raw.set && typeof raw.set === "object" && !Array.isArray(raw.set)) step.set = cleanFlags(raw.set);
+  if (raw.test !== undefined) step.test = raw.test;
+  if (Array.isArray(raw.steps)) step.steps = raw.steps.map(cleanMissionStep).filter(Boolean);
+  const count = Number(raw.count ?? raw.seconds ?? (step.kind === "dialogue" ? step.lines?.length : 1));
   step.count = Number.isFinite(count) && count > 0 ? count : 1;
   return step;
 }
@@ -274,7 +313,7 @@ function cleanMission(raw) {
     current,
     counters,
   };
-  for (const key of ["type", "tier", "n", "r", "o", "e", "faction"]) {
+  for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "timeout", "elapsed", "failed", "failure", "failureMessage"]) {
     if (raw[key] !== undefined) mission[key] = raw[key];
   }
   if (mission.type && MISSION_TYPES.includes(mission.type)) {
@@ -410,6 +449,22 @@ function cleanPlaceMemory(raw) {
   return out;
 }
 
+/** Clean small, data-only state written by story scripts for each place. */
+function cleanMissionState(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [place, values] of Object.entries(raw)) {
+    if (!place || !values || typeof values !== "object" || Array.isArray(values)) continue;
+    const clean = {};
+    for (const [key, value] of Object.entries(values)) {
+      if (!key || !["boolean", "string", "number"].includes(typeof value)) continue;
+      if (typeof value !== "number" || Number.isFinite(value)) clean[key] = value;
+    }
+    if (Object.keys(clean).length) out[place] = clean;
+  }
+  return out;
+}
+
 /** Clean each station's independent stock. Unknown station keys are retained
  * as namespaced save records so a catalog can be regenerated before use. */
 function cleanStationStores(raw) {
@@ -517,6 +572,7 @@ export function sanitizeWorld(raw) {
     destination: cleanDestination(raw.destination),
     resume: cleanResume(raw.resume),
     placeMemory: cleanPlaceMemory(raw.placeMemory),
+    missionState: cleanMissionState(raw.missionState),
   }, stationStores);
 }
 

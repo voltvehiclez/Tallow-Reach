@@ -24,5 +24,18 @@ export const CONTRACT_OBJECTIVE_KINDS = {
   salvage: "collect",
 };
 
+export const SCRIPT_ACTION_KINDS = [
+  "spawn-wave",
+  "spawn-ship",
+  "set-sector-state",
+  "give-item",
+  "take-item",
+  "play-sound",
+  "warp-player",
+];
+
 export const isMissionKind = kind => MISSION_KINDS.includes(kind);
 export const isMissionStepKind = kind => MISSION_STEP_KINDS.includes(kind);
+export const isScriptActionKind = kind => SCRIPT_ACTION_KINDS.includes(kind);
+
+export { BORDER_SIGNAL_MISSION, STORY_MISSIONS, storyMission } from "./story.js";

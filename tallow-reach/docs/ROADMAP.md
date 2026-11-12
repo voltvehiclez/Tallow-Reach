@@ -9,8 +9,9 @@
 **Current position:** **Milestone C is built and Milestone D has started.** **Steps 0 to 11 are ticked**
 (11B owner playtest passed, as recorded in VISION.md). **Step 12 is built and awaiting the owner
 playtest** in `TESTING-12-PLACES.md`. Step **13a** is built and awaiting the owner playtest in
-`TESTING-13-MISSIONS.md`; the dialogue/script screens in 13b/13c are not started. Saves are version
-**19**: `world.destination` and place memory remain in the world half, while `profile.missions` and
+`TESTING-13-MISSIONS.md`; the 13b story runtime is now built and covered headlessly, while the 13c
+dialogue/mission-log screens are not started. Saves are version **19**: `world.destination`, place
+memory and story-script place state remain in the world half, while `profile.missions` and
 `profile.flags` replace the single contract slot. v18 and older active contracts migrate into the
 one-step mission runner. Generated pockets are filled immediately by three data templates
 (`frontier`, `trade_lane`, `salvage_yard`) with tier-selected encounters: hostile patrols, a dockable
@@ -63,7 +64,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
 | 11 | System map, pocket chooser and starmap (100+ systems, save v17) | C | [x] **2026-11-10: 11A/11B owner playtest passed.** |
 | 12 | Encounters, place templates, place memory (save v18) | C | [ ] **Built 2026-11-10; owner playtest pending (`TESTING-12-PLACES.md`).** |
-| 13 | Mission framework; contracts rebuilt on it (save v19) | D | [~] **13a built 2026-11-10; owner playtest pending (`TESTING-13-MISSIONS.md`); 13b/13c remain.** |
+| 13 | Mission framework; contracts rebuilt on it (save v19) | D | [~] **13a built 2026-11-10; 13b runtime built 2026-11-10; owner 13a playtest pending (`TESTING-13-MISSIONS.md`); 13c screens remain.** |
 | 14 | Instanced places and wormholes | D | [ ] |
 | 15 | Campaign scaffolding (save v20) | D | [ ] |
 | 16 | Multiplayer (plan written when reached) | | [ ] |
@@ -126,6 +127,7 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 
 ## Log
 
+- 2026-11-10: **Step 13b runtime started; 13c screens remain.** Added data-only dialogue/choice, script, wait, flags/branch, parallel and failure handling to `sim/missions.js`; story scripts can request waves/ships through the AI adapter, set saved per-place state, move inventory, play sounds or warp a pilot. Added the ten-step `The Border Signal` example, v19 save coverage and `tests/step13b-missions.test.mjs`; the dialogue panel and mission-log UI remain 13c.
 - 2026-11-10: **Step 13a built; owner playtest pending.** Added `src/data/missions/` and the generic `sim/missions.js` runner. Mine, hunt and salvage contracts now instantiate one-step data missions, several can be active together, and kill/mine/collect/reach/deliver/survive objective events advance the same runner. Save v18 active contracts migrate to v19 `profile.missions`; `profile.flags` is ready for the choice branch planned in 13b. Added `tests/step13-missions.test.mjs` and `TESTING-13-MISSIONS.md`; 13b dialogue/script steps and 13c screens remain.
 - 2026-11-10: **Step 12 built; owner playtest pending.** Generated pockets now resolve three data templates with tier-selected encounters (`hostile_patrol`, `friendly_trader`, `derelict`, `resource_cache`), and are filled on load. Generic AI spawners preserve hunt contracts; trader stations reuse Meridian's `SHOPS` definitions with independent station-local storage. Stable asteroid slots, static loot encounters and one-shot patrols use `world.placeMemory` with 420 simulation-second defaults, pause-safe countdowns and `respawn-place` event overrides. `world.stationStores` uses stable station keys and keeps the old v18 `world.store` saves compatible without consuming reserved v19/v20 slots. Added `tests/step12-places.test.mjs`, `tests/station-inventory.test.mjs`, content reference checks and `TESTING-12-PLACES.md`. Step 11 was ticked after the owner confirmed its playtest; Step 12 remains unticked until this new playtest passes.
 - 2026-11-07: Vision, target architecture, roadmap and refactor plan written (docs only).

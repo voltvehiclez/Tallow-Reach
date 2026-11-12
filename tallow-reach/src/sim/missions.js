@@ -1,28 +1,33 @@
-// Data-driven mission runner (Step 13a). Contracts are the first mission kind;
-// the runner already speaks in objective events so story missions can add
-// dialogue, flags and scripts without creating a second progress system.
+// Data-driven mission runner (Steps 13a and 13b). Contracts are the first
+// mission kind; the same runner also handles story dialogue, scripts, waits,
+// remembered flags, branches and parallel objectives.
 
 import { on, emit } from "../util/events.js";
 import { missionFromContract, describeMission } from "../data/missions/contracts.js";
 import { itemName } from "../data/items.js";
 import { state, profileOf } from "../state/state.js";
-import { STATION, countOf, takeItem } from "./inventory.js";
+import { STATION, addItem, countOf, takeItem } from "./inventory.js";
+import { enterPlace, arrivalPos } from "./places.js";
 
 let nextMissionId = 0;
 
 function missionsOf(profile = state.profile) {
   if (!profile) return [];
-  if (Array.isArray(profile.missions)) return profile.missions;
-  // Plain test/legacy profiles may still carry only the old property. The real
-  // save profile has a compatibility setter, but this also keeps the runner
-  // useful with a minimal object made by a headless test.
-  if (profile.mission) {
-    const mission = missionFromContract(profile.mission, `contract:legacy:${++nextMissionId}`);
-    profile.missions = mission ? [mission] : [];
-    return profile.missions;
+  if (!Array.isArray(profile.missions)) {
+    // Plain test/legacy profiles may still carry only the old property. The
+    // real save profile has a compatibility setter, but this keeps the runner
+    // useful with a minimal object made by a headless test.
+    if (profile.mission) {
+      const mission = missionFromContract(profile.mission, `contract:legacy:${++nextMissionId}`);
+      profile.missions = mission ? [mission] : [];
+    } else profile.missions = [];
   }
-  profile.missions = [];
+  if (!profile.flags || typeof profile.flags !== "object" || Array.isArray(profile.flags)) profile.flags = {};
   return profile.missions;
+}
+
+function profileFor(payload = {}, fallback = state.profile) {
+  return payload.profile || profileOf(payload.player) || fallback;
 }
 
 export const activeMissions = (profile = state.profile) => missionsOf(profile);
@@ -36,18 +41,42 @@ export function missionStep(mission) {
   return mission.steps[mission.step];
 }
 
+export function isMissionFailed(mission) {
+  return !!mission?.failed;
+}
+
 export function isMissionComplete(mission) {
-  return !!mission && (mission.completed === true || mission.step >= (mission.steps?.length || 0));
+  return !!mission && !mission.failed && (mission.completed === true || mission.step >= (mission.steps?.length || 0));
+}
+
+function stepCount(step) {
+  if (!step) return 1;
+  if (step.kind === "dialogue") return Math.max(1, Array.isArray(step.lines) ? step.lines.length : 1);
+  if (step.kind === "parallel") return Math.max(1, (step.steps || []).reduce((n, child) => n + stepCount(child), 0));
+  const count = Number(step.count ?? step.seconds ?? 1);
+  return Number.isFinite(count) && count > 0 ? count : 1;
+}
+
+function parallelKey(step, child) {
+  return `${step.id}.${child.id}`;
+}
+
+function counterValue(mission, id) {
+  return Math.max(0, Number(mission.counters?.[id]) || 0);
 }
 
 export function missionProgress(mission) {
   if (!mission || !Array.isArray(mission.steps) || !mission.steps.length) return { done: 0, total: 0 };
   const index = Math.min(Math.max(0, mission.step), mission.steps.length - 1);
   const step = mission.steps[index];
-  const done = isMissionComplete(mission)
-    ? step.count
-    : Number(mission.counters?.[step.id] || 0);
-  return { done: Math.min(step.count, Math.max(0, done)), total: step.count, step, index };
+  if (step.kind === "parallel") {
+    const total = (step.steps || []).reduce((n, child) => n + stepCount(child), 0);
+    const done = (step.steps || []).reduce((n, child) => n + Math.min(stepCount(child), counterValue(mission, parallelKey(step, child))), 0);
+    return { done, total, step, index };
+  }
+  const total = stepCount(step);
+  const done = isMissionComplete(mission) ? total : Math.min(total, counterValue(mission, step.id));
+  return { done, total, step, index };
 }
 
 export function remainingObjective(mission) {
@@ -56,7 +85,9 @@ export function remainingObjective(mission) {
 }
 
 export function missionForObjective(profile, kind) {
-  return missionsOf(profile).find(mission => !isMissionComplete(mission) && missionStep(mission)?.kind === kind) || null;
+  return missionsOf(profile).find(mission =>
+    !isMissionComplete(mission) && !isMissionFailed(mission) && missionStep(mission)?.kind === kind
+  ) || null;
 }
 
 function freshId(type) {
@@ -64,17 +95,199 @@ function freshId(type) {
   return `contract:${type}:${nextMissionId}`;
 }
 
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 /** Make an active mission from a compact board offer. */
 export function instantiateMission(offer) {
   return missionFromContract(offer, freshId(offer?.type));
 }
 
+/** Clone a data-only story definition into the saved runtime shape. */
+export function instantiateStoryMission(definition, id = definition?.id) {
+  if (!definition || definition.kind !== "story" || !Array.isArray(definition.steps) || !definition.steps.length) return null;
+  const mission = cloneData(definition);
+  mission.id = id || `story:${++nextMissionId}`;
+  mission.step = 0;
+  mission.current = 0;
+  mission.counters = {};
+  mission.elapsed = 0;
+  delete mission.completed;
+  delete mission.failed;
+  return mission;
+}
+
 function ensureCounters(mission) {
-  if (!mission.counters || typeof mission.counters !== "object") mission.counters = {};
+  if (!mission.counters || typeof mission.counters !== "object" || Array.isArray(mission.counters)) mission.counters = {};
   for (const step of mission.steps || []) {
+    if (step.kind === "parallel") {
+      for (const child of step.steps || []) {
+        const id = parallelKey(step, child), value = Number(mission.counters[id]);
+        mission.counters[id] = Number.isFinite(value) && value >= 0 ? Math.min(stepCount(child), value) : 0;
+      }
+      continue;
+    }
     const value = Number(mission.counters[step.id]);
-    mission.counters[step.id] = Number.isFinite(value) && value >= 0 ? value : 0;
+    mission.counters[step.id] = Number.isFinite(value) && value >= 0 ? Math.min(stepCount(step), value) : 0;
   }
+}
+
+function stepIndex(mission, target) {
+  if (target === undefined || target === null || target === "") return null;
+  if (typeof target === "number" || /^\d+$/.test(String(target))) {
+    const index = Math.floor(+target);
+    return index >= 0 && index <= mission.steps.length ? index : null;
+  }
+  const index = mission.steps.findIndex(step => step.id === target);
+  return index >= 0 ? index : null;
+}
+
+function nextStepIndex(mission, step, fallback = mission.step + 1) {
+  const target = step?.next ?? step?.goto;
+  if (target !== undefined) return stepIndex(mission, target);
+  return fallback;
+}
+
+function applyFlags(profile, values) {
+  if (!values || typeof values !== "object" || Array.isArray(values)) return false;
+  if (!profile.flags || typeof profile.flags !== "object" || Array.isArray(profile.flags)) profile.flags = {};
+  let changed = false;
+  for (const [id, value] of Object.entries(values)) {
+    if (!id || profile.flags[id] !== value) {
+      profile.flags[id] = value;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function flagsMatch(flags, test) {
+  if (test === undefined || test === null) return true;
+  if (typeof test === "string") return !!flags?.[test];
+  if (Array.isArray(test)) return test.every(id => !!flags?.[id]);
+  if (typeof test !== "object") return false;
+  return Object.entries(test).every(([id, expected]) => flags?.[id] === expected);
+}
+
+function emitProgress(mission, event, payload = {}) {
+  emit("mission-progress", { mission, event, payload, player: payload.player });
+}
+
+function markComplete(mission, payload = {}) {
+  if (mission.completed) return false;
+  mission.completed = true;
+  mission.current = mission.steps.length;
+  emit("mission-completed", { mission, player: payload.player });
+  return true;
+}
+
+function moveToStep(mission, target, payload = {}) {
+  const index = target;
+  if (!Number.isInteger(index) || index < 0 || index > mission.steps.length) return false;
+  mission.step = index;
+  mission.current = index;
+  mission.p = 0;
+  if (index >= mission.steps.length) markComplete(mission, payload);
+  return true;
+}
+
+function scriptKind(action) {
+  if (typeof action === "string") return action;
+  return action?.kind || action?.action || action?.type || "";
+}
+
+function scriptActions(step) {
+  if (Array.isArray(step?.actions)) return step.actions;
+  if (Array.isArray(step?.action)) return step.action;
+  return step?.action ? [step.action] : [];
+}
+
+function placeState(place) {
+  const world = state.worldState;
+  if (!world.missionState || typeof world.missionState !== "object" || Array.isArray(world.missionState)) {
+    world.missionState = {};
+  }
+  if (!world.missionState[place] || typeof world.missionState[place] !== "object" || Array.isArray(world.missionState[place])) {
+    world.missionState[place] = {};
+  }
+  return world.missionState[place];
+}
+
+function executeScriptAction(action, mission, profile, payload = {}) {
+  const kind = scriptKind(action);
+  if (!kind) return false;
+  const player = payload.player || (profile === state.profile ? state.player : null);
+  const place = action.place || action.sector || player?.place || state.place;
+  const count = Math.max(1, Math.floor(+action.count || 1));
+  if (kind === "give-item" || kind === "take-item") {
+    const item = action.item;
+    const where = action.target === "station" ? STATION : profile.ship;
+    const changed = kind === "give-item"
+      ? addItem(where, item, count, profile, state.worldState)
+      : takeItem(where, item, count, profile, state.worldState);
+    emit(kind === "give-item" ? "mission-item-given" : "mission-item-taken", {
+      mission, item, count: changed, target: action.target || "ship", player,
+    });
+    return changed > 0;
+  }
+  if (kind === "set-sector-state") {
+    const values = action.set || action.state || (action.key ? { [action.key]: action.value } : {});
+    Object.assign(placeState(place), values);
+    emit("mission-sector-state", { mission, place, state: placeState(place), player });
+    return true;
+  }
+  if (kind === "play-sound") {
+    const name = action.name || action.sound;
+    if (name) emit("sfx", { name, ...(action.args && typeof action.args === "object" ? action.args : {}) });
+    return !!name;
+  }
+  if (kind === "warp-player") {
+    const target = action.to || action.place || action.sector;
+    if (!target || !player || !enterPlace(target, player)) return false;
+    if (player.pos) player.pos.copy(arrivalPos(target));
+    emit("mission-warp", { mission, from: place, to: target, player });
+    return true;
+  }
+  // Spawn actions are handled by the simulation adapter in sim/ai.js. Keeping
+  // them as an event means mission data does not import an enemy system.
+  if (kind === "spawn-wave" || kind === "spawn-ship") {
+    emit("mission-script", { mission, action: { ...action, kind }, place, player, profile });
+    return true;
+  }
+  return false;
+}
+
+function executeScriptStep(step, mission, profile, payload = {}) {
+  let changed = false;
+  for (const action of scriptActions(step)) changed = executeScriptAction(action, mission, profile, payload) || changed;
+  return changed;
+}
+
+/** Run zero-length story steps immediately after a mission starts or advances. */
+function activateAutomatic(mission, profile, payload = {}) {
+  let changed = false;
+  for (let guard = 0; guard < 100 && !isMissionComplete(mission) && !isMissionFailed(mission); guard++) {
+    const step = missionStep(mission);
+    if (!step) break;
+    if (step.kind === "script") {
+      executeScriptStep(step, mission, profile, payload);
+      changed = true;
+      moveToStep(mission, nextStepIndex(mission, step), payload);
+      continue;
+    }
+    if (step.kind === "flags") {
+      applyFlags(profile, step.set);
+      const pass = flagsMatch(profile.flags, step.test);
+      const target = pass ? (step.then ?? step.ifTrue ?? step.next) : (step.else ?? step.ifFalse);
+      const moved = moveToStep(mission, target === undefined ? mission.step + 1 : stepIndex(mission, target), payload);
+      changed = moved || changed;
+      if (!moved) break;
+      continue;
+    }
+    break;
+  }
+  return changed;
 }
 
 function objectiveMatches(step, event, payload = {}) {
@@ -93,43 +306,161 @@ function objectiveMatches(step, event, payload = {}) {
     return (!target || target === payload.target || target === payload.place) &&
       (!step.item || step.item === payload.item);
   }
+  if (step.kind === "wait") {
+    if (event === "mission-trigger") return !step.trigger || step.trigger === payload.trigger || step.trigger === payload.id;
+    if (event === "place-entered") {
+      const target = step.place || step.sector || step.target;
+      return !!target && target === (payload.id || payload.place);
+    }
+    return event === "mission-tick" && (step.timer === true || step.trigger === "timer" || step.seconds !== undefined);
+  }
   return event === "mission-tick" && step.kind === "survive";
+}
+
+function advanceDialogue(mission, step, event, payload, profile) {
+  const lines = Array.isArray(step.lines) ? step.lines : step.lines == null ? [] : [String(step.lines)];
+  const current = counterValue(mission, step.id);
+  if (event === "dialogue-choice") {
+    if (current < Math.max(0, lines.length - 1)) return false;
+    const choiceId = typeof payload.choice === "object" ? payload.choice.id : payload.choice;
+    const choice = (step.choices || []).find(item => item.id === choiceId);
+    if (!choice) return false;
+    applyFlags(profile, choice.set || choice.flags);
+    const target = choice.next ?? choice.goto;
+    moveToStep(mission, target === undefined ? mission.step + 1 : stepIndex(mission, target), payload);
+    activateAutomatic(mission, profile, payload);
+    return true;
+  }
+  if (event !== "dialogue-next") return false;
+  if (current + 1 < lines.length) {
+    mission.counters[step.id] = current + 1;
+    mission.p = current + 1;
+    return true;
+  }
+  moveToStep(mission, nextStepIndex(mission, step), payload);
+  activateAutomatic(mission, profile, payload);
+  return true;
+}
+
+function advanceParallel(mission, step, event, payload) {
+  let changed = false;
+  for (const child of step.steps || []) {
+    const id = parallelKey(step, child), total = stepCount(child), before = counterValue(mission, id);
+    if (before >= total || !objectiveMatches(child, event, payload)) continue;
+    const amount = child.kind === "survive" || (child.kind === "wait" && event === "mission-tick")
+      ? Math.max(0, Number(payload.dt) || 0) : 1;
+    mission.counters[id] = Math.min(total, before + amount);
+    changed = true;
+  }
+  if (changed) {
+    mission.p = (step.steps || []).filter(child => counterValue(mission, parallelKey(step, child)) >= stepCount(child)).length;
+    if ((step.steps || []).every(child => counterValue(mission, parallelKey(step, child)) >= stepCount(child))) {
+      moveToStep(mission, nextStepIndex(mission, step), payload);
+      const profile = profileFor(payload);
+      activateAutomatic(mission, profile, payload);
+    }
+  }
+  return changed;
 }
 
 /** Advance one current objective. Returns true when the mission changed. */
 export function advanceMission(mission, event, payload = {}) {
-  if (!mission || isMissionComplete(mission) || !missionStep(mission)) return false;
+  if (!mission || isMissionComplete(mission) || isMissionFailed(mission) || !missionStep(mission)) return false;
+  const profile = profileFor(payload);
   ensureCounters(mission);
+  const prepared = activateAutomatic(mission, profile, payload);
+  if (prepared || isMissionComplete(mission) || isMissionFailed(mission)) {
+    if (prepared) emitProgress(mission, event, payload);
+    return prepared;
+  }
   const step = missionStep(mission);
+  if (step.kind === "dialogue") {
+    const changed = advanceDialogue(mission, step, event, payload, profile);
+    if (changed) emitProgress(mission, event, payload);
+    return changed;
+  }
+  if (step.kind === "parallel") {
+    const changed = advanceParallel(mission, step, event, payload);
+    if (changed) emitProgress(mission, event, payload);
+    return changed;
+  }
   if (!objectiveMatches(step, event, payload)) return false;
 
-  const before = mission.counters[step.id] || 0;
-  const amount = step.kind === "survive" ? Math.max(0, Number(payload.dt) || 0) : 1;
-  const after = Math.min(step.count, before + amount);
+  const before = counterValue(mission, step.id);
+  const amount = step.kind === "survive" || (step.kind === "wait" && event === "mission-tick")
+    ? Math.max(0, Number(payload.dt) || 0) : 1;
+  const after = Math.min(stepCount(step), before + amount);
   mission.counters[step.id] = after;
   mission.p = Math.floor(after);
-  if (after >= step.count) {
-    mission.step += 1;
-    mission.current = mission.step;
-    if (mission.step >= mission.steps.length) mission.completed = true;
+  if (after >= stepCount(step)) {
+    moveToStep(mission, nextStepIndex(mission, step), payload);
+    activateAutomatic(mission, profile, payload);
   }
-  emit("mission-progress", { mission, event, payload, player: payload.player });
-  if (mission.completed) emit("mission-completed", { mission, player: payload.player });
+  emitProgress(mission, event, payload);
   return true;
 }
 
 /** Advance all missions owned by the event's player. */
 export function advanceMissions(event, payload = {}) {
-  const profile = profileOf(payload.player);
+  const profile = profileFor(payload);
   let changed = false;
-  for (const mission of [...missionsOf(profile)]) changed = advanceMission(mission, event, payload) || changed;
+  for (const mission of [...missionsOf(profile)]) {
+    if (event === "mission-tick") {
+      mission.elapsed = Math.max(0, Number(mission.elapsed) || 0) + Math.max(0, Number(payload.dt) || 0);
+      if (mission.timeout > 0 && mission.elapsed >= mission.timeout) {
+        changed = failMission(mission, "timeout", profile, payload) || changed;
+        continue;
+      }
+    }
+    changed = advanceMission(mission, event, payload) || changed;
+  }
+  return changed;
+}
+
+function failureRule(mission, reason) {
+  const fails = mission?.fails;
+  if (!fails || typeof fails !== "object") return null;
+  if (Array.isArray(fails.on) && fails.on.includes(reason)) return fails[reason] ?? fails;
+  if (Object.prototype.hasOwnProperty.call(fails, reason)) return fails[reason];
+  return null;
+}
+
+function failureAction(rule, mission) {
+  if (typeof rule === "string") return rule === "abandon" ? "abandon" : "keep";
+  return rule?.action || mission?.fails?.action || "keep";
+}
+
+/** Mark a configured story mission failure and apply its declared outcome. */
+export function failMission(mission, reason, profile = state.profile, payload = {}) {
+  if (!mission || isMissionFailed(mission)) return false;
+  const rule = failureRule(mission, reason);
+  if (!rule) return false;
+  mission.failed = true;
+  mission.failure = reason;
+  const message = typeof rule === "object" ? rule.message : mission.fails?.message;
+  if (message) mission.failureMessage = message;
+  applyFlags(profile, typeof rule === "object" ? rule.set : null);
+  const action = failureAction(rule, mission);
+  emit("mission-failed", { mission, reason, action, message: mission.failureMessage || "", player: payload.player });
+  if (action === "abandon") {
+    const list = missionsOf(profile), index = list.indexOf(mission);
+    if (index >= 0) list.splice(index, 1);
+  }
+  return true;
+}
+
+function failMissionsFor(reason, payload = {}) {
+  const profile = profileFor(payload);
+  let changed = false;
+  for (const mission of [...missionsOf(profile)]) changed = failMission(mission, reason, profile, payload) || changed;
   return changed;
 }
 
 export function acceptMission(offer, profile = state.profile) {
-  const mission = instantiateMission(offer);
+  const mission = offer?.kind === "story" ? instantiateStoryMission(offer) : instantiateMission(offer);
   if (!mission) return undefined;
   missionsOf(profile).push(mission);
+  activateAutomatic(mission, profile, { profile });
   return mission;
 }
 
@@ -137,6 +468,29 @@ export function missionAt(indexOrId, profile = state.profile) {
   const list = missionsOf(profile);
   if (typeof indexOrId === "number" || /^\d+$/.test(String(indexOrId ?? ""))) return list[+indexOrId];
   return list.find(mission => mission.id === indexOrId);
+}
+
+/** Current dialogue line and choices for the future dialogue panel (Step 13c). */
+export function missionDialogue(mission) {
+  const step = missionStep(mission);
+  if (!step || step.kind !== "dialogue") return null;
+  const lines = Array.isArray(step.lines) ? step.lines : step.lines == null ? [] : [String(step.lines)];
+  const lineIndex = Math.min(Math.max(0, counterValue(mission, step.id)), Math.max(0, lines.length - 1));
+  return {
+    speaker: step.speaker || "",
+    line: lines[lineIndex] || "",
+    lineIndex,
+    lines: [...lines],
+    choices: Array.isArray(step.choices) ? step.choices.map(choice => ({ ...choice })) : [],
+    waitingForChoice: Array.isArray(step.choices) && lineIndex >= lines.length - 1,
+  };
+}
+
+/** Select a current dialogue choice without making the UI know step internals. */
+export function chooseMission(indexOrId, choiceId, profile = state.profile) {
+  const mission = missionAt(indexOrId, profile);
+  if (!mission) return false;
+  return advanceMission(mission, "dialogue-choice", { choice: choiceId, profile });
 }
 
 function itemRequirement(mission) {
@@ -198,7 +552,10 @@ export function completeMission(indexOrId, profile = state.profile) {
 export function abandonMission(indexOrId, profile = state.profile) {
   const mission = missionAt(indexOrId, profile) || missionsOf(profile)[0];
   if (!mission) return undefined;
-  missionsOf(profile).splice(missionsOf(profile).indexOf(mission), 1);
+  failMission(mission, "abandon", profile, { player: profile === state.profile ? state.player : undefined });
+  const list = missionsOf(profile);
+  const index = list.indexOf(mission);
+  if (index >= 0) list.splice(index, 1);
   emit("mission-abandoned", { mission, player: profile === state.profile ? state.player : undefined });
   return "Mission abandoned.";
 }
@@ -210,4 +567,16 @@ on("enemy-killed", payload => advanceMissions("enemy-killed", payload));
 on("pickup", payload => advanceMissions("pickup", payload));
 on("place-entered", payload => advanceMissions("place-entered", payload));
 on("delivered", payload => advanceMissions("delivered", payload));
+on("mission-trigger", payload => advanceMissions("mission-trigger", payload));
 on("mission-tick", payload => advanceMissions("mission-tick", payload));
+on("mission-dialogue-next", payload => advanceMissions("dialogue-next", payload));
+on("mission-dialogue-choice", payload => advanceMissions("dialogue-choice", payload));
+on("player-dead", payload => failMissionsFor("player-dead", payload));
+on("place-changed", payload => {
+  advanceMissions("place-changed", payload);
+  const profile = profileFor(payload);
+  for (const mission of [...missionsOf(profile)]) {
+    const sector = mission.fails?.sector || mission.origin;
+    if (sector && payload.from === sector && payload.to !== sector) failMission(mission, "left-sector", profile, payload);
+  }
+});
