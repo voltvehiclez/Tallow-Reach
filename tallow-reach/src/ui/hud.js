@@ -11,7 +11,7 @@ import { interpolatedPos } from "../render/views.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
-import { activeMissions, missionDescription, missionProgress } from "../sim/missions.js";
+import { activeMissions, missionDescription, missionNextText, missionProgress } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
 import { V } from "../util/math.js";
@@ -109,13 +109,22 @@ export function coneRadiusPx(deg) {
 }
 
 /** Refresh every HUD element. Call once per frame while flying. */
+const escHud = value => String(value ?? "").replace(/[&<>\"']/g, c => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '\"': "&quot;",
+  "'": "&#39;",
+}[c]));
+
 function missionsHtml(missions) {
   if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
   return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
     const progress = mission.type === "hunt" ? missionProgress(mission) : null;
-    return `<div class="hud-mission"><span>${missionDescription(mission)}</span>${
-      progress ? ` <small>${progress.done}/${progress.total}</small>` : ""
-    }</div>`;
+    return `<div class="hud-mission"><strong>${escHud(missionDescription(mission))}:</strong>` +
+      `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
+        progress ? `<small>${progress.done}/${progress.total}</small>` : ""
+      }</div>`;
   }).join("")}</div>`;
 }
 

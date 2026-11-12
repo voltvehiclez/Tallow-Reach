@@ -530,6 +530,8 @@ test("the flight HUD lists every active mission by title", () => {
   const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
   assert.match(hud, /missions\.map\(mission =>/, "the top-right HUD renders every active mission");
   assert.match(hud, /class="hud-missions"/, "missions have a dedicated HUD block");
+  assert.match(hud, /missionNextText\(mission\)/, "the top-right HUD shows each mission's current objective");
+  assert.match(hud, /hud-mission-objective/, "the current objective has its own HUD line");
   assert.doesNotMatch(hud, /activeMissions\(S\)\[0\]/, "the HUD must not discard missions after the first");
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /#tr \.hud-mission/, "each active mission has a readable top-right style");

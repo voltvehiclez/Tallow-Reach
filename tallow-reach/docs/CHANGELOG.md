@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Show player-facing mission objectives in the flight HUD
+
+- Removed internal `Step X of Y` numbering from the Mission log. Active missions now present a clear player-facing status, progress and **Next** instruction instead of exposing the runner's implementation steps.
+- The top-right flight HUD now lists every active mission as its title plus the current `missionNextText()` objective. Updated The Border Signal's data-defined text for the Hollow patrol, signal search, beacon retrieval and return to Meridian Station; mission persistence, dialogue, rewards and scripted beacon transfer remain unchanged.
+- Added UI/content regressions for hidden step numbering and objective updates across the story flow. Save version remains **19**. Focused UI/content tests pass **61/61**, full `npm test` passes **371/371**, `npm run build` produces a **736 KB** bundle, and the complete-project ZIP is refreshed. Browser validation remains pending in `TESTING-13C-SCREENS.md`.
+
+---
+
 ## 2026-11-10: Stabilize story mission completion and scripted hand-offs
 
 - Fixed completed story missions being treated as failed on a later sector change, timeout or death. The Border Signal now remains active and claimable after the pilot returns from Kestrel Hollow, instead of disappearing and reappearing as a fresh **Start** offer.

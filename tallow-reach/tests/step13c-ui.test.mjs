@@ -8,6 +8,7 @@ import {
   advanceMission,
   instantiateStoryMission,
   missionDialogue,
+  missionNextText,
 } from "../src/sim/missions.js";
 import { dialogueHtml, missionLogHtml } from "../src/ui/missionlog.js";
 import { state } from "../src/state/state.js";
@@ -33,7 +34,7 @@ test("13c: the dialogue panel renders a portrait slot, speaker, data text and ch
   assert.match(second, /data-dialogue-choice="decline"/, "the decline choice is data-driven");
 });
 
-test("13c: mission log lists active missions, current step, progress and next action", () => {
+test("13c: mission log lists active missions, objective, progress and next action", () => {
   const profile = newProfile();
   profile.missions.push(storyMission());
   const html = missionLogHtml(profile);
@@ -46,10 +47,28 @@ test("13c: mission log lists active missions, current step, progress and next ac
     state.profile = previousProfile;
   }
   assert.match(html, /The Border Signal/, "the active mission title is shown");
-  assert.match(html, /Step 1 of 10/, "the current step is shown");
+  assert.match(html, /Active/, "the mission is presented as active without exposing internal step numbering");
+  assert.doesNotMatch(html, /Step \d+ of \d+/, "internal step numbering is not shown to players");
   assert.match(html, /Progress 0\/2/, "the current dialogue progress is shown");
   assert.match(html, /Hear Archivist Vale(?:&#39;|')s request and choose whether to investigate\./, "the next action comes from mission data");
   assert.match(html, /A weak signal is repeating beyond Kestrel Hollow\./, "the current dialogue preview is shown");
+
+  const waiting = storyMission();
+  waiting.step = 4;
+  assert.equal(missionNextText(waiting), "Go to Kestrel Hollow and defeat the two raiders.",
+    "the story data supplies a direct current objective for the flight HUD");
+  const searching = storyMission();
+  searching.step = 5;
+  assert.equal(missionNextText(searching), "Reach the signal and hold position for two seconds.",
+    "the HUD objective updates from the story data after the wave");
+  const beacon = storyMission();
+  beacon.step = 7;
+  assert.equal(missionNextText(beacon), "Retrieve the beacon and keep it aboard your ship.",
+    "the HUD objective updates for the scripted beacon transfer");
+  const returning = storyMission();
+  returning.step = 8;
+  assert.equal(missionNextText(returning), "Return to Meridian Station with the beacon.",
+    "the HUD objective updates for the return-home handoff");
 
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
   const ui = readFileSync(new URL("../src/ui/missionlog.js", import.meta.url), "utf8");

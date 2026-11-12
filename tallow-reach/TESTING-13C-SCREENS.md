@@ -18,13 +18,16 @@ continuing with the browser pass.
 
 - [ ] **1.1** Open the built game or live preview and check the browser console for red errors.
 - [ ] **1.2** Enter the game, dock at the home station and open the **Mission log** tab. It should show
-      the active missions, their current step, progress and a **Next** instruction. The existing
-      **Contracts** tab remains available with its board, active rows, Accept, Refresh, Abandon and
-      inventory-gated Collect reward actions.
+      the active missions, their current objective, progress and a **Next** instruction without exposing
+      internal `Step X of Y` numbering. The existing **Contracts** tab remains available with its board,
+      active rows, Accept, Refresh, Abandon and inventory-gated Collect reward actions.
 - [ ] **1.3** The Mission log should list a **Story missions** section with **The Border Signal** when
       that story mission is not already active. Start it once. It should enter the active list without
       changing the existing contract board.
-- [ ] **1.4** While flying, press **P** or **Esc** to open the pause overlay. **Resume** must be above
+- [ ] **1.4** While flying, check the top-right HUD. Every active mission should show its title and a
+      direct current objective, such as **Go to Kestrel Hollow and defeat the two raiders** or
+      **Reach the signal and hold position for two seconds**. Multiple active missions must all remain
+      visible. Then press **P** or **Esc** to open the pause overlay. **Resume** must be above
       **Exit to main menu**. Click **Exit to main menu** and confirm gameplay closes to the title screen,
       where **Campaign** is first and disabled and **Open World** is second. Click **Open World** and
       confirm it uses the existing flow, returning to the same station or flight resume point.
@@ -37,15 +40,15 @@ continuing with the browser pass.
 - [ ] **2.2** Click **Continue**. The second line should appear and the two data-defined choices,
       **I will investigate.** and **Not today.**, should replace Continue.
 - [ ] **2.3** Choose either response. The panel should close or update as the story advances, the
-      Mission log should show the changed step, and no story text should be missing or replaced by a
-      hard-coded placeholder.
+      Mission log should show the changed objective, and no story text should be missing or replaced by
+      a hard-coded placeholder.
 - [ ] **2.4** If the dialogue is still open, launch and confirm normal throttle, boost, mining/combat,
       docking and pause behavior still work. A dialogue panel is an overlay, not an automatic pause.
 
 ## 3. Save and mission-log consistency
 
 - [ ] **3.1** Leave a story dialogue on its second line or leave a story mission on an objective, save
-      in the Saves tab, reload that slot, and return to the Mission log. The same mission step,
+      in the Saves tab, reload that slot, and return to the Mission log. The same current objective,
       dialogue line, choice state and Next instruction should be restored.
 - [ ] **3.2** Confirm all active contracts and the story mission remain visible in the Mission log and
       the flight HUD. Completing or abandoning one must remove only that mission from the active list.

@@ -99,7 +99,17 @@ canvas {
   color: var(--amber);
   overflow-wrap: anywhere;
 }
+#tr .hud-mission strong {
+  display: block;
+}
+#tr .hud-mission-objective {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.25;
+}
 #tr .hud-mission small {
+  display: block;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

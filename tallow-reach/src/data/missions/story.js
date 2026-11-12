@@ -45,11 +45,11 @@ export const BORDER_SIGNAL_MISSION = {
       action: { kind: "spawn-wave", place: "hollow", enemy: "raider", count: 2 },
       next: "wait",
     },
-    { id: "wait", kind: "wait", trigger: "wave-clear", count: 1, log: "Wait for the patrol wave to clear.", next: "search" },
+    { id: "wait", kind: "wait", trigger: "wave-clear", count: 1, log: "Go to Kestrel Hollow and defeat the two raiders.", next: "search" },
     {
       id: "search",
       kind: "parallel",
-      log: "Reach the signal and hold position while it resolves.",
+      log: "Reach the signal and hold position for two seconds.",
       steps: [
         { id: "reach-signal", kind: "reach", place: "hollow", count: 1 },
         { id: "hold-position", kind: "survive", count: 2 },
@@ -67,7 +67,7 @@ export const BORDER_SIGNAL_MISSION = {
     {
       id: "reward-item",
       kind: "script",
-      log: "Receive the beacon from the signal.",
+      log: "Retrieve the beacon and keep it aboard your ship.",
       action: { kind: "give-item", target: "ship", item: "salv", count: 1 },
       next: "finish",
     },
@@ -76,7 +76,7 @@ export const BORDER_SIGNAL_MISSION = {
       kind: "dialogue",
       speaker: "Archivist Vale",
       portrait: "archivist-vale",
-      log: "Hear the final briefing and return with the beacon.",
+      log: "Return to Meridian Station with the beacon.",
       lines: ["The beacon is yours. Bring it home and we can learn who sent the signal."],
       next: 10,
     },

@@ -16,7 +16,6 @@ import {
   missionDialogue,
   missionNextText,
   missionProgress,
-  missionStep,
   nextMissionDialogue,
 } from "../sim/missions.js";
 import { setPause } from "./pause.js";
@@ -53,16 +52,10 @@ export function dialogueHtml(mission) {
 }
 
 function missionStatus(mission, index, profile) {
-  const step = missionStep(mission);
   const progress = missionProgress(mission);
   const complete = isMissionComplete(mission);
   const failed = isMissionFailed(mission);
-  const stateText = failed
-    ? "Failed"
-    : complete
-      ? "Complete"
-      : `Step ${Math.min(progress.index + 1, mission.steps.length)} of ${mission.steps.length}`;
-  const kindText = step?.kind ? ` · ${step.kind}` : "";
+  const stateText = failed ? "Failed" : complete ? "Complete" : "Active";
   const action = complete && canCollectMissionReward(mission, profile)
     ? `<button data-a="done" data-b="${index}">Collect reward</button>`
     : !complete
@@ -76,7 +69,7 @@ function missionStatus(mission, index, profile) {
   return (
     `<article class="mission-log-card">` +
     `<header><h3>${esc(mission.title || "Mission")}</h3><span>${esc(mission.kind || "mission")}</span></header>` +
-    `<p class="mission-log-status">${stateText}${kindText} <span>· Progress ${progress.done}/${progress.total}</span></p>` +
+    `<p class="mission-log-status">${stateText} <span>· Progress ${progress.done}/${progress.total}</span></p>` +
     `<div class="mission-log-bar"><i style="width:${width}%"></i></div>` +
     preview +
     `<p class="mission-log-next"><strong>Next:</strong> ${esc(missionNextText(mission))}</p>` +
@@ -91,7 +84,7 @@ export function missionLogHtml(profileOrUi = state.profile) {
   const active = activeMissions(profile);
   const activeIds = new Set(active.map(mission => mission.id));
   const storyOffers = STORY_MISSIONS.filter(mission => !activeIds.has(mission.id));
-  let html = `<h2>Mission log</h2><div class="sub">Active missions, current steps and the next thing to do.</div>`;
+  let html = `<h2>Mission log</h2><div class="sub">Active missions, current objectives and the next thing to do.</div>`;
   html += active.length
     ? active.map((mission, index) => missionStatus(mission, index, profile)).join("")
     : `<p>No active missions.</p>`;
