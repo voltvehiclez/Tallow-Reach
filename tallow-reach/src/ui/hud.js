@@ -86,6 +86,10 @@ export function setupHud() {
     if (player && player !== state.player) return;
     el.root.hidden = false;
   });
+  on("main-menu", () => {
+    el.root.hidden = true;
+    routeCache = null;
+  });
   on("hurt", ({ shielded, player }) => {
     if (player && player !== state.player) return;
     el.flash.style.opacity = shielded ? 0.25 : 0.8;

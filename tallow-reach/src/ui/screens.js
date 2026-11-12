@@ -71,7 +71,10 @@ export function introHtml() {
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
     `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +
-    `<button class="go" data-a="intro">Enter game</button>`
+    `<div class="main-menu-actions">` +
+    `<button class="go" data-a="campaign" disabled>Campaign</button>` +
+    `<button class="go" data-a="intro">Open World</button>` +
+    `</div>`
   );
 }
 

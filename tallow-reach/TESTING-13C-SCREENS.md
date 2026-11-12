@@ -24,6 +24,10 @@ continuing with the browser pass.
 - [ ] **1.3** The Mission log should list a **Story missions** section with **The Border Signal** when
       that story mission is not already active. Start it once. It should enter the active list without
       changing the existing contract board.
+- [ ] **1.4** While flying, press **P** or **Esc** to open the pause overlay. **Resume** must be above
+      **Exit to main menu**. Click **Exit to main menu** and confirm gameplay closes to the title screen,
+      where **Campaign** is first and disabled and **Open World** is second. Click **Open World** and
+      confirm it uses the existing flow, returning to the same station or flight resume point.
 
 ## 2. Use the dialogue panel
 

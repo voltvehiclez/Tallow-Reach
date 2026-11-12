@@ -54,6 +54,12 @@ export function setupMenu() {
     state.ui.tab = "h";
     render();
   });
+  on("main-menu", () => {
+    state.ui.intro = true;
+    state.ui.tab = "m";
+    state.ui.toast = "";
+    render();
+  });
 
   contracts.ensureBoard();
   render();
@@ -90,8 +96,10 @@ function loadedMessage(text) {
 }
 
 const ACTIONS = {
-  // "Enter game": leave the start screen and deploy the pilot where the save put
-  // them — docked at a station, or flying at that pocket's arrival point.
+  // "Open World": leave the start screen and deploy the pilot where the save put
+  // them — docked at a station, or flying at that pocket's arrival point. The
+  // existing `intro` action is deliberately kept as the Open World button's
+  // implementation.
   intro() {
     state.ui.intro = false;
     state.ui.tab = "m";

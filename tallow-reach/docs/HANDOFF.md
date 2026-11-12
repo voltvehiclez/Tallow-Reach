@@ -136,15 +136,19 @@ await the browser checks in `TESTING-13C-SCREENS.md`.
   last hostile dies, and a later reach objective recognizes the pilot's current place. Step 13c now
   adds the data-driven Mission log tab and live dialogue panel; the story offer list can start
   `The Border Signal`, and dialogue choices save through the existing v19 mission shape without
-  pausing flight by default.
+  pausing flight by default. The pause overlay now offers **Exit to main menu** below **Resume**;
+  it saves the current resume point and returns to a title screen with disabled **Campaign** first and
+  **Open World** second, while Open World retains the existing `intro` action.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely
   moving/turning muzzle offset without changing projectile velocity, aim or collision rules. Shots still
   inherit ship velocity, so drift after leaving the muzzle is expected. The owner confirmed this works.
-- **Results:** `npm test` **366/366 pass** (including the Step 13a/13b/13c mission tests, salvage
-  hand-in, mission dialogue/script/branch/failure coverage, HUD regressions, generated station-local
-  inventory, starmap/station-separation tests, existing 8B/11B and Step 12 oracles). `npm run build`
-  succeeded: the generated bundle is **735 KB** and is included in the latest playable build. The owner
+- **Results:** `npm test` **368/368 pass** (including the Step 13a/13b/13c mission tests, pause/main-menu
+  navigation, salvage hand-in, mission dialogue/script/branch/failure coverage, HUD regressions, generated
+  station-local inventory, starmap/station-separation tests, existing 8B/11B and Step 12 oracles).
+  `npm run build` succeeded: the generated bundle is **735 KB** and is included in the latest playable
+  build. The complete-project `tallow-reach-latest-build.zip` is refreshed with that source and build.
+  The owner
   passed the first 13a playtest and reported the salvage hand-in bug; the corrected playtest is pending.
   The owner passed the Step 11B visual playtest; the Step 12 visual playtest is still pending. Save **v19** persists
   destination, place memory, station-local stocks, story-script place state and portable mission progress;
@@ -152,6 +156,10 @@ await the browser checks in `TESTING-13C-SCREENS.md`.
   **121 systems / 445 pockets / 444 links** (including detached station pockets); system ids/names/positions
   stay stable, gate connections change; independent core rolls give 116 stars and 5 black holes (including
   Duskdrift). Meridian is a star.
+- **Current package:** `tallow-reach/tallow-reach-latest-build.zip` is the complete project directory,
+  including source, tests, docs and generated HTML, excluding only `node_modules`, Git internals,
+  `.arena` data and the nested prior archive. Browser-local saves are not packaged; export a `TR1:` code
+  separately.
 - **Known limits:** generated pockets now resolve the `frontier`, `trade_lane` and `salvage_yard`
   templates, with four encounter kinds; derelicts/caches are represented by crates and trader stations
   reuse Meridian's `SHOPS` definitions with independent station-local storage. Visibility is `all`; travel is free and non-empty route costs are

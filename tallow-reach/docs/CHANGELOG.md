@@ -19,6 +19,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-10: Add pause exit and split the main menu actions
+
+- The pause overlay now places **Exit to main menu** below **Resume**. It saves the current resume point, unpauses and emits the existing UI event path that restores the title screen and hides flight/dialogue overlays.
+- The title screen now shows a disabled **Campaign** button followed by **Open World**. Open World deliberately uses the existing `intro` action, so the current open-world resume/deploy behavior is unchanged.
+- Added headless menu and pause-navigation regressions, updated the Step 13c browser checklist, and kept save version **19** unchanged. Full `npm test` passes **368/368**; `npm run build` produces a **735 KB** bundle, and the complete-project ZIP is refreshed alongside it.
+
+---
+
 ## 2026-11-10: Advance Border Signal after its mission wave
 
 - Mission-spawned waves now emit the configured `wave-clear` trigger automatically when their last ship is destroyed. The runner also counts a reach objective when a later step begins in a place the pilot already occupies, so The Border Signal can proceed after the two Hollow raiders are defeated instead of waiting forever.

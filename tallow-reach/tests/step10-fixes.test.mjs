@@ -45,6 +45,7 @@ const m = await loadHeadless("src/ui/menu.js", {
   resumeFromSave: "src/sim/session.js",
   dock: "src/sim/session.js",
   encodeSave: "src/state/storage.js",
+  emit: "src/util/events.js",
 });
 const { state } = m;
 const panel = document.getElementById("panel");
@@ -149,9 +150,15 @@ test("fix 2: docking always shows the station menu, never the start screen again
   m.resumeFromSave(P);
   assert.equal(P.docked, false);
   assert.equal(panel.hidden, false, "the start screen owns the panel while it is up");
-  assert.ok(panel.innerHTML.includes("Enter game"), "and it is still the start screen");
+  assert.ok(panel.innerHTML.includes('data-a="campaign" disabled>Campaign</button>'),
+    "Campaign is shown but disabled");
+  assert.ok(panel.innerHTML.includes('data-a="intro">Open World</button>'),
+    "Open World keeps the existing intro action");
+  assert.ok(panel.innerHTML.indexOf(">Campaign</button>") < panel.innerHTML.indexOf(">Open World</button>"),
+    "Campaign comes before Open World");
+  assert.ok(!panel.innerHTML.includes(">Enter game</button>"), "the old button is gone");
 
-  assert.equal(click("intro"), null, '"Enter game"');
+  assert.equal(click("intro"), null, '"Open World"');
   assert.equal(state.ui.intro, false);
   assert.equal(P.docked, false, "it deploys the pilot where the save put them");
   assert.equal(state.place, "hollow");
@@ -162,18 +169,30 @@ test("fix 2: docking always shows the station menu, never the start screen again
   assert.equal(P.docked, true);
   assert.equal(panel.hidden, false);
   assert.ok(panel.innerHTML.includes("Contracts"), "the station menu with its tabs");
-  assert.ok(!panel.innerHTML.includes("Enter game"), "not the start screen");
+  assert.ok(!panel.innerHTML.includes(">Open World</button>"), "not the start screen");
   assert.equal(state.ui.intro, false, "the start screen never comes back");
 });
 
 test("fix 2: a station save deploys straight into the station menu", () => {
   const P = boot("reach", true);
   m.resumeFromSave(P);
-  assert.ok(panel.innerHTML.includes("Enter game"));
+  assert.ok(panel.innerHTML.includes('data-a="campaign" disabled>Campaign</button>'));
+  assert.ok(panel.innerHTML.includes('data-a="intro">Open World</button>'));
   assert.equal(click("intro"), null);
   assert.equal(P.docked, true);
   assert.equal(panel.hidden, false);
   assert.ok(panel.innerHTML.includes("Contracts"));
+});
+
+test("pause exit event returns the panel to the main menu", () => {
+  boot("hollow", false);
+  assert.equal(state.ui.intro, false);
+  m.emit("main-menu", {});
+  assert.equal(state.ui.intro, true);
+  assert.equal(state.ui.tab, "m");
+  assert.equal(panel.hidden, false);
+  assert.ok(panel.innerHTML.includes('data-a="campaign" disabled>Campaign</button>'));
+  assert.ok(panel.innerHTML.includes('data-a="intro">Open World</button>'));
 });
 
 test("fix 1: sound is started by a user gesture, not only by the start button", () => {
@@ -184,11 +203,11 @@ test("fix 1: sound is started by a user gesture, not only by the start button", 
     "so does a key press");
   assert.match(main, /import \{ updateAudio, initAudio \} from "\.\/core\/audio\.js"/);
 
-  // And the start button still starts it (recorded by the headless sound stand-in).
+  // And the Open World button still starts it (recorded by the headless sound stand-in).
   boot("hollow", true);
   const mark = m.__calls.length;
   assert.equal(click("intro"), null);
-  assert.ok(m.__calls.slice(mark).some(c => c.name === "initAudio"), "Enter game starts sound too");
+  assert.ok(m.__calls.slice(mark).some(c => c.name === "initAudio"), "Open World starts sound too");
 });
 
 test("fix 2: nothing simulates behind the start screen", () => {

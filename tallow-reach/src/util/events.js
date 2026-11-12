@@ -79,6 +79,8 @@
 //                                    the pilot removed an active mission
 //   mission-ui-refresh {}
 //                                    a non-mission screen transition changed dialogue visibility
+//   main-menu {}
+//                                    the pause menu returned the local screen to the title menu
 
 const handlers = new Map();
 

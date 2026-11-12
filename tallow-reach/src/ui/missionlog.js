@@ -173,6 +173,7 @@ export function setupMissionLog() {
     "mission-rewarded",
     "mission-abandoned",
     "mission-ui-refresh",
+    "main-menu",
     "docked",
     "launched",
   ]) on(event, renderDialogue);

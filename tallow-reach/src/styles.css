@@ -475,6 +475,12 @@ button:focus-visible {
   padding: 10px;
   font-size: 18px;
 }
+.main-menu-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+.main-menu-actions .go { margin-top: 0; }
 /* ---- Outfitting: the ship in the middle, module bays around it ---- */
 /* This tab opens the panel up to the middle of the screen, because the ship
    needs room to be looked at. Everything else stays where it was. */
