@@ -125,8 +125,8 @@ awaits the mission playtest in `TESTING-13-MISSIONS.md`; 13b/13c have not starte
   reward is claimed. `sim/contracts.js` remains the contract-board facade. `sim/ai.js` uses an active
   kill mission to select hunt targets and `sim/session.js` spawns the combined outstanding salvage need.
   The current contract screen lists several active missions and retains Accept, Refresh, Abandon and
-  inventory-gated Collect reward actions; salvage rows say `N crates required` instead of progress.
-  Dialogue, choices,
+  inventory-gated Collect reward actions; active mission rows keep the mission title and reward without
+  an extra progress or crate-requirement line. Dialogue, choices,
   scripts, waits, branching, parallel steps and the dialogue/log screens are 13b/13c work.
 - **Cannon visual follow-up:** a newly spawned local shot now interpolates from the previous rendered
   hull-local muzzle to its current simulated position for its first tick. This addresses a likely

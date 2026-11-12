@@ -21,7 +21,7 @@ the next person must know (save version, rebuild needed, known issues).
 
 ## 2026-11-10: Require salvage delivery before paying recover contracts
 
-- Recover contracts now count only `salv` items from derelict crates. The Contract screen and flight HUD say `N crates required` instead of showing a misleading `Progress N/N`; **Collect reward** appears only when the current station/ship has enough items, otherwise the action remains **Abandon**.
+- Recover contracts now count only `salv` items from derelict crates. The Contract screen and flight HUD keep active mission rows concise by showing the mission title rather than an extra progress or crate-requirement line; **Collect reward** appears only when the current station/ship has enough items, otherwise the action remains **Abandon**.
 - Claiming the reward requires the requested number in the current station or current ship hold; the items are consumed only when the hand-in succeeds, and an incomplete delivery leaves the mission claimable without paying. Existing saved salvage missions gain the explicit delivery item during v19 sanitization. Added headless coverage for missing stock, mixed station/ship stock, consumption and reward payout; the owner playtest checklist now covers the hand-in rule.
 
 ---

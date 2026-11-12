@@ -75,10 +75,10 @@ Do this section if a salvage offer is active. If not, accept one before launchin
 - [ ] **4.1** Launch with the salvage mission active. The field should contain enough derelict crates for
       the outstanding amount. Several active salvage missions may share one spawned group; it must not
       duplicate crates just because two missions are active.
-- [ ] **4.2** Collect crates normally. The HUD progress should advance from pickup events, while cargo
+- [ ] **4.2** Collect crates normally. The mission title should remain visible in the HUD, while cargo
       limits, pickup sound and item counts remain unchanged.
-- [ ] **4.3** Finish the requested number, dock and open **Contracts**. The mission text should say
-      `N crates required`, not `Progress N/N`. If the required `Salvage` items are missing from the
+- [ ] **4.3** Finish the requested number, dock and open **Contracts**. The active row should stay
+      concise with the mission title and reward. If the required `Salvage` items are missing from the
       current station and current ship, the action button must say **Abandon**, not **Collect reward**.
 - [ ] **4.4** Put the required items in the current station or ship. The button should change to
       **Collect reward**. Click it: the required Salvage items should be removed from the station/ship

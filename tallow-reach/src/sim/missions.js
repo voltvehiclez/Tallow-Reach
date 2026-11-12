@@ -145,7 +145,6 @@ function itemRequirement(mission) {
     return {
       item: step?.item || "salv",
       count: Math.max(1, Math.floor(+mission.n || +step?.count || 1)),
-      label: "crates",
     };
   }
   const step = mission?.steps?.find(item => item.kind === "deliver" && item.item);
@@ -153,13 +152,7 @@ function itemRequirement(mission) {
   return {
     item: step.item,
     count: Math.max(1, Math.floor(+step.count || 1)),
-    label: itemName(step.item),
   };
-}
-
-export function missionRequirementText(mission) {
-  const requirement = itemRequirement(mission);
-  return requirement ? `${requirement.count} ${requirement.label} required` : null;
 }
 
 export function missionDeliveryRequirement(mission, profile = state.profile) {

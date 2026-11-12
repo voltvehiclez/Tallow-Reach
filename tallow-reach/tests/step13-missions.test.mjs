@@ -17,7 +17,6 @@ import {
   completeMission,
   isMissionComplete,
   missionProgress,
-  missionRequirementText,
 } from "../src/sim/missions.js";
 import { emit } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
@@ -72,7 +71,6 @@ test("13a: salvage rewards require and consume the recovered items at hand-in", 
   try {
     const mission = missionFromContract({ type: "salvage", tier: 1, p: 2, n: 2, r: 700 }, "salvage-hand-in");
     assert.equal(mission.steps[0].item, "salv");
-    assert.equal(missionRequirementText(mission), "2 crates required");
     profile.missions.push(mission);
     const before = profile.cr;
     assert.equal(canCollectMissionReward(mission, profile), false);

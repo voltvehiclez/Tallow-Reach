@@ -526,7 +526,7 @@ test("moduleListName names the equipped modules for the HUD and the toast", () =
   assert.equal(moduleListName(undefined), "");
 });
 
-test("the flight HUD lists every active mission with its progress", () => {
+test("the flight HUD lists every active mission by title", () => {
   const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
   assert.match(hud, /missions\.map\(mission =>/, "the top-right HUD renders every active mission");
   assert.match(hud, /class="hud-missions"/, "missions have a dedicated HUD block");
@@ -534,7 +534,8 @@ test("the flight HUD lists every active mission with its progress", () => {
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /#tr \.hud-mission/, "each active mission has a readable top-right style");
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
-  assert.match(screens, /missionRequirementText\(m\)/, "item missions show their hand-in requirement");
+  assert.doesNotMatch(hud, /missionRequirementText|Progress/, "the HUD keeps mission rows concise");
+  assert.doesNotMatch(screens, /missionRequirementText|Progress/, "contract rows keep mission details concise");
   assert.match(screens, /canCollectMissionReward\(m\)/, "reward collection checks current inventories");
 });
 
