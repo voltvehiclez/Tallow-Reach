@@ -11,7 +11,7 @@ import { interpolatedPos } from "../render/views.js";
 import { state, say } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
-import { activeMissions, missionDescription, missionNextText, missionProgress } from "../sim/missions.js";
+import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
 import { V } from "../util/math.js";
@@ -139,13 +139,16 @@ function missionsHtml(missions) {
   if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
   return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
     const progress = mission.type === "hunt" ? missionProgress(mission) : null;
+    // A recovery contract counts its own crates: "2 out of 3 crates recovered"
+    // says what is left to fly out for, and the hand-in line stays a hand-in.
+    const recovered = missionRecoveryText(mission);
     // Contracts are ordinary work and read light blue; story missions keep the
     // amber so a story always stands out in the top-right block.
     const kind = mission.kind === "contract" ? "contract" : "story";
     return `<div class="hud-mission hud-mission-${kind}"><strong>${escHud(missionDescription(mission))}:</strong>` +
       `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
         progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""
-      }</div>`;
+      }${recovered ? `<small>${recovered}</small>` : ""}</div>`;
   }).join("")}</div>`;
 }
 

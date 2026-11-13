@@ -19,7 +19,7 @@ import { refreshDrive, hasDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
 import { refreshGuns } from "./guns.js";
 import { refreshHull } from "./hull.js";
-import { spawnCrate } from "./combat.js";
+import { spawnCrate, nextMissionCrateSlot } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
 import { activeMissions, missionProgress, missionObjectivesDone } from "./missions.js";
@@ -53,6 +53,30 @@ export function configurePlayer(P, profile) {
 const DOCK_RANGE = 300;     // metres from the outpost
 const DOCK_MAX_SPEED = 70;  // m/s
 
+/**
+ * Put one persistent crate in the field for every crate a recovery contract
+ * still needs. Each crate belongs to its mission (`missionId` + `crateSlot`), so
+ * it can be counted, restored from a save and cleared away when that mission is
+ * handed in — while the salvage inside the hold stays ordinary cargo.
+ */
+function ensureSalvageCrates(placeId, profile) {
+  const field = fieldAt(placeId);
+  if (!field?.salvage) return;
+  const W = placeWorld(placeId);
+  const [sx, sy, sz] = field.salvage.spread;
+  for (const mission of activeMissions(profile)) {
+    if (mission?.type !== "salvage" || mission.failed || missionObjectivesDone(mission)) continue;
+    const progress = missionProgress(mission);
+    const missing = Math.max(0, progress.total - progress.done) -
+      W.crates.filter(crate => crate?.missionId === mission.id && crate.item === "salv").length;
+    let slot = nextMissionCrateSlot(placeId, mission.id, "salv");
+    for (let i = 0; i < missing; i++) {
+      const at = V(...field.pos).add(V(R(-sx, sx), R(-sy, sy), R(-sz, sz)));
+      spawnCrate(at, "salv", placeId, null, null, mission.id, true, slot++);
+    }
+  }
+}
+
 /** Leave the outpost and head for the asteroid field. */
 export function launch(P = state.player, profile = profileOf(P)) {
   assertSessionPilot(P, profile, "launch");
@@ -77,18 +101,11 @@ export function launch(P = state.player, profile = profileOf(P)) {
   refreshHull(P, profile);      // and its Hull HP follow the fitted hull module
   P.en = P.drive.bmax;          // launched with a full boost tank
 
-  // Collect objectives need their crates out in the field. Several active
-  // salvage missions share one field; spawn only the combined outstanding need.
-  const field = fieldAt(placeId),
-    salvageNeed = activeMissions(profile)
-      .filter(m => m.type === "salvage" && !missionObjectivesDone(m) && m.steps?.[m.step]?.kind === "collect")
-      .reduce((sum, m) => sum + missionProgress(m).total - missionProgress(m).done, 0);
-  if (salvageNeed > 0 && field && placeWorld(placeId).crates.length === 0) {
-    const [sx, sy, sz] = field.salvage.spread;
-    for (let i = 0; i < salvageNeed; i++) {
-      spawnCrate(V(...field.pos).add(V(R(-sx, sx), R(-sy, sy), R(-sz, sz))), undefined, placeId);
-    }
-  }
+  // A recovery contract spawns its own crates in the field and counts only
+  // those: two jobs running side by side each need their own crates flown out
+  // and picked up. Top up whatever is still to be recovered on every launch, so
+  // a crate lost with a reloaded pocket never leaves a contract unreachable.
+  ensureSalvageCrates(placeId, profile);
 
   emit("launched", { player: P });
   if (local) {

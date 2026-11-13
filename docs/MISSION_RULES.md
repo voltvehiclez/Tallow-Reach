@@ -7,9 +7,8 @@ Missions are a story the player is living in. Every beat must pass one test:
 > **If a real pilot were in this situation, would it make physical and logical sense, and could
 > they ever get stuck or cheated?**
 
-If not, it is a bug, even if the code does what it was written to do. These rules are enforced by
-tools (the linter and the invariant tests below), not just by good intentions, so a new mission is
-checked the moment it is added.
+If not, it is a bug, even if the code does what it was written to do. Tools — the linter and the
+invariant tests below — enforce these rules, so a new mission is checked the moment it is added.
 
 ## The realism rule (overrides everything below)
 
@@ -19,27 +18,27 @@ checked the moment it is added.
   state change, or space freeing up. If the hold is full, the item stays where it is (a crate in space,
   cargo at the dock) until the player comes back with room, and the objective says so.
 - **Nothing happens by itself.** Nothing is delivered, completed, spawned or abandoned because a number
-  changed or a timer ran out. It happens because the player, or someone in the world, did something.
+  changed or a timer ran out: it happens because the player, or someone in the world, did something.
 - **Requirements are real.** No cargo space, no money, no ship that can fly: the mission waits and says
-  what is needed. It never assumes the best case and never fails because of it.
+  what is needed; it never assumes the best case or fails because of it.
 - **Time and distance are real.** Ships take time to arrive and come from somewhere. A conversation
-  needs the right situation: face to face (docked) or on the radio (flying).
+  needs the right situation: docked or on the radio.
 - **Nobody is punished for what they could not know.** A surprise is fine when the story intends it,
-  but the player must be able to see why, afterwards.
+  but they must be able to see why afterwards.
 
 ## The rules, and how each is enforced
 
 | # | Rule | Enforced by |
 |---|------|-------------|
 | 1 | The player is always somewhere, doing something. Before anything happens, check where and in what mode (docked, flying, warping, combat, dead, loading). Never act on where the player was when it was planned. | `stepSituationReady` in `sim/missions.js`; linter requires each dialogue and script to declare its situation |
-| 2 | Surprises are deliberate and set up by what the player does in the world (arriving, passing a point, a radio warning). Nothing spawns in the pilot's face. | Linter: every spawn needs `spawnDist: [min, max]` with min >= `MISSION_RULES.minSpawnDistance` and must run while flying; invariant test measures the real distance |
+| 2 | Surprises are deliberate and set up by what the player does in the world (arriving, passing a point, a radio warning). Nothing spawns in the pilot's face. | Linter (`spawnDist` >= `minSpawnDistance`, flying only); invariant test measures the real distance |
 | 3 | **Dialogue and the world are separate.** Pressing continue, accept or next only moves the conversation. It never spawns, moves, gives or takes anything. World events listen to world state, never to dialogue buttons. | Invariant test snapshots the world around every dialogue click |
-| 4 | Each beat declares the situation it needs, individually: `requiresDock: true` (station, face to face) or `false` (radio). One beat needing a dock never blocks the rest. | Linter (`requiresDock` is mandatory on every dialogue; a script needs exactly one of `requiresDock` / `requiresFlying`) |
+| 4 | Each beat declares the situation it needs, individually: `requiresDock: true` (face to face) or `false` (radio). One beat needing a dock never blocks the rest. | Linter (mandatory `requiresDock` on dialogue; a script needs exactly one of `requiresDock` / `requiresFlying`) |
 | 5 | The player is never stuck and never silently punished. There is always a way forward and the objective says what it is. Failure comes only from a clear cause, with a message. | Linter (objective on every step, no dead ends or loops, `fails.message`); invariant tests (never stuck, never failed or abandoned unless a declared rule fired) |
-| 6 | The mission adapts to the player's resources. A full hold makes a step wait; it does not skip, fail or abandon. | Invariant test fills the hold at every step; `blockedScriptText` and the "Dock at a station and make room" hint |
-| 7 | Everything can be interrupted and resumes: undock, warp, die, quit, reload. Replaying starts clean. | Invariant tests: wander, save and load at every step, die at every step then replay |
+| 6 | The mission adapts to the player's resources: a full hold makes a step wait, never skip, fail or abandon. | Invariant test fills the hold at every step; `blockedScriptText` and the "Dock at a station and make room" hint |
+| 7 | Everything can be interrupted and resumes: undock, warp, die, quit, reload; replaying starts clean. | Invariant tests: wander, save and load, die at every step then replay |
 | 8 | Think of the odd cases before building (see the checklist). | Your plan |
-| 9 | **Objectives done is not mission accomplished.** A mission that collects or mines an item is only accomplished when the station hand-in consumes it and pays. Until then its guidance names what is still owed, and it never says complete, accomplished or finished. | Runner (`missionObjectivesDone` vs `completeMission`); linter rejects completion words in `objective`/`handIn.objective`; invariant test |
+| 9 | **Objectives done is not mission accomplished.** A mission that collects or mines an item is accomplished only when the station hand-in consumes it and pays; until then the guidance names what is still owed and never says complete, accomplished or finished. | Runner (`missionObjectivesDone` vs `completeMission`); linter rejects completion words in `objective`/`handIn.objective`; invariant test |
 | 10 | A mission says what it is: a **contract** says "Contract complete" / "Contract failed", a story mission says "Mission ...". | Runner (`missionKindWord`); linter rejects "mission" in contract guidance |
 | 11 | **One hand-in station.** Every mission is handed in at exactly one named station: the one that gave it out, unless its data sends the pilot somewhere specific (`handIn.station`). The reward is paid nowhere else, and the guidance always names that station — never "a station", never the one the pilot happens to be docked at. | Runner (`missionHandInStation`, `completeMission`, `handInNextText`); the docked screens disable the hand-in away from the station; linter checks `handIn.station` is a pocket with a station |
 
@@ -49,25 +48,34 @@ are owed, adds "You have 2 of 3." when they are short, and the station button re
 the sentence for any `collect`/`mine`/`deliver` objective with an item. Contracts supply their own wording in
 `data/missions/contracts.js` (`{station}` is filled in with the mission's hand-in station); Border Signal supplies
 `"Return to {station} with the beacon."` and names its station (`handIn.station: "reach"`).
+
+**Delivery contracts say where the cargo goes, not how much is aboard.** `mine` is flagged `delivery: true`, so
+`missionNextText` shows the hand-in sentence from the start ("Deliver the Ferrite to Meridian Station.") instead of a
+step count, and `handInNextText` never appends "You have 2 of 3." — the tally saw only the hold while the station
+store may hold the rest. Hunt contracts keep their count: kills cannot be banked.
+
+**A recovery (`salvage`) contract owns the crates it puts in space.** Launching spawns exactly `n` crates, each tagged
+with the mission id and a crate `slot` (`session.js` `ensureSalvageCrates`). Only those move its count — another
+contract's crates and loose Salvage from a wreck never do (`step.owned`) — so two jobs each fly out their own crates.
+The HUD and log say "2 out of 3 crates recovered" (`missionRecoveryText`). The recovered item is ordinary Salvage, so
+any of it in the hold or station pays the hand-in, which consumes `n`; handing in or abandoning clears the contract's
+crates from space and deletes their saved records.
 Never hand those same goods over with a `take-item` script as well: the station hand-in is already that transfer, and
 `loadCargo`/`handOver` are for cargo that is not an objective item (as in the Parcel run).
 
 **Where the hand-in happens.** Every mission and contract is handed in at **one station**. The default is the station
 that gave the mission out: `acceptMission` records it on the mission (`handIn.station`) the moment it is taken, so it
-survives a save and cannot drift as the pilot travels. A mission that should be handed in somewhere else names the pocket
-in its data — `handIn: { station: "reach", objective: "Return to {station} with the beacon." }` — and that station wins
-over the giving one. `completeMission` refuses anywhere else ("Hand this in at Meridian Station."), takes nothing and pays
+survives a save and cannot drift as the pilot travels. A mission handed in elsewhere names the pocket in its data
+(`handIn: { station: "reach", objective: "Return to {station} with the beacon." }`), and that station wins. `completeMission` refuses anywhere else ("Hand this in at Meridian Station."), takes nothing and pays
 nothing. The mission itself stays with the pilot: an accepted mission is listed in the Mission log and the Contracts tab
-at **every** station, with its progress and next objective, so a job taken at Meridian can be watched from Galereach.
+at **every** station, with its progress and next objective.
 Only the hand-in is station-bound — elsewhere the card names the station and disables the button, and at the station that
 takes it the card reads **Hand in cargo** — and Abandon works wherever the pilot is, so a mission is never stuck behind a
 counter. **Offers** are station-specific: a story mission is offered only at the station that gives it out (`offeredAt`,
 checked by the linter), and contract offers are per station (`boardAt`), so one counter's board is never read or accepted
-at another. Guidance always says where: use `{station}` in `handIn.objective` and in any objective that mentions
-delivery, so the sentence follows the data instead of a hard-coded name (the linter warns when a hand-in sentence cannot
-name its station). Two more cases resolve to something sensible and can never make a mission impossible: a mission saved
-before the field existed uses its `origin` (the station it was taken from), and one whose station no longer exists uses the
-home station.
+at another. Use `{station}` in `handIn.objective` and in any objective that mentions delivery, so the sentence follows
+the data instead of a hard-coded name (the linter warns when a hand-in sentence cannot name its station). Fallbacks: a
+mission saved before the field existed uses its `origin`; one whose station no longer exists uses the home station.
 
 **Where the mission is offered.** Missions are specific to one station by default: `missionOfferStation()` resolves
 `offeredAt` from the mission's data, else the station it is handed in at, else the home station, and the Mission log
@@ -100,8 +108,8 @@ Every failure (death, `left-sector`, `timeout`, `lost-item`) always carries a me
 ## Tools
 
 - **Templates** (`src/data/missions/templates.js`): `briefing`, `radio`, `travelTo`, `loadCargo`,
-  `handOver`, `ambush`, `mineOre`, `sequence`, `mission`. They already follow the rules, so build
-  missions from them and only write a raw `script` step when no template fits.
+  `handOver`, `ambush`, `mineOre`, `sequence`, `mission`. They follow the rules, so build from them and
+  only write a raw `script` step when no template fits.
 - **Linter** (`src/data/missions/validate.js`, run by `tests/mission-lint.test.mjs` over every mission):
   catches missing `next`/objective/situation, numeric step targets (write `next: "end"`), unreachable
   steps, dead ends and loops, spawns too close or while docked, collected mission items nobody drops,

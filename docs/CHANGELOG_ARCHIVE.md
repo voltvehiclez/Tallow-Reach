@@ -8,6 +8,65 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Every mission and contract is handed in at one named station
+
+Fixes "the game does not care which location you hand a mission in at." **Save version unchanged (v19)** — the field is
+additive and older missions resolve it from `origin`; rebuild needed (`npm run build`, then `npm test`).
+
+- **Why:** `completeMission` asked only that the pilot be docked, so any station paid any mission, and the guidance named
+  whichever station the pilot happened to be at instead of the one that takes the hand-in.
+- **The rule (data):** a mission is handed in at **one station** — the one that gave it out, unless its data names another
+  with `handIn.station: "<pocket id>"` (a job that starts at one station and ends at another). `BORDER_SIGNAL_MISSION` now
+  declares `handIn.station: "reach"` and says `"Return to {station} with the beacon."`.
+- **The runner (`sim/missions.js`):** `acceptMission` stamps `handIn.station` on the mission when it is taken, so the station
+  survives a save and cannot drift as the pilot travels. New `missionHandInStation`, `missionHandInStationName`,
+  `atMissionHandInStation` and `canCompleteMissionHere`. `completeMission` refuses any other station ("Hand this in at
+  Meridian Station."), takes nothing and pays nothing. Fallbacks so a mission can never become impossible: a mission saved
+  before the field existed resolves its `origin`, an offer resolves the station the pilot is docked at, and a station that no
+  longer exists falls back to the home station.
+- **Guidance:** `{station}` is filled in with the mission's hand-in station, never "a station" or wherever the pilot is;
+  a mission with nothing to hand over now says "Contract complete. Return to Meridian Station to collect the reward."
+- **Screens (`ui/missionlog.js`, `ui/screens.js`):** away from the station the status reads "Deliver to <station>" and the
+  hand-in button is disabled with the station named ("Hand in at Meridian Station"), next to Abandon; at the right station it
+  reads "Ready to hand in" and "Hand in cargo" as before. Story offers say where they are handed in.
+- **Save (`state/profile.js`):** `cleanMission` keeps `handIn` (objective and station) instead of dropping it, and Border
+  Signal's authored station always wins. No `SAVE_VERSION` bump.
+- **Linter (`data/missions/validate.js`):** `handIn.station` must be a pocket with a station feature; any other `handIn` key
+  is flagged; a hand-in sentence that names neither `{station}` nor the station itself is a warning.
+- **Tests:** new `tests/mission-handin-station.test.mjs` (a second station pocket proves the contract taken at Meridian cannot
+  be paid at Depot Station and vice versa, a data-chosen station, the save round trip, and the linter). Two existing wording
+  assertions updated.
+- **Docs:** `MISSION_RULES.md` rule 11 and a "Where the hand-in happens" paragraph, recipes 03 and 11, mission principles,
+  `src/sim/README.md`, and the playtest guide.
+
+---
+
+---
+
+## 2026-11-13: Dying hands you a complete spare Wasp that can be fitted again
+
+Fixes "if you die, you get a free wasp. Cant then equip equipment to the ship." **Save version unchanged (v19)**;
+rebuild needed (`npm run build`, then `npm test`).
+
+- **Why:** `die()` deleted the lost hull's fleet records and then added the replacement as a bare hull id. A ship's bays *are*
+  `profile.loadout[ship]`, so the free Wasp had no bays at all: Outfitting had nothing to fit into, and drive, Hull HP and guns
+  all read as empty. A save/reload rebuilt the fit (`cleanLoadouts`), which is why the bug only showed in a live session.
+- **`state/profile.js`:** new `addShipRecords(profile, id)` (its own empty hold, full hull fraction, stock fit) and
+  `ensureShipRecords(profile, id)` (fills in only what is missing). One definition of a complete ship, used by every route that
+  adds or selects a hull, so a bought ship and a replacement can never differ in which records exist.
+- **`sim/session.js` `die()`:** the lent Wasp and any fallback hull now go through those helpers before `setShip`. The death text
+  is unchanged ("The station lent you a spare Wasp.") — it now simply is a fitted Wasp.
+- **`sim/economy.js`:** `buyShip` uses `addShipRecords` (same behaviour, one definition); `selectShip` runs `ensureShipRecords`
+  first, so a hull that a very old save left without a fit is repaired when the player picks it, not only on the next reload.
+- **Tests:** new `tests/ship-recovery.test.mjs` (the lent ship can be equipped and flies with Hull HP, drive and guns; falling
+  back to another owned ship keeps its cargo, fittings and damage; the helpers repair a hull missing its records).
+  `tests/fixtures/step8b-combat-lifecycle.json` was re-recorded: every snapshot before the death in that run is identical, and
+  the post-death snapshots now show a real ship (power, shields, hull, a gun bay, an empty hold) instead of a bare id.
+- **Not changed:** mission state. Cargo and mission items still go with the lost ship, so a mission that owed a lost item still
+  fails. The `testing/TESTING-DEATH-AND-MISSIONS.md` guide has a new "After a death" section for this.
+
+---
+
 ## 2026-11-13: A mission is accomplished by its hand-in, not by its last step; contract wording and colours
 
 Fixes the Border Signal stuck mission and the contract wording. **Save version unchanged (v19)**;

@@ -287,7 +287,7 @@ function cleanMissionStep(raw, index) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
   const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
   const step = { id, kind: raw.kind };
-  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "missionItem", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "missionItem", "owned", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
     if (raw[key] !== undefined) step[key] = raw[key];
   }
   if (raw.lines !== undefined) {
@@ -359,6 +359,10 @@ function cleanMission(raw) {
   if (raw.type === "salvage") {
     const collect = steps.find(step => step.kind === "collect");
     if (collect && !collect.item) collect.item = "salv";
+    // Recovery contracts own the crates they put in space, so their count only
+    // moves for their own crates. Saves written before that rule counted any
+    // pickup; they keep the count they earned and gain the rule from here on.
+    if (collect) collect.owned = true;
   }
   const step = Math.max(0, Math.min(steps.length, currentStep));
   const counters = {};
@@ -567,7 +571,12 @@ function cleanMissionDrop(raw) {
     typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= PLACE_EXTENT
   ) ? raw.pos.slice() : null;
   if (!missionId || !item || !pos) return null;
-  return { missionId, item, pos, collected: raw.collected === true };
+  // A recovery contract puts several crates of one item in space, one record per
+  // crate, told apart by `slot`. Older records have none and stay slot-less.
+  const slot = Number.isInteger(raw.slot) && raw.slot >= 0 ? raw.slot : null;
+  return slot == null
+    ? { missionId, item, pos, collected: raw.collected === true }
+    : { missionId, item, slot, pos, collected: raw.collected === true };
 }
 
 /** Clean small, data-only state written by story scripts for each place. */
@@ -583,7 +592,9 @@ function cleanMissionState(raw) {
         const drops = [];
         for (const rawDrop of value) {
           const drop = cleanMissionDrop(rawDrop);
-          if (!drop || drops.some(existing => existing.missionId === drop.missionId && existing.item === drop.item)) continue;
+          if (!drop || drops.some(existing =>
+            existing.missionId === drop.missionId && existing.item === drop.item &&
+            (existing.slot ?? null) === (drop.slot ?? null))) continue;
           drops.push(drop);
         }
         if (drops.length) clean.drops = drops;

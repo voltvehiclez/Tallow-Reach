@@ -64,12 +64,11 @@ test("a contract is handed in at the station that gave it out, not at any statio
 
     // Guidance names the hand-in station even from somewhere else.
     moveTo(ctx, "depot");
-    assert.equal(missionNextText(mission, ctx.profile),
-      "Deliver 2 Ferrite to Meridian Station. You have 1 of 2.",
+    assert.equal(missionNextText(mission, ctx.profile), "Deliver the Ferrite to Meridian Station.",
       "the sentence names the station that takes the cargo, not the one the pilot is at");
     addItem(ctx.profile.ship, "ferrite", 1, ctx.profile, state.worldState);
-    assert.equal(missionNextText(mission, ctx.profile), "Deliver 2 Ferrite to Meridian Station.",
-      "with the whole cargo aboard only the delivery is left to say");
+    assert.equal(missionNextText(mission, ctx.profile), "Deliver the Ferrite to Meridian Station.",
+      "a delivery contract shows no running tally, full hold or not");
 
     // Docked at the wrong station: told where to go, paid nothing, cargo kept.
     moveTo(ctx, "depot", { dock: true });
@@ -83,7 +82,7 @@ test("a contract is handed in at the station that gave it out, not at any statio
     // its hand-in belongs to Meridian, and the card says so instead of paying out.
     const log = missionLogHtml(ctx.profile);
     assert.match(log, /Mine 2 Ferrite/, "the active mission is still listed here");
-    assert.match(log, /Deliver to Meridian Station/, "the log says where the hand-in is");
+    assert.match(log, /Deliver the Ferrite to Meridian Station/, "the log says where the hand-in is");
     assert.match(log, /Hand in at Meridian Station/, "the log names the station and disables the button");
     assert.match(log, /data-a="done"[^>]*disabled/, "the hand-in button cannot be pressed here");
     assert.doesNotMatch(log, />Hand in cargo</, "nothing offers a hand-in at the wrong station");
@@ -111,7 +110,8 @@ test("the default is the giving station: a contract taken at Depot Station is ha
     const mission = finishObjective(acceptMission({ type: "salvage", tier: 1, n: 1, r: 200 }, ctx.profile));
     assert.equal(missionHandInStation(mission), "depot", "the station that gave the contract takes it back");
     addItem(ctx.profile.ship, "salv", 1, ctx.profile, state.worldState);
-    assert.match(missionNextText(mission, ctx.profile), /Deliver 1 derelict crate to Depot Station\.|Deliver 1 derelict crates to Depot Station\./);
+    assert.equal(missionNextText(mission, ctx.profile), "Deliver them to Depot Station.",
+      "the salvage contract names the station that takes the crates");
 
     moveTo(ctx, "reach", { dock: true });
     assert.equal(completeMission(mission.id, ctx.profile, ctx.player), "Hand this in at Depot Station.",

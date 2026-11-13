@@ -43,8 +43,14 @@ export const CONTRACT_MISSION_TEMPLATES = {
     title: "Mining contract",
     kind: "contract",
     requires: [],
-    steps: [{ id: "objective", kind: "mine", objective: "Mine {remaining} {item} for delivery to {station}." }],
-    handIn: { objective: "Deliver {count} {item} to {station}." },
+    // A delivery job (`delivery: true`): the pilot mines, then brings the ore in.
+    // Its guidance names where the cargo goes instead of counting what has been
+    // picked up so far — the station store may already hold part of the load, so
+    // a running tally told only half the story (owner request). The title still
+    // says what to mine: "Mine 12 Ferrite".
+    delivery: true,
+    steps: [{ id: "objective", kind: "mine", objective: "Deliver the {item} to {station}." }],
+    handIn: { objective: "Deliver the {item} to {station}." },
     rewards: { credits: "$reward" },
     fails: { abandon: "abandoned" },
   },
@@ -64,8 +70,14 @@ export const CONTRACT_MISSION_TEMPLATES = {
     title: "Salvage contract",
     kind: "contract",
     requires: [],
-    steps: [{ id: "objective", kind: "collect", item: "salv", objective: "Recover {remaining} derelict crates for delivery to {station}." }],
-    handIn: { objective: "Deliver {count} derelict crates to {station}." },
+    delivery: true,
+    // "Recover 3 derelict crates" says the job; this says where they go.
+    // `owned` marks the crates the contract itself puts in space: the mission
+    // spawns exactly `n` of them, only those count for its own recovery count,
+    // and they are cleared away when it is handed in. The recovered crates
+    // themselves are ordinary Salvage, so any of them can pay the hand-in.
+    steps: [{ id: "objective", kind: "collect", item: "salv", owned: true, objective: "Deliver them to {station}." }],
+    handIn: { objective: "Deliver them to {station}." },
     rewards: { credits: "$reward" },
     fails: { abandon: "abandoned" },
   },
