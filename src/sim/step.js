@@ -18,7 +18,9 @@ import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 /** The frame loop's pause gate. A hosted multiplayer world never pauses merely
  *  because the host opened a local chart; explicit pause still stops this session. */
 export function isSimulationPaused() {
-  return state.paused || state.ui.intro || (!!state.ui.starmap && !state.multiplayer);
+  // Only the pause card and the title screen stop the clock. The starmap and the
+  // flight inventory are read-only overlays: the world keeps running behind them.
+  return !!(state.paused || state.ui.intro);
 }
 
 /** One simulation tick. Caller does not step while paused. */

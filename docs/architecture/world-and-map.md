@@ -64,8 +64,10 @@ These are real, current limits. None of them is a bug in play today.
   when legal. The sim rechecks the quote and emits `travel-denied` on refusal; successful destinations do not
   add the generic bottom confirmation in either map mode. The shared route list shows a small destination
   pocket parenthetical on the final row only for pocket targets; route rows use distinct start, intermediate and
-  destination markers, with a dark center, small orange tick and one dotted outer ring. Current/start and destination icons are about 20% smaller. The ship HUD renders every route row without an inner scrollbar. Single-player chart pauses the
-  frame gate and suspends audio; `state.multiplayer` is the future host flag that keeps a hosted world running.
+  destination markers, with a dark center, small orange tick and one dotted outer ring. Current/start and destination icons are about 20% smaller. The ship HUD renders every route row without an inner scrollbar. The chart never stops the clock: `sim/step.js`
+  `isSimulationPaused()` counts only the pause card and the title screen, so the world (and its audio) keeps
+  running behind the chart in every mode. It does release flight input and blocks the dock/lock/weapon/jump
+  hotkeys while open.
   Generated gate traders are removed from gate pockets and receive their own station pocket/internal link;
   explicit `allowStation`, `stationPlacement: "gate"` or feature records can deliberately co-locate one.
   Generated pockets resolve `frontier`, `trade_lane` or `salvage_yard` templates; their tier selects hostile

@@ -83,5 +83,12 @@ export const itemValue = id => (isItem(id) ? ITEMS[id].v || 0 : 0);
 /** Can this be sold to the station? */
 export const canSell = id => itemValue(id) > 0;
 
+/**
+ * Can this be thrown away? Anything a pilot owns except a mission item: a
+ * beacon or a parcel the mission needs cannot be found again, so trashing it
+ * would strand the mission for good.
+ */
+export const canDiscard = id => isItem(id) && itemCat(id) !== "mission";
+
 /** Most of `id` that fit in one stack (no limit unless the entry says `st`). */
 export const itemStack = id => (isItem(id) ? ITEMS[id].st || Infinity : 0);

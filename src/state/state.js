@@ -152,6 +152,7 @@ export const state = {
   ui: {
     intro: true,
     starmap: null,     // active chart; null while closed
+    cargo: null,       // the in-flight ship inventory; null while closed
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
     tab: "m",          // m contracts, l mission log, h hangar, o outfitting, i inventory, p shop, b base, s saves

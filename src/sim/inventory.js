@@ -143,6 +143,18 @@ export function takeItem(where, id, n = 1, profile = state.profile, world = stat
 }
 
 /**
+ * Throw `n` of item `id` away for good (the whole stack by default). The panel
+ * asks how many and then confirms, so the pilot never loses goods to a silent
+ * click. Returns a message either way.
+ */
+export function discardItem(where, id, n = Infinity, profile = state.profile, world = state.worldState) {
+  if (!isItem(id)) return "Unknown item.";
+  const count = takeItem(where, id, n, profile, world);
+  if (!(count > 0)) return `No ${itemName(id)} to discard.`;
+  return `Discarded ${count} ${itemName(id)} from ${nameOf(where)}.`;
+}
+
+/**
  * What a place holds, in the order the Inventory tab lists it: goods in
  * catalogue order, then spare modules in the order they arrived.
  */

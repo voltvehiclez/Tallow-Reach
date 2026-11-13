@@ -8,6 +8,81 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: A mission is accomplished by its hand-in, not by its last step; contract wording and colours
+
+Fixes the Border Signal stuck mission and the contract wording. **Save version unchanged (v19)**;
+rebuild needed (`npm run build`, then `npm test`).
+
+- **Why:** after the Border Signal's last in-space line the HUD said the mission was done and to return for the reward. Dying
+  then lost the beacon, so the reward could never be collected and the mission stayed in the log forever. Contracts announced
+  "Mission complete" before their crates were handed in, and called themselves missions.
+- **`sim/missions.js`:** `isMissionComplete` is now `missionObjectivesDone` (the steps are finished; the mission is **not**
+  accomplished), and the `mission-completed` event is `mission-objectives-done`. The item requirement is now public as
+  `missionHandIn`. New `missionLostHandIn` fails (`lost-item`) a mission whose mission-only hand-in exists nowhere, so an
+  impossible mission never waits forever. Guidance after the last step comes from `handInNextText`: it names the cargo and
+  station and how much is still owed, and says "Contract complete"/"Mission complete" only when there is nothing to hand in.
+  Failure messages are the reason only ("Your ship was destroyed."); the notice adds "Contract failed"/"Mission failed".
+- **`player-dead`:** a mission whose objectives are done but whose mission-only item is still owed now fails too, with the
+  item named. `failMission` grows an `afterObjectives` option so only this "gone for good" case can fail a finished mission;
+  timeouts and sector changes still cannot. `abandonMission` uses the mission's own kind in its message.
+- **Data:** contract templates now name the station (`{station}`) and declare `handIn.objective` ("Deliver {count} {item} to
+  {station}."); Border Signal declares "Return to Meridian Station with the beacon."; the Ore run test mission declares its
+  hand-in. Contract missions remember the station they were taken from (`origin`, already a saved field) so field pockets can
+  name it. `templates.js` `mission()` accepts `handIn`.
+- **`ui/hud.js`, `styles.css`:** contract mission names are light blue (`--ice`), story mission names stay amber.
+- **`ui/missionlog.js`, `ui/screens.js`:** the status reads "Ready to hand in" / "Awaiting cargo" / "Complete" and the button
+  says "Hand in cargo" when goods are owed; Abandon is always offered when a mission is not ready. The failure notice and the
+  mission-log kind label use the mission's kind.
+- **Linter (`data/missions/validate.js`):** an item-bearing mission without `handIn.objective` is an error; so is guidance
+  that claims completion and any contract guidance that says "mission". Docs: `MISSION_RULES.md` (rules 9 and 10), `LESSONS.md`
+  (L15), `ROADMAP.md` (steps 12 and 13 ticked, log), the guides moved to `testing/passed/`, and a rewritten
+  `testing/TESTING-DEATH-AND-MISSIONS.md`. Tests: new death/wording/UI/lint regressions; 465/465 pass.
+
+## 2026-11-13: Dying no longer fails missions by default; "Mission failed" notice in the HUD
+
+Small gameplay change. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **Why:** death already costs the ship and its hold, so it should not also fail a mission unless the mission wants that.
+- **`sim/missions.js`:** a mission now fails on death only if its data declares `fails.on: ["player-dead"]`, or the ship was carrying a
+  mission-only item (category `mission`) the mission needs (new `missionOnlyItems(mission)`). The second case needs no declaration and
+  says "Your ship was destroyed and the X it carried was lost." Every failure now carries a message (a default per reason when
+  the rule has none) and the `mission-failed` event carries `title`.
+- **`sim/player.js`:** `player-dead` now carries `lost`, the hold at the moment of death, so the result never depends on listener order.
+- **Data:** The Border Signal no longer declares a death failure (it still fails if you die carrying the beacon); the Parcel run test
+  mission lost its explicit rule (same behaviour, now derived); the Ambush run keeps its explicit one on purpose. Saved Border Signal
+  missions pick up the new rule on load (their `fails` is re-read from the data).
+- **`ui/missionlog.js`, `styles.css`:** a red "Mission failed: <mission>" notice with the reason sits over the flight HUD and the docked
+  screen for 15 s or until clicked. Abandoning shows none.
+- **Linter:** no longer requires a death rule for missions that use mission items (the framework handles it).
+- **Tests:** new `tests/mission-death.test.mjs`; the die-at-every-step invariant, the lint, 13b and 13c tests updated. Docs:
+  `MISSION_RULES.md`, `LESSONS.md` (L10), new guide `testing/TESTING-DEATH-AND-MISSIONS.md`.
+
+## 2026-11-13: Docs consistency pass for multi-AI handoffs, changelog capped at 10 entries
+
+Docs and one docs test only; **no game code changed, save version unchanged (v19)**, no rebuild needed.
+
+- **Changelog rule simplified and enforced:** `CHANGELOG.md` holds **at most 10 full entries**; adding one that makes 11 moves the
+  oldest to the archive (verbatim) with an index line. The old "more than 15, then trim to 10" wording is gone from `CHANGELOG.md`,
+  `ARCHITECTURE.md`, `HOW_TO_ADD.md`, `AI_PROMPTS.md`, `AGENTS.md` and `HANDOFF.md`. This change moved the oldest entry
+  ("Stabilize story mission completion and scripted hand-offs") to the archive.
+- **`tests/docs.test.mjs`:** new checks that the changelog has at most 10 full entries, and that its "Older entries" index matches the
+  archive's headings exactly (same titles, no duplicates).
+- **Step status has one home (`ROADMAP.md`):** the duplicate status lines in `REFACTOR_PLAN.md` steps 12 and 13 and the step list in
+  `HANDOFF.md` now point to the ROADMAP table; the ROADMAP "current position" paragraph no longer restates the table.
+- **`HANDOFF.md`:** new "Before you end a chat" checklist (changelog, roadmap, handoff, Last checked, folder READMEs, build/test, zip).
+- **Stale references removed:** `AI_PROMPTS.md` no longer says a root `CLAUDE.md` exists (only `AGENTS.md` does; the starter prompt
+  covers tools that do not read it); a ROADMAP parking-lot line pointing at text that no longer exists in HANDOFF was removed.
+- **Step 13 ticked in `ROADMAP.md`** (owner playtested the mission framework, 2026-11-13). Its four playtest guides moved to
+  `testing/passed/` and `testing/README.md` was updated. Step 12 stays unticked: its playtest is not recorded.
+- **REFACTOR_PLAN slimmed:** the long "Mission-safety enforcement plan" (the eight principles applied to missions) moved word for word to
+  `docs/architecture/mission-principles.md`, listed in `ARCHITECTURE.md`; the plan keeps a link.
+- **Stale facts removed from `docs/architecture/feature-notes.md`:** a "381/381 tests, 746 KB bundle" results note, a "Current package:
+  tallow-reach-latest-build.zip" bullet (no such file is in the project) and playtest-pending sentences that duplicated ROADMAP. The
+  original wording is kept in `docs/archive/HANDOFF_2026-11-10.md`. Do not put test counts or bundle sizes in the docs: they go stale.
+- **File lists completed:** `src/data/README.md` (`camera.js` and every file in `missions/`), `src/state/README.md` (`controls.js`),
+  `src/util/README.md` (`ids.js`), and the `ARCHITECTURE.md` file map (all current `sim/`, `ui/`, `data/` and `state/` files; it now
+  says the folder READMEs are the authoritative list).
+
 ## 2026-11-13: Docs restructure, LESSONS.md, docs check test, duplicate-mission guard
 
 Docs-only restructure so new AI chats read less and the project stays scalable, plus one small guard. **Save version

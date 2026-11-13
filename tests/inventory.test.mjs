@@ -271,9 +271,13 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(screens, /i:\s*inventoryHtml/, "and a screen for it");
   assert.match(screens, /class="inv-grid"/, "inventory contents render as a grid of item tiles");
   assert.match(screens, /class="inv-item"/, "each item is shown as an individual tile");
-  assert.match(screens, /while \(rows\.length < 25\)/, "empty slots keep each inventory grid at a 25-slot minimum");
-  assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/, "each inventory row has five slots");
+  assert.match(screens, /while \(rows\.length < slots\)/, "empty slots keep each inventory grid at its slot minimum");
+  assert.match(screens, /slots = 25/, "a station grid stays 5×5");
+  assert.match(screens, /slots: 35/, "the in-flight hold is 7×5");
+  assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/, "each station inventory row has five slots");
+  assert.match(styles, /#cargo \.inv-grid \{\s*grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/, "the flight hold has seven slots a row");
   assert.match(styles, /height: calc\(3 \* var\(--inv-row-height\) \+ 2 \* var\(--inv-row-gap\)\)/, "each hold grid keeps a three-row viewport");
+  assert.match(styles, /height: calc\(5 \* var\(--inv-row-height\) \+ 4 \* var\(--inv-row-gap\)\)/, "and the flight hold shows five rows");
   assert.match(styles, /overflow-y: auto/, "each hold grid scrolls independently");
   assert.match(screens, /Shift-click to move its whole stack/, "the Inventory explains stack movement");
   assert.match(menu, /name === "mv" && e\.shiftKey/, "Shift-click moves the full stack");

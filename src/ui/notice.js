@@ -44,9 +44,41 @@ export function isRoutineReply(text) {
 }
 
 const SECONDS = 7;
+// Where the notice sits: just under the flight message line (`#msg`) — the
+// centred line at 14% of the screen that says "Empty weapon slot" when a weapon
+// switch finds nothing fitted, or names the warp — and never on top of it. With
+// the HUD away (docked, title screen) that line is worked out from the viewport
+// height instead, so a notice lands in the same band on every screen.
+const ANCHOR_ID = "msg";
+const MESSAGE_TOP = 0.14;   // #msg's own top, as a share of the viewport height
+const MESSAGE_LINE = 26;    // one line of #msg at 18px
+const GAP = 12;             // px between the message line and the notice
+
 let root = null;
 let timer = 0;
 let current = "";
+
+function viewportHeight() {
+  if (typeof window !== "undefined" && window.innerHeight) return window.innerHeight;
+  const doc = typeof document === "undefined" ? null : document;
+  return doc?.documentElement?.clientHeight || 800;
+}
+
+/**
+ * Put the notice just below the message line. Measured every time it is shown:
+ * the line is empty most of the time, and a wrapped warp message makes it
+ * taller — the notice must clear it either way.
+ */
+function placeNotice() {
+  if (!root || !root.style) return;
+  const doc = typeof document === "undefined" ? null : document;
+  const anchor = doc && typeof doc.getElementById === "function" ? doc.getElementById(ANCHOR_ID) : null;
+  const rect = anchor && typeof anchor.getBoundingClientRect === "function" ? anchor.getBoundingClientRect() : null;
+  // A hidden HUD measures nothing, so the same band is derived from the viewport.
+  const messageTop = rect && rect.top > 0 ? rect.top : Math.round(viewportHeight() * MESSAGE_TOP);
+  const messageHeight = rect && rect.height > 0 ? rect.height : MESSAGE_LINE;
+  root.style.top = `${Math.round(messageTop + messageHeight + GAP)}px`;
+}
 
 /** Create the notice element: fixed to the viewport, outside the panel. */
 export function setupNotices() {
@@ -58,6 +90,10 @@ export function setupNotices() {
   root.setAttribute("aria-live", "polite");
   root.addEventListener("click", hideNotice);
   document.body.appendChild(root);
+  // A resized window moves the HUD block: keep a notice on screen under it.
+  if (typeof addEventListener === "function") {
+    addEventListener("resize", () => { if (root && !root.hidden) placeNotice(); });
+  }
   return root;
 }
 
@@ -67,6 +103,7 @@ export function showNotice(text) {
   if (!root) setupNotices();
   current = String(text);
   root.textContent = current;
+  placeNotice();
   root.hidden = false;
   clearTimeout(timer);
   timer = setTimeout(hideNotice, SECONDS * 1000);

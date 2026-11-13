@@ -14,10 +14,11 @@ export const canPause = (ui = state.ui) => !ui.intro;
 
 /**
  * Can the starmap open? Also everywhere in the open world. A pilot docked at a
- * station may look at the map; the warp it proposes still needs a launch.
+ * station may look at the map; the warp it proposes still needs a launch. One
+ * full-screen surface at a time: the flight inventory closes before the chart.
  */
 export function canOpenStarmap(P = localPlayer(), ui = state.ui, galaxy = state.galaxy) {
-  return !ui.intro && !state.paused && !!galaxy && !!P && !P.dead && !P.warp;
+  return !ui.intro && !state.paused && !ui.cargo && !!galaxy && !!P && !P.dead && !P.warp;
 }
 
 /**

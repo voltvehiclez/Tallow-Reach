@@ -20,11 +20,12 @@ import { toggleModulePicker, togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
-import { canSell, itemName } from "../data/items.js";
+import { canSell, canDiscard, itemName } from "../data/items.js";
 import { storyMission } from "../data/missions/index.js";
 import { introHtml, outpostHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
+import { openDiscardPopover } from "./discard.js";
 
 const $ = id => document.getElementById(id);
 let panel;
@@ -73,6 +74,19 @@ export function setupMenu() {
 
   contracts.ensureBoard();
   render();
+}
+
+/**
+ * Show a docked tab from a key binding (I in a station opens the Inventory tab).
+ * Does nothing on the title screen.
+ */
+export function openStationTab(name) {
+  if (state.ui.intro || !panel) return false;
+  state.ui.tab = name;
+  state.ui.confirmReset = false;
+  state.ui.fit = null;
+  render();
+  return true;
 }
 
 export function render() {
@@ -396,6 +410,7 @@ function openInventorySell(button) {
   };
   panel.querySelector(".inv-context")?.remove();
   panel.querySelector(".inv-sell-popover")?.remove();
+  panel.querySelector(".inv-discard-popover")?.remove();
 
   const popover = document.createElement("div");
   popover.className = "inv-sell-popover";
@@ -444,6 +459,42 @@ function confirmInventorySell(button) {
   render();
 }
 
+/**
+ * Discard, step one: ask how many in a popover beside the tile (the sell box's
+ * number field), then step two asks "Are you sure ...?" — see ui/discard.js.
+ */
+function openInventoryDiscard(button) {
+  const id = button.dataset.b;
+  const where = button.dataset.where || inv.STATION;
+  if (!canDiscard(id)) return;
+  const count = inv.countOf(where, id);
+  if (!(count > 0)) return;
+
+  const context = button.closest(".inv-context");
+  const anchor = {
+    left: Number(context?.dataset.anchorLeft || 0),
+    top: Number(context?.dataset.anchorTop || 0),
+    width: Number(context?.dataset.anchorWidth || 0),
+  };
+  panel.querySelector(".inv-context")?.remove();
+  panel.querySelector(".inv-sell-popover")?.remove();
+
+  openDiscardPopover({
+    host: panel,
+    anchor,
+    where,
+    id,
+    count,
+    onDiscard: (place, item, amount) => {
+      toast(inv.discardItem(place, item, amount));
+      inventoryChanged();
+      uiSound("confirm");
+      save();
+      render();
+    },
+  });
+}
+
 function onInventoryContextMenu(e) {
   const tile = e.target.closest("button.inv-item[data-kind]");
   if (!tile) return;
@@ -468,13 +519,31 @@ function onInventoryContextMenu(e) {
   }
   menu.append(sell);
 
+  // Discard trashes the whole stack, here and in flight (ui/cargo.js). The
+  // label carries the count so the click says what it will cost.
+  const discard = document.createElement("button");
+  discard.type = "button";
+  discard.dataset.a = "discard";
+  discard.dataset.b = tile.dataset.id;
+  discard.dataset.where = tile.dataset.where || "";
+  discard.setAttribute("role", "menuitem");
+  discard.textContent = `Discard \u00d7${tile.dataset.count}`;
+  if (!canDiscard(tile.dataset.id)) {
+    discard.disabled = true;
+    discard.title = "A mission item: hand it in, do not trash it.";
+  } else {
+    discard.title = "Throw this whole stack away. It cannot be recovered.";
+  }
+  menu.append(discard);
+
   const rect = panel.getBoundingClientRect();
   const tileRect = tile.getBoundingClientRect();
   menu.dataset.anchorLeft = String(tileRect.left - rect.left + panel.scrollLeft);
   menu.dataset.anchorTop = String(tileRect.top - rect.top + panel.scrollTop);
   menu.dataset.anchorWidth = String(tileRect.width);
   const x = Math.min(panel.scrollLeft + panel.clientWidth - 132, Math.max(panel.scrollLeft, e.clientX - rect.left + panel.scrollLeft));
-  const y = Math.min(panel.scrollTop + panel.clientHeight - 44, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
+  // Room for both entries (Sell, Discard) before the menu would leave the panel.
+  const y = Math.min(panel.scrollTop + panel.clientHeight - 76, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   panel.append(menu);
@@ -483,7 +552,7 @@ function onInventoryContextMenu(e) {
 function onClick(e) {
   const btn = e.target.closest("button[data-a]");
   if (!btn) {
-    if (e.target.closest(".inv-sell-popover")) return;
+    if (e.target.closest(".inv-sell-popover") || e.target.closest(".inv-discard-popover")) return;
     panel.querySelector(".inv-context")?.remove();
     panel.querySelector(".inv-sell-popover")?.remove();
     return;
@@ -492,6 +561,11 @@ function onClick(e) {
   const name = btn.dataset.a;
   if (name === "invSellOpen") {
     openInventorySell(btn);
+    uiSound();
+    return;
+  }
+  if (name === "discard") {
+    openInventoryDiscard(btn);
     uiSound();
     return;
   }

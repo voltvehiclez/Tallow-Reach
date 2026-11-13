@@ -73,8 +73,9 @@ export function introHtml() {
     `The mining beam and missiles are sold in the Shop. ` +
     `F locks whatever is nearest your crosshair, such as hostiles, rocks, crates or the station, and F again releases it. ` +
     `G docks when you are within 300 m of the station and slower than 70 m/s. ` +
-    `M opens the starmap: right-click a system to set a destination, then press J while flying for each next warp. You can also choose individual pockets to warp to. The map pauses single-player flight; M or Esc closes it. ` +
+    `M opens the starmap: right-click a system to set a destination, then press J while flying for each next warp. You can also choose individual pockets to warp to. The world keeps running while the map is open; M or Esc closes it. ` +
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
+    `I shows the hold of the ship you are flying while you are in space; dock to move cargo. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
     `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +
     `<div class="main-menu-actions">` +
@@ -452,31 +453,38 @@ export function viewedShip(ui = state.ui) {
 }
 
 /** One ore or module tile in the inventory grid, with its existing move actions. */
-function invRow({ name, sub, kind, id, count, dir, free, vol }) {
+function invRow({ name, sub, kind, id, count, dir, free, vol, move = true, place = "" }) {
   const where = dir === "s" ? "ship" : "station";
+  const inner =
+    `<span class="inv-item-top"><span class="inv-kind">${kind === "c" ? "ORE" : "MOD"}</span><span class="inv-n">&times;${count}</span></span>` +
+    `<span class="inv-item-name">${name}</span><span class="inv-item-meta">${vol} m³ each</span>`;
+  if (!move) {
+    // In flight there is nowhere to move cargo to: the tile is a label, not a button.
+    return `<div class="inv-item inv-item-read" data-kind="${kind}" data-id="${id}" data-count="${count}" data-where="${place}" ` +
+      `title="${name}: ${sub}. Right-click to discard." aria-label="${name}, quantity ${count}. Right-click to discard.">${inner}</div>`;
+  }
   const room = Math.floor(free / (vol || 1));
   const noRoom = room > 0 ? "false" : "true";
   return (
-    `<button class="inv-item" data-a="mv" data-b="${kind}:${id}:${dir}:1" data-kind="${kind}" data-id="${id}" data-dir="${dir}" data-count="${count}" aria-disabled="${noRoom}" ` +
-    `title="${name}: ${sub}. Click to move one; Shift-click to move the whole stack." ` +
+    `<button class="inv-item" data-a="mv" data-b="${kind}:${id}:${dir}:1" data-kind="${kind}" data-id="${id}" data-dir="${dir}" data-count="${count}" data-where="${place}" aria-disabled="${noRoom}" ` +
+    `title="${name}: ${sub}. Click to move one; Shift-click to move the whole stack. Right-click to discard." ` +
     `aria-label="${name}, quantity ${count}. Click to move one to the ${where}; Shift-click to move the whole stack.">` +
-    `<span class="inv-item-top"><span class="inv-kind">${kind === "c" ? "ORE" : "MOD"}</span><span class="inv-n">&times;${count}</span></span>` +
-    `<span class="inv-item-name">${name}</span><span class="inv-item-meta">${vol} m³ each</span>` +
+    inner +
     `</button>`
   );
 }
 
 /** One inventory panel: a heading with the m³ in use, then a grid of contents. */
-function invColumn(where, title, dir) {
+function invColumn(where, title, dir, { move = true, profile = state.profile, slots = 25 } = {}) {
   const dest = where === STATION ? viewedShip() : STATION;   // where the buttons send things
-  const used = loadOf(where),
-    cap = capacityOf(where),
-    destFree = freeOf(dest);
+  const used = loadOf(where, profile),
+    cap = capacityOf(where, profile),
+    destFree = move ? freeOf(dest, profile) : 0;
   const rows = [];
   // One list for the whole place: goods in catalogue order, then spare modules
   // in the order they arrived. The kind is what the tile shows (ORE / MOD) and
   // what the move and sell actions read; the catalogue decides which is which.
-  for (const { id, n } of itemsAt(where)) {
+  for (const { id, n } of itemsAt(where, profile)) {
     const part = isModule(id);
     rows.push(
       invRow({
@@ -488,12 +496,14 @@ function invColumn(where, title, dir) {
         dir,
         free: destFree,
         vol: itemVol(id),
+        move,
+        place: where,
       })
     );
   }
-  // Keep a 5-by-5 slot field even when this hold contains fewer items. The
-  // three-row viewport therefore stays the same size and remains scrollable.
-  while (rows.length < 25) rows.push(`<div class="inv-empty-slot" aria-hidden="true"></div>`);
+  // Keep a full slot field even when this hold contains fewer items, so the
+  // viewport stays the same size: 5×5 at a station, 7×5 in the flight card.
+  while (rows.length < slots) rows.push(`<div class="inv-empty-slot" aria-hidden="true"></div>`);
   return (
     `<section class="inv-col"><header><h3>${title}</h3><span class="mod-count">${used} / ${cap} m³</span></header>` +
     `<div class="inv-grid">${rows.join("")}</div>` +
@@ -519,6 +529,20 @@ function inventoryHtml(ui) {
     `<button class="ship-arrow" data-a="invNext" ${many} aria-label="Next ship">&#8250;</button>` +
     `</div>` +
     invColumn(id, `${ship.n} hold`, "t")
+  );
+}
+
+/**
+ * The ship's own inventory, read in flight (press I in space). Same columns and
+ * tiles as the station Inventory tab, but only the hold of the ship being flown,
+ * read-only — there is no station to move cargo into out here.
+ */
+export function cargoHtml(profile = state.profile) {
+  const id = profile.ship, ship = SHIPS[id];
+  // 7 tiles across and 5 rows down in the wider card (styles.css), still read-only.
+  return (
+    `<h2>Ship inventory</h2>` +
+    invColumn(id, `${ship.n} hold`, "t", { move: false, profile, slots: 35 })
   );
 }
 

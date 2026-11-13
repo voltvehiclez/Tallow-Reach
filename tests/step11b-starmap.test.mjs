@@ -258,16 +258,19 @@ test("11B: M is a map action and an open map releases flight controls", () => {
   assert.equal(P.controls.thrust, 0);
 });
 
-test("11B: single-player chart pauses the frame gate; a future hosted world keeps running", () => {
+test("11B: the chart leaves the world running; only the pause card and title screen stop it", () => {
   fresh();
   state.ui.starmap = { selected: "meridian" };
-  assert.equal(isSimulationPaused(), true);
-  state.multiplayer = true;
-  assert.equal(isSimulationPaused(), false);
+  assert.equal(isSimulationPaused(), false, "reading the chart does not stop the clock");
+  state.ui.cargo = { open: true };
+  assert.equal(isSimulationPaused(), false, "nor does the flight inventory");
+  state.ui.cargo = null;
   state.paused = true;
-  assert.equal(isSimulationPaused(), true);
+  assert.equal(isSimulationPaused(), true, "the pause card still does");
   state.paused = false;
-  state.multiplayer = false;
+  state.ui.intro = true;
+  assert.equal(isSimulationPaused(), true, "and so does the title screen");
+  state.ui.intro = false;
   state.ui.starmap = null;
 });
 

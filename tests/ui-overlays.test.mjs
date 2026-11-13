@@ -28,7 +28,7 @@ test("pause card: Resume is the first control and Exit to main menu the last", (
 });
 
 test("both overlays open at a station: docked is part of the open world", () => {
-  const prev = { intro: state.ui.intro, paused: state.paused, galaxy: state.galaxy };
+  const prev = { intro: state.ui.intro, paused: state.paused, cargo: state.ui.cargo, galaxy: state.galaxy };
   try {
     state.ui.intro = false;
     state.paused = false;
@@ -48,9 +48,13 @@ test("both overlays open at a station: docked is part of the open world", () => 
     state.paused = false;
     assert.equal(canOpenStarmap(player({ warp: {} }), state.ui, state.galaxy), false, "not mid-warp");
     assert.equal(canOpenStarmap(player({ dead: true }), state.ui, state.galaxy), false, "not while dead");
+    state.ui.cargo = { open: true };
+    assert.equal(canOpenStarmap(player(), state.ui, state.galaxy), false, "not on top of the flight inventory");
+    state.ui.cargo = null;
   } finally {
     state.ui.intro = prev.intro;
     state.paused = prev.paused;
+    state.ui.cargo = prev.cargo;
     state.galaxy = prev.galaxy;
   }
 });

@@ -59,9 +59,9 @@ export function syncControls() {
   c.steer.y = pointer.y;
   c.fire = !!keys.fire;
   c.sec = !!keys.sec;
-  // A local map is a modal control surface. In the future hosted case the sim
-  // may keep running, but opening the chart must not leave the host throttling.
-  if (state.ui.starmap) {
+  // The chart and the flight inventory are modal control surfaces: they take the
+  // flight keys while open, even though the world keeps running behind the overlay.
+  if (state.ui.starmap || state.ui.cargo) {
     c.thrust = c.strafe = c.lift = c.roll = 0;
     c.stop = c.brake = c.boost = c.fire = c.sec = false;
     c.steer.x = c.steer.y = 0;
@@ -84,6 +84,7 @@ export const BINDINGS = {
   KeyG: "dock",
   KeyM: "starmap",
   KeyJ: "route:jump",
+  KeyI: "cargo",
   KeyP: "pause",
   Escape: "pause",
 };
@@ -91,15 +92,16 @@ export const BINDINGS = {
 export function installInput() {
   addEventListener("keydown", e => {
     if (e.target.tagName === "TEXTAREA" || (["INPUT", "SELECT"].includes(e.target.tagName) && !["Escape", "KeyM"].includes(e.code))) return;
-    // The chart owns flight input while open. Leave Space/Enter alone so its
-    // focused buttons and system nodes still work as ordinary keyboard controls.
-    if (!state.ui.starmap) keys[e.code] = 1;
+    // The chart (and the flight inventory) own flight input while open. Leave
+    // Space/Enter alone so their focused buttons still work as controls.
+    const modal = !!(state.ui.starmap || state.ui.cargo);
+    if (!modal) keys[e.code] = 1;
     syncControls();
-    if (!state.ui.starmap && e.code === "AltLeft") {
+    if (!modal && e.code === "AltLeft") {
       e.preventDefault();
       emit("freecam", true);
     }
-    if (!state.ui.starmap && e.code === "Space") e.preventDefault();
+    if (!modal && e.code === "Space") e.preventDefault();
     const name = BINDINGS[e.code];
     if (name) emit("action", { name, repeat: e.repeat, key: e.code });
   });

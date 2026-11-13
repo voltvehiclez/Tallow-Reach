@@ -59,11 +59,12 @@
   follows the new system and resets its pocket framing; a galaxy view remains a galaxy view. Same-system
   travel keeps framing, other pilots cannot change local memory, and loading a save resets it. No save
   schema changes; this follow-up was included in the passed Step 11B playtest.
-- **Pause/input:** `isSimulationPaused()` freezes single-player flight while the chart is open;
-  `state.multiplayer` is the future host flag that keeps a hosted world running. Opening the chart
-  clears/zeroes flight controls, blocks free-cam start and dock/lock/weapon hotkeys, and suspends audio;
-  a later user-gesture audio init does not undo that suspension. M closes the chart; Esc closes an open
-  pocket popup first, then the chart; P closes the chart then pauses.
+- **Pause/input:** the chart and the in-flight ship inventory are read-only overlays over a live world:
+  `isSimulationPaused()` counts only the pause card and the title screen, so time, physics and audio keep
+  running behind either one (an earlier build paused and muted for the chart; that was dropped at the
+  owner's request). Opening either clears/zeroes flight controls and blocks free-cam start and the
+  dock/lock/weapon/jump hotkeys. M closes the chart; Esc closes an open pocket popup first, then the
+  chart; P closes the chart then pauses.
 - **Save v19:** `world.destination` stores the local system or exact pocket target and
   `world.placeMemory` stores only positive remaining simulation-second cooldowns for mined rock slots
   and cleared one-shot encounters. `world.stationStores` keeps one stock per stable

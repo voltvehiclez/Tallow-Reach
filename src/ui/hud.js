@@ -30,6 +30,20 @@ let markerCount = 0;
 let el = {};
 let routeCache = null;
 
+/**
+ * Show or hide the flight HUD **and** the system pointer with it. The canvas
+ * hides the pointer for mouse-look flight (`styles.css`), and the HUD draws its
+ * own reticle (`#cur`); while the HUD is away — the title screen, or docked at a
+ * station — the reticle is gone too, so the real pointer has to come back or the
+ * mouse disappears over the empty screen.
+ */
+function setReticle(visible) {
+  el.root.hidden = !visible;
+  if (document.body && document.body.classList) {
+    document.body.classList.toggle("no-reticle", !visible);
+  }
+}
+
 export function setupHud() {
   el = {
     root: $("hud"),
@@ -79,17 +93,21 @@ export function setupHud() {
 
   on("docked", ({ player } = {}) => {
     if (player && player !== state.player) return;
-    el.root.hidden = true;
+    setReticle(false);
   });
   on("launched", ({ player } = {}) => {
     if (state.ui.intro) return;
     if (player && player !== state.player) return;
-    el.root.hidden = false;
+    setReticle(true);
   });
   on("main-menu", () => {
-    el.root.hidden = true;
+    setReticle(false);
     routeCache = null;
   });
+
+  // The title screen boots with the HUD hidden (index.html), so sync the pointer
+  // with whatever the shell started with.
+  setReticle(!el.root.hidden);
   on("hurt", ({ shielded, player }) => {
     if (player && player !== state.player) return;
     el.flash.style.opacity = shielded ? 0.25 : 0.8;
