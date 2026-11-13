@@ -8,6 +8,127 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Docs restructure, LESSONS.md, docs check test, duplicate-mission guard
+
+Docs-only restructure so new AI chats read less and the project stays scalable, plus one small guard. **Save version
+unchanged (v19)**; rebuild needed (one source change).
+
+- **`docs/HANDOFF.md` rewritten short** (about 130 lines): start-here steps, a "read these docs for this task" table, current
+  state, the owner's ground rules (all kept), a "keeping the game scalable" section, the bug-report procedure and the doc map.
+  The old file is kept word for word in `docs/archive/HANDOFF_2026-11-10.md`; its long "Where things stand" section is now
+  `docs/architecture/feature-notes.md`.
+- **`docs/LESSONS.md` (new):** classes of bug earlier chats hit (repeated accept/abandon multiplying ships, full hold abandoning
+  a mission, warp mid-dialogue failing it, items appearing in the hold, and more), each with cause, rule and the test that
+  enforces it. Rule for every chat: when the owner reports a bug, add a failing test, fix the class, update LESSONS.
+- **`docs/HOW_TO_ADD.md` split:** the 21 recipes are now one file each in `docs/recipes/` (numbers unchanged), with an index.
+- **`docs/ARCHITECTURE.md` split:** conventions and known gaps moved word for word into `docs/architecture/` (content-data,
+  ship-systems, simulation-and-rendering, ui-and-screens, world-and-map); the main file keeps the layers, universal conventions,
+  events, state and saves. "Keeping the docs scalable" rewritten with the new rules (one home per fact, archive never delete).
+- **Status in one place:** step status lives only in `docs/ROADMAP.md` (current-position prose rewritten; the old text is in
+  `docs/archive/ROADMAP_STATUS_2026-11-10.md`). `docs/REFACTOR_PLAN.md` steps 1 to 11 moved to
+  `docs/archive/REFACTOR_PLAN_STEPS_1-11.md`.
+- **Playtest guides** moved from the project root to `testing/` (current ones on top, finished steps in `testing/passed/`,
+  `TEST-OLD-CODES.txt` beside them) with `testing/README.md`. Older changelog entries name the guides without a folder.
+- `README.md`, `AGENTS.md` and `docs/AI_PROMPTS.md` updated: read HANDOFF first and only the docs the task needs; the starter
+  prompt, the bug-report wording and the "content is data" rule.
+- **`tests/docs.test.mjs` (new):** fails if a doc grows past its size limit, a relative link breaks, an index misses a file,
+  HANDOFF's save version differs from `SAVE_VERSION`, a "Last checked" line is missing, or a lesson lacks a rule or enforcement.
+- **Source change: `acceptMission` (`sim/missions.js`) refuses to start a story mission that is already active.** Before, only
+  the Mission log hid an active offer, so a second start would run the script twice and double every spawn. New tests in
+  `tests/mission-invariants.test.mjs`: a story mission cannot be active twice; accepting and abandoning a mission over and over
+  never multiplies its ships or crates.
+- Changelog rotated per its own rule (more than 15 full entries): the oldest moved word for word to the archive with index lines.
+
+## 2026-11-13: Step 13d: mission rules, linter, templates and invariant tests
+
+Hardens the mission framework so illogical missions are caught when written, not found in play.
+No gameplay behaviour changes for Border Signal; **save version unchanged (v19)**; rebuild needed.
+
+- `docs/MISSION_RULES.md` (new): the realism rule, the eight rules and what enforces each, a checklist.
+  Linked from `AGENTS.md`, `HANDOFF.md`, `HOW_TO_ADD.md` section 11 and `REFACTOR_PLAN.md` step 13.
+- `src/data/missions/validate.js` (new) and `rules.js` (new, `minSpawnDistance` 600): a mission linter run
+  over every authored mission by `tests/mission-lint.test.mjs`. Errors on: missing `next`, objective or
+  situation; numeric step targets; unreachable steps, dead ends and loops; spawns too close or while
+  docked; a collected mission item nothing drops; `take-item` with no source; a wave wait with no wave;
+  the `deliver` step (nothing emits "delivered"); failure with no message; a mission-only item with no
+  `player-dead` failure rule.
+- Step targets now accept `"end"` (`sim/missions.js` `stepIndex`). Border Signal uses it instead of the
+  bare `next: 11`, and its last step names `next: "end"`. Numeric targets still work for old saves.
+- `src/data/missions/templates.js` (new): `briefing`, `radio`, `travelTo`, `loadCargo`, `handOver`,
+  `ambush`, `mineOre`, `sequence`, `mission`. They fill in the situation rules and every `next`.
+- `src/data/missions/test-missions.js` (new): Parcel run (cargo), Radio relay (radio only, a choice),
+  Ore run (mine N), Ambush run (fail and replay). New item `parcel` in `data/items.js`. They are not
+  offered to normal players; open the game with `?testmissions` and they appear under "Test missions" in
+  the Mission log (`ui/missionlog.js`). `storyMission(id)` also finds them.
+- `sim/missions.js`: a dock-side step that is blocked by a full hold now says "Dock at a station and make
+  room in your hold" when the pilot is flying, instead of only "make room".
+- `tests/mission-invariants.test.mjs` and `tests/mission-driver.mjs` (new): a scripted pilot plays every
+  mission, normally, wandering, reloading at every step, with a full hold, destroyed at every step (then
+  replaying), and two missions at once. Checks: never stuck; nothing silently failed or abandoned; items
+  move only by real pickup, hand-over or hand-in; dialogue buttons never change the world; spawns are
+  at a safe distance; a save and load keeps every authored field; replays start clean.
+- `tests/step13b-missions.test.mjs`: the reachability test accepts the `"end"` target.
+- `TESTING-13D-MISSION-RULES.md` (new): the owner playtest.
+- Known gaps recorded in MISSION_RULES.md: `deliver` is unimplemented, feature-anchored spawns, silent
+  timeouts, no escort objective.
+- Tests: 437 pass. Needs the owner playtest before step 14.
+
+---
+
+## 2026-11-10: Name the Border Signal object and consume story hand-ins
+
+- Added a dedicated `beacon` catalogue item named **Beacon**. Border Signal's authored defeat drop, collect objective, dialogue wording and objective now refer to that id; ordinary hostile `salv` loot remains unchanged.
+- Mission reward hand-in detection now covers item-bearing `collect`, `deliver` and `mine` objectives, including story missions and nested parallel objectives. The exact required quantity is taken from the current station first and then the active ship hold before payout; missing stock leaves the completed mission active and unpaid.
+- Existing Border Signal mission records that used `salv` are migrated to `beacon` where they describe the authored persistent drop. Save version remains **19**.
+- Verification: `npm test` passes **381/381**, `npm run build` produces a **746 KB** bundle, the ZIP passes `unzip -t`, and the preview serves HTTP 200.
+
+---
+
+## 2026-11-10: Make Border Signal's beacon a persistent physical drop
+
+- The Border Signal's authored Beacon now drops from the first patrol ship at that ship's defeat position instead of being silently granted by a mission script. Ordinary raider salvage loot remains additive, while the authored crate is mission-tagged and visually/physically collectible.
+- The mission crate survives leaving Hollow, world clearing and v19 save/load, restores once at its saved position, remains present when the hold is full, and marks itself collected only after a successful non-docked pickup. Abandoning or rewarding the mission removes its saved marker and runtime content.
+- Added headless coverage for physical pickup gating, defeat-position placement, full-hold retry, duplicate-free save/load restoration, collected-drop suppression, old-save fallback and cleanup. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Make Border Signal handoffs resource-safe
+
+- A full cargo hold now pauses the beacon handoff with an actionable **Make room in your hold to continue.** instruction. Inventory changes and docking retry pending item scripts, but the beacon remains a Hollow retrieval: unloading at the station cannot complete a remote handoff; return and finish the arrival warp to collect it.
+- Multi-action item scripts preflight their combined capacity and resources, so a blocked batch cannot partially transfer an earlier item and duplicate it on retry. Station-gated dialogue also refuses stale calls without a current docked pilot.
+- Border Signal no longer auto-fails for leaving Kestrel Hollow or for an undisplayed timeout. Its only automatic failure is the clear, reported cause of ship destruction; explicit player abandonment remains the destructive choice.
+- The station briefing now uses spoiler-safe investigation wording and leads to a travel objective. The mission activates its sector and spawns the distant, mission-tagged patrol only after the pilot enters Kestrel Hollow, never because a dialogue button was clicked.
+- v19 save sanitization now restores new situation requirements, preserves nested parallel counters, and migrates older Border Signal saves by stable step id without reviving timeout/leave failure. Documented the enforcement plan and known limits for all eight architecture principles in `docs/REFACTOR_PLAN.md`. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Clean up abandoned mission content and gate dialogue
+
+- Mission-spawned hostiles, their hostile shots and their loot now carry the mission identity. Abandoning a mission removes those records and their views without clearing ordinary patrols, derelicts or other place content.
+- Authored station-contact dialogue becomes **Redock to continue talking.** when the pilot undocks, with Continue and choice controls blocked until docking again. In-field dialogue remains actionable during flight, including the Border Signal beacon handoff.
+- Leaving a mission sector while a dialogue line is open no longer interprets the open panel as mission abandonment. This keeps a pending station conversation resumable after redocking and lets the beacon line survive a return warp before Close is clicked.
+- Added regressions for scripted-wave cleanup, dialogue scope, save metadata and the warp-before-Close case. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+## 2026-11-10: Remove unexplained mission progress counters
+
+- Removed the ambiguous `Progress 0/2` display from story missions. It was counting the two lines in the current dialogue, not overall mission completion, so dialogue-line counts and non-quantitative story-step bars are no longer shown in the Mission log.
+- Quantitative contract missions retain a clearly labelled `Objective progress: 0 of N` count, and hunt progress in the flight HUD now says `0 of N defeated` instead of an unexplained fraction.
+- Added UI regression coverage and updated the browser checklist. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
+---
+
+## 2026-11-10: Keep mission objectives spoiler-safe
+
+- Separated player-facing `objective` text from compatibility/internal `log` text. The HUD and Mission log now use only the data-defined objective, so a procedural trigger such as `wave-clear` cannot reveal a future encounter.
+- The Border Signal now tells the player to **Investigate the signal in Kestrel Hollow** and later **Stay with the signal in Kestrel Hollow**, then uses discovery-oriented wording before the return home. Contract templates use data-defined objective placeholders without changing their known requirements.
+- Objective text survives the existing v19 save sanitization, and fallback wording for missions without an authored objective no longer exposes internal triggers or step counts. Focused mission/UI tests pass **21/21**; rebuild the generated HTML and complete-project ZIP after this change.
+
+---
+
 ## 2026-11-10: Show player-facing mission objectives in the flight HUD
 
 - Removed internal `Step X of Y` numbering from the Mission log. Active missions now present a clear player-facing status, progress and **Next** instruction instead of exposing the runner's implementation steps.

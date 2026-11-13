@@ -16,7 +16,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { STORY_MISSIONS, TEST_MISSIONS } from "../src/data/missions/index.js";
 import { MISSION_RULES } from "../src/data/missions/rules.js";
-import { activeMissions, isMissionFailed, missionOnlyItems } from "../src/sim/missions.js";
+import { activeMissions, isMissionFailed, missionHandIn, missionNextText, missionOnlyItems } from "../src/sim/missions.js";
+import { itemCat } from "../src/data/items.js";
 import { emit } from "../src/util/events.js";
 import {
   accept, die, drive, dock, emptyHoldIfFull, fillHold, handIn, holdIsFull, ledger, missionEntities,
@@ -33,7 +34,7 @@ const hasDeathRule = def => def.fails?.on?.includes("player-dead") && def.fails.
 for (const def of ALL) {
   test(`${def.id}: plays through to the reward when nothing goes wrong`, () => withPilot(ctx => {
     accept(ctx, def);
-    assert.equal(drive(ctx, def.id), "complete");
+    assert.equal(drive(ctx, def.id), "objectives-done");
     handIn(ctx, def.id);
     assert.deepEqual(ledger.failed, [], "nothing failed");
     assert.deepEqual(ledger.abandoned, [], "nothing was abandoned");
@@ -47,7 +48,7 @@ for (const def of ALL) {
     // Docked, flying at the station, flying in the other pocket: every loop somewhere else.
     const spots = [["reach", true], ["hollow", false], ["reach", false], ["hollow", false], ["reach", true]];
     const wander = (c, mission, loop) => { const [place, docked] = spots[loop % spots.length]; moveTo(c, place, { dock: docked }); };
-    assert.equal(drive(ctx, def.id, { before: wander, unblock: emptyHoldIfFull }), "complete");
+    assert.equal(drive(ctx, def.id, { before: wander, unblock: emptyHoldIfFull }), "objectives-done");
     handIn(ctx, def.id);
     assert.deepEqual(ledger.failed, []);
     assert.deepEqual(ledger.abandoned, []);
@@ -60,7 +61,7 @@ for (const def of ALL) {
       const key = `${mission.step}:${JSON.stringify(mission.counters)}`;
       if (key !== lastStep) { lastStep = key; reload(c); }
     };
-    assert.equal(drive(ctx, def.id, { before: reloadOnNewStep }), "complete");
+    assert.equal(drive(ctx, def.id, { before: reloadOnNewStep }), "objectives-done");
     reload(ctx);
     handIn(ctx, def.id);
   }));
@@ -71,7 +72,7 @@ for (const def of ALL) {
     const fillOncePerStep = (c, mission) => {
       if (!filledAt.has(mission.step)) { filledAt.add(mission.step); fillHold(c); }
     };
-    assert.equal(drive(ctx, def.id, { before: fillOncePerStep, unblock: emptyHoldIfFull }), "complete");
+    assert.equal(drive(ctx, def.id, { before: fillOncePerStep, unblock: emptyHoldIfFull }), "objectives-done");
     assert.deepEqual(ledger.failed, [], "a full hold is never a failure");
     assert.deepEqual(ledger.abandoned, []);
     handIn(ctx, def.id);
@@ -100,9 +101,26 @@ for (const def of ALL) {
           `${item} changed in the hold by something other than a pickup or a mission hand-over (step ${mission.steps[mission.step]?.id})`);
       }
     };
-    assert.equal(drive(ctx, def.id, { before: storm, unblock: emptyHoldIfFull }), "complete");
+    assert.equal(drive(ctx, def.id, { before: storm, unblock: emptyHoldIfFull }), "objectives-done");
     handIn(ctx, def.id);
   }));
+
+  // A mission that hands in a mission-only object (a beacon, a parcel) is not
+  // accomplished by its last step: it is accomplished when the hand-in takes it.
+  if (missionHandIn(def) && itemCat(missionHandIn(def).item) === "mission") {
+    test(`${def.id}: the last step does not accomplish it while the hand-in item is still owed`, () => withPilot(ctx => {
+      accept(ctx, def);
+      assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "objectives-done");
+      const mission = activeMissions(ctx.profile)[0];
+      assert.ok(mission, "the mission stays active until the hand-in");
+      assert.doesNotMatch(missionNextText(mission, ctx.profile), /complete/i,
+        "the guidance never claims the mission is accomplished before the hand-in");
+      assert.equal(ctx.profile.done, 0, "no reward is paid by finishing the steps");
+      handIn(ctx, def.id);
+      assert.equal(activeMissions(ctx.profile).length, 0, "the hand-in is what finishes it");
+      assert.equal(ctx.profile.done, 1);
+    }));
+  }
 
   test(`${def.id}: if the ship is destroyed at any step it fails clearly or can still be finished`, () => {
     const steps = def.steps.length;
@@ -128,12 +146,12 @@ for (const def of ALL) {
           const again = accept(ctx, def);
           assert.equal(again.step, 0, "a replay starts at the beginning");
           assert.deepEqual(Object.values(again.counters).filter(Boolean), [], "with no leftover progress");
-          assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "complete", "and can be finished");
+          assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "objectives-done", "and its steps can be finished");
           handIn(ctx, def.id);
           assert.deepEqual(ledger.failed, [], "the replay does not fail");
         } else {
           assert.deepEqual(ledger.failed, [], "death did not fail a mission with no death rule and no mission item aboard");
-          assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "complete", "and it can still be finished without the lost hold");
+          assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "objectives-done", "and its steps can still be finished without the lost hold");
           handIn(ctx, def.id);
         }
       });
@@ -147,7 +165,7 @@ test("two missions at once do not interfere with each other", () => withPilot(ct
   assert.equal(activeMissions(ctx.profile).length, defs.length);
   // Take every mission half way, then finish them in a different order.
   for (const def of defs) drive(ctx, def.id, { stopAt: m => m.step >= 2, unblock: emptyHoldIfFull });
-  for (const def of [...defs].reverse()) assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "complete", `${def.id} finishes`);
+  for (const def of [...defs].reverse()) assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "objectives-done", `${def.id} finishes its steps`);
   for (const def of defs) handIn(ctx, def.id);
   assert.deepEqual(ledger.failed, [], "no mission failed another");
   assert.equal(activeMissions(ctx.profile).length, 0);

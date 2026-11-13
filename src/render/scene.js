@@ -48,19 +48,25 @@ export function updateScenery(dt) {
 function buildScenery(id, group) {
   const spins = [];
   for (const f of placeDef(id).features) {
-    if (f.kind === "planet") spins.push(...buildPlanet(f, group));
-    else if (f.kind === "station") spins.push(...buildStation(f, group));
+    if (f.kind === "planet") spins.push(...addModel(planetModel(f), group));
+    else if (f.kind === "station") spins.push(...addModel(stationModel(f), group));
   }
   scenerySpins.set(id, spins);
 }
 
-function buildPlanet(f, group) {
+/** Put a built model in a group and hand back its spin records. */
+function addModel(model, group) {
+  group.add(model.object);
+  return model.spins;
+}
+
+/** A planet and its atmosphere shell, with the spin rate its feature asks for. */
+export function planetModel(f) {
   const planet = new THREE.Mesh(
     new THREE.SphereGeometry(f.radius, 48, 32),
     new THREE.MeshStandardMaterial({ color: f.col, roughness: 1 })
   );
   planet.position.set(...f.pos);
-  group.add(planet);
   const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(f.atmosphere, 48, 32),
     new THREE.MeshBasicMaterial({
@@ -69,16 +75,20 @@ function buildPlanet(f, group) {
     })
   );
   atmosphere.position.copy(planet.position);
-  group.add(atmosphere);
-  return [{ object: planet, rate: f.spin }];
+  const object = new THREE.Group();
+  object.add(planet, atmosphere);
+  return { object, spins: [{ object: planet, rate: f.spin }] };
 }
 
-function buildStation(f, group) {
+/**
+ * The station itself: a spun ring, spokes, a hub and its lights. Exported so the
+ * title screen can show the same station without a second copy of the geometry.
+ */
+export function stationModel(f) {
   const stn = new THREE.Group();
   const spin = new THREE.Group();
   stn.add(spin);
   stn.position.set(...f.pos);
-  group.add(stn);
   const m = mm(0x4a545c);
   const add = (geo, x, y, z, parent) => {
     const o = new THREE.Mesh(geo, m);
@@ -105,7 +115,7 @@ function buildStation(f, group) {
   }
   add(new THREE.BoxGeometry(60, 2, 30), 0, -60, 0, stn);
   add(new THREE.BoxGeometry(8, 8, 40), 0, 0, 26, stn);
-  return [{ object: spin, rate: 0.1 }];
+  return { object: stn, spins: [{ object: spin, rate: 0.1 }] };
 }
 
 scene.add(new THREE.HemisphereLight(0x5a6e80, 0x120e0c, 0.45));

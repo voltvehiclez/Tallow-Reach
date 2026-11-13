@@ -6,15 +6,20 @@ import { STORY_MISSIONS, TEST_MISSIONS } from "../data/missions/index.js";
 import { state, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { uiSound } from "../core/audio.js";
-import { on } from "../util/events.js";
+import { emit, on } from "../util/events.js";
 import {
   activeMissions,
+  atMissionHandInStation,
   canCollectMissionReward,
   chooseMission,
-  isMissionComplete,
   isMissionFailed,
   missionDialogue,
+  missionHandIn,
+  missionOfferStation,
+  missionHandInStationName,
+  missionKindWord,
   missionNextText,
+  missionObjectivesDone,
   missionProgress,
   nextMissionDialogue,
 } from "../sim/missions.js";
@@ -28,13 +33,19 @@ const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "'": "&#39;",
 }[c]));
 
-/** Render the live dialogue card for one active mission. */
-export function dialogueHtml(mission, { blocked = false } = {}) {
+/**
+ * Render the live dialogue card for one active mission. `stationName` is set when
+ * the pilot is docked somewhere else: the conversation belongs to its own counter,
+ * so the card says where to go instead of offering Continue.
+ */
+export function dialogueHtml(mission, { blocked = false, stationName = "" } = {}) {
   const dialogue = missionDialogue(mission);
   if (!dialogue) return "";
   const locked = blocked && dialogue.requiresDock;
   const choices = locked
-    ? `<p class="dialogue-locked">Redock to continue talking.</p>`
+    ? `<p class="dialogue-locked">${stationName
+        ? `Return to ${esc(stationName)} to continue talking.`
+        : "Redock to continue talking."}</p>`
     : dialogue.waitingForChoice && dialogue.choices.length
       ? dialogue.choices.map(choice =>
           `<button class="dialogue-choice" data-dialogue-choice="${esc(choice.id)}">${esc(choice.text || choice.id)}</button>`
@@ -54,16 +65,33 @@ export function dialogueHtml(mission, { blocked = false } = {}) {
   );
 }
 
-function missionStatus(mission, index, profile) {
+function missionStatus(mission, profile) {
   const progress = missionProgress(mission);
-  const complete = isMissionComplete(mission);
+  const objectivesDone = missionObjectivesDone(mission);
   const failed = isMissionFailed(mission);
-  const stateText = failed ? "Failed" : complete ? "Complete" : "Active";
-  const action = complete && canCollectMissionReward(mission, profile)
-    ? `<button data-a="done" data-b="${index}">Collect reward</button>`
-    : !complete
-      ? `<button data-a="drop" data-b="${index}">Abandon</button>`
-      : "";
+  const requirement = missionHandIn(mission);
+  const atStation = atMissionHandInStation(mission);
+  const station = missionHandInStationName(mission);
+  const cargoReady = objectivesDone && canCollectMissionReward(mission, profile);
+  const ready = cargoReady && atStation;
+  // "Complete" is reserved for a mission with nothing left to hand over, at the
+  // one station that takes it. A mission that owes items is only ready once they
+  // are aboard or at the station, and one that must be handed in elsewhere says
+  // where to go instead of pretending it can be paid here.
+  const stateText = failed
+    ? "Failed"
+    : ready
+      ? requirement ? "Ready to hand in" : "Complete"
+      : objectivesDone
+        ? cargoReady ? `Deliver to ${station}` : "Awaiting cargo"
+        : "Active";
+  // A not-yet-ready mission always offers Abandon, so no state is a dead end.
+  const action = ready
+    ? `<button data-a="done" data-b="${esc(mission.id)}">${requirement ? "Hand in cargo" : "Collect reward"}</button>`
+    : cargoReady
+      ? `<button data-a="done" data-b="${esc(mission.id)}" disabled>${requirement ? "Hand in" : "Collect"} at ${esc(station)}</button>` +
+        `<button data-a="drop" data-b="${esc(mission.id)}">Abandon</button>`
+      : `<button data-a="drop" data-b="${esc(mission.id)}">Abandon</button>`;
   const dialogue = missionDialogue(mission);
   const preview = dialogue
     ? `<p class="mission-log-dialogue"><strong>${esc(dialogue.speaker || "Mission contact")}:</strong> ${esc(dialogue.line)}</p>`
@@ -80,7 +108,7 @@ function missionStatus(mission, index, profile) {
     : "";
   return (
     `<article class="mission-log-card">` +
-    `<header><h3>${esc(mission.title || "Mission")}</h3><span>${esc(mission.kind || "mission")}</span></header>` +
+    `<header><h3>${esc(mission.title || "Mission")}</h3><span>${esc(missionKindWord(mission))}</span></header>` +
     `<p class="mission-log-status">${stateText}${progressText}</p>` +
     progressBar +
     preview +
@@ -93,20 +121,27 @@ function missionStatus(mission, index, profile) {
 /** Render all active missions plus data-defined story missions not yet accepted. */
 export function missionLogHtml(profileOrUi = state.profile) {
   const profile = Array.isArray(profileOrUi?.missions) ? profileOrUi : state.profile;
+  // Progress is readable anywhere: an active mission follows the pilot and is
+  // listed at every station, so a job taken at Meridian can be watched at
+  // Galereach. Only the *offers* are station-bound (each names the station that
+  // gives it out), and only the station that takes the hand-in pays.
   const active = activeMissions(profile);
   const activeIds = new Set(active.map(mission => mission.id));
-  const storyOffers = STORY_MISSIONS.filter(mission => !activeIds.has(mission.id));
+  const storyOffers = STORY_MISSIONS.filter(mission =>
+    !activeIds.has(mission.id) && missionOfferStation(mission) === state.place);
   // The framework test missions are for the owner and for AI chats checking the
   // mission rules; they appear only when the game is opened with ?testmissions.
   const showTest = typeof location !== "undefined" && /[?&]testmissions(&|=|$)/.test(location.search || "");
   const testOffers = showTest ? TEST_MISSIONS.filter(mission => !activeIds.has(mission.id)) : [];
   let html = `<h2>Mission log</h2><div class="sub">Active missions, current objectives and the next thing to do.</div>`;
   html += active.length
-    ? active.map((mission, index) => missionStatus(mission, index, profile)).join("")
-    : `<p>No active missions.</p>`;
+    // Indexes would address the wrong mission: the list is this station's only,
+    // while the runner counts every active mission. Name the mission instead.
+    ? active.map(mission => missionStatus(mission, profile)).join("")
+    : `<p>No active missions here.</p>`;
   if (storyOffers.length) {
     html += `<h2>Story missions</h2>` + storyOffers.map(mission =>
-      `<div class="row"><div>${esc(mission.title)}<small>Story mission</small></div><button data-a="story" data-b="${esc(mission.id)}">Start</button></div>`
+      `<div class="row"><div>${esc(mission.title)}<small>Story mission · hand in at ${esc(missionHandInStationName(mission))}</small></div><button data-a="story" data-b="${esc(mission.id)}">Start</button></div>`
     ).join("");
   }
   if (testOffers.length) {
@@ -148,8 +183,11 @@ export function renderDialogue() {
     missionPause = true;
     setPause(true);
   }
-  const blocked = dialogue.requiresDock && !!state.player && !state.player.docked;
-  root.innerHTML = dialogueHtml(mission, { blocked });
+  // A station-contact conversation needs that station: docked elsewhere it is
+  // read-only with the station named, and in flight it asks the pilot to redock.
+  const away = !!dialogue.station && dialogue.station !== state.place;
+  const blocked = dialogue.requiresDock && (away || (!!state.player && !state.player.docked));
+  root.innerHTML = dialogueHtml(mission, { blocked, stationName: away ? dialogue.stationName : "" });
   root.hidden = false;
 }
 
@@ -161,7 +199,8 @@ function onDialogueClick(event) {
   const dialogue = missionDialogue(mission);
   // Only station-contact conversations are gated. In-field dialogue, such as
   // the beacon handoff, remains actionable during flight and after a warp.
-  if (dialogue?.requiresDock && state.player && !state.player.docked) {
+  const away = !!dialogue?.station && dialogue.station !== state.place;
+  if (dialogue?.requiresDock && (away || (state.player && !state.player.docked))) {
     renderDialogue();
     return;
   }
@@ -189,7 +228,8 @@ export function failureNoticeHtml({ mission, title, reason, message } = {}) {
   if (reason === "abandon") return "";   // the pilot chose that; no alarm needed
   const name = title || mission?.title || "Mission";
   const why = message || mission?.failureMessage || "It can no longer be completed.";
-  return `<strong>Mission failed: ${esc(name)}</strong><span>${esc(why)}</span><em>Click to dismiss</em>`;
+  // A contract says "Contract failed"; only story work calls itself a mission.
+  return `<strong>${esc(missionKindWord(mission))} failed: ${esc(name)}</strong><span>${esc(why)}</span><em>Click to dismiss</em>`;
 }
 
 function hideFailureNotice() {
@@ -231,7 +271,7 @@ export function setupMissionLog() {
   for (const event of [
     "mission-accepted",
     "mission-progress",
-    "mission-completed",
+    "mission-objectives-done",
     "mission-failed",
     "mission-rewarded",
     "mission-abandoned",
@@ -240,6 +280,16 @@ export function setupMissionLog() {
     "main-menu",
     "docked",
     "launched",
-  ]) on(event, renderDialogue);
+  ]) {
+    on(event, () => {
+      renderDialogue();
+      // The docked panel (Mission log, Contracts) is a snapshot drawn when it was
+      // opened, so closing the last dialogue line left the card saying Abandon
+      // until another tab was opened. Tell the panel to redraw whenever a mission
+      // changes; menu.js ignores this while the panel is hidden or on the title.
+      const panelAlreadyRedraws = ["mission-ui-refresh", "main-menu", "docked", "launched"].includes(event);
+      if (!panelAlreadyRedraws) emit("mission-ui-refresh", {});
+    });
+  }
   renderDialogue();
 }

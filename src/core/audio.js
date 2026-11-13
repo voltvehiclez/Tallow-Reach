@@ -9,11 +9,13 @@ import { on } from "../util/events.js";
 
 let ctx = null;
 let master, noiseBuf, engineGain, engineFilter, engineOsc, engineOscGain;
-let roarRaw, roarMid, roarCrackle, hum, humGain, droneGain, stationGain, ambGain;
+let roarRaw, roarMid, roarCrackle, hum, humGain, droneGain, stationGain, stationLfoGain, ambGain;
 let muted = false;
 let suspended = false;   // pause/local chart owns this; a later click must not resume it
 let mechT = 0;   // next time a docking clank may play
 let alarmT = 0;  // next time the low-hull alarm may beep
+const STATION_LFO = 0.006;   // how much the docked pad breathes
+const MENU_FADE_SECONDS = 1.8;
 
 export const isMuted = () => muted;
 
@@ -142,10 +144,11 @@ export function initAudio() {
   const lfo = ctx.createOscillator(),
     lfoGain = ctx.createGain();
   lfo.frequency.value = 0.12;
-  lfoGain.gain.value = 0.006;
+  lfoGain.gain.value = STATION_LFO;   // the pad's slow breathing
   lfo.connect(lfoGain);
   lfoGain.connect(stationGain.gain);
   lfo.start();
+  stationLfoGain = lfoGain;
 
   const amb = ctx.createBufferSource(),
     ambFilter = ctx.createBiquadFilter();
@@ -160,6 +163,33 @@ export function initAudio() {
   ambGain.connect(master);
   amb.start();
 }
+
+/**
+ * Fade every looping voice (engine hiss and growl, roar, beam hum, low drone, the
+ * docked pad and its air) to silence over `seconds`, and leave it there.
+ *
+ * The main menu pauses the simulation, so `updateAudio()` stops running: without
+ * this the engine kept droning at whatever level it had when the pilot quit.
+ * A ramp rather than a hard stop, because the menu should arrive quietly instead
+ * of cutting off mid-roar. Starting the game again ramps everything back up,
+ * because `updateAudio()` sets its levels every frame.
+ */
+export function fadeToSilence(seconds = MENU_FADE_SECONDS) {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const voices = [engineGain, engineOscGain, roarRaw?.g, roarMid?.g, roarCrackle?.g, humGain, droneGain, stationGain, ambGain, stationLfoGain];
+  for (const voice of voices) {
+    const param = voice?.gain;
+    if (!param) continue;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(Math.max(0, param.value), now);
+    param.linearRampToValueAtTime(0, now + Math.max(0.05, seconds));
+  }
+}
+
+// Leaving the game for the title screen: nothing will drive the loops again
+// until the pilot starts playing, so they must be brought down here.
+on("main-menu", () => fadeToSilence());
 
 /** Toggle mute. Returns the new muted state. */
 export function toggleMute() {
@@ -366,6 +396,8 @@ export function updateAudio(s) {
   ramp(hum.frequency, 60 + s.mineFrac * 60, 0.1);
   ramp(droneGain.gain, flying ? 0.05 : 0, 0.8);
   ramp(ambGain.gain, s.docked ? 0.05 * (0.55 + 0.45 * Math.sin(s.time * 0.3)) : 0, 1.5);
+  // A fade to the title screen zeroed this too; playing again brings the pad back.
+  if (stationLfoGain && stationLfoGain.gain.value !== STATION_LFO) stationLfoGain.gain.value = STATION_LFO;
 
   if (flying && s.hullFrac < 0.3 && s.time > alarmT) {
     alarmT = s.time + 1.1;

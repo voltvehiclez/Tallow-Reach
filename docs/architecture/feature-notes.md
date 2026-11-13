@@ -80,7 +80,10 @@
   pocket. A failed prepare restores the previous catalog. v15 and older saves/codes still load.
 - **13a/13b mission framework:** `src/data/missions/index.js` defines the extensible vocabulary;
   `contracts.js` keeps the three contract generators data-only and `story.js` contains the ten-step
-  `The Border Signal` worked example. `sim/missions.js` listens for contract events plus story
+  `The Border Signal` worked example. A mission's last step only makes it `missionObjectivesDone`: it is accomplished
+  when `completeMission` consumes its hand-in (`missionHandIn`) and pays, guided meanwhile by `handIn.objective`
+  ("Deliver 2 derelict crates to Meridian Station. You have 1 of 2."), and a lost mission-only hand-in fails it.
+  `sim/missions.js` listens for contract events plus story
   triggers/dialogue actions, and now runs dialogue lines/choices, scripts (wave/ship requests, saved
   place state, inventory, sound and warp), waits, flags/branches, parallel objectives and configured
   death/leave/timeout failures. Recover contracts still filter collection to `salv`, while the

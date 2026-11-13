@@ -14,7 +14,7 @@ import {
   activeMissions,
   chooseMission,
   completeMission,
-  isMissionComplete,
+  missionObjectivesDone,
   isMissionFailed,
   missionDialogue,
   missionNextText,
@@ -152,7 +152,7 @@ test("13b: dialogue choice changes the next step and the worked mission complete
     emit("pickup", { item: "beacon", missionId: mission.id, missionItem: true, place: "hollow", player, profile });
     assert.equal(mission.step, 9, "only the successful mission pickup advances the story");
     advanceMission(mission, "dialogue-next", { player });
-    assert.equal(isMissionComplete(mission), true);
+    assert.equal(missionObjectivesDone(mission), true);
   } finally {
     state.worldState = previousWorld;
     state.place = previousPlace;
@@ -180,9 +180,12 @@ test("13b: a completed mission remains claimable after leaving its origin sector
     profile.holds.wasp.beacon = 1;
     emit("pickup", { item: "beacon", missionId: mission.id, missionItem: true, place: "hollow", player, profile });
     advanceMission(mission, "dialogue-next", { player });
-    assert.equal(isMissionComplete(mission), true);
+    assert.equal(missionObjectivesDone(mission), true);
 
     emit("place-changed", { from: "hollow", to: "reach", player, profile });
+    state.place = "reach";
+    player.place = "reach";
+    player.docked = true;
     assert.equal(isMissionFailed(mission), false, "returning home cannot fail a completed mission");
     assert.equal(activeMissions(profile).length, 1, "the completed mission stays available to collect");
     delete profile.holds.wasp.beacon;
@@ -634,8 +637,8 @@ test("13b: mission-scoped triggers do not advance another waiting mission", () =
   const second = makeWaiter("story.second");
   profile.missions.push(first, second);
   advanceMissions("mission-trigger", { trigger: "wave-clear", mission: first.id, profile });
-  assert.equal(isMissionComplete(first), true);
-  assert.equal(isMissionComplete(second), false, "the other story does not consume the first story's wave");
+  assert.equal(missionObjectivesDone(first), true);
+  assert.equal(missionObjectivesDone(second), false, "the other story does not consume the first story's wave");
 });
 
 test("13b: a blocked item script waits instead of silently losing the item", () => {
@@ -682,7 +685,7 @@ test("13b: the alternate dialogue choice takes the decline branch", () => {
   assert.equal(chooseMission(mission.id, "decline", profile, player), true);
   assert.equal(profile.flags["story.border.helped"], false);
   assert.equal(mission.steps[mission.step].id, "declined");
-  assert.equal(isMissionComplete(mission), false);
+  assert.equal(missionObjectivesDone(mission), false);
 });
 
 test("13b: wait steps support a timer and a player entering an area", () => {
@@ -711,7 +714,7 @@ test("13b: wait steps support a timer and a player entering an area", () => {
   assert.equal(mission.step, 1);
   player.place = "hollow";
   advanceMission(mission, "place-entered", { id: "hollow", player });
-  assert.equal(isMissionComplete(mission), true);
+  assert.equal(missionObjectivesDone(mission), true);
 });
 
 test("13b: a mission saves dialogue progress and story state in the middle of a step", () => {

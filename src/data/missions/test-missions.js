@@ -48,6 +48,7 @@ export const ORE_RUN = mission({
   id: "test.ore-run",
   title: "Test: Ore run",
   credits: 120,
+  handIn: { objective: "Deliver {count} {item} to {station}." },
   steps: [
     briefing({ id: "brief", speaker: "Foreman", lines: ["We need three Ferrite at the station."], objective: "Hear the foreman's request." }),
     mineOre({ id: "mine", item: "ferrite", count: 3, objective: "Mine 3 Ferrite and bring it to Meridian Station." }),

@@ -16,6 +16,8 @@ function makeEl(id) {
     id, hidden: false, _html: "", handlers: {}, dataset: {}, style: {},
     clientWidth: 1200, clientHeight: 800, scrollLeft: 0, scrollTop: 0,
     addEventListener(t, fn) { this.handlers[t] = fn; },
+    setAttribute(k, v) { this[k] = v; },
+    appendChild(child) { this.child = child; return child; },
     classList: { toggle() {}, add() {}, remove() {} },
     set innerHTML(v) { this._html = v; }, get innerHTML() { return this._html; },
     querySelector() { return null; }, querySelectorAll() { return []; },
@@ -25,6 +27,8 @@ function makeEl(id) {
 globalThis.document = {
   getElementById: id => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); },
   createElement: tag => makeEl(tag),
+  // ui/notice.js puts its fixed message element on the body, never in the panel.
+  body: makeEl("body"),
 };
 const mem = new Map();
 globalThis.localStorage = {
@@ -46,6 +50,7 @@ const m = await loadHeadless("src/ui/menu.js", {
   dock: "src/sim/session.js",
   encodeSave: "src/state/storage.js",
   emit: "src/util/events.js",
+  shownNotice: "src/ui/notice.js",
 });
 const { state } = m;
 const panel = document.getElementById("panel");
@@ -64,7 +69,6 @@ function boot(place = "reach", intro = true) {
   state.place = place;
   state.ui.intro = intro;
   state.ui.tab = "s";
-  state.ui.toast = "";
   state.ui.xcode = "";
   const P = m.configurePlayer(m.createPlayer(), state.profile);
   P.place = place;
@@ -97,7 +101,7 @@ test("fix 3: Load slot restores the save and redraws the panel in the same click
   assert.equal(click("ld", "1"), null, "loading a slot must not throw");
   assert.equal(state.profile.cr, 600, "credits come back");
   assert.ok(panel.innerHTML.includes("600 cr"), "and the panel shows them without another click");
-  assert.equal(state.ui.toast, "Loaded slot 1");
+  assert.equal(m.shownNotice(), "", "a routine \"Loaded slot 1\" says nothing: the panel already shows the save");
   assert.equal(JSON.parse(mem.get("tr_s1")).profile.cr, 600, "the slot itself is untouched");
 });
 
@@ -125,13 +129,13 @@ test("fix 3: Import applies a good code, and a bad code leaves the game alone", 
   document.getElementById("xt").value = code;
   assert.equal(click("im"), null);
   assert.equal(state.profile.cr, 4850);
-  assert.equal(state.ui.toast, "Save imported.");
+  assert.equal(m.shownNotice(), "", "a routine import confirmation says nothing either");
   assert.ok(panel.innerHTML.includes("4850 cr"));
 
   document.getElementById("xt").value = "TR1:garbage";
   assert.equal(click("im"), null);
   assert.equal(state.profile.cr, 4850, "a damaged code changes nothing");
-  assert.equal(state.ui.toast, "That code is not a valid save.");
+  assert.equal(m.shownNotice(), "That code is not a valid save.", "a refusal is still shown, in the fixed notice");
 });
 
 test("fix 3: Reset progress works and leaves the pilot docked at the home station", () => {

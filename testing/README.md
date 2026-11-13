@@ -13,11 +13,11 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 | Guide | Covers |
 | --- | --- |
 | [TESTING-BASELINE.md](TESTING-BASELINE.md) | The whole game; play it after every step. |
-| [TESTING-DEATH-AND-MISSIONS.md](TESTING-DEATH-AND-MISSIONS.md) | Dying and missions: death no longer fails a mission by default; the "Mission failed" notice. |
-| [TESTING-12-PLACES.md](TESTING-12-PLACES.md) | Step 12: generated places, templates, encounters, place memory. |
+| [TESTING-DEATH-AND-MISSIONS.md](TESTING-DEATH-AND-MISSIONS.md) | Mission hand-ins (a mission is only accomplished when its items are handed in), dying with a mission-only item, contract wording and the "Contract failed" / "Mission failed" notice. |
 
 ## Passed (history, in `passed/`)
 
+[TESTING-12-PLACES.md](passed/TESTING-12-PLACES.md) (step 12),
 [TESTING-11A.md](passed/TESTING-11A.md), [TESTING-STARMAP.md](passed/TESTING-STARMAP.md) (step 11),
 [TESTING-PLACES.md](passed/TESTING-PLACES.md) (step 10), [TESTING-INVENTORY.md](passed/TESTING-INVENTORY.md),
 [TESTING-SHOPS.md](passed/TESTING-SHOPS.md), [TESTING-SELLING.md](passed/TESTING-SELLING.md),

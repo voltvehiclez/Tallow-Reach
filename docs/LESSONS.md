@@ -106,6 +106,20 @@ Mission lessons are first because missions are where most bugs have come from. T
   revealing what has not happened yet). Never show internal counters, step numbers or trigger names.
 - **Enforced by:** the linter (every step needs an `objective`); `tests/step13c-ui.test.mjs`.
 
+### L15. A mission claimed to be accomplished before its items were handed in, then stuck when they were lost
+- **Seen:** after the Border Signal's last in-space line the HUD said the mission was done and to return for the reward; dying
+  then lost the beacon, the reward could never be collected, and the mission sat there forever. Contracts announced "Mission
+  complete" before their crates were handed in, and called themselves missions rather than contracts.
+- **Rule:** finishing the steps is `missionObjectivesDone`, never "accomplished". An item-bearing mission is paid only by
+  `completeMission`, which consumes the hand-in first; until then its guidance shows `handIn.objective` and how much is still
+  owed. A lost mission-only hand-in (the hold destroyed with the ship, or no copy anywhere) fails the mission with a message
+  instead of waiting forever. Wording follows the mission's `kind`: a contract says "Contract ...". Never read
+  `mission.completed` by hand; use `missionObjectivesDone`.
+- **Enforced by:** the linter (`handIn.objective` required; no completion words in guidance; a contract may not say mission),
+  `tests/mission-death.test.mjs` (death after the last step, and a hand-in that exists nowhere), the
+  `last step does not accomplish it` invariant in `tests/mission-invariants.test.mjs`, `tests/step13-missions.test.mjs` and
+  `tests/step13c-ui.test.mjs`.
+
 ---
 
 ## Everything else
@@ -126,6 +140,39 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** after moving an object, update its matrix before reading `matrixWorld` for a gun or camera position.
   See `architecture/simulation-and-rendering.md`.
 - **Enforced by:** NOT YET: add a test if this bites again (it cannot be checked headlessly today, only by eye).
+
+### L16. A hull id is not a ship
+- **Seen (owner):** "If you die, you get a free wasp. Cant then equip equipment to the ship." The replacement Wasp had no bays in
+  Outfitting and flew with no thrusters and no Hull HP.
+- **Cause:** the lost hull's fleet records (`holds[id]`, `hp[id]`, `loadout[id]`) were deleted, and the replacement was added as
+  an id only. Everything reads a ship *through* those records — `layoutFor` for its bays, `hullOf` for Hull HP, the fit for
+  drive, shields and guns — so a hull without them is not half a ship, it is nothing. A save/reload hid the bug, because
+  `cleanLoadouts` gives any hull without a saved fit the stock fit.
+- **Rule:** a hull joins the fleet through `addShipRecords` (`state/profile.js`); nothing pushes to `profile.ships` without it, and
+  a hull that becomes the flown ship goes through `ensureShipRecords` first. Never delete a ship's records without creating the
+  ones its replacement needs, in the same step.
+- **Enforced by:** `tests/ship-recovery.test.mjs`, and the post-death snapshots in `tests/single-player-combat-8b.test.mjs`
+  (they record power, shields, hull, a gun bay and an empty hold for the replacement ship).
+
+### L17. A recorded-state fixture only proves what changed if you diff it
+- **Seen:** fixing the spare Wasp changed the recorded 8b lifecycle fixture, which failed as a long unreadable deep-equal.
+- **Rule:** when behaviour changes on purpose, re-record the fixture and diff old against new. Accept it only if every difference
+  sits inside the behaviour you meant to change — here snapshots from the death onwards changed and every earlier one was
+  identical, which is the evidence the fix did nothing else. Say so in a comment beside the fixture's test. A blanket re-record
+  that "makes the test pass" would hide real regressions.
+- **Enforced by:** the comment above the fixture assertion in `tests/single-player-combat-8b.test.mjs`.
+
+### L18. A rule about *where* something happens was left to the caller
+- **Seen (owner):** "It doesn't seem like the game cares which location you hand in a mission in." Contracts and missions
+  paid at whatever station the pilot happened to dock at, and the guidance named that station too.
+- **Cause:** the reward step asked only "is the pilot docked?" — the *place* was never part of the mission record, so the
+  runner, the HUD and both docked screens each invented their own idea of "the station". The data had the fact only in prose.
+- **Rule:** a mission fact that decides an outcome is data on the mission, not a condition read from wherever the player is.
+  The hand-in station is stored on the mission when it is taken (`handIn.station`, defaulting to the giving station), one
+  runner function answers "which station" and "are we there", every screen asks it, and `completeMission` refuses anywhere
+  else. Guidance names the station from that same field (`{station}`), never a second copy of the name.
+- **Enforced by:** `tests/mission-handin-station.test.mjs` (a second station pocket proves the wrong counter pays nothing),
+  the linter's `handIn.station` checks, and `docs/MISSION_RULES.md` rule 11.
 
 ---
 

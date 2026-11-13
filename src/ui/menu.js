@@ -2,6 +2,7 @@
 // its buttons. Buttons carry a data-a action name and an optional data-b argument.
 
 import { on, emit } from "../util/events.js";
+import { notify, showNotice, hideNotice, setupNotices } from "./notice.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
 import { state, currentSave, applySave, resetPlaces } from "../state/state.js";
 import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
@@ -30,6 +31,7 @@ let panel;
 
 export function setupMenu() {
   panel = $("panel");
+  setupNotices();
   panel.addEventListener("click", onClick);
   panel.addEventListener("contextmenu", onInventoryContextMenu);
   panel.addEventListener("mouseover", e => {
@@ -41,7 +43,7 @@ export function setupMenu() {
   on("docked", ({ player } = {}) => {
     if (player && player !== state.player) return;
     if (state.ui.intro) return;
-    state.ui.toast = "";
+    hideNotice();
     render();
   });
   on("launched", ({ player } = {}) => {
@@ -50,14 +52,22 @@ export function setupMenu() {
     panel.hidden = true;
   });
   on("died", text => {
-    state.ui.toast = text;
+    showNotice(text);
     state.ui.tab = "h";
     render();
   });
   on("main-menu", () => {
     state.ui.intro = true;
     state.ui.tab = "m";
-    state.ui.toast = "";
+    hideNotice();
+    render();
+  });
+  // A mission changed while a docked screen is open — the last dialogue line
+  // closed, a dock-side script finished, a hand-in or an abandon went through.
+  // The panel is a snapshot, so redraw it; otherwise the Mission log keeps
+  // showing the old state (an Abandon button on a mission ready to hand in).
+  on("mission-ui-refresh", () => {
+    if (state.ui.intro || panel.hidden) return;
     render();
   });
 
@@ -77,8 +87,13 @@ function save() {
   saveAutosave(currentSave());
 }
 
+/**
+ * The one way an action's reply reaches the pilot. Routine confirmations are
+ * silent; refusals and warnings go to the fixed notice (ui/notice.js), so the
+ * panel never grows a line and never shifts.
+ */
 function toast(text) {
-  state.ui.toast = text;
+  notify(text);
 }
 
 /** Let pending mission hand-offs retry after the player changes cargo. */
@@ -112,14 +127,11 @@ const ACTIONS = {
     resumeFromSave();
     emit("mission-ui-refresh", {});
     const notice = recoveryNotice();
-    if (notice) {
-      state.ui.toast = notice;
-      render();
-    }
+    if (notice) showNotice(notice);
   },
   tab(name) {
     state.ui.tab = name;
-    state.ui.toast = "";
+    hideNotice();
     state.ui.confirmReset = false;
     state.ui.fit = null;
   },
@@ -133,20 +145,29 @@ const ACTIONS = {
     toast(contracts.acceptContract(+i));
   },
   ref() {
-    contracts.rerollBoard();
+    // Only this station's board reshuffles; other stations keep their offers.
+    contracts.rerollBoard(state.worldState, state.place);
   },
   drop(i) {
     // Abandon used to be silent; keep that contract-board behavior while the
-    // generic runner removes the selected active mission.
-    contracts.abandonContract(i === undefined ? undefined : +i);
+    // generic runner removes the selected active mission. The button carries a
+    // mission id (the panel lists only this station's missions, so a position
+    // would address the wrong record).
+    contracts.abandonContract(i);
   },
   done(i) {
-    toast(contracts.completeContract(i === undefined ? undefined : +i));
+    toast(contracts.completeContract(i));
   },
   story(id) {
     const definition = storyMission(id);
     if (!definition) {
       toast("That story mission is not available.");
+      return;
+    }
+    // Story missions belong to the station that gives them out; the log only
+    // lists them there, and the rule is enforced here too.
+    if (contracts.missionOfferStation(definition) !== state.place) {
+      toast("That story mission is not offered here.");
       return;
     }
     if (contracts.activeMissions().some(mission => mission.id === definition.id)) {
@@ -207,7 +228,6 @@ const ACTIONS = {
     const ship = viewedShip();
     const [from, to] = dir === "s" ? [inv.STATION, ship] : [ship, inv.STATION];
     const count = n === "all" ? Infinity : Math.max(1, +n || 1);
-    state.ui.toast = "";
     inv.moveItem(from, to, id, count);
     inventoryChanged();
   },

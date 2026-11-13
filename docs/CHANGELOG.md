@@ -20,6 +20,261 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
+
+Owner correction to the station-scoping round: "Active story missions are not visible if you dock into another station...
+accepting border signal doesnt show anything in progress when im docked at galereach." Right: progress is the pilot's,
+not the counter's. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **Every active mission is listed at every station.** `ui/missionlog.js` and the Contracts tab
+  (`ui/screens.js`) no longer filter the active list by station: a job taken at Meridian shows at Galereach with its
+  status, objective, progress bar and dialogue preview, and can be abandoned from anywhere. The `missionFiledAt` helper
+  is gone — it existed only for that filter.
+- **Only the hand-in is station-bound.** Elsewhere the card reads "Deliver to Meridian Station" and shows a disabled
+  **Hand in at Meridian Station** button; at the mission's own station the same button is **Hand in cargo**. Public
+  options are unchanged: the chest `completeMission` refusal, the cargo never leaving the hold, and the reward only at
+  the station that takes it.
+- **Station conversations stay at their station.** Now that a mission is listed everywhere, its counter dialogue must
+  not be playable from the wrong counter. A `requiresDock` dialogue is live only while docked at the station that gives
+  the mission out (`missionAtItsStation`): elsewhere the card is read-only and says "Return to Meridian Station to
+  continue talking.", and `advanceDialogue` refuses the same click. In-field dialogue (the beacon hand-off) is unchanged.
+- **Offers are still station-specific.** The story offer list (`missionOfferStation`) and per-station contract boards
+  (`boardAt`) are untouched: Galereach still offers nothing to accept, and an accepted Border Signal is not offered a
+  second time.
+- **Tests:** `tests/mission-station-scoping.test.mjs` now pins the corrected rule — both jobs visible at both stations,
+  hand-in live only at the right one, Abandon present everywhere, the real-seed check extended (accept the Border Signal
+  at Meridian, dock at Galereach, and the log shows the mission there with no story offer), and a new test that the
+  Meridian briefing cannot be played from another station.
+  `tests/mission-handin-station.test.mjs` expects the mission listed at the wrong station with a disabled, station-named
+  hand-in. 487 tests pass.
+
+Files: `src/ui/missionlog.js`, `src/ui/screens.js`, `src/sim/missions.js`, `src/sim/contracts.js`,
+`src/ui/README.md`, `testing/TESTING-BASELINE.md`,
+`tests/mission-station-scoping.test.mjs`, `tests/mission-handin-station.test.mjs`, `docs/MISSION_RULES.md`,
+`docs/architecture/ui-and-screens.md`, `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
+## 2026-11-13: No message line that moves the menu, and no "filed at another station" note
+
+Owner feedback on the docked screens: "if you are in another station it says 1 mission is filed at another station. fly
+there to read it. You dont need to mention that just say 'No active missions here'", and "remove these types of UI
+notifications... I dont like it when notifications cause the entire UI to shift". **Save version unchanged (v19)**;
+rebuild needed (`npm run build`, then `npm test`).
+
+- **The Mission log and Contracts tab no longer explain where the other work is.** A station with no missions simply
+  reads "No active missions here."; the `N missions are filed at another station` line is gone from both screens
+  (`ui/missionlog.js`, `ui/screens.js`). Filtering is unchanged — another station's missions still do not appear.
+- **The panel never prints a message.** `outpostHtml` used to start with `<div class="ok">…</div>`, so every action that
+  returned a string pushed the whole menu down: "Contract accepted. Launch when ready.", "Sold 12 items for 340 cr.",
+  "Basic Power Plant moved to storage.". That element and `state.ui.toast` are gone.
+- **Routine confirmations are silent; refusals and warnings are a fixed overlay.** New `ui/notice.js` owns the rule:
+  `isRoutineReply()` lists the replies that only restate the redrawn panel (accepted, paid, sold, moved, fitted,
+  restocked, repaired, bought-into-storage, saved/loaded/deleted slot, reset, imported), and `notify()` shows anything
+  else — a refusal, a save/import failure, a galaxy-recovery warning — in a `#panel-notice` element fixed to the
+  viewport (`role="status"`, click to dismiss, 7 s). An unrecognised message is shown, never swallowed. The "mission
+  failed" alert is untouched.
+- **No layout can shift:** `#panel-notice` is `position: fixed` outside the panel; the panel's markup has no message
+  slot at all. A test asserts both.
+- **Tests:** new `tests/ui-notices.test.mjs` (silent replies, visible refusals, the panel renders no message, the CSS is
+  fixed). Existing tests that observed `state.ui.toast` now read `shownNotice()` from the same module
+  (`tests/step10-fixes.test.mjs`, `tests/step11b-starmap.test.mjs`, `tests/navigation.test.mjs`); the mission-log tests
+  assert the elsewhere note is gone. 487 tests pass.
+
+Files: `src/ui/notice.js` (new), `src/ui/menu.js`, `src/ui/screens.js`, `src/ui/missionlog.js`, `src/ui/pause.js`,
+`src/state/state.js`, `src/styles.css`, `tests/ui-notices.test.mjs`, `tests/step10-fixes.test.mjs`,
+`tests/step11b-starmap.test.mjs`, `tests/navigation.test.mjs`, `tests/mission-station-scoping.test.mjs`,
+`tests/mission-handin-station.test.mjs`.
+
+---
+
+## 2026-11-13: A story mission is offered at one station, and only there
+
+Owner follow-up to the station-scoping round: "missions by default are specific to a station — Border Signal is only
+available at Meridian; at Galereach the Mission log should have nothing to accept as a story mission."
+**Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **The default is one station, and there is no "offered everywhere" form.** `missionOfferStation()` resolves the
+  offering station as `offeredAt`, else the station the mission is handed in at, else the home station — so an
+  authored mission without either field is still Meridian-only, never global. The Mission log lists a story offer
+  only where that resolves to the station being read, and `ui/menu.js` refuses a `story` action anywhere else.
+- **Fails closed instead of silently moving.** A mission whose `offeredAt` names an unknown id, or a pocket with no
+  station, is offered **nowhere** (the linter already reports it as an error) rather than falling back to the home
+  station. `sim/missions.js` gains `stationPocket(id)`, which requires a real station pocket, because `stationAt`
+  alone accepts any unknown id — the place catalog falls back to Meridian for ids it does not know. `missionHandInStation`
+  and the hand-in stamping use it too, so a corrupt `handIn.station` in an old save resolves from `origin` instead of
+  filing the mission at a station that does not exist.
+- **Verified at the real Galereach:** new regression in `tests/mission-station-scoping.test.mjs` builds the seed's
+  galaxy (122 station pockets), docks at the station named Galereach, and asserts the Mission log has no Border Signal
+  and no `data-a="story"` button there, while Meridian in the same galaxy still shows both. A second test pins the
+  fail-closed rule. 484 tests pass.
+
+Files: `src/sim/missions.js`, `tests/mission-station-scoping.test.mjs`, `docs/MISSION_RULES.md`,
+`docs/architecture/ui-and-screens.md`, `src/data/README.md`.
+
+---
+
+## 2026-11-13: Missions belong to the station that filed them, and the docked panel redraws itself
+
+Two owner-reported fixes. **Save version unchanged (v19)** — `world.boards` is an additive field with a
+default; rebuild needed (`npm run build`, then `npm test`).
+
+- **Station-specific missions and contracts:** a station's contract board used to be the world's one board,
+  so a job read at Meridian could be accepted at Depot, and the Mission log listed every active mission no
+  matter where it was taken. New `sim/contracts.js` `boardAt(placeId, world)` gives every station its own
+  offers (`world.board` stays the home station's list so old saves keep theirs in place; other stations get
+  `world.boards[placeId]`, generated on first look); `ensureBoard(world, placeId)` and
+  `rerollBoard(world, placeId)` work per station, and `acceptContract(index, profile, world, placeId)`
+  rerolls only the board it read. `acceptMission`/`instantiateMission` take the giving station explicitly,
+  so a contract taken from Depot's board is stamped Depot even when the caller is not standing there.
+- **The Mission log and Contracts tab are scoped to the current station:** both filter with
+  `missionFiledAt(mission)` (filed where it is handed in), and a line below says how many missions are
+  filed elsewhere ("1 mission is filed at another station. Fly there to read it."). Story missions are
+  offered only where `missionOfferStation()` points: `data/missions/story.js` now says `offeredAt: "reach"`
+  for the Border Signal, the linter rejects an `offeredAt` that is not a station, and `ui/menu.js` refuses a
+  `story` action for a mission offered elsewhere.
+- **Buttons address missions by id, not by list position:** the panels list a filtered selection, so a
+  position would hit the wrong record once another station's missions exist. `data-b` now carries
+  `mission.id` in `ui/screens.js` and `ui/missionlog.js`, and `ui/menu.js` passes it through unchanged.
+- **The docked panel redraws when a mission changes:** the panel is HTML drawn when it is opened, so closing
+  the Border Signal's final dialogue left the card offering **Abandon** while the beacon was already aboard.
+  `ui/missionlog.js` now emits `mission-ui-refresh` after every mission event except the ones that already
+  redraw the panel (mission-ui-refresh, main-menu, docked, launched); `ui/menu.js` listens and redraws the
+  visible panel. Closing the last line now shows **Hand in cargo** straight away.
+- **Save:** `newWorld()` gains `boards: {}`; `cleanWorld` keeps only pockets that exist and are not the home
+  station, and only boards with at least one valid offer, so a save never grows from stations merely
+  visited.
+- **Tests:** new `tests/mission-station-scoping.test.mjs` (5 tests: per-station boards and rerolls, filing at
+  the giving station, scoped log/tab with the elsewhere count, story offers only at their station, and the
+  dialogue-close redraw). `tests/mission-handin-station.test.mjs` now expects the wrong station to hide the
+  mission instead of disabling its button; `tests/step9-save.test.mjs` expects `boards`. 482 tests pass.
+
+Files: `src/sim/missions.js`, `src/sim/contracts.js`, `src/sim/session.js`, `src/state/profile.js`,
+`src/data/missions/story.js`, `src/data/missions/validate.js`, `src/ui/screens.js`, `src/ui/missionlog.js`,
+`src/ui/menu.js`, `tests/mission-station-scoping.test.mjs`, `tests/mission-handin-station.test.mjs`,
+`tests/step9-save.test.mjs`.
+
+---
+
+## 2026-11-13: Overlays everywhere in the open world, a quiet exit to the menu, and a cinematic title view
+
+Four owner-reported UI fixes. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **Pause card order:** Resume is now the first control and **Exit to main menu** the last, with the sound
+  switch between them. The markup lives in `ui/overlays.js` (`pauseOverlayHtml()`), so the order is one place.
+- **Pause and starmap while docked:** both used to be refused unless the pilot was flying. New
+  `ui/overlays.js` owns the rule (`canPause`, `canOpenStarmap`) and `main.js` plus `sim`-facing `openStarmap`
+  ask it: only the title screen, the pause overlay itself, a dead pilot or a warp refuses. Plotting from the
+  chart while docked works; the warp itself still needs a launch, and the chart now says "Docked: launch to
+  warp." instead of offering a course that does nothing.
+- **Quiet exit to the menu:** the simulation stops behind the title screen, so `updateAudio()` stopped
+  driving the loops and the engine droned on. `core/audio.js` gains `fadeToSilence(seconds)` (a 1.8 s ramp on
+  every looping voice — engine hiss and growl, roar, beam hum, drone, docked pad and its LFO — not a hard
+  cut), called from a `main-menu` listener. Playing again ramps everything back up.
+- **Cinematic title screen:** the menu used to show whatever the game camera last rendered (the pocket the
+  pilot quit in). New `render/menuview.js` draws its own scene — the home station turning with its planet
+  behind it — from `DEFAULT_PLACE` features only, on the path in `data/camera.js` (`MENU_CAMERA`,
+  `menu-pose`-style `menuPose`, sway 110 s, distance 520) and independent of the saved world, so the
+  background is the same every time. It also nudges the station left of centre on wide screens so the title
+  panel does not cover it. `render/scene.js` now exports `stationModel`/`planetModel` so both scenes use one
+  copy of the station geometry.
+- **Tests:** new `tests/ui-overlays.test.mjs` (pause card order, both overlays allowed at a station and
+  refused on the title screen/pause/warp/death, the title camera always framing the station with the planet
+  behind it, and the fade being safe with no speakers).
+- **Docs:** `docs/architecture/ui-and-screens.md` conventions, `src/ui`, `src/render` and `src/core` README
+  rows, and steps 4–6 of `testing/TESTING-BASELINE.md`.
+
+---
+
+## 2026-11-13: Every mission and contract is handed in at one named station
+
+Fixes "the game does not care which location you hand a mission in at." **Save version unchanged (v19)** — the field is
+additive and older missions resolve it from `origin`; rebuild needed (`npm run build`, then `npm test`).
+
+- **Why:** `completeMission` asked only that the pilot be docked, so any station paid any mission, and the guidance named
+  whichever station the pilot happened to be at instead of the one that takes the hand-in.
+- **The rule (data):** a mission is handed in at **one station** — the one that gave it out, unless its data names another
+  with `handIn.station: "<pocket id>"` (a job that starts at one station and ends at another). `BORDER_SIGNAL_MISSION` now
+  declares `handIn.station: "reach"` and says `"Return to {station} with the beacon."`.
+- **The runner (`sim/missions.js`):** `acceptMission` stamps `handIn.station` on the mission when it is taken, so the station
+  survives a save and cannot drift as the pilot travels. New `missionHandInStation`, `missionHandInStationName`,
+  `atMissionHandInStation` and `canCompleteMissionHere`. `completeMission` refuses any other station ("Hand this in at
+  Meridian Station."), takes nothing and pays nothing. Fallbacks so a mission can never become impossible: a mission saved
+  before the field existed resolves its `origin`, an offer resolves the station the pilot is docked at, and a station that no
+  longer exists falls back to the home station.
+- **Guidance:** `{station}` is filled in with the mission's hand-in station, never "a station" or wherever the pilot is;
+  a mission with nothing to hand over now says "Contract complete. Return to Meridian Station to collect the reward."
+- **Screens (`ui/missionlog.js`, `ui/screens.js`):** away from the station the status reads "Deliver to <station>" and the
+  hand-in button is disabled with the station named ("Hand in at Meridian Station"), next to Abandon; at the right station it
+  reads "Ready to hand in" and "Hand in cargo" as before. Story offers say where they are handed in.
+- **Save (`state/profile.js`):** `cleanMission` keeps `handIn` (objective and station) instead of dropping it, and Border
+  Signal's authored station always wins. No `SAVE_VERSION` bump.
+- **Linter (`data/missions/validate.js`):** `handIn.station` must be a pocket with a station feature; any other `handIn` key
+  is flagged; a hand-in sentence that names neither `{station}` nor the station itself is a warning.
+- **Tests:** new `tests/mission-handin-station.test.mjs` (a second station pocket proves the contract taken at Meridian cannot
+  be paid at Depot Station and vice versa, a data-chosen station, the save round trip, and the linter). Two existing wording
+  assertions updated.
+- **Docs:** `MISSION_RULES.md` rule 11 and a "Where the hand-in happens" paragraph, recipes 03 and 11, mission principles,
+  `src/sim/README.md`, and the playtest guide.
+
+---
+
+## 2026-11-13: Dying hands you a complete spare Wasp that can be fitted again
+
+Fixes "if you die, you get a free wasp. Cant then equip equipment to the ship." **Save version unchanged (v19)**;
+rebuild needed (`npm run build`, then `npm test`).
+
+- **Why:** `die()` deleted the lost hull's fleet records and then added the replacement as a bare hull id. A ship's bays *are*
+  `profile.loadout[ship]`, so the free Wasp had no bays at all: Outfitting had nothing to fit into, and drive, Hull HP and guns
+  all read as empty. A save/reload rebuilt the fit (`cleanLoadouts`), which is why the bug only showed in a live session.
+- **`state/profile.js`:** new `addShipRecords(profile, id)` (its own empty hold, full hull fraction, stock fit) and
+  `ensureShipRecords(profile, id)` (fills in only what is missing). One definition of a complete ship, used by every route that
+  adds or selects a hull, so a bought ship and a replacement can never differ in which records exist.
+- **`sim/session.js` `die()`:** the lent Wasp and any fallback hull now go through those helpers before `setShip`. The death text
+  is unchanged ("The station lent you a spare Wasp.") — it now simply is a fitted Wasp.
+- **`sim/economy.js`:** `buyShip` uses `addShipRecords` (same behaviour, one definition); `selectShip` runs `ensureShipRecords`
+  first, so a hull that a very old save left without a fit is repaired when the player picks it, not only on the next reload.
+- **Tests:** new `tests/ship-recovery.test.mjs` (the lent ship can be equipped and flies with Hull HP, drive and guns; falling
+  back to another owned ship keeps its cargo, fittings and damage; the helpers repair a hull missing its records).
+  `tests/fixtures/step8b-combat-lifecycle.json` was re-recorded: every snapshot before the death in that run is identical, and
+  the post-death snapshots now show a real ship (power, shields, hull, a gun bay, an empty hold) instead of a bare id.
+- **Not changed:** mission state. Cargo and mission items still go with the lost ship, so a mission that owed a lost item still
+  fails. The `testing/TESTING-DEATH-AND-MISSIONS.md` guide has a new "After a death" section for this.
+
+---
+
+## 2026-11-13: A mission is accomplished by its hand-in, not by its last step; contract wording and colours
+
+Fixes the Border Signal stuck mission and the contract wording. **Save version unchanged (v19)**;
+rebuild needed (`npm run build`, then `npm test`).
+
+- **Why:** after the Border Signal's last in-space line the HUD said the mission was done and to return for the reward. Dying
+  then lost the beacon, so the reward could never be collected and the mission stayed in the log forever. Contracts announced
+  "Mission complete" before their crates were handed in, and called themselves missions.
+- **`sim/missions.js`:** `isMissionComplete` is now `missionObjectivesDone` (the steps are finished; the mission is **not**
+  accomplished), and the `mission-completed` event is `mission-objectives-done`. The item requirement is now public as
+  `missionHandIn`. New `missionLostHandIn` fails (`lost-item`) a mission whose mission-only hand-in exists nowhere, so an
+  impossible mission never waits forever. Guidance after the last step comes from `handInNextText`: it names the cargo and
+  station and how much is still owed, and says "Contract complete"/"Mission complete" only when there is nothing to hand in.
+  Failure messages are the reason only ("Your ship was destroyed."); the notice adds "Contract failed"/"Mission failed".
+- **`player-dead`:** a mission whose objectives are done but whose mission-only item is still owed now fails too, with the
+  item named. `failMission` grows an `afterObjectives` option so only this "gone for good" case can fail a finished mission;
+  timeouts and sector changes still cannot. `abandonMission` uses the mission's own kind in its message.
+- **Data:** contract templates now name the station (`{station}`) and declare `handIn.objective` ("Deliver {count} {item} to
+  {station}."); Border Signal declares "Return to Meridian Station with the beacon."; the Ore run test mission declares its
+  hand-in. Contract missions remember the station they were taken from (`origin`, already a saved field) so field pockets can
+  name it. `templates.js` `mission()` accepts `handIn`.
+- **`ui/hud.js`, `styles.css`:** contract mission names are light blue (`--ice`), story mission names stay amber.
+- **`ui/missionlog.js`, `ui/screens.js`:** the status reads "Ready to hand in" / "Awaiting cargo" / "Complete" and the button
+  says "Hand in cargo" when goods are owed; Abandon is always offered when a mission is not ready. The failure notice and the
+  mission-log kind label use the mission's kind.
+- **Linter (`data/missions/validate.js`):** an item-bearing mission without `handIn.objective` is an error; so is guidance
+  that claims completion and any contract guidance that says "mission". Docs: `MISSION_RULES.md` (rules 9 and 10), `LESSONS.md`
+  (L15), `ROADMAP.md` (steps 12 and 13 ticked, log), the guides moved to `testing/passed/`, and a rewritten
+  `testing/TESTING-DEATH-AND-MISSIONS.md`. Tests: new death/wording/UI/lint regressions; 465/465 pass.
+
+---
+
 ## 2026-11-13: Dying no longer fails missions by default; "Mission failed" notice in the HUD
 
 Small gameplay change. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
@@ -69,129 +324,16 @@ Docs and one docs test only; **no game code changed, save version unchanged (v19
 
 ---
 
-## 2026-11-13: Docs restructure, LESSONS.md, docs check test, duplicate-mission guard
-
-Docs-only restructure so new AI chats read less and the project stays scalable, plus one small guard. **Save version
-unchanged (v19)**; rebuild needed (one source change).
-
-- **`docs/HANDOFF.md` rewritten short** (about 130 lines): start-here steps, a "read these docs for this task" table, current
-  state, the owner's ground rules (all kept), a "keeping the game scalable" section, the bug-report procedure and the doc map.
-  The old file is kept word for word in `docs/archive/HANDOFF_2026-11-10.md`; its long "Where things stand" section is now
-  `docs/architecture/feature-notes.md`.
-- **`docs/LESSONS.md` (new):** classes of bug earlier chats hit (repeated accept/abandon multiplying ships, full hold abandoning
-  a mission, warp mid-dialogue failing it, items appearing in the hold, and more), each with cause, rule and the test that
-  enforces it. Rule for every chat: when the owner reports a bug, add a failing test, fix the class, update LESSONS.
-- **`docs/HOW_TO_ADD.md` split:** the 21 recipes are now one file each in `docs/recipes/` (numbers unchanged), with an index.
-- **`docs/ARCHITECTURE.md` split:** conventions and known gaps moved word for word into `docs/architecture/` (content-data,
-  ship-systems, simulation-and-rendering, ui-and-screens, world-and-map); the main file keeps the layers, universal conventions,
-  events, state and saves. "Keeping the docs scalable" rewritten with the new rules (one home per fact, archive never delete).
-- **Status in one place:** step status lives only in `docs/ROADMAP.md` (current-position prose rewritten; the old text is in
-  `docs/archive/ROADMAP_STATUS_2026-11-10.md`). `docs/REFACTOR_PLAN.md` steps 1 to 11 moved to
-  `docs/archive/REFACTOR_PLAN_STEPS_1-11.md`.
-- **Playtest guides** moved from the project root to `testing/` (current ones on top, finished steps in `testing/passed/`,
-  `TEST-OLD-CODES.txt` beside them) with `testing/README.md`. Older changelog entries name the guides without a folder.
-- `README.md`, `AGENTS.md` and `docs/AI_PROMPTS.md` updated: read HANDOFF first and only the docs the task needs; the starter
-  prompt, the bug-report wording and the "content is data" rule.
-- **`tests/docs.test.mjs` (new):** fails if a doc grows past its size limit, a relative link breaks, an index misses a file,
-  HANDOFF's save version differs from `SAVE_VERSION`, a "Last checked" line is missing, or a lesson lacks a rule or enforcement.
-- **Source change: `acceptMission` (`sim/missions.js`) refuses to start a story mission that is already active.** Before, only
-  the Mission log hid an active offer, so a second start would run the script twice and double every spawn. New tests in
-  `tests/mission-invariants.test.mjs`: a story mission cannot be active twice; accepting and abandoning a mission over and over
-  never multiplies its ships or crates.
-- Changelog rotated per its own rule (more than 15 full entries): the oldest moved word for word to the archive with index lines.
-
----
-
-## 2026-11-13: Step 13d: mission rules, linter, templates and invariant tests
-
-Hardens the mission framework so illogical missions are caught when written, not found in play.
-No gameplay behaviour changes for Border Signal; **save version unchanged (v19)**; rebuild needed.
-
-- `docs/MISSION_RULES.md` (new): the realism rule, the eight rules and what enforces each, a checklist.
-  Linked from `AGENTS.md`, `HANDOFF.md`, `HOW_TO_ADD.md` section 11 and `REFACTOR_PLAN.md` step 13.
-- `src/data/missions/validate.js` (new) and `rules.js` (new, `minSpawnDistance` 600): a mission linter run
-  over every authored mission by `tests/mission-lint.test.mjs`. Errors on: missing `next`, objective or
-  situation; numeric step targets; unreachable steps, dead ends and loops; spawns too close or while
-  docked; a collected mission item nothing drops; `take-item` with no source; a wave wait with no wave;
-  the `deliver` step (nothing emits "delivered"); failure with no message; a mission-only item with no
-  `player-dead` failure rule.
-- Step targets now accept `"end"` (`sim/missions.js` `stepIndex`). Border Signal uses it instead of the
-  bare `next: 11`, and its last step names `next: "end"`. Numeric targets still work for old saves.
-- `src/data/missions/templates.js` (new): `briefing`, `radio`, `travelTo`, `loadCargo`, `handOver`,
-  `ambush`, `mineOre`, `sequence`, `mission`. They fill in the situation rules and every `next`.
-- `src/data/missions/test-missions.js` (new): Parcel run (cargo), Radio relay (radio only, a choice),
-  Ore run (mine N), Ambush run (fail and replay). New item `parcel` in `data/items.js`. They are not
-  offered to normal players; open the game with `?testmissions` and they appear under "Test missions" in
-  the Mission log (`ui/missionlog.js`). `storyMission(id)` also finds them.
-- `sim/missions.js`: a dock-side step that is blocked by a full hold now says "Dock at a station and make
-  room in your hold" when the pilot is flying, instead of only "make room".
-- `tests/mission-invariants.test.mjs` and `tests/mission-driver.mjs` (new): a scripted pilot plays every
-  mission, normally, wandering, reloading at every step, with a full hold, destroyed at every step (then
-  replaying), and two missions at once. Checks: never stuck; nothing silently failed or abandoned; items
-  move only by real pickup, hand-over or hand-in; dialogue buttons never change the world; spawns are
-  at a safe distance; a save and load keeps every authored field; replays start clean.
-- `tests/step13b-missions.test.mjs`: the reachability test accepts the `"end"` target.
-- `TESTING-13D-MISSION-RULES.md` (new): the owner playtest.
-- Known gaps recorded in MISSION_RULES.md: `deliver` is unimplemented, feature-anchored spawns, silent
-  timeouts, no escort objective.
-- Tests: 437 pass. Needs the owner playtest before step 14.
-
----
-
-## 2026-11-10: Name the Border Signal object and consume story hand-ins
-
-- Added a dedicated `beacon` catalogue item named **Beacon**. Border Signal's authored defeat drop, collect objective, dialogue wording and objective now refer to that id; ordinary hostile `salv` loot remains unchanged.
-- Mission reward hand-in detection now covers item-bearing `collect`, `deliver` and `mine` objectives, including story missions and nested parallel objectives. The exact required quantity is taken from the current station first and then the active ship hold before payout; missing stock leaves the completed mission active and unpaid.
-- Existing Border Signal mission records that used `salv` are migrated to `beacon` where they describe the authored persistent drop. Save version remains **19**.
-- Verification: `npm test` passes **381/381**, `npm run build` produces a **746 KB** bundle, the ZIP passes `unzip -t`, and the preview serves HTTP 200.
-
----
-
-## 2026-11-10: Make Border Signal's beacon a persistent physical drop
-
-- The Border Signal's authored Beacon now drops from the first patrol ship at that ship's defeat position instead of being silently granted by a mission script. Ordinary raider salvage loot remains additive, while the authored crate is mission-tagged and visually/physically collectible.
-- The mission crate survives leaving Hollow, world clearing and v19 save/load, restores once at its saved position, remains present when the hold is full, and marks itself collected only after a successful non-docked pickup. Abandoning or rewarding the mission removes its saved marker and runtime content.
-- Added headless coverage for physical pickup gating, defeat-position placement, full-hold retry, duplicate-free save/load restoration, collected-drop suppression, old-save fallback and cleanup. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
-
----
-
-## 2026-11-10: Make Border Signal handoffs resource-safe
-
-- A full cargo hold now pauses the beacon handoff with an actionable **Make room in your hold to continue.** instruction. Inventory changes and docking retry pending item scripts, but the beacon remains a Hollow retrieval: unloading at the station cannot complete a remote handoff; return and finish the arrival warp to collect it.
-- Multi-action item scripts preflight their combined capacity and resources, so a blocked batch cannot partially transfer an earlier item and duplicate it on retry. Station-gated dialogue also refuses stale calls without a current docked pilot.
-- Border Signal no longer auto-fails for leaving Kestrel Hollow or for an undisplayed timeout. Its only automatic failure is the clear, reported cause of ship destruction; explicit player abandonment remains the destructive choice.
-- The station briefing now uses spoiler-safe investigation wording and leads to a travel objective. The mission activates its sector and spawns the distant, mission-tagged patrol only after the pilot enters Kestrel Hollow, never because a dialogue button was clicked.
-- v19 save sanitization now restores new situation requirements, preserves nested parallel counters, and migrates older Border Signal saves by stable step id without reviving timeout/leave failure. Documented the enforcement plan and known limits for all eight architecture principles in `docs/REFACTOR_PLAN.md`. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
-
----
-
-## 2026-11-10: Clean up abandoned mission content and gate dialogue
-
-- Mission-spawned hostiles, their hostile shots and their loot now carry the mission identity. Abandoning a mission removes those records and their views without clearing ordinary patrols, derelicts or other place content.
-- Authored station-contact dialogue becomes **Redock to continue talking.** when the pilot undocks, with Continue and choice controls blocked until docking again. In-field dialogue remains actionable during flight, including the Border Signal beacon handoff.
-- Leaving a mission sector while a dialogue line is open no longer interprets the open panel as mission abandonment. This keeps a pending station conversation resumable after redocking and lets the beacon line survive a return warp before Close is clicked.
-- Added regressions for scripted-wave cleanup, dialogue scope, save metadata and the warp-before-Close case. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
-
----
-
-## 2026-11-10: Remove unexplained mission progress counters
-
-- Removed the ambiguous `Progress 0/2` display from story missions. It was counting the two lines in the current dialogue, not overall mission completion, so dialogue-line counts and non-quantitative story-step bars are no longer shown in the Mission log.
-- Quantitative contract missions retain a clearly labelled `Objective progress: 0 of N` count, and hunt progress in the flight HUD now says `0 of N defeated` instead of an unexplained fraction.
-- Added UI regression coverage and updated the browser checklist. Save version remains **19**; rebuild the generated HTML and complete-project ZIP after this change.
-
----
-
-## 2026-11-10: Keep mission objectives spoiler-safe
-
-- Separated player-facing `objective` text from compatibility/internal `log` text. The HUD and Mission log now use only the data-defined objective, so a procedural trigger such as `wave-clear` cannot reveal a future encounter.
-- The Border Signal now tells the player to **Investigate the signal in Kestrel Hollow** and later **Stay with the signal in Kestrel Hollow**, then uses discovery-oriented wording before the return home. Contract templates use data-defined objective placeholders without changing their known requirements.
-- Objective text survives the existing v19 save sanitization, and fallback wording for missions without an authored objective no longer exposes internal triggers or step counts. Focused mission/UI tests pass **21/21**; rebuild the generated HTML and complete-project ZIP after this change.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: Docs restructure, LESSONS.md, docs check test, duplicate-mission guard
+- 2026-11-13: Step 13d: mission rules, linter, templates and invariant tests
+- 2026-11-10: Name the Border Signal object and consume story hand-ins
+- 2026-11-10: Make Border Signal's beacon a persistent physical drop
+- 2026-11-10: Make Border Signal handoffs resource-safe
+- 2026-11-10: Clean up abandoned mission content and gate dialogue
+- 2026-11-10: Remove unexplained mission progress counters
+- 2026-11-10: Keep mission objectives spoiler-safe
 - 2026-11-10: Show player-facing mission objectives in the flight HUD
 - 2026-11-10: Stabilize story mission completion and scripted hand-offs
 - 2026-11-10: Add pause exit and split the main menu actions

@@ -13,7 +13,7 @@ import { MODULES } from "../data/modules.js";
 import { isShop, shopDef, shopRow } from "../data/shops.js";
 import { ownedCount } from "./fitting.js";
 import { setShip } from "./player.js";
-import { stockFor } from "../state/profile.js";
+import { addShipRecords, ensureShipRecords } from "../state/profile.js";
 import {
   STATION, buyItem as buyInto, capacityOf, countOf, hasRoomFor, holdOf, loadOf, moveItem, stockOf,
   takeItem, unitsOf, valueOf,
@@ -145,15 +145,18 @@ export function buyShip(id, profile = state.profile, world = state.worldState) {
   if (profile.cr < price || profile.ships.length >= world.base.hangar + 1) return;
   profile.cr -= price;
   profile.ships.push(id);
-  holdOf(id, profile);                     // its own empty hold
-  delete profile.hp[id];
-  profile.loadout[id] = stockFor(id);      // comes with the stock modules fitted
+  // Its own empty hold, no damage and the stock modules fitted: one shared
+  // definition of a complete ship, so a bought hull and a replacement hull can
+  // never differ in which records exist.
+  addShipRecords(profile, id);
 }
 
 export function selectShip(id, P = state.player, profile = profileOf(P)) {
   assertEconomyPilot(P, profile);
   // Each ship has its own hold now, so cargo stays with the ship it is in and
-  // nothing has to fit before you can switch.
+  // nothing has to fit before you can switch. Fill in anything an old save left
+  // out: a hull with no fit has no bays and nothing to fly with.
+  ensureShipRecords(profile, id);
   profile.ship = id;
   setShip(id, P, profile);
   refillPower(P, profile);       // docked: the new hull's cells are full

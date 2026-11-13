@@ -77,8 +77,13 @@ export function sequence(steps) {
   });
 }
 
-/** A complete story-kind mission definition. */
-export const mission = ({ id, title, steps, credits = 0, fails }) => ({
+/**
+ * A complete story-kind mission definition. `handIn.objective` is the sentence
+ * shown after the last step while the mission still owes items: a mission whose
+ * objectives collect or mine an item is not accomplished until the station
+ * hand-in consumes it, and the linter requires this sentence for such missions.
+ */
+export const mission = ({ id, title, steps, credits = 0, fails, handIn }) => ({
   id,
   title,
   kind: "story",
@@ -86,4 +91,5 @@ export const mission = ({ id, title, steps, credits = 0, fails }) => ({
   steps: sequence(steps),
   rewards: { credits },
   fails: fails || {},
+  ...(handIn ? { handIn } : {}),
 });

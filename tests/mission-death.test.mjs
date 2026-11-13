@@ -7,9 +7,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { emit } from "../src/util/events.js";
 import { PARCEL_RUN, AMBUSH_RUN, RADIO_RELAY, ORE_RUN } from "../src/data/missions/test-missions.js";
-import { missionOnlyItems, activeMissions, isMissionFailed, failMission } from "../src/sim/missions.js";
+import { STORY_MISSIONS } from "../src/data/missions/index.js";
+import {
+  missionOnlyItems, activeMissions, isMissionFailed, failMission, missionNextText, missionObjectivesDone,
+} from "../src/sim/missions.js";
 import { failureNoticeHtml } from "../src/ui/missionlog.js";
-import { accept, ledger, newPilot, resetLedger } from "./mission-driver.mjs";
+import { accept, die, drive, emptyHoldIfFull, ledger, newPilot, resetLedger } from "./mission-driver.mjs";
 
 const withPilot = fn => { const ctx = newPilot(); try { return fn(ctx); } finally { ctx.restore(); } };
 const dieWith = (ctx, lost) => emit("player-dead", { player: ctx.player, profile: ctx.profile, lost });
@@ -44,6 +47,35 @@ test("death: a mission that asks for it still fails on death, with its own messa
   assert.equal(ledger.failed[0].message, AMBUSH_RUN.fails.message);
 }));
 
+test("death: the last line of a mission does not accomplish it; dying with the owed item fails it", () => withPilot(ctx => {
+  const def = STORY_MISSIONS[0];   // The Border Signal
+  accept(ctx, def);
+  assert.equal(drive(ctx, def.id, { unblock: emptyHoldIfFull }), "objectives-done",
+    "every step is finished, but the beacon is still owed");
+  const mission = activeMissions(ctx.profile)[0];
+  assert.ok(mission, "the mission stays active until the hand-in");
+  assert.equal(missionObjectivesDone(mission), true);
+  assert.match(missionNextText(mission, ctx.profile), /beacon/i, "it still asks for the beacon");
+  assert.equal(ctx.profile.done, 0, "nothing was paid or counted yet");
+  die(ctx);
+  assert.equal(ledger.failed.length, 1, "dying with the owed beacon fails the mission");
+  assert.match(ledger.failed[0].message, /beacon/i, "and names the lost item");
+  assert.equal(activeMissions(ctx.profile).length, 0, "the mission is gone, not stuck");
+  assert.equal(ctx.profile.done, 0, "a failed hand-in pays nothing");
+}));
+
+test("death: a mission-only hand-in that exists nowhere fails instead of waiting forever", () => withPilot(ctx => {
+  const def = STORY_MISSIONS[0];
+  accept(ctx, def);
+  drive(ctx, def.id, { unblock: emptyHoldIfFull });
+  const mission = activeMissions(ctx.profile)[0];
+  delete ctx.profile.holds[ctx.profile.ship].beacon;   // the only copy is gone
+  emit("docked", { player: ctx.player, profile: ctx.profile });
+  assert.equal(isMissionFailed(mission), true, "the impossible hand-in fails the mission");
+  assert.match(ledger.failed[0].message, /beacon/i);
+  assert.equal(activeMissions(ctx.profile).length, 0);
+}));
+
 test("death: a finished mission waiting for its reward is never failed by dying with the item", () => withPilot(ctx => {
   const mission = accept(ctx, PARCEL_RUN);
   mission.completed = true;
@@ -53,7 +85,7 @@ test("death: a finished mission waiting for its reward is never failed by dying 
 }));
 
 test("failures always carry a message, even when the rule has none", () => withPilot(ctx => {
-  for (const [reason, text] of [["player-dead", /ship was destroyed/], ["timeout", /time ran out/], ["left-sector", /left the area/]]) {
+  for (const [reason, text] of [["player-dead", /ship was destroyed/], ["timeout", /Time ran out/], ["left-sector", /left the area/]]) {
     resetLedger();
     const mission = accept(ctx, RADIO_RELAY);
     failMission(mission, reason, ctx.profile, { player: ctx.player }, { action: "abandon" });

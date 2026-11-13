@@ -1525,6 +1525,7 @@ const menu = await loadHeadless("src/ui/menu.js", {
   prepareGalaxySave: "src/sim/galaxy-session.js", createPlayer: "src/sim/player.js",
   configurePlayer: "src/sim/session.js", resumeFromSave: "src/sim/session.js",
   encodeSave: "src/state/storage.js", placeAt: "src/data/places.js",
+  shownNotice: "src/ui/notice.js", hideNotice: "src/ui/notice.js",
 });
 const menuPanel = document.getElementById("panel");
 function menuClick(a, b) {
@@ -1540,7 +1541,7 @@ function menuBoot() {
   menu.configurePlayer(menu.createPlayer(), save.profile);
   menu.state.ui.intro = true;
   menu.state.ui.tab = "s";
-  menu.state.ui.toast = "";
+  menu.hideNotice();
   return save;
 }
 menuBoot();
@@ -1559,7 +1560,7 @@ test("11B: intro, slot and import recovery notices survive; a bad import leaves 
   menu.applySave(menu.prepareGalaxySave(raw));
   menu.state.ui.intro = true;
   menuClick("intro");
-  assert.match(menu.state.ui.toast, /character and cargo are safe/);
+  assert.match(menu.shownNotice(), /character and cargo are safe/);
   assert.equal(menu.state.galaxyRecovery, null);
   assert.equal(menu.state.player.docked, true);
 
@@ -1567,22 +1568,24 @@ test("11B: intro, slot and import recovery notices survive; a bad import leaves 
   menu.state.ui.intro = false;
   menu.state.profile.cr = 1;
   menuClick("ld", "1");
-  assert.match(menu.state.ui.toast, /^Loaded slot 1/);
-  assert.match(menu.state.ui.toast, /character and cargo are safe/);
+  // The routine "Loaded slot 1" is silent; the recovery warning appended to it
+  // is not, so the combined message is shown once.
+  assert.match(menu.shownNotice(), /^Loaded slot 1/);
+  assert.match(menu.shownNotice(), /character and cargo are safe/);
   assert.equal(menu.state.profile.cr, 1234);
 
   menu.state.profile.cr = 2;
   document.getElementById("xt").value = legacyCode(raw);
   menuClick("im");
-  assert.match(menu.state.ui.toast, /^Save imported\./);
-  assert.match(menu.state.ui.toast, /character and cargo are safe/);
+  assert.match(menu.shownNotice(), /^Save imported\./);
+  assert.match(menu.shownNotice(), /character and cargo are safe/);
   assert.equal(menu.state.profile.cr, 1234);
 
   const galaxyBefore = menu.state.galaxy;
   const bad = { v: 16, profile: { v: 16 }, world: { galaxy: { seed: 999 } } };
   document.getElementById("xt").value = legacyCode(bad);
   menuClick("im");
-  assert.equal(menu.state.ui.toast, "That code is not a valid save.");
+  assert.equal(menu.shownNotice(), "That code is not a valid save.");
   assert.equal(menu.state.profile.cr, 1234);
   assert.equal(menu.state.galaxy, galaxyBefore);
   assert.deepEqual(menu.placeAt("sys-001").pos, galaxyBefore.systemsById["sys-001"].pos);

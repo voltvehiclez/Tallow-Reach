@@ -27,6 +27,14 @@ objectives are handed in through the same station-first/ship-hold inventory path
 consumed only when the reward succeeds, so a completed mission with missing stock remains claimable.
 The old singular `profile.mission` property is
 only a non-enumerable compatibility view of the first active mission; do not build new code around it.
+An item-bearing mission is **not accomplished by its last step**: it is paid when `completeMission` consumes the hand-in.
+Give it `handIn: { objective: "Deliver {count} {item} to {station}." }` (the linter requires it), and never write
+"complete", "completed" or "accomplished" in an `objective` — the HUD shows the hand-in sentence until the goods are paid.
+A lost mission-only hand-in fails the mission with a message rather than waiting forever.
+A mission is handed in at **one station**: by default the one that gave it out, recorded when the pilot starts it. To send
+the pilot somewhere specific, name the pocket — `handIn: { station: "reach", objective: "Return to {station} with the beacon." }`
+— and use `{station}` in the sentence so it always names the right station. The reward is refused anywhere else and the
+Mission log disables the hand-in button there, so never write a second file or screen that pays a mission.
 
 To add a contract, edit `src/data/missions/contracts.js`: add its type, generator, one-line wording,
 and a template step, then expose it through the contract board facade in `src/sim/contracts.js`.

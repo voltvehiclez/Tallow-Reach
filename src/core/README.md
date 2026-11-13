@@ -2,7 +2,7 @@
 
 | File | What it does |
 |---|---|
-| `audio.js` | All sound, synthesised with Web Audio. The **`SFX` table** says what each game sound is, played by the one `on("sfx", playSfx)` listener — the sim emits `sfx` events and never calls this file. `tone()`, `nz()`, `uiSound()`, `hoverSound()`, the warp pair `warpCharge()`/`warpBurst()`, `oreGained()` (a chime when a beam cycle banks an ore), per-frame `updateAudio()`, cosmetic-only randomness, mute (`toggleMute`, `isMuted`) and `setAudioSuspended` for pause/local chart (the requested suspension survives a later user-gesture `initAudio`). |
+| `audio.js` | All sound, synthesised with Web Audio. The **`SFX` table** says what each game sound is, played by the one `on("sfx", playSfx)` listener — the sim emits `sfx` events and never calls this file. `tone()`, `nz()`, `uiSound()`, `hoverSound()`, the warp pair `warpCharge()`/`warpBurst()`, `oreGained()` (a chime when a beam cycle banks an ore), per-frame `updateAudio()`, cosmetic-only randomness, mute (`toggleMute`, `isMuted`) and `setAudioSuspended` for pause/local chart (the requested suspension survives a later user-gesture `initAudio`). `fadeToSilence(seconds)` ramps every looping voice (engine, roar, hum, drone, docked pad) to zero — the `main-menu` listener uses it, because nothing drives the loops once the simulation stops behind the title screen. |
 | `input.js` | The only file that knows a key code. `HELD` + `syncControls()` fill `localPlayer().controls`; `BINDINGS` maps one-off keys to named `action` events (M is `starmap`, travel actions carry `to`). An open chart releases/zeroes flight input and leaves Space/Enter to focused UI controls; `clearControls()` also runs on blur. |
 
 Rules:

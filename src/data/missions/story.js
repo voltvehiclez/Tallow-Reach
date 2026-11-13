@@ -7,6 +7,9 @@ export const BORDER_SIGNAL_MISSION = {
   title: "The Border Signal",
   kind: "story",
   requires: [],
+  // Archivist Vale gives this out at Meridian Station; the Mission log only
+  // offers it there, and its hand-in comes back to the same counter.
+  offeredAt: "reach",
   origin: "hollow",
   steps: [
     {
@@ -127,6 +130,14 @@ export const BORDER_SIGNAL_MISSION = {
     },
   ],
   rewards: { credits: 300 },
+  // The mission is NOT accomplished when the last line is read: it is accomplished
+  // when the beacon is handed in at a station. Until then the HUD keeps saying so,
+  // and losing the beacon (the hold is destroyed with the ship) fails the mission.
+  // Handed in at Meridian Station, not at whatever station the pilot happens to
+  // dock at: `handIn.station` names the pocket, and the runner refuses the
+  // reward anywhere else (docs/MISSION_RULES.md). Omit it and the mission is
+  // handed in at the station that gave it out instead.
+  handIn: { station: "reach", objective: "Return to {station} with the beacon." },
   // No failure rules: dying does not fail this mission. Carrying the beacon when the ship
   // is destroyed does (the framework fails any mission whose mission-only item is lost).
   fails: {},
