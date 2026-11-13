@@ -20,6 +20,109 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-13: Notices hang just below the flight message line
+
+Owner request: "Make it so that all pop up notifications like the confirmation after you have discarded an items appear
+by default in the top middle part of the screen in the top 25% of the screen", then: "Its too high up, it should be
+positioned just below the UI element in ship UI where it says 'Empty weapon slot' etc. Make sure it doesnt overlap with
+the Empty weapon / Warp: slot UI element though." **Save version unchanged (v19)**; rebuild needed (`npm run build`,
+then `npm test`).
+
+- **`#panel-notice` sits under the centred message line.** It is still fixed to the viewport (so it can never move the
+  panel), still `role="status"`, 7 s or a click to dismiss, and still `left: 50%` + `translateX(-50%)`. `ui/notice.js`
+  `placeNotice()` now measures `#msg` — the centred line at 14% of the screen that says **"Empty weapon slot"** when a
+  weapon switch finds nothing fitted, or names the warp — on every notice, and puts the notice **12 px under its bottom
+  edge**, so the two never touch and a wrapped warp message pushes the notice down with it.
+- **Docked and on the title screen** the HUD is away, so the line measures nothing: the same band is derived from the
+  viewport height (`0.14 × height + one 26 px line + 12`), and `styles.css` carries `top: 16%` as the pre-script default.
+  A window resize re-measures while a notice is showing.
+- **Correction to the first attempt:** it was anchored to `#tr`, the top-right HUD block that also prints "Empty weapon
+  slot" as the fitted-weapon readout. That is not the element the owner meant — the notification they compare against is
+  the centred `#msg` line — so the anchor moved. The "mission failed" alert in `missionlog.js` was not touched.
+- **Tests:** `tests/ui-notices.test.mjs` asserts the rule is centred with the `16%` band and no `bottom`;
+  `tests/ui-notice-position.test.mjs` drives `placeNotice()` itself — 164 px under a message line at 126 px with one line
+  of text, 190 px when the message wraps to two, and the same 164 px from the viewport fallback when the line is hidden.
+  502 tests pass.
+
+Files: `src/ui/notice.js`, `src/styles.css`, `tests/ui-notices.test.mjs`, `tests/ui-notice-position.test.mjs`,
+`src/ui/README.md`, `docs/architecture/ui-and-screens.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
+## 2026-11-13: Right-click Discard everywhere — how many, then "are you sure?"
+
+Owner request: "Add a right click function to inventories called 'Discard'. This just trashes an item. This works in
+both station and ship ui. So this will be the first thing you can do with items in space." Follow-up: "When clicking on
+discard a pop up should come up asking how many you want to discard the same way when you right click and sell. Also
+before discarding the final click should ask you 'are you sure you want to discard x?'" **Save version unchanged
+(v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **One shared popover, two steps** (`ui/discard.js`, used by the station panel and the flight card). Step one is the
+  sell box's own number field — **Discard Ferrite**, `Amount (1–7)`, defaulting to the whole stack — with **Discard**
+  and **Cancel**. Step two is the question the owner asked for: **"Are you sure you want to discard 3 Ferrite?"** with
+  "It cannot be recovered." and only then **Discard** / **Cancel**. Nothing leaves the hold until the second click;
+  Enter commits the visible step, Esc closes the box, and a count outside 1–N is refused with the sell box's wording.
+- **Station panel:** the tile menu still lists **Sell** then **Discard ×N**; Discard now opens the popover instead of
+  trashing at once, and the commit trashes from that tile's own place, notices, saves, redraws and re-emits
+  `mission-inventory-changed` so pending hand-offs retry.
+- **Flight card:** the same popover from the hold's right-click menu, autosaving and redrawing the card on commit.
+- **One rule, one function:** `data/items.js` `canDiscard(id)` refuses only mission items (a beacon or parcel cannot be
+  found again), and `sim/inventory.js` `discardItem(where, id, n)` takes `n` (whole stack by default) and returns the
+  pilot's message ("Discarded 2 Ferrite from the Wasp.").
+- **Fixed after the owner's playtest:** (1) *"the are you sure tab doesnt appear in the ship ui"* — the popover's step
+  one swapped its own `innerHTML`, which detached the clicked button, so the flight card's click handler saw a target
+  outside the popover and closed the question it had just opened. `ui/discard.js` now stops propagation for clicks
+  inside the popover (a test fails without that line). (2) *"mouse cursor is not visible when moving it outside a
+  menu"* — the canvas hides the system pointer for mouse-look flight while the HUD draws its own reticle, so beside the
+  station panel there was no pointer at all. `ui/hud.js` `setReticle()` hides the HUD and adds `body.no-reticle`
+  together, and `styles.css` gives the canvas `cursor: default` in that state: docked and on the title screen the real
+  pointer is back.
+- **Tests:** `tests/inventory-discard.test.mjs` (whole and partial stacks in hold and station, the wording, the mission
+  rule, both screens' tiles carrying `data-where`, both menus wired through the popover, the ask/question HTML), the
+  DOM test in `tests/ui-cargo.test.mjs`, which walks the whole flight-card flow: right-click → menu → amount box (whole
+  stack) → bad count refused → question surviving its own click → confirm trashes exactly that many → cancel keeps
+  cargo → mission item greyed, and `tests/ui-cursor.test.mjs` for the pointer/hand-over. 501 tests pass.
+
+Files: `src/ui/discard.js` (new), `src/data/items.js`, `src/sim/inventory.js`, `src/ui/screens.js`, `src/ui/menu.js`,
+`src/ui/cargo.js`, `src/styles.css`, `tests/inventory-discard.test.mjs`, `tests/ui-cargo.test.mjs`, `src/ui/hud.js`, `tests/ui-cursor.test.mjs` (new), `src/ui/README.md`, `src/sim/README.md`,
+`docs/architecture/ui-and-screens.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
+## 2026-11-13: Press I in space to read the ship's inventory, and the chart no longer stops the clock
+
+Owner request: "can we add menu of the current ship's inventory if we click 'i' when in space? Same layout as the
+inventory when in a station but it can be a bit wider." Follow-up in the same round: drop the card's sub-line, make it
+**7 tiles across and 5 rows** tall at the same total width, and "make it so that the map and the inventory dont pause
+the game". **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **I in space opens the hold.** New `ui/cargo.js` owns a modal card outside the docked panel: `screens.js`
+  `cargoHtml()` draws the same `inv-col`/`inv-grid`/`inv-item` tiles as the station Inventory tab, but only the hold of
+  the ship being flown, in an **880 px** card instead of the station panel's 580 px. No sub-line, and **7 tiles a row by
+  5 rows** (`slots: 35`, narrower boxes at the same tile height and total width). In flight there is nowhere to move
+  cargo, so the tiles are labels (`inv-item-read`), with no move, sell or ship-switch controls.
+- **The chart and the hold never stop the world.** `sim/step.js` `isSimulationPaused()` now counts **only** the pause
+  card and the title screen, so time, physics and audio keep running behind either overlay in every mode (the chart
+  used to pause a single-player flight and mute it). Both still release held flight input and block the
+  dock/lock/weapon/jump hotkeys while open, and both close on docking.
+- **It behaves like the chart otherwise.** **I** or **Esc** closes the hold, **P** closes it and opens the pause card,
+  the Close button and a click outside work, and docking, the title screen or death close it. `canOpenCargo()` refuses
+  while docked, dead, warping, paused, on the title screen or over the starmap.
+- **Docked, I is the Inventory tab.** In a station the panel already shows the tabs, so `I` switches it to Inventory
+  (`menu.js` `openStationTab`). The launch help text now mentions the key.
+- **Tests:** new `tests/ui-cargo.test.mjs` (the same tile layout, capacity and 7×5 slot field, read-only in flight while
+  the station tab keeps its move buttons, the open/refuse rule, and the world staying live); the chart's frame-gate test
+  now asserts that neither overlay pauses and that the pause card and title screen still do. 492 tests pass.
+
+Files: `src/ui/cargo.js` (new), `src/ui/screens.js`, `src/ui/menu.js`, `src/main.js`, `src/core/input.js`,
+`src/ui/starmap.js`, `src/sim/step.js`, `src/state/state.js`, `src/styles.css`, `tests/ui-cargo.test.mjs`,
+`tests/step11b-starmap.test.mjs`, `tests/inventory.test.mjs`, `src/ui/overlays.js`, `tests/ui-overlays.test.mjs`,
+`src/ui/README.md`, `src/sim/README.md`,
+`docs/architecture/ui-and-screens.md`, `docs/architecture/world-and-map.md`, `docs/architecture/feature-notes.md`,
+`docs/VISION.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
 
 Owner correction to the station-scoping round: "Active story missions are not visible if you dock into another station...
@@ -243,89 +346,11 @@ rebuild needed (`npm run build`, then `npm test`).
 
 ---
 
-## 2026-11-13: A mission is accomplished by its hand-in, not by its last step; contract wording and colours
-
-Fixes the Border Signal stuck mission and the contract wording. **Save version unchanged (v19)**;
-rebuild needed (`npm run build`, then `npm test`).
-
-- **Why:** after the Border Signal's last in-space line the HUD said the mission was done and to return for the reward. Dying
-  then lost the beacon, so the reward could never be collected and the mission stayed in the log forever. Contracts announced
-  "Mission complete" before their crates were handed in, and called themselves missions.
-- **`sim/missions.js`:** `isMissionComplete` is now `missionObjectivesDone` (the steps are finished; the mission is **not**
-  accomplished), and the `mission-completed` event is `mission-objectives-done`. The item requirement is now public as
-  `missionHandIn`. New `missionLostHandIn` fails (`lost-item`) a mission whose mission-only hand-in exists nowhere, so an
-  impossible mission never waits forever. Guidance after the last step comes from `handInNextText`: it names the cargo and
-  station and how much is still owed, and says "Contract complete"/"Mission complete" only when there is nothing to hand in.
-  Failure messages are the reason only ("Your ship was destroyed."); the notice adds "Contract failed"/"Mission failed".
-- **`player-dead`:** a mission whose objectives are done but whose mission-only item is still owed now fails too, with the
-  item named. `failMission` grows an `afterObjectives` option so only this "gone for good" case can fail a finished mission;
-  timeouts and sector changes still cannot. `abandonMission` uses the mission's own kind in its message.
-- **Data:** contract templates now name the station (`{station}`) and declare `handIn.objective` ("Deliver {count} {item} to
-  {station}."); Border Signal declares "Return to Meridian Station with the beacon."; the Ore run test mission declares its
-  hand-in. Contract missions remember the station they were taken from (`origin`, already a saved field) so field pockets can
-  name it. `templates.js` `mission()` accepts `handIn`.
-- **`ui/hud.js`, `styles.css`:** contract mission names are light blue (`--ice`), story mission names stay amber.
-- **`ui/missionlog.js`, `ui/screens.js`:** the status reads "Ready to hand in" / "Awaiting cargo" / "Complete" and the button
-  says "Hand in cargo" when goods are owed; Abandon is always offered when a mission is not ready. The failure notice and the
-  mission-log kind label use the mission's kind.
-- **Linter (`data/missions/validate.js`):** an item-bearing mission without `handIn.objective` is an error; so is guidance
-  that claims completion and any contract guidance that says "mission". Docs: `MISSION_RULES.md` (rules 9 and 10), `LESSONS.md`
-  (L15), `ROADMAP.md` (steps 12 and 13 ticked, log), the guides moved to `testing/passed/`, and a rewritten
-  `testing/TESTING-DEATH-AND-MISSIONS.md`. Tests: new death/wording/UI/lint regressions; 465/465 pass.
-
----
-
-## 2026-11-13: Dying no longer fails missions by default; "Mission failed" notice in the HUD
-
-Small gameplay change. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
-
-- **Why:** death already costs the ship and its hold, so it should not also fail a mission unless the mission wants that.
-- **`sim/missions.js`:** a mission now fails on death only if its data declares `fails.on: ["player-dead"]`, or the ship was carrying a
-  mission-only item (category `mission`) the mission needs (new `missionOnlyItems(mission)`). The second case needs no declaration and
-  says "Your ship was destroyed and the X it carried was lost." Every failure now carries a message (a default per reason when
-  the rule has none) and the `mission-failed` event carries `title`.
-- **`sim/player.js`:** `player-dead` now carries `lost`, the hold at the moment of death, so the result never depends on listener order.
-- **Data:** The Border Signal no longer declares a death failure (it still fails if you die carrying the beacon); the Parcel run test
-  mission lost its explicit rule (same behaviour, now derived); the Ambush run keeps its explicit one on purpose. Saved Border Signal
-  missions pick up the new rule on load (their `fails` is re-read from the data).
-- **`ui/missionlog.js`, `styles.css`:** a red "Mission failed: <mission>" notice with the reason sits over the flight HUD and the docked
-  screen for 15 s or until clicked. Abandoning shows none.
-- **Linter:** no longer requires a death rule for missions that use mission items (the framework handles it).
-- **Tests:** new `tests/mission-death.test.mjs`; the die-at-every-step invariant, the lint, 13b and 13c tests updated. Docs:
-  `MISSION_RULES.md`, `LESSONS.md` (L10), new guide `testing/TESTING-DEATH-AND-MISSIONS.md`.
-
----
-
-## 2026-11-13: Docs consistency pass for multi-AI handoffs, changelog capped at 10 entries
-
-Docs and one docs test only; **no game code changed, save version unchanged (v19)**, no rebuild needed.
-
-- **Changelog rule simplified and enforced:** `CHANGELOG.md` holds **at most 10 full entries**; adding one that makes 11 moves the
-  oldest to the archive (verbatim) with an index line. The old "more than 15, then trim to 10" wording is gone from `CHANGELOG.md`,
-  `ARCHITECTURE.md`, `HOW_TO_ADD.md`, `AI_PROMPTS.md`, `AGENTS.md` and `HANDOFF.md`. This change moved the oldest entry
-  ("Stabilize story mission completion and scripted hand-offs") to the archive.
-- **`tests/docs.test.mjs`:** new checks that the changelog has at most 10 full entries, and that its "Older entries" index matches the
-  archive's headings exactly (same titles, no duplicates).
-- **Step status has one home (`ROADMAP.md`):** the duplicate status lines in `REFACTOR_PLAN.md` steps 12 and 13 and the step list in
-  `HANDOFF.md` now point to the ROADMAP table; the ROADMAP "current position" paragraph no longer restates the table.
-- **`HANDOFF.md`:** new "Before you end a chat" checklist (changelog, roadmap, handoff, Last checked, folder READMEs, build/test, zip).
-- **Stale references removed:** `AI_PROMPTS.md` no longer says a root `CLAUDE.md` exists (only `AGENTS.md` does; the starter prompt
-  covers tools that do not read it); a ROADMAP parking-lot line pointing at text that no longer exists in HANDOFF was removed.
-- **Step 13 ticked in `ROADMAP.md`** (owner playtested the mission framework, 2026-11-13). Its four playtest guides moved to
-  `testing/passed/` and `testing/README.md` was updated. Step 12 stays unticked: its playtest is not recorded.
-- **REFACTOR_PLAN slimmed:** the long "Mission-safety enforcement plan" (the eight principles applied to missions) moved word for word to
-  `docs/architecture/mission-principles.md`, listed in `ARCHITECTURE.md`; the plan keeps a link.
-- **Stale facts removed from `docs/architecture/feature-notes.md`:** a "381/381 tests, 746 KB bundle" results note, a "Current package:
-  tallow-reach-latest-build.zip" bullet (no such file is in the project) and playtest-pending sentences that duplicated ROADMAP. The
-  original wording is kept in `docs/archive/HANDOFF_2026-11-10.md`. Do not put test counts or bundle sizes in the docs: they go stale.
-- **File lists completed:** `src/data/README.md` (`camera.js` and every file in `missions/`), `src/state/README.md` (`controls.js`),
-  `src/util/README.md` (`ids.js`), and the `ARCHITECTURE.md` file map (all current `sim/`, `ui/`, `data/` and `state/` files; it now
-  says the folder READMEs are the authoritative list).
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: A mission is accomplished by its hand-in, not by its last step; contract wording and colours
+- 2026-11-13: Dying no longer fails missions by default; "Mission failed" notice in the HUD
+- 2026-11-13: Docs consistency pass for multi-AI handoffs, changelog capped at 10 entries
 - 2026-11-13: Docs restructure, LESSONS.md, docs check test, duplicate-mission guard
 - 2026-11-13: Step 13d: mission rules, linter, templates and invariant tests
 - 2026-11-10: Name the Border Signal object and consume story hand-ins

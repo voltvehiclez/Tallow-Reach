@@ -13,7 +13,11 @@
   "Contract accepted. Launch when ready.", "Basic Power Plant moved to storage.") say nothing —
   the redrawn panel already shows the result — and anything the pilot must read appears in
   `ui/notice.js`'s fixed `#panel-notice` (role="status", click to dismiss, 7 s), which cannot move
-  the screen. `isRoutineReply` is the list of silent replies; an unrecognised message is shown, so a
+  the screen. It is centred (`left: 50%` + `translateX(-50%)`) and `placeNotice()` measures the flight
+  message line (`#msg`, `top: 14%` — "Empty weapon slot" on an empty weapon switch, or the warp name)
+  on every notice, putting the notice 12 px under its bottom edge — never over it. When the HUD is
+  hidden (docked or on the title screen) the same band is worked out from the viewport height. A
+  resize re-measures. CSS carries `top: 16%` as the pre-script default. `isRoutineReply` is the list of silent replies; an unrecognised message is shown, so a
   refusal is never swallowed. Do not put a message back inside the panel.
 - **Screens are pure functions** that return an HTML string from the current state.
   They never change state.
@@ -23,6 +27,21 @@
   pause or plot a route (warping still needs a launch, and the chart says "Docked: launch to
   warp." on its chart panel). Only the title screen, the pause overlay itself, a dead pilot or a
   warp in progress refuses. Do not copy a `!docked` condition into a key handler instead.
+- **The pointer follows the reticle.** The canvas hides the system pointer for mouse-look flight, since the HUD draws
+  its own reticle (`#cur`); `ui/hud.js` `setReticle()` hides the HUD and adds `body.no-reticle` together, so on the title
+  screen and while docked the real pointer is back and never disappears over the empty screen beside the panel.
+- **Inventory tiles have two item actions, both behind a right-click.** Click moves one, Shift-click moves the
+  stack; right-click opens **Sell** (a quantity box) and **Discard ×N**. Discard is a two-step popover shared by the
+  station panel and the flight card (`ui/discard.js`): how many, then "Are you sure you want to discard 3 Ferrite?",
+  and only that second click trashes — with `sim/inventory.js` `discardItem(where, id, n)`. Mission items are refused
+  by `data/items.js` `canDiscard`, because a beacon or parcel cannot be found again.
+- **The flight inventory is a modal of its own** (`ui/cargo.js`): press **I** in space and the ship's
+  hold opens in a wider (880 px) read-only card built by `screens.js` `cargoHtml()` — the station
+  Inventory tab's tiles with no moves and no selling, laid out **7 across and 5 rows down** and with no
+  explanatory sub-line. `canOpenCargo()` refuses while docked (the station panel has an Inventory tab;
+  there, I just switches to it), on the title screen, while dead, warping or paused, and over the
+  starmap. Opening it releases flight input; the world keeps running behind it, sound included. Esc
+  closes it; P closes it and opens the pause card.
 - **The pause card's order is fixed** (`pauseOverlayHtml()`): Resume is the first control and
   Exit to main menu the last, with the sound switch between them. Exiting saves the resume
   point, returns to the title screen and fades every looping sound to silence

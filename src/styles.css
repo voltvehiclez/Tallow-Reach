@@ -32,6 +32,14 @@ canvas {
   cursor: none;
 }
 
+/* In flight the HUD draws its own reticle, so the canvas hides the system
+   pointer. When that reticle is not on screen — the title screen, or docked at a
+   station — the pointer comes back (ui/hud.js toggles the class), so the mouse
+   never vanishes over the empty screen beside the panel. */
+body.no-reticle canvas {
+  cursor: default;
+}
+
 /* ---- Flight HUD (top-left bars, top-right info, centre messages, markers) ---- */
 #hud>div {
   position: fixed;
@@ -317,11 +325,14 @@ canvas {
 }
 
 /* ---- Panel notice: a message the pilot must read. Fixed to the viewport, so it
-   never pushes a row of the docked panel (or anything else) out of place. ---- */
+   never pushes a row of the docked panel (or anything else) out of place, and
+   centred just under the flight message line (`#msg`, at 14% — "Empty weapon
+   slot", warp names). ui/notice.js measures that line and sets the exact top;
+   this is the same band as a plain default before it runs. ---- */
 #panel-notice {
   position: fixed;
   left: 50%;
-  bottom: 26px;
+  top: 16%;
   transform: translateX(-50%);
   z-index: 80;
   max-width: min(560px, calc(100% - 40px));
@@ -336,6 +347,56 @@ canvas {
   cursor: pointer;
 }
 #panel-notice[hidden] { display: none; }
+
+/* ---- Flight inventory (I in space): the station Inventory layout in a wider,
+   read-only card. A modal surface of its own, outside the docked panel. ---- */
+#cargo {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 6, 8, .55);
+  backdrop-filter: blur(3px);
+}
+#cargo[hidden] { display: none; }
+.cargo-card {
+  position: relative;
+  width: min(880px, 100%);   /* wider than the 580px station panel */
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 22px 26px 26px;
+  background: rgba(7, 9, 11, .96);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 60px rgba(0,0,0,.6);
+}
+.cargo-card .cargo-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+}
+/* 7 tiles across and 5 rows down: the same overall width and tile height as the
+   station grid, in narrower boxes, so a full hold reads at a glance. */
+#cargo .inv-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  height: calc(5 * var(--inv-row-height) + 4 * var(--inv-row-gap));
+}
+
+/* Narrow windows cannot fit seven readable boxes: fall back to four a row. */
+@media (max-width: 640px) {
+  #cargo .inv-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* In flight a tile is a label, not a move button — but right-click still discards. */
+.inv-item-read {
+  cursor: context-menu;
+}
+.inv-item-read:hover {
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(8, 12, 15, .72);
+}
 
 /* ---- Mission failed notice: over the flight HUD and the docked screen ---- */
 #mission-alert {
@@ -923,7 +984,17 @@ button.mod-bay.on {
   text-align: left;
   font-size: 12px;
 }
-.inv-sell-popover {
+.inv-context button:disabled {
+  opacity: .55;
+}
+/* The flight card's menu is anchored inside the card, which scrolls. */
+.cargo-card .inv-context {
+  z-index: 30;
+}
+/* The Discard popover is the sell box's twin: same frame, same number field and
+   action row (its classes are shared), plus a warning line on the confirm step. */
+.inv-sell-popover,
+.inv-discard-popover {
   position: absolute;
   z-index: 25;
   width: min(220px, calc(100% - 16px));
@@ -933,7 +1004,8 @@ button.mod-bay.on {
   color: var(--ink);
   box-shadow: 0 8px 22px rgba(0, 0, 0, .7);
 }
-.inv-sell-popover > strong {
+.inv-sell-popover > strong,
+.inv-discard-popover > strong {
   display: block;
   margin-bottom: 8px;
   color: var(--ice);
@@ -941,12 +1013,14 @@ button.mod-bay.on {
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-.inv-sell-popover label {
+.inv-sell-popover label,
+.inv-discard-popover label {
   display: block;
   color: var(--dim);
   font-size: 12px;
 }
-.inv-sell-popover label span {
+.inv-sell-popover label span,
+.inv-discard-popover label span {
   color: var(--dim);
   font-size: 10px;
 }
@@ -971,6 +1045,11 @@ button.mod-bay.on {
   justify-content: flex-end;
   gap: 6px;
   margin-top: 5px;
+}
+.inv-discard-warn {
+  margin: 0 0 4px;
+  color: var(--red);
+  font-size: 11px;
 }
 .inv-sell-actions button {
   padding: 4px 9px;

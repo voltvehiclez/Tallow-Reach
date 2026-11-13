@@ -19,10 +19,11 @@ import { startWarp } from "./sim/sectors.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
-import { setupMenu } from "./ui/menu.js";
+import { setupMenu, openStationTab } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog } from "./ui/missionlog.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
+import { setupCargo, openCargo, closeCargo, isCargoOpen, canOpenCargo } from "./ui/cargo.js";
 import { canPause, canOpenStarmap } from "./ui/overlays.js";
 import { updateMenuView, menuView, resizeMenuView } from "./render/menuview.js";
 import { updateOutfitting } from "./ui/outfitting.js";
@@ -84,10 +85,11 @@ setupWarpFlash();
 setupPause();
 setupMissionLog();
 setupStarmap();
+setupCargo();
 installInput();
 syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
-  canStart: () => !localPlayer().docked && !state.paused && !isStarmapOpen(),
+  canStart: () => !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen(),
   getScale: () => SHIPS[state.profile.ship].sc,
 });
 
@@ -98,7 +100,7 @@ showPlace(state.place);
 
 on("action", ({ name, repeat, to: nameTo, key }) => {
   const pauseKey = key !== "Escape";
-  const playing = !state.ui.intro && !localPlayer().docked && !state.paused && !isStarmapOpen();
+  const playing = !state.ui.intro && !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen();
   switch (name) {
     case "lock":
       if (playing && !repeat) toggleLock();
@@ -118,6 +120,17 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
         else if (canOpenStarmap()) openStarmap();
       }
       break;
+    case "cargo": {
+      // In space: the ship's own inventory, in the same tiles as the station tab.
+      // Docked: the panel is already on screen, so the key switches it to Inventory.
+      // On the title screen there is no pilot, and the key does nothing.
+      if (repeat) break;
+      const P = localPlayer();
+      if (isCargoOpen()) closeCargo();
+      else if (P && P.docked) openStationTab("i");
+      else if (canOpenCargo(P)) openCargo();
+      break;
+    }
     case "route:jump":
       if (!repeat && playing) jumpRoute(localPlayer());
       break;
@@ -129,6 +142,10 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
     case "pause":
       if (isStarmapOpen()) {
         closeStarmap();
+        if (name === "pause" && pauseKey) setPause(true);
+      } else if (isCargoOpen()) {
+        // Esc just closes the hold; P closes it and opens the pause card.
+        closeCargo();
         if (name === "pause" && pauseKey) setPause(true);
       } else if (canPause()) setPause(!state.paused);
       break;

@@ -556,7 +556,7 @@ export function openStarmap() {
     playerSystem, notice: "", labels: saved?.labels ?? false, menu: null, routePage: 0,
   };
   clearControls();
-  if (!state.multiplayer) setAudioSuspended(true);
+  // The world keeps flying behind the chart, so ordinary audio carries on.
   root.hidden = false;
   render();
   render();   // measure the inserted chart so dots/labels keep their screen size

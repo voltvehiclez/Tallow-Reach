@@ -19,7 +19,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 function makeElement(tag = "div") {
   return {
-    tagName: tag.toUpperCase(), id: "", hidden: false, textContent: "", innerHTML: "",
+    tagName: tag.toUpperCase(), id: "", hidden: false, textContent: "", innerHTML: "", style: {},
     children: [], handlers: {}, attributes: {},
     appendChild(child) { this.children.push(child); child.parentNode = this; return child; },
     setAttribute(name, value) { this.attributes[name] = String(value); },
@@ -95,6 +95,9 @@ test("the panel never renders a message line, so no action moves the layout", ()
   const rule = css.match(/#panel-notice\s*\{[^}]*\}/);
   assert.ok(rule, "the notice has its own rule");
   assert.match(rule[0], /position:\s*fixed/, "and it is fixed to the viewport, so it cannot move the panel");
+  assert.match(rule[0], /left:\s*50%/, "it is centred across the screen");
+  assert.match(rule[0], /top:\s*16%/, "it has a band below the flight message line");
+  assert.doesNotMatch(rule[0], /bottom:/, "no longer pinned to the bottom");
 });
 
 test("a notice is a fixed overlay: shown for a refusal, silent for a confirmation", () => {

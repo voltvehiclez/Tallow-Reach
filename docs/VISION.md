@@ -141,8 +141,8 @@ mention) until the owner decides. Record the decision here when made, and delete
 - **2026-11-08 — step 11B starmap interaction and saved worlds (owner-approved slice):** **M opens a
   clickable 2D chart** instead of warping immediately. It shows visible systems, the current location,
   gate connections and any selected system's full pocket list; only a legal hop starts the existing
-  warp sequence (the later owner decision above makes local hops free by default). Single-player map pauses the simulation; a future hosted co-op
-  world keeps running. Save **v16** stores the galaxy seed plus compact discovery/visit records, not
+  warp sequence (the later owner decision above makes local hops free by default). Single-player map pauses the simulation (later changed: the chart no longer pauses or mutes;
+  see `docs/architecture/world-and-map.md`), while a future hosted co-op world keeps running. Save **v16** stores the galaxy seed plus compact discovery/visit records, not
   generated geography; v15 and older migrate, and a removed pocket recovers to the safe home station
   without losing character/cargo. This supersedes the temporary M-cycling note below.
 

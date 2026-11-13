@@ -21,10 +21,26 @@ Write down anything odd with what you did, what you expected and what happened. 
 3. Hold **Left Alt** and move the mouse: the free camera orbits. Release: it returns.
 4. Press **P**: the pause menu opens and the game freezes. **Resume is the top button and Exit to
    main menu the bottom one.** Press **P** again: it resumes.
-5. Dock at a station, then press **M**: the starmap opens over the station screen (plot a route; the
+5. Press **I** while flying: a wider version of the station Inventory panel opens with the hold of
+   the ship you are flying — 7 tiles a row and 5 rows, no sub-line, and nothing you can move or sell.
+   The world keeps running behind it (watch a rock drift past, and the engine stays audible); **I** or
+   **Esc** closes it. Press **I** again after docking: it switches the station panel to its Inventory
+   tab.
+6. Right-click a tile in the flight card: the menu offers **Discard ×N** and nothing else. Take it: a
+   box asks **how many** (the whole stack by default, same as Sell). Enter a number and press its
+   **Discard**: it now asks **"Are you sure you want to discard N …?"** — nothing is gone yet. Press
+   **Discard** there: that many leave the hold with a "Discarded N …" notice. **Cancel** backs out at
+   either step. A count outside 1–N is refused with "Enter a whole number from 1 to N." Right-click a
+   mission item (beacon, parcel): Discard is greyed out. Every notice like this one lands at the **top
+   centre**, just under the flight message line — the centred "Empty weapon slot" text you get when you
+   switch to a weapon you have not fitted — and never on top of it. Docked, it uses the same band.
+7. Dock at a station, then press **M**: the starmap opens over the station screen (plot a route; the
    warp itself waits until you launch). Press **M** again to close it, then press **P** and **Esc**:
-   the pause menu opens and closes while docked too.
-6. Press **P**, then **Exit to main menu**. Expected: the engine roar **fades out** over about two
+   the pause menu opens and closes while docked too. The chart, like the hold, does **not** stop the
+   clock: open it in flight and the ship keeps drifting behind it.
+8. Move the mouse off the station panel onto the empty screen: the pointer stays visible (in flight the HUD
+   draws its own reticle instead; on the title screen the pointer is visible too).
+9. Press **P**, then **Exit to main menu**. Expected: the engine roar **fades out** over about two
    seconds instead of cutting off or droning on, and the title screen shows the station turning with
    its planet behind it. Fly somewhere else, quit to the menu again: the background is the same view.
 
@@ -69,6 +85,7 @@ kept here as the reference for any later change that touches input:
 | **Space** / **C** | lift up / down |
 | **Q** / **E** | roll left / right |
 | **Shift** | boost (snaps the throttle to full once, then the tank drains) |
+| **I** | in space: the ship's own inventory (read-only); docked: the Inventory tab |
 | Mouse | steers; **Left Alt** + mouse orbits the camera and releasing returns it |
 | Left click | guns (or the beam, on slot 2) |
 | Right click | missiles, and the dashed lock ring must be the **same size as before** |
@@ -91,7 +108,8 @@ Two things worth a close look, because they are the parts that genuinely moved:
 
 1. Fly back within 300 m of the outpost and press **G**. The outpost panel opens.
 2. **Inventory** tab: ore you mined is in the ship's hold; move it to the station and sell it
-   (right click a stack, **Sell**). Credits go up.
+   (right click a stack, **Sell**; the same menu's **Discard ×N** throws cargo away instead, asking how
+   many and then for confirmation). Credits go up.
 3. **Contracts**: finish a contract if you completed one; you are paid.
 4. **Outfitting**: the 3D ship shows; click a bay, swap a module, click again to unequip it and
    see it in storage.
