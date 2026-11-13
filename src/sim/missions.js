@@ -93,6 +93,18 @@ export function missionProgress(mission) {
   return { done, total, step, index };
 }
 
+/**
+ * "2 out of 3 crates recovered" for a recovery contract, or null for missions
+ * that count something else (a hunt counts kills, a mining job counts ore).
+ * These are the crates the contract itself put in space: recovering another
+ * contract's, or loose crates from a wreck, never moves this number.
+ */
+export function missionRecoveryText(mission) {
+  if (!mission || mission.kind !== "contract" || mission.type !== "salvage") return null;
+  const { done, total } = missionProgress(mission);
+  return `${done} out of ${total} crates recovered`;
+}
+
 export function remainingObjective(mission) {
   const progress = missionProgress(mission);
   return Math.max(0, progress.total - progress.done);
@@ -231,14 +243,11 @@ function handInNextText(mission, profile) {
   const requirement = missionHandIn(mission);
   const station = stationLabel(mission);
   if (!requirement) return `${missionKindWord(mission)} complete. Return to ${station} to collect the reward.`;
-  const text = fillMissionText(handInObjective(mission) || "Deliver {count} {item} to {station}.", {
-    count: requirement.count,
-    remaining: 0,
-    item: itemName(requirement.item),
-    enemy: "hostiles",
-    station: stationLabel(mission),
-    place: stationLabel(mission),
-  });
+  const text = handInText(mission);
+  // A delivery contract's shortfall is paperwork, not guidance: the store and the
+  // hold both count, the sentence already names the station, and the docked
+  // card says exactly what is missing when the pilot tries to hand in.
+  if (deliveryContract(mission)) return text;
   const delivery = missionDeliveryRequirement(mission, profile);
   const have = delivery ? delivery.station + delivery.hold : requirement.count;
   return have >= requirement.count ? text : `${text} You have ${have} of ${requirement.count}.`;
@@ -264,10 +273,37 @@ function blockedScriptText(step, profile = state.profile) {
  * `objective` in its data step. The older `log` field remains in saved mission
  * data for compatibility, but is deliberately never shown here: procedural
  * logs can reveal a future ambush or another step's implementation detail. */
+/**
+ * A contract whose job is to gather cargo and bring it to a station (mining and
+ * salvage). Its guidance names the delivery from the moment it is taken: a
+ * "Mine 3 of 12" line counts only what is aboard, while the station store may
+ * already hold the rest, so the number told half the story (owner request).
+ */
+function deliveryContract(mission) {
+  return !!mission && mission.kind === "contract" && CONTRACT_MISSION_TEMPLATES[mission.type]?.delivery === true;
+}
+
+/** The sentence a mission shows about its owed goods, filled in. */
+function handInText(mission) {
+  const requirement = missionHandIn(mission);
+  return fillMissionText(handInObjective(mission) || "Deliver {count} {item} to {station}.", {
+    count: requirement?.count ?? 0,
+    remaining: 0,
+    item: requirement ? itemName(requirement.item) : "the cargo",
+    enemy: "hostiles",
+    place: stationLabel(mission),
+    station: stationLabel(mission),
+  });
+}
+
 export function missionNextText(mission, profile = state.profile) {
   if (!mission) return "No mission selected.";
   if (isMissionFailed(mission)) return mission.failureMessage || `${missionKindWord(mission)} failed.`;
   if (missionObjectivesDone(mission)) return handInNextText(mission, profile);
+  // Read from the data, not from the step: an accepted contract keeps the step
+  // text it was created with, and the delivery sentence is the right guidance
+  // at every point of the job.
+  if (deliveryContract(mission)) return handInText(mission);
   const step = missionStep(mission);
   if (!step) return "No current objective.";
   const progress = missionProgress(mission);
@@ -625,7 +661,7 @@ function primeReachStep(mission, payload = {}) {
 function missionPickupMatches(step, mission, payload = {}) {
   const requiredPlace = step?.place || step?.sector || step?.requiresPlace;
   const actualPlace = payload.player?.place || payload.place || payload.id;
-  return step?.kind === "collect" && step.missionItem === true &&
+  return step?.kind === "collect" && (step.missionItem === true || step.owned === true) &&
     payload.missionId === mission.id &&
     payload.missionItem === true &&
     (!step.item || step.item === payload.item) &&
@@ -702,9 +738,17 @@ function objectiveMatches(step, event, payload = {}, mission = null) {
     return (!step.enemy || step.enemy === payload.def) && (!step.faction || step.faction === payload.faction);
   }
   if (step.kind === "mine") return !step.item || step.item === payload.item;
-  if (step.kind === "collect") return (!step.item || step.item === payload.item) &&
-    (step.missionItem !== true || (payload.missionItem === true &&
-      payload.missionId === mission?.id && payload.player?.docked !== true));
+  if (step.kind === "collect") {
+    // `owned` crates belong to one recovery contract: the mission spawns its own
+    // in space, and another contract's crates (or loose Salvage from a wreck)
+    // must not finish its count. The recovered item is ordinary cargo, so any
+    // Salvage can still pay the hand-in.
+    if (step.owned === true &&
+        (payload.missionId !== mission?.id || payload.player?.docked === true)) return false;
+    return (!step.item || step.item === payload.item) &&
+      (step.missionItem !== true || (payload.missionItem === true &&
+        payload.missionId === mission?.id && payload.player?.docked !== true));
+  }
 
   if (step.kind === "reach" || step.kind === "reach-sector") {
     const target = step.place || step.sector || step.target;

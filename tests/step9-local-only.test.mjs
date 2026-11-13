@@ -30,6 +30,7 @@ import {
   completeContract,
 } from "../src/sim/contracts.js";
 import { stepSim } from "../src/sim/step.js";
+import { activeMissions } from "../src/sim/missions.js";
 import { DEFAULT_PLACE } from "../src/data/places.js";
 import { stationAt } from "../src/sim/places.js";
 
@@ -121,8 +122,11 @@ test("9c (inventory & pickups): crate pickup works while local is docked and ski
   guest.flight.spawnT = 1e9;
   guest.pos.set(100, 0, 0);
   guestProfile.mission = { type: "salvage", tier: 1, p: 0, n: 1, r: 500 };
+  // A recovery contract only counts the crates it put in space itself, so this
+  // pickup belongs to the guest's own contract rather than to loose salvage.
+  const guestMission = activeMissions(guestProfile)[0];
 
-  spawnCrate(V(105, 0, 0), "salv");
+  spawnCrate(V(105, 0, 0), "salv", DEFAULT_PLACE, null, null, guestMission.id, false);
   stepSim(1 / 60);
 
   assert.equal(state.world.crates.length, 0, "guest picked up crate while local was docked");
@@ -138,7 +142,7 @@ test("9c (inventory & pickups): crate pickup works while local is docked and ski
   state.profile.holds.wasp.ferrite = 20; // local Wasp hold full
   guest.pos.set(312, 0, 0);
 
-  spawnCrate(V(305, 0, 0), "salv");
+  spawnCrate(V(305, 0, 0), "salv", DEFAULT_PLACE, null, null, guestMission.id, false);
   stepSim(1 / 60);
   assert.equal(state.world.crates.length, 0);
   assert.equal(guestProfile.holds.wasp.salv, 2, "pilot with free hold room collected the crate");

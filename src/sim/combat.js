@@ -51,10 +51,37 @@ function missionDropList(placeId, create = true) {
   return record.drops;
 }
 
-function missionDropFor(placeId, missionId, item) {
-  return missionDropList(placeId, false).find(drop =>
-    drop && drop.missionId === missionId && drop.item === item
-  ) || null;
+/**
+ * A recovery contract puts several crates of the same item in space, so a drop
+ * record is identified by its `slot` as well as the mission and item. Records
+ * written before slots existed have none and keep matching slot-less spawns
+ * (the authored single-crate objectives).
+ */
+const crateSlotOf = value => (value === null || value === undefined || value === ""
+  ? null
+  : Math.max(0, Math.floor(Number(value) || 0)));
+
+const dropSlotOf = value => crateSlotOf(value?.slot ?? value?.crateSlot);
+
+function sameMissionDrop(drop, missionId, item, slot = null) {
+  if (!drop || drop.missionId !== missionId || drop.item !== item) return false;
+  const own = dropSlotOf(drop);
+  return slot == null ? own == null : own === slot;
+}
+
+function missionDropFor(placeId, missionId, item, slot = null) {
+  return missionDropList(placeId, false).find(drop => sameMissionDrop(drop, missionId, item, slot)) || null;
+}
+
+/** The lowest crate slot this mission has not used yet in a place. */
+export function nextMissionCrateSlot(placeId, missionId, item) {
+  const used = new Set(missionDropList(placeId, false)
+    .filter(drop => drop && drop.missionId === missionId && drop.item === item)
+    .map(drop => crateSlotOf(drop.slot))
+    .filter(slot => slot != null));
+  let slot = 0;
+  while (used.has(slot)) slot++;
+  return slot;
 }
 
 function missionDropPosition(drop) {
@@ -63,13 +90,14 @@ function missionDropPosition(drop) {
     : null;
 }
 
-function rememberMissionDrop(placeId, missionId, item, pos) {
+function rememberMissionDrop(placeId, missionId, item, pos, slot = null) {
   const drops = missionDropList(placeId);
-  const existing = drops.find(drop => drop?.missionId === missionId && drop?.item === item);
+  const existing = drops.find(drop => sameMissionDrop(drop, missionId, item, slot));
   if (existing) return existing;
   const record = {
     missionId,
     item,
+    slot: crateSlotOf(slot),
     pos: [Number(pos.x) || 0, Number(pos.y) || 0, Number(pos.z) || 0],
     collected: false,
   };
@@ -80,7 +108,7 @@ function rememberMissionDrop(placeId, missionId, item, pos) {
 function saveMissionDropPosition(crate) {
   if (!crate?.missionId || !crate.persistent) return;
   const drops = missionDropList(crate.place || state.place, false);
-  const record = drops.find(drop => drop?.missionId === crate.missionId && drop?.item === crate.item);
+  const record = drops.find(drop => sameMissionDrop(drop, crate.missionId, crate.item, crate.crateSlot));
   if (record && record.collected !== true) {
     record.pos = [Number(crate.pos.x) || 0, Number(crate.pos.y) || 0, Number(crate.pos.z) || 0];
   }
@@ -90,7 +118,7 @@ function saveMissionDropPosition(crate) {
 export function removeMissionDrop(crate, collected = false) {
   if (!crate?.missionId || !crate.persistent) return;
   const drops = missionDropList(crate.place || state.place, false);
-  const index = drops.findIndex(drop => drop?.missionId === crate.missionId && drop?.item === crate.item);
+  const index = drops.findIndex(drop => sameMissionDrop(drop, crate.missionId, crate.item, crate.crateSlot));
   if (index < 0) return;
   if (collected) drops[index].collected = true;
   else drops.splice(index, 1);
@@ -116,9 +144,11 @@ export function restoreMissionDrops(placeId = state.place) {
   const drops = missionDropList(placeId, false);
   for (const drop of [...drops]) {
     if (!drop || drop.collected || !drop.missionId || !drop.item) continue;
-    if (W.crates.some(crate => crate.missionId === drop.missionId && crate.item === drop.item && crate.persistent)) continue;
+    const slot = crateSlotOf(drop.slot);
+    if (W.crates.some(crate =>
+      crate.persistent && sameMissionDrop(crate, drop.missionId, drop.item, slot))) continue;
     const pos = missionDropPosition(drop);
-    if (pos) spawnCrate(pos, drop.item, placeId, null, null, drop.missionId);
+    if (pos) spawnCrate(pos, drop.item, placeId, null, null, drop.missionId, true, slot);
   }
 
   // A pre-physical-flow v19 save can already be waiting at Border Signal's
@@ -229,19 +259,22 @@ export function spawnCrate(
   encounterType = null,
   missionId = null,
   persistent = !!missionId,
+  crateSlot = null,
 ) {
   const W = placeWorld(placeId);
+  const slot = missionId && persistent ? crateSlotOf(crateSlot) : null;
   let at = V(p.x, p.y, p.z);
   if (missionId && persistent) {
-    const saved = missionDropFor(placeId, missionId, item);
+    const saved = missionDropFor(placeId, missionId, item, slot);
     if (saved?.collected) return null;
     const existing = W.crates.find(crate =>
-      crate.missionId === missionId && crate.item === item && crate.persistent
+      crate.missionId === missionId && crate.item === item && crate.persistent &&
+      (slot == null ? crateSlotOf(crate.crateSlot) == null : crateSlotOf(crate.crateSlot) === slot)
     );
     if (existing) return existing;
     const savedPos = missionDropPosition(saved);
     if (savedPos) at = savedPos;
-    else rememberMissionDrop(placeId, missionId, item, at);
+    else rememberMissionDrop(placeId, missionId, item, at, slot);
   }
   const e = {
     kind: "crate",
@@ -250,6 +283,7 @@ export function spawnCrate(
     encounterType,
     missionId,
     persistent: !!missionId && persistent,
+    crateSlot: slot,
     pos: at,
     quat: freshQuat(),      // the sim turns it; the view copies the turn
     t: missionId && persistent ? Infinity : CRATE_LIFE,

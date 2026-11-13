@@ -18,6 +18,7 @@ import {
   missionObjectivesDone,
   missionNextText,
   missionProgress,
+  missionRecoveryText,
 } from "../src/sim/missions.js";
 import { emit } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
@@ -37,12 +38,17 @@ test("13a: every contract is a mission-data template with a runner objective", (
     assert.equal(mission.steps[0].count, 3);
     assert.equal(mission.rewards.credits, 500);
     assert.equal(missionObjectivesDone(mission), false);
+    // A delivery contract says where the cargo goes, never how much has been
+    // picked up so far: the station store may already hold part of the load.
     const expected = {
-      mine: "Mine 3 Ferrite for delivery to Meridian Station.",
+      mine: "Deliver the Ferrite to Meridian Station.",
       hunt: "Destroy 3 pirate raiders.",
-      salvage: "Recover 3 derelict crates for delivery to Meridian Station.",
+      salvage: "Deliver them to Meridian Station.",
     }[type];
-    assert.equal(missionNextText(mission), expected, `${type} objective placeholders are player-facing`);
+    assert.equal(missionNextText(mission), expected, `${type} guidance is player-facing`);
+    if (type !== "hunt") {
+      assert.doesNotMatch(missionNextText(mission), /\d/, "no progress numbers on a delivery contract");
+    }
     if (type === "hunt") assert.equal(template.handIn, undefined, "a hunt contract has nothing to hand in");
     else assert.equal(typeof template.handIn?.objective, "string", `${type} declares the sentence shown while its cargo is owed`);
   }
@@ -84,17 +90,15 @@ test("13a: a contract is not accomplished until its goods are handed in, and it 
   try {
     const salvage = missionFromContract({ type: "salvage", tier: 1, p: 0, n: 2, r: 500 }, "wording-salvage");
     profile.missions.push(salvage);
-    assert.equal(missionNextText(salvage, profile),
-      "Recover 2 derelict crates for delivery to Meridian Station.",
+    assert.equal(missionNextText(salvage, profile), "Deliver them to Meridian Station.",
       "the guiding text says where the cargo goes while it is being recovered");
 
     salvage.counters.objective = 2;
     salvage.step = salvage.current = 1;
     salvage.completed = true;
     assert.equal(missionObjectivesDone(salvage), true, "the collecting is finished");
-    assert.equal(missionNextText(salvage, profile),
-      "Deliver 2 derelict crates to Meridian Station. You have 0 of 2.",
-      "but the contract still asks for the hand-in, with no claim of accomplishment");
+    assert.equal(missionNextText(salvage, profile), "Deliver them to Meridian Station.",
+      "and it still asks for the hand-in, with no claim of accomplishment and no tally");
     assert.doesNotMatch(missionNextText(salvage, profile), /complete/i, "no completion claim before the hand-in");
 
     const hunt = missionFromContract({ type: "hunt", tier: 1, p: 0, n: 2, r: 400, e: "raider" }, "wording-hunt");
@@ -108,6 +112,39 @@ test("13a: a contract is not accomplished until its goods are handed in, and it 
     if (previous === undefined) delete station.salv;
     else station.salv = previous;
   }
+});
+
+test("13a: a recovery contract counts only its own crates and reports the tally in words", () => {
+  const profile = newProfile();
+  const small = missionFromContract({ type: "salvage", tier: 1, p: 0, n: 3, r: 300 }, "recovery-small");
+  const large = missionFromContract({ type: "salvage", tier: 2, p: 0, n: 6, r: 600 }, "recovery-large");
+  profile.missions.push(small, large);
+  const player = { profile, docked: false, place: "reach" };
+  const pickup = (missionId, missionItem = true) =>
+    advanceMissions("pickup", { item: "salv", missionId, missionItem, player });
+
+  assert.equal(missionRecoveryText(small), "0 out of 3 crates recovered");
+  assert.equal(missionRecoveryText(large), "0 out of 6 crates recovered");
+
+  pickup(large.id);
+  assert.equal(missionRecoveryText(small), "0 out of 3 crates recovered",
+    "another contract's crate is not this contract's crate");
+  assert.equal(missionRecoveryText(large), "1 out of 6 crates recovered");
+
+  pickup(null, false);
+  assert.equal(missionRecoveryText(small), "0 out of 3 crates recovered",
+    "loose salvage from a wreck never counts toward a recovery contract");
+  assert.equal(missionRecoveryText(large), "1 out of 6 crates recovered");
+
+  pickup(small.id);
+  pickup(small.id);
+  pickup(small.id);
+  assert.equal(missionRecoveryText(small), "3 out of 3 crates recovered");
+  assert.equal(missionObjectivesDone(small), true, "its own three crates finish the objective");
+  assert.equal(missionRecoveryText(large), "1 out of 6 crates recovered", "the other job is untouched");
+
+  const hunt = missionFromContract({ type: "hunt", tier: 1, p: 0, n: 2, r: 400, e: "raider" }, "recovery-hunt");
+  assert.equal(missionRecoveryText(hunt), null, "only recovery contracts report crates");
 });
 
 test("13a: a lost mission-only hand-in fails the contract instead of waiting forever", () => {

@@ -21,6 +21,7 @@ import {
   missionNextText,
   missionObjectivesDone,
   missionProgress,
+  missionRecoveryText,
   nextMissionDialogue,
 } from "../sim/missions.js";
 import { setPause } from "./pause.js";
@@ -100,8 +101,11 @@ function missionStatus(mission, profile) {
   // mission completion. Keep that implementation detail out of the log; only
   // show a labelled numeric count for contracts with a meaningful target.
   const showProgress = mission.kind === "contract" && progress.total > 1;
+  // A recovery contract counts crates it put in space itself, so it says so in
+  // plain words instead of a bare "0 of 3".
+  const recovered = missionRecoveryText(mission);
   const progressText = showProgress
-    ? ` <span>· Objective progress: ${progress.done} of ${progress.total}</span>`
+    ? ` <span>· ${recovered || `Objective progress: ${progress.done} of ${progress.total}`}</span>`
     : "";
   const progressBar = showProgress
     ? `<div class="mission-log-bar"><i style="width:${Math.round((progress.done / progress.total) * 100)}%"></i></div>`

@@ -20,6 +20,66 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-13: A recovery contract recovers its own crates, and the space is left clean
+
+Owner request: "recovery missions require you to recover all the crates the mission generates … lists progress of
+recovery in the ship ui and mission log as 'x out of y crates recovered'. Those must then be specific to the specific
+mission … you must recover each mission's own individual crates", and "to complete the mission you need the right
+number of items and are consumed upon hand in … must clear the space of the mission specific in space crates."
+**Save version unchanged (v19)** — `slot` is additive and older drop records stay slot-less; rebuild needed
+(`npm run build`, then `npm test`).
+
+- **Each crate belongs to one contract (`data/missions/contracts.js`).** The salvage step carries `owned: true`, so the
+  runner counts a pickup for a contract only when the crate carries that mission's id (`objectiveMatches`,
+  `missionPickupMatches`). Accepting "Recover 3" and "Recover 6" at once now needs all nine of their own crates: another
+  contract's crates, and loose Salvage from a wreck, move nothing.
+- **The field (`sim/session.js`).** `ensureSalvageCrates` runs on every launch and puts one persistent crate in the
+  asteroid field for each crate a contract still needs. The crates are persistent and tagged, so a warp, a dock or a
+  reload keeps them, and a crate already collected is never spawned again.
+- **Several crates of one item (`sim/combat.js`).** A drop record used to be keyed by mission + item, which allowed only
+  one crate per mission. Records now carry a `slot` (`nextMissionCrateSlot` hands out the next free one), and spawn,
+  drift, pickup, save and restore all match on it. `state/profile.js` keeps `slot` in the saved world and dedupes by it.
+- **Wording (`sim/missions.js`, `ui/hud.js`, `ui/missionlog.js`).** `missionRecoveryText` says "2 out of 3 crates
+  recovered": the HUD shows it under the contract line while flying, and the docked card uses it in place of "Objective
+  progress: 0 of 3". This supersedes the previous entry's salvage wording — the no-tally rule now covers **mine** only.
+- **Hand-in is unchanged in kind, stricter in fact.** Objectives done (each crate recovered from space) plus `n` Salvage
+  in the station or the hold; `consumeDelivery` takes them and pays. Any Salvage pays, because the recovered crates are
+  ordinary cargo, and the items are consumed on the spot.
+- **The space is left clean.** Handing in a contract (or abandoning it) already ran `clearMissionContents`; it now drops
+  that mission's crates from every pocket and deletes their saved records, so nothing respawns when the pocket loads
+  again. Tested with an extra crate still floating when the pilot hands in.
+- **Tests:** new `tests/mission-recovery-crates.test.mjs` (spawn counts and slots, per-contract counting, hand-in
+  consumption and cleanup, abandon cleanup, save round trip) and a per-contract counting test in
+  `tests/step13-missions.test.mjs`; the guest-pickup test now spawns its own contract's crate. **509 tests / 0 failures.**
+- **Docs:** `docs/MISSION_RULES.md` (recovery-contract paragraph, trimmed to stay inside its size cap), `src/sim/README.md`,
+  `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
+
+## 2026-11-13: Contract guidance says where the cargo goes, not how much is aboard
+
+Owner request: "Currently recover contracts and mine contracts update the mission subtext in top right of ship ui depending
+on how many items you have picked up. Avoid this for recovery/delivery missions. It is simplest to have a mission title
+'Recover x Derelict crates' and sub text 'deliver them to Meridian station' … progress numbers are not good … since
+hypothetically you could have a lot of derelict crates in the station." **Save version unchanged (v19)**; rebuild needed
+(`npm run build`, then `npm test`).
+
+- **The two delivery contracts read as a delivery from the moment they are taken.** `mine` and `salvage` are flagged
+  `delivery: true` in `data/missions/contracts.js`, and the runner (`missionNextText`) shows the hand-in sentence for them
+  instead of the gather step's sentence, which counted what had been picked up so far. The HUD's top-right block now reads
+  **Mine 12 Ferrite — Deliver the Ferrite to Meridian Station.** and **Recover 3 derelict crates — Deliver them to Meridian
+  Station.**, steady while mining, while carrying, and after the load is stored.
+- **No running tally on a delivery contract.** `handInNextText` no longer appends "You have 2 of 3." for them: the count
+  only ever saw the ship's hold while the station store may already hold part of the load. The docked hand-in button still
+  reports the exact shortfall, and hunt contracts keep their "0 of 4 defeated" line because kills cannot be banked.
+- **Read from the data, not from the saved step**, so a contract accepted before this build shows the new sentence too;
+  old saves keep the wording they were stamped with until they fall back to `handIn.objective`.
+- **Tests:** `tests/step13-missions.test.mjs` and `tests/mission-handin-station.test.mjs` now assert the delivery sentence,
+  that it carries no digits, and that it does not change when the hold fills up. 502 tests pass.
+
+Files: `src/data/missions/contracts.js`, `src/sim/missions.js`, `tests/step13-missions.test.mjs`,
+`tests/mission-handin-station.test.mjs`, `docs/MISSION_RULES.md`, `src/sim/README.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: Notices hang just below the flight message line
 
 Owner request: "Make it so that all pop up notifications like the confirmation after you have discarded an items appear
@@ -289,65 +349,10 @@ Four owner-reported UI fixes. **Save version unchanged (v19)**; rebuild needed (
 
 ---
 
-## 2026-11-13: Every mission and contract is handed in at one named station
-
-Fixes "the game does not care which location you hand a mission in at." **Save version unchanged (v19)** — the field is
-additive and older missions resolve it from `origin`; rebuild needed (`npm run build`, then `npm test`).
-
-- **Why:** `completeMission` asked only that the pilot be docked, so any station paid any mission, and the guidance named
-  whichever station the pilot happened to be at instead of the one that takes the hand-in.
-- **The rule (data):** a mission is handed in at **one station** — the one that gave it out, unless its data names another
-  with `handIn.station: "<pocket id>"` (a job that starts at one station and ends at another). `BORDER_SIGNAL_MISSION` now
-  declares `handIn.station: "reach"` and says `"Return to {station} with the beacon."`.
-- **The runner (`sim/missions.js`):** `acceptMission` stamps `handIn.station` on the mission when it is taken, so the station
-  survives a save and cannot drift as the pilot travels. New `missionHandInStation`, `missionHandInStationName`,
-  `atMissionHandInStation` and `canCompleteMissionHere`. `completeMission` refuses any other station ("Hand this in at
-  Meridian Station."), takes nothing and pays nothing. Fallbacks so a mission can never become impossible: a mission saved
-  before the field existed resolves its `origin`, an offer resolves the station the pilot is docked at, and a station that no
-  longer exists falls back to the home station.
-- **Guidance:** `{station}` is filled in with the mission's hand-in station, never "a station" or wherever the pilot is;
-  a mission with nothing to hand over now says "Contract complete. Return to Meridian Station to collect the reward."
-- **Screens (`ui/missionlog.js`, `ui/screens.js`):** away from the station the status reads "Deliver to <station>" and the
-  hand-in button is disabled with the station named ("Hand in at Meridian Station"), next to Abandon; at the right station it
-  reads "Ready to hand in" and "Hand in cargo" as before. Story offers say where they are handed in.
-- **Save (`state/profile.js`):** `cleanMission` keeps `handIn` (objective and station) instead of dropping it, and Border
-  Signal's authored station always wins. No `SAVE_VERSION` bump.
-- **Linter (`data/missions/validate.js`):** `handIn.station` must be a pocket with a station feature; any other `handIn` key
-  is flagged; a hand-in sentence that names neither `{station}` nor the station itself is a warning.
-- **Tests:** new `tests/mission-handin-station.test.mjs` (a second station pocket proves the contract taken at Meridian cannot
-  be paid at Depot Station and vice versa, a data-chosen station, the save round trip, and the linter). Two existing wording
-  assertions updated.
-- **Docs:** `MISSION_RULES.md` rule 11 and a "Where the hand-in happens" paragraph, recipes 03 and 11, mission principles,
-  `src/sim/README.md`, and the playtest guide.
-
----
-
-## 2026-11-13: Dying hands you a complete spare Wasp that can be fitted again
-
-Fixes "if you die, you get a free wasp. Cant then equip equipment to the ship." **Save version unchanged (v19)**;
-rebuild needed (`npm run build`, then `npm test`).
-
-- **Why:** `die()` deleted the lost hull's fleet records and then added the replacement as a bare hull id. A ship's bays *are*
-  `profile.loadout[ship]`, so the free Wasp had no bays at all: Outfitting had nothing to fit into, and drive, Hull HP and guns
-  all read as empty. A save/reload rebuilt the fit (`cleanLoadouts`), which is why the bug only showed in a live session.
-- **`state/profile.js`:** new `addShipRecords(profile, id)` (its own empty hold, full hull fraction, stock fit) and
-  `ensureShipRecords(profile, id)` (fills in only what is missing). One definition of a complete ship, used by every route that
-  adds or selects a hull, so a bought ship and a replacement can never differ in which records exist.
-- **`sim/session.js` `die()`:** the lent Wasp and any fallback hull now go through those helpers before `setShip`. The death text
-  is unchanged ("The station lent you a spare Wasp.") — it now simply is a fitted Wasp.
-- **`sim/economy.js`:** `buyShip` uses `addShipRecords` (same behaviour, one definition); `selectShip` runs `ensureShipRecords`
-  first, so a hull that a very old save left without a fit is repaired when the player picks it, not only on the next reload.
-- **Tests:** new `tests/ship-recovery.test.mjs` (the lent ship can be equipped and flies with Hull HP, drive and guns; falling
-  back to another owned ship keeps its cargo, fittings and damage; the helpers repair a hull missing its records).
-  `tests/fixtures/step8b-combat-lifecycle.json` was re-recorded: every snapshot before the death in that run is identical, and
-  the post-death snapshots now show a real ship (power, shields, hull, a gun bay, an empty hold) instead of a bare id.
-- **Not changed:** mission state. Cargo and mission items still go with the lost ship, so a mission that owed a lost item still
-  fails. The `testing/TESTING-DEATH-AND-MISSIONS.md` guide has a new "After a death" section for this.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: Every mission and contract is handed in at one named station
+- 2026-11-13: Dying hands you a complete spare Wasp that can be fitted again
 - 2026-11-13: A mission is accomplished by its hand-in, not by its last step; contract wording and colours
 - 2026-11-13: Dying no longer fails missions by default; "Mission failed" notice in the HUD
 - 2026-11-13: Docs consistency pass for multi-AI handoffs, changelog capped at 10 entries

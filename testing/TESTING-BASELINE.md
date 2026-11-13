@@ -38,9 +38,19 @@ Write down anything odd with what you did, what you expected and what happened. 
    warp itself waits until you launch). Press **M** again to close it, then press **P** and **Esc**:
    the pause menu opens and closes while docked too. The chart, like the hold, does **not** stop the
    clock: open it in flight and the ship keeps drifting behind it.
-8. Move the mouse off the station panel onto the empty screen: the pointer stays visible (in flight the HUD
+8. Take a **mining** and a **salvage** contract, launch, and read the mission block. Mining keeps one steady line
+   ("Mine 12 Ferrite — Deliver the Ferrite to Meridian Station."); mine a rock and the subtext does not change.
+   The salvage contract adds its own count under the line: "Recover 3 derelict crates — Deliver them to Meridian
+   Station. / 0 out of 3 crates recovered". Accept a second salvage contract of a different size before launching:
+   the field holds the two sets of crates (`3 + 6`), and picking up one job's crates moves only that job's count —
+   loose Salvage from a wreck, or the other job's crates, leave it at 0. Fly into a crate of the first job: its count
+   goes up, the other stays. Dock: the Mission log card reads "1 out of 3 crates recovered" (not "Objective progress:
+   0 of 3"). Recover the rest, hand in: the crates are consumed, the reward is paid, and any crates of that contract
+   still floating in the field are gone (dock, launch and fly to the field to confirm), while the other contract's
+   crates are still there.
+9. Move the mouse off the station panel onto the empty screen: the pointer stays visible (in flight the HUD
    draws its own reticle instead; on the title screen the pointer is visible too).
-9. Press **P**, then **Exit to main menu**. Expected: the engine roar **fades out** over about two
+10. Press **P**, then **Exit to main menu**. Expected: the engine roar **fades out** over about two
    seconds instead of cutting off or droning on, and the title screen shows the station turning with
    its planet behind it. Fly somewhere else, quit to the menu again: the background is the same view.
 
