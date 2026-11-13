@@ -15,7 +15,7 @@ import {
   advanceMissions,
   canCollectMissionReward,
   completeMission,
-  isMissionComplete,
+  missionObjectivesDone,
   missionNextText,
   missionProgress,
 } from "../src/sim/missions.js";
@@ -36,13 +36,15 @@ test("13a: every contract is a mission-data template with a runner objective", (
     assert.equal(mission.id, `test:${type}`);
     assert.equal(mission.steps[0].count, 3);
     assert.equal(mission.rewards.credits, 500);
-    assert.equal(isMissionComplete(mission), false);
+    assert.equal(missionObjectivesDone(mission), false);
     const expected = {
-      mine: "Mine 3 Ferrite.",
+      mine: "Mine 3 Ferrite for delivery to Meridian Station.",
       hunt: "Destroy 3 pirate raiders.",
-      salvage: "Recover 3 derelict crates.",
+      salvage: "Recover 3 derelict crates for delivery to Meridian Station.",
     }[type];
     assert.equal(missionNextText(mission), expected, `${type} objective placeholders are player-facing`);
+    if (type === "hunt") assert.equal(template.handIn, undefined, "a hunt contract has nothing to hand in");
+    else assert.equal(typeof template.handIn?.objective, "string", `${type} declares the sentence shown while its cargo is owed`);
   }
 });
 
@@ -58,11 +60,11 @@ test("13a: multiple active contracts advance independently from gameplay events"
   advanceMissions("mined", { item: "ferrite", player });
   assert.equal(missionProgress(mine).done, 1);
   advanceMissions("enemy-killed", { def: "raider", faction: "pirates", player });
-  assert.equal(isMissionComplete(hunt), true);
-  assert.equal(isMissionComplete(mine), false);
+  assert.equal(missionObjectivesDone(hunt), true);
+  assert.equal(missionObjectivesDone(mine), false);
 
   advanceMissions("mined", { item: "ferrite", player });
-  assert.equal(isMissionComplete(mine), true);
+  assert.equal(missionObjectivesDone(mine), true);
   const before = profile.cr;
   assert.equal(completeMission(1, profile), `Paid 500 cr.`);
   assert.equal(profile.cr, before + 500);
@@ -72,6 +74,49 @@ test("13a: multiple active contracts advance independently from gameplay events"
   assert.equal(completeMission(undefined, profile), `Paid 400 cr.`);
   assert.equal(profile.holds.wasp.ferrite, undefined, "mined ore is consumed at hand-in");
   assert.equal(activeMissions(profile).length, 0);
+});
+
+test("13a: a contract is not accomplished until its goods are handed in, and it never calls itself a mission", () => {
+  const profile = newProfile();
+  const station = state.worldState.store;
+  const previous = station.salv;
+  delete station.salv;
+  try {
+    const salvage = missionFromContract({ type: "salvage", tier: 1, p: 0, n: 2, r: 500 }, "wording-salvage");
+    profile.missions.push(salvage);
+    assert.equal(missionNextText(salvage, profile),
+      "Recover 2 derelict crates for delivery to Meridian Station.",
+      "the guiding text says where the cargo goes while it is being recovered");
+
+    salvage.counters.objective = 2;
+    salvage.step = salvage.current = 1;
+    salvage.completed = true;
+    assert.equal(missionObjectivesDone(salvage), true, "the collecting is finished");
+    assert.equal(missionNextText(salvage, profile),
+      "Deliver 2 derelict crates to Meridian Station. You have 0 of 2.",
+      "but the contract still asks for the hand-in, with no claim of accomplishment");
+    assert.doesNotMatch(missionNextText(salvage, profile), /complete/i, "no completion claim before the hand-in");
+
+    const hunt = missionFromContract({ type: "hunt", tier: 1, p: 0, n: 2, r: 400, e: "raider" }, "wording-hunt");
+    hunt.step = hunt.current = 1;
+    hunt.completed = true;
+    profile.missions.push(hunt);
+    assert.equal(missionNextText(hunt, profile),
+      "Contract complete. Return to Meridian Station to collect the reward.",
+      "a contract with nothing to hand in calls itself a contract, never a mission, and names the station that takes it");
+  } finally {
+    if (previous === undefined) delete station.salv;
+    else station.salv = previous;
+  }
+});
+
+test("13a: a lost mission-only hand-in fails the contract instead of waiting forever", () => {
+  const profile = newProfile();
+  const mission = missionFromContract({ type: "salvage", tier: 1, p: 2, n: 2, r: 700 }, "lost-hand-in");
+  // Salvage crates are ordinary goods, so they can be recovered again: no failure.
+  profile.missions.push(mission);
+  emit("docked", { profile });
+  assert.equal(activeMissions(profile).length, 1, "recoverable goods never fail a mission");
 });
 
 test("13a: salvage rewards require and consume the recovered items at hand-in", () => {
@@ -155,7 +200,7 @@ test("13a: the runner supports reach, deliver and survive objective events", () 
   advanceMissions("delivered", { target: "station", item: "salv", player });
   advanceMissions("mission-tick", { dt: 1, player });
   advanceMissions("mission-tick", { dt: 1, player });
-  assert.equal(isMissionComplete(profile.missions[0]), true);
+  assert.equal(missionObjectivesDone(profile.missions[0]), true);
 });
 
 test("13a: v18 active contracts migrate to v19 missions and flags survive round trips", () => {
@@ -181,5 +226,5 @@ test("13a: objective events on the event bus reach the active runner", () => {
   const player = playerFor(profile);
   profile.missions.push(missionFromContract({ type: "mine", tier: 1, p: 0, n: 1, r: 1, o: "ferrite" }, "bus-test"));
   emit("mined", { item: "ferrite", player });
-  assert.equal(isMissionComplete(profile.missions[0]), true);
+  assert.equal(missionObjectivesDone(profile.missions[0]), true);
 });

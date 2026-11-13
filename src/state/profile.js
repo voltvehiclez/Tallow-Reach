@@ -99,6 +99,36 @@ function allStockFit() {
 }
 
 /**
+ * A hull that is new to the fleet: its own empty hold, no remembered damage and
+ * its stock modules fitted. EVERY way a ship can join the fleet goes through
+ * here (buying one, or the station lending a replacement after a loss). A hull
+ * is not just an id: without `loadout[ship]` it has no bays at all, so it can be
+ * neither fitted in Outfitting nor flown (no thrusters, no Hull HP).
+ */
+export function addShipRecords(profile, id) {
+  if (!profile || !SHIPS[id]) return profile;
+  if (!profile.holds || typeof profile.holds !== "object") profile.holds = {};
+  if (!profile.hp || typeof profile.hp !== "object") profile.hp = {};
+  if (!profile.loadout || typeof profile.loadout !== "object") profile.loadout = {};
+  profile.holds[id] = newHold();
+  profile.hp[id] = 1;           // a fresh hull has no damage to remember
+  profile.loadout[id] = stockFor(id);
+  return profile;
+}
+
+/** Fill in only what hull `id` is missing, leaving anything it already has. */
+export function ensureShipRecords(profile, id) {
+  if (!profile || !SHIPS[id]) return profile;
+  if (!profile.holds || typeof profile.holds !== "object") profile.holds = {};
+  if (!profile.hp || typeof profile.hp !== "object") profile.hp = {};
+  if (!profile.loadout || typeof profile.loadout !== "object") profile.loadout = {};
+  if (!profile.holds[id]) profile.holds[id] = newHold();
+  if (!(Number(profile.hp[id]) > 0)) profile.hp[id] = 1;
+  if (!profile.loadout[id]) profile.loadout[id] = stockFor(id);
+  return profile;
+}
+
+/**
  * Keep the old singular property as a non-enumerable compatibility view. Old
  * callers can still assign `profile.mission` or read its compact `{ type, p,
  * n, r, ... }` shape, while every saved active mission lives in `missions`.
@@ -157,7 +187,8 @@ export function newWorld() {
   return worldWithStationStores({
     v: SAVE_VERSION,
     base: { ...BASE_DEFAULT },
-    board: [],
+    board: [],       // the home station's contract offers (kept as the old field)
+    boards: {},      // other stations' offers: place id -> compact offers
     galaxy: newGalaxyRecord(),
     place: DEFAULT_PLACE,
     destination: null, // local session destination, saved with this world
@@ -372,9 +403,21 @@ function cleanMission(raw) {
   for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "timeout", "elapsed", "failed", "failure", "failureMessage"]) {
     if (raw[key] !== undefined && !(borderDefinition && key === "timeout")) mission[key] = raw[key];
   }
+  // `handIn` is part of the mission: the sentence shown while the cargo is owed
+  // and, for a mission handed in somewhere specific, the station that takes it.
+  // Additive field (v19): an older record without it resolves the station from
+  // `origin`, so no save migration is needed.
+  if (raw.handIn && typeof raw.handIn === "object" && !Array.isArray(raw.handIn)) {
+    const handIn = {};
+    if (typeof raw.handIn.objective === "string" && raw.handIn.objective) handIn.objective = raw.handIn.objective;
+    if (typeof raw.handIn.station === "string" && raw.handIn.station) handIn.station = raw.handIn.station;
+    if (Object.keys(handIn).length) mission.handIn = handIn;
+  }
   if (borderDefinition) {
     mission.origin = borderDefinition.origin;
     delete mission.timeout;
+    // The authored story hand-in station wins over whatever a save carried.
+    if (borderDefinition.handIn?.station) mission.handIn = { ...(mission.handIn || {}), station: borderDefinition.handIn.station };
   }
   if (mission.type && MISSION_TYPES.includes(mission.type)) {
     mission.tier = Math.max(1, Math.floor(+mission.tier || 1));
@@ -641,6 +684,16 @@ export function sanitizeWorld(raw) {
   stationStores[homeStation] = homeStore;
 
   const board = Array.isArray(raw.board) ? raw.board.map(cleanContract).filter(Boolean) : [];
+  // Per-station boards are additive (v19): the home station keeps using `board`,
+  // every other station has its own list here, generated when it is first read.
+  const boards = {};
+  if (raw.boards && typeof raw.boards === "object" && !Array.isArray(raw.boards)) {
+    for (const [placeId, offers] of Object.entries(raw.boards)) {
+      if (!isPocket(placeId) || placeId === DEFAULT_PLACE) continue;   // home is `board`
+      const clean = Array.isArray(offers) ? offers.map(cleanContract).filter(Boolean) : [];
+      if (clean.length) boards[placeId] = clean;
+    }
+  }
   // v15 and older had galaxy:null. Never trust/save generated geography here;
   // galaxy-session installs the seed's catalog before this validation runs.
   const galaxy = cleanGalaxyRecord(raw.galaxy);
@@ -656,6 +709,7 @@ export function sanitizeWorld(raw) {
     v: SAVE_VERSION,
     base,
     board,
+    boards,
     galaxy,
     place,
     destination: cleanDestination(raw.destination),

@@ -23,6 +23,8 @@ import { setupMenu } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog } from "./ui/missionlog.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
+import { canPause, canOpenStarmap } from "./ui/overlays.js";
+import { updateMenuView, menuView, resizeMenuView } from "./render/menuview.js";
 import { updateOutfitting } from "./ui/outfitting.js";
 import { refillPower } from "./sim/power.js";
 import { refreshDrive } from "./sim/drive.js";
@@ -113,7 +115,7 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
     case "starmap":
       if (!repeat) {
         if (isStarmapOpen()) closeStarmap();
-        else if (playing) openStarmap();
+        else if (canOpenStarmap()) openStarmap();
       }
       break;
     case "route:jump":
@@ -128,7 +130,7 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       if (isStarmapOpen()) {
         closeStarmap();
         if (name === "pause" && pauseKey) setPause(true);
-      } else if (!state.ui.intro && !localPlayer().docked) setPause(!state.paused);
+      } else if (canPause()) setPause(!state.paused);
       break;
   }
 });
@@ -138,6 +140,7 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
+  resizeMenuView();
 });
 
 // --- Frame loop ------------------------------------------------------------
@@ -154,7 +157,15 @@ function frame(now) {
   const dt = Math.min(MAX_FRAME_DT, (now - last) / 1000);
   last = now;
 
-  // Nothing simulates behind the start screen or the pause overlay.
+  // The title screen has its own cinematic scene (the station turning with its
+  // planet behind it), so it never shows the last game view; nothing simulates
+  // behind it. The pause overlay freezes the game scene where it is.
+  if (state.ui.intro) {
+    updateMenuView(dt);
+    const menu = menuView();
+    renderer.render(menu.scene, menu.camera);
+    return;
+  }
   if (isSimulationPaused()) {
     renderer.render(scene, camera);
     return;

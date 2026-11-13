@@ -14,7 +14,7 @@ import { V } from "../src/util/math.js";
 import { itemCat } from "../src/data/items.js";
 import { MISSION_RULES } from "../src/data/missions/rules.js";
 import {
-  acceptMission, activeMissions, completeMission, isMissionComplete, isMissionFailed,
+  acceptMission, activeMissions, completeMission, missionObjectivesDone, isMissionFailed,
   missionDeliveryRequirement, missionDialogue, missionNextText, missionStep,
   chooseMission, nextMissionDialogue,
 } from "../src/sim/missions.js";
@@ -244,7 +244,8 @@ const progressSignature = (ctx, id) => {
  * Play a mission to its end. Options: `before(ctx, mission)` runs before every
  * action (the disturbance); `stopAt(mission)` stops early; `unblock(ctx, mission)`
  * is what a sensible player does when nothing seems to happen (empty the hold).
- * Returns "complete", "failed" or "stopped". Throws if the player gets stuck.
+ * Returns "objectives-done" (every step done, the hand-in may still be owed),
+ * "failed" or "stopped". Throws if the player gets stuck.
  */
 export function drive(ctx, id, { before, stopAt, unblock, maxLoops = 400 } = {}) {
   let idle = 0;
@@ -253,7 +254,7 @@ export function drive(ctx, id, { before, stopAt, unblock, maxLoops = 400 } = {})
     const mission = ctx.profile.missions.find(item => item.id === id);
     if (!mission) return "failed";
     if (isMissionFailed(mission)) return "failed";
-    if (isMissionComplete(mission)) return "complete";
+    if (missionObjectivesDone(mission)) return "objectives-done";
     if (stopAt?.(mission)) return "stopped";
     before?.(ctx, mission, loop);
     const now = ctx.profile.missions.find(item => item.id === id);

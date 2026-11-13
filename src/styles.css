@@ -96,8 +96,11 @@ canvas {
   margin-top: 2px;
 }
 #tr .hud-mission {
-  color: var(--amber);
+  color: var(--amber);   /* story missions: the special colour */
   overflow-wrap: anywhere;
+}
+#tr .hud-mission.hud-mission-contract {
+  color: var(--ice);     /* contracts are ordinary work */
 }
 #tr .hud-mission strong {
   display: block;
@@ -312,6 +315,27 @@ canvas {
   border-left: 1px solid var(--line);
   overflow: auto;
 }
+
+/* ---- Panel notice: a message the pilot must read. Fixed to the viewport, so it
+   never pushes a row of the docked panel (or anything else) out of place. ---- */
+#panel-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 80;
+  max-width: min(560px, calc(100% - 40px));
+  padding: 10px 16px;
+  background: rgba(10, 16, 20, .94);
+  border: 1px solid var(--ice);
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  color: #dceef4;
+  font-size: 13px;
+  line-height: 1.35;
+  pointer-events: auto;
+  cursor: pointer;
+}
+#panel-notice[hidden] { display: none; }
 
 /* ---- Mission failed notice: over the flight HUD and the docked screen ---- */
 #mission-alert {
@@ -1070,7 +1094,8 @@ textarea {
   resize: vertical;
 }
 
-/* ---- Pause overlay layout: title, hint, sound switch, Resume ---- */
+/* ---- Pause overlay layout: title, hint, Resume at the top, sound switch,
+   Exit to main menu at the bottom (markup: ui/overlays.js) ---- */
 #pz>div {
   display: grid;
   justify-items: center;
@@ -1206,6 +1231,7 @@ textarea {
 .sm-node text { fill: var(--ink); font-size: 11px; paint-order: stroke; stroke: #07090b; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
 .sm-node.current text { fill: var(--amber); }
 .sm-here-label { fill: var(--amber); font-size: .85em; }
+.sm-notice { margin: 6px 0 0; color: var(--amber); }
 .sm-help { margin: 0; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 13px; }
 .sm-details { min-height: 0; overflow: visible; border: 1px solid var(--line); padding: 14px; background: rgba(13,18,21,.8); }
 .sm-details h2 { margin: 0 0 6px; font-size: 22px; color: var(--ice); }

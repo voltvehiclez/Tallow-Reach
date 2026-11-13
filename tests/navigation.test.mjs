@@ -94,13 +94,17 @@ const pause = await loadHeadless("src/ui/pause.js", {
   state: "src/state/state.js",
   currentSave: "src/state/state.js",
   on: "src/util/events.js",
+  // Same bundle instance as the one pause.js imported, so the test can see the
+  // notice the pause screen clears.
+  showNotice: "src/ui/notice.js",
+  shownNotice: "src/ui/notice.js",
 });
 
 
 test("pause Exit to main menu saves, unpauses and emits the title-screen transition", () => {
   pause.state.ui.intro = false;
   pause.state.ui.tab = "m";
-  pause.state.ui.toast = "old notice";
+  pause.showNotice("old notice");
   pause.state.paused = false;
 
   let transitions = 0;
@@ -126,7 +130,8 @@ test("pause Exit to main menu saves, unpauses and emits the title-screen transit
   assert.equal(transitions, 1);
   assert.equal(pause.state.ui.intro, true);
   assert.equal(pause.state.ui.tab, "m");
-  assert.equal(pause.state.ui.toast, "");
+  assert.equal(pause.shownNotice(), "", "the panel's old message is gone with the game");
+  assert.equal("toast" in pause.state.ui, false, "and the panel no longer carries message text at all");
   assert.equal(pause.state.paused, false);
   assert.equal(overlay.hidden, true);
   assert.ok(storage.has("tr1"), "leaving gameplay keeps a current autosave");

@@ -19,7 +19,14 @@ Write down anything odd with what you did, what you expected and what happened. 
 2. Mouse steers; **W** speeds up, **S** slows, **X** stops, **A/D** strafe, **Space/C** up/down,
    **Q/E** roll, **Shift** boost. The ship should feel heavy and smooth, the same as before.
 3. Hold **Left Alt** and move the mouse: the free camera orbits. Release: it returns.
-4. Press **P**: the pause menu opens and the game freezes. Press **P** again: it resumes.
+4. Press **P**: the pause menu opens and the game freezes. **Resume is the top button and Exit to
+   main menu the bottom one.** Press **P** again: it resumes.
+5. Dock at a station, then press **M**: the starmap opens over the station screen (plot a route; the
+   warp itself waits until you launch). Press **M** again to close it, then press **P** and **Esc**:
+   the pause menu opens and closes while docked too.
+6. Press **P**, then **Exit to main menu**. Expected: the engine roar **fades out** over about two
+   seconds instead of cutting off or droning on, and the title screen shows the station turning with
+   its planet behind it. Fly somewhere else, quit to the menu again: the background is the same view.
 
 ## B. Mine and fight (3 min)
 
@@ -240,3 +247,34 @@ feel identical.
    any) shows in **Outfitting > Services**, and selling cargo on **Base** or **Inventory** adds the
    expected credits (including any Refinery bonus).
 
+## N. Missions belong to a station, and the docked panel keeps up
+
+The owner reported that a Meridian mission could be read from another station's Mission log, and that
+closing the Border Signal's final dialogue left the card offering **Abandon** while the beacon was
+already aboard.
+
+1. **Build:** `npm run build`, then `npm test` (should report **482 pass, 0 fail**). Open
+   `game/tallow-reach.html` and play with a save that has missions in it.
+2. **One station's board:** dock at Meridian, open **Contracts**, note the four offers. Launch, warp
+   to another station (open **Starmap** to pick one), dock, open **Contracts**: the four offers there
+   are that station's own, not Meridian's. Accept one and it stays in your Mission log and Contracts
+   tab at every station you dock at (progress follows the pilot); only a station with no active
+   missions says "No active missions here.", with no explanation of where other work is.
+   Press **Refresh** on one station's board: the other station's offers are unchanged when you
+   return. Hand-in guidance names the station that takes the cargo.
+3. **Story offers stay home, the mission does not:** Meridian offers **The Border Signal**; the log at
+   any other station does not offer it and nothing can start it there. Accept it at Meridian, then dock
+   elsewhere: the mission is still listed with its progress, its hand-in button names Meridian and is
+   disabled, and Abandon still works. If its current step is a conversation with Archivist Vale, the
+   dialogue card is read-only and says "Return to Meridian Station to continue talking."
+4. **No messages that move the panel (new):** accept a contract, sell the hold, unfit a module. The panel
+   must not grow a line at the top or shift its rows; nothing appears for these confirmations. A refusal
+   (e.g. a bad save code) appears at the bottom of the screen in a small fixed notice that does not move
+   anything, and the red "Mission failed" alert still behaves as before.
+5. **The redraw (the reported bug):** play the Border Signal to its final conversation, open the
+   **Mission log** tab with the dialogue still up, then close the last line. Expected: the card under
+   the dialogue changes to **Hand in cargo** immediately — no tab switch, no re-dock needed. Also
+   check the flight-side version: with the beacon aboard and the dialogue open, the log's button
+   should never stay on **Abandon** once the objectives are done.
+6. **Old saves:** load a save from before this change. Its home board is intact, missions keep their
+   hand-in station, and no mission disappeared from the log.

@@ -33,13 +33,18 @@ export const DESCRIBE = {
 
 export const CONTRACTS_PER_BOARD = 4;
 
+// Contracts hand their goods over at a station, so their guidance says where the
+// cargo goes (`{station}`) and `handIn.objective` says what is still owed. A
+// contract must never claim to be accomplished before that hand-in: the runner
+// shows this sentence, not "Contract complete", until the goods are paid for.
 export const CONTRACT_MISSION_TEMPLATES = {
   mine: {
     id: "contract.mine",
     title: "Mining contract",
     kind: "contract",
     requires: [],
-    steps: [{ id: "objective", kind: "mine", objective: "Mine {remaining} {item}." }],
+    steps: [{ id: "objective", kind: "mine", objective: "Mine {remaining} {item} for delivery to {station}." }],
+    handIn: { objective: "Deliver {count} {item} to {station}." },
     rewards: { credits: "$reward" },
     fails: { abandon: "abandoned" },
   },
@@ -48,6 +53,8 @@ export const CONTRACT_MISSION_TEMPLATES = {
     title: "Hunt contract",
     kind: "contract",
     requires: [],
+    // Nothing to hand in: destroying the ships is the whole job, so this one is
+    // "Contract complete" (not "Mission complete") once its wave is gone.
     steps: [{ id: "objective", kind: "kill", objective: "Destroy {remaining} {enemy}." }],
     rewards: { credits: "$reward" },
     fails: { abandon: "abandoned" },
@@ -57,7 +64,8 @@ export const CONTRACT_MISSION_TEMPLATES = {
     title: "Salvage contract",
     kind: "contract",
     requires: [],
-    steps: [{ id: "objective", kind: "collect", item: "salv", objective: "Recover {remaining} derelict crates." }],
+    steps: [{ id: "objective", kind: "collect", item: "salv", objective: "Recover {remaining} derelict crates for delivery to {station}." }],
+    handIn: { objective: "Deliver {count} derelict crates to {station}." },
     rewards: { credits: "$reward" },
     fails: { abandon: "abandoned" },
   },

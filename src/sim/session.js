@@ -9,6 +9,7 @@ import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { DEFAULT_PLACE } from "../data/places.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
 import { state, msg, profileOf, currentSave, placeWorld } from "../state/state.js";
+import { addShipRecords, ensureShipRecords } from "../state/profile.js";
 import { saveAutosave } from "../state/storage.js";
 import { clearTransient } from "./world.js";
 import { stationAt, fieldAt, launchFace, enterPlace, arrivalPos } from "./places.js";
@@ -21,7 +22,7 @@ import { refreshHull } from "./hull.js";
 import { spawnCrate } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
-import { activeMissions, missionProgress, isMissionComplete } from "./missions.js";
+import { activeMissions, missionProgress, missionObjectivesDone } from "./missions.js";
 import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
 
@@ -80,7 +81,7 @@ export function launch(P = state.player, profile = profileOf(P)) {
   // salvage missions share one field; spawn only the combined outstanding need.
   const field = fieldAt(placeId),
     salvageNeed = activeMissions(profile)
-      .filter(m => m.type === "salvage" && !isMissionComplete(m) && m.steps?.[m.step]?.kind === "collect")
+      .filter(m => m.type === "salvage" && !missionObjectivesDone(m) && m.steps?.[m.step]?.kind === "collect")
       .reduce((sum, m) => sum + missionProgress(m).total - missionProgress(m).done, 0);
   if (salvageNeed > 0 && field && placeWorld(placeId).crates.length === 0) {
     const [sx, sy, sz] = field.salvage.spread;
@@ -128,8 +129,10 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   // Preserve the old fallback for empty pockets: docking there returns home.
   // A real station feature — including a generated friendly trader — keeps its
   // own pocket so its named shop can be used.
-  if (local) enterPlace(stationAt(placeId) ? placeId : DEFAULT_PLACE, P);
-  ensureBoard(world);
+  const dockedAt = stationAt(placeId) ? placeId : DEFAULT_PLACE;
+  if (local) enterPlace(dockedAt, P);
+  // The board the pilot walks up to is this station's own (home keeps `board`).
+  ensureBoard(world, dockedAt);
   if (local) saveAutosave(currentSave());
   emit("docked", { player: P });
 }
@@ -232,10 +235,16 @@ export function die() {
 
   if (S.ships.length) {
     S.ship = S.ships[0];
+    // A ship you fall back to must have its own hold, fit and hull fraction;
+    // fill in anything a very old save left out rather than flying half a ship.
+    ensureShipRecords(S, S.ship);
     setShip(S.ship);
   } else if (S.cr < SHIPS[DEFAULT_SHIP].price) {
     S.ships = [DEFAULT_SHIP];
     S.ship = DEFAULT_SHIP;
+    // The lent Wasp is a complete ship: empty hold, no damage, stock modules.
+    // Without this it had no bays, so it could not be fitted or flown at all.
+    addShipRecords(S, DEFAULT_SHIP);
     setShip(DEFAULT_SHIP);
     text += " The station lent you a spare Wasp.";
   } else {

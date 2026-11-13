@@ -85,6 +85,34 @@ test("13c: mission log lists active missions, objective, progress and next actio
   returning.step = 9;
   assert.equal(missionNextText(returning), "Return to Meridian Station.",
     "the HUD objective updates for the return-home handoff without repeating the reveal");
+  const owed = storyMission();
+  owed.step = owed.current = 10;
+  owed.completed = true;
+  assert.equal(missionNextText(owed, profile), "Return to Meridian Station with the beacon. You have 0 of 1.",
+    "after the last line the mission asks for the hand-in, never for a reward");
+  const paid = storyMission();
+  paid.step = paid.current = 10;
+  paid.completed = true;
+  profile.holds[profile.ship].beacon = 1;
+  assert.equal(missionNextText(paid, profile), "Return to Meridian Station with the beacon.",
+    "with the beacon aboard the guidance is only the hand-in");
+  assert.doesNotMatch(missionNextText(paid, profile), /complete/i,
+    "a mission that owes its beacon is never called complete");
+
+  // A mission that owes its item is ready to hand in, not complete; one that has
+  // lost it says so and still offers a way out.
+  const owedProfile = newProfile();
+  const owedMission = instantiateStoryMission(BORDER_SIGNAL_MISSION);
+  owedMission.step = owedMission.current = 10;
+  owedMission.completed = true;
+  owedProfile.missions.push(owedMission);
+  assert.match(missionLogHtml(owedProfile), /Awaiting cargo/, "a missing hand-in is not called complete");
+  assert.match(missionLogHtml(owedProfile), /Abandon/, "and the mission log still offers a way out");
+  owedProfile.holds[owedProfile.ship].beacon = 1;
+  const readyHtml = missionLogHtml(owedProfile);
+  assert.match(readyHtml, /Ready to hand in/, "with the item aboard it is ready to hand in");
+  assert.match(readyHtml, /Hand in cargo/, "and the button is the hand-in, not a reward claim");
+  assert.doesNotMatch(readyHtml, /Complete/, "nothing claims it is complete before the hand-in");
 
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
   const ui = readFileSync(new URL("../src/ui/missionlog.js", import.meta.url), "utf8");

@@ -19,8 +19,14 @@ import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/
 import {
   describe,
   activeMissions,
+  boardAt,
+  atMissionHandInStation,
   canCollectMissionReward,
-  isMissionComplete,
+  canCompleteMissionHere,
+  missionHandInStationName,
+  missionHandIn,
+  missionNextText,
+  missionObjectivesDone,
   missionProgress,
 } from "../sim/contracts.js";
 import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
@@ -83,7 +89,6 @@ export function outpostHtml(ui) {
   let h = `<h1>${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n}</h1><div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${TABS.map(
     ([k, n]) => `<button data-a="tab" data-b="${k}" class="${ui.tab === k ? "on" : ""}">${n}</button>`
   ).join("")}</nav>`;
-  if (ui.toast) h += `<div class="ok">${ui.toast}</div>`;
 
   const render = SCREENS[ui.tab];
   if (render) h += render(ui);
@@ -94,29 +99,43 @@ export function outpostHtml(ui) {
 }
 
 function contractsHtml() {
+  // Active missions are the pilot's own: they are listed here and in the Mission
+  // log wherever the pilot docks, with the hand-in button live only at the one
+  // station that takes it.
   const active = activeMissions();
   const activeHtml = active.length
-    ? `<h2>Active missions</h2>` + active.map((m, i) => {
-        const ready = isMissionComplete(m) && canCollectMissionReward(m),
+    ? `<h2>Active missions</h2>` + active.map(m => {
+        const requirement = missionHandIn(m),
+          // The reward is only collected at the mission's own station, so the
+          // row offers the button there and says where to go everywhere else.
+          cargoReady = missionObjectivesDone(m) && canCollectMissionReward(m),
+          here = atMissionHandInStation(m),
+          ready = cargoReady && here,
+          station = missionHandInStationName(m),
           progress = m.type === "hunt" ? missionProgress(m) : null,
-          detail = `${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
+          // With every step done the row says what is still owed (the hand-in,
+          // or the reward trip) instead of leaving a bare Abandon button.
+          owed = missionObjectivesDone(m) ? `${missionNextText(m)} ` : "",
+          detail = `${owed}${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
         return `<div class="row"><div>${describe(m)}<small>${detail}</small></div>${
           ready
-            ? `<button data-a="done" data-b="${i}">Collect reward</button>`
-            : `<button data-a="drop" data-b="${i}">Abandon</button>`
+            ? `<button data-a="done" data-b="${m.id}">${requirement ? "Hand in cargo" : "Collect reward"}</button>`
+            : cargoReady
+              ? `<button data-a="done" data-b="${m.id}" disabled>${requirement ? "Hand in" : "Collect"} at ${station}</button><button data-a="drop" data-b="${m.id}">Abandon</button>`
+              : `<button data-a="drop" data-b="${m.id}">Abandon</button>`
         }</div>`;
       }).join("")
-    : `<p>No active missions.</p>`;
+    : `<p>No active missions here.</p>`;
   return (
     activeHtml +
     `<h2>Contract board</h2>` +
-    state.worldState.board
+    boardAt(state.place)
       .map(
         (c, i) =>
           `<div class="row"><div>${describe(c)}<small>Threat ${c.tier} of 3. Reward ${c.r} cr.</small></div><button data-a="acc" data-b="${i}">Accept</button></div>`
       )
       .join("") +
-    `<div class="row"><small>Contracts reshuffle every time you refresh.</small><button data-a="ref">Refresh</button></div>`
+    `<div class="row"><small>This station's board reshuffles when you refresh it.</small><button data-a="ref">Refresh</button></div>`
   );
 }
 

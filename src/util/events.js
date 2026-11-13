@@ -70,12 +70,13 @@
 //                                    a contract or story mission entered a pilot's active list
 //   mission-progress  { mission, event, payload, player }
 //                                    the data-driven runner advanced an objective
-//   mission-completed { mission, player }
-//                                    all steps are complete; reward collection is still explicit
+//   mission-objectives-done { mission, player }
+//                                    every step is finished, but the mission is NOT accomplished:
+//                                    items still owed are handed in, and the reward claimed, at a station
 //   mission-failed { mission, title, reason, action, message, player }   `message` is always filled; the HUD shows it
 //                                    a configured death, departure or timeout outcome ran
 //   mission-rewarded { mission, reward, player }
-//                                    the pilot collected a completed mission reward
+//                                    the pilot handed in any owed items and took the reward
 //   mission-abandoned { mission, player }
 //                                    the pilot removed an active mission
 //   mission-inventory-changed { profile, player }

@@ -16,6 +16,7 @@ import { travelQuote, intraSystemPolicy, travelOptions, findRouteToSystem, findD
 import { emit, on } from "../util/events.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
+import { canOpenStarmap } from "./overlays.js";
 
 let root = null;
 let drag = null;
@@ -533,7 +534,9 @@ const knowledge = () => state.worldState.galaxy?.knowledge || {};
 
 export function openStarmap() {
   const P = localPlayer();
-  if (!root || !state.galaxy || state.ui.intro || state.paused || !P || P.docked || P.dead || P.warp) return false;
+  // Docked is not a reason to refuse: the chart may be read at a station, and
+  // warping from it still needs a launch. The rule lives in ui/overlays.js.
+  if (!root || !canOpenStarmap(P)) return false;
   clearPendingNavigationClick();
   cancelTransition();
   const from = P.place || state.place;
@@ -908,6 +911,7 @@ function onClickNow(e) {
     render();
   } else if (action === "system-warp") {
     const id = view.menu?.systemId;
+    if (localPlayer()?.docked) { view.notice = "Docked: launch to warp."; render(); return; }
     const to = id && directSystemWarp(state.galaxy, localPlayer()?.place || state.place, id, travelContext());
     view.menu = null;
     if (!to) { view.notice = ""; render(); return; }
@@ -919,6 +923,9 @@ function onClickNow(e) {
   } else if (action === "travel") {
     const to = button.dataset.to;
     const from = localPlayer()?.place || state.place;
+    // The chart opens at a station too; warping needs a launch first, so say so
+    // here instead of proposing a course that main.js would silently refuse.
+    if (localPlayer()?.docked) { view.notice = "Docked: launch to warp."; render(); return; }
     const choice = menuChoice(state.galaxy, view, from);
     view.menu = null;
     if (choice && choice.pocket.id !== to) {
@@ -1153,6 +1160,7 @@ function render() {
       <div class="sm-body">
         <section class="sm-chart-panel" aria-label="${esc(Term("mapNode"))} chart">
           ${tools}
+          ${localPlayer()?.docked ? `<p class="sm-notice">Docked at ${esc(here.n)}: launch to warp. The chart can be used here for planning.</p>` : view.notice ? `<p class="sm-notice">${esc(view.notice)}</p>` : ""}
           <svg class="sm-chart${transition ? " transitioning" : ""}" data-mode="${esc(view.mode)}" viewBox="${box.join(" ")}" preserveAspectRatio="xMidYMid meet" aria-label="${view.mode === "system" ? esc(selected?.n || "") + " " + esc(terms("flyable")) : "Connected " + esc(terms("mapNode"))}">
             ${chart}
           </svg>

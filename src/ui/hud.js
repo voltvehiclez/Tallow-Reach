@@ -121,7 +121,10 @@ function missionsHtml(missions) {
   if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
   return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
     const progress = mission.type === "hunt" ? missionProgress(mission) : null;
-    return `<div class="hud-mission"><strong>${escHud(missionDescription(mission))}:</strong>` +
+    // Contracts are ordinary work and read light blue; story missions keep the
+    // amber so a story always stands out in the top-right block.
+    const kind = mission.kind === "contract" ? "contract" : "story";
+    return `<div class="hud-mission hud-mission-${kind}"><strong>${escHud(missionDescription(mission))}:</strong>` +
       `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
         progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""
       }</div>`;

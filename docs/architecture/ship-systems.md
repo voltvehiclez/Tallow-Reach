@@ -115,6 +115,13 @@
 - **Fitting lives in one place.** `sim/fitting.js` is the only code that writes `profile.loadout`, and
   it refreshes the acting pilot's ship power, drive, shields, hull and guns after every change.
   Anything else that changes a bay must go through it, or the ship keeps the old numbers.
+- **A hull id is not a ship.** What makes a hull flyable and fittable is its three fleet records:
+  `profile.holds[id]` (its own hold), `profile.hp[id]` (its remembered hull fraction) and
+  `profile.loadout[id]` (its bays). A hull with no loadout entry has no bays in Outfitting and no
+  thrusters, Hull HP, shields or guns. A hull joins the fleet through `addShipRecords`
+  (`state/profile.js`, used by `buyShip` and by the station's spare Wasp after a death) and any hull
+  that becomes the flown ship is repaired with `ensureShipRecords` first (`selectShip`, and the
+  fallback to another owned ship in `sim/session.js`).
 
 ## Known gaps
 

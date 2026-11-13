@@ -12,7 +12,7 @@
 
 import { isItem } from "../items.js";
 import { ENEMIES } from "../enemies.js";
-import { isPocket } from "../places.js";
+import { isPocket, placeDef } from "../places.js";
 import { MISSION_KINDS, MISSION_STEP_KINDS } from "./index.js";
 import { MISSION_RULES } from "./rules.js";
 
@@ -178,6 +178,82 @@ export function lintMission(def) {
     def.steps.forEach((step, i) => { if (!canEnd.has(i) && edges(i).some(n => canEnd.has(n))) canEnd.add(i); });
   }
   def.steps.forEach((step, i) => { if (reach.has(i) && !canEnd.has(i)) error(step, "step can never reach the end of the mission (dead end or loop)"); });
+
+  // --- player-facing wording -----------------------------------------------------
+  // Guidance says what the pilot must still DO. It must never claim the work is
+  // finished: a mission that hands items in is only accomplished when the station
+  // hand-in takes them (LESSONS L15). A contract also never calls itself a mission.
+  const COMPLETION_CLAIM = /\b(complete|completed|completing|accomplished|finished)\b/i;
+  const guidance = [];
+  const collectGuidance = step => {
+    if (typeof step?.objective === "string") guidance.push(step);
+    for (const child of step?.steps || []) collectGuidance(child);
+  };
+  def.steps.forEach(collectGuidance);
+  if (typeof def.handIn?.objective === "string" && def.handIn.objective.trim()) guidance.push(null);
+  for (const step of guidance) {
+    const text = step?.objective ?? def.handIn.objective;
+    if (COMPLETION_CLAIM.test(text)) {
+      error(step, `guidance must not claim completion ("${text}"): a mission is only accomplished when its reward is handed in at a station, so say what is still owed`);
+    }
+    if (def.kind === "contract" && /\bmission\b/i.test(text)) {
+      error(step, `a contract must call itself a contract, never a mission ("${text}")`);
+    }
+  }
+
+  // A mission whose objectives collect or mine an item is not accomplished until
+  // that item is handed in, so its data must say what the HUD shows meanwhile.
+  const handInSteps = [];
+  const visitHandIn = step => {
+    if (step?.item && ["collect", "mine", "deliver"].includes(step.kind)) handInSteps.push(step);
+    for (const child of step?.steps || []) visitHandIn(child);
+  };
+  def.steps.forEach(visitHandIn);
+  if (handInSteps.length && !(typeof def.handIn?.objective === "string" && def.handIn.objective.trim())) {
+    error(handInSteps[0], `this mission hands in ${handInSteps.map(step => `"${step.item}"`).join(", ")}, so it needs a \`handIn.objective\` sentence: the guidance shown after the last step while the cargo is still owed`);
+  }
+  // --- the hand-in station -------------------------------------------------------
+  // Every mission is handed in at exactly one station (docs/MISSION_RULES.md). A
+  // mission that sends the pilot somewhere specific names it with
+  // `handIn.station`; otherwise it is the station that gave the mission out, so
+  // authored data normally leaves the field out.
+  if (def.handIn !== undefined) {
+    if (typeof def.handIn !== "object" || def.handIn === null || Array.isArray(def.handIn)) {
+      error(null, "`handIn` must be an object with an `objective` sentence");
+    } else {
+      for (const key of Object.keys(def.handIn)) {
+        if (key !== "objective" && key !== "station") {
+          warn(null, `unknown \`handIn.${key}\`: the runner reads only \`objective\` and \`station\``);
+        }
+      }
+      let stationName = "";
+      if (def.handIn.station !== undefined) {
+        if (!isPocket(def.handIn.station)) error(null, `handIn.station "${def.handIn.station}" is not a pocket`);
+        else {
+          const feature = placeDef(def.handIn.station).features.find(f => f.kind === "station");
+          if (!feature) error(null, `handIn.station "${def.handIn.station}" has no station, so nothing can be handed in there`);
+          else stationName = String(feature.n || "");
+        }
+      }
+      const objective = typeof def.handIn.objective === "string" ? def.handIn.objective : "";
+      if (objective && !objective.includes("{station}") && !(stationName && objective.includes(stationName))) {
+        warn(null, "handIn.objective should use `{station}` (the runner fills in the station) so the sentence always names where the hand-in is");
+      }
+    }
+  }
+
+  // --- where the mission is offered ----------------------------------------------
+  // Story work is offered at one station's counter. `offeredAt` names it; leave it
+  // out and the mission is offered wherever its hand-in is, else at the home
+  // station. The field only decides where the log lists it, but a typo would
+  // silently move a mission, so it is checked like the hand-in station.
+  if (def.offeredAt !== undefined) {
+    if (typeof def.offeredAt !== "string" || !isPocket(def.offeredAt)) {
+      error(null, `\`offeredAt\` ${JSON.stringify(def.offeredAt)} is not a pocket, so no station offers this mission`);
+    } else if (!placeDef(def.offeredAt).features.some(f => f.kind === "station")) {
+      error(null, `\`offeredAt\` "${def.offeredAt}" has no station, so nothing offers this mission`);
+    }
+  }
 
   // --- sources: nothing may wait for something that can never exist -------------
   // Walk the steps in order; a later step may rely on an earlier source only.

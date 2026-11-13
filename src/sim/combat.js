@@ -126,7 +126,9 @@ export function restoreMissionDrops(placeId = state.place) {
   // out directly and never saved a defeat position. Give that save one safe,
   // deterministic crate at the pocket arrival point rather than soft-locking it.
   for (const mission of state.profile?.missions || []) {
-    if (mission.failed || mission.completed) continue;
+    // Only a mission that is still ON its collect step needs a legacy crate;
+    // a failed one is gone and a finished one is past every step.
+    if (mission.failed) continue;
     const step = mission.steps?.[mission.step ?? mission.current];
     if (step?.kind !== "collect" || step.missionItem !== true || step.place !== placeId || !step.item) continue;
     if (drops.some(drop => drop?.missionId === mission.id && drop.item === step.item)) continue;

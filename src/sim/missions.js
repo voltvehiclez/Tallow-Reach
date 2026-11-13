@@ -3,13 +3,14 @@
 // remembered flags, branches and parallel objectives.
 
 import { on, emit } from "../util/events.js";
-import { missionFromContract, describeMission } from "../data/missions/contracts.js";
+import { CONTRACT_MISSION_TEMPLATES, missionFromContract, describeMission } from "../data/missions/contracts.js";
+import { storyMission } from "../data/missions/index.js";
 import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
-import { placeAt } from "../data/places.js";
+import { placeAt, isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { state, profileOf } from "../state/state.js";
 import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stockOf, takeItem } from "./inventory.js";
-import { enterPlace, arrivalPos } from "./places.js";
+import { enterPlace, arrivalPos, stationAt } from "./places.js";
 
 let nextMissionId = 0;
 
@@ -47,8 +48,19 @@ export function isMissionFailed(mission) {
   return !!mission?.failed;
 }
 
-export function isMissionComplete(mission) {
+/**
+ * Every authored step is finished. This is deliberately NOT called "complete":
+ * a mission that hands items in is not accomplished until `completeMission`
+ * takes the goods and pays. Read this name, never `mission.completed`, so the
+ * difference cannot quietly disappear again (LESSONS L15).
+ */
+export function missionObjectivesDone(mission) {
   return !!mission && !mission.failed && (mission.completed === true || mission.step >= (mission.steps?.length || 0));
+}
+
+/** The word the runner uses for this mission's own kind: "Contract" or "Mission". */
+export function missionKindWord(mission) {
+  return mission?.kind === "contract" ? "Contract" : "Mission";
 }
 
 function stepCount(step) {
@@ -77,7 +89,7 @@ export function missionProgress(mission) {
     return { done, total, step, index };
   }
   const total = stepCount(step);
-  const done = isMissionComplete(mission) ? total : Math.min(total, counterValue(mission, step.id));
+  const done = missionObjectivesDone(mission) ? total : Math.min(total, counterValue(mission, step.id));
   return { done, total, step, index };
 }
 
@@ -86,19 +98,150 @@ export function remainingObjective(mission) {
   return Math.max(0, progress.total - progress.done);
 }
 
-/** Replace the small set of data-only placeholders used by contract
- * objectives. Story objectives are normally complete sentences and need no
- * interpolation. */
-function formatMissionObjective(text, step, progress) {
+/** Fill the small set of data-only placeholders a mission sentence may use. */
+function fillMissionText(text, values) {
+  return String(text ?? "").replace(/\{(remaining|count|item|enemy|place|station)\}/g, (_, key) => String(values[key] ?? ""));
+}
+
+/**
+ * A station pocket id, or null. `stationAt` alone would accept any unknown id,
+ * because the place catalog falls back to the home station for ids it does not
+ * know; that would turn a corrupt `handIn.station` into a mission filed at a
+ * station that does not exist, which no log would ever show.
+ */
+export const stationPocket = id => (typeof id === "string" && isPocket(id) && stationAt(id) ? id : null);
+
+/**
+ * The place id of the station a mission is handed in at. Mission data may name
+ * one (`handIn.station`) when the job sends the pilot somewhere specific;
+ * otherwise it is the station that gave the mission out, which `acceptMission`
+ * records the moment it is taken. `origin` (the station a contract was taken
+ * from) resolves it for missions saved before the field existed, the station the
+ * pilot is docked at covers an offer that has not been accepted yet, and a
+ * record whose station no longer exists falls back to the home station, so a
+ * mission can never become impossible. Returns null only if nothing can be named.
+ */
+export function missionHandInStation(mission) {
+  const named = stationPocket(mission?.handIn?.station);
+  if (named) return named;
+  const origin = stationPocket(mission?.origin);
+  if (origin) return origin;
+  // An offer (or a mission taken in flight) has no origin station yet: the one
+  // the pilot is docked at gives it out, so that is where it comes back to.
+  if (stationPocket(state.place)) return state.place;
+  return stationPocket(DEFAULT_PLACE);
+}
+
+/** The name of the station a mission is handed in at, for player-facing text. */
+export function missionHandInStationName(mission) {
+  return stationAt(missionHandInStation(mission))?.n || "a station";
+}
+
+/**
+ * Is the pilot docked at the station that takes this mission's hand-in? A
+ * mission with no resolvable station can be handed in anywhere (it must never
+ * become impossible); everything ordinary names exactly one station.
+ */
+export function atMissionHandInStation(mission, placeId = state.place) {
+  const station = missionHandInStation(mission);
+  return !station || station === placeId;
+}
+
+/**
+ * The one station that offers an authored mission: its own `offeredAt`, else the
+ * station it is handed in at (the giving station), else home. Every mission is
+ * therefore specific to a station by default — there is no "offered everywhere"
+ * form, and the Mission log only lists an offer at that station.
+ *
+ * A mission whose data names `offeredAt` that is not a station is offered
+ * **nowhere** rather than silently moving to the fallback: a typo must not turn
+ * one station's job into every station's job (the linter reports it as an error).
+ */
+export function missionOfferStation(definition, fallback = DEFAULT_PLACE) {
+  const named = typeof definition?.offeredAt === "string" ? definition.offeredAt : "";
+  if (named) return stationPocket(named);          // fail closed, never move
+  const handIn = stationPocket(definition?.handIn?.station);
+  if (handIn) return handIn;
+  return stationPocket(fallback);
+}
+
+/**
+ * Is the pilot at the station this mission belongs to? A station-contact
+ * conversation (a dialogue step with `requiresDock`) happens at the counter that
+ * gives the mission out, not at any station the pilot may dock at: reading the
+ * Archivist's briefing while docked at Galereach would be a conversation in two
+ * places at once. Missions that name no station are never held back.
+ */
+export function missionAtItsStation(mission, placeId = state.place) {
+  const station = missionOfferStation(mission);
+  return !station || !placeId || station === placeId;
+}
+
+/** The station name a mission sentence shows for `{station}`. */
+function stationLabel(mission) {
+  return missionHandInStationName(mission);
+}
+
+/**
+ * Record the station a mission is handed in at, once, when it is taken: its own
+ * data if it names one, else the station that gave it out. Stored on the
+ * mission so it survives a save and cannot drift as the pilot travels.
+ */
+function stampHandInStation(mission, at = state.place) {
+  if (!mission) return mission;
+  if (stationPocket(mission?.handIn?.station)) return mission;   // the data chose it
+  const giving = stationPocket(at) || missionHandInStation(mission);
+  if (!giving) return mission;
+  mission.handIn = { ...(mission.handIn || {}), station: giving };
+  return mission;
+}
+
+/** The sentence a mission shows while its objectives are done but its items
+ * are still owed. Kept in mission data (`handIn.objective`), never in the UI. */
+function handInObjective(mission) {
+  if (typeof mission?.handIn?.objective === "string" && mission.handIn.objective) return mission.handIn.objective;
+  const definition = mission?.kind === "contract"
+    ? CONTRACT_MISSION_TEMPLATES[mission?.type]
+    : storyMission(mission?.id);
+  return typeof definition?.handIn?.objective === "string" ? definition.handIn.objective : "";
+}
+
+/** Replace the placeholders used by contract objectives. Story objectives are
+ * normally complete sentences and need no interpolation. */
+function formatMissionObjective(text, step, progress, mission) {
   const target = step.place || step.sector || step.target;
-  const values = {
+  return fillMissionText(text, {
     remaining: Math.max(0, progress.total - progress.done),
     count: progress.total,
     item: step.item ? itemName(step.item) : "the required item",
     enemy: step.enemy ? enemyDef(step.enemy).pl || "hostiles" : "hostiles",
     place: target ? placeAt(target)?.n || target : "the target area",
-  };
-  return text.replace(/\{(remaining|count|item|enemy|place)\}/g, (_, key) => values[key]);
+    station: stationLabel(mission),
+  });
+}
+
+/**
+ * Guidance once every objective is finished but the reward is unclaimed.
+ * A mission that owes items is NOT accomplished yet: its text keeps naming the
+ * cargo and the station until the hand-in consumes them. A mission with nothing
+ * to hand over is done and says so in its own kind's word, so a contract never
+ * calls itself a mission.
+ */
+function handInNextText(mission, profile) {
+  const requirement = missionHandIn(mission);
+  const station = stationLabel(mission);
+  if (!requirement) return `${missionKindWord(mission)} complete. Return to ${station} to collect the reward.`;
+  const text = fillMissionText(handInObjective(mission) || "Deliver {count} {item} to {station}.", {
+    count: requirement.count,
+    remaining: 0,
+    item: itemName(requirement.item),
+    enemy: "hostiles",
+    station: stationLabel(mission),
+    place: stationLabel(mission),
+  });
+  const delivery = missionDeliveryRequirement(mission, profile);
+  const have = delivery ? delivery.station + delivery.hold : requirement.count;
+  return have >= requirement.count ? text : `${text} You have ${have} of ${requirement.count}.`;
 }
 
 /** Explain a resource-blocked script instead of leaving a vague generic step. */
@@ -123,8 +266,8 @@ function blockedScriptText(step, profile = state.profile) {
  * logs can reveal a future ambush or another step's implementation detail. */
 export function missionNextText(mission, profile = state.profile) {
   if (!mission) return "No mission selected.";
-  if (isMissionFailed(mission)) return mission.failureMessage || "Mission failed.";
-  if (isMissionComplete(mission)) return "Mission complete. Return to a station to collect the reward.";
+  if (isMissionFailed(mission)) return mission.failureMessage || `${missionKindWord(mission)} failed.`;
+  if (missionObjectivesDone(mission)) return handInNextText(mission, profile);
   const step = missionStep(mission);
   if (!step) return "No current objective.";
   const progress = missionProgress(mission);
@@ -138,7 +281,7 @@ export function missionNextText(mission, profile = state.profile) {
       : resourceHint;
   }
   if (typeof step.objective === "string" && step.objective) {
-    return formatMissionObjective(step.objective, step, progress);
+    return formatMissionObjective(step.objective, step, progress, mission);
   }
   const left = Math.max(0, progress.total - progress.done);
   const target = step.place || step.sector || step.target;
@@ -173,7 +316,7 @@ export function missionNextText(mission, profile = state.profile) {
 
 export function missionForObjective(profile, kind) {
   return missionsOf(profile).find(mission =>
-    !isMissionComplete(mission) && !isMissionFailed(mission) && missionStep(mission)?.kind === kind
+    !missionObjectivesDone(mission) && !isMissionFailed(mission) && missionStep(mission)?.kind === kind
   ) || null;
 }
 
@@ -187,8 +330,13 @@ function cloneData(value) {
 }
 
 /** Make an active mission from a compact board offer. */
-export function instantiateMission(offer) {
-  return missionFromContract(offer, freshId(offer?.type));
+export function instantiateMission(offer, at = state.place) {
+  const mission = missionFromContract(offer, freshId(offer?.type));
+  // Remember the station the contract was taken from, so the hand-in guidance
+  // can name it while the pilot is out in the field. `origin` is already part of
+  // the saved mission shape, so no save migration is needed.
+  if (mission && !mission.origin) mission.origin = at;
+  return stampHandInStation(mission, at);
 }
 
 /** Clone a data-only story definition into the saved runtime shape. */
@@ -264,11 +412,14 @@ function emitProgress(mission, event, payload = {}) {
   emit("mission-progress", { mission, event, payload, player: payload.player });
 }
 
-function markComplete(mission, payload = {}) {
+// The last step finished. This is NOT the mission's accomplishment: a mission
+// that hands items in still waits for `completeMission`, which consumes them
+// and pays. The event name says so, so no listener can mistake one for the other.
+function markObjectivesDone(mission, payload = {}) {
   if (mission.completed) return false;
   mission.completed = true;
   mission.current = mission.steps.length;
-  emit("mission-completed", { mission, player: payload.player });
+  emit("mission-objectives-done", { mission, player: payload.player });
   return true;
 }
 
@@ -278,7 +429,7 @@ function moveToStep(mission, target, payload = {}) {
   mission.step = index;
   mission.current = index;
   mission.p = 0;
-  if (index >= mission.steps.length) markComplete(mission, payload);
+  if (index >= mission.steps.length) markObjectivesDone(mission, payload);
   return true;
 }
 
@@ -507,7 +658,7 @@ function rememberMissionPickup(mission, event, payload = {}) {
 /** Run zero-length story steps immediately after a mission starts or advances. */
 function activateAutomatic(mission, profile, payload = {}) {
   let changed = false;
-  for (let guard = 0; guard < 100 && !isMissionComplete(mission) && !isMissionFailed(mission); guard++) {
+  for (let guard = 0; guard < 100 && !missionObjectivesDone(mission) && !isMissionFailed(mission); guard++) {
     const step = missionStep(mission);
     if (!step) break;
     if (primeReachStep(mission, payload)) {
@@ -584,6 +735,9 @@ function advanceDialogue(mission, step, event, payload, profile) {
   if (!player || state.loading || player.loading || player.dead || player.warp ||
       (player.inCombat && step.allowCombat !== true) ||
       (step.requiresDock === true && player.docked !== true)) return false;
+  // A station-contact conversation belongs to the station that gives the mission
+  // out; docking at another counter is not the same place (docs/MISSION_RULES.md).
+  if (step.requiresDock === true && !missionAtItsStation(mission, player.place || state.place)) return false;
   const lines = Array.isArray(step.lines) ? step.lines : step.lines == null ? [] : [String(step.lines)];
   const current = counterValue(mission, step.id);
   if (event === "dialogue-choice") {
@@ -633,14 +787,14 @@ function advanceParallel(mission, step, event, payload) {
 export function advanceMission(mission, event, payload = {}) {
   if (!mission || isMissionFailed(mission) || !missionStep(mission)) return false;
   const rememberedPickup = rememberMissionPickup(mission, event, payload);
-  if (isMissionComplete(mission)) return rememberedPickup;
+  if (missionObjectivesDone(mission)) return rememberedPickup;
   // Mission-spawned trigger events are scoped to the mission that emitted them;
   // otherwise a wave-clear from one story could wake every waiting story.
   if (event === "mission-trigger" && payload.mission && payload.mission !== mission.id) return false;
   const profile = profileFor(payload);
   ensureCounters(mission);
   const prepared = activateAutomatic(mission, profile, payload);
-  if (prepared || isMissionComplete(mission) || isMissionFailed(mission)) {
+  if (prepared || missionObjectivesDone(mission) || isMissionFailed(mission)) {
     if (prepared) emitProgress(mission, event, payload);
     return prepared;
   }
@@ -671,10 +825,14 @@ export function advanceMission(mission, event, payload = {}) {
   return true;
 }
 
+// Events after which a mission that owes a hand-in is checked for a mission-only
+// item that no longer exists anywhere (a ship destroyed, a hold changed, a dock).
+const LOST_HAND_IN_EVENTS = new Set(["mission-tick", "docked", "place-changed", "warp-end", "mission-inventory-changed"]);
+
 /** Advance all missions owned by the event's player. */
 export function advanceMissions(event, payload = {}) {
   const profile = profileFor(payload);
-  let changed = false;
+  let changed = LOST_HAND_IN_EVENTS.has(event) ? failLostHandIns(payload, profile) : false;
   for (const mission of [...missionsOf(profile)]) {
     if (event === "mission-tick") {
       mission.elapsed = Math.max(0, Number(mission.elapsed) || 0) + Math.max(0, Number(payload.dt) || 0);
@@ -701,11 +859,13 @@ function failureAction(rule, mission) {
   return rule?.action || mission?.fails?.action || "keep";
 }
 
-/** What to tell the player when a failure rule carries no message of its own. */
+/** What to tell the player when a failure rule carries no message of its own.
+ * The notice above it already says "Mission failed: <name>", so these are the
+ * reason only. */
 const FAILURE_REASON_TEXT = {
-  "player-dead": "your ship was destroyed.",
-  "left-sector": "you left the area the mission needed you in.",
-  timeout: "time ran out.",
+  "player-dead": "Your ship was destroyed.",
+  "left-sector": "You left the area the mission needed you in.",
+  timeout: "Time ran out.",
 };
 
 /**
@@ -728,19 +888,68 @@ export function missionOnlyItems(mission) {
   return [...found].filter(id => itemCat(id) === "mission");
 }
 
-/** Mark a configured story mission failure and apply its declared outcome. */
-export function failMission(mission, reason, profile = state.profile, payload = {}, ruleOverride = null) {
-  // Completed missions remain active until the player collects their reward.
-  // They must survive a later timeout, death or sector change instead of being
-  // marked failed and removed while the player is returning home.
-  if (!mission || isMissionFailed(mission) || isMissionComplete(mission)) return false;
+/** Every copy of an item anywhere the pilot can reach without it being lost. */
+function missionCopies(item, profile) {
+  let total = 0;
+  const seen = new Set();
+  const add = stock => {
+    if (!stock || typeof stock !== "object" || seen.has(stock)) return;
+    seen.add(stock);
+    total += Math.max(0, Number(stock[item]) || 0);
+  };
+  for (const hold of Object.values(profile?.holds || {})) add(hold);
+  const world = state.worldState || {};
+  for (const stock of Object.values(world.stationStores || {})) add(stock);
+  add(world.store);
+  return total;
+}
+
+/**
+ * A mission whose objectives are done but which still owes a hand-in can be
+ * waiting on a mission-only object (category "mission": a beacon, a parcel) that
+ * no longer exists anywhere. Such an object cannot be bought, mined or looted
+ * again, so the mission is impossible: this returns its requirement. Ordinary
+ * goods (ore, salvage) can be recovered again, so they never count as lost, and
+ * neither does an item that is still in the ship or at a station.
+ */
+export function missionLostHandIn(mission, profile = state.profile) {
+  if (!mission || isMissionFailed(mission) || !missionObjectivesDone(mission)) return null;
+  const requirement = missionHandIn(mission);
+  if (!requirement || itemCat(requirement.item) !== "mission") return null;
+  return missionCopies(requirement.item, profile) >= requirement.count ? null : requirement;
+}
+
+/** Fail every active mission that owes a hand-in it can never make. Says why. */
+function failLostHandIns(payload = {}, profile = profileFor(payload)) {
+  let changed = false;
+  for (const mission of [...missionsOf(profile)]) {
+    const lost = missionLostHandIn(mission, profile);
+    if (!lost) continue;
+    changed = failMission(mission, "lost-item", profile, payload, {
+      action: "abandon",
+      message: `The ${itemName(lost.item)} this ${missionKindWord(mission).toLowerCase()} needed is gone, so it cannot be finished.`,
+    }, { afterObjectives: true }) || changed;
+  }
+  return changed;
+}
+
+/**
+ * Mark a configured mission failure and apply its declared outcome.
+ * `options.afterObjectives` is the one way to fail a mission whose steps are
+ * all done: what it needs is gone for good (a lost mission-only hand-in item).
+ * Without it, a returning pilot is never failed by a later timeout, death or
+ * sector change.
+ */
+export function failMission(mission, reason, profile = state.profile, payload = {}, ruleOverride = null, options = {}) {
+  if (!mission || isMissionFailed(mission)) return false;
+  if (missionObjectivesDone(mission) && options.afterObjectives !== true) return false;
   const rule = ruleOverride || failureRule(mission, reason);
   if (!rule) return false;
   mission.failed = true;
   mission.failure = reason;
   // A failure always says why. Authored text wins; otherwise the reason names the cause.
   const authored = typeof rule === "object" ? rule.message : mission.fails?.message;
-  const message = authored || (FAILURE_REASON_TEXT[reason] ? `Mission failed: ${FAILURE_REASON_TEXT[reason]}` : "");
+  const message = authored || FAILURE_REASON_TEXT[reason] || "";
   if (message) mission.failureMessage = message;
   applyFlags(profile, typeof rule === "object" ? rule.set : null);
   const action = failureAction(rule, mission);
@@ -759,12 +968,22 @@ function failMissionsFor(reason, payload = {}) {
   return changed;
 }
 
-export function acceptMission(offer, profile = state.profile) {
+export function acceptMission(offer, profile = state.profile, at = state.place) {
   // A story mission can only be active once. The Mission log hides an active
   // offer, but the rule belongs here: a second copy (a double click, a retry, a
   // network message) would run the same script twice and double every spawn.
   if (offer?.kind === "story" && missionsOf(profile).some(active => active.id === offer.id)) return undefined;
-  const mission = offer?.kind === "story" ? instantiateStoryMission(offer) : instantiateMission(offer);
+  // Every mission is handed in at one station: its data may name it, otherwise it
+  // is the station that gave the mission out (this one, unless the pilot is not
+  // at a station, in which case the home station). Stamped on the record so it
+  // survives a save and cannot drift as the pilot travels.
+  // `at` is the station whose board the offer came from: a contract read at a
+  // station is filed there even if the caller is not standing in it (tests, or a
+  // board browsed for a docked friend).
+  const mission = stampHandInStation(
+    offer?.kind === "story" ? instantiateStoryMission(offer) : instantiateMission(offer, at),
+    at,
+  );
   if (!mission) return undefined;
   missionsOf(profile).push(mission);
   activateAutomatic(mission, profile, { profile });
@@ -795,6 +1014,9 @@ export function missionDialogue(mission) {
     // Only authored station-contact conversations require docking. In-field
     // mission dialogue stays actionable while flying.
     requiresDock: step.requiresDock === true,
+    // Where that conversation happens: the station that gives the mission out.
+    station: missionOfferStation(mission),
+    stationName: missionOfferStation(mission) ? stationAt(missionOfferStation(mission))?.n || "" : "",
     pause: step.pause === true || mission.pause === true,
   };
 }
@@ -822,12 +1044,16 @@ function itemRequirementStep(steps = []) {
   return null;
 }
 
-function itemRequirement(mission) {
-  // Collect objectives are hand-ins too: a physical story pickup reaches the
-  // pilot's hold first, then the completed mission consumes it at the station.
-  // Search nested parallel objectives as well, so every item-bearing objective
-  // uses the same reward hand-in path. Keep the legacy salvage fallback for
-  // unsanitized v18/early-v19 records that did not store their explicit item id.
+/**
+ * The items a mission must hand over before it is accomplished, or null. What
+ * counts as a hand-in is data: any item-bearing `collect`, `mine` or `deliver`
+ * objective, including one nested in a parallel step. The runner consumes the
+ * exact quantity at the station only when the reward is paid, so a mission that
+ * owes items is never treated as finished early (LESSONS L15). The legacy
+ * salvage fallback covers unsanitized v18/early-v19 records that did not store
+ * their explicit item id.
+ */
+export function missionHandIn(mission) {
   const step = itemRequirementStep(mission?.steps);
   if (!step && mission?.type !== "salvage") return null;
   const item = step?.item || "salv";
@@ -838,15 +1064,20 @@ function itemRequirement(mission) {
 }
 
 export function missionDeliveryRequirement(mission, profile = state.profile) {
-  const requirement = itemRequirement(mission);
+  const requirement = missionHandIn(mission);
   if (!requirement) return null;
   const station = countOf(STATION, requirement.item, profile, state.worldState);
   const hold = countOf(profile.ship, requirement.item, profile, state.worldState);
   return { ...requirement, station, hold };
 }
 
+/** Ready to be paid at the station the pilot is at right now. */
+export function canCompleteMissionHere(mission, profile = state.profile) {
+  return canCollectMissionReward(mission, profile) && atMissionHandInStation(mission);
+}
+
 export function canCollectMissionReward(mission, profile = state.profile) {
-  if (!isMissionComplete(mission)) return false;
+  if (!missionObjectivesDone(mission)) return false;
   const requirement = missionDeliveryRequirement(mission, profile);
   return !requirement || requirement.station + requirement.hold >= requirement.count;
 }
@@ -867,8 +1098,11 @@ export function completeMission(indexOrId, profile = state.profile, player = pro
   if (player && (state.loading || player.loading || player.dead || player.warp || player.inCombat || player.docked !== true)) {
     return "Dock at a station to collect the reward.";
   }
-  const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(isMissionComplete);
-  if (!mission || !isMissionComplete(mission)) return undefined;
+  const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(missionObjectivesDone);
+  if (!mission || !missionObjectivesDone(mission)) return undefined;
+  // One station takes the hand-in. Anywhere else pays nothing and says where to
+  // go, so the reward can never be collected at the wrong counter.
+  if (!atMissionHandInStation(mission)) return `Hand this in at ${missionHandInStationName(mission)}.`;
   const deliveryError = consumeDelivery(mission, profile);
   if (deliveryError) return deliveryError;
   const reward = Math.max(0, Math.floor(+mission.rewards?.credits || +mission.r || 0));
@@ -888,7 +1122,7 @@ export function abandonMission(indexOrId, profile = state.profile) {
   const index = list.indexOf(mission);
   if (index >= 0) list.splice(index, 1);
   emit("mission-abandoned", { mission, player: profile === state.profile ? state.player : undefined });
-  return "Mission abandoned.";
+  return `${missionKindWord(mission)} abandoned.`;
 }
 
 // Gameplay events carry the acting player, so progress remains in that pilot's
@@ -915,19 +1149,29 @@ on("mission-dialogue-choice", payload => advanceMissions("dialogue-choice", payl
 //   1. its data says so on purpose (`fails: { on: ["player-dead"], ... }`), or
 //   2. the ship was carrying a mission-only item the mission still needs: the hold is
 //      lost with the ship and that item cannot be found again.
+// Case 2 applies to a mission whose objectives are all done but whose hand-in
+// has not happened yet: the beacon is gone, so it can never be accomplished.
 // Either way the failure carries a message, which the HUD shows.
 on("player-dead", (payload = {}) => {
   const profile = profileFor(payload);
+  // `lost` is the hold as it was at the moment of death, so this never depends
+  // on whether the recovery code has already cleared the ship.
   const held = payload.lost || profile?.holds?.[profile?.ship] || {};
   for (const mission of [...missionsOf(profile)]) {
+    if (isMissionFailed(mission)) continue;
     if (failMission(mission, "player-dead", profile, payload)) continue;
-    if (isMissionFailed(mission) || isMissionComplete(mission)) continue;
-    const lostItem = missionOnlyItems(mission).find(id => (Number(held[id]) || 0) > 0);
+    const requirement = missionHandIn(mission);
+    const lostItem = (requirement && itemCat(requirement.item) === "mission" && (Number(held[requirement.item]) || 0) > 0
+      ? requirement.item
+      : null) ||
+      (!missionObjectivesDone(mission)
+        ? missionOnlyItems(mission).find(id => (Number(held[id]) || 0) > 0)
+        : null);
     if (!lostItem) continue;
     failMission(mission, "player-dead", profile, payload, {
       action: "abandon",
       message: `Your ship was destroyed and the ${itemName(lostItem)} it carried was lost.`,
-    });
+    }, { afterObjectives: true });
   }
 });
 on("place-changed", payload => {

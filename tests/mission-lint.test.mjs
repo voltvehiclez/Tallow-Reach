@@ -128,6 +128,30 @@ test("lint accepts: a mission item with no death rule (the framework fails it it
   assert.deepEqual(missionErrors(def), []);
 });
 
+test("lint catches: a mission that hands in items without saying what is owed", () => {
+  const def = clone(TEST_MISSIONS.find(item => item.id === "test.ore-run"));
+  delete def.handIn;
+  assert.ok(hasError(def, /needs a `handIn\.objective`/), "the hand-in sentence is required");
+  def.handIn = { objective: "Deliver {count} {item} to {station}." };
+  assert.deepEqual(errorsOf(def), []);
+});
+
+test("lint catches: guidance that claims the mission is already done", () => {
+  const def = clone(TEST_MISSIONS.find(item => item.id === "test.ore-run"));
+  def.steps[1].objective = "Mining complete. Return for your pay.";
+  assert.ok(hasError(def, /must not claim completion/), "a step objective may not say complete");
+  const handIn = clone(TEST_MISSIONS.find(item => item.id === "test.ore-run"));
+  handIn.handIn.objective = "Mission complete. Collect your reward.";
+  assert.ok(hasError(handIn, /must not claim completion/), "the hand-in sentence may not either");
+});
+
+test("lint catches: a contract that calls itself a mission", () => {
+  const def = clone(TEST_MISSIONS.find(item => item.id === "test.ambush-run"));
+  def.kind = "contract";
+  def.steps[0].objective = "Mission accepted. Hear the scout's warning.";
+  assert.ok(hasError(def, /must call itself a contract/), "a contract says contract");
+});
+
 test("lint catches: a failure with no message, and a bad failure reason", () => {
   const def = good();
   delete def.fails.message;

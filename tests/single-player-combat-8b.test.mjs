@@ -1,4 +1,8 @@
 // Recorded from 8b commit 6496516f: mining, combat, missile, dock and death.
+// Re-recorded once, when death recovery started handing out a COMPLETE spare Wasp: every
+// snapshot before the death at i=750 is byte-identical, and from i=750 on the runtime ship
+// has the power, shields, hull, gun and empty hold that a real hull has (it used to come back
+// as a bare id with no fit, which is why nothing could be equipped afterwards).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

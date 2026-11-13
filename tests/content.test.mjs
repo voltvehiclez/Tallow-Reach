@@ -536,8 +536,12 @@ test("the flight HUD lists every active mission by title", () => {
   assert.match(hud, /missionNextText\(mission\)/, "the top-right HUD shows each mission's current objective");
   assert.match(hud, /hud-mission-objective/, "the current objective has its own HUD line");
   assert.doesNotMatch(hud, /activeMissions\(S\)\[0\]/, "the HUD must not discard missions after the first");
+  assert.match(hud, /hud-mission hud-mission-\$\{kind\}/, "the HUD tags each mission with its kind");
+  assert.match(hud, /kind = mission\.kind === "contract" \? "contract" : "story"/, "contracts and stories are told apart");
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /#tr \.hud-mission/, "each active mission has a readable top-right style");
+  assert.match(css, /#tr \.hud-mission \{[^}]*color: var\(--amber\)/, "story missions keep the amber");
+  assert.match(css, /#tr \.hud-mission\.hud-mission-contract \{[^}]*color: var\(--ice\)/, "contract names are light blue");
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
   assert.doesNotMatch(hud, /missionRequirementText/, "the HUD has no obsolete item-requirement text");
   assert.doesNotMatch(screens, /missionRequirementText/, "contract rows have no obsolete item-requirement text");

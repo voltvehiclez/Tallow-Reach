@@ -8,9 +8,8 @@
 
 *Last checked: 2026-11-13.*
 
-**Current position (rewritten 2026-11-13):** the table below is the status. Step 13 is ticked. **Step 12 is built but its owner playtest
-(`testing/TESTING-12-PLACES.md`) is not recorded yet**, so it is still unticked. Saves are version **19**. Next: step 14
-(instanced places and wormholes).
+**Current position (rewritten 2026-11-13):** the table below is the status. Steps 12 and 13 are ticked after the owner's
+playtests. Saves are version **19**. Next: step 14 (instanced places and wormholes).
 
 Long status prose from before this rewrite is in [archive/ROADMAP_STATUS_2026-11-10.md](archive/ROADMAP_STATUS_2026-11-10.md);
 the feature details are in [architecture/feature-notes.md](architecture/feature-notes.md).
@@ -48,7 +47,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 9 | Split profile/world save and close step-9 local-only items (save v13) | B | [x] **2026-11-08: owner playtest passed (Milestone B complete).** |
 | 10 | Place definitions (systems and pockets), current pocket saved (save v14) | C | [x] **2026-11-08: owner playtest passed (3 bugs found, fixed, confirmed).** |
 | 11 | System map, pocket chooser and starmap (100+ systems, save v17) | C | [x] **2026-11-10: 11A/11B owner playtest passed.** |
-| 12 | Encounters, place templates, place memory (save v18) | C | [ ] **Built 2026-11-10; owner playtest pending (`testing/TESTING-12-PLACES.md`).** |
+| 12 | Encounters, place templates, place memory (save v18) | C | [x] **2026-11-13: owner playtest passed** (`testing/passed/TESTING-12-PLACES.md`). |
 | 13 | Mission framework; contracts rebuilt on it (save v19) | D | [x] **2026-11-13: owner playtested the mission framework and it passed (13a contracts, 13b story runtime, 13c screens, 13d rules and linter).** Guides are in `testing/passed/`. |
 | 14 | Instanced places and wormholes | D | [ ] |
 | 15 | Campaign scaffolding (save v20) | D | [ ] |
@@ -111,6 +110,8 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 
 ## Log
 
+- 2026-11-13: **Station-scoped missions and the docked-panel redraw built; owner browser check pending.** Contract offers are per station (`boardAt`, `world.boards`), the Mission log and Contracts tab list only the missions filed at the station being read (with a count of the rest), and story missions are offered only where their data says (`offeredAt`, linted). Panel buttons now carry mission ids instead of list positions, and `mission-ui-refresh` redraws an open docked panel, so closing the Border Signal's final dialogue shows **Hand in cargo** at once. Existing saves keep their home board; save version stays v19 (additive field). The suite passes 482/482.
+- 2026-11-13: **Steps 12 and 13 ticked (owner playtests passed); mission hand-in fix built.** A mission is no longer accomplished by its last step: item-bearing missions keep asking for the hand-in and are paid only when the station hand-in consumes the goods. Dying with a still-owed mission-only item fails the mission with a message; a mission-only hand-in that exists nowhere fails instead of waiting forever. Contract guidance names the station and says "Contract complete", and the flight HUD colours contract names light blue and story names amber. Added `missionObjectivesDone`, `missionHandIn` and the `mission-objectives-done` event, linter rules against claiming completion and against a contract calling itself a mission, and death/UI/wording regressions; the suite passes 465/465.
 - 2026-11-10: **Story mission return-home fix built; owner browser recheck pending.** Completed missions no longer fail and disappear when the pilot changes sector, and mission-tagged wave triggers cannot advance another waiting mission. Scripted item hand-offs now wait for enough cargo/station space instead of silently progressing. Added Border Signal return-home, trigger-isolation and blocked-hand-off regressions; the suite passes 371/371.
 - 2026-11-10: **Main-menu navigation follow-up built; owner browser check pending.** The pause overlay now has **Exit to main menu** below **Resume**, saving the current resume point before returning to a title screen with disabled **Campaign** first and **Open World** second. Open World keeps the existing `intro` action; the generated HTML and complete-project ZIP are refreshed after the 368-test suite.
 - 2026-11-10: **Step 13c screens built; owner browser playtest pending.** Added the data-driven `src/ui/missionlog.js` Mission log tab and live dialogue panel, story-mission start actions, optional portrait/log/pause step fields with v19 save round-trip coverage, and `testing/TESTING-13C-SCREENS.md`. Dialogue does not pause the world unless its mission data requests it.
