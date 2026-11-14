@@ -20,6 +20,20 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: Three owner-reported bugs — the Alt camera locks to the hull, one primary fires at a time, no tags over the menu
+
+Owner, on the step-14 round: three bugs. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
+
+- **Bug 1 — the Alt free camera now locks its up vector to the ship.** With Alt held the mouse orbits and the wheel zooms (unchanged), but the view rolls with the hull: roll with E/Q and the ship holds still in frame while the world turns around it, instead of the old world-up lookAt that let the ship spin under a level camera. New `faceUp` in `util/math.js`; used by the free-cam branch of `chaseView` (`render/camera.js`). The non-Alt chase view is untouched. Alt-chords (`Alt+E` and friends) are now `preventDefault()`ed in `core/input.js` so the browser's own menu does not pop during the free camera (owner confirmed 2026-11-14; Chrome's reserved menu keys cannot be overruled).
+- **Bug 2 — exactly one primary weapon fires, the selected one.** Keys **1 and 2 now select primary bay 1 and primary bay 2**; left click fires only the module in the selected bay (a gun from that bay, or the beam fitted there). A second fitted cannon stays silent until its slot is selected; an empty selected bay fires nothing. `profile.pw` stores the selection as `"1"`/`"2"` and migrates old saves in place: legacy `"cannon"`/`"beam"` map to the first bay of the flown ship holding that kind of module (falling back to the other kind, then bay one) — no version bump, v21 saves load cleanly. HUD shows the slot number next to the weapon (`1: Basic cannons`); the equip toast names the module of the slot pressed; `primarySlotIndex` in `sim/weapons.js` is the one place that folds legacy values. Guests get the same rule.
+- **Bug round also swallows Alt-chords before the browser can act on them** (`core/input.js`): any `Alt+<letter>` keydown/keyup gets `preventDefault()`, so holding Alt to orbit in free cam no longer pops the browser's own menu in browsers that honour it (Firefox, Edge, Safari — and Chrome for chords it does not reserve; Chrome's own menu keys such as Alt+E/Alt+F on Windows are owned by the browser and cannot be overruled). Owner confirmed working 2026-11-14.
+- **Bug 3 — no world-space tags over the main menu.** The markers live outside `#hud` (`#mk`), so the menu's `main-menu` event hid the HUD but left the last drawn set — "Trade lane asteroid field", hostiles, crates — floating on the title screen. `setReticle` now hides/shows the marker container together with the HUD (docking and the pause-equivalent paths hide them too; `drawMarkers` redraws on the next flight frame).
+- **Tests:** new `tests/primary-slots.test.mjs` (selection, empty bay, legacy migration); `content.test.mjs` source guards updated to the slot model; `player-weapons`, `headless-fight`, `step9-local-only`, `step9-save`, `single-player-combat-8b`, `profile`, `content` updated to the new `pw` values. **575/575 pass**; build green.
+
+Files: `src/util/math.js`, `src/render/camera.js`, `src/ui/hud.js`, `src/core/input.js`, `src/main.js`, `src/sim/weapons.js`, `src/sim/guns.js` (comments), `src/state/profile.js`, `src/state/state.js`, `src/index.html`, `tests/primary-slots.test.mjs` (new), `tests/content.test.mjs`, `tests/player-weapons.test.mjs`, `tests/profile.test.mjs`, `tests/single-player-combat-8b.test.mjs`, `tests/step9-local-only.test.mjs`, `tests/step9-save.test.mjs`, `tests/headless-fight.test.mjs`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
+---
+
 ## 2026-11-14: The rift wears real space too — the deep rift its own sky
 
 Owner, after the wormhole sky landed and a first pass at the rift one: "Sorry, here is an image for rift, here is an image for deeprift." Two owner-provided panoramas (2880×1440 equirect WebPs), shipped **byte-for-byte**: `rift.webp` (232 KB, a teal maelstrom) and `deeprift.webp` (69 KB, near-black with one sable cluster). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested — ROADMAP stays unticked.
@@ -376,26 +390,8 @@ Files: `src/data/instances.js` (new), `src/data/places.js`, `src/data/items.js`,
 
 ---
 
-## 2026-11-14: VISION records the owner's step 14 rift decisions; open question 5 is closed
-
-Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner answered step 14's blocking
-question, so the decision is written down before any code exists — the docs are the memory across chats.
-
-- `docs/VISION.md`: open question 5 deleted, and a **"2026-11-14 — Step 14: rifts, instances and how you may leave
-  one"** decision added. A spawned wormhole is a **rift**; the first is a **Basic rift** at 10 cr, used by
-  right-clicking it in the in-flight ship inventory, opening where the ship is and refused unless the ship is 1 km clear
-  of a station, an asteroid field's edge or a planet's surface (150 m from a single rock). Natural wormholes are
-  map-visible, warpable and time limited. Entering and leaving is a close-range **R** press, never contact. Whether an
-  instance may be left is **data on the instance**: the Basic rift stays shut until its objective is done. A spawned
-  rift is one use. Instances are never saved — a checkpoint on entry, no autosave inside, a save on the way out — so
-  reloading mid-rift returns the pilot to the entry point with none of that run's loot.
-- Its "Instanced places" bullet now names rifts and points at the decision.
-- Next: build slice **14a** (the Basic rift) once the owner says go. Natural wormholes are slice **14b** and will need
-  save **v20**, which makes step 15 (campaign) v21; the ROADMAP table will be renumbered in that change.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: VISION records the owner's step 14 rift decisions; open question 5 is closed
 - 2026-11-14: The owner confirmed the pending mission playtests; nothing is waiting now
 - 2026-11-13: A recovery contract recovers its own crates, and the space is left clean
 

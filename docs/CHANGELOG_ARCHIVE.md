@@ -8,6 +8,25 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: VISION records the owner's step 14 rift decisions; open question 5 is closed
+
+Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner answered step 14's blocking
+question, so the decision is written down before any code exists — the docs are the memory across chats.
+
+- `docs/VISION.md`: open question 5 deleted, and a **"2026-11-14 — Step 14: rifts, instances and how you may leave
+  one"** decision added. A spawned wormhole is a **rift**; the first is a **Basic rift** at 10 cr, used by
+  right-clicking it in the in-flight ship inventory, opening where the ship is and refused unless the ship is 1 km clear
+  of a station, an asteroid field's edge or a planet's surface (150 m from a single rock). Natural wormholes are
+  map-visible, warpable and time limited. Entering and leaving is a close-range **R** press, never contact. Whether an
+  instance may be left is **data on the instance**: the Basic rift stays shut until its objective is done. A spawned
+  rift is one use. Instances are never saved — a checkpoint on entry, no autosave inside, a save on the way out — so
+  reloading mid-rift returns the pilot to the entry point with none of that run's loot.
+- Its "Instanced places" bullet now names rifts and points at the decision.
+- Next: build slice **14a** (the Basic rift) once the owner says go. Natural wormholes are slice **14b** and will need
+  save **v20**, which makes step 15 (campaign) v21; the ROADMAP table will be renumbered in that change.
+
+---
+
 ## 2026-11-14: The owner confirmed the pending mission playtests; nothing is waiting now
 
 Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner reported that the work built

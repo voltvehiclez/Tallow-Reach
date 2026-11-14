@@ -84,7 +84,7 @@ test("9a: real v12 save migrates cleanly to v20 profile + world", () => {
   assert.equal(migrated.profile.done, 9);
   assert.equal(migrated.profile.kills, 17);
   assert.equal(migrated.profile.msl, 5);
-  assert.equal(migrated.profile.pw, "beam");
+  assert.equal(migrated.profile.pw, "1", "the legacy beam selection migrates to the bay holding the beam (bay one on the Prospector)");
   assert.deepEqual(migrated.profile.hp, V12_SAVE.hp);
   assert.deepEqual(migrated.profile.loadout, V12_SAVE.loadout);
   assert.equal("base" in migrated.profile, false);

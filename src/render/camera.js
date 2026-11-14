@@ -1,7 +1,7 @@
 // Camera: docking orbit, chase view, free orbit (hold Alt) and screen shake.
 // Input comes in through the event bus; the sim decides when free cam is allowed.
 
-import { V, face, clamp, fwdQ } from "../util/math.js";
+import { V, faceUp, clamp, fwdQ } from "../util/math.js";
 import { on } from "../util/events.js";
 import { state } from "../state/state.js";
 import { cosmeticRandom } from "../util/rng.js";
@@ -69,7 +69,11 @@ export function chaseView(dt, P, fc, pose = P) {
       .applyQuaternion(pose.quat)
       .add(pose.pos);
     camera.position.copy(o);
-    face(camera, pose.pos, 1);
+    // Lock the camera's up to the ship's up: with Alt held the mouse orbits and
+    // zooms the camera, and rolling the ship (E/Q) rolls the view with it — the
+    // ship holds still in frame while the world turns around it.
+    const shipUp = V(0, 1, 0).applyQuaternion(pose.quat);
+    faceUp(camera, pose.pos, 1, shipUp);
   } else {
     // Ride along with the ship's movement and smooth only the offset, so that
     // speed cannot push the camera back by itself: the trail above is the whole

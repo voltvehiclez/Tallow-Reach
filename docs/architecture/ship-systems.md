@@ -58,20 +58,24 @@
   index is the only difference between the two bays: the same module behaves the same in
   either one, and there is no separate key for either. The gun's damage is multiplied by the
   hull's `dmg` (1 on every hull — the hulls are identical apart from the hold for now), so
-  the module figure is the number the game uses. While the trigger is held and the guns are firing they report
-  `setDraw("guns", draw * guns fitted)`; `hasPower()` decides whether they may fire at all, the
-  same rule the thrusters follow. `state.flight.gunCd` holds one cooldown per fitted gun.
+  the module figure is the number the game uses. While the trigger is held and the selected gun is firing it reports
+  `setDraw("guns", draw)`; `hasPower()` decides whether it may fire at all, the
+  same rule the thrusters follow. `state.flight.gunCd` holds one cooldown per fitted gun. **Only the module in the
+  selected primary bay fires** — keys 1 and 2 select bay one and bay two (`profile.pw` stores `"1"`/`"2"`; legacy
+  `cannon`/`beam` values migrate to the bay holding that kind of module on the flown ship), and `updatePrimary()`
+  reads the selection through `primarySlotIndex()`. A gun in the other bay stays silent until its slot is pressed;
+  an empty selected bay fires nothing.
   Whether they fired on a given frame is worked out inside `updatePrimary` and kept there — it
   is per-frame and purely local, so it is not a field of `state.flight` (the old stored copy was
   never read by anything outside `sim/weapons.js`).
 - **The mining beam is a module too, not a weapon flag.** `beam_basic` lives in the `primary`
   group (`period` 4 s of continuous contact per ore before the hull's `mine` multiplier,
   `range` 340 m, `draw` 2 MJ/s), sold at Meridian for 900 cr (`data/shops.js`) — buying it puts the module in
-  storage, from where it can be fitted in either primary bay like a gun (key 2 selects the
-  beam slot; with no beam fitted that slot is the `Empty weapon slot`).
+  storage, from where it can be fitted in either primary bay like a gun (key 1 or key 2 selects whichever bay it sits
+  in; a slot whose bay holds nothing is the `Empty weapon slot`).
   `sim/guns.js`'s `beamsOf()` picks the fitted beams (a primary module with `period`, no
-  `dmg`), and `state.beams` holds them; `updatePrimary()` only cuts with the beam slot
-  selected, a rock in reach and the power to pay (`setDraw("beam", …)`, `hasPower()`,
+  `dmg`), and `state.beams` holds them; `updatePrimary()` only cuts with the bay holding the beam selected,
+  a rock in reach and the power to pay (`setDraw("beam", …)`, `hasPower()`,
   `state.power.use.beam`), it draws only while actually cutting, and a whole ore banks per
   `period` of continuous contact (1 ore per 4 s, `best.ore` depletes per ore, the rock
   disappears when dry). The hull's `mine` multiplier is 1 on every hull. **The moment contact stops, the progress toward the next ore is
@@ -82,8 +86,8 @@
   no progress to bank. Each completed ore plays a chime (the `ore-gained` entry of `SFX` in
   `core/audio.js`, emitted once per ore the beam secures, above the loop that puts the ore in the
   hold). The beam
-  is not a gun: `gunsOf()` never returns it, so the guns and the beam slot never both fire.
-  The first fitted beam (lowest bay) acts if two are fitted. Saves that owned the old shop
+  is not a gun: `gunsOf()` never returns it, so a beam selected in one slot and a gun in the other never both fire.
+  Each fitted beam answers to its own slot key (1 or 2). Saves that owned the old shop
   beam were given one `beam_basic` in storage in save version 8 (not auto-fitted).
 - **The missile lock ring is sized by the screen, not the sim.** The sim reports the cone in
   degrees (`state.flight.coneAngle`: `MISSILE.cone` while a launcher is fitted and no warp is

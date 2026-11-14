@@ -23,7 +23,7 @@ export function createPlayerRuntime() {
       beamEnd: null, beamT: 0, mineFrac: 1, coneAngle: 0 },
     power: { gen: 0, cap: 0, stored: 0, draw: 0, use: { drive: 0, shield: 0, guns: 0, beam: 0 } },
     drive: { spd: 0, turn: 0 }, shield: { cap: 0, regen: 0, delay: 0 }, hullSpec: { cap: 0 },
-    guns: [], beams: [], missiles: [], ship: DEFAULT_SHIP, weapon: "cannon", missileStock: 0,
+    guns: [], beams: [], missiles: [], ship: DEFAULT_SHIP, weapon: "1", missileStock: 0,
     aimDirection: null, place: DEFAULT_PLACE, warp: null, profile: null, configured: false,
   };
 }
@@ -161,7 +161,7 @@ export function applySave(save) {
   if (local) {
     local.profile = state.profile;
     local.ship = state.profile.ship;
-    local.weapon = state.profile.pw;
+    local.weapon = state.profile.pw;   // "1" or "2" — the selected primary bay
     local.missileStock = state.profile.msl;
     local.place = state.place;
   }

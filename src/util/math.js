@@ -33,6 +33,18 @@ export function faceQ(quat, from, target, k) {
 }
 
 /**
+ * Turn `o` (something with `.position` and `.quaternion`) to face `target`,
+ * with `up` as the camera's up direction. Pass the ship's up vector and the
+ * view rolls with the ship instead of staying level with the horizon.
+ */
+export function faceUp(o, target, k, up) {
+  _m4.lookAt(o.position, target, up);
+  _q.setFromRotationMatrix(_m4);
+  if (k >= 1) o.quaternion.copy(_q);
+  else o.quaternion.slerp(_q, k);
+}
+
+/**
  * Turn `o` (something with `.position` and `.quaternion`) to face `target`.
  * For a plain entity — which has `pos` and `quat` and is not a mesh — use faceQ.
  */

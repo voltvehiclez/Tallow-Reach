@@ -10,7 +10,6 @@ import { camera } from "../render/scene.js";
 import { interpolatedPos } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
-import { moduleListName } from "../sim/guns.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
@@ -28,18 +27,24 @@ const MARKER_MARGIN_Y = 30;
 
 let markers = [];
 let markerCount = 0;
+let markerRoot = null;
 let el = {};
 let routeCache = null;
 
 /**
- * Show or hide the flight HUD **and** the system pointer with it. The canvas
- * hides the pointer for mouse-look flight (`styles.css`), and the HUD draws its
- * own reticle (`#cur`); while the HUD is away — the title screen, or docked at a
- * station — the reticle is gone too, so the real pointer has to come back or the
- * mouse disappears over the empty screen.
+ * Show or hide the flight HUD, the world-space markers **and** the system pointer
+ * with it. The markers live outside `#hud` (`#mk`, they are `position: fixed`),
+ * so hiding only the HUD leaves the last drawn set of tags — "Trade lane
+ * asteroid field" and the like — floating over whatever replaced the flight
+ * view, the title screen included. The canvas hides the pointer for
+ * mouse-look flight (`styles.css`), and the HUD draws its own reticle (`#cur`);
+ * while the HUD is away — the title screen, or docked at a station — the
+ * reticle is gone too, so the real pointer has to come back or the mouse
+ * disappears over the empty screen.
  */
 function setReticle(visible) {
   el.root.hidden = !visible;
+  if (markerRoot) markerRoot.style.display = visible ? "" : "none";
   if (document.body && document.body.classList) {
     document.body.classList.toggle("no-reticle", !visible);
   }
@@ -74,7 +79,8 @@ export function setupHud() {
   };
 
   routeCache = null;
-  const container = $("mk");
+  markerRoot = $("mk");
+  const container = markerRoot;
   for (let i = 0; i < MARKER_POOL; i++) {
     const d = document.createElement("div");
     d.className = "mk";
@@ -213,19 +219,16 @@ export function updateHud(dt) {
 
   updateHudRoute(dt);
 
-  // The primary line names what left click will do, using the names of the
-  // equipped modules: the fitted beams for the beam slot, the fitted guns for the
-  // cannon slot, and the same "Empty weapon slot" either way when nothing is there.
-  const guns = state.guns,
-    beams = state.beams || [],
-    primary =
-      S.pw === "beam"
-        ? beams.length > 0
-          ? moduleListName(beams)
-          : "Empty weapon slot"
-        : guns.length > 0
-        ? moduleListName(guns)
-        : "Empty weapon slot";
+  // The primary line names what left click will do, using the name of the module
+  // in the selected primary bay (key 1 = bay one, key 2 = bay two) — the same
+  // "Empty weapon slot" when the bay holds nothing. The leading number is the
+  // key to press, so the selected weapon is always on screen.
+  const slot = S.pw === "2" ? 1 : 0;
+  const fitted =
+    (state.guns || []).find(g => g.i === slot) ||
+    (state.beams || []).find(b => b.i === slot) ||
+    null;
+  const primary = fitted ? `${slot + 1}: ${fitted.n}` : "Empty weapon slot";
 
   el.topRight.innerHTML =
     `${placeAt(state.place).n}<br>` +

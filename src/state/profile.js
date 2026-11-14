@@ -187,7 +187,7 @@ export function newProfile() {
     done: 0,            // contracts completed
     kills: 0,
     msl: 0,             // missiles carried
-    pw: "cannon",      // equipped primary
+    pw: "1",           // selected primary bay: "1" (key 1) or "2" (key 2)
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
     loadout: allStockFit(),      // fitted modules per hull, group -> bay array
   });
@@ -468,7 +468,6 @@ export function sanitizeProfile(raw) {
   }
 
   const msl = Math.max(0, Math.min(MODULES.missile_basic.cap, Math.floor(+raw.msl || 0)));
-  const pw = raw.pw === "beam" ? "beam" : "cannon";
 
   const hp = {};
   const rawHp = raw.hp && typeof raw.hp === "object" ? raw.hp : {};
@@ -478,6 +477,12 @@ export function sanitizeProfile(raw) {
   }
 
   const loadout = cleanLoadouts(raw.loadout, rawVersion);
+  // Keys 1 and 2 select primary bay one and primary bay two; the save stores the
+  // selected bay as "1" or "2". Older saves stored the old mode switch instead
+  // ("cannon" / "beam"): map it to the bay holding that kind of module on the
+  // flown ship (falling back to the other kind, then to bay one), so the weapon
+  // that answered to that key before is the one selected after the upgrade.
+  const pw = cleanPrimarySelection(raw.pw, loadout, ship);
 
   // v11: every ship has its own hold. A save from before that carried one `cargo`
   // object for the ship being flown, so that ship gets it.
@@ -965,6 +970,31 @@ function clampLevel(value, lo, hi) {
  * save, or a hull added in an update) gets the stock fit. A bay the player has
  * really left empty stays empty: only a missing hull or group falls back.
  */
+/**
+ * The primary bay the pilot has selected, as the save stores it: "1" (key 1,
+ * bay index 0) or "2" (key 2, bay index 1). Legacy saves carry the old mode
+ * switch — "cannon" or "beam" — so they are mapped to the first bay of the flown
+ * ship holding that kind of primary module (a gun for "cannon", a beam for
+ * "beam"), falling back to the other kind and finally to bay one. Garbage
+ * normalises to "1".
+ */
+function cleanPrimarySelection(rawPw, loadout, ship) {
+  if (rawPw === "1" || rawPw === "2") return rawPw;
+  const bays =
+    (loadout && loadout[ship] && loadout[ship].primary) || [];
+  const slotHolding = kind => {
+    for (let i = 0; i < bays.length; i++) {
+      const m = bays[i] && MODULES[bays[i]];
+      if (!m || m.g !== "primary") continue;
+      const isBeam = !!m.period;
+      if ((kind === "beam") === isBeam) return i === 0 ? "1" : "2";
+    }
+    return null;
+  };
+  if (rawPw === "beam") return slotHolding("beam") || slotHolding("gun") || "1";
+  return slotHolding("gun") || slotHolding("beam") || "1";
+}
+
 function cleanLoadouts(saved, version) {
   const addedLater = [];
   if (version < 5) addedLater.push("thruster");
