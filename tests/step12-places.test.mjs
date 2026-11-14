@@ -195,14 +195,14 @@ test("save version 20 preserves place memory and station stores, while older sav
     hollow: { rocks: { "field:3": 12.5 }, encounters: { "derelict-0": 300 } },
   };
   const clean = sanitizeSave(save);
-  assert.equal(SAVE_VERSION, 20);
+  assert.equal(SAVE_VERSION, 21);
   assert.deepEqual(clean.world.placeMemory, save.world.placeMemory);
 
   const old = JSON.parse(JSON.stringify(save));
   old.v = old.profile.v = old.world.v = 17;
   delete old.world.placeMemory;
   const migrated = sanitizeSave(old);
-  assert.equal(migrated.v, 20);
+  assert.equal(migrated.v, 21);
   assert.deepEqual(migrated.world.placeMemory, {});
 
   const bad = JSON.parse(JSON.stringify(save));

@@ -56,6 +56,90 @@ export const ENEMIES = {
     loot: "raider",
   },
 
+  // A smuggler's escort in a smuggling site (step 14c): a gun for hire working the smugglers'
+  // route. Its own hostile — not a raider — so a hunt contract for the map's pirates is never paid
+  // by a fight the contract never asked for, the same rule the rift guardians follow.
+  // Tunable.
+  smuggler: {
+    n: "Smuggler",
+    pl: "smugglers",
+    hp: 12,
+    col: 0x332e2a,             // worn charcoal: a working gun, not a raider's chrome
+    scale: 1.15,
+    f: "pirates",
+    ai: "chase",
+    turn: 1.5,
+    spdFar: 120,
+    spdNear: 24,
+    spdOrbit: 44,
+    circleAt: 240,
+    fireRange: 720,
+    lostRange: 9000,           // a closed pocket: nothing in it is ever far enough to drop
+    hearRange: 600,
+    fireDelay: 1.6,
+    fireGap: [0.4, 0.8],
+    dmg: 1,
+    bspd: 510,
+    spawnDist: [700, 1100],    // spawned by the site's wave, never by a wanderer
+    loot: "smuggler",
+  },
+
+  // A smuggler's escort: raiders fly with them, so the escort can stay a raider. This is the
+  // prize of the smuggling site (step 14c): a slow, tough freighter hauling illegal goods, armed
+  // only enough to be in the way. It never flees and never surrenders — it is in the way and it
+  // shoots back. Tunable.
+  freighter: {
+    n: "Smuggling Freighter",
+    pl: "smuggling freighters",
+    hp: 46,
+    col: 0x2b2b30,             // dull gunmetal: a working smuggler's ship, not a raider's chrome
+    scale: 2.1,
+    f: "pirates",
+    ai: "chase",
+    turn: 0.9,
+    spdFar: 55,
+    spdNear: 16,
+    spdOrbit: 18,
+    circleAt: 380,
+    fireRange: 600,
+    lostRange: 9000,           // a closed pocket: nothing in it is ever far enough to drop
+    hearRange: 650,
+    fireDelay: 2.5,
+    fireGap: [0.9, 1.6],
+    dmg: 2,
+    bspd: 500,
+    spawnDist: [400, 600],     // spawned by the site's wave, never by a wanderer
+    loot: "freighter",
+  },
+
+  // The hostile that holds a hive-type wormhole site (step 14c): the same shape of fight as a
+  // rift guardian — heavier than the map, quick to turn, defending something — and it pays well
+  // for it. That is the whole reward there: no canister hangs in a hive (owner, 2026-11-14).
+  // Tunable.
+  hiveguardian: {
+    n: "Hive Guardian",
+    pl: "hive guardians",
+    hp: 26,
+    col: 0x39421e,             // hive umber-green: organic, not rift metal
+    scale: 1.5,
+    f: "rift",
+    ai: "chase",
+    turn: 1.9,
+    spdFar: 145,
+    spdNear: 38,
+    spdOrbit: 58,
+    circleAt: 230,
+    fireRange: 720,
+    lostRange: 9000,           // a closed pocket: nothing in it is ever far enough to drop
+    hearRange: 720,
+    fireDelay: 1.2,
+    fireGap: [0.45, 0.85],
+    dmg: 2.2,
+    bspd: 580,
+    spawnDist: [800, 1200],
+    loot: "hiveguardian",
+  },
+
   // The hostiles that hold a rift shut (step 14). They used to *be* raiders, so the target lock
   // read "Newbie Raider", a hunt contract was paid by a rift run, and the fight was the tutorial
   // fight wearing a harder multiplier (owner bug report 2026-11-14). They are their own hostile

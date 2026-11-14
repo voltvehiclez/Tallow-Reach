@@ -11,9 +11,10 @@ import {
   setPlaceCatalog, placeAt, placeDef, isPocket, isInstancePlace, pocketsIn, DEFAULT_PLACE,
 } from "../src/data/places.js";
 import {
-  RIFT, RIFTS, INSTANCE_TEMPLATES, OBJECTIVE_KINDS, EXIT_REQUIREMENT_TYPES, EXPIRY_OUTCOME_TYPES,
-  SKY_KINDS, instanceIdFor,
+  RIFT, RIFTS, WORMHOLE_SITE_POOL, INSTANCE_TEMPLATES, OBJECTIVE_KINDS, EXIT_REQUIREMENT_TYPES,
+  EXPIRY_OUTCOME_TYPES, SKY_KINDS, instanceIdFor, waveGroups,
 } from "../src/data/instances.js";
+import { isItem } from "../src/data/items.js";
 import { LOOT_TABLES } from "../src/data/loot.js";
 import { ENEMIES, DEFAULT_ENEMY } from "../src/data/enemies.js";
 import { FACTIONS } from "../src/data/factions.js";
@@ -126,22 +127,41 @@ test("every instance template is complete data, and the registries know every wo
     assert.ok(t.n && t.d, `${id}: a name and a description`);
     assert.ok(Number(t.tier) > 0, `${id}: an advisory tier`);
     // A template's own clock, or the game's default run length when it does not declare one.
+    // 0 is legal and means "no clock of its own" — a natural (simple) wormhole's 20 minutes
+    // belong to the pocket that spawned, not to the far side.
     const clock = typeof t.lifetimeSec === "number" ? t.lifetimeSec : RIFT.defaultLifetimeSec;
-    assert.ok(Number(clock) > 0, `${id}: a lifetime`);
+    assert.ok(Number(clock) >= 0, `${id}: a lifetime of 0 or more`);
     // A run is harder than the map, and the numbers that say so are the ones the fight is made of:
     // the wave's own Hull HP and damage, times the run's scalars, are above the map's own hostile.
-    // (The scalars used to do all the work, when a rift borrowed raiders and inflated them.)
-    const guardian = ENEMIES[t.guardians?.enemy];
-    assert.ok(guardian, `${id}: its guardian is a real enemy`);
-    assert.ok(Number(t.difficulty?.hp) > 0 && Number(t.difficulty?.dmg) > 0, `${id}: its scalars are numbers`);
-    assert.ok(guardian.hp * t.difficulty.hp > ENEMIES[DEFAULT_ENEMY].hp,
-      `${id}: its wave outlasts the map's ${ENEMIES[DEFAULT_ENEMY].n}`);
-    assert.ok(guardian.dmg * t.difficulty.dmg > ENEMIES[DEFAULT_ENEMY].dmg,
-      `${id}: and each of them hits harder than one`);
-    assert.ok(FACTIONS[guardian.f], `${id}: its guardians belong to a faction that exists`);
-    assert.ok(Number(t.guardians.count) > 0, `${id}: it declares a wave`);
-    const [lo, hi] = t.guardians.spawnDist;
-    assert.ok(lo > 0 && hi >= lo, `${id}: its wave spawns at a real distance band`);
+    // (The scalars used to do all the work, when a rift borrowed raiders and inflated them.) A
+    // natural (simple) wormhole site may fly the map's own hostile by design — a smuggler's escort
+    // is a raider — so the bound is inclusive there. `guardians: null` is a peaceful site with no
+    // wave at all, which only a mine-ore objective may legitimately have.
+    const groups = waveGroups(t.guardians);
+    const hardFloor = t.reentrant === true ? ">=" : ">";
+    if (groups.length === 0) {
+      assert.equal(t.objective?.kind, "mine-ore",
+        `${id}: no wave at all, so nothing to fight — only a mine-ore objective can complete`);
+    }
+    for (const group of groups) {
+      const guardian = ENEMIES[group.enemy];
+      assert.ok(guardian, `${id}: its ${group.enemy} is a real enemy`);
+      assert.ok(Number(t.difficulty?.hp) > 0 && Number(t.difficulty?.dmg) > 0, `${id}: its scalars are numbers`);
+      const hpEdge = guardian.hp * t.difficulty.hp;
+      const dmgEdge = guardian.dmg * t.difficulty.dmg;
+      assert.ok(hardFloor === ">" ? hpEdge > ENEMIES[DEFAULT_ENEMY].hp : hpEdge >= ENEMIES[DEFAULT_ENEMY].hp,
+        `${id}: its wave outlasts the map's ${ENEMIES[DEFAULT_ENEMY].n}`);
+      assert.ok(hardFloor === ">" ? dmgEdge > ENEMIES[DEFAULT_ENEMY].dmg : dmgEdge >= ENEMIES[DEFAULT_ENEMY].dmg,
+        `${id}: and each of them hits at least as hard as one`);
+      assert.ok(FACTIONS[guardian.f], `${id}: its guardians belong to a faction that exists`);
+      assert.ok(Number(group.count) > 0, `${id}: it declares a wave`);
+      const [lo, hi] = group.spawnDist;
+      assert.ok(lo > 0 && hi >= lo, `${id}: its wave spawns at a real distance band`);
+    }
+    if (t.objective?.kind === "mine-ore") {
+      assert.ok(isItem(t.objective.ore), `${id}: its mine-ore names a real item`);
+      assert.ok(Number(t.objective.need) > 0, `${id}: and how many of it`);
+    }
     assert.ok(OBJECTIVE_KINDS.includes(t.objective?.kind), `${id}: the objective kind is declared vocabulary`);
     assert.ok(typeof OBJECTIVES[t.objective.kind] === "function", `${id}: and sim/instances.js can check it`);
     assert.ok(t.objective.n, `${id}: an authored objective sentence for the HUD`);
@@ -162,9 +182,11 @@ test("every instance template is complete data, and the registries know every wo
     assert.ok(EXPIRY_OUTCOME_TYPES.includes(t.onExpire?.kind), `${id}: the expiry outcome is declared vocabulary`);
     assert.ok(typeof EXPIRY_OUTCOMES[t.onExpire.kind] === "function", `${id}: and has a handler`);
     assert.ok(t.onExpire.message, `${id}: running out of time says so`);
-    assert.ok(LOOT_TABLES[t.cache?.loot], `${id}: its cache names a real loot table`);
-    assert.ok(Array.isArray(t.cache.pos) && t.cache.pos.length === 3, `${id}: its canister hangs somewhere`);
-    assert.ok(Number(t.cache.r) > 0, `${id}: and is drawn at a declared size`);
+    if (t.cache) {   // the prize is optional: the natural sites before one does not
+      assert.ok(LOOT_TABLES[t.cache.loot], `${id}: its cache names a real loot table`);
+      assert.ok(Array.isArray(t.cache.pos) && t.cache.pos.length === 3, `${id}: its canister hangs somewhere`);
+      assert.ok(Number(t.cache.r) > 0, `${id}: and is drawn at a declared size`);
+    }
     assert.ok(Array.isArray(t.enter?.pos) && t.enter.pos.length === 3, `${id}: it has an arrival point`);
     assert.ok(Array.isArray(t.features) && t.features.length > 0, `${id}: it has features to load`);
     for (const feature of t.features) {
@@ -179,6 +201,15 @@ test("every instance template is complete data, and the registries know every wo
       assert.ok(INSTANCE_TEMPLATES[entry.id], `${riftId}: ${entry.id} is a real template`);
       assert.ok(Number(entry.w) > 0, `${riftId}: ${entry.id} has a positive weight`);
     }
+  }
+  for (const entry of WORMHOLE_SITE_POOL) {
+    const site = INSTANCE_TEMPLATES[entry.id];
+    assert.ok(site, `${entry.id}: a wormhole site must be a real template`);
+    assert.equal(site.reentrant, true, `${entry.id}: a wormhole site is re-enterable`);
+    assert.equal(site.lifetimeSec, 0, `${entry.id}: a site carries no clock of its own`);
+    assert.equal(site.exit?.n, "Stable wormhole", `${entry.id}: the way out is a Stable wormhole`);
+    assert.equal(site.exit?.requires.length, 0, `${entry.id}: and it is never locked`);
+    assert.ok(Number(entry.w) > 0, `${entry.id}: and it has a positive weight`);
   }
 });
 
@@ -667,7 +698,10 @@ test("a run is 20 minutes unless its template says otherwise", () => {
   assert.equal(RIFT.defaultLifetimeSec, 1200, "the default is 20 minutes of unpaused play");
   for (const id of Object.keys(INSTANCE_TEMPLATES)) {
     const record = createInstance(id, 8888);
-    assert.equal(record.totalLifetime, RIFT.defaultLifetimeSec, `${id}: the default clock`);
+    const expect = typeof INSTANCE_TEMPLATES[id].lifetimeSec === "number"
+      ? INSTANCE_TEMPLATES[id].lifetimeSec
+      : RIFT.defaultLifetimeSec;
+    assert.equal(record.totalLifetime, expect, `${id}: the declared clock (0 = none)`);
     destroyInstance(record, "reset");
   }
 
@@ -954,14 +988,24 @@ test("a rift's wave is its own hostile, and no contract is paid by killing it", 
 
   // The owner's complaint as rules (2026-11-14): the target lock read "Newbie Raider" inside a rift,
   // and a hunt contract for raiders was paid by a run the contract never asked for.
+  // Rift waves: their own hostile, rift faction. Natural (simple) wormhole sites fly their own
+  // trade instead — smugglers, a freighter, hive guardians — so the same bound is: no wave anywhere
+  // may fly the map's own DEFAULT_ENEMY, and every hostile has its own reported name and drop.
   for (const [id, t] of Object.entries(INSTANCE_TEMPLATES)) {
-    const def = ENEMIES[t.guardians.enemy];
-    assert.notEqual(t.guardians.enemy, DEFAULT_ENEMY, `${id}: its wave is not the map's own hostile`);
-    assert.equal(def.f, "rift", `${id}: it belongs to the rift, not to a faction the pilot can hail`);
-    assert.match(def.n, /[Gg]uardian/, `${id}: the lock reads what it is ("${def.n}")`);
-    assert.match(def.pl, /guardians/, `${id}: and contract wording would say "${def.pl}"`);
-    assert.ok(LOOT_TABLES[def.loot], `${id}: it leaves its own drop behind`);
-    assert.notEqual(def.col, ENEMIES[DEFAULT_ENEMY].col, `${id}: it is not wearing a raider's hull`);
+    for (const group of waveGroups(t.guardians)) {
+      const def = ENEMIES[group.enemy];
+      assert.notEqual(group.enemy, DEFAULT_ENEMY, `${id}: its ${group.enemy} is not the map's own hostile`);
+      if (t.reentrant === true) {
+        // A natural site's own hostile: not the map's, but not required to be a rift guardian.
+        assert.ok(FACTIONS[def.f], `${id}: ${group.enemy} belongs to a faction that exists`);
+      } else {
+        assert.equal(def.f, "rift", `${id}: ${group.enemy} belongs to the rift, not to a faction the pilot can hail`);
+        assert.match(def.n, /[Gg]uardian/, `${id}: the lock reads what it is ("${def.n}")`);
+        assert.match(def.pl, /guardians/, `${id}: and contract wording would say "${def.pl}"`);
+      }
+      assert.ok(LOOT_TABLES[def.loot], `${id}: ${group.enemy} leaves its own drop behind`);
+      assert.notEqual(def.col, ENEMIES[DEFAULT_ENEMY].col, `${id}: ${group.enemy} is not wearing a raider's hull`);
+    }
   }
 
   // The fight the owner playtested, unchanged: a raider's 10 Hull HP and 1 damage a shot, times the
@@ -975,7 +1019,11 @@ test("a rift's wave is its own hostile, and no contract is paid by killing it", 
   const record = insideRift(player, 4242);
   const wave = placeWorld(record.id).enemies;
   assert.equal(wave.length, basic.guardians.count, "the declared wave is there");
-  for (const e of wave) assert.equal(e.def, "riftguardian", "and every one of them is a guardian");
+  const riftWave = waveGroups(basic.guardians);
+  for (const [i, e] of wave.entries()) {
+    assert.equal(e.def, riftWave[0].enemy, "and every one of them is a guardian");
+    assert.ok(ENEMIES[e.def], "a hostile that exists");
+  }
 
   // Locked up, the way the pilot sees it: the label is the hostile's own name.
   player.pos.copy(wave[0].pos).add(V(0, 0, 300));   // 300 m down-range of it, facing -Z as entry leaves the ship

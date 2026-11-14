@@ -30,7 +30,7 @@ import { V, Q, UP } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { random, makeRng } from "../util/rng.js";
 import { state, placeWorld, localPlayer, profileOf, instanceAt, msg, say, clearInstances } from "../state/state.js";
-import { RIFT, riftDef, isInstanceTemplate, instanceTemplate, instanceIdFor } from "../data/instances.js";
+import { RIFT, riftDef, isInstanceTemplate, instanceTemplate, instanceIdFor, waveGroups } from "../data/instances.js";
 import {
   registerInstancePlace,
   unregisterInstancePlace,
@@ -156,6 +156,8 @@ export function rollRiftTemplate(riftId, rng = random) {
 export const OBJECTIVES = {
   // Every hostile this instance declared is gone.
   "destroy-guardians": record => !!record.spawned && !placeWorld(record.id).enemies.length,
+  // `objective.need` units of `objective.ore` mined (counted off `mined` events by this file).
+  "mine-ore": record => (record.mined || 0) >= Number(record.objective?.need || 1),
 };
 
 /** Is this instance's objective complete? An unknown kind is never complete (it fails shut). */
@@ -265,6 +267,9 @@ export function createInstance(templateId, seed, opts = {}) {
     origin,
     entry: null,
     difficulty,
+    // A natural (simple) wormhole's site may be left and re-entered at any time; a rift may not.
+    reentrant: template.reentrant === true,
+    mined: 0,
     lifetime,
     totalLifetime: lifetime,
     warned: false,
@@ -277,6 +282,9 @@ export function createInstance(templateId, seed, opts = {}) {
       kind: template.objective?.kind || null,
       n: template.objective?.n || "",
       done: template.objective?.done || "",
+      // mine-ore carries its own wording of what is owed; destroy-guardians ignores both.
+      ore: template.objective?.ore || null,
+      need: Number(template.objective?.need) > 0 ? Math.floor(Number(template.objective.need)) : 1,
       met: false,
     },
     exit: {
@@ -347,6 +355,33 @@ function closeDoor(record) {
 }
 
 /**
+ * Put every pilot standing in this run back where they entered from, without touching the run
+ * itself: the exit rules and the run's own records are untouched. `destroyInstance` calls this on
+ * the way out, and so does leaving a re-enterable run — the place is the same, only the run stays.
+ */
+function sendPilotsHome(record) {
+  const entry = record.entry;
+  for (const P of state.players) {
+    if (!P || (P.place || state.place) !== record.id) continue;
+    P.place = record.origin || P.place;
+    if (entry) {
+      P.pos.copy(entry.pos);
+      P.quat.copy(entry.quat);
+      P.sh = entry.sh;
+      P.en = entry.en;
+    }
+    P.v.set(0, 0, 0);
+    P.thr = 0;
+    P.snap = true;
+    if (P === state.player) {
+      state.place = P.place;
+      // The saved world follows the pilot out of a run: it names a place, and it is gone now.
+      state.worldState.place = P.place;
+    }
+  }
+}
+
+/**
  * End an instance for good: empty it, put every pilot inside it back at the spot they entered from,
  * take its door out of the pocket, and unregister the place. Safe to call twice and safe to call for
  * an instance nobody is inside.
@@ -366,25 +401,7 @@ export function destroyInstance(record, reason = "left") {
   if (record.cache) record.cache.entity = null;
 
   // Out first, then the place goes: `dock()` and every lookup resolve a pocket, never a dead id.
-  for (const P of state.players) {
-    if (!P || (P.place || state.place) !== record.id) continue;
-    const entry = record.entry;
-    P.place = record.origin || P.place;
-    if (entry) {
-      P.pos.copy(entry.pos);
-      P.quat.copy(entry.quat);
-      P.sh = entry.sh;
-      P.en = entry.en;
-    }
-    P.v.set(0, 0, 0);
-    P.thr = 0;
-    P.snap = true;
-    if (P === state.player) {
-      state.place = P.place;
-      // The saved world follows the pilot out of a run: it is a place, and it is gone now.
-      state.worldState.place = P.place;
-    }
-  }
+  sendPilotsHome(record);
 
   closeDoor(record);
   state.instances.delete(record.id);
@@ -412,6 +429,8 @@ function restoreInstance(saved) {
   record.lifetime = Math.max(0, Number(saved.lifetime) || 0);
   record.totalLifetime = Math.max(record.lifetime, Number(saved.totalLifetime) || 0);
   record.warned = saved.warned === true;
+  // What a mine-ore objective had already mined comes back with the save (slice 14c).
+  record.mined = Math.max(0, Math.floor(Number(saved.mined) || 0));
   // The objective's own words come from the template; only its state is saved.
   if (saved.objectiveMet === true) record.objective.met = true;
   const cache = record.cache;
@@ -648,25 +667,28 @@ export function enterRift(rift, player = localPlayer()) {
 /** The declared wave, at its declared distance from the arrival point — never in the pilot's face. */
 function spawnGuardians(record) {
   const template = instanceTemplate(record.template);
-  const wave = template?.guardians;
-  if (!wave || !ENEMIES[wave.enemy]) return;
-  const count = Math.max(0, Math.floor(Number(wave.count) || 0));
-  if (!count) return;
-  const [lo, hi] = Array.isArray(wave.spawnDist) && wave.spawnDist.length === 2 ? wave.spawnDist : [600, 900];
+  const groups = waveGroups(template?.guardians);
+  if (!groups.length) return;
+  // One stream for the whole wave, rolled group by group in declaration order, so the same seed is
+  // always the same fight.
   const rng = streamRng(record.seed, PURPOSE_GUARDIANS);
-  for (let i = 0; i < count; i++) {
-    // Evenly spread around the arrival point, each at its own rolled distance and height, so a run
-    // is the same every time and no guardian ever materialises on top of the pilot.
-    const angle = (i / count) * Math.PI * 2 + rng() * 0.6;
-    const dist = lo + rng() * Math.max(0, hi - lo);
-    const at = V(
-      record.enterPos.x + Math.cos(angle) * dist,
-      record.enterPos.y + (rng() - 0.5) * dist * 0.3,
-      record.enterPos.z + Math.sin(angle) * dist,
-    );
-    // `encounter` stays null: an instance's wave is not a pocket encounter, so it writes no place
-    // memory and can never trip a mission's wave-clear trigger.
-    spawnEnemy(wave.enemy, at, record.id, null, {});
+  for (const group of groups) {
+    const [lo, hi] = group.spawnDist;
+    if (!ENEMIES[group.enemy]) continue;
+    for (let i = 0; i < group.count; i++) {
+      // Evenly spread around the arrival point, each at its own rolled distance and height, so a
+      // run is the same every time and nothing ever materialises on top of the pilot.
+      const angle = (i / group.count) * Math.PI * 2 + rng() * 0.6;
+      const dist = lo + rng() * Math.max(0, hi - lo);
+      const at = V(
+        record.enterPos.x + Math.cos(angle) * dist,
+        record.enterPos.y + (rng() - 0.5) * dist * 0.3,
+        record.enterPos.z + Math.sin(angle) * dist,
+      );
+      // `encounter` stays null: an instance's wave is not a pocket encounter, so it writes no
+      // place memory and can never trip a mission's wave-clear trigger.
+      spawnEnemy(group.enemy, at, record.id, null, {});
+    }
   }
 }
 
@@ -712,6 +734,8 @@ function spawnGate(record) {
     place: record.id,
     n: record.exit.n,
     exit: true,
+    // A natural wormhole's way out is the same grey sphere as the way in (a rift's is the anomaly).
+    variant: record.reentrant ? "simple" : undefined,
     locked: !!exitDenial(record),
     pos: record.exitPos.clone(),
     quat: Q(),
@@ -736,11 +760,20 @@ export function leaveInstance(player = localPlayer()) {
   if (at.distanceTo(record.exitPos) > range) {
     return `Fly back to ${record.exit.n} (within ${range} m of it) and press R.`;
   }
-  const denial = exitDenial(record);
-  if (denial) {
-    msg(denial, 5);
-    emit("travel-denied", { reason: denial, from: record.id, to: record.origin });
-    return denial;
+  const loss = exitDenial(record);
+  if (loss) {
+    msg(loss, 5);
+    emit("travel-denied", { reason: loss, from: record.id, to: record.origin });
+    return loss;
+  }
+  // A natural (simple) wormhole's run may be left at any time and re-entered until the pocket's
+  // 20 minutes are spent: the pilot goes back where they came from, the run keeps its state, the
+  // door stays hanging in the pocket. A rift is one use and despawns here.
+  if (record.reentrant) {
+    sendPilotsHome(record);
+    emit("instance-closed", { id: record.id, origin: record.origin, reason: "left" });
+    emit("rift-left", { id: record.id, origin: record.origin });
+    return true;
   }
   destroyInstance(record, "left");
   emit("rift-left", { id: record.id, origin: record.origin });
@@ -1042,4 +1075,16 @@ export function updateRifts(dt, placeId = state.place) {
 on("dying", ({ player } = {}) => {
   const record = instanceAt(player ? player.place || state.place : state.place);
   if (record) destroyInstance(record, "death");
+});
+
+// The beam put some ore in the hold (sim/weapons.js emits `mined`). A mine-ore objective counts
+// only the ore it asked for — and only inside the instance that declared it. Completion itself is
+// noticed by the tick, the same way a destroyed wave is, so a missed event can never strand a run.
+on("mined", ({ item, player } = {}) => {
+  const P = player || localPlayer();
+  const id = P ? P.place || state.place : state.place;
+  const record = isInstancePlace(id) ? instanceAt(id) : null;
+  if (!record || record.gone || record.objective?.kind !== "mine-ore" || record.objective.met) return;
+  if (item !== record.objective.ore) return;
+  record.mined = (record.mined || 0) + 1;
 });

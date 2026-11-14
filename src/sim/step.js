@@ -14,6 +14,7 @@ import { updateBullets, updateCrates } from "./combat.js";
 import { updateEffects } from "./effects.js";
 import { updatePlaceMemory } from "./place-memory.js";
 import { updateInstances, updateRifts } from "./instances.js";
+import { updateWormholes } from "./wormholes.js";
 import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 
 /** The frame loop's pause gate. A hosted multiplayer world never pauses merely
@@ -63,6 +64,9 @@ export function stepSim(dt) {
   // Step 14: every live instance keeps its own clock, objective and locked cache, wherever the
   // pilots are. Instances are few, so this sweeps them all rather than going place by place.
   updateInstances(dt);
+  // Slice 14c: the simple wormhole pockets keep their clocks — 20 minutes from spawn, then the way
+  // in fades. One sweep; there are ~75, spread over the whole galaxy.
+  updateWormholes(dt);
   for (const placeId of state.places.keys()) updateEffects(dt, placeId);
 }
 

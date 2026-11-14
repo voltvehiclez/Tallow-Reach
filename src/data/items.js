@@ -38,8 +38,12 @@ export const ITEMS = {
   ferrite: { n: "Ferrite", cat: "ore", v: 10 },
   cobalt: { n: "Cobalt", cat: "ore", v: 24 },
   voidite: { n: "Voidite", cat: "ore", v: 60 },
+  // The rare belt ore: what the mining-belt wormhole site pays in. Tunable.
+  lumenite: { n: "Lumenite", cat: "ore", v: 150 },
   salv: { n: "Salvage", cat: "salvage", v: 70 },
   core: { n: "Reactor core", cat: "salvage", v: 350 },
+  // Seized smuggling cargo: what a smuggler's freighter drops. Tunable.
+  contraband: { n: "Contraband", cat: "trade", v: 220 },
   beacon: { n: "Beacon", cat: "mission", v: 0 },
   parcel: { n: "Sealed parcel", cat: "mission", v: 0 },
 

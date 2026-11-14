@@ -83,6 +83,15 @@
 //                                    a saved run was rebuilt around the pilot on load (slice 14b)
 //   instances-forgotten { ids }       a load dropped the runs of the save it replaced, so their
 //                                    places no longer exist (main.js frees their scenery)
+//   wormhole-collapsed { id, parent, template }
+//                                    a simple wormhole's clock ended (slice 14c): the door in
+//                                    normal space faded. The pocket lingers only while the pilot is
+//                                    in it (or in its run, or warping towards it); otherwise it was
+//                                    taken off the map in the same breath. A replacement pops up
+//                                    somewhere else in the universe either way.
+//   wormhole-gone { id, parent }     a simple wormhole pocket was removed from the map for good —
+//                                    it faded while nobody was in it, or the pilot warped off a
+//                                    faded one (main.js frees its scenery)
 //   delivered     { item?, target?, place?, player }
 //                                    a mission delivery objective reached its target
 //   mission-tick  { dt, player }     one unpaused simulation tick for survive/wait objectives

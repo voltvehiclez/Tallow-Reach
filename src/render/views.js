@@ -104,6 +104,46 @@ const sealedCoreMat = new THREE.MeshStandardMaterial({
   metalness: 0.2,
 });
 
+// A simple wormhole (slice 14c): the grey dark sphere that hangs in a spawned pocket, a F-lockable
+// anomaly with a greyish radiance around it — EVE-like, cooler and quieter than a rift. One look
+// shared by the door in normal space and the Stable wormhole way out of a run (both carry
+// `variant: "simple"`; the update picks the right breathing from that).
+const wormholeCoreGeo = new THREE.SphereGeometry(0.5, 32, 22);
+const wormholeCoreMat = new THREE.MeshStandardMaterial({
+  color: 0x121419,
+  emissive: 0x8f99ab,
+  emissiveIntensity: 0.18,
+  roughness: 0.5,
+  metalness: 0.4,
+});
+const wormholeGlowGeo = new THREE.SphereGeometry(0.82, 28, 18);
+const wormholeGlowMat = new THREE.MeshBasicMaterial({
+  color: 0x7e8798,
+  transparent: true,
+  opacity: 0.35,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  depthWrite: false,
+});
+const wormholeAuraGeo = new THREE.SphereGeometry(1.25, 30, 22);
+const wormholeAuraMat = new THREE.MeshBasicMaterial({
+  color: 0x99a2b4,
+  transparent: true,
+  opacity: 0.13,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  depthWrite: false,
+});
+const wormholeFlareGeo = new THREE.SphereGeometry(1.7, 24, 16);
+const wormholeFlareMat = new THREE.MeshBasicMaterial({
+  color: 0x565e6e,
+  transparent: true,
+  opacity: 0.06,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  depthWrite: false,
+});
+
 // The prize canister: a plain drum with two bands and a lamp that says whether it is still sealed.
 const cacheBodyGeo = new THREE.CylinderGeometry(0.42, 0.42, 1.35, 16, 1);
 const cacheCapGeo = new THREE.CylinderGeometry(0.3, 0.44, 0.24, 16, 1);
@@ -311,6 +351,42 @@ registerEntityView("rock", {
  * (`e.quat`); the shimmer is this file's own business and scales each view's shells by a phase taken
  * from the record's id, so two doors never pulse in step and nothing shared is animated.
  */
+// A simple wormhole: one dark sphere with two shells of grey radiance around it. No eye, no
+// sealed/unsealed state — a simple wormhole is never locked, so the view never has to guess why.
+function buildSimpleWormhole(e) {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(wormholeCoreGeo, wormholeCoreMat);
+  const glow = new THREE.Mesh(wormholeGlowGeo, wormholeGlowMat);
+  const aura = new THREE.Mesh(wormholeAuraGeo, wormholeAuraMat);
+  const flare = new THREE.Mesh(wormholeFlareGeo, wormholeFlareMat);
+  g.add(core, glow, aura, flare);
+  g.userData = { core, glow, aura, flare, phase: ((Number(e.id) || 0) % 628) / 100, simple: true };
+  g.scale.setScalar(Math.max(1, Number(e.r) || 30));
+  return initialPose(e, g);
+}
+
+function updateSimpleWormhole(e, g) {
+  updatePose(e, g);
+  g.scale.setScalar(Math.max(1, Number(e.r) || 30));
+  const u = g.userData,
+    t = performance.now() * 0.001,
+    // Two slow waves, like something breathing in its sleep — never a flicker.
+    swell = Math.sin(t * 0.9 + u.phase) * 0.05 + Math.sin(t * 2.3 + u.phase * 1.7) * 0.025;
+  u.core.rotation.y = t * 0.05 + u.phase;   // the sphere turns glacially, on the clock, not per frame
+  u.glow.scale.setScalar(1 + swell * 0.9);
+  u.aura.scale.setScalar(1 + swell * 1.6);
+  u.flare.scale.setScalar(1 - swell * 1.1);
+}
+
+// The door hanging in a pocket and the way out of a run are one kind of object; the variant on the
+// record decides which of the two looks it wears (a rift is the orange anomaly, a simple wormhole is
+// the grey sphere). `render/` never reads the template — only the colour of the record, ever.
+const buildDoor = e => (e.variant === "simple" ? buildSimpleWormhole(e) : buildAnomaly(e));
+const updateDoor = (e, g) => {
+  if (e.variant === "simple") updateSimpleWormhole(e, g);
+  else updateAnomaly(e, g);
+};
+
 function buildAnomaly(e) {
   const g = new THREE.Group();
   const core = new THREE.Mesh(anomalyCoreGeo, anomalyCoreMat);
@@ -344,9 +420,10 @@ function updateAnomaly(e, g) {
   u.eye.scale.setScalar(sealed ? 0.45 : 0.9 + Math.sin(t * 3.1 + u.phase) * 0.12);
 }
 
-// The door hanging in a pocket, and the way out of a run: one look, because they are one thing.
-registerEntityView("rift", { list: () => state.world.rifts, build: buildAnomaly, update: updateAnomaly, remove: noCleanup });
-registerEntityView("gate", { list: () => state.world.gates, build: buildAnomaly, update: updateAnomaly, remove: noCleanup });
+// The door hanging in a pocket, and the way out of a run: one kind of object; the record's variant
+// decides the look (the orange anomaly, or the grey simple wormhole).
+registerEntityView("rift", { list: () => state.world.rifts, build: buildDoor, update: updateDoor, remove: noCleanup });
+registerEntityView("gate", { list: () => state.world.gates, build: buildDoor, update: updateDoor, remove: noCleanup });
 
 // The prize: a canister, visible and plainly locked from the moment the pilot arrives. Opening it is
 // a deliberate R beside it, and an emptied one is dropped by the sim, so it is never drawn open and

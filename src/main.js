@@ -17,6 +17,7 @@ import { toggleLock } from "./sim/targeting.js";
 import { tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
 import { riftAction, restoreInstances } from "./sim/instances.js";
+import { restoreWormholes } from "./sim/wormholes.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
@@ -56,8 +57,10 @@ installCrashNotice();
 document.body.prepend(renderer.domElement);
 applySave(loadAutosave(prepareGalaxySave) || prepareGalaxySave(newSave()));
 // A save can be from inside a rift (slice 14b): its run has to be a place again before anything
-// loads that place. `resumeFromSave()` below puts the pilot back in it and fills it in.
+// loads that place. A save can also be standing in a simple wormhole pocket (slice 14c): the pocket
+// has to be a place before its scenery is built. `resumeFromSave()` below puts the pilot back in it.
 restoreInstances();
+restoreWormholes();
 createPlayer();
 setShip(state.profile.ship);
 loadPlace(state.place);
@@ -111,6 +114,12 @@ on("place-entered", ({ id }) => showPlace(id));
 // `render/` is not allowed to know when a run ends, so the bus says so and this is the only place
 // that acts on it.
 on("instance-closed", ({ id }) => {
+  forgetPlace(id);
+  showPlace(state.place);
+});
+// A simple wormhole pocket that despawns (it faded while nobody was in it, or the pilot warped off
+// a faded one) takes its scenery, its sky and its door with it.
+on("wormhole-gone", ({ id }) => {
   forgetPlace(id);
   showPlace(state.place);
 });

@@ -31,22 +31,24 @@ run and what to click. Different AI assistants work in separate chats and none r
 
 ## Where the game is now
 
-- Save version: **v20**.
+- Save version: **v21**.
 - **Which steps are done, built or next: see the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step
   status is kept (this file, REFACTOR_PLAN and the README do not repeat it); tick steps there. A step that is "built"
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" and tick them there if so. If they
   report a bug, fix it first, following "When the owner reports a bug" below.
-- **14a/14b ticked; two owner notes shipped (2026-11-14):** the owner playtested 14a + 14b, four bugs were fixed (the
-  mid-rift logout fix owner-confirmed), a second round built the canister **trade**, the **20-minute default clock** and
-  the **starless sky** — and their verdict was "works well", with two notes, both now shipped. The painted fractures and
-  filaments read as **odd lines** over an otherwise good sky, so `render/sky.js` strokes nothing at all now (washes,
-  nebula cores, an invisible dither grain; the templates' `cracks` colour is gone), and opening a loot surface **freezes
-  the ship** (`modalSurface()` in `core/input.js` now covers the cache; `holdShip()` in `sim/pilot.js` kills carry and
-  throttle), so WASD and the mouse do nothing until it closes. [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)
-  §5/§5b are the re-run guide. Next: **14c** simple wormholes (**v21**), **14d** wormhole systems, then step 15 (**v22**).
-  A run saves as template, seed, clock, objective, prize (half-traded, as it stands) and entry spot (`world.instances`).
-- The campaign (step 15) must be built from the mission templates and pass the linter. Build notes: [architecture/feature-notes.md](architecture/feature-notes.md); code and tests are authoritative.
+- **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system, appears
+  on that system's map as a "Simple Wormhole" with no notice — **20 minutes from spawn, kept in `world.wormholes`**.
+  Always **75** in the universe, never more than **3 per system**; a fresh universe staggers their clocks and every
+  replacement pops up with a full 20 minutes. The pocket holds a skybox, asteroid formations and one grey dark sphere you
+  can lock. The far side is a site (smugglers and a freighter to destroy, a lumenite belt to mine, a guardian hive), is
+  **less hardcore than a rift — leave at any time** — and is re-enterable until the pocket expires; objectives and
+  rewards are one-time. Collapse fades the way in; the **Stable wormhole** out always works, no clock, and there is no
+  `kill` outcome. v20 → **v21**; step 15 is **v22**. Guide:
+  [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md). Next: **14d**, then step 15. A run saves as
+  template, seed, clock, objective, prize (half-traded) and entry spot (`world.instances`); a standing simple wormhole
+  saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`).
+- The campaign (step 15) must be built from the mission templates and pass the linter. See [architecture/feature-notes.md](architecture/feature-notes.md); code and tests are authoritative.
 
 ## The owner's ground rules (do not break these)
 
@@ -143,6 +145,4 @@ on the end of the address.
 | `CHANGELOG.md` / `CHANGELOG_ARCHIVE.md` | Recent changes in full, older history. Never delete entries. |
 | `AI_PROMPTS.md` | Prompts the owner pastes into new chats. |
 | `archive/` | Superseded text, kept word for word: old HANDOFF, finished refactor steps, old status prose. |
-| `../testing/` | Owner playtest guides (current ones on top, `passed/` for finished steps). |
-
-Each `src/` folder also has a short `README.md` listing its files and rules.
+| `../testing/` | Owner playtest guides (current ones on top, `passed/` for finished steps). Each `src/` folder also has a short `README.md` listing its files and rules. |
