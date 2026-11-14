@@ -20,9 +20,16 @@ export function prepareGalaxySave(raw) {
   const previousRecovery = state.galaxyRecovery;
   const requested = typeof rawWorld?.place === "string" ? rawWorld.place
     : typeof rawWorld?.sector === "string" ? rawWorld.sector : null;
+  // A pilot can be inside a temporary run (step 14b), which is a place that is in no galaxy: it is
+  // registered at runtime by `sim/instances.js` from the run list this same save carries. Without
+  // this, a save made inside a rift looked like a pocket that had been removed, and the pilot was
+  // "recovered" home — out of the run they were standing in.
+  const runs = Array.isArray(rawWorld?.instances) ? rawWorld.instances : [];
+  const savedRun = typeof requested === "string" && runs.some(run => run && run.id === requested);
   // Check the id the save actually asked for. sanitizeSave deliberately falls
   // back to home for an unknown id, which would otherwise hide the recovery.
-  const missingPocket = requested !== null && !Object.prototype.hasOwnProperty.call(galaxy.pocketsById, requested);
+  const missingPocket = requested !== null && !savedRun &&
+    !Object.prototype.hasOwnProperty.call(galaxy.pocketsById, requested);
   // Old generated gate ids encode their system pair. Resolve the old seeded
   // catalog before sanitization so a removed gate can move to its own system's
   // ordinary pocket instead of stranding the player or losing their character.

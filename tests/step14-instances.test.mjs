@@ -15,10 +15,15 @@ import {
   SKY_KINDS, instanceIdFor,
 } from "../src/data/instances.js";
 import { LOOT_TABLES } from "../src/data/loot.js";
-import { ENEMIES } from "../src/data/enemies.js";
+import { ENEMIES, DEFAULT_ENEMY } from "../src/data/enemies.js";
+import { FACTIONS } from "../src/data/factions.js";
+import { missionFromContract } from "../src/data/missions/contracts.js";
+import { acceptMission, activeMissions, missionProgress } from "../src/sim/missions.js";
 import { generateGalaxy } from "../src/sim/galaxy.js";
 import { createPlayer, hurt } from "../src/sim/player.js";
 import { configurePlayer, resumeFromSave } from "../src/sim/session.js";
+import { prepareGalaxySave } from "../src/sim/galaxy-session.js";
+import { saveAutosave, loadAutosave } from "../src/state/storage.js";
 import { enterPlace, loadPlace } from "../src/sim/places.js";
 import { addItem, countOf, holdOf, discardItem } from "../src/sim/inventory.js";
 import { SHIPS } from "../src/data/ships.js";
@@ -110,9 +115,17 @@ test("every instance template is complete data, and the registries know every wo
     assert.ok(t.n && t.d, `${id}: a name and a description`);
     assert.ok(Number(t.tier) > 0, `${id}: an advisory tier`);
     assert.ok(Number(t.lifetimeSec) > 0, `${id}: a lifetime`);
-    assert.ok(Number(t.difficulty?.hp) > 1 && Number(t.difficulty?.dmg) > 1,
-      `${id}: harder than the map, which scales no enemy at all`);
-    assert.ok(ENEMIES[t.guardians?.enemy], `${id}: its guardian is a real enemy`);
+    // A run is harder than the map, and the numbers that say so are the ones the fight is made of:
+    // the wave's own Hull HP and damage, times the run's scalars, are above the map's own hostile.
+    // (The scalars used to do all the work, when a rift borrowed raiders and inflated them.)
+    const guardian = ENEMIES[t.guardians?.enemy];
+    assert.ok(guardian, `${id}: its guardian is a real enemy`);
+    assert.ok(Number(t.difficulty?.hp) > 0 && Number(t.difficulty?.dmg) > 0, `${id}: its scalars are numbers`);
+    assert.ok(guardian.hp * t.difficulty.hp > ENEMIES[DEFAULT_ENEMY].hp,
+      `${id}: its wave outlasts the map's ${ENEMIES[DEFAULT_ENEMY].n}`);
+    assert.ok(guardian.dmg * t.difficulty.dmg > ENEMIES[DEFAULT_ENEMY].dmg,
+      `${id}: and each of them hits harder than one`);
+    assert.ok(FACTIONS[guardian.f], `${id}: its guardians belong to a faction that exists`);
     assert.ok(Number(t.guardians.count) > 0, `${id}: it declares a wave`);
     const [lo, hi] = t.guardians.spawnDist;
     assert.ok(lo > 0 && hi >= lo, `${id}: its wave spawns at a real distance band`);
@@ -295,7 +308,7 @@ test("R at close range goes in; the run is generated, sealed and harder than the
   assert.equal(enemies.length, wave.count, "the declared wave is there");
   for (const e of enemies) {
     assert.equal(e.hp, Math.round(ENEMIES[e.def].hp * record.difficulty.hp),
-      "each guardian is hardened by the template's scalar");
+      "each guardian's Hull HP is its own number, times the run's scalar");
     assert.equal(e.mx, e.hp, "and its maximum matches");
     assert.equal(e.encounter, null, "an instance's wave is no pocket encounter, so it writes no place memory");
     assert.ok(e.pos.distanceTo(player.pos) >= wave.spawnDist[0] - 1,
@@ -775,4 +788,105 @@ test("a save from before runs existed still loads, and a run this build cannot r
   assert.equal(state.player.place, DEFAULT_PLACE, "and the pilot is home");
   assert.deepEqual(state.player.pos.toArray(), [10, 0, 10], "flying at the spot the save named");
   assert.equal(instanceAt(state.player.place), null, "in a pocket, not in a run that is not there");
+});
+
+/** A stand-in for the browser's localStorage, so a test can walk the real boot path. */
+function mockStorage() {
+  const mem = new Map();
+  const prev = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: k => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: k => mem.delete(k),
+  };
+  return { mem, restore: () => { globalThis.localStorage = prev; } };
+}
+
+test("the boot path a browser takes comes back inside the run, with no pocket-recovery detour", () => {
+  const player = withRifts(fresh());
+  const record = insideRift(player, 6060);
+  updateInstances(20);
+  const lifetime = record.lifetime;
+  const stock = record.cache.stock.map(stack => ({ ...stack }));
+
+  const storage = mockStorage();
+  try {
+    saveAutosave(currentSave());     // what the 30-second timer, pagehide and the menu all do
+    assert.ok(storage.mem.size > 0, "the autosave was written");
+
+    // The browser comes back: boot reads that autosave through the galaxy adapter, which is the
+    // path that used to see a run's place id as a pocket that had been removed and "recover" the
+    // pilot home (owner bug report 2026-11-14).
+    state.galaxyRecovery = null;
+    const loaded = loadAutosave(prepareGalaxySave);
+    assert.ok(loaded, "the autosave loads");
+    assert.equal(state.galaxyRecovery, null, "a run is a place, not a pocket that went missing");
+    assert.equal(loaded.world.place, record.id, "and the save still names the run");
+    assert.ok(loaded.world.resume, "with the pilot's own spot inside it");
+
+    applySave(loaded);
+    resumeFromSave();
+    const back = instanceAt(record.id);
+    assert.ok(back, "so the run is alive again");
+    assert.equal(state.player.place, record.id, "and the pilot is standing in it");
+    assert.equal(back.lifetime, lifetime, "with the clock where it was");
+    assert.deepEqual(back.cache.stock, stock, "and the same prize still inside");
+    assert.equal(placeWorld(record.id).gates.length, 1, "the way out is there");
+  } finally {
+    storage.restore();
+  }
+});
+
+test("a rift's wave is its own hostile, and no contract is paid by killing it", () => {
+  const player = withRifts(fresh());
+
+  // The owner's complaint as rules (2026-11-14): the target lock read "Newbie Raider" inside a rift,
+  // and a hunt contract for raiders was paid by a run the contract never asked for.
+  for (const [id, t] of Object.entries(INSTANCE_TEMPLATES)) {
+    const def = ENEMIES[t.guardians.enemy];
+    assert.notEqual(t.guardians.enemy, DEFAULT_ENEMY, `${id}: its wave is not the map's own hostile`);
+    assert.equal(def.f, "rift", `${id}: it belongs to the rift, not to a faction the pilot can hail`);
+    assert.match(def.n, /[Gg]uardian/, `${id}: the lock reads what it is ("${def.n}")`);
+    assert.match(def.pl, /guardians/, `${id}: and contract wording would say "${def.pl}"`);
+    assert.ok(LOOT_TABLES[def.loot], `${id}: it leaves its own drop behind`);
+    assert.notEqual(def.col, ENEMIES[DEFAULT_ENEMY].col, `${id}: it is not wearing a raider's hull`);
+  }
+
+  // The fight the owner playtested, unchanged: a raider's 10 Hull HP and 1 damage a shot, times the
+  // 1.6 / 1.5 and 2.2 / 2 the templates used to inflate them by, now authored on the guardians.
+  const basic = INSTANCE_TEMPLATES.guardian_rift, deep = INSTANCE_TEMPLATES.deep_rift;
+  assert.equal(Math.round(ENEMIES.riftguardian.hp * basic.difficulty.hp), 16, "a basic rift's guardian");
+  assert.equal(ENEMIES.riftguardian.dmg * basic.difficulty.dmg, 1.5, "hits exactly as hard as before");
+  assert.equal(Math.round(ENEMIES.deepguardian.hp * deep.difficulty.hp), 22, "and a deep rift's");
+  assert.equal(ENEMIES.deepguardian.dmg * deep.difficulty.dmg, 2, "hits exactly as hard as before");
+
+  const record = insideRift(player, 4242);
+  const wave = placeWorld(record.id).enemies;
+  assert.equal(wave.length, basic.guardians.count, "the declared wave is there");
+  for (const e of wave) assert.equal(e.def, "riftguardian", "and every one of them is a guardian");
+
+  // Locked up, the way the pilot sees it: the label is the hostile's own name.
+  player.pos.copy(wave[0].pos).add(V(0, 0, 300));   // 300 m down-range of it, facing -Z as entry leaves the ship
+  player.quat.identity();
+  toggleLock(player);
+  assert.equal(player.flight.lock?.k, "e", "the first guardian locks");
+  assert.match(lockName(player.flight.lock), /^Rift Guardian \d+%$/,
+    `the lock says "${lockName(player.flight.lock)}"`);
+  pruneLock(player);
+
+  // A hunt contract asks for the map's raiders. Killing this wave must not pay for it.
+  acceptMission(missionFromContract({ type: "hunt", tier: 1, n: 4, r: 860, e: DEFAULT_ENEMY }),
+    state.profile, DEFAULT_PLACE);
+  assert.equal(activeMissions(state.profile).length, 1, "the contract is open");
+
+  for (const e of [...placeWorld(record.id).enemies]) {
+    let guard = 0;
+    while (e.hp > 0 && guard++ < 200) hitHostile(e, 50, e.pos, player, record.id);
+  }
+  updateInstances(1 / 60);
+
+  const [hunt] = activeMissions(state.profile);
+  assert.equal(missionProgress(hunt).done, 0, "four guardians died and the raider contract did not move");
+  assert.equal(record.objective.met, true, "while the run's own objective is met, as ever");
+  assert.ok(state.hud.msg, "and the run said its own sentence about it");
 });

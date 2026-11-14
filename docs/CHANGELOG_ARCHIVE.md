@@ -8,6 +8,40 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Press I in space to read the ship's inventory, and the chart no longer stops the clock
+
+Owner request: "can we add menu of the current ship's inventory if we click 'i' when in space? Same layout as the
+inventory when in a station but it can be a bit wider." Follow-up in the same round: drop the card's sub-line, make it
+**7 tiles across and 5 rows** tall at the same total width, and "make it so that the map and the inventory dont pause
+the game". **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **I in space opens the hold.** New `ui/cargo.js` owns a modal card outside the docked panel: `screens.js`
+  `cargoHtml()` draws the same `inv-col`/`inv-grid`/`inv-item` tiles as the station Inventory tab, but only the hold of
+  the ship being flown, in an **880 px** card instead of the station panel's 580 px. No sub-line, and **7 tiles a row by
+  5 rows** (`slots: 35`, narrower boxes at the same tile height and total width). In flight there is nowhere to move
+  cargo, so the tiles are labels (`inv-item-read`), with no move, sell or ship-switch controls.
+- **The chart and the hold never stop the world.** `sim/step.js` `isSimulationPaused()` now counts **only** the pause
+  card and the title screen, so time, physics and audio keep running behind either overlay in every mode (the chart
+  used to pause a single-player flight and mute it). Both still release held flight input and block the
+  dock/lock/weapon/jump hotkeys while open, and both close on docking.
+- **It behaves like the chart otherwise.** **I** or **Esc** closes the hold, **P** closes it and opens the pause card,
+  the Close button and a click outside work, and docking, the title screen or death close it. `canOpenCargo()` refuses
+  while docked, dead, warping, paused, on the title screen or over the starmap.
+- **Docked, I is the Inventory tab.** In a station the panel already shows the tabs, so `I` switches it to Inventory
+  (`menu.js` `openStationTab`). The launch help text now mentions the key.
+- **Tests:** new `tests/ui-cargo.test.mjs` (the same tile layout, capacity and 7×5 slot field, read-only in flight while
+  the station tab keeps its move buttons, the open/refuse rule, and the world staying live); the chart's frame-gate test
+  now asserts that neither overlay pauses and that the pause card and title screen still do. 492 tests pass.
+
+Files: `src/ui/cargo.js` (new), `src/ui/screens.js`, `src/ui/menu.js`, `src/main.js`, `src/core/input.js`,
+`src/ui/starmap.js`, `src/sim/step.js`, `src/state/state.js`, `src/styles.css`, `tests/ui-cargo.test.mjs`,
+`tests/step11b-starmap.test.mjs`, `tests/inventory.test.mjs`, `src/ui/overlays.js`, `tests/ui-overlays.test.mjs`,
+`src/ui/README.md`, `src/sim/README.md`,
+`docs/architecture/ui-and-screens.md`, `docs/architecture/world-and-map.md`, `docs/architecture/feature-notes.md`,
+`docs/VISION.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
 
 Owner correction to the station-scoping round: "Active story missions are not visible if you dock into another station...

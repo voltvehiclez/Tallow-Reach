@@ -3,7 +3,8 @@
 
 import * as THREE from "three";
 import { DEFAULT_PLACE, placeDef, placeAt } from "../data/places.js";
-import { mm } from "./models.js";
+import { mm, rockShapeAt } from "./models.js";
+import { paintSky } from "./sky.js";
 import { cosmeticRandom } from "../util/rng.js";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
 
@@ -102,57 +103,34 @@ const SKY_RADIUS = 15000;
  *              shards drifting slowly inside. Unstable, and nowhere near the space outside.
  */
 export const SKIES = {
+  /**
+   * A broken pocket: space, but the space of somewhere that has collapsed. Painted, not built (see
+   * `render/sky.js` for why), and wrapped around the inside of a sphere — unlit and seen from the
+   * back, so the sphere's own facets never show and the picture is the whole of the sky. Debris
+   * drifts inside it, turning slowly, in the same rock shapes the place's field uses.
+   */
   shattered(sky) {
-    const col = Number(sky.col) || 0x120806,
-      glow = Number(sky.glow) || 0xff7a2a,
-      cracks = Number(sky.cracks) || glow,
-      shards = Math.max(0, Math.floor(Number(sky.shards) || 0));
+    const shards = Math.max(0, Math.floor(Number(sky.shards) || 0));
     const g = new THREE.Group();
 
-    // The shell: a big inverted icosahedron with one flat shade per panel, so the sky reads as broken
-    // rather than smooth. A few panels catch the ember glow.
-    const shellGeo = new THREE.IcosahedronGeometry(SKY_RADIUS, 3).toNonIndexed();
-    const verts = shellGeo.attributes.position.count;
-    const colors = new Float32Array(verts * 3);
-    const base = new THREE.Color(col),
-      tint = new THREE.Color(glow),
-      c = new THREE.Color();
-    for (let i = 0; i < verts; i += 3) {
-      c.copy(base).multiplyScalar(0.5 + cosmeticRandom() * 0.5).lerp(tint, Math.pow(cosmeticRandom(), 3) * 0.18);
-      for (let v = 0; v < 3; v++) {
-        colors[(i + v) * 3] = c.r;
-        colors[(i + v) * 3 + 1] = c.g;
-        colors[(i + v) * 3 + 2] = c.b;
-      }
-    }
-    shellGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    const shell = new THREE.Mesh(
-      shellGeo,
-      new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false })
-    );
+    const canvas = document.createElement("canvas");
+    paintSky(sky, canvas);
+    const texture = new THREE.CanvasTexture(canvas);
+    const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);
+    const shellMat = new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.BackSide,
+      fog: false,
+      depthWrite: false,
+    });
+    const shell = new THREE.Mesh(shellGeo, shellMat);
     g.add(shell);
 
-    // The fractures: the shell's own edges, glowing faintly, so the whole sky looks cracked.
-    g.add(
-      new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(SKY_RADIUS * 0.998, 2)),
-        new THREE.LineBasicMaterial({
-          color: cracks,
-          transparent: true,
-          opacity: 0.2,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          fog: false,
-        })
-      )
-    );
-
     // Shards drifting inside it, each turning at its own slow rate.
-    const spins = [{ object: shell, rate: 0.0032 }];
-    const shardGeo = new THREE.TetrahedronGeometry(1, 0);
-    const shardMat = mm(0x241a16, col);
+    const spins = [{ object: shell, rate: 0.0014 }];
+    const shardMat = mm(0x241a16, Number(sky.col) || 0x120806);
     for (let i = 0; i < shards; i++) {
-      const shard = new THREE.Mesh(shardGeo, shardMat);
+      const shard = new THREE.Mesh(rockShapeAt(i), shardMat);
       const d = R(1500, 6000),
         u = R(-1, 1),
         t = R(0, 6.283),
@@ -165,11 +143,10 @@ export const SKIES = {
     }
 
     // A run's sky is built for that run alone, so it is freed with it: an instance comes and goes,
-    // and its shell, edges and shard geometry must not stay on the card after it.
-    const own = [shellGeo, shell.material, shardGeo, shardMat];
-    g.traverse(o => {
-      if (o.isLineSegments) own.push(o.geometry, o.material);
-    });
+    // and its sphere, its painted picture and its shard material must not stay on the card after
+    // it. The rock shapes are shared with every field in the game, so they are not this sky's to
+    // free.
+    const own = [shellGeo, shellMat, texture, shardMat];
     return { object: g, spins, dispose: () => own.forEach(r => r && r.dispose && r.dispose()) };
   },
 };

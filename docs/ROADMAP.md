@@ -12,13 +12,13 @@
 playtests, and on 2026-11-14 the owner also confirmed the mission follow-ups built on 2026-11-13 (station-scoped offers
 and the docked-panel redraw, delivery wording, recovery contracts and their own crates) plus
 `testing/passed/TESTING-DEATH-AND-MISSIONS.md`. Saves are version **20**.
-**Slice 14a, the owner's six feedback items on it, and slice 14b are built and waiting on the owner's playtest**
+**Slice 14a, the owner's six feedback items on it, and slice 14b are built; the owner's playtest found four bugs, all four are fixed, and a re-playtest is pending**
 ([../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)): the Basic rift is on Meridian's shelf, using it
 opens a **shimmering dark-orange anomaly** in clear space, **R** goes in and out, **F** locks the door, the way out and
 the canister and the HUD marks all three, the run is generated from a template and a seed under a **shattered sky of its
 own**, its guardians are hardened, the prize is a **canister opened with R** once the objective is done, the way out is a
 **second anomaly** that stays sealed until then, and the 20-minute clock kills the pilot still inside. A run is now
-**saved** (`world.instances`), so logging out mid-rift comes back mid-rift. `npm test` is green (529 tests) and the build
+**saved** (`world.instances`), so logging out mid-rift comes back mid-rift. `npm test` is green (546 tests) and the build
 is 799 KB.
 Next: **14c** simple wormholes (save **v21**) and **14d** wormhole systems in uncharted space. On 2026-11-14 the owner spelled out how natural wormholes work — a simple wormhole is a pocket that
 spawns itself in normal space, its 20 minutes run from that spawn, running out only collapses the way in, and the way out
@@ -64,8 +64,8 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 12 | Encounters, place templates, place memory (save v18) | C | [x] **2026-11-13: owner playtest passed** (`testing/passed/TESTING-12-PLACES.md`). |
 | 13 | Mission framework; contracts rebuilt on it (save v19) | D | [x] **2026-11-13: owner playtested the mission framework and it passed (13a contracts, 13b story runtime, 13c screens, 13d rules and linter).** Guides are in `testing/passed/`. |
 | 14 | Instanced places and wormholes (rifts) | D | [ ] |
-| 14a | The Basic rift: item, spawn in space, enter, locked loot cache, lifetime, exit rules (save v19) | D | [ ] **Built 2026-11-14, and the owner's six playtest items on it are built too (the anomaly and its gate, F-locks and HUD labels, the R-opened canister, the shattered sky); waiting on the owner's playtest** (`testing/TESTING-14-RIFTS.md`). |
-| 14b | A run survives a quit: an instance in progress is saved and restored exactly (save v20) | D | [ ] **Built 2026-11-14; waiting on the owner's playtest** (`testing/TESTING-14-RIFTS.md`). |
+| 14a | The Basic rift: item, spawn in space, enter, locked loot cache, lifetime, exit rules (save v19) | D | [ ] **Built 2026-11-14, and the owner's six playtest items on it are built too (the anomaly and its gate, F-locks and HUD labels, the R-opened canister, the painted sky). The owner's playtest then found three bugs in it — raiders standing in as guardians, a paneled sky, a crash nobody could read — all fixed 2026-11-14; re-playtest pending** (`testing/TESTING-14-RIFTS.md`). |
+| 14b | A run survives a quit: an instance in progress is saved and restored exactly (save v20) | D | [ ] **Built 2026-11-14. The owner's playtest found the fourth bug — quitting mid-rift "recovered" the pilot out of the run — fixed 2026-11-14 (`prepareGalaxySave` now treats a saved run's place as a place); re-playtest pending** (`testing/TESTING-14-RIFTS.md`). |
 | 14c | Simple wormholes: a pocket that spawns itself inside an existing system, its 20-minute entry clock, collapse on expiry, the Stable wormhole way out, re-enterable until it expires (save v21) | D | [ ] |
 | 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space | D | [ ] |
 | 15 | Campaign scaffolding (save v22) | D | [ ] |
@@ -131,6 +131,27 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 
 ## Log
 
+- 2026-11-14: **Step 14 owner playtest: four bugs, four fixes.** (1) **Quitting mid-rift no longer
+  "recovers" the pilot out of the run**: `prepareGalaxySave` (`sim/galaxy-session.js`) treated any saved
+  place id that is not in the galaxy's pockets as a removed pocket — always true of a run's id — so it
+  moved the save home, nulled `resume` and armed the "That pocket no longer exists" notice; a place the
+  save's own `world.instances` owns is now a place the save may name, and the boot path returns inside
+  the rift with the same clock (test 20 walks that path and fails without the fix). (2) **The rift's
+  wave is its own hostile**: `riftguardian` (16 Hull HP, 1.5 damage, ember hull) and `deepguardian`
+  (22 / 2, void violet) in `data/enemies.js`, faction `rift` in `data/factions.js`, their own drop
+  tables in `data/loot.js`; both templates' `difficulty` is 1 / 1 because the numbers are authored on
+  the hostile instead of inflated onto a borrowed raider — the lock reads "Rift Guardian", and a raider
+  hunt contract is no longer paid by a rift run (test 21). (3) **The sky is painted, not paneled**: new
+  `src/render/sky.js` paints one canvas — near-black base in the template's colour, a faint band of its
+  glow with dust lanes, 3200 stars spread over the sphere, wandering forking fractures with a dark lip
+  and a burning edge — and `render/scene.js` wraps it inside an unlit sphere with rock-shaped debris,
+  so no facet shows; `tests/sky.test.mjs` checks it against a recording canvas. (4) **A crash the pilot
+  can read**: `main.js` catches a broken frame, draws anyway and reports through new `ui/crash.js` (a
+  card with the error's own first line; repeats counted; `installCrashNotice()` catches uncaught
+  listener/timer/promise errors). The owner's pasted `e.n.replace is not a function` is in no build
+  this repo has made — every `.replace` is wrapped in `String(... ?? "")` — so it came from a stale
+  build; the card means the next one is legible. `npm test` **546/546**, build 803 KB. Save stays
+  **v20**. 14a and 14b stay unticked until the owner confirms these four.
 - 2026-11-14: **The owner's six 14a playtest items built, and slice 14b with them: a run survives a quit (save v20).** (1) The rift door is a **shimmering spherical anomaly** — a dark core, a bright eye, an additive aura and a flare — drawn by one shared `buildAnomaly`/`updateAnomaly` in `render/views.js`. (2) **F locks it**, and so does the way out and the canister (`sim/targeting.js` kinds `r`, `g`, `k`), with `ui/hud.js` marking all three at all times, pinned to the screen edge with their distance when they are behind the pilot. (3) The prize is a **canister** the pilot opens with **R** once the objective is done: `openCache` moves its stacks into the pilot's own hold one unit at a time, a full hold takes what fits and is told how much is left, and every refusal is a sentence on screen; `completeObjective` no longer spills crates. (4) A rift has **a sky of its own**: `SKIES.shattered` in `render/scene.js` (an inverted shell of dark panels, glowing fractures, drifting shards, carried with the camera, starfield hidden), declared per template as `sky`, and **both templates lost their `planet` feature** — a rift is not the space outside it. (5) The way out is a **second anomaly of its own** (`kind: "gate"`, `placeWorld(id).gates`, `record.exitPos`, template `exit { n, pos, r, requires }`), visible from arrival, locked until the exit rules are met, and leaving a rift now puts the pocket's scenery back (`forgetPlace` + `showPlace` on `instance-closed`). (6) **Logging out mid-rift comes back mid-rift**: save **v20** adds `world.instances` (`captureInstances` in `state/state.js`, `cleanInstanceRuns` in `state/profile.js`), `captureResume` no longer redirects to the pocket, `enterPlace` names the run as the current place and `destroyInstance` names the pocket again, and `restoreInstances()`/`populateInstances()` in `sim/instances.js` rebuild the record, its place, its wave, its canister and its gate — called from `resumeFromSave()` and, at boot, before `loadPlace`. The clock, the prize and the objective come back exactly; the wave comes back at full strength, and an emptied canister stays empty so a prize cannot be farmed twice. A run whose id `instanceIdFor` would not produce is dropped and its pilot sent home. `tests/step14-instances.test.mjs` is now 19 tests (locks and labels, the canister, the gate entity, two reload round trips, the v19 migration, an un-rebuildable run); `npm test` 529/0, build 799 KB. **Neither 14a nor 14b is ticked: both wait for the owner's playtest.**
 - 2026-11-14: **Slice 14a built: rifts and instanced places.** New `src/sim/instances.js` (the runtime: the weighted template roll, clearance, opening a door, entering and leaving by **R**, the objective, the exit rules, the clock, the two expiry outcomes, the locked cache) and `src/sim/consumables.js` (**Use** in the flight card: one unit, only on success). `rift_basic` is on Meridian's shelf at 10 cr, `render/views.js` draws the `rift` and `cache` kinds, `KeyR` is bound, the HUD shows the authored objective, the countdown and the exit line, and `sim/ai.js` hardens every hostile inside by the template's `difficulty`. The instance is a place registered at runtime with `kind: "instance"`, so it is on no map and warpable to nowhere, and it is built from a template and a seed: one seed is one instance, with no `placeMemory` trace. Saves stay **v19** — a save made inside a run returns the pilot to the pocket and the spot they entered at, until slice 14b saves the run itself. New `tests/step14-instances.test.mjs` (13 tests); `npm test` 522/0, build 789 KB. Playtest guide `testing/TESTING-14-RIFTS.md`, recipe `docs/recipes/22-a-new-rift-or-instance.md`. **The step is not ticked: it waits for the owner's playtest.**
 - 2026-11-14: **Owner clarified how natural wormholes work; slices 14c and 14d rewritten.** A **simple wormhole** is a pocket that spawns itself in normal space: warp to it like any pocket, see the wormhole as an object, press **R** close to it and enter one instanced pocket isolated from the rest of space, with an objective (a fight, mining a special ore, …). Its 20 minutes run from the moment the pocket **spawns**, not from entry. Expiry fades the wormhole object and dooms the outer pocket (it leaves the map when you warp off); the way out inside is a **Stable wormhole** with no clock of its own, so you are never forced out or killed by it, and leaving late returns you to an empty pocket. A **wormhole system** — a later slice, now **14d** — is entered the same way but its far side is a system in uncharted space: off the existing starmap, persistent and saved like any other system, with dynamic wormhole pockets on the same timer (a new one spawns so you can always get out) and a map button to view normal space and come back. The `eject` expiry outcome is replaced by `collapse`. Docs only: `VISION.md`, `REFACTOR_PLAN.md` step 14, `TARGET_ARCHITECTURE.md` (new **Wormhole** paragraph), this table. Rifts are unchanged: they still kill on expiry. The owner then answered four follow-ups the same day: **build the rift first** (14a, as planned); a simple wormhole's pocket appears **as a new pocket inside an existing system**; spawned wormhole pockets **are saved with their remaining time**, so 14c takes **v21** and step 15 moves to **v22**; and a wormhole **may be re-entered until its timer ends**, which makes its objective and its locked cache strictly one-time per wormhole. No game behaviour changed; saves stay v19.
@@ -253,22 +274,10 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
   removed-pocket recovery, map/input pause and release, and 21 new tests. `npm test` **300/300**;
   build succeeded (650 KB). Root `testing/passed/TESTING-STARMAP.md` and old-code section C added. Step 11 stays
   unticked until the owner playtest passes. Next after that: **step 12** questions and slice plan.
-- 2026-11-08: **Step 11B starmap UI follow-up built** (owner: "the map looks ok", then four changes).
-  Zooming into a system dot opens a derived pocket map with internal lines and gate exit stubs toward
-  neighbouring systems; right-click a legal pocket for **Warp to**; the right panel is a compact
-  system/current-pocket/pocket-row overview with no warp buttons or scrolling. Save v16 unchanged
-  (layout is derived, not saved). `npm test` **304/304**; build succeeded (662 KB). Step 11 still
-  awaits the owner's `testing/passed/TESTING-STARMAP.md` pass.
-- 2026-11-08: **Step 11B system-map follow-up built** (owner's three changes). Open-world systems now
-  allow free warp to any local pocket; only their sub-system charts omit internal blue lines, while the
-  galaxy keeps explicit gate routes. A per-system `intraSystem: "links"` opt-out is ready for future
-  route-only instances. Pockets orbit a seeded visual-only star (95%) / black hole (5%); the core keeps a
-  permanent proper-name/type label and cannot be warped to. Gate peers, compact name-only rows, warp
-  rechecks and save v16 are unchanged. `npm test` **310/310**; build succeeded (666 KB). Step 11 still
-  awaits the owner's `testing/passed/TESTING-STARMAP.md` pass.
-- 2026-11-08: **Step 11B starmap refinements built** (owner's six changes). Removed native hover tooltips
-  from pockets/central bodies while keeping click popups; core labels are permanent two-line name/type
-  labels. Galaxy pan keeps the previous max-zoom feel and pans farther on screen when zoomed out; system
-  cores scale with zoom. Gate pocket names avoid orange stubs/peer labels, and neighbouring-system labels
-  open the same reachability/warp popup for the reciprocal gate pocket. `npm test` **312/312**; build
-  succeeded (669 KB). Save v16 and travel rechecks unchanged; owner playtest still pending.
+- 2026-11-08: **Three rounds of Step 11B starmap follow-ups built** (owner's thirteen changes over the
+  day): a derived pocket map behind a zoomed system dot with gate exit stubs and **Warp to** on a legal
+  pocket; free warp to any local pocket in open-world systems (sub-system charts keep no internal blue
+  lines); pockets orbiting a seeded visual-only star/black hole with permanent two-line core labels;
+  no native hover tooltips, click popups kept; pan/zoom feel preserved; gate and neighbour labels kept
+  off each other and opening the reciprocal warp popup. Save v16 unchanged throughout. `npm test`
+  304 → 312; builds 662 → 669 KB. Step 11 awaited the owner's `testing/passed/TESTING-STARMAP.md` pass.

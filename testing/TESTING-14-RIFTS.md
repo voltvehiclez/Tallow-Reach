@@ -7,7 +7,8 @@ this in real life?**
 What is new: a rift is a **place you carry with you**. You buy a one-use **Basic rift**, open a door in
 clear space, fly to it and press **R** to go in. The door — and the way out inside — is a **shimmering
 dark-orange anomaly**: a dark spherical core with a bright eye, an orange aura and a flare around it.
-Inside is a generated pocket under **a shattered sky of its own**, with no stars and no planet: pirates
+Inside is a generated pocket under **a shattered sky of its own** — painted space, dark and ember-lit,
+with stars, a faint nebula band and glowing fracture lines, and no planet: the rift's **own guardians**
 guarding a **canister** that stays sealed until the objective is done, and a **Rift gate** that stays
 sealed with it. **F** locks any of the three and the HUD labels all of them, so the way out cannot be
 lost. The pocket **collapses 20 minutes after you went in** — with you inside it. And the run is
@@ -55,10 +56,12 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
       enter Guardian rift"** once you are inside **200 m**; further out there is no hint, and pressing
       **R** says **"Nothing to enter here."**
 - [ ] Inside 200 m, press **R**: you are inside, at once, with no loading screen and no docking.
-- [ ] **The sky is somewhere else.** No stars at all: instead a dark, uneven shell closes the space in,
-      with **glowing fracture lines** running through it and **shards drifting** slowly in front of it.
-      It is dim and orange-black, and it turns very slowly. It does not look like the pocket you left,
-      and there is **no planet** in it — nothing here is copied from normal space.
+- [ ] **The sky is somewhere else.** It is **space, not a shell**: a near-black sky with real stars in it,
+      a faint band of ember-coloured cloud, and **glowing fracture lines** — jagged, forking, with a dark
+      lip — running through it, with **rock debris drifting** slowly in front. It reads as a photograph of
+      a dark, hellish, broken place, **not as triangles, panels or flat shapes**, and it turns very
+      slowly. It does not look like the pocket you left, and there is **no planet** in it — nothing here
+      is copied from normal space.
 - [ ] Top right now reads the run's own name (**Guardian rift** or, about one door in seven, **Deep
       rift**) instead of the pocket's, and under it a panel with four lines: the objective, the
       collapse countdown, the canister line, and the exit line.
@@ -66,9 +69,12 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
       name. The countdown starts at **20:00** (25:00 in a Deep rift) and ticks down every second.
 - [ ] The canister line reads **"Rift cache is locked"** and the exit line reads **"The way out is
       sealed until the rift guardians are destroyed."**
-- [ ] **4 raiders** (6 in a Deep rift) are out there between **800 m and 1100 m** — never on top of
-      you. Each one takes clearly **more hits** than a raider in normal space, and their shots hurt
-      more.
+- [ ] **4 Rift Guardians** (6 **Deep Rift Guardians** in a Deep rift) are out there between **800 m and
+      1100 m** — never on top of you. They are **their own hostile**: lock one with **F** and the label
+      reads **Rift Guardian** with its hull percentage — never "Newbie Raider" — their hulls are ember
+      brown (violet in a Deep rift), not pirate red, and they leave their own wrecks behind. A **hunt
+      contract for raiders does not move** when you kill them: they are not raiders. Each one takes the
+      same number of hits the playtested wave did, and their shots hurt the same.
 - [ ] Ahead of you, about **180 m** away, hangs a **second anomaly** — the **Rift gate**, drawn exactly
       like the door you came through, labelled **Rift gate (sealed)** with its distance, and locked
       with **F** like any other target. It is in plain sight from the moment you arrive.
@@ -155,6 +161,10 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
       the hold, no door anywhere and nothing inside a run.
 - [ ] Save to a **slot** from inside a run (Esc → save), leave the run, then load the slot: you are back
       inside it again.
+- [ ] **Quit to the menu mid-rift** (Esc → Exit to main menu) and start again from the same save: you are
+      back **inside the run**, same countdown — not "recovered" to the pocket, and with **no** "That
+      pocket no longer exists" notice anywhere. Leaving a run mid-rift, in any of these ways, is the same
+      as logging out in space: you come back where you were.
 - [ ] Back up a zip of the project.
 
 ## 9. Also check
@@ -167,3 +177,6 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
       each label says what the thing is and how far away it is.
 - [ ] While a run is open, the rest of the game is untouched: missions still tick, warp still charges,
       the starmap still lists the ordinary pockets (and never lists a run).
+- [ ] If anything in the game ever breaks, a **card in the top-left corner** says what broke in one line
+      and says the game is still flying; the game keeps running behind it and clicking the card clears
+      it. Read the line out in a bug report — it is the exact error. (Nothing should show one.)
