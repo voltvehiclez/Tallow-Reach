@@ -49,7 +49,7 @@ test("sanitizeSave upgrades an unversioned prototype save into profile and world
   assert.equal(s.v, SAVE_VERSION);
   assert.equal(s.profile.cr, 1200);
   assert.equal(s.profile.hp.wasp, 0.75);
-  assert.equal(s.profile.pw, "beam");
+  assert.equal(s.profile.pw, "1", "legacy beam selection with no beam fitted lands on bay one");
   assert.deepEqual(s.profile.holds.wasp, { ferrite: 3, salv: 1 });
   assert.equal(s.world.store.cobalt, 5);
   assert.equal(s.world.store.beam_basic, 1, "old beam unlock becomes a stored module");

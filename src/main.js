@@ -139,11 +139,11 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
     case "lock":
       if (playing && !repeat) toggleLock();
       break;
-    case "weapon:cannon":
-      if (playing) setWeapon("cannon");
+    case "primary:1":
+      if (playing) setWeapon(0);
       break;
-    case "weapon:beam":
-      if (playing) setWeapon("beam");
+    case "primary:2":
+      if (playing) setWeapon(1);
       break;
     case "dock":
       if (playing && !state.warp) tryDock();

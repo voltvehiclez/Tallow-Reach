@@ -2,11 +2,12 @@
 // secondary bay.
 //
 // A gun is a module in the `primary` group (data/modules.js). A hull has two
-// primary bays; putting the same gun in either one works the same way, and both
-// fire together on left click, each with its own cooldown. The bay only decides
-// which barrel the shot comes out of. The mining beam is a primary module too
-// (beam_basic, `period` instead of `dmg`), one beam acting at a time; gunsOf
-// only picks up modules with `dmg`, beamsOf the ones with `period`.
+// primary bays; putting the same gun in either one works the same way. Keys 1
+// and 2 select primary bay one and primary bay two, and only the selected bay's
+// module fires — a gun from that bay, or the beam fitted there. The bay only
+// decides which barrel the shot comes out of. The mining beam is a primary module
+// too (beam_basic, `period` instead of `dmg`); gunsOf only picks up modules with
+// `dmg`, beamsOf the ones with `period`.
 // missilesOf does the same for the `secondary` group (missile_basic): the
 // missiles are the only secondary module so far, so any secondary module with
 // `dmg` is a launcher.
@@ -69,8 +70,9 @@ export function gunsOf(loadout) {
 /**
  * The mining beams fitted in the primary bays, in bay order. A beam is a
  * primary module with a `period` instead of a `dmg` (no beam module means beams
- * is empty and key 2 is an empty weapon slot). Pure, so it can be tested
- * without a game. If two beams are fitted, the game uses the first one only.
+ * is empty and its slot is an empty weapon slot). Pure, so it can be tested
+ * without a game. When two beams are fitted, each answers to its own slot key
+ * (1 or 2) — the selected one is the one that cuts.
  *
  *   i       bay index
  *   id      module id, so the panel can name it

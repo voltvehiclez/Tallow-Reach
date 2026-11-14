@@ -87,8 +87,8 @@ export function clearControls() {
 // One-shot actions. Alt (free camera) is a hold action and is handled separately.
 export const BINDINGS = {
   KeyF: "lock",
-  Digit1: "weapon:cannon",
-  Digit2: "weapon:beam",
+  Digit1: "primary:1",
+  Digit2: "primary:2",
   KeyG: "dock",
   KeyR: "rift",
   KeyM: "starmap",
@@ -101,6 +101,12 @@ export const BINDINGS = {
 export function installInput() {
   addEventListener("keydown", e => {
     if (e.target.tagName === "TEXTAREA" || (["INPUT", "SELECT"].includes(e.target.tagName) && !["Escape", "KeyM"].includes(e.code))) return;
+    // Swallow Alt-key combinations before the browser can act on them. Alt+E and
+    // siblings are menu accelerators in the browser's own chrome, so without
+    // this the free camera (hold Left Alt) also pops a menu. preventDefault
+    // consumes the chord in browsers that honour it; a few (Chrome on
+    // Windows/Linux for its own menu keys) cannot be overruled by a page at all.
+    if (e.altKey && e.code !== "AltLeft" && e.code !== "AltRight") e.preventDefault();
     // A modal surface owns flight input while open. Leave
     // Space/Enter alone so their focused buttons still work as controls.
     const modal = modalSurface();
@@ -116,6 +122,7 @@ export function installInput() {
   });
 
   addEventListener("keyup", e => {
+    if (e.altKey && e.code !== "AltLeft" && e.code !== "AltRight") e.preventDefault();
     keys[e.code] = 0;
     syncControls();
     if (e.code === "AltLeft") {

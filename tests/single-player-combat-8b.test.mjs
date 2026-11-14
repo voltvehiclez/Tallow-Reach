@@ -29,7 +29,7 @@ state.world.asteroids.push({kind:'rock',pos:V(0,0,-200),quat:Q(),r:20,scale:V(20
 spawnEnemy('raider', V(80,0,-550));
 const snapshots=[];
 for(let i=0;i<900;i++){
- state.profile.pw=i<300?'beam':'cannon'; state.controls.fire=i<500; state.controls.sec=i===320; state.controls.thrust=i>=400&&i<450?1:0;
+ state.profile.pw=i<300?'2':'1'; state.controls.fire=i<500; state.controls.sec=i===320; state.controls.thrust=i>=400&&i<450?1:0;
  if(i===520)hurt(4); if(i===600){dock();launch();state.flight.spawnT=1e9;} if(i===750)hurt(100);
  stepSim(1/60);
  if(i%30===0||i===899){const p=state.player;const w=state.world;snapshots.push({i,p:p.pos.toArray(),q:p.quat.toArray(),v:p.v.toArray(),thr:p.thr,en:p.en,sh:p.sh,hull:p.hull,docked:p.docked,power:structuredClone(state.power),cd:[...state.flight.gunCd],beam:state.flight.beamOn,beamT:state.flight.beamT,ml:state.flight.missileLock.t,shots:w.bullets.map(x=>x.pos.toArray()),missiles:w.missiles.map(x=>x.pos.toArray()),enemies:w.enemies.map(x=>({p:x.pos.toArray(),hp:x.hp})),rocks:w.asteroids.map(x=>x.ore),profile:{kills:state.profile.kills,msl:state.profile.msl,holds:structuredClone(state.profile.holds),hp:structuredClone(state.profile.hp),cr:state.profile.cr,ships:[...state.profile.ships]}});}

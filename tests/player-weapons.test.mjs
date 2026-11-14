@@ -45,8 +45,8 @@ test("two pilots fire from their own ship, cooldown and power budget", () => {
   assert.equal(state.world.bullets.filter(x => x.owner === b).length, 4);
   assert.equal(a.power.use.guns, 0);
   assert.ok(b.power.use.guns > 0);
-  setWeapon("beam", b);
-  assert.equal(state.profile.pw, "cannon");
+  setWeapon(1, b);
+  assert.equal(state.profile.pw, "1");
 });
 
 test("locks, missile stock and aim belong to the pilot", () => {

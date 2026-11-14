@@ -77,7 +77,7 @@ test("9c (inventory & pickups): non-local mining credits guest hold, stops when 
   local.docked = true;
 
   guestProfile.loadout.wasp.primary = ["beam_basic", null];
-  guestProfile.pw = "beam";
+  guestProfile.pw = "1";   // bay one holds the beam
   guestProfile.mission = { type: "mine", tier: 1, p: 0, n: 2, r: 400, o: "ferrite" };
   configurePlayer(guest, guestProfile);
   guest.docked = false;
@@ -167,9 +167,9 @@ test("9c (economy, outfitting & saved ammo): guest purchases, fits, repairs, wea
   assert.deepEqual(guestProfile.loadout.wasp.secondary, ["missile_basic"]);
   assert.deepEqual(state.profile.loadout.wasp.secondary, [null], "host loadout untouched");
 
-  setWeapon("beam", guest);
-  assert.equal(guestProfile.pw, "beam");
-  assert.equal(state.profile.pw, "cannon");
+  setWeapon(0, guest);
+  assert.equal(guestProfile.pw, "1");
+  assert.equal(state.profile.pw, "1");
 
   guest.docked = false;
   guest.pos.set(0, 0, -400);

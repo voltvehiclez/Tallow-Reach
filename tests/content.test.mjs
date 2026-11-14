@@ -438,13 +438,13 @@ test("any primary slot with nothing in it is called 'Empty weapon slot'", () => 
   // Player-facing wording lives in sim/weapons.js and ui/hud.js; guard both.
   const weapons = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
   assert.match(weapons, /"Empty weapon slot"/, "an empty slot says exactly that");
-  assert.match(weapons, /state\.guns\.length > 0/, "the cannon slot is empty when no guns are fitted");
+  assert.match(weapons, /const gun = P\.guns\.find\(g => g\.i === slot\)/, "only the gun in the selected bay fires");
   const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
   assert.match(hud, /"Empty weapon slot"/, "the HUD names the empty slot the same way");
   assert.doesNotMatch(hud, /"No guns"/, "the old 'No guns' wording is gone");
-  // The equipped line and the toast take the module's own name now.
-  assert.match(hud, /moduleListName\(/, "the HUD builds the primary line from the modules' names");
-  assert.match(weapons, /moduleListName\(/, "the equip toast too");
+  // The equipped line and the toast take the module's own name, and the HUD shows the bay key.
+  assert.match(hud, /`\$\{slot \+ 1\}:/, "the HUD prefixes the fitted weapon with its slot number");
+  assert.match(weapons, /fitted \? `\$\{fitted\.n\} equipped`/, "the equip toast names the fitted module");
   assert.doesNotMatch(weapons, /"Cannons equipped"/, "the hardcoded 'Cannons equipped' is gone");
 });
 
@@ -580,7 +580,7 @@ test("save version 8: the old mining beam purchase becomes the beam module", () 
   assert.equal(owner.v, SAVE_VERSION);
   assert.equal(owner.world.store.beam_basic, 1, "an owner of the old beam gets one beam module in storage");
   assert.equal(owner.profile.wp, undefined, "the whole wp object is gone from the save");
-  assert.equal(owner.profile.pw, "beam", "the selected slot is kept");
+  assert.equal(owner.profile.pw, "1", "a legacy beam selection with no beam fitted lands on bay one");
 
   const never = sanitizeSave({ v: 7, ships: ["wasp"], ship: "wasp", cr: 100, wp: { beam: false, msl: false } });
   assert.equal(never.world.store.beam_basic, undefined, "a save that never bought the beam gets nothing");
@@ -612,7 +612,7 @@ test("save version 9: the old missile launcher purchase becomes the missile modu
 test("the primary fire loop puts one bolt downrange per linked barrel", () => {
   // weapons.js imports the scene, so it cannot be imported here; guard the rule.
   const src = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
-  assert.match(src, /g\.barrels/, "the number of barrels comes from the module");
+  assert.match(src, /gun\.barrels/, "the number of barrels comes from the module");
   assert.match(src, /for \(let b = 0; b < n; b\+\+\)/, "one bolt per barrel, on the gun's own cooldown");
   assert.match(src, /setDraw\("guns", gunsOn \? gunDraw : 0\)/, "the power bill does not count bolts");
 });

@@ -209,7 +209,7 @@ test("mining a rock is a data change: the ore, the shrinking scale and the cargo
   S.player.quat.set(0, 0, 0, 1);
   S.player.v.set(0, 0, 0);
   S.player.acc = 0;
-  sim.setWeapon("beam");
+  sim.setWeapon(1);   // bay two holds the beam
   S.controls.fire = true;
   const before = rock.scale.x;
 

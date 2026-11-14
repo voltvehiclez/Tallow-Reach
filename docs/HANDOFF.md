@@ -35,8 +35,8 @@ run and what to click. Different AI assistants work in separate chats and none r
 - **Which steps are done, built or next: see the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step
   status is kept (this file, REFACTOR_PLAN and the README do not repeat it); tick steps there. A step that is "built"
   but not ticked is waiting for the owner's playtest.
-- **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" and tick them there if so. If they
-  report a bug, fix it first, following "When the owner reports a bug" below.
+- **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first, following "When the owner reports a bug" below.
+- **Bug round (2026-11-14, built, awaiting the owner's re-play):** with Alt held the free camera rolls with the hull (E/Q spins the ship in a still frame), keys **1/2 select primary bay 1/2 and only the selected bay's weapon fires** (save `pw` stores `"1"`/`"2"`; legacy `cannon`/`beam` migrate to the bay holding that kind of module — v21 saves load cleanly), and world-space markers hide with the HUD, so nothing floats over the main menu.
 - **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system,
   appears on that system's map as a "Simple Wormhole" with no notice — **20 minutes from spawn, kept in `world.wormholes`**.
   Always **75** in the universe, never more than **3 per system**; clocks stagger on a fresh universe, and replacements

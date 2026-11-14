@@ -11,7 +11,7 @@ import { state, say, msg, profileOf, placeWorld } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
-import { gunsOf, moduleListName } from "./guns.js";
+import { gunsOf } from "./guns.js";
 
 export { gunsOf, refreshGuns } from "./guns.js";
 import { fire } from "./combat.js";
@@ -28,24 +28,45 @@ import { fieldAt } from "./places.js";
 // (step 7b). The sim only says where the beam is and when it is on:
 // `state.flight.beamStart` / `beamEnd` / `beamOn`, which the view copies.
 
-/** Equip a primary weapon. Keys 1 and 2 cycle the primary slots: key 1 is the
- *  cannon slot (whatever the primary bays are holding), key 2 is the mining beam
- *  slot. A slot with nothing in it — the beam unbought, or every primary bay
- *  empty — is an "Empty weapon slot": left click does nothing. */
-export function setWeapon(name, P = state.player) {
+/**
+ * Which primary bay (0 or 1) the pilot has selected. Keys 1 and 2 select
+ * primary slot 1 and primary slot 2; only the selected slot's module fires —
+ * a gun from that bay, or the mining beam fitted there. Legacy values fold in:
+ * "beam" was the old any-bay beam mode and "cannon" the old cannon mode, so a
+ * guest or hand-fed profile that predates slot selection lands on the bay that
+ * used to answer.
+ */
+export function primarySlotIndex(weapon, P) {
+  if (weapon === "2") return 1;
+  if (weapon === "1") return 0;
+  const guns = (P && P.guns) || [],
+    beams = (P && P.beams) || [];
+  if (weapon === "beam") {
+    const b = beams[0];
+    return b ? b.i : 0;
+  }
+  const g = guns[0];
+  return g ? g.i : 0;   // "cannon" and anything unrecognised
+}
+
+/** Select primary slot `slot` (0 = key 1, 1 = key 2). A slot with nothing in it
+ *  is an "Empty weapon slot": left click does nothing. */
+export function setWeapon(slot, P = state.player) {
+  const s = slot === 1 || slot === "2" ? 1 : 0,
+    value = s === 1 ? "2" : "1";
   const prof = profileOf(P);
   if (P !== state.player) {
-    if (prof) prof.pw = name;
-    P.weapon = name;
+    if (prof) prof.pw = value;
+    P.weapon = value;
     return;
   }
   const S = state.profile;
-  S.pw = name;
-  if (P) P.weapon = name;
-  if (name === "beam")
-    msg((state.beams || []).length > 0 ? `${moduleListName(state.beams)} equipped` : "Empty weapon slot", 1.5);
-  else
-    msg(state.guns.length > 0 ? `${moduleListName(state.guns)} equipped` : "Empty weapon slot", 1.5);
+  S.pw = value;
+  if (P) P.weapon = value;
+  const gun = (state.guns || []).find(g => g.i === s),
+    beam = (state.beams || []).find(b => b.i === s),
+    fitted = gun || beam || null;
+  msg(fitted ? `${fitted.n} equipped` : "Empty weapon slot", 1.5);
 }
 
 /** Primary fire: the fitted guns when held, or the mining beam if its slot is
@@ -56,6 +77,7 @@ export function updatePrimary(dt, P = state.player) {
     F = P.flight, power = P.power,
     ship = prof ? prof.ship : P.ship,
     weapon = prof ? prof.pw : P.weapon,
+    slot = primarySlotIndex(weapon, P),
     c = P.controls,
     d = SHIPS[ship],
     sayFor = text => { if (local) say(text); };
@@ -74,54 +96,55 @@ export function updatePrimary(dt, P = state.player) {
     return;   // render/views.js hides the beam when F.beamOn is false
   }
 
-  // Guns: whichever primary bays hold a gun fire together on left click, each on
-  // its own cooldown. Firing costs 2 MJ/s a gun, and a ship with no power to spare
-  // fires nothing — the same rule the thrusters and shields follow.
-  const gunDraw = P.guns.reduce((sum, g) => sum + g.draw, 0);
-  const wantGuns = c.fire && weapon !== "beam" && P.guns.length > 0;
-  // Compare against the rest of the ship's bill, so the guns are not counted twice.
+  // Only the gun in the selected bay fires on left click, on its own cooldown.
+  // A second gun fitted in the other bay stays silent until its slot is
+  // selected. Firing costs what the gun asks (2 MJ/s for the basic cannon), and
+  // a ship with no power to spare fires nothing — the same rule the thrusters
+  // and shields follow.
+  const gun = P.guns.find(g => g.i === slot) || null;
+  const gunDraw = gun ? gun.draw : 0;
+  const wantGuns = c.fire && !!gun;
+  // Compare against the rest of the ship's bill, so the gun is not counted twice.
   const otherDraw = power.draw - (power.use.guns || 0);
   const gunsOn = wantGuns && hasPower(otherDraw + gunDraw, power);
   if (local) setDraw("guns", gunsOn ? gunDraw : 0);
   else setDraw("guns", gunsOn ? gunDraw : 0, power);
 
   if (gunsOn) {
-    let fired = false;
-    P.guns.forEach((g, i) => {
-      if (F.gunCd[i] > 0) return;
-      F.gunCd[i] = 1 / g.rate;
-      fired = true;
+    const gi = P.guns.indexOf(gun);
+    if (F.gunCd[gi] <= 0) {
+      F.gunCd[gi] = 1 / gun.rate;
       // One bolt per linked barrel. A multi-barrel gun fires from the fixed nose
       // hardpoints mirrored about the centerline (the basic cannon puts one bolt
       // per side, at -1.8 m and +1.8 m) wherever it sits in the bays — the way the
       // cannons fired before they were a module. A single barrel fires from its
       // bay mount as usual. Same cooldown and same power draw either way.
-      const n = Math.max(1, g.barrels || 1),
+      const n = Math.max(1, gun.barrels || 1),
         f = playerFwd(P);
       for (let b = 0; b < n; b++) {
         fire(
-          playerMount("gun", i, b, n, P, ship),
+          playerMount("gun", gun.i, b, n, P, ship),
           f,
-          g.speed,
+          gun.speed,
           true,
-          g.dmg * d.dmg,
+          gun.dmg * d.dmg,
           P
         );
       }
-    });
-    if (fired) emit("sfx", { name: "cannon" });
+      emit("sfx", { name: "cannon" });
+    }
   }
 
-  // The mining beam: the first beam module fitted in the primary bays, in bay
-  // order. It needs the beam slot (key 2), a rock in reach and the power to cut;
+  // The mining beam: the beam module fitted in the selected bay. It needs that
+  // slot selected (key 1 or key 2), a rock in reach and the power to cut;
   // it draws MJ/s only while it is actually cutting. One ore per `period`
   // seconds of uninterrupted contact with the same rock (scaled by the hull's
   // mine multiplier); the moment contact stops, the progress toward the next
   // ore is lost — the count starts over.
-  const beam = (P.beams || [])[0];
+  const beam = (P.beams || []).find(b => b.i === slot) || null;
   const beamOtherDraw = power.draw - (power.use.beam || 0);
   F.beamOn = false;
-  if (c.fire && weapon === "beam" && beam) {
+  if (c.fire && beam) {
     // Find the nearest asteroid inside the beam cone.
     const f = playerFwd(P),
       pp = playerPos(P);
@@ -146,7 +169,7 @@ export function updatePrimary(dt, P = state.player) {
     } else {
       // The beam cuts continuously. Draw it, charge for it, and bank whole ores
       // as they complete.
-      const start = playerMount("beam", 0, 0, 1, P, ship),
+      const start = playerMount("beam", beam.i, 0, 1, P, ship),
         end = pp.clone().addScaledVector(f, Math.max(0, bestDist - best.r * 0.5));
       // The sim says where the beam starts and stops; render/views.js draws it.
       F.beamOn = true;
