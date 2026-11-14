@@ -67,9 +67,18 @@
 //   instance-warning { id, left }     `RIFT.warnSec` seconds of lifetime are left
 //   instance-objective-done { id, kind }
 //                                    the instance's objective was completed
-//   instance-cache-open { id, loot, left }
-//                                    the pilot opened the run's canister with R and took what fit
-//                                    into their own hold; `left` is how many units stayed inside
+//   instance-cache-open { id, loot, n, left, profile }
+//                                    the pilot opened the run's canister with R: a trade, offered by
+//                                    ui/cache.js, not a transfer. `n` is the canister's own name and
+//                                    `left` how many units are inside it at that moment
+//   instance-cache-moved { id, item, n, dir }
+//                                    one click in that trade moved `n` of `item`; `dir` is "take"
+//                                    (canister to hold) or "stow" (the other way)
+//   instance-cache-empty { id, loot }
+//                                    a take left nothing inside, so the canister was dropped from
+//                                    the world; something stowed back into it brings it back
+//   instance-cache-closed { id, left }
+//                                    the trade was put away, with `left` units still inside
 //   instance-restored { id, template, left }
 //                                    a saved run was rebuilt around the pilot on load (slice 14b)
 //   instances-forgotten { ids }       a load dropped the runs of the save it replaced, so their

@@ -25,7 +25,7 @@ import { configurePlayer, resumeFromSave } from "../src/sim/session.js";
 import { prepareGalaxySave } from "../src/sim/galaxy-session.js";
 import { saveAutosave, loadAutosave } from "../src/state/storage.js";
 import { enterPlace, loadPlace } from "../src/sim/places.js";
-import { addItem, countOf, holdOf, discardItem } from "../src/sim/inventory.js";
+import { CACHE, addItem, countOf, holdOf, discardItem, itemsAt } from "../src/sim/inventory.js";
 import { SHIPS } from "../src/data/ships.js";
 import { hitHostile } from "../src/sim/combat.js";
 import { dropEnemy } from "../src/sim/enemy.js";
@@ -34,7 +34,8 @@ import { toggleLock, lockName, lockPosition, pruneLock } from "../src/sim/target
 import {
   rollRiftTemplate, createInstance, riftClearance, openRift, enterRift, leaveInstance,
   destroyInstance, exitDenial, objectiveDone, updateInstances, nearestRift, riftAction,
-  restoreInstances, populateInstances, openCache,
+  restoreInstances, populateInstances, openCacheTrade, closeCacheTrade, tradeCacheItem,
+  cacheTradeRecord, cacheUnits, instanceWarning,
   OBJECTIVES, EXIT_REQUIREMENTS, EXPIRY_OUTCOMES,
 } from "../src/sim/instances.js";
 import { setSeed } from "../src/util/rng.js";
@@ -49,9 +50,15 @@ const CLEAR = [0, 0, 4000];
 const deaths = [];
 const closures = [];
 const expiries = [];
+const offers = [];
+const moved = [];
+const emptied = [];
 on("died", text => deaths.push(text));
 on("instance-closed", payload => closures.push(payload));
 on("instance-expired", payload => expiries.push(payload));
+on("instance-cache-open", payload => offers.push(payload));
+on("instance-cache-moved", payload => moved.push(payload));
+on("instance-cache-empty", payload => emptied.push(payload));
 
 function fresh(seed = 12012) {
   resetPlaces();
@@ -63,6 +70,7 @@ function fresh(seed = 12012) {
   state.ui.starmap = null;
   state.ui.destination = null;
   state.ui.cargo = null;
+  state.ui.cache = null;
   state.paused = false;
   state.time = 0;
   state.hud.msg = "";
@@ -81,6 +89,9 @@ function fresh(seed = 12012) {
   deaths.length = 0;
   closures.length = 0;
   expiries.length = 0;
+  offers.length = 0;
+  moved.length = 0;
+  emptied.length = 0;
   return player;
 }
 
@@ -114,7 +125,9 @@ test("every instance template is complete data, and the registries know every wo
   for (const [id, t] of Object.entries(INSTANCE_TEMPLATES)) {
     assert.ok(t.n && t.d, `${id}: a name and a description`);
     assert.ok(Number(t.tier) > 0, `${id}: an advisory tier`);
-    assert.ok(Number(t.lifetimeSec) > 0, `${id}: a lifetime`);
+    // A template's own clock, or the game's default run length when it does not declare one.
+    const clock = typeof t.lifetimeSec === "number" ? t.lifetimeSec : RIFT.defaultLifetimeSec;
+    assert.ok(Number(clock) > 0, `${id}: a lifetime`);
     // A run is harder than the map, and the numbers that say so are the ones the fight is made of:
     // the wave's own Hull HP and damage, times the run's scalars, are above the map's own hostile.
     // (The scalars used to do all the work, when a rift borrowed raiders and inflated them.)
@@ -354,7 +367,8 @@ test("R at close range goes in; the run is generated, sealed and harder than the
   assert.equal(run.template, record.template, "with the template it was rolled from");
   assert.equal(run.seed, record.seed, "and the seed that rolls it back the same");
   assert.equal(run.origin, DEFAULT_PLACE, "and the pocket it was entered from");
-  assert.deepEqual(run.cache.stock, record.cache.stock, "the prize is saved exactly as it stands");
+  assert.deepEqual(run.cache.stock, Object.keys(record.cache.stock).map(i => ({ i, c: record.cache.stock[i] })),
+    "the prize is saved exactly as it stands, in the list of stacks a loader reads");
   assert.equal(run.cache.open, false, "still sealed, because the objective still stands");
   assert.equal(run.objectiveMet, false, "and the save says so in words the loader understands");
   assert.ok(Math.abs(run.lifetime - record.lifetime) < 1e-9, "down to the second of clock left");
@@ -362,7 +376,7 @@ test("R at close range goes in; the run is generated, sealed and harder than the
     "so leaving still puts the pilot back at the spot the door was opened from");
 });
 
-test("destroying the wave unlocks the canister, and R beside it moves the prize into the hold", () => {
+test("destroying the wave unlocks the canister, and R beside it opens a trade — nothing moves by itself", () => {
   const player = withRifts(fresh());
   const record = insideRift(player, 31337);
   const W = placeWorld(record.id);
@@ -376,14 +390,18 @@ test("destroying the wave unlocks the canister, and R beside it moves the prize 
   assert.equal(W.caches[0].locked, true, "and still locked");
   assert.equal(record.gate.locked, true, "as is the way out");
 
-  // Beside a sealed canister, R says why and takes nothing.
-  const stockBefore = record.cache.stock.map(s => `${s.i} ${s.c}`).join(", ");
-  assert.ok(stockBefore, "the canister holds something from the moment the run is made");
+  // Beside a sealed canister, R says why and offers nothing.
+  const rolled = { ...record.cache.stock };
+  assert.ok(cacheUnits(record.cache) > 0, "the canister holds something from the moment the run is made");
   player.pos.copy(record.cache.pos);
   assert.equal(riftAction(player), false, "R on a sealed canister does not open it");
   assert.match(state.hud.msg, /still sealed/, "and says it is sealed");
   assert.match(state.hud.msg, /Destroy the rift guardians/, "with the objective that would unlock it");
   assert.equal(holdOf(ship, state.profile).salv || 0, 0, "nothing entered the hold");
+  assert.equal(cacheTradeRecord(player), null, "so there is no canister to trade with yet");
+  assert.match(tradeCacheItem("take", "salv", Infinity, player), /still sealed/,
+    "and a trade that is asked for anyway is refused, rather than robbing a locked prize");
+  assert.deepEqual(record.cache.stock, rolled, "which left it exactly as it was");
 
   hitHostile(W.enemies[0], 9999, W.enemies[0].pos, player, record.id);
   const cratesFromTheFight = W.crates.length;
@@ -400,16 +418,72 @@ test("destroying the wave unlocks the canister, and R beside it moves the prize 
   assert.match(state.hud.msg, /unlocked/, "the pilot is told");
   assert.match(state.hud.msg, /press R/, "and how to collect it");
 
-  // R beside it moves the whole prize aboard, one unit at a time, through the ordinary inventory rules.
-  const wanted = record.cache.stock.map(s => [s.i, s.c]);
+  // R beside it opens the trade: the pilot's hold and the canister, side by side. Opening it is not
+  // taking from it (owner 2026-11-14: the cache is an inventory, and clicking moves cargo across).
+  offers.length = 0;
   assert.equal(riftAction(player), true, "R opens it");
-  assert.match(state.hud.msg, /gives up/, "and says what came aboard");
-  for (const [id, n] of wanted) assert.equal(countOf(ship, id), n, `${n} ${id} is in the hold`);
-  assert.equal(W.caches.length, 0, "an empty canister is gone");
-  assert.equal(record.cache.stock.length, 0, "and the record says it is empty");
+  assert.equal(offers.length, 1, "and offers the trade on the bus, for the panel to show");
+  assert.equal(offers[0].id, record.id, "naming the run");
+  assert.equal(offers[0].n, record.cache.n, "and the canister the pilot is looking at");
+  assert.equal(offers[0].left, cacheUnits(record.cache), "with everything still inside");
+  assert.deepEqual(record.cache.stock, rolled, "opening moved nothing at all");
+  assert.equal(holdOf(ship, state.profile).salv || 0, 0, "and nothing entered the hold by itself");
+  assert.equal(cacheTradeRecord(player), record, "so the sim knows which canister a trade would use");
+  assert.equal(state.hud.prompt, `Press R to open ${record.cache.n}`, "and the prompt still says what R does");
 });
 
-test("a full hold takes what fits, the canister keeps the rest, and R again finishes the job", () => {
+test("the trade moves cargo both ways, one click at a time, and a whole stack with Shift", () => {
+  const player = withRifts(fresh());
+  const record = insideRift(player, 31337);
+  const ship = state.profile.ship;
+  clearWave(record);
+  player.pos.copy(record.cache.pos);
+  assert.equal(openCacheTrade(record, player), true, "the canister is open to trade with");
+
+  const rolled = { ...record.cache.stock };
+  const [first, ...rest] = Object.keys(rolled);
+  const total = cacheUnits(record.cache);
+
+  // One click moves one unit, in the ordinary inventory words.
+  assert.match(tradeCacheItem("take", first, 1, player), /Moved 1 /, "a click moves one");
+  assert.equal(countOf(ship, first), 1, "into the hold");
+  assert.equal(record.cache.stock[first], rolled[first] - 1, "and out of the canister");
+
+  // Shift-click moves the whole stack — which is the same call with no count at all.
+  assert.match(tradeCacheItem("take", first, Infinity, player),
+    new RegExp(`Moved ${rolled[first] - 1} `), "Shift-click moves the rest of that stack");
+  assert.equal(countOf(ship, first), rolled[first], "so the hold holds all of it");
+  assert.equal(record.cache.stock[first], undefined, "and a stack that reaches zero leaves the canister");
+
+  // The other way: a canister out in a collapsing pocket is the one place cargo can be left behind.
+  assert.match(tradeCacheItem("stow", first, 2, player), /Moved 2 /, "cargo goes back the same way");
+  assert.equal(countOf(ship, first), rolled[first] - 2, "out of the hold");
+  assert.equal(record.cache.stock[first], 2, "and into the canister");
+  assert.equal(placeWorld(record.id).caches.length, 1, "which is still hanging there");
+
+  // What is left follows, and an emptied canister is gone from the world.
+  moved.length = 0;
+  for (const { id } of itemsAt(CACHE)) tradeCacheItem("take", id, Infinity, player);
+  assert.equal(cacheUnits(record.cache), 0, "the canister is empty");
+  assert.equal(placeWorld(record.id).caches.length, 0, "and dropped from the world: nothing left to fly to");
+  assert.equal(emptied.length, 1, "which the bus reports");
+  assert.equal(countOf(ship, first), rolled[first] - 2 + 2, "with everything the pilot clicked across");
+  for (const id of rest) assert.equal(countOf(ship, id), rolled[id], `and all of the ${id}`);
+  assert.ok(moved.length >= rest.length, "one report per click that moved something");
+
+  // Putting something back brings the canister with it: the tick rebuilds a run's own objects.
+  assert.match(tradeCacheItem("stow", first, 1, player), /Moved 1 /, "a pilot can still leave cargo behind");
+  updateInstances(1 / 60);
+  assert.equal(placeWorld(record.id).caches.length, 1, "so the canister is hanging there again");
+  assert.equal(placeWorld(record.id).caches[0].locked, false, "and it is still open");
+
+  // Nothing open, nothing to trade with: the refusal is a sentence, never a silent no-op.
+  closeCacheTrade(record);
+  destroyInstance(record, "reset");
+  assert.equal(tradeCacheItem("take", "salv", 1, player), "There is no canister here to trade with.");
+});
+
+test("a full hold takes nothing, the canister keeps everything, and making room finishes the job", () => {
   const player = withRifts(fresh());
   const record = insideRift(player, 909);
   const ship = state.profile.ship;
@@ -417,34 +491,32 @@ test("a full hold takes what fits, the canister keeps the rest, and R again fini
   player.pos.copy(record.cache.pos);
 
   const room = SHIPS[ship].cargo;
-  const total = record.cache.stock.reduce((n, s) => n + s.c, 0);
-  const stockOf = () => record.cache.stock.reduce((n, s) => n + s.c, 0);
+  const total = cacheUnits(record.cache);
   assert.ok(total > 3, "the prize is bigger than the room this test leaves");
+  assert.equal(openCacheTrade(record, player), true, "a full hold still opens the trade");
 
-  // Nothing fits at all: the canister is untouched and the pilot is told plainly.
+  // Nothing fits at all: the canister is untouched and the pilot is told plainly, in the panel.
   addItem(ship, "ferrite", room, state.profile);
-  assert.equal(riftAction(player), false, "R with a full hold takes nothing");
-  assert.match(state.hud.msg, /No room in the hold/, "and says so");
-  assert.equal(stockOf(), total, "the canister is untouched");
+  assert.match(tradeCacheItem("take", "salv", 1, player), /No room in /, "a click that cannot move says so");
+  assert.match(tradeCacheItem("take", "salv", Infinity, player), /No room in /, "and so does a whole stack");
+  assert.equal(cacheUnits(record.cache), total, "the canister is untouched");
   assert.equal(placeWorld(record.id).caches.length, 1, "and still hanging where it was");
+  assert.equal(countOf(ship, "salv"), 0, "with nothing aboard");
 
-  // Room for part of it: what fits comes aboard, one unit at a time, and the rest waits.
-  discardItem(ship, "ferrite", 3, state.profile);
-  assert.equal(riftAction(player), false, "R with room for only some of it does not finish the job");
-  assert.match(state.hud.msg, /will not fit/, "and says how much is left inside");
-  assert.match(state.hud.msg, /press R again/, "and what to do about it");
-  const left = stockOf();
-  assert.ok(left > 0 && left < total, "some came aboard and some did not");
-  assert.equal(
-    countOf(ship, "salv") + countOf(ship, "voidite") + countOf(ship, "core"), total - left,
-    "and the hold holds exactly what was reported"
-  );
-  assert.equal(placeWorld(record.id).caches.length, 1, "the canister stays until it is empty");
+  // Room for part of it: what fits comes aboard and the rest stays inside, because a click moves as
+  // many as the hold can take and never more. Two m³ of a full hold is two units of salvage.
+  assert.ok((record.cache.stock.salv || 0) > 2, "the canister holds more salvage than this makes room for");
+  discardItem(ship, "ferrite", 2, state.profile);
+  assert.match(tradeCacheItem("take", "salv", Infinity, player), /Moved 2 Salvage/, "what fits comes aboard");
+  assert.equal(countOf(ship, "salv"), 2, "and exactly what fits came aboard");
+  assert.match(tradeCacheItem("take", "salv", Infinity, player), /No room in /, "the next one does not");
+  assert.ok(cacheUnits(record.cache) > 0, "so the rest waits inside");
+  assert.equal(placeWorld(record.id).caches.length, 1, "and the canister stays until it is empty");
 
-  // Make room and the rest follows on the next press: a full hold never loses the prize.
+  // Make room and the rest follows: a full hold never loses the prize, it only delays it.
   discardItem(ship, "ferrite", countOf(ship, "ferrite"), state.profile);
-  assert.equal(riftAction(player), true, "R again takes the rest");
-  assert.equal(stockOf(), 0, "the canister is empty");
+  for (const { id } of itemsAt(CACHE)) tradeCacheItem("take", id, Infinity, player);
+  assert.equal(cacheUnits(record.cache), 0, "the canister is empty");
   assert.equal(placeWorld(record.id).caches.length, 0, "and gone");
   assert.equal(countOf(ship, "salv") + countOf(ship, "voidite") + countOf(ship, "core"), total,
     "with the whole prize aboard, and not one unit more");
@@ -454,7 +526,7 @@ test("one seed is one prize: two runs of it hold exactly the same canister", () 
   const stockOf = () => {
     const player = withRifts(fresh());
     const record = insideRift(player, 5150);
-    const out = record.cache.stock.map(s => `${s.i}x${s.c}`).sort().join("|");
+    const out = Object.keys(record.cache.stock).map(i => `${i}x${record.cache.stock[i]}`).sort().join("|");
     destroyInstance(record, "reset");
     return out;
   };
@@ -527,9 +599,13 @@ test("F locks the door, the way out and the canister, and each label says what i
     "the same lock reads open once the objective is done");
   assert.equal(player.flight.lock.o.locked, false, "because the record's own flag changed");
 
-  // Opening it takes the canister away, and the lock goes with it rather than marking empty space.
+  // Opening the trade leaves the canister exactly where it hangs: it is a panel, not a transfer, so
+  // the lock is still on something real. Taking everything out of it is what takes it away.
   player.pos.copy(record.cache.pos);
-  riftAction(player);
+  assert.equal(riftAction(player), true, "R beside an open canister offers the trade");
+  pruneLock(player);
+  assert.equal(player.flight.lock?.k, "k", "and the canister is still there to stay locked on");
+  for (const { id } of itemsAt(CACHE)) tradeCacheItem("take", id, Infinity, player);
   pruneLock(player);
   assert.equal(player.flight.lock, null, "an emptied canister cannot stay locked");
 });
@@ -539,9 +615,12 @@ test("a rift's clock runs from entry, warns, then kills: the run and the ship ar
   addItem(state.profile.ship, "salv", 4, state.profile);
   const record = insideRift(player, 2024);
   const template = INSTANCE_TEMPLATES[record.template];
-  assert.equal(record.lifetime, template.lifetimeSec, "the clock is the template's, started on entry");
+  assert.equal(typeof template.lifetimeSec, "undefined",
+    "neither rift declares a clock of its own: both ride the game's default run length");
+  assert.equal(record.totalLifetime, RIFT.defaultLifetimeSec, "which is what the run was given on entry");
+  assert.equal(record.lifetime, record.totalLifetime, "and it starts full");
 
-  updateInstances(template.lifetimeSec - RIFT.warnSec - 1);
+  updateInstances(record.totalLifetime - RIFT.warnSec - 1);
   assert.equal(record.warned, false, "no warning while there is still time");
   updateInstances(2);
   assert.equal(record.warned, true, "the warning fires inside RIFT.warnSec of the end");
@@ -578,6 +657,37 @@ test("dying to a shot inside a rift despawns it at once and puts the pilot back 
   assert.equal(deaths.length, 1, "one death, from the shot");
   assert.ok(!deaths[0].startsWith(INSTANCE_TEMPLATES[record.template].onExpire.message),
     "and it is not blamed on the clock");
+});
+
+test("a run is 20 minutes unless its template says otherwise", () => {
+  const player = withRifts(fresh());
+
+  // The owner's rule (2026-11-14): "rifts default time is 20 minutes unless specified. So deep rifts
+  // also are 20 minutes." Both rifts ride the default, so both are 1200 seconds from entry.
+  assert.equal(RIFT.defaultLifetimeSec, 1200, "the default is 20 minutes of unpaused play");
+  for (const id of Object.keys(INSTANCE_TEMPLATES)) {
+    const record = createInstance(id, 8888);
+    assert.equal(record.totalLifetime, RIFT.defaultLifetimeSec, `${id}: the default clock`);
+    destroyInstance(record, "reset");
+  }
+
+  // A template that does specify one is honoured, down to "no clock of its own".
+  const fake = { n: "Clock test", d: "A test.", tier: 1, lifetimeSec: 600 };
+  INSTANCE_TEMPLATES.__clock_test = fake;
+  try {
+    const short = createInstance("__clock_test", 8889);
+    assert.equal(short.totalLifetime, 600, "a declared clock is the clock");
+    destroyInstance(short, "reset");
+    fake.lifetimeSec = 0;
+    const endless = createInstance("__clock_test", 8890);
+    assert.equal(endless.totalLifetime, 0, "and 0 still means no limit of its own, not the default");
+    assert.equal(instanceWarning(endless), null, "so nothing warns about a clock that is not running");
+    destroyInstance(endless, "reset");
+  } finally {
+    delete INSTANCE_TEMPLATES.__clock_test;
+  }
+  assert.equal(state.instances.size, 0, "the test left no run behind");
+  assert.ok(player, "and the pilot is untouched by any of it");
 });
 
 test("a collapse expiry only takes the way in: the run stays and the pilot leaves whenever", () => {
@@ -665,7 +775,7 @@ test("logging out inside a rift comes back inside it: same run, clock, prize, wa
   player.pos.set(140, -20, 90);
   player.quat.set(0, 0.3826834, 0, 0.9238795).normalize();
   const lifetime = record.lifetime;
-  const stock = record.cache.stock.map(stack => ({ ...stack }));
+  const stock = { ...record.cache.stock };
   const guardians = placeWorld(id).enemies.map(e => e.pos.toArray().map(Math.round));
   const rocks = placeWorld(id).asteroids.length;
   const spot = player.pos.toArray();
@@ -718,9 +828,10 @@ test("a run that was already finished comes back finished: the way out is open a
   assert.equal(record.objective.met, true, "the wave is gone, so the objective is met");
   const cacheName = record.cache.n;
   player.pos.copy(record.cache.pos);
-  assert.equal(openCache(record, player), true, "and R beside the canister empties it into the hold");
+  assert.equal(openCacheTrade(record, player), true, "and R beside the canister opens the trade");
+  for (const { id } of itemsAt(CACHE)) tradeCacheItem("take", id, Infinity, player);
   const taken = countOf(ship, "salv");
-  assert.ok(taken > 0, "the prize is aboard");
+  assert.ok(taken > 0, "the prize is aboard, because the pilot took it");
   const lifetime = record.lifetime;
 
   reload();
@@ -735,8 +846,9 @@ test("a run that was already finished comes back finished: the way out is open a
   assert.equal(W.gates[0].locked, false, "and unlocked");
   assert.equal(W.enemies.length, 0, "the wave does not come back");
   assert.equal(W.caches.length, 0, "an emptied canister is gone from the world for good");
-  assert.equal(back.cache.stock.length, 0, "it is empty in the record too");
-  assert.equal(openCache(back, state.player), `The ${cacheName} is empty.`, "so R cannot farm it a second time");
+  assert.equal(cacheUnits(back.cache), 0, "it is empty in the record too");
+  assert.equal(openCacheTrade(back, state.player), `The ${cacheName} is empty.`,
+    "so R cannot farm it a second time");
   assert.equal(countOf(ship, "salv"), taken, "and the hold still holds exactly what was taken");
   assert.deepEqual(state.player.pos.toArray().map(Math.round), record.cache.pos.toArray().map(Math.round),
     "the pilot comes back beside the canister they emptied, not at the arrival point");
@@ -807,7 +919,7 @@ test("the boot path a browser takes comes back inside the run, with no pocket-re
   const record = insideRift(player, 6060);
   updateInstances(20);
   const lifetime = record.lifetime;
-  const stock = record.cache.stock.map(stack => ({ ...stack }));
+  const stock = { ...record.cache.stock };
 
   const storage = mockStorage();
   try {

@@ -204,8 +204,9 @@ pilot (and dying inside despawns the rift instantly, death rules otherwise uncha
 collapses** — only the way in goes, its Stable wormhole way out keeps working, and the pilot leaves whenever they like
 with everything they are carrying. Both outcomes live in one registry, so a future kind can declare another. The reward
 that matters is a physical **canister** that hangs in the run from the start, stays sealed until the objective is
-complete and is then opened by the pilot with **R**, which moves what is inside into their own hold one unit at a
-time — so neither expiry, nor quitting, nor death can hand it over, and a full hold loses nothing. That is what keeps
+complete and is then opened by the pilot with **R**, which puts their hold and the canister side by side so clicks
+move cargo between them, one unit or a whole stack, in either direction — so neither expiry, nor quitting, nor death
+can hand it over, and a full hold loses nothing. That is what keeps
 the saved run from being an exploit.
 **Done when.** You can buy and spawn a rift, enter the generated instance, fight, loot, and leave with the loot only
 when the instance's exit rules allow it; the same seed gives the same instance (tested); a quit inside restores the run

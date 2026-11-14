@@ -45,8 +45,8 @@ import { lootTable } from "../data/loot.js";
 import { addEntity, dropEntity, clearEntities } from "./entity.js";
 import { spawnEnemy } from "./ai.js";
 import { rollLoot } from "./loot.js";
-import { addItem } from "./inventory.js";
-import { itemName } from "../data/items.js";
+import { CACHE, countOf, moveItem } from "./inventory.js";
+import { itemName, newStock } from "../data/items.js";
 import { clearWorldObjects } from "./world.js";
 import { enterPlace } from "./places.js";
 import { playerPos } from "./pilot.js";
@@ -70,15 +70,47 @@ const streamRng = (seed, purpose) => makeRng(((seed >>> 0) ^ Math.imul(purpose, 
  * the instance — the same seed is the same reward, and a saved run comes back with exactly what was
  * still inside (slice 14b).
  */
+/**
+ * What a canister starts with, as an ordinary stock map (`{ itemId: count }`) — the same shape a
+ * ship's hold and a station store use, so `sim/inventory.js` can treat the canister as one more
+ * container and the trade panel needs no rules of its own (owner 2026-11-14: opening a cache shows
+ * the ship's inventory beside the cache's, and clicking moves cargo between them).
+ */
 function rollCacheStock(lootId, seed) {
-  if (!lootId || !lootTable(lootId)) return [];
+  if (!lootId || !lootTable(lootId)) return newStock();
   const rng = streamRng(seed, PURPOSE_CACHE);
-  const stacks = new Map();
+  const stock = newStock();
   for (const drop of rollLoot(lootId, rng)) {
     const count = Math.max(1, Math.floor(Number(drop.count) || 1));
-    stacks.set(drop.item, (stacks.get(drop.item) || 0) + count);
+    stock[drop.item] = (stock[drop.item] || 0) + count;
   }
-  return [...stacks].map(([i, c]) => ({ i, c }));
+  return stock;
+}
+
+/** How many units are inside a canister (or 0 for a run with no prize). */
+export const cacheUnits = cache => {
+  const stock = cache && cache.stock;
+  if (!stock) return 0;
+  let n = 0;
+  for (const id of Object.keys(stock)) n += Math.max(0, Math.floor(Number(stock[id]) || 0));
+  return n;
+};
+
+/** A saved prize (`[{ i, c }]`, the shape slice 14b writes) back into a live stock map. */
+function stockFromSaved(saved) {
+  const stock = newStock();
+  if (Array.isArray(saved)) {
+    for (const stack of saved) {
+      const c = Math.max(0, Math.floor(Number(stack?.c) || 0));
+      if (stack && typeof stack.i === "string" && c > 0) stock[stack.i] = (stock[stack.i] || 0) + c;
+    }
+  } else if (saved && typeof saved === "object") {
+    for (const id of Object.keys(saved)) {
+      const c = Math.max(0, Math.floor(Number(saved[id]) || 0));
+      if (c > 0) stock[id] = c;
+    }
+  }
+  return stock;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -212,7 +244,12 @@ export function createInstance(templateId, seed, opts = {}) {
   const existing = instanceAt(id);
   if (existing) return existing;
 
-  const lifetime = Math.max(0, Number(template.lifetimeSec) || 0);
+  // A template that does not declare a clock gets the game's default run length, so a new instance
+  // is 20 minutes unless its own data says otherwise (owner 2026-11-14). `lifetimeSec: 0` is still a
+  // template saying "no clock of its own", and it is honoured.
+  const lifetime = typeof template.lifetimeSec === "number"
+    ? Math.max(0, Number(template.lifetimeSec) || 0)
+    : Math.max(0, Number(RIFT.defaultLifetimeSec) || 0);
   const difficulty = {
     hp: Number(template.difficulty?.hp) > 0 ? Number(template.difficulty.hp) : 1,
     dmg: Number(template.difficulty?.dmg) > 0 ? Number(template.difficulty.dmg) : 1,
@@ -258,7 +295,7 @@ export function createInstance(templateId, seed, opts = {}) {
           pos: V(...(template.cache.pos || [0, 0, 0])),
           r: Number(template.cache.r) > 0 ? Number(template.cache.r) : 10,
           // Rolled once from the instance's own seed, so one seed is one reward — and what is still
-          // inside is a plain list of stacks, which is what makes a saved run come back identical.
+          // inside is a plain stock map, which is what makes a saved run come back identical.
           stock: rollCacheStock(template.cache.loot, s),
           open: false,
           entity: null,
@@ -379,7 +416,7 @@ function restoreInstance(saved) {
   if (saved.objectiveMet === true) record.objective.met = true;
   const cache = record.cache;
   if (cache && saved.cache) {
-    cache.stock = saved.cache.stock.map(stack => ({ i: stack.i, c: stack.c }));
+    cache.stock = stockFromSaved(saved.cache.stock);
     cache.open = saved.cache.open === true;
   }
   const entry = saved.entry;
@@ -644,7 +681,7 @@ function spawnRun(record) {
   // way to fight it — or its prize — again.
   if (!record.objective.met) spawnGuardians(record);
   // A canister the pilot already emptied stays emptied: it is gone from the world for good.
-  if (record.cache?.stock.length) spawnCache(record);
+  if (cacheUnits(record.cache) > 0) spawnCache(record);
   spawnGate(record);
 }
 
@@ -722,7 +759,7 @@ export function instancePrompt(record, player = localPlayer()) {
   const cache = record.cache;
   if (cache?.entity && at.distanceTo(cache.pos) <= (Number(RIFT.cacheRange) || 0)) {
     if (!cache.open) return `The ${cache.n} is sealed`;
-    return cache.stock.length ? `Press R to open ${cache.n}` : `The ${cache.n} is empty`;
+    return cacheUnits(cache) > 0 ? `Press R to open ${cache.n}` : `The ${cache.n} is empty`;
   }
   if (at.distanceTo(record.exitPos) <= (Number(RIFT.exitRange) || 0)) {
     return exitDenial(record) || `Press R to leave through ${record.exit.n}`;
@@ -744,8 +781,8 @@ export function riftAction(player = localPlayer()) {
     const record = instanceAt(placeId);
     const cache = record?.cache;
     if (cache?.entity && playerPos(P).distanceTo(cache.pos) <= (Number(RIFT.cacheRange) || 0)) {
-      // `openCache` says what happened either way, so this only reports whether the job is done.
-      return openCache(record, P) === true;
+      // `openCacheTrade` says what happened either way, so this only reports whether it opened.
+      return openCacheTrade(record, P) === true;
     }
     const out = leaveInstance(P);
     if (out !== true) msg(out, 5);
@@ -795,17 +832,44 @@ const listWords = parts =>
   parts.length < 2 ? parts[0] || "" : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 
 /**
- * Open the canister the pilot is beside and move what is inside into their ship's hold: one unit at a
- * time through the ordinary inventory rules, so what fits comes aboard and what does not stays inside
- * and waits for the next press. A full hold loses nothing and is told so.
+ * The canister a trade moves cargo in and out of: the prize of the run the pilot is inside, once its
+ * objective has unlocked it. Null anywhere else — out in a pocket there is nothing to trade with, a
+ * sealed canister is not open to trade with, and a run that has no prize has nothing to offer.
  *
- * Returns true when the canister is empty afterwards, or a sentence (a refusal, or what is left).
+ * An emptied canister still answers here: its stock is the record's own, so a pilot who took
+ * everything out can put something back (`tradeCacheItem`), and the tick hangs it in the world again.
+ *
+ * `sim/inventory.js` resolves its `CACHE` container the same way (the local pilot's own run, once it
+ * is open), so a move between a hold and the canister is an ordinary `moveItem` between two of them.
  */
-export function openCache(record, player = localPlayer(), profile = null) {
+export function cacheTradeRecord(player = localPlayer()) {
+  const record = canisterAt(player);
+  return record && record.cache.open ? record : null;
+}
+
+/**
+ * The run's canister whether it is open or not, so a refusal can say which of the two it is: no
+ * canister here at all, or one that is still sealed.
+ */
+function canisterAt(player = localPlayer()) {
+  const P = player || localPlayer();
+  const placeId = P?.place || state.place;
+  const record = isInstancePlace(placeId) ? instanceAt(placeId) : null;
+  return record && record.cache ? record : null;
+}
+
+/**
+ * Open the canister the pilot is beside: a **trade**, not a transfer. Nothing moves by itself — the
+ * panel (`ui/cache.js`) puts the ship's hold and the canister side by side and the pilot clicks cargo
+ * across, one unit per click or a whole stack with Shift, in either direction (owner 2026-11-14:
+ * "clicking and shift clicking moves items in between exactly like ship inv and station inv").
+ *
+ * Returns true when the trade is offered, or a sentence saying why it is not.
+ */
+export function openCacheTrade(record, player = localPlayer(), profile = null) {
   const cache = record?.cache;
   const P = player || localPlayer();
-  // Every answer here is a sentence the pilot sees: a refusal is never swallowed, and a success says
-  // what came aboard rather than leaving the hold to change in silence.
+  // Every answer here is a sentence the pilot sees: a refusal is never swallowed (LESSONS L11).
   const refuse = text => {
     msg(text, 6);
     return text;
@@ -813,33 +877,67 @@ export function openCache(record, player = localPlayer(), profile = null) {
   if (!cache) return refuse("There is nothing to open here.");
   if (!P || P.dead) return refuse("There is nobody to open it.");
   if (!cache.open) return refuse(`The ${cache.n} is still sealed. ${record.objective.n || ""}`.trim());
-  if (!cache.stock.length) return refuse(`The ${cache.n} is empty.`);
+  if (!cacheUnits(cache)) return refuse(`The ${cache.n} is empty.`);
 
   const prof = profile || profileOf(P) || state.profile;
-  const taken = [];
-  for (const stack of cache.stock) {
-    let moved = 0;
-    while (stack.c > 0 && addItem(prof.ship, stack.i, 1, prof)) {
-      stack.c--;
-      moved++;
-    }
-    if (moved) taken.push(`${moved} ${itemName(stack.i)}`);
-  }
-  const leftCount = cache.stock.reduce((n, stack) => n + stack.c, 0);
-  cache.stock = cache.stock.filter(stack => stack.c > 0);
-  if (!taken.length) return refuse(`No room in the hold for the ${cache.n}. Make room and press R again.`);
+  emit("sfx", { name: "pickup" });
+  emit("instance-cache-open", {
+    id: record.id,
+    loot: cache.loot,
+    n: cache.n,
+    left: cacheUnits(cache),
+    profile: prof,
+  });
+  return true;
+}
+
+/**
+ * Put the trade away. The canister keeps exactly what the pilot left in it and stays where it hangs,
+ * so the next press of R beside it reopens the same trade — unless it was emptied, which drops it
+ * from the world for good (see `tradeCacheItem`).
+ */
+export function closeCacheTrade(record = cacheTradeRecord()) {
+  if (!record) return false;
+  emit("instance-cache-closed", { id: record.id, left: cacheUnits(record.cache) });
+  return true;
+}
+
+/**
+ * One click in the trade panel: move `n` units of `id` (a whole stack for Infinity, which is what
+ * Shift-click asks for) between the canister and the pilot's hold. `dir` is `"take"` for canister to
+ * hold and `"stow"` for the other way. The move itself is the ordinary inventory rule, so what does
+ * not fit stays put and the pilot is told so in the panel's own words.
+ *
+ * Returns the sentence `moveItem` returns, which is what the panel shows.
+ */
+export function tradeCacheItem(dir, id, n = 1, player = localPlayer(), profile = null) {
+  const record = canisterAt(player);
+  if (!record) return "There is no canister here to trade with.";
+  const cache = record.cache;
+  // A trade is the one place cargo could leave a prize that was never unlocked, so the rule is stated
+  // here and not only in the panel that would never open for it.
+  if (!cache.open) return `The ${cache.n} is still sealed.`;
+  const P = player || localPlayer();
+  const prof = profile || profileOf(P) || state.profile;
+  const take = dir === "take";
+  const from = take ? CACHE : prof.ship;
+  const to = take ? prof.ship : CACHE;
+
+  const before = countOf(to, id, prof);
+  const text = moveItem(from, to, id, n, prof);
+  const moved = countOf(to, id, prof) - before;
+  if (!(moved > 0)) return text;
 
   emit("sfx", { name: "pickup" });
-  emit("instance-cache-open", { id: record.id, loot: cache.loot, left: leftCount });
-  const empty = !cache.stock.length;
-  const text = empty
-    ? `The ${cache.n} gives up ${listWords(taken)}.`
-    : `The ${cache.n} gives up ${listWords(taken)}; ${leftCount} more will not fit. Make room and press R again.`;
-  msg(text, 6);
-  if (empty) {
+  emit("instance-cache-moved", { id: record.id, item: id, n: moved, dir: take ? "take" : "stow" });
+  // Emptied, the canister is gone from the world: there is nothing left to fly to. Something put back
+  // into it brings it back (the tick rebuilds a run's objects from the record), so a pilot who wants
+  // to leave cargo behind can still do it.
+  if (take && !cacheUnits(cache)) {
     if (cache.entity) dropEntity(placeWorld(record.id).caches, cache.entity);
     cache.entity = null;
-    return true;
+    emit("instance-cache-empty", { id: record.id, loot: cache.loot });
+    msg(`The ${cache.n} is empty.`, 6);
   }
   return text;
 }
@@ -897,7 +995,7 @@ export function updateInstances(dt) {
     // cleared, or a saved run is being restored — it is built again from the record.
     const cache = record.cache;
     const W = placeWorld(record.id);
-    if (record.spawned && cache && !cache.entity && cache.stock.length) spawnCache(record);
+    if (record.spawned && cache && !cache.entity && cacheUnits(cache) > 0) spawnCache(record);
     if (record.spawned && (!record.gate || !W.gates.includes(record.gate))) {
       record.gate = null;
       spawnGate(record);

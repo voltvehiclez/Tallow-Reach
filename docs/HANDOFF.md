@@ -38,14 +38,16 @@ run and what to click. Different AI assistants work in separate chats and none r
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" and tick them there if so. If they
   report a bug, fix it first, following "When the owner reports a bug" below.
 - **Waiting on a re-playtest (2026-11-14):** the owner playtested 14a + 14b and reported four bugs — quitting mid-rift
-  lost the run, the wave was raiders, the sky read as triangles, and a crash froze the screen — and all four are fixed
-  (CHANGELOG's newest entry). 14a and 14b stay unticked in ROADMAP until the owner re-runs
-  [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md) and says they pass. Next slices: **14c** simple wormholes (**v21**), **14d** wormhole systems
-  in uncharted space, then step 15 the campaign (**v22**). A run is saved as template, seed, clock, objective, prize and
-  entry spot (`world.instances`), so logging out inside one comes back inside it — with its wave back at full strength.
-- The campaign (step 15) must be built from the mission templates and pass the linter.
-- Detailed notes on how the galaxy, starmap, place templates and mission runner were built are in
-  [architecture/feature-notes.md](architecture/feature-notes.md). Code and tests are authoritative.
+  lost the run, the wave was raiders, the sky read as triangles, a crash froze the screen — all fixed (CHANGELOG), with
+  the mid-rift logout fix **owner-confirmed**. A second round was built the same day on their asks: the canister opens
+  as a **trade** (hold left, canister right, click and Shift-click moving cargo both ways — `ui/cache.js` over
+  `sim/inventory.js`'s `CACHE` container), **every run's clock is 20 minutes by default** (`RIFT.defaultLifetimeSec`,
+  Deep rifts included), and the rift **sky has no stars** (near-black, a cold two-tone nebula, thin fractures, shattered
+  rock drifting in front). 14a/14b stay unticked until the owner re-runs [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)
+  (§5 the trade, §5b the sky) and says they pass. Next: **14c** simple wormholes (**v21**), **14d** wormhole systems,
+  then step 15 (**v22**). A run saves as template, seed, clock, objective, prize (half-traded, as it stands) and entry
+  spot (`world.instances`).
+- The campaign (step 15) must be built from the mission templates and pass the linter. Build notes: [architecture/feature-notes.md](architecture/feature-notes.md); code and tests are authoritative.
 
 ## The owner's ground rules (do not break these)
 

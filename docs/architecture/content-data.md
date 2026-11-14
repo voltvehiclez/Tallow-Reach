@@ -81,7 +81,10 @@
   in step with the run's own state. `render/views.js` draws all three — the door and the gate through one
   shared anomaly builder, so a way out always looks like the way in — and `sim/targeting.js` locks all three
   (**F**) while `ui/hud.js` labels all three at all times. The canister is opened by the pilot with **R**
-  (`openCache`), which moves its stacks into their own hold one unit at a time; nothing spills by itself.
+  (`openCacheTrade`), which offers a trade: `ui/cache.js` puts the ship's hold and the canister side by
+  side and clicks move cargo between them — one unit, or a whole stack with Shift, in either direction —
+  through `sim/inventory.js`, whose `CACHE` container is the canister's own stock map; nothing spills by
+  itself.
   What a run contains — its template, wave, difficulty scalars, objective, exit rules, expiry outcome,
   canister, sky and clearance margins — is all vocabulary in `data/instances.js`, and adding one is
   [recipe 22](../recipes/22-a-new-rift-or-instance.md).

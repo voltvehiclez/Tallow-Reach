@@ -20,7 +20,8 @@ salvage_rift: {
   n: "Salvage rift",
   d: "A torn pocket with a wreck still warm.",
   tier: 5,                                    // advisory, above the map's 1..3
-  lifetimeSec: 1200,                          // 0 = no clock of its own
+  // lifetimeSec: 1200,                     // optional: left out, a run gets RIFT.defaultLifetimeSec
+                                              // (20 minutes); 0 = no clock of its own
   difficulty: { hp: 1.8, dmg: 1.6 },          // every hostile inside is this much harder
   guardians: { enemy: "raider", count: 5, spawnDist: [800, 1200] },
   objective: {
@@ -64,9 +65,10 @@ Rules the framework enforces, and `tests/step14-instances.test.mjs` checks:
   pilot's words. The HUD prints only these (LESSONS L11): never a rule name, an id or a bare number.
 - A field uses `stable: true`, so its rocks are derived from the instance's seed and the run leaves
   no trace in `world.placeMemory`.
-- `lifetimeSec` runs from **entry** for a rift. A wormhole's 20 minutes belong to the pocket that
-  spawned in normal space (slice 14c), so its instance declares `lifetimeSec: 0` and its
-  `exit.requires` is `[]` — the way out must never have a clock of its own.
+- A run's clock runs from **entry** and is `RIFT.defaultLifetimeSec` (20 minutes) unless the template
+  declares `lifetimeSec`. A wormhole's 20 minutes belong to the pocket that spawned in normal space
+  (slice 14c), so its instance declares `lifetimeSec: 0` and its `exit.requires` is `[]` — the way out
+  must never have a clock of its own.
 - `cache` is optional; without it there is no prize to open.
 
 Then make it reachable: add `{ id: "salvage_rift", w: <weight> }` to a `RIFTS` pool (§2), or to a new
@@ -180,9 +182,12 @@ kind to `SKY_KINDS` in `src/data/instances.js` in the same change.
   builder in `render/views.js`, so a way out always looks like the way in; the canister is a drum with
   a lamp that is red while sealed and green once open.
 - **The prize is opened by the pilot, never spilled** (LESSONS L6): `completeObjective` unlocks the
-  canister, and `openCache(record, player, profile)` moves its stacks into the pilot's own hold one
-  unit at a time — what fits comes aboard, what does not stays inside and waits for the next **R**
-  inside `RIFT.cacheRange`. Every answer is a sentence the pilot sees.
+  canister, and **R** inside `RIFT.cacheRange` opens it as a **trade** — the pilot's hold and the
+  canister side by side, clicks moving cargo both ways through `sim/inventory.js` — so what the pilot
+  takes is the pilot's choice, what does not fit stays inside, and cargo can be put back. The roll
+  belongs to the instance (`streamRng(seed, 2)`), so one seed is one reward, and the stock is an
+  ordinary `{ itemId: count }` map, which is what lets the inventory layer treat a canister as one more
+  container. Every answer is a sentence the pilot sees.
 - **Difficulty**: `sim/ai.js` multiplies an enemy's hp and damage by `instanceAt(place).difficulty`.
 - **Ticks**: `updateInstances(dt)` runs the clock, the warning, the objective, both objects' spin and
   lock state, and the prompt; `updateRifts(dt, placeId)` turns each door and offers "Press R to enter …".
@@ -195,7 +200,8 @@ kind to `SKY_KINDS` in `src/data/instances.js` in the same change.
   death rules then apply unchanged.
 - **Events** (documented in `util/events.js`): `rift-opened`, `rift-entered`, `rift-left`,
   `instance-closed { reason }` (`left | expiry | death | refused | reset`), `instance-expired { kind }`,
-  `instance-warning`, `instance-objective-done`, `instance-cache-open`, `instance-restored`,
+  `instance-warning`, `instance-objective-done`, `instance-cache-open` (a trade is offered, not a
+  transfer), `instance-cache-moved`, `instance-cache-empty`, `instance-cache-closed`, `instance-restored`,
   `instances-forgotten`.
 
 ## 7. Saves (slice 14b, save v20)

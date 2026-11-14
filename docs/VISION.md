@@ -104,6 +104,20 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
+- **2026-11-14 — Rifts revised after playtest: a trade, a default clock, and a sky with no stars (owner).**
+  Three reversals of this step's earlier answers. **(1)** Pressing **R** on an unlocked canister no longer moves what
+  is inside into the hold: it opens a **trade** — the ship's inventory on the left, the canister's inventory off to the
+  right, in the same tiles as the station's Inventory tab — and **clicking and Shift-clicking moves cargo between them
+  in either direction**, exactly like ship and station inventories. A canister's stock is therefore an ordinary stock
+  map, so the inventory layer reaches it like any container; an emptied canister still drops out of the world, and a
+  half-traded one is saved exactly as it stands. **(2)** Every run's clock is **20 minutes by default** — a template
+  that does not declare `lifetimeSec` gets `RIFT.defaultLifetimeSec`, so a Deep rift is 20 minutes like any other, and
+  what makes it deeper is its wave, its debris and its prize, not its time. **(3)** The sky inside is **darker and
+  less orange, with no stars at all**: a near-black base, a cold two-tone **nebula** with dust lanes and filaments in
+  it, thin fractures where the pocket broke, and **shattered asteroids** drifting in front of the whole. The earlier
+  "dark-orange-and-black anomaly" and "unstable and shattered" answers stand for the door, the gate and the fractures;
+  the *sky* is now a dark place with something mysterious in it, not an orange fog.
+
 - **2026-11-14 — Step 14a playtested: how a rift must look, be locked, be looted and be saved (owner).**
   Six items, all built the same day. **(1)** A rift is a **shimmering spherical dark-orange-and-black anomaly** with
   two parts: a spherical core "eye" and an outer glowing aura/flare. **(2)** It is **lockable with F** and its label

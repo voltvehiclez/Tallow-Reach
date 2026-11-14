@@ -105,15 +105,37 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
 - [ ] The exit line now reads **"Rift gate is open — fly back to it and press R"**, the gate's label
       becomes **Rift gate (open)**, and its sealed shells are gone.
 - [ ] Fly to the canister (inside **60 m**; the hint under the screen says **"Press R to open Rift
-      cache"**) and press **R**: a message names what came aboard — for example **"The Rift cache gives
-      up 4 salvage, 4 voidite and 1 Reactor core."** — with the usual pickup sound. Once it is empty the
-      canister is **gone** from the world, its label with it, and R there does what R does anywhere
-      else in a run: it is the way out.
-- [ ] The hold did **not** fill itself at any point: the HUD's hold load changes only when you press R.
-- [ ] **Try it with a full hold** (mine the field first, or run a Deep rift in a starter Wasp): R takes
-      what fits and says **"…; 4 more will not fit. Make room and press R again."** The canister stays
-      where it hangs with the rest inside it, and pressing R again after dropping or selling something
-      takes the remainder. Nothing disappears into a hold that has no room.
+      cache"**) and press **R**: a **trade panel** opens over the flight view — your ship's hold on the
+      **left**, the canister on the **right**, in the same tiles as the station's Inventory tab, each
+      column headed with what is in it. **Nothing has moved yet**: the hold load is what it was, and
+      the canister still holds its whole prize.
+- [ ] **Click** a tile in the canister's column: **one** unit steps across into the hold (pickup sound,
+      the tile's count drops by one on the right and appears on the left). **Shift-click** it: the rest
+      of that stack goes across in one click. Then click and Shift-click one of your own tiles: cargo
+      goes **back** into the canister the same way. The two columns always show exactly what each side
+      holds.
+- [ ] **Right-click** a tile in your hold: **Use** (only for an item with a use), **Stow all** and
+      **Discard ×N**, as in flight. **Right-click** a tile in the canister: **Take all**. Nothing can be
+      discarded out of a canister — leaving it there is the same thing.
+- [ ] Take everything: the canister is **gone** from the world, its label with it, and the panel says
+      **"The canister is empty."** while staying open — stow something back into it and it hangs in the
+      world again, still unlocked. Put the trade away with **R** again, with **Esc**, or with the
+      **Close** button; the world kept running the whole time, clock included.
+- [ ] **Try it with a full hold** (mine the field first, or run a Deep rift in a starter Wasp): a click
+      that has no room says so as a notice (**"No room in the Wasp."**) and moves nothing; the canister
+      keeps everything until you make room. Nothing disappears into a hold that has no room, and the
+      trade never closes itself.
+
+## 5b. The sky inside (owner 2026-11-14: darker, no stars, nebula, shattered rock)
+
+- [ ] Look around inside a run: the sky is **near-black** with a cold **nebula** in it — veils of
+      violet and teal light with dark dust lanes through them, never an orange fog — and thin
+      **fractures** where the pocket broke. There are **no stars at all** in it.
+- [ ] **Shattered rock** drifts in front of that sky: dark broken shapes at every distance, turning
+      slowly, silhouetted against the nebula rather than lit like scenery.
+- [ ] Open a **Deep rift** (15% of doors; a Deep run says **Deep rift** in the top right): the same kind
+      of sky, **darker and colder**, with paler fractures. Two rifts never wear the same sky.
+- [ ] Leave the run: the pocket's own stars, planet and station come back exactly as they were.
 
 ## 6. Leaving
 
@@ -128,8 +150,9 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
 
 ## 7. The clock
 
-- [ ] Open another rift and go in, then idle. With **60 seconds** left a warning message appears and
-      the countdown keeps running.
+- [ ] Open another rift and go in, then idle. The countdown starts at **20:00** — every run gets the
+      same 20 minutes, **including a Deep rift** — unless a template ever declares its own clock.
+- [ ] With **60 seconds** left a warning message appears and the countdown keeps running.
 - [ ] Let it reach zero: **you die.** The message starts with the run's own words — **"The rift
       collapsed with your ship inside it."** — and continues with the ordinary death consequences and
       the recovery fee.

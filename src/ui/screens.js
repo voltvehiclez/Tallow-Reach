@@ -10,8 +10,9 @@ import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js
 import { MODULES } from "../data/modules.js";
 import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import {
-  STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, valueOf,
+  CACHE, STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, valueOf,
 } from "../sim/inventory.js";
+import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { hullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
@@ -453,13 +454,28 @@ export function viewedShip(ui = state.ui) {
   return S.ships.includes(ui.invShip) ? ui.invShip : S.ship;
 }
 
-/** One ore or module tile in the inventory grid, with its existing move actions. */
-function invRow({ name, sub, kind, id, count, dir, free, vol, move = true, place = "" }) {
-  const where = dir === "s" ? "ship" : "station";
+/**
+ * One ore or module tile in the inventory grid, with its existing move actions.
+ *
+ * `action` is the panel's own move action (`mv` for the station's Inventory tab, `cmv` for the rift
+ * cache trade) and `destWord` what a click's destination is called in the tile's own words, so the
+ * same tile serves a station, a hold and a canister without any of them knowing about each other.
+ */
+function invRow({
+  name, sub, kind, id, count, dir, free, vol, move = true, place = "",
+  action = "mv", destWord = dir === "s" ? "ship" : "station",
+}) {
+  const where = destWord;
   // What the tile's corner says: a module, something you can use in flight (step 14), or ore —
   // which keeps the "ORE" word every existing tile has always had.
   const label = kind === "c" ? (itemUse(id) ? "USE" : "ORE") : "MOD";
-  const rightClick = itemUse(id) ? "Right-click to use or discard." : "Right-click to discard.";
+  // What right-click does is the panel's business, not the tile's: a hold tile offers the menu the
+  // flight card has (Use / Stow all / Discard), a canister tile the one thing worth saying about it.
+  const rightClick = destWord === "hold"
+    ? "Right-click to take the whole stack."
+    : destWord === "canister"
+      ? (itemUse(id) ? "Right-click to use, stow or discard." : "Right-click to stow or discard.")
+      : itemUse(id) ? "Right-click to use or discard." : "Right-click to discard.";
   const inner =
     `<span class="inv-item-top"><span class="inv-kind">${label}</span><span class="inv-n">&times;${count}</span></span>` +
     `<span class="inv-item-name">${name}</span><span class="inv-item-meta">${vol} m³ each</span>`;
@@ -471,7 +487,7 @@ function invRow({ name, sub, kind, id, count, dir, free, vol, move = true, place
   const room = Math.floor(free / (vol || 1));
   const noRoom = room > 0 ? "false" : "true";
   return (
-    `<button class="inv-item" data-a="mv" data-b="${kind}:${id}:${dir}:1" data-kind="${kind}" data-id="${id}" data-dir="${dir}" data-count="${count}" data-where="${place}" aria-disabled="${noRoom}" ` +
+    `<button class="inv-item" data-a="${action}" data-b="${kind}:${id}:${dir}:1" data-kind="${kind}" data-id="${id}" data-dir="${dir}" data-count="${count}" data-where="${place}" aria-disabled="${noRoom}" ` +
     `title="${name}: ${sub}. Click to move one; Shift-click to move the whole stack. Right-click to discard." ` +
     `aria-label="${name}, quantity ${count}. Click to move one to the ${where}; Shift-click to move the whole stack.">` +
     inner +
@@ -480,8 +496,11 @@ function invRow({ name, sub, kind, id, count, dir, free, vol, move = true, place
 }
 
 /** One inventory panel: a heading with the m³ in use, then a grid of contents. */
-function invColumn(where, title, dir, { move = true, profile = state.profile, slots = 25 } = {}) {
-  const dest = where === STATION ? viewedShip() : STATION;   // where the buttons send things
+function invColumn(where, title, dir, {
+  move = true, profile = state.profile, slots = 25,
+  dest = where === STATION ? viewedShip() : STATION,   // where the buttons send things
+  action = "mv", destWord = null,
+} = {}) {
   const used = loadOf(where, profile),
     cap = capacityOf(where, profile),
     destFree = move ? freeOf(dest, profile) : 0;
@@ -504,14 +523,18 @@ function invColumn(where, title, dir, { move = true, profile = state.profile, sl
         vol: itemVol(id),
         move,
         place: where,
+        action,
+        ...(destWord ? { destWord } : {}),
       })
     );
   }
   // Keep a full slot field even when this hold contains fewer items, so the
   // viewport stays the same size: 5×5 at a station, 7×5 in the flight card.
   while (rows.length < slots) rows.push(`<div class="inv-empty-slot" aria-hidden="true"></div>`);
+  // A container with no volume of its own (a rift's canister) says how much is in it and stops there.
+  const room = Number.isFinite(cap) ? `${used} / ${cap} m³` : `${used} m³`;
   return (
-    `<section class="inv-col"><header><h3>${title}</h3><span class="mod-count">${used} / ${cap} m³</span></header>` +
+    `<section class="inv-col"><header><h3>${title}</h3><span class="mod-count">${room}</span></header>` +
     `<div class="inv-grid">${rows.join("")}</div>` +
     `</section>`
   );
@@ -549,6 +572,33 @@ export function cargoHtml(profile = state.profile) {
   return (
     `<h2>Ship inventory</h2>` +
     invColumn(id, `${ship.n} hold`, "t", { move: false, profile, slots: 35 })
+  );
+}
+
+/**
+ * A rift's canister, traded with in flight (press R beside it). The ship's own hold on the left and
+ * the canister on the right, in the same tiles as the station's Inventory tab and the flight card,
+ * and cargo moves between them the same way: a click moves one, Shift-click moves the whole stack —
+ * in either direction, so a pilot can put something back (owner 2026-11-14).
+ *
+ * The moves are `cmv` actions, which `ui/cache.js` handles by way of `sim/instances.js`
+ * (`tradeCacheItem`), so the canister obeys the ordinary inventory rules and nothing here knows how
+ * a run keeps its prize.
+ */
+export function cacheHtml(profile = state.profile) {
+  const record = cacheTradeRecord();
+  const cache = record?.cache;
+  if (!cache) return "";
+  const id = profile.ship, hull = SHIPS[id], left = cacheUnits(cache);
+  return (
+    `<h2>${cache.n}</h2>` +
+    `<div class="sub">Click an item to move one; Shift-click to move its whole stack. Cargo goes both ways: take it into your hold, or stow it back in the canister. ` +
+    `Right-click an item in your hold to use it or throw it away. ${left ? `${left} inside.` : "The canister is empty."}</div>` +
+    // The pilot's own hold on the left, the canister off to the right (owner 2026-11-14).
+    `<div class="cache-cols">` +
+    invColumn(id, `${hull.n} hold`, "stow", { move: true, profile, slots: 35, dest: CACHE, action: "cmv", destWord: "canister" }) +
+    invColumn(CACHE, cache.n, "take", { move: true, profile, slots: 35, dest: id, action: "cmv", destWord: "hold" }) +
+    `</div>`
   );
 }
 

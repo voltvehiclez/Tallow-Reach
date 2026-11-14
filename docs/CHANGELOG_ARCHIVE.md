@@ -8,6 +8,46 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Right-click Discard everywhere — how many, then "are you sure?"
+
+Owner request: "Add a right click function to inventories called 'Discard'. This just trashes an item. This works in
+both station and ship ui. So this will be the first thing you can do with items in space." Follow-up: "When clicking on
+discard a pop up should come up asking how many you want to discard the same way when you right click and sell. Also
+before discarding the final click should ask you 'are you sure you want to discard x?'" **Save version unchanged
+(v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **One shared popover, two steps** (`ui/discard.js`, used by the station panel and the flight card). Step one is the
+  sell box's own number field — **Discard Ferrite**, `Amount (1–7)`, defaulting to the whole stack — with **Discard**
+  and **Cancel**. Step two is the question the owner asked for: **"Are you sure you want to discard 3 Ferrite?"** with
+  "It cannot be recovered." and only then **Discard** / **Cancel**. Nothing leaves the hold until the second click;
+  Enter commits the visible step, Esc closes the box, and a count outside 1–N is refused with the sell box's wording.
+- **Station panel:** the tile menu still lists **Sell** then **Discard ×N**; Discard now opens the popover instead of
+  trashing at once, and the commit trashes from that tile's own place, notices, saves, redraws and re-emits
+  `mission-inventory-changed` so pending hand-offs retry.
+- **Flight card:** the same popover from the hold's right-click menu, autosaving and redrawing the card on commit.
+- **One rule, one function:** `data/items.js` `canDiscard(id)` refuses only mission items (a beacon or parcel cannot be
+  found again), and `sim/inventory.js` `discardItem(where, id, n)` takes `n` (whole stack by default) and returns the
+  pilot's message ("Discarded 2 Ferrite from the Wasp.").
+- **Fixed after the owner's playtest:** (1) *"the are you sure tab doesnt appear in the ship ui"* — the popover's step
+  one swapped its own `innerHTML`, which detached the clicked button, so the flight card's click handler saw a target
+  outside the popover and closed the question it had just opened. `ui/discard.js` now stops propagation for clicks
+  inside the popover (a test fails without that line). (2) *"mouse cursor is not visible when moving it outside a
+  menu"* — the canvas hides the system pointer for mouse-look flight while the HUD draws its own reticle, so beside the
+  station panel there was no pointer at all. `ui/hud.js` `setReticle()` hides the HUD and adds `body.no-reticle`
+  together, and `styles.css` gives the canvas `cursor: default` in that state: docked and on the title screen the real
+  pointer is back.
+- **Tests:** `tests/inventory-discard.test.mjs` (whole and partial stacks in hold and station, the wording, the mission
+  rule, both screens' tiles carrying `data-where`, both menus wired through the popover, the ask/question HTML), the
+  DOM test in `tests/ui-cargo.test.mjs`, which walks the whole flight-card flow: right-click → menu → amount box (whole
+  stack) → bad count refused → question surviving its own click → confirm trashes exactly that many → cancel keeps
+  cargo → mission item greyed, and `tests/ui-cursor.test.mjs` for the pointer/hand-over. 501 tests pass.
+
+Files: `src/ui/discard.js` (new), `src/data/items.js`, `src/sim/inventory.js`, `src/ui/screens.js`, `src/ui/menu.js`,
+`src/ui/cargo.js`, `src/styles.css`, `tests/inventory-discard.test.mjs`, `tests/ui-cargo.test.mjs`, `src/ui/hud.js`, `tests/ui-cursor.test.mjs` (new), `src/ui/README.md`, `src/sim/README.md`,
+`docs/architecture/ui-and-screens.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: Press I in space to read the ship's inventory, and the chart no longer stops the clock
 
 Owner request: "can we add menu of the current ship's inventory if we click 'i' when in space? Same layout as the

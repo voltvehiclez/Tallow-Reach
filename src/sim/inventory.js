@@ -1,11 +1,16 @@
 // Inventory: where things are kept, how much room there is, and moving things.
 //
-// There are two kinds of place, and both are measured in m³:
+// There are three kinds of place, and two of them are measured in m³:
 //   - the STATION: the current pocket's station store. Every station uses its
 //     own entry in `world.stationStores`, keyed by `${placeId}:${featureId}`;
 //     Meridian's enumerable `world.store` is a backward-compatible alias.
 //   - a SHIP's hold: `profile.holds[shipId]`. The room is the hull's `cargo`
 //     (data/ships.js). Every owned ship has its own hold.
+//   - the CACHE: the canister of the temporary run the local pilot is inside
+//     (`sim/instances.js`), which is what a rift's prize is traded out of. Its
+//     stock is the record's own, so a move to or from it is a move in the save.
+//     A canister has no measured volume: it takes whatever is put in it, up to
+//     the same stack rule every other container obeys.
 //
 // Station storage and refinery levels live on `world` (`state.worldState` by
 // default); ship holds and credits live on `profile` (`state.profile` by
@@ -19,9 +24,28 @@ import { REFINERY_BONUS_PER_LEVEL, STORAGE_PER_LEVEL } from "../data/station.js"
 
 /** The id that means "the current station" wherever a place is asked for. */
 export const STATION = "station";
+/**
+ * The id that means "the canister the local pilot has open" — a rift run's prize. Like `STATION` it
+ * stands for a container the caller does not have to name, and like a station's store its stock is
+ * shared with everybody: it belongs to the run, not to a pilot.
+ */
+export const CACHE = "cache";
 const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
 
 const isStation = where => where === STATION;
+const isCache = where => where === CACHE;
+
+/**
+ * The instance record whose canister `CACHE` means, or null: the run the local pilot is inside, when
+ * that run's prize is open to trade with (`sim/instances.js` `cacheTradeRecord` answers the same
+ * question for the sim). Resolved from runtime state rather than handed in, because a canister is a
+ * place in the world and not part of anybody's profile — exactly like `state.place` deciding which
+ * station `STATION` is.
+ */
+function cacheRecord() {
+  const record = state.instances.get(state.place);
+  return record && record.cache && record.cache.open ? record : null;
+}
 
 function activePlace(world, placeId) {
   if (placeId) return placeId;
@@ -52,6 +76,7 @@ export function stationStock(world = state.worldState, placeId = null) {
 /** What a place keeps: `{ itemId: count }`, made on first use. */
 export function stockOf(where, profile = state.profile, world = state.worldState) {
   if (isStation(where)) return stationStock(world);
+  if (isCache(where)) return cacheRecord()?.cache.stock || newStock();
   const holds = profile.holds || (profile.holds = {});
   return holds[where] || (holds[where] = newStock());
 }
@@ -59,9 +84,15 @@ export function stockOf(where, profile = state.profile, world = state.worldState
 /** The hold of ship `id` (the ship being flown by default). */
 export const holdOf = (id, profile = state.profile) => stockOf(id ?? profile.ship, profile);
 
-/** Room in m³. */
+/**
+ * Room in m³. A canister has none to give: while one is open it takes whatever the stack rule allows,
+ * and with nothing open it takes nothing at all, so a move to `CACHE` outside a run is refused rather
+ * than swallowing cargo.
+ */
 export function capacityOf(where, profile = state.profile, world = state.worldState) {
-  return isStation(where) ? STORAGE_PER_LEVEL * world.base.store : SHIPS[where].cargo;
+  if (isStation(where)) return STORAGE_PER_LEVEL * world.base.store;
+  if (isCache(where)) return cacheRecord() ? Infinity : 0;
+  return SHIPS[where].cargo;
 }
 
 /** How many m³ are in use at a place. */
@@ -111,7 +142,9 @@ export const hasRoomFor = (where, id, n = 1, profile = state.profile, world = st
 
 /** The place's name for messages. */
 export function nameOf(where) {
-  return isStation(where) ? "the station" : `the ${SHIPS[where].n}`;
+  if (isStation(where)) return "the station";
+  if (isCache(where)) return `the ${(cacheRecord()?.cache.n || "cache").toLowerCase()}`;
+  return `the ${SHIPS[where].n}`;
 }
 
 /**

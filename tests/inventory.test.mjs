@@ -291,10 +291,16 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(economy, /takeItem\(where, id, count/, "only the requested amount is removed");
   assert.doesNotMatch(screens, /ownsModule/, "the shop no longer hides Buy once you own one");
   assert.match(screens, /&times;\$\{n\}/, "the picker shows how many of a part there are");
-  for (const action of ["mv", "invPrev", "invNext"]) {
+  for (const action of ["invPrev", "invNext"]) {
     assert.match(menu, new RegExp(`\\b${action}\\(`), `menu.js has the ${action} action`);
     assert.match(screens, new RegExp(`data-a="${action}`), `a button in screens.js uses ${action}`);
   }
+  // A move tile carries its own panel's action name, which is `mv` unless the panel says otherwise:
+  // the station's Inventory tab takes the default and the rift-cache trade (ui/cache.js) passes `cmv`,
+  // so one tile serves both and each panel's clicks stay its own business.
+  assert.match(menu, /\bmv\(/, "menu.js has the mv action");
+  assert.match(screens, /action = "mv"/, "a tile in screens.js moves with mv unless its panel names another");
+  assert.match(screens, /data-a="\$\{action\}"/, "and the tile really carries that action");
   assert.match(economy, /buyInto\(id, row\.price, STATION, n/, "the shop buys through the inventory (no Owned limit)");
   assert.doesNotMatch(economy, /Store your cargo first/, "ships keep their own cargo, so switching is never refused");
 

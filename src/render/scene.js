@@ -126,18 +126,24 @@ export const SKIES = {
     const shell = new THREE.Mesh(shellGeo, shellMat);
     g.add(shell);
 
-    // Shards drifting inside it, each turning at its own slow rate.
+    // Shattered rock drifting inside it: the asteroids of a field that broke up with the pocket,
+    // silhouetted against the nebula and each turning at its own slow rate. They are cold and nearly
+    // unlit, so they read as shapes in the dark rather than as scenery — which is the point of them
+    // (owner 2026-11-14: "shattered asteroids in the background skybox").
     const spins = [{ object: shell, rate: 0.0014 }];
-    const shardMat = mm(0x241a16, Number(sky.col) || 0x120806);
+    const shardMat = mm(0x14161d, Number(sky.glow) || 0x6a4cb0);
+    shardMat.emissiveIntensity = 0.06;   // a breath of the nebula's own light on the rock, no more
     for (let i = 0; i < shards; i++) {
       const shard = new THREE.Mesh(rockShapeAt(i), shardMat);
-      const d = R(1500, 6000),
+      // Spread through the whole shell, near and far: a handful close enough to be shapes with edges,
+      // and the rest a long way off, small against the painted sky.
+      const d = R(1200, 9000),
         u = R(-1, 1),
         t = R(0, 6.283),
         s = Math.sqrt(Math.max(0, 1 - u * u));
       shard.position.set(s * Math.cos(t) * d, u * d, s * Math.sin(t) * d);
       shard.rotation.set(R(0, 6.283), R(0, 6.283), R(0, 6.283));
-      shard.scale.setScalar(R(16, 64));
+      shard.scale.setScalar(d < 3000 ? R(26, 90) : R(10, 40));
       g.add(shard);
       spins.push({ object: shard, rate: R(-0.05, 0.05) });
     }

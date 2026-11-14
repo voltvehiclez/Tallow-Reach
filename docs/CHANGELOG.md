@@ -20,6 +20,54 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars
+
+The owner came back from the PR #20 build with the mid-rift logout fix **confirmed working** ("can now log out mid
+rift and returns fine") and three more asks. All three are built. `npm test` → **556 tests, 0 fail**
+(`tests/step14-instances.test.mjs` 23, new `tests/ui-cache.test.mjs` 5, `tests/sky.test.mjs` rewritten to 10).
+**Save version unchanged (v20)**: a canister's stock is still saved inside `world.instances` in the stack list slice
+14b defined — only its live shape changed, and `restoreInstance` reads the old shape straight back.
+
+- **Twenty minutes is the default clock (ask 1: "rifts default time is 20 minutes unless specified").**
+  `RIFT.defaultLifetimeSec` (1200) in `data/instances.js`; `createInstance` uses it whenever a template does not
+  declare `lifetimeSec`, and a declared `lifetimeSec: 0` still means "no clock of its own". Both rift templates had
+  their `lifetimeSec` removed, so **a Deep rift is 20 minutes too** — what makes it deep is its wave, its debris and
+  its prize, not its time. The new step14 test "a run is 20 minutes unless its template says otherwise" pins the
+  default, a declared clock and the 0 case.
+- **The cache is a trade panel, not an auto-loot (ask 2: "your inventory ui + cache inventory ui … clicking and shift
+  clicking moves items in between exactly like ship inv and station inv", ship on the left, cache off to the right).**
+  `openCache` — which moved stacks into the hold one press at a time — is gone. In its place: `openCacheTrade`,
+  `tradeCacheItem(dir, id, n)`, `closeCacheTrade` and `cacheTradeRecord` in `sim/instances.js`, and a new
+  `src/ui/cache.js` modal: **R** beside an unlocked canister opens a card with the ship's hold on the left and the
+  canister on the right (`.cache-cols` in `styles.css`), in exactly the station Inventory tab's tiles; a click moves
+  one, Shift-click moves the whole stack, in **either direction**; right-click offers **Use / Stow all / Discard** in
+  the hold and **Take all** on a canister tile. This works because a canister's stock became an ordinary
+  `{ itemId: count }` stock map: `sim/inventory.js` grew a third container key, `CACHE`, resolved to the open run's
+  canister (`stockOf`, an unbounded `capacityOf`, `nameOf`), so `moveItem`, `spaceFor` and `itemsAt` reach it
+  unchanged — and the saved `[{ i, c }]` shape is converted in `captureInstances` and `restoreInstance`, so no save
+  migration was needed. An emptied canister still drops out of the world (and comes back if something is stowed into
+  it), a full hold loses nothing and says so as a notice, and a sealed canister refuses to trade at all. In
+  `main.js`, **R** again, **Esc** and **P** put the trade away; flight input is released while it is open but the run
+  — clock included — keeps running, like the flight inventory card.
+- **The sky is darker and less orange, with no stars, a nebula and shattered asteroids (ask 3).** `render/sky.js`
+  rewritten: `skyStars` is gone for good; the generators are now `skyVeils` (enormous faint washes spread over the
+  *sphere* — the nebula's body), `skyClouds` (the band's light and its dust lanes, in two passes), `skyWisps` (blurred
+  filaments inside the band) and `skyCracks`. Both palettes in `data/instances.js` are near-black bases with two cold
+  lights (`glow` plus a new `veil`: violet/teal for an ordinary rift, indigo/magenta and dimmer for a deep one), and
+  the only warm colour left in an ordinary rift's sky is the fracture hairline — a deep rift's fractures are pale
+  violet. `render/scene.js` gives the drifting shards a cold rock material with a breath of the nebula's own light
+  and spreads more of them (30 / 40, near and far) against the painted sky. `tests/sky.test.mjs` is rewritten (10
+  tests): determinism, per-template palette, sphere-uniform veils, an explicit "nothing in the picture could be a
+  star" check (no star generator exported, no fill smaller than a wash), and luminance/hue guards that pin every
+  rift's sky dark and non-amber.
+- Docs: the cache and clock paragraphs of `src/sim/README.md`, `src/data/README.md`, `src/render/README.md`,
+  `docs/architecture/content-data.md`, `docs/recipes/22` and `docs/REFACTOR_PLAN.md` rewritten for the trade; a new
+  owner-decision entry at the top of `docs/VISION.md`; `testing/TESTING-14-RIFTS.md` §5 is now the trade checklist,
+  with a new §5b for the sky and a 20:00 clock check. **ROADMAP 14a/14b stay unticked**: they wait for the owner's
+  playtest of this build.
+
+---
+
 ## 2026-11-14: Step 14 owner playtest — four bugs, four fixes (the run you quit is the run you come back to)
 
 The owner flew slices 14a + 14b and reported four bugs. All four are fixed. `npm test` → **546 tests,
@@ -385,48 +433,9 @@ Files: `src/ui/notice.js`, `src/styles.css`, `tests/ui-notices.test.mjs`, `tests
 
 ---
 
-## 2026-11-13: Right-click Discard everywhere — how many, then "are you sure?"
-
-Owner request: "Add a right click function to inventories called 'Discard'. This just trashes an item. This works in
-both station and ship ui. So this will be the first thing you can do with items in space." Follow-up: "When clicking on
-discard a pop up should come up asking how many you want to discard the same way when you right click and sell. Also
-before discarding the final click should ask you 'are you sure you want to discard x?'" **Save version unchanged
-(v19)**; rebuild needed (`npm run build`, then `npm test`).
-
-- **One shared popover, two steps** (`ui/discard.js`, used by the station panel and the flight card). Step one is the
-  sell box's own number field — **Discard Ferrite**, `Amount (1–7)`, defaulting to the whole stack — with **Discard**
-  and **Cancel**. Step two is the question the owner asked for: **"Are you sure you want to discard 3 Ferrite?"** with
-  "It cannot be recovered." and only then **Discard** / **Cancel**. Nothing leaves the hold until the second click;
-  Enter commits the visible step, Esc closes the box, and a count outside 1–N is refused with the sell box's wording.
-- **Station panel:** the tile menu still lists **Sell** then **Discard ×N**; Discard now opens the popover instead of
-  trashing at once, and the commit trashes from that tile's own place, notices, saves, redraws and re-emits
-  `mission-inventory-changed` so pending hand-offs retry.
-- **Flight card:** the same popover from the hold's right-click menu, autosaving and redrawing the card on commit.
-- **One rule, one function:** `data/items.js` `canDiscard(id)` refuses only mission items (a beacon or parcel cannot be
-  found again), and `sim/inventory.js` `discardItem(where, id, n)` takes `n` (whole stack by default) and returns the
-  pilot's message ("Discarded 2 Ferrite from the Wasp.").
-- **Fixed after the owner's playtest:** (1) *"the are you sure tab doesnt appear in the ship ui"* — the popover's step
-  one swapped its own `innerHTML`, which detached the clicked button, so the flight card's click handler saw a target
-  outside the popover and closed the question it had just opened. `ui/discard.js` now stops propagation for clicks
-  inside the popover (a test fails without that line). (2) *"mouse cursor is not visible when moving it outside a
-  menu"* — the canvas hides the system pointer for mouse-look flight while the HUD draws its own reticle, so beside the
-  station panel there was no pointer at all. `ui/hud.js` `setReticle()` hides the HUD and adds `body.no-reticle`
-  together, and `styles.css` gives the canvas `cursor: default` in that state: docked and on the title screen the real
-  pointer is back.
-- **Tests:** `tests/inventory-discard.test.mjs` (whole and partial stacks in hold and station, the wording, the mission
-  rule, both screens' tiles carrying `data-where`, both menus wired through the popover, the ask/question HTML), the
-  DOM test in `tests/ui-cargo.test.mjs`, which walks the whole flight-card flow: right-click → menu → amount box (whole
-  stack) → bad count refused → question surviving its own click → confirm trashes exactly that many → cancel keeps
-  cargo → mission item greyed, and `tests/ui-cursor.test.mjs` for the pointer/hand-over. 501 tests pass.
-
-Files: `src/ui/discard.js` (new), `src/data/items.js`, `src/sim/inventory.js`, `src/ui/screens.js`, `src/ui/menu.js`,
-`src/ui/cargo.js`, `src/styles.css`, `tests/inventory-discard.test.mjs`, `tests/ui-cargo.test.mjs`, `src/ui/hud.js`, `tests/ui-cursor.test.mjs` (new), `src/ui/README.md`, `src/sim/README.md`,
-`docs/architecture/ui-and-screens.md`, `testing/TESTING-BASELINE.md`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: Right-click Discard everywhere — how many, then "are you sure?"
 - 2026-11-13: Press I in space to read the ship's inventory, and the chart no longer stops the clock
 - 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
 - 2026-11-13: No message line that moves the menu, and no "filed at another station" note
