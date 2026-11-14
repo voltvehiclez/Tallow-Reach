@@ -32,17 +32,27 @@
 //                 nothing ever appears in the pilot's face.
 //   objective     { kind, n } what must be done. `kind` is one of OBJECTIVE_KINDS; `n` is the
 //                 player-facing sentence the HUD shows.
-//   exit          { n, requires: [{ type, message }] } — `n` names the way out as the pilot sees it
-//                 (a natural wormhole's is a "Stable wormhole": lore says it never fades). `type`
-//                 is one of EXIT_REQUIREMENT_TYPES and `message` is what the pilot is told while it
-//                 refuses. Empty `requires` means the instance may always be left.
+//   exit          { n, pos, r, requires: [{ type, message }] } — the way out is an object of its own
+//                 in the world, lockable with F and labelled on the HUD: `pos` is where it hangs and
+//                 `r` how big it is drawn. `n` names it as the pilot sees it (a natural wormhole's is
+//                 a "Stable wormhole": lore says it never fades). `type` is one of
+//                 EXIT_REQUIREMENT_TYPES and `message` is what the pilot is told while it refuses.
+//                 Empty `requires` means it is never locked.
 //   onExpire      { kind, message } — `kind` is one of EXPIRY_OUTCOME_TYPES.
-//   cache         { n, loot, pos } the locked container: `loot` is a table id from data/loot.js,
-//                 `pos` where it hangs. Omit it for an instance with no cache.
-//   enter         { pos } the arrival point inside, and where the way out stays.
-//   features      ordinary place features (asteroidField, planet, encounter, ...), read by the same
-//                 generic loader a pocket uses (sim/places.js). Never a `spawner`: an instance's
-//                 hostiles are its declared wave, so its content is exactly what this file says.
+//   cache         { n, loot, pos, r } the prize: a canister, locked but plainly visible from the
+//                 moment the pilot arrives. Once the objective is done, flying within
+//                 `RIFT.cacheRange` of it and pressing R opens it and moves what is inside into the
+//                 ship's hold — as much as fits, and the rest waits for the next press. `loot` is a
+//                 table id from data/loot.js and its roll belongs to the instance, so one seed is one
+//                 reward. Omit `cache` for an instance with no prize.
+//   enter         { pos } the arrival point inside. The way out is its own object at `exit.pos`, so a
+//                 pilot arrives looking at the run rather than sitting inside the door home.
+//   sky           { kind, col, glow, cracks, shards } the sky of somewhere else, drawn by
+//                 `render/scene.js` from its `SKIES` registry. An instance has no starfield and no
+//                 planet: nothing here is copied from the space outside.
+//   features      ordinary place features (asteroidField, ...), read by the same generic loader a
+//                 pocket uses (sim/places.js). Never a `spawner` — an instance's hostiles are its
+//                 declared wave, so its content is exactly what this file says — and never a `planet`.
 //
 // `npm test` (tests/step14-instances.test.mjs) fails if a template is missing a field or names an
 // enemy, loot table, objective, exit rule or outcome that does not exist.
@@ -50,7 +60,8 @@
 /** How a pilot opens, uses and gets out of a rift. Distances are metres. */
 export const RIFT = {
   enterRange: 200,     // fly this close to a rift in space and press R to go in
-  exitRange: 220,      // inside, the way out is the entry point; press R this close to leave
+  exitRange: 220,      // inside, fly this close to the way out (its own portal) and press R to leave
+  cacheRange: 60,      // inside, fly this close to the canister and press R to open it
   warnSec: 60,         // the HUD warns this long before an instance collapses
 
   // "At least 1 km from a big structure like asteroids or stations" (owner). Measured to the thing
@@ -77,6 +88,16 @@ export const EXIT_REQUIREMENT_TYPES = ["objective-done"];
  */
 export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
 
+/**
+ * What an instance's sky can be. The builders live in `render/scene.js` (`SKIES`), which is the only
+ * file that knows how one is drawn: a template names a kind and its colours, so a new look for a new
+ * kind of instance is a data line plus one builder.
+ *
+ *   shattered   a collapsing shell of dark panels with glowing fractures and drifting shards — no
+ *               starfield, no planet: somewhere that is not the space outside.
+ */
+export const SKY_KINDS = ["shattered"];
+
 export const INSTANCE_TEMPLATES = {
   // The Basic rift's usual run: four hardened guardians hold a small, rich pocket shut.
   guardian_rift: {
@@ -86,16 +107,24 @@ export const INSTANCE_TEMPLATES = {
     lifetimeSec: 1200,           // 20 minutes of unpaused play
     difficulty: { hp: 1.6, dmg: 1.5 },
     guardians: { enemy: "raider", count: 4, spawnDist: [800, 1100] },
-    objective: { kind: "destroy-guardians", n: "Destroy the rift guardians" },
+    objective: {
+      kind: "destroy-guardians",
+      n: "Destroy the rift guardians",
+      // Said once, when the last one breaks up: the moment the canister and the way out both open.
+      done: "The last rift guardian breaks up.",
+    },
     exit: {
       n: "Rift gate",
+      pos: [0, 10, 500],           // the way out hangs behind the arrival point, in plain sight
+      r: 26,
       requires: [
         { type: "objective-done", message: "The way out is sealed until the rift guardians are destroyed." },
       ],
     },
     onExpire: { kind: "kill", message: "The rift collapsed with your ship inside it." },
-    cache: { n: "Rift cache", loot: "rift_cache", pos: [0, -30, -520] },
+    cache: { n: "Rift cache", loot: "rift_cache", pos: [0, -30, -520], r: 10 },
     enter: { pos: [0, 0, 320] },
+    sky: { kind: "shattered", col: 0x1a0c06, glow: 0xff7a2a, cracks: 0xffb267, shards: 26 },
     features: [
       {
         kind: "asteroidField",
@@ -111,16 +140,6 @@ export const INSTANCE_TEMPLATES = {
         rock: { rMin: 20, rMax: 72, orePerR: 1.9 },
         salvage: { spread: [500, 120, 500] },
       },
-      {
-        kind: "planet",
-        id: "planet",
-        pos: [-5200, -1400, -8600],
-        radius: 2000,
-        atmosphere: 2140,
-        col: 0x3b2f45,
-        atmoCol: 0x7d5f96,
-        spin: 0.0022,
-      },
     ],
   },
 
@@ -132,16 +151,23 @@ export const INSTANCE_TEMPLATES = {
     lifetimeSec: 1500,           // 25 minutes: a bigger run gets a longer clock
     difficulty: { hp: 2.2, dmg: 2 },
     guardians: { enemy: "raider", count: 6, spawnDist: [900, 1300] },
-    objective: { kind: "destroy-guardians", n: "Destroy the rift guardians" },
+    objective: {
+      kind: "destroy-guardians",
+      n: "Destroy the rift guardians",
+      done: "The last of the deep rift's guardians breaks up.",
+    },
     exit: {
       n: "Rift gate",
+      pos: [0, -20, 560],
+      r: 30,
       requires: [
         { type: "objective-done", message: "The way out is sealed until the rift guardians are destroyed." },
       ],
     },
     onExpire: { kind: "kill", message: "The deep rift collapsed with your ship inside it." },
-    cache: { n: "Deep rift cache", loot: "rift_cache_deep", pos: [0, -40, -640] },
+    cache: { n: "Deep rift cache", loot: "rift_cache_deep", pos: [0, -40, -640], r: 12 },
     enter: { pos: [0, 0, 360] },
+    sky: { kind: "shattered", col: 0x14060a, glow: 0xff5a1e, cracks: 0xff9a5a, shards: 34 },
     features: [
       {
         kind: "asteroidField",
@@ -156,16 +182,6 @@ export const INSTANCE_TEMPLATES = {
         stable: true,
         rock: { rMin: 22, rMax: 80, orePerR: 2.1 },
         salvage: { spread: [600, 140, 600] },
-      },
-      {
-        kind: "planet",
-        id: "planet",
-        pos: [6400, 900, -9200],
-        radius: 2400,
-        atmosphere: 2560,
-        col: 0x2b3a44,
-        atmoCol: 0x4f8fa5,
-        spin: 0.0018,
       },
     ],
   },

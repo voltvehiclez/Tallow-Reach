@@ -78,9 +78,9 @@ export function enterPlace(id, player = state.player) {
   if (player) player.place = id;
   if (local) {
     state.place = id;
-    // Slice 14a: an instance is session runtime, so the saved world keeps naming the pocket the rift
-    // was opened from and a save made inside one returns the pilot there. Slice 14b saves the run.
-    if (!instance) state.worldState.place = id;
+    // Slice 14b: a run is a place like any other as far as a save is concerned, so the saved world
+    // names it and a load comes back inside it. `destroyInstance` names the pocket again on the way out.
+    state.worldState.place = id;
   }
   emit("place-entered", { id, player });
   return true;

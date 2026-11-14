@@ -120,7 +120,7 @@ system and is permanently labelled with its type on a second row, but it is not 
 route-only systems draw them. Gate exit stubs point toward the exact peer system and their labels are clickable travel targets.
 Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gently when zoomed out; core graphics scale with system zoom. Place memory
 (mined-out rocks, cleared encounters, respawn timers) belongs to the world half of the save; it was
-introduced in v18 and is retained in current save v19 alongside mission progress. The map is not a fixed two-level container: pockets may later have optional
+introduced in v18 and is retained in current save v20 alongside mission progress. The map is not a fixed two-level container: pockets may later have optional
 child places using the same place record.
 
 **Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole; one the player spawns
@@ -142,7 +142,10 @@ fades, the outer pocket leaves the map when the pilot warps off and then despawn
 pilot to an empty pocket. A **wormhole system** (slice 14d) is entered the same way, but its far side is a system in
 uncharted space: absent from the existing starmap, persistent and saved like any other system, with its own dynamic
 wormhole pockets on the same timer — and a new one spawns if the way out would otherwise be lost. Both expiry outcomes
-live in one registry, so a future kind declares another without a code change. A future temporary
+live in one registry, so a future kind declares another without a code change. A door and the way out inside are the
+**same object** to the pilot — one shimmering anomaly, F-lockable and labelled in the HUD at all times — the prize is a
+**canister** the pilot opens with **R** once the objective is met, a run is seen under **a sky of its own** with nothing
+copied from the space outside it, and a run in progress is **saved** and rebuilt from its template and seed. A future temporary
 instanced system that needs ordered internal travel can use the existing `intraSystem: "links"` data policy.
 
 **Entity.** `{ id, kind: "enemy"|"asteroid"|"crate"|"bullet"|"missile"|"ship"|..., pos, vel, quat, ... }`
@@ -163,7 +166,7 @@ player }`), so missions, achievements and sound can subscribe without the sim kn
 
 ## Saves
 
-- Current save version is **19** (starmap seed/knowledge, destination, place memory, station-local stores and data-driven mission progress); v18 and older migrate on load. Legacy worlds containing only `world.store` are assigned to their saved station when possible. Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
+- Current save version is **20** (starmap seed/knowledge, destination, place memory, station-local stores, data-driven mission progress and the instance runs a pilot is inside); v19 and older migrate on load. Legacy worlds containing only `world.store` are assigned to their saved station when possible. Every save slot and `TR1:` export code stores `{ v, profile, world }` (principle 5), with automatic
   migration from flat v1..v12 and split v13 through v18 saves:
   `profile` holds the portable character (`cr`, `ship`, `ships`, `holds`, `loadout`, `hp`, `msl`,
   `pw`, `missions`, `flags`, `kills`, `done`), and `world` (`state.worldState`) holds the hosted world's

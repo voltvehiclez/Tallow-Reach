@@ -104,6 +104,19 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 ## Decisions made
 
+- **2026-11-14 — Step 14a playtested: how a rift must look, be locked, be looted and be saved (owner).**
+  Six items, all built the same day. **(1)** A rift is a **shimmering spherical dark-orange-and-black anomaly** with
+  two parts: a spherical core "eye" and an outer glowing aura/flare. **(2)** It is **lockable with F** and its label
+  is **part of the HUD** — an entry or an exit that has to be hunted for is a lost ship. **(3)** The loot is a
+  **canister-shaped object**, locked until the objective is complete, and the pilot **presses R on it** to open it and
+  move what is inside into their own inventory; nothing enters a hold by itself (LESSONS L6). **(4)** The sky inside is
+  **another dimension**: dark and realistic like the rest of the game, **unstable and shattered**, and it **never
+  copies the planets** — a rift is not the space outside it. **(5)** The way out inside is **the same anomaly** as the
+  door, **lockable the same way**, **visible at all times** and **sealed until the objective is complete**. **(6)**
+  Logging out mid-rift **respawns the pilot inside the rift with everything identical** — clock, NPCs, loot — which
+  reverses this step's earlier "an instance is session runtime, so a save returns the pilot to the pocket" answer and
+  is what save **v20** (slice 14b) does. The wave comes back at full strength, and a canister once emptied stays
+  empty, so a reload is never a way to fight a fight again or farm a prize twice.
 - **2026-11-14 — Step 14: rifts, instances and how you may leave one (owner; closes open question 5).**
   A wormhole the player spawns is called a **rift**. Many things will be able to open one later; the first is a
   **Basic rift** bought for **10 cr**, used by **right-clicking it in the in-flight ship inventory (I)**, and it opens

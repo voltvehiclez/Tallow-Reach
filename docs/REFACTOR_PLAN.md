@@ -171,12 +171,18 @@ The eight architecture principles applied to missions (enforcement, and the limi
   requirements, expiry outcome), `sim/instances.js` (`createInstance(template, seed, tier)`, enter/leave, expiry),
   `sim/consumables.js` (`useItem` plus a `USE_ACTIONS` registry), the `rift_basic` item and its 10 cr shop row, the
   rift entity and its view, the **R** binding, the locked loot cache and at least two instance templates.
-  Session-only: an instance is not saved yet, so quitting inside returns the pilot to the pocket the rift was opened
-  from. **Save stays v19.**
-- **14b — a run survives a quit.** Save the instance the local pilot is inside (template, seed, tier, remaining
-  lifetime, enemies, crates, rocks, objective progress, cache state and the pilot's spot) and restore it exactly on
-  load. `world.place` may then be an instance id, so the save validator, the galaxy loader and the resume path must
-  learn about instances. **Save version 20**, migration from 19, old-save test.
+  Session-only in this slice: an instance is not saved yet, so quitting inside returns the pilot to the pocket the
+  rift was opened from. **Save stays v19.** (Superseded by 14b, and by the owner's playtest of 14a on 2026-11-14:
+  the door and the way out are one shimmering anomaly, both F-lockable and labelled in the HUD; the prize is a
+  canister opened with **R**; a run has a shattered sky of its own and no planet in it.)
+- **14b — a run survives a quit.** Save the run the local pilot is inside and rebuild it on load. What is saved is
+  only what a rebuild cannot work out: template, seed, tier, remaining lifetime, whether the warning was shown,
+  whether the objective is met, the canister's remaining stock and open flag, the entry spot and the pilot's own
+  spot (`world.instances` plus `world.resume`). Everything else — rocks, wave, prize roll, scenery and sky — comes
+  out of the template and the seed, so a saved run is **rebuilt, never deserialised**. `world.place` may then be an
+  instance id, so the save validator, the galaxy loader and the resume path must learn about instances. The wave
+  comes back at full strength (a save carries the run, not each guardian's damage) and an emptied canister stays
+  empty, so reloading can never farm a prize twice. **Save version 20**, migration from 19, old-save test.
 - **14c — simple wormholes.** A wormhole pocket that **spawns by itself in normal space**: it appears on the map, is
   warpable like any pocket while it lasts, and holds the wormhole object the pilot enters with **R**. Its 20 minutes
   run from the moment the pocket **spawns**, not from entry. Running out fires the `collapse` outcome: the wormhole
@@ -197,15 +203,17 @@ difficulty scalar well above the map's. A lifetime, and a data-declared outcome 
 pilot (and dying inside despawns the rift instantly, death rules otherwise unchanged), while a **natural wormhole
 collapses** — only the way in goes, its Stable wormhole way out keeps working, and the pilot leaves whenever they like
 with everything they are carrying. Both outcomes live in one registry, so a future kind can declare another. The reward
-that matters is a
-physical **loot cache** that stays locked until the objective is complete, so neither expiry, nor quitting, nor death
-can hand it over — that is what keeps the saved run from being an exploit.
+that matters is a physical **canister** that hangs in the run from the start, stays sealed until the objective is
+complete and is then opened by the pilot with **R**, which moves what is inside into their own hold one unit at a
+time — so neither expiry, nor quitting, nor death can hand it over, and a full hold loses nothing. That is what keeps
+the saved run from being an exploit.
 **Done when.** You can buy and spawn a rift, enter the generated instance, fight, loot, and leave with the loot only
 when the instance's exit rules allow it; the same seed gives the same instance (tested); a quit inside restores the run
 exactly (14b); a wormhole pocket spawns itself in normal space, expires by collapsing its entry, and can always be left
 through the Stable wormhole (14c); a wormhole system is reachable, persistent, has its own dynamic pockets and a map
 button back to normal space (14d).
-**Save.** **Version 20** in slice 14b (an instance in progress is saved); v19 and older migrate. Step 15 becomes v21.
+**Save.** **Version 20** in slice 14b (a run in progress is saved); v19 and older migrate. 14c takes **v21** and
+step 15 becomes **v22** (owner, 2026-11-14).
 
 ## Step 15: Campaign scaffolding
 **Goal.** The campaign can be *written*, one data file per mission.

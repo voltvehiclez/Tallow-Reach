@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-13.*
+*Last checked: 2026-11-14.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -173,6 +173,23 @@ Mission lessons are first because missions are where most bugs have come from. T
   else. Guidance names the station from that same field (`{station}`), never a second copy of the name.
 - **Enforced by:** `tests/mission-handin-station.test.mjs` (a second station pocket proves the wrong counter pays nothing),
   the linter's `handIn.station` checks, and `docs/MISSION_RULES.md` rule 11.
+
+### L19. A field was written on one object and read from another, so a feature silently never appeared
+- **Seen (owner, step 14a playtest):** the rift sky was asked for and nothing in the game looked different — a rift
+  still showed the ordinary starfield and the pocket's planet behind it.
+- **Cause:** the sky was registered on the **place record** (`registerInstancePlace({ …, sky })`, read back with
+  `placeAt(id)`) but the renderer looked for it on the **place definition** (`placeDef(id).sky`), which is built from
+  features only. The lookup returned `undefined`, the `if` did nothing, and every test still passed: nothing in `sim/`
+  or `data/` could see it, and no test asserted the field was where the reader reads it. A whole feature was missing
+  and the only failure was a picture.
+- **Rule:** when `render/` or `ui/` reads a field, name in a comment **which object carries it**, and add an assertion
+  that reads the field back **the same way the reader does** — `placeAt(id).sky.kind`, not "the template has a sky".
+  A visual or presentational feature that no test can see is a feature nobody has verified: the data being right is not
+  the same as the reader finding it. Silence is the failure mode here, so prefer a test that would fail if the reader
+  and the writer disagreed.
+- **Enforced by:** `tests/step14-instances.test.mjs` — the reload test asserts `placeAt(record.id).sky.kind` is the
+  template's declared kind (the reader's own path), and the template test asserts every template declares a `sky.kind`
+  in `SKY_KINDS` and no `planet` feature.
 
 ---
 

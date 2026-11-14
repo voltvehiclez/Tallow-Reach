@@ -67,7 +67,13 @@
 //   instance-warning { id, left }     `RIFT.warnSec` seconds of lifetime are left
 //   instance-objective-done { id, kind }
 //                                    the instance's objective was completed
-//   instance-cache-open { id, loot }  the locked cache spilled its crates into the instance
+//   instance-cache-open { id, loot, left }
+//                                    the pilot opened the run's canister with R and took what fit
+//                                    into their own hold; `left` is how many units stayed inside
+//   instance-restored { id, template, left }
+//                                    a saved run was rebuilt around the pilot on load (slice 14b)
+//   instances-forgotten { ids }       a load dropped the runs of the save it replaced, so their
+//                                    places no longer exist (main.js frees their scenery)
 //   delivered     { item?, target?, place?, player }
 //                                    a mission delivery objective reached its target
 //   mission-tick  { dt, player }     one unpaused simulation tick for survive/wait objectives

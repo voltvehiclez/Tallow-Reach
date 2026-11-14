@@ -8,6 +8,41 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
+
+Owner correction to the station-scoping round: "Active story missions are not visible if you dock into another station...
+accepting border signal doesnt show anything in progress when im docked at galereach." Right: progress is the pilot's,
+not the counter's. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **Every active mission is listed at every station.** `ui/missionlog.js` and the Contracts tab
+  (`ui/screens.js`) no longer filter the active list by station: a job taken at Meridian shows at Galereach with its
+  status, objective, progress bar and dialogue preview, and can be abandoned from anywhere. The `missionFiledAt` helper
+  is gone — it existed only for that filter.
+- **Only the hand-in is station-bound.** Elsewhere the card reads "Deliver to Meridian Station" and shows a disabled
+  **Hand in at Meridian Station** button; at the mission's own station the same button is **Hand in cargo**. Public
+  options are unchanged: the chest `completeMission` refusal, the cargo never leaving the hold, and the reward only at
+  the station that takes it.
+- **Station conversations stay at their station.** Now that a mission is listed everywhere, its counter dialogue must
+  not be playable from the wrong counter. A `requiresDock` dialogue is live only while docked at the station that gives
+  the mission out (`missionAtItsStation`): elsewhere the card is read-only and says "Return to Meridian Station to
+  continue talking.", and `advanceDialogue` refuses the same click. In-field dialogue (the beacon hand-off) is unchanged.
+- **Offers are still station-specific.** The story offer list (`missionOfferStation`) and per-station contract boards
+  (`boardAt`) are untouched: Galereach still offers nothing to accept, and an accepted Border Signal is not offered a
+  second time.
+- **Tests:** `tests/mission-station-scoping.test.mjs` now pins the corrected rule — both jobs visible at both stations,
+  hand-in live only at the right one, Abandon present everywhere, the real-seed check extended (accept the Border Signal
+  at Meridian, dock at Galereach, and the log shows the mission there with no story offer), and a new test that the
+  Meridian briefing cannot be played from another station.
+  `tests/mission-handin-station.test.mjs` expects the mission listed at the wrong station with a disabled, station-named
+  hand-in. 487 tests pass.
+
+Files: `src/ui/missionlog.js`, `src/ui/screens.js`, `src/sim/missions.js`, `src/sim/contracts.js`,
+`src/ui/README.md`, `testing/TESTING-BASELINE.md`,
+`tests/mission-station-scoping.test.mjs`, `tests/mission-handin-station.test.mjs`, `docs/MISSION_RULES.md`,
+`docs/architecture/ui-and-screens.md`, `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: No message line that moves the menu, and no "filed at another station" note
 
 Owner feedback on the docked screens: "if you are in another station it says 1 mission is filed at another station. fly

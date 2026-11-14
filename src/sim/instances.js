@@ -29,15 +29,24 @@
 import { V, Q, UP } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { random, makeRng } from "../util/rng.js";
-import { state, placeWorld, localPlayer, profileOf, instanceAt, msg, say } from "../state/state.js";
+import { state, placeWorld, localPlayer, profileOf, instanceAt, msg, say, clearInstances } from "../state/state.js";
 import { RIFT, riftDef, isInstanceTemplate, instanceTemplate, instanceIdFor } from "../data/instances.js";
-import { registerInstancePlace, unregisterInstancePlace, isInstancePlace, featuresOf, placeAt } from "../data/places.js";
+import {
+  registerInstancePlace,
+  unregisterInstancePlace,
+  isInstancePlace,
+  featuresOf,
+  placeAt,
+  isPlace,
+  DEFAULT_PLACE,
+} from "../data/places.js";
 import { ENEMIES } from "../data/enemies.js";
 import { lootTable } from "../data/loot.js";
 import { addEntity, dropEntity, clearEntities } from "./entity.js";
 import { spawnEnemy } from "./ai.js";
 import { rollLoot } from "./loot.js";
-import { spawnCrate } from "./combat.js";
+import { addItem } from "./inventory.js";
+import { itemName } from "../data/items.js";
 import { clearWorldObjects } from "./world.js";
 import { enterPlace } from "./places.js";
 import { playerPos } from "./pilot.js";
@@ -54,6 +63,23 @@ const _spin = Q();
 const PURPOSE_GUARDIANS = 1;
 const PURPOSE_CACHE = 2;
 const streamRng = (seed, purpose) => makeRng(((seed >>> 0) ^ Math.imul(purpose, 0x9e3779b1)) >>> 0);
+
+/**
+ * What a canister holds: one roll of its loot table from the instance's own seed, as stacks of
+ * `{ i, c }`. Rolled when the instance is made rather than when it is opened, so the prize is part of
+ * the instance — the same seed is the same reward, and a saved run comes back with exactly what was
+ * still inside (slice 14b).
+ */
+function rollCacheStock(lootId, seed) {
+  if (!lootId || !lootTable(lootId)) return [];
+  const rng = streamRng(seed, PURPOSE_CACHE);
+  const stacks = new Map();
+  for (const drop of rollLoot(lootId, rng)) {
+    const count = Math.max(1, Math.floor(Number(drop.count) || 1));
+    stacks.set(drop.item, (stacks.get(drop.item) || 0) + count);
+  }
+  return [...stacks].map(([i, c]) => ({ i, c }));
+}
 
 /* ------------------------------------------------------------------------- */
 /* Which template a rift opens                                                */
@@ -218,6 +244,7 @@ export function createInstance(templateId, seed, opts = {}) {
     },
     exit: {
       n: template.exit?.n || "Way out",
+      r: Number(template.exit?.r) > 0 ? Number(template.exit.r) : 26,
       requires: Array.isArray(template.exit?.requires) ? template.exit.requires.map(r => ({ ...r })) : [],
     },
     onExpire: {
@@ -229,11 +256,18 @@ export function createInstance(templateId, seed, opts = {}) {
           n: template.cache.n || "Cache",
           loot: template.cache.loot || null,
           pos: V(...(template.cache.pos || [0, 0, 0])),
+          r: Number(template.cache.r) > 0 ? Number(template.cache.r) : 10,
+          // Rolled once from the instance's own seed, so one seed is one reward — and what is still
+          // inside is a plain list of stacks, which is what makes a saved run come back identical.
+          stock: rollCacheStock(template.cache.loot, s),
           open: false,
           entity: null,
         }
       : null,
     enterPos: V(...(template.enter?.pos || [0, 0, 0])),
+    // The way out is an object of its own in the world: seen, labelled, lockable and locked.
+    exitPos: V(...(template.exit?.pos || template.enter?.pos || [0, 0, 0])),
+    gate: null,
   };
 
   state.instances.set(id, record);
@@ -247,6 +281,8 @@ export function createInstance(templateId, seed, opts = {}) {
     tier: record.tier,
     instance: templateId,
     features: template.features || [],
+    // The sky of somewhere else: `render/scene.js` reads it and hides the ordinary starfield.
+    sky: template.sky || null,
     // The system the entry pocket belongs to, so a chart opened inside one still reads sensibly.
     parent: origin ? placeAt(origin).parent || null : null,
     enter: { pos: [...record.enterPos.toArray()] },
@@ -287,7 +323,10 @@ export function destroyInstance(record, reason = "left") {
   const W = placeWorld(record.id);
   clearWorldObjects(record.id);
   clearEntities(W.caches);
+  clearEntities(W.gates);
   clearEntities(W.rifts);
+  record.gate = null;
+  if (record.cache) record.cache.entity = null;
 
   // Out first, then the place goes: `dock()` and every lookup resolve a pocket, never a dead id.
   for (const P of state.players) {
@@ -303,7 +342,11 @@ export function destroyInstance(record, reason = "left") {
     P.v.set(0, 0, 0);
     P.thr = 0;
     P.snap = true;
-    if (P === state.player) state.place = P.place;
+    if (P === state.player) {
+      state.place = P.place;
+      // The saved world follows the pilot out of a run: it is a place, and it is gone now.
+      state.worldState.place = P.place;
+    }
   }
 
   closeDoor(record);
@@ -312,6 +355,94 @@ export function destroyInstance(record, reason = "left") {
   state.places.delete(record.id);
   emit("instance-closed", { id: record.id, origin: record.origin, reason });
   return true;
+}
+
+/* ------------------------------------------------------------------------- */
+/* A saved run comes back (slice 14b)                                         */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Put one saved run back into the world as a live record. `createInstance`
+ * reproduces everything the seed decides — the template, its guardians, its rocks
+ * and its rolled prize — so only what the run lived through is copied back: the
+ * clock, whether the objective is met, what is still inside the canister, and the
+ * spot in the pocket the pilot entered from. Returns the record, or null when this
+ * build cannot rebuild it (a template that no longer exists).
+ */
+function restoreInstance(saved) {
+  const record = createInstance(saved.template, saved.seed, { origin: saved.origin, tier: saved.tier });
+  if (!record) return null;
+  record.lifetime = Math.max(0, Number(saved.lifetime) || 0);
+  record.totalLifetime = Math.max(record.lifetime, Number(saved.totalLifetime) || 0);
+  record.warned = saved.warned === true;
+  // The objective's own words come from the template; only its state is saved.
+  if (saved.objectiveMet === true) record.objective.met = true;
+  const cache = record.cache;
+  if (cache && saved.cache) {
+    cache.stock = saved.cache.stock.map(stack => ({ i: stack.i, c: stack.c }));
+    cache.open = saved.cache.open === true;
+  }
+  const entry = saved.entry;
+  const num = v => (Number.isFinite(+v) && +v >= 0 ? +v : 0);
+  record.entry = entry
+    ? { pos: V(...entry.pos), quat: Q(...entry.quat), sh: num(entry.sh), en: num(entry.en) }
+    : null;
+  return record;
+}
+
+/**
+ * Rebuild every saved run and register its place, so a load that was made inside
+ * one has somewhere to come back to. Call it **before** `resumeFromSave()`: the
+ * pilot's saved place has to be a place by the time they are put in it, and
+ * entering a place clears its world, so nothing is spawned here yet.
+ *
+ * Returns how many runs came back.
+ */
+export function restoreInstances() {
+  // A load never keeps the runs of the save it replaced — nor their place containers, so `loadPlace`
+  // rebuilds a restored run's rocks from its features instead of keeping whatever was flying in them.
+  const stale = [...state.instances.keys()];
+  for (const id of stale) state.places.delete(id);
+  clearInstances();
+  // `render/` is not allowed to know what a save is, so it is told which places stopped existing.
+  if (stale.length) emit("instances-forgotten", { ids: stale });
+  const saved = state.worldState.instances;
+  for (const run of Array.isArray(saved) ? saved : []) {
+    if (run && typeof run === "object") restoreInstance(run);   // registers itself in state.instances
+  }
+  // A run this build cannot rebuild leaves the pilot's saved place pointing at
+  // nowhere. Send them home instead of into a pocket that is on no map.
+  const place = state.worldState.place;
+  if (typeof place === "string" && !state.instances.has(place) && !isPlace(place)) {
+    state.worldState.place = DEFAULT_PLACE;
+    state.worldState.resume = null;
+  }
+  return state.instances.size;
+}
+
+/**
+ * Build what a restored run is made of — its guardians, its canister and its way
+ * out — for every run the pilot is standing in. Call it **after** `resumeFromSave()`,
+ * because entering a place clears that place's objects first. The clock keeps
+ * running from where the save left it, the canister stays sealed until the
+ * objective is met, and the guardians come back whole: a half-destroyed wave is
+ * not something a save carries.
+ *
+ * Returns how many runs were filled in.
+ */
+export function populateInstances() {
+  let filled = 0;
+  for (const record of state.instances.values()) {
+    if (!record || record.gone || record.spawned) continue;
+    const P = pilotInside(record);
+    if (!P) continue;
+    spawnRun(record);
+    // The panel's own words rather than a sentence about something that is not happening now.
+    msg(record.objective.met ? `${record.objective.n} — done` : record.objective.n || "Objective", 8);
+    emit("instance-restored", { id: record.id, template: record.template, left: instanceTimeLeft(record) });
+    filled++;
+  }
+  return filled;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -470,9 +601,7 @@ export function enterRift(rift, player = localPlayer()) {
   P.warp = null;
 
   if (!record.spawned) {
-    record.spawned = true;
-    spawnGuardians(record);
-    spawnCache(record);
+    spawnRun(record);
   }
   msg(record.objective.n || "Objective", 8);
   emit("rift-entered", { id: record.id, template: record.template, origin: record.origin });
@@ -505,6 +634,20 @@ function spawnGuardians(record) {
 }
 
 /** The locked cache: a physical container, visible from the start, collectable only once it opens. */
+/**
+ * What a run puts in the world: its guardians, its canister and its way out. One function so a run
+ * entered through a door and a run restored from a save are filled in exactly the same way.
+ */
+function spawnRun(record) {
+  record.spawned = true;
+  // A run whose objective is met comes back met: its wave is gone for good, so a reload is never a
+  // way to fight it — or its prize — again.
+  if (!record.objective.met) spawnGuardians(record);
+  // A canister the pilot already emptied stays emptied: it is gone from the world for good.
+  if (record.cache?.stock.length) spawnCache(record);
+  spawnGate(record);
+}
+
 function spawnCache(record) {
   if (!record.cache || record.cache.entity) return;
   const cache = addEntity(placeWorld(record.id).caches, {
@@ -512,13 +655,32 @@ function spawnCache(record) {
     place: record.id,
     n: record.cache.n,
     loot: record.cache.loot,
-    locked: true,
+    locked: !record.cache.open,
     pos: record.cache.pos.clone(),
     quat: Q(),
     spin: 0.35,
-    r: 9,
+    r: record.cache.r,
   });
   record.cache.entity = cache;
+}
+
+/**
+ * The way out: a portal of its own in the world, always visible, drawn like the door the pilot came
+ * through, and locked until the instance's own exit rules are met.
+ */
+function spawnGate(record) {
+  if (record.gate) return;
+  record.gate = addEntity(placeWorld(record.id).gates, {
+    kind: "gate",
+    place: record.id,
+    n: record.exit.n,
+    exit: true,
+    locked: !!exitDenial(record),
+    pos: record.exitPos.clone(),
+    quat: Q(),
+    spin: 0.35,
+    r: record.exit.r,
+  });
 }
 
 /**
@@ -534,8 +696,8 @@ export function leaveInstance(player = localPlayer()) {
   if (!record) return "There is no way out here.";
   const at = playerPos(P);
   const range = Number(RIFT.exitRange) || 0;
-  if (at.distanceTo(record.enterPos) > range) {
-    return `Fly back to ${record.exit.n} (within ${range} m of where you came in) and press R.`;
+  if (at.distanceTo(record.exitPos) > range) {
+    return `Fly back to ${record.exit.n} (within ${range} m of it) and press R.`;
   }
   const denial = exitDenial(record);
   if (denial) {
@@ -549,13 +711,42 @@ export function leaveInstance(player = localPlayer()) {
 }
 
 /**
- * The **R** key: come out if you are inside, go in if a rift is within range. One binding, one
- * deliberate press — a ship can never drift in or out by contact.
+ * What R would do here, in the instance's own words, or null when nothing is in reach. The canister
+ * comes first when the pilot is right beside it — it is small and it is the reason to be here — and
+ * the way out answers everywhere else within its own range.
+ */
+export function instancePrompt(record, player = localPlayer()) {
+  const P = player || localPlayer();
+  if (!record || !P) return null;
+  const at = playerPos(P);
+  const cache = record.cache;
+  if (cache?.entity && at.distanceTo(cache.pos) <= (Number(RIFT.cacheRange) || 0)) {
+    if (!cache.open) return `The ${cache.n} is sealed`;
+    return cache.stock.length ? `Press R to open ${cache.n}` : `The ${cache.n} is empty`;
+  }
+  if (at.distanceTo(record.exitPos) <= (Number(RIFT.exitRange) || 0)) {
+    return exitDenial(record) || `Press R to leave through ${record.exit.n}`;
+  }
+  return null;
+}
+
+/**
+ * The **R** key, on the nearest thing it can act on: outside, a rift door within range; inside, the
+ * canister beside the pilot if there is one to open, otherwise the way out. One binding, one
+ * deliberate press — a ship can never drift in or out by contact, and flying past a canister never
+ * opens it.
  */
 export function riftAction(player = localPlayer()) {
   const P = player || localPlayer();
   if (!P || P.dead) return false;
-  if (isInstancePlace(P.place || state.place)) {
+  const placeId = P.place || state.place;
+  if (isInstancePlace(placeId)) {
+    const record = instanceAt(placeId);
+    const cache = record?.cache;
+    if (cache?.entity && playerPos(P).distanceTo(cache.pos) <= (Number(RIFT.cacheRange) || 0)) {
+      // `openCache` says what happened either way, so this only reports whether the job is done.
+      return openCache(record, P) === true;
+    }
     const out = leaveInstance(P);
     if (out !== true) msg(out, 5);
     return out === true;
@@ -587,40 +778,79 @@ export function instanceWarning(record) {
   return `${record.n} collapses in ${left} second${left === 1 ? "" : "s"}.`;
 }
 
-/** Spill the cache as ordinary crates. They are collected one by one, so a full hold leaves them
- *  floating: the reward is never added to a hold by itself (LESSONS L6). */
-function openCache(record) {
+/**
+ * The objective is done, so the canister unlocks — and stays exactly where it hangs. Taking what is
+ * inside is the pilot's own act, at close range, with R: nothing enters a hold by itself (LESSONS L6).
+ */
+function unlockCache(record) {
   const cache = record.cache;
   if (!cache || cache.open) return false;
   cache.open = true;
-  const W = placeWorld(record.id);
-  if (cache.loot && lootTable(cache.loot)) {
-    const rng = streamRng(record.seed, PURPOSE_CACHE);
-    for (const drop of rollLoot(cache.loot, rng)) {
-      const count = Math.max(1, Math.floor(Number(drop.count) || 1));
-      const scatter = Math.max(0, Number(drop.scatter) || 0);
-      for (let i = 0; i < count; i++) {
-        const at = V(
-          cache.pos.x + (rng() * 2 - 1) * scatter,
-          cache.pos.y + (rng() * 2 - 1) * scatter * 0.4,
-          cache.pos.z + (rng() * 2 - 1) * scatter,
-        );
-        spawnCrate(at, drop.item, record.id, null, null, null, false);
-      }
-    }
-  }
-  if (cache.entity) dropEntity(W.caches, cache.entity);
-  cache.entity = null;
-  emit("instance-cache-open", { id: record.id, loot: cache.loot });
+  if (cache.entity) cache.entity.locked = false;
   return true;
+}
+
+/** "a, b and c" — the way the game lists things inside a sentence. */
+const listWords = parts =>
+  parts.length < 2 ? parts[0] || "" : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+
+/**
+ * Open the canister the pilot is beside and move what is inside into their ship's hold: one unit at a
+ * time through the ordinary inventory rules, so what fits comes aboard and what does not stays inside
+ * and waits for the next press. A full hold loses nothing and is told so.
+ *
+ * Returns true when the canister is empty afterwards, or a sentence (a refusal, or what is left).
+ */
+export function openCache(record, player = localPlayer(), profile = null) {
+  const cache = record?.cache;
+  const P = player || localPlayer();
+  // Every answer here is a sentence the pilot sees: a refusal is never swallowed, and a success says
+  // what came aboard rather than leaving the hold to change in silence.
+  const refuse = text => {
+    msg(text, 6);
+    return text;
+  };
+  if (!cache) return refuse("There is nothing to open here.");
+  if (!P || P.dead) return refuse("There is nobody to open it.");
+  if (!cache.open) return refuse(`The ${cache.n} is still sealed. ${record.objective.n || ""}`.trim());
+  if (!cache.stock.length) return refuse(`The ${cache.n} is empty.`);
+
+  const prof = profile || profileOf(P) || state.profile;
+  const taken = [];
+  for (const stack of cache.stock) {
+    let moved = 0;
+    while (stack.c > 0 && addItem(prof.ship, stack.i, 1, prof)) {
+      stack.c--;
+      moved++;
+    }
+    if (moved) taken.push(`${moved} ${itemName(stack.i)}`);
+  }
+  const leftCount = cache.stock.reduce((n, stack) => n + stack.c, 0);
+  cache.stock = cache.stock.filter(stack => stack.c > 0);
+  if (!taken.length) return refuse(`No room in the hold for the ${cache.n}. Make room and press R again.`);
+
+  emit("sfx", { name: "pickup" });
+  emit("instance-cache-open", { id: record.id, loot: cache.loot, left: leftCount });
+  const empty = !cache.stock.length;
+  const text = empty
+    ? `The ${cache.n} gives up ${listWords(taken)}.`
+    : `The ${cache.n} gives up ${listWords(taken)}; ${leftCount} more will not fit. Make room and press R again.`;
+  msg(text, 6);
+  if (empty) {
+    if (cache.entity) dropEntity(placeWorld(record.id).caches, cache.entity);
+    cache.entity = null;
+    return true;
+  }
+  return text;
 }
 
 function completeObjective(record) {
   if (record.objective.met) return;
   record.objective.met = true;
-  const opened = openCache(record);
+  const unlocked = unlockCache(record);
+  if (record.gate) record.gate.locked = !!exitDenial(record);
   const text = [record.objective.done || "Objective complete."];
-  if (opened) text.push(`${record.cache.n} is open.`);
+  if (unlocked) text.push(`${record.cache.n} unlocked — fly to it and press R.`);
   if (!record.exit.requires.length || !exitDenial(record)) text.push("The way out is open.");
   msg(text.join(" "), 8);
   emit("instance-objective-done", { id: record.id, kind: record.objective.kind });
@@ -661,16 +891,31 @@ export function updateInstances(dt) {
       }
     }
     if (!record.objective.met && objectiveDone(record)) completeObjective(record);
+
+    // The two objects a run puts in the world turn in place, and their locks follow the instance's
+    // own state rather than a flag somebody remembered to set. If one is missing — a place was
+    // cleared, or a saved run is being restored — it is built again from the record.
     const cache = record.cache;
-    if (cache?.entity) cache.entity.quat.multiply(_spin.setFromAxisAngle(UP, cache.entity.spin * dt));
-    // The way out offers itself the way a door does: a prompt only where R would work, in the
-    // instance's own words, and the refusal instead when the exit is still sealed.
+    const W = placeWorld(record.id);
+    if (record.spawned && cache && !cache.entity && cache.stock.length) spawnCache(record);
+    if (record.spawned && (!record.gate || !W.gates.includes(record.gate))) {
+      record.gate = null;
+      spawnGate(record);
+    }
+    if (cache?.entity) {
+      cache.entity.locked = !cache.open;
+      cache.entity.quat.multiply(_spin.setFromAxisAngle(UP, cache.entity.spin * dt));
+    }
+    if (record.gate) {
+      record.gate.locked = !!exitDenial(record);
+      record.gate.quat.multiply(_spin.setFromAxisAngle(UP, record.gate.spin * dt));
+    }
+    // Both offer themselves the way a door does: a hint only where R would work, in the instance's
+    // own words, and the refusal instead while the way out is sealed.
     const P = localPlayer();
-    if (
-      P && !P.dead && (P.place || state.place) === record.id &&
-      playerPos(P).distanceTo(record.enterPos) <= (Number(RIFT.exitRange) || 0)
-    ) {
-      say(exitDenial(record) || `Press R to leave through ${record.exit.n}`);
+    if (P && !P.dead && (P.place || state.place) === record.id) {
+      const prompt = instancePrompt(record, P);
+      if (prompt) say(prompt);
     }
   }
 }

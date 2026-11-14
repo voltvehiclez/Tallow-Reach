@@ -33,8 +33,8 @@ function boot(place = "reach") {
   return P;
 }
 
-test("v19: a new save has a resume slot, null while docked", () => {
-  assert.equal(SAVE_VERSION, 19);
+test("v20: a new save has a resume slot, null while docked", () => {
+  assert.equal(SAVE_VERSION, 20);
   const s = newSave();
   assert.equal(s.world.resume, null);
   assert.deepEqual(sanitizeSave(s), s);

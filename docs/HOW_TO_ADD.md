@@ -64,4 +64,4 @@ Open only the recipe you need. Each one is a separate file in `docs/recipes/`; t
 | 19 | [A new kind of thing in the world](recipes/19-a-new-kind-of-thing-in.md) | a new entity kind |
 | 20 | [Edit the starmap web and travel rules](recipes/20-edit-the-starmap-web-and-travel.md) | steps 11A/11B |
 | 21 | [Add a place-template encounter](recipes/21-add-a-place-template-encounter.md) | Step 12 |
-| 22 | [A new rift, instance or wormhole run](recipes/22-a-new-rift-or-instance.md) | data only; a new rule needs one function |
+| 22 | [A new rift, instance or wormhole run](recipes/22-a-new-rift-or-instance.md) | data only; a new rule or sky kind needs one function |

@@ -45,6 +45,8 @@ export function profileOf(player = localPlayer()) {
 /**
  * Record where the local pilot is right now, so the next load puts them back
  * there. Null while docked (or dead): loading then opens the station menu.
+ * Inside a temporary run this is the pilot's own spot in it, so logging out
+ * mid-rift comes back mid-rift; `captureInstances()` keeps the run itself alive.
  */
 export function captureResume() {
   const P = localPlayer();
@@ -52,23 +54,57 @@ export function captureResume() {
     state.worldState.resume = null;
     return null;
   }
-  // Slice 14a: an instance is session-only, so a save made inside a rift records the spot the rift
-  // was opened from and a reload returns the pilot there — never into an instance that no longer
-  // exists. Slice 14b replaces this with the saved run itself (owner decision 2026-11-14).
-  const entry = instanceAt(P.place || state.place)?.entry;
-  state.worldState.resume = entry
-    ? { pos: entry.pos.toArray(), quat: entry.quat.toArray(), sh: entry.sh, en: entry.en }
-    : { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
+  state.worldState.resume = { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
   return state.worldState.resume;
 }
 
 /**
+ * Snapshot every live temporary run into the world record (save v20). A run keeps
+ * what a rebuild cannot work out for itself — its identity, its clock, whether its
+ * objective is met, what is still inside its prize and the spot it was entered
+ * from. The seed reproduces the rest, so one saved run always comes back as the
+ * same run: same guardians, same rocks, same reward.
+ */
+export function captureInstances() {
+  const runs = [];
+  for (const record of state.instances.values()) {
+    if (!record || record.gone || record.expired) continue;
+    runs.push({
+      id: record.id,
+      template: record.template,
+      seed: record.seed >>> 0,
+      tier: record.tier,
+      origin: record.origin,
+      lifetime: Math.max(0, Number(record.lifetime) || 0),
+      totalLifetime: Math.max(0, Number(record.totalLifetime) || 0),
+      warned: !!record.warned,
+      objectiveMet: !!record.objective?.met,
+      entry: record.entry
+        ? {
+            pos: record.entry.pos.toArray(),
+            quat: record.entry.quat.toArray(),
+            sh: record.entry.sh,
+            en: record.entry.en,
+          }
+        : null,
+      ...(record.cache
+        ? { cache: { stock: record.cache.stock.map(s => ({ i: s.i, c: s.c })), open: !!record.cache.open } }
+        : {}),
+    });
+  }
+  state.worldState.instances = runs;
+  return runs;
+}
+
+/**
  * Snapshot the local profile and hosted world as a combined save object.
- * Captures the live resume point first, so every save path — autosave, slot and
- * export code — records where the pilot actually is.
+ * Captures the live resume point and every temporary run first, so every save
+ * path — autosave, slot and export code — records where the pilot actually is,
+ * including inside a rift.
  */
 export function currentSave() {
   captureResume();
+  captureInstances();
   state.worldState.destination = state.ui.destination;
   return {
     v: SAVE_VERSION,
@@ -229,9 +265,13 @@ export function placeWorld(id) {
     container = {
       id,
       loaded: false,
-      // `rifts` are the wormholes floating in a pocket (step 14) and `caches` the
-      // locked containers inside an instance; both are records, drawn by render/views.js.
-      entities: { enemies: [], asteroids: [], crates: [], bullets: [], missiles: [], fx: [], rifts: [], caches: [] },
+      // Step 14: `rifts` are the wormhole doors floating in a pocket, and inside an instance `gates`
+      // are the way out (its own portal object) and `caches` the canister holding the prize. All
+      // three are plain records, drawn by render/views.js and lockable with F.
+      entities: {
+        enemies: [], asteroids: [], crates: [], bullets: [], missiles: [], fx: [],
+        rifts: [], gates: [], caches: [],
+      },
     };
     state.places.set(id, container);
   }

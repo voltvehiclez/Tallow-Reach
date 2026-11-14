@@ -240,14 +240,14 @@ test("13a: the runner supports reach, deliver and survive objective events", () 
   assert.equal(missionObjectivesDone(profile.missions[0]), true);
 });
 
-test("13a: v18 active contracts migrate to v19 missions and flags survive round trips", () => {
+test("13a: v18 active contracts migrate to v20 missions and flags survive round trips", () => {
   const old = newSave();
   old.v = old.profile.v = old.world.v = 18;
   old.profile.mission = { type: "mine", tier: 2, p: 3, n: 10, r: 900, o: "cobalt" };
   old.profile.flags = { metArchivist: true };
   const save = sanitizeSave(old);
-  assert.equal(SAVE_VERSION, 19);
-  assert.equal(save.v, 19);
+  assert.equal(SAVE_VERSION, 20);
+  assert.equal(save.v, 20);
   assert.equal(save.profile.missions.length, 1);
   assert.equal(save.profile.missions[0].steps[0].kind, "mine");
   assert.equal(save.profile.missions[0].counters.objective, 3);

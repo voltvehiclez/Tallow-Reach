@@ -14,6 +14,7 @@ import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
+import { isInstanceTemplate, instanceIdFor } from "../data/instances.js";
 
 const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
 
@@ -67,7 +68,12 @@ function worldWithStationStores(fields, stationStores) {
 //   19 replaces the single profile.mission slot with profile.missions and adds
 //      remembered flags; v18 and older active contracts migrate into the runner's
 //      one-step mission shape.
-export const SAVE_VERSION = 19;
+//   20 adds world.instances: the temporary instance runs a pilot is inside (a rift).
+//      A run keeps its id, template, seed, tier, remaining lifetime, objective,
+//      prize stock and the spot it was entered from, so logging out mid-rift comes
+//      back inside it. v19 and older saves have no runs — they resume where they
+//      always did, because slice 14a never saved an instance.
+export const SAVE_VERSION = 20;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -193,6 +199,7 @@ export function newWorld() {
     place: DEFAULT_PLACE,
     destination: null, // local session destination, saved with this world
     resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
+    instances: [],     // temporary runs the pilot is inside (rifts); see cleanInstanceRuns
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
     missionState: {},  // story-script state keyed by place id
   }, { [HOME_STATION_KEY]: newStock() });
@@ -522,6 +529,60 @@ function cleanResume(raw) {
   return { pos, quat: quat || [0, 0, 0, 1], sh: num(raw.sh), en: num(raw.en) };
 }
 
+/**
+ * The temporary runs a world keeps (save v20). A run stores only what a rebuild
+ * cannot work out for itself: which template and seed it is, how much of its
+ * lifetime is left, whether its objective is met, what is still inside its prize
+ * and where the pilot came from. The seed reproduces the guardians, the rocks and
+ * the rolled prize, so one saved run always comes back as the same run.
+ * An id that `instanceIdFor` would not produce is dropped, so a save can never
+ * name a place the game cannot rebuild.
+ */
+function cleanInstanceRuns(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  const seen = new Set();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const template = typeof entry.template === "string" && isInstanceTemplate(entry.template) ? entry.template : null;
+    if (!template) continue;
+    const seed = Number.isFinite(+entry.seed) ? +entry.seed >>> 0 : 0;
+    const id = instanceIdFor(template, seed);
+    if (entry.id !== id || seen.has(id)) continue;
+    seen.add(id);
+    const secs = v => (Number.isFinite(+v) && +v >= 0 ? +v : 0);
+    const totalLifetime = secs(entry.totalLifetime);
+    const lifetime = totalLifetime > 0 ? Math.min(secs(entry.lifetime), totalLifetime) : secs(entry.lifetime);
+    const run = {
+      id,
+      template,
+      seed,
+      tier: Number.isFinite(+entry.tier) && +entry.tier > 0 ? +entry.tier : 1,
+      origin: typeof entry.origin === "string" && isPocket(entry.origin) ? entry.origin : null,
+      lifetime,
+      totalLifetime,
+      warned: entry.warned === true,
+      objectiveMet: entry.objectiveMet === true,
+      entry: cleanResume(entry.entry),
+    };
+    if (entry.cache && typeof entry.cache === "object" && !Array.isArray(entry.cache) && Array.isArray(entry.cache.stock)) {
+      // The prize is a list of stacks — `{ i: itemId, c: count }` — and what is left
+      // in it is the one thing a rebuild cannot know, so it is saved as it stands.
+      run.cache = {
+        stock: entry.cache.stock
+          .map(stack => ({
+            i: typeof stack?.i === "string" && isItem(stack.i) ? stack.i : null,
+            c: Number.isFinite(+stack?.c) ? Math.max(0, Math.floor(+stack.c)) : 0,
+          }))
+          .filter(stack => stack.i && stack.c > 0),
+        open: entry.cache.open === true,
+      };
+    }
+    out.push(run);
+  }
+  return out;
+}
+
 /** Validate a destination against the currently installed seeded galaxy. */
 function cleanDestination(raw) {
   if (typeof raw === "string") return isSystem(raw) ? raw : null;
@@ -708,13 +769,17 @@ export function sanitizeWorld(raw) {
   // v15 and older had galaxy:null. Never trust/save generated geography here;
   // galaxy-session installs the seed's catalog before this validation runs.
   const galaxy = cleanGalaxyRecord(raw.galaxy);
+  // v20: temporary runs. A pilot inside one is in a place that is not a pocket of
+  // the map, so the run list also decides whether the saved place id still exists.
+  const instances = cleanInstanceRuns(raw.instances);
+  const inRun = typeof raw.place === "string" && instances.some(r => r.id === raw.place) ? raw.place : null;
   // v14: current pocket. v13 and older saves stored the same ids as `sector`.
-  const place = relocateDockedStation ? detachedPlace
+  const place = inRun || (relocateDockedStation ? detachedPlace
     : typeof raw.place === "string" && isPocket(raw.place)
       ? raw.place
       : typeof raw.sector === "string" && isPocket(raw.sector)
         ? raw.sector
-        : DEFAULT_PLACE;
+        : DEFAULT_PLACE);
 
   return worldWithStationStores({
     v: SAVE_VERSION,
@@ -725,6 +790,7 @@ export function sanitizeWorld(raw) {
     place,
     destination: cleanDestination(raw.destination),
     resume: cleanResume(raw.resume),
+    instances,
     placeMemory: cleanPlaceMemory(raw.placeMemory),
     missionState: cleanMissionState(raw.missionState),
   }, stationStores);

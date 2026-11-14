@@ -20,6 +20,63 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: Step 14a feedback built — a rift you can see, lock and open — and slice 14b, a run that survives a quit
+
+The owner playtested slice 14a and returned six items; all six are built, plus slice **14b**.
+`npm test` → **529 tests, 0 fail** (`tests/step14-instances.test.mjs` is now 19); `npm run build` → 799 KB.
+**Save version v20** (from v19): `world.instances` keeps the run a pilot is inside, so logging out mid-rift
+comes back mid-rift. v19 and older saves have no runs and load unchanged.
+
+- **The anomaly (items 1 and 5).** `render/views.js` grew one shared pair, `buildAnomaly` / `updateAnomaly`,
+  and it draws **both** the door a pilot opens (`kind: "rift"`) and the way out inside (`kind: "gate"`):
+  a dark spherical core, a bright eye, an additive aura and a flare at 1.5×, shimmering from
+  `performance.now()` with a per-entity phase, plus sealed shells while it is locked. The way out is now an
+  entity of its own — `placeWorld(id).gates`, `record.gate`, `record.exitPos` — always visible from arrival,
+  F-lockable, and locked until the instance's own exit rules are met. Data: a template's
+  `exit { n, pos, r, requires }` (the exit is a place in the world, not the point the pilot arrived at).
+- **A sky of somewhere else (item 4).** `render/scene.js` exports a `SKIES` registry; `SKIES.shattered`
+  builds an inverted icosahedron shell of dark panels with glowing fracture lines through them and shards
+  drifting inside it, carried with the camera by `updateScenery`, and `showPlace` hides the ordinary
+  starfield while a place has a sky of its own. A template declares `sky { kind, col, glow, cracks, shards }`
+  and `SKY_KINDS` in `data/instances.js` is the vocabulary. **Both rift templates lost their `planet`
+  feature**: a rift is not the space outside it, so nothing in one is copied from a pocket.
+  `forgetPlace(id)` frees an instance's scenery and sky for good when its run ends, and `main.js`
+  (`instance-closed`) now also calls `showPlace(state.place)` — leaving a rift used to leave the pilot
+  looking at an empty scene with no stars.
+- **F locks all three, and the HUD says what each is (item 2).** `sim/targeting.js` lock kinds grew `"r"`
+  (rift door), `"g"` (way out, labelled `(sealed)` / `(open)`) and `"k"` (canister, `(locked)` / `(open)`),
+  and `ui/hud.js` marks rifts, gates and canisters at all times — pinned to the edge of the screen when they
+  are behind the pilot, with their distance — so the way in and the way out cannot be lost.
+- **The prize is a canister you open with R (item 3).** `openCache(record, player, profile)` is exported from
+  `sim/instances.js`: it moves the canister's stacks into the pilot's **own** hold one unit at a time, so a
+  full hold takes what fits and is told how much is left (`Make room and press R again`). Every refusal is a
+  sentence the pilot sees — still sealed (with the objective's own words), empty, no room — and a success says
+  what came aboard. `completeObjective` now **unlocks** the canister instead of spilling crates, and
+  `render/views.js` draws it as a canister (body, two caps, two bands, a lamp that is red while sealed and
+  green once open). Data: `cache { n, loot, pos, r }` and `RIFT.cacheRange` (60 m).
+- **Slice 14b: a run survives a quit (item 6).** `world.instances` (v20) keeps one entry per live run:
+  template, seed, tier, remaining lifetime, `warned`, whether the objective is met, the canister's remaining
+  stock and open flag, and the entry spot the pilot is put back at when they leave. `captureInstances()`
+  (`state/state.js`) writes it from `currentSave()`; `captureResume()` no longer redirects a save made inside
+  a run to the pocket; `enterPlace` now writes an instance id into `world.place` and `destroyInstance` writes
+  the pocket back on the way out. `restoreInstances()` and `populateInstances()` (`sim/instances.js`) rebuild
+  a saved run — record, place registration, then guardians, canister and gate — and are called from
+  `resumeFromSave()`, with `restoreInstances()` also called at boot in `main.js` before `loadPlace`, because a
+  place has to exist before anything can load it. `cleanInstanceRuns` (`state/profile.js`) drops any run whose
+  id `instanceIdFor` would not produce, and a `world.place` that is then nowhere sends the pilot home.
+  Deliberate and documented: the wave comes back at **full strength** (a save carries the run, not each
+  guardian's damage), and an emptied canister stays empty, so reloading can never farm a prize twice.
+- **Files.** `src/data/instances.js`, `src/state/{profile,state}.js`, `src/sim/{instances,places,session,targeting,world}.js`,
+  `src/render/{scene,views}.js`, `src/ui/hud.js`, `src/main.js`, `tests/{step14-instances,layers,step9-save,step10-save,
+  step11b-starmap,step12-places,step13-missions,step13c-ui,resume-spot,shops,station-inventory}.test.mjs`,
+  `docs/{HANDOFF,ROADMAP}.md`, `docs/recipes/22-a-new-rift-or-instance.md`, `testing/TESTING-14-RIFTS.md`,
+  the `src/*/README.md` files touched, and `docs/architecture/{world-and-map,content-data}.md`.
+- **Next.** Slice **14c** simple wormholes (save v21: a pocket that spawns itself inside a charted system,
+  20 minutes from spawn, `collapse` on expiry, re-enterable until its timer ends, objective and locked
+  canister strictly one-time), then **14d** wormhole systems in uncharted space, then step 15 the campaign (v22).
+
+---
+
 ## 2026-11-14: Step 14a built — a rift you carry, an instance you fly into, and a cache that stays locked
 
 `npm test` → **523 tests, 0 fail** (14 new: 13 for the instance rules, one for the two new views);
@@ -356,43 +413,9 @@ Files: `src/ui/cargo.js` (new), `src/ui/screens.js`, `src/ui/menu.js`, `src/main
 
 ---
 
-## 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
-
-Owner correction to the station-scoping round: "Active story missions are not visible if you dock into another station...
-accepting border signal doesnt show anything in progress when im docked at galereach." Right: progress is the pilot's,
-not the counter's. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
-
-- **Every active mission is listed at every station.** `ui/missionlog.js` and the Contracts tab
-  (`ui/screens.js`) no longer filter the active list by station: a job taken at Meridian shows at Galereach with its
-  status, objective, progress bar and dialogue preview, and can be abandoned from anywhere. The `missionFiledAt` helper
-  is gone — it existed only for that filter.
-- **Only the hand-in is station-bound.** Elsewhere the card reads "Deliver to Meridian Station" and shows a disabled
-  **Hand in at Meridian Station** button; at the mission's own station the same button is **Hand in cargo**. Public
-  options are unchanged: the chest `completeMission` refusal, the cargo never leaving the hold, and the reward only at
-  the station that takes it.
-- **Station conversations stay at their station.** Now that a mission is listed everywhere, its counter dialogue must
-  not be playable from the wrong counter. A `requiresDock` dialogue is live only while docked at the station that gives
-  the mission out (`missionAtItsStation`): elsewhere the card is read-only and says "Return to Meridian Station to
-  continue talking.", and `advanceDialogue` refuses the same click. In-field dialogue (the beacon hand-off) is unchanged.
-- **Offers are still station-specific.** The story offer list (`missionOfferStation`) and per-station contract boards
-  (`boardAt`) are untouched: Galereach still offers nothing to accept, and an accepted Border Signal is not offered a
-  second time.
-- **Tests:** `tests/mission-station-scoping.test.mjs` now pins the corrected rule — both jobs visible at both stations,
-  hand-in live only at the right one, Abandon present everywhere, the real-seed check extended (accept the Border Signal
-  at Meridian, dock at Galereach, and the log shows the mission there with no story offer), and a new test that the
-  Meridian briefing cannot be played from another station.
-  `tests/mission-handin-station.test.mjs` expects the mission listed at the wrong station with a disabled, station-named
-  hand-in. 487 tests pass.
-
-Files: `src/ui/missionlog.js`, `src/ui/screens.js`, `src/sim/missions.js`, `src/sim/contracts.js`,
-`src/ui/README.md`, `testing/TESTING-BASELINE.md`,
-`tests/mission-station-scoping.test.mjs`, `tests/mission-handin-station.test.mjs`, `docs/MISSION_RULES.md`,
-`docs/architecture/ui-and-screens.md`, `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
 - 2026-11-13: No message line that moves the menu, and no "filed at another station" note
 - 2026-11-13: A story mission is offered at one station, and only there
 - 2026-11-13: Missions belong to the station that filed them, and the docked panel redraws itself

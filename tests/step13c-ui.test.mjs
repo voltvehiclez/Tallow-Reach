@@ -153,7 +153,7 @@ test("13c: old Border Signal saves migrate by step id to the resumable flow", ()
   assert.equal(mission.timeout, undefined);
 });
 
-test("13c: dialogue presentation fields survive the existing v19 save round trip", () => {
+test("13c: dialogue presentation fields survive the existing v20 save round trip", () => {
   const save = newSave();
   save.profile.missions.push(storyMission());
   const loaded = sanitizeSave(save);
@@ -161,7 +161,7 @@ test("13c: dialogue presentation fields survive the existing v19 save round trip
   assert.equal(step.portrait, "archivist-vale");
   assert.equal(step.log, "Hear Archivist Vale's request and choose whether to investigate.");
   assert.equal(step.objective, "Hear Archivist Vale's request.");
-  assert.equal(step.requiresDock, true, "station dialogue keeps its dock requirement through v19 saves");
+  assert.equal(step.requiresDock, true, "station dialogue keeps its dock requirement through v20 saves");
   assert.equal(loaded.profile.missions[0].steps[9].portrait, "archivist-vale");
   assert.equal(loaded.profile.missions[0].steps[9].objective, "Return to Meridian Station.");
   assert.equal(loaded.profile.missions[0].steps[9].requiresDock, false, "the beacon dialogue remains in-field after a save");

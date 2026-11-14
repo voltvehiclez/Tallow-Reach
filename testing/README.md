@@ -13,7 +13,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 | Guide | Covers |
 | --- | --- |
 | [TESTING-BASELINE.md](TESTING-BASELINE.md) | The whole game; play it after every step. |
-| [TESTING-14-RIFTS.md](TESTING-14-RIFTS.md) | Step 14a: buying and using a rift, the sealed way out, the locked cache, the 20-minute collapse, dying inside, reloading. |
+| [TESTING-14-RIFTS.md](TESTING-14-RIFTS.md) | Step 14a + 14b: buying and using a rift, the anomaly and its gate, F-locks and HUD labels, the shattered sky, the canister you open with R, the 20-minute collapse, dying inside, and reloading mid-rift. |
 
 ## Passed (history, in `passed/`)
 

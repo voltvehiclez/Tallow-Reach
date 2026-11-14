@@ -25,6 +25,7 @@ import { ensureBoard } from "./contracts.js";
 import { activeMissions, missionProgress, missionObjectivesDone } from "./missions.js";
 import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
+import { restoreInstances, populateInstances } from "./instances.js";
 
 function assertSessionPilot(P, profile, verb) {
   if (P && P !== state.player && (!profile || profile === state.profile)) {
@@ -161,6 +162,10 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
  * a damaged position, or a ship that cannot move.
  */
 export function resumeFromSave(P = state.player, profile = profileOf(P)) {
+  // The save may have been made inside a temporary run (slice 14b). The run and its place are
+  // rebuilt first — `enterPlace` refuses anything that is not a place — and filled in at the end,
+  // because entering a place clears that place's objects.
+  restoreInstances();
   const placeId = state.worldState.place || DEFAULT_PLACE;
   enterPlace(placeId, P);
   emit("place-entered", { id: placeId, player: P });   // refresh scenery/views even when the id did not change
@@ -215,6 +220,7 @@ export function resumeFromSave(P = state.player, profile = profileOf(P)) {
     P.pos.set(...station.pos);
     emit("docked", { player: P });
   }
+  populateInstances();   // the pilot is standing in the run now, so it can be filled in
   return P;
 }
 

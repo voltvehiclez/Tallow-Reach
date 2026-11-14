@@ -178,6 +178,14 @@ function instanceHtml(record) {
   if (record.lifetime > 0) {
     lines.push(`<small>${escHud(record.n)} collapses in ${clockText(instanceTimeLeft(record))}</small>`);
   }
+  const cache = record.cache;
+  if (cache && cache.stock && cache.stock.length) {
+    lines.push(
+      `<small>${escHud(
+        cache.open ? `${cache.n} is open — fly to it and press R` : `${cache.n} is locked`
+      )}</small>`
+    );
+  }
   const denial = exitDenial(record);
   lines.push(
     `<small>${
@@ -400,6 +408,18 @@ function drawMarkers() {
       mark(interpolatedPos(c), "Crate", "");
     }
   });
+
+  // Step 14: the doors, the way out and the prize canister are always labelled — a run is a place
+  // with nothing else in it to judge distance by, and losing the way out is losing the ship.
+  for (const r of W.rifts || []) {
+    if (r !== (lock && lock.o)) mark(interpolatedPos(r), r.dest || r.n || "Rift", "i");
+  }
+  for (const g of W.gates || []) {
+    if (g !== (lock && lock.o)) mark(interpolatedPos(g), g.locked ? `${g.n} (sealed)` : `${g.n} (open)`, "i");
+  }
+  for (const k of W.caches || []) {
+    if (k !== (lock && lock.o)) mark(interpolatedPos(k), k.locked ? `${k.n} (locked)` : `${k.n} (open)`, "i");
+  }
 
   for (let i = markerCount; i < MARKER_POOL; i++) markers[i].style.display = "none";
 }
