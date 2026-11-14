@@ -26,6 +26,7 @@ import { activeMissions, missionProgress, missionObjectivesDone } from "./missio
 import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
 import { restoreInstances, populateInstances } from "./instances.js";
+import { restoreWormholes } from "./wormholes.js";
 
 function assertSessionPilot(P, profile, verb) {
   if (P && P !== state.player && (!profile || profile === state.profile)) {
@@ -164,8 +165,10 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
 export function resumeFromSave(P = state.player, profile = profileOf(P)) {
   // The save may have been made inside a temporary run (slice 14b). The run and its place are
   // rebuilt first — `enterPlace` refuses anything that is not a place — and filled in at the end,
-  // because entering a place clears that place's objects.
+  // because entering a place clears that place's objects. Simple wormhole pockets (slice 14c) are
+  // rebuilt the same way: someone may be standing in one.
   restoreInstances();
+  restoreWormholes();
   const placeId = state.worldState.place || DEFAULT_PLACE;
   enterPlace(placeId, P);
   emit("place-entered", { id: placeId, player: P });   // refresh scenery/views even when the id did not change

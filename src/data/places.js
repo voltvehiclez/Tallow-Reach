@@ -20,11 +20,22 @@ let livePlaces = null;
 // geography. They are kept apart from the resolved galaxy so that installing a catalog — a load, an
 // import, a new game — drops every instance with it, and so `pocketsIn`/the map can never see one.
 let instancePlaces = null;
+
+// Runtime wormhole pockets (slice 14c): the simple wormholes that spawn themselves in normal
+// space. Unlike an instance they ARE on the map — pockets of the system they spawned in, warpable
+// like its siblings, saved with their remaining time — but they are still runtime geography, kept
+// apart from the seeded galaxy for the same reason, and dropped/re-added by the wormhole module
+// (`sim/wormholes.js`) on every load.
+let wormholePlaces = null;
 let merged = null;
 
 // Built on first use, not at import time: `PLACES` is declared further down this file.
 function rebuildCatalog() {
-  merged = instancePlaces ? { ...(livePlaces || PLACES), ...instancePlaces } : livePlaces || PLACES;
+  const base = livePlaces || PLACES;
+  let out = base;
+  if (wormholePlaces) out = { ...out, ...wormholePlaces };
+  if (instancePlaces) out = { ...out, ...instancePlaces };
+  merged = out;
   return merged;
 }
 
@@ -33,8 +44,10 @@ export function setPlaceCatalog(galaxy = null) {
     ...Object.fromEntries(galaxy.systems.map(s => [s.id, s])),
     ...galaxy.pockets,
   } : null;
-  // A replaced world leaves no instance behind: they belong to the session that made them.
+  // A replaced world leaves no instance or wormhole behind: they belong to the session that made
+  // them. The save carries the wormholes (slice 14c) and re-registers them on load.
   instancePlaces = null;
+  wormholePlaces = null;
   rebuildCatalog();
 }
 
@@ -67,6 +80,34 @@ export function clearInstancePlaces() {
 /** Is this id a runtime instance rather than a pocket of the map? */
 export const isInstancePlace = id =>
   !!instancePlaces && typeof id === "string" && Object.prototype.hasOwnProperty.call(instancePlaces, id);
+
+/** Register a runtime wormhole pocket (slice 14c). The record must be a pocket of its parent
+ *  system — `kind: "pocket"` — so `isPocket` accepts it and the map and the warp rules treat it
+ *  like any sibling. Saves persist these records; the wormhole module re-registers them on load. */
+export function registerWormholePlace(record) {
+  if (!record || typeof record.id !== "string" || !record.id || record.kind !== "pocket") return null;
+  if (!wormholePlaces) wormholePlaces = {};
+  wormholePlaces[record.id] = record;
+  rebuildCatalog();
+  return record;
+}
+
+/** Forget one wormhole pocket. Returns whether there was one to forget. */
+export function unregisterWormholePlace(id) {
+  if (!wormholePlaces || !Object.prototype.hasOwnProperty.call(wormholePlaces, id)) return false;
+  delete wormholePlaces[id];
+  if (!Object.keys(wormholePlaces).length) wormholePlaces = null;
+  rebuildCatalog();
+  return true;
+}
+
+/** Forget every wormhole pocket (a load, an import, a new game, a reset). */
+export function clearWormholePlaces() {
+  if (!wormholePlaces) return false;
+  wormholePlaces = null;
+  rebuildCatalog();
+  return true;
+}
 
 const catalog = () => merged || rebuildCatalog();
 

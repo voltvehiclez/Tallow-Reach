@@ -5,9 +5,10 @@
 
 import { GALAXY } from "../data/galaxy.js";
 import { DEFAULT_PLACE, setPlaceCatalog } from "../data/places.js";
-import { state } from "../state/state.js";
+import { state, clearWormholes } from "../state/state.js";
 import { sanitizeSave } from "../state/profile.js";
 import { generateGalaxy, recordSystemVisit } from "./galaxy.js";
+import { registerWormholePlaces } from "./wormholes.js";
 
 /** Resolve a raw save's seed, install its catalog, sanitize and recover safely.
  *  Used by boot, slot load and import before applySave(). Throws on invalid
@@ -51,11 +52,17 @@ export function prepareGalaxySave(raw) {
     // Validation must see the candidate seed's pockets. A bad save must not leave
     // that candidate installed behind the still-running old world.
     setPlaceCatalog(galaxy);
+    // Simple wormholes (slice 14c): a saved pocket of the map is registered before validation so
+    // the id can resolve — the same way a saved run inside an instance is handled above. A fresh
+    // world replaces whatever the old one registered.
+    clearWormholes();
+    registerWormholePlaces(rawWorld, galaxy);
     save = sanitizeSave(input);
   } catch (error) {
     setPlaceCatalog(previousGalaxy);
     state.galaxy = previousGalaxy;
     state.galaxyRecovery = previousRecovery;
+    clearWormholes();
     throw error;
   }
   state.galaxyRecovery = recovery;

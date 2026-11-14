@@ -1,12 +1,19 @@
 // Rifts and instances (refactor step 14).
 //
-// An **instance** is a temporary, generated, harder place reached through a wormhole. It is not on
+// An **instance** is a temporary, generated, harder place reached through a wormhole. A rift is not on
 // the starmap and it is not a pocket of any system: it is a place record registered at runtime (see
 // `registerInstancePlace` in data/places.js) whose features come from a template below. A wormhole
-// the pilot spawns is called a **rift**; the natural, map-visible kind arrives in slice 14c.
+// the pilot spawns is called a **rift**; a **simple wormhole** (slice 14c) is a pocket that spawns
+// itself inside an existing system — on that system's pocket map, warpable like its siblings, a grey
+// sphere called "Simple Wormhole" hanging at its centre — and the pocket, not the instance, carries
+// the clock: its 20 minutes run from the moment the pocket spawns, not from entry.
 //
 // Everything the owner decided on 2026-11-14 lives here as numbers and ids, never as code
-// (docs/VISION.md, "Step 14: rifts, instances and how you may leave one"):
+// (docs/VISION.md, "Step 14: rifts, instances and how you may leave one"), and the spawn tuning for
+// simple wormholes is data too (the owner, 2026-11-14: "There can be 75 simple wormholes in the
+// universe at all times, these are spread out over all the systems. Try to avoid having more than 3
+// wormholes per system. When a wormhole fades away after 20 minutes of being alive, a new one pops
+// up somewhere in the universe." — and no notice when one spawns):
 //
 //   * a rift opens where the ship is, and only in clear space;
 //   * entering and leaving is a key press at close range, never contact;
@@ -30,9 +37,16 @@
 //   difficulty    { hp, dmg } multipliers applied to every hostile spawned inside
 //   guardians     { enemy, count, spawnDist } the wave that opens on entry. `enemy` is an id from
 //                 data/enemies.js; `spawnDist` is [min, max] metres from the arrival point, so
-//                 nothing ever appears in the pilot's face.
+//                 nothing ever appears in the pilot's face. A template with a mixed wave declares
+//                 `{ groups: [ { enemy, count, spawnDist }, ... ] }` instead — one entry per kind,
+//                 each spawning independently (a smuggler site's escort and its freighter are two
+//                 groups). `guardians: null` (or absent) means no wave at all: a peaceful site.
 //   objective     { kind, n } what must be done. `kind` is one of OBJECTIVE_KINDS; `n` is the
-//                 player-facing sentence the HUD shows.
+//                 player-facing sentence the HUD shows. `mine-ore` adds `ore` (an item id from
+//                 data/items.js) and `need` (how many).
+//   reentrant     OPTIONAL true: the run may be left and re-entered at any time — the pilot is
+//                 put back where they came from and the run keeps its live state (guardians,
+//                 rocks, prize). Natural (simple) wormhole sites are re-enterable; a rift is not.
 //   exit          { n, pos, r, requires: [{ type, message }] } — the way out is an object of its own
 //                 in the world, lockable with F and labelled on the HUD: `pos` is where it hangs and
 //                 `r` how big it is drawn. `n` names it as the pilot sees it (a natural wormhole's is
@@ -81,7 +95,7 @@ export const RIFT = {
 };
 
 /** What an objective can ask for. The handlers live in `sim/instances.js`. */
-export const OBJECTIVE_KINDS = ["destroy-guardians"];
+export const OBJECTIVE_KINDS = ["destroy-guardians", "mine-ore"];
 
 /** What may hold an exit shut. The handlers live in `sim/instances.js` (`EXIT_REQUIREMENTS`). */
 export const EXIT_REQUIREMENT_TYPES = ["objective-done"];
@@ -106,8 +120,11 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  *   shattered   a collapsing shell with a cold nebula in it and shattered rock drifting in front of
  *               the whole — painted in gradients only, no stars and no lines, no starfield, no
  *               planet: somewhere that is not the space outside.
+ *   shroud      the grey of a simple wormhole (slice 14c): a dark, near-neutral sky of grey washes
+ *               and one pale radiance, still no stars and no planet. Wraps both the spawned pocket
+ *               itself and the far side of its sites.
  */
-export const SKY_KINDS = ["shattered"];
+export const SKY_KINDS = ["shattered", "shroud"];
 
 export const INSTANCE_TEMPLATES = {
   // The Basic rift's usual run: four hardened guardians hold a small, rich pocket shut.
@@ -204,6 +221,171 @@ export const INSTANCE_TEMPLATES = {
       },
     ],
   },
+
+  // -------------------------------------------------------------------------
+  // Simple wormhole sites (slice 14c). A simple wormhole is a pocket that spawns itself in normal
+  // space — warpable like any pocket, carrying its own 20 minutes from the moment it spawns — so
+  // the *instance* on its far side has no clock of its own (`lifetimeSec: 0`) and its way out is a
+  // **Stable wormhole** with no clock and no lock: every one of these can be left at any time,
+  // which is what makes them "less hardcore rifts" (owner, 2026-11-14). They may be re-entered
+  // until the pocket's timer ends, so what they pay is gone for good once taken. The owner will add
+  // many more sites; these are the first three.
+  //
+  // Shared shape: `reentrant: true`, `lifetimeSec: 0`, `exit.requires: []`, `onExpire` declared as
+  // `collapse` (only a rift kills; these collapse only at the *pocket* level, when their 20 minutes
+  // are spent — the door in normal space fades, the pocket stays on the map until the pilot warps
+  // off and then despawns, and anything still inside can always get out through the Stable
+  // wormhole).
+
+  // A pirate smuggling operation: escorts and a freighter hauling illegal goods. Destroy them all.
+  // The freighter's wreck spills its cargo — that is the whole prize. No canister (owner,
+  // 2026-11-14).
+  wh_smugglers: {
+    n: "Smuggling operation",
+    d: "A smuggler's freighter and its escort, working a stolen lane through somewhere else.",
+    tier: 3,
+    lifetimeSec: 0,
+    reentrant: true,
+    difficulty: { hp: 1, dmg: 1 },
+    // Two groups: the escort flies cover while the freighter runs its route. Both count toward the
+    // same objective: a destroyed wave is a destroyed wave.
+    guardians: {
+      groups: [
+        { enemy: "smuggler", count: 4, spawnDist: [700, 1100] },
+        { enemy: "freighter", count: 1, spawnDist: [300, 500] },
+      ],
+    },
+    objective: {
+      kind: "destroy-guardians",
+      n: "Destroy the smugglers and the freighter",
+      done: "The freighter breaks apart with its cargo aboard.",
+    },
+    exit: {
+      n: "Stable wormhole",
+      pos: [0, 12, 480],
+      r: 34,
+      requires: [],
+    },
+    onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
+    enter: { pos: [0, 0, 320] },
+    sky: { kind: "shroud", col: 0x06070c, glow: 0x9aa3b5, veil: 0x555c6e },
+    features: [
+      {
+        kind: "asteroidField",
+        id: "debris",
+        n: "Smuggler debris",
+        pos: [850, 90, -620],
+        radius: 330,
+        height: 150,
+        count: 18,
+        ore: "asteroid",
+        respawnSec: 420,
+        stable: true,
+        rock: { rMin: 14, rMax: 55, orePerR: 1.5 },
+        salvage: { spread: [600, 150, 600] },
+      },
+    ],
+  },
+
+  // A mining belt of rare Lumenite. Nothing here shoots at you; the prize is the ore itself, so it
+  // is yours the moment it is in your hold — flying in and out is the whole game. No canister.
+  wh_mining: {
+    n: "Lumenite belt",
+    d: "A drifting belt rich in lumenite, pulled somewhere else entirely.",
+    tier: 2,
+    lifetimeSec: 0,
+    reentrant: true,
+    difficulty: { hp: 1, dmg: 1 },
+    guardians: null,               // a peaceful site: the belt never fought back
+    objective: {
+      kind: "mine-ore",
+      ore: "lumenite",
+      need: 4,
+      n: "Mine 4 lumenite",
+      done: "The belt has given up its lumenite.",
+    },
+    exit: {
+      n: "Stable wormhole",
+      pos: [0, -12, 470],
+      r: 34,
+      requires: [],
+    },
+    onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
+    enter: { pos: [0, 0, 330] },
+    sky: { kind: "shroud", col: 0x04060d, glow: 0x8fa8c8, veil: 0x2e4258 },
+    features: [
+      {
+        kind: "asteroidField",
+        id: "veins",
+        n: "Lumenite veins",
+        pos: [650, 70, -550],
+        radius: 420,
+        height: 180,
+        count: 26,
+        ore: "wh_rock",
+        respawnSec: 420,
+        stable: true,
+        rock: { rMin: 18, rMax: 62, orePerR: 1.7 },
+        salvage: { spread: [600, 150, 600] },
+      },
+      {
+        kind: "asteroidField",
+        id: "veins2",
+        n: "Outer veins",
+        pos: [-700, -60, 350],
+        radius: 260,
+        height: 140,
+        count: 12,
+        ore: "wh_rock",
+        respawnSec: 420,
+        stable: true,
+        rock: { rMin: 14, rMax: 48, orePerR: 1.5 },
+        salvage: { spread: [500, 140, 500] },
+      },
+    ],
+  },
+
+  // A hive of guardians that pay well for their ruin. No canister (owner, 2026-11-14): the wrecks
+  // themselves are the reward.
+  wh_hive: {
+    n: "Guardian hive",
+    d: "Something made a nest of the pocket. It pays to break it.",
+    tier: 4,
+    lifetimeSec: 0,
+    reentrant: true,
+    difficulty: { hp: 1, dmg: 1 },
+    guardians: { enemy: "hiveguardian", count: 6, spawnDist: [700, 1200] },
+    objective: {
+      kind: "destroy-guardians",
+      n: "Destroy the hive guardians",
+      done: "The last hive guardian breaks up.",
+    },
+    exit: {
+      n: "Stable wormhole",
+      pos: [0, 10, 460],
+      r: 34,
+      requires: [],
+    },
+    onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
+    enter: { pos: [0, 0, 330] },
+    sky: { kind: "shroud", col: 0x070905, glow: 0x8fae7a, veil: 0x46502f },
+    features: [
+      {
+        kind: "asteroidField",
+        id: "shards",
+        n: "Hive shards",
+        pos: [-800, 70, -520],
+        radius: 360,
+        height: 160,
+        count: 22,
+        ore: "rift_rock",
+        respawnSec: 420,
+        stable: true,
+        rock: { rMin: 16, rMax: 66, orePerR: 1.6 },
+        salvage: { spread: [550, 150, 550] },
+      },
+    ],
+  },
 };
 
 export const INSTANCE_TEMPLATE_IDS = Object.keys(INSTANCE_TEMPLATES);
@@ -238,3 +420,88 @@ export const riftDef = id => (isRift(id) ? RIFTS[id] : null);
 /** The instance id for a template and seed. Derived, never counted, so the same
  *  seed always gives the same instance — including its deterministic rock slots. */
 export const instanceIdFor = (templateId, seed) => `rift-${templateId}-${(seed >>> 0).toString(36)}`;
+
+/* ------------------------------------------------------------------------- */
+/* Simple wormholes (slice 14c): a pocket that spawns itself in normal space    */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * How many simple wormholes hang in the universe, spread over all the systems, and how long each
+ * one lives (the owner, 2026-11-14). The population is a standing rule: when one fades away after
+ * `lifetimeSec`, a new one pops up somewhere in the universe. A fresh universe (or the first load of
+ * a save from before wormholes) fills itself with `population` wormholes whose remaining lives are
+ * rolled from 0 to `lifetimeSec` at random, so collapses never march in sync; a wormhole that
+ * respawns after an expiry always gets the full `lifetimeSec` Again. Tunable.
+ */
+export const WORMHOLE_SPAWN = {
+  population: 75,
+  maxPerSystem: 3,
+  lifetimeSec: 1200,          // 20 minutes of simulation time from the moment a wormhole spawns
+};
+
+/**
+ * Which sites a simple wormhole can open into, weighted. A pool of one-entry rows keeps the odds
+ * readable, and a new site is one entry here — the owner will add many more (the first three are a
+ * pirate smuggling operation, a lumenite belt and a guardian hive). Which template a wormhole
+ * offers is a weighted roll, and it lives in `rollWormholeTemplate` in sim/instances.js.
+ */
+export const WORMHOLE_SITE_POOL = [
+  { id: "wh_smugglers", w: 1 },
+  { id: "wh_mining", w: 1 },
+  { id: "wh_hive", w: 1 },
+];
+
+/**
+ * The pocket a simple wormhole hangs in (owner, 2026-11-14): its own skybox, some interesting
+ * asteroid formations, and in the centre a grey dark sphere called "Simple Wormhole" — a
+ * F-lockable anomaly with a greyish radiance around it, similar to EVE Online's wormholes. The
+ * pocket is a pocket of the system it spawned in: it appears on that system's pocket map, is
+ * warpable like its siblings, and carries the 20-minute clock itself (the instance inside has none).
+ */
+export const WORMHOLE_POCKET = {
+  n: "Simple Wormhole",
+  d: "A wormhole hangs in open space.",
+  enter: { pos: [0, 0, 420] },   // arrive off the sphere's shoulder; the sphere is a few fly-bys away
+  sky: { kind: "shroud", col: 0x06070c, glow: 0x9aa3b5, veil: 0x555c6e },
+  features: [
+    {
+      kind: "asteroidField", id: "formation", n: "Drifting formation",
+      pos: [750, 130, -700], radius: 400, height: 170, count: 16,
+      ore: "asteroid", respawnSec: 420, stable: true,
+      rock: { rMin: 22, rMax: 95, orePerR: 1.6 }, salvage: { spread: [750, 160, 750] },
+    },
+    {
+      kind: "asteroidField", id: "formation2", n: "Outer formation",
+      pos: [-820, -90, 480], radius: 260, height: 130, count: 10,
+      ore: "asteroid", respawnSec: 420, stable: true,
+      rock: { rMin: 12, rMax: 40, orePerR: 1.4 }, salvage: { spread: [650, 140, 650] },
+    },
+  ],
+};
+
+/** The pocket id for a wormhole's seed: `wh-` plus the seed in base 36. Hand-authored ids never
+ *  use this prefix, so a save can never name a pocket the game cannot rebuild. */
+export const wormholeIdFor = seed => `wh-${(seed >>> 0).toString(36)}`;
+
+/**
+ * Normalise a template's `guardians` into the flat list of spawn groups it means — one group per
+ * kind of hostile. Accepts the simple shape `{ enemy, count, spawnDist }`, the mixed shape
+ * `{ groups: [...] }` and `null`/absent (no wave). Both `sim/instances.js` (to spawn) and the
+ * completeness test in `tests/step14-instances.test.mjs` (to check) go through this, so the two
+ * can never disagree about what a template declares.
+ */
+export function waveGroups(guardians) {
+  const norm = g => {
+    const enemy = typeof g?.enemy === "string" ? g.enemy : null;
+    const count = Math.max(0, Math.floor(Number(g?.count) || 0));
+    const [lo, hi] = Array.isArray(g?.spawnDist) && g.spawnDist.length === 2 ? g.spawnDist : [600, 900];
+    const a = Number(lo), b = Number(hi);
+    const min = Number.isFinite(a) && a > 0 ? a : 600;
+    const max = Number.isFinite(b) && b >= min ? b : min;
+    return enemy && count > 0 ? { enemy, count, spawnDist: [min, max] } : null;
+  };
+  if (!guardians || typeof guardians !== "object") return [];
+  if (Array.isArray(guardians.groups)) return guardians.groups.map(norm).filter(Boolean);
+  const one = norm(guardians);
+  return one ? [one] : [];
+}

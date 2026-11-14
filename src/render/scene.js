@@ -99,8 +99,10 @@ const SKY_RADIUS = 15000;
  * returning `{ object, spins }` exactly like a scenery model, so a sky hangs off its place's own
  * group and is shown and hidden with it. Visual only: every number here is a look, never a rule.
  *
- *   shattered  a collapsing shell of dark panels with glowing fractures running through them, and
- *              shards drifting slowly inside. Unstable, and nowhere near the space outside.
+ *   shattered  a painted near-black nebula of cold ember light with shards drifting inside — the
+ *              somewhere a rift's run is. Unstable, and nowhere near the space outside.
+ *   shroud     a dark, near-neutral grey painted sky (slice 14c): the weather of a simple
+ *              wormhole's space. No shards — the place's own formations are the scenery.
  */
 export const SKIES = {
   /**
@@ -158,6 +160,37 @@ export const SKIES = {
     // it. The rock shapes are shared with every field in the game, so they are not this sky's to
     // free.
     const own = [shellGeo, shellMat, texture, shardMat];
+    return { object: g, spins, dispose: () => own.forEach(r => r && r.dispose && r.dispose()) };
+  },
+
+  /**
+   * The grey of a simple wormhole (slice 14c): a dark, near-neutral sky of grey washes — the
+   * radiance a wormhole leaks into the pocket it hangs in, and the somewhere a site's far side is.
+   * Painted like the shattered sky (`render/sky.js` to the same rules: no line, no star, no
+   * contour), wrapped around the inside of a sphere, seen from the back. No shards: the place's
+   * own asteroid formations are the scenery.
+   */
+  shroud(sky) {
+    const g = new THREE.Group();
+
+    const canvas = document.createElement("canvas");
+    paintSky(sky, canvas);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);
+    const shellMat = new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.BackSide,
+      fog: false,
+      depthWrite: false,
+    });
+    const shell = new THREE.Mesh(shellGeo, shellMat);
+    g.add(shell);
+
+    // The shell turns so slowly it barely reads as moving — like a place that is not in a hurry.
+    const spins = [{ object: shell, rate: 0.0009 }];
+    const own = [shellGeo, shellMat, texture];
     return { object: g, spins, dispose: () => own.forEach(r => r && r.dispose && r.dispose()) };
   },
 };

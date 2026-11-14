@@ -75,6 +75,49 @@ export const LOOT_TABLES = {
     ],
   },
 
+  // The ore a wormhole mining belt is made of (step 14c): richer than a rift rock, with the rare
+  // Lumenite mixed in. Tunable.
+  wh_rock: {
+    kind: "pick",
+    entries: [
+      { i: "ferrite", w: 40 },
+      { i: "voidite", w: 30 },
+      { i: "lumenite", w: 30 },
+    ],
+  },
+
+  // A smuggler's wreck (step 14c): a raider's drop with a little of the site's cargo mixed in —
+  // most pilots will never see the illegal goods here, the freighter is the one carrying the real
+  // load. Tunable.
+  smuggler: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [1, 2], w: 1 },
+      { i: "contraband", c: [1, 1], w: 0.2 },
+      { i: "core", c: [1, 1], w: 0.1, j: 0 },
+    ],
+  },
+
+  // A smuggling freighter's seized cargo (step 14c): it hauls illegal goods, so its wreck
+  // spills them. Tunable.
+  freighter: {
+    kind: "drops",
+    entries: [
+      { i: "contraband", c: [2, 4], w: 1, j: 20 },
+      { i: "core", c: [1, 1], w: 0.3, j: 10 },
+    ],
+  },
+
+  // A hive guardian's wreck (step 14c): the hive pays well for those who break it. Tunable.
+  hiveguardian: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [2, 4], w: 1 },
+      { i: "voidite", c: [1, 3], w: 0.8, j: 8 },
+      { i: "core", c: [1, 2], w: 0.4, j: 12 },
+    ],
+  },
+
   // What a rift's rock is made of (step 14): the same ore, but the rare kind is
   // nearly three times as common. This is the "high reward" half of a rift.
   rift_rock: {

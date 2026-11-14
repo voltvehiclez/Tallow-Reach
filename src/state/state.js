@@ -6,7 +6,7 @@
 import { newProfile, newWorld, SAVE_VERSION } from "./profile.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
-import { DEFAULT_PLACE, clearInstancePlaces } from "../data/places.js";
+import { DEFAULT_PLACE, clearInstancePlaces, clearWormholePlaces } from "../data/places.js";
 
 // Before the local ship exists, input can still be prepared for it. Once created,
 // every pilot owns its own controls; legacy aliases expose the selected local pilot.
@@ -79,6 +79,7 @@ export function captureInstances() {
       totalLifetime: Math.max(0, Number(record.totalLifetime) || 0),
       warned: !!record.warned,
       objectiveMet: !!record.objective?.met,
+      mined: Math.max(0, Math.floor(Number(record.mined) || 0)),
       entry: record.entry
         ? {
             pos: record.entry.pos.toArray(),
@@ -105,6 +106,32 @@ export function captureInstances() {
 }
 
 /**
+ * Snapshot every live simple wormhole into the world record (save v21). A wormhole is the pocket
+ * it spawned in plus the clock that runs from that spawn; the instance behind it is saved by
+ * `captureInstances()`. Doomed (collapsed) wormholes only exist while somebody is still in them —
+ * the wormhole module removes the others as soon as their clock ends — so whatever is live is
+ * worth saving. The seed rebuilds the rest.
+ */
+export function captureWormholes() {
+  const out = [];
+  for (const record of state.wormholes.values()) {
+    if (!record) continue;
+    out.push({
+      id: record.id,
+      parent: record.parent,
+      template: record.template,
+      seed: record.seed >>> 0,
+      tier: record.tier,
+      lifetime: Math.max(0, Number(record.lifetime) || 0),
+      totalLifetime: Math.max(0, Number(record.totalLifetime) || 0),
+      doomed: record.doomed === true,
+    });
+  }
+  state.worldState.wormholes = out;
+  return out;
+}
+
+/**
  * Snapshot the local profile and hosted world as a combined save object.
  * Captures the live resume point and every temporary run first, so every save
  * path — autosave, slot and export code — records where the pilot actually is,
@@ -113,6 +140,7 @@ export function captureInstances() {
 export function currentSave() {
   captureResume();
   captureInstances();
+  captureWormholes();
   state.worldState.destination = state.ui.destination;
   return {
     v: SAVE_VERSION,
@@ -184,6 +212,10 @@ export const state = {
   // lifetime, objective, exit, cache }. Session runtime only in slice 14a; slice 14b saves the one
   // the local pilot is inside so a run survives a quit.
   instances: new Map(),
+  // Simple wormholes (slice 14c): spawned pocket id -> { id, parent, template, seed, tier,
+  // lifetime, totalLifetime, doomed }. The pocket IS saved (it carries the 20-minute clock), so a
+  // reload finds the wormhole still hanging in its system with the time it had left.
+  wormholes: new Map(),
 
   // The local pilot's place entities. Existing UI/tests read state.world; sim
   // systems that act on another pilot pass an explicit place id instead.
@@ -292,11 +324,24 @@ export function resetPlaces() {
   state.places.clear();
   state.place = DEFAULT_PLACE;
   clearInstances();
+  clearWormholes();
 }
 
 /** The runtime record of the instance a place id belongs to, or null for an ordinary pocket. */
 export function instanceAt(id) {
   return (typeof id === "string" && state.instances.get(id)) || null;
+}
+
+/** The runtime record of the simple wormhole a pocket id belongs to, or null for an ordinary
+ *  pocket. A wormhole record is the *door's* timer and parent system — the instance behind it is a
+ *  separate record in `state.instances`. */
+export function wormholeAt(id) {
+  return (typeof id === "string" && state.wormholes.get(id)) || null;
+}
+
+/** True while this id is the pocket of a simple wormhole, live or faded. */
+export function isWormholePocket(id) {
+  return !!wormholeAt(id);
 }
 
 /** True while this pilot is inside a temporary instance rather than a pocket of the map. */
@@ -307,10 +352,12 @@ export function insideInstance(player = localPlayer()) {
 
 /** Drop every runtime instance record and its place registration (a load, a reset). */
 export function clearInstances() {
-  if (!state.instances.size) {
-    clearInstancePlaces();
-    return;
-  }
-  state.instances.clear();
+  if (state.instances.size) state.instances.clear();
   clearInstancePlaces();
+}
+
+/** Drop every runtime wormhole record and its pocket registration (a load, a reset). */
+export function clearWormholes() {
+  if (state.wormholes.size) state.wormholes.clear();
+  clearWormholePlaces();
 }

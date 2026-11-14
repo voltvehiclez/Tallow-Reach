@@ -8,6 +8,32 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Contract guidance says where the cargo goes, not how much is aboard
+
+Owner request: "Currently recover contracts and mine contracts update the mission subtext in top right of ship ui depending
+on how many items you have picked up. Avoid this for recovery/delivery missions. It is simplest to have a mission title
+'Recover x Derelict crates' and sub text 'deliver them to Meridian station' … progress numbers are not good … since
+hypothetically you could have a lot of derelict crates in the station." **Save version unchanged (v19)**; rebuild needed
+(`npm run build`, then `npm test`).
+
+- **The two delivery contracts read as a delivery from the moment they are taken.** `mine` and `salvage` are flagged
+  `delivery: true` in `data/missions/contracts.js`, and the runner (`missionNextText`) shows the hand-in sentence for them
+  instead of the gather step's sentence, which counted what had been picked up so far. The HUD's top-right block now reads
+  **Mine 12 Ferrite — Deliver the Ferrite to Meridian Station.** and **Recover 3 derelict crates — Deliver them to Meridian
+  Station.**, steady while mining, while carrying, and after the load is stored.
+- **No running tally on a delivery contract.** `handInNextText` no longer appends "You have 2 of 3." for them: the count
+  only ever saw the ship's hold while the station store may already hold part of the load. The docked hand-in button still
+  reports the exact shortfall, and hunt contracts keep their "0 of 4 defeated" line because kills cannot be banked.
+- **Read from the data, not from the saved step**, so a contract accepted before this build shows the new sentence too;
+  old saves keep the wording they were stamped with until they fall back to `handIn.objective`.
+- **Tests:** `tests/step13-missions.test.mjs` and `tests/mission-handin-station.test.mjs` now assert the delivery sentence,
+  that it carries no digits, and that it does not change when the hold fills up. 502 tests pass.
+
+Files: `src/data/missions/contracts.js`, `src/sim/missions.js`, `tests/step13-missions.test.mjs`,
+`tests/mission-handin-station.test.mjs`, `docs/MISSION_RULES.md`, `src/sim/README.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: Notices hang just below the flight message line
 
 Owner request: "Make it so that all pop up notifications like the confirmation after you have discarded an items appear

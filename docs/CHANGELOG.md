@@ -20,6 +20,24 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
+
+Owner, 2026-11-14, spelling out the natural-wormhole model: a pocket spawns itself in normal space, its 20 minutes run
+from the pocket's spawn, running out only collapses the way in, and the far side is always escapable through a
+**Stable wormhole** with no clock. The build is **save v21** (v20 → v21 migration, unchanged storage keys, old-save test).
+**Not playtested yet — ROADMAP 14c stays unticked and the slice is a draft until the owner passes it**
+(`testing/TESTING-14C-WORMHOLES.md`). Rebuild needed (`npm run build`, then `npm test`).
+
+- **How many, where.** A **standing population of 75** simple wormholes in the universe at all times, **never more than 3 per system** (`WORMHOLE_SPAWN`). A fresh universe (or a legacy fill from an old save) rolls each one's remaining clock at random between 0 and 20 minutes so the sky never cycles in sync; **every replacement that pops up after an expiry gets the full 20 minutes**. When one expires, a replacement spawns somewhere else. No spawn notice — the marker on the system's map is all the warning there is.
+- **The pocket** is a registered place (like a rift instance, through `registerWormholePlace`): a skybox, interesting asteroid formations, and a centre **grey dark sphere** the pilot can lock — "Simple Wormhole", greyish radiance, colder than a rift (`views.js` `buildSimpleWormhole`; new `shroud` sky in `SKY_KINDS` with `SKIES.shroud` in `render/scene.js`). It hangs on that system's map at a fixed dot derived from its seed, warps like any other pocket, and carries **20 minutes from pocket spawn, saved in `world.wormholes`** (id, parent system, seed, template, remaining clock).
+- **The far side** is a site from `WORMHOLE_SITE_POOL`: **wh_smugglers** (smugglers and a freighter hauling illegal goods — destroy them), **wh_mining** (a lumenite belt — a new `mine-ore` objective kind, `ore: "lumenite"`, need 4, no hostiles, no cache), **wh_hive** (a guardian hive — good loot, **no cache**). Each site is `reentrant`: leave at any time through the always-open **Stable wormhole** (no clock, never locked); come back until the 20 minutes are spent. Objective and rewards are one-time per wormhole (the run is saved; `mined` progress is captured in `world.instances`).
+- **Expiry fires `collapse` only** — the entry fades in normal space, the Stable wormhole remains usable, and nothing `kill`-s, ever. A collapsed pocket lingers only while the pilot is in it or in its run; otherwise it despawns at once (proposed rule, not owner-approved yet). A replacement pops up elsewhere either way.
+- **Data the slice adds:** items `lumenite` (ore, v150) and `contraband` (trade, v220, ordinary cargo — no legality system); enemies `smuggler` (its own hostile so hunt contracts never pay for it), `freighter` ("Smuggling Freighter") and `hiveguardian`; loot `wh_rock`, `smuggler`, `freighter`, `hiveguardian`; the `mine-ore` entry in `OBJECTIVE_KINDS`; `{groups: [...]}` for compatible wave declarations (backwards compatible with the single-`{enemy,count}` form); `waveGroups()` normaliser in `data/instances.js`.
+- **Save v21.** `SAVE_VERSION = 21`; `world.instances` runs keep their `mined` progress; a new `cleanWormholes` keeps `world.wormholes` honest (id re-derivable from seed, parent must be a system of this galaxy, template must be a real re-enterable site, clock kept). A saved wormhole pocket rebuilds before validation the same way a saved run site does. **step 15 is v22.** Old-save tests cover the migration; `step14-instances.test.mjs` re-derives wormhole records and templates.
+- **Open questions for the owner** (asked in the playtest guide / next round): equal-weight site pool; contraband as ordinary cargo; the countdown's visibility (starmap tooltip? HUD?); spawn-eligibility (home system? uncharted?); what happens to a collapsed pocket nobody sees; whether the door is lockable only for a lock, not a trigger.
+
+Files: `src/data/instances.js`, `src/data/items.js`, `src/data/loot.js`, `src/data/enemies.js`, `src/data/places.js`, `src/state/state.js`, `src/state/profile.js`, `src/sim/wormholes.js` (new), `src/sim/instances.js`, `src/sim/session.js`, `src/sim/step.js`, `src/sim/galaxy-session.js`, `src/main.js`, `src/util/events.js`, `src/render/views.js`, `src/render/scene.js` and the folder READMEs, `tests/step14-instances.test.mjs`, `tests/step14c-wormholes.test.mjs` (new), `testing/TESTING-14C-WORMHOLES.md` (new), docs (`HANDOFF.md`, `ROADMAP.md`, `CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`).
+
 ## 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
 
 Owner, on the round-two build: "Works well. 2 things." — the painted cracks and filaments in the rift sky read as
@@ -407,36 +425,13 @@ number of items and are consumed upon hand in … must clear the space of the mi
 - **Docs:** `docs/MISSION_RULES.md` (recovery-contract paragraph, trimmed to stay inside its size cap), `src/sim/README.md`,
   `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
 
-## 2026-11-13: Contract guidance says where the cargo goes, not how much is aboard
-
-Owner request: "Currently recover contracts and mine contracts update the mission subtext in top right of ship ui depending
-on how many items you have picked up. Avoid this for recovery/delivery missions. It is simplest to have a mission title
-'Recover x Derelict crates' and sub text 'deliver them to Meridian station' … progress numbers are not good … since
-hypothetically you could have a lot of derelict crates in the station." **Save version unchanged (v19)**; rebuild needed
-(`npm run build`, then `npm test`).
-
-- **The two delivery contracts read as a delivery from the moment they are taken.** `mine` and `salvage` are flagged
-  `delivery: true` in `data/missions/contracts.js`, and the runner (`missionNextText`) shows the hand-in sentence for them
-  instead of the gather step's sentence, which counted what had been picked up so far. The HUD's top-right block now reads
-  **Mine 12 Ferrite — Deliver the Ferrite to Meridian Station.** and **Recover 3 derelict crates — Deliver them to Meridian
-  Station.**, steady while mining, while carrying, and after the load is stored.
-- **No running tally on a delivery contract.** `handInNextText` no longer appends "You have 2 of 3." for them: the count
-  only ever saw the ship's hold while the station store may already hold part of the load. The docked hand-in button still
-  reports the exact shortfall, and hunt contracts keep their "0 of 4 defeated" line because kills cannot be banked.
-- **Read from the data, not from the saved step**, so a contract accepted before this build shows the new sentence too;
-  old saves keep the wording they were stamped with until they fall back to `handIn.objective`.
-- **Tests:** `tests/step13-missions.test.mjs` and `tests/mission-handin-station.test.mjs` now assert the delivery sentence,
-  that it carries no digits, and that it does not change when the hold fills up. 502 tests pass.
-
-Files: `src/data/missions/contracts.js`, `src/sim/missions.js`, `tests/step13-missions.test.mjs`,
-`tests/mission-handin-station.test.mjs`, `docs/MISSION_RULES.md`, `src/sim/README.md`, `testing/TESTING-BASELINE.md`.
-
 ---
 
 ---
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: Contract guidance says where the cargo goes, not how much is aboard
 - 2026-11-13: Notices hang just below the flight message line
 - 2026-11-13: Right-click Discard everywhere — how many, then "are you sure?"
 - 2026-11-13: Press I in space to read the ship's inventory, and the chart no longer stops the clock

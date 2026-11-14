@@ -14,7 +14,7 @@ import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
-import { isInstanceTemplate, instanceIdFor } from "../data/instances.js";
+import { isInstanceTemplate, instanceTemplate, instanceIdFor, wormholeIdFor, WORMHOLE_SPAWN } from "../data/instances.js";
 
 const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
 
@@ -73,7 +73,12 @@ function worldWithStationStores(fields, stationStores) {
 //      prize stock and the spot it was entered from, so logging out mid-rift comes
 //      back inside it. v19 and older saves have no runs — they resume where they
 //      always did, because slice 14a never saved an instance.
-export const SAVE_VERSION = 20;
+//   21 adds world.wormholes: the simple wormhole pockets that spawn themselves in
+//      normal space — the pocket id, the system it hangs in, the site behind it and
+//      how much of its 20 minutes is left. A run's own record also keeps how much of
+//      a mine-ore objective it has mined. v20 and older saves have no wormholes;
+//      the universe fills itself on the next load.
+export const SAVE_VERSION = 21;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -200,6 +205,7 @@ export function newWorld() {
     destination: null, // local session destination, saved with this world
     resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
     instances: [],     // temporary runs the pilot is inside (rifts); see cleanInstanceRuns
+    wormholes: [],     // simple wormhole pockets in normal space; see cleanWormholes
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
     missionState: {},  // story-script state keyed by place id
   }, { [HOME_STATION_KEY]: newStock() });
@@ -563,6 +569,7 @@ function cleanInstanceRuns(raw) {
       totalLifetime,
       warned: entry.warned === true,
       objectiveMet: entry.objectiveMet === true,
+      mined: Number.isFinite(+entry.mined) && +entry.mined >= 0 ? Math.floor(+entry.mined) : 0,
       entry: cleanResume(entry.entry),
     };
     if (entry.cache && typeof entry.cache === "object" && !Array.isArray(entry.cache) && Array.isArray(entry.cache.stock)) {
@@ -579,6 +586,54 @@ function cleanInstanceRuns(raw) {
       };
     }
     out.push(run);
+  }
+  return out;
+}
+
+/**
+ * The simple wormhole pockets a world keeps (save v21). A wormhole stores only what a rebuild
+ * cannot work out for itself: its seed (which derives its pocket id, its far-side site and the
+ * instance behind it), the system it hangs in, how much of its clock is left and whether it has
+ * already faded. The pocket's own content comes from `WORMHOLE_POCKET` in `data/instances.js`.
+ * An id `wormholeIdFor` would not produce, a parent that is not a system of this galaxy, or a
+ * template that is not a re-enterable site is dropped — a save can never name a place the game
+ * cannot rebuild.
+ */
+function cleanWormholes(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  const seen = new Set();
+  const perParent = new Map();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const seed = Number.isFinite(+entry.seed) ? +entry.seed >>> 0 : null;
+    if (seed === null) continue;
+    const id = wormholeIdFor(seed);
+    if (entry.id !== id || seen.has(id)) continue;
+    const template = typeof entry.template === "string" && isInstanceTemplate(entry.template)
+      ? entry.template : null;
+    // Only the natural, re-enterable sites may spawn as persistent pockets — never a rift's template.
+    if (!template || !instanceTemplate(template)?.reentrant) continue;
+    const parent = typeof entry.parent === "string" && isSystem(entry.parent) ? entry.parent : null;
+    if (!parent) continue;
+    const secs = v => (Number.isFinite(+v) && +v >= 0 ? +v : 0);
+    const totalLifetime = secs(entry.totalLifetime);
+    const lifetime = totalLifetime > 0 ? Math.min(secs(entry.lifetime), totalLifetime) : secs(entry.lifetime);
+    // The standing-population rule is a hard bound: never more than `maxPerSystem` in one system,
+    // even in a hand-edited save. First come, first kept.
+    if ((perParent.get(parent) || 0) >= Number(WORMHOLE_SPAWN.maxPerSystem)) continue;
+    perParent.set(parent, (perParent.get(parent) || 0) + 1);
+    seen.add(id);
+    out.push({
+      id,
+      parent,
+      template,
+      seed,
+      tier: Number.isFinite(+entry.tier) && +entry.tier > 0 ? +entry.tier : 1,
+      lifetime,
+      totalLifetime,
+      doomed: entry.doomed === true,
+    });
   }
   return out;
 }
@@ -772,9 +827,13 @@ export function sanitizeWorld(raw) {
   // v20: temporary runs. A pilot inside one is in a place that is not a pocket of
   // the map, so the run list also decides whether the saved place id still exists.
   const instances = cleanInstanceRuns(raw.instances);
+  // v21: simple wormhole pockets. They are pockets of the map, so a pilot may be
+  // standing in one — it registers before this validation runs.
+  const wormholes = cleanWormholes(raw.wormholes);
   const inRun = typeof raw.place === "string" && instances.some(r => r.id === raw.place) ? raw.place : null;
   // v14: current pocket. v13 and older saves stored the same ids as `sector`.
-  const place = inRun || (relocateDockedStation ? detachedPlace
+  const inWormhole = typeof raw.place === "string" && wormholes.some(w => w.id === raw.place) ? raw.place : null;
+  const place = inRun || inWormhole || (relocateDockedStation ? detachedPlace
     : typeof raw.place === "string" && isPocket(raw.place)
       ? raw.place
       : typeof raw.sector === "string" && isPocket(raw.sector)
@@ -791,6 +850,7 @@ export function sanitizeWorld(raw) {
     destination: cleanDestination(raw.destination),
     resume: cleanResume(raw.resume),
     instances,
+    wormholes,
     placeMemory: cleanPlaceMemory(raw.placeMemory),
     missionState: cleanMissionState(raw.missionState),
   }, stationStores);
