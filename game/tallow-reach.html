@@ -1057,20 +1057,18 @@ button.mod-bay.on {
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-/* Title row: the confirm buttons live up here with the title, right beside
-   where the player just right-clicked — the whole popover is one row closer to
-   the mouse than a footer action line (owner, bug report 2026-11-14). */
+/* Title row: the confirm buttons live directly under the title, always on their
+   own line. The wrap decided differently per panel width/zoom — the owner wants
+   this exact stack on every resolution, so it is a column, not a wrap (2026-11-14). */
 .inv-sell-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
-  flex-wrap: wrap;
   margin-bottom: 8px;
 }
 .inv-sell-head > strong {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 100%;
   margin-bottom: 0;
   color: var(--ice);
   font-size: 12px;
@@ -1082,6 +1080,7 @@ button.mod-bay.on {
 .inv-sell-head .inv-sell-actions {
   flex: 0 0 auto;
   margin-top: 0;
+  justify-content: flex-start;
 }
 .inv-sell-popover label,
 .inv-discard-popover label {
