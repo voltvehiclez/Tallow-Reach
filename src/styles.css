@@ -388,6 +388,42 @@ body.no-reticle canvas {
   #cargo .inv-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
+/* ---- Rift cache trade (R beside a canister): the hold on the left, the canister on the right.
+   The flight card's frame and the station Inventory's tiles, side by side, because a trade is two
+   containers and the pilot should see both at once (owner 2026-11-14). ---- */
+#cache {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 6, 8, .55);
+  backdrop-filter: blur(3px);
+}
+#cache[hidden] { display: none; }
+.cache-card {
+  width: min(1160px, 100%);   /* two grids of five tiles across, and the gap between them */
+}
+.cache-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+/* Five tiles across and seven rows down in each column: the same tile as everywhere else, and the
+   35 slots the flight card gives a hold, so neither side scrolls before it is full. */
+#cache .inv-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  height: calc(7 * var(--inv-row-height) + 6 * var(--inv-row-gap));
+}
+
+/* A narrow window cannot hold two grids: the canister goes below the hold, four tiles across. */
+@media (max-width: 900px) {
+  .cache-cols { grid-template-columns: minmax(0, 1fr); }
+  #cache .inv-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 /* In flight a tile is a label, not a move button — but right-click still discards. */
 .inv-item-read {
   cursor: context-menu;

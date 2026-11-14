@@ -25,6 +25,7 @@ import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog } from "./ui/missionlog.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
 import { setupCargo, openCargo, closeCargo, isCargoOpen, canOpenCargo } from "./ui/cargo.js";
+import { setupCache, closeCache, isCacheOpen } from "./ui/cache.js";
 import { canPause, canOpenStarmap } from "./ui/overlays.js";
 import { updateMenuView, menuView, resizeMenuView } from "./render/menuview.js";
 import { updateOutfitting } from "./ui/outfitting.js";
@@ -95,10 +96,12 @@ setupPause();
 setupMissionLog();
 setupStarmap();
 setupCargo();
+setupCache();
 installInput();
 syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
-  canStart: () => !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen(),
+  canStart: () =>
+    !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen() && !isCacheOpen(),
   getScale: () => SHIPS[state.profile.ship].sc,
 });
 
@@ -121,7 +124,8 @@ showPlace(state.place);
 
 on("action", ({ name, repeat, to: nameTo, key }) => {
   const pauseKey = key !== "Escape";
-  const playing = !state.ui.intro && !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen();
+  const playing = !state.ui.intro && !localPlayer().docked && !state.paused && !isStarmapOpen() &&
+    !isCargoOpen() && !isCacheOpen();
   switch (name) {
     case "lock":
       if (playing && !repeat) toggleLock();
@@ -137,8 +141,12 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       break;
     case "rift":
       // Step 14: one deliberate press goes in or out of a wormhole — into a rift door that is
-      // within range, or out through the instance's own way out. Never by contact.
-      if (playing && !repeat && !state.warp) riftAction(localPlayer());
+      // within range, or out through the instance's own way out. Never by contact. Beside a run's
+      // canister the same press opens the trade (ui/cache.js), and pressing it again puts it away:
+      // the pilot's hands are on the cargo, so R stays the canister's key until they are done.
+      if (repeat) break;
+      if (isCacheOpen()) closeCache();
+      else if (playing && !state.warp) riftAction(localPlayer());
       break;
     case "starmap":
       if (!repeat) {
@@ -172,6 +180,10 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       } else if (isCargoOpen()) {
         // Esc just closes the hold; P closes it and opens the pause card.
         closeCargo();
+        if (name === "pause" && pauseKey) setPause(true);
+      } else if (isCacheOpen()) {
+        // The same, for a canister: Esc puts the trade away, P puts it away and pauses.
+        closeCache();
         if (name === "pause" && pauseKey) setPause(true);
       } else if (canPause()) setPause(!state.paused);
       break;

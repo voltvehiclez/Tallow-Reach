@@ -14,7 +14,7 @@ import { moduleListName } from "../sim/guns.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
-import { exitDenial, instanceTimeLeft } from "../sim/instances.js";
+import { cacheUnits, exitDenial, instanceTimeLeft } from "../sim/instances.js";
 import { V } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
@@ -179,7 +179,7 @@ function instanceHtml(record) {
     lines.push(`<small>${escHud(record.n)} collapses in ${clockText(instanceTimeLeft(record))}</small>`);
   }
   const cache = record.cache;
-  if (cache && cache.stock && cache.stock.length) {
+  if (cacheUnits(cache) > 0) {
     lines.push(
       `<small>${escHud(
         cache.open ? `${cache.n} is open — fly to it and press R` : `${cache.n} is locked`

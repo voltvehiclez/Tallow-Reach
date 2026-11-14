@@ -22,6 +22,7 @@
 //   tier          advisory difficulty, above the map's 1..3 (it selects nothing by itself today;
 //                 content reads it the way a pocket's tier selects encounters)
 //   lifetimeSec   simulation seconds before this instance collapses; 0 = no limit of its own.
+//                 Left out, a run gets `RIFT.defaultLifetimeSec` (20 minutes) instead.
 //                 Simulation seconds only advance on unpaused ticks, so pausing never burns a
 //                 clock. A rift's 20 minutes run from entry and are declared here. A simple
 //                 wormhole's 20 minutes run from the moment its pocket spawns in normal space, so
@@ -41,15 +42,20 @@
 //   onExpire      { kind, message } — `kind` is one of EXPIRY_OUTCOME_TYPES.
 //   cache         { n, loot, pos, r } the prize: a canister, locked but plainly visible from the
 //                 moment the pilot arrives. Once the objective is done, flying within
-//                 `RIFT.cacheRange` of it and pressing R opens it and moves what is inside into the
-//                 ship's hold — as much as fits, and the rest waits for the next press. `loot` is a
-//                 table id from data/loot.js and its roll belongs to the instance, so one seed is one
-//                 reward. Omit `cache` for an instance with no prize.
+//                 `RIFT.cacheRange` of it and pressing R opens a trade: the ship's hold and the
+//                 canister side by side, and clicking moves cargo between them (shift-click moves
+//                 the whole stack), in either direction, until the canister is empty and gone.
+//                 `loot` is a table id from data/loot.js and its roll belongs to the instance, so
+//                 one seed is one reward. Omit `cache` for an instance with no prize.
 //   enter         { pos } the arrival point inside. The way out is its own object at `exit.pos`, so a
 //                 pilot arrives looking at the run rather than sitting inside the door home.
-//   sky           { kind, col, glow, cracks, shards } the sky of somewhere else, drawn by
-//                 `render/scene.js` from its `SKIES` registry. An instance has no starfield and no
-//                 planet: nothing here is copied from the space outside.
+//   sky           { kind, col, glow, veil, cracks, shards } the sky of somewhere else, drawn by
+//                 `render/scene.js` from its `SKIES` registry and painted by `render/sky.js`: `col`
+//                 the near-black it is seen through, `glow` and `veil` the two lights of its nebula,
+//                 `cracks` the colour of the fractures, `shards` how many broken rocks drift in front
+//                 of it. An instance has no starfield and no planet: nothing here is copied from the
+//                 space outside, and there are no stars in it either — a collapsed pocket has no suns
+//                 of its own to show (owner 2026-11-14).
 //   features      ordinary place features (asteroidField, ...), read by the same generic loader a
 //                 pocket uses (sim/places.js). Never a `spawner` — an instance's hostiles are its
 //                 declared wave, so its content is exactly what this file says — and never a `planet`.
@@ -61,7 +67,10 @@
 export const RIFT = {
   enterRange: 200,     // fly this close to a rift in space and press R to go in
   exitRange: 220,      // inside, fly this close to the way out (its own portal) and press R to leave
-  cacheRange: 60,      // inside, fly this close to the canister and press R to open it
+  cacheRange: 60,      // inside, fly this close to the canister and press R to trade with it
+  // The clock every run gets unless its template says otherwise (owner 2026-11-14: "rifts default
+  // time is 20 minutes unless specified"). A template's own `lifetimeSec` still wins.
+  defaultLifetimeSec: 1200,
   warnSec: 60,         // the HUD warns this long before an instance collapses
 
   // "At least 1 km from a big structure like asteroids or stations" (owner). Measured to the thing
@@ -93,8 +102,9 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  * file that knows how one is drawn: a template names a kind and its colours, so a new look for a new
  * kind of instance is a data line plus one builder.
  *
- *   shattered   a collapsing shell of dark panels with glowing fractures and drifting shards — no
- *               starfield, no planet: somewhere that is not the space outside.
+ *   shattered   a collapsing shell with a cold nebula in it, glowing fractures running through the
+ *               break, and shattered rock drifting in front of the whole — no stars, no starfield, no
+ *               planet: somewhere that is not the space outside.
  */
 export const SKY_KINDS = ["shattered"];
 
@@ -104,7 +114,7 @@ export const INSTANCE_TEMPLATES = {
     n: "Guardian rift",
     d: "A collapsed pocket, held shut by its own guardians.",
     tier: 4,
-    lifetimeSec: 1200,           // 20 minutes of unpaused play
+    // No `lifetimeSec`: an ordinary run gets the default clock — 20 minutes of unpaused play.
     // The guardians are authored for a rift (`data/enemies.js`), so a run does not inflate them:
     // these multipliers are what a run would apply to a hostile it borrowed from the map.
     difficulty: { hp: 1, dmg: 1 },
@@ -126,7 +136,10 @@ export const INSTANCE_TEMPLATES = {
     onExpire: { kind: "kill", message: "The rift collapsed with your ship inside it." },
     cache: { n: "Rift cache", loot: "rift_cache", pos: [0, -30, -520], r: 10 },
     enter: { pos: [0, 0, 320] },
-    sky: { kind: "shattered", col: 0x1a0c06, glow: 0xff7a2a, cracks: 0xffb267, shards: 26 },
+    // Dark, cold and a little bit wrong (owner 2026-11-14: "less orange ... darker, no stars, some
+    // mysterious nebula and shattered asteroids"). The one warm thing left in it is the fracture
+    // hairline, which is thin enough to be an ember in a collapsed pocket rather than the sky's mood.
+    sky: { kind: "shattered", col: 0x05060b, glow: 0x7a5cc4, veil: 0x2a8794, cracks: 0xff9a52, shards: 30 },
     features: [
       {
         kind: "asteroidField",
@@ -150,7 +163,8 @@ export const INSTANCE_TEMPLATES = {
     n: "Deep rift",
     d: "A deep collapse. Something heavier is holding it shut.",
     tier: 6,
-    lifetimeSec: 1500,           // 25 minutes: a bigger run gets a longer clock
+    // No `lifetimeSec`: a deep run gets the default clock, the same 20 minutes as any other rift
+    // (owner 2026-11-14). What makes it deeper is the wave, the debris and the prize, not the time.
     difficulty: { hp: 1, dmg: 1 },
     guardians: { enemy: "deepguardian", count: 6, spawnDist: [900, 1300] },
     objective: {
@@ -169,7 +183,9 @@ export const INSTANCE_TEMPLATES = {
     onExpire: { kind: "kill", message: "The deep rift collapsed with your ship inside it." },
     cache: { n: "Deep rift cache", loot: "rift_cache_deep", pos: [0, -40, -640], r: 12 },
     enter: { pos: [0, 0, 360] },
-    sky: { kind: "shattered", col: 0x14060a, glow: 0xff5a1e, cracks: 0xff9a5a, shards: 34 },
+    // A deeper collapse is darker and colder than the ordinary one, with a second light under the
+    // first and colder fractures: the same kind of place, further gone, and nothing warm left in it.
+    sky: { kind: "shattered", col: 0x03040a, glow: 0x54439f, veil: 0x9c4279, cracks: 0xb9a4ff, shards: 40 },
     features: [
       {
         kind: "asteroidField",

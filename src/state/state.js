@@ -87,8 +87,16 @@ export function captureInstances() {
             en: record.entry.en,
           }
         : null,
+      // The prize is saved as it stands — what the pilot has traded out of it stays out of it. Its
+      // live form is a stock map (`{ itemId: count }`, the shape every container uses); the saved
+      // form is the list of stacks slice 14b defined, and `restoreInstance` reads it back.
       ...(record.cache
-        ? { cache: { stock: record.cache.stock.map(s => ({ i: s.i, c: s.c })), open: !!record.cache.open } }
+        ? {
+            cache: {
+              stock: Object.keys(record.cache.stock || {}).map(i => ({ i, c: record.cache.stock[i] })),
+              open: !!record.cache.open,
+            },
+          }
         : {}),
     });
   }
@@ -205,6 +213,7 @@ export const state = {
     intro: true,
     starmap: null,     // active chart; null while closed
     cargo: null,       // the in-flight ship inventory; null while closed
+    cache: null,       // the rift-cache trade (ui/cache.js); null while closed
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
     tab: "m",          // m contracts, l mission log, h hangar, o outfitting, i inventory, p shop, b base, s saves

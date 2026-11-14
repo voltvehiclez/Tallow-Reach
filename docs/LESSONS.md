@@ -221,3 +221,15 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** the test(s) or linter rule that fail if it breaks. If there is none yet, write
   "NOT YET: add a test" and add it in the same change.
 ```
+
+### L21. When a new ask makes old code look like a special case, the shape underneath is usually the cause
+
+The canister's prize began as a list of `{ i, c }` stacks because that was the shape a save could carry, and the same
+shape is why the ordinary inventory rules could not reach it: `sim/inventory.js` speaks stock maps, so `openCache` had
+to hand-carry cargo unit by unit, and every question about the canister — what is in it, is there room, move three of
+these — needed a loop of its own. When the owner asked for a trade (two inventories side by side, clicks moving cargo
+between them), the fix was not a panel bolted onto the old shape: it was making the canister an ordinary stock map
+first, after which the panel was two columns of the grid that already existed and every move was the existing
+`moveItem`. The save kept the list shape by converting at the two edges (`captureInstances`, `restoreInstance`), so no
+save version moved. Before building UI for a container, ask what shape the container is: if the inventory layer cannot
+address it, the panel will end up re-implementing the inventory layer.
