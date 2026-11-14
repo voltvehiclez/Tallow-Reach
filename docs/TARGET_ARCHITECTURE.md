@@ -123,10 +123,27 @@ Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing gen
 introduced in v18 and is retained in current save v19 alongside mission progress. The map is not a fixed two-level container: pockets may later have optional
 child places using the same place record.
 
-**Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole. It
-is not on the system map and is discarded on exit. Same loader, different source. A future temporary
-instanced system that needs ordered internal travel can use the existing `intraSystem: "links"` data
-policy; instance creation/lifecycle itself is still step 14 work.
+**Instance.** A temporary place made from `(definition, seed, tier)` when you enter a wormhole; one the player spawns
+is a **rift**. The instance itself is never on the system map. Same loader, different source: its features come from
+`data/instances.js` and resolve through the same `placeDef` path a pocket uses. Its exit rules, its lifetime, what
+running out of time does, and its locked loot cache are data on the instance, not code. An instance in progress **is
+saved** (owner decision 2026-11-14 in VISION.md): quitting inside restores the pilot at the exact spot with the same
+enemies, crates, rocks, objective progress and time left, so `world.place` may be an instance id and the save
+validator, the galaxy loader and the resume path must all accept one. It is discarded when the pilot leaves it, when
+its lifetime ends, or when the pilot dies inside — and dying inside despawns it instantly. The locked cache is what
+keeps a saved run from being an exploit: expiry, quitting and death can never hand it over.
+
+**Wormhole.** The door to an instance, and the clock that door carries (owner model, 2026-11-14). A **rift** is
+deployed by the pilot in an ordinary pocket, its clock runs from entry, and running out is the `kill` outcome. A
+**simple wormhole** (slice 14c) lives in a pocket that spawns itself in normal space and is warpable like any pocket
+while it lasts; its 20 minutes run from that spawn, and running out is the `collapse` outcome — the wormhole object
+fades, the outer pocket leaves the map when the pilot warps off and then despawns, while the way out inside (a
+**Stable wormhole**) has no clock of its own, so nobody is ever forced out and leaving after the collapse returns the
+pilot to an empty pocket. A **wormhole system** (slice 14d) is entered the same way, but its far side is a system in
+uncharted space: absent from the existing starmap, persistent and saved like any other system, with its own dynamic
+wormhole pockets on the same timer — and a new one spawns if the way out would otherwise be lost. Both expiry outcomes
+live in one registry, so a future kind declares another without a code change. A future temporary
+instanced system that needs ordered internal travel can use the existing `intraSystem: "links"` data policy.
 
 **Entity.** `{ id, kind: "enemy"|"asteroid"|"crate"|"bullet"|"missile"|"ship"|..., pos, vel, quat, ... }`
 held in the runtime container of the place it belongs to, unique ids from a counter. The sim moves
@@ -215,10 +232,10 @@ Each item names evidence so a new AI can verify it. The step that fixes it is in
 Keep today's folders. **Do not rename or reshuffle for its own sake.** Additions only:
 
 ```
-src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  place-templates.js  places.js  terms.js  galaxy.js
+src/data/enemies.js  loot.js  factions.js  shops.js  encounters.js  place-templates.js  instances.js  places.js  terms.js  galaxy.js
 src/data/missions/   mission vocabulary and generated contract templates
 src/data/campaign/   one file per mission (m01.js, m02.js, ...) + index.js listing the order
-src/sim/encounters.js  place-memory.js  loot.js  places.js  asteroids.js  galaxy.js  galaxy-session.js  travel.js  instances.js  missions.js  step.js
+src/sim/encounters.js  place-memory.js  loot.js  places.js  asteroids.js  galaxy.js  galaxy-session.js  travel.js  instances.js  consumables.js  missions.js  step.js
 src/render/views.js           builds and updates a mesh per entity (7a: hostiles)
 src/ui/starmap.js  missionlog.js
 src/net/                      (multiplayer step only)

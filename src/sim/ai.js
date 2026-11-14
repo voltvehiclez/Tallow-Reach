@@ -13,7 +13,7 @@ import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
 import { encounterDef, encounterRespawn } from "../data/encounters.js";
 import { profileOf } from "../state/state.js";
 import { missionForObjective, remainingObjective } from "./missions.js";
-import { state, placeWorld } from "../state/state.js";
+import { state, placeWorld, instanceAt } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
 import { clearMissionDrops, fire, removeMissionDrop } from "./combat.js";
 import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
@@ -47,6 +47,11 @@ let nextId = 1;
 export function spawnEnemy(id, pos, placeId = state.place, encounter = null, options = {}) {
   const def = enemyDef(id);
   const hasLootOverride = Object.prototype.hasOwnProperty.call(options || {}, "loot");
+  // An instance declares a difficulty scalar (data/instances.js `difficulty`), so the same enemy is
+  // harder inside one instead of the map getting harder. Everywhere else there is no instance and no
+  // scaling at all, which is why an ordinary pocket's hostiles are byte-for-byte what they were.
+  const hpScale = instanceAt(placeId)?.difficulty?.hp;
+  const hp = hpScale > 0 ? Math.max(1, Math.round(def.hp * hpScale)) : def.hp;
   const e = {
     id: nextId++,
     kind: "enemy",
@@ -57,8 +62,8 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null, opt
     f: def.f,
     loot: hasLootOverride ? options.loot : def.loot,
     dropOnDefeat: options?.dropOnDefeat || null,
-    hp: def.hp,
-    mx: def.hp,
+    hp,
+    mx: hp,
     pos: V(pos.x, pos.y, pos.z),
     quat: Q(),
     v: V(0, 0, 0),
@@ -116,7 +121,9 @@ export function updateEnemies(dt, placeId = state.place) {
       const missionId = String(e.encounter || "").startsWith("mission:")
         ? String(e.encounter).slice("mission:".length)
         : null;
-      const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
+      // The instance's damage scalar, if this place is one (data/instances.js `difficulty`).
+      const dmgScale = instanceAt(placeId)?.difficulty?.dmg;
+      const shot = fire(e.pos, dir, def.bspd, false, dmgScale > 0 ? def.dmg * dmgScale : def.dmg);
       // Keep the projectile's place and mission ownership explicit even when
       // the generic fire helper defaults to the local pilot's place.
       shot.place = placeId;

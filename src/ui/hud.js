@@ -8,12 +8,13 @@ import { placeAt, featuresOf } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
 import { interpolatedPos } from "../render/views.js";
-import { state, say } from "../state/state.js";
+import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { moduleListName } from "../sim/guns.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
 import { stationAt } from "../sim/places.js";
+import { exitDenial, instanceTimeLeft } from "../sim/instances.js";
 import { V } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
@@ -152,6 +153,40 @@ function missionsHtml(missions) {
   }).join("")}</div>`;
 }
 
+/** mm:ss for an instance's remaining lifetime. */
+const clockText = seconds => {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/**
+ * The instance block (step 14): what this run asks for, how long it has left, and whether the way
+ * out is open. All three are read from the instance's own record — the objective sentence is the
+ * authored one (`data/instances.js`), and the refusal is the template's own words, so the HUD never
+ * invents a rule (LESSONS L11).
+ */
+function instanceHtml(record) {
+  if (!record) return "";
+  const lines = [];
+  if (record.objective.n) {
+    lines.push(
+      `<span class="hud-mission-objective">${escHud(
+        record.objective.met ? `${record.objective.n} — done` : record.objective.n
+      )}</span>`
+    );
+  }
+  if (record.lifetime > 0) {
+    lines.push(`<small>${escHud(record.n)} collapses in ${clockText(instanceTimeLeft(record))}</small>`);
+  }
+  const denial = exitDenial(record);
+  lines.push(
+    `<small>${
+      denial ? escHud(denial) : `${escHud(record.exit.n)} is open — fly back to it and press R`
+    }</small>`
+  );
+  return `<div class="hud-mission hud-mission-story" aria-label="This instance">${lines.join("")}</div>`;
+}
+
 export function updateHud(dt) {
   const P = state.player,
     S = state.profile,
@@ -186,6 +221,7 @@ export function updateHud(dt) {
 
   el.topRight.innerHTML =
     `${placeAt(state.place).n}<br>` +
+    instanceHtml(instanceAt(state.place)) +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
     missionsHtml(missions);

@@ -30,6 +30,12 @@ const views = await loadHeadless(
     clearWorldObjects: "src/sim/world.js",
     dropEnemy: "src/sim/enemy.js",
     V: "src/util/math.js",
+    Q: "src/util/math.js",
+    // Step 14: the door and the locked cache are records too, made by the sim's own functions.
+    openRift: "src/sim/instances.js",
+    addEntity: "src/sim/entity.js",
+    setPlaceCatalog: "src/data/places.js",
+    generateGalaxy: "src/sim/galaxy.js",
     // Step 7b: the sim's own makers, so a test can spawn real shots and rocks.
     fire: "src/sim/combat.js",
     spawnCrate: "src/sim/combat.js",
@@ -53,7 +59,7 @@ function fresh() {
   const W = views.state.world;
   W.enemies.length = 0;
   views.updateEnemyViews();          // sweep the meshes of anything left over
-  for (const k of ["bullets", "missiles", "crates", "fx", "asteroids"]) W[k].length = 0;
+  for (const k of ["bullets", "missiles", "crates", "fx", "asteroids", "rifts", "caches"]) W[k].length = 0;
   views.updateEntityViews();
   return views.state;
 }
@@ -218,6 +224,61 @@ test("a spawned crate, party and rock are drawn, and a cleared field empties the
   assert.equal(S.world.fx.length + S.world.crates.length, 0, "crates and sparks are gone");
   assert.equal(S.world.asteroids.length, 1, "the rock is geography: it stays");
   assert.equal(views.entityViewCount(), 1, "so only the rock is still drawn");
+});
+
+test("a rift door and a locked cache are drawn from their records, and go when the records do", () => {
+  const S = fresh();
+  views.installEnemyViews();
+  views.setPlaceCatalog(views.generateGalaxy(4242));
+  views.createPlayer();
+  S.player.docked = false;
+  S.player.pos.set(0, 0, 4000);
+
+  // A real door, made the way `sim/instances.js` makes one when a pilot uses a rift, and a cache
+  // record with the fields `spawnCache` writes. Both are plain data: neither holds a mesh. A view is
+  // built the moment its record is announced, so the call log is marked first.
+  const mark = views.__calls.length;
+  const door = views.openRift("basic", S.player, 4242);
+  assert.equal(typeof door, "object", `the door opens in clear space (${door})`);
+  assert.equal(S.world.rifts.length, 1, "it is a record in that pocket's own list");
+  assert.equal(door.m, undefined, "and it holds no mesh");
+  const cache = views.addEntity(S.world.caches, {
+    kind: "cache",
+    place: S.place,
+    n: "Rift cache",
+    loot: "rift_cache",
+    locked: true,
+    pos: views.V(0, -30, -520),
+    quat: views.Q(),
+    spin: 0.35,
+    r: 9,
+  });
+
+  views.updateEntityViews();
+  assert.equal(views.entityViewCount(), 2, "one mesh for the door and one for the cache");
+
+  // The meshes go into the stand-in scene, so they can be read back from the recorded call. The
+  // pilot's own hull is built by a stand-in too, and its "mesh" is a proxy rather than a real one.
+  const added = views.__calls.slice(mark).filter(c => c.name === "scene.add").map(c => c.args[0]);
+  const meshes = added.filter(m => typeof m?.scale?.x === "number");
+  assert.equal(meshes.length, 2, "a real mesh for each record");
+  // How big each looks is the record's own radius, never a number in the drawing code, and each one
+  // hangs where its record says.
+  assert.deepEqual(
+    meshes.map(m => m.scale.x).sort((a, b) => a - b),
+    [door.r, cache.r].sort((a, b) => a - b),
+    "both are drawn at the radius their records declare"
+  );
+  assert.ok(meshes.some(m => m.position.z === 4000), "the door hangs where it was opened");
+  assert.ok(meshes.some(m => m.position.y === -30 && m.position.z === -520), "and the cache where the template put it");
+  assert.deepEqual([door.pos.z, cache.pos.z], [4000, -520], "drawing never moves either record");
+
+  // Clearing the world the way docking and warping do takes both, so a pocket never keeps a door
+  // nobody can fly through again and an instance never keeps a prize nobody can win.
+  views.clearWorldObjects();
+  views.updateEntityViews();
+  assert.equal(S.world.rifts.length + S.world.caches.length, 0, "both records are gone");
+  assert.equal(views.entityViewCount(), 0, "and so are their meshes");
 });
 
 test("a missile is a record, flown and drawn by data", () => {

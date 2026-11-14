@@ -904,12 +904,20 @@ test("shields arrived in save version 6: older saves are fitted with them", () =
 
 test("an enemy's shot uses its own def's damage and bullet speed", () => {
   // The sim must never hard-code an enemy's numbers (tests/enemies.test.mjs spawns
-  // a fake enemy to prove the same thing at runtime).
+  // a fake enemy to prove the same thing at runtime). Since step 14 the one thing
+  // that may modify them is the instance's declared difficulty scalar, read from
+  // the runtime instance record — a number from data/instances.js, never a literal.
   const src = readFileSync(new URL("../src/sim/ai.js", import.meta.url), "utf8");
+  const shot = src.match(/const shot = fire\(([^;]*)\);/);
+  assert.ok(shot, "an enemy shoots through sim/combat.js `fire`");
+  assert.match(shot[1], /def\.bspd/, "the shot's speed comes from the enemy's def");
+  assert.match(shot[1], /def\.dmg/, "and its damage comes from the enemy's def");
+  assert.doesNotMatch(shot[1], /def\.(bspd|dmg)\s*[-+*/]\s*[\d.]/, "never combined with a literal number");
+  assert.doesNotMatch(shot[1], /(?:^|,)\s*[\d.]+\s*(?:,|$)/, "and no argument of the call is a literal");
   assert.match(
     src,
-    /fire\(e\.pos, dir, def\.bspd, false, def\.dmg\)/,
-    "the shot's speed and damage come from the enemy's def"
+    /const dmgScale = instanceAt\(placeId\)\?\.difficulty\?\.dmg;/,
+    "the only modifier is the instance's own scalar (data/instances.js)"
   );
   assert.equal(ENEMIES.raider.dmg, 1, "the raider still does 1 damage a shot");
 });

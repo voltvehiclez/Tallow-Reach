@@ -161,15 +161,51 @@ counters) plus `flags`, with migration.
 The eight architecture principles applied to missions (enforcement, and the limits of what validation can prove) are in
 [architecture/mission-principles.md](architecture/mission-principles.md).
 
-## Step 14: Instanced sectors and wormholes
-**Goal.** Temporary, generated, harder sectors reached through wormholes.
-**Ask the owner first:** open question 5.
-**Do.** `sim/instances.js` (`createInstance(template, seed, tier)`), a wormhole item and entity, rules
-for entering and leaving, a difficulty scalar well above the map's, at least two instance templates.
-Instances are not saved; leaving or dying discards them (death rules unchanged).
-**Done when.** You can spawn a wormhole, enter a generated instance, fight, loot, leave with the loot;
-the same seed gives the same instance (tested).
-**Save.** Only if wormhole items need it (item registry already covers it).
+## Step 14: Instanced places and wormholes (rifts)
+**Goal.** Temporary, generated, harder places reached through wormholes. One the player spawns is a **rift**.
+**Ask the owner first:** open question 5 — **answered 2026-11-14** and recorded in [VISION.md](VISION.md)
+("Step 14: rifts, instances and how you may leave one"). Read that decision before building; it overrides the
+"instances are not saved" line this step used to carry.
+**Slices** (owner-chosen 2026-11-14; build one per chat, each playable and testable on its own):
+- **14a — the Basic rift.** `data/instances.js` (templates, spawn clearance, lifetime, difficulty scalar, exit
+  requirements, expiry outcome), `sim/instances.js` (`createInstance(template, seed, tier)`, enter/leave, expiry),
+  `sim/consumables.js` (`useItem` plus a `USE_ACTIONS` registry), the `rift_basic` item and its 10 cr shop row, the
+  rift entity and its view, the **R** binding, the locked loot cache and at least two instance templates.
+  Session-only: an instance is not saved yet, so quitting inside returns the pilot to the pocket the rift was opened
+  from. **Save stays v19.**
+- **14b — a run survives a quit.** Save the instance the local pilot is inside (template, seed, tier, remaining
+  lifetime, enemies, crates, rocks, objective progress, cache state and the pilot's spot) and restore it exactly on
+  load. `world.place` may then be an instance id, so the save validator, the galaxy loader and the resume path must
+  learn about instances. **Save version 20**, migration from 19, old-save test.
+- **14c — simple wormholes.** A wormhole pocket that **spawns by itself in normal space**: it appears on the map, is
+  warpable like any pocket while it lasts, and holds the wormhole object the pilot enters with **R**. Its 20 minutes
+  run from the moment the pocket **spawns**, not from entry. Running out fires the `collapse` outcome: the wormhole
+  object fades, the pocket stays on the map until the pilot warps off and then despawns. The way out inside is a
+  **Stable wormhole** with no clock of its own, so nobody is ever forced out or killed by it, and leaving after the
+  collapse returns the pilot to that now-empty pocket. The pocket appears as **a new pocket inside an existing system**
+  (owner, 2026-11-14), warpable like its siblings; spawned wormhole pockets **are saved with their remaining time**, so
+  14c takes the save version after the one 14b uses; and a wormhole **may be re-entered until its timer ends**, which
+  makes its objective and locked cache strictly one-time per wormhole. Objectives beyond a fight (mining a special ore,
+  say) are new `OBJECTIVE_KINDS` entries, and the spawn rule (which system, how often, how many alive at once) is data.
+- **14d — wormhole systems (uncharted space).** Entered exactly like a simple wormhole, but the far side is a
+  **system** that is not on the existing starmap: pockets the pilot uses like any other system's, **persistent and
+  saved** like one. Its own wormhole pockets are the dynamic part (the same 20-minute timer), and if one expires while
+  the pilot is inside, a new one spawns so they can still get out. The starmap opens on the wormhole system's pocket
+  map, with a button to view the normal-space map and the same button to come back.
+**Do.** Entering and leaving are rules in data (`exit.requires`), never code, so the owner can add criteria later. A
+difficulty scalar well above the map's. A lifetime, and a data-declared outcome for running out: a **rift kills** the
+pilot (and dying inside despawns the rift instantly, death rules otherwise unchanged), while a **natural wormhole
+collapses** — only the way in goes, its Stable wormhole way out keeps working, and the pilot leaves whenever they like
+with everything they are carrying. Both outcomes live in one registry, so a future kind can declare another. The reward
+that matters is a
+physical **loot cache** that stays locked until the objective is complete, so neither expiry, nor quitting, nor death
+can hand it over — that is what keeps the saved run from being an exploit.
+**Done when.** You can buy and spawn a rift, enter the generated instance, fight, loot, and leave with the loot only
+when the instance's exit rules allow it; the same seed gives the same instance (tested); a quit inside restores the run
+exactly (14b); a wormhole pocket spawns itself in normal space, expires by collapsing its entry, and can always be left
+through the Stable wormhole (14c); a wormhole system is reachable, persistent, has its own dynamic pockets and a map
+button back to normal space (14d).
+**Save.** **Version 20** in slice 14b (an instance in progress is saved); v19 and older migrate. Step 15 becomes v21.
 
 ## Step 15: Campaign scaffolding
 **Goal.** The campaign can be *written*, one data file per mission.
@@ -181,7 +217,7 @@ missions in any order for a modest reward; finishing all missions flips the play
 releases the open world; a simple brief/dialogue panel for text.
 **Done when.** A test completes a stub campaign and checks the transition and the replay rewards.
 Adding a mission is one new file and one line in `index.js`.
-**Save.** **Version 20**, migration from 19.
+**Save.** **Version 22**, migration from 21 (14b took v20 for a saved run, 14c takes v21 for saved wormhole pockets).
 
 > **Milestone D reached.** Write the campaign.
 

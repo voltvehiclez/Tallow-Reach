@@ -52,6 +52,23 @@ const crateCoreMat = mm(0x3a6a7a, 0x1a5a6a);
 
 const particleGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 
+// Step 14: a rift door (the wormhole hanging in a pocket) and a locked cache (the reward inside an
+// instance). Both are unit-sized here and scaled by the record's own `r`, so how big a wormhole
+// looks is data in `sim/instances.js` / `data/instances.js`, not a number in the drawing code.
+const riftRingGeo = new THREE.TorusGeometry(1, 0.16, 10, 40);
+const riftRingMat = new THREE.MeshStandardMaterial({
+  color: 0x301c46,
+  emissive: 0x9a5cf0,
+  emissiveIntensity: 1.6,
+  transparent: true,
+  opacity: 0.95,
+});
+const riftCoreGeo = new THREE.SphereGeometry(0.72, 20, 16);
+const riftCoreMat = new THREE.MeshBasicMaterial({ color: 0xdcc0ff, transparent: true, opacity: 0.28 });
+
+const cacheGeo = new THREE.IcosahedronGeometry(1, 0);
+const cacheMat = mm(0x54472c, 0x8a6a20);
+
 /** A rock's faint glow by the ore inside it (the colours it always had). */
 const rockGlow = type => (type === "cobalt" ? 0x14304a : type === "voidite" ? 0x3a1a55 : 0);
 
@@ -241,6 +258,31 @@ registerEntityView("rock", {
     return m;
   },
   update: (e, m) => { updatePose(e, m); m.scale.copy(e.scale); },
+  remove: noCleanup,
+});
+// A rift is a ring with a faint core, turned by the sim (`rift.quat`): the view only copies the pose
+// and the record's radius, exactly as every other kind does.
+registerEntityView("rift", {
+  list: () => state.world.rifts,
+  build: e => {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(riftRingGeo, riftRingMat), new THREE.Mesh(riftCoreGeo, riftCoreMat));
+    g.scale.setScalar(Math.max(1, Number(e.r) || 20));
+    return initialPose(e, g);
+  },
+  update: (e, m) => { updatePose(e, m); m.scale.setScalar(Math.max(1, Number(e.r) || 20)); },
+  remove: noCleanup,
+});
+// The locked cache: one solid container, visible from the moment the pilot arrives. It is drawn only
+// while it is locked, because opening it drops the record and spills ordinary crates in its place.
+registerEntityView("cache", {
+  list: () => state.world.caches,
+  build: e => {
+    const m = initialPose(e, new THREE.Mesh(cacheGeo, cacheMat));
+    m.scale.setScalar(Math.max(1, Number(e.r) || 9));
+    return m;
+  },
+  update: (e, m) => { updatePose(e, m); m.scale.setScalar(Math.max(1, Number(e.r) || 9)); },
   remove: noCleanup,
 });
 

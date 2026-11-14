@@ -15,13 +15,60 @@
 import { templateAt, templateFeatures } from "./place-templates.js";
 
 let livePlaces = null;
+
+// Runtime instance places (step 14): temporary, generated, never on the starmap and never saved as
+// geography. They are kept apart from the resolved galaxy so that installing a catalog — a load, an
+// import, a new game — drops every instance with it, and so `pocketsIn`/the map can never see one.
+let instancePlaces = null;
+let merged = null;
+
+// Built on first use, not at import time: `PLACES` is declared further down this file.
+function rebuildCatalog() {
+  merged = instancePlaces ? { ...(livePlaces || PLACES), ...instancePlaces } : livePlaces || PLACES;
+  return merged;
+}
+
 export function setPlaceCatalog(galaxy = null) {
   livePlaces = galaxy ? {
     ...Object.fromEntries(galaxy.systems.map(s => [s.id, s])),
     ...galaxy.pockets,
   } : null;
+  // A replaced world leaves no instance behind: they belong to the session that made them.
+  instancePlaces = null;
+  rebuildCatalog();
 }
-const catalog = () => livePlaces || PLACES;
+
+/** Register a runtime instance place (`sim/instances.js`). Returns the record. */
+export function registerInstancePlace(record) {
+  if (!record || typeof record.id !== "string" || !record.id) return null;
+  if (!instancePlaces) instancePlaces = {};
+  instancePlaces[record.id] = record;
+  rebuildCatalog();
+  return record;
+}
+
+/** Forget one instance place. Returns whether there was one to forget. */
+export function unregisterInstancePlace(id) {
+  if (!instancePlaces || !Object.prototype.hasOwnProperty.call(instancePlaces, id)) return false;
+  delete instancePlaces[id];
+  if (!Object.keys(instancePlaces).length) instancePlaces = null;
+  rebuildCatalog();
+  return true;
+}
+
+/** Forget every instance place (a load, an import, a new game, a reset). */
+export function clearInstancePlaces() {
+  if (!instancePlaces) return false;
+  instancePlaces = null;
+  rebuildCatalog();
+  return true;
+}
+
+/** Is this id a runtime instance rather than a pocket of the map? */
+export const isInstancePlace = id =>
+  !!instancePlaces && typeof id === "string" && Object.prototype.hasOwnProperty.call(instancePlaces, id);
+
+const catalog = () => merged || rebuildCatalog();
 
 export const PLACE_DEFS = {
   // Today's Tallow Reach: the station, the asteroid belt, the planet backdrop

@@ -23,4 +23,8 @@ export function clearWorldObjects(placeId = state.place) {
   // pilot actually picks them up.
   for (const crate of [...w.crates]) if (!crate.persistent) dropEntity(w.crates, crate);
   clearEntities(w.fx);
+  // A rift door and a locked cache belong to the session that made them, not to the pocket's
+  // geography: leaving the pocket (or loading a world) takes them with it. Step 14.
+  clearEntities(w.rifts);
+  clearEntities(w.caches);
 }

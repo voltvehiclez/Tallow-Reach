@@ -13,10 +13,12 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 | Guide | Covers |
 | --- | --- |
 | [TESTING-BASELINE.md](TESTING-BASELINE.md) | The whole game; play it after every step. |
-| [TESTING-DEATH-AND-MISSIONS.md](TESTING-DEATH-AND-MISSIONS.md) | Mission hand-ins (a mission is only accomplished when its items are handed in), dying with a mission-only item, contract wording and the "Contract failed" / "Mission failed" notice. |
+| [TESTING-14-RIFTS.md](TESTING-14-RIFTS.md) | Step 14a: buying and using a rift, the sealed way out, the locked cache, the 20-minute collapse, dying inside, reloading. |
 
 ## Passed (history, in `passed/`)
 
+[TESTING-DEATH-AND-MISSIONS.md](passed/TESTING-DEATH-AND-MISSIONS.md) (mission hand-ins, dying with a
+mission-only item, contract wording and the failure notices; owner-confirmed 2026-11-14),
 [TESTING-12-PLACES.md](passed/TESTING-12-PLACES.md) (step 12),
 [TESTING-11A.md](passed/TESTING-11A.md), [TESTING-STARMAP.md](passed/TESTING-STARMAP.md) (step 11),
 [TESTING-PLACES.md](passed/TESTING-PLACES.md) (step 10), [TESTING-INVENTORY.md](passed/TESTING-INVENTORY.md),

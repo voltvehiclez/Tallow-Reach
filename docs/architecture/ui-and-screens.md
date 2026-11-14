@@ -30,8 +30,9 @@
 - **The pointer follows the reticle.** The canvas hides the system pointer for mouse-look flight, since the HUD draws
   its own reticle (`#cur`); `ui/hud.js` `setReticle()` hides the HUD and adds `body.no-reticle` together, so on the title
   screen and while docked the real pointer is back and never disappears over the empty screen beside the panel.
-- **Inventory tiles have two item actions, both behind a right-click.** Click moves one, Shift-click moves the
-  stack; right-click opens **Sell** (a quantity box) and **Discard ×N**. Discard is a two-step popover shared by the
+- **Inventory tiles have three item actions, all behind a right-click.** Click moves one, Shift-click moves the
+  stack; right-click opens **Use** (only for an item with a `use` field, `sim/consumables.js` `canUse`), **Sell**
+  (a quantity box) and **Discard ×N**. Discard is a two-step popover shared by the
   station panel and the flight card (`ui/discard.js`): how many, then "Are you sure you want to discard 3 Ferrite?",
   and only that second click trashes — with `sim/inventory.js` `discardItem(where, id, n)`. Mission items are refused
   by `data/items.js` `canDiscard`, because a beacon or parcel cannot be found again.
@@ -41,7 +42,10 @@
   explanatory sub-line. `canOpenCargo()` refuses while docked (the station panel has an Inventory tab;
   there, I just switches to it), on the title screen, while dead, warping or paused, and over the
   starmap. Opening it releases flight input; the world keeps running behind it, sound included. Esc
-  closes it; P closes it and opens the pause card.
+  closes it; P closes it and opens the pause card. A tile's label says **USE** for an item with a `use`
+  field and **ORE** or **MOD** otherwise (`screens.js` `invRow`), and **Use** runs that item's declared
+  action (`sim/consumables.js` `useItem`): it spends exactly one unit and only when the action worked,
+  shows the returned sentence as a notice, closes the card on success and redraws it on a refusal.
 - **The pause card's order is fixed** (`pauseOverlayHtml()`): Resume is the first control and
   Exit to main menu the last, with the sound switch between them. Exiting saves the resume
   point, returns to the title screen and fades every looping sound to silence

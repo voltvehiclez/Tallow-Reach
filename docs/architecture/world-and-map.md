@@ -28,9 +28,25 @@
   bottom status/refusal notices. `route-display.js` is shared by the HUD and starmap;
   an exact `{ pocketId: ... }` destination uses the pocket name in its route title and still gets a small parenthetical pocket name on the final system row.
 
+- **An instance is a third kind of place, and it is on no map** (step 14). `data/places.js` keeps a runtime
+  registry beside the resolved catalog: `registerInstancePlace({ kind: "instance", parent, features, enter })`,
+  `unregisterInstancePlace`, `clearInstancePlaces`, `isInstancePlace`. It resolves through the ordinary
+  `placeAt` / `placeDef` path (its `features` come from its template in `data/instances.js`, and `placeAt`
+  falls back to `DEFAULT_PLACE` for an id that has been destroyed), but its `kind` is never `pocket`, so
+  `pocketsIn`, the starmap and warp cannot see it and it can never be a destination; `setPlaceCatalog` drops
+  every instance when a world is installed. A pilot reaches one by pressing **R** next to a door
+  (`sim/instances.js`), and `sim/places.js` `enterPlace` is instance-aware. An instance writes no
+  `placeMemory`: its fields use `stable: true` and its rocks come from the instance's own seed, so a run
+  leaves no trace behind when it is destroyed.
+
 ## Known gaps
 
 These are real, current limits. None of them is a bug in play today.
+
+- **A run in progress is not saved yet** (slice 14a). `state.instances` is session runtime, so
+  `captureResume()` redirects a save made inside one to the pocket it was opened from plus the spot the pilot
+  entered at. Slice 14b saves the run itself (save v20); a simple wormhole's pocket and its remaining time
+  follow in 14c (v21).
 
 - **Where you logged out is saved** (`world.place` + `world.resume`, save v19). A save made while
   docked opens the station menu; a save made in flight returns you to the exact spot and heading,

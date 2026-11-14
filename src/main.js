@@ -16,6 +16,7 @@ import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
 import { tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
+import { riftAction } from "./sim/instances.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
@@ -113,6 +114,11 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       break;
     case "dock":
       if (playing && !state.warp) tryDock();
+      break;
+    case "rift":
+      // Step 14: one deliberate press goes in or out of a wormhole — into a rift door that is
+      // within range, or out through the instance's own way out. Never by contact.
+      if (playing && !repeat && !state.warp) riftAction(localPlayer());
       break;
     case "starmap":
       if (!repeat) {

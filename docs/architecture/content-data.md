@@ -75,6 +75,12 @@
   builds a point in the ship's own frame from `pos`/`quat`, never from `matrixWorld`.
   **`src/sim/` holds no mesh, material or scene object**; `tests/layers.test.mjs` fails if one is
   named in a sim file's code.
+- **A rift and a locked cache are records of the same kind** (step 14). A door hanging in a pocket lives
+  in that pocket's `rifts` list and the container an objective unlocks in the instance's `caches` list,
+  each with a `pos`, a `quat`, a spin and a radius `r`; `render/views.js` draws both. What a run contains
+  — its template, wave, difficulty scalars, objective, exit rules, expiry outcome, cache and clearance
+  margins — is all vocabulary in `data/instances.js`, and adding one is
+  [recipe 22](../recipes/22-a-new-rift-or-instance.md).
 - **Inventory: every place is measured in m³, and `sim/inventory.js` is the one home for it.** Since
   step 9 (save v13), the **hosted station** keeps its stock (`{ itemId: count }`) in `worldState.store`
   and its room is `STORAGE_PER_LEVEL` (250) times `worldState.base.store`. Each **ship's hold** is

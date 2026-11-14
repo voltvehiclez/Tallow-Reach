@@ -20,6 +20,179 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: Step 14a built — a rift you carry, an instance you fly into, and a cache that stays locked
+
+`npm test` → **523 tests, 0 fail** (14 new: 13 for the instance rules, one for the two new views);
+`npm run build` → 789 KB. **Save version unchanged
+(v19)**: in this slice an instance is session runtime, so a save made inside one comes back to the pocket it
+was opened from and the spot the pilot entered at. Slice 14b saves the run itself.
+
+- **NEW `src/sim/instances.js`** — the whole runtime. `rollRiftTemplate` (weighted, seeded),
+  `createInstance`, `riftClearance`, `openRift` (a door at the ship), `enterRift` / `leaveInstance` /
+  `riftAction` (**R** only, at close range, never by contact), `objectiveDone`, `exitDenial`,
+  `instanceTimeLeft` / `instanceWarning` / `expireInstance` / `updateInstances` / `updateRifts`,
+  `destroyInstance`, and the registries `OBJECTIVES`, `EXIT_REQUIREMENTS` and `EXPIRY_OUTCOMES`. Everything
+  a template can say is looked up in a registry, and every registry **fails shut**: an unknown objective is
+  never done, an unknown exit rule refuses with "The way out cannot be checked (…)", and an unknown expiry
+  outcome still puts the pilot out of the place rather than trapping them in a dead one.
+- **NEW `src/sim/consumables.js`** — `USE_ACTIONS`, `canUse`, `useItem`. A handler returns `{ text }` when it
+  worked or a sentence when it did not; exactly **one** unit is consumed, and only on success. `spawn-rift` is
+  the first action: it refuses while docked, inside an instance, or too close to anything, and passes the
+  clearance sentence through word for word.
+- **The locked cache** (LESSONS L6): it hangs in the instance from the moment the pilot arrives, as an entity
+  of its own. When the objective is met it is replaced by ordinary crates that spill where it hung and are
+  collected one at a time — nothing enters a hold by side effect, and one seed spills the same crates in the
+  same places.
+- **Seeded throughout**: `instanceIdFor(template, seed)` names the place, `streamRng(seed, 1)` lays out the
+  wave and `streamRng(seed, 2)` the cache, so one seed is one instance — same rocks, same guardians, same
+  reward — and an instance writes no `world.placeMemory` at all. `Math.random()` appears nowhere in `sim/`.
+- **Harder than the map**: `sim/ai.js` multiplies a hostile's hp and damage by `instanceAt(place).difficulty`
+  (1.6 / 1.5 for `guardian_rift`, 2.2 / 2 for `deep_rift`). The declared wave spawns with `encounter: null`,
+  so it writes no place memory and cannot trip a mission's wave-clear trigger.
+- **The clock**: `lifetimeSec` of unpaused simulation seconds from entry, `warnSec` 60 of warning, then the
+  template's declared outcome. `kill` stamps `state.deathNotice` with the template's own sentence, despawns
+  the run and its door, and lets the ordinary death rules finish (ship and whole hold gone, recovery fee,
+  loaned Wasp, docked in the pocket it was opened from). `collapse` only fades the door and dooms the outer
+  pocket (`doomOrigin`, which 14c reads): the instance stays open, its exit keeps working and nobody is ever
+  forced out or killed by a wormhole's clock.
+- **Dying inside a run**: `sim/session.js` `die()` now emits `dying` before it removes anything, and
+  `sim/instances.js` listens — the run despawns at once and the pilot is put back at their entry spot, so the
+  ordinary death rules apply unchanged whatever killed them.
+- **Views, input, HUD, cards**: `render/views.js` draws the `rift` and `cache` kinds from their records with
+  shared geometry and materials (eight entity kinds now); `core/input.js` binds `KeyR: "rift"` and `main.js`
+  dispatches it only while playing and not warping; `ui/hud.js` `instanceHtml` shows the authored objective,
+  the `mm:ss` countdown and the exit line (open, or the template's refusal); `ui/cargo.js` offers **Use**
+  above **Discard** in flight; `ui/screens.js` labels a consumable's tile **USE** and words its line by
+  category; `index.html` and the intro screen's controls list both mention **R**.
+- **Content and shops**: `rift_basic` is back on Meridian's shelf at **10 cr**, described in the shop's own
+  words (item `v: 6`, so selling follows the 60 % rule); `data/loot.js` gains `rift_rock`, `rift_cache` and
+  `rift_cache_deep`.
+- **NEW `tests/step14-instances.test.mjs`** (13 tests): every template is complete and every word it uses is
+  in a registry; the weighted roll and its refusals; seeded determinism and the absence of a `placeMemory`
+  trace; the four clearance margins; one use and one door per seed; **R** in and out at range with the sealed
+  exit refusing in the template's words; the cache's spill; leaving returns the pilot to the exact entry spot
+  with everything aboard; both expiry outcomes; a death by shot inside a run; fail-closed unknown rules;
+  `destroyInstance` and `resetPlaces`. `tests/views.test.mjs` gains one more: a real door and a cache
+  record each get exactly one mesh, drawn at the radius and the position their records declare, and both
+  meshes go when `clearWorldObjects()` takes the records.
+- **Fixed while testing**: `captureResume()` spread a `{ pos, quat }` of `Vector3`s into the resume point
+  instead of arrays, which would have saved garbage for anybody inside an instance; and `expireInstance()`
+  now emits `instance-expired` **before** the outcome runs, so a listener still sees the instance registered
+  (a `kill` destroyed it first and the event had nothing left to look at). The way out also offers itself the
+  way a door does: within `RIFT.exitRange` the prompt says "Press R to leave through …", or the refusal while
+  it is sealed.
+- **Docs**: NEW `testing/TESTING-14-RIFTS.md` (owner playtest, listed in `testing/README.md`), NEW
+  `docs/recipes/22-a-new-rift-or-instance.md` (indexed in `docs/HOW_TO_ADD.md`), `docs/HANDOFF.md` rewritten,
+  `docs/ROADMAP.md` step 14a status, `src/sim/README.md` and `src/data/README.md`.
+- **Not in this slice**: saving a run (14b), simple wormholes and their self-spawning pockets (14c),
+  uncharted wormhole systems (14d), and the campaign (15).
+
+Files: `src/sim/instances.js` (new), `src/sim/consumables.js` (new), `src/sim/{session,places,world,ai,step}.js`,
+`src/state/state.js`, `src/data/{instances,items,loot,shops}.js`, `src/render/views.js`, `src/core/input.js`,
+`src/main.js`, `src/index.html`, `src/ui/{hud,cargo,screens}.js`, `src/util/events.js`,
+`tests/step14-instances.test.mjs` (new), `tests/{layers,views,shops,content,enemies}.test.mjs`, `src/sim/README.md`,
+`src/data/README.md`, `src/{render,core,ui}/README.md`, `docs/{HANDOFF,ROADMAP,HOW_TO_ADD,ARCHITECTURE,CHANGELOG}.md`,
+`docs/architecture/{world-and-map,content-data,ui-and-screens}.md`,
+`docs/recipes/22-a-new-rift-or-instance.md`, `testing/{TESTING-14-RIFTS,README}.md`.
+
+---
+
+## 2026-11-14: Step 14 groundwork — instance templates as data, and the owner's wormhole model recorded
+
+No game behaviour changed yet: everything below is data, docs and empty runtime hooks that nothing reads. **Save
+version unchanged (v19)**, but `src/` changed, so rebuild (`npm run build`) and re-run `npm test`.
+
+- **Owner clarification (fourth round, 2026-11-14).** Natural wormholes come in two kinds that share one machinery. A
+  **simple wormhole** is a pocket that spawns itself in normal space: warp to it like any pocket, the wormhole hangs
+  there as an object, press **R** close to it and enter one instanced pocket isolated from the rest of space with an
+  objective of its own. Its **20 minutes run from the moment the pocket spawns**, not from entry. Running out fades the
+  wormhole object and dooms the outer pocket — it leaves the map when you warp off, then despawns. The way out inside is
+  a **Stable wormhole** with no clock of its own: nobody is ever forced out or killed by it, and leaving after the
+  collapse returns you to an empty pocket. A **wormhole system** (later slice, now **14d**) is entered the same way, but
+  its far side is a system in uncharted space — off the existing starmap, **persistent and saved** like any other
+  system, with dynamic wormhole pockets on the same timer (a new one spawns so you can always get out) and a map button
+  to view normal space and come back. Rifts are unchanged: they still **kill** on expiry.
+- `docs/VISION.md`: the step 14 decision rewritten for that model — the two wormhole kinds, the two clock anchors, and
+  `collapse` replacing the third round's `eject` (nothing forces a pilot out of a wormhole, so there is nothing to
+  eject from). Slices are now 14a rift, 14b saved run, 14c simple wormholes, 14d wormhole systems.
+- `docs/REFACTOR_PLAN.md`: step 14's 14c bullet rewritten — it is no longer "data only", because a self-spawning
+  pocket, its timer and its despawn are real machinery — and a 14d bullet added. `docs/TARGET_ARCHITECTURE.md` gains a
+  **Wormhole** paragraph beside **Instance**. `docs/ROADMAP.md`: table rows 14c/14d, current position, log line.
+- **NEW `src/data/instances.js`** — the whole template vocabulary, with no behaviour in it (a weighted roll is
+  behaviour and belongs to `sim/instances.js`, the way `data/loot.js` is rolled by `sim/loot.js`): `RIFT`
+  (`enterRange` 200, `exitRange` 220, `warnSec` 60, and `clearance` — 1000 m from a station, an asteroid field's
+  edge or a planet's surface, 150 m from any single rock), `OBJECTIVE_KINDS`, `EXIT_REQUIREMENT_TYPES`,
+  `EXPIRY_OUTCOME_TYPES` (`kill`, `collapse`), two instance templates (`guardian_rift`: tier 4, 1200 s,
+  `{hp 1.6, dmg 1.5}`, four guardians, sealed exit, locked cache; `deep_rift`: tier 6, 1500 s, `{hp 2.2, dmg 2}`,
+  six guardians, richer cache), `RIFTS.basic` as a weighted template pool, and `instanceIdFor(templateId, seed)` so
+  one seed is always one instance.
+- `src/data/places.js`: a runtime **instance place registry** — `registerInstancePlace`, `unregisterInstancePlace`,
+  `clearInstancePlaces`, `isInstancePlace`. An instance resolves through the ordinary `placeAt`/`placeDef` path
+  (its `features` come from its template) but stays out of `pocketsIn`, so it can never appear on a map, and
+  `setPlaceCatalog` drops every instance when a world is installed. The merged catalog is built **lazily**: reading
+  `PLACES` at import time is a reference error, and the first `npm test` after this change said so (51 files failed).
+- `src/state/state.js`: `state.instances` (a Map, session runtime only in 14a), `instanceAt`, `insideInstance`,
+  `clearInstances`; `resetPlaces` clears them; every place container gains `rifts` and `caches` entity lists; and
+  `captureResume` records the spot a rift was entered from instead of a spot inside an instance that is not saved yet,
+  so a save inside a rift returns the pilot to the pocket it was opened from. Slice 14b replaces that with the run.
+- `src/data/items.js`: the first consumable — `rift_basic` (10 cr, `use: "spawn-rift"`, `rift: "basic"`) plus the
+  `itemUse`/`itemRift` readers. `src/data/loot.js`: `rift_rock` (richer ore) and the two cache tables
+  `rift_cache` / `rift_cache_deep`. `src/data/README.md`: the row for `instances.js` (`tests/docs.test.mjs`
+  requires one).
+- **Deliberately not added yet:** the `rift_basic` shop row. The **Use** action behind it (`sim/consumables.js`,
+  `sim/instances.js`, the right-click menu entry, the **R** binding, the rift and cache views) is what slice 14a
+  builds next, and an item you can buy but cannot use would be a silent failure.
+- This entry **supersedes** the first 2026-11-14 entry above on three points: instances **are** saved (14b, v20),
+  expiry outcomes are **per template**, and the natural-wormhole outcome is `collapse` — not the second round's
+  `eject`, and not the first round's "instances are never saved".
+- Next: slice **14a** — `sim/instances.js` (create/enter/leave/expire, the objective and exit registries, the locked
+  cache), `sim/consumables.js` (`useItem` plus `USE_ACTIONS`), the rift and cache entities and their views, the
+  **R** binding, the shop row, `tests/step14-instances.test.mjs` and `testing/TESTING-14-RIFTS.md`.
+
+Files: `src/data/instances.js` (new), `src/data/places.js`, `src/data/items.js`, `src/data/loot.js`,
+`src/data/README.md`, `src/state/state.js`, `docs/VISION.md`, `docs/REFACTOR_PLAN.md`,
+`docs/TARGET_ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/CHANGELOG.md`.
+
+---
+
+## 2026-11-14: VISION records the owner's step 14 rift decisions; open question 5 is closed
+
+Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner answered step 14's blocking
+question, so the decision is written down before any code exists — the docs are the memory across chats.
+
+- `docs/VISION.md`: open question 5 deleted, and a **"2026-11-14 — Step 14: rifts, instances and how you may leave
+  one"** decision added. A spawned wormhole is a **rift**; the first is a **Basic rift** at 10 cr, used by
+  right-clicking it in the in-flight ship inventory, opening where the ship is and refused unless the ship is 1 km clear
+  of a station, an asteroid field's edge or a planet's surface (150 m from a single rock). Natural wormholes are
+  map-visible, warpable and time limited. Entering and leaving is a close-range **R** press, never contact. Whether an
+  instance may be left is **data on the instance**: the Basic rift stays shut until its objective is done. A spawned
+  rift is one use. Instances are never saved — a checkpoint on entry, no autosave inside, a save on the way out — so
+  reloading mid-rift returns the pilot to the entry point with none of that run's loot.
+- Its "Instanced places" bullet now names rifts and points at the decision.
+- Next: build slice **14a** (the Basic rift) once the owner says go. Natural wormholes are slice **14b** and will need
+  save **v20**, which makes step 15 (campaign) v21; the ROADMAP table will be renumbered in that change.
+
+---
+
+## 2026-11-14: The owner confirmed the pending mission playtests; nothing is waiting now
+
+Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner reported that the work built
+on 2026-11-13 passed in the browser — station-scoped mission offers with the docked-panel redraw, the contract delivery
+wording, recovery contracts spawning and counting their own crates — together with the death-and-missions playtest guide.
+
+- `docs/ROADMAP.md`: "Current position" rewritten so it says no playtest is pending, a log line added for 2026-11-14,
+  "Last checked" moved to 2026-11-14.
+- `testing/TESTING-DEATH-AND-MISSIONS.md` moved to `testing/passed/`; both tables in `testing/README.md` updated.
+- `docs/HANDOFF.md`: "Last checked" 2026-11-14, plus one line saying nothing is waiting on a playtest.
+- This file: its oldest full entry moved word for word to `docs/CHANGELOG_ARCHIVE.md` with an index line, so exactly ten
+  full entries remain here.
+- Next: refactor step 14 (instanced places and wormholes). The owner has answered VISION open question 5 — spawnable
+  wormholes are **rifts**, sold as a "Basic rift" for 10 cr, used by right-clicking it in the in-flight ship inventory,
+  spawning where the ship is at least 1 km from any large structure; natural wormholes appear on pocket maps and are
+  time-limited; a rift may declare criteria that must be met before it can be left. The step is planned before any code.
+
+---
+
 ## 2026-11-13: A recovery contract recovers its own crates, and the space is left clean
 
 Owner request: "recovery missions require you to recover all the crates the mission generates … lists progress of
@@ -218,139 +391,12 @@ Files: `src/ui/missionlog.js`, `src/ui/screens.js`, `src/sim/missions.js`, `src/
 
 ---
 
-## 2026-11-13: No message line that moves the menu, and no "filed at another station" note
-
-Owner feedback on the docked screens: "if you are in another station it says 1 mission is filed at another station. fly
-there to read it. You dont need to mention that just say 'No active missions here'", and "remove these types of UI
-notifications... I dont like it when notifications cause the entire UI to shift". **Save version unchanged (v19)**;
-rebuild needed (`npm run build`, then `npm test`).
-
-- **The Mission log and Contracts tab no longer explain where the other work is.** A station with no missions simply
-  reads "No active missions here."; the `N missions are filed at another station` line is gone from both screens
-  (`ui/missionlog.js`, `ui/screens.js`). Filtering is unchanged — another station's missions still do not appear.
-- **The panel never prints a message.** `outpostHtml` used to start with `<div class="ok">…</div>`, so every action that
-  returned a string pushed the whole menu down: "Contract accepted. Launch when ready.", "Sold 12 items for 340 cr.",
-  "Basic Power Plant moved to storage.". That element and `state.ui.toast` are gone.
-- **Routine confirmations are silent; refusals and warnings are a fixed overlay.** New `ui/notice.js` owns the rule:
-  `isRoutineReply()` lists the replies that only restate the redrawn panel (accepted, paid, sold, moved, fitted,
-  restocked, repaired, bought-into-storage, saved/loaded/deleted slot, reset, imported), and `notify()` shows anything
-  else — a refusal, a save/import failure, a galaxy-recovery warning — in a `#panel-notice` element fixed to the
-  viewport (`role="status"`, click to dismiss, 7 s). An unrecognised message is shown, never swallowed. The "mission
-  failed" alert is untouched.
-- **No layout can shift:** `#panel-notice` is `position: fixed` outside the panel; the panel's markup has no message
-  slot at all. A test asserts both.
-- **Tests:** new `tests/ui-notices.test.mjs` (silent replies, visible refusals, the panel renders no message, the CSS is
-  fixed). Existing tests that observed `state.ui.toast` now read `shownNotice()` from the same module
-  (`tests/step10-fixes.test.mjs`, `tests/step11b-starmap.test.mjs`, `tests/navigation.test.mjs`); the mission-log tests
-  assert the elsewhere note is gone. 487 tests pass.
-
-Files: `src/ui/notice.js` (new), `src/ui/menu.js`, `src/ui/screens.js`, `src/ui/missionlog.js`, `src/ui/pause.js`,
-`src/state/state.js`, `src/styles.css`, `tests/ui-notices.test.mjs`, `tests/step10-fixes.test.mjs`,
-`tests/step11b-starmap.test.mjs`, `tests/navigation.test.mjs`, `tests/mission-station-scoping.test.mjs`,
-`tests/mission-handin-station.test.mjs`.
-
----
-
-## 2026-11-13: A story mission is offered at one station, and only there
-
-Owner follow-up to the station-scoping round: "missions by default are specific to a station — Border Signal is only
-available at Meridian; at Galereach the Mission log should have nothing to accept as a story mission."
-**Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
-
-- **The default is one station, and there is no "offered everywhere" form.** `missionOfferStation()` resolves the
-  offering station as `offeredAt`, else the station the mission is handed in at, else the home station — so an
-  authored mission without either field is still Meridian-only, never global. The Mission log lists a story offer
-  only where that resolves to the station being read, and `ui/menu.js` refuses a `story` action anywhere else.
-- **Fails closed instead of silently moving.** A mission whose `offeredAt` names an unknown id, or a pocket with no
-  station, is offered **nowhere** (the linter already reports it as an error) rather than falling back to the home
-  station. `sim/missions.js` gains `stationPocket(id)`, which requires a real station pocket, because `stationAt`
-  alone accepts any unknown id — the place catalog falls back to Meridian for ids it does not know. `missionHandInStation`
-  and the hand-in stamping use it too, so a corrupt `handIn.station` in an old save resolves from `origin` instead of
-  filing the mission at a station that does not exist.
-- **Verified at the real Galereach:** new regression in `tests/mission-station-scoping.test.mjs` builds the seed's
-  galaxy (122 station pockets), docks at the station named Galereach, and asserts the Mission log has no Border Signal
-  and no `data-a="story"` button there, while Meridian in the same galaxy still shows both. A second test pins the
-  fail-closed rule. 484 tests pass.
-
-Files: `src/sim/missions.js`, `tests/mission-station-scoping.test.mjs`, `docs/MISSION_RULES.md`,
-`docs/architecture/ui-and-screens.md`, `src/data/README.md`.
-
----
-
-## 2026-11-13: Missions belong to the station that filed them, and the docked panel redraws itself
-
-Two owner-reported fixes. **Save version unchanged (v19)** — `world.boards` is an additive field with a
-default; rebuild needed (`npm run build`, then `npm test`).
-
-- **Station-specific missions and contracts:** a station's contract board used to be the world's one board,
-  so a job read at Meridian could be accepted at Depot, and the Mission log listed every active mission no
-  matter where it was taken. New `sim/contracts.js` `boardAt(placeId, world)` gives every station its own
-  offers (`world.board` stays the home station's list so old saves keep theirs in place; other stations get
-  `world.boards[placeId]`, generated on first look); `ensureBoard(world, placeId)` and
-  `rerollBoard(world, placeId)` work per station, and `acceptContract(index, profile, world, placeId)`
-  rerolls only the board it read. `acceptMission`/`instantiateMission` take the giving station explicitly,
-  so a contract taken from Depot's board is stamped Depot even when the caller is not standing there.
-- **The Mission log and Contracts tab are scoped to the current station:** both filter with
-  `missionFiledAt(mission)` (filed where it is handed in), and a line below says how many missions are
-  filed elsewhere ("1 mission is filed at another station. Fly there to read it."). Story missions are
-  offered only where `missionOfferStation()` points: `data/missions/story.js` now says `offeredAt: "reach"`
-  for the Border Signal, the linter rejects an `offeredAt` that is not a station, and `ui/menu.js` refuses a
-  `story` action for a mission offered elsewhere.
-- **Buttons address missions by id, not by list position:** the panels list a filtered selection, so a
-  position would hit the wrong record once another station's missions exist. `data-b` now carries
-  `mission.id` in `ui/screens.js` and `ui/missionlog.js`, and `ui/menu.js` passes it through unchanged.
-- **The docked panel redraws when a mission changes:** the panel is HTML drawn when it is opened, so closing
-  the Border Signal's final dialogue left the card offering **Abandon** while the beacon was already aboard.
-  `ui/missionlog.js` now emits `mission-ui-refresh` after every mission event except the ones that already
-  redraw the panel (mission-ui-refresh, main-menu, docked, launched); `ui/menu.js` listens and redraws the
-  visible panel. Closing the last line now shows **Hand in cargo** straight away.
-- **Save:** `newWorld()` gains `boards: {}`; `cleanWorld` keeps only pockets that exist and are not the home
-  station, and only boards with at least one valid offer, so a save never grows from stations merely
-  visited.
-- **Tests:** new `tests/mission-station-scoping.test.mjs` (5 tests: per-station boards and rerolls, filing at
-  the giving station, scoped log/tab with the elsewhere count, story offers only at their station, and the
-  dialogue-close redraw). `tests/mission-handin-station.test.mjs` now expects the wrong station to hide the
-  mission instead of disabling its button; `tests/step9-save.test.mjs` expects `boards`. 482 tests pass.
-
-Files: `src/sim/missions.js`, `src/sim/contracts.js`, `src/sim/session.js`, `src/state/profile.js`,
-`src/data/missions/story.js`, `src/data/missions/validate.js`, `src/ui/screens.js`, `src/ui/missionlog.js`,
-`src/ui/menu.js`, `tests/mission-station-scoping.test.mjs`, `tests/mission-handin-station.test.mjs`,
-`tests/step9-save.test.mjs`.
-
----
-
-## 2026-11-13: Overlays everywhere in the open world, a quiet exit to the menu, and a cinematic title view
-
-Four owner-reported UI fixes. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
-
-- **Pause card order:** Resume is now the first control and **Exit to main menu** the last, with the sound
-  switch between them. The markup lives in `ui/overlays.js` (`pauseOverlayHtml()`), so the order is one place.
-- **Pause and starmap while docked:** both used to be refused unless the pilot was flying. New
-  `ui/overlays.js` owns the rule (`canPause`, `canOpenStarmap`) and `main.js` plus `sim`-facing `openStarmap`
-  ask it: only the title screen, the pause overlay itself, a dead pilot or a warp refuses. Plotting from the
-  chart while docked works; the warp itself still needs a launch, and the chart now says "Docked: launch to
-  warp." instead of offering a course that does nothing.
-- **Quiet exit to the menu:** the simulation stops behind the title screen, so `updateAudio()` stopped
-  driving the loops and the engine droned on. `core/audio.js` gains `fadeToSilence(seconds)` (a 1.8 s ramp on
-  every looping voice — engine hiss and growl, roar, beam hum, drone, docked pad and its LFO — not a hard
-  cut), called from a `main-menu` listener. Playing again ramps everything back up.
-- **Cinematic title screen:** the menu used to show whatever the game camera last rendered (the pocket the
-  pilot quit in). New `render/menuview.js` draws its own scene — the home station turning with its planet
-  behind it — from `DEFAULT_PLACE` features only, on the path in `data/camera.js` (`MENU_CAMERA`,
-  `menu-pose`-style `menuPose`, sway 110 s, distance 520) and independent of the saved world, so the
-  background is the same every time. It also nudges the station left of centre on wide screens so the title
-  panel does not cover it. `render/scene.js` now exports `stationModel`/`planetModel` so both scenes use one
-  copy of the station geometry.
-- **Tests:** new `tests/ui-overlays.test.mjs` (pause card order, both overlays allowed at a station and
-  refused on the title screen/pause/warp/death, the title camera always framing the station with the planet
-  behind it, and the fade being safe with no speakers).
-- **Docs:** `docs/architecture/ui-and-screens.md` conventions, `src/ui`, `src/render` and `src/core` README
-  rows, and steps 4–6 of `testing/TESTING-BASELINE.md`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: No message line that moves the menu, and no "filed at another station" note
+- 2026-11-13: A story mission is offered at one station, and only there
+- 2026-11-13: Missions belong to the station that filed them, and the docked panel redraws itself
+- 2026-11-13: Overlays everywhere in the open world, a quiet exit to the menu, and a cinematic title view
 - 2026-11-13: Every mission and contract is handed in at one named station
 - 2026-11-13: Dying hands you a complete spare Wasp that can be fitted again
 - 2026-11-13: A mission is accomplished by its hand-in, not by its last step; contract wording and colours

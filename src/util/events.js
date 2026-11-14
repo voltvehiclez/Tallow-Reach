@@ -14,6 +14,10 @@
 //   docked                           player docked at the outpost
 //   launched                         player left the outpost
 //   died          text               ship destroyed (after docking)
+//   dying         { player }         the hull reached zero and `die()` is about to take the ship, its
+//                                    hold and the recovery fee. Anything that must happen while the
+//                                    pilot is still where they died listens here: an instance
+//                                    despawns at once and puts them back where they entered (step 14)
 //   mined         { item, player }   one unit of ore added to the acting pilot's hold
 //   pickup        { item, player, place, encounter, encounterType }
 //                                    crate picked up; encounter fields are null for ordinary loot
@@ -49,6 +53,21 @@
 //   travel-denied { player, from, to, reason }
 //                                    sim/sectors.js refused a proposed hop; the
 //                                    starmap shows the reason without closing
+//   rift-opened   { id, place, template, seed }
+//                                    a rift door appeared in a pocket (step 14)
+//   rift-entered  { id, template, origin }
+//                                    a pilot went in: the instance exists and its clock is running
+//   rift-left     { id, origin }      a pilot came out through the instance's own exit
+//   instance-closed { id, origin, reason }
+//                                    an instance was destroyed for good; reason is "left",
+//                                    "expiry", "death", "refused" or "reset"
+//   instance-expired { id, kind, origin }
+//                                    its lifetime ran out; `kind` is the declared `onExpire.kind`
+//                                    ("kill" or "collapse"), whose handler then ran
+//   instance-warning { id, left }     `RIFT.warnSec` seconds of lifetime are left
+//   instance-objective-done { id, kind }
+//                                    the instance's objective was completed
+//   instance-cache-open { id, loot }  the locked cache spilled its crates into the instance
 //   delivered     { item?, target?, place?, player }
 //                                    a mission delivery objective reached its target
 //   mission-tick  { dt, player }     one unpaused simulation tick for survive/wait objectives

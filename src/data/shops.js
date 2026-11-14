@@ -96,6 +96,14 @@ export const SHOPS = {
         n: "Basic hull",
         d: "Hull. Standard armour plating: 10 Hull HP.",
       },
+      // Step 14: the first rift. Ten credits, one use — right-click it in the ship's own inventory
+      // (press I in space) and choose Use to open it where you are.
+      {
+        id: "rift_basic",
+        price: 10,
+        n: "Basic rift",
+        d: "Consumable. Opens a rift where you fly it, at least 1 km clear of any station, asteroid field or planet and 150 m clear of any single rock. Inside: hardened guardians, rich debris, and a locked cache that opens only when they are all destroyed — the way out stays sealed until then. The rift collapses 20 minutes after you enter, with you in it. One use: move it to a ship, press I in space, right-click it and choose Use.",
+      },
     ],
   },
 };

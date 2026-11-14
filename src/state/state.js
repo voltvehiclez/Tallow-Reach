@@ -6,7 +6,7 @@
 import { newProfile, newWorld, SAVE_VERSION } from "./profile.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
-import { DEFAULT_PLACE } from "../data/places.js";
+import { DEFAULT_PLACE, clearInstancePlaces } from "../data/places.js";
 
 // Before the local ship exists, input can still be prepared for it. Once created,
 // every pilot owns its own controls; legacy aliases expose the selected local pilot.
@@ -48,8 +48,16 @@ export function profileOf(player = localPlayer()) {
  */
 export function captureResume() {
   const P = localPlayer();
-  state.worldState.resume = !P || P.docked || P.dead
-    ? null
+  if (!P || P.docked || P.dead) {
+    state.worldState.resume = null;
+    return null;
+  }
+  // Slice 14a: an instance is session-only, so a save made inside a rift records the spot the rift
+  // was opened from and a reload returns the pilot there — never into an instance that no longer
+  // exists. Slice 14b replaces this with the saved run itself (owner decision 2026-11-14).
+  const entry = instanceAt(P.place || state.place)?.entry;
+  state.worldState.resume = entry
+    ? { pos: entry.pos.toArray(), quat: entry.quat.toArray(), sh: entry.sh, en: entry.en }
     : { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
   return state.worldState.resume;
 }
@@ -118,12 +126,20 @@ export const state = {
   aimDirection: { x: 0, y: 0, z: -1 }, // last rendered camera direction, supplied by the frame loop
   paused: false,
   time: 0,             // seconds of unpaused play
+  // A line to prepend to the next death notice, or null. An instance's expiry says why the pilot
+  // died ("The rift collapsed with your ship inside it.") before the ordinary death sentence.
+  // Runtime only: never saved, and always consumed by the death it was set for.
+  deathNotice: null,
   place: DEFAULT_PLACE,     // id from data/places.js: the pocket the local pilot is flying in
   // The local pilot's warp. Like state.flight, this is a compatibility alias;
   // every pilot owns their own warp on the player record.
   get warp() { const p = localPlayer(); return p ? p.warp : pendingWarp; },
   set warp(w) { const p = localPlayer(); if (p) p.warp = w; else pendingWarp = w; },
   places: new Map(),        // place id -> { id, loaded, entities } runtime containers (session only)
+  // Temporary instances (step 14): instance place id -> { template, seed, tier, origin, entry,
+  // lifetime, objective, exit, cache }. Session runtime only in slice 14a; slice 14b saves the one
+  // the local pilot is inside so a run survives a quit.
+  instances: new Map(),
 
   // The local pilot's place entities. Existing UI/tests read state.world; sim
   // systems that act on another pilot pass an explicit place id instead.
@@ -213,7 +229,9 @@ export function placeWorld(id) {
     container = {
       id,
       loaded: false,
-      entities: { enemies: [], asteroids: [], crates: [], bullets: [], missiles: [], fx: [] },
+      // `rifts` are the wormholes floating in a pocket (step 14) and `caches` the
+      // locked containers inside an instance; both are records, drawn by render/views.js.
+      entities: { enemies: [], asteroids: [], crates: [], bullets: [], missiles: [], fx: [], rifts: [], caches: [] },
     };
     state.places.set(id, container);
   }
@@ -224,4 +242,26 @@ export function placeWorld(id) {
 export function resetPlaces() {
   state.places.clear();
   state.place = DEFAULT_PLACE;
+  clearInstances();
+}
+
+/** The runtime record of the instance a place id belongs to, or null for an ordinary pocket. */
+export function instanceAt(id) {
+  return (typeof id === "string" && state.instances.get(id)) || null;
+}
+
+/** True while this pilot is inside a temporary instance rather than a pocket of the map. */
+export function insideInstance(player = localPlayer()) {
+  const P = player || localPlayer();
+  return !!instanceAt(P ? P.place || state.place : state.place);
+}
+
+/** Drop every runtime instance record and its place registration (a load, a reset). */
+export function clearInstances() {
+  if (!state.instances.size) {
+    clearInstancePlaces();
+    return;
+  }
+  state.instances.clear();
+  clearInstancePlaces();
 }

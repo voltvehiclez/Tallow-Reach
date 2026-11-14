@@ -238,12 +238,22 @@ export function tryDock(P = state.player, profile = profileOf(P), world = state.
  * the station lends a Wasp if they have nothing left.
  */
 export function die() {
+  // Anything that has to happen while the pilot is still where they died runs here, before the ship
+  // and its hold are removed and before the docking below resolves a station. An instance despawns
+  // at once and puts the pilot back where they entered: `sim/instances.js` listens for `dying`.
+  emit("dying", { player: state.player });
   const S = state.profile,
     lost = S.ship;
   const fee = Math.min(S.cr, RECOVERY_FEE);
   boom(state.player.pos, 30, 0xffa050);
 
   let text = `Your ${SHIPS[lost].n} was destroyed and is gone for good. Cargo lost, ${fee} cr recovery fee.`;
+  // What ran out of time says why first (`onExpire.message` in data/instances.js), then the ordinary
+  // sentence follows, so the notice is one line of lore and one line of consequences.
+  if (state.deathNotice) {
+    text = `${state.deathNotice} ${text}`;
+    state.deathNotice = null;
+  }
   delete S.holds[lost];      // its ore and any spare modules it carried go with it
   S.cr -= fee;
   S.ships = S.ships.filter(id => id !== lost);
