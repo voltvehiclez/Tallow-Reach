@@ -28,9 +28,37 @@
   bottom status/refusal notices. `route-display.js` is shared by the HUD and starmap;
   an exact `{ pocketId: ... }` destination uses the pocket name in its route title and still gets a small parenthetical pocket name on the final system row.
 
+- **An instance is a third kind of place, and it is on no map** (step 14). `data/places.js` keeps a runtime
+  registry beside the resolved catalog: `registerInstancePlace({ kind: "instance", parent, features, sky, enter })`,
+  `unregisterInstancePlace`, `clearInstancePlaces`, `isInstancePlace`. It resolves through the ordinary
+  `placeAt` / `placeDef` path (its `features` come from its template in `data/instances.js`, and `placeAt`
+  falls back to `DEFAULT_PLACE` for an id that has been destroyed), but its `kind` is never `pocket`, so
+  `pocketsIn`, the starmap and warp cannot see it and it can never be a destination; `setPlaceCatalog` drops
+  every instance when a world is installed. A pilot reaches one by pressing **R** next to a door
+  (`sim/instances.js`), and `sim/places.js` `enterPlace` is instance-aware. An instance writes no
+  `placeMemory`: its fields use `stable: true` and its rocks come from the instance's own seed, so a run
+  leaves no trace behind when it is destroyed. Its `sky` is part of the place record (`placeAt(id).sky`),
+  which is how `render/scene.js` knows to hide the ordinary starfield and build a sky of its own — and why a
+  template's `features` never contain a planet: a run is somewhere else, not the space outside it.
+- **A run in progress is saved** (slice 14b, save v20). `world.instances` keeps one entry per live run —
+  template, seed, tier, remaining lifetime, `warned`, whether the objective is met, the canister's remaining
+  stock and open flag, and the entry spot — and `world.place` names the run while the pilot is inside it
+  (`enterPlace` writes it, `destroyInstance` writes the pocket back). A load **rebuilds** rather than
+  deserialises: `restoreInstances()` makes the records and registers their places before anything loads them,
+  and `populateInstances()` fills in the wave, the canister and the gate once the pilot is standing in the
+  run. Both are called by `resumeFromSave()`; boot calls `restoreInstances()` before `loadPlace`.
+
 ## Known gaps
 
 These are real, current limits. None of them is a bug in play today.
+
+- **A saved run carries the run, not the fight** (slice 14b). Everything the template and the seed decide
+  comes back exactly — rocks, wave, prize, sky — but the wave comes back at **full strength**, because a save
+  carries the run's state and not each guardian's damage. An emptied canister stays empty, so reloading can
+  never farm a prize twice.
+- **A rift door a pilot spawned but never entered is not saved.** Doors are session runtime: a reload leaves
+  the pocket without one, and the consumable that made it is spent. Slice 14c decides whether a spawned
+  wormhole pocket (which the world makes rather than the pilot) is saved with its remaining time.
 
 - **Where you logged out is saved** (`world.place` + `world.resume`, save v19). A save made while
   docked opens the station menu; a save made in flight returns you to the exact spot and heading,

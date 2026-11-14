@@ -92,9 +92,17 @@ test("Meridian sells exactly what it always has, at the prices the owner set", (
     assert.equal(price(id), 1, `${id} costs 1 cr`);
     assert.equal(shopRow(M, id).own, false, `${id}: no "You own N" (it counts every hull's stock fit)`);
   }
+  // Step 14: the first consumable, at the price the owner set on 2026-11-14.
+  assert.equal(price("rift_basic"), 10, "a Basic rift is 10 cr");
+  assert.equal(ITEMS.rift_basic.cat, "consumable", "and it is a consumable, not a part");
   // Nothing else is sold yet: no ore, no spare anything.
-  assert.equal(rows.length, 8, "eight rows in the shop");
-  for (const row of rows) assert.ok(ITEMS[row.id].cat === "module", `${row.id}: only parts are sold today`);
+  assert.equal(rows.length, 9, "nine rows in the shop");
+  for (const row of rows) {
+    assert.ok(
+      ITEMS[row.id].cat === "module" || row.id === "rift_basic",
+      `${row.id}: only parts and the Basic rift are sold today`
+    );
+  }
   // Every part is listed once. The old standard-issue "Autocannons" line is gone:
   // there is only one cannon module (basic cannons), and it is a stock row now.
   assert.equal(rows.filter(r => r.id === "cannon_basic").length, 1, "the cannons are listed once");
@@ -225,7 +233,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 19, "Step 13 mission progress is now part of the save");
+  assert.equal(p.v, 20, "Step 13 mission progress is now part of the save");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {

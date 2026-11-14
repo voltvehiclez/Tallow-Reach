@@ -11,7 +11,8 @@ import { saveAutosave } from "../state/storage.js";
 import { on, emit } from "../util/events.js";
 import { cargoHtml } from "./screens.js";
 import { discardItem, countOf } from "../sim/inventory.js";
-import { canDiscard } from "../data/items.js";
+import { useItem, canUse } from "../sim/consumables.js";
+import { canDiscard, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
 import { clearControls, syncControls } from "../core/input.js";
@@ -58,6 +59,22 @@ function onCargoContextMenu(event) {
   menu = document.createElement("div");
   menu.className = "inv-context";
   menu.setAttribute("role", "menu");
+
+  // Step 14: anything with a `use` field in data/items.js gets a **Use** entry beside Discard. What
+  // using it does is data (`USE_ACTIONS` in sim/consumables.js), so this menu never grows a second
+  // special case for the next consumable.
+  if (canUse(tile.dataset.id)) {
+    const use = document.createElement("button");
+    use.type = "button";
+    use.dataset.a = "cargoUse";
+    use.dataset.b = tile.dataset.id;
+    use.dataset.where = tile.dataset.where;
+    use.setAttribute("role", "menuitem");
+    use.textContent = "Use";
+    use.title = `Use one ${itemName(tile.dataset.id)}.`;
+    menu.append(use);
+  }
+
   const discard = document.createElement("button");
   discard.type = "button";
   discard.dataset.a = "cargoDiscard";
@@ -123,7 +140,37 @@ function openCargoDiscard(entry) {
   uiSound();
 }
 
+/** Use one of the item: say what happened, and only close the card if it was actually spent. */
+function useConsumable(entry) {
+  const id = entry.dataset.b;
+  const where = entry.dataset.where || state.profile.ship;
+  if (!canUse(id)) return;
+  closeContextMenu();
+  const before = countOf(where, id);
+  notify(useItem(id, where));
+  uiSound("confirm");
+  if (!(countOf(where, id) < before)) {
+    // Refused — nothing was spent, so the card stays exactly as the pilot left it.
+    renderCargo();
+    return;
+  }
+  // The hold changed, so anything waiting on cargo gets its retry, and the run is saved.
+  emit("mission-inventory-changed", { profile: state.profile, player: state.player });
+  try {
+    saveAutosave(currentSave());
+  } catch {
+    // An autosave that cannot be written must not eat the use itself.
+  }
+  // Using something happens out in the world, so the world is what the pilot should see next.
+  closeCargo();
+}
+
 function onCargoClick(event) {
+  const use = event.target.closest("[data-a='cargoUse']");
+  if (use && !use.disabled) {
+    useConsumable(use);
+    return;
+  }
   const discard = event.target.closest("[data-a='cargoDiscard']");
   if (discard && !discard.disabled) {
     openCargoDiscard(discard);

@@ -82,6 +82,7 @@ export const BINDINGS = {
   Digit1: "weapon:cannon",
   Digit2: "weapon:beam",
   KeyG: "dock",
+  KeyR: "rift",
   KeyM: "starmap",
   KeyJ: "route:jump",
   KeyI: "cargo",

@@ -8,6 +8,172 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station
+
+Owner correction to the station-scoping round: "Active story missions are not visible if you dock into another station...
+accepting border signal doesnt show anything in progress when im docked at galereach." Right: progress is the pilot's,
+not the counter's. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **Every active mission is listed at every station.** `ui/missionlog.js` and the Contracts tab
+  (`ui/screens.js`) no longer filter the active list by station: a job taken at Meridian shows at Galereach with its
+  status, objective, progress bar and dialogue preview, and can be abandoned from anywhere. The `missionFiledAt` helper
+  is gone — it existed only for that filter.
+- **Only the hand-in is station-bound.** Elsewhere the card reads "Deliver to Meridian Station" and shows a disabled
+  **Hand in at Meridian Station** button; at the mission's own station the same button is **Hand in cargo**. Public
+  options are unchanged: the chest `completeMission` refusal, the cargo never leaving the hold, and the reward only at
+  the station that takes it.
+- **Station conversations stay at their station.** Now that a mission is listed everywhere, its counter dialogue must
+  not be playable from the wrong counter. A `requiresDock` dialogue is live only while docked at the station that gives
+  the mission out (`missionAtItsStation`): elsewhere the card is read-only and says "Return to Meridian Station to
+  continue talking.", and `advanceDialogue` refuses the same click. In-field dialogue (the beacon hand-off) is unchanged.
+- **Offers are still station-specific.** The story offer list (`missionOfferStation`) and per-station contract boards
+  (`boardAt`) are untouched: Galereach still offers nothing to accept, and an accepted Border Signal is not offered a
+  second time.
+- **Tests:** `tests/mission-station-scoping.test.mjs` now pins the corrected rule — both jobs visible at both stations,
+  hand-in live only at the right one, Abandon present everywhere, the real-seed check extended (accept the Border Signal
+  at Meridian, dock at Galereach, and the log shows the mission there with no story offer), and a new test that the
+  Meridian briefing cannot be played from another station.
+  `tests/mission-handin-station.test.mjs` expects the mission listed at the wrong station with a disabled, station-named
+  hand-in. 487 tests pass.
+
+Files: `src/ui/missionlog.js`, `src/ui/screens.js`, `src/sim/missions.js`, `src/sim/contracts.js`,
+`src/ui/README.md`, `testing/TESTING-BASELINE.md`,
+`tests/mission-station-scoping.test.mjs`, `tests/mission-handin-station.test.mjs`, `docs/MISSION_RULES.md`,
+`docs/architecture/ui-and-screens.md`, `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
+## 2026-11-13: No message line that moves the menu, and no "filed at another station" note
+
+Owner feedback on the docked screens: "if you are in another station it says 1 mission is filed at another station. fly
+there to read it. You dont need to mention that just say 'No active missions here'", and "remove these types of UI
+notifications... I dont like it when notifications cause the entire UI to shift". **Save version unchanged (v19)**;
+rebuild needed (`npm run build`, then `npm test`).
+
+- **The Mission log and Contracts tab no longer explain where the other work is.** A station with no missions simply
+  reads "No active missions here."; the `N missions are filed at another station` line is gone from both screens
+  (`ui/missionlog.js`, `ui/screens.js`). Filtering is unchanged — another station's missions still do not appear.
+- **The panel never prints a message.** `outpostHtml` used to start with `<div class="ok">…</div>`, so every action that
+  returned a string pushed the whole menu down: "Contract accepted. Launch when ready.", "Sold 12 items for 340 cr.",
+  "Basic Power Plant moved to storage.". That element and `state.ui.toast` are gone.
+- **Routine confirmations are silent; refusals and warnings are a fixed overlay.** New `ui/notice.js` owns the rule:
+  `isRoutineReply()` lists the replies that only restate the redrawn panel (accepted, paid, sold, moved, fitted,
+  restocked, repaired, bought-into-storage, saved/loaded/deleted slot, reset, imported), and `notify()` shows anything
+  else — a refusal, a save/import failure, a galaxy-recovery warning — in a `#panel-notice` element fixed to the
+  viewport (`role="status"`, click to dismiss, 7 s). An unrecognised message is shown, never swallowed. The "mission
+  failed" alert is untouched.
+- **No layout can shift:** `#panel-notice` is `position: fixed` outside the panel; the panel's markup has no message
+  slot at all. A test asserts both.
+- **Tests:** new `tests/ui-notices.test.mjs` (silent replies, visible refusals, the panel renders no message, the CSS is
+  fixed). Existing tests that observed `state.ui.toast` now read `shownNotice()` from the same module
+  (`tests/step10-fixes.test.mjs`, `tests/step11b-starmap.test.mjs`, `tests/navigation.test.mjs`); the mission-log tests
+  assert the elsewhere note is gone. 487 tests pass.
+
+Files: `src/ui/notice.js` (new), `src/ui/menu.js`, `src/ui/screens.js`, `src/ui/missionlog.js`, `src/ui/pause.js`,
+`src/state/state.js`, `src/styles.css`, `tests/ui-notices.test.mjs`, `tests/step10-fixes.test.mjs`,
+`tests/step11b-starmap.test.mjs`, `tests/navigation.test.mjs`, `tests/mission-station-scoping.test.mjs`,
+`tests/mission-handin-station.test.mjs`.
+
+---
+
+## 2026-11-13: A story mission is offered at one station, and only there
+
+Owner follow-up to the station-scoping round: "missions by default are specific to a station — Border Signal is only
+available at Meridian; at Galereach the Mission log should have nothing to accept as a story mission."
+**Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **The default is one station, and there is no "offered everywhere" form.** `missionOfferStation()` resolves the
+  offering station as `offeredAt`, else the station the mission is handed in at, else the home station — so an
+  authored mission without either field is still Meridian-only, never global. The Mission log lists a story offer
+  only where that resolves to the station being read, and `ui/menu.js` refuses a `story` action anywhere else.
+- **Fails closed instead of silently moving.** A mission whose `offeredAt` names an unknown id, or a pocket with no
+  station, is offered **nowhere** (the linter already reports it as an error) rather than falling back to the home
+  station. `sim/missions.js` gains `stationPocket(id)`, which requires a real station pocket, because `stationAt`
+  alone accepts any unknown id — the place catalog falls back to Meridian for ids it does not know. `missionHandInStation`
+  and the hand-in stamping use it too, so a corrupt `handIn.station` in an old save resolves from `origin` instead of
+  filing the mission at a station that does not exist.
+- **Verified at the real Galereach:** new regression in `tests/mission-station-scoping.test.mjs` builds the seed's
+  galaxy (122 station pockets), docks at the station named Galereach, and asserts the Mission log has no Border Signal
+  and no `data-a="story"` button there, while Meridian in the same galaxy still shows both. A second test pins the
+  fail-closed rule. 484 tests pass.
+
+Files: `src/sim/missions.js`, `tests/mission-station-scoping.test.mjs`, `docs/MISSION_RULES.md`,
+`docs/architecture/ui-and-screens.md`, `src/data/README.md`.
+
+---
+
+## 2026-11-13: Missions belong to the station that filed them, and the docked panel redraws itself
+
+Two owner-reported fixes. **Save version unchanged (v19)** — `world.boards` is an additive field with a
+default; rebuild needed (`npm run build`, then `npm test`).
+
+- **Station-specific missions and contracts:** a station's contract board used to be the world's one board,
+  so a job read at Meridian could be accepted at Depot, and the Mission log listed every active mission no
+  matter where it was taken. New `sim/contracts.js` `boardAt(placeId, world)` gives every station its own
+  offers (`world.board` stays the home station's list so old saves keep theirs in place; other stations get
+  `world.boards[placeId]`, generated on first look); `ensureBoard(world, placeId)` and
+  `rerollBoard(world, placeId)` work per station, and `acceptContract(index, profile, world, placeId)`
+  rerolls only the board it read. `acceptMission`/`instantiateMission` take the giving station explicitly,
+  so a contract taken from Depot's board is stamped Depot even when the caller is not standing there.
+- **The Mission log and Contracts tab are scoped to the current station:** both filter with
+  `missionFiledAt(mission)` (filed where it is handed in), and a line below says how many missions are
+  filed elsewhere ("1 mission is filed at another station. Fly there to read it."). Story missions are
+  offered only where `missionOfferStation()` points: `data/missions/story.js` now says `offeredAt: "reach"`
+  for the Border Signal, the linter rejects an `offeredAt` that is not a station, and `ui/menu.js` refuses a
+  `story` action for a mission offered elsewhere.
+- **Buttons address missions by id, not by list position:** the panels list a filtered selection, so a
+  position would hit the wrong record once another station's missions exist. `data-b` now carries
+  `mission.id` in `ui/screens.js` and `ui/missionlog.js`, and `ui/menu.js` passes it through unchanged.
+- **The docked panel redraws when a mission changes:** the panel is HTML drawn when it is opened, so closing
+  the Border Signal's final dialogue left the card offering **Abandon** while the beacon was already aboard.
+  `ui/missionlog.js` now emits `mission-ui-refresh` after every mission event except the ones that already
+  redraw the panel (mission-ui-refresh, main-menu, docked, launched); `ui/menu.js` listens and redraws the
+  visible panel. Closing the last line now shows **Hand in cargo** straight away.
+- **Save:** `newWorld()` gains `boards: {}`; `cleanWorld` keeps only pockets that exist and are not the home
+  station, and only boards with at least one valid offer, so a save never grows from stations merely
+  visited.
+- **Tests:** new `tests/mission-station-scoping.test.mjs` (5 tests: per-station boards and rerolls, filing at
+  the giving station, scoped log/tab with the elsewhere count, story offers only at their station, and the
+  dialogue-close redraw). `tests/mission-handin-station.test.mjs` now expects the wrong station to hide the
+  mission instead of disabling its button; `tests/step9-save.test.mjs` expects `boards`. 482 tests pass.
+
+Files: `src/sim/missions.js`, `src/sim/contracts.js`, `src/sim/session.js`, `src/state/profile.js`,
+`src/data/missions/story.js`, `src/data/missions/validate.js`, `src/ui/screens.js`, `src/ui/missionlog.js`,
+`src/ui/menu.js`, `tests/mission-station-scoping.test.mjs`, `tests/mission-handin-station.test.mjs`,
+`tests/step9-save.test.mjs`.
+
+---
+
+## 2026-11-13: Overlays everywhere in the open world, a quiet exit to the menu, and a cinematic title view
+
+Four owner-reported UI fixes. **Save version unchanged (v19)**; rebuild needed (`npm run build`, then `npm test`).
+
+- **Pause card order:** Resume is now the first control and **Exit to main menu** the last, with the sound
+  switch between them. The markup lives in `ui/overlays.js` (`pauseOverlayHtml()`), so the order is one place.
+- **Pause and starmap while docked:** both used to be refused unless the pilot was flying. New
+  `ui/overlays.js` owns the rule (`canPause`, `canOpenStarmap`) and `main.js` plus `sim`-facing `openStarmap`
+  ask it: only the title screen, the pause overlay itself, a dead pilot or a warp refuses. Plotting from the
+  chart while docked works; the warp itself still needs a launch, and the chart now says "Docked: launch to
+  warp." instead of offering a course that does nothing.
+- **Quiet exit to the menu:** the simulation stops behind the title screen, so `updateAudio()` stopped
+  driving the loops and the engine droned on. `core/audio.js` gains `fadeToSilence(seconds)` (a 1.8 s ramp on
+  every looping voice — engine hiss and growl, roar, beam hum, drone, docked pad and its LFO — not a hard
+  cut), called from a `main-menu` listener. Playing again ramps everything back up.
+- **Cinematic title screen:** the menu used to show whatever the game camera last rendered (the pocket the
+  pilot quit in). New `render/menuview.js` draws its own scene — the home station turning with its planet
+  behind it — from `DEFAULT_PLACE` features only, on the path in `data/camera.js` (`MENU_CAMERA`,
+  `menu-pose`-style `menuPose`, sway 110 s, distance 520) and independent of the saved world, so the
+  background is the same every time. It also nudges the station left of centre on wide screens so the title
+  panel does not cover it. `render/scene.js` now exports `stationModel`/`planetModel` so both scenes use one
+  copy of the station geometry.
+- **Tests:** new `tests/ui-overlays.test.mjs` (pause card order, both overlays allowed at a station and
+  refused on the title screen/pause/warp/death, the title camera always framing the station with the planet
+  behind it, and the fade being safe with no speakers).
+- **Docs:** `docs/architecture/ui-and-screens.md` conventions, `src/ui`, `src/render` and `src/core` README
+  rows, and steps 4–6 of `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: Every mission and contract is handed in at one named station
 
 Fixes "the game does not care which location you hand a mission in at." **Save version unchanged (v19)** — the field is

@@ -25,6 +25,7 @@ import { ensureBoard } from "./contracts.js";
 import { activeMissions, missionProgress, missionObjectivesDone } from "./missions.js";
 import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
+import { restoreInstances, populateInstances } from "./instances.js";
 
 function assertSessionPilot(P, profile, verb) {
   if (P && P !== state.player && (!profile || profile === state.profile)) {
@@ -161,6 +162,10 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
  * a damaged position, or a ship that cannot move.
  */
 export function resumeFromSave(P = state.player, profile = profileOf(P)) {
+  // The save may have been made inside a temporary run (slice 14b). The run and its place are
+  // rebuilt first — `enterPlace` refuses anything that is not a place — and filled in at the end,
+  // because entering a place clears that place's objects.
+  restoreInstances();
   const placeId = state.worldState.place || DEFAULT_PLACE;
   enterPlace(placeId, P);
   emit("place-entered", { id: placeId, player: P });   // refresh scenery/views even when the id did not change
@@ -215,6 +220,7 @@ export function resumeFromSave(P = state.player, profile = profileOf(P)) {
     P.pos.set(...station.pos);
     emit("docked", { player: P });
   }
+  populateInstances();   // the pilot is standing in the run now, so it can be filled in
   return P;
 }
 
@@ -238,12 +244,22 @@ export function tryDock(P = state.player, profile = profileOf(P), world = state.
  * the station lends a Wasp if they have nothing left.
  */
 export function die() {
+  // Anything that has to happen while the pilot is still where they died runs here, before the ship
+  // and its hold are removed and before the docking below resolves a station. An instance despawns
+  // at once and puts the pilot back where they entered: `sim/instances.js` listens for `dying`.
+  emit("dying", { player: state.player });
   const S = state.profile,
     lost = S.ship;
   const fee = Math.min(S.cr, RECOVERY_FEE);
   boom(state.player.pos, 30, 0xffa050);
 
   let text = `Your ${SHIPS[lost].n} was destroyed and is gone for good. Cargo lost, ${fee} cr recovery fee.`;
+  // What ran out of time says why first (`onExpire.message` in data/instances.js), then the ordinary
+  // sentence follows, so the notice is one line of lore and one line of consequences.
+  if (state.deathNotice) {
+    text = `${state.deathNotice} ${text}`;
+    state.deathNotice = null;
+  }
   delete S.holds[lost];      // its ore and any spare modules it carried go with it
   S.cr -= fee;
   S.ships = S.ships.filter(id => id !== lost);

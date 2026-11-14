@@ -75,6 +75,16 @@
   builds a point in the ship's own frame from `pos`/`quat`, never from `matrixWorld`.
   **`src/sim/` holds no mesh, material or scene object**; `tests/layers.test.mjs` fails if one is
   named in a sim file's code.
+- **A door, a way out and a prize canister are records of the same kind** (step 14). A door hanging in a
+  pocket lives in that pocket's `rifts` list; the way out of a run lives in its `gates` list and its canister
+  in its `caches` list, each with a `pos`, a `quat`, a spin, a radius `r` and a `locked` flag the tick keeps
+  in step with the run's own state. `render/views.js` draws all three — the door and the gate through one
+  shared anomaly builder, so a way out always looks like the way in — and `sim/targeting.js` locks all three
+  (**F**) while `ui/hud.js` labels all three at all times. The canister is opened by the pilot with **R**
+  (`openCache`), which moves its stacks into their own hold one unit at a time; nothing spills by itself.
+  What a run contains — its template, wave, difficulty scalars, objective, exit rules, expiry outcome,
+  canister, sky and clearance margins — is all vocabulary in `data/instances.js`, and adding one is
+  [recipe 22](../recipes/22-a-new-rift-or-instance.md).
 - **Inventory: every place is measured in m³, and `sim/inventory.js` is the one home for it.** Since
   step 9 (save v13), the **hosted station** keeps its stock (`{ itemId: count }`) in `worldState.store`
   and its room is `STORAGE_PER_LEVEL` (250) times `worldState.base.store`. Each **ship's hold** is

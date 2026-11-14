@@ -2,7 +2,7 @@
 // so the look of a screen can be changed without touching game logic.
 
 import { SHIPS } from "../data/ships.js";
-import { ITEM_IDS, canSell, isItem, isModule, itemName, itemValue, itemVol } from "../data/items.js";
+import { ITEM_IDS, canSell, isItem, isModule, itemCat, itemName, itemUse, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
 import { shopDef } from "../data/shops.js";
@@ -73,6 +73,7 @@ export function introHtml() {
     `The mining beam and missiles are sold in the Shop. ` +
     `F locks whatever is nearest your crosshair, such as hostiles, rocks, crates or the station, and F again releases it. ` +
     `G docks when you are within 300 m of the station and slower than 70 m/s. ` +
+    `R enters a wormhole when you are close to one, and R again leaves an instance through the way you came in — never by contact, and a sealed way out says why. ` +
     `M opens the starmap: right-click a system to set a destination, then press J while flying for each next warp. You can also choose individual pockets to warp to. The world keeps running while the map is open; M or Esc closes it. ` +
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `I shows the hold of the ship you are flying while you are in space; dock to move cargo. ` +
@@ -455,13 +456,17 @@ export function viewedShip(ui = state.ui) {
 /** One ore or module tile in the inventory grid, with its existing move actions. */
 function invRow({ name, sub, kind, id, count, dir, free, vol, move = true, place = "" }) {
   const where = dir === "s" ? "ship" : "station";
+  // What the tile's corner says: a module, something you can use in flight (step 14), or ore —
+  // which keeps the "ORE" word every existing tile has always had.
+  const label = kind === "c" ? (itemUse(id) ? "USE" : "ORE") : "MOD";
+  const rightClick = itemUse(id) ? "Right-click to use or discard." : "Right-click to discard.";
   const inner =
-    `<span class="inv-item-top"><span class="inv-kind">${kind === "c" ? "ORE" : "MOD"}</span><span class="inv-n">&times;${count}</span></span>` +
+    `<span class="inv-item-top"><span class="inv-kind">${label}</span><span class="inv-n">&times;${count}</span></span>` +
     `<span class="inv-item-name">${name}</span><span class="inv-item-meta">${vol} m³ each</span>`;
   if (!move) {
     // In flight there is nowhere to move cargo to: the tile is a label, not a button.
     return `<div class="inv-item inv-item-read" data-kind="${kind}" data-id="${id}" data-count="${count}" data-where="${place}" ` +
-      `title="${name}: ${sub}. Right-click to discard." aria-label="${name}, quantity ${count}. Right-click to discard.">${inner}</div>`;
+      `title="${name}: ${sub}. ${rightClick}" aria-label="${name}, quantity ${count}. ${rightClick}">${inner}</div>`;
   }
   const room = Math.floor(free / (vol || 1));
   const noRoom = room > 0 ? "false" : "true";
@@ -486,10 +491,11 @@ function invColumn(where, title, dir, { move = true, profile = state.profile, sl
   // what the move and sell actions read; the catalogue decides which is which.
   for (const { id, n } of itemsAt(where, profile)) {
     const part = isModule(id);
+    const word = part ? "Module" : itemCat(id) === "consumable" ? "Consumable" : "Ore";
     rows.push(
       invRow({
         name: itemName(id),
-        sub: `${part ? "Module" : "Ore"}, ${itemVol(id)} m³ each`,
+        sub: `${word}, ${itemVol(id)} m³ each`,
         kind: part ? "m" : "c",
         id,
         count: n,

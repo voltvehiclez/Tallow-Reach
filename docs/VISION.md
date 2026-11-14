@@ -60,7 +60,7 @@ organised so that most new content is **data, not code**.
   content of a system decides how dangerous it is. A far system may be deliberately easy. Risk versus
   reward is the main source of replayability.
 - **Death** = the ship and its whole hold are gone for good (today's rule; the recovery fee and the
-  loaned Wasp remain).
+  loaned Wasp remain). Dying inside a rift — to a shot or to its timer — also despawns that rift at once.
 
 ### 2. Campaign (built after the open world is working)
 
@@ -96,7 +96,6 @@ mention) until the owner decides. Record the decision here when made, and delete
 
 | # | Question | Default until decided |
 | --- | --- | --- |
-| 5 | **Wormholes.** What does it take to spawn one, and can you leave an instance with loot at any time? | A consumable item opens one; you can always leave through the entry wormhole; dying inside loses everything, as everywhere. |
 | 6 | **Whose ship do guests fly in a host's world?** | Their **own** ship and hold, brought with them (so the risk is real). What they gain stays in their own save, and returns to their own world automatically. |
 | 7 | **Guests and the host's station.** Can a guest dock at the host's Meridian, shop and repair? | Yes, with the host's prices. A guest's *storage* stays in their own save. |
 | 8 | **Campaign ships.** Do campaign missions use your own ship or a ship the story gives you? | The story gives a fixed ship per mission (keeps missions balanced and replayable). |
@@ -104,6 +103,69 @@ mention) until the owner decides. Record the decision here when made, and delete
 | 10 | **Joining technology** (how a link connects two browsers without a server). | Decided at the multiplayer step, not now. See TARGET_ARCHITECTURE.md. It may need to relax the "no new dependencies" rule. |
 
 ## Decisions made
+
+- **2026-11-14 — Step 14a playtested: how a rift must look, be locked, be looted and be saved (owner).**
+  Six items, all built the same day. **(1)** A rift is a **shimmering spherical dark-orange-and-black anomaly** with
+  two parts: a spherical core "eye" and an outer glowing aura/flare. **(2)** It is **lockable with F** and its label
+  is **part of the HUD** — an entry or an exit that has to be hunted for is a lost ship. **(3)** The loot is a
+  **canister-shaped object**, locked until the objective is complete, and the pilot **presses R on it** to open it and
+  move what is inside into their own inventory; nothing enters a hold by itself (LESSONS L6). **(4)** The sky inside is
+  **another dimension**: dark and realistic like the rest of the game, **unstable and shattered**, and it **never
+  copies the planets** — a rift is not the space outside it. **(5)** The way out inside is **the same anomaly** as the
+  door, **lockable the same way**, **visible at all times** and **sealed until the objective is complete**. **(6)**
+  Logging out mid-rift **respawns the pilot inside the rift with everything identical** — clock, NPCs, loot — which
+  reverses this step's earlier "an instance is session runtime, so a save returns the pilot to the pocket" answer and
+  is what save **v20** (slice 14b) does. The wave comes back at full strength, and a canister once emptied stays
+  empty, so a reload is never a way to fight a fight again or farm a prize twice.
+- **2026-11-14 — Step 14: rifts, instances and how you may leave one (owner; closes open question 5).**
+  A wormhole the player spawns is called a **rift**. Many things will be able to open one later; the first is a
+  **Basic rift** bought for **10 cr**, used by **right-clicking it in the in-flight ship inventory (I)**, and it opens
+  **where the ship is** — refused unless the ship is at least **1 km clear of a large structure**: measured to a
+  station, to an asteroid field's edge (its centre plus its radius) and to a planet's surface, with a smaller
+  **150 m** margin from any single rock so a rift never opens inside one. Every one of those numbers is data
+  (`src/data/instances.js`), tunable without code.
+  **Natural wormholes come in two kinds that share one machinery** (owner, 2026-11-14). A **simple wormhole** is a
+  pocket that **spawns by itself in normal space**: it appears on the map, you warp to it like any pocket, and the
+  wormhole hangs inside it as an object you fly close to and enter with the same deliberate press. The far side is
+  **one instanced pocket, isolated from the rest of space**, holding an objective of its own — a fight, mining a
+  special ore, whatever the template says. A **wormhole system** (a later slice) is entered exactly the same way, but
+  its far side is a **system in uncharted space** that is not on the existing starmap: it has pockets you use like any
+  other system's, and it is **persistent and saved** like one. What is dynamic inside it are its own wormhole pockets,
+  which live and die by the same timer — and if one expires while you are in there, **a new wormhole pocket spawns so
+  you can still get out**. Inside a wormhole system the map opens on that system's pocket map, with a button to look at
+  the normal-space map and the same button to come back.
+  Entering and leaving is a **deliberate key press (R) at close range**, never contact, so a
+  ship cannot drift in by accident and a shut exit can say why. Whether an instance may be left is **data on the
+  instance, never code**: the Basic rift stays shut until its objective is done (destroy the NPCs), a natural
+  wormhole may be left at any time, and further criteria can be added later without a code change. A spawned rift is
+  **one use** and collapses when the pilot leaves it.
+  **Every wormhole is time limited — 20 minutes of simulation time — but each clock starts on a different thing, and
+  what running out does is data per template, never code.** A **rift's** clock runs from entry and it **kills the
+  pilot**: the ship and its whole hold are lost exactly as in any death, and the rift despawns at once. A **simple
+  wormhole's** clock runs from the moment its pocket **spawns in normal space**, and it **never kills**: running out
+  only **collapses the way in**. The wormhole object fades, the outer pocket stays on the map until you warp off and
+  then despawns, and the way out inside is a **Stable wormhole** with no clock of its own — so you are never forced out
+  and may leave whenever you like. Leave after the collapse and you are put back in that outer pocket with nothing
+  there to fly through again. Future kinds may punish differently again (losing one specific thing, say), so the
+  outcome is a declared field resolved through a registry of outcomes — `kill` and `collapse` today.
+  **A run survives a quit.** Quitting or reloading inside a rift returns the pilot **inside it at the exact spot**, with
+  the same enemies and their damage, the same crates and rocks, the same objective progress and the same time left, so
+  an emergency errand costs nothing. It is not an escape: everything is exactly as it was. What makes neither a quit,
+  nor an expiry, nor a death payable is the **physical loot cache inside the instance that stays locked until the
+  objective is complete**. Loot already picked up stays with the pilot; the cache is the reward that none of those three
+  ways out can ever hand over. This is why an instance in
+  progress *is* saved, unlike everything else floating in space — it makes step 14 save version **20**.
+  Difficulty inside a rift is a scalar well above the map's, so the same enemies are harder rather than the map getting
+  harder. Built in owner-chosen slices: **14a** the Basic rift (session-only), **14b** the saved run, **14c** simple
+  wormholes (self-spawning pockets, their timer, the Stable wormhole way out), **14d** wormhole systems in uncharted
+  space.
+  **Four more owner answers (2026-11-14, round four).** The **rift is built first** (slice 14a): it needs no map
+  changes and it is the framework every wormhole then reuses. A simple wormhole's pocket appears as **a new pocket
+  inside an existing system**, on that system's pocket map, warpable like its siblings. Spawned wormhole pockets **are
+  saved with their remaining time**, so a reload finds the wormhole still hanging there — that is a save version of its
+  own, after the one slice 14b takes. And a simple wormhole **may be re-entered until its timer runs out**: leaving does
+  not consume it, so its objective and its locked cache must be strictly one-time per wormhole or the same reward could
+  be farmed by walking back in.
 
 - **2026-11-10 — Step 13a/13b mission framework (owner):** story choices may affect later missions, so mission data keeps remembered `profile.flags` and simple dialogue-choice hooks available without forcing every mission to use them. Contracts and story missions share one data shape and runner; several missions may be active at once. Step 13a covers objective events and preserves the existing contract behavior; 13b now adds data-only dialogue, scripts, waits, flags/branching, parallel work and declared failure outcomes. 13c now presents those records through a data-driven Mission log tab and live dialogue panel, with no automatic world pause. The `The Border Signal` data mission is the worked example. Save v19 replaces the old singular active-contract slot with `profile.missions` plus `flags` and keeps story-script place state in the world half; older saves still migrate.
 

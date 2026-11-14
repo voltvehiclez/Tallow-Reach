@@ -5,7 +5,7 @@
 import { V } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { state, placeWorld } from "../state/state.js";
-import { placeAt, placeDef, featureOf, featureById, isPocket } from "../data/places.js";
+import { placeAt, placeDef, featureOf, featureById, isPocket, isInstancePlace } from "../data/places.js";
 import { populateField, spawnAsteroid } from "./asteroids.js";
 import { spawnStaticEncounter } from "./encounters.js";
 import { restoreMissionDrops } from "./combat.js";
@@ -61,12 +61,16 @@ on("place-memory-ready", ({ placeId, kind, id } = {}) => {
   }
 });
 
-/** Put a pilot in a pocket. The local alias/scenery follows only the local pilot. */
+/** Put a pilot in a pocket — or in a runtime instance (step 14), which is a place with features to
+ *  load like any other. The local alias/scenery follows only the local pilot. */
 export function enterPlace(id, player = state.player) {
-  if (!isPocket(id)) return false;
+  // Anything that is neither refuses, so a dead or mistyped id can never become the pilot's world.
+  const instance = isInstancePlace(id);
+  if (!instance && !isPocket(id)) return false;
   loadPlace(id);
   const local = player === state.player;
-  if (local) recordSystemVisit(state.galaxy, state.worldState.galaxy?.knowledge, id);
+  // An instance belongs to no system, so there is no system visit to record for it.
+  if (local && !instance) recordSystemVisit(state.galaxy, state.worldState.galaxy?.knowledge, id);
   if ((player ? player.place : state.place) === id) {
     if (local) state.place = id;
     return true;
@@ -74,6 +78,8 @@ export function enterPlace(id, player = state.player) {
   if (player) player.place = id;
   if (local) {
     state.place = id;
+    // Slice 14b: a run is a place like any other as far as a save is concerned, so the saved world
+    // names it and a load comes back inside it. `destroyInstance` names the pocket again on the way out.
     state.worldState.place = id;
   }
   emit("place-entered", { id, player });

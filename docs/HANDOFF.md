@@ -5,7 +5,7 @@ code**: give complete files (or exact find-and-replace edits) with full paths, a
 run and what to click. Different AI assistants work in separate chats and none remembers earlier ones.
 **The docs are the memory.** Do not read every doc: read this file, then only what your task needs.
 
-*Last checked: 2026-11-13. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
+*Last checked: 2026-11-14. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
 
 ## Start here (every chat)
 
@@ -20,6 +20,7 @@ run and what to click. Different AI assistants work in separate chats and none r
 | **Missions, dialogue, triggers, contracts** | [MISSION_RULES.md](MISSION_RULES.md) (mandatory), [recipes/11](recipes/11-story-and-scripted-missions.md), [recipes/03](recipes/03-a-new-contract-type.md) |
 | Adding content (ship, item, enemy, module, place, shop, loot) | [HOW_TO_ADD.md](HOW_TO_ADD.md), then the one recipe in `docs/recipes/` |
 | The starmap, places, travel | [architecture/world-and-map.md](architecture/world-and-map.md), [recipes/14](recipes/14-a-new-pocket-or-system.md), [recipes/20](recipes/20-edit-the-starmap-web-and-travel.md), [recipes/21](recipes/21-add-a-place-template-encounter.md) |
+| **Rifts, instances, wormholes, consumables** | "Step 14" in [VISION.md](VISION.md), [recipes/22](recipes/22-a-new-rift-or-instance.md), `src/data/instances.js` and `src/sim/instances.js` (both documented at the top) |
 | Ships, modules, weapons, fitting | [architecture/ship-systems.md](architecture/ship-systems.md) |
 | Items, inventory, shops, loot, enemies, randomness | [architecture/content-data.md](architecture/content-data.md) |
 | The tick, input, sound, rendering | [architecture/simulation-and-rendering.md](architecture/simulation-and-rendering.md) |
@@ -30,12 +31,18 @@ run and what to click. Different AI assistants work in separate chats and none r
 
 ## Where the game is now
 
-- Save version: **v19**.
+- Save version: **v20**.
 - **Which steps are done, built or next: see the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step
   status is kept (this file, REFACTOR_PLAN and the README do not repeat it); tick steps there. A step that is "built"
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" and tick them there if so. If they
   report a bug, fix it first, following "When the owner reports a bug" below.
+- **Waiting on a playtest (2026-11-14):** the owner's six 14a feedback items — the shimmering anomaly a rift and its
+  way out both are, F-locks and HUD labels for all three, the R-opened canister, the shattered sky — **plus slice 14b**,
+  a run that survives a quit: [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md). Tick 14a and 14b in
+  ROADMAP only when the owner says they passed. Next slices: **14c** simple wormholes (**v21**), **14d** wormhole systems
+  in uncharted space, then step 15 the campaign (**v22**). A run is saved as template, seed, clock, objective, prize and
+  entry spot (`world.instances`), so logging out inside one comes back inside it — with its wave back at full strength.
 - The campaign (step 15) must be built from the mission templates and pass the linter.
 - Detailed notes on how the galaxy, starmap, place templates and mission runner were built are in
   [architecture/feature-notes.md](architecture/feature-notes.md). Code and tests are authoritative.
@@ -131,7 +138,7 @@ on the end of the address.
 | `REFACTOR_PLAN.md` | The refactor steps still to do, with prompts. Finished steps are in `archive/`. |
 | `TARGET_ARCHITECTURE.md` | The end-state design, the eight principles, the debt register. |
 | `ARCHITECTURE.md` | How the code works **now**: layers, events, state, saves. Area details in `architecture/`. |
-| `HOW_TO_ADD.md` | Index of 21 recipes in `recipes/`. |
+| `HOW_TO_ADD.md` | Index of 22 recipes in `recipes/`. |
 | `CHANGELOG.md` / `CHANGELOG_ARCHIVE.md` | Recent changes in full, older history. Never delete entries. |
 | `AI_PROMPTS.md` | Prompts the owner pastes into new chats. |
 | `archive/` | Superseded text, kept word for word: old HANDOFF, finished refactor steps, old status prose. |

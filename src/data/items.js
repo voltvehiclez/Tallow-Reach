@@ -7,6 +7,10 @@
 //   v     sell value in credits per unit (mission objects may use 0 and cannot be sold)
 //   vol   m³ one unit takes up (1 unless the entry says otherwise)
 //   st    most that fit in one stack (no limit unless the entry says otherwise)
+//   use   OPTIONAL: the in-flight action this item can be used for (a key of `USE_ACTIONS`
+//         in sim/consumables.js). Read it through `itemUse(id)`, never by hand.
+//   rift  OPTIONAL: the rift kind it opens (an id in `RIFTS`, data/instances.js), read
+//         through `itemRift(id)`.
 //
 // A module's entry carries no numbers of its own: its name, volume and stats
 // come from data/modules.js under the same id, so nothing is written twice.
@@ -38,6 +42,12 @@ export const ITEMS = {
   core: { n: "Reactor core", cat: "salvage", v: 350 },
   beacon: { n: "Beacon", cat: "mission", v: 0 },
   parcel: { n: "Sealed parcel", cat: "mission", v: 0 },
+
+  // Consumables: used in flight from the ship's own inventory (press I, then
+  // right-click the tile for **Use**). `use` names an action in `USE_ACTIONS`
+  // (sim/consumables.js) and `rift` names the rift kind it opens
+  // (data/instances.js). `v` is what an unused one sells back for.
+  rift_basic: { n: "Basic rift", cat: "consumable", v: 6, vol: 1, st: 10, use: "spawn-rift", rift: "basic" },
 
   // Modules: the stats live in data/modules.js under the same id; `v` is what a
   // spare part sells for (60% of the shop price, see the note at the top).
@@ -92,3 +102,10 @@ export const canDiscard = id => isItem(id) && itemCat(id) !== "mission";
 
 /** Most of `id` that fit in one stack (no limit unless the entry says `st`). */
 export const itemStack = id => (isItem(id) ? ITEMS[id].st || Infinity : 0);
+
+/** The in-flight action this item can be used for (a key of `USE_ACTIONS` in
+ * sim/consumables.js), or null for anything that is only carried, sold or fitted. */
+export const itemUse = id => (isItem(id) ? ITEMS[id].use || null : null);
+
+/** The rift kind an item opens (an id in `RIFTS`, data/instances.js), or null. */
+export const itemRift = id => (isItem(id) ? ITEMS[id].rift || null : null);

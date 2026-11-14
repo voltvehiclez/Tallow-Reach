@@ -105,7 +105,7 @@ test("each generated station has independent inventory that survives save/load",
   old.world.place = first.id;
   old.world.store = { cobalt: 3 };
   const migrated = sanitizeSave(old);
-  assert.equal(migrated.v, 19);
+  assert.equal(migrated.v, 20);
   assert.deepEqual(migrated.world.store, {}, "legacy stock moves off the home alias when the save was at a trader");
   assert.deepEqual(migrated.world.stationStores[stationKeyAt(first.id)], { cobalt: 3 }, "legacy stock is assigned to the saved station");
 

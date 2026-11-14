@@ -6,7 +6,7 @@
 import { newProfile, newWorld, SAVE_VERSION } from "./profile.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
-import { DEFAULT_PLACE } from "../data/places.js";
+import { DEFAULT_PLACE, clearInstancePlaces } from "../data/places.js";
 
 // Before the local ship exists, input can still be prepared for it. Once created,
 // every pilot owns its own controls; legacy aliases expose the selected local pilot.
@@ -45,22 +45,66 @@ export function profileOf(player = localPlayer()) {
 /**
  * Record where the local pilot is right now, so the next load puts them back
  * there. Null while docked (or dead): loading then opens the station menu.
+ * Inside a temporary run this is the pilot's own spot in it, so logging out
+ * mid-rift comes back mid-rift; `captureInstances()` keeps the run itself alive.
  */
 export function captureResume() {
   const P = localPlayer();
-  state.worldState.resume = !P || P.docked || P.dead
-    ? null
-    : { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
+  if (!P || P.docked || P.dead) {
+    state.worldState.resume = null;
+    return null;
+  }
+  state.worldState.resume = { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
   return state.worldState.resume;
 }
 
 /**
+ * Snapshot every live temporary run into the world record (save v20). A run keeps
+ * what a rebuild cannot work out for itself — its identity, its clock, whether its
+ * objective is met, what is still inside its prize and the spot it was entered
+ * from. The seed reproduces the rest, so one saved run always comes back as the
+ * same run: same guardians, same rocks, same reward.
+ */
+export function captureInstances() {
+  const runs = [];
+  for (const record of state.instances.values()) {
+    if (!record || record.gone || record.expired) continue;
+    runs.push({
+      id: record.id,
+      template: record.template,
+      seed: record.seed >>> 0,
+      tier: record.tier,
+      origin: record.origin,
+      lifetime: Math.max(0, Number(record.lifetime) || 0),
+      totalLifetime: Math.max(0, Number(record.totalLifetime) || 0),
+      warned: !!record.warned,
+      objectiveMet: !!record.objective?.met,
+      entry: record.entry
+        ? {
+            pos: record.entry.pos.toArray(),
+            quat: record.entry.quat.toArray(),
+            sh: record.entry.sh,
+            en: record.entry.en,
+          }
+        : null,
+      ...(record.cache
+        ? { cache: { stock: record.cache.stock.map(s => ({ i: s.i, c: s.c })), open: !!record.cache.open } }
+        : {}),
+    });
+  }
+  state.worldState.instances = runs;
+  return runs;
+}
+
+/**
  * Snapshot the local profile and hosted world as a combined save object.
- * Captures the live resume point first, so every save path — autosave, slot and
- * export code — records where the pilot actually is.
+ * Captures the live resume point and every temporary run first, so every save
+ * path — autosave, slot and export code — records where the pilot actually is,
+ * including inside a rift.
  */
 export function currentSave() {
   captureResume();
+  captureInstances();
   state.worldState.destination = state.ui.destination;
   return {
     v: SAVE_VERSION,
@@ -118,12 +162,20 @@ export const state = {
   aimDirection: { x: 0, y: 0, z: -1 }, // last rendered camera direction, supplied by the frame loop
   paused: false,
   time: 0,             // seconds of unpaused play
+  // A line to prepend to the next death notice, or null. An instance's expiry says why the pilot
+  // died ("The rift collapsed with your ship inside it.") before the ordinary death sentence.
+  // Runtime only: never saved, and always consumed by the death it was set for.
+  deathNotice: null,
   place: DEFAULT_PLACE,     // id from data/places.js: the pocket the local pilot is flying in
   // The local pilot's warp. Like state.flight, this is a compatibility alias;
   // every pilot owns their own warp on the player record.
   get warp() { const p = localPlayer(); return p ? p.warp : pendingWarp; },
   set warp(w) { const p = localPlayer(); if (p) p.warp = w; else pendingWarp = w; },
   places: new Map(),        // place id -> { id, loaded, entities } runtime containers (session only)
+  // Temporary instances (step 14): instance place id -> { template, seed, tier, origin, entry,
+  // lifetime, objective, exit, cache }. Session runtime only in slice 14a; slice 14b saves the one
+  // the local pilot is inside so a run survives a quit.
+  instances: new Map(),
 
   // The local pilot's place entities. Existing UI/tests read state.world; sim
   // systems that act on another pilot pass an explicit place id instead.
@@ -213,7 +265,13 @@ export function placeWorld(id) {
     container = {
       id,
       loaded: false,
-      entities: { enemies: [], asteroids: [], crates: [], bullets: [], missiles: [], fx: [] },
+      // Step 14: `rifts` are the wormhole doors floating in a pocket, and inside an instance `gates`
+      // are the way out (its own portal object) and `caches` the canister holding the prize. All
+      // three are plain records, drawn by render/views.js and lockable with F.
+      entities: {
+        enemies: [], asteroids: [], crates: [], bullets: [], missiles: [], fx: [],
+        rifts: [], gates: [], caches: [],
+      },
     };
     state.places.set(id, container);
   }
@@ -224,4 +282,26 @@ export function placeWorld(id) {
 export function resetPlaces() {
   state.places.clear();
   state.place = DEFAULT_PLACE;
+  clearInstances();
+}
+
+/** The runtime record of the instance a place id belongs to, or null for an ordinary pocket. */
+export function instanceAt(id) {
+  return (typeof id === "string" && state.instances.get(id)) || null;
+}
+
+/** True while this pilot is inside a temporary instance rather than a pocket of the map. */
+export function insideInstance(player = localPlayer()) {
+  const P = player || localPlayer();
+  return !!instanceAt(P ? P.place || state.place : state.place);
+}
+
+/** Drop every runtime instance record and its place registration (a load, a reset). */
+export function clearInstances() {
+  if (!state.instances.size) {
+    clearInstancePlaces();
+    return;
+  }
+  state.instances.clear();
+  clearInstancePlaces();
 }

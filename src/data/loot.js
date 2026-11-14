@@ -51,6 +51,39 @@ export const LOOT_TABLES = {
       { i: "voidite", w: 8 },
     ],
   },
+
+  // What a rift's rock is made of (step 14): the same ore, but the rare kind is
+  // nearly three times as common. This is the "high reward" half of a rift.
+  rift_rock: {
+    kind: "pick",
+    entries: [
+      { i: "ferrite", w: 40 },
+      { i: "cobalt", w: 38 },
+      { i: "voidite", w: 22 },
+    ],
+  },
+
+  // The locked cache at the heart of a guardian rift. It spills as ordinary
+  // crates the pilot collects one by one, so a full hold leaves them floating
+  // (nothing is ever added to a hold by itself).
+  rift_cache: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [4, 6], w: 1, j: 26 },
+      { i: "core", c: [1, 1], w: 0.5, j: 12 },
+      { i: "voidite", c: [3, 5], w: 0.7, j: 20 },
+    ],
+  },
+
+  // A deep rift pays roughly twice as much for a harder fight.
+  rift_cache_deep: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [8, 12], w: 1, j: 34 },
+      { i: "core", c: [1, 2], w: 0.85, j: 16 },
+      { i: "voidite", c: [6, 10], w: 0.9, j: 26 },
+    ],
+  },
 };
 
 /** The table an enemy uses if its def names none. */

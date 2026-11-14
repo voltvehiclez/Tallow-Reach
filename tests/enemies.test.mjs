@@ -164,11 +164,15 @@ test("no enemy is written into the sim code any more", () => {
   }
 
   assert.match(src, /AI_BEHAVIOURS\[def\.ai\]/, "the behaviour is chosen by the def's ai field");
-  assert.match(
-    src,
-    /fire\(e\.pos, dir, def\.bspd, false, def\.dmg\)/,
-    "the shot's speed and damage come from the def"
-  );
+  // The shot's numbers come from the def. Step 14 added exactly one modifier: an instance's
+  // declared difficulty scalar, read from the runtime record (data/instances.js), so this reads the
+  // call's arguments instead of pinning one exact line of source.
+  const shot = src.match(/const shot = fire\(([^;]*)\);/);
+  assert.ok(shot, "an enemy shoots through sim/combat.js `fire`");
+  assert.match(shot[1], /def\.bspd/, "the shot's speed comes from the def");
+  assert.match(shot[1], /def\.dmg/, "and its damage comes from the def");
+  assert.doesNotMatch(shot[1], /def\.(bspd|dmg)\s*[-+*/]\s*[\d.]/, "never combined with a literal number");
+  assert.doesNotMatch(shot[1], /(?:^|,)\s*[\d.]+\s*(?:,|$)/, "and no argument of the call is a literal");
 
   // Step 7a: the AI moves data, not meshes, and needs no scene to do it.
   assert.doesNotMatch(src, /e\.m\b/, "an enemy has no mesh any more (it is `e.pos` / `e.quat`)");

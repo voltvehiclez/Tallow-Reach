@@ -13,6 +13,7 @@ import { updateEnemies } from "./ai.js";
 import { updateBullets, updateCrates } from "./combat.js";
 import { updateEffects } from "./effects.js";
 import { updatePlaceMemory } from "./place-memory.js";
+import { updateInstances, updateRifts } from "./instances.js";
 import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 
 /** The frame loop's pause gate. A hosted multiplayer world never pauses merely
@@ -57,7 +58,11 @@ export function stepSim(dt) {
     updateEnemies(dt, placeId);
     updateBullets(dt, placeId);
     updateCrates(dt, placeId);
+    updateRifts(dt, placeId);      // step 14: a rift door turns in place and offers itself to the pilot
   }
+  // Step 14: every live instance keeps its own clock, objective and locked cache, wherever the
+  // pilots are. Instances are few, so this sweeps them all rather than going place by place.
+  updateInstances(dt);
   for (const placeId of state.places.keys()) updateEffects(dt, placeId);
 }
 

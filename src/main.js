@@ -1,7 +1,7 @@
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
-import { renderer, scene, camera, stars, showPlace, updateScenery } from "./render/scene.js";
+import { renderer, scene, camera, stars, showPlace, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
 import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
@@ -16,6 +16,7 @@ import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
 import { tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
+import { riftAction, restoreInstances } from "./sim/instances.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
@@ -48,6 +49,9 @@ import {
 
 document.body.prepend(renderer.domElement);
 applySave(loadAutosave(prepareGalaxySave) || prepareGalaxySave(newSave()));
+// A save can be from inside a rift (slice 14b): its run has to be a place again before anything
+// loads that place. `resumeFromSave()` below puts the pilot back in it and fills it in.
+restoreInstances();
 createPlayer();
 setShip(state.profile.ship);
 loadPlace(state.place);
@@ -94,6 +98,18 @@ installCameraControls(state.freeCam, {
 });
 
 on("place-entered", ({ id }) => showPlace(id));
+// A run that ends is never coming back, so its scenery and its sky go with it, and the pocket the
+// pilot is back in shows again (already `state.place`: `destroyInstance` moves them before it emits).
+// `render/` is not allowed to know when a run ends, so the bus says so and this is the only place
+// that acts on it.
+on("instance-closed", ({ id }) => {
+  forgetPlace(id);
+  showPlace(state.place);
+});
+// A load replaces the runs of the save before it; their scenery goes with them.
+on("instances-forgotten", ({ ids }) => {
+  for (const id of ids) forgetPlace(id);
+});
 showPlace(state.place);
 
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
@@ -113,6 +129,11 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       break;
     case "dock":
       if (playing && !state.warp) tryDock();
+      break;
+    case "rift":
+      // Step 14: one deliberate press goes in or out of a wormhole — into a rift door that is
+      // within range, or out through the instance's own way out. Never by contact.
+      if (playing && !repeat && !state.warp) riftAction(localPlayer());
       break;
     case "starmap":
       if (!repeat) {

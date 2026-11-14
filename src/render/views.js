@@ -52,6 +52,66 @@ const crateCoreMat = mm(0x3a6a7a, 0x1a5a6a);
 
 const particleGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 
+// Step 14: an anomaly — the rift door hanging in a pocket, and the way out of a run, which is drawn
+// identically because it is the same kind of thing. Two parts, as the owner described it: a dark core
+// "eye" (a near-black sphere with an ember rim and a bright centre) and an outer glowing aura with a
+// wider, fainter flare. Both are unit-sized here and scaled by the record's own `r`, so how big one
+// looks is data in `data/instances.js`, not a number in the drawing code.
+//
+// A **sealed** one (the way out while the objective stands, or a locked canister) is dim and red
+// instead of bright. Which it is comes from the record's own `locked` flag, never guessed here.
+const anomalyCoreGeo = new THREE.SphereGeometry(0.5, 32, 22);
+const anomalyCoreMat = new THREE.MeshStandardMaterial({
+  color: 0x0b0503,
+  emissive: 0xff6a1a,
+  emissiveIntensity: 0.5,
+  roughness: 0.4,
+  metalness: 0.2,
+});
+const anomalyEyeGeo = new THREE.SphereGeometry(0.2, 20, 14);
+const anomalyEyeMat = new THREE.MeshBasicMaterial({ color: 0xffd9a8 });
+const auraGeo = new THREE.SphereGeometry(1, 28, 20);
+const auraMat = new THREE.MeshBasicMaterial({
+  color: 0xff7a22,
+  transparent: true,
+  opacity: 0.17,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  depthWrite: false,
+});
+const flareGeo = new THREE.SphereGeometry(1, 24, 16);
+const flareMat = new THREE.MeshBasicMaterial({
+  color: 0xff4d0d,
+  transparent: true,
+  opacity: 0.07,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  depthWrite: false,
+});
+const sealedAuraMat = new THREE.MeshBasicMaterial({
+  color: 0x6a1c0c,
+  transparent: true,
+  opacity: 0.2,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  depthWrite: false,
+});
+const sealedCoreMat = new THREE.MeshStandardMaterial({
+  color: 0x0a0405,
+  emissive: 0x8a2a10,
+  emissiveIntensity: 0.35,
+  roughness: 0.6,
+  metalness: 0.2,
+});
+
+// The prize canister: a plain drum with two bands and a lamp that says whether it is still sealed.
+const cacheBodyGeo = new THREE.CylinderGeometry(0.42, 0.42, 1.35, 16, 1);
+const cacheCapGeo = new THREE.CylinderGeometry(0.3, 0.44, 0.24, 16, 1);
+const cacheBandGeo = new THREE.TorusGeometry(0.45, 0.05, 8, 20);
+const cacheMat = mm(0x3a3129, 0x2a1c0c);
+const cacheSealedMat = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
+const cacheOpenMat = new THREE.MeshBasicMaterial({ color: 0x8dffab });
+
 /** A rock's faint glow by the ore inside it (the colours it always had). */
 const rockGlow = type => (type === "cobalt" ? 0x14304a : type === "voidite" ? 0x3a1a55 : 0);
 
@@ -241,6 +301,89 @@ registerEntityView("rock", {
     return m;
   },
   update: (e, m) => { updatePose(e, m); m.scale.copy(e.scale); },
+  // The shape is shared, but every rock carries its own material (its ore's faint glow), so it is
+  // freed with the rock — an instance's field comes and goes, and the card must not keep it.
+  remove: m => { if (m.material) m.material.dispose(); },
+});
+/**
+ * One anomaly: a dark core eye, its bright centre, a glowing aura and a wider flare — plus the dim
+ * sealed shells, which are shown instead while the record says `locked`. The sim turns it
+ * (`e.quat`); the shimmer is this file's own business and scales each view's shells by a phase taken
+ * from the record's id, so two doors never pulse in step and nothing shared is animated.
+ */
+function buildAnomaly(e) {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(anomalyCoreGeo, anomalyCoreMat);
+  const sealedCore = new THREE.Mesh(anomalyCoreGeo, sealedCoreMat);
+  const eye = new THREE.Mesh(anomalyEyeGeo, anomalyEyeMat);
+  const aura = new THREE.Mesh(auraGeo, auraMat);
+  const flare = new THREE.Mesh(flareGeo, flareMat);
+  const sealed = new THREE.Mesh(auraGeo, sealedAuraMat);
+  flare.scale.setScalar(1.5);
+  sealed.scale.setScalar(1.05);
+  g.add(core, sealedCore, eye, aura, flare, sealed);
+  g.userData = { core, sealedCore, eye, aura, flare, sealed, phase: ((Number(e.id) || 0) % 628) / 100 };
+  g.scale.setScalar(Math.max(1, Number(e.r) || 20));
+  return initialPose(e, g);
+}
+
+function updateAnomaly(e, g) {
+  updatePose(e, g);
+  g.scale.setScalar(Math.max(1, Number(e.r) || 20));
+  const u = g.userData,
+    sealed = !!e.locked,
+    t = performance.now() * 0.001,
+    breathe = Math.sin(t * 1.7 + u.phase) * 0.05 + Math.sin(t * 4.3 + u.phase * 2) * 0.02;
+  u.sealed.visible = sealed;
+  u.sealedCore.visible = sealed;
+  u.core.visible = !sealed;
+  u.aura.visible = !sealed;
+  u.flare.visible = !sealed;
+  u.aura.scale.setScalar(0.95 + breathe);
+  u.flare.scale.setScalar(1.5 - breathe);
+  u.eye.scale.setScalar(sealed ? 0.45 : 0.9 + Math.sin(t * 3.1 + u.phase) * 0.12);
+}
+
+// The door hanging in a pocket, and the way out of a run: one look, because they are one thing.
+registerEntityView("rift", { list: () => state.world.rifts, build: buildAnomaly, update: updateAnomaly, remove: noCleanup });
+registerEntityView("gate", { list: () => state.world.gates, build: buildAnomaly, update: updateAnomaly, remove: noCleanup });
+
+// The prize: a canister, visible and plainly locked from the moment the pilot arrives. Opening it is
+// a deliberate R beside it, and an emptied one is dropped by the sim, so it is never drawn open and
+// bare.
+registerEntityView("cache", {
+  list: () => state.world.caches,
+  build: e => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(cacheBodyGeo, cacheMat);
+    const top = new THREE.Mesh(cacheCapGeo, cacheMat);
+    const bottom = new THREE.Mesh(cacheCapGeo, cacheMat);
+    top.position.y = 0.78;
+    bottom.position.y = -0.78;
+    bottom.rotation.x = Math.PI;
+    const bands = [0.34, -0.34].map(y => {
+      const band = new THREE.Mesh(cacheBandGeo, cacheMat);
+      band.rotation.x = Math.PI / 2;
+      band.position.y = y;
+      return band;
+    });
+    const lampSealed = new THREE.Mesh(anomalyEyeGeo, cacheSealedMat);
+    const lampOpen = new THREE.Mesh(anomalyEyeGeo, cacheOpenMat);
+    for (const lamp of [lampSealed, lampOpen]) {
+      lamp.position.y = 0.98;
+      lamp.scale.setScalar(0.4);
+    }
+    g.add(body, top, bottom, ...bands, lampSealed, lampOpen);
+    g.userData = { lampSealed, lampOpen };
+    g.scale.setScalar(Math.max(1, Number(e.r) || 9));
+    return initialPose(e, g);
+  },
+  update: (e, g) => {
+    updatePose(e, g);
+    g.scale.setScalar(Math.max(1, Number(e.r) || 9));
+    g.userData.lampSealed.visible = !!e.locked;
+    g.userData.lampOpen.visible = !e.locked;
+  },
   remove: noCleanup,
 });
 
