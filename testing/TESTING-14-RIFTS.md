@@ -8,7 +8,7 @@ What is new: a rift is a **place you carry with you**. You buy a one-use **Basic
 clear space, fly to it and press **R** to go in. The door — and the way out inside — is a **shimmering
 dark-orange anomaly**: a dark spherical core with a bright eye, an orange aura and a flare around it.
 Inside is a generated pocket under **a shattered sky of its own** — painted space, dark and ember-lit,
-with stars, a faint nebula band and glowing fracture lines, and no planet: the rift's **own guardians**
+with a cold starless nebula and no planet: the rift's **own guardians**
 guarding a **canister** that stays sealed until the objective is done, and a **Rift gate** that stays
 sealed with it. **F** locks any of the three and the HUD labels all of them, so the way out cannot be
 lost. The pocket **collapses 20 minutes after you went in** — with you inside it. And the run is
@@ -56,12 +56,11 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
       enter Guardian rift"** once you are inside **200 m**; further out there is no hint, and pressing
       **R** says **"Nothing to enter here."**
 - [ ] Inside 200 m, press **R**: you are inside, at once, with no loading screen and no docking.
-- [ ] **The sky is somewhere else.** It is **space, not a shell**: a near-black sky with real stars in it,
-      a faint band of ember-coloured cloud, and **glowing fracture lines** — jagged, forking, with a dark
-      lip — running through it, with **rock debris drifting** slowly in front. It reads as a photograph of
-      a dark, hellish, broken place, **not as triangles, panels or flat shapes**, and it turns very
-      slowly. It does not look like the pocket you left, and there is **no planet** in it — nothing here
-      is copied from normal space.
+- [ ] **The sky is somewhere else.** It is **space, not a shell**: a near-black sky with a cold nebula in
+      it — veils of light, dust lanes, a few brighter cores, **no stars and no lines of any kind** — with
+      **rock debris drifting** slowly in front. It reads as a photograph of a dark, broken place, **not as
+      triangles, panels, flat shapes or a drawing**, and it turns very slowly. It does not look like the
+      pocket you left, and there is **no planet** in it — nothing here is copied from normal space.
 - [ ] Top right now reads the run's own name (**Guardian rift** or, about one door in seven, **Deep
       rift**) instead of the pocket's, and under it a panel with four lines: the objective, the
       collapse countdown, the canister line, and the exit line.
@@ -125,16 +124,21 @@ lost. The pocket **collapses 20 minutes after you went in** — with you inside 
       that has no room says so as a notice (**"No room in the Wasp."**) and moves nothing; the canister
       keeps everything until you make room. Nothing disappears into a hold that has no room, and the
       trade never closes itself.
+- [ ] **While the trade is open the ship hangs still.** Hold **W**, hold **Shift**, push the mouse into a
+      corner: the ship neither moves nor turns, and clicks land on the card, not on the guns. Close the
+      trade: the stick comes back over a ship at rest, exactly where you left it.
 
 ## 5b. The sky inside (owner 2026-11-14: darker, no stars, nebula, shattered rock)
 
 - [ ] Look around inside a run: the sky is **near-black** with a cold **nebula** in it — veils of
-      violet and teal light with dark dust lanes through them, never an orange fog — and thin
-      **fractures** where the pocket broke. There are **no stars at all** in it.
+      violet and teal light with dark dust lanes and a few brighter cores, never an orange fog.
+      There are **no stars at all** in it and **no lines of any kind**: no fractures, no filaments,
+      no seam down the sky, no banding — nothing a pilot could point at and call a drawing.
 - [ ] **Shattered rock** drifts in front of that sky: dark broken shapes at every distance, turning
       slowly, silhouetted against the nebula rather than lit like scenery.
 - [ ] Open a **Deep rift** (15% of doors; a Deep run says **Deep rift** in the top right): the same kind
-      of sky, **darker and colder**, with paler fractures. Two rifts never wear the same sky.
+      of sky, **darker and colder**, violet where the ordinary rift is teal. Two rifts never wear the
+      same sky.
 - [ ] Leave the run: the pocket's own stars, planet and station come back exactly as they were.
 
 ## 6. Leaving

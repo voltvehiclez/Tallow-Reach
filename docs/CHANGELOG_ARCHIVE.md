@@ -8,6 +8,35 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-13: Notices hang just below the flight message line
+
+Owner request: "Make it so that all pop up notifications like the confirmation after you have discarded an items appear
+by default in the top middle part of the screen in the top 25% of the screen", then: "Its too high up, it should be
+positioned just below the UI element in ship UI where it says 'Empty weapon slot' etc. Make sure it doesnt overlap with
+the Empty weapon / Warp: slot UI element though." **Save version unchanged (v19)**; rebuild needed (`npm run build`,
+then `npm test`).
+
+- **`#panel-notice` sits under the centred message line.** It is still fixed to the viewport (so it can never move the
+  panel), still `role="status"`, 7 s or a click to dismiss, and still `left: 50%` + `translateX(-50%)`. `ui/notice.js`
+  `placeNotice()` now measures `#msg` — the centred line at 14% of the screen that says **"Empty weapon slot"** when a
+  weapon switch finds nothing fitted, or names the warp — on every notice, and puts the notice **12 px under its bottom
+  edge**, so the two never touch and a wrapped warp message pushes the notice down with it.
+- **Docked and on the title screen** the HUD is away, so the line measures nothing: the same band is derived from the
+  viewport height (`0.14 × height + one 26 px line + 12`), and `styles.css` carries `top: 16%` as the pre-script default.
+  A window resize re-measures while a notice is showing.
+- **Correction to the first attempt:** it was anchored to `#tr`, the top-right HUD block that also prints "Empty weapon
+  slot" as the fitted-weapon readout. That is not the element the owner meant — the notification they compare against is
+  the centred `#msg` line — so the anchor moved. The "mission failed" alert in `missionlog.js` was not touched.
+- **Tests:** `tests/ui-notices.test.mjs` asserts the rule is centred with the `16%` band and no `bottom`;
+  `tests/ui-notice-position.test.mjs` drives `placeNotice()` itself — 164 px under a message line at 126 px with one line
+  of text, 190 px when the message wraps to two, and the same 164 px from the viewport fallback when the line is hidden.
+  502 tests pass.
+
+Files: `src/ui/notice.js`, `src/styles.css`, `tests/ui-notices.test.mjs`, `tests/ui-notice-position.test.mjs`,
+`src/ui/README.md`, `docs/architecture/ui-and-screens.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
 ## 2026-11-13: Right-click Discard everywhere — how many, then "are you sure?"
 
 Owner request: "Add a right click function to inventories called 'Discard'. This just trashes an item. This works in

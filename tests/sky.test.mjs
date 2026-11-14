@@ -1,8 +1,10 @@
 // The painted sky (step 14, owner bug reports 2026-11-14).
 //
-// Two complaints, two rules. The first: a sky of flat panels read as triangles, so the sky is painted
-// on a canvas and wrapped around a sphere. The second: "Make the skybox less orange. Make it darker,
-// no stars, some mysterious nebula and shattered asteroids in the background skybox."
+// Three complaints, three rules. The first: a sky of flat panels read as triangles, so the sky is
+// painted on a canvas and wrapped around a sphere. The second: "Make the skybox less orange. Make it
+// darker, no stars, some mysterious nebula and shattered asteroids in the background skybox." The
+// third, on the painted sky: it carried "odd lines" — painted fractures and filaments — and a sky
+// with polylines in it is a drawing, not a place, so the painter may not stroke a line at all.
 //
 // A sky is a look, so what a test can honestly check is: that it is painted from the place's own data,
 // that one roll source paints one sky exactly, that the nebula's washes are spread over the *sphere*
@@ -15,7 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as skyModule from "../src/render/sky.js";
-import { SKY_SIZE, SKY_COUNTS, skyVeils, skyClouds, skyWisps, skyCracks, paintSky } from "../src/render/sky.js";
+import { SKY_SIZE, SKY_COUNTS, skyVeils, skyClouds, skyCores, skyGrain, paintSky } from "../src/render/sky.js";
 import { makeRng } from "../src/util/rng.js";
 import { INSTANCE_TEMPLATES } from "../src/data/instances.js";
 
@@ -90,16 +92,16 @@ test("the sky is painted from the place's own palette, so two rifts are not the 
   assert.deepEqual(first.args, [0, 0, SKY_SIZE.w, SKY_SIZE.h], "and it covers the canvas");
   assert.equal(first.fill, rgba(SKY.col, 1), "in the colour the template authored");
 
-  // Both of the nebula's lights are in the picture, and the fractures are the template's own colour.
+  // Both of the nebula's lights are in the picture, and nothing else is: no fracture colour, no
+  // star white — the palette a template authors is exactly the palette that gets painted.
   const stops = named(calls, "addColorStop").map(c => c.args[1]);
   for (const colour of [SKY.glow, SKY.veil]) {
     assert.ok(stops.some(s => s.startsWith(rgba(colour, 1).replace(/, 1\)$/, ""))),
       `${colour.toString(16)} is one of this sky's two lights`);
   }
-  const strokes = named(calls, "stroke");
-  assert.ok(strokes.some(s => s.stroke === rgba(SKY.cracks, 1)), "and so are its fractures");
-  assert.ok(strokes.some(s => s.stroke === "rgba(0, 0, 0, 1)"),
-    "each fracture has a dark lip, so it reads as a gap and not a line drawn on top");
+  // And nothing in the picture is a line: the owner's round-two complaint was odd lines over an
+  // otherwise good sky, and a stroke is the only way this painter could draw one.
+  assert.equal(named(calls, "stroke").length, 0, "the painter strokes nothing: no lines in the sky");
 
   // The deeper collapse declares a colder palette; the painter must honour that, not its defaults.
   const deep = stubCanvas();
@@ -147,10 +149,13 @@ test("there are no stars in it: nothing that could be a pinpoint is painted or e
   const { canvas, calls } = stubCanvas();
   paintSky(SKY, canvas, makeRng(17));
 
-  // A star was a fillRect a pixel or two across. Every fill in this sky is either the base, a wash the
-  // width of a good part of the canvas, or one of the two pole gradients — nothing small.
-  const small = named(calls, "fillRect").filter(c => c.args[2] < 64 || c.args[3] < 64);
-  assert.equal(small.length, 0, "nothing in the picture is smaller than a wash");
+  // A star was a fillRect a pixel or two across at up to full alpha. The only pixel-scale fills this
+  // sky may hold are the dither grain — every wash, even a core of the nebula, is dozens of pixels
+  // wide — and grain lives under four hundredths of alpha: the difference between film grain and a
+  // point of light.
+  const dots = named(calls, "fillRect").filter(c => c.args[2] <= 2 && c.args[3] <= 2);
+  assert.equal(dots.length, SKY_COUNTS.grain, "the only pixel-scale fills are the grain");
+  assert.ok(dots.every(c => c.alpha <= 0.04), "and no grain pixel is bright enough to be a star");
   // And no fill is drawn at a bare alpha with a hard colour, which is how a pinpoint would have to be
   // made: every light in this sky goes through a gradient that fades to nothing at its edge.
   const hard = named(calls, "fillRect").filter(c => c.fill !== "gradient" && c.alpha === 1 &&
@@ -186,6 +191,16 @@ test("the nebula's veils are spread over the sphere, not over the canvas", () =>
     "and each one names a light to carry");
 });
 
+test("the nebula has hearts: small bright cores where the body of it is thickest", () => {
+  const cores = skyCores(SKY, makeRng(31));
+  assert.equal(cores.length, SKY_COUNTS.cores, "a handful, not a field");
+  for (const c of cores) {
+    assert.ok(Math.abs(c.v - 0.5) <= 0.25, `a core sits inside the cloud band (v ${c.v.toFixed(2)})`);
+    assert.ok(c.r >= 0.02 && c.r <= 0.06, `small against a cloud's 0.03–0.16 (r ${c.r.toFixed(2)})`);
+    assert.ok(c.a >= 0.07 && c.a <= 0.17, `the brightest wash in the sky, and still faint (a ${c.a.toFixed(2)})`);
+  }
+});
+
 test("the clouds lie along one band, about a third of them are dust, and they carry two lights", () => {
   const clouds = skyClouds(SKY, makeRng(3));
   assert.equal(clouds.length, SKY_COUNTS.clouds);
@@ -202,43 +217,18 @@ test("the clouds lie along one band, about a third of them are dust, and they ca
   assert.ok(clouds.some(c => !c.dark), "which is not all of them: a nebula has light in it");
 });
 
-test("the wisps are long, soft and few, and lie where the light is", () => {
-  const wisps = skyWisps(SKY, makeRng(19));
-  assert.equal(wisps.length, SKY_COUNTS.wisps, "a handful of filaments, not a web");
-  for (const w of wisps) {
-    assert.ok(w.pts.length >= 5, "a wisp is a run of points, so it wanders");
-    for (const p of w.pts) assert.ok(Number.isFinite(p.u) && Number.isFinite(p.v), "and drawable");
-    const span = Math.hypot(
-      Math.max(...w.pts.map(p => p.u)) - Math.min(...w.pts.map(p => p.u)),
-      (Math.max(...w.pts.map(p => p.v)) - Math.min(...w.pts.map(p => p.v))) * 2
-    );
-    assert.ok(span > 0.12, `it is long (${span.toFixed(2)} of the map across)`);
-    assert.ok(w.w > 4 && w.a > 0 && w.a < 0.2, "wide, blurred and faint: structure, not a line");
-    assert.ok(w.tone === "glow" || w.tone === "veil", "in one of the sky's own two lights");
-    // Kept inside the part of an equirectangular map that reads as sky: the poles pinch, and paint
-    // spent there is paint wasted.
-    for (const p of w.pts) assert.ok(p.v >= 0.08 && p.v <= 0.92, `a wisp stays off the poles (${p.v})`);
+test("the grain is a dither, not content: pixels, faint, and everywhere", () => {
+  const grain = skyGrain(SKY, makeRng(23));
+  assert.equal(grain.length, SKY_COUNTS.grain, "enough pixels to break a contour before it forms");
+  for (const g of grain) {
+    assert.ok(Number.isFinite(g.u) && g.u >= 0 && g.u < 1, "spread over the whole canvas");
+    assert.ok(Number.isFinite(g.v) && g.v >= 0 && g.v < 1, "including the poles' vignette");
+    assert.ok(g.a > 0 && g.a <= 0.034, `and each one under four hundredths of alpha (${g.a})`);
   }
-  const starts = wisps.map(w => w.pts[0].v);
-  assert.ok(Math.max(...starts) - Math.min(...starts) < 0.6, "and they start around the nebula's band");
-});
-
-test("the fractures wander and fork, and stay numbers a canvas can draw", () => {
-  const cracks = skyCracks(SKY, makeRng(9));
-  assert.equal(cracks.length, SKY_COUNTS.cracks);
-  for (const c of cracks) {
-    assert.ok(c.pts.length >= 6, "a fracture is a run of points, not one straight line");
-    for (const p of [...c.pts, ...c.forks.flat()]) {
-      assert.ok(Number.isFinite(p.u) && Number.isFinite(p.v), `${JSON.stringify(p)} is drawable`);
-    }
-    assert.ok(c.w > 0 && c.a > 0 && c.a <= 1, "with a weight and a brightness");
-    // A fork leaves from somewhere along its parent, the way glass does.
-    for (const fork of c.forks) {
-      assert.ok(fork.length >= 3, "a fork is a run too");
-      assert.ok(c.pts.some(p => p.u === fork[0].u && p.v === fork[0].v), "and it starts on the parent");
-    }
-  }
-  assert.ok(cracks.some(c => c.forks.length > 0), "some of them fork");
+  assert.ok(grain.some(g => g.dark) && grain.some(g => !g.dark), "light and dark both, like real dither");
+  // A starfield would crowd nowhere and light everything; grain is uniform and lifts nothing.
+  const share = grain.filter(g => g.v < 0.1).length / grain.length;
+  assert.ok(Math.abs(share - 0.1) < 0.02, "uniform down the canvas, not banded anywhere");
 });
 
 test("the painter draws every wash, wraps the seam, and darkens the poles", () => {
@@ -247,22 +237,23 @@ test("the painter draws every wash, wraps the seam, and darkens the poles", () =
 
   const rects = named(calls, "fillRect");
   // One for the base, up to three per wash (itself and one canvas width either side, so the seam is
-  // whole) and two for the poles — and at least one per wash, since a wash in the middle of the map
-  // is never wholly off-canvas.
-  const washes = SKY_COUNTS.veils + SKY_COUNTS.clouds;
-  assert.ok(rects.length >= washes + 3, `${rects.length} fills for ${washes} washes, the base and the poles`);
-  assert.ok(rects.length <= 1 + washes * 3 + 2, "and never more than the seam-wrapping allows");
+  // whole), two for the poles, and one per grain pixel — and at least one per wash, since a wash in
+  // the middle of the map is never wholly off-canvas.
+  const washes = SKY_COUNTS.veils + SKY_COUNTS.clouds + SKY_COUNTS.cores;
+  assert.ok(rects.length >= washes + 3 + SKY_COUNTS.grain,
+    `${rects.length} fills for ${washes} washes, the base, the poles and the grain`);
+  assert.ok(rects.length <= 1 + washes * 3 + 2 + SKY_COUNTS.grain,
+    "and never more than the seam-wrapping and the grain allow");
   assert.deepEqual(rects[0].args, [0, 0, SKY_SIZE.w, SKY_SIZE.h], "the base covers the canvas");
 
   const gradients = named(calls, "createRadialGradient");
-  assert.equal(gradients.length, rects.length - 3, "every wash is a gradient, and nothing else is");
+  assert.equal(gradients.length, rects.length - 3 - SKY_COUNTS.grain,
+    "every wash is a gradient, and nothing else is");
 
-  const strokes = named(calls, "stroke");
-  // A wisp is one stroke at three offsets; every fracture run is three strokes (the dark lip, the hot
-  // hairline, a wide bloom of it) at three offsets, and every crack has at least its own run.
-  assert.ok(strokes.length >= SKY_COUNTS.wisps * 3 + SKY_COUNTS.cracks * 9,
-    `${strokes.length} strokes for ${SKY_COUNTS.wisps} wisps and ${SKY_COUNTS.cracks} fractures`);
-  assert.equal(strokes.length % 3, 0, "everything is stroked at the same three seam offsets");
+  // The rule the owner's second round of feedback made: this painter has no line in it.
+  assert.equal(named(calls, "stroke").length, 0, "nothing is stroked, so nothing can read as a line");
+  assert.equal(named(calls, "beginPath").length + named(calls, "moveTo").length + named(calls, "lineTo").length, 0,
+    "not even a path is started");
 
   const poles = named(calls, "createLinearGradient");
   assert.equal(poles.length, 2, "the top and the bottom of the map are eaten");

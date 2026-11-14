@@ -113,10 +113,11 @@ mention) until the owner decides. Record the decision here when made, and delete
   half-traded one is saved exactly as it stands. **(2)** Every run's clock is **20 minutes by default** — a template
   that does not declare `lifetimeSec` gets `RIFT.defaultLifetimeSec`, so a Deep rift is 20 minutes like any other, and
   what makes it deeper is its wave, its debris and its prize, not its time. **(3)** The sky inside is **darker and
-  less orange, with no stars at all**: a near-black base, a cold two-tone **nebula** with dust lanes and filaments in
-  it, thin fractures where the pocket broke, and **shattered asteroids** drifting in front of the whole. The earlier
-  "dark-orange-and-black anomaly" and "unstable and shattered" answers stand for the door, the gate and the fractures;
-  the *sky* is now a dark place with something mysterious in it, not an orange fog.
+  less orange, with no stars at all**: a near-black base, a cold two-tone **nebula** with dust lanes and bright cores
+  in it, and **shattered asteroids** drifting in front of the whole — painted in gradients only, with **no line of any
+  kind** in it, because a sky with polylines in it is a drawing and not a place (owner, round three: the first painted
+  sky's fractures read as odd lines). The earlier "dark-orange-and-black anomaly" and "unstable and shattered" answers
+  stand for the door, the gate and the broken rock; the *sky* is a dark place with something mysterious in it.
 
 - **2026-11-14 — Step 14a playtested: how a rift must look, be locked, be looted and be saved (owner).**
   Six items, all built the same day. **(1)** A rift is a **shimmering spherical dark-orange-and-black anomaly** with

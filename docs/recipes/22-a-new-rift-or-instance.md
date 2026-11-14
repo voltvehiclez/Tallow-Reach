@@ -40,7 +40,7 @@ salvage_rift: {
   onExpire: { kind: "kill", message: "The rift collapsed with your ship inside it." },
   cache: { n: "Salvage cache", loot: "rift_cache", pos: [0, -30, -560], r: 10 },
   enter: { pos: [0, 0, 320] },
-  sky: { kind: "shattered", col: 0x1a0c06, glow: 0xff7a2a, cracks: 0xffb267, shards: 26 },
+  sky: { kind: "shattered", col: 0x1a0c06, glow: 0xff7a2a, shards: 26 },
   features: [
     { kind: "asteroidField", id: "field", n: "Rift debris", pos: [900, 60, -700], radius: 480,
       height: 170, count: 28, ore: "rift_rock", respawnSec: 420, stable: true,

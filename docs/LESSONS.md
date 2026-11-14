@@ -233,3 +233,17 @@ first, after which the panel was two columns of the grid that already existed an
 `moveItem`. The save kept the list shape by converting at the two edges (`captureInstances`, `restoreInstance`), so no
 save version moved. Before building UI for a container, ask what shape the container is: if the inventory layer cannot
 address it, the panel will end up re-implementing the inventory layer.
+
+### L22. When the owner says "remove the lines", remove the ability to draw lines
+
+The first painted sky carried fractures and filaments because a nebula with nothing but blobs in it looked empty, and
+they were painted the only way a canvas draws a thin bright thing: `beginPath`, `lineTo`, `stroke`, three times over
+for the seam. The owner's verdict on the second round was that the sky was good *except* those lines — and the
+temptation was to repaint them fainter, blurrier, fewer. Fainter lines are still lines: the eye reads a stroke as a
+mark somebody made, which is exactly what "not realistic" means. The fix was structural instead — the painter lost its
+`stroke` helper altogether, so a line in the sky is now impossible rather than discouraged, and the structure the lines
+had been standing in for came back as shapes a real nebula actually has (bright cores where the gas is thick) plus one
+pass of invisible dither grain, because a smooth dark gradient bands into contour lines of its own on an 8-bit screen
+and those would have been "odd lines" by next round. The test that protects it asserts the recording canvas saw zero
+strokes and no path ever started: when a complaint is about a kind of artifact, pin the absence of the capability, not
+the absence of this week's instance of it.

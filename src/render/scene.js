@@ -116,6 +116,11 @@ export const SKIES = {
     const canvas = document.createElement("canvas");
     paintSky(sky, canvas);
     const texture = new THREE.CanvasTexture(canvas);
+    // Seen from inside, the picture is magnified rather than shrunk, so mipmaps buy nothing here —
+    // and a mip level that cannot wrap across the seam would draw a line of its own down the sky.
+    // One linear filter, no mips: no seam, no contour, nothing in the picture that is not painted.
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
     const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);
     const shellMat = new THREE.MeshBasicMaterial({
       map: texture,
