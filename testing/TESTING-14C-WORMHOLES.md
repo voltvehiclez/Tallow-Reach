@@ -12,7 +12,7 @@ one system**; when one expires a replacement pops up somewhere else. A fresh uni
 clocks at random; every respawn comes back with the full **20 minutes**.
 
 **Save version is v21.** The save keeps the standing wormholes (`world.wormholes`) and their remaining
-time; a v20 save loads and simply has none yet (the next fill rolls one in).
+time; a v20 save loads and fills the universe back to its population on load.
 
 **Not everything in this slice is owner-decided.** The playtest questions are at the end — answer them
 in a reply, and anything that is wrong will be fixed before the slice ticks in ROADMAP.
@@ -28,9 +28,9 @@ in a reply, and anything that is wrong will be fixed before the slice ticks in R
       starmap shows every pocket you know, including spawned ones.
 - [ ] Warp to the system, and look at the pocket list in the chart: the **Simple Wormhole** is there
       as a warp target. Warp to it.
-- [ ] Inside, the sky is **dark and near-neutral grey** — a hazy shroud with no stars, not the
-      rift's ember-shattered nebula and not the pocket you came from — and there is **no planet**
-      and **no station**, just **asteroid formations** drifting.
+- [ ] Inside, the sky is the **same sky the system you came from wears** — the pocket is ordinary
+      space in the same solar system, not somewhere else. There is **no planet** and **no station**,
+      just **asteroid formations** drifting.
 - [ ] At the centre hangs one **grey dark sphere** — "Simple Wormhole" — with a **greyish radiance**
       around it. **F** locks it; the lock reticle takes it and the HUD labels it **Locked Simple
       Wormhole** (or **Simple Wormhole** unlocked). It never fires, never flees, never disappears
@@ -43,8 +43,9 @@ in a reply, and anything that is wrong will be fixed before the slice ticks in R
       **"Press R to enter Simple Wormhole"** once you are inside **200 m**; further out there is no
       hint, and pressing **R** says **"Nothing to enter here."**
 - [ ] Press **R**: you are inside at once, with no loading screen and no docking.
-- [ ] **The sky is somewhere else again** — a **dark grey, near-neutral shroud** with no stars
-      anywhere. It is not a shell, not a drawing, not the pocket you left.
+- [ ] **The sky is somewhere else again** — a real **dark-grey nebula panorama with few stars**,
+      the owner's reference picture, seen wrapped around you. Not the pocket you left, not a painted
+      haze.
 - [ ] Top right names the site (**Smuggling operation**, **Lumenite belt**, or **Guardian hive** —
       roughly one in three; each door is rolled when the wormhole first spawns it).
 - [ ] There is a way out: a **Stable wormhole** — the same grey sphere, at the far side of the site.

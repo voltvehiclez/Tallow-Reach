@@ -63,14 +63,16 @@
 //                 one seed is one reward. Omit `cache` for an instance with no prize.
 //   enter         { pos } the arrival point inside. The way out is its own object at `exit.pos`, so a
 //                 pilot arrives looking at the run rather than sitting inside the door home.
-//   sky           { kind, col, glow, veil, shards } the sky of somewhere else, drawn by
-//                 `render/scene.js` from its `SKIES` registry and painted by `render/sky.js`: `col`
-//                 the near-black it is seen through, `glow` and `veil` the two lights of its nebula,
-//                 `shards` how many broken rocks drift in front of it. The painter lays down
-//                 gradients only — no stars, and no lines of any kind: a first pass carried painted
-//                 fractures and the owner sent them back as "odd lines" over an otherwise good sky.
-//                 An instance has no starfield and no planet: nothing here is copied from the space
-//                 outside, and a collapsed pocket has no suns of its own to show (owner 2026-11-14).
+//   sky           { kind, ... } the sky of somewhere else, drawn by `render/scene.js` from its
+//                 `SKIES` registry: `kind` names the builder, everything else is that builder's data.
+//                 `shattered` (a rift's run) and `shroud` (inside a simple wormhole) are both the
+//                 owner's panoramas, inlined with the build (`src/assets/`, data URLs) and wrapped
+//                 around the inside of the sky sphere as equirect images (2026-11-14): `shattered`
+//                 carries `shards` (how many broken rocks drift in front) and `variant` (`rift`,
+//                 the default, or `deep` — the deep rift's near-black sky); `shroud` carries
+//                 nothing at all. An instance has no planet: nothing here is
+//                 copied from the space outside, and a collapsed pocket has no suns of its own to
+//                 show (owner 2026-11-14).
 //   features      ordinary place features (asteroidField, ...), read by the same generic loader a
 //                 pocket uses (sim/places.js). Never a `spawner` — an instance's hostiles are its
 //                 declared wave, so its content is exactly what this file says — and never a `planet`.
@@ -117,12 +119,14 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  * file that knows how one is drawn: a template names a kind and its colours, so a new look for a new
  * kind of instance is a data line plus one builder.
  *
- *   shattered   a collapsing shell with a cold nebula in it and shattered rock drifting in front of
- *               the whole — painted in gradients only, no stars and no lines, no starfield, no
- *               planet: somewhere that is not the space outside.
- *   shroud      the grey of a simple wormhole (slice 14c): a dark, near-neutral sky of grey washes
- *               and one pale radiance, still no stars and no planet. Wraps both the spawned pocket
- *               itself and the far side of its sites.
+ *   shattered   the owner's own panoramas (2026-11-14): a teal maelstrom for an ordinary rift and
+ *               a near-black sky with one sable cluster for a deep one (`variant: "deep"`), with
+ *               shattered rock drifting in front of the whole, plus `shards`. No planet:
+ *               somewhere that is not the space outside.
+ *   shroud      real space (slice 14c, 2026-11-14): the owner's dark-grey nebula panorama with
+ *               few stars — the somewhere inside a simple wormhole. The pocket a wormhole hangs in
+ *               declares no sky at all: it is ordinary space in the system it spawned in and shows
+ *               the same starfield as every sibling pocket.
  */
 export const SKY_KINDS = ["shattered", "shroud"];
 
@@ -154,10 +158,9 @@ export const INSTANCE_TEMPLATES = {
     onExpire: { kind: "kill", message: "The rift collapsed with your ship inside it." },
     cache: { n: "Rift cache", loot: "rift_cache", pos: [0, -30, -520], r: 10 },
     enter: { pos: [0, 0, 320] },
-    // Dark, cold and a little bit wrong (owner 2026-11-14: "less orange ... darker, no stars, some
-    // mysterious nebula and shattered asteroids"), and painted in gradients only: no stars, no
-    // lines, nothing a pilot could point at and call a drawing.
-    sky: { kind: "shattered", col: 0x05060b, glow: 0x7a5cc4, veil: 0x2a8794, shards: 30 },
+    // The owner's own sky for the rift: a teal maelstrom with shattered rock drifting in front
+    // of it (2026-11-14).
+    sky: { kind: "shattered", shards: 30 },
     features: [
       {
         kind: "asteroidField",
@@ -201,9 +204,9 @@ export const INSTANCE_TEMPLATES = {
     onExpire: { kind: "kill", message: "The deep rift collapsed with your ship inside it." },
     cache: { n: "Deep rift cache", loot: "rift_cache_deep", pos: [0, -40, -640], r: 12 },
     enter: { pos: [0, 0, 360] },
-    // A deeper collapse is darker and colder than the ordinary one, with a second light under the
-    // first: the same kind of place, further gone, and nothing warm left in it at all.
-    sky: { kind: "shattered", col: 0x03040a, glow: 0x54439f, veil: 0x9c4279, shards: 40 },
+    // A deeper collapse, the owner's own deep-rift sky: near-black, one sable cluster, fewer
+    // stars than the ordinary rift (2026-11-14).
+    sky: { kind: "shattered", shards: 40, variant: "deep" },
     features: [
       {
         kind: "asteroidField",
@@ -268,7 +271,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 320] },
-    sky: { kind: "shroud", col: 0x06070c, glow: 0x9aa3b5, veil: 0x555c6e },
+    sky: { kind: "shroud" },   // inside a simple wormhole: the dark-grey nebula panorama, few stars
     features: [
       {
         kind: "asteroidField",
@@ -312,7 +315,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "shroud", col: 0x04060d, glow: 0x8fa8c8, veil: 0x2e4258 },
+    sky: { kind: "shroud" },   // inside a simple wormhole: the dark-grey nebula panorama, few stars
     features: [
       {
         kind: "asteroidField",
@@ -368,7 +371,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "shroud", col: 0x070905, glow: 0x8fae7a, veil: 0x46502f },
+    sky: { kind: "shroud" },   // inside a simple wormhole: the dark-grey nebula panorama, few stars
     features: [
       {
         kind: "asteroidField",
@@ -452,17 +455,21 @@ export const WORMHOLE_SITE_POOL = [
 ];
 
 /**
- * The pocket a simple wormhole hangs in (owner, 2026-11-14): its own skybox, some interesting
- * asteroid formations, and in the centre a grey dark sphere called "Simple Wormhole" — a
+ * The pocket a simple wormhole hangs in (owner, 2026-11-14): ordinary space in the system it
+ * spawned in, some interesting
+ * and in the centre a grey dark sphere called "Simple Wormhole" — a
  * F-lockable anomaly with a greyish radiance around it, similar to EVE Online's wormholes. The
  * pocket is a pocket of the system it spawned in: it appears on that system's pocket map, is
- * warpable like its siblings, and carries the 20-minute clock itself (the instance inside has none).
+ * warpable like its siblings, carries the 20-minute clock itself (the instance inside has none) —
+ * and it hangs the same starfield every sibling pocket hangs, always (owner, 2026-11-14: it is
+ * the same solar system). Only the far side is somewhere else.
  */
 export const WORMHOLE_POCKET = {
   n: "Simple Wormhole",
   d: "A wormhole hangs in open space.",
   enter: { pos: [0, 0, 420] },   // arrive off the sphere's shoulder; the sphere is a few fly-bys away
-  sky: { kind: "shroud", col: 0x06070c, glow: 0x9aa3b5, veil: 0x555c6e },
+  // No `sky` on purpose: the pocket is the parent system's own space (owner, 2026-11-14) and
+  // shows the ordinary starfield, like every other pocket.
   features: [
     {
       kind: "asteroidField", id: "formation", n: "Drifting formation",

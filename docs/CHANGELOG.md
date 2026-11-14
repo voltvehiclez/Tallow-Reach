@@ -20,6 +20,29 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: The rift wears real space too — the deep rift its own sky
+
+Owner, after the wormhole sky landed and a first pass at the rift one: "Sorry, here is an image for rift, here is an image for deeprift." Two owner-provided panoramas (2880×1440 equirect WebPs), shipped **byte-for-byte**: `rift.webp` (232 KB, a teal maelstrom) and `deeprift.webp` (69 KB, near-black with one sable cluster). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested — ROADMAP stays unticked.
+
+- **`SKIES.shattered` is no longer painted.** It wraps the owner's rift panorama around the inside of the same sphere, seen from the back, one linear filter, no mips — every star where the owner put it. The broken rock still drifts inside it (owner, round three: "shattered asteroids in the background skybox"), lit with a breath of the nebula's teal.
+- **The deep rift is its own image, not a dimmer copy.** `data/instances.js` picks it with `sky.variant: "deep"` on `deep_rift` (shards 40); the ordinary `guardian_rift` wears the rift sky at full presence (shards 30, no `variant`). `sky.variant` is the only colour-adjacent key a template carries besides `kind` and `shards` — no palette, no multiplier, nothing to tune.
+- **`col`, `glow`, `veil` are gone from the rift templates** — they fed the painter, and no template needs them any more. `render/sky.js` is now **unused at runtime**: it survives only for `tests/sky.test.mjs`; deleting both is the owner's call.
+- **Tests:** `tests/step14-instances.test.mjs` pins the rift sky's shape — declared kind, integer `shards`, the deep rift (and only the deep rift) declares `variant: "deep"`, and nothing else. 571/571 pass overall; the build inlines both panoramas as data URLs.
+- **Docs:** `src/render/README.md`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `docs/HANDOFF.md`.
+
+Files: `src/assets/sky-rift.webp` (new), `src/assets/sky-deeprift.webp` (new), `src/render/scene.js`, `src/data/instances.js`, `src/render/README.md`, `src/render/sky.js`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `tests/step14-instances.test.mjs`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
+## 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
+
+Owner, looking at the 14c build: "Im not too happy with the skyboxes of both rifts and wormholes … they look almost like coloured fabric. I want them to look like genuine space / fantasy in high quality, Im using a 4k monitor." This round covers the **simple wormhole only**; the rift sky comes next. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet — ROADMAP 14c stays unticked.
+
+- **The pocket is the system's own space, always** (owner, 2026-11-14: "since we are still in the same solar system. This should always be the case"). The spawned pocket no longer declares a `sky` at all (`sim/wormholes.js` `pocketRecord`, `WORMHOLE_POCKET`): `render/scene.js` shows the ordinary starfield, exactly like every sibling pocket. Map dot, formations, lock, clock — unchanged.
+- **The far side is real space.** `SKIES.shroud` is no longer painted: it wraps the owner's reference panorama — a **dark-grey nebula with few stars** (2880×1440 equirect WebP, q90, ~168 KB) — around the inside of the same sphere, seen from the back, one linear filter, no mips, no painter in between. An equirect image is exactly what a sphere's UV unwrap is, so it hangs level with no seam math at all. The panorama rides inside the single-file build as a base64 data URL (`src/assets/sky-shroud.webp`; `build.mjs` gained an esbuild `.webp → dataurl` loader) — no external asset path ever resolves.
+- **`shroud` carries no colour data any more**: the three site templates (`wh_smugglers`, `wh_mining`, `wh_hive`) are `{ kind: "shroud" }` and `WORMHOLE_POCKET` lost its palette. The painter (`render/sky.js`) and the `shattered` rift sky are untouched.
+- **Docs/tests:** `tests/step14c-wormholes.test.mjs` gained "the pocket is the system's own space; only the far side is somewhere else" (14/14 there, **571/571** overall); `src/render/README.md`, `data/instances.js` comments and the playtest guide describe both skies. **Open:** the rift (`shattered`) sky still reads as coloured fabric to the owner — next round.
+
+Files: `src/assets/sky-shroud.webp` (new), `build.mjs`, `src/render/scene.js`, `src/sim/wormholes.js`, `src/data/instances.js`, `src/render/README.md`, `testing/TESTING-14C-WORMHOLES.md`, `tests/step14c-wormholes.test.mjs`, docs (`CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`), `game/tallow-reach.html`.
+
 ## 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
 
 Owner, 2026-11-14, spelling out the natural-wormhole model: a pocket spawns itself in normal space, its 20 minutes run
@@ -372,64 +395,9 @@ question, so the decision is written down before any code exists — the docs ar
 
 ---
 
-## 2026-11-14: The owner confirmed the pending mission playtests; nothing is waiting now
-
-Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner reported that the work built
-on 2026-11-13 passed in the browser — station-scoped mission offers with the docked-panel redraw, the contract delivery
-wording, recovery contracts spawning and counting their own crates — together with the death-and-missions playtest guide.
-
-- `docs/ROADMAP.md`: "Current position" rewritten so it says no playtest is pending, a log line added for 2026-11-14,
-  "Last checked" moved to 2026-11-14.
-- `testing/TESTING-DEATH-AND-MISSIONS.md` moved to `testing/passed/`; both tables in `testing/README.md` updated.
-- `docs/HANDOFF.md`: "Last checked" 2026-11-14, plus one line saying nothing is waiting on a playtest.
-- This file: its oldest full entry moved word for word to `docs/CHANGELOG_ARCHIVE.md` with an index line, so exactly ten
-  full entries remain here.
-- Next: refactor step 14 (instanced places and wormholes). The owner has answered VISION open question 5 — spawnable
-  wormholes are **rifts**, sold as a "Basic rift" for 10 cr, used by right-clicking it in the in-flight ship inventory,
-  spawning where the ship is at least 1 km from any large structure; natural wormholes appear on pocket maps and are
-  time-limited; a rift may declare criteria that must be met before it can be left. The step is planned before any code.
-
----
-
-## 2026-11-13: A recovery contract recovers its own crates, and the space is left clean
-
-Owner request: "recovery missions require you to recover all the crates the mission generates … lists progress of
-recovery in the ship ui and mission log as 'x out of y crates recovered'. Those must then be specific to the specific
-mission … you must recover each mission's own individual crates", and "to complete the mission you need the right
-number of items and are consumed upon hand in … must clear the space of the mission specific in space crates."
-**Save version unchanged (v19)** — `slot` is additive and older drop records stay slot-less; rebuild needed
-(`npm run build`, then `npm test`).
-
-- **Each crate belongs to one contract (`data/missions/contracts.js`).** The salvage step carries `owned: true`, so the
-  runner counts a pickup for a contract only when the crate carries that mission's id (`objectiveMatches`,
-  `missionPickupMatches`). Accepting "Recover 3" and "Recover 6" at once now needs all nine of their own crates: another
-  contract's crates, and loose Salvage from a wreck, move nothing.
-- **The field (`sim/session.js`).** `ensureSalvageCrates` runs on every launch and puts one persistent crate in the
-  asteroid field for each crate a contract still needs. The crates are persistent and tagged, so a warp, a dock or a
-  reload keeps them, and a crate already collected is never spawned again.
-- **Several crates of one item (`sim/combat.js`).** A drop record used to be keyed by mission + item, which allowed only
-  one crate per mission. Records now carry a `slot` (`nextMissionCrateSlot` hands out the next free one), and spawn,
-  drift, pickup, save and restore all match on it. `state/profile.js` keeps `slot` in the saved world and dedupes by it.
-- **Wording (`sim/missions.js`, `ui/hud.js`, `ui/missionlog.js`).** `missionRecoveryText` says "2 out of 3 crates
-  recovered": the HUD shows it under the contract line while flying, and the docked card uses it in place of "Objective
-  progress: 0 of 3". This supersedes the previous entry's salvage wording — the no-tally rule now covers **mine** only.
-- **Hand-in is unchanged in kind, stricter in fact.** Objectives done (each crate recovered from space) plus `n` Salvage
-  in the station or the hold; `consumeDelivery` takes them and pays. Any Salvage pays, because the recovered crates are
-  ordinary cargo, and the items are consumed on the spot.
-- **The space is left clean.** Handing in a contract (or abandoning it) already ran `clearMissionContents`; it now drops
-  that mission's crates from every pocket and deletes their saved records, so nothing respawns when the pocket loads
-  again. Tested with an extra crate still floating when the pilot hands in.
-- **Tests:** new `tests/mission-recovery-crates.test.mjs` (spawn counts and slots, per-contract counting, hand-in
-  consumption and cleanup, abandon cleanup, save round trip) and a per-contract counting test in
-  `tests/step13-missions.test.mjs`; the guest-pickup test now spawns its own contract's crate. **509 tests / 0 failures.**
-- **Docs:** `docs/MISSION_RULES.md` (recovery-contract paragraph, trimmed to stay inside its size cap), `src/sim/README.md`,
-  `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
-
----
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: The owner confirmed the pending mission playtests; nothing is waiting now
+- 2026-11-13: A recovery contract recovers its own crates, and the space is left clean
 
 - 2026-11-13: Contract guidance says where the cargo goes, not how much is aboard
 - 2026-11-13: Notices hang just below the flight message line

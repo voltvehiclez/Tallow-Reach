@@ -6,7 +6,7 @@
 // third, on the painted sky: it carried "odd lines" — painted fractures and filaments — and a sky
 // with polylines in it is a drawing, not a place, so the painter may not stroke a line at all.
 //
-// A sky is a look, so what a test can honestly check is: that it is painted from the place's own data,
+// A sky is a look, so what a test can honestly check is: that it is painted from the palette it is given,
 // that one roll source paints one sky exactly, that the nebula's washes are spread over the *sphere*
 // and not over the canvas, that there is nothing in it that could be a star, that the palette really is
 // dark and cold, and that the painter covers the canvas with what the generators made. The generators
@@ -19,10 +19,12 @@ import assert from "node:assert/strict";
 import * as skyModule from "../src/render/sky.js";
 import { SKY_SIZE, SKY_COUNTS, skyVeils, skyClouds, skyCores, skyGrain, paintSky } from "../src/render/sky.js";
 import { makeRng } from "../src/util/rng.js";
-import { INSTANCE_TEMPLATES } from "../src/data/instances.js";
 
-const SKY = INSTANCE_TEMPLATES.guardian_rift.sky;
-const DEEP = INSTANCE_TEMPLATES.deep_rift.sky;
+// Since 2026-11-14 the runtime's skies are the owner's panoramas (see `scene.js`), not this
+// painter, so the tests carry their own two stand-in palettes — a basic rift's and a deeper
+// collapse's — and keep the painter honest as a piece of kept code, not as the shipped look.
+const SKY = { col: 0x05060b, glow: 0x7a5cc4, veil: 0x2a8794 };
+const DEEP = { col: 0x03040a, glow: 0x54439f, veil: 0x9c4279 };
 
 /** `0xrrggbb` as the css rgba() the painter writes. */
 const rgba = (hex, a) => `rgba(${(hex >> 16) & 255}, ${(hex >> 8) & 255}, ${hex & 255}, ${a})`;
