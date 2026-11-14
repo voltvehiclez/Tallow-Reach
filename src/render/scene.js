@@ -4,8 +4,12 @@
 import * as THREE from "three";
 import { DEFAULT_PLACE, placeDef, placeAt } from "../data/places.js";
 import { mm, rockShapeAt } from "./models.js";
-import { paintSky } from "./sky.js";
 import { cosmeticRandom } from "../util/rng.js";
+// The skies of somewhere else (slice 14): the owner's panoramas (2026-11-14), inlined as data
+// URLs by the build, so the game stays one self-contained file.
+import shroudSkyUrl from "../assets/sky-shroud.webp";
+import riftSkyUrl from "../assets/sky-rift.webp";
+import deepRiftSkyUrl from "../assets/sky-deeprift.webp";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
 
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -94,33 +98,38 @@ export function forgetPlace(id) {
 /** How far out a sky shell sits: beyond the play area, inside the camera's far plane. */
 const SKY_RADIUS = 15000;
 
+// The rift's two skies (slice 14a/14b), both the owner's panoramas (2026-11-14).
+const SHATTERED_URLS = { rift: riftSkyUrl, deep: deepRiftSkyUrl };
+
 /**
  * The skies a place can declare (`data/instances.js` `sky.kind`). One builder per kind, each
  * returning `{ object, spins }` exactly like a scenery model, so a sky hangs off its place's own
  * group and is shown and hidden with it. Visual only: every number here is a look, never a rule.
  *
- *   shattered  a painted near-black nebula of cold ember light with shards drifting inside — the
- *              somewhere a rift's run is. Unstable, and nowhere near the space outside.
- *   shroud     a dark, near-neutral grey painted sky (slice 14c): the weather of a simple
- *              wormhole's space. No shards — the place's own formations are the scenery.
+ *   shattered  the owner's own panoramas (2026-11-14), shards drifting inside them — the
+ *              somewhere a rift's run is: `variant` picks `rift` (teal maelstrom) or `deep`
+ *              (near-black, one sable cluster). The place's own rock does the rest.
+ *   shroud     real space (slice 14c): the owner's dark-grey nebula panorama with few stars —
+ *              the somewhere inside a simple wormhole. No shards — the place's own formations
+ *              are the scenery.
  */
 export const SKIES = {
   /**
-   * A broken pocket: space, but the space of somewhere that has collapsed. Painted, not built (see
-   * `render/sky.js` for why), and wrapped around the inside of a sphere — unlit and seen from the
-   * back, so the sphere's own facets never show and the picture is the whole of the sky. Debris
-   * drifts inside it, turning slowly, in the same rock shapes the place's field uses.
+   * The somewhere a rift's run is: the owner's own two panoramas (2026-11-14), wrapped around the
+   * inside of a sphere, seen from the back — the same equirect-on-sphere treatment as the
+   * wormhole panorama, every star where the owner put it. One linear filter, no mips. `variant`
+   * picks the deep rift's darker sky; anything else (or nothing) gets the ordinary rift sky — a
+   * look, never a rule, so a typo costs a prettier sky and never the place. Debris drifts inside
+   * it, turning slowly, in the same rock shapes the place's field uses.
    */
   shattered(sky) {
     const shards = Math.max(0, Math.floor(Number(sky.shards) || 0));
+    const variant = typeof sky?.variant === "string" && Object.prototype.hasOwnProperty.call(SHATTERED_URLS, sky.variant)
+      ? sky.variant
+      : "rift";
     const g = new THREE.Group();
 
-    const canvas = document.createElement("canvas");
-    paintSky(sky, canvas);
-    const texture = new THREE.CanvasTexture(canvas);
-    // Seen from inside, the picture is magnified rather than shrunk, so mipmaps buy nothing here —
-    // and a mip level that cannot wrap across the seam would draw a line of its own down the sky.
-    // One linear filter, no mips: no seam, no contour, nothing in the picture that is not painted.
+    const texture = new THREE.TextureLoader().load(SHATTERED_URLS[variant]);
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);
@@ -138,12 +147,13 @@ export const SKIES = {
     // unlit, so they read as shapes in the dark rather than as scenery — which is the point of them
     // (owner 2026-11-14: "shattered asteroids in the background skybox").
     const spins = [{ object: shell, rate: 0.0014 }];
-    const shardMat = mm(0x14161d, Number(sky.glow) || 0x6a4cb0);
-    shardMat.emissiveIntensity = 0.06;   // a breath of the nebula's own light on the rock, no more
+    // Lit cool, with a breath of the nebula's teal caught in the rock: near-black, never bright.
+    const shardMat = mm(0x14161d, 0x2f6f78);
+    shardMat.emissiveIntensity = 0.12;   // the teal bleeds into the rock, no more than that
     for (let i = 0; i < shards; i++) {
       const shard = new THREE.Mesh(rockShapeAt(i), shardMat);
       // Spread through the whole shell, near and far: a handful close enough to be shapes with edges,
-      // and the rest a long way off, small against the painted sky.
+      // and the rest a long way off, small against the nebula.
       const d = R(1200, 9000),
         u = R(-1, 1),
         t = R(0, 6.283),
@@ -156,7 +166,7 @@ export const SKIES = {
     }
 
     // A run's sky is built for that run alone, so it is freed with it: an instance comes and goes,
-    // and its sphere, its painted picture and its shard material must not stay on the card after
+    // and its sphere, its panorama and its shard material must not stay on the card after
     // it. The rock shapes are shared with every field in the game, so they are not this sky's to
     // free.
     const own = [shellGeo, shellMat, texture, shardMat];
@@ -164,18 +174,19 @@ export const SKIES = {
   },
 
   /**
-   * The grey of a simple wormhole (slice 14c): a dark, near-neutral sky of grey washes — the
-   * radiance a wormhole leaks into the pocket it hangs in, and the somewhere a site's far side is.
-   * Painted like the shattered sky (`render/sky.js` to the same rules: no line, no star, no
-   * contour), wrapped around the inside of a sphere, seen from the back. No shards: the place's
-   * own asteroid formations are the scenery.
+   * The somewhere inside a simple wormhole (slice 14c): the owner's dark-grey nebula panorama
+   * with few stars (2026-11-14), wrapped around the inside of a sphere, seen from the back —
+   * an equirectangular image is exactly what a sphere's UV unwrap is, so the panorama hangs
+   * level all round with no painter in between and every star where the owner put it. One linear
+   * filter, no mips: nothing sampled here is anything the owner did not paint. No shards: the
+   * place's own asteroid formations are the scenery.
    */
-  shroud(sky) {
+  shroud() {
     const g = new THREE.Group();
 
-    const canvas = document.createElement("canvas");
-    paintSky(sky, canvas);
-    const texture = new THREE.CanvasTexture(canvas);
+    // A data URL decodes off the main thread; the very first frames may render black before the
+    // panorama lands. That is the whole failure mode.
+    const texture = new THREE.TextureLoader().load(shroudSkyUrl);
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);

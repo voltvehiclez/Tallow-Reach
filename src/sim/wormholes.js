@@ -109,7 +109,9 @@ const pocketRecord = (record) => ({
   enter: { kind: "warp", pos: [...WORMHOLE_POCKET.enter.pos] },
   leave: { kind: "warp" },
   features: JSON.parse(JSON.stringify(WORMHOLE_POCKET.features)),
-  sky: { ...WORMHOLE_POCKET.sky },
+  // No `sky`: the pocket is ordinary space in the system it spawned in (owner, 2026-11-14),
+  // so it hangs the same starfield every sibling pocket hangs — always. Only the far side of
+  // the wormhole is somewhere else.
   mapPos: wormholeMapPos(record.seed),
 });
 

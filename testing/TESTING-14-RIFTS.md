@@ -7,8 +7,8 @@ this in real life?**
 What is new: a rift is a **place you carry with you**. You buy a one-use **Basic rift**, open a door in
 clear space, fly to it and press **R** to go in. The door — and the way out inside — is a **shimmering
 dark-orange anomaly**: a dark spherical core with a bright eye, an orange aura and a flare around it.
-Inside is a generated pocket under **a shattered sky of its own** — painted space, dark and ember-lit,
-with a cold starless nebula and no planet: the rift's **own guardians**
+Inside is a generated pocket under **a shattered sky of its own** — the owner's teal maelstrom panorama with
+shattered rock drifting in front of it, no planet (the deep rift wears the owner's near-black deep-sky instead): the rift's **own guardians**
 guarding a **canister** that stays sealed until the objective is done, and a **Rift gate** that stays
 sealed with it. **F** locks any of the three and the HUD labels all of them, so the way out cannot be
 lost. The pocket **collapses 20 minutes after you went in** — with you inside it. And the run is

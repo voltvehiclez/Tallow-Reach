@@ -171,6 +171,14 @@ test("every instance template is complete data, and the registries know every wo
       `${id}: the way out is an object somewhere in the world, not an abstract point`);
     assert.ok(Number(t.exit?.r) > 0, `${id}: and it is drawn at a declared size`);
     assert.ok(SKY_KINDS.includes(t.sky?.kind), `${id}: its sky is declared vocabulary`);
+    if (t.sky?.kind === "shattered") {
+      assert.ok(Number.isInteger(t.sky.shards) && t.sky.shards > 0, `${id}: the rift declares how many shards drift`);
+      if (id === "deep_rift") assert.equal(t.sky.variant, "deep", "the deep rift wears the owner's deep panorama");
+      else assert.equal(t.sky.variant, undefined, "every other rift wears the ordinary rift panorama");
+      if (t.sky.variant != null) assert.equal(t.sky.variant, "deep", `${id}: the only other rift sky is the deep panorama`);
+      assert.deepEqual(Object.keys(t.sky).sort(), t.sky.variant != null ? ["kind", "shards", "variant"] : ["kind", "shards"],
+        `${id}: the rift sky carries only shards and variant — the panorama is the owner's image, not a palette`);
+    }
     for (const feature of t.features) {
       assert.notEqual(feature.kind, "planet", `${id}: a rift is not the space outside it, so no planet`);
     }

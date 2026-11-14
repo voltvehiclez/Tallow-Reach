@@ -1,5 +1,9 @@
 // The sky a place is seen under, painted (step 14).
 //
+// STATUS 2026-11-14: unused at runtime. Both skies (rift `shattered` and wormhole `shroud`) are now the
+// owner's equirect panoramas wrapped by `scene.js`, inlined from `src/assets/`. This painter survives
+// only because `tests/sky.test.mjs` exercises it; deleting both, or wiring it back in, is the owner's call.
+//
 // The first rift sky was built out of flat panels with one shade each, and flat panels read as what
 // they are: triangles. A broken geometry, not a place (owner bug report 2026-11-14 — "should look
 // like space but a bit hellish / dark / shattered. Should look realistic").

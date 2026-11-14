@@ -37,15 +37,16 @@ run and what to click. Different AI assistants work in separate chats and none r
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" and tick them there if so. If they
   report a bug, fix it first, following "When the owner reports a bug" below.
-- **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system, appears
-  on that system's map as a "Simple Wormhole" with no notice — **20 minutes from spawn, kept in `world.wormholes`**.
-  Always **75** in the universe, never more than **3 per system**; a fresh universe staggers their clocks and every
-  replacement pops up with a full 20 minutes. The pocket holds a skybox, asteroid formations and one grey dark sphere you
-  can lock. The far side is a site (smugglers and a freighter to destroy, a lumenite belt to mine, a guardian hive), is
-  **less hardcore than a rift — leave at any time** — and is re-enterable until the pocket expires; objectives and
-  rewards are one-time. Collapse fades the way in; the **Stable wormhole** out always works, no clock, and there is no
-  `kill` outcome. v20 → **v21**; step 15 is **v22**. Guide:
-  [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md). Next: **14d**, then step 15. A run saves as
+- **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system,
+  appears on that system's map as a "Simple Wormhole" with no notice — **20 minutes from spawn, kept in `world.wormholes`**.
+  Always **75** in the universe, never more than **3 per system**; clocks stagger on a fresh universe, and replacements
+  pop up with the full 20 minutes. The pocket shows the system's own starfield; a grey dark sphere you can lock hangs at
+  its centre. Every instance interior is the owner's panorama now (dark-grey nebula for a wormhole site, teal maelstrom
+  for a rift, near-black for a deep rift). The far side is a site (smugglers and a freighter to destroy, a lumenite belt
+  to mine, a guardian hive), is **less hardcore than a rift — leave at any time** — and is re-enterable until the pocket
+  expires; objectives and rewards are one-time. Collapse fades the way in; the **Stable wormhole** out always works, no
+  clock, no `kill` outcome. v20 → **v21**; step 15 is **v22** (guide:
+  [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as
   template, seed, clock, objective, prize (half-traded) and entry spot (`world.instances`); a standing simple wormhole
   saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`).
 - The campaign (step 15) must be built from the mission templates and pass the linter. See [architecture/feature-notes.md](architecture/feature-notes.md); code and tests are authoritative.

@@ -28,6 +28,9 @@ const options = {
   target: "es2020",
   legalComments: "none",
   write: false,
+  // Artwork (e.g. the slice-14c sky panorama) is inlined as base64 data URLs, so the build stays
+  // one self-contained file and no asset path ever needs to resolve inside the sandbox.
+  loader: { ".webp": "dataurl" },
   plugins: [
     {
       name: "html-shell",

@@ -11,11 +11,12 @@ import {
 } from "../src/state/state.js";
 import { newProfile, newWorld, SAVE_VERSION } from "../src/state/profile.js";
 import {
-  setPlaceCatalog, isPocket, placeDef,
+  setPlaceCatalog, isPocket, placeDef, placeAt,
 } from "../src/data/places.js";
 import {
   WORMHOLE_SPAWN,
   wormholeIdFor,
+  INSTANCE_TEMPLATES,
 } from "../src/data/instances.js";
 import { generateGalaxy, systemPocketLayout, pocketsInSystem } from "../src/sim/galaxy.js";
 import { prepareGalaxySave } from "../src/sim/galaxy-session.js";
@@ -94,6 +95,19 @@ test("a fresh universe fills itself with 75 standing simple wormholes, never mor
   for (const record of state.wormholes.values()) {
     const pocket = pocketsInSystem(state.galaxy, record.parent).find(p => p.id === record.id);
     assert.ok(pocket, "and every one of them is listed on its system's chart");
+  }
+});
+
+test("the pocket is the system's own space; only the far side is somewhere else", () => {
+  fresh();
+  restoreWormholes();
+  const record = [...state.wormholes.values()][0];
+  assert.equal(placeAt(record.id).sky, undefined,
+    "the pocket declares no sky — it hangs the same starfield as every sibling pocket");
+  for (const [id, template] of Object.entries(INSTANCE_TEMPLATES)) {
+    if (!id.startsWith("wh_")) continue;
+    assert.equal(template.sky?.kind, "shroud",
+      `${id}: the far side is the dark-grey nebula panorama, not the system's space`);
   }
 });
 

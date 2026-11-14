@@ -8,6 +8,63 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: The owner confirmed the pending mission playtests; nothing is waiting now
+
+Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner reported that the work built
+on 2026-11-13 passed in the browser — station-scoped mission offers with the docked-panel redraw, the contract delivery
+wording, recovery contracts spawning and counting their own crates — together with the death-and-missions playtest guide.
+
+- `docs/ROADMAP.md`: "Current position" rewritten so it says no playtest is pending, a log line added for 2026-11-14,
+  "Last checked" moved to 2026-11-14.
+- `testing/TESTING-DEATH-AND-MISSIONS.md` moved to `testing/passed/`; both tables in `testing/README.md` updated.
+- `docs/HANDOFF.md`: "Last checked" 2026-11-14, plus one line saying nothing is waiting on a playtest.
+- This file: its oldest full entry moved word for word to `docs/CHANGELOG_ARCHIVE.md` with an index line, so exactly ten
+  full entries remain here.
+- Next: refactor step 14 (instanced places and wormholes). The owner has answered VISION open question 5 — spawnable
+  wormholes are **rifts**, sold as a "Basic rift" for 10 cr, used by right-clicking it in the in-flight ship inventory,
+  spawning where the ship is at least 1 km from any large structure; natural wormholes appear on pocket maps and are
+  time-limited; a rift may declare criteria that must be met before it can be left. The step is planned before any code.
+
+---
+
+## 2026-11-13: A recovery contract recovers its own crates, and the space is left clean
+
+Owner request: "recovery missions require you to recover all the crates the mission generates … lists progress of
+recovery in the ship ui and mission log as 'x out of y crates recovered'. Those must then be specific to the specific
+mission … you must recover each mission's own individual crates", and "to complete the mission you need the right
+number of items and are consumed upon hand in … must clear the space of the mission specific in space crates."
+**Save version unchanged (v19)** — `slot` is additive and older drop records stay slot-less; rebuild needed
+(`npm run build`, then `npm test`).
+
+- **Each crate belongs to one contract (`data/missions/contracts.js`).** The salvage step carries `owned: true`, so the
+  runner counts a pickup for a contract only when the crate carries that mission's id (`objectiveMatches`,
+  `missionPickupMatches`). Accepting "Recover 3" and "Recover 6" at once now needs all nine of their own crates: another
+  contract's crates, and loose Salvage from a wreck, move nothing.
+- **The field (`sim/session.js`).** `ensureSalvageCrates` runs on every launch and puts one persistent crate in the
+  asteroid field for each crate a contract still needs. The crates are persistent and tagged, so a warp, a dock or a
+  reload keeps them, and a crate already collected is never spawned again.
+- **Several crates of one item (`sim/combat.js`).** A drop record used to be keyed by mission + item, which allowed only
+  one crate per mission. Records now carry a `slot` (`nextMissionCrateSlot` hands out the next free one), and spawn,
+  drift, pickup, save and restore all match on it. `state/profile.js` keeps `slot` in the saved world and dedupes by it.
+- **Wording (`sim/missions.js`, `ui/hud.js`, `ui/missionlog.js`).** `missionRecoveryText` says "2 out of 3 crates
+  recovered": the HUD shows it under the contract line while flying, and the docked card uses it in place of "Objective
+  progress: 0 of 3". This supersedes the previous entry's salvage wording — the no-tally rule now covers **mine** only.
+- **Hand-in is unchanged in kind, stricter in fact.** Objectives done (each crate recovered from space) plus `n` Salvage
+  in the station or the hold; `consumeDelivery` takes them and pays. Any Salvage pays, because the recovered crates are
+  ordinary cargo, and the items are consumed on the spot.
+- **The space is left clean.** Handing in a contract (or abandoning it) already ran `clearMissionContents`; it now drops
+  that mission's crates from every pocket and deletes their saved records, so nothing respawns when the pocket loads
+  again. Tested with an extra crate still floating when the pilot hands in.
+- **Tests:** new `tests/mission-recovery-crates.test.mjs` (spawn counts and slots, per-contract counting, hand-in
+  consumption and cleanup, abandon cleanup, save round trip) and a per-contract counting test in
+  `tests/step13-missions.test.mjs`; the guest-pickup test now spawns its own contract's crate. **509 tests / 0 failures.**
+- **Docs:** `docs/MISSION_RULES.md` (recovery-contract paragraph, trimmed to stay inside its size cap), `src/sim/README.md`,
+  `src/ui/README.md`, `testing/TESTING-BASELINE.md`.
+
+---
+
+---
+
 ## 2026-11-13: Contract guidance says where the cargo goes, not how much is aboard
 
 Owner request: "Currently recover contracts and mine contracts update the mission subtext in top right of ship ui depending
