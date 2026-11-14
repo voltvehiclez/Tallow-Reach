@@ -35,6 +35,7 @@ import { refreshHull } from "./sim/hull.js";
 import { createSimClock, isSimulationPaused } from "./sim/step.js";
 import { SIM_DT, MAX_FRAME_DT, AUTOSAVE_SECONDS } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
+import { installCrashNotice, reportCrash } from "./ui/crash.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 import {
   installEnemyViews,
@@ -46,6 +47,10 @@ import {
 } from "./render/views.js";
 
 // --- Boot ------------------------------------------------------------------
+
+// First, so that anything which breaks below — or later, in a listener or a timer — is said on
+// screen instead of only in the browser's console (see ui/crash.js).
+installCrashNotice();
 
 document.body.prepend(renderer.domElement);
 applySave(loadAutosave(prepareGalaxySave) || prepareGalaxySave(newSave()));
@@ -190,8 +195,13 @@ const simClock = createSimClock( undefined, {
   afterStep: snapRenderedPlayer,
 });
 
-function frame(now) {
-  requestAnimationFrame(frame);
+/**
+ * One frame. Split from `frame` below so that anything it throws can be caught without stopping the
+ * loop: the next frame is asked for first, then the work is tried, then — if the work broke — the
+ * scene is drawn anyway and the problem is said on screen. Without that, a single bad frame leaves
+ * the last good picture frozen on the glass with a live loop behind it, which plays as a dead game.
+ */
+function drawFrame(now) {
   const dt = Math.min(MAX_FRAME_DT, (now - last) / 1000);
   last = now;
 
@@ -251,6 +261,20 @@ function frame(now) {
 
   // Draws its own canvas and does nothing unless the Outfitting tab is open.
   updateOutfitting(dt);
+}
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  try {
+    drawFrame(now);
+  } catch (err) {
+    reportCrash("frame", err);
+    try {
+      renderer.render(scene, camera);
+    } catch (renderErr) {
+      reportCrash("render", renderErr);
+    }
+  }
 }
 
 requestAnimationFrame(frame);

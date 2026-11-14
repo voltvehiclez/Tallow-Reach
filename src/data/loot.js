@@ -32,6 +32,29 @@ export const LOOT_TABLES = {
     ],
   },
 
+  // What a rift's guardian leaves behind (step 14). It is not a pirate wreck with a cargo hold:
+  // it is the pocket's own metal, so the rare ore the canister inside pays in also comes off the
+  // wreck. The salvage and the core chance are the raider's, so giving the rift its own hostile
+  // did not change what a run pays.
+  riftguardian: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [1, 2], w: 1 },
+      { i: "voidite", c: [1, 1], w: 0.25, j: 0 },
+      { i: "core", c: [1, 1], w: 0.1, j: 0 },
+    ],
+  },
+
+  // The deeper collapse pays better, the way its canister does.
+  deepguardian: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [2, 3], w: 1 },
+      { i: "voidite", c: [1, 2], w: 0.4, j: 0 },
+      { i: "core", c: [1, 1], w: 0.2, j: 0 },
+    ],
+  },
+
   // A derelict is a larger, guaranteed salvage cache with a rarer core.
   derelict: {
     kind: "drops",

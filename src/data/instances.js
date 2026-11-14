@@ -102,11 +102,13 @@ export const INSTANCE_TEMPLATES = {
   // The Basic rift's usual run: four hardened guardians hold a small, rich pocket shut.
   guardian_rift: {
     n: "Guardian rift",
-    d: "A collapsed pocket, held shut by pirate guardians.",
+    d: "A collapsed pocket, held shut by its own guardians.",
     tier: 4,
     lifetimeSec: 1200,           // 20 minutes of unpaused play
-    difficulty: { hp: 1.6, dmg: 1.5 },
-    guardians: { enemy: "raider", count: 4, spawnDist: [800, 1100] },
+    // The guardians are authored for a rift (`data/enemies.js`), so a run does not inflate them:
+    // these multipliers are what a run would apply to a hostile it borrowed from the map.
+    difficulty: { hp: 1, dmg: 1 },
+    guardians: { enemy: "riftguardian", count: 4, spawnDist: [800, 1100] },
     objective: {
       kind: "destroy-guardians",
       n: "Destroy the rift guardians",
@@ -149,8 +151,8 @@ export const INSTANCE_TEMPLATES = {
     d: "A deep collapse. Something heavier is holding it shut.",
     tier: 6,
     lifetimeSec: 1500,           // 25 minutes: a bigger run gets a longer clock
-    difficulty: { hp: 2.2, dmg: 2 },
-    guardians: { enemy: "raider", count: 6, spawnDist: [900, 1300] },
+    difficulty: { hp: 1, dmg: 1 },
+    guardians: { enemy: "deepguardian", count: 6, spawnDist: [900, 1300] },
     objective: {
       kind: "destroy-guardians",
       n: "Destroy the rift guardians",

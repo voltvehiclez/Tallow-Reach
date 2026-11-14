@@ -193,6 +193,24 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ---
 
+### L20. A frame that throws stops the picture but not the loop, so a one-line bug plays as a dead game
+- **Seen (owner, step 14 playtest):** "the game crashes … a few seconds after you've destroyed the last guardian" —
+  a frozen screen, no message, and the only word about it a line in the browser console nobody was looking at.
+- **Cause:** `main.js` asks for the next frame *before* it does the frame's work, so an exception inside a frame leaves
+  the loop alive and the last good image on the glass: the game is running and looks dead. The pasted error was from a
+  stale build, but the shape of the failure is the lesson — anything that can throw in front of the player takes the
+  whole game down with it, silently.
+- **Rule:** work that can throw in front of the player is caught where it happens, **said on screen in a sentence with
+  the error's own first line** (`ui/crash.js`, `reportCrash`), and the picture is drawn anyway. A repeat is counted, not
+  listed (a per-frame error would bury the sentence in a second); the card lists a few distinct problems and says how
+  many it left out. The net listens only to what the browser reports as uncaught plus the frame loop's own catch — no
+  `sim/` module may call it and no game rule may depend on it, and a test that expects an error still gets it thrown.
+- **Enforced by:** `tests/crash.test.mjs` — the card's sentence and where it came from, repeat counting, the four-line
+  cap with its "and N more" line, dismissal, and that a broken `document` cannot itself become the crash — plus the
+  `frame`/`drawFrame` split in `main.js`.
+
+---
+
 ## Template (copy for a new entry)
 
 ```

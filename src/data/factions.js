@@ -11,6 +11,13 @@ export const FACTIONS = {
     n: "Pirates",
     d: "Raiders who prey on the shipping around Meridian.",
   },
+  // Step 14: what holds a collapsed pocket shut. Its own group, because it is not a group the
+  // pilot can hail, trade with or be blamed for offending — and a contract that asks for pirates
+  // must not be paid by a rift's guardians (owner bug report 2026-11-14).
+  rift: {
+    n: "Rift Guardians",
+    d: "Whatever keeps a broken pocket closed. It does not hail, trade or run.",
+  },
 };
 
 /** What an unknown faction id falls back to. */

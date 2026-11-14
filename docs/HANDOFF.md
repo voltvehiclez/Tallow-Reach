@@ -37,10 +37,10 @@ run and what to click. Different AI assistants work in separate chats and none r
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" and tick them there if so. If they
   report a bug, fix it first, following "When the owner reports a bug" below.
-- **Waiting on a playtest (2026-11-14):** the owner's six 14a feedback items — the shimmering anomaly a rift and its
-  way out both are, F-locks and HUD labels for all three, the R-opened canister, the shattered sky — **plus slice 14b**,
-  a run that survives a quit: [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md). Tick 14a and 14b in
-  ROADMAP only when the owner says they passed. Next slices: **14c** simple wormholes (**v21**), **14d** wormhole systems
+- **Waiting on a re-playtest (2026-11-14):** the owner playtested 14a + 14b and reported four bugs — quitting mid-rift
+  lost the run, the wave was raiders, the sky read as triangles, and a crash froze the screen — and all four are fixed
+  (CHANGELOG's newest entry). 14a and 14b stay unticked in ROADMAP until the owner re-runs
+  [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md) and says they pass. Next slices: **14c** simple wormholes (**v21**), **14d** wormhole systems
   in uncharted space, then step 15 the campaign (**v22**). A run is saved as template, seed, clock, objective, prize and
   entry spot (`world.instances`), so logging out inside one comes back inside it — with its wave back at full strength.
 - The campaign (step 15) must be built from the mission templates and pass the linter.
