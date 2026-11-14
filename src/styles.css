@@ -1033,7 +1033,7 @@ button.mod-bay.on {
 .inv-discard-popover {
   position: absolute;
   z-index: 25;
-  width: min(220px, calc(100% - 16px));
+  width: min(248px, calc(100% - 16px));
   padding: 10px 12px;
   border: 1px solid var(--amber);
   background: rgba(7, 9, 11, .98);
@@ -1048,6 +1048,32 @@ button.mod-bay.on {
   font-size: 13px;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+/* Title row: the confirm buttons live up here with the title, right beside
+   where the player just right-clicked — the whole popover is one row closer to
+   the mouse than a footer action line (owner, bug report 2026-11-14). */
+.inv-sell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.inv-sell-head > strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+  color: var(--ice);
+  font-size: 12px;
+  line-height: 1.25;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.inv-sell-head .inv-sell-actions {
+  flex: 0 0 auto;
+  margin-top: 0;
 }
 .inv-sell-popover label,
 .inv-discard-popover label {

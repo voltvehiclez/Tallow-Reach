@@ -7,7 +7,7 @@ import { CONTRACT_MISSION_TEMPLATES, missionFromContract, describeMission } from
 import { storyMission } from "../data/missions/index.js";
 import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
-import { placeAt, isPocket, DEFAULT_PLACE } from "../data/places.js";
+import { placeAt, placeDef, isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { state, profileOf } from "../state/state.js";
 import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stockOf, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos, stationAt } from "./places.js";
@@ -366,12 +366,40 @@ function cloneData(value) {
 }
 
 /** Make an active mission from a compact board offer. */
+/**
+ * Name the area a hunt contract is fighting over: the asteroid field in the
+ * accepting pocket, pulled from the same feature data the spawner sees, so the
+ * objective sentence can say exactly where the raiders are (never "somewhere
+ * out there"). Returns null when the pocket has no named field.
+ */
+function huntAreaHint(at) {
+  const features = placeDef(at)?.features;
+  const field = Array.isArray(features) ? features.find(feature => feature.kind === "asteroidField" && feature.n) : null;
+  return field?.n || null;
+}
+
 export function instantiateMission(offer, at = state.place) {
   const mission = missionFromContract(offer, freshId(offer?.type));
   // Remember the station the contract was taken from, so the hand-in guidance
   // can name it while the pilot is out in the field. `origin` is already part of
   // the saved mission shape, so no save migration is needed.
   if (mission && !mission.origin) mission.origin = at;
+  // A hunt is about the neighbourhood it was taken in: raiders elsewhere in the
+  // universe must not pay for it, so the kill step carries its pocket
+  // (`objectiveMatches` refuses any other place) and says which belt to clear.
+  if (mission?.type === "hunt") {
+    const placeName = placeAt(at)?.n || "the area";
+    const field = huntAreaHint(at);
+    for (const step of mission.steps || []) {
+      if (step.kind !== "kill") continue;
+      step.place = at;
+      if (step.objective === "Destroy {remaining} {enemy}.") {
+        step.objective = field
+          ? `Destroy {remaining} {enemy} near the ${field} (${placeName}).`
+          : `Destroy {remaining} {enemy} in ${placeName}.`;
+      }
+    }
+  }
   return stampHandInStation(mission, at);
 }
 

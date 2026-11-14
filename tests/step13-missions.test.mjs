@@ -56,9 +56,9 @@ test("13a: every contract is a mission-data template with a runner objective", (
 
 test("13a: multiple active contracts advance independently from gameplay events", () => {
   const profile = newProfile();
-  const player = playerFor(profile);
-  const mine = acceptMission({ type: "mine", tier: 1, p: 0, n: 2, r: 400, o: "ferrite" }, profile);
-  const hunt = acceptMission({ type: "hunt", tier: 1, p: 0, n: 1, r: 500, e: "raider" }, profile);
+  const player = { ...playerFor(profile), place: "reach" };
+  const mine = acceptMission({ type: "mine", tier: 1, p: 0, n: 2, r: 400, o: "ferrite" }, profile, "reach");
+  const hunt = acceptMission({ type: "hunt", tier: 1, p: 0, n: 1, r: 500, e: "raider" }, profile, "reach");
   assert.equal(activeMissions(profile).length, 2);
 
   advanceMissions("mined", { item: "cobalt", player });

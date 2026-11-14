@@ -37,6 +37,7 @@ run and what to click. Different AI assistants work in separate chats and none r
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first, following "When the owner reports a bug" below.
 - **Bug round (2026-11-14, built, awaiting the owner's re-play):** with Alt held the free camera rolls with the hull (E/Q spins the ship in a still frame), keys **1/2 select primary bay 1/2 and only the selected bay's weapon fires** (save `pw` stores `"1"`/`"2"`; legacy `cannon`/`beam` migrate to the bay holding that kind of module — v21 saves load cleanly), and world-space markers hide with the HUD, so nothing floats over the main menu.
+- **Bug round two (2026-11-14, built, awaiting the owner's re-play):** the Sell/Discard confirm buttons sit in the popover's title row; both flows anchor with one rule (clicked-entry centre − 44px) so Discard keeps the placement the owner approved and Sell matches it — the confirm rides just above the mouse. A hunt contract is scoped to the pocket it was accepted in (kills elsewhere don't count; the objective names the area). Rebuilt on `arena/22587946-tallow-reach` after Continue reset the branch.
 - **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system,
   appears on that system's map as a "Simple Wormhole" with no notice — **20 minutes from spawn, kept in `world.wormholes`**.
   Always **75** in the universe, never more than **3 per system**; clocks stagger on a fresh universe, and replacements
@@ -50,7 +51,6 @@ run and what to click. Different AI assistants work in separate chats and none r
   template, seed, clock, objective, prize (half-traded) and entry spot (`world.instances`); a standing simple wormhole
   saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`).
 - The campaign (step 15) must be built from the mission templates and pass the linter. See [architecture/feature-notes.md](architecture/feature-notes.md); code and tests are authoritative.
-
 ## The owner's ground rules (do not break these)
 
 - No new npm dependencies; plain ES modules. The one planned exception is a small networking library at the

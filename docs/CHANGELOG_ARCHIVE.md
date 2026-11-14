@@ -8,6 +8,64 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: Step 14 groundwork — instance templates as data, and the owner's wormhole model recorded
+
+No game behaviour changed yet: everything below is data, docs and empty runtime hooks that nothing reads. **Save
+version unchanged (v19)**, but `src/` changed, so rebuild (`npm run build`) and re-run `npm test`.
+
+- **Owner clarification (fourth round, 2026-11-14).** Natural wormholes come in two kinds that share one machinery. A
+  **simple wormhole** is a pocket that spawns itself in normal space: warp to it like any pocket, the wormhole hangs
+  there as an object, press **R** close to it and enter one instanced pocket isolated from the rest of space with an
+  objective of its own. Its **20 minutes run from the moment the pocket spawns**, not from entry. Running out fades the
+  wormhole object and dooms the outer pocket — it leaves the map when you warp off, then despawns. The way out inside is
+  a **Stable wormhole** with no clock of its own: nobody is ever forced out or killed by it, and leaving after the
+  collapse returns you to an empty pocket. A **wormhole system** (later slice, now **14d**) is entered the same way, but
+  its far side is a system in uncharted space — off the existing starmap, **persistent and saved** like any other
+  system, with dynamic wormhole pockets on the same timer (a new one spawns so you can always get out) and a map button
+  to view normal space and come back. Rifts are unchanged: they still **kill** on expiry.
+- `docs/VISION.md`: the step 14 decision rewritten for that model — the two wormhole kinds, the two clock anchors, and
+  `collapse` replacing the third round's `eject` (nothing forces a pilot out of a wormhole, so there is nothing to
+  eject from). Slices are now 14a rift, 14b saved run, 14c simple wormholes, 14d wormhole systems.
+- `docs/REFACTOR_PLAN.md`: step 14's 14c bullet rewritten — it is no longer "data only", because a self-spawning
+  pocket, its timer and its despawn are real machinery — and a 14d bullet added. `docs/TARGET_ARCHITECTURE.md` gains a
+  **Wormhole** paragraph beside **Instance**. `docs/ROADMAP.md`: table rows 14c/14d, current position, log line.
+- **NEW `src/data/instances.js`** — the whole template vocabulary, with no behaviour in it (a weighted roll is
+  behaviour and belongs to `sim/instances.js`, the way `data/loot.js` is rolled by `sim/loot.js`): `RIFT`
+  (`enterRange` 200, `exitRange` 220, `warnSec` 60, and `clearance` — 1000 m from a station, an asteroid field's
+  edge or a planet's surface, 150 m from any single rock), `OBJECTIVE_KINDS`, `EXIT_REQUIREMENT_TYPES`,
+  `EXPIRY_OUTCOME_TYPES` (`kill`, `collapse`), two instance templates (`guardian_rift`: tier 4, 1200 s,
+  `{hp 1.6, dmg 1.5}`, four guardians, sealed exit, locked cache; `deep_rift`: tier 6, 1500 s, `{hp 2.2, dmg 2}`,
+  six guardians, richer cache), `RIFTS.basic` as a weighted template pool, and `instanceIdFor(templateId, seed)` so
+  one seed is always one instance.
+- `src/data/places.js`: a runtime **instance place registry** — `registerInstancePlace`, `unregisterInstancePlace`,
+  `clearInstancePlaces`, `isInstancePlace`. An instance resolves through the ordinary `placeAt`/`placeDef` path
+  (its `features` come from its template) but stays out of `pocketsIn`, so it can never appear on a map, and
+  `setPlaceCatalog` drops every instance when a world is installed. The merged catalog is built **lazily**: reading
+  `PLACES` at import time is a reference error, and the first `npm test` after this change said so (51 files failed).
+- `src/state/state.js`: `state.instances` (a Map, session runtime only in 14a), `instanceAt`, `insideInstance`,
+  `clearInstances`; `resetPlaces` clears them; every place container gains `rifts` and `caches` entity lists; and
+  `captureResume` records the spot a rift was entered from instead of a spot inside an instance that is not saved yet,
+  so a save inside a rift returns the pilot to the pocket it was opened from. Slice 14b replaces that with the run.
+- `src/data/items.js`: the first consumable — `rift_basic` (10 cr, `use: "spawn-rift"`, `rift: "basic"`) plus the
+  `itemUse`/`itemRift` readers. `src/data/loot.js`: `rift_rock` (richer ore) and the two cache tables
+  `rift_cache` / `rift_cache_deep`. `src/data/README.md`: the row for `instances.js` (`tests/docs.test.mjs`
+  requires one).
+- **Deliberately not added yet:** the `rift_basic` shop row. The **Use** action behind it (`sim/consumables.js`,
+  `sim/instances.js`, the right-click menu entry, the **R** binding, the rift and cache views) is what slice 14a
+  builds next, and an item you can buy but cannot use would be a silent failure.
+- This entry **supersedes** the first 2026-11-14 entry above on three points: instances **are** saved (14b, v20),
+  expiry outcomes are **per template**, and the natural-wormhole outcome is `collapse` — not the second round's
+  `eject`, and not the first round's "instances are never saved".
+- Next: slice **14a** — `sim/instances.js` (create/enter/leave/expire, the objective and exit registries, the locked
+  cache), `sim/consumables.js` (`useItem` plus `USE_ACTIONS`), the rift and cache entities and their views, the
+  **R** binding, the shop row, `tests/step14-instances.test.mjs` and `testing/TESTING-14-RIFTS.md`.
+
+Files: `src/data/instances.js` (new), `src/data/places.js`, `src/data/items.js`, `src/data/loot.js`,
+`src/data/README.md`, `src/state/state.js`, `docs/VISION.md`, `docs/REFACTOR_PLAN.md`,
+`docs/TARGET_ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/CHANGELOG.md`.
+
+---
+
 ## 2026-11-14: VISION records the owner's step 14 rift decisions; open question 5 is closed
 
 Docs only: no code changed, no rebuild needed, **save version unchanged (v19)**. The owner answered step 14's blocking
