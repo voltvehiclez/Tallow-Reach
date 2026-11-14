@@ -20,6 +20,35 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
+
+Owner, on the round-two build: "Works well. 2 things." — the painted cracks and filaments in the rift sky read as
+**odd lines** across an otherwise good sky ("important the skybox looks realistic/professional"), and opening a loot
+cache left the ship flying: WASD still thrust and the mouse still turned it. **Save version unchanged (v20)**; rebuild
+needed (`npm run build`, then `npm test`).
+
+- **`render/sky.js` strokes nothing any more.** `skyWisps` and `skyCracks` are gone, and with them the templates'
+  `cracks` palette colour (dropped from both templates in `data/instances.js` and from recipe 22's example). The
+  generators are now `skyVeils`, `skyClouds`, a new `skyCores` (small bright knots — the hearts a real nebula piles its
+  light into, so the sky keeps its structure with no line in it) and a new `skyGrain`: six thousand single pixels under
+  four hundredths of alpha, an invisible dither that stops the dark gradients banding into contour lines on an 8-bit
+  screen. The sky texture in `render/scene.js` also drops mipmaps, because a mip level that cannot wrap the seam is a
+  line of its own. `tests/sky.test.mjs` (10) now asserts the painter makes zero strokes and starts no path at all.
+- **A loot surface freezes the ship.** `core/input.js` funnels the three modal surfaces (chart, flight card, rift
+  trade) through one `modalSurface()` — the trade had been missing from the hand-written gate, which was the whole bug
+  — so thrust, strafe, lift, roll, boost, fire and the mouse steer all read zero while one is open; and a new
+  `holdShip()` in `sim/pilot.js` kills the ship's carry and throttle the moment `ui/cache.js` or `ui/cargo.js` opens,
+  because zeroed controls alone still coast. Closing hands back a ship at rest. `tests/ui-cache.test.mjs` grew a sixth
+  test that holds W and pushes the mouse against an open trade and watches the ship not move one metre.
+- **Docs:** TESTING-14 §2/§5/§5b, VISION, ROADMAP (14a/14b ticked on the owner's "works well"), HANDOFF, the
+  render/data/core/ui/sim READMEs and recipe 22 all lose their fractures and gain the freeze.
+- **Tests:** 557/0 (`tests/sky.test.mjs` 10, `tests/ui-cache.test.mjs` 6). Build 810 KB.
+
+Files: `src/render/sky.js`, `src/render/scene.js`, `src/data/instances.js`, `src/core/input.js`, `src/sim/pilot.js`,
+`src/ui/cache.js`, `src/ui/cargo.js`, `tests/sky.test.mjs`, `tests/ui-cache.test.mjs`, and the docs above.
+
+---
+
 ## 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars
 
 The owner came back from the PR #20 build with the mid-rift logout fix **confirmed working** ("can now log out mid
@@ -404,37 +433,11 @@ Files: `src/data/missions/contracts.js`, `src/sim/missions.js`, `tests/step13-mi
 
 ---
 
-## 2026-11-13: Notices hang just below the flight message line
-
-Owner request: "Make it so that all pop up notifications like the confirmation after you have discarded an items appear
-by default in the top middle part of the screen in the top 25% of the screen", then: "Its too high up, it should be
-positioned just below the UI element in ship UI where it says 'Empty weapon slot' etc. Make sure it doesnt overlap with
-the Empty weapon / Warp: slot UI element though." **Save version unchanged (v19)**; rebuild needed (`npm run build`,
-then `npm test`).
-
-- **`#panel-notice` sits under the centred message line.** It is still fixed to the viewport (so it can never move the
-  panel), still `role="status"`, 7 s or a click to dismiss, and still `left: 50%` + `translateX(-50%)`. `ui/notice.js`
-  `placeNotice()` now measures `#msg` — the centred line at 14% of the screen that says **"Empty weapon slot"** when a
-  weapon switch finds nothing fitted, or names the warp — on every notice, and puts the notice **12 px under its bottom
-  edge**, so the two never touch and a wrapped warp message pushes the notice down with it.
-- **Docked and on the title screen** the HUD is away, so the line measures nothing: the same band is derived from the
-  viewport height (`0.14 × height + one 26 px line + 12`), and `styles.css` carries `top: 16%` as the pre-script default.
-  A window resize re-measures while a notice is showing.
-- **Correction to the first attempt:** it was anchored to `#tr`, the top-right HUD block that also prints "Empty weapon
-  slot" as the fitted-weapon readout. That is not the element the owner meant — the notification they compare against is
-  the centred `#msg` line — so the anchor moved. The "mission failed" alert in `missionlog.js` was not touched.
-- **Tests:** `tests/ui-notices.test.mjs` asserts the rule is centred with the `16%` band and no `bottom`;
-  `tests/ui-notice-position.test.mjs` drives `placeNotice()` itself — 164 px under a message line at 126 px with one line
-  of text, 190 px when the message wraps to two, and the same 164 px from the viewport fallback when the line is hidden.
-  502 tests pass.
-
-Files: `src/ui/notice.js`, `src/styles.css`, `tests/ui-notices.test.mjs`, `tests/ui-notice-position.test.mjs`,
-`src/ui/README.md`, `docs/architecture/ui-and-screens.md`, `testing/TESTING-BASELINE.md`.
-
 ---
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-13: Notices hang just below the flight message line
 - 2026-11-13: Right-click Discard everywhere — how many, then "are you sure?"
 - 2026-11-13: Press I in space to read the ship's inventory, and the chart no longer stops the clock
 - 2026-11-13: Your missions follow you; only the offers and the hand-in stay at a station

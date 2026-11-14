@@ -37,16 +37,15 @@ run and what to click. Different AI assistants work in separate chats and none r
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" and tick them there if so. If they
   report a bug, fix it first, following "When the owner reports a bug" below.
-- **Waiting on a re-playtest (2026-11-14):** the owner playtested 14a + 14b and reported four bugs — quitting mid-rift
-  lost the run, the wave was raiders, the sky read as triangles, a crash froze the screen — all fixed (CHANGELOG), with
-  the mid-rift logout fix **owner-confirmed**. A second round was built the same day on their asks: the canister opens
-  as a **trade** (hold left, canister right, click and Shift-click moving cargo both ways — `ui/cache.js` over
-  `sim/inventory.js`'s `CACHE` container), **every run's clock is 20 minutes by default** (`RIFT.defaultLifetimeSec`,
-  Deep rifts included), and the rift **sky has no stars** (near-black, a cold two-tone nebula, thin fractures, shattered
-  rock drifting in front). 14a/14b stay unticked until the owner re-runs [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)
-  (§5 the trade, §5b the sky) and says they pass. Next: **14c** simple wormholes (**v21**), **14d** wormhole systems,
-  then step 15 (**v22**). A run saves as template, seed, clock, objective, prize (half-traded, as it stands) and entry
-  spot (`world.instances`).
+- **14a/14b ticked; two owner notes shipped (2026-11-14):** the owner playtested 14a + 14b, four bugs were fixed (the
+  mid-rift logout fix owner-confirmed), a second round built the canister **trade**, the **20-minute default clock** and
+  the **starless sky** — and their verdict was "works well", with two notes, both now shipped. The painted fractures and
+  filaments read as **odd lines** over an otherwise good sky, so `render/sky.js` strokes nothing at all now (washes,
+  nebula cores, an invisible dither grain; the templates' `cracks` colour is gone), and opening a loot surface **freezes
+  the ship** (`modalSurface()` in `core/input.js` now covers the cache; `holdShip()` in `sim/pilot.js` kills carry and
+  throttle), so WASD and the mouse do nothing until it closes. [../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)
+  §5/§5b are the re-run guide. Next: **14c** simple wormholes (**v21**), **14d** wormhole systems, then step 15 (**v22**).
+  A run saves as template, seed, clock, objective, prize (half-traded, as it stands) and entry spot (`world.instances`).
 - The campaign (step 15) must be built from the mission templates and pass the linter. Build notes: [architecture/feature-notes.md](architecture/feature-notes.md); code and tests are authoritative.
 
 ## The owner's ground rules (do not break these)

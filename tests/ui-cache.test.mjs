@@ -23,6 +23,7 @@ import { addItem, countOf, CACHE } from "../src/sim/inventory.js";
 import { openRift, enterRift, riftAction, updateInstances, cacheUnits } from "../src/sim/instances.js";
 import { setSeed } from "../src/util/rng.js";
 import { emit } from "../src/util/events.js";
+import { keys, pointer, syncControls } from "../src/core/input.js";
 import { SHIPS } from "../src/data/ships.js";
 import {
   canOpenCache, setupCache, openCache, closeCache, isCacheOpen, toggleCache,
@@ -258,4 +259,51 @@ test("an emptied canister keeps the panel open, and the hold's tiles still work 
   updateInstances(1 / 60);
   assert.equal(state.world.caches.length, 1, "and the canister is back in the world, holding it");
   closeCache({ silent: true });
+});
+
+test("opening the trade leaves the ship still: no thrust, no steer, no carry (owner 2026-11-14)", () => {
+  installDom();
+  const { player } = insideRift();
+
+  // With the panel shut the stick is live: W is thrust, the mouse is steer, and the ship carries.
+  keys.KeyW = 1;
+  keys.ShiftLeft = 1;
+  pointer.x = 0.8;
+  pointer.y = -0.4;
+  syncControls();
+  assert.equal(player.controls.thrust, 1, "W thrusts while flying");
+  assert.equal(player.controls.boost, true, "Shift boosts");
+  assert.equal(player.controls.steer.x, 0.8, "and the mouse steers");
+  player.v.set(30, 4, -12);
+  player.thr = 0.7;
+
+  openCache();
+  assert.deepEqual(player.v.toArray(), [0, 0, 0], "opening the trade kills the carry outright");
+  assert.equal(player.thr, 0, "and the throttle with it");
+  // Now press them AGAIN while the panel is open, the way a pilot fidgets: opening released what was
+  // held, so these are fresh presses against an open trade.
+  keys.KeyW = 1;
+  keys.ShiftLeft = 1;
+  pointer.x = 0.8;
+  pointer.y = -0.4;
+  syncControls();
+  assert.equal(player.controls.thrust, 0, "W held down does nothing while the trade is open");
+  assert.equal(player.controls.strafe, 0, "nor A/D");
+  assert.equal(player.controls.boost, false, "nor Shift");
+  assert.equal(player.controls.fire, false, "nor a click on the panel: it is a click on the panel");
+  assert.deepEqual([player.controls.steer.x, player.controls.steer.y], [0, 0],
+    "and moving the mouse turns nothing");
+
+  // A tick of the sim with those controls leaves the ship exactly where the trade opened.
+  const spot = player.pos.toArray();
+  updateInstances(1 / 60);
+  assert.deepEqual(player.pos.toArray(), spot, "the ship hangs still beside the canister");
+
+  closeCache({ silent: true });
+  syncControls();
+  assert.equal(player.controls.thrust, 1, "closing hands the stick back over a ship at rest");
+  keys.KeyW = 0;
+  keys.ShiftLeft = 0;
+  pointer.x = pointer.y = 0;
+  syncControls();
 });

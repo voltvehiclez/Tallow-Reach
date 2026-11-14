@@ -18,6 +18,7 @@ import { on, emit } from "../util/events.js";
 import { cacheHtml } from "./screens.js";
 import { CACHE, countOf, discardItem } from "../sim/inventory.js";
 import { cacheTradeRecord, closeCacheTrade, tradeCacheItem } from "../sim/instances.js";
+import { holdShip } from "../sim/pilot.js";
 import { useItem, canUse } from "../sim/consumables.js";
 import { canDiscard, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
@@ -279,7 +280,8 @@ export function openCache() {
   state.ui.cache = { open: true, id: record.id };
   renderCache();
   root.hidden = false;
-  clearControls();
+  clearControls();          // release what is held (core/input.js also gates the panel as modal)
+  holdShip();               // and kill the carry: the trade is read beside a still ship
   uiSound();
   return true;
 }

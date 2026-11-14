@@ -31,6 +31,22 @@ export const playerFwd = (player = localPlayer()) => fwdQ(player.quat);
 export const playerDist = (p, player = localPlayer()) => player.pos.distanceTo(p);
 
 /** Put the pilot's ship at `x, y, z`, facing whatever `quat` said before. */
+/**
+ * Bring the ship to a dead stop without docking: the carry and the throttle are killed together.
+ * A modal surface that takes flight input — the rift cache trade, the flight inventory card — opens
+ * it beside whatever the pilot was looking at, and this is what keeps it beside that: with the input
+ * released and no carry left, the ship hangs still while the world runs on (owner 2026-11-14: "make
+ * it so that you stay still when opening a loot cache"). Closing the panel hands the controls back
+ * over a ship at rest, which is exactly how a docked pilot leaves a station.
+ */
+export function holdShip(player = localPlayer()) {
+  const P = player || localPlayer();
+  if (!P || !P.v || P.docked || P.dead || P.warp) return false;
+  P.v.set(0, 0, 0);
+  P.thr = 0;
+  return true;
+}
+
 export function setPlayerPos(x, y, z, player = localPlayer()) {
   player.pos.set(x, y, z);
 }

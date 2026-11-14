@@ -12,6 +12,7 @@ import { on, emit } from "../util/events.js";
 import { cargoHtml } from "./screens.js";
 import { discardItem, countOf } from "../sim/inventory.js";
 import { useItem, canUse } from "../sim/consumables.js";
+import { holdShip } from "../sim/pilot.js";
 import { canDiscard, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
@@ -210,7 +211,8 @@ export function openCargo() {
   state.ui.cargo = { open: true };
   renderCargo();
   root.hidden = false;
-  clearControls();
+  clearControls();          // release what is held (core/input.js gates the card as modal)
+  holdShip();               // and kill the carry: a loot inventory is read beside a still ship
   uiSound();
   return true;
 }

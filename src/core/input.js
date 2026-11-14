@@ -42,6 +42,14 @@ export const keys = {};
 export const pointer = { x: 0, y: 0 };
 
 /**
+ * The modal control surfaces: the chart, and the two loot inventories (the flight card and the rift
+ * cache trade). While one of them is open it owns the flight keys and the mouse — the world keeps
+ * running behind the overlay, but the ship does not answer the stick (owner 2026-11-14: opening a
+ * loot inventory must leave the ship still, not flying itself while the pilot reads).
+ */
+const modalSurface = () => !!(state.ui.starmap || state.ui.cargo || state.ui.cache);
+
+/**
  * Rebuild the local player's controls from what is held right now. Called after every key or
  * mouse change, so the record is always current when the sim's frame runs.
  */
@@ -59,9 +67,9 @@ export function syncControls() {
   c.steer.y = pointer.y;
   c.fire = !!keys.fire;
   c.sec = !!keys.sec;
-  // The chart and the flight inventory are modal control surfaces: they take the
-  // flight keys while open, even though the world keeps running behind the overlay.
-  if (state.ui.starmap || state.ui.cargo) {
+  // A modal surface takes the flight keys while open, even though the world keeps
+  // running behind the overlay.
+  if (modalSurface()) {
     c.thrust = c.strafe = c.lift = c.roll = 0;
     c.stop = c.brake = c.boost = c.fire = c.sec = false;
     c.steer.x = c.steer.y = 0;
@@ -93,9 +101,9 @@ export const BINDINGS = {
 export function installInput() {
   addEventListener("keydown", e => {
     if (e.target.tagName === "TEXTAREA" || (["INPUT", "SELECT"].includes(e.target.tagName) && !["Escape", "KeyM"].includes(e.code))) return;
-    // The chart (and the flight inventory) own flight input while open. Leave
+    // A modal surface owns flight input while open. Leave
     // Space/Enter alone so their focused buttons still work as controls.
-    const modal = !!(state.ui.starmap || state.ui.cargo);
+    const modal = modalSurface();
     if (!modal) keys[e.code] = 1;
     syncControls();
     if (!modal && e.code === "AltLeft") {
@@ -127,8 +135,9 @@ export function installInput() {
   });
 
   addEventListener("mousedown", e => {
-    if (!state.ui.starmap && e.button === 0) keys.fire = 1;
-    if (!state.ui.starmap && e.button === 2) keys.sec = 1;
+    // A click inside a modal surface is a click on the panel, never a trigger pull.
+    if (!modalSurface() && e.button === 0) keys.fire = 1;
+    if (!modalSurface() && e.button === 2) keys.sec = 1;
     syncControls();
   });
   addEventListener("mouseup", e => {

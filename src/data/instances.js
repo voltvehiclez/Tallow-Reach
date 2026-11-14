@@ -49,13 +49,14 @@
 //                 one seed is one reward. Omit `cache` for an instance with no prize.
 //   enter         { pos } the arrival point inside. The way out is its own object at `exit.pos`, so a
 //                 pilot arrives looking at the run rather than sitting inside the door home.
-//   sky           { kind, col, glow, veil, cracks, shards } the sky of somewhere else, drawn by
+//   sky           { kind, col, glow, veil, shards } the sky of somewhere else, drawn by
 //                 `render/scene.js` from its `SKIES` registry and painted by `render/sky.js`: `col`
 //                 the near-black it is seen through, `glow` and `veil` the two lights of its nebula,
-//                 `cracks` the colour of the fractures, `shards` how many broken rocks drift in front
-//                 of it. An instance has no starfield and no planet: nothing here is copied from the
-//                 space outside, and there are no stars in it either — a collapsed pocket has no suns
-//                 of its own to show (owner 2026-11-14).
+//                 `shards` how many broken rocks drift in front of it. The painter lays down
+//                 gradients only — no stars, and no lines of any kind: a first pass carried painted
+//                 fractures and the owner sent them back as "odd lines" over an otherwise good sky.
+//                 An instance has no starfield and no planet: nothing here is copied from the space
+//                 outside, and a collapsed pocket has no suns of its own to show (owner 2026-11-14).
 //   features      ordinary place features (asteroidField, ...), read by the same generic loader a
 //                 pocket uses (sim/places.js). Never a `spawner` — an instance's hostiles are its
 //                 declared wave, so its content is exactly what this file says — and never a `planet`.
@@ -102,8 +103,8 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  * file that knows how one is drawn: a template names a kind and its colours, so a new look for a new
  * kind of instance is a data line plus one builder.
  *
- *   shattered   a collapsing shell with a cold nebula in it, glowing fractures running through the
- *               break, and shattered rock drifting in front of the whole — no stars, no starfield, no
+ *   shattered   a collapsing shell with a cold nebula in it and shattered rock drifting in front of
+ *               the whole — painted in gradients only, no stars and no lines, no starfield, no
  *               planet: somewhere that is not the space outside.
  */
 export const SKY_KINDS = ["shattered"];
@@ -137,9 +138,9 @@ export const INSTANCE_TEMPLATES = {
     cache: { n: "Rift cache", loot: "rift_cache", pos: [0, -30, -520], r: 10 },
     enter: { pos: [0, 0, 320] },
     // Dark, cold and a little bit wrong (owner 2026-11-14: "less orange ... darker, no stars, some
-    // mysterious nebula and shattered asteroids"). The one warm thing left in it is the fracture
-    // hairline, which is thin enough to be an ember in a collapsed pocket rather than the sky's mood.
-    sky: { kind: "shattered", col: 0x05060b, glow: 0x7a5cc4, veil: 0x2a8794, cracks: 0xff9a52, shards: 30 },
+    // mysterious nebula and shattered asteroids"), and painted in gradients only: no stars, no
+    // lines, nothing a pilot could point at and call a drawing.
+    sky: { kind: "shattered", col: 0x05060b, glow: 0x7a5cc4, veil: 0x2a8794, shards: 30 },
     features: [
       {
         kind: "asteroidField",
@@ -184,8 +185,8 @@ export const INSTANCE_TEMPLATES = {
     cache: { n: "Deep rift cache", loot: "rift_cache_deep", pos: [0, -40, -640], r: 12 },
     enter: { pos: [0, 0, 360] },
     // A deeper collapse is darker and colder than the ordinary one, with a second light under the
-    // first and colder fractures: the same kind of place, further gone, and nothing warm left in it.
-    sky: { kind: "shattered", col: 0x03040a, glow: 0x54439f, veil: 0x9c4279, cracks: 0xb9a4ff, shards: 40 },
+    // first: the same kind of place, further gone, and nothing warm left in it at all.
+    sky: { kind: "shattered", col: 0x03040a, glow: 0x54439f, veil: 0x9c4279, shards: 40 },
     features: [
       {
         kind: "asteroidField",
