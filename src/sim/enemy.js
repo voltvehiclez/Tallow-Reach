@@ -20,9 +20,14 @@
 import { V, fwdQ, faceQ } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { state, placeWorld } from "../state/state.js";
+import { enemyDef } from "../data/enemies.js";
+import { SHIP_RADIUS } from "./colliders.js";
 
 /** Where enemy `e` is. */
 export const enemyPos = e => e.pos;
+
+/** An enemy hull's collision radius: the player's 4 m hull scaled by the def's model scale. */
+export const enemyHullRadius = e => SHIP_RADIUS * (enemyDef(e.def)?.scale ?? 1);
 
 /** Which way enemy `e` points (-Z of its rotation), as a new vector. */
 export const enemyFwd = e => fwdQ(e.quat);

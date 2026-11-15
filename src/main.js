@@ -38,6 +38,7 @@ import { createSimClock, isSimulationPaused } from "./sim/step.js";
 import { SIM_DT, MAX_FRAME_DT, AUTOSAVE_SECONDS } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { installCrashNotice, reportCrash } from "./ui/crash.js";
+import { preloadModels } from "./render/gltf.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 import {
   installEnemyViews,
@@ -298,4 +299,7 @@ function frame(now) {
   }
 }
 
-requestAnimationFrame(frame);
+// Wait for any registered .glb templates (usually none) before the first frame,
+// so a model file never pops in as the built-in geometry and then swaps;
+// a broken file simply falls back to the built-in model.
+preloadModels().finally(() => requestAnimationFrame(frame));

@@ -17,6 +17,7 @@ import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
 import { addEntity, dropEntity } from "./entity.js";
+import { collideRockAt } from "./colliders.js";
 
 /**
  * Launch a missile at `target` (a hostile record, or null for unguided) from the
@@ -85,8 +86,9 @@ export function updateMissileFlight(dt, placeId = state.place) {
       }
     }
     if (!end) {
+      // Missiles die on the rock's mesh, not a bounding circle — the same hull the pilot flies.
       for (const a of W.asteroids) {
-        if (a.pos.distanceTo(s.pos) < a.r * 0.8) {
+        if (collideRockAt(a.shape || 0, a.pos, a.quat, a.scale, s.pos.x, s.pos.y, s.pos.z, 1.5)) {
           end = true;
           break;
         }

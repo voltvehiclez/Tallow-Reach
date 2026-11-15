@@ -56,6 +56,7 @@ about each other, use the event bus instead.
 | You want to...                       | Edit                                           |
 |--------------------------------------|------------------------------------------------|
 | Add or rebalance a ship              | `data/ships.js`                                |
+| Add or replace a `.glb` model         | `src/assets/models/` (drop in, rebuild); see [GLB_MODELS.md](GLB_MODELS.md), HOW_TO_ADD.md recipe 23 |
 | Add an item (ore, salvage, trade good) or change prices | `data/items.js` (`ITEMS`); see HOW_TO_ADD.md recipe 2 |
 | Tune the basic cannon                 | `data/modules.js` (`cannon_basic`: `dmg`, `rate`, `bspd`, `draw`) |
 | Tune the mining beam                  | `data/modules.js` (`beam_basic`: `period`, `range`, `draw`)  |

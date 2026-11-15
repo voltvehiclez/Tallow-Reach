@@ -175,7 +175,6 @@ export function templateFeatures(templateId, place = {}) {
         id: featureId,
         n: place.stationName || encounter.n,
         pos,
-        keepout: station.keepout,
         dockRange: station.dockRange,
         dockSpeed: station.dockSpeed,
         launch: {

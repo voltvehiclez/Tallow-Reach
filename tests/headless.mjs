@@ -77,7 +77,12 @@ const stand = name => new Proxy(function () {}, {
   construct: (t, args) => { __calls.push({ name, args }); return stand(name + "()"); },
   set: () => true,
 });
-${stubbedNames().map(n => `export const ${n} = stand(${JSON.stringify(n)});`).join("\n")}
+${stubbedNames().filter(n => !["instantiateModel", "modelTemplate", "preloadModels"].includes(n)).map(n => `export const ${n} = stand(${JSON.stringify(n)});`).join("\n")}
+// GLB support hooks: no .glb is registered in the headless tests, so the
+// built-in fallback is the behaviour under test — same as the runtime with an empty model folder.
+export const instantiateModel = () => null;
+export const modelTemplate = () => null;
+export const preloadModels = () => Promise.resolve({ loaded: [], failed: [] });
 `;
 }
 

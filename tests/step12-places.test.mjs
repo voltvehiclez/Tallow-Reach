@@ -103,7 +103,7 @@ test("generated stations are separate from gates while explicit gate co-location
   const gate = gates.find(place => place.template === "trade_lane") || gates[0];
   const explicit = {
     kind: "station", id: "author-station", n: "Author Station", pos: [0, 0, 0],
-    keepout: 90, dockRange: 260, dockSpeed: 70, launch: { pos: [0, 0, 220] }, shop: "meridian",
+    dockRange: 260, dockSpeed: 70, launch: { pos: [0, 0, 220] }, shop: "meridian",
   };
   const authored = generateGalaxy(undefined, {}, { places: { [gate.id]: { features: [explicit] } } });
   setPlaceCatalog(authored);

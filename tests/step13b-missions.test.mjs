@@ -23,6 +23,8 @@ import {
 import { emit, on } from "../src/util/events.js";
 import { state } from "../src/state/state.js";
 import "../src/sim/ai.js";
+import { createPlayerRecord } from "../src/sim/player.js";
+import { configurePlayer } from "../src/sim/session.js";
 import { loadPlace } from "../src/sim/places.js";
 import { fire, hitHostile, spawnCrate, updateCrates } from "../src/sim/combat.js";
 import { clearWorldObjects } from "../src/sim/world.js";
@@ -236,6 +238,47 @@ test("13b: a mission wave emits wave-clear and preserves an already-reached sear
     emit("mission-tick", { dt: 2, player, profile });
     assert.equal(mission.steps[mission.step].id, "reward-item", "returning to the signal resumes the pending hold before the physical pickup");
   } finally {
+    state.worldState = previousWorld;
+    state.place = previousPlace;
+    state.places = previousPlaces;
+  }
+});
+
+test("13b: a mission wave destroyed by the world (no killer) still wakes the wave-clear wait", () => {
+  // The owner's rule (2026-11-14): a specific NPC being destroyed advances the
+  // objective no matter what destroyed it. A rock, not the pilot, kills the wave —
+  // and the wait step wakes for the co-pilot holding the story, not only for the
+  // local pilot.
+  const profile = newProfile();
+  const { mission } = freshStory(profile);
+  const guest = configurePlayer(createPlayerRecord(), profile);
+  guest.docked = true;
+  guest.place = "reach";
+  state.players.push(guest);
+  const previousWorld = state.worldState;
+  const previousPlace = state.place;
+  const previousPlaces = state.places;
+  state.worldState = newSave().world;
+  state.place = "hollow";
+  state.places = new Map();
+  try {
+    advanceMission(mission, "dialogue-next", { player: guest, profile });
+    chooseMission(mission.id, "help", profile, guest);
+    advanceMission(mission, "dialogue-next", { player: guest, profile });
+    assert.equal(mission.steps[mission.step].id, "travel", "the story waits for the co-pilot to enter Hollow");
+    guest.place = "hollow";
+    guest.docked = false;
+    emit("place-entered", { id: "hollow", player: guest, profile });
+    assert.equal(mission.steps[mission.step].id, "wait", "entering Hollow starts the spawned wave");
+    const wave = [...state.places.get("hollow").entities.enemies];
+    assert.equal(wave.length, 2, "the mission script spawns both patrol ships");
+
+    // No pilot: the environment kills the patrol (a rock, a cave, a rift).
+    for (const enemy of wave) hitHostile(enemy, 999, enemy.pos, null, "hollow");
+    assert.equal(mission.steps[mission.step].id, "search", "the last mission ship wakes the wave-clear wait however it died");
+    assert.equal(missionProgress(mission).done, 1, "being in Hollow already satisfies the reach half of search");
+  } finally {
+    state.players.splice(state.players.indexOf(guest), 1);
     state.worldState = previousWorld;
     state.place = previousPlace;
     state.places = previousPlaces;

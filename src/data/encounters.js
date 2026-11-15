@@ -34,7 +34,6 @@ export const ENCOUNTERS = {
     d: "A friendly trader with a small weapons counter.",
     shop: "meridian",
     station: {
-      keepout: 90,
       dockRange: 260,
       dockSpeed: 70,
       launch: { pos: [0, 0, 220], face: "field" },

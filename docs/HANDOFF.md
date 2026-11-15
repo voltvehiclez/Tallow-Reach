@@ -24,6 +24,7 @@ run and what to click. Different AI assistants work in separate chats and none r
 | Ships, modules, weapons, fitting | [architecture/ship-systems.md](architecture/ship-systems.md) |
 | Items, inventory, shops, loot, enemies, randomness | [architecture/content-data.md](architecture/content-data.md) |
 | The tick, input, sound, rendering | [architecture/simulation-and-rendering.md](architecture/simulation-and-rendering.md) |
+| `.glb` models, collision | [GLB_MODELS.md](GLB_MODELS.md) |
 | Screens and menus | [architecture/ui-and-screens.md](architecture/ui-and-screens.md) |
 | A numbered refactor step | [REFACTOR_PLAN.md](REFACTOR_PLAN.md), [ROADMAP.md](ROADMAP.md) |
 | Saves | "Save compatibility" in [ARCHITECTURE.md](ARCHITECTURE.md) |
@@ -36,6 +37,7 @@ run and what to click. Different AI assistants work in separate chats and none r
   status is kept (this file, REFACTOR_PLAN and the README do not repeat it); tick steps there. A step that is "built"
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first, following "When the owner reports a bug" below.
+- **Models & collision (2026-11-14, built, awaiting the owner's playtest):** every drawn thing accepts a `.glb` dropped into `src/assets/models/` (rebuild inlines it; missing/broken files fall back to the built-in mesh), and collision is the drawn mesh everywhere — rocks, the station's ring and hub (the invisible `keepout` wall is gone), planets, missiles; `noclip` is the only mesh opt-out, `collide: false`/`collideDmg` the only data ones. Enemies are solid too (2026-11-14, ram damage both ways, an ownerless kill credits no pilot's kill stat, but any kill settles any kill/hunt/wave-clear objective for every pilot holding it — rock, ship or pilot; only the pocket the hunt was taken in gates hunts). Save **v21**; `npm test` → 587/587. NOT playtested (fly through the station axis: should pass; clip the ring/hub: should bounce; a raider ramming you should take and deal damage and die of it). See [GLB_MODELS.md](GLB_MODELS.md).
 - **Bug round (2026-11-14, built, awaiting the owner's re-play):** with Alt held the free camera rolls with the hull (E/Q spins the ship in a still frame), keys **1/2 select primary bay 1/2 and only the selected bay's weapon fires** (save `pw` stores `"1"`/`"2"`; legacy `cannon`/`beam` migrate to the bay holding that kind of module — v21 saves load cleanly), and world-space markers hide with the HUD, so nothing floats over the main menu.
 - **Bug round two (2026-11-14, built, awaiting the owner's re-play):** the Sell/Discard confirm buttons sit in the popover's title row; both flows anchor with one rule (clicked-entry centre − 44px) so Discard keeps the placement the owner approved and Sell matches it — the confirm rides just above the mouse. A hunt contract is scoped to the pocket it was accepted in (kills elsewhere don't count; the objective names the area). Rebuilt on `arena/22587946-tallow-reach` after Continue reset the branch.
 - **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system,
@@ -49,8 +51,7 @@ run and what to click. Different AI assistants work in separate chats and none r
   clock, no `kill` outcome. v20 → **v21**; step 15 is **v22** (guide:
   [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as
   template, seed, clock, objective, prize (half-traded) and entry spot (`world.instances`); a standing simple wormhole
-  saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`).
-- The campaign (step 15) must be built from the mission templates and pass the linter. See [architecture/feature-notes.md](architecture/feature-notes.md); code and tests are authoritative.
+  saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`). Campaign = step 15 (v22): mission templates + linter green, see [architecture/feature-notes.md](architecture/feature-notes.md).
 ## The owner's ground rules (do not break these)
 
 - No new npm dependencies; plain ES modules. The one planned exception is a small networking library at the

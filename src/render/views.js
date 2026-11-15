@@ -29,7 +29,10 @@ import { UP } from "../util/math.js";
 import { enemyDef } from "../data/enemies.js";
 import { SHIPS } from "../data/ships.js";
 import { mountOffset } from "../data/mounts.js";
-import { buildPlayerShip } from "./models.js";
+import { buildPlayerShip, ROCK_SHAPES } from "./models.js";
+import { instantiateModel, modelTemplate, engNodes } from "./gltf.js";
+import { colliderFromObject } from "./collideModel.js";
+import { setRockSoup } from "../sim/colliders.js";
 
 /* ------------------------------------------------------------------------- */
 /* Entity view registry                                                       */
@@ -157,6 +160,20 @@ const rockGlow = type => (type === "cobalt" ? 0x14304a : type === "voidite" ? 0x
 
 // Enemy IDs and other entity IDs come from separate counters, so a single map
 // must namespace them. `group` also preserves the two existing frame updates.
+// A rock must collide with what is drawn. When `asteroid.glb` is registered, every rock
+// wears the same GLB mesh (scale/rotation vary); its triangles replace the built-in shape
+// soups the first time a rock is drawn. Module init is too early to rely on the GLB having
+// loaded (it is usually still warming up), so the swap happens lazily, once.
+let glbRockSoupDone = false;
+function ensureGlbRockSoup() {
+  if (glbRockSoupDone) return;
+  const template = modelTemplate("asteroid");
+  if (!template) return;
+  const col = colliderFromObject(template, { id: "asteroid", damage: 1 });
+  if (col) for (let k = 0; k < ROCK_SHAPES; k++) setRockSoup(k, col.soup);
+  glbRockSoupDone = true;
+}
+
 const kinds = new Map();
 const drawn = new Map(); // group:id -> { mesh, kind, group, handler }
 const keyFor = (group, id) => `${group}:${id}`;
@@ -305,37 +322,93 @@ const noCleanup = () => {};
 
 registerEntityView("enemy", {
   group: "enemy", list: () => state.world.enemies,
-  build: e => { const def = enemyDef(e.def); return initialPose(e, mkShip(def.col, def.scale, true)); },
+  build: e => {
+    const def = enemyDef(e.def);
+    // `enemy.<defId>.glb` replaces the built-in pirate hull when registered; the def's
+    // scale still applies, for parity with the built-in model.
+    const gltf = instantiateModel(`enemy.${e.def}`);
+    if (gltf) {
+      gltf.scale.multiplyScalar(def.scale ?? 1);
+      gltf.eng = engNodes(gltf);
+      return initialPose(e, gltf);
+    }
+    return initialPose(e, mkShip(def.col, def.scale, true));
+  },
   update: updatePose, remove: noCleanup,
 });
 registerEntityView("bullet", {
   list: () => state.world.bullets,
-  build: e => initialPose(e, new THREE.Mesh(bulletGeo, e.own ? playerBulletMat : enemyBulletMat)),
+  build: e => {
+    const gltf = instantiateModel("bullet");
+    if (gltf) return initialPose(e, gltf);
+    return initialPose(e, new THREE.Mesh(bulletGeo, e.own ? playerBulletMat : enemyBulletMat));
+  },
   update: updatePose, remove: noCleanup,
 });
 registerEntityView("missile", {
   list: () => state.world.missiles,
-  build: e => initialPose(e, new THREE.Mesh(missileGeo, missileMat)),
+  build: e => {
+    const gltf = instantiateModel("missile");
+    return initialPose(e, gltf || new THREE.Mesh(missileGeo, missileMat));
+  },
   update: updatePose, remove: noCleanup,
 });
 registerEntityView("crate", {
   list: () => state.world.crates,
-  build: e => initialPose(e, new THREE.Mesh(crateGeo, e.item === "core" ? crateCoreMat : crateSalvMat)),
+  build: e => {
+    // One `crate.glb` replaces the built-in crate (both ore kinds — the seam that marked
+    // a core crate is baked into the model). The built-in look keeps them distinct.
+    const gltf = instantiateModel("crate");
+    if (gltf) return initialPose(e, gltf);
+    return initialPose(e, new THREE.Mesh(crateGeo, e.item === "core" ? crateCoreMat : crateSalvMat));
+  },
   update: updatePose, remove: noCleanup,
 });
 registerEntityView("fx", {
   list: () => state.world.fx,
   build: e => {
+    const gltf = instantiateModel("fx");
+    if (gltf) {
+      // Every spark clones its materials so it can fade on its own clock.
+      gltf.traverse(node => { if (node.isMesh && node.material) node.material = node.material.clone(); });
+      gltf.scale.setScalar(e.size || 1);
+      return initialPose(e, gltf);
+    }
     const m = initialPose(e, new THREE.Mesh(particleGeo, new THREE.MeshBasicMaterial({ color: e.col, transparent: true })));
     m.scale.setScalar(e.size || 1);
     return m;
   },
-  update: (e, m) => { updatePose(e, m); m.material.opacity = Math.max(0, e.l / (e.t || 1)); },
-  remove: m => { if (m.material) m.material.dispose(); },
+  update: (e, m) => {
+    updatePose(e, m);
+    const opacity = Math.max(0, e.l / (e.t || 1));
+    // A GLB's materials are cloned per particle so each can fade on its own clock.
+    if (m.material) {
+      m.material.transparent = true;   // cloned fx must fade; the built-in material is already set
+      m.material.opacity = opacity;
+    } else {
+      m.traverse(node => { if (node.isMesh && node.material) { node.material.transparent = true; node.material.opacity = opacity; } });
+    }
+  },
+  remove: m => {
+    // A GLB's cloned materials are shared between the mesh's own remove path and the
+    // test's disposal counter — dispose every material it finds, exactly once each.
+    const done = new Set();
+    const disposeMat = mat => { if (mat && !done.has(mat)) { done.add(mat); mat.dispose(); } };
+    m.traverse(node => { if (node.isMesh) { disposeMat(node.material); } });
+    disposeMat(m.material);
+  },
 });
 registerEntityView("rock", {
   list: () => state.world.asteroids,
   build: e => {
+    // One `asteroid.glb` replaces the six built-in rock shapes (the ore's glow is baked
+    // into the model, or lost — see docs/GLB_MODELS.md).
+    ensureGlbRockSoup();
+    const gltf = instantiateModel("asteroid");
+    if (gltf) {
+      gltf.scale.copy(e.scale);
+      return initialPose(e, gltf);
+    }
     const m = initialPose(e, new THREE.Mesh(rockShapeAt(e.shape || 0), mm(0x4a4540, rockGlow(e.type))));
     m.scale.copy(e.scale);
     return m;
@@ -381,8 +454,22 @@ function updateSimpleWormhole(e, g) {
 // The door hanging in a pocket and the way out of a run are one kind of object; the variant on the
 // record decides which of the two looks it wears (a rift is the orange anomaly, a simple wormhole is
 // the grey sphere). `render/` never reads the template — only the colour of the record, ever.
-const buildDoor = e => (e.variant === "simple" ? buildSimpleWormhole(e) : buildAnomaly(e));
+const buildDoor = e => {
+  const key = e.variant === "simple" ? "wormhole" : "anomaly";
+  const glb = instantiateModel(key);
+  if (glb) {
+    glb.userData = { door: "glb" };
+    glb.scale.setScalar(Math.max(1, Number(e.r) || 30));
+    return initialPose(e, glb);
+  }
+  return e.variant === "simple" ? buildSimpleWormhole(e) : buildAnomaly(e);
+};
 const updateDoor = (e, g) => {
+  if (g.userData?.door === "glb") {
+    updatePose(e, g);
+    g.scale.setScalar(Math.max(1, Number(e.r) || 30));
+    return;
+  }
   if (e.variant === "simple") updateSimpleWormhole(e, g);
   else updateAnomaly(e, g);
 };
@@ -431,6 +518,13 @@ registerEntityView("gate", { list: () => state.world.gates, build: buildDoor, up
 registerEntityView("cache", {
   list: () => state.world.caches,
   build: e => {
+    const glb = instantiateModel("cache");
+    if (glb) {
+      // No lamps on a custom model — the sealed/unsealed state is the model's own business.
+      glb.userData = { lampSealed: null, lampOpen: null };
+      glb.scale.setScalar(Math.max(1, Number(e.r) || 9));
+      return initialPose(e, glb);
+    }
     const g = new THREE.Group();
     const body = new THREE.Mesh(cacheBodyGeo, cacheMat);
     const top = new THREE.Mesh(cacheCapGeo, cacheMat);
@@ -458,8 +552,8 @@ registerEntityView("cache", {
   update: (e, g) => {
     updatePose(e, g);
     g.scale.setScalar(Math.max(1, Number(e.r) || 9));
-    g.userData.lampSealed.visible = !!e.locked;
-    g.userData.lampOpen.visible = !e.locked;
+    if (g.userData.lampSealed) g.userData.lampSealed.visible = !!e.locked;
+    if (g.userData.lampOpen) g.userData.lampOpen.visible = !e.locked;
   },
   remove: noCleanup,
 });
@@ -545,7 +639,7 @@ export class PlayerShipView {
     m.position.copy(player.pos);
     m.quaternion.copy(player.quat);
     m.visible = !player.docked;
-    if (m.eng) m.eng.forEach(e => e.scale.set(1, 1, 0.5 + player.thr * 2 + player.bs * 2));
+    if (m.eng) for (const e of m.eng) e.scale.set(e.scale.x, e.scale.y, (e.userData.engZ0 ?? 1) * (0.5 + player.thr * 2 + player.bs * 2));
   }
   remove() { scene.remove(this.mesh); }
 }
@@ -564,12 +658,21 @@ function ensurePlayerView() {
 /* The mining beam (step 7b)                                                  */
 /* ------------------------------------------------------------------------- */
 
-const beamMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.3, 0.3, 1, 6),
-  new THREE.MeshBasicMaterial({ color: 0xffb25a, transparent: true, opacity: 0.8 })
-);
-beamMesh.visible = false;
-scene.add(beamMesh);
+// `beam.glb` replaces the built-in cylinder (unit height along Y, origin at the centre —
+// the same convention the cylinder uses, so the scaling below is unchanged). Built lazily:
+// the .glb is not guaranteed loaded until after boot.
+let beamMesh = null;
+function ensureBeam() {
+  if (beamMesh) return beamMesh;
+  beamMesh = instantiateModel("beam") ||
+    new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 1, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffb25a, transparent: true, opacity: 0.8 })
+    );
+  beamMesh.visible = false;
+  scene.add(beamMesh);
+  return beamMesh;
+}
 
 /* ------------------------------------------------------------------------- */
 /* Installing and updating                                                    */
@@ -614,6 +717,7 @@ function updatePlayerView() {
 function updateBeamView() {
   const F = state.flight;
   const on_ = !!(F.beamOn && F.beamStart && F.beamEnd);
+  const beamMesh = ensureBeam();
   beamMesh.visible = on_;
   if (!on_) return;
   let start = F.beamStart;

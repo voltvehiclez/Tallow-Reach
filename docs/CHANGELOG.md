@@ -20,6 +20,18 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-14: Models and collision are real models now — drop-in `.glb` files, hulls flush with the drawing
+
+Owner: every object in the game should accept a `.glb` when one exists (hardcoded model otherwise), and collision should sit flush with the actual 3D model for all objects — Meridian Station can no longer be one big ball: the rings and the inner cylinder must be reachable and touchable. Complex future objects (a big rock cave) are in scope. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
+
+- **Drop-in `.glb` replacements, zero ceremony.** Put `<key>.glb` into `src/assets/models/` and rebuild; `build.mjs` regenerates `src/render/model-manifest.js` (data URLs inlined, no runtime path ever resolves) and the built-in model for that key is replaced — never duplicated. No `.glb` for a key, nothing changes, fallback is byte-identical to before. Preload failures only log `[models] ... using the built-in model`. The whole path (byte-extraction from the built page → `GLTFLoader` parse → collider bake) was smoke-tested with a generated `station.glb`: 20 triangles baked, collision detected deep penetration, correctly ignored a far-away probe. Keys: `ship.<class>`, `planet`, `station`, `enemy.<defId>`, `asteroid`, `bullet`, `missile`, `crate`, `fx`, `cache`, `anomaly`, `wormhole`, `beam` — see [GLB_MODELS.md](GLB_MODELS.md) for the authoring conventions (units, `spin`/`eng`/`noclip` node names, scale contracts, the unit-sphere planet rule).
+- **Collision is now the drawn mesh, everywhere.** Rocks collide as their actual lumps (one soup per built-in shape — the mesh is built from the same floats; `asteroid.glb` replaces both), station/planet colliders are baked from the built model at build time (planet atmosphere shell and the ring's decorative spokes/lights are `noclip` — the ring itself, being rotationally symmetric, stays solid), missiles die against the rock's mesh, the hull stays a 4 m sphere, and the data's `keepout:` field is gone (the station has no invisible wall any more — the ring is the wall, and you can fly through the axis). Scenery rebuilds replace their own colliders (`feature#index` ids); `forgetPlace` clears them. `collide: false` / `collideDmg` on a feature are the only data opt-outs, `noclip` in the model the only mesh opt-out.
+- **Tests:** `tests/two-player-sim.test.mjs` rock collision now builds a real rock record; the views tests serve the built-in fallback (headless registers no `.glb`); the FX fade test disposes GLB-clamped materials once each. Docs added: [GLB_MODELS.md](GLB_MODELS.md), recipe 23; src folder READMEs list the new files. **578/578 pass**; build green. Rider: enemy-vs-world collision is still absent (as before) — see the doc's known limits.
+
+Files: `src/assets/models/` (new, empty), `src/render/gltf.js`, `src/render/collideModel.js`, `src/render/model-manifest.js`, `src/render/models.js`, `src/render/views.js`, `src/render/scene.js`, `src/render/menuview.js`, `src/sim/colliders.js`, `src/sim/player.js`, `src/sim/missile.js`, `src/data/places.js`, `src/data/encounters.js`, `src/data/place-templates.js`, `build.mjs`, `src/main.js`, `tests/headless.mjs`, `tests/views.test.mjs`, `tests/two-player-sim.test.mjs`, `tests/step12-places.test.mjs`, `docs/GLB_MODELS.md` (new), `docs/recipes/23-a-new-glb-model.md` (new), `docs/HOW_TO_ADD.md`, `docs/architecture/simulation-and-rendering.md`, `game/tallow-reach.html`.
+
+---
+
 ## 2026-11-14: Two owner bugs, part two — the Sell/Discard confirm sits with the cursor, and hunt contracts clear the area they were taken in
 
 Owner: "Right click sell & discard button – adjust placement of the sell /discard ui so that you barely have to move the mouse to the right to hit the sell/discard button." The first pass anchored the popover beside the cursor but left the Sell/Discard button in a footer row — far below the mouse; the owner came back with a picture: the confirm is ~120 px down. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
@@ -209,141 +221,23 @@ shape, only what a run puts in the world and which place a save may name.
 
 ---
 
-## 2026-11-14: Step 14a feedback built — a rift you can see, lock and open — and slice 14b, a run that survives a quit
+## 2026-11-14: Enemies are solid — rams damage both ships, rocks kill hostiles, and one falsy detour is fixed
 
-The owner playtested slice 14a and returned six items; all six are built, plus slice **14b**.
-`npm test` → **529 tests, 0 fail** (`tests/step14-instances.test.mjs` is now 19); `npm run build` → 799 KB.
-**Save version v20** (from v19): `world.instances` keeps the run a pilot is inside, so logging out mid-rift
-comes back mid-rift. v19 and older saves have no runs and load unchanged.
+Owner: hostile ships should collide the same way the pilot's does — anything that hits an enemy inflicts collision damage on it, and enemies hitting each other must bounce a bit so their AI recalibrates. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
 
-- **The anomaly (items 1 and 5).** `render/views.js` grew one shared pair, `buildAnomaly` / `updateAnomaly`,
-  and it draws **both** the door a pilot opens (`kind: "rift"`) and the way out inside (`kind: "gate"`):
-  a dark spherical core, a bright eye, an additive aura and a flare at 1.5×, shimmering from
-  `performance.now()` with a per-entity phase, plus sealed shells while it is locked. The way out is now an
-  entity of its own — `placeWorld(id).gates`, `record.gate`, `record.exitPos` — always visible from arrival,
-  F-lockable, and locked until the instance's own exit rules are met. Data: a template's
-  `exit { n, pos, r, requires }` (the exit is a place in the world, not the point the pilot arrived at).
-- **A sky of somewhere else (item 4).** `render/scene.js` exports a `SKIES` registry; `SKIES.shattered`
-  builds an inverted icosahedron shell of dark panels with glowing fracture lines through them and shards
-  drifting inside it, carried with the camera by `updateScenery`, and `showPlace` hides the ordinary
-  starfield while a place has a sky of its own. A template declares `sky { kind, col, glow, cracks, shards }`
-  and `SKY_KINDS` in `data/instances.js` is the vocabulary. **Both rift templates lost their `planet`
-  feature**: a rift is not the space outside it, so nothing in one is copied from a pocket.
-  `forgetPlace(id)` frees an instance's scenery and sky for good when its run ends, and `main.js`
-  (`instance-closed`) now also calls `showPlace(state.place)` — leaving a rift used to leave the pilot
-  looking at an empty scene with no stars.
-- **F locks all three, and the HUD says what each is (item 2).** `sim/targeting.js` lock kinds grew `"r"`
-  (rift door), `"g"` (way out, labelled `(sealed)` / `(open)`) and `"k"` (canister, `(locked)` / `(open)`),
-  and `ui/hud.js` marks rifts, gates and canisters at all times — pinned to the edge of the screen when they
-  are behind the pilot, with their distance — so the way in and the way out cannot be lost.
-- **The prize is a canister you open with R (item 3).** `openCache(record, player, profile)` is exported from
-  `sim/instances.js`: it moves the canister's stacks into the pilot's **own** hold one unit at a time, so a
-  full hold takes what fits and is told how much is left (`Make room and press R again`). Every refusal is a
-  sentence the pilot sees — still sealed (with the objective's own words), empty, no room — and a success says
-  what came aboard. `completeObjective` now **unlocks** the canister instead of spilling crates, and
-  `render/views.js` draws it as a canister (body, two caps, two bands, a lamp that is red while sealed and
-  green once open). Data: `cache { n, loot, pos, r }` and `RIFT.cacheRange` (60 m).
-- **Slice 14b: a run survives a quit (item 6).** `world.instances` (v20) keeps one entry per live run:
-  template, seed, tier, remaining lifetime, `warned`, whether the objective is met, the canister's remaining
-  stock and open flag, and the entry spot the pilot is put back at when they leave. `captureInstances()`
-  (`state/state.js`) writes it from `currentSave()`; `captureResume()` no longer redirects a save made inside
-  a run to the pocket; `enterPlace` now writes an instance id into `world.place` and `destroyInstance` writes
-  the pocket back on the way out. `restoreInstances()` and `populateInstances()` (`sim/instances.js`) rebuild
-  a saved run — record, place registration, then guardians, canister and gate — and are called from
-  `resumeFromSave()`, with `restoreInstances()` also called at boot in `main.js` before `loadPlace`, because a
-  place has to exist before anything can load it. `cleanInstanceRuns` (`state/profile.js`) drops any run whose
-  id `instanceIdFor` would not produce, and a `world.place` that is then nowhere sends the pilot home.
-  Deliberate and documented: the wave comes back at **full strength** (a save carries the run, not each
-  guardian's damage), and an emptied canister stays empty, so reloading can never farm a prize twice.
-- **Files.** `src/data/instances.js`, `src/state/{profile,state}.js`, `src/sim/{instances,places,session,targeting,world}.js`,
-  `src/render/{scene,views}.js`, `src/ui/hud.js`, `src/main.js`, `tests/{step14-instances,layers,step9-save,step10-save,
-  step11b-starmap,step12-places,step13-missions,step13c-ui,resume-spot,shops,station-inventory}.test.mjs`,
-  `docs/{HANDOFF,ROADMAP}.md`, `docs/recipes/22-a-new-rift-or-instance.md`, `testing/TESTING-14-RIFTS.md`,
-  the `src/*/README.md` files touched, and `docs/architecture/{world-and-map,content-data}.md`.
-- **Next.** Slice **14c** simple wormholes (save v21: a pocket that spawns itself inside a charted system,
-  20 minutes from spawn, `collapse` on expiry, re-enterable until its timer ends, objective and locked
-  canister strictly one-time), then **14d** wormhole systems in uncharted space, then step 15 the campaign (v22).
+- **Impact energy is relative speed, at the moment of contact** — the same 25 m/s / 0.015 hull-per-m/s rule the pilot's rock hits use, applied to both ships of a collision (the owner's rule, applied uniformly; an earlier pass measured absolute own-speed and would have let a stationary victim escape — caught in review before it shipped). The pilot takes it through the shields (`hurt`); the hostile takes it via a new `enemy-rammed` event → `hitHostile(e, dmg, at, byPlayer, placeId)`, so a ram kill is the rammer's kill. `enemyHullRadius` scales the 4 m hull sphere by the def's `scale` (a raider ≈ 4.8 m).
+- **Enemy-vs-world.** Rocks damage a hostile on contact (kill credited to nobody — `byPlayer: null` on `enemy-rammed`, and `killHostile`'s new no-credit path leaves `profile.kills` and the place memory alone; `advanceMissions` refuses to settle hunt contracts for `player === null` either). Static scenery bounces the ship without damage, exactly like the pilot (ring/hub/planets/wormholes — anything with a collider). The interaction is post-movement, after the AI has steered.
+- **Enemy-vs-enemy.** Equal-mass hulls swap their normal velocity parts under restitution 0.4 (`reflectVelocity` is now exported from `sim/colliders.js`); no damage by design (ramming a rival is not a contract), and the existing chase lerp re-aims the AI next tick. Pairwise pass over a snapshot, corpses skipped.
+- **Contracts care that the target died, not who managed it — all missions, all contracts** (owner, 2026-11-14: "all missions / contracts the default is that as long as a specific npc is destroyed, doesn't matter how, it advances the objective" — generalising the same-day hunt note). Every objective fed by `enemy-killed` — hunt contracts, kill steps in story missions, kill steps inside parallel objectives, and `wait` steps woken by a mission wave-clear (`mission-trigger`, mission-id-scoped) — settle however the hostile died: rock, another ship, the pilot. An ownerless kill (nobody to blame) advances those objectives for **every pilot holding them** — the local profile and any configured guest profiles on board (`advanceMissions` fans out over `state.players`; an ownerless `mission-trigger` naming its mission fans out the same way, and only the profile holding that mission id can match it); an attributed kill still goes to its owner only. Follow-on steps (flags, script / give-item) run against the owning profile (`advanceMission` / `advanceParallel` take the `profile`). Tests pin both ends: an environmental kill pays the co-pilot's hunt too, and a mission wave killed by the world (no killer) still wakes the story's wait step for the pilot holding it. The pocket the hunt was accepted in still gates it (`step.place`), never the killer; `mission-trigger` wave-clears are mission-scoped as before. An ownerless kill credits no pilot's `kills` stat, but pays the contract like any other.
+- **Two reliability fixes along the way.** (i) The no-credit path is `byPlayer === undefined` vs `null` vs a record — `localPlayer()` is falsy in headless bundles, and the first version swallowed the local pilot's credit for it. **587/587 pass**; build green (1501 KB). A stress probe (3 raiders, 30 s, seeds fixed) shows no NaNs and no double-processing; enemies despawn intact when the pilot dies (existing `dock` → `die` → `clearTransient` path).
 
----
-
-## 2026-11-14: Step 14a built — a rift you carry, an instance you fly into, and a cache that stays locked
-
-`npm test` → **523 tests, 0 fail** (14 new: 13 for the instance rules, one for the two new views);
-`npm run build` → 789 KB. **Save version unchanged
-(v19)**: in this slice an instance is session runtime, so a save made inside one comes back to the pocket it
-was opened from and the spot the pilot entered at. Slice 14b saves the run itself.
-
-- **NEW `src/sim/instances.js`** — the whole runtime. `rollRiftTemplate` (weighted, seeded),
-  `createInstance`, `riftClearance`, `openRift` (a door at the ship), `enterRift` / `leaveInstance` /
-  `riftAction` (**R** only, at close range, never by contact), `objectiveDone`, `exitDenial`,
-  `instanceTimeLeft` / `instanceWarning` / `expireInstance` / `updateInstances` / `updateRifts`,
-  `destroyInstance`, and the registries `OBJECTIVES`, `EXIT_REQUIREMENTS` and `EXPIRY_OUTCOMES`. Everything
-  a template can say is looked up in a registry, and every registry **fails shut**: an unknown objective is
-  never done, an unknown exit rule refuses with "The way out cannot be checked (…)", and an unknown expiry
-  outcome still puts the pilot out of the place rather than trapping them in a dead one.
-- **NEW `src/sim/consumables.js`** — `USE_ACTIONS`, `canUse`, `useItem`. A handler returns `{ text }` when it
-  worked or a sentence when it did not; exactly **one** unit is consumed, and only on success. `spawn-rift` is
-  the first action: it refuses while docked, inside an instance, or too close to anything, and passes the
-  clearance sentence through word for word.
-- **The locked cache** (LESSONS L6): it hangs in the instance from the moment the pilot arrives, as an entity
-  of its own. When the objective is met it is replaced by ordinary crates that spill where it hung and are
-  collected one at a time — nothing enters a hold by side effect, and one seed spills the same crates in the
-  same places.
-- **Seeded throughout**: `instanceIdFor(template, seed)` names the place, `streamRng(seed, 1)` lays out the
-  wave and `streamRng(seed, 2)` the cache, so one seed is one instance — same rocks, same guardians, same
-  reward — and an instance writes no `world.placeMemory` at all. `Math.random()` appears nowhere in `sim/`.
-- **Harder than the map**: `sim/ai.js` multiplies a hostile's hp and damage by `instanceAt(place).difficulty`
-  (1.6 / 1.5 for `guardian_rift`, 2.2 / 2 for `deep_rift`). The declared wave spawns with `encounter: null`,
-  so it writes no place memory and cannot trip a mission's wave-clear trigger.
-- **The clock**: `lifetimeSec` of unpaused simulation seconds from entry, `warnSec` 60 of warning, then the
-  template's declared outcome. `kill` stamps `state.deathNotice` with the template's own sentence, despawns
-  the run and its door, and lets the ordinary death rules finish (ship and whole hold gone, recovery fee,
-  loaned Wasp, docked in the pocket it was opened from). `collapse` only fades the door and dooms the outer
-  pocket (`doomOrigin`, which 14c reads): the instance stays open, its exit keeps working and nobody is ever
-  forced out or killed by a wormhole's clock.
-- **Dying inside a run**: `sim/session.js` `die()` now emits `dying` before it removes anything, and
-  `sim/instances.js` listens — the run despawns at once and the pilot is put back at their entry spot, so the
-  ordinary death rules apply unchanged whatever killed them.
-- **Views, input, HUD, cards**: `render/views.js` draws the `rift` and `cache` kinds from their records with
-  shared geometry and materials (eight entity kinds now); `core/input.js` binds `KeyR: "rift"` and `main.js`
-  dispatches it only while playing and not warping; `ui/hud.js` `instanceHtml` shows the authored objective,
-  the `mm:ss` countdown and the exit line (open, or the template's refusal); `ui/cargo.js` offers **Use**
-  above **Discard** in flight; `ui/screens.js` labels a consumable's tile **USE** and words its line by
-  category; `index.html` and the intro screen's controls list both mention **R**.
-- **Content and shops**: `rift_basic` is back on Meridian's shelf at **10 cr**, described in the shop's own
-  words (item `v: 6`, so selling follows the 60 % rule); `data/loot.js` gains `rift_rock`, `rift_cache` and
-  `rift_cache_deep`.
-- **NEW `tests/step14-instances.test.mjs`** (13 tests): every template is complete and every word it uses is
-  in a registry; the weighted roll and its refusals; seeded determinism and the absence of a `placeMemory`
-  trace; the four clearance margins; one use and one door per seed; **R** in and out at range with the sealed
-  exit refusing in the template's words; the cache's spill; leaving returns the pilot to the exact entry spot
-  with everything aboard; both expiry outcomes; a death by shot inside a run; fail-closed unknown rules;
-  `destroyInstance` and `resetPlaces`. `tests/views.test.mjs` gains one more: a real door and a cache
-  record each get exactly one mesh, drawn at the radius and the position their records declare, and both
-  meshes go when `clearWorldObjects()` takes the records.
-- **Fixed while testing**: `captureResume()` spread a `{ pos, quat }` of `Vector3`s into the resume point
-  instead of arrays, which would have saved garbage for anybody inside an instance; and `expireInstance()`
-  now emits `instance-expired` **before** the outcome runs, so a listener still sees the instance registered
-  (a `kill` destroyed it first and the event had nothing left to look at). The way out also offers itself the
-  way a door does: within `RIFT.exitRange` the prompt says "Press R to leave through …", or the refusal while
-  it is sealed.
-- **Docs**: NEW `testing/TESTING-14-RIFTS.md` (owner playtest, listed in `testing/README.md`), NEW
-  `docs/recipes/22-a-new-rift-or-instance.md` (indexed in `docs/HOW_TO_ADD.md`), `docs/HANDOFF.md` rewritten,
-  `docs/ROADMAP.md` step 14a status, `src/sim/README.md` and `src/data/README.md`.
-- **Not in this slice**: saving a run (14b), simple wormholes and their self-spawning pockets (14c),
-  uncharted wormhole systems (14d), and the campaign (15).
-
-Files: `src/sim/instances.js` (new), `src/sim/consumables.js` (new), `src/sim/{session,places,world,ai,step}.js`,
-`src/state/state.js`, `src/data/{instances,items,loot,shops}.js`, `src/render/views.js`, `src/core/input.js`,
-`src/main.js`, `src/index.html`, `src/ui/{hud,cargo,screens}.js`, `src/util/events.js`,
-`tests/step14-instances.test.mjs` (new), `tests/{layers,views,shops,content,enemies}.test.mjs`, `src/sim/README.md`,
-`src/data/README.md`, `src/{render,core,ui}/README.md`, `docs/{HANDOFF,ROADMAP,HOW_TO_ADD,ARCHITECTURE,CHANGELOG}.md`,
-`docs/architecture/{world-and-map,content-data,ui-and-screens}.md`,
-`docs/recipes/22-a-new-rift-or-instance.md`, `testing/{TESTING-14-RIFTS,README}.md`.
+Files: `src/sim/combat.js`, `src/sim/missions.js`, `src/sim/ai.js`, `src/sim/enemy.js`, `src/sim/player.js`, `src/sim/colliders.js`, `src/util/events.js`, `src/sim/README.md`, `tests/enemy-collision.test.mjs` (new), `docs/GLB_MODELS.md`, `docs/architecture/simulation-and-rendering.md`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
 
 ---
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: Step 14a feedback built — a rift you can see, lock and open — and slice 14b, a run that survives a quit
+- 2026-11-14: Step 14a built — a rift you carry, an instance you fly into, and a cache that stays locked
 - 2026-11-14: Step 14 groundwork — instance templates as data, and the owner's wormhole model recorded
 - 2026-11-14: VISION records the owner's step 14 rift decisions; open question 5 is closed
 - 2026-11-14: The owner confirmed the pending mission playtests; nothing is waiting now

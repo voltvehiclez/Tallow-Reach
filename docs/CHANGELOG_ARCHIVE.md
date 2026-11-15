@@ -8,6 +8,138 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: Step 14a feedback built — a rift you can see, lock and open — and slice 14b, a run that survives a quit
+
+The owner playtested slice 14a and returned six items; all six are built, plus slice **14b**.
+`npm test` → **529 tests, 0 fail** (`tests/step14-instances.test.mjs` is now 19); `npm run build` → 799 KB.
+**Save version v20** (from v19): `world.instances` keeps the run a pilot is inside, so logging out mid-rift
+comes back mid-rift. v19 and older saves have no runs and load unchanged.
+
+- **The anomaly (items 1 and 5).** `render/views.js` grew one shared pair, `buildAnomaly` / `updateAnomaly`,
+  and it draws **both** the door a pilot opens (`kind: "rift"`) and the way out inside (`kind: "gate"`):
+  a dark spherical core, a bright eye, an additive aura and a flare at 1.5×, shimmering from
+  `performance.now()` with a per-entity phase, plus sealed shells while it is locked. The way out is now an
+  entity of its own — `placeWorld(id).gates`, `record.gate`, `record.exitPos` — always visible from arrival,
+  F-lockable, and locked until the instance's own exit rules are met. Data: a template's
+  `exit { n, pos, r, requires }` (the exit is a place in the world, not the point the pilot arrived at).
+- **A sky of somewhere else (item 4).** `render/scene.js` exports a `SKIES` registry; `SKIES.shattered`
+  builds an inverted icosahedron shell of dark panels with glowing fracture lines through them and shards
+  drifting inside it, carried with the camera by `updateScenery`, and `showPlace` hides the ordinary
+  starfield while a place has a sky of its own. A template declares `sky { kind, col, glow, cracks, shards }`
+  and `SKY_KINDS` in `data/instances.js` is the vocabulary. **Both rift templates lost their `planet`
+  feature**: a rift is not the space outside it, so nothing in one is copied from a pocket.
+  `forgetPlace(id)` frees an instance's scenery and sky for good when its run ends, and `main.js`
+  (`instance-closed`) now also calls `showPlace(state.place)` — leaving a rift used to leave the pilot
+  looking at an empty scene with no stars.
+- **F locks all three, and the HUD says what each is (item 2).** `sim/targeting.js` lock kinds grew `"r"`
+  (rift door), `"g"` (way out, labelled `(sealed)` / `(open)`) and `"k"` (canister, `(locked)` / `(open)`),
+  and `ui/hud.js` marks rifts, gates and canisters at all times — pinned to the edge of the screen when they
+  are behind the pilot, with their distance — so the way in and the way out cannot be lost.
+- **The prize is a canister you open with R (item 3).** `openCache(record, player, profile)` is exported from
+  `sim/instances.js`: it moves the canister's stacks into the pilot's **own** hold one unit at a time, so a
+  full hold takes what fits and is told how much is left (`Make room and press R again`). Every refusal is a
+  sentence the pilot sees — still sealed (with the objective's own words), empty, no room — and a success says
+  what came aboard. `completeObjective` now **unlocks** the canister instead of spilling crates, and
+  `render/views.js` draws it as a canister (body, two caps, two bands, a lamp that is red while sealed and
+  green once open). Data: `cache { n, loot, pos, r }` and `RIFT.cacheRange` (60 m).
+- **Slice 14b: a run survives a quit (item 6).** `world.instances` (v20) keeps one entry per live run:
+  template, seed, tier, remaining lifetime, `warned`, whether the objective is met, the canister's remaining
+  stock and open flag, and the entry spot the pilot is put back at when they leave. `captureInstances()`
+  (`state/state.js`) writes it from `currentSave()`; `captureResume()` no longer redirects a save made inside
+  a run to the pocket; `enterPlace` now writes an instance id into `world.place` and `destroyInstance` writes
+  the pocket back on the way out. `restoreInstances()` and `populateInstances()` (`sim/instances.js`) rebuild
+  a saved run — record, place registration, then guardians, canister and gate — and are called from
+  `resumeFromSave()`, with `restoreInstances()` also called at boot in `main.js` before `loadPlace`, because a
+  place has to exist before anything can load it. `cleanInstanceRuns` (`state/profile.js`) drops any run whose
+  id `instanceIdFor` would not produce, and a `world.place` that is then nowhere sends the pilot home.
+  Deliberate and documented: the wave comes back at **full strength** (a save carries the run, not each
+  guardian's damage), and an emptied canister stays empty, so reloading can never farm a prize twice.
+- **Files.** `src/data/instances.js`, `src/state/{profile,state}.js`, `src/sim/{instances,places,session,targeting,world}.js`,
+  `src/render/{scene,views}.js`, `src/ui/hud.js`, `src/main.js`, `tests/{step14-instances,layers,step9-save,step10-save,
+  step11b-starmap,step12-places,step13-missions,step13c-ui,resume-spot,shops,station-inventory}.test.mjs`,
+  `docs/{HANDOFF,ROADMAP}.md`, `docs/recipes/22-a-new-rift-or-instance.md`, `testing/TESTING-14-RIFTS.md`,
+  the `src/*/README.md` files touched, and `docs/architecture/{world-and-map,content-data}.md`.
+- **Next.** Slice **14c** simple wormholes (save v21: a pocket that spawns itself inside a charted system,
+  20 minutes from spawn, `collapse` on expiry, re-enterable until its timer ends, objective and locked
+  canister strictly one-time), then **14d** wormhole systems in uncharted space, then step 15 the campaign (v22).
+
+## 2026-11-14: Step 14a built — a rift you carry, an instance you fly into, and a cache that stays locked
+
+`npm test` → **523 tests, 0 fail** (14 new: 13 for the instance rules, one for the two new views);
+`npm run build` → 789 KB. **Save version unchanged
+(v19)**: in this slice an instance is session runtime, so a save made inside one comes back to the pocket it
+was opened from and the spot the pilot entered at. Slice 14b saves the run itself.
+
+- **NEW `src/sim/instances.js`** — the whole runtime. `rollRiftTemplate` (weighted, seeded),
+  `createInstance`, `riftClearance`, `openRift` (a door at the ship), `enterRift` / `leaveInstance` /
+  `riftAction` (**R** only, at close range, never by contact), `objectiveDone`, `exitDenial`,
+  `instanceTimeLeft` / `instanceWarning` / `expireInstance` / `updateInstances` / `updateRifts`,
+  `destroyInstance`, and the registries `OBJECTIVES`, `EXIT_REQUIREMENTS` and `EXPIRY_OUTCOMES`. Everything
+  a template can say is looked up in a registry, and every registry **fails shut**: an unknown objective is
+  never done, an unknown exit rule refuses with "The way out cannot be checked (…)", and an unknown expiry
+  outcome still puts the pilot out of the place rather than trapping them in a dead one.
+- **NEW `src/sim/consumables.js`** — `USE_ACTIONS`, `canUse`, `useItem`. A handler returns `{ text }` when it
+  worked or a sentence when it did not; exactly **one** unit is consumed, and only on success. `spawn-rift` is
+  the first action: it refuses while docked, inside an instance, or too close to anything, and passes the
+  clearance sentence through word for word.
+- **The locked cache** (LESSONS L6): it hangs in the instance from the moment the pilot arrives, as an entity
+  of its own. When the objective is met it is replaced by ordinary crates that spill where it hung and are
+  collected one at a time — nothing enters a hold by side effect, and one seed spills the same crates in the
+  same places.
+- **Seeded throughout**: `instanceIdFor(template, seed)` names the place, `streamRng(seed, 1)` lays out the
+  wave and `streamRng(seed, 2)` the cache, so one seed is one instance — same rocks, same guardians, same
+  reward — and an instance writes no `world.placeMemory` at all. `Math.random()` appears nowhere in `sim/`.
+- **Harder than the map**: `sim/ai.js` multiplies a hostile's hp and damage by `instanceAt(place).difficulty`
+  (1.6 / 1.5 for `guardian_rift`, 2.2 / 2 for `deep_rift`). The declared wave spawns with `encounter: null`,
+  so it writes no place memory and cannot trip a mission's wave-clear trigger.
+- **The clock**: `lifetimeSec` of unpaused simulation seconds from entry, `warnSec` 60 of warning, then the
+  template's declared outcome. `kill` stamps `state.deathNotice` with the template's own sentence, despawns
+  the run and its door, and lets the ordinary death rules finish (ship and whole hold gone, recovery fee,
+  loaned Wasp, docked in the pocket it was opened from). `collapse` only fades the door and dooms the outer
+  pocket (`doomOrigin`, which 14c reads): the instance stays open, its exit keeps working and nobody is ever
+  forced out or killed by a wormhole's clock.
+- **Dying inside a run**: `sim/session.js` `die()` now emits `dying` before it removes anything, and
+  `sim/instances.js` listens — the run despawns at once and the pilot is put back at their entry spot, so the
+  ordinary death rules apply unchanged whatever killed them.
+- **Views, input, HUD, cards**: `render/views.js` draws the `rift` and `cache` kinds from their records with
+  shared geometry and materials (eight entity kinds now); `core/input.js` binds `KeyR: "rift"` and `main.js`
+  dispatches it only while playing and not warping; `ui/hud.js` `instanceHtml` shows the authored objective,
+  the `mm:ss` countdown and the exit line (open, or the template's refusal); `ui/cargo.js` offers **Use**
+  above **Discard** in flight; `ui/screens.js` labels a consumable's tile **USE** and words its line by
+  category; `index.html` and the intro screen's controls list both mention **R**.
+- **Content and shops**: `rift_basic` is back on Meridian's shelf at **10 cr**, described in the shop's own
+  words (item `v: 6`, so selling follows the 60 % rule); `data/loot.js` gains `rift_rock`, `rift_cache` and
+  `rift_cache_deep`.
+- **NEW `tests/step14-instances.test.mjs`** (13 tests): every template is complete and every word it uses is
+  in a registry; the weighted roll and its refusals; seeded determinism and the absence of a `placeMemory`
+  trace; the four clearance margins; one use and one door per seed; **R** in and out at range with the sealed
+  exit refusing in the template's words; the cache's spill; leaving returns the pilot to the exact entry spot
+  with everything aboard; both expiry outcomes; a death by shot inside a run; fail-closed unknown rules;
+  `destroyInstance` and `resetPlaces`. `tests/views.test.mjs` gains one more: a real door and a cache
+  record each get exactly one mesh, drawn at the radius and the position their records declare, and both
+  meshes go when `clearWorldObjects()` takes the records.
+- **Fixed while testing**: `captureResume()` spread a `{ pos, quat }` of `Vector3`s into the resume point
+  instead of arrays, which would have saved garbage for anybody inside an instance; and `expireInstance()`
+  now emits `instance-expired` **before** the outcome runs, so a listener still sees the instance registered
+  (a `kill` destroyed it first and the event had nothing left to look at). The way out also offers itself the
+  way a door does: within `RIFT.exitRange` the prompt says "Press R to leave through …", or the refusal while
+  it is sealed.
+- **Docs**: NEW `testing/TESTING-14-RIFTS.md` (owner playtest, listed in `testing/README.md`), NEW
+  `docs/recipes/22-a-new-rift-or-instance.md` (indexed in `docs/HOW_TO_ADD.md`), `docs/HANDOFF.md` rewritten,
+  `docs/ROADMAP.md` step 14a status, `src/sim/README.md` and `src/data/README.md`.
+- **Not in this slice**: saving a run (14b), simple wormholes and their self-spawning pockets (14c),
+  uncharted wormhole systems (14d), and the campaign (15).
+
+Files: `src/sim/instances.js` (new), `src/sim/consumables.js` (new), `src/sim/{session,places,world,ai,step}.js`,
+`src/state/state.js`, `src/data/{instances,items,loot,shops}.js`, `src/render/views.js`, `src/core/input.js`,
+`src/main.js`, `src/index.html`, `src/ui/{hud,cargo,screens}.js`, `src/util/events.js`,
+`tests/step14-instances.test.mjs` (new), `tests/{layers,views,shops,content,enemies}.test.mjs`, `src/sim/README.md`,
+`src/data/README.md`, `src/{render,core,ui}/README.md`, `docs/{HANDOFF,ROADMAP,HOW_TO_ADD,ARCHITECTURE,CHANGELOG}.md`,
+`docs/architecture/{world-and-map,content-data,ui-and-screens}.md`,
+`docs/recipes/22-a-new-rift-or-instance.md`, `testing/{TESTING-14-RIFTS,README}.md`.
+
+---
+
 ## 2026-11-14: Step 14 groundwork — instance templates as data, and the owner's wormhole model recorded
 
 No game behaviour changed yet: everything below is data, docs and empty runtime hooks that nothing reads. **Save

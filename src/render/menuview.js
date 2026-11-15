@@ -33,24 +33,32 @@ scene.add(stars.clone());
 const spins = [];
 let planetDir = [-0.568, -0.122, -0.812];
 let t = 0;
+let built = false;
 
-for (const feature of placeDef(DEFAULT_PLACE).features) {
-  if (feature.kind === "station") {
-    const model = stationModel(feature);
-    scene.add(model.object);
-    spins.push(...model.spins);
-  } else if (feature.kind === "planet") {
-    const model = planetModel(feature);
-    scene.add(model.object);
-    spins.push(...model.spins);
-    // Point the camera at the side of the station away from this planet, so the
-    // planet sits behind the station instead of off-screen.
-    planetDir = [feature.pos[0], feature.pos[1], feature.pos[2]];
+/** Build the title scene on first use — after the .glb templates have loaded, so the
+ *  title screen wears the same models as the game. */
+function ensureBuilt() {
+  if (built) return;
+  built = true;
+  for (const feature of placeDef(DEFAULT_PLACE).features) {
+    if (feature.kind === "station") {
+      const model = stationModel(feature);
+      scene.add(model.object);
+      spins.push(...model.spins);
+    } else if (feature.kind === "planet") {
+      const model = planetModel(feature);
+      scene.add(model.object);
+      spins.push(...model.spins);
+      // Point the camera at the side of the station away from this planet, so the
+      // planet sits behind the station instead of off-screen.
+      planetDir = [feature.pos[0], feature.pos[1], feature.pos[2]];
+    }
   }
 }
 
 /** One frame of the title view: slow camera arc, and the station's own spin. */
 export function updateMenuView(dt) {
+  ensureBuilt();
   t += Math.max(0, dt);
   for (const spin of spins) spin.object.rotation.y += dt * spin.rate;
   const pose = menuPose(t, planetDir);
@@ -59,7 +67,10 @@ export function updateMenuView(dt) {
 }
 
 /** The scene and camera to render while the title screen is up. */
-export const menuView = () => ({ scene, camera });
+export const menuView = () => {
+  ensureBuilt();
+  return { scene, camera };
+};
 
 /**
  * Keep the framing right on resize. The title panel covers the right-hand side
