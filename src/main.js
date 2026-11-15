@@ -6,6 +6,7 @@ import { dockedView, chaseView, shakeOffset, installCameraControls } from "./ren
 import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
 import { loadAutosave, saveAutosave } from "./state/storage.js";
+import { shipCameraScale } from "./render/models.js";
 import { SHIPS } from "./data/ships.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
@@ -106,7 +107,7 @@ syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
   canStart: () =>
     !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen() && !isCacheOpen(),
-  getScale: () => SHIPS[state.profile.ship].sc,
+  getScale: () => shipCameraScale(state.profile.ship),
 });
 
 on("place-entered", ({ id }) => showPlace(id));

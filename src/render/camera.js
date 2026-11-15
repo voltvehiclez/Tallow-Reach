@@ -9,6 +9,7 @@ const R = (a, b) => a + cosmeticRandom() * (b - a);
 import { FLIGHT } from "../data/ships.js";
 import { cameraTrail } from "../data/camera.js";
 import { camera } from "./scene.js";
+import { shipCameraScale } from "./models.js";
 
 const _rel = V(0, 0, 0);
 const _want = V(0, 0, 0);
@@ -43,7 +44,8 @@ export function chaseView(dt, P, fc, pose = P) {
   // Built from the ship's position and quaternion by hand, not with
   // localToWorld(): matrixWorld is only refreshed when the scene is drawn, so
   // reading it here gives last frame's transform.
-  const tp = V(0, 2.6, trail(pose)).applyQuaternion(pose.quat).add(pose.pos);
+  const framing = shipCameraScale(state.profile.ship);
+  const tp = V(0, 2.6, trail(pose)).multiplyScalar(framing).applyQuaternion(pose.quat).add(pose.pos);
 
   // The ship's own travel this frame. The camera is carried along by it, so the
   // easing below never sees the ship's speed; a jump (arriving in a new pocket)
@@ -77,7 +79,7 @@ export function chaseView(dt, P, fc, pose = P) {
   } else {
     // Ride along with the ship's movement and smooth only the offset, so that
     // speed cannot push the camera back by itself: the trail above is the whole
-    // of the speed effect, and nothing can exceed CAMERA.fast. Turning still
+    // of the speed effect, and nothing can exceed CAMERA.fast times the model-size ratio. Turning still
     // swings the view, because the offset is eased in world space.
     _rel.copy(camera.position).sub(pose.pos).add(_delta);
     _want.copy(tp).sub(pose.pos);
@@ -102,7 +104,7 @@ export function shakeOffset(P, dt, shipScale) {
 /**
  * Wires free-cam controls to input events. `canStart` is asked before Alt
  * starts an orbit (not while docked or paused). `getScale` returns the
- * current ship's model scale, which sets the zoom range.
+ * current ship's measured size relative to Wasp, which sets the zoom range.
  */
 export function installCameraControls(fc, { canStart, getScale }) {
   on("freecam", down => {

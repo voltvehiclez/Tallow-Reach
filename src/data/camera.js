@@ -1,5 +1,6 @@
 // Chase-camera trail. These are distances in world units from the ship to the
-// camera, measured along the ship's back-to-front axis (the camera sits behind
+// camera for the reference Wasp (other models scale distance and height by
+// their measured size relative to Wasp in render/camera.js), measured along the ship's back-to-front axis (the camera sits behind
 // the ship on its +Z side).
 //
 // The camera used to trail further the faster you went, because it followed the

@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { SHIPS } from "../data/ships.js";
 import { R } from "../util/math.js";
-import { instantiateModel, spinNodes, engNodes } from "./gltf.js";
+import { instantiateModel, modelTemplate, spinNodes, engNodes } from "./gltf.js";
 import { builtInRockPositions } from "../sim/colliders.js";
 
 export const mm = (color, emissive) =>
@@ -97,6 +97,28 @@ export function buildPlayerShip(id) {
     });
   }
   return g;
+}
+
+// Use the model's full bounding diagonal: width, height and length all affect
+// framing. Measuring before flight transforms avoids speed/thrust camera pumping.
+export function modelFramingRatio(model, reference) {
+  const size = object => new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3()).length();
+  const baseline = size(reference), measured = size(model);
+  return baseline > 0 && measured > 0 ? measured / baseline : 1;
+}
+
+const framingCache = new Map();
+/** Visual size relative to the actual Wasp model, including GLB import fitting.
+ * Cache per template pair; an early fallback measurement cannot mask later preload.
+ */
+export function shipCameraScale(id) {
+  if (id === "wasp") return 1; // the owner's gold-standard view never changes
+  const source = modelTemplate(`ship.${id}`), wasp = modelTemplate("ship.wasp");
+  const cached = framingCache.get(id);
+  if (cached && cached.source === source && cached.wasp === wasp) return cached.scale;
+  const scale = modelFramingRatio(buildPlayerShip(id), buildPlayerShip("wasp"));
+  framingCache.set(id, { source, wasp, scale });
+  return scale;
 }
 
 // Six lumpy rock shapes, built once and reused by every asteroid — the same positions the
