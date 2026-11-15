@@ -19,5 +19,6 @@
 
 export const SKYBOXES = {
   // BEGIN GENERATED (tools/skybox/skybox.py maintains these lines; do not edit by hand)
+  teal_black_test: { n: "Teal Black (kept for later)", preset: "void", seed: 3, size: 4096, tint: 0x2cb4c2 },
   // END GENERATED
 };

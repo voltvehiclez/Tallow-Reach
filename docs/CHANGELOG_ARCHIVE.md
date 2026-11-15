@@ -8,6 +8,52 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars
+
+The owner came back from the PR #20 build with the mid-rift logout fix **confirmed working** ("can now log out mid
+rift and returns fine") and three more asks. All three are built. `npm test` → **556 tests, 0 fail**
+(`tests/step14-instances.test.mjs` 23, new `tests/ui-cache.test.mjs` 5, `tests/sky.test.mjs` rewritten to 10).
+**Save version unchanged (v20)**: a canister's stock is still saved inside `world.instances` in the stack list slice
+14b defined — only its live shape changed, and `restoreInstance` reads the old shape straight back.
+
+- **Twenty minutes is the default clock (ask 1: "rifts default time is 20 minutes unless specified").**
+  `RIFT.defaultLifetimeSec` (1200) in `data/instances.js`; `createInstance` uses it whenever a template does not
+  declare `lifetimeSec`, and a declared `lifetimeSec: 0` still means "no clock of its own". Both rift templates had
+  their `lifetimeSec` removed, so **a Deep rift is 20 minutes too** — what makes it deep is its wave, its debris and
+  its prize, not its time. The new step14 test "a run is 20 minutes unless its template says otherwise" pins the
+  default, a declared clock and the 0 case.
+- **The cache is a trade panel, not an auto-loot (ask 2: "your inventory ui + cache inventory ui … clicking and shift
+  clicking moves items in between exactly like ship inv and station inv", ship on the left, cache off to the right).**
+  `openCache` — which moved stacks into the hold one press at a time — is gone. In its place: `openCacheTrade`,
+  `tradeCacheItem(dir, id, n)`, `closeCacheTrade` and `cacheTradeRecord` in `sim/instances.js`, and a new
+  `src/ui/cache.js` modal: **R** beside an unlocked canister opens a card with the ship's hold on the left and the
+  canister on the right (`.cache-cols` in `styles.css`), in exactly the station Inventory tab's tiles; a click moves
+  one, Shift-click moves the whole stack, in **either direction**; right-click offers **Use / Stow all / Discard** in
+  the hold and **Take all** on a canister tile. This works because a canister's stock became an ordinary
+  `{ itemId: count }` stock map: `sim/inventory.js` grew a third container key, `CACHE`, resolved to the open run's
+  canister (`stockOf`, an unbounded `capacityOf`, `nameOf`), so `moveItem`, `spaceFor` and `itemsAt` reach it
+  unchanged — and the saved `[{ i, c }]` shape is converted in `captureInstances` and `restoreInstance`, so no save
+  migration was needed. An emptied canister still drops out of the world (and comes back if something is stowed into
+  it), a full hold loses nothing and says so as a notice, and a sealed canister refuses to trade at all. In
+  `main.js`, **R** again, **Esc** and **P** put the trade away; flight input is released while it is open but the run
+  — clock included — keeps running, like the flight inventory card.
+- **The sky is darker and less orange, with no stars, a nebula and shattered asteroids (ask 3).** `render/sky.js`
+  rewritten: `skyStars` is gone for good; the generators are now `skyVeils` (enormous faint washes spread over the
+  *sphere* — the nebula's body), `skyClouds` (the band's light and its dust lanes, in two passes), `skyWisps` (blurred
+  filaments inside the band) and `skyCracks`. Both palettes in `data/instances.js` are near-black bases with two cold
+  lights (`glow` plus a new `veil`: violet/teal for an ordinary rift, indigo/magenta and dimmer for a deep one), and
+  the only warm colour left in an ordinary rift's sky is the fracture hairline — a deep rift's fractures are pale
+  violet. `render/scene.js` gives the drifting shards a cold rock material with a breath of the nebula's own light
+  and spreads more of them (30 / 40, near and far) against the painted sky. `tests/sky.test.mjs` is rewritten (10
+  tests): determinism, per-template palette, sphere-uniform veils, an explicit "nothing in the picture could be a
+  star" check (no star generator exported, no fill smaller than a wash), and luminance/hue guards that pin every
+  rift's sky dark and non-amber.
+- Docs: the cache and clock paragraphs of `src/sim/README.md`, `src/data/README.md`, `src/render/README.md`,
+  `docs/architecture/content-data.md`, `docs/recipes/22` and `docs/REFACTOR_PLAN.md` rewritten for the trade; a new
+  owner-decision entry at the top of `docs/VISION.md`; `testing/TESTING-14-RIFTS.md` §5 is now the trade checklist,
+  with a new §5b for the sky and a 20:00 clock check. **ROADMAP 14a/14b stay unticked**: they wait for the owner's
+  playtest of this build.
+
 ## 2026-11-14: Step 14 owner playtest — four bugs, four fixes (the run you quit is the run you come back to)
 
 The owner flew slices 14a + 14b and reported four bugs. All four are fixed. `npm test` → **546 tests,
