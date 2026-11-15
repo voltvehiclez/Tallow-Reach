@@ -35,8 +35,8 @@ let planetDir = [-0.568, -0.122, -0.812];
 let t = 0;
 let built = false;
 
-/** Build the title scene on first use — after the .glb templates have loaded, so the
- *  title screen wears the same models as the game. */
+/** Build the title immediately with available models (built-in fallback while
+ * background imports load). Never hold the title screen behind ship decoding. */
 function ensureBuilt() {
   if (built) return;
   built = true;

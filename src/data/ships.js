@@ -4,13 +4,14 @@
 // thing that differs between them (the Hull HP come from the fitted hull
 // module now, not from the hull itself):
 //
-//   cargo   hold capacity, in m³           dmg     multiplier on cannon damage (1 for now)
+//   cargo   hold capacity, in m³           dmg     multiplier on EVERYTHING the ship's weapons output
 //   mine    multiplier on mining rate (1 for now)
 //   price   cost in the Hangar             col     hull colour (hex)
-//   sc      model scale
+//   sc      model scale                    hpMul   multiplier on Hull HP from the fitted hull module (1 for now)
 //
-// Ship-specific bonuses will arrive later; until then nothing on a hull
-// modifies the simulation, only the hold does. Hull HP come from the fitted
+// Ship-specific bonuses will arrive later as hull attributes; the first is the
+// Test Ship's, below. Until then the baseline hulls are identical apart from
+// their holds. Hull HP come from the fitted
 // hull module (data/modules.js, sim/hull.js): a hull with no module in its
 // hull bay has no Hull HP at all, and any hit reaching it kills the ship.
 //
@@ -55,6 +56,19 @@ export const SHIPS = {
     cargo: 30,
     dmg: 1, mine: 1, sc: 1,
     price: 600, col: 0x434b53,
+  },
+  // The owner's stress hull (2026-11-15): deliberately cheap and deliberately
+  // overwhelming — 100× the basic hull's Hull HP, ten times the damage output
+  // of everything the ship fires, the Wasp's hold, layout and stock fit.
+  testship: {
+    n: "Test Ship",
+    d: "A proof of concept: 100× the basic hull's Hull HP and ten times the damage.",
+    cargo: 20,
+    dmg: 10, mine: 1, sc: 1, hpMul: 100,
+    // Imported nose points +X; fit visually to 115% of Wasp length, not flight scale.
+    modelYaw: Math.PI / 2, modelLength: 14.8925,
+    cameraPadding: 1.2, // owner playtest: 20% more room than automatic framing
+    price: 1, col: 0x8a6d3b,
   },
 };
 

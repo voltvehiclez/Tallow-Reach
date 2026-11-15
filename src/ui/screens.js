@@ -13,7 +13,7 @@ import {
   CACHE, STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, valueOf,
 } from "../sim/inventory.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
-import { hullOf } from "../sim/hull.js";
+import { effectiveHullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/economy.js";
@@ -152,7 +152,7 @@ function hangarHtml() {
       .map(id => {
         const s = SHIPS[id],
           owned = S.ships.includes(id),
-          hp = hullOf((S.loadout || {})[id]);
+          hp = effectiveHullOf((S.loadout || {})[id], id);
         const action = owned
           ? S.ship === id
             ? `<span class="ok">In use</span>`

@@ -263,3 +263,10 @@ pass of invisible dither grain, because a smooth dark gradient bands into contou
 and those would have been "odd lines" by next round. The test that protects it asserts the recording canvas saw zero
 strokes and no path ever started: when a complaint is about a kind of artifact, pin the absence of the capability, not
 the absence of this week's instance of it.
+
+### L23. Imported models need an explicit coordinate and size contract
+
+An owner-supplied fighter faced +X and used small exporter units; loading successfully did not make it
+a flight-ready model. Keep optional visual yaw and target length in hull data, rotate before measuring,
+then scale and centre the bounds in a wrapper. Do not change gameplay `sc` to fix asset units. Test
+forward direction, centred bounds, and size relative to the baseline hull before asking for a playtest.

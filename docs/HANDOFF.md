@@ -37,8 +37,9 @@ run and what to click. Different AI assistants work in separate chats and none r
   status is kept (this file, REFACTOR_PLAN and the README do not repeat it); tick steps there. A step that is "built"
   but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first, following "When the owner reports a bug" below.
-- **Models & collision (2026-11-14, built, awaiting the owner's playtest):** every drawn thing accepts a `.glb` dropped into `src/assets/models/` (rebuild inlines it; missing/broken files fall back to the built-in mesh), and collision is the drawn mesh everywhere — rocks, the station's ring and hub (the invisible `keepout` wall is gone), planets, missiles; `noclip` is the only mesh opt-out, `collide: false`/`collideDmg` the only data ones. Enemies are solid too (2026-11-14, ram damage both ways, an ownerless kill credits no pilot's kill stat, but any kill settles any kill/hunt/wave-clear objective for every pilot holding it — rock, ship or pilot; only the pocket the hunt was taken in gates hunts). Save **v21**; `npm test` → 587/587. NOT playtested (fly through the station axis: should pass; clip the ring/hub: should bounce; a raider ramming you should take and deal damage and die of it). See [GLB_MODELS.md](GLB_MODELS.md).
+- **Models & collision (2026-11-14, awaiting playtest):** drop-in `.glb` per drawn thing (rebuild inlines; built-in fallback kept); collision fitted to the drawn mesh — rocks, station ring/hub, planets, missiles; `noclip` the only mesh opt-out, `collide: false`/`collideDmg` the only data ones. Enemies are solid (ram both ways; raider rams deal/take damage). Any kill settles kill/hunt/wave-clear objectives for every holder; only hunt habitat gates hunts. Save **v21**. See [GLB_MODELS.md](GLB_MODELS.md).
 - **Bug round (2026-11-14, built, awaiting the owner's re-play):** with Alt held the free camera rolls with the hull (E/Q spins the ship in a still frame), keys **1/2 select primary bay 1/2 and only the selected bay's weapon fires** (save `pw` stores `"1"`/`"2"`; legacy `cannon`/`beam` migrate to the bay holding that kind of module — v21 saves load cleanly), and world-space markers hide with the HUD, so nothing floats over the main menu.
+- **Test Ship (2026-11-15, awaiting playtest):** 1-cr Hangar hull `testship` — 100× Hull HP, 10× damage, Wasp's hold/layout/stock fit, owner's 181 KB `heavyfighter-compressed.glb` inlined (embedded Draco decoder; ~2.33 MB page). Buy in Hangar: arrives fully fitted, 1000 Hull HP. See [GLB_MODELS.md](GLB_MODELS.md).
 - **Bug round two (2026-11-14, built, awaiting the owner's re-play):** the Sell/Discard confirm buttons sit in the popover's title row; both flows anchor with one rule (clicked-entry centre − 44px) so Discard keeps the placement the owner approved and Sell matches it — the confirm rides just above the mouse. A hunt contract is scoped to the pocket it was accepted in (kills elsewhere don't count; the objective names the area). Rebuilt on `arena/22587946-tallow-reach` after Continue reset the branch.
 - **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system,
   appears on that system's map as a "Simple Wormhole" with no notice — **20 minutes from spawn, kept in `world.wormholes`**.
@@ -127,10 +128,7 @@ npm test
 node serve.mjs     # optional: serves game/ on http://localhost:8080
 ```
 
-Or double-click `game/tallow-reach.html`. If a preview blocks localStorage, open it in its own tab. Owner
-playtest guides are in [../testing/](../testing/README.md): play `TESTING-BASELINE.md` plus the guide for the
-step, load an old save, and back up a zip. To try the mission test missions, open the game with `?testmissions`
-on the end of the address.
+Or double-click `game/tallow-reach.html`. If a preview blocks localStorage, open it in its own tab. Owner playtest guides are in [../testing/](../testing/README.md): play `TESTING-BASELINE.md` plus the guide for the step. To try the mission test missions, open the game with `?testmissions` on the end of the address.
 
 ## Map of the docs
 

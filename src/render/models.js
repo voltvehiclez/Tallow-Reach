@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { SHIPS } from "../data/ships.js";
 import { R } from "../util/math.js";
-import { instantiateModel, spinNodes, engNodes } from "./gltf.js";
+import { instantiateModel, modelTemplate, spinNodes, engNodes } from "./gltf.js";
 import { builtInRockPositions } from "../sim/colliders.js";
 
 export const mm = (color, emissive) =>
@@ -56,15 +56,31 @@ export function mkShip(color, scale, foe) {
   return g;
 }
 
+/** Optional import correction, isolated from flight scale and the source template.
+ * Centre after rotation/scaling so exporter origins never offset the flying hull.
+ */
+export function fitShipModel(model, data) {
+  const root = new THREE.Group();
+  root.add(model);
+  if (data?.modelYaw) model.rotateY(data.modelYaw);
+  if (data?.modelLength) {
+    let bounds = new THREE.Box3().setFromObject(model);
+    const length = bounds.getSize(new THREE.Vector3()).z;
+    if (length > 0) model.scale.multiplyScalar(data.modelLength / length);
+    bounds = new THREE.Box3().setFromObject(model);
+    model.position.sub(bounds.getCenter(new THREE.Vector3()));
+  }
+  root.scale.setScalar(data?.sc ?? 1);
+  root.eng = engNodes(model);
+  return root;
+}
+
 /** The player's ship, including the per-class add-ons — or its `ship.<id>.glb`, if one is registered. */
 export function buildPlayerShip(id) {
   const d = SHIPS[id];
   const gltf = instantiateModel(`ship.${id}`);
   if (gltf) {
-    // The hull's own scale applies to a .glb as well, for parity with the built-in ship.
-    gltf.scale.multiplyScalar(d?.sc ?? 1);
-    gltf.eng = engNodes(gltf);
-    return gltf;
+    return fitShipModel(gltf, d);
   }
   const g = mkShip(d.col, d.sc, false);
   if (id === "prospector") {
@@ -81,6 +97,28 @@ export function buildPlayerShip(id) {
     });
   }
   return g;
+}
+
+// Use the model's full bounding diagonal: width, height and length all affect
+// framing. Measuring before flight transforms avoids speed/thrust camera pumping.
+export function modelFramingRatio(model, reference) {
+  const size = object => new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3()).length();
+  const baseline = size(reference), measured = size(model);
+  return baseline > 0 && measured > 0 ? measured / baseline : 1;
+}
+
+const framingCache = new Map();
+/** Visual size relative to the actual Wasp model, including GLB import fitting.
+ * Cache per template pair; an early fallback measurement cannot mask later preload.
+ */
+export function shipCameraScale(id) {
+  if (id === "wasp") return 1; // the owner's gold-standard view never changes
+  const source = modelTemplate(`ship.${id}`), wasp = modelTemplate("ship.wasp");
+  const cached = framingCache.get(id);
+  if (cached && cached.source === source && cached.wasp === wasp) return cached.scale;
+  const scale = modelFramingRatio(buildPlayerShip(id), buildPlayerShip("wasp")) * (SHIPS[id]?.cameraPadding ?? 1);
+  framingCache.set(id, { source, wasp, scale });
+  return scale;
 }
 
 // Six lumpy rock shapes, built once and reused by every asteroid — the same positions the

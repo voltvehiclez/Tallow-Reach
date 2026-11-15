@@ -29,8 +29,11 @@ import { openDiscardPopover } from "./discard.js";
 
 const $ = id => document.getElementById(id);
 let panel;
+let beforeStart = null;
+let starting = false;
 
-export function setupMenu() {
+export function setupMenu(options = {}) {
+  beforeStart = options.beforeStart || null;
   panel = $("panel");
   setupNotices();
   panel.addEventListener("click", onClick);
@@ -568,7 +571,7 @@ function onInventoryContextMenu(e) {
   panel.append(menu);
 }
 
-function onClick(e) {
+async function onClick(e) {
   const btn = e.target.closest("button[data-a]");
   if (!btn) {
     if (e.target.closest(".inv-sell-popover") || e.target.closest(".inv-discard-popover")) return;
@@ -578,6 +581,24 @@ function onClick(e) {
   }
   if (btn.disabled) return;
   const name = btn.dataset.a;
+  if (name === "intro" && beforeStart) {
+    if (starting) return;
+    starting = true;
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = "Loading models…";
+    initAudio(); // retain the user gesture before awaiting background work
+    try {
+      await beforeStart();
+    } catch (err) {
+      showNotice(`Could not prepare models. Please try again. ${err.message || err}`);
+      return;
+    } finally {
+      starting = false;
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
   if (name === "invSellOpen") {
     openInventorySell(btn);
     uiSound();

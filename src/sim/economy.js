@@ -22,7 +22,7 @@ export { valueOf };   // the Base tab and the Inventory sell box both ask for it
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
-import { refreshHull, hullOf } from "./hull.js";
+import { refreshHull, effectiveHullOf } from "./hull.js";
 import { refreshGuns } from "./guns.js";
 
 function assertEconomyPilot(P, profile) {
@@ -44,7 +44,7 @@ export const storageCap = (world = state.worldState) => capacityOf(STATION, stat
  *  fitted hull module — no module fitted means nothing to repair, and a free repair. */
 export function repairCost(id, profile = state.profile) {
   const frac = profile.hp[id] ?? 1;
-  const max = hullOf((profile.loadout || {})[id]);
+  const max = effectiveHullOf((profile.loadout || {})[id], id);
   if (max <= 0) return 0;
   const missing = max * (1 - frac);
   return Math.round(missing * (2 + (3 * missing) / max));

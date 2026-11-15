@@ -30,3 +30,5 @@ Rules:
 - A bay opens a picker: `data-a="slot"` (module, `data-b` is `group:bay`) or `data-a="paint"` (paint, `data-b` is the paint id). The rule lives in `picker.js`.
 
 `chart-lines.js` computes a cached, derived visual layout that nudges unrelated dots away from straight gate connections; it does not alter simulation positions. In crowded cases the chart masks only obstructing unrelated dots, never both endpoints globally. Highlighted routes reuse the same straight geometry.
+
+At boot, `setupMenu({ beforeStart })` gates Open World on the background model promise, with a disabled “Loading models…” button while pending; the title renders independently.

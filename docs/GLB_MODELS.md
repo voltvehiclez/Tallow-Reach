@@ -18,7 +18,26 @@ solid thing is collided against the triangles that are actually drawn. Both are 
 
 If the file is missing, unreadable or invalid, the game logs `[models] "<key>" failed to load; using the
 built-in model.` once at boot and uses the built-in model — a broken asset never breaks boot.
+The title renders immediately using available/built-in scenery; embedded model decoding starts after
+a paint opportunity. Open World waits for that background load, showing “Loading models…” if needed.
+This avoids a blank title while parsing but does not reduce the embedded page download.
+
 `loadedModelKeys()` / `failedModelKeys()` in `render/gltf.js` say what happened.
+
+## Notes on the shipped files
+
+Until 2026-11-15, `src/assets/models/` was expected to hold only `.gitkeep` — GLBs were local-only
+so the built page stayed small. That convention is amended for **exactly one owner-supplied file**:
+`ship.testship.glb` (now the owner’s 181 KB `heavyfighter-compressed.glb`, replacing the original
+13 MB version; inlined into the ~2.33 MB built page). The Test Ship uses `SHIPS.testship.modelYaw` (+π/2) and `modelLength` (14.8925 m, 115% of Wasp length)
+to correct its import orientation, uniformly size it and centre its bounds; this does not change flight scale. Any
+further large models should be a deliberate decision with the owner, made before the file lands.
+
+The compressed model requires Draco geometry and WebP texture support. `render/gltf.js` uses
+three.js’s existing `DRACOLoader` with the embedded JavaScript decoder in `src/assets/decoders/`
+(Apache 2.0); no CDN, external files or additional npm dependencies. Decoder workers are disposed
+after preload. The actual compressed geometry is decoded in `tests/compressed-model.test.mjs`
+and checked against the original bounds. Modern browsers provide WebP support.
 
 ## The keys
 

@@ -6,6 +6,7 @@ import { dockedView, chaseView, shakeOffset, installCameraControls } from "./ren
 import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
 import { loadAutosave, saveAutosave } from "./state/storage.js";
+import { shipCameraScale } from "./render/models.js";
 import { SHIPS } from "./data/ships.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
@@ -38,7 +39,7 @@ import { createSimClock, isSimulationPaused } from "./sim/step.js";
 import { SIM_DT, MAX_FRAME_DT, AUTOSAVE_SECONDS } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { installCrashNotice, reportCrash } from "./ui/crash.js";
-import { preloadModels } from "./render/gltf.js";
+import { preloadAfterPaint } from "./render/gltf.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 import {
   installEnemyViews,
@@ -78,7 +79,7 @@ addEventListener("pointerdown", () => initAudio(), { passive: true });
 addEventListener("keydown", () => initAudio());
 
 setupHud();
-setupMenu();
+setupMenu({ beforeStart: () => modelLoading });
 resumeFromSave();   // prepares the ship; the start screen still owns the panel
 
 // Save where the pilot is, so quitting mid-flight returns them to that spot.
@@ -106,7 +107,7 @@ syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
   canStart: () =>
     !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen() && !isCacheOpen(),
-  getScale: () => SHIPS[state.profile.ship].sc,
+  getScale: () => shipCameraScale(state.profile.ship),
 });
 
 on("place-entered", ({ id }) => showPlace(id));
@@ -299,7 +300,7 @@ function frame(now) {
   }
 }
 
-// Wait for any registered .glb templates (usually none) before the first frame,
-// so a model file never pops in as the built-in geometry and then swaps;
-// a broken file simply falls back to the built-in model.
-preloadModels().finally(() => requestAnimationFrame(frame));
+// Draw the title first. Model decoding starts only after the browser has had
+// a paint opportunity; Open World waits for the same background-load promise.
+requestAnimationFrame(frame);
+const modelLoading = preloadAfterPaint();

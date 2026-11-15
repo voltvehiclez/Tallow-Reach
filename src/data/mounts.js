@@ -6,7 +6,7 @@ const DEFAULT_MOUNTS = {
   missile: { x: 0, y: -1.2, z: -5 },
   beam: { x: 0, y: -1, z: -6 },
 };
-export const HULL_MOUNTS = { wasp: DEFAULT_MOUNTS, prospector: DEFAULT_MOUNTS, bulwark: DEFAULT_MOUNTS };
+export const HULL_MOUNTS = { wasp: DEFAULT_MOUNTS, prospector: DEFAULT_MOUNTS, bulwark: DEFAULT_MOUNTS, testship: DEFAULT_MOUNTS };
 
 // `bay` selects a single gun's position; linked barrels remain centred.
 export function mountOffset(hull, name, scale, bay = 0, barrel = 0, count = 1) {
