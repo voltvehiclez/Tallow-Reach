@@ -5,7 +5,7 @@ code**: give complete files (or exact find-and-replace edits) with full paths, a
 run and what to click. Different AI assistants work in separate chats and none remembers earlier ones.
 **The docs are the memory.** Do not read every doc: read this file, then only what your task needs.
 
-*Last checked: 2026-11-14. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
+*Last checked: 2026-11-15. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
 
 ## Start here (every chat)
 
@@ -41,18 +41,19 @@ run and what to click. Different AI assistants work in separate chats and none r
 - **Bug round (2026-11-14, built, awaiting the owner's re-play):** with Alt held the free camera rolls with the hull (E/Q spins the ship in a still frame), keys **1/2 select primary bay 1/2 and only the selected bay's weapon fires** (save `pw` stores `"1"`/`"2"`; legacy `cannon`/`beam` migrate to the bay holding that kind of module — v21 saves load cleanly), and world-space markers hide with the HUD, so nothing floats over the main menu.
 - **Test Ship (2026-11-15, awaiting playtest):** 1-cr Hangar hull `testship` — 100× Hull HP, 10× damage, Wasp's hold/layout/stock fit, owner's 181 KB `heavyfighter-compressed.glb` inlined (embedded Draco decoder; ~2.33 MB page). Buy in Hangar: arrives fully fitted, 1000 Hull HP. See [GLB_MODELS.md](GLB_MODELS.md).
 - **Bug round two (2026-11-14, built, awaiting the owner's re-play):** the Sell/Discard confirm buttons sit in the popover's title row; both flows anchor with one rule (clicked-entry centre − 44px) so Discard keeps the placement the owner approved and Sell matches it — the confirm rides just above the mouse. A hunt contract is scoped to the pocket it was accepted in (kills elsewhere don't count; the objective names the area). Rebuilt on `arena/22587946-tallow-reach` after Continue reset the branch.
-- **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system,
-  appears on that system's map as a "Simple Wormhole" with no notice — **20 minutes from spawn, kept in `world.wormholes`**.
-  Always **75** in the universe, never more than **3 per system**; clocks stagger on a fresh universe, and replacements
-  pop up with the full 20 minutes. The pocket shows the system's own starfield; a grey dark sphere you can lock hangs at
-  its centre. Every instance interior is the owner's panorama now (dark-grey nebula for a wormhole site, teal maelstrom
-  for a rift, near-black for a deep rift). The far side is a site (smugglers and a freighter to destroy, a lumenite belt
-  to mine, a guardian hive), is **less hardcore than a rift — leave at any time** — and is re-enterable until the pocket
-  expires; objectives and rewards are one-time. Collapse fades the way in; the **Stable wormhole** out always works, no
-  clock, no `kill` outcome. v20 → **v21**; step 15 is **v22** (guide:
-  [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as
-  template, seed, clock, objective, prize (half-traded) and entry spot (`world.instances`); a standing simple wormhole
-  saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`). Campaign = step 15 (v22): mission templates + linter green, see [architecture/feature-notes.md](architecture/feature-notes.md).
+- **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system, appears on that system's map as a "Simple Wormhole" with no notice —
+  **20 minutes from spawn, kept in `world.wormholes`**. Always **75** in the universe, never more than **3 per system**; clocks stagger on a fresh universe, and replacements pop up
+  with the full 20 minutes. The pocket shows the system's own starfield; a grey dark sphere you can lock hangs at its centre. Every instance interior is the owner's panorama now
+  (dark-grey nebula for a wormhole site, teal maelstrom for a rift, near-black for a deep rift). The far side is a site (smugglers and a freighter to destroy, a lumenite belt to mine,
+  a guardian hive), is **less hardcore than a rift — leave at any time** — and is re-enterable until the pocket expires; objectives and rewards are one-time. Collapse fades the way in;
+  the **Stable wormhole** out always works, no clock, no `kill` outcome. v20 → **v21**; step 15 is **v22** (guide:
+  [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as template, seed, clock, objective, prize (half-traded) and
+  entry spot (`world.instances`); a standing simple wormhole saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`). Campaign = step 15 (v22):
+  mission templates + linter green, see [architecture/feature-notes.md](architecture/feature-notes.md).
+- **One extra sky installed, worn by nothing (2026-11-15):** `teal_black_test` — black space, teal nebula highlights,
+  few stars (preset `void`, seed `3`, 4096, 140 KB, recipe `tools/skybox/specs/teal_black_test.json`). The owner said
+  "keep it for later"; no template wears it. Use it with `sky: { kind: "panorama", skybox: "teal_black_test", shards: 0 }`.
+
 ## The owner's ground rules (do not break these)
 
 - No new npm dependencies; plain ES modules. The one planned exception is a small networking library at the
