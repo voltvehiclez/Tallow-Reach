@@ -20,6 +20,13 @@ If the file is missing, unreadable or invalid, the game logs `[models] "<key>" f
 built-in model.` once at boot and uses the built-in model — a broken asset never breaks boot.
 `loadedModelKeys()` / `failedModelKeys()` in `render/gltf.js` say what happened.
 
+## Notes on the shipped files
+
+Until 2026-11-15, `src/assets/models/` was expected to hold only `.gitkeep` — GLBs were local-only
+so the built page stayed small. That convention is amended for **exactly one owner-supplied file**:
+`ship.testship.glb` (13 MB, from the owner's Google Drive, inlined into the ~19 MB built page). Any
+further large models should be a deliberate decision with the owner, made before the file lands.
+
 ## The keys
 
 | Key (file name) | Replaces | Scale contract | Notes |

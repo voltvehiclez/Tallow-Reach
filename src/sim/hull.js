@@ -20,6 +20,7 @@
 // the fraction it had; it takes actual repairs to top it up.
 
 import { MODULES } from "../data/modules.js";
+import { SHIPS } from "../data/ships.js";
 import { state } from "../state/state.js";
 import { clamp } from "../util/math.js";
 
@@ -43,6 +44,17 @@ export function hullOf(loadout) {
 }
 
 /**
+ * The Hull HP a ship would have with this loadout: the module's HP multiplied
+ * by the hull's own `hpMul` (the Test Ship's is 100). This is what `refreshHull`
+ * stamps on the flying ship, what the Hangar stat line shows, and what repair
+ * costs are charged against. Pure, so it can be tested. Pass `ship` to get the
+ * multiplier for that hull; without it the raw module HP is returned.
+ */
+export function effectiveHullOf(loadout, ship) {
+  return hullOf(loadout) * ((ship && SHIPS[ship] && SHIPS[ship].hpMul) || 1);
+}
+
+/**
  * Rebuild state.hull and the flying ship's Hull HP from the saved fit.
  * Call after a fit change, a ship change, a save load or a dock, the way
  * sim/shield.js refreshes the shields. The saved fraction (profile.hp[ship])
@@ -50,7 +62,7 @@ export function hullOf(loadout) {
  */
 export function refreshHull(P = state.player, S = state.profile) {
   if (P && P !== state.player && arguments.length < 2) throw new Error("Non-local fitting requires an explicit fit profile");
-  const cap = hullOf((S.loadout || {})[S.ship]);
+  const cap = effectiveHullOf((S.loadout || {})[S.ship], S.ship);
   if (P) P.hullSpec = { cap };
   else state.hull = { cap };
   if (!P) return;

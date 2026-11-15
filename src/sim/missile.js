@@ -11,8 +11,9 @@
 
 import { V, Q, faceQ } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
+import { SHIPS } from "../data/ships.js";
 import { emit } from "../util/events.js";
-import { state, localPlayer, placeWorld } from "../state/state.js";
+import { state, localPlayer, placeWorld, profileOf } from "../state/state.js";
 import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
@@ -26,6 +27,10 @@ import { collideRockAt } from "./colliders.js";
  */
 export function launchMissile(target, launcher, dir, muzzle, player = localPlayer()) {
   const P = player;
+  // The hull's own multiplier applies to everything it fires (the baseline
+  // hulls carry 1; the Test Ship carries 10).
+  const prof = P ? profileOf(P) : null;
+  const dMul = (prof && SHIPS[prof.ship]?.dmg) || (P && SHIPS[P.ship]?.dmg) || 1;
   const m = {
     kind: "missile",
     place: P.place || state.place,
@@ -38,7 +43,7 @@ export function launchMissile(target, launcher, dir, muzzle, player = localPlaye
     sp: MISSILE.sp0 + Math.max(0, P.v.dot(dir)),
     t: target,
     l: MISSILE.life,
-    dmg: launcher.dmg,
+    dmg: launcher.dmg * dMul,
   };
   addEntity(placeWorld(m.place).missiles, m);
   if (m.place === state.place) emit("sfx", { name: "missile-fire" });

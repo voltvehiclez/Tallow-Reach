@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { GALAXY, GALAXY_OVERRIDES } from "../src/data/galaxy.js";
 import { DEFAULT_PLACE, placeAt, pocketsIn, setPlaceCatalog } from "../src/data/places.js";
-import { SAVE_VERSION, newSave, sanitizeSave } from "../src/state/profile.js";
+import { SAVE_VERSION, newSave, sanitizeSave, stockFor } from "../src/state/profile.js";
 import { state, applySave, currentSave, resetPlaces } from "../src/state/state.js";
 import { encodeSave, decodeSave, loadAutosave, saveAutosave, writeSlot, readSlot } from "../src/state/storage.js";
 import { generateGalaxy, recordSystemVisit, systemPocketLayout } from "../src/sim/galaxy.js";
@@ -1054,7 +1054,8 @@ test("11B: the pre-11B v15 fixture resumes flying with its character and cargo i
   assert.deepEqual(save.profile.mission, V15.profile.mission, "the singular compatibility view keeps the old contract");
   assert.deepEqual(save.profile.flags, {});
   assert.deepEqual(save.profile.holds, V15.profile.holds);
-  assert.deepEqual(save.profile.loadout, V15.profile.loadout);
+  assert.deepEqual(save.profile.loadout, { ...V15.profile.loadout, testship: stockFor("testship") },
+    "the Test Ship backfills into old saves with its stock fit, like every known hull");
   assert.deepEqual(save.world.base, V15.world.base);
   assert.deepEqual(save.world.store, V15.world.store);
   assert.deepEqual(save.world.board, V15.world.board);

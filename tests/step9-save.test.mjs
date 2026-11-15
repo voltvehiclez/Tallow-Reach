@@ -7,7 +7,7 @@ import {
   SAVE_VERSION,
   newProfile,
   newWorld,
-  newSave,
+  newSave, stockFor,
   sanitizeProfile,
   sanitizeWorld,
   sanitizeSave,
@@ -86,7 +86,8 @@ test("9a: real v12 save migrates cleanly to v20 profile + world", () => {
   assert.equal(migrated.profile.msl, 5);
   assert.equal(migrated.profile.pw, "1", "the legacy beam selection migrates to the bay holding the beam (bay one on the Prospector)");
   assert.deepEqual(migrated.profile.hp, V12_SAVE.hp);
-  assert.deepEqual(migrated.profile.loadout, V12_SAVE.loadout);
+  // The Test Ship backfills into old saves with its stock fit, like every known hull.
+  assert.deepEqual(migrated.profile.loadout, { ...V12_SAVE.loadout, testship: stockFor("testship") });
   assert.equal("base" in migrated.profile, false);
   assert.equal("store" in migrated.profile, false);
 

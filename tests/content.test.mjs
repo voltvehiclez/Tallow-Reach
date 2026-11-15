@@ -57,12 +57,19 @@ test("every ship has all the fields the game reads", () => {
 });
 
 test("every hull is the same ship apart from its hold (m³)", () => {
-  const [first, ...rest] = Object.values(SHIPS);
+  // The Test Ship is the owner's deliberate exception (2026-11-15): 100× Hull
+  // HP, 10× damage, 1 cr — how a proof-of-concept hull is supposed to differ.
+  const [first, ...rest] = Object.values(SHIPS).filter(s => s.n !== "Test Ship");
   for (const s of rest) {
     for (const f of ["hull", "dmg", "mine", "sc", "price"]) {
       assert.equal(s[f], first[f], `every hull ships the same ${f} — only the hold differs`);
     }
   }
+  const testship = Object.entries(SHIPS).find(([id]) => id === "testship");
+  assert.ok(testship, "the Test Ship exists");
+  assert.equal(testship[1].price, 1, "the Test Ship costs 1 credit");
+  assert.equal(testship[1].dmg, 10, "the Test Ship does 10× damage");
+  assert.equal(testship[1].hpMul, 100, "the Test Ship has 100× Hull HP");
   const holds = Object.values(SHIPS).map(s => s.cargo);
   assert.ok(new Set(holds).size > 1, "the hulls differ in hold size (that is the point of them)");
 });

@@ -32,6 +32,7 @@ export const SHIP_LAYOUTS = {
   wasp: { power: 1, cell: 1, thruster: 1, shield: 1, primary: 2, secondary: 1, hull: 1 },
   prospector: { power: 1, cell: 1, thruster: 1, shield: 1, primary: 2, secondary: 1, hull: 1 },
   bulwark: { power: 1, cell: 1, thruster: 1, shield: 1, primary: 2, secondary: 1, hull: 1 },
+  testship: { power: 1, cell: 1, thruster: 1, shield: 1, primary: 2, secondary: 1, hull: 1 },
 };
 
 /** The bay counts for hull `shipId`, falling back to the Wasp. */
