@@ -56,15 +56,31 @@ export function mkShip(color, scale, foe) {
   return g;
 }
 
+/** Optional import correction, isolated from flight scale and the source template.
+ * Centre after rotation/scaling so exporter origins never offset the flying hull.
+ */
+export function fitShipModel(model, data) {
+  const root = new THREE.Group();
+  root.add(model);
+  if (data?.modelYaw) model.rotateY(data.modelYaw);
+  if (data?.modelLength) {
+    let bounds = new THREE.Box3().setFromObject(model);
+    const length = bounds.getSize(new THREE.Vector3()).z;
+    if (length > 0) model.scale.multiplyScalar(data.modelLength / length);
+    bounds = new THREE.Box3().setFromObject(model);
+    model.position.sub(bounds.getCenter(new THREE.Vector3()));
+  }
+  root.scale.setScalar(data?.sc ?? 1);
+  root.eng = engNodes(model);
+  return root;
+}
+
 /** The player's ship, including the per-class add-ons — or its `ship.<id>.glb`, if one is registered. */
 export function buildPlayerShip(id) {
   const d = SHIPS[id];
   const gltf = instantiateModel(`ship.${id}`);
   if (gltf) {
-    // The hull's own scale applies to a .glb as well, for parity with the built-in ship.
-    gltf.scale.multiplyScalar(d?.sc ?? 1);
-    gltf.eng = engNodes(gltf);
-    return gltf;
+    return fitShipModel(gltf, d);
   }
   const g = mkShip(d.col, d.sc, false);
   if (id === "prospector") {

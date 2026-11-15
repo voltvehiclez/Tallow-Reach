@@ -24,7 +24,8 @@ built-in model.` once at boot and uses the built-in model — a broken asset nev
 
 Until 2026-11-15, `src/assets/models/` was expected to hold only `.gitkeep` — GLBs were local-only
 so the built page stayed small. That convention is amended for **exactly one owner-supplied file**:
-`ship.testship.glb` (13 MB, from the owner's Google Drive, inlined into the ~19 MB built page). Any
+`ship.testship.glb` (13 MB, from the owner's Google Drive, inlined into the ~19 MB built page). The Test Ship uses `SHIPS.testship.modelYaw` (+π/2) and `modelLength` (14.8925 m, 115% of Wasp length)
+to correct its import orientation, uniformly size it and centre its bounds; this does not change flight scale. Any
 further large models should be a deliberate decision with the owner, made before the file lands.
 
 ## The keys

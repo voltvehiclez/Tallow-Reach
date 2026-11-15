@@ -33,3 +33,5 @@ Rules:
 - Adding a ship, item or contract type: see `docs/HOW_TO_ADD.md` recipes 1 to 3.
 - A module needs an entry in `items.js` as well as `modules.js` (recipe 16 step 1), and a row in
   `shops.js` if the player should be able to buy one (recipe 4).
+
+Imported ship visuals may set `modelYaw` (radians) and `modelLength` (metres along −Z); the renderer centres and uniformly fits them without changing gameplay `sc`.
