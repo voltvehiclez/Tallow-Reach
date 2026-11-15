@@ -3,8 +3,13 @@
 
 import * as THREE from "three";
 import { DEFAULT_PLACE, placeDef, placeAt } from "../data/places.js";
-import { mm, rockShapeAt } from "./models.js";
+import { mm, rockShapeAt, stationModel, planetModel } from "./models.js";
+import { colliderFromObject } from "./collideModel.js";
+import { registerPlaceCollider, clearPlaceColliders } from "../sim/colliders.js";
 import { cosmeticRandom } from "../util/rng.js";
+
+// The title screen and hangar draw the same models; re-exported so they keep importing from here.
+export { stationModel, planetModel };
 // The skies of somewhere else (slice 14): the owner's panoramas (2026-11-14), inlined as data
 // URLs by the build, so the game stays one self-contained file.
 import shroudSkyUrl from "../assets/sky-shroud.webp";
@@ -59,9 +64,19 @@ export function updateScenery(dt) {
 function buildScenery(id, group) {
   const def = placeDef(id);
   const spins = [];
-  for (const f of def.features) {
-    if (f.kind === "planet") spins.push(...addModel(planetModel(f), group));
-    else if (f.kind === "station") spins.push(...addModel(stationModel(f), group));
+  for (const [index, f] of def.features.entries()) {
+    let built = null;
+    if (f.kind === "planet") built = planetModel(f);
+    else if (f.kind === "station") built = stationModel(f);
+    if (!built) continue;
+    spins.push(...addModel(built, group));
+    // Collision mirrors what is drawn (see docs/GLB_MODELS.md): the baked triangles are the
+    // collider. `collide: false` in a feature opts a glow or decoration out. The feature
+    // index keeps two same-kind features without ids from overwriting each other's collider.
+    if (f.collide !== false) {
+      const col = colliderFromObject(built.object, { id: f.id || `${f.kind}#${index}`, damage: f.collideDmg ?? 0 });
+      if (col) registerPlaceCollider(id, col);
+    }
   }
   // Step 14: an instance declares its own sky on its place record, so it never looks like the space
   // outside it. `placeDef` is about features; the sky belongs to the place itself.
@@ -91,6 +106,7 @@ export function forgetPlace(id) {
   scenerySkies.delete(id);
   const dispose = skyDisposers.get(id);
   skyDisposers.delete(id);
+  clearPlaceColliders(id);
   if (dispose) dispose();
   return !!group;
 }
@@ -210,64 +226,6 @@ export const SKIES = {
 function addModel(model, group) {
   group.add(model.object);
   return model.spins;
-}
-
-/** A planet and its atmosphere shell, with the spin rate its feature asks for. */
-export function planetModel(f) {
-  const planet = new THREE.Mesh(
-    new THREE.SphereGeometry(f.radius, 48, 32),
-    new THREE.MeshStandardMaterial({ color: f.col, roughness: 1 })
-  );
-  planet.position.set(...f.pos);
-  const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(f.atmosphere, 48, 32),
-    new THREE.MeshBasicMaterial({
-      color: f.atmoCol, transparent: true, opacity: 0.18,
-      side: THREE.BackSide, blending: THREE.AdditiveBlending,
-    })
-  );
-  atmosphere.position.copy(planet.position);
-  const object = new THREE.Group();
-  object.add(planet, atmosphere);
-  return { object, spins: [{ object: planet, rate: f.spin }] };
-}
-
-/**
- * The station itself: a spun ring, spokes, a hub and its lights. Exported so the
- * title screen can show the same station without a second copy of the geometry.
- */
-export function stationModel(f) {
-  const stn = new THREE.Group();
-  const spin = new THREE.Group();
-  stn.add(spin);
-  stn.position.set(...f.pos);
-  const m = mm(0x4a545c);
-  const add = (geo, x, y, z, parent) => {
-    const o = new THREE.Mesh(geo, m);
-    o.position.set(x, y, z);
-    (parent || spin).add(o);
-    return o;
-  };
-  const ring = add(new THREE.TorusGeometry(90, 7, 8, 48), 0, 0, 0);
-  ring.rotation.x = Math.PI / 2;
-  for (let i = 0; i < 4; i++) {
-    const spoke = add(new THREE.BoxGeometry(180, 2.5, 2.5), 0, 0, 0);
-    spoke.rotation.y = (i * Math.PI) / 4;
-  }
-  add(new THREE.CylinderGeometry(14, 14, 150, 12), 0, 0, 0, stn);
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * 6.283;
-    const light = new THREE.Mesh(
-      new THREE.BoxGeometry(6, 3, 2),
-      new THREE.MeshBasicMaterial({ color: 0xd9a45a })
-    );
-    light.position.set(Math.cos(a) * 90, 8, Math.sin(a) * 90);
-    light.rotation.y = -a;
-    spin.add(light);
-  }
-  add(new THREE.BoxGeometry(60, 2, 30), 0, -60, 0, stn);
-  add(new THREE.BoxGeometry(8, 8, 40), 0, 0, 26, stn);
-  return { object: stn, spins: [{ object: spin, rate: 0.1 }] };
 }
 
 scene.add(new THREE.HemisphereLight(0x5a6e80, 0x120e0c, 0.45));

@@ -7,7 +7,7 @@ import { CONTRACT_MISSION_TEMPLATES, missionFromContract, describeMission } from
 import { storyMission } from "../data/missions/index.js";
 import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
-import { placeAt, isPocket, DEFAULT_PLACE } from "../data/places.js";
+import { placeAt, placeDef, isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { state, profileOf } from "../state/state.js";
 import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stockOf, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos, stationAt } from "./places.js";
@@ -366,12 +366,40 @@ function cloneData(value) {
 }
 
 /** Make an active mission from a compact board offer. */
+/**
+ * Name the area a hunt contract is fighting over: the asteroid field in the
+ * accepting pocket, pulled from the same feature data the spawner sees, so the
+ * objective sentence can say exactly where the raiders are (never "somewhere
+ * out there"). Returns null when the pocket has no named field.
+ */
+function huntAreaHint(at) {
+  const features = placeDef(at)?.features;
+  const field = Array.isArray(features) ? features.find(feature => feature.kind === "asteroidField" && feature.n) : null;
+  return field?.n || null;
+}
+
 export function instantiateMission(offer, at = state.place) {
   const mission = missionFromContract(offer, freshId(offer?.type));
   // Remember the station the contract was taken from, so the hand-in guidance
   // can name it while the pilot is out in the field. `origin` is already part of
   // the saved mission shape, so no save migration is needed.
   if (mission && !mission.origin) mission.origin = at;
+  // A hunt is about the neighbourhood it was taken in: raiders elsewhere in the
+  // universe must not pay for it, so the kill step carries its pocket
+  // (`objectiveMatches` refuses any other place) and says which belt to clear.
+  if (mission?.type === "hunt") {
+    const placeName = placeAt(at)?.n || "the area";
+    const field = huntAreaHint(at);
+    for (const step of mission.steps || []) {
+      if (step.kind !== "kill") continue;
+      step.place = at;
+      if (step.objective === "Destroy {remaining} {enemy}.") {
+        step.objective = field
+          ? `Destroy {remaining} {enemy} near the ${field} (${placeName}).`
+          : `Destroy {remaining} {enemy} in ${placeName}.`;
+      }
+    }
+  }
   return stampHandInStation(mission, at);
 }
 
@@ -806,7 +834,7 @@ function advanceDialogue(mission, step, event, payload, profile) {
   return true;
 }
 
-function advanceParallel(mission, step, event, payload) {
+function advanceParallel(mission, step, event, payload, profile = profileFor(payload)) {
   let changed = false;
   for (const child of step.steps || []) {
     const id = parallelKey(step, child), total = stepCount(child), before = counterValue(mission, id);
@@ -820,7 +848,6 @@ function advanceParallel(mission, step, event, payload) {
     mission.p = (step.steps || []).filter(child => counterValue(mission, parallelKey(step, child)) >= stepCount(child)).length;
     if ((step.steps || []).every(child => counterValue(mission, parallelKey(step, child)) >= stepCount(child))) {
       moveToStep(mission, nextStepIndex(mission, step), payload);
-      const profile = profileFor(payload);
       activateAutomatic(mission, profile, payload);
     }
   }
@@ -828,14 +855,13 @@ function advanceParallel(mission, step, event, payload) {
 }
 
 /** Advance one current objective. Returns true when the mission changed. */
-export function advanceMission(mission, event, payload = {}) {
+export function advanceMission(mission, event, payload = {}, profile = profileFor(payload)) {
   if (!mission || isMissionFailed(mission) || !missionStep(mission)) return false;
   const rememberedPickup = rememberMissionPickup(mission, event, payload);
   if (missionObjectivesDone(mission)) return rememberedPickup;
   // Mission-spawned trigger events are scoped to the mission that emitted them;
   // otherwise a wave-clear from one story could wake every waiting story.
   if (event === "mission-trigger" && payload.mission && payload.mission !== mission.id) return false;
-  const profile = profileFor(payload);
   ensureCounters(mission);
   const prepared = activateAutomatic(mission, profile, payload);
   if (prepared || missionObjectivesDone(mission) || isMissionFailed(mission)) {
@@ -849,7 +875,7 @@ export function advanceMission(mission, event, payload = {}) {
     return changed;
   }
   if (step.kind === "parallel") {
-    const changed = advanceParallel(mission, step, event, payload);
+    const changed = advanceParallel(mission, step, event, payload, profile);
     if (changed) emitProgress(mission, event, payload);
     return changed;
   }
@@ -875,17 +901,34 @@ const LOST_HAND_IN_EVENTS = new Set(["mission-tick", "docked", "place-changed", 
 
 /** Advance all missions owned by the event's player. */
 export function advanceMissions(event, payload = {}) {
-  const profile = profileFor(payload);
-  let changed = LOST_HAND_IN_EVENTS.has(event) ? failLostHandIns(payload, profile) : false;
-  for (const mission of [...missionsOf(profile)]) {
-    if (event === "mission-tick") {
-      mission.elapsed = Math.max(0, Number(mission.elapsed) || 0) + Math.max(0, Number(payload.dt) || 0);
-      if (mission.timeout > 0 && mission.elapsed >= mission.timeout) {
-        changed = failMission(mission, "timeout", profile, payload) || changed;
-        continue;
+  // Kill steps are cause-agnostic (owner, 2026-11-14): a hostile destroyed by a
+  // rock, by another ship or by the pilot all read the same `enemy-killed` event —
+  // "destroyed is destroyed". An ownerless kill (a rock, no pilot to blame)
+  // advances kill objectives wherever they live: the local pilot's and any guest
+  // pilots' on this build, the same way. The kill step's `place` scope, not the
+  // killer, is what keeps a belt honest. Attributed kills go to their owner as
+  // before; `state.players` is deduped against `state.profile`. An ownerless
+  // `mission-trigger` that names its mission fans out the same way — only the
+  // profile holding that mission id can match it, so an unscoped trigger stays
+  // with the local profile.
+  const ownerlessKill = !payload.player && !payload.profile &&
+    (event === "enemy-killed" || (event === "mission-trigger" && !!payload.mission));
+  const profiles = ownerlessKill
+    ? [...new Set([state.profile, ...state.players.map(p => p?.profile)].filter(Boolean))]
+    : [profileFor(payload)];
+  let changed = false;
+  for (const profile of profiles) {
+    changed = (LOST_HAND_IN_EVENTS.has(event) ? failLostHandIns(payload, profile) : false) || changed;
+    for (const mission of [...missionsOf(profile)]) {
+      if (event === "mission-tick") {
+        mission.elapsed = Math.max(0, Number(mission.elapsed) || 0) + Math.max(0, Number(payload.dt) || 0);
+        if (mission.timeout > 0 && mission.elapsed >= mission.timeout) {
+          changed = failMission(mission, "timeout", profile, payload) || changed;
+          continue;
+        }
       }
+      changed = advanceMission(mission, event, payload, profile) || changed;
     }
-    changed = advanceMission(mission, event, payload) || changed;
   }
   return changed;
 }

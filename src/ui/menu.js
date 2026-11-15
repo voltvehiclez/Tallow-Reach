@@ -395,6 +395,32 @@ function afterSaveChange() {
   resumeFromSave();
 }
 
+/** The popover's anchor: the horizontal spot the user right-clicked, vertically
+ * derived from the menu entry that was clicked — but with a fixed offset, not
+ * "centred on the click line" (owner, 2026-11-14: the Discard popover's old
+ * placement, opening at the right-click line so its buttons sat ~23px above
+ * the mouse, was perfect; the Sell button sat slightly below it). The Discard
+ * entry centres 43.75px below the menu's right-click line (menu pad 4 + entry
+ * height ~26.5 + half entry); popover top = clicked-entry centre minus the
+ * head-row half-height (~21px) minus those 43.75px would restore Discard
+ * exactly, so both flows now share one rule: popover top = entry centre − 44.
+ * For Discard that equals the old right-click line (discard entry centre − 44
+ * ≈ menu top); for Sell, whose entry sits one row higher, the whole popover
+ * rides up by one row, so its buttons land ~23px above the mouse — the same
+ * relation Discard had, for both. The head row is ~22px tall and the popover
+ * pads 10px on top, hence the -21 half-height folded into the constant. */
+function popoverAnchorFor(panel, button, fallbackContext) {
+  const rect = panel.getBoundingClientRect();
+  const entry = button.getBoundingClientRect();
+  const entryCenter = entry.top - rect.top + panel.scrollTop + entry.height / 2;
+  const context = fallbackContext || button.closest(".inv-context");
+  return {
+    left: Number(context?.dataset.anchorLeft || 0),
+    top: Math.max(panel.scrollTop, entryCenter - 44),
+    width: Number(context?.dataset.anchorWidth || 0),
+  };
+}
+
 function openInventorySell(button) {
   const [kind, id, dir, stack] = String(button.dataset.b || "").split(":");
   if (!canSell(id)) return;
@@ -402,12 +428,7 @@ function openInventorySell(button) {
   const available = inv.countOf(source, id);
   if (!(available > 0)) return;
 
-  const context = button.closest(".inv-context");
-  const anchor = {
-    left: Number(context?.dataset.anchorLeft || 0),
-    top: Number(context?.dataset.anchorTop || 0),
-    width: Number(context?.dataset.anchorWidth || 0),
-  };
+  const anchor = popoverAnchorFor(panel, button);
   panel.querySelector(".inv-context")?.remove();
   panel.querySelector(".inv-sell-popover")?.remove();
   panel.querySelector(".inv-discard-popover")?.remove();
@@ -418,10 +439,10 @@ function openInventorySell(button) {
   popover.setAttribute("aria-label", "Sell item");
   popover.dataset.source = `${kind}:${id}:${dir}`;
   popover.innerHTML =
-    `<strong>Sell ${itemName(id)}</strong>` +
+    `<div class="inv-sell-head"><strong>Sell ${itemName(id)}</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="invSellConfirm">Sell</button><button type="button" data-a="invSellCancel">Cancel</button></div></div>` +
     `<label>Amount <span>(1–${available})</span><input class="inv-sell-amount" type="number" min="1" max="${available}" step="1" value="${stack || available}"></label>` +
-    `<div class="inv-sell-error" aria-live="polite"></div>` +
-    `<div class="inv-sell-actions"><button type="button" data-a="invSellConfirm">Sell</button><button type="button" data-a="invSellCancel">Cancel</button></div>`;
+    `<div class="inv-sell-error" aria-live="polite"></div>`;
 
   const scrollLeft = panel.scrollLeft, scrollTop = panel.scrollTop;
   const preferredLeft = anchor.left + anchor.width + 8;
@@ -470,12 +491,7 @@ function openInventoryDiscard(button) {
   const count = inv.countOf(where, id);
   if (!(count > 0)) return;
 
-  const context = button.closest(".inv-context");
-  const anchor = {
-    left: Number(context?.dataset.anchorLeft || 0),
-    top: Number(context?.dataset.anchorTop || 0),
-    width: Number(context?.dataset.anchorWidth || 0),
-  };
+  const anchor = popoverAnchorFor(panel, button);
   panel.querySelector(".inv-context")?.remove();
   panel.querySelector(".inv-sell-popover")?.remove();
 
@@ -537,13 +553,16 @@ function onInventoryContextMenu(e) {
   menu.append(discard);
 
   const rect = panel.getBoundingClientRect();
-  const tileRect = tile.getBoundingClientRect();
-  menu.dataset.anchorLeft = String(tileRect.left - rect.left + panel.scrollLeft);
-  menu.dataset.anchorTop = String(tileRect.top - rect.top + panel.scrollTop);
-  menu.dataset.anchorWidth = String(tileRect.width);
-  const x = Math.min(panel.scrollLeft + panel.clientWidth - 132, Math.max(panel.scrollLeft, e.clientX - rect.left + panel.scrollLeft));
+  // Anchor the sell/discard popovers where the mouse is, not beside the tile —
+  // the tile can sit a full tile-width to the left of the cursor, and hunting the
+  // popover across the panel was the whole complaint (owner, 2026-11-14). The
+  // flight card and the canister already anchor their popovers to the click point.
   // Room for both entries (Sell, Discard) before the menu would leave the panel.
+  const x = Math.min(panel.scrollLeft + panel.clientWidth - 132, Math.max(panel.scrollLeft, e.clientX - rect.left + panel.scrollLeft));
   const y = Math.min(panel.scrollTop + panel.clientHeight - 76, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
+  menu.dataset.anchorLeft = String(x);
+  menu.dataset.anchorTop = String(y);
+  menu.dataset.anchorWidth = "0";
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   panel.append(menu);

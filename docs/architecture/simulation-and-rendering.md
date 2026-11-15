@@ -12,6 +12,16 @@
   last frame. Build world points from a record's `pos` and `quat` by hand when the result matters
   (`playerLocal` in `sim/pilot.js`, `chaseView` in `render/camera.js`). **No code outside
   `render/` may read `matrixWorld` at all** — `tests/layers.test.mjs` enforces it for `sim/`.
+- **Models and collision are one system.** Every solid thing collides against the triangles that are
+  actually drawn: rocks against a soup built from the same positions their meshes use (`sim/colliders.js`
+  `builtInRockPositions`, or an `asteroid.glb`'s triangles), scenery against a world-space bake of the
+  built model at build time (`render/collideModel.js`, registered per place, cleared on teardown).
+  A `.glb` dropped in `src/assets/models/` replaces a built-in mesh wholesale; `noclip`-named nodes and
+  `collide: false` features are the only opt-outs. See [GLB_MODELS.md](../GLB_MODELS.md). The sim still
+  imports no renderer: collision math lives in `sim/colliders.js` and is plain data. Enemies are
+  solid too: hull-vs-hull hits ricochet both ships and damage them by relative speed; rocks damage
+  them like the pilot (kills credit nobody); scenery only bounces them; enemy-vs-enemy contact is
+  damage-free and acts as an AI nudge.
 - **The sim runs at 60 ticks a second** (`sim/step.js`, `data/simulation.js`); the frame loop
   accumulates time and keeps the old 0.05-second stall cap. Pause does not advance it. Screen and
   sound randomness use a separate cosmetic stream. Between 60 Hz ticks, `render/views.js`,

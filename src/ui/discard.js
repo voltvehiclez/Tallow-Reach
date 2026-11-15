@@ -13,10 +13,10 @@ import { itemName } from "../data/items.js";
 /** Step one: pick a count. Defaults to the whole stack. */
 export function discardAskHtml(id, available, amount = available) {
   return (
-    `<strong>Discard ${itemName(id)}</strong>` +
+    `<div class="inv-sell-head"><strong>Discard ${itemName(id)}</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="discardAsk">Discard</button><button type="button" data-a="discardCancel">Cancel</button></div></div>` +
     `<label>Amount <span>(1–${available})</span><input class="inv-sell-amount" type="number" min="1" max="${available}" step="1" value="${amount}"></label>` +
-    `<div class="inv-sell-error" aria-live="polite"></div>` +
-    `<div class="inv-sell-actions"><button type="button" data-a="discardAsk">Discard</button><button type="button" data-a="discardCancel">Cancel</button></div>`
+    `<div class="inv-sell-error" aria-live="polite"></div>`
   );
 }
 
@@ -26,9 +26,9 @@ export const discardQuestion = (id, amount) => `Are you sure you want to discard
 /** Step two: the confirmation. */
 export function discardConfirmHtml(id, amount) {
   return (
-    `<strong>${discardQuestion(id, amount)}</strong>` +
-    `<p class="inv-discard-warn">It cannot be recovered.</p>` +
-    `<div class="inv-sell-actions"><button type="button" data-a="discardConfirm">Discard</button><button type="button" data-a="discardCancel">Cancel</button></div>`
+    `<div class="inv-sell-head"><strong>${discardQuestion(id, amount)}</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="discardConfirm">Discard</button><button type="button" data-a="discardCancel">Cancel</button></div></div>` +
+    `<p class="inv-discard-warn">It cannot be recovered.</p>`
   );
 }
 

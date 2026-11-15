@@ -10,7 +10,7 @@ import { spawnEnemy, nearestPlayer } from "../src/sim/ai.js";
 import { enemyFwd } from "../src/sim/enemy.js";
 import { fire, updateBullets } from "../src/sim/combat.js";
 import { launchMissile } from "../src/sim/missile.js";
-import { V } from "../src/util/math.js";
+import { V, Q } from "../src/util/math.js";
 import { setSeed } from "../src/util/rng.js";
 
 const dt = 1 / 60;
@@ -102,7 +102,7 @@ test("a rock collision damages the colliding non-local pilot, not the local prof
   const { local, other } = fresh();
   const beforeLocal = { hull: local.hull, sh: local.sh, hp: state.profile.hp[state.profile.ship] };
   other.v.set(100, 0, 0);
-  const rock = { pos: other.pos.clone(), r: 10, scale: V(1, 1, 1), s0: V(1, 1, 1) };
+  const rock = { pos: other.pos.clone(), shape: 0, quat: Q(0, 0, 0, 1), scale: V(1, 1, 1), s0: V(1, 1, 1) };
   state.world.asteroids.push(rock);
   const before = other.sh;
   stepSim(dt);

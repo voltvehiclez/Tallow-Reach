@@ -16,7 +16,8 @@ import { missionForObjective, remainingObjective } from "./missions.js";
 import { state, placeWorld, instanceAt } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
 import { clearMissionDrops, fire, removeMissionDrop } from "./combat.js";
-import { enemyFwd, turnEnemy, enemyPos, dropEnemy } from "./enemy.js";
+import { enemyFwd, turnEnemy, enemyPos, dropEnemy, enemyHullRadius } from "./enemy.js";
+import { collideRockAt, collideSphereAt, placeCollidersOf, reflectVelocity } from "./colliders.js";
 import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
 
@@ -129,6 +130,65 @@ export function updateEnemies(dt, placeId = state.place) {
       shot.place = placeId;
       shot.missionId = missionId;
       if (dist < def.hearRange) emit("sfx", { name: "enemy-fire" });
+    }
+  }
+
+  // Collision: enemies are solid. Two hulls that drifted into each other separate and
+  // ricochet — just enough kick for the AI to re-plan its approach next tick; no damage
+  // (ramming a rival is not a contract). Rocks and scenery act like they do for the pilot:
+  // rocks damage like flying into one (credited to no one — a rock is not a pilot),
+  // scenery only bounces.
+  const ships = [...E];   // (a copy: a rock can kill one mid-pass, which splices E)
+  for (let i = 0; i < ships.length; i++) {
+    const a = ships[i];
+    if (!a) continue;
+    const ra = enemyHullRadius(a);
+    for (let j = i + 1; j < ships.length; j++) {
+      const b = ships[j];
+      if (!b) continue;
+      const rb = enemyHullRadius(b),
+        rr = ra + rb;
+      let dx = b.pos.x - a.pos.x, dy = b.pos.y - a.pos.y, dz = b.pos.z - a.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= rr * rr) continue;
+      let d = Math.sqrt(d2), nx, ny, nz;
+      if (d > 1e-6) { nx = dx / d; ny = dy / d; nz = dz / d; } else { nx = 1; ny = 0; nz = 0; d = 0; }
+      const overlap = rr - d, half = overlap * 0.5;
+      a.pos.x -= nx * half; a.pos.y -= ny * half; a.pos.z -= nz * half;
+      b.pos.x += nx * half; b.pos.y += ny * half; b.pos.z += nz * half;
+      // n points a -> b; approaching means a's normal speed beats b's.
+      const vnA = a.v.x * nx + a.v.y * ny + a.v.z * nz,
+        vnB = b.v.x * nx + b.v.y * ny + b.v.z * nz;
+      if (vnA > vnB) {   // equal hull masses swap normal velocity parts, restitution 0.4
+        const REST = 0.4,
+          newA = (vnA * (1 - REST) + vnB * (1 + REST)) / 2,
+          newB = (vnB * (1 - REST) + vnA * (1 + REST)) / 2;
+        a.v.x += (newA - vnA) * nx; a.v.y += (newA - vnA) * ny; a.v.z += (newA - vnA) * nz;
+        b.v.x += (newB - vnB) * nx; b.v.y += (newB - vnB) * ny; b.v.z += (newB - vnB) * nz;
+      }
+    }
+  }
+  for (const a of ships) {
+    // A rock may have killed this one already this pass (hp <= 0, off the list): skip it,
+    // or the kill would resolve twice — double boom, double loot, double event.
+    if (!a || a.hp <= 0) continue;
+    const ra = enemyHullRadius(a);
+    // Same world, same rocks as the pilot — a rock that hurts a ship hurts an enemy.
+    const W = placeWorld(placeId);
+    for (const rock of W.asteroids) {
+      if (a.hp <= 0) break;   // killed by an earlier rock this pass — stop hitting the corpse
+      const hit = collideRockAt(rock.shape || 0, rock.pos, rock.quat, rock.scale, a.pos.x, a.pos.y, a.pos.z, ra);
+      if (!hit) continue;
+      const speed = a.v.length();   // impact speed, before the bounce changes it
+      a.pos.x += hit.x * hit.depth; a.pos.y += hit.y * hit.depth; a.pos.z += hit.z * hit.depth;
+      reflectVelocity(a.v, hit.x, hit.y, hit.z, 0.4);
+      if (speed > 25) emit("enemy-rammed", { e: a, dmg: speed * 0.015 * (hit.damage || 1), at: a.pos, byPlayer: null, placeId });
+    }
+    for (const collider of placeCollidersOf(placeId)) {
+      const hit = collideSphereAt([collider], a.pos.x, a.pos.y, a.pos.z, ra);
+      if (!hit) continue;
+      a.pos.x += hit.x * hit.depth; a.pos.y += hit.y * hit.depth; a.pos.z += hit.z * hit.depth;
+      reflectVelocity(a.v, hit.x, hit.y, hit.z, 0.4);
     }
   }
 

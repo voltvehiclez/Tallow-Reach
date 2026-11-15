@@ -1033,7 +1033,7 @@ button.mod-bay.on {
 .inv-discard-popover {
   position: absolute;
   z-index: 25;
-  width: min(220px, calc(100% - 16px));
+  width: min(248px, calc(100% - 16px));
   padding: 10px 12px;
   border: 1px solid var(--amber);
   background: rgba(7, 9, 11, .98);
@@ -1048,6 +1048,31 @@ button.mod-bay.on {
   font-size: 13px;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+/* Title row: the confirm buttons live directly under the title, always on their
+   own line. The wrap decided differently per panel width/zoom — the owner wants
+   this exact stack on every resolution, so it is a column, not a wrap (2026-11-14). */
+.inv-sell-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.inv-sell-head > strong {
+  width: 100%;
+  margin-bottom: 0;
+  color: var(--ice);
+  font-size: 12px;
+  line-height: 1.25;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.inv-sell-head .inv-sell-actions {
+  flex: 0 0 auto;
+  margin-top: 0;
+  justify-content: flex-start;
 }
 .inv-sell-popover label,
 .inv-discard-popover label {

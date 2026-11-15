@@ -11,7 +11,7 @@
 
 import { V, Q, R, faceQ, UP } from "../util/math.js";
 import { rollLoot } from "./loot.js";
-import { emit } from "../util/events.js";
+import { emit, on } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { placeAt } from "../data/places.js";
 import { SHIPS } from "../data/ships.js";
@@ -194,16 +194,25 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = 
 }
 
 /** Apply damage to a hostile and handle its death. */
-export function hitHostile(e, dmg, at, byPlayer = localPlayer(), placeId = e.place || state.place) {
+export function hitHostile(e, dmg, at, byPlayer = undefined, placeId = e.place || state.place) {
   e.hp -= dmg;
   boom(at, 2, 0xffd080, placeId);
   if (e.hp <= 0) killHostile(e, byPlayer, placeId);
 }
 
-function killHostile(e, byPlayer = localPlayer(), placeId = e.place || state.place) {
+function killHostile(e, byPlayer = undefined, placeId = e.place || state.place) {
   boom(enemyPos(e), 22, 0xff8a40, placeId);
   dropEnemy(e);          // out of the world, and render/views.js removes its mesh
-  const prof = byPlayer ? profileOf(byPlayer) : state.profile;
+  // Three distinct cases: `undefined` (the default) — the local pilot gets the credit;
+  // `null` — the environment did it (a rock): no kill credit for the stat, though
+  // the `enemy-killed` event still carries the kill everywhere else; a record — that
+  // pilot. Contracts do not care who pulled the trigger: kill steps settle on the
+  // event alone (owner, 2026-11-14).
+  const prof = byPlayer === undefined
+    ? (localPlayer() ? profileOf(localPlayer()) : state.profile)
+    : byPlayer === null
+      ? null
+      : profileOf(byPlayer);
   if (prof) prof.kills++;
   emit("enemy-killed", {
     def: e.def,
@@ -399,3 +408,10 @@ export function updateCrates(dt, placeId = state.place) {
     }
   }
 }
+// A ship physically ramming a hostile hurts both; the sim emits this from the
+// collision paths (sim/player.js, sim/ai.js) so nobody imports combat to say so.
+// byPlayer === null (a rock did it) kills without crediting anyone.
+on("enemy-rammed", ({ e, dmg, at, byPlayer = null, placeId = e?.place || state.place } = {}) => {
+  if (!e) return;
+  hitHostile(e, dmg, at || enemyPos(e), byPlayer, placeId);
+});

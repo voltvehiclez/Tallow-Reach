@@ -34,6 +34,7 @@
 //                                    itself). Extra fields are that sound's arguments, e.g.
 //                                    { name: "explosion", count } or { name: "warp-charge", dur }
 //   enemy-killed  { def, faction, id, player, place, encounter }
+//   enemy-rammed  { e, dmg, at, byPlayer, placeId }   (collision damage; byPlayer null = the environment did it)
 //                                    a hostile was destroyed; encounter is null for ordinary enemies
 //   entity-spawned { id, kind }     any other entity entered the world: a bullet, missile,
 //                                    crate, particle or rock (render/views.js builds its mesh).

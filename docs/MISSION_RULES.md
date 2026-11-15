@@ -41,6 +41,7 @@ invariant tests below — enforce these rules, so a new mission is checked the m
 | 9 | **Objectives done is not mission accomplished.** A mission that collects or mines an item is accomplished only when the station hand-in consumes it and pays; until then the guidance names what is still owed and never says complete, accomplished or finished. | Runner (`missionObjectivesDone` vs `completeMission`); linter rejects completion words in `objective`/`handIn.objective`; invariant test |
 | 10 | A mission says what it is: a **contract** says "Contract complete" / "Contract failed", a story mission says "Mission ...". | Runner (`missionKindWord`); linter rejects "mission" in contract guidance |
 | 11 | **One hand-in station.** Every mission is handed in at exactly one named station: the one that gave it out, unless its data sends the pilot somewhere specific (`handIn.station`). The reward is paid nowhere else, and the guidance always names that station — never "a station", never the one the pilot happens to be docked at. | Runner (`missionHandInStation`, `completeMission`, `handInNextText`); the docked screens disable the hand-in away from the station; linter checks `handIn.station` is a pocket with a station |
+| 12 | **A job about an area is about that area.** A locational objective carries `step.place`; the runner refuses events elsewhere, and the sentence names the spot from the same data the spawner uses. | Runner (`objectiveMatches` place check; `instantiateMission` stamps it at acceptance); `tests/hunt-place.test.mjs` |
 
 **Hand-in (`handIn.objective`).** An item-bearing mission must say what the pilot still owes after the last step:
 `handIn: { objective: "Deliver {count} {item} to {station}." }`. The runner shows it — never "complete" — while the goods
@@ -63,24 +64,22 @@ crates from space and deletes their saved records.
 Never hand those same goods over with a `take-item` script as well: the station hand-in is already that transfer, and
 `loadCargo`/`handOver` are for cargo that is not an objective item (as in the Parcel run).
 
-**Where the hand-in happens.** Every mission and contract is handed in at **one station**. The default is the station
-that gave the mission out: `acceptMission` records it on the mission (`handIn.station`) the moment it is taken, so it
-survives a save and cannot drift as the pilot travels. A mission handed in elsewhere names the pocket in its data
-(`handIn: { station: "reach", objective: "Return to {station} with the beacon." }`), and that station wins. `completeMission` refuses anywhere else ("Hand this in at Meridian Station."), takes nothing and pays
-nothing. The mission itself stays with the pilot: an accepted mission is listed in the Mission log and the Contracts tab
-at **every** station, with its progress and next objective.
+**Where the hand-in happens.** Every mission is handed in at **one station**: the default is the station that gave it
+out (`acceptMission` records `handIn.station` on take, so it survives a save). A mission handed in elsewhere names the
+pocket in its data and that station wins; `completeMission` refuses anywhere else ("Hand this in at Meridian Station."),
+taking nothing and paying nothing. The mission itself stays with the pilot: listed in the Mission log and the Contracts
+tab at **every** station, with progress and next objective.
 Only the hand-in is station-bound — elsewhere the card names the station and disables the button, and at the station that
 takes it the card reads **Hand in cargo** — and Abandon works wherever the pilot is, so a mission is never stuck behind a
-counter. **Offers** are station-specific: a story mission is offered only at the station that gives it out (`offeredAt`,
-checked by the linter), and contract offers are per station (`boardAt`), so one counter's board is never read or accepted
-at another. Use `{station}` in `handIn.objective` and in any objective that mentions delivery, so the sentence follows
+counter. **Offers** are station-specific: a story mission is offered only where it is given out (`offeredAt`, linted), and
+contract offers are per station (`boardAt`); no counter's board is read at another. Use `{station}` in `handIn.objective`
+and in any objective that mentions delivery, so the sentence follows
 the data instead of a hard-coded name (the linter warns when a hand-in sentence cannot name its station). Fallbacks: a
 mission saved before the field existed uses its `origin`; one whose station no longer exists uses the home station.
 
-**Where the mission is offered.** Missions are specific to one station by default: `missionOfferStation()` resolves
-`offeredAt` from the mission's data, else the station it is handed in at, else the home station, and the Mission log
-offers it only at that station. A story mission that should be given out elsewhere names the pocket
-(`offeredAt: "some-station-pocket"`, linted like `handIn.station`); contract offers are per station anyway (`boardAt`).
+**Where the mission is offered.** By default `missionOfferStation()` resolves `offeredAt` from the mission's data, else its
+hand-in station, else the home station; the Mission log offers it only at that station. A story mission that should be given
+out elsewhere names the pocket (`offeredAt: "some-station-pocket"`, linted like `handIn.station`).
 There is no "offered at every station" form, and a name that does not resolve offers the mission **nowhere** rather than
 silently moving it to Meridian — a typo must fail loudly, not turn one station's job into everyone's.
 

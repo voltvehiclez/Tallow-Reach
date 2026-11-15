@@ -122,7 +122,6 @@ export const PLACE_DEFS = {
         id: "meridian",
         n: "Meridian Station",
         pos: [0, 0, 0],
-        keepout: 120,          // ships closer than this are pushed back out
         dockRange: 300,        // G docks inside this range
         dockSpeed: 70,         // ...and below this speed (m/s)
         launch: { pos: [0, 0, 200], face: "field" },

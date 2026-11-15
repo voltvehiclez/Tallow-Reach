@@ -5,7 +5,8 @@ import { emit } from "../util/events.js";
 import { neutralControls } from "../state/controls.js";
 import { FLIGHT } from "../data/ships.js";
 import { warpSteerEase } from "../data/sectors.js";
-import { featureOf } from "../data/places.js";
+import { collideRockAt, collideSphereAt, placeCollidersOf, SHIP_RADIUS, reflectVelocity } from "./colliders.js";
+import { enemyHullRadius } from "./enemy.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 
 import { state, msg, localPlayer, profileOf, createPlayerRuntime } from "../state/state.js";
@@ -231,35 +232,76 @@ export function flight(dt, P = state.player, runtime = null) {
   P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
   P.pos.addScaledVector(P.v, dt);
 
-  // Asteroid collisions: push out of the rock and bounce off it. A rock's drawn
-  // size is its own `scale` (the view copies it), and `s0` the size it was born at.
+  // Collision matches what is drawn (docs/GLB_MODELS.md): every rock is its own
+  // lumpy triangle soup scaled/rotated onto the rock, and every scenery model — the
+  // station's ring and hub, planets, a GLB cave — bakes its triangles into this
+  // place's colliders. `collide: false` on a feature opts it out (glow shells). The
+  // ship itself is a sphere of SHIP_RADIUS. Resolution is the same push-out bounce the
+  // old sphere tests used; only the hull is different.
   for (const a of state.world.asteroids) {
-    const q = P.pos.clone().sub(a.pos);
-    const r = a.r * Math.max(a.scale.x / a.s0.x, 0.4) * 0.9 + 4;
-    const len = q.length();
-    if (len < r) {
-      const normal = q.divideScalar(len || 1);
-      P.pos.addScaledVector(normal, r - len);
-      const speed = P.v.length();
-      P.v.reflect(normal).multiplyScalar(0.4);
-      if (speed > 25) hurt(speed * 0.015, P, r.profile);   // was 0.15 against a 100-point hull; the basic
-                                             // hull has 10, so collision damage is 1/10th
+    const speed = P.v.length();
+    const hit = collideRockAt(a.shape || 0, a.pos, a.quat, a.scale, P.pos.x, P.pos.y, P.pos.z, SHIP_RADIUS);
+    if (!hit) continue;
+    P.pos.x += hit.x * hit.depth;
+    P.pos.y += hit.y * hit.depth;
+    P.pos.z += hit.z * hit.depth;
+    bounceOff(P, hit);
+    if (speed > 25) hurt(speed * 0.015 * (hit.damage || 1), P);   // 1/10th of the old 100-point-hull rule
+  }
+
+  // Enemy hulls are solid, like rocks: the two ships separate and ricochet off each
+  // other, and a hit above 25 m/s costs both sides the same collision damage the pilot
+  // takes from a rock — shields first for them, raw hull for the hostile. A ram-kill
+  // credits the pilot, via the same event the beam and bolts use.
+  for (const e of state.world.enemies) {
+    const rr = SHIP_RADIUS + enemyHullRadius(e);
+    let dx = P.pos.x - e.pos.x, dy = P.pos.y - e.pos.y, dz = P.pos.z - e.pos.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 >= rr * rr) continue;
+    let d = Math.sqrt(d2), nx, ny, nz;
+    if (d > 1e-6) { nx = dx / d; ny = dy / d; nz = dz / d; } else { nx = 0; ny = 0; nz = 1; d = 0; }
+    const overlap = rr - d, half = overlap * 0.5;
+    P.pos.x += nx * half; P.pos.y += ny * half; P.pos.z += nz * half;
+    e.pos.x -= nx * half; e.pos.y -= ny * half; e.pos.z -= nz * half;
+    // Impact energy: the relative speed at the moment of contact — the same 25 m/s /
+    // 0.015 rule the pilot's rock hits use, applied to both ships of a collision.
+    // (Absolute own-speed would let a stationary victim escape, which is not how
+    // being rammed feels.)
+    const impact = Math.hypot(P.v.x - e.v.x, P.v.y - e.v.y, P.v.z - e.v.z);
+    // Measured before the ricochet, exactly like the rock rule measures before its bounce.
+    const vnP = P.v.x * nx + P.v.y * ny + P.v.z * nz,
+      vnE = e.v.x * nx + e.v.y * ny + e.v.z * nz;
+    if (vnP < vnE) {   // approaching — equal hull masses swap normal velocity parts, restitution 0.4
+      const REST = 0.4,
+        newP = (vnP * (1 - REST) + vnE * (1 + REST)) / 2,
+        newE = (vnE * (1 - REST) + vnP * (1 + REST)) / 2;
+      P.v.x += (newP - vnP) * nx; P.v.y += (newP - vnP) * ny; P.v.z += (newP - vnP) * nz;
+      e.v.x += (newE - vnE) * nx; e.v.y += (newE - vnE) * ny; e.v.z += (newE - vnE) * nz;
+    }
+    // n points from the enemy to the pilot; n-velocities behind each other means they are closing.
+    if (impact > 25) {
+      hurt(impact * 0.015, P);
+      emit("enemy-rammed", { e, dmg: impact * 0.015, at: e.pos, byPlayer: P, placeId: P.place || state.place });
     }
   }
 
-  // Keep out of the station (only pockets that have one).
-  const station = featureOf(P.place || state.place, "station");
-  if (station) {
-    const at = V(...station.pos),
-      keepout = station.keepout;
-    if (P.pos.distanceTo(at) < keepout) {
-      const away = P.pos.clone().sub(at);
-      if (away.lengthSq() === 0) away.set(0, 0, 1);
-      P.pos.copy(at).add(away.setLength(keepout));
-      P.v.multiplyScalar(0.5);
-    }
+  const place = P.place || state.place;
+  for (const collider of placeCollidersOf(place)) {
+    const speed = P.v.length();
+    const hit = collideSphereAt([collider], P.pos.x, P.pos.y, P.pos.z, SHIP_RADIUS);
+    if (!hit) continue;
+    P.pos.x += hit.x * hit.depth;
+    P.pos.y += hit.y * hit.depth;
+    P.pos.z += hit.z * hit.depth;
+    bounceOff(P, hit);
+    if (hit.damage > 0 && speed > 25) hurt(speed * 0.015 * hit.damage, P);
   }
 
+}
+
+/** Reflect the ship's velocity off a collision normal, keeping 40% of its energy. */
+function bounceOff(P, hit) {
+  reflectVelocity(P.v, hit.x, hit.y, hit.z, 0.4);
 }
 
 /** Apply `d` damage: shields first, then hull. Emits "player-dead" at zero hull. */
