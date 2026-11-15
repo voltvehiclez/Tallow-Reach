@@ -4,9 +4,9 @@
 // key's built-in model is replaced — no .glb for a key, nothing changes.
 //
 // Runtime contract:
-//   - `preloadModels()` is awaited once at boot, before the first frame, so scene
-//     builders never see a half-loaded template. It never throws; a broken file logs
-//     and that key simply keeps its built-in look.
+//   - The title paints first; `preloadAfterPaint()` then loads models in the
+//     background. Open World waits for readiness before gameplay. A broken file
+//     logs and that key simply keeps its built-in look.
 //   - `instantiateModel(key)` returns a fresh clone (geometry and materials shared)
 //     or null when no .glb is registered for the key — callers fall back to their
 //     built-in model.
@@ -87,3 +87,11 @@ export const engNodes = root => {
 /** Test/diagnostic hooks. */
 export const loadedModelKeys = () => [...templates.keys()];
 export const failedModelKeys = () => [...failures];
+
+/** Give the title a paint opportunity before decoding any embedded models.
+ * Two animation callbacks are intentional: work in the first callback still
+ * runs BEFORE that frame is painted. Injectable dependencies keep this testable.
+ */
+export function preloadAfterPaint(schedule = requestAnimationFrame, load = preloadModels) {
+  return new Promise(resolve => schedule(() => schedule(resolve))).then(() => load());
+}

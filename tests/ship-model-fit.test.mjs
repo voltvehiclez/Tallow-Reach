@@ -50,3 +50,25 @@ test('Test Ship camera has 20% extra breathing room without changing Wasp', () =
   assert.ok(Math.abs(shipCameraScale('testship') / automatic - 1.2) < 1e-6);
   assert.equal(shipCameraScale('wasp'), 1);
 });
+
+
+test('background models start only after the title paint opportunity and are awaited', async () => {
+  const output = await build({ entryPoints: ['src/render/gltf.js'], bundle: true, write: false, format: 'esm', platform: 'node', loader: { '.glb': 'dataurl' } });
+  const { preloadAfterPaint } = await import('data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64'));
+  const frames = [];
+  let started = false, finished = false, finish;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const ready = preloadAfterPaint(fn => frames.push(fn), () => { started = true; return pending; });
+  ready.then(() => { finished = true; });
+  assert.equal(started, false);
+  frames.shift()();
+  await Promise.resolve();
+  assert.equal(started, false, 'first frame must remain available to paint title');
+  frames.shift()();
+  await Promise.resolve();
+  assert.equal(started, true);
+  assert.equal(finished, false, 'entering gameplay must still wait for models');
+  finish();
+  await ready;
+  assert.equal(finished, true);
+});

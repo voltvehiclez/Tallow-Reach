@@ -39,7 +39,7 @@ import { createSimClock, isSimulationPaused } from "./sim/step.js";
 import { SIM_DT, MAX_FRAME_DT, AUTOSAVE_SECONDS } from "./data/simulation.js";
 import { setupWarpFlash, updateWarpFlash } from "./ui/warpflash.js";
 import { installCrashNotice, reportCrash } from "./ui/crash.js";
-import { preloadModels } from "./render/gltf.js";
+import { preloadAfterPaint } from "./render/gltf.js";
 import { setupWarpStreaks, updateWarpStreaks } from "./render/warpfx.js";
 import {
   installEnemyViews,
@@ -79,7 +79,7 @@ addEventListener("pointerdown", () => initAudio(), { passive: true });
 addEventListener("keydown", () => initAudio());
 
 setupHud();
-setupMenu();
+setupMenu({ beforeStart: () => modelLoading });
 resumeFromSave();   // prepares the ship; the start screen still owns the panel
 
 // Save where the pilot is, so quitting mid-flight returns them to that spot.
@@ -300,7 +300,7 @@ function frame(now) {
   }
 }
 
-// Wait for any registered .glb templates (usually none) before the first frame,
-// so a model file never pops in as the built-in geometry and then swaps;
-// a broken file simply falls back to the built-in model.
-preloadModels().finally(() => requestAnimationFrame(frame));
+// Draw the title first. Model decoding starts only after the browser has had
+// a paint opportunity; Open World waits for the same background-load promise.
+requestAnimationFrame(frame);
+const modelLoading = preloadAfterPaint();

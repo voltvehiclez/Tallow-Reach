@@ -18,6 +18,10 @@ solid thing is collided against the triangles that are actually drawn. Both are 
 
 If the file is missing, unreadable or invalid, the game logs `[models] "<key>" failed to load; using the
 built-in model.` once at boot and uses the built-in model — a broken asset never breaks boot.
+The title renders immediately using available/built-in scenery; embedded model decoding starts after
+a paint opportunity. Open World waits for that background load, showing “Loading models…” if needed.
+This avoids a blank title while parsing but does not reduce the embedded page download.
+
 `loadedModelKeys()` / `failedModelKeys()` in `render/gltf.js` say what happened.
 
 ## Notes on the shipped files
