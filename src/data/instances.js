@@ -70,7 +70,9 @@
 //                 around the inside of the sky sphere as equirect images (2026-11-14): `shattered`
 //                 carries `shards` (how many broken rocks drift in front) and `variant` (`rift`,
 //                 the default, or `deep` — the deep rift's near-black sky); `shroud` carries
-//                 nothing at all. An instance has no planet: nothing here is
+//                 nothing at all. `panorama` is a GENERATED 4K skybox: it carries `skybox` (an id in
+//                 `data/skyboxes.js`, made with `tools/skybox/skybox.py`) and `shards`, and is
+//                 otherwise `shattered` wearing that picture. An instance has no planet: nothing here is
 //                 copied from the space outside, and a collapsed pocket has no suns of its own to
 //                 show (owner 2026-11-14).
 //   features      ordinary place features (asteroidField, ...), read by the same generic loader a
@@ -123,12 +125,14 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  *               a near-black sky with one sable cluster for a deep one (`variant: "deep"`), with
  *               shattered rock drifting in front of the whole, plus `shards`. No planet:
  *               somewhere that is not the space outside.
+ *   panorama    a generated 4K skybox (`sky.skybox` = an id in `data/skyboxes.js`, made with
+ *               `tools/skybox/skybox.py`; recipe 24): `shattered`'s treatment with that picture, plus `shards`.
  *   shroud      real space (slice 14c, 2026-11-14): the owner's dark-grey nebula panorama with
  *               few stars — the somewhere inside a simple wormhole. The pocket a wormhole hangs in
  *               declares no sky at all: it is ordinary space in the system it spawned in and shows
  *               the same starfield as every sibling pocket.
  */
-export const SKY_KINDS = ["shattered", "shroud"];
+export const SKY_KINDS = ["shattered", "shroud", "panorama"];
 
 export const INSTANCE_TEMPLATES = {
   // The Basic rift's usual run: four hardened guardians hold a small, rich pocket shut.

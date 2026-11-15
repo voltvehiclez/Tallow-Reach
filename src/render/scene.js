@@ -15,6 +15,9 @@ export { stationModel, planetModel };
 import shroudSkyUrl from "../assets/sky-shroud.webp";
 import riftSkyUrl from "../assets/sky-rift.webp";
 import deepRiftSkyUrl from "../assets/sky-deeprift.webp";
+// Generated skyboxes (`tools/skybox/skybox.py`): their ids and colours are data, their images are imports.
+import { SKYBOXES } from "../data/skyboxes.js";
+import { SKYBOX_URLS } from "./skyboxes.js";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
 
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -128,6 +131,8 @@ const SHATTERED_URLS = { rift: riftSkyUrl, deep: deepRiftSkyUrl };
  *   shroud     real space (slice 14c): the owner's dark-grey nebula panorama with few stars —
  *              the somewhere inside a simple wormhole. No shards — the place's own formations
  *              are the scenery.
+ *   panorama   a generated 4K skybox (`sky.skybox` is its id in `data/skyboxes.js`): `shattered`'s
+ *              treatment with that skybox's image and nebula colour. How to make one: `tools/skybox/README.md`.
  */
 export const SKIES = {
   /**
@@ -138,14 +143,15 @@ export const SKIES = {
    * look, never a rule, so a typo costs a prettier sky and never the place. Debris drifts inside
    * it, turning slowly, in the same rock shapes the place's field uses.
    */
-  shattered(sky) {
+  shattered(sky, override) {
     const shards = Math.max(0, Math.floor(Number(sky.shards) || 0));
     const variant = typeof sky?.variant === "string" && Object.prototype.hasOwnProperty.call(SHATTERED_URLS, sky.variant)
       ? sky.variant
       : "rift";
     const g = new THREE.Group();
 
-    const texture = new THREE.TextureLoader().load(SHATTERED_URLS[variant]);
+    // `override` is how `SKIES.panorama` reuses this builder with a generated skybox's image and tint.
+    const texture = new THREE.TextureLoader().load(override?.url || SHATTERED_URLS[variant]);
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);
@@ -164,7 +170,7 @@ export const SKIES = {
     // (owner 2026-11-14: "shattered asteroids in the background skybox").
     const spins = [{ object: shell, rate: 0.0014 }];
     // Lit cool, with a breath of the nebula's teal caught in the rock: near-black, never bright.
-    const shardMat = mm(0x14161d, 0x2f6f78);
+    const shardMat = mm(0x14161d, override?.tint ?? 0x2f6f78);
     shardMat.emissiveIntensity = 0.12;   // the teal bleeds into the rock, no more than that
     for (let i = 0; i < shards; i++) {
       const shard = new THREE.Mesh(rockShapeAt(i), shardMat);
@@ -187,6 +193,20 @@ export const SKIES = {
     // free.
     const own = [shellGeo, shellMat, texture, shardMat];
     return { object: g, spins, dispose: () => own.forEach(r => r && r.dispose && r.dispose()) };
+  },
+
+  /**
+   * A generated skybox (`tools/skybox/skybox.py`, listed in `data/skyboxes.js`, image in
+   * `render/skyboxes.js`): `sky.skybox` is its id. Everything else is `shattered`'s own treatment —
+   * the same sphere, the same unlit back-face wrap, `shards` of drifting rock — with the rock
+   * catching a breath of the skybox's own nebula colour instead of the rift's teal. An id that is
+   * not installed falls back to the ordinary rift sky: a look, never a rule, so a typo costs a
+   * prettier sky and never the place (and `npm test` fails on the typo).
+   */
+  panorama(sky) {
+    const url = Object.prototype.hasOwnProperty.call(SKYBOX_URLS, sky?.skybox) ? SKYBOX_URLS[sky.skybox] : null;
+    const tint = Object.prototype.hasOwnProperty.call(SKYBOXES, sky?.skybox) ? SKYBOXES[sky.skybox].tint : undefined;
+    return SKIES.shattered(sky, url ? { url, tint } : undefined);
   },
 
   /**

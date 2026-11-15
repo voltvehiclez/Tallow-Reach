@@ -13,6 +13,9 @@ Before you change anything, read:
 4. The matching recipe in `docs/recipes/` (index: `docs/HOW_TO_ADD.md`) and the `README.md` of each `src/`
    folder you will touch. The newest entries of `docs/CHANGELOG.md` show what earlier chats changed.
 
+**Skies:** for a new sky, instance or wormhole background, use the generator: read `tools/skybox/README.md` and
+`docs/recipes/24-a-new-skybox.md`. Never paint or download a sky.
+
 When the owner reports a bug: reproduce it as a failing test, fix the root cause for the whole class, extend the
 test, and add or update an entry in `docs/LESSONS.md`.
 

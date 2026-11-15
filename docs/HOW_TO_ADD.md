@@ -66,3 +66,4 @@ Open only the recipe you need. Each one is a separate file in `docs/recipes/`; t
 | 21 | [Add a place-template encounter](recipes/21-add-a-place-template-encounter.md) | Step 12 |
 | 22 | [A new rift, instance or wormhole run](recipes/22-a-new-rift-or-instance.md) | data only; a new rule or sky kind needs one function |
 | 23 | [A `.glb` model for something that already exists](recipes/23-a-new-glb-model.md) | drop-in asset, no code |
+| 24 | [A new skybox](recipes/24-a-new-skybox.md) | run `tools/skybox/skybox.py`, then one line of data |

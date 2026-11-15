@@ -20,6 +20,30 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-15: A skybox generator, so every new instance can have a dark, realistic 4K sky
+
+**No save change. `npm run build` and `npm test` needed.** No skybox is installed yet, so the game looks exactly as before.
+
+- **`tools/skybox/skybox.py`** (Python, numpy + Pillow; not part of the game bundle) renders a 4096×2048 equirectangular
+  WebP in about 40 s and ~400 KB: luminous nebula gas, a mist behind it, dark dust clouds in front (rim-lit where thin,
+  ragged fractal edges), hot cores, an optional Milky Way band, and stars with a power-law brightness spread, blackbody
+  colours and equal-area placement (stretched correctly for the projection; dust hides them). Every layer is a function of
+  view direction, so there is no seam and no pole pinching. It bloom-filters, **auto-exposes to a mood** (`black`,
+  `very_dark`, `dark` default, `dim`; the owner wants dark space), tone-maps, dithers, and prints a report that must say OK.
+  `--install` refuses on any warning. Eight looks in `tools/skybox/presets.json`: void, maelstrom, ember, violet_veil, ash,
+  milky_way, cobalt_cluster, emerald_mist. `--preview` writes a contact sheet with four 70-degree pilot's-eye views.
+- **Game side:** new sky kind `panorama` (`sky: { kind: "panorama", skybox: "<id>", shards: 30 }`) in `data/instances.js`
+  `SKY_KINDS`; `SKIES.panorama` in `render/scene.js` reuses `SKIES.shattered` (it now takes an optional `{ url, tint }`
+  override, behaviour for the existing skies unchanged). New `src/data/skyboxes.js` (data) and `src/render/skyboxes.js`
+  (image imports), both with `GENERATED` blocks the tool maintains. Verified in headless Chromium with the real scene code.
+- **For AI assistants:** `tools/skybox/README.md` (workflow, "owner says -> run this" table, warnings), **recipe 24** (23 was
+  taken by the GLB-model recipe), a line in `AGENTS.md` and `HANDOFF.md`. `tests/skybox.test.mjs` guards manifest, image (2:1,
+  size, budget), import, recipe and the template's skybox name, and the presets file.
+- Known: 4096 wide is about 0.09 degrees per pixel, so on a 4K monitor at the 70-degree camera the sky is magnified about 2.4
+  times; `--size 8192` is the sharper option (about 3 GB RAM, bigger game file). Do not commit the tool's `skybox-out/` folder.
+
+---
+
 ## 2026-11-15: The Test Ship — a 1-credit hull with 100× Hull HP and 10× damage, flown with the owner's GLB
 
 Owner: "make a new ship available in the Hangar that costs 1 credit. It is called 'Test Ship'. It has 100x hp of wasp, 10x multiplier to all damage output. Same slot layout as wasp. Same default slots come with it when you buy it already fitted. It will use this 3d model called heavyfighter.glb in my google drive." **Save version unchanged (v21)**; rebuild needed (`npm run build` — the page grows to ~19 MB — then `npm test`). NOT playtested yet.
@@ -194,53 +218,10 @@ rift and returns fine") and three more asks. All three are built. `npm test` →
 
 ---
 
-## 2026-11-14: Step 14 owner playtest — four bugs, four fixes (the run you quit is the run you come back to)
-
-The owner flew slices 14a + 14b and reported four bugs. All four are fixed. `npm test` → **546 tests,
-0 fail** (new `tests/sky.test.mjs` 7, new `tests/crash.test.mjs` 8, `tests/step14-instances.test.mjs`
-now 21); `npm run build` → 803 KB. **Save version unchanged (v20)**: nothing a save stores changed
-shape, only what a run puts in the world and which place a save may name.
-
-- **Quitting mid-rift came back as "That pocket no longer exists" (bug 2).** `prepareGalaxySave`
-  (`src/sim/galaxy-session.js`) decided the save's place was a pocket that had been removed whenever
-  the id was not among the galaxy's pockets — which is always true of a run's id — so it moved the
-  save home, nulled `resume` and armed the recovery notice, out of the run the pilot was standing in.
-  A run the save's own `world.instances` carries is now a place the save may name: `missingPocket`
-  skips ids owned by a saved run, and the browser boot path (autosave → `prepareGalaxySave` →
-  `applySave` → `resumeFromSave`) comes back inside the rift at the same spot with the same clock,
-  exactly like logging out in space. Test 20 walks that boot path with a stand-in `localStorage` and
-  fails without the fix.
-- **The rift's hostiles were "Newbie Raiders" (bug 3).** The wave was four `raider`s with the
-  template's 1.6 / 1.5 multiplier on them, so the target lock read the tutorial hostile's name and a
-  raider hunt contract was paid by a rift run. They are two entries of their own now —
-  `riftguardian` (16 Hull HP, 1.5 damage a shot, ember hull) and `deepguardian` (22 / 2, void violet)
-  in `src/data/enemies.js`, faction `rift` in `src/data/factions.js`, with their own drop tables in
-  `src/data/loot.js` — and both templates' `difficulty` is 1 / 1, because the numbers are authored on
-  the hostile instead of inflated onto a borrowed one. The fight is numerically what the owner
-  playtested; the lock reads **Rift Guardian**, and test 21 asserts four dead guardians do not move a
-  raider contract.
-- **The rift's sky read as triangles (bug 4).** `SKIES.shattered` was an inverted shell of flat panels
-  with one shade each, which is exactly what it looks like. It is painted now: new `src/render/sky.js`
-  paints one canvas — a near-black base in the template's own colour, a faint band of its glow with
-  dust lanes through it, 3200 stars spread over the sphere with a few bright ones, and wandering
-  forking fractures with a dark lip and a burning edge — and `scene.js` wraps it around the inside of
-  an unlit sphere, so no facet of anything shows and the shards drifting inside are rock shapes, not
-  tetrahedra. The generators are pure and take their roll function, so `tests/sky.test.mjs` checks the
-  whole picture against a recording canvas, and one seed paints one sky exactly.
-- **The crash the pilot could not see (bug 1).** The console line the owner pasted
-  (`e.n.replace is not a function`) is in no build this repo has ever produced — every `.replace` in
-  the game is wrapped in `String(... ?? "")` and the committed bundle has no member-expression
-  `.replace` at all — so it came from a stale build (a tab left open across rebuilds, or an older
-  zip). What the report exposed is the shape of the failure: a frame that throws leaves the loop
-  running but stops drawing, so the last good picture freezes with a live game behind it. `main.js`
-  now catches a broken frame, draws anyway and reports through new `src/ui/crash.js`, which puts the
-  error's own first line on screen in a card; `installCrashNotice()` catches anything else the browser
-  reports as uncaught (a listener, a timer, a promise). A repeat is counted, not listed, and the card
-  says how much it left out. If anything still breaks, the pilot can now read what.
-
 ---
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: Step 14 owner playtest — four bugs, four fixes (the run you quit is the run you come back to)
 - 2026-11-14: Enemies are solid — rams damage both ships, rocks kill hostiles, and one falsy detour is fixed
 - 2026-11-14: Step 14a feedback built — a rift you can see, lock and open — and slice 14b, a run that survives a quit
 - 2026-11-14: Step 14a built — a rift you carry, an instance you fly into, and a cache that stays locked

@@ -8,6 +8,52 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: Step 14 owner playtest — four bugs, four fixes (the run you quit is the run you come back to)
+
+The owner flew slices 14a + 14b and reported four bugs. All four are fixed. `npm test` → **546 tests,
+0 fail** (new `tests/sky.test.mjs` 7, new `tests/crash.test.mjs` 8, `tests/step14-instances.test.mjs`
+now 21); `npm run build` → 803 KB. **Save version unchanged (v20)**: nothing a save stores changed
+shape, only what a run puts in the world and which place a save may name.
+
+- **Quitting mid-rift came back as "That pocket no longer exists" (bug 2).** `prepareGalaxySave`
+  (`src/sim/galaxy-session.js`) decided the save's place was a pocket that had been removed whenever
+  the id was not among the galaxy's pockets — which is always true of a run's id — so it moved the
+  save home, nulled `resume` and armed the recovery notice, out of the run the pilot was standing in.
+  A run the save's own `world.instances` carries is now a place the save may name: `missingPocket`
+  skips ids owned by a saved run, and the browser boot path (autosave → `prepareGalaxySave` →
+  `applySave` → `resumeFromSave`) comes back inside the rift at the same spot with the same clock,
+  exactly like logging out in space. Test 20 walks that boot path with a stand-in `localStorage` and
+  fails without the fix.
+- **The rift's hostiles were "Newbie Raiders" (bug 3).** The wave was four `raider`s with the
+  template's 1.6 / 1.5 multiplier on them, so the target lock read the tutorial hostile's name and a
+  raider hunt contract was paid by a rift run. They are two entries of their own now —
+  `riftguardian` (16 Hull HP, 1.5 damage a shot, ember hull) and `deepguardian` (22 / 2, void violet)
+  in `src/data/enemies.js`, faction `rift` in `src/data/factions.js`, with their own drop tables in
+  `src/data/loot.js` — and both templates' `difficulty` is 1 / 1, because the numbers are authored on
+  the hostile instead of inflated onto a borrowed one. The fight is numerically what the owner
+  playtested; the lock reads **Rift Guardian**, and test 21 asserts four dead guardians do not move a
+  raider contract.
+- **The rift's sky read as triangles (bug 4).** `SKIES.shattered` was an inverted shell of flat panels
+  with one shade each, which is exactly what it looks like. It is painted now: new `src/render/sky.js`
+  paints one canvas — a near-black base in the template's own colour, a faint band of its glow with
+  dust lanes through it, 3200 stars spread over the sphere with a few bright ones, and wandering
+  forking fractures with a dark lip and a burning edge — and `scene.js` wraps it around the inside of
+  an unlit sphere, so no facet of anything shows and the shards drifting inside are rock shapes, not
+  tetrahedra. The generators are pure and take their roll function, so `tests/sky.test.mjs` checks the
+  whole picture against a recording canvas, and one seed paints one sky exactly.
+- **The crash the pilot could not see (bug 1).** The console line the owner pasted
+  (`e.n.replace is not a function`) is in no build this repo has ever produced — every `.replace` in
+  the game is wrapped in `String(... ?? "")` and the committed bundle has no member-expression
+  `.replace` at all — so it came from a stale build (a tab left open across rebuilds, or an older
+  zip). What the report exposed is the shape of the failure: a frame that throws leaves the loop
+  running but stops drawing, so the last good picture freezes with a live game behind it. `main.js`
+  now catches a broken frame, draws anyway and reports through new `src/ui/crash.js`, which puts the
+  error's own first line on screen in a card; `installCrashNotice()` catches anything else the browser
+  reports as uncaught (a listener, a timer, a promise). A repeat is counted, not listed, and the card
+  says how much it left out. If anything still breaks, the pilot can now read what.
+
+---
+
 ## 2026-11-14: Enemies are solid — rams damage both ships, rocks kill hostiles, and one falsy detour is fixed
 
 Owner: hostile ships should collide the same way the pilot's does — anything that hits an enemy inflicts collision damage on it, and enemies hitting each other must bounce a bit so their AI recalibrates. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
