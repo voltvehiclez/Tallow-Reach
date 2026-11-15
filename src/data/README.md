@@ -35,3 +35,5 @@ Rules:
   `shops.js` if the player should be able to buy one (recipe 4).
 
 Imported ship visuals may set `modelYaw` (radians) and `modelLength` (metres along −Z); the renderer centres and uniformly fits them without changing gameplay `sc`.
+
+Optional `cameraPadding` multiplies automatic model-relative camera framing (default 1); Test Ship uses 1.2 after owner playtesting. It does not change model or flight scale.

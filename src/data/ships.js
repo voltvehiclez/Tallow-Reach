@@ -67,6 +67,7 @@ export const SHIPS = {
     dmg: 10, mine: 1, sc: 1, hpMul: 100,
     // Imported nose points +X; fit visually to 115% of Wasp length, not flight scale.
     modelYaw: Math.PI / 2, modelLength: 14.8925,
+    cameraPadding: 1.2, // owner playtest: 20% more room than automatic framing
     price: 1, col: 0x8a6d3b,
   },
 };

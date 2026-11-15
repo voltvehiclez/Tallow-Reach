@@ -116,7 +116,7 @@ export function shipCameraScale(id) {
   const source = modelTemplate(`ship.${id}`), wasp = modelTemplate("ship.wasp");
   const cached = framingCache.get(id);
   if (cached && cached.source === source && cached.wasp === wasp) return cached.scale;
-  const scale = modelFramingRatio(buildPlayerShip(id), buildPlayerShip("wasp"));
+  const scale = modelFramingRatio(buildPlayerShip(id), buildPlayerShip("wasp")) * (SHIPS[id]?.cameraPadding ?? 1);
   framingCache.set(id, { source, wasp, scale });
   return scale;
 }

@@ -42,3 +42,11 @@ test('camera framing keeps Wasp unchanged and follows actual model dimensions', 
   assert.ok(modelFramingRatio(wide, reference) > 1, 'width counts, not just ship length or gameplay sc');
   assert.equal(modelFramingRatio(new THREE.Group(), reference), 1, 'empty model is safe');
 });
+
+
+test('Test Ship camera has 20% extra breathing room without changing Wasp', () => {
+  const automatic = modelFramingRatio(buildPlayerShip('testship'), buildPlayerShip('wasp'));
+  assert.equal(SHIPS.testship.cameraPadding, 1.2);
+  assert.ok(Math.abs(shipCameraScale('testship') / automatic - 1.2) < 1e-6);
+  assert.equal(shipCameraScale('wasp'), 1);
+});
