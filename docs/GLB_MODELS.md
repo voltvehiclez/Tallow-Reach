@@ -28,9 +28,16 @@ This avoids a blank title while parsing but does not reduce the embedded page do
 
 Until 2026-11-15, `src/assets/models/` was expected to hold only `.gitkeep` — GLBs were local-only
 so the built page stayed small. That convention is amended for **exactly one owner-supplied file**:
-`ship.testship.glb` (13 MB, from the owner's Google Drive, inlined into the ~19 MB built page). The Test Ship uses `SHIPS.testship.modelYaw` (+π/2) and `modelLength` (14.8925 m, 115% of Wasp length)
+`ship.testship.glb` (now the owner’s 181 KB `heavyfighter-compressed.glb`, replacing the original
+13 MB version; inlined into the ~2.33 MB built page). The Test Ship uses `SHIPS.testship.modelYaw` (+π/2) and `modelLength` (14.8925 m, 115% of Wasp length)
 to correct its import orientation, uniformly size it and centre its bounds; this does not change flight scale. Any
 further large models should be a deliberate decision with the owner, made before the file lands.
+
+The compressed model requires Draco geometry and WebP texture support. `render/gltf.js` uses
+three.js’s existing `DRACOLoader` with the embedded JavaScript decoder in `src/assets/decoders/`
+(Apache 2.0); no CDN, external files or additional npm dependencies. Decoder workers are disposed
+after preload. The actual compressed geometry is decoded in `tests/compressed-model.test.mjs`
+and checked against the original bounds. Modern browsers provide WebP support.
 
 ## The keys
 
