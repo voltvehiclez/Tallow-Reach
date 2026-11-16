@@ -6,7 +6,7 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-*Last checked: 2026-11-14.*
+*Last checked: 2026-11-16.*
 
 **Current position (rewritten 2026-11-14):** the table below is the status. Steps 12 and 13 are ticked after the owner's
 playtests, and on 2026-11-14 the owner also confirmed the mission follow-ups built on 2026-11-13 (station-scoped offers,
@@ -19,14 +19,17 @@ the canister; the run is generated from a template and a seed under a **shattere
 hardened; the prize is a **canister opened with R** once the objective is done; the way out stays sealed until then; the
 20-minute clock kills the pilot still inside; and a run is **saved** (`world.instances`), so logging out mid-rift comes
 back mid-rift. `npm test` is green and the build is measured per build.
-**Slice 14c is built and waiting on the owner's playtest (2026-11-14):** a pocket spawns itself inside an existing
+**On 2026-11-16 the owner confirmed all pending playtests passed (14c, the cube-map skies, the collision-damage fix, the Test Ship and both bug rounds); 14c is ticked.** 14c recap: a pocket spawns itself inside an existing
 system, hangs on its map as a **Simple Wormhole** (**20 minutes from pocket spawn**, saved in `world.wormholes`), holds a
 skybox, asteroid formations and a centre grey dark sphere to lock, collapses on time, and the far side is a small site
 pool — smugglers and a freighter to destroy, a lumenite belt to mine, a guardian hive — **leave at any time**,
 **re-enterable** until it expires, one-time rewards. **75 standing, never more than 3 per system**; every respawn gets
-the full 20 minutes. Collapse never `kill`-s; the **Stable wormhole** out is never locked. Guide:
-`testing/TESTING-14C-WORMHOLES.md`; stays unticked until the owner passes it.
-Next: **14c** after playtest, **14d** wormhole systems in uncharted space. On 2026-11-14 the owner spelled out how natural wormholes work — a simple wormhole is a pocket that
+the full 20 minutes. Collapse never `kill`-s; the **Stable wormhole** out is never locked.
+**System space built 2026-11-16, playtest passed:** every pocket of a system has a derived 3D AU position
+(`systemSpatialLayout`), systems are AU-scaled with a seeded per-system size multiplier, and the sky shows the system
+(star/black hole as a 3D sphere + sibling pockets as dots) with the light re-aimed from the visible body. Saves unchanged.
+Guide: `testing/TESTING-SYSTEM-SKY.md`.
+Next: **14d** wormhole systems in uncharted space. On 2026-11-14 the owner spelled out how natural wormholes work — a simple wormhole is a pocket that
 spawns itself in normal space, its 20 minutes run from that spawn, running out only collapses the way in, and the way out
 inside is a **Stable wormhole** with no clock of its own. That is recorded in [VISION.md](VISION.md) and in step 14 of
 [REFACTOR_PLAN.md](REFACTOR_PLAN.md); it changes 14c and adds 14d.
@@ -72,7 +75,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 14 | Instanced places and wormholes (rifts) | D | [ ] |
 | 14a | The Basic rift: item, spawn in space, enter, locked loot cache, lifetime, exit rules (save v19) | D | [x] **Built 2026-11-14 with the owner's six playtest items; the playtest's three bugs in it (raiders as guardians, a paneled sky, an unreadable crash) and the second round (trade canister, 20-minute clock, starless sky) all shipped, the owner confirmed the round works, and their last two notes — lines in the sky, a ship that flew during a trade — shipped the same day** (`testing/TESTING-14-RIFTS.md`). |
 | 14b | A run survives a quit: an instance in progress is saved and restored exactly (save v20) | D | [x] **Built 2026-11-14; the playtest's fourth bug — quitting mid-rift "recovered" the pilot out of the run — fixed and owner-confirmed (`prepareGalaxySave` treats a saved run's place as a place); a half-traded canister saves exactly as it stands** (`testing/TESTING-14-RIFTS.md`). |
-| 14c | Simple wormholes: a pocket that spawns itself inside an existing system, its 20-minute entry clock, collapse on expiry, the Stable wormhole way out, re-enterable until it expires (save v21) | D | [ ] **Built 2026-11-14, waiting on the owner's playtest** (`testing/TESTING-14C-WORMHOLES.md`). 75 standing, never more than 3 per system, staggered on a fresh universe, 20 minutes from spawn, `collapse` only, the way out always a **Stable wormhole**. |
+| 14c | Simple wormholes: a pocket that spawns itself inside an existing system, its 20-minute entry clock, collapse on expiry, the Stable wormhole way out, re-enterable until it expires (save v21) | D | [x] **2026-11-16: owner playtest passed** (`testing/TESTING-14C-WORMHOLES.md`). 75 standing, never more than 3 per system, staggered on a fresh universe, 20 minutes from spawn, `collapse` only, the way out always a **Stable wormhole**. |
 | 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space | D | [ ] |
 | 15 | Campaign scaffolding (save v22) | D | [ ] |
 | 16 | Multiplayer (plan written when reached) | | [ ] |
@@ -138,6 +141,8 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 ## Log
 
 Older build-detail entries (the two 14a build entries) moved verbatim to `docs/archive/ROADMAP_LOG_2026-11-14.md` on 2026-11-14 to keep this file under its size limit.
+
+- 2026-11-16: **System space built — AU layouts, per-system sizes, and the system sky layer.** Every pocket of a system carries a derived 3D AU position (`systemSpatialLayout`); systems roll a seeded size multiplier and their border is the farthest pocket; heights are a tiny seeded roll (authored `mapHeight` wins); the sky shows the star/black hole (a 3D sphere sized by its AU size ÷ your distance) and sibling pockets as dots; the one directional light re-aims from the visible body. The 2D map and saves are unchanged. Owner playtest passed 2026-11-16; 14c ticked the same day (all pending playtests passed).
 
 
 - 2026-11-14: **Round three: the sky loses its lines, and a loot card freezes the ship.** The owner confirmed round two ("works well") with two notes. **(1)** The painted fractures (`skyCracks`) and filaments (`skyWisps`) read as *odd lines* over an otherwise good sky, so `render/sky.js` strokes nothing any more: its generators are `skyVeils`, `skyClouds`, new `skyCores` (small bright knots — the hearts a nebula piles its light into, so the sky keeps structure with no line in it) and new `skyGrain` (six thousand single pixels under 0.04 alpha: an invisible dither that keeps dark gradients from banding into contour lines); both templates lose their `cracks` palette field, and the sky texture drops mipmaps so no seam can draw a line of its own. **(2)** While a loot surface is open — the rift trade or the I card — the ship hangs still: `core/input.js` funnels chart, card and trade through one `modalSurface()` (the trade had been missing from the hand-written gate, which was the whole bug) and new `holdShip()` in `sim/pilot.js` kills carry and throttle on open, so WASD moves nothing and the mouse turns nothing until it closes. Tests: `tests/sky.test.mjs` 10 (zero strokes, no path started, grain is dither not stars), `tests/ui-cache.test.mjs` 6 (the freeze); `npm test` 557/0. **14a and 14b ticked on the owner's pass; these two notes were the last of it.**

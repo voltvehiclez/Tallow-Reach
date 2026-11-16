@@ -66,6 +66,39 @@ export const GALAXY = {
     blackHoleChance: 0.05, coreRadius: 26, blackHoleRadius: 20,
     coreLabelOffset: 14, coreLabelLineHeight: 14, labelGap: 8,
   },
+
+  // System space: the system a pocket lives in, measured in AUs (1 AU = 150 million km),
+  // NOT in flight metres — flying inside a pocket never meaningfully moves its position
+  // in the system. Pocket positions are DERIVED from the same deterministic layout as
+  // the 2D pocket map (authored `mapPos` wins), with map y read as AU z. Height (`y`) is
+  // a tiny seeded roll per pocket inside ±heightAmplitudeAu — invisible against 7+ AU
+  // orbits, so the 2D chart and AU distances barely change — plus an authored `mapHeight`
+  // (AU) for a pocket whose height is chosen by hand (wins the roll). Set
+  // heightAmplitudeAu to 0 for a perfectly flat system. A system's size is dynamic: its
+  // border is simply its farthest pocket from the central body, so adding a farther pocket
+  // makes the system bigger by itself. Each system rolls a stable seeded multiplier in
+  // [minScale, maxScale] on auPerMapUnit at generation time, which is what makes some
+  // systems compact and others vast; `auPerMapUnit * scale` is the one fixed conversion.
+  // Stars and black holes have a SET size in AU; their apparent size in the sky follows
+  // from it and from the flying pocket's distance, so a pocket closer to the star sees
+  // it bigger and a bigger system sees it smaller. All stars are one look (the owner
+  // may add star shades later); the black hole is dimmer with a slight orange tint.
+  // `layerRadius` is how far out the drawn star/dots sit (inside the camera's far
+  // plane, behind the scenery); radius clamps keep bodies on screen at any distance.
+  systemSpace: {
+    auPerMapUnit: 0.05, minScale: 0.6, maxScale: 1.6,
+    heightAmplitudeAu: 1.2,
+    layerRadius: 12000, minBodyPx: 26, maxBodyPx: 900,
+    star: {
+      radiusAu: 0.16, color: 0xffe9b8, halo: 0xffdf9e, haloOpacity: 0.85, haloScale: 4.0,
+      lightColor: 0xffe2b8, lightIntensity: 2.1,
+    },
+    blackHole: {
+      radiusAu: 0.1, color: 0x040405, halo: 0xff8f3f, haloOpacity: 0.5, haloScale: 3.4,
+      lightColor: 0xffc38a, lightIntensity: 1.35,
+    },
+    pocketDot: { size: 2.2, color: 0xdfe8f5, opacity: 0.55 },
+  },
 };
 
 /**
@@ -83,6 +116,9 @@ export const GALAXY = {
  *
  * Move a pocket on its system's zoomed-in map (2D map units, not flight pos):
  *   places: { "hollow": { mapPos: [-130, 90] } }
+ *
+ * Choose a pocket's height above the map plane (AU; wins the seeded ±heightAmplitudeAu roll):
+ *   places: { "hollow": { mapHeight: 0.6 } }
  *
  * Delete a pocket (its links are pruned automatically):
  *   removedPlaces: ["hollow"]

@@ -20,6 +20,55 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: The system sky passed its playtest
+
+Owner: "good, play test so far passed" (2026-11-16) — the system-space work from the previous entry is confirmed:
+star/black hole visible and correctly placed, dots, per-pocket lighting, per-system sizes. Docs-only status change; no
+code moved. HANDOFF and the ROADMAP current position and log line now say the playtest passed; 14c remains ticked. Save
+version unchanged (**v21**); `npm run build` and `npm test` re-run green.
+
+---
+
+## 2026-11-16: System space — AUs, a true 3D position for every pocket, and a sky that shows the system you're in
+
+Owner: "All pockets in a system should have a type of 3d position in x, y, z. This is to prepare the game for a
+potential feature in the future if i make warping within a system more dynamic by putting you in a so called 'warp
+space' … Another reason is so that the skybox will now have another layer that is dependant on the 3d position of the
+pocket and celestials." Owner's playtests of everything pending (14c, cube-map skies, collision damage, Test Ship,
+both bug rounds) **passed**; 14c is ticked in ROADMAP. **Save version unchanged (v21)**; rebuild needed (`npm run
+build`, then `npm test`). NOT playtested yet.
+
+- **Pockets have 3D AU positions, derived — never saved.** `systemSpatialLayout(world, systemId)` in `sim/galaxy.js`
+  lifts the same deterministic layout the 2D pocket map uses into AUs (1 AU = 150 million km): map `x` → AU `x`, map
+  `y` → AU `z`, and a tiny seeded height per pocket inside `±heightAmplitudeAu` (1.2 AU) so bodies don't ride one
+  line; an authored `mapHeight` wins the roll (the owner's future manual-height path). The map stays 2D and unchanged;
+  no save shape changes. Runtime-registered wormhole pockets are included via their authored `mapPos`, like their
+  siblings. Snapshot: systems are measured in AUs — flying inside a pocket never meaningfully moves it in the system.
+- **Systems have their own size, and it's dynamic.** Each system rolls a stable seeded multiplier in [0.6, 1.6]
+  (`systemScale`, hashed from seed + system id) on `auPerMapUnit` (0.05) — that is the one fixed conversion; some
+  systems come out compact, some vast, and each keeps its own. A system's outer boundary (`radiusAu`) is simply its
+  farthest pocket from the core, so adding a farther pocket makes the system bigger by itself. No field is stored.
+- **The sky has a system layer now (`render/systemsky.js`).** Every ordinary pocket of a system — including a spawned
+  simple wormhole's pocket — hangs the system's star/black hole in its true direction and every sibling pocket as a
+  barely-visible dot. The body renders as a real 3D sphere at the sky's depth with an additive halo: it cannot be
+  flown to (the sky follows the camera), and its apparent size is its set AU size over the flying pocket's distance
+  (`star.radiusAu` 0.16 / `blackHole.radiusAu` 0.1) — closer pocket → bigger body, compact system → bigger sun.
+  Black hole: dimmer, slight orange tint; stars are one look, with room for shades later. Instances (rifts, the far
+  side of a wormhole) are in no system and keep their own skies, unchanged.
+- **The light always comes from the body you can see.** `showPlace` re-aims the one DirectionalLight per pocket from
+  the star/black hole direction; black hole light is dimmer (1.35 vs 2.1) and orange-tinted. Instances get the old
+  default back; hemisphere light unchanged.
+- **Tests:** new `tests/system-spatial.test.mjs` (9) pins the derivation (heights inside the band, map↔3D lift, scale
+  bounds and stability, boundary growth, origin-centred body, star/blackHole core, runtime wormhole inject, tuning
+  validation). **649/649 pass**; build 3008 KB.
+- **Not done, deliberately:** the warp-space flight itself (step TBD), star shades, authored per-system scale
+  override, per-pocket authored heights beyond the `mapHeight` hook, lighting from a raised body on the 2D map
+  (map stays 2D).
+
+Files: `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/render/systemsky.js` (new), `src/render/scene.js`, `tests/system-spatial.test.mjs` (new), `src/render/README.md`, `src/sim/README.md`, `src/data/README.md`, `testing/TESTING-SYSTEM-SKY.md` (new), `docs/architecture/world-and-map.md`, `docs/architecture/simulation-and-rendering.md`, `docs/HANDOFF.md`, `docs/ROADMAP.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
+---
+
 ## 2026-11-15: Hitting the station hurts again — solid means collision damage, by default
 
 Owner: "Collision damage is gone from the meridian station. Everything that is solid should apply collision damage
@@ -303,30 +352,9 @@ Files: `src/assets/decoders/` (decoder, license, README), `tests/compressed-mode
 
 ---
 
-## 2026-11-14: Models and collision are real models now — drop-in `.glb` files, hulls flush with the drawing
-
-Owner: every object in the game should accept a `.glb` when one exists (hardcoded model otherwise), and collision should sit flush with the actual 3D model for all objects — Meridian Station can no longer be one big ball: the rings and the inner cylinder must be reachable and touchable. Complex future objects (a big rock cave) are in scope. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
-
-- **Drop-in `.glb` replacements, zero ceremony.** Put `<key>.glb` into `src/assets/models/` and rebuild; `build.mjs` regenerates `src/render/model-manifest.js` (data URLs inlined, no runtime path ever resolves) and the built-in model for that key is replaced — never duplicated. No `.glb` for a key, nothing changes, fallback is byte-identical to before. Preload failures only log `[models] ... using the built-in model`. The whole path (byte-extraction from the built page → `GLTFLoader` parse → collider bake) was smoke-tested with a generated `station.glb`: 20 triangles baked, collision detected deep penetration, correctly ignored a far-away probe. Keys: `ship.<class>`, `planet`, `station`, `enemy.<defId>`, `asteroid`, `bullet`, `missile`, `crate`, `fx`, `cache`, `anomaly`, `wormhole`, `beam` — see [GLB_MODELS.md](GLB_MODELS.md) for the authoring conventions (units, `spin`/`eng`/`noclip` node names, scale contracts, the unit-sphere planet rule).
-- **Collision is now the drawn mesh, everywhere.** Rocks collide as their actual lumps (one soup per built-in shape — the mesh is built from the same floats; `asteroid.glb` replaces both), station/planet colliders are baked from the built model at build time (planet atmosphere shell and the ring's decorative spokes/lights are `noclip` — the ring itself, being rotationally symmetric, stays solid), missiles die against the rock's mesh, the hull stays a 4 m sphere, and the data's `keepout:` field is gone (the station has no invisible wall any more — the ring is the wall, and you can fly through the axis). Scenery rebuilds replace their own colliders (`feature#index` ids); `forgetPlace` clears them. `collide: false` / `collideDmg` on a feature are the only data opt-outs, `noclip` in the model the only mesh opt-out.
-- **Tests:** `tests/two-player-sim.test.mjs` rock collision now builds a real rock record; the views tests serve the built-in fallback (headless registers no `.glb`); the FX fade test disposes GLB-clamped materials once each. Docs added: [GLB_MODELS.md](GLB_MODELS.md), recipe 23; src folder READMEs list the new files. **578/578 pass**; build green. Rider: enemy-vs-world collision is still absent (as before) — see the doc's known limits.
-
-Files: `src/assets/models/` (new, empty), `src/render/gltf.js`, `src/render/collideModel.js`, `src/render/model-manifest.js`, `src/render/models.js`, `src/render/views.js`, `src/render/scene.js`, `src/render/menuview.js`, `src/sim/colliders.js`, `src/sim/player.js`, `src/sim/missile.js`, `src/data/places.js`, `src/data/encounters.js`, `src/data/place-templates.js`, `build.mjs`, `src/main.js`, `tests/headless.mjs`, `tests/views.test.mjs`, `tests/two-player-sim.test.mjs`, `tests/step12-places.test.mjs`, `docs/GLB_MODELS.md` (new), `docs/recipes/23-a-new-glb-model.md` (new), `docs/HOW_TO_ADD.md`, `docs/architecture/simulation-and-rendering.md`, `game/tallow-reach.html`.
-
----
-
-## 2026-11-14: Two owner bugs, part two — the Sell/Discard confirm sits with the cursor, and hunt contracts clear the area they were taken in
-
-Owner: "Right click sell & discard button – adjust placement of the sell /discard ui so that you barely have to move the mouse to the right to hit the sell/discard button." The first pass anchored the popover beside the cursor but left the Sell/Discard button in a footer row — far below the mouse; the owner came back with a picture: the confirm is ~120 px down. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
-
-- **The popover's action row is in the popover's header, under the title.** `SELL BASIC POWER CELL` sits on its own line with the **Sell** / **Cancel** buttons in a row directly beneath it, on every resolution and zoom (`inv-sell-head` in `styles.css` is now a fixed column — the wrap decided differently per panel width; the owner approved the stacked layout), in every copy of the sell/discard popover — the station's (`ui/menu.js`), the flight card's and the rift cache's shared `discard.js`, both discard steps included. Long titles wrap with `overflow-wrap`, and the popover is 248 px wide. Both flows anchor vertically with one rule (`popoverAnchorFor`, clicked-entry centre − 44px); with the stacked header the confirm row lands right on the mouse's line. **Accepting a hunt no longer pays for anywhere in the universe.** The kill step carries the pocket the board was read at (`step.place`, enforced by `objectiveMatches`), so raiders elsewhere do not count; the objective sentence is rewritten at acceptance to say where to fight — `Destroy {remaining} {enemy} near the {field} ({place}).` ("near the Asteroid field (Meridian Station)." at home; "near the Trade-lane asteroid field (Galedrift Expanse)." in a generated trade lane; a field-less pocket says "in {pocket}."). The name comes from the same `asteroidField` feature the spawner reads. Hunts accepted before this change keep the old any-place rule; no save migration.
-- **Tests:** new `tests/hunt-place.test.mjs` (Meridian field naming and gating, generated trade-lane naming, field-less fallback); `tests/step13-missions.test.mjs` scopes its hunt to the place the kill events carry. **578/578 pass**; build green.
-
-Files: `src/ui/menu.js`, `src/ui/discard.js`, `src/styles.css`, `src/sim/missions.js`, `tests/hunt-place.test.mjs` (new), `tests/step13-missions.test.mjs`, `game/tallow-reach.html`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: Models and collision are real models now — drop-in `.glb` files, hulls flush with the drawing
+- 2026-11-14: Two owner bugs, part two — the Sell/Discard confirm sits with the cursor, and hunt contracts clear the area they were taken in
 - 2026-11-14: Three owner-reported bugs — the Alt camera locks to the hull, one primary fires at a time, no tags over the menu
 - 2026-11-14: The rift wears real space too — the deep rift its own sky
 - 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky

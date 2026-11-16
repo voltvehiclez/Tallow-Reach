@@ -40,6 +40,15 @@
   canvas out of the page without destroying it; `ui/outfitting.js` puts the same canvas
   back into `#shipview` after each render. Do not create a renderer per render, and keep
   `id="shipview"` in `outfittingHtml`.
+- **The system sky layer and its light (2026-11-16).** `render/systemsky.js` gives every ordinary pocket of a
+  system (and a spawned wormhole pocket, which is one) the system's star/black hole hanging in its true AU
+  direction plus every sibling pocket as a barely-visible dot; instances get nothing and keep their own skies.
+  Positions derive from `systemSpatialLayout` (AU, heights a tiny seeded roll with authored `mapHeight` winning);
+  the body is a real 3D sphere whose drawn size is its set AU size over the pocket's distance. The layer rides
+  inside the sky group that follows the camera, so it can never be flown to. `showPlace` also re-aims the scene's
+  one `DirectionalLight` per place from the same body (black hole: dimmer and orange-tinted) and restores the old
+  default off the systems. The starmap's 2D chart and the light can never disagree with the sky, because all three
+  read the same derived layout — and nothing of it is saved.
 - **The sim never reads the keyboard.** `core/input.js` is the only file that knows a key code.
   It fills `localPlayer().controls` (one plain record per pilot, shape in `src/state/controls.js`)
   and the sim reads that. Step 8c gives each player independent flight, power, drive, shield,

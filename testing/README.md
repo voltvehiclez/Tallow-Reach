@@ -15,6 +15,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 | [TESTING-BASELINE.md](TESTING-BASELINE.md) | The whole game; play it after every step. |
 | [TESTING-14-RIFTS.md](TESTING-14-RIFTS.md) | Step 14a + 14b: buying and using a rift, the anomaly and its gate, F-locks and HUD labels, the shattered sky, the canister you open with R, the 20-minute collapse, dying inside, and reloading mid-rift. |
 | [TESTING-14C-WORMHOLES.md](TESTING-14C-WORMHOLES.md) | Step 14c: simple wormholes — a pocket that spawns itself in normal space, the no-notice starmap marker, the 20-minute clock, the grey dark sphere, the three sites (smugglers/freighter, lumenite belt, guardian hive), leaving and re-entering at any time, collapse on expiry, and the save v21 round trip. |
+| [TESTING-SYSTEM-SKY.md](TESTING-SYSTEM-SKY.md) | System space: every pocket of a system in a derived 3D AU layout, the star/black hole hanging in its true direction with size set by its AU size and pocket distance, sibling pockets as barely-visible dots, light per pocket from the visible body, per-system sizes, and the wormhole/rift exclusions. |
 
 ## Passed (history, in `passed/`)
 
