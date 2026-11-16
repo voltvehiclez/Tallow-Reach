@@ -100,8 +100,10 @@ function buildScenery(id, group) {
     // Collision mirrors what is drawn (see docs/GLB_MODELS.md): the baked triangles are the
     // collider. `collide: false` in a feature opts a glow or decoration out. The feature
     // index keeps two same-kind features without ids from overwriting each other's collider.
+    // Damage defaults to 1, like a rock: anything solid hurts at speed unless the feature says
+    // otherwise (`collideDmg: 0` bounces without damage).
     if (f.collide !== false) {
-      const col = colliderFromObject(built.object, { id: f.id || `${f.kind}#${index}`, damage: f.collideDmg ?? 0 });
+      const col = colliderFromObject(built.object, { id: f.id || `${f.kind}#${index}`, damage: f.collideDmg ?? 1 });
       if (col) {
         // A still model registers itself; a model with turning parts registers one live mover per
         // turning node, each of which the sim re-reads through its `mover.transform` every frame.

@@ -86,8 +86,14 @@ Ericson closest-point-on-triangle solve. There is one code path for procedural a
   transform rather than re-bake. Atmosphere shells are tagged `noclip` and fly-through. Planets are
   solid (they used to be walk-through). Scenery hits never damage the hull — they bounce it.
 - **The ship** — a 4 m sphere (`SHIP_RADIUS`), unchanged for flight feel.
+- **Solid means it hurts.** Any collider carries a `damage` factor, and it defaults to **`1` — the same
+  factor a rock uses**. Fly into Meridian Station above 25 m/s and it costs shield/hull at exactly the
+  rate a rock does: `speed * 0.015 * damage`, with the 25 m/s threshold unchanged. This is the owner's
+  rule (2026-11-15): "everything that is solid should apply collision damage unless otherwise
+  specified". It applies to the pilot **and to hostiles** (an environmental kill, credited to no one).
 - **Data opt-outs** (the only others): a place feature may say `collide: false` (pure decoration,
-  e.g. a hologram) or `collideDmg: <n>` (hull damage factor on hit; default `0` for scenery).
+  e.g. a hologram) or `collideDmg: <n>` — the damage factor, **default `1`**; `collideDmg: 0` is the
+  way to make a solid surface bounce without hurting, and `2` makes one hurt twice as much.
 - **Authoring opt-out:** a node named `noclip*` (see table). Reach for this only for things the pilot
   should fly through — never to dodge collision for a hull.
 - **The cave test:** a big rock cave is just scenery — author the cave as one `station.glb`-style

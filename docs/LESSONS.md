@@ -17,23 +17,8 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ## Missions
 
-### L1. Starting a mission again spawned more ships each time
-- **Seen:** accepting and abandoning a mission repeatedly made more and more NPCs appear.
-- **Cause:** nothing stopped the same story mission being active twice (only the Mission log hid it), so its
-  script ran twice; and abandoning did not always remove the ships, shots and crates the mission had made.
-- **Rule:** a story mission can be active only once. Everything a mission spawns carries the mission's identity
-  and is removed when it is abandoned, failed or paid. Starting it again starts clean from step 0.
-- **Enforced by:** `tests/mission-invariants.test.mjs` ("cannot be active twice", "accepting and abandoning it
-  over and over never multiplies its ships"); the guard in `acceptMission` (`sim/missions.js`).
-
-### L2. A full hold made the mission skip, fail or abandon
-- **Seen:** when the hold had no room for the mission item, the mission abandoned itself or moved on without the
-  next dialogue.
-- **Cause:** a resource shortfall (cargo space) was treated as a failure or as "done".
-- **Rule:** a shortage makes a step **wait**, and the objective says what to do. A step that hands over an item
-  advances only when the whole amount really fits. A mission item dropped in space stays there until collected.
-- **Enforced by:** the full-hold invariant (every mission, every step); `tests/step13b-missions.test.mjs`
-  (blocked beacon hand-off); `blockedScriptText` and the "Dock at a station and make room" hint.
+<!-- L1, L2, L4 and L5 were moved verbatim to docs/archive/LESSONS_1-5.md on 2026-11-15 to keep
+     this file under its size limit. -->
 
 ### L3. Warping or undocking during a dialogue failed the mission
 - **Seen:** leaving mid-conversation (warp, undock) marked the mission failed, or killed the dialogue.
@@ -43,23 +28,6 @@ Mission lessons are first because missions are where most bugs have come from. T
   says to return.
 - **Enforced by:** the wandering invariant (the pilot is moved to a different place before every action); the
   linter (`fails.message`, allowed failure reasons); `step13b` warp-before-Close test.
-
-### L4. A finished mission failed or vanished afterwards
-- **Seen:** after completing the objective, a later sector change or death removed the mission before the reward
-  could be claimed, and it re-appeared as a fresh "Start".
-- **Cause:** failure rules were checked even after completion.
-- **Rule:** a completed mission can no longer fail; it stays claimable until paid.
-- **Enforced by:** `tests/step13b-missions.test.mjs` (return-home flow). *Partial: the invariants do not yet kill
-  the pilot after completion, so add that case if this area changes.*
-
-### L5. A dialogue button made things spawn, or ships appeared in the pilot's face
-- **Seen:** pressing Continue triggered a spawn the briefing had not led up to; NPCs appeared on top of the pilot.
-- **Cause:** world events were chained to dialogue progress; spawns were placed relative to nothing safe.
-- **Rule:** dialogue and the world are separate (Continue only moves the conversation). Spawns happen because of
-  what the pilot does in the world, from a declared distance of at least `MISSION_RULES.minSpawnDistance`, while
-  flying.
-- **Enforced by:** invariant (the world is snapshotted around every dialogue click and must be unchanged);
-  invariant (measured spawn distance); linter (every spawn needs `spawnDist`, `requiresFlying`).
 
 ### L6. A mission item appeared in the hold by itself
 - **Seen:** with a full hold the item dropped; after unloading cargo at the station the item suddenly appeared in
@@ -359,3 +327,25 @@ and depth, for every hull. Thin flat geometry probes it.
 
 - **Enforced by:** `tests/moving-colliders.test.mjs` — on the arms at 24 spin phases, clear between them, arms named
   `spin`.
+
+### L27. A default is a rule you did not write down: a silent `0` made every station harmless
+
+Hitting Meridian Station did nothing for three sessions. The rock path carries `damage: 1` hardcoded, so rocks hurt;
+the scenery path threaded a `damage` factor from data through the bake to a `hit.damage > 0` gate — defaulting to `0`
+at every hop (`colliderFromObject`, `scene.js`'s `f.collideDmg ?? 0`). Zero passed every check, multiplied every
+number, did nothing. A **factor defaulting to zero behind a `> 0` gate** is a feature that is dead rather than wrong,
+and nothing crashes.
+
+**The owner's rule is the right default:** everything solid hurts unless specifically told not to (2026-11-15). So the
+factor defaults to `1` — the rock's own number — and the opt-out is explicit data (`collideDmg: 0`). When a system
+has a knob whose zero means "never", make the *default* the behaviour the game wants, and make disabling it the
+sentence a person has to write on purpose. Then apply the rule everywhere it is meant to hold in one pass: the pilot
+**and** hostiles, which had the same free bounce for the same reason.
+
+The second half is the test that was missing: nothing asserted scenery damage either way, so 633 green tests said
+"fine" about a station that could not hurt anyone. Assert a rule at what the player feels — flying a hull into scenery
+and reading the shield bar — not at the plumbing that carries it.
+
+- **Enforced by:** `tests/collision-damage.test.mjs` (bake defaults, the hull really takes the rock-rate damage,
+  the factor scales it, `collideDmg: 0` opts out, slow contact is free, rock and station cost the same) and
+  `tests/enemy-collision.test.mjs` (scenery damages a hostile, `collideDmg: 0` does not).

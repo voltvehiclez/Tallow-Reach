@@ -135,9 +135,9 @@ export function updateEnemies(dt, placeId = state.place) {
 
   // Collision: enemies are solid. Two hulls that drifted into each other separate and
   // ricochet — just enough kick for the AI to re-plan its approach next tick; no damage
-  // (ramming a rival is not a contract). Rocks and scenery act like they do for the pilot:
-  // rocks damage like flying into one (credited to no one — a rock is not a pilot),
-  // scenery only bounces.
+  // (ramming a rival is not a contract). Rocks and scenery act exactly like they do for the
+  // pilot: both damage at speed, credited to no one (a rock is not a pilot, and nor is a wall).
+  // `collideDmg: 0` on a feature is the only no-damage surface, for the pilot and for hostiles.
   const ships = [...E];   // (a copy: a rock can kill one mid-pass, which splices E)
   for (let i = 0; i < ships.length; i++) {
     const a = ships[i];
@@ -184,11 +184,19 @@ export function updateEnemies(dt, placeId = state.place) {
       reflectVelocity(a.v, hit.x, hit.y, hit.z, 0.4);
       if (speed > 25) emit("enemy-rammed", { e: a, dmg: speed * 0.015 * (hit.damage || 1), at: a.pos, byPlayer: null, placeId });
     }
+    // Scenery hurts a hostile the same way it hurts the pilot: solid means solid, at speed.
+    // Credited to no one — `byPlayer: null` — so flying a raider into the ring is an
+    // environmental kill, and every kill objective settles it (owner, 2026-11-15).
     for (const collider of placeCollidersOf(placeId)) {
+      if (a.hp <= 0) break;   // an earlier collider this pass finished it
       const hit = collideSphereAt([collider], a.pos.x, a.pos.y, a.pos.z, ra);
       if (!hit) continue;
+      const speed = a.v.length();   // impact speed, before the bounce changes it
       a.pos.x += hit.x * hit.depth; a.pos.y += hit.y * hit.depth; a.pos.z += hit.z * hit.depth;
       reflectVelocity(a.v, hit.x, hit.y, hit.z, 0.4);
+      if (hit.damage > 0 && speed > 25) {
+        emit("enemy-rammed", { e: a, dmg: speed * 0.015 * hit.damage, at: a.pos, byPlayer: null, placeId });
+      }
     }
   }
 

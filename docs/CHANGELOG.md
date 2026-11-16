@@ -20,6 +20,45 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-15: Hitting the station hurts again — solid means collision damage, by default
+
+Owner: "Collision damage is gone from the meridian station. Everything that is solid should apply collision damage
+unless otherwise specific. Asteroids still apply collision damage correctly."
+
+Exactly right, and it was one default. A rock's collider carries `damage: 1` (hardcoded in `collideRockAt`), so rocks
+always hurt. Scenery went the other way: `colliderFromObject` took `damage = 0`, `scene.js` passed
+`f.collideDmg ?? 0`, and `player.js` gated on `hit.damage > 0` then multiplied by the factor — so a factor of 0
+zeroed the damage and the condition skipped it. Every station, planet and cave had been a free bounce since the
+model-fitted collision work, and **no test checked it either way**, which is why it survived three sessions.
+
+**No save change (v21).** `npm test` **640/640**, `npm run build` 3002 KB.
+
+- **The rule is now the owner's rule: solid means `damage: 1`, the same factor a rock uses.** Fly into Meridian above
+  25 m/s and it costs `speed * 0.015 * damage` — shields first, exactly the rock rate, measured. The 25 m/s threshold
+  is unchanged (drifting into a station is still free).
+- **Opt-outs are data, not defaults.** `collideDmg: 0` makes a surface solid but harmless (a bounce), `collideDmg: 2`
+  makes one hurt twice as much, `collide: false` still means no collider at all. Default `1` in both
+  `colliderFromObject` and `scene.js`.
+- **Hostiles obey the same rule.** `ai.js` used to bounce raiders off scenery for free while a rock hurt them; scenery
+  now damages them through the same `enemy-rammed` event with `byPlayer: null`, so it is an environmental kill that
+  credits no pilot and settles every kill objective the same way a rock kill does. The rock path's 25 m/s gate is
+  kept for both.
+- **A test-prop lesson, not a game bug:** a *single flat triangle* is a bad stand-in for a wall — a 4.8 m hull can
+  straddle a zero-thickness plane between two ticks and register nothing. Real scenery is closed geometry and every
+  Meridian part is thick enough (thinnest 2 m, so a 4.8 m hull overlaps it from 3.8 m away). The new hostile test
+  builds a closed slab.
+- **Files:** `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`, docs.
+- **Tests:** new `tests/collision-damage.test.mjs` (6) — the bake defaults to 1 for still parts and movers, flying
+  into the station costs hull, the cost is the rock rate scaled by the factor, `collideDmg: 0` bounces for free,
+  slow contact is still free, and a rock and a station cost the same for the same approach. `tests/enemy-collision.test.mjs`
+  gains one (scenery damages a hostile, `collideDmg: 0` does not). Two of these were checked to FAIL with the old
+  default restored.
+- **Not playtested.** Headless only; the owner's own flight is the visual check.
+
+Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`,
+`tests/collision-damage.test.mjs` (new), `tests/enemy-collision.test.mjs`, `docs/GLB_MODELS.md`, `docs/HANDOFF.md`,
+`docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
 ## 2026-11-15: Big moving parts are solid, and a wormhole pocket is really there after a reload
 
 Two owner bug reports, both fixed at the level they live at rather than at the symptom.
@@ -287,21 +326,8 @@ Files: `src/ui/menu.js`, `src/ui/discard.js`, `src/styles.css`, `src/sim/mission
 
 ---
 
-## 2026-11-14: Three owner-reported bugs — the Alt camera locks to the hull, one primary fires at a time, no tags over the menu
-
-Owner, on the step-14 round: three bugs. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
-
-- **Bug 1 — the Alt free camera now locks its up vector to the ship.** With Alt held the mouse orbits and the wheel zooms (unchanged), but the view rolls with the hull: roll with E/Q and the ship holds still in frame while the world turns around it, instead of the old world-up lookAt that let the ship spin under a level camera. New `faceUp` in `util/math.js`; used by the free-cam branch of `chaseView` (`render/camera.js`). The non-Alt chase view is untouched. Alt-chords (`Alt+E` and friends) are now `preventDefault()`ed in `core/input.js` so the browser's own menu does not pop during the free camera (owner confirmed 2026-11-14; Chrome's reserved menu keys cannot be overruled).
-- **Bug 2 — exactly one primary weapon fires, the selected one.** Keys **1 and 2 now select primary bay 1 and primary bay 2**; left click fires only the module in the selected bay (a gun from that bay, or the beam fitted there). A second fitted cannon stays silent until its slot is selected; an empty selected bay fires nothing. `profile.pw` stores the selection as `"1"`/`"2"` and migrates old saves in place: legacy `"cannon"`/`"beam"` map to the first bay of the flown ship holding that kind of module (falling back to the other kind, then bay one) — no version bump, v21 saves load cleanly. HUD shows the slot number next to the weapon (`1: Basic cannons`); the equip toast names the module of the slot pressed; `primarySlotIndex` in `sim/weapons.js` is the one place that folds legacy values. Guests get the same rule.
-- **Bug round also swallows Alt-chords before the browser can act on them** (`core/input.js`): any `Alt+<letter>` keydown/keyup gets `preventDefault()`, so holding Alt to orbit in free cam no longer pops the browser's own menu in browsers that honour it (Firefox, Edge, Safari — and Chrome for chords it does not reserve; Chrome's own menu keys such as Alt+E/Alt+F on Windows are owned by the browser and cannot be overruled). Owner confirmed working 2026-11-14.
-- **Bug 3 — no world-space tags over the main menu.** The markers live outside `#hud` (`#mk`), so the menu's `main-menu` event hid the HUD but left the last drawn set — "Trade lane asteroid field", hostiles, crates — floating on the title screen. `setReticle` now hides/shows the marker container together with the HUD (docking and the pause-equivalent paths hide them too; `drawMarkers` redraws on the next flight frame).
-- **Tests:** new `tests/primary-slots.test.mjs` (selection, empty bay, legacy migration); `content.test.mjs` source guards updated to the slot model; `player-weapons`, `headless-fight`, `step9-local-only`, `step9-save`, `single-player-combat-8b`, `profile`, `content` updated to the new `pw` values. **575/575 pass**; build green.
-
-Files: `src/util/math.js`, `src/render/camera.js`, `src/ui/hud.js`, `src/core/input.js`, `src/main.js`, `src/sim/weapons.js`, `src/sim/guns.js` (comments), `src/state/profile.js`, `src/state/state.js`, `src/index.html`, `tests/primary-slots.test.mjs` (new), `tests/content.test.mjs`, `tests/player-weapons.test.mjs`, `tests/profile.test.mjs`, `tests/single-player-combat-8b.test.mjs`, `tests/step9-local-only.test.mjs`, `tests/step9-save.test.mjs`, `tests/headless-fight.test.mjs`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: Three owner-reported bugs — the Alt camera locks to the hull, one primary fires at a time, no tags over the menu
 - 2026-11-14: The rift wears real space too — the deep rift its own sky
 - 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
 - 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21

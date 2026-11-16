@@ -76,8 +76,13 @@ function placementOf(object) {
  * Returns `{ id, soup, damage, mover }` for a solid still part, or `{ id, damage, movers: [...] }`
  * when the model has turning parts — one live mover per turning node, in that node's own space.
  * `null` when nothing solid was found.
+ *
+ * **Solid means it hurts.** `damage` defaults to `1`, the same factor a rock uses: fly into a station
+ * ring above 25 m/s and it costs hull, exactly as a rock does (owner, 2026-11-15 — "everything that
+ * is solid should apply collision damage unless otherwise specified"). A feature that should bounce
+ * without hurting says so in data: `collideDmg: 0`.
  */
-export function colliderFromObject(root, { id = "model", damage = 0 } = {}) {
+export function colliderFromObject(root, { id = "model", damage = 1 } = {}) {
   if (!root) return null;
   root.updateMatrixWorld(true);
   const points = [];
