@@ -15,6 +15,20 @@ export const CAMERA = {
 };
 
 /**
+ * The chase camera's field of view, in degrees. The base was 70 until
+ * 2026-11-16, when the owner asked to narrow it toward EVE Online's tighter
+ * view (rectilinear projection magnifies the edges of the frame; EVE measures
+ * ~1.45x at the frame's edge vs ~2.2x at 70). Boost (+4) and warp (+16) widen
+ * the view on top of the base, exactly as before. Tuning knob for the owner's
+ * playtest; tune it here, never in render/camera.js.
+ */
+export const VIEW = {
+  base: 46,
+  boost: 4,
+  warp: 16,
+};
+
+/**
  * How far behind the ship the camera sits, in world units.
  * `vf` is the ship's speed along its own forward axis (negative when reversing),
  * `fwdTop` the fastest it can go forward (throttle 1 plus boost) and `revTop` the

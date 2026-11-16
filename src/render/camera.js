@@ -7,7 +7,7 @@ import { state } from "../state/state.js";
 import { cosmeticRandom } from "../util/rng.js";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
 import { FLIGHT } from "../data/ships.js";
-import { cameraTrail } from "../data/camera.js";
+import { cameraTrail, VIEW } from "../data/camera.js";
 import { camera } from "./scene.js";
 import { shipCameraScale } from "./models.js";
 
@@ -90,7 +90,7 @@ export function chaseView(dt, P, fc, pose = P) {
   // A warp widens the view; state.warp.fx runs 0 -> 1 -> 0. It must not turn or
   // roll the picture: nothing rotates when the drive engages.
   const warp = state.warp ? state.warp.fx : 0;
-  camera.fov += (70 + 4 * pose.bs + 16 * warp - camera.fov) * Math.min(1, dt * 4);
+  camera.fov += (VIEW.base + VIEW.boost * pose.bs + VIEW.warp * warp - camera.fov) * Math.min(1, dt * 4);
   camera.updateProjectionMatrix();
 }
 
