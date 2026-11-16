@@ -18,7 +18,10 @@ import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
 import { boom, puff } from "./effects.js";
 import { addEntity, dropEntity } from "./entity.js";
-import { collideRockAt } from "./colliders.js";
+import { placeCollidersOf, sweepColliders } from "./colliders.js";
+
+/** Scratch: the start of this tick's step, so a frame allocates nothing. */
+const _from = V(0, 0, 0);
 
 /**
  * Launch a missile at `target` (a hostile record, or null for unguided) from the
@@ -78,6 +81,7 @@ export function updateMissileFlight(dt, placeId = state.place) {
     }
 
     s.sp = Math.min(MISSILE.max, s.sp + MISSILE.acc * dt);
+    _from.copy(s.pos);                       // where it was: this tick's segment starts here
     s.pos.addScaledVector(s.d, s.sp * dt);
     faceQ(s.quat, s.pos, s.pos.clone().add(s.d), 1);
     puff(s.pos.clone(), 0xaaa090, 0.5, placeId);   // the exhaust trail, one puff a frame
@@ -91,15 +95,18 @@ export function updateMissileFlight(dt, placeId = state.place) {
       }
     }
     if (!end) {
-      // Missiles die on the rock's mesh, not a bounding circle — the same hull the pilot flies.
-      for (const a of W.asteroids) {
-        if (collideRockAt(a.shape || 0, a.pos, a.quat, a.scale, s.pos.x, s.pos.y, s.pos.z, 1.5)) {
-          end = true;
-          break;
-        }
+      // A wall, then the rocks — the same swath the ship cannot fly through, tested along the whole
+      // step the missile covered this tick rather than at its end point. A missile is fast (480 m/s
+      // is 8 m a tick) and a rock can be thin, so the segment is what makes the hit certain.
+      const wall = sweepColliders(placeCollidersOf(placeId), W.asteroids, _from, s.pos);
+      if (wall) {
+        s.pos.set(wall.x, wall.y, wall.z);
+        end = true;
       }
     }
     if (end) {
+      // A warhead that meets a station or a rock bursts where it hit; one that simply expires
+      // burns out. Same flash either way, so the pilot sees it happen.
       boom(s.pos, 16, 0xffa060, placeId);
       dropEntity(MS, s);
     }

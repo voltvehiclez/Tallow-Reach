@@ -3,8 +3,10 @@
 //
 // The pilot's collision rules are the reference: a hit above 25 m/s costs 0.015
 // hull per m/s (shields first for the pilot), rocks damage whoever flies at them
-// (with no one credited for the kill), static scenery bounces without damage, and
-// two ships knock each other aside so the ailment reads as a re-aim, not a grind.
+// (with no one credited for the kill), **solid scenery damages the same way** (owner,
+// 2026-11-15 — it used to bounce for free, which is why hitting Meridian Station cost
+// nothing), and two ships knock each other aside so the ailment reads as a re-aim, not
+// a grind.
 //
 // Run with `npm test`.
 
@@ -19,6 +21,25 @@ import { spawnEnemy, updateEnemies } from "../src/sim/ai.js";
 import { advanceMissions, acceptMission, missionProgress } from "../src/sim/missions.js";
 import { V, Q } from "../src/util/math.js";
 import { setSeed } from "../src/util/rng.js";
+import {
+  makeSoup, registerPlaceCollider, clearPlaceColliders,
+} from "../src/sim/colliders.js";
+
+/** A closed box as 12 triangles, from min/max on each axis — the soup an author would bake. */
+function slab(x0, x1, y0, y1, z0, z1) {
+  const v = [];
+  const quad = (a, b, c, d) => v.push(...a, ...b, ...c, ...a, ...c, ...d);
+  const V3 = (x, y, z) => [x, y, z];
+  const p000 = V3(x0, y0, z0), p100 = V3(x1, y0, z0), p110 = V3(x1, y1, z0), p010 = V3(x0, y1, z0);
+  const p001 = V3(x0, y0, z1), p101 = V3(x1, y0, z1), p111 = V3(x1, y1, z1), p011 = V3(x0, y1, z1);
+  quad(p001, p101, p111, p011);   // +z face (nearest the raider)
+  quad(p000, p010, p110, p100);   // -z face
+  quad(p010, p011, p111, p110);   // top
+  quad(p000, p100, p101, p001);   // bottom
+  quad(p000, p001, p011, p010);   // -x
+  quad(p100, p110, p111, p101);   // +x
+  return v;
+}
 
 const dt = 1 / 60;
 
@@ -93,6 +114,38 @@ test("a rock damages a hostile like it damages the pilot, without crediting anyo
   updateEnemies(dt, "reach");
   assert.ok(enemy.hp < enemy.mx, "the hostile took collision damage from the rock");
   assert.equal(state.profile.kills, 0, "an environmental kill credits no pilot");
+});
+
+test("solid scenery damages a hostile too: the station is not a free bounce for anyone", () => {
+  // Same rule as the pilot's (owner, 2026-11-15: "everything that is solid"). Scenery used to
+  // bounce a hostile for free while a rock hurt it; both use the collider's `damage` factor now,
+  // and neither credits a pilot.
+  fresh();
+  // A wall across the hostile's path, as the render layer would bake it: damage 1 by default.
+  // A solid SLAB (not a single flat tri: a 4.8 m hull can straddle a zero-thickness plane between
+  // ticks and never register, which is a property of the test prop, not of the game — real scenery
+  // is closed geometry). Its near face is 3 m ahead of the raider.
+  const wall = { id: "wall", damage: 1, soup: makeSoup(new Float32Array(slab(-200, 200, -200, 200, -3, 3))) };
+  clearPlaceColliders("reach");
+  registerPlaceCollider("reach", wall);
+  const enemy = spawnEnemy("raider", V(0, 0, 0));
+  enemy.fire = 1e9;
+  enemy.v.set(0, 0, 120);        // full burn into the wall
+  const hpBefore = enemy.hp;
+  updateEnemies(dt, "reach");
+  assert.ok(enemy.hp < hpBefore, "the hostile took collision damage from the scenery");
+  assert.equal(state.profile.kills, 0, "and no pilot is credited: a wall is not a pilot");
+
+  // The opt-out still holds for hostiles: a zero-damage surface bounces them unharmed.
+  clearPlaceColliders("reach");
+  registerPlaceCollider("reach", { ...wall, damage: 0 });
+  const second = spawnEnemy("raider", V(0, 0, 0));
+  second.fire = 1e9;
+  second.v.set(0, 0, 120);
+  const hp2 = second.hp;
+  updateEnemies(dt, "reach");
+  assert.equal(second.hp, hp2, "collideDmg: 0 bounces a hostile without damage");
+  clearPlaceColliders("reach");
 });
 
 test("an environmental kill settles a hunt contract — destroyed is destroyed", () => {

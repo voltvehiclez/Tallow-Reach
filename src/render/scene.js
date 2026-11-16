@@ -32,6 +32,7 @@ scene.add(camera);
 // use from the place definition and start hidden unless active.
 const placeGroups = new Map();
 const scenerySpins = new Map(); // place id -> [{ object, rate }]
+const sceneryMovers = new Map(); // place id -> [live collider] (turning parts)
 const scenerySkies = new Map(); // place id -> the sky group that follows the camera
 const skyDisposers = new Map(); // place id -> free that sky's own geometry (an instance ends)
 let activePlace = DEFAULT_PLACE;
@@ -62,13 +63,34 @@ export function showPlace(id) {
 /** Rotate the active place's scenery (planet, station ring) and carry its sky with the camera. */
 export function updateScenery(dt) {
   for (const spin of scenerySpins.get(activePlace) || []) spin.object.rotation.y += dt * spin.rate;
+  // A turning part's collider is exact without ever being re-baked: the soup stays in the part's
+  // own space and this hands the sim the part's live transform. Cheap — one decompose per moving
+  // node per frame, not one per triangle.
+  for (const mover of sceneryMovers.get(activePlace) || []) refreshMover(mover);
   const sky = scenerySkies.get(activePlace);
   if (sky) sky.position.copy(camera.position);
 }
 
+/** Re-read one live collider's placement from the part it belongs to. */
+function refreshMover(collider) {
+  const object = collider.mover.object;
+  if (!object) return;
+  object.updateWorldMatrix(true, false);
+  object.matrixWorld.decompose(_mvPos, _mvQuat, _mvScale);
+  const m = collider.mover;
+  m.pos.x = _mvPos.x; m.pos.y = _mvPos.y; m.pos.z = _mvPos.z;
+  m.quat.x = _mvQuat.x; m.quat.y = _mvQuat.y; m.quat.z = _mvQuat.z; m.quat.w = _mvQuat.w;
+  m.scale.x = _mvScale.x; m.scale.y = _mvScale.y; m.scale.z = _mvScale.z;
+}
+
+const _mvPos = new THREE.Vector3();
+const _mvQuat = new THREE.Quaternion();
+const _mvScale = new THREE.Vector3();
+
 function buildScenery(id, group) {
   const def = placeDef(id);
   const spins = [];
+  const movers = [];
   for (const [index, f] of def.features.entries()) {
     let built = null;
     if (f.kind === "planet") built = planetModel(f);
@@ -78,9 +100,19 @@ function buildScenery(id, group) {
     // Collision mirrors what is drawn (see docs/GLB_MODELS.md): the baked triangles are the
     // collider. `collide: false` in a feature opts a glow or decoration out. The feature
     // index keeps two same-kind features without ids from overwriting each other's collider.
+    // Damage defaults to 1, like a rock: anything solid hurts at speed unless the feature says
+    // otherwise (`collideDmg: 0` bounces without damage).
     if (f.collide !== false) {
-      const col = colliderFromObject(built.object, { id: f.id || `${f.kind}#${index}`, damage: f.collideDmg ?? 0 });
-      if (col) registerPlaceCollider(id, col);
+      const col = colliderFromObject(built.object, { id: f.id || `${f.kind}#${index}`, damage: f.collideDmg ?? 1 });
+      if (col) {
+        // A still model registers itself; a model with turning parts registers one live mover per
+        // turning node, each of which the sim re-reads through its `mover.transform` every frame.
+        if (col.soup) registerPlaceCollider(id, col);
+        for (const mover of col.movers || []) {
+          registerPlaceCollider(id, mover);
+          movers.push(mover);
+        }
+      }
     }
   }
   // Step 14: an instance declares its own sky on its place record, so it never looks like the space
@@ -96,6 +128,7 @@ function buildScenery(id, group) {
     if (sky.dispose) skyDisposers.set(id, sky.dispose);
   }
   scenerySpins.set(id, spins);
+  sceneryMovers.set(id, movers);
 }
 
 /**
@@ -110,6 +143,7 @@ export function forgetPlace(id) {
     placeGroups.delete(id);
   }
   scenerySpins.delete(id);
+  sceneryMovers.delete(id);
   scenerySkies.delete(id);
   const dispose = skyDisposers.get(id);
   skyDisposers.delete(id);

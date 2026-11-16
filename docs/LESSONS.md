@@ -17,23 +17,8 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ## Missions
 
-### L1. Starting a mission again spawned more ships each time
-- **Seen:** accepting and abandoning a mission repeatedly made more and more NPCs appear.
-- **Cause:** nothing stopped the same story mission being active twice (only the Mission log hid it), so its
-  script ran twice; and abandoning did not always remove the ships, shots and crates the mission had made.
-- **Rule:** a story mission can be active only once. Everything a mission spawns carries the mission's identity
-  and is removed when it is abandoned, failed or paid. Starting it again starts clean from step 0.
-- **Enforced by:** `tests/mission-invariants.test.mjs` ("cannot be active twice", "accepting and abandoning it
-  over and over never multiplies its ships"); the guard in `acceptMission` (`sim/missions.js`).
-
-### L2. A full hold made the mission skip, fail or abandon
-- **Seen:** when the hold had no room for the mission item, the mission abandoned itself or moved on without the
-  next dialogue.
-- **Cause:** a resource shortfall (cargo space) was treated as a failure or as "done".
-- **Rule:** a shortage makes a step **wait**, and the objective says what to do. A step that hands over an item
-  advances only when the whole amount really fits. A mission item dropped in space stays there until collected.
-- **Enforced by:** the full-hold invariant (every mission, every step); `tests/step13b-missions.test.mjs`
-  (blocked beacon hand-off); `blockedScriptText` and the "Dock at a station and make room" hint.
+<!-- L1, L2, L4 and L5 were moved verbatim to docs/archive/LESSONS_1-5.md on 2026-11-15 to keep
+     this file under its size limit. -->
 
 ### L3. Warping or undocking during a dialogue failed the mission
 - **Seen:** leaving mid-conversation (warp, undock) marked the mission failed, or killed the dialogue.
@@ -43,23 +28,6 @@ Mission lessons are first because missions are where most bugs have come from. T
   says to return.
 - **Enforced by:** the wandering invariant (the pilot is moved to a different place before every action); the
   linter (`fails.message`, allowed failure reasons); `step13b` warp-before-Close test.
-
-### L4. A finished mission failed or vanished afterwards
-- **Seen:** after completing the objective, a later sector change or death removed the mission before the reward
-  could be claimed, and it re-appeared as a fresh "Start".
-- **Cause:** failure rules were checked even after completion.
-- **Rule:** a completed mission can no longer fail; it stays claimable until paid.
-- **Enforced by:** `tests/step13b-missions.test.mjs` (return-home flow). *Partial: the invariants do not yet kill
-  the pilot after completion, so add that case if this area changes.*
-
-### L5. A dialogue button made things spawn, or ships appeared in the pilot's face
-- **Seen:** pressing Continue triggered a spawn the briefing had not led up to; NPCs appeared on top of the pilot.
-- **Cause:** world events were chained to dialogue progress; spawns were placed relative to nothing safe.
-- **Rule:** dialogue and the world are separate (Continue only moves the conversation). Spawns happen because of
-  what the pilot does in the world, from a declared distance of at least `MISSION_RULES.minSpawnDistance`, while
-  flying.
-- **Enforced by:** invariant (the world is snapshotted around every dialogue click and must be unchanged);
-  invariant (measured spawn distance); linter (every spawn needs `spawnDist`, `requiresFlying`).
 
 ### L6. A mission item appeared in the hold by itself
 - **Seen:** with a full hold the item dropped; after unloading cargo at the station the item suddenly appeared in
@@ -315,3 +283,69 @@ sky hung upside down.
 - **Enforced by:** `tests/skybox.test.mjs` — "the six faces are drawn the way the generator painted them" and "each flip
   in the table is necessary and no flip is redundant". It caught the real bug (worst mismatch 1.25 on `py`/`ny`, 0.0000
   on the other four).
+
+### L25. A projectile's hit test must read the colliders the world already has, and sweep, not sample
+
+Shots went through Meridian Station for months because `updateBullets` asked two questions and neither was "is
+there scenery here": it checked hostiles (a sphere) and rocks (a distance-to-centre circle). The colliders existed
+and the player's own ship already collided with them; the projectile path simply never asked. Whenever something new
+must be hit, blocked or stopped, look for the hit test the game **already trusts** and reuse it — here
+`sim/colliders.js`, which `render/` bakes and `player.js` and `ai.js` already read — rather than writing a second,
+cheaper approximation beside it. A second approximation drifts: the old rock test used a bounding circle, so shots
+also died in empty space beside a lumpy rock.
+
+The other half is **sweeping**. A basic cannon bolt covers 15 m in one 60 Hz tick and a missile 8 m, so an end-point
+test tunnels through anything thinner than that: a station spoke, a small rock, the edge of a hull. Test the segment
+between the last tick's position and this one (`segmentColliderHit`), take the nearest hit's fraction `t`, and put the
+projectile at the impact point so the explosion happens where it hit and not past it. The same sweep answers "would
+this wall block the beam" for free.
+
+Two consequences worth keeping:
+- **`noclip` and `collide: false` must stay pass-through for projectiles as well as ships.** They are the owner's
+  opt-out; a weapon that hits decoration makes the opt-out meaningless. Assert it, do not assume it.
+- **Check what the new stop rule does to balance before shipping it.** Rocks now stop enemy fire, so a pilot can take
+  cover — a real gameplay change. Measure it (here: 1 of 24 long lines from the station meets a rock in the Meridian
+  belt) and say so, rather than discovering it in a playtest.
+
+- **Enforced by:** `tests/projectile-collision.test.mjs` — the Meridian Station's real geometry stops a bolt on its hub
+  and its ring, a thin wall between two ticks is caught, the nearest collider wins, a hostile's hull still resolves
+  first, `noclip` scenery does not stop shots, a rock stops a hostile shot aimed at the pilot, and a missile and the
+  mining beam obey the same rule.
+
+### L26. A collider is a snapshot: if the part moves, transform the query, never re-bake the bake
+
+A baked collider is a photograph — right for a still part, wrong at once for a turning one: Meridian's 180 m arms are
+**144 m** from a still hitbox in a minute. Baking several angles is wrong too: fat between samples, N× the triangles. Both conflate *geometry* with *where it is*. Keep them apart: bake the soup **once, in its own space**, store
+the live transform beside it (`mover = { pos, quat, scale }`, refreshed per frame), and carry the **query** in — segment
+for weapons, sphere for hulls. Asteroid soups already worked this way (`segmentRockHit`). Rotate the
+normal back to world space before moving a hull.
+
+**Follow the owner's default:** match the model for anything noticeable; only tiny decoration earns `noclip`, and a
+*workaround* tag is a smell. The arms also exposed a latent bug: `closestPointTriangle`'s face-interior branch was
+guarded by a triple product that is **identically zero**, so interior queries fell back to *vertex A* — wrong normal
+and depth, for every hull. Thin flat geometry probes it.
+
+- **Enforced by:** `tests/moving-colliders.test.mjs` — on the arms at 24 spin phases, clear between them, arms named
+  `spin`.
+
+### L27. A default is a rule you did not write down: a silent `0` made every station harmless
+
+Hitting Meridian Station did nothing for three sessions. The rock path carries `damage: 1` hardcoded, so rocks hurt;
+the scenery path threaded a `damage` factor from data through the bake to a `hit.damage > 0` gate — defaulting to `0`
+at every hop (`colliderFromObject`, `scene.js`'s `f.collideDmg ?? 0`). Zero passed every check, multiplied every
+number, did nothing. A **factor defaulting to zero behind a `> 0` gate** is a feature that is dead rather than wrong,
+and nothing crashes.
+
+**The owner's rule is the right default:** everything solid hurts unless specifically told not to (2026-11-15). So the
+factor defaults to `1` — the rock's own number — and the opt-out is explicit data (`collideDmg: 0`). When a system
+has a knob whose zero means "never", make the *default* the behaviour the game wants, and make disabling it the
+sentence a person has to write on purpose. Then apply the rule everywhere it is meant to hold in one pass: the pilot
+**and** hostiles, which had the same free bounce for the same reason.
+
+The second half is the test that was missing: nothing asserted scenery damage either way, so 633 green tests said
+"fine" about a station that could not hurt anyone. Assert a rule at what the player feels — flying a hull into scenery
+and reading the shield bar — not at the plumbing that carries it.
+
+- **Enforced by:** `tests/collision-damage.test.mjs` (bake defaults, the hull really takes the rock-rate damage,
+  the factor scales it, `collideDmg: 0` opts out, slow contact is free, rock and station cost the same) and
+  `tests/enemy-collision.test.mjs` (scenery damages a hostile, `collideDmg: 0` does not).

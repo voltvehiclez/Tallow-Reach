@@ -294,6 +294,9 @@ export function flight(dt, P = state.player, runtime = null) {
     P.pos.y += hit.y * hit.depth;
     P.pos.z += hit.z * hit.depth;
     bounceOff(P, hit);
+    // Everything solid hurts, at the same rate a rock does (owner, 2026-11-15): a station ring, a
+    // planet, a cave wall. `collideDmg: 0` in a place's data is the only way to make one bounce
+    // without damage, and `collide: false` the only way to have none at all.
     if (hit.damage > 0 && speed > 25) hurt(speed * 0.015 * hit.damage, P);
   }
 

@@ -23,6 +23,7 @@ import { dropEntity } from "./entity.js";
 import { rockMemoryId } from "./asteroids.js";
 import { markRockMined } from "./place-memory.js";
 import { fieldAt } from "./places.js";
+import { placeCollidersOf, sweepColliders } from "./colliders.js";
 
 // The mining beam's glow and the missiles' bodies are drawn by `render/views.js`
 // (step 7b). The sim only says where the beam is and when it is on:
@@ -158,6 +159,21 @@ export function updatePrimary(dt, P = state.player) {
       if (off < a.r + 4 && along < bestDist) {
         bestDist = along;
         best = a;
+      }
+    }
+    // The beam is a cutting torch, not a ghost: it stops on whatever stops a shot, so a station wall
+    // between the ship and the rock stops the cut. Without this the beam reached through the
+    // station's hull to a rock on the far side of it.
+    if (best) {
+      const reach = Math.max(0, bestDist - best.r * 0.5);
+      const wall = sweepColliders(placeCollidersOf(P.place || state.place), [], pp, pp.clone().addScaledVector(f, reach));
+      if (wall) {
+        F.beamOn = true;
+        F.beamStart = playerMount("beam", beam.i, 0, 1, P, ship);
+        F.beamEnd = V(wall.x, wall.y, wall.z);
+        sayFor("Beam blocked");
+        F.beamT = 0;                 // no progress toward an ore through a wall
+        return;
       }
     }
     if (!best) {

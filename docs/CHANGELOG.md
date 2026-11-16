@@ -20,6 +20,138 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-15: Hitting the station hurts again — solid means collision damage, by default
+
+Owner: "Collision damage is gone from the meridian station. Everything that is solid should apply collision damage
+unless otherwise specific. Asteroids still apply collision damage correctly."
+
+Exactly right, and it was one default. A rock's collider carries `damage: 1` (hardcoded in `collideRockAt`), so rocks
+always hurt. Scenery went the other way: `colliderFromObject` took `damage = 0`, `scene.js` passed
+`f.collideDmg ?? 0`, and `player.js` gated on `hit.damage > 0` then multiplied by the factor — so a factor of 0
+zeroed the damage and the condition skipped it. Every station, planet and cave had been a free bounce since the
+model-fitted collision work, and **no test checked it either way**, which is why it survived three sessions.
+
+**No save change (v21).** `npm test` **640/640**, `npm run build` 3002 KB.
+
+- **The rule is now the owner's rule: solid means `damage: 1`, the same factor a rock uses.** Fly into Meridian above
+  25 m/s and it costs `speed * 0.015 * damage` — shields first, exactly the rock rate, measured. The 25 m/s threshold
+  is unchanged (drifting into a station is still free).
+- **Opt-outs are data, not defaults.** `collideDmg: 0` makes a surface solid but harmless (a bounce), `collideDmg: 2`
+  makes one hurt twice as much, `collide: false` still means no collider at all. Default `1` in both
+  `colliderFromObject` and `scene.js`.
+- **Hostiles obey the same rule.** `ai.js` used to bounce raiders off scenery for free while a rock hurt them; scenery
+  now damages them through the same `enemy-rammed` event with `byPlayer: null`, so it is an environmental kill that
+  credits no pilot and settles every kill objective the same way a rock kill does. The rock path's 25 m/s gate is
+  kept for both.
+- **A test-prop lesson, not a game bug:** a *single flat triangle* is a bad stand-in for a wall — a 4.8 m hull can
+  straddle a zero-thickness plane between two ticks and register nothing. Real scenery is closed geometry and every
+  Meridian part is thick enough (thinnest 2 m, so a 4.8 m hull overlaps it from 3.8 m away). The new hostile test
+  builds a closed slab.
+- **Files:** `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`, docs.
+- **Tests:** new `tests/collision-damage.test.mjs` (6) — the bake defaults to 1 for still parts and movers, flying
+  into the station costs hull, the cost is the rock rate scaled by the factor, `collideDmg: 0` bounces for free,
+  slow contact is still free, and a rock and a station cost the same for the same approach. `tests/enemy-collision.test.mjs`
+  gains one (scenery damages a hostile, `collideDmg: 0` does not). Two of these were checked to FAIL with the old
+  default restored.
+- **Not playtested.** Headless only; the owner's own flight is the visual check.
+
+Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`,
+`tests/collision-damage.test.mjs` (new), `tests/enemy-collision.test.mjs`, `docs/GLB_MODELS.md`, `docs/HANDOFF.md`,
+`docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
+## 2026-11-15: Big moving parts are solid, and a wormhole pocket is really there after a reload
+
+Two owner bug reports, both fixed at the level they live at rather than at the symptom.
+
+Owner, on collision: "Meridian station arms that connect to the ring have no collision box. I think its good if
+collision boxes are more accurate to the model by default. Obviously dont go completely crazy with collision box
+accuracy if it causes performance issues." And then the rule that set the design: **"the way you integrate this needs
+to be foundational so that big moving parts on structures have collision boxes by default. Very tiny details its ok
+if they dont have collision box, try to make collision boxes as accurate as possible by default while having a
+reasonable performance consideration."**
+
+**No save change (v21).** `npm test` **633/633**, `npm run build` 3002 KB.
+
+- **Why the arms had no collider.** They were tagged `noclip.spin`, and not by mistake: a collider is a *bake*, a
+  bake is a snapshot, and a snapshot of a turning part is wrong the moment it turns. Meridian's arms are 180 m long
+  at 0.1 rad/s, so a still hitbox is **144 m** away from the drawn arm inside a minute. Baking several copies
+  through the turn is the other wrong answer: fat between copies, and N× the triangles forever.
+- **The foundation: live colliders for moving parts.** A part named `spin` now bakes its soup **once in its own
+  space** and carries `mover = { pos, quat, scale, object }`; `render/scene.js` refreshes that from the part's world
+  matrix each frame (`refreshMover`), and `sim/colliders.js` carries the query into the part's space instead of
+  carrying triangles out — the same trick asteroid soups already used. Exact at every angle, no re-bake, no extra
+  triangles; a frame's cost for a mover is one `decompose()`. Both `collideSphereAt` (ships) and `segmentColliderHit`
+  (weapons) understand movers, so the arms are solid to the hull **and** to every weapon, per the rule shipped earlier
+  today. Small decoration (the twelve warning lights) stays `noclip` — the owner's exception.
+- **A real bug fell out of this: `closestPointTriangle` was wrong for most hits.** Its face-interior branch was
+  guarded by a triple product that is **identically zero**, so every query landing inside a triangle reported
+  *vertex A* as the closest point. Penetration was then measured from a far corner and the push-out normal pointed
+  at it. That affected ship-vs-scenery and ship-vs-rock everywhere, not just the arms; a box's broad flat face is
+  exactly where it showed. Fixed, with two tests that compare the push-out against the real analytic surface
+  distance. Flight feel is unchanged (`SHIP_RADIUS` still 4) — hulls are simply pushed out along the right normal now.
+- **The wormhole bug: the pocket was never loaded, so its rocks were never there.** Owner: "Going inside a simple
+  wormhole and exiting the game in the wormhole… open game again and go through the exit wormhole and you get back
+  to the simple wormhole pocket in normal space. This causes the debris around the wormhole in normal space
+  invisible, wormhole is visible though. The debris are visible again when you warp out and back into the simple
+  wormhole pocket." `loadPlace` only fills a place when the container is not loaded — and on a normal visit that
+  runs. But a pilot who quit **inside** the run is put straight back into the run by the load, so the pocket they
+  came through is never visited and nothing ever builds it. `leaveInstance` → `sendPilotsHome` then returned them
+  to a pocket with no world behind it: the door is rebuilt from the place definition either way, so it was visible,
+  while the asteroid field (which lives in the world) was empty and therefore invisible. **Fix:** `sendPilotsHome`
+  loads the place it sends the pilot back to. Idempotent, so the ordinary path is unchanged.
+- **Files:** `src/render/collideModel.js`, `src/render/scene.js`, `src/render/models.js`, `src/sim/colliders.js`,
+  `src/sim/instances.js`, `docs/GLB_MODELS.md`, two new tests below.
+- **Tests:** new `tests/moving-colliders.test.mjs` (11) — the hitbox is exactly on the arms at 24 spin phases and
+  clear between them, the soup is never rebuilt, a full turn does not drift it, ships are pushed out along the
+  part's own normal, the station's still parts keep their 840 triangles, the arms add 48 (not 48× samples), and the
+  source guard that the arms are still named `spin`. New `tests/wormhole-reload-return.test.mjs` (3) — quit in the
+  run, reload, exit, and the pocket's field matches a fresh visit exactly (it was 0 rocks before the fix).
+- **Not playtested.** The owner's own flight is the only visual check; both fixes are headless-verified only.
+
+Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/render/models.js`, `src/sim/colliders.js`,
+`src/sim/instances.js`, `tests/moving-colliders.test.mjs` (new), `tests/wormhole-reload-return.test.mjs` (new),
+`docs/GLB_MODELS.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `docs/HANDOFF.md`, `docs/LESSONS.md`,
+`game/tallow-reach.html`.
+
+## 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
+
+Owner: "collision boxes that are not no-clipable stop all types of weapons / projectiles in a logical way. So all
+cannons, missiles etc should impact when hitting a collision box. I notice if I shoot meridian station with cannons it
+goes through it. Not sure how it works with asteroids but make sure the hit boxes stop them so its realistic."
+**No save change (v21).** `npm test` **619/619**, `npm run build` 2999 KB.
+
+- **The bug:** `updateBullets` tested hostiles (a sphere), then rocks (a distance-to-centre circle), and **never looked at
+  a place's colliders at all**. A station had nothing to hit, so every shot passed through it. Enemy fire had the same
+  hole in reverse — and because bolts stopped on a rock's *bounding circle* rather than its mesh, a shot could also die
+  on empty space beside a lumpy one.
+- **The fix, in `sim/colliders.js`:** `sweepColliders` / `segmentColliderHit` / `segmentRockHit` walk the **segment a
+  projectile covered that tick** (Möller–Trumbore, two-sided) across the place's colliders and the rock soups, and return
+  the nearest hit with its fraction along the path. Sweeping rather than sampling the end point matters: a 900 m/s bolt
+  covers 15 m a tick, so a station spoke or a small rock can sit entirely between two ticks. Unit checks: a thin sheet
+  between two ticks is caught; the nearest of two colliders wins regardless of list order; a rock is transformed into
+  model space rather than every vertex out.
+- **Bolt rule, in order:** a hostile's hull, then the scenery and rocks, then the pilot's hull for a hostile's shot. The
+  wall is checked for both sides, because a wall is a wall whoever fired. A shot that meets scenery dies **at the impact
+  point** with a spark, and damages nothing — scenery has no hull points.
+- **Missiles** sweep the same swath and burst on scenery and rocks instead of sailing through. **The mining beam** is
+  blocked too: a station wall between the ship and the rock stops the cut, the beam is drawn to the wall, and `beamT`
+  does not advance, so a rock cannot be mined through a station.
+- **The owner's exact case is a test.** `tests/projectile-collision.test.mjs` builds Meridian Station's real geometry
+  (ring, hub, base, dock box; the four `noclip.spin` spokes correctly excluded), and checks a bolt down the station's axis
+  stops on the hub, one at the ring hits the ring, and shots 400 m clear or 200 m above fly on.
+- **`noclip` and `collide: false` still let projectiles through**, which is what they are for: only clipping colliders
+  stop a weapon. That is asserted, not assumed.
+- **Balance effect, measured rather than assumed:** the Meridian belt is sparse — of 24 lines out from the station, one
+  meets a rock within 4 km — so combat does not become a corridor. Enemy fire can now be blocked by a rock when the pilot
+  takes cover behind one, which is the realism the owner asked for.
+- **One golden fixture re-recorded** (`tests/fixtures/step8b-combat-lifecycle.json`) and the reason is written into the
+  test file. Every player position, heading, velocity, power reading, cooldown, missile, ore count, credit and docked
+  flag is byte-identical; what changed is that shots stop at the rock and the pilot keeps the shields the raider's fire
+  used to take **by passing through that same rock** (10 instead of falling to 0), so hull stays 10 and saved hp is 1, not
+  0.6. Its three narrative assertions (mined ore, a missile launched, died and docked) all still hold.
+
+---
+
 ## 2026-11-15: The skies are cube maps — six 2048 faces each, no distortion and no seams
 
 The owner: "the skyboxes look a bit distorted and also a little bit blurry since im using 4k monitor. Make the Skybox
@@ -194,44 +326,10 @@ Files: `src/ui/menu.js`, `src/ui/discard.js`, `src/styles.css`, `src/sim/mission
 
 ---
 
-## 2026-11-14: Three owner-reported bugs — the Alt camera locks to the hull, one primary fires at a time, no tags over the menu
-
-Owner, on the step-14 round: three bugs. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
-
-- **Bug 1 — the Alt free camera now locks its up vector to the ship.** With Alt held the mouse orbits and the wheel zooms (unchanged), but the view rolls with the hull: roll with E/Q and the ship holds still in frame while the world turns around it, instead of the old world-up lookAt that let the ship spin under a level camera. New `faceUp` in `util/math.js`; used by the free-cam branch of `chaseView` (`render/camera.js`). The non-Alt chase view is untouched. Alt-chords (`Alt+E` and friends) are now `preventDefault()`ed in `core/input.js` so the browser's own menu does not pop during the free camera (owner confirmed 2026-11-14; Chrome's reserved menu keys cannot be overruled).
-- **Bug 2 — exactly one primary weapon fires, the selected one.** Keys **1 and 2 now select primary bay 1 and primary bay 2**; left click fires only the module in the selected bay (a gun from that bay, or the beam fitted there). A second fitted cannon stays silent until its slot is selected; an empty selected bay fires nothing. `profile.pw` stores the selection as `"1"`/`"2"` and migrates old saves in place: legacy `"cannon"`/`"beam"` map to the first bay of the flown ship holding that kind of module (falling back to the other kind, then bay one) — no version bump, v21 saves load cleanly. HUD shows the slot number next to the weapon (`1: Basic cannons`); the equip toast names the module of the slot pressed; `primarySlotIndex` in `sim/weapons.js` is the one place that folds legacy values. Guests get the same rule.
-- **Bug round also swallows Alt-chords before the browser can act on them** (`core/input.js`): any `Alt+<letter>` keydown/keyup gets `preventDefault()`, so holding Alt to orbit in free cam no longer pops the browser's own menu in browsers that honour it (Firefox, Edge, Safari — and Chrome for chords it does not reserve; Chrome's own menu keys such as Alt+E/Alt+F on Windows are owned by the browser and cannot be overruled). Owner confirmed working 2026-11-14.
-- **Bug 3 — no world-space tags over the main menu.** The markers live outside `#hud` (`#mk`), so the menu's `main-menu` event hid the HUD but left the last drawn set — "Trade lane asteroid field", hostiles, crates — floating on the title screen. `setReticle` now hides/shows the marker container together with the HUD (docking and the pause-equivalent paths hide them too; `drawMarkers` redraws on the next flight frame).
-- **Tests:** new `tests/primary-slots.test.mjs` (selection, empty bay, legacy migration); `content.test.mjs` source guards updated to the slot model; `player-weapons`, `headless-fight`, `step9-local-only`, `step9-save`, `single-player-combat-8b`, `profile`, `content` updated to the new `pw` values. **575/575 pass**; build green.
-
-Files: `src/util/math.js`, `src/render/camera.js`, `src/ui/hud.js`, `src/core/input.js`, `src/main.js`, `src/sim/weapons.js`, `src/sim/guns.js` (comments), `src/state/profile.js`, `src/state/state.js`, `src/index.html`, `tests/primary-slots.test.mjs` (new), `tests/content.test.mjs`, `tests/player-weapons.test.mjs`, `tests/profile.test.mjs`, `tests/single-player-combat-8b.test.mjs`, `tests/step9-local-only.test.mjs`, `tests/step9-save.test.mjs`, `tests/headless-fight.test.mjs`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
-
----
-
-## 2026-11-14: The rift wears real space too — the deep rift its own sky
-
-Owner, after the wormhole sky landed and a first pass at the rift one: "Sorry, here is an image for rift, here is an image for deeprift." Two owner-provided panoramas (2880×1440 equirect WebPs), shipped **byte-for-byte**: `rift.webp` (232 KB, a teal maelstrom) and `deeprift.webp` (69 KB, near-black with one sable cluster). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested — ROADMAP stays unticked.
-
-- **`SKIES.shattered` is no longer painted.** It wraps the owner's rift panorama around the inside of the same sphere, seen from the back, one linear filter, no mips — every star where the owner put it. The broken rock still drifts inside it (owner, round three: "shattered asteroids in the background skybox"), lit with a breath of the nebula's teal.
-- **The deep rift is its own image, not a dimmer copy.** `data/instances.js` picks it with `sky.variant: "deep"` on `deep_rift` (shards 40); the ordinary `guardian_rift` wears the rift sky at full presence (shards 30, no `variant`). `sky.variant` is the only colour-adjacent key a template carries besides `kind` and `shards` — no palette, no multiplier, nothing to tune.
-- **`col`, `glow`, `veil` are gone from the rift templates** — they fed the painter, and no template needs them any more. `render/sky.js` is now **unused at runtime**: it survives only for `tests/sky.test.mjs`; deleting both is the owner's call.
-- **Tests:** `tests/step14-instances.test.mjs` pins the rift sky's shape — declared kind, integer `shards`, the deep rift (and only the deep rift) declares `variant: "deep"`, and nothing else. 571/571 pass overall; the build inlines both panoramas as data URLs.
-- **Docs:** `src/render/README.md`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `docs/HANDOFF.md`.
-
-Files: `src/assets/sky-rift.webp` (new), `src/assets/sky-deeprift.webp` (new), `src/render/scene.js`, `src/data/instances.js`, `src/render/README.md`, `src/render/sky.js`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `tests/step14-instances.test.mjs`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
-
-## 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
-
-Owner, looking at the 14c build: "Im not too happy with the skyboxes of both rifts and wormholes … they look almost like coloured fabric. I want them to look like genuine space / fantasy in high quality, Im using a 4k monitor." This round covers the **simple wormhole only**; the rift sky comes next. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet — ROADMAP 14c stays unticked.
-
-- **The pocket is the system's own space, always** (owner, 2026-11-14: "since we are still in the same solar system. This should always be the case"). The spawned pocket no longer declares a `sky` at all (`sim/wormholes.js` `pocketRecord`, `WORMHOLE_POCKET`): `render/scene.js` shows the ordinary starfield, exactly like every sibling pocket. Map dot, formations, lock, clock — unchanged.
-- **The far side is real space.** `SKIES.shroud` is no longer painted: it wraps the owner's reference panorama — a **dark-grey nebula with few stars** (2880×1440 equirect WebP, q90, ~168 KB) — around the inside of the same sphere, seen from the back, one linear filter, no mips, no painter in between. An equirect image is exactly what a sphere's UV unwrap is, so it hangs level with no seam math at all. The panorama rides inside the single-file build as a base64 data URL (`src/assets/sky-shroud.webp`; `build.mjs` gained an esbuild `.webp → dataurl` loader) — no external asset path ever resolves.
-- **`shroud` carries no colour data any more**: the three site templates (`wh_smugglers`, `wh_mining`, `wh_hive`) are `{ kind: "shroud" }` and `WORMHOLE_POCKET` lost its palette. The painter (`render/sky.js`) and the `shattered` rift sky are untouched.
-- **Docs/tests:** `tests/step14c-wormholes.test.mjs` gained "the pocket is the system's own space; only the far side is somewhere else" (14/14 there, **571/571** overall); `src/render/README.md`, `data/instances.js` comments and the playtest guide describe both skies. **Open:** the rift (`shattered`) sky still reads as coloured fabric to the owner — next round.
-
-Files: `src/assets/sky-shroud.webp` (new), `build.mjs`, `src/render/scene.js`, `src/sim/wormholes.js`, `src/data/instances.js`, `src/render/README.md`, `testing/TESTING-14C-WORMHOLES.md`, `tests/step14c-wormholes.test.mjs`, docs (`CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`), `game/tallow-reach.html`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: Three owner-reported bugs — the Alt camera locks to the hull, one primary fires at a time, no tags over the menu
+- 2026-11-14: The rift wears real space too — the deep rift its own sky
+- 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
 - 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
 - 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
 - 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars

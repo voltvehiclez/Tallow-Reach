@@ -202,10 +202,16 @@ export function stationModel(f) {
   };
   const ring = add(new THREE.TorusGeometry(90, 7, 8, 48), 0, 0, 0);
   ring.rotation.x = Math.PI / 2;
+  // The arms are big moving parts, so they are solid like everything else (owner, 2026-11-15).
+  // They hang in a node named for the `spin` convention so the collider knows they turn: its soup
+  // is baked once in the arms' own frame and carried into the world by the live transform, so the
+  // hitbox follows them round exactly and never needs re-baking. See docs/GLB_MODELS.md.
+  const arms = new THREE.Group();
+  arms.name = "spin";
+  spin.add(arms);
   for (let i = 0; i < 4; i++) {
-    const spoke = add(new THREE.BoxGeometry(180, 2.5, 2.5), 0, 0, 0);
+    const spoke = add(new THREE.BoxGeometry(180, 2.5, 2.5), 0, 0, 0, arms);
     spoke.rotation.y = (i * Math.PI) / 4;
-    spoke.name = "noclip.spin";   // the collider is baked once; see docs/GLB_MODELS.md
   }
   add(new THREE.CylinderGeometry(14, 14, 150, 12), 0, 0, 0, stn);
   for (let i = 0; i < 12; i++) {

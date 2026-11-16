@@ -48,7 +48,7 @@ import { rollLoot } from "./loot.js";
 import { CACHE, countOf, moveItem } from "./inventory.js";
 import { itemName, newStock } from "../data/items.js";
 import { clearWorldObjects } from "./world.js";
-import { enterPlace } from "./places.js";
+import { enterPlace, loadPlace } from "./places.js";
 import { playerPos } from "./pilot.js";
 import { hurt } from "./player.js";
 
@@ -379,6 +379,14 @@ function sendPilotsHome(record) {
       state.worldState.place = P.place;
     }
   }
+  // The pocket the pilot comes back to has to BE a place again before they stand in it. A pilot who
+  // entered this run without first loading its pocket (which is what happens after a reload: they
+  // are put straight back into the run, so the pocket was never visited this session) used to land
+  // in a pocket with no container behind it — nothing to draw, so its rock formations were
+  // invisible until a warp out and back rebuilt it (owner bug report, 2026-11-15). Loading it here is
+  // idempotent: a pocket already loaded just refreshes its persistent spawns.
+  const home = record.origin;
+  if (typeof home === "string" && home && isPlace(home)) loadPlace(home);
 }
 
 /**
