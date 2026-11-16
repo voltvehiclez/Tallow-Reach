@@ -5,6 +5,18 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-14: The rift wears real space too — the deep rift its own sky
+
+Owner, after the wormhole sky landed and a first pass at the rift one: "Sorry, here is an image for rift, here is an image for deeprift." Two owner-provided panoramas (2880×1440 equirect WebPs), shipped **byte-for-byte**: `rift.webp` (232 KB, a teal maelstrom) and `deeprift.webp` (69 KB, near-black with one sable cluster). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested — ROADMAP stays unticked.
+
+- **`SKIES.shattered` is no longer painted.** It wraps the owner's rift panorama around the inside of the same sphere, seen from the back, one linear filter, no mips — every star where the owner put it. The broken rock still drifts inside it (owner, round three: "shattered asteroids in the background skybox"), lit with a breath of the nebula's teal.
+- **The deep rift is its own image, not a dimmer copy.** `data/instances.js` picks it with `sky.variant: "deep"` on `deep_rift` (shards 40); the ordinary `guardian_rift` wears the rift sky at full presence (shards 30, no `variant`). `sky.variant` is the only colour-adjacent key a template carries besides `kind` and `shards` — no palette, no multiplier, nothing to tune.
+- **`col`, `glow`, `veil` are gone from the rift templates** — they fed the painter, and no template needs them any more. `render/sky.js` is now **unused at runtime**: it survives only for `tests/sky.test.mjs`; deleting both is the owner's call.
+- **Tests:** `tests/step14-instances.test.mjs` pins the rift sky's shape — declared kind, integer `shards`, the deep rift (and only the deep rift) declares `variant: "deep"`, and nothing else. 571/571 pass overall; the build inlines both panoramas as data URLs.
+- **Docs:** `src/render/README.md`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `docs/HANDOFF.md`.
+
+Files: `src/assets/sky-rift.webp` (new), `src/assets/sky-deeprift.webp` (new), `src/render/scene.js`, `src/data/instances.js`, `src/render/README.md`, `src/render/sky.js`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `tests/step14-instances.test.mjs`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 

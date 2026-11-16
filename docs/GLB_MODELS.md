@@ -64,9 +64,9 @@ Names are matched case-insensitively at build/instantiate time; anything not lis
 
 | Name pattern | Meaning |
 | --- | --- |
-| `spin` / `spin-*` | rotated around **Y**. Station rings: baked collider stays flush **only if the part is rotationally symmetric about Y** (a torus ring is; spokes are not — the built-in spokes and their bulbs are tagged `noclip` for exactly this reason). Planet spin rate comes from the feature (`spin`, radians/second, visual only); station spin is 0.1. |
+| `spin` / `spin-*` | rotated around **Y**, and **solid** — the collider follows the part round (see *Moving parts* below). Planet spin rate comes from the feature (`spin`, radians/second, visual only); station spin is 0.1. |
 | `eng` / `eng-*` | engine glow. Its **Z** scale is driven each frame by throttle (and boost) from whatever length you authored (the authored scale is remembered on `userData.engZ0`). The built-in boxes are 1. |
-| `noclip` / `noclip-*` / `noclip.*` | **drawn, but no collision triangles.** Glow shells, auras, decorative vanes, the ring's spokes/lights. The only opt-out from model-fitted collision, short of `collide: false` in data. |
+| `noclip` / `noclip-*` / `noclip.*` | **drawn, but no collision triangles.** Glow shells, auras, warning lights, tiny vanes. Keep this for things a pilot should never bump into; **not** for big structure. The only opt-out from model-fitted collision, short of `collide: false` in data. |
 
 ## Collision — fitted to the model, everywhere
 
@@ -78,11 +78,13 @@ Ericson closest-point-on-triangle solve. There is one code path for procedural a
   per-rock scale/rotation still apply). Broadphase is the soup's bounding sphere; rocks at 18–70 m cost
   nothing until they are close. Missiles die on the same hull. Hitting one above 25 m/s costs a point of
   hull per 0.015 of speed, same rule as before.
-- **Station / planet / future scenery** — the collider is baked from the *built* model at build time,
-  in world space (`render/collideModel.js`), registered per place id, and cleared when the place is torn
-  down. The station's torus ring, hub cylinder and docking arm are all solid (the ring spins but is
-  rotationally symmetric, so the static bake is exact); atmosphere shells are tagged `noclip` and fly-through.
-  Planets are solid now (they used to be walk-through). Scenery hits never damage the hull — they bounce it.
+- **Station / planet / future scenery** — the collider is baked from the *built* model at build time
+  (`render/collideModel.js`), registered per place id, and cleared when the place is torn down. A still
+  model bakes to one world-space soup; a model with `spin` parts additionally yields one **live mover**
+  per turning node (see *Moving parts*). Meridian's torus ring, hub, docking arm, lower pylon **and its
+  four spoke arms** are all solid — the arms are 48 triangles in their own space, and the hit tests
+  transform rather than re-bake. Atmosphere shells are tagged `noclip` and fly-through. Planets are
+  solid (they used to be walk-through). Scenery hits never damage the hull — they bounce it.
 - **The ship** — a 4 m sphere (`SHIP_RADIUS`), unchanged for flight feel.
 - **Data opt-outs** (the only others): a place feature may say `collide: false` (pure decoration,
   e.g. a hologram) or `collideDmg: <n>` (hull damage factor on hit; default `0` for scenery).
@@ -93,12 +95,34 @@ Ericson closest-point-on-triangle solve. There is one code path for procedural a
   interior walls collide exactly as drawn, with no new code. Hundreds of thousands of triangles are
   fine: broadphase rejects distant triangles by bounding sphere per model.
 
-### The spinning-part rule
+### Moving parts (and why nothing needs `noclip` to dodge collision)
 
-A collider is baked once, at build orientation. A part named `spin` therefore keeps its build-time
-shape for physics: **spin parts must be rotationally symmetric about the spin axis** (rings, tori,
-cylinders), or be tagged `noclip` if they are decorative. An asymmetric spinning hull cannot be
-represented by a static bake — tag it `noclip` and put a static collision proxy behind it.
+Everything solid is solid by default, **including parts that move**. Owner, 2026-11-15: "big moving
+parts on structures have collision boxes by default… make collision boxes as accurate as possible by
+default while having a reasonable performance consideration."
+
+A part named `spin` becomes a **live collider**: its triangle soup is baked **once, in the part's own
+space**, and the collider record carries a `mover = { pos, quat, scale, object }` that the render layer
+refreshes each frame from the part's world matrix (`render/scene.js` → `refreshMover`). The hit tests
+carry the query into the part's space instead of carrying triangles out (`_moverLocal` in
+`sim/colliders.js`), exactly as asteroid soups already work. So:
+
+- **exact at every angle**, not just at build orientation — no drift as the part turns;
+- **no re-baking and no extra triangles** — the cost per frame is one `decompose()` per moving node;
+- a still model still bakes to one world-space soup and costs nothing per frame.
+
+Two wrong answers this replaces, both worth knowing about: baking a spinning part once is wrong
+within a second (Meridian's 180 m arms stray 144 m inside a minute), and baking N copies through the
+turn is fat between copies and costs N× the triangles forever. A live transform has neither problem.
+
+A mover's soup may be non-uniformly scaled; the sphere radius is scaled with it so the comparison
+stays honest, and the push-out normal is rotated back into world space before the hull is moved.
+
+**Small decoration is the one exception.** A warning light, a glow shell, a tiny vane may be tagged
+`noclip` — the owner allows this and no more ("very tiny details its ok if they dont have collision
+box"). Big structure, anything the pilot's eye reads as the station's frame or a place to bump into,
+gets a collider. When in doubt, leave it solid: a hitbox that is a few centimetres off is invisible,
+a shot passing through a station arm is not.
 
 ## What a `.glb` cannot change
 
@@ -115,4 +139,4 @@ represented by a static bake — tag it `noclip` and put a static collision prox
   separate `noclip`-inverted mesh — ask the owner before adding BVH code.
 - If profiling ever shows triangle tests hurting, the fix is a bounds grid per soup, not a new collision rule.
 
-*Last checked: 2026-11-14.*
+*Last checked: 2026-11-15.*

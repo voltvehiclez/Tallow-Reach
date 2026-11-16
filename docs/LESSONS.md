@@ -343,3 +343,19 @@ Two consequences worth keeping:
   and its ring, a thin wall between two ticks is caught, the nearest collider wins, a hostile's hull still resolves
   first, `noclip` scenery does not stop shots, a rock stops a hostile shot aimed at the pilot, and a missile and the
   mining beam obey the same rule.
+
+### L26. A collider is a snapshot: if the part moves, transform the query, never re-bake the bake
+
+A baked collider is a photograph — right for a still part, wrong at once for a turning one: Meridian's 180 m arms are
+**144 m** from a still hitbox in a minute. Baking several angles is wrong too: fat between samples, N× the triangles. Both conflate *geometry* with *where it is*. Keep them apart: bake the soup **once, in its own space**, store
+the live transform beside it (`mover = { pos, quat, scale }`, refreshed per frame), and carry the **query** in — segment
+for weapons, sphere for hulls. Asteroid soups already worked this way (`segmentRockHit`). Rotate the
+normal back to world space before moving a hull.
+
+**Follow the owner's default:** match the model for anything noticeable; only tiny decoration earns `noclip`, and a
+*workaround* tag is a smell. The arms also exposed a latent bug: `closestPointTriangle`'s face-interior branch was
+guarded by a triple product that is **identically zero**, so interior queries fell back to *vertex A* — wrong normal
+and depth, for every hull. Thin flat geometry probes it.
+
+- **Enforced by:** `tests/moving-colliders.test.mjs` — on the arms at 24 spin phases, clear between them, arms named
+  `spin`.

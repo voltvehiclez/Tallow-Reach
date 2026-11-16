@@ -20,6 +20,60 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-15: Big moving parts are solid, and a wormhole pocket is really there after a reload
+
+Two owner bug reports, both fixed at the level they live at rather than at the symptom.
+
+Owner, on collision: "Meridian station arms that connect to the ring have no collision box. I think its good if
+collision boxes are more accurate to the model by default. Obviously dont go completely crazy with collision box
+accuracy if it causes performance issues." And then the rule that set the design: **"the way you integrate this needs
+to be foundational so that big moving parts on structures have collision boxes by default. Very tiny details its ok
+if they dont have collision box, try to make collision boxes as accurate as possible by default while having a
+reasonable performance consideration."**
+
+**No save change (v21).** `npm test` **633/633**, `npm run build` 3002 KB.
+
+- **Why the arms had no collider.** They were tagged `noclip.spin`, and not by mistake: a collider is a *bake*, a
+  bake is a snapshot, and a snapshot of a turning part is wrong the moment it turns. Meridian's arms are 180 m long
+  at 0.1 rad/s, so a still hitbox is **144 m** away from the drawn arm inside a minute. Baking several copies
+  through the turn is the other wrong answer: fat between copies, and N× the triangles forever.
+- **The foundation: live colliders for moving parts.** A part named `spin` now bakes its soup **once in its own
+  space** and carries `mover = { pos, quat, scale, object }`; `render/scene.js` refreshes that from the part's world
+  matrix each frame (`refreshMover`), and `sim/colliders.js` carries the query into the part's space instead of
+  carrying triangles out — the same trick asteroid soups already used. Exact at every angle, no re-bake, no extra
+  triangles; a frame's cost for a mover is one `decompose()`. Both `collideSphereAt` (ships) and `segmentColliderHit`
+  (weapons) understand movers, so the arms are solid to the hull **and** to every weapon, per the rule shipped earlier
+  today. Small decoration (the twelve warning lights) stays `noclip` — the owner's exception.
+- **A real bug fell out of this: `closestPointTriangle` was wrong for most hits.** Its face-interior branch was
+  guarded by a triple product that is **identically zero**, so every query landing inside a triangle reported
+  *vertex A* as the closest point. Penetration was then measured from a far corner and the push-out normal pointed
+  at it. That affected ship-vs-scenery and ship-vs-rock everywhere, not just the arms; a box's broad flat face is
+  exactly where it showed. Fixed, with two tests that compare the push-out against the real analytic surface
+  distance. Flight feel is unchanged (`SHIP_RADIUS` still 4) — hulls are simply pushed out along the right normal now.
+- **The wormhole bug: the pocket was never loaded, so its rocks were never there.** Owner: "Going inside a simple
+  wormhole and exiting the game in the wormhole… open game again and go through the exit wormhole and you get back
+  to the simple wormhole pocket in normal space. This causes the debris around the wormhole in normal space
+  invisible, wormhole is visible though. The debris are visible again when you warp out and back into the simple
+  wormhole pocket." `loadPlace` only fills a place when the container is not loaded — and on a normal visit that
+  runs. But a pilot who quit **inside** the run is put straight back into the run by the load, so the pocket they
+  came through is never visited and nothing ever builds it. `leaveInstance` → `sendPilotsHome` then returned them
+  to a pocket with no world behind it: the door is rebuilt from the place definition either way, so it was visible,
+  while the asteroid field (which lives in the world) was empty and therefore invisible. **Fix:** `sendPilotsHome`
+  loads the place it sends the pilot back to. Idempotent, so the ordinary path is unchanged.
+- **Files:** `src/render/collideModel.js`, `src/render/scene.js`, `src/render/models.js`, `src/sim/colliders.js`,
+  `src/sim/instances.js`, `docs/GLB_MODELS.md`, two new tests below.
+- **Tests:** new `tests/moving-colliders.test.mjs` (11) — the hitbox is exactly on the arms at 24 spin phases and
+  clear between them, the soup is never rebuilt, a full turn does not drift it, ships are pushed out along the
+  part's own normal, the station's still parts keep their 840 triangles, the arms add 48 (not 48× samples), and the
+  source guard that the arms are still named `spin`. New `tests/wormhole-reload-return.test.mjs` (3) — quit in the
+  run, reload, exit, and the pocket's field matches a fresh visit exactly (it was 0 rocks before the fix).
+- **Not playtested.** The owner's own flight is the only visual check; both fixes are headless-verified only.
+
+Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/render/models.js`, `src/sim/colliders.js`,
+`src/sim/instances.js`, `tests/moving-colliders.test.mjs` (new), `tests/wormhole-reload-return.test.mjs` (new),
+`docs/GLB_MODELS.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `docs/HANDOFF.md`, `docs/LESSONS.md`,
+`game/tallow-reach.html`.
+
 ## 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
 
 Owner: "collision boxes that are not no-clipable stop all types of weapons / projectiles in a logical way. So all
@@ -247,19 +301,8 @@ Files: `src/util/math.js`, `src/render/camera.js`, `src/ui/hud.js`, `src/core/in
 
 ---
 
-## 2026-11-14: The rift wears real space too — the deep rift its own sky
-
-Owner, after the wormhole sky landed and a first pass at the rift one: "Sorry, here is an image for rift, here is an image for deeprift." Two owner-provided panoramas (2880×1440 equirect WebPs), shipped **byte-for-byte**: `rift.webp` (232 KB, a teal maelstrom) and `deeprift.webp` (69 KB, near-black with one sable cluster). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested — ROADMAP stays unticked.
-
-- **`SKIES.shattered` is no longer painted.** It wraps the owner's rift panorama around the inside of the same sphere, seen from the back, one linear filter, no mips — every star where the owner put it. The broken rock still drifts inside it (owner, round three: "shattered asteroids in the background skybox"), lit with a breath of the nebula's teal.
-- **The deep rift is its own image, not a dimmer copy.** `data/instances.js` picks it with `sky.variant: "deep"` on `deep_rift` (shards 40); the ordinary `guardian_rift` wears the rift sky at full presence (shards 30, no `variant`). `sky.variant` is the only colour-adjacent key a template carries besides `kind` and `shards` — no palette, no multiplier, nothing to tune.
-- **`col`, `glow`, `veil` are gone from the rift templates** — they fed the painter, and no template needs them any more. `render/sky.js` is now **unused at runtime**: it survives only for `tests/sky.test.mjs`; deleting both is the owner's call.
-- **Tests:** `tests/step14-instances.test.mjs` pins the rift sky's shape — declared kind, integer `shards`, the deep rift (and only the deep rift) declares `variant: "deep"`, and nothing else. 571/571 pass overall; the build inlines both panoramas as data URLs.
-- **Docs:** `src/render/README.md`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `docs/HANDOFF.md`.
-
-Files: `src/assets/sky-rift.webp` (new), `src/assets/sky-deeprift.webp` (new), `src/render/scene.js`, `src/data/instances.js`, `src/render/README.md`, `src/render/sky.js`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `tests/step14-instances.test.mjs`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: The rift wears real space too — the deep rift its own sky
 - 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
 - 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
 - 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
