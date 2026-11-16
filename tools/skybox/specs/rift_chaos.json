@@ -1,0 +1,42 @@
+{
+  "mood": "very_dark",
+  "background": "#03040a",
+  "palette": [
+    "#2cb4c2",
+    "#1f8f86"
+  ],
+  "nebula": {
+    "amount": 1.25,
+    "coverage": 0.62,
+    "scale": 0.85,
+    "wisps": 0.9,
+    "turbulence": 1.2,
+    "cores": 2.0
+  },
+  "dust": {
+    "amount": 1.0,
+    "coverage": 0.85,
+    "rim": 1.5
+  },
+  "stars": {
+    "density": 0.16,
+    "brightness": 1.0,
+    "color": 0.4,
+    "warmth": 0.0,
+    "halos": 1.0
+  },
+  "band": {
+    "strength": 0.0,
+    "tilt": 28.0,
+    "rotation": 40.0,
+    "width": 11.0
+  },
+  "detail": 0.5,
+  "saturation": 1.0,
+  "contrast": 1.15,
+  "grain": 1.0,
+  "name": "rift_chaos",
+  "preset": "maelstrom",
+  "seed": 23,
+  "size": 4096
+}

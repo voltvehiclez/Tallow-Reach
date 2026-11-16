@@ -111,6 +111,24 @@ export function clearWormholePlaces() {
 
 const catalog = () => merged || rebuildCatalog();
 
+/**
+ * The sky every ordinary pocket is flown under — normal space, as opposed to the somewhere else
+ * an instance is (`data/instances.js`, whose template carries its own `sky`). It is a generated
+ * skybox (`data/skyboxes.js`, made with `tools/skybox/skybox.py`, recipe 24) and it carries the
+ * stars itself.
+ *
+ * Owner 2026-11-15: "remove the existing starfield. This is because our previously generated
+ * skybox already has some stars baked in it. I might re-add star fields in the future but not
+ * now." So `render/scene.js` draws no starfield of its own: the picture is the stars, and two
+ * sets of them would double up. Putting a starfield back is one flag there, not a data change.
+ *
+ * This is the default, not a rule: a place record may carry its own `sky` to override it, and a
+ * runtime instance already does. A skybox id that is not installed is dropped here (the pocket
+ * then falls back to plain black), so a typo costs a background and never the place — and
+ * `npm test` names the typo.
+ */
+export const DEFAULT_SKY = { kind: "panorama", skybox: "normal_space", shards: 0, starfield: false };
+
 export const PLACE_DEFS = {
   // Today's Tallow Reach: the station, the asteroid belt, the planet backdrop
   // and the raider spawner. Every position/radius/rule the sim used to hard-code

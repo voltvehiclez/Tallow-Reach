@@ -2,7 +2,7 @@
 // data/places.js features. Visual only; gameplay positions live in the sim/data.
 
 import * as THREE from "three";
-import { DEFAULT_PLACE, placeDef, placeAt } from "../data/places.js";
+import { DEFAULT_PLACE, DEFAULT_SKY, placeDef, placeAt } from "../data/places.js";
 import { mm, rockShapeAt, stationModel, planetModel } from "./models.js";
 import { colliderFromObject } from "./collideModel.js";
 import { registerPlaceCollider, clearPlaceColliders } from "../sim/colliders.js";
@@ -53,8 +53,11 @@ export function showPlace(id) {
   activePlace = id;
   placeGroup(id);
   for (const [key, g] of placeGroups) g.visible = key === id;
-  // A place with a sky of its own is somewhere else: the ordinary starfield is not showing through it.
-  stars.visible = !scenerySkies.has(id);
+  // The starfield is a per-place look, not a global: it shows only where the place's own sky asks
+  // for one (`starfield: true`) — and only while the master switch is on. Everywhere else the sky
+  // picture is the stars (owner 2026-11-15).
+  const skyDef = placeAt(id).sky || DEFAULT_SKY;
+  stars.visible = STARFIELD.enabled && skyDef.starfield === true;
 }
 
 /** Rotate the active place's scenery (planet, station ring) and carry its sky with the camera. */
@@ -82,9 +85,11 @@ function buildScenery(id, group) {
     }
   }
   // Step 14: an instance declares its own sky on its place record, so it never looks like the space
-  // outside it. `placeDef` is about features; the sky belongs to the place itself.
-  const skyDef = placeAt(id).sky;
-  const sky = skyDef && SKIES[skyDef.kind] ? SKIES[skyDef.kind](skyDef) : null;
+  // outside it. `placeDef` is about features; the sky belongs to the place itself. An ordinary
+  // pocket declares nothing and wears `DEFAULT_SKY` — normal space, a generated skybox with its own
+  // stars in the picture (owner 2026-11-15). A kind nothing builds is dropped, never fatal.
+  const skyDef = skyFor(placeAt(id).sky || DEFAULT_SKY);
+  const sky = skyDef ? SKIES[skyDef.kind](skyDef) : null;
   if (sky) {
     group.add(sky.object);
     spins.push(...sky.spins);
@@ -119,6 +124,20 @@ const SKY_RADIUS = 15000;
 
 // The rift's two skies (slice 14a/14b), both the owner's panoramas (2026-11-14).
 const SHATTERED_URLS = { rift: riftSkyUrl, deep: deepRiftSkyUrl };
+
+/**
+ * What a sky definition resolves to, or `null` when nothing should be drawn for it.
+ *
+ * Only `panorama` can say no: a generated skybox that is not installed (a typo, or a sky removed
+ * from the game) leaves its pocket on plain black rather than throwing — a look, never a rule.
+ * Everything else passes through untouched, so each builder still sees exactly the data its
+ * template declared.
+ */
+function skyFor(def) {
+  if (!def || !SKIES[def.kind]) return null;
+  if (def.kind === "panorama" && !Object.prototype.hasOwnProperty.call(SKYBOX_URLS, def.skybox)) return null;
+  return def;
+}
 
 /**
  * The skies a place can declare (`data/instances.js` `sky.kind`). One builder per kind, each
@@ -253,10 +272,23 @@ const sun = new THREE.DirectionalLight(0xffe2b8, 2.1);
 sun.position.set(-1, 0.4, 0.6);
 scene.add(sun);
 
-// Starfield on a far sphere. It follows the camera so it never runs out.
+// Starfield on a far sphere.
+//
+// OWNER 2026-11-15: "remove the existing starfield. This is because our previously generated
+// skybox already has some stars baked in it. I might re-add star fields in the future but not
+// now." So this is off by default: normal space wears a generated skybox that carries its own
+// stars (`DEFAULT_SKY` in data/places.js), and a second set drawn here would double them up.
+//
+// Putting stars back is this one flag plus a pocket whose sky says `starfield: true` — the
+// geometry, the material and the per-frame follow (`stars.position`) are all kept, so nothing
+// else has to be rebuilt. `STARFIELD.enabled` is the master switch; `STARFIELD.count` is the
+// number of points it makes.
+export const STARFIELD = { enabled: false, count: 2500 };
+
 export const stars = (() => {
   const p = [];
-  for (let i = 0; i < 2500; i++) {
+  const n = STARFIELD.enabled ? STARFIELD.count : 0;
+  for (let i = 0; i < n; i++) {
     const u = R(-1, 1),
       t = R(0, 6.283),
       s = Math.sqrt(1 - u * u);
@@ -268,6 +300,7 @@ export const stars = (() => {
     g,
     new THREE.PointsMaterial({ color: 0x9aa6b2, size: 1.6, sizeAttenuation: false })
   );
+  points.visible = STARFIELD.enabled;
   scene.add(points);
   return points;
 })();

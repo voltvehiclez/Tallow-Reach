@@ -810,6 +810,11 @@ def install(spec: dict, webp_path: Path, label: str) -> None:
     tint = spec["palette"][0].lstrip("#").lower()
     entries[spec["name"]] = (f'{spec["name"]}: {{ n: {json.dumps(label)}, preset: {json.dumps(spec["preset"])}, '
                              f'seed: {spec["seed"]}, size: {spec["size"]}, tint: 0x{tint} }},')
+    write_registries(entries)
+
+
+def write_registries(entries: dict) -> None:
+    """Rewrite both GENERATED blocks from `entries` (id -> its data/skyboxes.js line)."""
     # src/data/skyboxes.js: pure data, safe for the node tests to import
     block = "".join(f"  {entries[k]}\n" for k in sorted(entries))
     data_src = DATA_FILE.read_text(encoding="utf-8")
@@ -826,6 +831,29 @@ def install(spec: dict, webp_path: Path, label: str) -> None:
     URL_FILE.write_text(url_src, encoding="utf-8")
 
 
+def remove(name: str) -> None:
+    """Un-install one skybox: image, recipe and both registry lines, in that order.
+
+    The mirror of `install` — `src/assets/skyboxes/` is the tool's folder, so nothing may be
+    deleted out of it by hand either. A name that is not installed is not an error.
+    """
+    entries = read_manifest()
+    known = name in entries
+    removed = []
+    for path in (ASSET_DIR / f"{name}.webp", SPEC_DIR / f"{name}.json"):
+        if path.exists():
+            path.unlink()
+            removed.append(str(path))
+    if known:
+        del entries[name]
+        write_registries(entries)
+        removed.append("its line in src/data/skyboxes.js and src/render/skyboxes.js")
+    if not removed:
+        print(f"'{name}' was not installed; nothing to remove")
+        return
+    print(f"REMOVED {name}: " + "; ".join(removed))
+
+
 # --------------------------------------------------------------------------------------- CLI
 def cmd_presets(_args) -> None:
     for name, p in sorted(load_presets().items()):
@@ -839,6 +867,12 @@ def cmd_list(_args) -> None:
         print(line)
     if not read_manifest():
         print("(no generated skyboxes installed yet)")
+
+
+def cmd_remove(args) -> None:
+    if not NAME_RE.match(args.name):
+        sys.exit("name must be lowercase letters, digits and underscores, starting with a letter")
+    remove(args.name)
 
 
 def cmd_check(args) -> None:
@@ -887,6 +921,9 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("presets", help="list looks and valid keys").set_defaults(fn=cmd_presets)
     sub.add_parser("list", help="list installed skyboxes").set_defaults(fn=cmd_list)
+    r = sub.add_parser("remove", help="un-install a skybox (image, recipe and registry lines)")
+    r.add_argument("name", help="the id to remove")
+    r.set_defaults(fn=cmd_remove)
     c = sub.add_parser("check", help="report brightness/seam/size of any panorama")
     c.add_argument("file")
     c.set_defaults(fn=cmd_check)

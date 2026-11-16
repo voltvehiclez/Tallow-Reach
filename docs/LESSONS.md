@@ -264,6 +264,26 @@ and those would have been "odd lines" by next round. The test that protects it a
 strokes and no path ever started: when a complaint is about a kind of artifact, pin the absence of the capability, not
 the absence of this week's instance of it.
 
+### L25. Two skies for one picture: the same image installed twice, and a starfield that was already in the paint
+
+- **Seen (owner, 2026-11-15):** "remove the existing starfield. This is because our previously generated skybox already
+  has some stars baked in it. I might re-add star fields in the future but not now."
+- **Cause:** the sky was one thing and the stars another, because until now no sky *was* a picture — the starfield was
+  the only thing drawing stars. The moment normal space started wearing a generated skybox, two systems were drawing the
+  same stars, and the fix was not to darken one of them: it was to stop drawing a second set. The same shape of mistake
+  sat in the assets: the sky the owner kept had been installed under a working name and again under its real one, so the
+  build inlined the same 140 KB picture twice.
+- **Rule:** a picture that carries a thing must not be drawn under a second copy of that thing — ask *who draws this*
+  before adding a layer. A sky's own look is data on the sky (`starfield`, `shards`), and one switch (`STARFIELD.enabled`)
+  can turn a whole layer off without deleting the geometry, so the owner can ask for it back in one line. And an installed
+  sky is a resource with a name: re-making it under the final name and `remove`-ing the old one is part of installing it
+  (the tool has `remove` for exactly this, because `src/assets/skyboxes/` is the tool's folder and not a place to delete
+  from by hand).
+- **Enforced by:** `tests/skybox.test.mjs` — "normal space wears a generated sky, and the drawn starfield is off" reads
+  `showPlace`'s own starfield expression (writer and reader cannot drift apart, as in L19) and pins the master switch;
+  "nothing is in the skybox folder or the url map without being in data/skyboxes.js" plus the per-id budget check make a
+  second copy of a picture a visible 140 KB, and the report's file size is quoted in the CHANGELOG entry.
+
 ### L23. Imported models need an explicit coordinate and size contract
 
 An owner-supplied fighter faced +X and used small exporter units; loading successfully did not make it
