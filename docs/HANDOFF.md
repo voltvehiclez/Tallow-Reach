@@ -5,7 +5,7 @@ code**: give complete files (or exact find-and-replace edits) with full paths, a
 run and what to click. Different AI assistants work in separate chats and none remembers earlier ones.
 **The docs are the memory.** Do not read every doc: read this file, then only what your task needs.
 
-*Last checked: 2026-11-15. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
+*Last checked: 2026-11-16. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
 
 ## Start here (every chat)
 
@@ -35,25 +35,11 @@ run and what to click. Different AI assistants work in separate chats and none r
 - Save version: **v21**.
 - **Which steps are done, built or next: the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step status is kept (this file, REFACTOR_PLAN and the README do
   not repeat it); tick steps there. A step that is "built" but not ticked is waiting for the owner's playtest.
-- **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first, following "When the owner reports a bug" below.
-- **Models & collision (2026-11-14; projectiles + moving parts 2026-11-15):** drop-in `.glb` per drawn thing (built-in fallback kept); **ships** collide with the drawn mesh, `noclip` the mesh opt-out and `collide: false`/`collideDmg` the data ones; enemies are solid (ram both ways). **Every weapon stops too** — bolts, missiles and the mining beam sweep the segment they covered that tick against the same colliders (`sweepColliders`), because shots used to fly through Meridian Station. **Big moving parts are solid**: a `spin` part (Meridian's arms) is a *live* collider — soup baked once in its own space, `mover` refreshed per frame, hit tests carried into it. Exact at any angle, one `decompose()` per mover. Only tiny decoration is `noclip`. Fixed a `closestPointTriangle` bug. **Everything solid hurts**: `damage` defaults to 1 (the rock factor), pilot and hostiles alike; `collideDmg: 0` opts out. Rocks stop enemy fire. Any kill settles kill/hunt/wave-clear objectives for every holder. Save **v21**. See [GLB_MODELS.md](GLB_MODELS.md), LESSONS L25/L26.
-- **Bug round (2026-11-14, awaiting re-play):** with Alt held the free camera rolls with the hull (E/Q spins the ship in a still frame), keys **1/2 select primary bay 1/2 and only the selected bay's weapon fires** (save `pw` stores `"1"`/`"2"`; legacy `cannon`/`beam` migrate to the bay holding that kind of module — v21 saves load cleanly), and world-space markers hide with the HUD, so nothing floats over the main menu.
-- **Test Ship (2026-11-15, awaiting playtest):** 1-cr Hangar hull `testship` — 100× Hull HP, 10× damage, Wasp's hold/layout/stock fit, owner's 181 KB `heavyfighter-compressed.glb` inlined (embedded Draco decoder; ~2.33 MB page). Buy in Hangar: arrives fully fitted, 1000 Hull HP. See [GLB_MODELS.md](GLB_MODELS.md).
-- **Bug round two (2026-11-14, awaiting re-play):** the Sell/Discard confirm buttons sit in the popover's title row; both flows anchor with one rule (clicked-entry centre − 44px) so Discard keeps the placement the owner approved and Sell matches it — the confirm rides just above the mouse. A hunt contract is scoped to the pocket it was accepted in (kills elsewhere don't count; the objective names the area). Rebuilt on `arena/22587946-tallow-reach` after Continue reset the branch.
-- **14c simple wormholes built, waiting on the owner's playtest:** a pocket spawns itself in an ordinary system, appears on that system's map as a "Simple Wormhole" with no notice —
-  **20 min from spawn, kept in `world.wormholes`**. Always **75** in the universe, never more than **3 per system**; replacements pop up
-  with the full 20 minutes. The pocket shows the system's own starfield; a grey dark sphere you can lock hangs at its centre. Every instance interior is the owner's panorama now
-  (dark-grey nebula for a wormhole site, teal maelstrom for a rift, near-black for a deep rift). The far side is a site (smugglers and a freighter to destroy, a lumenite belt to mine,
-  a guardian hive), is **less hardcore than a rift — leave at any time** — and is re-enterable until the pocket expires; objectives and rewards are one-time. Collapse fades the way in;
-  the **Stable wormhole** out always works, no clock, no `kill` outcome. v20 → **v21**; step 15 is **v22** (guide:
-  [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as template, seed, clock, objective, prize (half-traded) and
-  entry spot (`world.instances`); a standing simple wormhole saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`). Campaign = step 15 (v22):
-  mission templates + linter green, see [architecture/feature-notes.md](architecture/feature-notes.md).
-- **Every sky is a generated CUBE MAP (2026-11-15, awaiting the owner's 4K playtest).** Owner: the equirect sky was "distorted and also a little bit blurry" on 4K, so a sky
-  is six square 2048×2048 faces of 90° on a `BoxGeometry` — same ids and looks: `normal_space` 258 KB (`DEFAULT_SKY`), `rift_chaos` 470 KB (both rifts), `wormhole_grey`
-  279 KB (all `wh_*`). **The drawn starfield is off** (`STARFIELD.enabled = false`). `render/cubemap.js` holds the one face correction, proven by `tests/skybox.test.mjs`.
-  Face size is the owner's call (2048); his panoramas are **kept, not drawn**.
-
+- **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first.
+- **Playtests passed (2026-11-16):** 14c, the cube-map skies, the collision-damage fix, the Test Ship and both bug rounds. ROADMAP 14c ticked.
+- **System space (2026-11-16, awaiting playtest):** every pocket of a system now has a derived **3D AU position** (`systemSpatialLayout` in `sim/galaxy.js`): map `x` → AU `x`, map `y` → AU `z`, plus a tiny seeded AU height per pocket (authored `mapHeight` wins). Systems are measured in AUs (1 AU = 150M km) with a seeded per-system scale multiplier; a system's border is its farthest pocket, so it grows itself. The map stays 2D; saves unchanged (nothing stored). Every ordinary pocket — and a spawned wormhole pocket — wears the **system sky layer** (`render/systemsky.js`): the star/black hole as a real 3D sphere (drawn size = its set AU size ÷ your distance — closer pocket = bigger sun) and sibling pockets as barely-visible dots. The one `DirectionalLight` re-aims per pocket from the visible body (black hole dimmer + orange); instances keep their own skies. Guide: [../testing/TESTING-SYSTEM-SKY.md](../testing/TESTING-SYSTEM-SKY.md). Prepares warp-space later.
+- **Models & collision (2026-11-14; playtested 2026-11-16):** drop-in `.glb` per drawn thing (built-in fallback kept); ships/enemies/weapons collide with the drawn mesh (`sweepColliders`); big moving parts are live colliders (Meridian's arms). **Everything solid hurts** (`damage` defaults 1; `collideDmg: 0` opts out). Save **v21**. See [GLB_MODELS.md](GLB_MODELS.md), LESSONS L25/L27.
+- **Test Ship (playtested); bug rounds 1+2 (playtested); 14c wormholes (playtested, ticked); cube-map skies (playtested):** all confirmed 2026-11-16. 14c recap: pockets spawn in ordinary systems, "Simple Wormhole" on the map, 75 standing / ≤3 per system, 20-minute clock, **Stable wormhole** out, save **v21** (`world.wormholes`); step 15 is **v22**. Test Ship recap: 1-cr Hangar `testship`, 1000 Hull HP, 10× damage, `heavyfighter-compressed.glb` inlined. Sky recap: every sky is a generated CUBE MAP (2048 px faces, `STARFIELD.enabled = false`); the owner's panoramas are kept, not drawn; `render/cubemap.js` holds the face correction. Next: **14d**, then step 15 (v22); campaign = step 15, see [architecture/feature-notes.md](architecture/feature-notes.md).
 
 ## The owner's ground rules (do not break these)
 

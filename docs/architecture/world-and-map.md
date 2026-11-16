@@ -5,6 +5,17 @@
 
 ## Conventions
 
+- **Every pocket has a 3D position in AUs (2026-11-16).** `sim/galaxy.js` `systemSpatialLayout(world,
+  systemId)` lifts the same deterministic `systemPocketLayout` into AU space: map `x` → AU `x`, map `y` →
+  AU `z`, and AU `y` (height) is a tiny seeded roll per pocket inside `±heightAmplitudeAu` (1.2 AU), with
+  an authored `mapHeight` (AU, on the pocket record) winning that roll — the future manual-height path.
+  `systemScale` gives each system a stable seeded multiplier in `[minScale, maxScale]` on `auPerMapUnit`
+  (0.05), so systems have their own sizes; a system's `radiusAu` is just its farthest pocket from the
+  central body, so adding a farther pocket grows the system by itself. Systems are measured in AUs,
+  never flight metres; heights are deliberately tiny, so the 2D chart is unaffected and the map stays
+  2D. Derived, never saved; runtime-registered wormhole pockets are included via their authored
+  `mapPos`. The central body sits at the origin. `data/galaxy.js` `systemSpace` holds the scale, sizes
+  and looks; `tests/system-spatial.test.mjs` pins the derivation.
 - **The starmap web is resolved data, not UI geometry.** `data/galaxy.js` holds generation tuning,
   visibility policy, advisory tier rules, free local travel default, empty route costs/requirements,
   central-body chance/radii and `GALAXY_OVERRIDES`.

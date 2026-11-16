@@ -17,6 +17,7 @@ export { stationModel, planetModel };
 // every sky in the game is a generated cube map (owner 2026-11-15).
 import { SKYBOXES } from "../data/skyboxes.js";
 import { SKYBOX_URLS } from "./skyboxes.js";
+import { buildSystemSkyLayer, systemLightFor } from "./systemsky.js";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
 
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -58,6 +59,18 @@ export function showPlace(id) {
   // picture is the stars (owner 2026-11-15).
   const skyDef = placeAt(id).sky || DEFAULT_SKY;
   stars.visible = STARFIELD.enabled && skyDef.starfield === true;
+  // The one scene light always comes from the central body of the system you are in (star, or
+  // black hole — dimmer and orange-tinted). Instances are in no system: the old default stands.
+  const light = systemLightFor(id);
+  if (light) {
+    sun.color.set(light.color);
+    sun.intensity = light.intensity;
+    sun.position.copy(light.direction).multiplyScalar(80);
+  } else {
+    sun.color.set(SUN_DEFAULT.color);
+    sun.intensity = SUN_DEFAULT.intensity;
+    sun.position.copy(SUN_DEFAULT.position);
+  }
 }
 
 /** Rotate the active place's scenery (planet, station ring) and carry its sky with the camera. */
@@ -126,6 +139,24 @@ function buildScenery(id, group) {
     spins.push(...sky.spins);
     scenerySkies.set(id, sky.object);
     if (sky.dispose) skyDisposers.set(id, sky.dispose);
+  }
+  // The system sky layer (2026-11-16): the star/black hole and the sibling pockets hanging in
+  // their true AU directions. Rides inside the sky group, so it follows the camera and can never
+  // be reached; instances and unregistered places get nothing and keep their own sky.
+  const layer = buildSystemSkyLayer(id);
+  if (layer) {
+    if (sky) {
+      sky.object.add(layer.object);
+      const disposeSky = sky.dispose;
+      const disposeLayer = layer.dispose;
+      skyDisposers.set(id, () => { if (disposeSky) disposeSky(); disposeLayer(); });
+    } else {
+      const holder = new THREE.Group();
+      holder.add(layer.object);
+      group.add(holder);
+      scenerySkies.set(id, holder);
+      skyDisposers.set(id, layer.dispose);
+    }
   }
   scenerySpins.set(id, spins);
   sceneryMovers.set(id, movers);
@@ -264,9 +295,11 @@ function addModel(model, group) {
 }
 
 scene.add(new THREE.HemisphereLight(0x5a6e80, 0x120e0c, 0.45));
-const sun = new THREE.DirectionalLight(0xffe2b8, 2.1);
-sun.position.set(-1, 0.4, 0.6);
+const SUN_DEFAULT = { color: 0xffe2b8, intensity: 2.1, position: new THREE.Vector3(-1, 0.4, 0.6) };
+const sun = new THREE.DirectionalLight(SUN_DEFAULT.color, SUN_DEFAULT.intensity);
+sun.position.copy(SUN_DEFAULT.position);
 scene.add(sun);
+scene.add(sun.target);
 
 // Starfield on a far sphere.
 //

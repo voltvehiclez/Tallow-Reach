@@ -96,6 +96,35 @@ export function validateTuning(tuning) {
   for (const key of ["coreRadius", "blackHoleRadius", "coreLabelOffset", "coreLabelLineHeight", "labelGap"]) {
     if (!(sub[key] > 0)) throw new Error(`galaxy.systemMap.${key} must be positive`);
   }
+  const sp = tuning.systemSpace;
+  if (!sp) throw new Error("galaxy.systemSpace is missing; read the table in data/galaxy.js");
+  for (const key of ["auPerMapUnit", "minScale", "maxScale", "layerRadius", "minBodyPx", "maxBodyPx"]) {
+    if (!(sp[key] > 0)) throw new Error(`galaxy.systemSpace.${key} must be positive`);
+  }
+  if (!(Number.isFinite(sp.heightAmplitudeAu) && sp.heightAmplitudeAu >= 0)) {
+    throw new Error("galaxy.systemSpace.heightAmplitudeAu must be zero or more");
+  }
+  if (!(sp.minScale <= sp.maxScale)) throw new Error("galaxy.systemSpace.minScale must not exceed maxScale");
+  if (!(sp.minBodyPx <= sp.maxBodyPx)) throw new Error("galaxy.systemSpace.minBodyPx must not exceed maxBodyPx");
+  for (const kind of ["star", "blackHole"]) {
+    const body = sp[kind];
+    if (!body) throw new Error(`galaxy.systemSpace.${kind} is missing; read the table in data/galaxy.js`);
+    for (const key of ["radiusAu", "haloScale", "lightIntensity"]) {
+      if (!(body[key] > 0)) throw new Error(`galaxy.systemSpace.${kind}.${key} must be positive`);
+    }
+    if (!(body.haloOpacity > 0 && body.haloOpacity <= 1)) {
+      throw new Error(`galaxy.systemSpace.${kind}.haloOpacity must be between 0 (exclusive) and 1`);
+    }
+    if (typeof body.color !== "number" || typeof body.halo !== "number") {
+      throw new Error(`galaxy.systemSpace.${kind} needs numeric color and halo`);
+    }
+    if (typeof body.lightColor !== "number") throw new Error(`galaxy.systemSpace.${kind}.lightColor must be a number`);
+  }
+  const dot = sp.pocketDot;
+  if (!dot) throw new Error("galaxy.systemSpace.pocketDot is missing; read the table in data/galaxy.js");
+  if (!(dot.size > 0)) throw new Error("galaxy.systemSpace.pocketDot.size must be positive");
+  if (!(dot.opacity > 0 && dot.opacity <= 1)) throw new Error("galaxy.systemSpace.pocketDot.opacity must be between 0 (exclusive) and 1");
+  if (typeof dot.color !== "number") throw new Error("galaxy.systemSpace.pocketDot.color must be a number");
   if (!["free", "links"].includes(tuning.travel.intraSystem)) {
     throw new Error('galaxy.travel.intraSystem must be "free" or "links"');
   }
@@ -489,6 +518,9 @@ export function validateGalaxy(world) {
     if (pocket.mapPos !== undefined && (!Array.isArray(pocket.mapPos) || pocket.mapPos.length !== 2 || !pocket.mapPos.every(Number.isFinite))) {
       errors.push(`pocket ${id} needs a finite 2D mapPos when authored`);
     }
+    if (pocket.mapHeight !== undefined && !Number.isFinite(pocket.mapHeight)) {
+      errors.push(`pocket ${id} needs a finite mapHeight when authored`);
+    }
   }
   for (const system of world.systems) {
     if (!Object.values(world.pockets).some(p => p.parent === system.id)) {
@@ -650,6 +682,74 @@ export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
   }
   nodes.sort((a, b) => a.id.localeCompare(b.id));
   return { system, nodes, byId: Object.fromEntries(nodes.map(n => [n.id, n])) };
+}
+
+/**
+ * The stable per-system size multiplier: a seeded roll in [minScale, maxScale], one per
+ * system, independent of everything else. Some systems come out compact, some vast, and each
+ * keeps its own for as long as the seed lives — this is the "systems have their own size" knob.
+ * It multiplies the one fixed AU conversion, so the 2D map (which works in map units) never
+ * changes; only the system-space scale does.
+ */
+export function systemScale(world, systemId, tuning = GALAXY.systemSpace) {
+  const system = world?.systemsById?.[systemId] || world?.systems?.find(s => s.id === systemId);
+  if (!system) return 1;
+  const seed = (world.seed ?? GALAXY.seed) >>> 0;
+  const roll = makeRng((seed ^ hashId(`space:${system.id}`)) >>> 0)();
+  return tuning.minScale + roll * (tuning.maxScale - tuning.minScale);
+}
+
+/**
+ * The 3D layout of one system, in AUs — the pocket map's own positions lifted off the page.
+ *
+ * Every pocket of the system gets a true `[x, y, z]` position: map `x` reads as AU `x`, map `y`
+ * reads as AU `z`, and AU `y` (height) is a tiny seeded roll per pocket inside
+ * `±heightAmplitudeAu` — far too small to trouble the AU scale or the 2D chart. An authored
+ * `mapHeight` (AU) wins the roll for a pocket whose height is chosen by hand. Set
+ * `heightAmplitudeAu` to 0 for a perfectly flat system. Authored `mapPos` wins for the ground
+ * plane, exactly as it does on the map, and a pocket registered at runtime (a spawned simple
+ * wormhole) is laid out by the same rules, so the sky and the future warp space always agree
+ * with the chart.
+ *
+ * A system's size is its farthest pocket: `radiusAu` is the outer boundary of the system and
+ * grows by itself when a farther pocket appears. The central body sits at the origin. Nothing
+ * here is saved; the resolved galaxy is rebuilt on load, like the map layout.
+ */
+export function systemSpatialLayout(world, systemId, tuning = GALAXY.systemSpace) {
+  if (!world) return null;
+  const system = world.systemsById?.[systemId] || world.systems.find(s => s.id === systemId);
+  if (!system || system.kind !== "system") return null;
+  const layout = systemPocketLayout(world, systemId, GALAXY.systemMap);
+  const scale = systemScale(world, systemId, tuning);
+  const k = tuning.auPerMapUnit * scale;
+  const seed = (world.seed ?? GALAXY.seed) >>> 0;
+  const amplitude = tuning.heightAmplitudeAu ?? 0;
+  const starKind = system.core?.kind === "blackHole" ? "blackHole" : "star";
+  const nodes = layout.nodes.map(node => {
+    const authoredHeight = node.pocket.mapHeight;
+    const roll = makeRng((seed ^ hashId(`height:${node.id}`)) >>> 0)();
+    const heightAu = Number.isFinite(authoredHeight) ? authoredHeight : (roll * 2 - 1) * amplitude;
+    const pos = [node.pos[0] * k, heightAu, node.pos[1] * k];
+    return {
+      id: node.id,
+      role: node.pocket.role ?? null,
+      parent: node.pocket.parent,
+      pos,
+      distanceAu: Math.hypot(pos[0], pos[1], pos[2]),
+    };
+  });
+  const radiusAu = nodes.reduce((max, node) => Math.max(max, node.distanceAu), 0);
+  return {
+    system,
+    starKind,
+    starName: system.core?.n || systemCoreName(system),
+    starPos: [0, 0, 0],
+    scale,
+    auPerUnit: k,
+    radiusAu,
+    nodes,
+    byId: Object.fromEntries(nodes.map(node => [node.id, node])),
+  };
 }
 
 /** Keep automatic dots apart while preserving the preferred outward direction
