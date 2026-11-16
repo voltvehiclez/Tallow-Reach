@@ -7,6 +7,8 @@ import { SHIPS } from "../data/ships.js";
 import { placeAt, featuresOf } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
+import { REMAP } from "../data/camera.js";
+import { viewToNdc, conePixels } from "../render/remapmath.js";
 import { interpolatedPos } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
@@ -130,6 +132,7 @@ export function setupHud() {
  */
 export function coneRadiusPx(deg) {
   if (!(deg > 0)) return 0;
+  if (REMAP.on) return conePixels(deg, innerHeight);
   return (Math.tan((deg * Math.PI) / 180) / Math.tan((camera.fov * Math.PI) / 360)) * innerHeight / 2;
 }
 
@@ -352,13 +355,22 @@ function mark(p, text, cls, ox, oy) {
   if (markerCount >= MARKER_POOL) return;
   camera.updateMatrixWorld();
   const el_ = markers[markerCount++];
-  const v = p.clone().project(camera);
   const pc = p.clone().applyMatrix4(camera.matrixWorldInverse);
   const W = innerWidth,
     H = innerHeight;
+  // Frame NDC of the point: through the lens curve with the lens on, through
+  // the stock projection otherwise. Same branch structure, one maths difference.
+  let v = null;
+  const fwd = -pc.z;
+  if (REMAP.on) {
+    if (fwd > 1e-6) v = viewToNdc(pc.x, pc.y, fwd);
+  } else {
+    const pv = p.clone().project(camera);
+    if (pc.z < 0) v = { x: pv.x, y: pv.y };
+  }
 
   let x, y;
-  if (pc.z < 0 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1) {
+  if (v && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1) {
     x = (v.x * 0.5 + 0.5) * W + (ox || 0);
     y = (-v.y * 0.5 + 0.5) * H + (oy || 0);
   } else {
