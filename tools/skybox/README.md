@@ -36,7 +36,11 @@ sky: { kind: "panorama", skybox: "crimson_pit", shards: 30 },
 ```
 
 `skybox` is the name you made; `shards` is how many broken rocks drift in front of it (0 for none). The rock picks up a
-breath of the nebula's colour on its own. Then add a `docs/CHANGELOG.md` entry (see `docs/recipes/24-a-new-skybox.md`).
+breath of the nebula's colour on its own. A sky may also carry `starfield: true` to ask for the drawn starfield on top of
+its picture — off everywhere, because the generated skies have their own stars (owner 2026-11-15).
+
+**Normal space is a skybox too.** `DEFAULT_SKY` in `src/data/places.js` is what an ordinary pocket wears (today
+`normal_space`); changing the look of normal space everywhere is that one line, not a template. Then add a `docs/CHANGELOG.md` entry (see `docs/recipes/24-a-new-skybox.md`).
 
 ## What the owner says -> what you run
 
@@ -70,6 +74,10 @@ at the top of `skybox.py`. Out-of-range numbers are clamped, never fatal. An unk
 - Re-make an installed sky exactly: `python3 tools/skybox/skybox.py make crimson_pit --spec tools/skybox/specs/crimson_pit.json --install`.
 - Change an installed sky: re-run `make` with the same name and new options plus `--install`; it overwrites that one sky.
 - See what is installed: `python3 tools/skybox/skybox.py list`.
+- Un-install one (image, recipe and both registry lines, in that order — **never** delete out of
+  `src/assets/skyboxes/` by hand): `python3 tools/skybox/skybox.py remove crimson_pit`. A name that
+  is not installed is not an error. Two skies with the same picture are dead weight: the build
+  inlines both, so re-make under the name you want and `remove` the old one.
 - Check any image the owner supplies: `python3 tools/skybox/skybox.py check path/to/image.webp`.
 
 ## The report, and what to do about a WARNING

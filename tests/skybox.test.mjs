@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SKYBOXES } from "../src/data/skyboxes.js";
 import { INSTANCE_TEMPLATES, SKY_KINDS } from "../src/data/instances.js";
+import { DEFAULT_SKY } from "../src/data/places.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = rel => fs.readFileSync(path.join(root, rel), "utf8");
@@ -78,12 +79,30 @@ test("nothing is in the skybox folder or the url map without being in data/skybo
 test("a place that wears a generated skybox names one that exists", () => {
   assert.ok(SKY_KINDS.includes("panorama"), "panorama is declared sky vocabulary");
   assert.match(read("src/render/scene.js"), /panorama\(sky\)/, "SKIES in render/scene.js has a panorama builder");
-  for (const [id, t] of Object.entries(INSTANCE_TEMPLATES)) {
-    if (t.sky?.kind !== "panorama") continue;
-    assert.ok(SKYBOXES[t.sky.skybox], `${id}: sky.skybox "${t.sky.skybox}" is not in data/skyboxes.js — make it: python3 tools/skybox/skybox.py make ${t.sky.skybox} --preset <look> --install`);
-    assert.ok(Number.isInteger(t.sky.shards) && t.sky.shards >= 0, `${id}: sky.shards is a whole number (0 for none)`);
-    for (const k of Object.keys(t.sky)) assert.ok(["kind", "skybox", "shards"].includes(k), `${id}: a panorama sky carries kind, skybox and shards only, not ${k}`);
+  const PANORAMA_KEYS = ["kind", "skybox", "shards", "starfield"];
+  // Every sky a template declares, and normal space's own default (`DEFAULT_SKY`, data/places.js):
+  // the ordinary pockets are not templates, so a skybox only they name would be unchecked.
+  const skies = [...Object.entries(INSTANCE_TEMPLATES).map(([id, t]) => [id, t.sky]), ["DEFAULT_SKY (normal space)", DEFAULT_SKY]];
+  for (const [id, sky] of skies) {
+    if (sky?.kind !== "panorama") continue;
+    assert.ok(SKYBOXES[sky.skybox], `${id}: sky.skybox "${sky.skybox}" is not in data/skyboxes.js — make it: python3 tools/skybox/skybox.py make ${sky.skybox} --preset <look> --install`);
+    assert.ok(Number.isInteger(sky.shards) && sky.shards >= 0, `${id}: sky.shards is a whole number (0 for none)`);
+    if (sky.starfield !== undefined) assert.equal(typeof sky.starfield, "boolean", `${id}: sky.starfield is true or false`);
+    for (const k of Object.keys(sky)) assert.ok(PANORAMA_KEYS.includes(k), `${id}: a panorama sky carries ${PANORAMA_KEYS.join(", ")} only, not ${k}`);
   }
+});
+
+test("normal space wears a generated sky, and the drawn starfield is off (owner 2026-11-15)", () => {
+  // "remove the existing starfield. This is because our previously generated skybox already has
+  // some stars baked in it. I might re-add star fields in the future but not now."
+  assert.equal(DEFAULT_SKY.kind, "panorama", "ordinary pockets wear a generated skybox");
+  assert.ok(SKYBOXES[DEFAULT_SKY.skybox], "and it names an installed skybox");
+  assert.equal(DEFAULT_SKY.starfield, false, "no drawn starfield on top of the picture's own stars");
+  const scene = read("src/render/scene.js");
+  assert.match(scene, /STARFIELD = \{ enabled: false/, "the starfield master switch is off, so nothing draws two sets of stars");
+  // `showPlace` must consult the place's sky (the reader's own path): a fixed `stars.visible` would
+  // be the L19 bug again — the field written in one place and never read.
+  assert.match(scene, /stars\.visible = STARFIELD\.enabled && skyDef\.starfield === true/, "showPlace reads the place's own sky for the starfield");
 });
 
 test("the generator's presets are well formed (the tool trusts this file)", () => {

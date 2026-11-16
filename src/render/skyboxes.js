@@ -6,12 +6,16 @@
 // Only `render/scene.js` reads `SKYBOX_URLS` (`SKIES.panorama`).
 
 // BEGIN GENERATED (imports)
-import sky_teal_black_test from "../assets/skyboxes/teal_black_test.webp";
+import sky_normal_space from "../assets/skyboxes/normal_space.webp";
+import sky_rift_chaos from "../assets/skyboxes/rift_chaos.webp";
+import sky_wormhole_grey from "../assets/skyboxes/wormhole_grey.webp";
 // END GENERATED
 
 /** id -> data URL of that skybox's equirectangular WebP. */
 export const SKYBOX_URLS = {
   // BEGIN GENERATED (map)
-  teal_black_test: sky_teal_black_test,
+  normal_space: sky_normal_space,
+  rift_chaos: sky_rift_chaos,
+  wormhole_grey: sky_wormhole_grey,
   // END GENERATED
 };

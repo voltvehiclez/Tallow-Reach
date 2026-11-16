@@ -8,6 +8,33 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
+
+Owner, on the round-two build: "Works well. 2 things." — the painted cracks and filaments in the rift sky read as
+**odd lines** across an otherwise good sky ("important the skybox looks realistic/professional"), and opening a loot
+cache left the ship flying: WASD still thrust and the mouse still turned it. **Save version unchanged (v20)**; rebuild
+needed (`npm run build`, then `npm test`).
+
+- **`render/sky.js` strokes nothing any more.** `skyWisps` and `skyCracks` are gone, and with them the templates'
+  `cracks` palette colour (dropped from both templates in `data/instances.js` and from recipe 22's example). The
+  generators are now `skyVeils`, `skyClouds`, a new `skyCores` (small bright knots — the hearts a real nebula piles its
+  light into, so the sky keeps its structure with no line in it) and a new `skyGrain`: six thousand single pixels under
+  four hundredths of alpha, an invisible dither that stops the dark gradients banding into contour lines on an 8-bit
+  screen. The sky texture in `render/scene.js` also drops mipmaps, because a mip level that cannot wrap the seam is a
+  line of its own. `tests/sky.test.mjs` (10) now asserts the painter makes zero strokes and starts no path at all.
+- **A loot surface freezes the ship.** `core/input.js` funnels the three modal surfaces (chart, flight card, rift
+  trade) through one `modalSurface()` — the trade had been missing from the hand-written gate, which was the whole bug
+  — so thrust, strafe, lift, roll, boost, fire and the mouse steer all read zero while one is open; and a new
+  `holdShip()` in `sim/pilot.js` kills the ship's carry and throttle the moment `ui/cache.js` or `ui/cargo.js` opens,
+  because zeroed controls alone still coast. Closing hands back a ship at rest. `tests/ui-cache.test.mjs` grew a sixth
+  test that holds W and pushes the mouse against an open trade and watches the ship not move one metre.
+- **Docs:** TESTING-14 §2/§5/§5b, VISION, ROADMAP (14a/14b ticked on the owner's "works well"), HANDOFF, the
+  render/data/core/ui/sim READMEs and recipe 22 all lose their fractures and gain the freeze.
+- **Tests:** 557/0 (`tests/sky.test.mjs` 10, `tests/ui-cache.test.mjs` 6). Build 810 KB.
+
+Files: `src/render/sky.js`, `src/render/scene.js`, `src/data/instances.js`, `src/core/input.js`, `src/sim/pilot.js`,
+`src/ui/cache.js`, `src/ui/cargo.js`, `tests/sky.test.mjs`, `tests/ui-cache.test.mjs`, and the docs above.
+
 ## 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars
 
 The owner came back from the PR #20 build with the mid-rift logout fix **confirmed working** ("can now log out mid

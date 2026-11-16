@@ -1,0 +1,42 @@
+{
+  "mood": "very_dark",
+  "background": "#04050a",
+  "palette": [
+    "#7f8a9c",
+    "#4e5a70"
+  ],
+  "nebula": {
+    "amount": 1.05,
+    "coverage": 0.5,
+    "scale": 1.25,
+    "wisps": 0.4,
+    "turbulence": 0.6,
+    "cores": 1.0
+  },
+  "dust": {
+    "amount": 0.9,
+    "coverage": 0.6,
+    "rim": 0.9
+  },
+  "stars": {
+    "density": 0.3,
+    "brightness": 1.0,
+    "color": 0.15,
+    "warmth": 0.0,
+    "halos": 0.5
+  },
+  "band": {
+    "strength": 0.0,
+    "tilt": 28.0,
+    "rotation": 40.0,
+    "width": 11.0
+  },
+  "detail": 0.5,
+  "saturation": 0.7,
+  "contrast": 1.0,
+  "grain": 1.0,
+  "name": "wormhole_grey",
+  "preset": "ash",
+  "seed": 5,
+  "size": 4096
+}

@@ -19,6 +19,8 @@
 
 export const SKYBOXES = {
   // BEGIN GENERATED (tools/skybox/skybox.py maintains these lines; do not edit by hand)
-  teal_black_test: { n: "Teal Black (kept for later)", preset: "void", seed: 3, size: 4096, tint: 0x2cb4c2 },
+  normal_space: { n: "Normal space (Tallow Reach)", preset: "void", seed: 3, size: 4096, tint: 0x2cb4c2 },
+  rift_chaos: { n: "Rift (chaotic teal)", preset: "maelstrom", seed: 23, size: 4096, tint: 0x2cb4c2 },
+  wormhole_grey: { n: "Wormhole (dark grey)", preset: "ash", seed: 5, size: 4096, tint: 0x7f8a9c },
   // END GENERATED
 };

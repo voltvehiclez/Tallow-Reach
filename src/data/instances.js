@@ -128,9 +128,14 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  *   panorama    a generated 4K skybox (`sky.skybox` = an id in `data/skyboxes.js`, made with
  *               `tools/skybox/skybox.py`; recipe 24): `shattered`'s treatment with that picture, plus `shards`.
  *   shroud      real space (slice 14c, 2026-11-14): the owner's dark-grey nebula panorama with
- *               few stars — the somewhere inside a simple wormhole. The pocket a wormhole hangs in
- *               declares no sky at all: it is ordinary space in the system it spawned in and shows
- *               the same starfield as every sibling pocket.
+ *               few stars — the somewhere inside a simple wormhole. Since 2026-11-15 the whole
+ *               game's skies are generated skyboxes (`panorama`), so no template names this; it is
+ *               kept as the owner's own panorama and as the third kind the vocabulary allows.
+ *
+ * Every sky may carry `starfield: true` to ask for the drawn starfield on top of its picture. It is
+ * off everywhere because the generated skyboxes have their own stars in them (owner 2026-11-15),
+ * and `render/scene.js` keeps the starfield switched off globally until the owner asks for it back.
+ * An ordinary pocket's sky is `DEFAULT_SKY` (`data/places.js`), not a template's.
  */
 export const SKY_KINDS = ["shattered", "shroud", "panorama"];
 
@@ -162,9 +167,9 @@ export const INSTANCE_TEMPLATES = {
     onExpire: { kind: "kill", message: "The rift collapsed with your ship inside it." },
     cache: { n: "Rift cache", loot: "rift_cache", pos: [0, -30, -520], r: 10 },
     enter: { pos: [0, 0, 320] },
-    // The owner's own sky for the rift: a teal maelstrom with shattered rock drifting in front
-    // of it (2026-11-14).
-    sky: { kind: "shattered", shards: 30 },
+    // The rift's sky (owner 2026-11-15): a generated skybox — black space torn open by chaotic teal
+    // gas — with shattered rock drifting in front of it. Made with tools/skybox/skybox.py.
+    sky: { kind: "panorama", skybox: "rift_chaos", shards: 30, starfield: false },
     features: [
       {
         kind: "asteroidField",
@@ -208,9 +213,10 @@ export const INSTANCE_TEMPLATES = {
     onExpire: { kind: "kill", message: "The deep rift collapsed with your ship inside it." },
     cache: { n: "Deep rift cache", loot: "rift_cache_deep", pos: [0, -40, -640], r: 12 },
     enter: { pos: [0, 0, 360] },
-    // A deeper collapse, the owner's own deep-rift sky: near-black, one sable cluster, fewer
-    // stars than the ordinary rift (2026-11-14).
-    sky: { kind: "shattered", shards: 40, variant: "deep" },
+    // A deeper collapse: the same generated rift sky, darker than the ordinary rift's, with more
+    // rock and fewer stars in the picture. The owner asked for one rift look (2026-11-15); the deep
+    // rift keeps its extra shards and its deeper damage, not a separate sky.
+    sky: { kind: "panorama", skybox: "rift_chaos", shards: 40, starfield: false },
     features: [
       {
         kind: "asteroidField",
@@ -275,7 +281,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 320] },
-    sky: { kind: "shroud" },   // inside a simple wormhole: the dark-grey nebula panorama, few stars
+    sky: { kind: "panorama", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
     features: [
       {
         kind: "asteroidField",
@@ -319,7 +325,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "shroud" },   // inside a simple wormhole: the dark-grey nebula panorama, few stars
+    sky: { kind: "panorama", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
     features: [
       {
         kind: "asteroidField",
@@ -375,7 +381,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "shroud" },   // inside a simple wormhole: the dark-grey nebula panorama, few stars
+    sky: { kind: "panorama", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
     features: [
       {
         kind: "asteroidField",

@@ -14,7 +14,7 @@
 import * as THREE from "three";
 import { DEFAULT_PLACE, placeDef } from "../data/places.js";
 import { MENU_CAMERA, menuPose } from "../data/camera.js";
-import { planetModel, stationModel, stars } from "./scene.js";
+import { planetModel, stationModel, stars, STARFIELD } from "./scene.js";
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(MENU_CAMERA.fov, innerWidth / innerHeight, 0.5, 40000);
@@ -27,8 +27,10 @@ sun.position.set(-1, 0.4, 0.6);
 scene.add(sun);
 
 // A copy of the open-world starfield: same geometry and material, parked at the
-// origin because this camera never leaves the station.
-scene.add(stars.clone());
+// origin because this camera never leaves the station. It is off while the starfield is off
+// (owner 2026-11-15: normal space wears a generated skybox that has its own stars), and the title
+// scene does not draw that skybox, so the title's black is deliberate.
+if (STARFIELD.enabled) scene.add(stars.clone());
 
 const spins = [];
 let planetDir = [-0.568, -0.122, -0.812];

@@ -50,9 +50,10 @@ run and what to click. Different AI assistants work in separate chats and none r
   [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as template, seed, clock, objective, prize (half-traded) and
   entry spot (`world.instances`); a standing simple wormhole saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`). Campaign = step 15 (v22):
   mission templates + linter green, see [architecture/feature-notes.md](architecture/feature-notes.md).
-- **One extra sky installed, worn by nothing (2026-11-15):** `teal_black_test` — black space, teal nebula highlights,
-  few stars (preset `void`, seed `3`, 4096, 140 KB, recipe `tools/skybox/specs/teal_black_test.json`). The owner said
-  "keep it for later"; no template wears it. Use it with `sky: { kind: "panorama", skybox: "teal_black_test", shards: 0 }`.
+- **Every sky is a generated skybox (2026-11-15, awaiting playtest).** `normal_space` (140 KB) is what ordinary pockets wear, via `DEFAULT_SKY` in `data/places.js` — **the drawn
+  starfield is off** (`STARFIELD.enabled = false`: the pictures have their own stars; re-adding it later is that flag plus `starfield: true` on a sky). `rift_chaos` (239 KB) is both
+  rift templates' sky and `wormhole_grey` (173 KB) all three `wh_*` sites'. The tool gained `remove <id>`; the duplicate `teal_black_test` is gone. Files stay where they were: the
+  owner ruled the restructure out ("skyboxes aren't part of refactor plan"). See recipe 24 and `tools/skybox/README.md`.
 
 ## The owner's ground rules (do not break these)
 

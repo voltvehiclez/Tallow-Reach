@@ -20,6 +20,48 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-15: Every sky is a generated skybox now — normal space, rifts and wormholes, and the starfield is gone
+
+The owner picked the skies and asked for three things in one go: normal space wears the sky we kept earlier, rifts get
+a black-and-teal chaotic one, wormholes a dark grey one, and "remove the existing starfield. This is because our
+previously generated skybox already has some stars baked in it. I might re-add star fields in the future but not now."
+**No save change (v21).** `npm test` **604/604**, `npm run build` 3016 KB (was 2466 KB).
+
+- **Three skies installed** with the tool (recipe 24), each `OK: dark, seamless and within budget`:
+  `normal_space` (140 KB, preset `void`, seed 3 — the sky the owner kept on 2026-11-15, re-made under its final name),
+  `rift_chaos` (239 KB, preset `maelstrom`, seed 23, turbulence 1.2, wisps 0.9, dust 1.0/0.85/1.5 — black space torn
+  open by chaotic teal gas), `wormhole_grey` (173 KB, preset `ash`, seed 5, `very_dark`, saturation 0.7 — dark grey, no
+  purple cast). Recipes in `tools/skybox/specs/`.
+- **Normal space is a sky, not a template.** New `DEFAULT_SKY = { kind: "panorama", skybox: "normal_space", shards: 0,
+  starfield: false }` in `data/places.js`; `render/scene.js` uses `placeAt(id).sky || DEFAULT_SKY`, so every ordinary
+  pocket wears it and a place may still override it. **The starfield is off:** `STARFIELD = { enabled: false }` keeps the
+  geometry and the per-frame follow, `showPlace` shows it only for a sky that says `starfield: true`, and
+  `menuview.js` clones it only when the switch is on — nothing draws two sets of stars. Re-adding star fields later is
+  that one flag plus a `starfield: true` on whichever sky wants them.
+- **Rifts and wormholes re-skinned.** Both rift templates now wear `rift_chaos` (the deep rift keeps its 40 shards and its
+  deeper damage; the owner asked for one rift look, so it no longer wears `variant: "deep"`), and all three `wh_*`
+  simple-wormhole templates wear `wormhole_grey` instead of `shroud`.
+- **`skyFor(def)`** in `scene.js` drops a sky nothing can draw — a `panorama` whose skybox id is not installed — so a
+  typo costs a background and never the place (and `npm test` names it).
+- **The tool gained `remove`** (`skybox.py remove <id>`): it deletes the image, the recipe and both registry lines, in
+  that order, because `src/assets/skyboxes/` is the tool's folder. The duplicate `teal_black_test` was removed with it
+  (the same picture as `normal_space`, and the build would have inlined the same sky twice).
+- **Not restructured, deliberately.** The owner asked about file structure and then ruled it out: "skyboxes aren't part
+  of refactor plan, also isn't 14d a part for wormhole systems" — correct on both counts, so nothing moved. The three
+  owner panoramas in `src/assets/` stay where they are (no template names two of them; `sky-deeprift` only as
+  `SKIES.shattered`'s fallback) and `src/assets/README.md` says so.
+- **Tests:** `tests/skybox.test.mjs` now checks `DEFAULT_SKY` as well as every template (a skybox only normal space names
+  would otherwise be unchecked) and adds "normal space wears a generated sky, and the drawn starfield is off", which reads
+  `showPlace`'s own expression so writer and reader cannot drift apart (L19). `tests/step14c-wormholes.test.mjs` now
+  expects the generated grey sky on the far side.
+- Files: `src/assets/skyboxes/*.webp`, `tools/skybox/specs/*.json`, `tools/skybox/skybox.py`, `tools/skybox/README.md`,
+  `src/data/skyboxes.js`, `src/render/skyboxes.js`, `src/data/places.js`, `src/data/instances.js`, `src/render/scene.js`,
+  `src/render/menuview.js`, `tests/skybox.test.mjs`, `tests/step14c-wormholes.test.mjs`, the folder READMEs,
+  `src/assets/README.md`, `game/tallow-reach.html`.
+
+---
+
+
 ## 2026-11-15: Kept for later — a black-and-teal sky, installed but worn by no place yet
 
 The owner asked to see the new skybox generator make a 4K sky: "black and teal highlights of nebula, few stars",
@@ -162,36 +204,8 @@ from the pocket's spawn, running out only collapses the way in, and the far side
 
 Files: `src/data/instances.js`, `src/data/items.js`, `src/data/loot.js`, `src/data/enemies.js`, `src/data/places.js`, `src/state/state.js`, `src/state/profile.js`, `src/sim/wormholes.js` (new), `src/sim/instances.js`, `src/sim/session.js`, `src/sim/step.js`, `src/sim/galaxy-session.js`, `src/main.js`, `src/util/events.js`, `src/render/views.js`, `src/render/scene.js` and the folder READMEs, `tests/step14-instances.test.mjs`, `tests/step14c-wormholes.test.mjs` (new), `testing/TESTING-14C-WORMHOLES.md` (new), docs (`HANDOFF.md`, `ROADMAP.md`, `CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`).
 
-## 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
-
-Owner, on the round-two build: "Works well. 2 things." — the painted cracks and filaments in the rift sky read as
-**odd lines** across an otherwise good sky ("important the skybox looks realistic/professional"), and opening a loot
-cache left the ship flying: WASD still thrust and the mouse still turned it. **Save version unchanged (v20)**; rebuild
-needed (`npm run build`, then `npm test`).
-
-- **`render/sky.js` strokes nothing any more.** `skyWisps` and `skyCracks` are gone, and with them the templates'
-  `cracks` palette colour (dropped from both templates in `data/instances.js` and from recipe 22's example). The
-  generators are now `skyVeils`, `skyClouds`, a new `skyCores` (small bright knots — the hearts a real nebula piles its
-  light into, so the sky keeps its structure with no line in it) and a new `skyGrain`: six thousand single pixels under
-  four hundredths of alpha, an invisible dither that stops the dark gradients banding into contour lines on an 8-bit
-  screen. The sky texture in `render/scene.js` also drops mipmaps, because a mip level that cannot wrap the seam is a
-  line of its own. `tests/sky.test.mjs` (10) now asserts the painter makes zero strokes and starts no path at all.
-- **A loot surface freezes the ship.** `core/input.js` funnels the three modal surfaces (chart, flight card, rift
-  trade) through one `modalSurface()` — the trade had been missing from the hand-written gate, which was the whole bug
-  — so thrust, strafe, lift, roll, boost, fire and the mouse steer all read zero while one is open; and a new
-  `holdShip()` in `sim/pilot.js` kills the ship's carry and throttle the moment `ui/cache.js` or `ui/cargo.js` opens,
-  because zeroed controls alone still coast. Closing hands back a ship at rest. `tests/ui-cache.test.mjs` grew a sixth
-  test that holds W and pushes the mouse against an open trade and watches the ship not move one metre.
-- **Docs:** TESTING-14 §2/§5/§5b, VISION, ROADMAP (14a/14b ticked on the owner's "works well"), HANDOFF, the
-  render/data/core/ui/sim READMEs and recipe 22 all lose their fractures and gain the freeze.
-- **Tests:** 557/0 (`tests/sky.test.mjs` 10, `tests/ui-cache.test.mjs` 6). Build 810 KB.
-
-Files: `src/render/sky.js`, `src/render/scene.js`, `src/data/instances.js`, `src/core/input.js`, `src/sim/pilot.js`,
-`src/ui/cache.js`, `src/ui/cargo.js`, `tests/sky.test.mjs`, `tests/ui-cache.test.mjs`, and the docs above.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
 - 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars
 - 2026-11-14: Step 14 owner playtest — four bugs, four fixes (the run you quit is the run you come back to)
 - 2026-11-14: Enemies are solid — rams damage both ships, rocks kill hostiles, and one falsy detour is fixed
