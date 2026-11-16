@@ -8,6 +8,17 @@ in here: open this file only when the index shows an entry that matters to what 
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
+
+Owner, looking at the 14c build: "Im not too happy with the skyboxes of both rifts and wormholes … they look almost like coloured fabric. I want them to look like genuine space / fantasy in high quality, Im using a 4k monitor." This round covers the **simple wormhole only**; the rift sky comes next. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet — ROADMAP 14c stays unticked.
+
+- **The pocket is the system's own space, always** (owner, 2026-11-14: "since we are still in the same solar system. This should always be the case"). The spawned pocket no longer declares a `sky` at all (`sim/wormholes.js` `pocketRecord`, `WORMHOLE_POCKET`): `render/scene.js` shows the ordinary starfield, exactly like every sibling pocket. Map dot, formations, lock, clock — unchanged.
+- **The far side is real space.** `SKIES.shroud` is no longer painted: it wraps the owner's reference panorama — a **dark-grey nebula with few stars** (2880×1440 equirect WebP, q90, ~168 KB) — around the inside of the same sphere, seen from the back, one linear filter, no mips, no painter in between. An equirect image is exactly what a sphere's UV unwrap is, so it hangs level with no seam math at all. The panorama rides inside the single-file build as a base64 data URL (`src/assets/sky-shroud.webp`; `build.mjs` gained an esbuild `.webp → dataurl` loader) — no external asset path ever resolves.
+- **`shroud` carries no colour data any more**: the three site templates (`wh_smugglers`, `wh_mining`, `wh_hive`) are `{ kind: "shroud" }` and `WORMHOLE_POCKET` lost its palette. The painter (`render/sky.js`) and the `shattered` rift sky are untouched.
+- **Docs/tests:** `tests/step14c-wormholes.test.mjs` gained "the pocket is the system's own space; only the far side is somewhere else" (14/14 there, **571/571** overall); `src/render/README.md`, `data/instances.js` comments and the playtest guide describe both skies. **Open:** the rift (`shattered`) sky still reads as coloured fabric to the owner — next round.
+
+Files: `src/assets/sky-shroud.webp` (new), `build.mjs`, `src/render/scene.js`, `src/sim/wormholes.js`, `src/data/instances.js`, `src/render/README.md`, `testing/TESTING-14C-WORMHOLES.md`, `tests/step14c-wormholes.test.mjs`, docs (`CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`), `game/tallow-reach.html`.
+
 ## 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
 
 Owner, 2026-11-14, spelling out the natural-wormhole model: a pocket spawns itself in normal space, its 20 minutes run

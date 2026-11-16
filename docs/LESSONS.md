@@ -315,3 +315,31 @@ sky hung upside down.
 - **Enforced by:** `tests/skybox.test.mjs` — "the six faces are drawn the way the generator painted them" and "each flip
   in the table is necessary and no flip is redundant". It caught the real bug (worst mismatch 1.25 on `py`/`ny`, 0.0000
   on the other four).
+
+### L25. A projectile's hit test must read the colliders the world already has, and sweep, not sample
+
+Shots went through Meridian Station for months because `updateBullets` asked two questions and neither was "is
+there scenery here": it checked hostiles (a sphere) and rocks (a distance-to-centre circle). The colliders existed
+and the player's own ship already collided with them; the projectile path simply never asked. Whenever something new
+must be hit, blocked or stopped, look for the hit test the game **already trusts** and reuse it — here
+`sim/colliders.js`, which `render/` bakes and `player.js` and `ai.js` already read — rather than writing a second,
+cheaper approximation beside it. A second approximation drifts: the old rock test used a bounding circle, so shots
+also died in empty space beside a lumpy rock.
+
+The other half is **sweeping**. A basic cannon bolt covers 15 m in one 60 Hz tick and a missile 8 m, so an end-point
+test tunnels through anything thinner than that: a station spoke, a small rock, the edge of a hull. Test the segment
+between the last tick's position and this one (`segmentColliderHit`), take the nearest hit's fraction `t`, and put the
+projectile at the impact point so the explosion happens where it hit and not past it. The same sweep answers "would
+this wall block the beam" for free.
+
+Two consequences worth keeping:
+- **`noclip` and `collide: false` must stay pass-through for projectiles as well as ships.** They are the owner's
+  opt-out; a weapon that hits decoration makes the opt-out meaningless. Assert it, do not assume it.
+- **Check what the new stop rule does to balance before shipping it.** Rocks now stop enemy fire, so a pilot can take
+  cover — a real gameplay change. Measure it (here: 1 of 24 long lines from the station meets a rock in the Meridian
+  belt) and say so, rather than discovering it in a playtest.
+
+- **Enforced by:** `tests/projectile-collision.test.mjs` — the Meridian Station's real geometry stops a bolt on its hub
+  and its ring, a thin wall between two ticks is caught, the nearest collider wins, a hostile's hull still resolves
+  first, `noclip` scenery does not stop shots, a rock stops a hostile shot aimed at the pilot, and a missile and the
+  mining beam obey the same rule.

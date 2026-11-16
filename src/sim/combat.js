@@ -23,6 +23,7 @@ import { hurt } from "./player.js";
 import { boom } from "./effects.js";
 import { playerPos, playerVel } from "./pilot.js";
 import { addEntity, dropEntity, freshQuat } from "./entity.js";
+import { placeCollidersOf, sweepColliders } from "./colliders.js";
 
 const CRATE_LIFE = 240;      // seconds before loot despawns
 const CRATE_PULL = 140;      // within this distance a crate drifts toward you
@@ -30,6 +31,16 @@ const CRATE_PICKUP = 20;     // within this distance you collect it
 const CRATE_SPIN = 1;        // radians a second the crate turns in place
 
 const _spin = Q();           // scratch, so a frame allocates nothing
+const _from = V(0, 0, 0);    // and the start of a shot's step across the tick
+
+/**
+ * A small shower where a shot met something that is not a ship: bright enough to be seen against a
+ * dark hull, short-lived, and cheap — three particles, no sound (a station is not a hostile, so
+ * there is nothing to announce).
+ */
+function sparks(hit, placeId) {
+  boom({ x: hit.x, y: hit.y, z: hit.z }, 4, 0xffd9a0, placeId);
+}
 
 function missionDropList(placeId, create = true) {
   const world = state.worldState;
@@ -302,17 +313,48 @@ export function spawnCrate(
   return addEntity(W.crates, e);
 }
 
-/** Move bullets along their path and resolve hits. */
+/**
+ * Move bullets along their path and resolve hits.
+ *
+ * Order of checks is the order of "what would stop this shot first", and each one is answered on
+ * the segment the shot actually covered this tick (`_from` -> `pos`), not on its end point alone: a
+ * bolt covers 15 m in a 60 Hz tick, so a station spoke or a small rock can sit entirely between two
+ * ticks and an end-point test would let the shot through it (the 2026-11-15 report: cannon fire
+ * went straight through Meridian Station).
+ *
+ *   1. a hostile's hull (a sphere, as before)
+ *   2. the scenery and the rocks — every registered collider for the place, which is exactly what
+ *      stops the pilot's own ship, so `noclip` decorations and `collide: false` features stay
+ *      fly-through for bullets too
+ *   3. the pilot's hull, for a hostile's shot
+ *
+ * Step 2 is new, and it is why a shot now dies on a station instead of passing through it. Nothing
+ * is damaged: the station and the rocks are scenery, and only hostiles and pilots carry hull points.
+ * A shot that spends itself on scenery just stops, with a spark at the point of impact.
+ */
 export function updateBullets(dt, placeId = state.place) {
   const W = placeWorld(placeId),
-    B = W.bullets;
+    B = W.bullets,
+    colliders = placeCollidersOf(placeId);
   for (let i = B.length - 1; i >= 0; i--) {
     const b = B[i];
     // A hit can kill the player mid-loop and clear this array. Skip stale entries.
     if (!b || B.indexOf(b) === -1) continue;
+    const from = _from.copy(b.pos);          // where it was: this tick's segment starts here
     b.pos.addScaledVector(b.v, dt);
     b.l -= dt;
     let dead = b.l <= 0;
+
+    // Whatever stops the ship stops the shot: the place's scenery and every rock in its field. This
+    // is checked before any hull, for both sides, because a wall is a wall whoever fired.
+    if (!dead) {
+      const wall = sweepColliders(colliders, W.asteroids, from, b.pos);
+      if (wall) {
+        b.pos.set(wall.x, wall.y, wall.z);   // die where it hit, not past it
+        sparks(wall, placeId);
+        dead = true;
+      }
+    }
 
     if (!dead && b.own) {
       for (let j = W.enemies.length - 1; j >= 0; j--) {
@@ -321,14 +363,6 @@ export function updateBullets(dt, placeId = state.place) {
           hitHostile(e, b.dmg, b.pos, b.owner, placeId);
           dead = true;
           break;
-        }
-      }
-      if (!dead) {
-        for (const a of W.asteroids) {
-          if (a.pos.distanceTo(b.pos) < a.r * 0.8) {
-            dead = true;
-            break;
-          }
         }
       }
     } else if (!dead && !b.own) {

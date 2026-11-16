@@ -3,6 +3,20 @@
 // snapshot before the death at i=750 is byte-identical, and from i=750 on the runtime ship
 // has the power, shields, hull, gun and empty hold that a real hull has (it used to come back
 // as a bare id with no fit, which is why nothing could be equipped afterwards).
+//
+// Re-recorded 2026-11-15, when projectiles started stopping on colliders (owner: shots went
+// through Meridian Station). The scenario fires at a raider past a rock at z=-200, so the
+// difference is the whole point and it is worth reading before "fixing" it:
+//   * shots die at the rock instead of flying on through it (shots are shorter-lived, and the
+//     i=240 snapshot's shot is a different one entirely)
+//   * the player keeps the shield it used to lose — the raider's fire at the player was passing
+//     through that same rock, and now the rock stops it (10 instead of 9, 8, 7, 6, 4, 3, 2, 1, 0)
+//   * with the shields intact the ship survives, so hull stays 10 rather than 6, and the
+//     saved profile hp is 1 rather than 0.6
+// Nothing else moved: every player position, heading, velocity, power reading, gun cooldown,
+// missile, ore count, credit and docked flag in the run is byte-identical.
+// The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
+// still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

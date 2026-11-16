@@ -20,6 +20,45 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
+
+Owner: "collision boxes that are not no-clipable stop all types of weapons / projectiles in a logical way. So all
+cannons, missiles etc should impact when hitting a collision box. I notice if I shoot meridian station with cannons it
+goes through it. Not sure how it works with asteroids but make sure the hit boxes stop them so its realistic."
+**No save change (v21).** `npm test` **619/619**, `npm run build` 2999 KB.
+
+- **The bug:** `updateBullets` tested hostiles (a sphere), then rocks (a distance-to-centre circle), and **never looked at
+  a place's colliders at all**. A station had nothing to hit, so every shot passed through it. Enemy fire had the same
+  hole in reverse — and because bolts stopped on a rock's *bounding circle* rather than its mesh, a shot could also die
+  on empty space beside a lumpy one.
+- **The fix, in `sim/colliders.js`:** `sweepColliders` / `segmentColliderHit` / `segmentRockHit` walk the **segment a
+  projectile covered that tick** (Möller–Trumbore, two-sided) across the place's colliders and the rock soups, and return
+  the nearest hit with its fraction along the path. Sweeping rather than sampling the end point matters: a 900 m/s bolt
+  covers 15 m a tick, so a station spoke or a small rock can sit entirely between two ticks. Unit checks: a thin sheet
+  between two ticks is caught; the nearest of two colliders wins regardless of list order; a rock is transformed into
+  model space rather than every vertex out.
+- **Bolt rule, in order:** a hostile's hull, then the scenery and rocks, then the pilot's hull for a hostile's shot. The
+  wall is checked for both sides, because a wall is a wall whoever fired. A shot that meets scenery dies **at the impact
+  point** with a spark, and damages nothing — scenery has no hull points.
+- **Missiles** sweep the same swath and burst on scenery and rocks instead of sailing through. **The mining beam** is
+  blocked too: a station wall between the ship and the rock stops the cut, the beam is drawn to the wall, and `beamT`
+  does not advance, so a rock cannot be mined through a station.
+- **The owner's exact case is a test.** `tests/projectile-collision.test.mjs` builds Meridian Station's real geometry
+  (ring, hub, base, dock box; the four `noclip.spin` spokes correctly excluded), and checks a bolt down the station's axis
+  stops on the hub, one at the ring hits the ring, and shots 400 m clear or 200 m above fly on.
+- **`noclip` and `collide: false` still let projectiles through**, which is what they are for: only clipping colliders
+  stop a weapon. That is asserted, not assumed.
+- **Balance effect, measured rather than assumed:** the Meridian belt is sparse — of 24 lines out from the station, one
+  meets a rock within 4 km — so combat does not become a corridor. Enemy fire can now be blocked by a rock when the pilot
+  takes cover behind one, which is the realism the owner asked for.
+- **One golden fixture re-recorded** (`tests/fixtures/step8b-combat-lifecycle.json`) and the reason is written into the
+  test file. Every player position, heading, velocity, power reading, cooldown, missile, ore count, credit and docked
+  flag is byte-identical; what changed is that shots stop at the rock and the pilot keeps the shields the raider's fire
+  used to take **by passing through that same rock** (10 instead of falling to 0), so hull stays 10 and saved hp is 1, not
+  0.6. Its three narrative assertions (mined ore, a missile launched, died and docked) all still hold.
+
+---
+
 ## 2026-11-15: The skies are cube maps — six 2048 faces each, no distortion and no seams
 
 The owner: "the skyboxes look a bit distorted and also a little bit blurry since im using 4k monitor. Make the Skybox
@@ -220,18 +259,8 @@ Owner, after the wormhole sky landed and a first pass at the rift one: "Sorry, h
 
 Files: `src/assets/sky-rift.webp` (new), `src/assets/sky-deeprift.webp` (new), `src/render/scene.js`, `src/data/instances.js`, `src/render/README.md`, `src/render/sky.js`, `src/assets/README.md`, `testing/TESTING-14-RIFTS.md`, `tests/step14-instances.test.mjs`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
 
-## 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
-
-Owner, looking at the 14c build: "Im not too happy with the skyboxes of both rifts and wormholes … they look almost like coloured fabric. I want them to look like genuine space / fantasy in high quality, Im using a 4k monitor." This round covers the **simple wormhole only**; the rift sky comes next. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet — ROADMAP 14c stays unticked.
-
-- **The pocket is the system's own space, always** (owner, 2026-11-14: "since we are still in the same solar system. This should always be the case"). The spawned pocket no longer declares a `sky` at all (`sim/wormholes.js` `pocketRecord`, `WORMHOLE_POCKET`): `render/scene.js` shows the ordinary starfield, exactly like every sibling pocket. Map dot, formations, lock, clock — unchanged.
-- **The far side is real space.** `SKIES.shroud` is no longer painted: it wraps the owner's reference panorama — a **dark-grey nebula with few stars** (2880×1440 equirect WebP, q90, ~168 KB) — around the inside of the same sphere, seen from the back, one linear filter, no mips, no painter in between. An equirect image is exactly what a sphere's UV unwrap is, so it hangs level with no seam math at all. The panorama rides inside the single-file build as a base64 data URL (`src/assets/sky-shroud.webp`; `build.mjs` gained an esbuild `.webp → dataurl` loader) — no external asset path ever resolves.
-- **`shroud` carries no colour data any more**: the three site templates (`wh_smugglers`, `wh_mining`, `wh_hive`) are `{ kind: "shroud" }` and `WORMHOLE_POCKET` lost its palette. The painter (`render/sky.js`) and the `shattered` rift sky are untouched.
-- **Docs/tests:** `tests/step14c-wormholes.test.mjs` gained "the pocket is the system's own space; only the far side is somewhere else" (14/14 there, **571/571** overall); `src/render/README.md`, `data/instances.js` comments and the playtest guide describe both skies. **Open:** the rift (`shattered`) sky still reads as coloured fabric to the owner — next round.
-
-Files: `src/assets/sky-shroud.webp` (new), `build.mjs`, `src/render/scene.js`, `src/sim/wormholes.js`, `src/data/instances.js`, `src/render/README.md`, `testing/TESTING-14C-WORMHOLES.md`, `tests/step14c-wormholes.test.mjs`, docs (`CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`), `game/tallow-reach.html`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: Real space inside a simple wormhole — the pocket wears the system's sky
 - 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
 - 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
 - 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars

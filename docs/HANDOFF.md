@@ -33,11 +33,10 @@ run and what to click. Different AI assistants work in separate chats and none r
 ## Where the game is now
 
 - Save version: **v21**.
-- **Which steps are done, built or next: see the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step
-  status is kept (this file, REFACTOR_PLAN and the README do not repeat it); tick steps there. A step that is "built"
-  but not ticked is waiting for the owner's playtest.
+- **Which steps are done, built or next: the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step status is kept (this file, REFACTOR_PLAN and the README do
+  not repeat it); tick steps there. A step that is "built" but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first, following "When the owner reports a bug" below.
-- **Models & collision (2026-11-14, awaiting playtest):** drop-in `.glb` per drawn thing (rebuild inlines; built-in fallback kept); collision fitted to the drawn mesh — rocks, station ring/hub, planets, missiles; `noclip` the only mesh opt-out, `collide: false`/`collideDmg` the only data ones. Enemies are solid (ram both ways; raider rams deal/take damage). Any kill settles kill/hunt/wave-clear objectives for every holder; only hunt habitat gates hunts. Save **v21**. See [GLB_MODELS.md](GLB_MODELS.md).
+- **Models & collision (2026-11-14; projectiles 2026-11-15 — awaiting playtest):** drop-in `.glb` per drawn thing (rebuild inlines; built-in fallback kept); **ships** collide with the drawn mesh (rocks, station ring/hub, planets), `noclip` the mesh opt-out and `collide: false`/`collideDmg` the data ones; enemies are solid (ram both ways). **Every weapon now stops too** — bolts, missiles and the mining beam sweep the segment they covered that tick against the same colliders (`sweepColliders` in `sim/colliders.js`), because shots used to fly straight through Meridian Station. Scenery takes no damage; rocks stop enemy fire, so cover works. Any kill settles kill/hunt/wave-clear objectives for every holder; only hunt habitat gates hunts. Save **v21**. See [GLB_MODELS.md](GLB_MODELS.md), LESSONS L25.
 - **Bug round (2026-11-14, built, awaiting the owner's re-play):** with Alt held the free camera rolls with the hull (E/Q spins the ship in a still frame), keys **1/2 select primary bay 1/2 and only the selected bay's weapon fires** (save `pw` stores `"1"`/`"2"`; legacy `cannon`/`beam` migrate to the bay holding that kind of module — v21 saves load cleanly), and world-space markers hide with the HUD, so nothing floats over the main menu.
 - **Test Ship (2026-11-15, awaiting playtest):** 1-cr Hangar hull `testship` — 100× Hull HP, 10× damage, Wasp's hold/layout/stock fit, owner's 181 KB `heavyfighter-compressed.glb` inlined (embedded Draco decoder; ~2.33 MB page). Buy in Hangar: arrives fully fitted, 1000 Hull HP. See [GLB_MODELS.md](GLB_MODELS.md).
 - **Bug round two (2026-11-14, built, awaiting the owner's re-play):** the Sell/Discard confirm buttons sit in the popover's title row; both flows anchor with one rule (clicked-entry centre − 44px) so Discard keeps the placement the owner approved and Sell matches it — the confirm rides just above the mouse. A hunt contract is scoped to the pocket it was accepted in (kills elsewhere don't count; the objective names the area). Rebuilt on `arena/22587946-tallow-reach` after Continue reset the branch.
@@ -50,10 +49,11 @@ run and what to click. Different AI assistants work in separate chats and none r
   [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as template, seed, clock, objective, prize (half-traded) and
   entry spot (`world.instances`); a standing simple wormhole saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`). Campaign = step 15 (v22):
   mission templates + linter green, see [architecture/feature-notes.md](architecture/feature-notes.md).
-- **Every sky is a generated CUBE MAP (2026-11-15, awaiting the owner's 4K playtest).** Owner: the equirect sky looked "distorted and also a little bit blurry since im using 4k
-  monitor", so a sky is six square 2048×2048 faces of 90° (`px, nx, py, ny, pz, nz`) on a `BoxGeometry` — same ids, same looks: `normal_space` 258 KB (`DEFAULT_SKY`), `rift_chaos`
-  470 KB (both rifts), `wormhole_grey` 279 KB (all `wh_*`). **The drawn starfield is off** (`STARFIELD.enabled = false`; back on with it plus `starfield: true`). The old
-  builders are gone; `render/cubemap.js` adds the one face correction (proven by `tests/skybox.test.mjs`). Face size is the owner's call (2048); his panoramas are **kept, not drawn**.
+- **Every sky is a generated CUBE MAP (2026-11-15, awaiting the owner's 4K playtest).** Owner: the equirect sky was "distorted and also a little bit blurry" on 4K, so a sky
+  is six square 2048×2048 faces of 90° on a `BoxGeometry` — same ids and looks: `normal_space` 258 KB (`DEFAULT_SKY`), `rift_chaos` 470 KB (both rifts), `wormhole_grey`
+  279 KB (all `wh_*`). **The drawn starfield is off** (`STARFIELD.enabled = false`). `render/cubemap.js` holds the one face correction, proven by `tests/skybox.test.mjs`.
+  Face size is the owner's call (2048); his panoramas are **kept, not drawn**.
+
 
 ## The owner's ground rules (do not break these)
 

@@ -12,6 +12,11 @@
 //
 // A collider may opt out per node inside a GLB (a node named `noclip`) or per feature in data
 // (`collide: false` — e.g. a glow shell the pilot should fly through).
+//
+// Three kinds of thing hit these: ships (`collideRockAt` / `collideSphereAt`, pushed out of the
+// surface), and — since 2026-11-15 — every projectile, through `sweepColliders`, which walks the
+// segment a shot or a missile covered in one tick. A projectile is stopped by whatever a ship is
+// stopped by: the same triangles, the same opt-outs, no separate idea of "shootable".
 
 const EMPTY = [];
 const placeColliders = new Map();   // placeId -> [collider]
@@ -291,5 +296,140 @@ function tx(pos, i, qx, qy, qz, qw, scale, origin, out) {
   out[0] = origin.x + vx + qw * tx_ + (qy * tz_ - qz * ty_);
   out[1] = origin.y + vy + qw * ty_ + (qz * tx_ - qx * tz_);
   out[2] = origin.z + vz + qw * tz_ + (qx * ty_ - qy * tx_);
+  return out;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Projectiles vs colliders: the segment a shot covered this tick            */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The first point where a segment from `a` to `b` meets one world-space collider's triangles.
+ * Returns `{ t, x, y, z }` with `t` the fraction along the segment (0 at `a`, 1 at `b`) and
+ * `x, y, z` the impact point, or null when the segment misses.
+ *
+ * A shot is a point moving in a straight line and a tick is short, but not short enough to test
+ * the end point alone: the basic cannon's bolt covers 15 m in one 60 Hz tick and the fastest gun
+ * 900 m/s covers the same, so a thin thing (a station's spoke, a small rock) can sit entirely
+ * between two ticks. Walking the segment is what makes a hit certain rather than lucky.
+ *
+ * The test is segment-vs-triangle (Moller-Trumbore, two-sided — a collider is solid from any
+ * side, since a rock's soup has no reliable winding). The broadphase sphere is the soup's own
+ * bounding sphere, so a segment that misses it costs one distance test, not a triangle loop.
+ */
+export function segmentColliderHit(a, b, collider) {
+  const soup = collider?.soup;
+  if (!soup) return null;
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const lenSq = dx * dx + dy * dy + dz * dz;
+  if (lenSq <= 0) return null;
+  const cx = soup.center.x, cy = soup.center.y, cz = soup.center.z;
+  // Broadphase: closest approach of the segment to the soup's centre, against its radius.
+  let t0 = ((cx - a.x) * dx + (cy - a.y) * dy + (cz - a.z) * dz) / lenSq;
+  t0 = t0 < 0 ? 0 : t0 > 1 ? 1 : t0;
+  const qx = a.x + dx * t0 - cx, qy = a.y + dy * t0 - cy, qz = a.z + dz * t0 - cz;
+  if (qx * qx + qy * qy + qz * qz > soup.radius * soup.radius) return null;
+
+  const pos = soup.pos;
+  let best = Infinity;
+  for (let i = 0; i < pos.length; i += 9) {
+    // Moller-Trumbore, both sides: `det` of either sign is a valid crossing.
+    const e1x = pos[i + 3] - pos[i], e1y = pos[i + 4] - pos[i + 1], e1z = pos[i + 5] - pos[i + 2];
+    const e2x = pos[i + 6] - pos[i], e2y = pos[i + 7] - pos[i + 1], e2z = pos[i + 8] - pos[i + 2];
+    const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+    const det = e1x * px + e1y * py + e1z * pz;
+    if (det > -1e-12 && det < 1e-12) continue;            // parallel to this triangle
+    const inv = 1 / det;
+    const tx = a.x - pos[i], ty = a.y - pos[i + 1], tz = a.z - pos[i + 2];
+    const u = (tx * px + ty * py + tz * pz) * inv;
+    if (u < 0 || u > 1) continue;
+    const qx2 = ty * e1z - tz * e1y, qy2 = tz * e1x - tx * e1z, qz2 = tx * e1y - ty * e1x;
+    const v = (dx * qx2 + dy * qy2 + dz * qz2) * inv;
+    if (v < 0 || u + v > 1) continue;
+    const t = (e2x * qx2 + e2y * qy2 + e2z * qz2) * inv;
+    if (t >= 0 && t <= 1 && t < best) best = t;
+  }
+  if (best === Infinity) return null;
+  return { t: best, x: a.x + dx * best, y: a.y + dy * best, z: a.z + dz * best };
+}
+
+/**
+ * The nearest thing a segment from `a` to `b` runs into, across every registered collider for a
+ * place and every rock in its field: `{ t, x, y, z, damage, id }`, or null for a clear path.
+ *
+ * This is the projectile counterpart of `collideSphereAt` and it reads exactly the same sources —
+ * `placeCollidersOf` for scenery (a station's ring and hub, a planet, a GLB cave — anything with a
+ * baked collider and no `collide: false`) and the rock soups for an asteroid field. So a projectile
+ * stops on whatever stops the ship, and `noclip` nodes and `collide: false` features stay
+ * fly-through for bullets too, which is the point of them.
+ *
+ * `rocks` is the place's asteroid list (plain rock records: `shape`, `pos`, `quat`, `scale`); pass
+ * an empty array when only scenery is wanted.
+ */
+export function sweepColliders(colliders, rocks, a, b) {
+  let best = null;
+  for (const collider of colliders) {
+    const hit = segmentColliderHit(a, b, collider);
+    if (hit && (!best || hit.t < best.t)) {
+      const soup = collider.soup;
+      best = { t: hit.t, x: hit.x, y: hit.y, z: hit.z, id: collider.id, damage: collider.damage || soup.damage || 0 };
+    }
+  }
+  if (rocks && rocks.length) {
+    // A rock's soup lives in its own local space, so the segment is carried into the rock instead
+    // of every vertex being carried out: same maths, one transform per rock rather than per vertex.
+    for (const rock of rocks) {
+      const hit = segmentRockHit(rock, a, b);
+      if (hit && (!best || hit.t < best.t)) best = hit;
+    }
+  }
+  return best;
+}
+
+/**
+ * A segment against one rock, transformed into the rock's model space with the rock's own
+ * position / rotation / non-uniform scale. `t` is still the fraction along the *world* segment.
+ */
+export function segmentRockHit(rock, a, b) {
+  const soup = rock?.soup || rockSoupAt(rock?.shape || 0);
+  if (!soup) return null;
+  const scale = rock.scale || _unitScale;
+  const maxS = Math.max(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z));
+  const touch = soup.radius * maxS;
+  // Broadphase in world space first, against the rock's own centre.
+  const cx = rock.pos.x, cy = rock.pos.y, cz = rock.pos.z;
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const lenSq = dx * dx + dy * dy + dz * dz;
+  if (lenSq <= 0) return null;
+  let t0 = ((cx - a.x) * dx + (cy - a.y) * dy + (cz - a.z) * dz) / lenSq;
+  t0 = t0 < 0 ? 0 : t0 > 1 ? 1 : t0;
+  const qx = a.x + dx * t0 - cx, qy = a.y + dy * t0 - cy, qz = a.z + dz * t0 - cz;
+  if (qx * qx + qy * qy + qz * qz > touch * touch) return null;
+
+  // World -> model: undo the rotation, then divide by the scale (zero-safe).
+  const qx0 = rock.quat?.x ?? 0, qy0 = rock.quat?.y ?? 0, qz0 = rock.quat?.z ?? 0, qw0 = rock.quat?.w ?? 1;
+  const ia = _rockLocal(a, cx, cy, cz, qx0, qy0, qz0, qw0, scale, _la);
+  const ib = _rockLocal(b, cx, cy, cz, qx0, qy0, qz0, qw0, scale, _lb);
+  const hit = segmentColliderHit(ia, ib, { soup });
+  if (!hit) return null;
+  // `hit.x/y/z` are model-space; the caller only needs the fraction, which the linear map preserves.
+  return { t: hit.t, x: a.x + dx * hit.t, y: a.y + dy * hit.t, z: a.z + dz * hit.t, id: rock.id, damage: 1 };
+}
+
+const _unitScale = { x: 1, y: 1, z: 1 };
+const _la = { x: 0, y: 0, z: 0 };
+const _lb = { x: 0, y: 0, z: 0 };
+
+/** A world point in one rock's model space, written into `out`. */
+function _rockLocal(p, cx, cy, cz, qx, qy, qz, qw, scale, out) {
+  const vx = p.x - cx, vy = p.y - cy, vz = p.z - cz;
+  // inverse rotation: conjugate
+  const tx_ = 2 * (-qy * vz + qz * vy), ty_ = 2 * (-qz * vx + qx * vz), tz_ = 2 * (-qx * vy + qy * vx);
+  const rx = vx - qw * tx_ + (-qy * tz_ + qz * ty_);
+  const ry = vy - qw * ty_ + (-qz * tx_ + qx * tz_);
+  const rz = vz - qw * tz_ + (-qx * ty_ + qy * tx_);
+  out.x = rx / (scale.x || 1);
+  out.y = ry / (scale.y || 1);
+  out.z = rz / (scale.z || 1);
   return out;
 }

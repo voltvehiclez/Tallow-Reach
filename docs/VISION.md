@@ -246,6 +246,15 @@ mention) until the owner decides. Record the decision here when made, and delete
   in `src/data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
   Meridian is a station feature inside its pocket, not a child place; the in-game station label is
   **Meridian Station**. Internal place ids and old saves/export codes keep working.
+- **2026-11-15 — every collision box stops weapons (owner).** "collision boxes that are not no-clipable stop all
+  types of weapons / projectiles in a logical way. So all cannons, missiles etc should impact when hitting a collision
+  box. I notice if I shoot meridian station with cannons it goes through it. Not sure how it works with asteroids but
+  make sure the hit boxes stop them so its realistic." So a **hit box is a wall for everything**, not just for the
+  ship: bolts, missiles and the mining beam all stop on it, at the point of impact. Two rules follow from his wording.
+  **The collider *is* the hit box** — the same triangles the ship collides with, and the path is swept, not sampled,
+  so nothing thin can be tunnelled. **"Not no-clipable" means what it says**: `noclip` decoration and `collide: false`
+  features stay pass-through for weapons too. Scenery stops a shot but takes no damage; a rock can now block enemy
+  fire, so cover works — measured (the belt is sparse) and kept.
 - **2026-11-15 — the sky is a cube map (owner).** "I think the skyboxes look a bit distorted and
   also a little bit blurry since im using 4k monitor. Make the Skybox generator be a box, ie 6
   square faces forming a cube. So remove the equirectangular ones we have now." The distortion and
@@ -255,8 +264,6 @@ mention) until the owner decides. Record the decision here when made, and delete
   a **cube map is the standing rule for every sky**, and the equirect panoramas the owner painted on
   2026-11-14 are history (kept as files, recorded, never drawn). He asked for at least 4096 per face
   and then chose **2048** after being shown the size, memory and render time — sharpness per face is
-  his decision to raise, not ours. The look of the sky is unchanged: every existing recipe was
-  re-rendered as a cube at its own texel density, so a cube is sharper without being a different sky.
 - **2026-11-08 — logging out mid-flight (owner, supersedes the arrival-point rule above):** you come
   back **where you logged out** — the same pocket, the exact spot and heading. The owner's reason:
   pockets may become large, and being sent back to the pocket entry every time you quit would be
