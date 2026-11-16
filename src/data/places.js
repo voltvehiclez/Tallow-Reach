@@ -114,8 +114,8 @@ const catalog = () => merged || rebuildCatalog();
 /**
  * The sky every ordinary pocket is flown under — normal space, as opposed to the somewhere else
  * an instance is (`data/instances.js`, whose template carries its own `sky`). It is a generated
- * skybox (`data/skyboxes.js`, made with `tools/skybox/skybox.py`, recipe 24) and it carries the
- * stars itself.
+ * cube-map skybox (`data/skyboxes.js`, made with `tools/skybox/skybox.py`, recipe 24): six 90-degree
+ * faces on the inside of a box, and it carries the stars itself.
  *
  * Owner 2026-11-15: "remove the existing starfield. This is because our previously generated
  * skybox already has some stars baked in it. I might re-add star fields in the future but not
@@ -127,7 +127,7 @@ const catalog = () => merged || rebuildCatalog();
  * then falls back to plain black), so a typo costs a background and never the place — and
  * `npm test` names the typo.
  */
-export const DEFAULT_SKY = { kind: "panorama", skybox: "normal_space", shards: 0, starfield: false };
+export const DEFAULT_SKY = { kind: "cube", skybox: "normal_space", shards: 0, starfield: false };
 
 export const PLACE_DEFS = {
   // Today's Tallow Reach: the station, the asteroid belt, the planet backdrop

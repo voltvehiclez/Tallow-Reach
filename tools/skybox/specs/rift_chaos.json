@@ -38,5 +38,5 @@
   "name": "rift_chaos",
   "preset": "maelstrom",
   "seed": 23,
-  "size": 4096
+  "face": 2048
 }

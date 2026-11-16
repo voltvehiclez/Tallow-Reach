@@ -50,10 +50,10 @@ run and what to click. Different AI assistants work in separate chats and none r
   [../testing/TESTING-14C-WORMHOLES.md](../testing/TESTING-14C-WORMHOLES.md)). Next: **14d**, then step 15. A run saves as template, seed, clock, objective, prize (half-traded) and
   entry spot (`world.instances`); a standing simple wormhole saves as id, parent, seed, mapPos, spawn time, template and remaining clock (`world.wormholes`). Campaign = step 15 (v22):
   mission templates + linter green, see [architecture/feature-notes.md](architecture/feature-notes.md).
-- **Every sky is a generated skybox (2026-11-15, awaiting playtest).** `normal_space` (140 KB) is what ordinary pockets wear, via `DEFAULT_SKY` in `data/places.js` — **the drawn
-  starfield is off** (`STARFIELD.enabled = false`: the pictures have their own stars; re-adding it later is that flag plus `starfield: true` on a sky). `rift_chaos` (239 KB) is both
-  rift templates' sky and `wormhole_grey` (173 KB) all three `wh_*` sites'. The tool gained `remove <id>`; the duplicate `teal_black_test` is gone. Files stay where they were: the
-  owner ruled the restructure out ("skyboxes aren't part of refactor plan"). See recipe 24 and `tools/skybox/README.md`.
+- **Every sky is a generated CUBE MAP (2026-11-15, awaiting the owner's 4K playtest).** Owner: the equirect sky looked "distorted and also a little bit blurry since im using 4k
+  monitor", so a sky is six square 2048×2048 faces of 90° (`px, nx, py, ny, pz, nz`) on a `BoxGeometry` — same ids, same looks: `normal_space` 258 KB (`DEFAULT_SKY`), `rift_chaos`
+  470 KB (both rifts), `wormhole_grey` 279 KB (all `wh_*`). **The drawn starfield is off** (`STARFIELD.enabled = false`; back on with it plus `starfield: true`). The old
+  builders are gone; `render/cubemap.js` adds the one face correction (proven by `tests/skybox.test.mjs`). Face size is the owner's call (2048); his panoramas are **kept, not drawn**.
 
 ## The owner's ground rules (do not break these)
 

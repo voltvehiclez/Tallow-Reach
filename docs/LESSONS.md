@@ -290,3 +290,28 @@ An owner-supplied fighter faced +X and used small exporter units; loading succes
 a flight-ready model. Keep optional visual yaw and target length in hull data, rotate before measuring,
 then scale and centre the bounds in a wrapper. Do not change gameplay `sc` to fix asset units. Test
 forward direction, centred bounds, and size relative to the baseline hull before asking for a playtest.
+
+### L24. A cube map has two independent ways to be wrong: the seams and the faces' own frames
+
+Making six images agree at their edges and making each image land right way up are different problems, and passing the
+seam check tells you nothing about the second. The generator builds every layer as a function of the **direction** a
+pixel looks in (one sphere, sampled back per face), which makes the 24 edges agree by construction and even makes a
+useless seam metric read low — so `cube_seam_error` measures edge pixels in direction space (`face_dirs`, then sample
+the *neighbouring* face through a 24-entry `CUBE_NEIGHBOURS` table), and the three skies read 0.36–0.66 per 255.
+Separately, the six files follow the OpenGL cube convention (`FACE_AXES`), which the generator's own preview cannot
+verify, because the preview draws the net from the same rules that drew the pixels. `BoxGeometry` groups its faces in
+the same order but frames **+Y and -Y the other way up**, so two faces would have arrived upside down and no file, no
+preview and no seam number would have shown it. The fix is `src/render/cubemap.js` (`CUBE_FACES`, `CUBE_FACE_FLIP`,
+`orientFace`), and the test reads `FACE_AXES` out of the Python, rebuilds `BoxGeometry`'s UV frames with three.js,
+compares a 7×7 grid of texels per face, and asserts each flip **necessary** (unflipped is wrong) and none **redundant**
+(flipping a correct face breaks it). A tautological test that only re-reads the constant would pass forever while the
+sky hung upside down.
+
+- **Rule:** for anything with a coordinate convention (cube faces, cubemaps, UVs, handedness), take the convention from
+  the two files that own it — the producer's source and the consumer's source — and prove them against each other in a
+  test. Do not infer it from a screenshot, a preview sheet, or a dimension that looks plausible.
+- **Also:** a `CubeTexture` is not a drop-in for a `MeshBasicMaterial.map` in three r128; only `background`/`envMap`
+  consult `isCubeTexture`. Six ordinary textures on the six material groups is the same picture with nothing to go wrong.
+- **Enforced by:** `tests/skybox.test.mjs` — "the six faces are drawn the way the generator painted them" and "each flip
+  in the table is necessary and no flip is redundant". It caught the real bug (worst mismatch 1.25 on `py`/`ny`, 0.0000
+  on the other four).

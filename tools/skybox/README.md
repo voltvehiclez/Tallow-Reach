@@ -1,13 +1,18 @@
-# Skybox generator: dark, realistic 4K space for Tallow Reach
+# Skybox generator: dark, realistic cube-map space for Tallow Reach
 
 **If the owner asks for a new sky, a new instance, rift or wormhole, or "a different background": use this tool.
 Never paint a sky in code, never download or hand-draw one, never edit `src/assets/skyboxes/` or the two
 GENERATED blocks by hand.** This tool makes the picture, saves its recipe, and registers it in the game.
 
-One command makes a 4096×2048 equirectangular WebP: a near-black sky with a luminous nebula, dark dust clouds
-silhouetted in front of it, realistic stars (many faint, few bright, real colours, hidden by the dust) and an
-optional Milky Way band. It is **auto-exposed to a dark mood, seamless at the edges, dithered (no banding) and
-checked** before it is allowed into the game. About 40 seconds, 400 KB per sky.
+One command makes a **cube map**: six square 2048×2048 faces of 90° each (`px, nx, py, ny, pz, nz`, the OpenGL
+order every engine reads), together a near-black sky with a luminous nebula, dark dust clouds silhouetted in front of
+it, realistic stars (many faint, few bright, real colours, hidden by the dust) and an optional Milky Way band. It is
+**auto-exposed to a dark mood, seamless across all 24 cube edges, dithered (no banding) and checked** before it is
+allowed into the game. About 4½ minutes and 250–500 KB for the whole sky.
+
+Why a cube and not a panorama (owner 2026-11-15): a 4096×2048 equirectangular image spends most of its pixels near the
+poles and stretches what is left across the horizon, so on the owner's 4K monitor the sky was magnified and smeared in
+exactly the direction he looks. Six equal faces have the same texel density everywhere and no poles at all.
 
 Needs Python 3 with `numpy` and `Pillow` (`pip install numpy pillow`). On Windows use `py` or `python` for `python3`.
 Run everything **from the project folder** (the one with `package.json`).
@@ -23,8 +28,8 @@ Run everything **from the project folder** (the one with `package.json`).
 5. use it (below), then:  npm run build  and  npm test
 ```
 
-Step 2 writes only to `./skybox-out/` (safe to repeat, delete it whenever). Step 4 copies the image into
-`src/assets/skyboxes/`, saves the recipe to `tools/skybox/specs/crimson_pit.json` and registers it in
+Step 2 writes only to `./skybox-out/` (safe to repeat, delete it whenever). Step 4 copies the six faces into
+`src/assets/skyboxes/crimson_pit/`, saves the recipe to `tools/skybox/specs/crimson_pit.json` and registers it in
 `src/data/skyboxes.js` and `src/render/skyboxes.js`. **The same name + preset + seed always gives the same sky.**
 
 ### Using the sky in a place or instance
@@ -32,7 +37,7 @@ Step 2 writes only to `./skybox-out/` (safe to repeat, delete it whenever). Step
 In `src/data/instances.js`, on the template (recipe 22), set:
 
 ```js
-sky: { kind: "panorama", skybox: "crimson_pit", shards: 30 },
+sky: { kind: "cube", skybox: "crimson_pit", shards: 30 },
 ```
 
 `skybox` is the name you made; `shards` is how many broken rocks drift in front of it (0 for none). The rock picks up a
@@ -63,7 +68,7 @@ its picture — off everywhere, because the generated skies have their own stars
 | "more glow at the edges of the clouds" | | `--set dust.rim=1.4` |
 | "a bright glowing centre" | | `--set nebula.cores=3` |
 | "a Milky Way band across the sky" | | `--set band.strength=1 --set band.tilt=30` |
-| "sharper / more detailed on my 4K screen" | | `--size 8192` (see the warnings below) |
+| "sharper / more detailed on my 4K screen" | | `--face 4096` (see the warnings below; ask the owner first — 2048 is his choice) |
 
 Every knob, its range and its meaning is listed by `python3 tools/skybox/skybox.py presets` and in the `DEFAULTS` table
 at the top of `skybox.py`. Out-of-range numbers are clamped, never fatal. An unknown key stops with the list of valid keys.
@@ -100,9 +105,15 @@ tool **refuses to install** unless you add `--force`; do not add `--force` to ge
   overlays, borders, fractures or filament lines to its output.
 - **Do not edit the output image** (no cropping, filters, resizing). To change a sky, change the recipe and re-make.
 - **One look per place.** Do not install a dozen variants "to pick from": render previews into `skybox-out/`, install
-  only the one that is used. Each installed sky adds about 400 KB to `game/tallow-reach.html`.
-- **8192 (8K) skies** need about 3 GB of RAM, take several minutes and add 1 to 2 MB each to the game. Use only if the
-  owner asks for more sharpness, and tell them the file got bigger. 4096 is the default and the standard.
+  only the one that is used. Each installed sky adds 250–500 KB to `game/tallow-reach.html` (six faces, ~1 MB for the
+  whole game's three skies).
+- **Face size is the owner's call.** 2048 per side is what he chose on 2026-11-15 after being shown the cost, and it is
+  the default; `--face 4096` is one flag away, but it is 4× the pixels, roughly 4× the file size and 13 minutes instead
+  of 4½. Do not raise it silently, and tell him the file got bigger if you do. `FACE_SIZES` allows 1024 to 8192;
+  1024 is only for a quick smoke test (it is visibly soft on a 4K screen).
+- **Never hand-flip, crop or re-orient a face.** The files are a real cube map in the OpenGL convention; the game turns
+  the top and bottom over itself (`src/render/cubemap.js`), because `BoxGeometry` frames those two differently. Getting
+  that wrong shows as an upside-down patch of sky, so `tests/skybox.test.mjs` checks it against `FACE_AXES` below.
 - Never run the tool with `--install` while a previous build is mid-way; build afterwards with `npm run build`.
 
 ## If something goes wrong
@@ -115,15 +126,29 @@ tool **refuses to install** unless you add `--force`; do not add `--force` to ge
 | `lost its BEGIN/END GENERATED markers` | someone hand-edited a registry file | restore `src/data/skyboxes.js` / `src/render/skyboxes.js` from git or the last zip, then install again |
 | `npm test` says a skybox has no image / import / recipe | files were deleted or edited by hand | re-make it with `--spec tools/skybox/specs/<name>.json --install` |
 | the sky in the game is the old teal one | the template's `skybox` name is not installed (a typo falls back to the rift sky) | `python3 tools/skybox/skybox.py list`; `npm test` names the bad template |
-| out of memory at `--size 8192` | not enough RAM | use the default 4096 |
+| out of memory at `--face 8192` | not enough RAM | use the default 2048 |
 
 ## How it works (only if you need to change the tool)
 
 All of it is in `skybox.py`, top to bottom: spec and presets, colour helpers, 3D gradient noise, then `build_sky`
-(warp field, regions, gas, mist, hot cores, dust, optional galactic band, star-density map), `make_star_layer`
-(power-law brightness, blackbody colour, equal-area placement, sub-pixel gaussian PSFs stretched for the
-equirectangular projection), `finish` (bloom, auto-exposure to the mood, ACES tone map, dither), then `report`,
-`view`/`make_preview`, `install` and the command line. Every layer is a function of the **direction** a pixel looks in,
-never of its x/y, which is why there is no seam and no pole pinching. Soft layers are computed at half resolution and
-upscaled; fine texture and stars are computed at full resolution. Presets live in `presets.json`; `tests/skybox.test.mjs`
-checks that file and the installed skyboxes. Adding a look = a new entry in `presets.json` (+ a row in the table above).
+(warp field, regions, gas, mist, hot cores, dust, optional galactic band, star-density map), the cube machinery, then
+`report`, `make_preview`, `install`/`remove` and the command line.
+
+**How the cube is made (the part to understand before changing anything).** Every layer is a function of the
+**direction** a pixel looks in, never of a face's x/y — that is the whole reason the six faces agree at their edges.
+`build_sky` evaluates the soft layers once on a sphere grid (`sphere_dirs`, `SOFT_FACE_WIDTHS × face` wide, i.e. the
+same texel density the old panorama had, so the look did not change), and `sample_sphere` reads that grid back at any
+direction. `face_dirs` then gives every pixel of every face its exact direction, `project_face` supersamples each face
+2× and box-filters it down, `StarField` places stars once in direction space (thinned by the dust), and `exposure_for`
+picks **one** exposure for all six faces at once, so no face is brighter than its neighbours. `finish_face` tone-maps
+and dithers each face in turn. So: one face in memory at a time (about 3 GB peak), no margins, no per-face special
+cases, and the report's seam check (`cube_seam_error`) reads each edge pixel of a face, computes its direction with
+`face_dirs`, and samples the neighbouring face through `CUBE_NEIGHBOURS` — 24 edges, mean difference per 255. A smooth
+sky reads ~0 there, so it is a sharp test rather than a rubber stamp.
+
+`FACE_AXES` is the one thing to be careful with: it says which way each face's right, up and outward axes point, i.e.
+the OpenGL cube convention. The game's `src/render/cubemap.js` depends on it and `tests/skybox.test.mjs` reads it out of
+this file and checks it against `BoxGeometry`. Do not change it to make a picture look right — change the picture.
+
+Presets live in `presets.json`; `tests/skybox.test.mjs` checks that file and the installed skyboxes. Adding a look = a
+new entry in `presets.json` (+ a row in the table above).
