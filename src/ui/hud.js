@@ -132,7 +132,7 @@ export function setupHud() {
  */
 export function coneRadiusPx(deg) {
   if (!(deg > 0)) return 0;
-  if (REMAP.on) return conePixels(deg, innerHeight);
+  if (REMAP.on) return conePixels(deg, innerHeight, innerWidth / innerHeight);
   return (Math.tan((deg * Math.PI) / 180) / Math.tan((camera.fov * Math.PI) / 360)) * innerHeight / 2;
 }
 
@@ -363,7 +363,7 @@ function mark(p, text, cls, ox, oy) {
   let v = null;
   const fwd = -pc.z;
   if (REMAP.on) {
-    if (fwd > 1e-6) v = viewToNdc(pc.x, pc.y, fwd);
+    if (fwd > 1e-6) v = viewToNdc(pc.x, pc.y, fwd, innerWidth / innerHeight);
   } else {
     const pv = p.clone().project(camera);
     if (pc.z < 0) v = { x: pv.x, y: pv.y };

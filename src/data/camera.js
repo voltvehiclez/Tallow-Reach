@@ -8,10 +8,15 @@
 // view running away. The trail is now a deliberate, bounded line in speed:
 // idle, flat out and reversing all land on the distances below.
 
+// Test tune (owner 2026-11-16): lower the stock vertical FOV to 45° and pull
+// the chase camera back by the matching factor, tan(35°) / tan(22.5°) ≈ 1.69,
+// so the ship keeps the same on-screen size while the perspective compresses.
+export const BASE_FOV = 45;
+
 export const CAMERA = {
-  base: 11,     // distance behind the ship when it is standing still
-  fast: 17,     // at full forward speed (full throttle + boost)
-  reverse: 10.5, // at maximum reverse thrust
+  base: 18.6,     // distance behind the ship when it is standing still
+  fast: 28.7,     // at full forward speed (full throttle + boost)
+  reverse: 17.8,  // at maximum reverse thrust
 };
 
 /**
@@ -41,7 +46,10 @@ export const CAMERA = {
  * static. The warp streaks and flash still carry the speed feel.
  */
 export const REMAP = {
-  on: true,
+  // Disabled: the owner rejected the look (too distorted) during playtest.
+  // Kept behind the knob so the experiment can be revisited or replaced;
+  // false restores the stock rectilinear pipeline exactly.
+  on: false,
   strength: 0.75,
   edge: 38,
 };

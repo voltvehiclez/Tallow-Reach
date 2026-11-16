@@ -1,12 +1,13 @@
 // The edge-compression lens. The flight scene renders into a wider off-screen
 // image (the "source"), then a full-screen quad re-draws it through the curve
 // from remapmath.js. The frame's edge always lands exactly at REMAP.edge
-// degrees off axis; bodies there stop reading as ovals, and the skybox (drawn
-// in the same source) is corrected by the same amount — one pass fixes world
-// and sky together, so they can never drift apart.
+// degrees off axis, and the skybox (drawn in the same source) is corrected by
+// the same amount — one pass fixes world and sky together, so they can never
+// drift apart.
 //
-// The source is an ordinary rectilinear render covering REMAP.edge plus a
-// small margin (aspect-adaptive, so portrait frames fit). It is drawn at a
+// The source is an ordinary rectilinear render with enough reach for the
+// lens's inverse-projected frame edge on both axes (aspect-adaptive; portrait
+// frames grow it too). It is drawn at a
 // resolution that keeps the centre texel density equal to a plain 70-degree
 // render: ~1.3x the pixels at the default edge (38°), up to ~2.3x for the
 // wide 46.5° preset. Render targets are recreated automatically on resize.
@@ -20,7 +21,7 @@
 import * as THREE from "three";
 import { renderer, scene, camera } from "./scene.js";
 import { REMAP } from "../data/camera.js";
-import { tanDeg, sourceHalfTanB, blendNorm } from "./remapmath.js";
+import { tanDeg, sourceHalfTanB, axisNorms } from "./remapmath.js";
 
 let rt = null;
 let srcCam = null;
@@ -45,7 +46,8 @@ void main() {
 const FRAG = `
 uniform sampler2D tScene;
 uniform float strength;
-uniform float blendNorm;
+uniform float normX;
+uniform float normY;
 uniform float tanB;
 uniform float aspect;
 varying vec2 vUv;
@@ -55,8 +57,8 @@ float fSign(float m, float uT, float s) {
 }
 
 float solveW(float uT, float s) {
-  float a = -0.7;
-  float b = 0.7;
+  float a = -0.85;
+  float b = 0.85; // covers axis half-angles up to ~80 degrees (any monitor)
   bool faNegative = fSign(a, uT, s) < 0.0;
   for (int i = 0; i < 15; i++) {
     float m = (a + b) * 0.5;
@@ -66,16 +68,16 @@ float solveW(float uT, float s) {
   return (a + b) * 0.5;
 }
 
-float tanAngle(float u) {
-  float uT = u * blendNorm;
+float tanAngle(float u, float norm) {
+  float uT = u * norm;
   float w = solveW(uT, strength);
   return 2.0 * w / max(1.0e-6, 1.0 - w * w);
 }
 
 void main() {
   vec2 ndc = vUv * 2.0 - 1.0;
-  float tx = tanAngle(ndc.x);
-  float ty = tanAngle(ndc.y);
+  float tx = tanAngle(ndc.x, normX);
+  float ty = tanAngle(ndc.y, normY);
   vec2 uv = 0.5 + 0.5 * vec2(tx / (tanB * aspect), ty / tanB);
   gl_FragColor = texture2D(tScene, clamp(uv, 0.0, 1.0));
 }
@@ -86,7 +88,8 @@ function buildQuad() {
     uniforms: {
       tScene: { value: rt.texture },
       strength: { value: REMAP.strength },
-      blendNorm: { value: blendNorm() },
+      normX: { value: 1 },
+      normY: { value: 1 },
       tanB: { value: 1 },
       aspect: { value: 1 },
     },
@@ -106,10 +109,9 @@ function ensureTarget() {
 
   if (rt) rt.dispose();
   const aspect = _size.x / _size.y;
-  const tanE = tanDeg(REMAP.edge);
-  tanB = sourceHalfTanB(tanE, aspect);
+  tanB = sourceHalfTanB(aspect);
   // Keep the centre texel density equal to a plain 70-degree render: scale the
-  // source by tan(edge) / tan(base) on both axes.
+  // source by tanB / tan(base half-angle) on both axes.
   const scale = tanB / tanDeg(STOCK_HALF_DEG);
   const w = Math.max(2, Math.ceil(_size.x * scale));
   const h = Math.max(2, Math.ceil(_size.y * scale));
@@ -123,11 +125,13 @@ function ensureTarget() {
   outW = _size.x;
   outH = _size.y;
   if (!quadScene) buildQuad();
+  const norms = axisNorms(aspect);
   quadMat.uniforms.tScene.value = rt.texture;
   quadMat.uniforms.tanB.value = tanB;
   quadMat.uniforms.aspect.value = aspect;
   quadMat.uniforms.strength.value = REMAP.strength;
-  quadMat.uniforms.blendNorm.value = blendNorm();
+  quadMat.uniforms.normX.value = norms.nx;
+  quadMat.uniforms.normY.value = norms.ny;
 }
 
 /**

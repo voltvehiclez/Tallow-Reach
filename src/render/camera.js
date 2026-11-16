@@ -7,7 +7,7 @@ import { state } from "../state/state.js";
 import { cosmeticRandom } from "../util/rng.js";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
 import { FLIGHT } from "../data/ships.js";
-import { cameraTrail, REMAP } from "../data/camera.js";
+import { cameraTrail, REMAP, BASE_FOV } from "../data/camera.js";
 import { camera } from "./scene.js";
 import { shipCameraScale } from "./models.js";
 
@@ -91,7 +91,7 @@ export function chaseView(dt, P, fc, pose = P) {
   // roll the picture: nothing rotates when the drive engages. With the lens on, the camera's field of view stays static and the warp streaks/flash carry the speed feel.
   const warp = state.warp ? state.warp.fx : 0;
   if (!REMAP.on) {
-    camera.fov += (70 + 4 * pose.bs + 16 * warp - camera.fov) * Math.min(1, dt * 4);
+    camera.fov += (BASE_FOV + 4 * pose.bs + 16 * warp - camera.fov) * Math.min(1, dt * 4);
     camera.updateProjectionMatrix();
   }
 }

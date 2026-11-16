@@ -6,19 +6,29 @@
 // one, in NDC form:
 //
 //   G(a)   = (1 - s) * tan(a) + s * 2 * tan(a / 2)     (s = REMAP.strength)
-//   u      = G(a) / G(REMAP.edge)
+//   u      = G(a) / norm     per axis
 //
-// u is the HUD/shader frame coordinate, a the world half-angle. Frame edges
-// land exactly at a = +/-REMAP.edge. Properties worth knowing (all tested):
-// G is odd and strictly increasing for 0 <= s <= 1; the circle aspect of a
-// small body (width/height, centre = 1) is G'(a) = (1-s)*sec^2(a) + s*sec^2(a/2)
-// >= 1 everywhere; stereographic (s = 1) is conformal (circles stay circles);
-// s = 0 is plain rectilinear over the edge angle.
+// u is the HUD/shader frame coordinate, a the world half-angle. Each axis maps
+// [-1, 1] to [-Ea, Ea] with Ea = G^-1(norm) slightly beyond REMAP.edge
+// (G < tan), and both axes share the SAME centre scale:
 //
-// The source image is a plain rectilinear render covering REMAP.edge plus a
-// margin — `sourceHalfTanB` is that guarantee (aspect-adaptive, so portrait
-// frames still fit). On-axis zoom, edge width and oval factor are data knobs in
-// `REMAP` (data/camera.js); this file owns the curve only.
+//   landscape (aspect >= 1):   nx = tan(edge) * aspect   (horizontal)
+//                              ny = tan(edge)            (vertical)
+//   portrait  (aspect  < 1):   nx = tan(edge)            (horizontal)
+//                              ny = tan(edge) / aspect   (vertical)
+//
+// so an object on-axis is drawn at EXACTLY the same scale in both axes on any
+// window shape — circles are circles in the middle of the frame, always. The
+// per-axis derivative is G'(a) = (1-s)*sec^2(a) + s*sec^2(a/2) >= 1, so the
+// rim magnifies relative to centre on each axis. This is separable, not a
+// conformal 2-D projection: at the left/right rim a small body reads wider
+// than tall; at the top/bottom rim it reads taller than wide. s = 0 is plain
+// rectilinear over the axis's range.
+//
+// The source image is a plain rectilinear render whose tan(B) is chosen so the
+// inverse-projected edge of BOTH axes is inside it (`sourceHalfTanB`) — merely
+// covering the vertical angle is not enough, and clamping the rim was a real
+// bug (blurry frame border, horizontally-squashed edge planets).
 //
 // Boost/warp widening is NOT animated through this curve: the lens mode keeps
 // camera.fov static. The warp streaks and flash carry the speed feel instead.
@@ -26,6 +36,15 @@
 import { REMAP } from "../data/camera.js";
 
 export const tanDeg = deg => Math.tan((deg * Math.PI) / 180);
+
+const edgeRad = () => (REMAP.edge * Math.PI) / 180;
+
+/** Per-axis normalisers for a window shape. Centre parity (equal px/radian x and y) is exact for every aspect. */
+export function axisNorms(aspect) {
+  const tanV = tanDeg(REMAP.edge);
+  if (aspect >= 1) return { nx: tanV * aspect, ny: tanV };
+  return { nx: tanV, ny: tanV / aspect };
+}
 
 /** G(a): the blend, numerator of the frame mapping. a in radians. */
 export function blendG(a, s = REMAP.strength) {
@@ -37,31 +56,25 @@ export function blendGp(a, s = REMAP.strength) {
   return (1 - s) / Math.cos(a) ** 2 + s / Math.cos(a / 2) ** 2;
 }
 
-/** u normaliser: u = 1 at the edge angle. */
-export function blendNorm() {
-  return blendG((REMAP.edge * Math.PI) / 180, REMAP.strength);
-}
-
-/** Frame NDC for a view-space direction angle a (radians). Zoom at the centre is G'/G(edge), which is exact. */
-export function ndcFromAlpha(a) {
-  return blendG(a, REMAP.strength) / blendNorm();
+/**Frame NDC for a view-space direction angle a (radians) on ONE axis — pass the axis normalizer. */
+export function ndcFromAlpha(a, norm = tanDeg(REMAP.edge)) {
+  return blendG(a, REMAP.strength) / norm;
 }
 
 /**
- * Solve G(a) = u * G(edge): the shader's per-pixel inversion.
- * Bisection on w = tan(a/2) (w in [-0.7, 0.7] covers every preset edge) over
- * f(w) = 2s·w^3 − uT·w^2 − 2w + uT — the cubic has exactly one root in that
- * bracket, so this cannot diverge. The GLSL twin in remap.js must match.
+ * Solve G(a) = u * norm on one axis. Bisection on w = tan(a/2) over
+ * f(w) = 2s·w^3 − uT·w^2 − 2w + uT — the cubic has exactly one root in the
+ * bracket for every preset edge, so this cannot diverge. The GLSL twin in
+ * remap.js must match.
  */
-export function alphaFromU(u) {
+export function alphaFromU(u, norm = tanDeg(REMAP.edge)) {
   const s = REMAP.strength;
-  const uT = u * blendNorm();
+  const uT = u * norm;
   if (uT === 0) return 0;
   const f = w => 2 * s * w ** 3 - uT * w * w - 2 * w + uT;
-  let a = -0.7, b = 0.7;
+  let a = -0.85, b = 0.85; // covers axis half-angles up to ~80 degrees (any monitor)
   let fa = f(a);
   const faNegative = fa < 0;
-  // Textbook bisection, sign-agnostic; the principal root is the bracket's only crossing.
   for (let i = 0; i < 60; i++) {
     const m = (a + b) / 2;
     const fm = f(m);
@@ -70,27 +83,33 @@ export function alphaFromU(u) {
   return 2 * Math.atan((a + b) / 2);
 }
 
-/** View-space vector (fwd = distance in front of the camera, always > 0) → frame NDC. */
-export function viewToNdc(x, y, fwd) {
+/** View-space vector (fwd = distance in front of the camera, always > 0) → frame NDC, both axes. */
+export function viewToNdc(x, y, fwd, aspect = 1) {
+  const { nx, ny } = axisNorms(aspect);
   return {
-    x: ndcFromAlpha(Math.atan(x / fwd)),
-    y: ndcFromAlpha(Math.atan(y / fwd)),
+    x: blendG(Math.atan(x / fwd), REMAP.strength) / nx,
+    y: blendG(Math.atan(y / fwd), REMAP.strength) / ny,
   };
 }
 
 /** Pixels for a cone of `deg` degrees at the frame centre, measured on the vertical axis. */
-export function conePixels(deg, heightPx) {
+export function conePixels(deg, heightPx, aspect = 1) {
   if (!(deg > 0)) return 0;
-  return ndcFromAlpha((deg * Math.PI) / 180) * (heightPx / 2);
+  const { ny } = axisNorms(aspect);
+  return (blendG((deg * Math.PI) / 180, REMAP.strength) / ny) * (heightPx / 2);
 }
 
 /**
  * tan(B) the source (rectilinear) render must cover so no output pixel samples
- * outside it. Landscape: the edge angle plus a small margin. Portrait (aspect
- * < 1): the horizontal frame only covers tan(B)·aspect, so B grows until the
- * edge fits across.
+ * outside it. The source is rendered with this same aspect, so its horizontal
+ * reach is tan(B) * aspect and its vertical reach is tan(B); both must cover the
+ * *inverse-projected* edge angles of the lens. (Checking G(alpha) — the NDC
+ * coordinate — instead of tan(alpha) was not enough and clamped the frame's rim.)
  */
-export function sourceHalfTanB(tanEdgeRad, aspect) {
-  const t = aspect >= 1 ? tanEdgeRad : tanEdgeRad / aspect;
-  return Math.tan(Math.atan(t) + Math.PI / 360); // 0.5 degree of margin
+export function sourceHalfTanB(aspect) {
+  const { nx, ny } = axisNorms(aspect);
+  const requiredX = Math.tan(alphaFromU(1, nx)) / aspect;
+  const requiredY = Math.tan(alphaFromU(1, ny));
+  const need = Math.max(requiredX, requiredY);
+  return Math.tan(Math.atan(need) + Math.PI / 360); // 0.5 degree of margin
 }
