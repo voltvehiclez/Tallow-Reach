@@ -106,10 +106,10 @@ test("the pocket is the system's own space; only the far side is somewhere else"
     "the pocket declares no sky of its own — it is normal space, wearing DEFAULT_SKY like every sibling pocket");
   for (const [id, template] of Object.entries(INSTANCE_TEMPLATES)) {
     if (!id.startsWith("wh_")) continue;
-    // Owner 2026-11-15: the far side wears a GENERATED dark-grey skybox, not the owner's own
-    // `shroud` panorama. Either way it is somewhere else, never the system's own space.
-    assert.equal(template.sky?.kind, "panorama",
-      `${id}: the far side is a generated sky, not the system's space`);
+    // Owner 2026-11-15: the far side wears a GENERATED dark-grey skybox — a cube map since that day,
+    // not the owner's own `shroud` panorama. Either way it is somewhere else, never normal space.
+    assert.equal(template.sky?.kind, "cube",
+      `${id}: the far side is a generated cube-map sky, not the system's space`);
     assert.equal(template.sky?.skybox, "wormhole_grey", `${id}: the dark-grey skybox is the wormhole's sky`);
   }
 });

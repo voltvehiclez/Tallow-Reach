@@ -246,6 +246,17 @@ mention) until the owner decides. Record the decision here when made, and delete
   in `src/data/terms.js` (`mapNode: "system"`, `flyable: "pocket"`), each changeable in one line.
   Meridian is a station feature inside its pocket, not a child place; the in-game station label is
   **Meridian Station**. Internal place ids and old saves/export codes keep working.
+- **2026-11-15 — the sky is a cube map (owner).** "I think the skyboxes look a bit distorted and
+  also a little bit blurry since im using 4k monitor. Make the Skybox generator be a box, ie 6
+  square faces forming a cube. So remove the equirectangular ones we have now." The distortion and
+  the blur were the same fault: an equirectangular picture spends its pixels on the poles and
+  stretches what is left across the horizon, so on a 4K screen the sky was magnified exactly where
+  the camera looks. Six 90° faces put the same texel density in every direction and have no poles, so
+  a **cube map is the standing rule for every sky**, and the equirect panoramas the owner painted on
+  2026-11-14 are history (kept as files, recorded, never drawn). He asked for at least 4096 per face
+  and then chose **2048** after being shown the size, memory and render time — sharpness per face is
+  his decision to raise, not ours. The look of the sky is unchanged: every existing recipe was
+  re-rendered as a cube at its own texel density, so a cube is sharper without being a different sky.
 - **2026-11-08 — logging out mid-flight (owner, supersedes the arrival-point rule above):** you come
   back **where you logged out** — the same pocket, the exact spot and heading. The owner's reason:
   pockets may become large, and being sent back to the pocket entry every time you quit would be

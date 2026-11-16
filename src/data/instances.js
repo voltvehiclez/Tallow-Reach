@@ -65,14 +65,12 @@
 //                 pilot arrives looking at the run rather than sitting inside the door home.
 //   sky           { kind, ... } the sky of somewhere else, drawn by `render/scene.js` from its
 //                 `SKIES` registry: `kind` names the builder, everything else is that builder's data.
-//                 `shattered` (a rift's run) and `shroud` (inside a simple wormhole) are both the
-//                 owner's panoramas, inlined with the build (`src/assets/`, data URLs) and wrapped
-//                 around the inside of the sky sphere as equirect images (2026-11-14): `shattered`
-//                 carries `shards` (how many broken rocks drift in front) and `variant` (`rift`,
-//                 the default, or `deep` — the deep rift's near-black sky); `shroud` carries
-//                 nothing at all. `panorama` is a GENERATED 4K skybox: it carries `skybox` (an id in
-//                 `data/skyboxes.js`, made with `tools/skybox/skybox.py`) and `shards`, and is
-//                 otherwise `shattered` wearing that picture. An instance has no planet: nothing here is
+//                 `cube` is a generated cube-map skybox (owner 2026-11-15): six 90-degree faces,
+//                 2048 px each, drawn on the inside of a box with `shards` broken rocks drifting in
+//                 front of them. It carries `skybox` (an id in `data/skyboxes.js`, made with
+//                 `tools/skybox/skybox.py`; recipe 24) and `shards`. A cube replaces the owner's
+//                 equirect panoramas of 2026-11-14 because a cube has no poles and the same texel
+//                 density everywhere, so nothing is stretched on a 4K screen. An instance has no planet: nothing here is
 //                 copied from the space outside, and a collapsed pocket has no suns of its own to
 //                 show (owner 2026-11-14).
 //   features      ordinary place features (asteroidField, ...), read by the same generic loader a
@@ -121,23 +119,17 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  * file that knows how one is drawn: a template names a kind and its colours, so a new look for a new
  * kind of instance is a data line plus one builder.
  *
- *   shattered   the owner's own panoramas (2026-11-14): a teal maelstrom for an ordinary rift and
- *               a near-black sky with one sable cluster for a deep one (`variant: "deep"`), with
- *               shattered rock drifting in front of the whole, plus `shards`. No planet:
- *               somewhere that is not the space outside.
- *   panorama    a generated 4K skybox (`sky.skybox` = an id in `data/skyboxes.js`, made with
- *               `tools/skybox/skybox.py`; recipe 24): `shattered`'s treatment with that picture, plus `shards`.
- *   shroud      real space (slice 14c, 2026-11-14): the owner's dark-grey nebula panorama with
- *               few stars — the somewhere inside a simple wormhole. Since 2026-11-15 the whole
- *               game's skies are generated skyboxes (`panorama`), so no template names this; it is
- *               kept as the owner's own panorama and as the third kind the vocabulary allows.
+ *   cube        a generated cube-map skybox (`sky.skybox` = an id in `data/skyboxes.js`, made with
+ *               `tools/skybox/skybox.py`; recipe 24): six 90-degree faces on the inside of a box,
+ *               with `shards` broken rocks drifting in front of them. Every sky in the game is one of
+ *               these since 2026-11-15 — normal space included (`DEFAULT_SKY`, `data/places.js`).
  *
  * Every sky may carry `starfield: true` to ask for the drawn starfield on top of its picture. It is
- * off everywhere because the generated skyboxes have their own stars in them (owner 2026-11-15),
+ * off everywhere because the generated skies have their own stars in them (owner 2026-11-15),
  * and `render/scene.js` keeps the starfield switched off globally until the owner asks for it back.
  * An ordinary pocket's sky is `DEFAULT_SKY` (`data/places.js`), not a template's.
  */
-export const SKY_KINDS = ["shattered", "shroud", "panorama"];
+export const SKY_KINDS = ["cube"];
 
 export const INSTANCE_TEMPLATES = {
   // The Basic rift's usual run: four hardened guardians hold a small, rich pocket shut.
@@ -169,7 +161,7 @@ export const INSTANCE_TEMPLATES = {
     enter: { pos: [0, 0, 320] },
     // The rift's sky (owner 2026-11-15): a generated skybox — black space torn open by chaotic teal
     // gas — with shattered rock drifting in front of it. Made with tools/skybox/skybox.py.
-    sky: { kind: "panorama", skybox: "rift_chaos", shards: 30, starfield: false },
+    sky: { kind: "cube", skybox: "rift_chaos", shards: 30, starfield: false },
     features: [
       {
         kind: "asteroidField",
@@ -216,7 +208,7 @@ export const INSTANCE_TEMPLATES = {
     // A deeper collapse: the same generated rift sky, darker than the ordinary rift's, with more
     // rock and fewer stars in the picture. The owner asked for one rift look (2026-11-15); the deep
     // rift keeps its extra shards and its deeper damage, not a separate sky.
-    sky: { kind: "panorama", skybox: "rift_chaos", shards: 40, starfield: false },
+    sky: { kind: "cube", skybox: "rift_chaos", shards: 40, starfield: false },
     features: [
       {
         kind: "asteroidField",
@@ -281,7 +273,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 320] },
-    sky: { kind: "panorama", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
+    sky: { kind: "cube", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
     features: [
       {
         kind: "asteroidField",
@@ -325,7 +317,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "panorama", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
+    sky: { kind: "cube", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
     features: [
       {
         kind: "asteroidField",
@@ -381,7 +373,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "panorama", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
+    sky: { kind: "cube", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
     features: [
       {
         kind: "asteroidField",

@@ -20,6 +20,51 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-15: The skies are cube maps — six 2048 faces each, no distortion and no seams
+
+The owner: "the skyboxes look a bit distorted and also a little bit blurry since im using 4k monitor. Make the Skybox
+generator be a box, ie 6 square faces forming a cube. So remove the equirectangular ones we have now. Generate new ones
+that replace the current ones." He asked for at least 4096 per face, was shown the cost (4096 = 100.7 Mpx, ~1.7–2.8 MB,
+384 MB of GPU memory, 10–13 min a sky), and **chose 2048** (`--face` is still one flag away). **No save change (v21).**
+`npm test` **610/610**, `npm run build` 2997 KB (was 3016 KB — smaller, with six times the pixel density where it counts).
+
+- **The tool writes cube maps now.** `tools/skybox/skybox.py` builds the soft layers **once on a sphere in direction
+  space** (`SOFT_FACE_WIDTHS = 2.0` face widths, i.e. the same texel density the old panorama had, so the looks did not
+  change), then cuts six faces out of it with a 2× supersampled box filter. Every layer is a function of the direction a
+  pixel looks in, never of a face's x/y, so the faces agree at their edges by construction — no margins, no per-face
+  special cases, one face in memory at a time (~3 GB). One exposure for all six faces; stars placed once in direction
+  space and thinned by the dust; `finish_face` tone-maps and dithers each face.
+- **The seam check is new and honest.** `cube_seam_error` walks all 24 edges: for an edge pixel of a face it computes
+  the direction with `face_dirs` and samples the neighbouring face through `CUBE_NEIGHBOURS`. Measured on the three
+  installed skies: **worst edge 0.66/255** (a smooth sky reads ~0 here, so this is a sharp test, not a rubber stamp).
+  A smoke test at 1024 per face on a smooth field reads 1.81/0.43/0.22 at face 64/256/512 and trends to 0.
+- **CLI:** `--face`/`--face-size` replaces `--size` (1024 for a smoke test, 2048 the default, 4096 on the owner's word,
+  8192 the ceiling); a spec's `face` key replaces `size`. `make` takes about **4½ minutes** per sky at 2048.
+- **Three skies regenerated from their existing recipes**, same ids and same looks, at 2048 per face:
+  `normal_space` (258 KB), `rift_chaos` (470 KB), `wormhole_grey` (279 KB) — **~1 MB for the whole set**, and the built
+  page got 19 KB *smaller*. Each install wrote six faces to `src/assets/skyboxes/<id>/`, the recipe, and the registry
+  lines. `tests/skybox.test.mjs` now checks six square faces per sky, six imports, one array entry in cube order.
+- **The game draws a box.** `SKIES.cube` in `render/scene.js` replaces `shattered`, `panorama` and `shroud`
+  (all three are **gone**, with `SHATTERED_URLS` and the imports of the owner's panoramas): a `BoxGeometry` with six
+  face materials, `BackSide`, unlit, no depth write, no mipmaps, one linear filter — the same treatment the panoramas
+  had. The shell no longer spins: a star pattern turning under a fixed ship reads as the ship drifting.
+- **`src/render/cubemap.js` is new, and it fixed a real bug.** `BoxGeometry` groups its faces in cube order but frames
+  **+Y and -Y the other way up**, so the top and bottom faces would have arrived upside down. The new file holds
+  `CUBE_FACES`, `CUBE_FACE_FLIP` and `orientFace`, and `tests/skybox.test.mjs` reads `FACE_AXES` out of the generator,
+  rebuilds `BoxGeometry`'s frames with three.js, and proves each flip necessary and no flip redundant. (A single
+  `CubeTexture` would have needed `envMap` and a shader hook in three r128; six plain textures is the same picture
+  with nothing to go wrong.)
+- **Vocabulary is one word.** `SKY_KINDS = ["cube"]`, `DEFAULT_SKY.kind = "cube"`, five templates say `kind: "cube"`.
+  `data/skyboxes.js` lines carry `face` instead of `size`.
+- **The owner's three panoramas are kept as history** (`src/assets/sky-*.webp`, unused, recorded in
+  `src/assets/README.md`); nothing draws them any more and **do not delete them without his word**.
+- Docs: recipe 24, `tools/skybox/README.md` (how the cube is made, the face-size rule, the never-hand-flip rule),
+  `src/assets`, `src/data` and `src/render` READMEs, LESSONS L24.
+- **Needs the owner's playtest:** the numbers say seamless and the preview sheets look like the approved skies, but no
+  browser exists in the sandbox — only his 4K screen can confirm "sharp and undistorted".
+
+---
+
 ## 2026-11-15: Every sky is a generated skybox now — normal space, rifts and wormholes, and the starfield is gone
 
 The owner picked the skies and asked for three things in one go: normal space wears the sky we kept earlier, rifts get
@@ -186,25 +231,8 @@ Owner, looking at the 14c build: "Im not too happy with the skyboxes of both rif
 
 Files: `src/assets/sky-shroud.webp` (new), `build.mjs`, `src/render/scene.js`, `src/sim/wormholes.js`, `src/data/instances.js`, `src/render/README.md`, `testing/TESTING-14C-WORMHOLES.md`, `tests/step14c-wormholes.test.mjs`, docs (`CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`), `game/tallow-reach.html`.
 
-## 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
-
-Owner, 2026-11-14, spelling out the natural-wormhole model: a pocket spawns itself in normal space, its 20 minutes run
-from the pocket's spawn, running out only collapses the way in, and the far side is always escapable through a
-**Stable wormhole** with no clock. The build is **save v21** (v20 → v21 migration, unchanged storage keys, old-save test).
-**Not playtested yet — ROADMAP 14c stays unticked and the slice is a draft until the owner passes it**
-(`testing/TESTING-14C-WORMHOLES.md`). Rebuild needed (`npm run build`, then `npm test`).
-
-- **How many, where.** A **standing population of 75** simple wormholes in the universe at all times, **never more than 3 per system** (`WORMHOLE_SPAWN`). A fresh universe (or a legacy fill from an old save) rolls each one's remaining clock at random between 0 and 20 minutes so the sky never cycles in sync; **every replacement that pops up after an expiry gets the full 20 minutes**. When one expires, a replacement spawns somewhere else. No spawn notice — the marker on the system's map is all the warning there is.
-- **The pocket** is a registered place (like a rift instance, through `registerWormholePlace`): a skybox, interesting asteroid formations, and a centre **grey dark sphere** the pilot can lock — "Simple Wormhole", greyish radiance, colder than a rift (`views.js` `buildSimpleWormhole`; new `shroud` sky in `SKY_KINDS` with `SKIES.shroud` in `render/scene.js`). It hangs on that system's map at a fixed dot derived from its seed, warps like any other pocket, and carries **20 minutes from pocket spawn, saved in `world.wormholes`** (id, parent system, seed, template, remaining clock).
-- **The far side** is a site from `WORMHOLE_SITE_POOL`: **wh_smugglers** (smugglers and a freighter hauling illegal goods — destroy them), **wh_mining** (a lumenite belt — a new `mine-ore` objective kind, `ore: "lumenite"`, need 4, no hostiles, no cache), **wh_hive** (a guardian hive — good loot, **no cache**). Each site is `reentrant`: leave at any time through the always-open **Stable wormhole** (no clock, never locked); come back until the 20 minutes are spent. Objective and rewards are one-time per wormhole (the run is saved; `mined` progress is captured in `world.instances`).
-- **Expiry fires `collapse` only** — the entry fades in normal space, the Stable wormhole remains usable, and nothing `kill`-s, ever. A collapsed pocket lingers only while the pilot is in it or in its run; otherwise it despawns at once (proposed rule, not owner-approved yet). A replacement pops up elsewhere either way.
-- **Data the slice adds:** items `lumenite` (ore, v150) and `contraband` (trade, v220, ordinary cargo — no legality system); enemies `smuggler` (its own hostile so hunt contracts never pay for it), `freighter` ("Smuggling Freighter") and `hiveguardian`; loot `wh_rock`, `smuggler`, `freighter`, `hiveguardian`; the `mine-ore` entry in `OBJECTIVE_KINDS`; `{groups: [...]}` for compatible wave declarations (backwards compatible with the single-`{enemy,count}` form); `waveGroups()` normaliser in `data/instances.js`.
-- **Save v21.** `SAVE_VERSION = 21`; `world.instances` runs keep their `mined` progress; a new `cleanWormholes` keeps `world.wormholes` honest (id re-derivable from seed, parent must be a system of this galaxy, template must be a real re-enterable site, clock kept). A saved wormhole pocket rebuilds before validation the same way a saved run site does. **step 15 is v22.** Old-save tests cover the migration; `step14-instances.test.mjs` re-derives wormhole records and templates.
-- **Open questions for the owner** (asked in the playtest guide / next round): equal-weight site pool; contraband as ordinary cargo; the countdown's visibility (starmap tooltip? HUD?); spawn-eligibility (home system? uncharted?); what happens to a collapsed pocket nobody sees; whether the door is lockable only for a lock, not a trigger.
-
-Files: `src/data/instances.js`, `src/data/items.js`, `src/data/loot.js`, `src/data/enemies.js`, `src/data/places.js`, `src/state/state.js`, `src/state/profile.js`, `src/sim/wormholes.js` (new), `src/sim/instances.js`, `src/sim/session.js`, `src/sim/step.js`, `src/sim/galaxy-session.js`, `src/main.js`, `src/util/events.js`, `src/render/views.js`, `src/render/scene.js` and the folder READMEs, `tests/step14-instances.test.mjs`, `tests/step14c-wormholes.test.mjs` (new), `testing/TESTING-14C-WORMHOLES.md` (new), docs (`HANDOFF.md`, `ROADMAP.md`, `CHANGELOG.md`, `CHANGELOG_ARCHIVE.md`).
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-14: Slice 14c built — simple wormholes spawn themselves, and save v21
 - 2026-11-14: The sky loses its lines, and opening a loot card leaves the ship still
 - 2026-11-14: Rift revisions after the playtest — the cache is a trade, every run is 20 minutes, and the sky has no stars
 - 2026-11-14: Step 14 owner playtest — four bugs, four fixes (the run you quit is the run you come back to)

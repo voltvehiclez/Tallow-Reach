@@ -38,5 +38,5 @@
   "name": "wormhole_grey",
   "preset": "ash",
   "seed": 5,
-  "size": 4096
+  "face": 2048
 }

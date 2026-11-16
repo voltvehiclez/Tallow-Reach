@@ -4,18 +4,17 @@
 import * as THREE from "three";
 import { DEFAULT_PLACE, DEFAULT_SKY, placeDef, placeAt } from "../data/places.js";
 import { mm, rockShapeAt, stationModel, planetModel } from "./models.js";
+import { orientFace } from "./cubemap.js";
 import { colliderFromObject } from "./collideModel.js";
 import { registerPlaceCollider, clearPlaceColliders } from "../sim/colliders.js";
 import { cosmeticRandom } from "../util/rng.js";
 
 // The title screen and hangar draw the same models; re-exported so they keep importing from here.
 export { stationModel, planetModel };
-// The skies of somewhere else (slice 14): the owner's panoramas (2026-11-14), inlined as data
-// URLs by the build, so the game stays one self-contained file.
-import shroudSkyUrl from "../assets/sky-shroud.webp";
-import riftSkyUrl from "../assets/sky-rift.webp";
-import deepRiftSkyUrl from "../assets/sky-deeprift.webp";
-// Generated skyboxes (`tools/skybox/skybox.py`): their ids and colours are data, their images are imports.
+// Generated skyboxes (`tools/skybox/skybox.py`): their ids and colours are data, their six cube faces
+// are imports (inlined as data URLs by the build, so the game stays one self-contained file).
+// The owner's three panoramas (`src/assets/sky-*.webp`) are kept as history and are no longer drawn:
+// every sky in the game is a generated cube map (owner 2026-11-15).
 import { SKYBOXES } from "../data/skyboxes.js";
 import { SKYBOX_URLS } from "./skyboxes.js";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
@@ -122,79 +121,90 @@ export function forgetPlace(id) {
 /** How far out a sky shell sits: beyond the play area, inside the camera's far plane. */
 const SKY_RADIUS = 15000;
 
-// The rift's two skies (slice 14a/14b), both the owner's panoramas (2026-11-14).
-const SHATTERED_URLS = { rift: riftSkyUrl, deep: deepRiftSkyUrl };
-
 /**
  * What a sky definition resolves to, or `null` when nothing should be drawn for it.
  *
- * Only `panorama` can say no: a generated skybox that is not installed (a typo, or a sky removed
- * from the game) leaves its pocket on plain black rather than throwing — a look, never a rule.
- * Everything else passes through untouched, so each builder still sees exactly the data its
- * template declared.
+ * A `cube` sky whose skybox is not installed (a typo, or a sky removed from the game) leaves its
+ * pocket on plain black rather than throwing — a look, never a rule. Everything else passes through
+ * untouched, so each builder still sees exactly the data its template declared.
  */
 function skyFor(def) {
   if (!def || !SKIES[def.kind]) return null;
-  if (def.kind === "panorama" && !Object.prototype.hasOwnProperty.call(SKYBOX_URLS, def.skybox)) return null;
+  if (def.kind === "cube" && !Object.prototype.hasOwnProperty.call(SKYBOX_URLS, def.skybox)) return null;
   return def;
 }
 
 /**
  * The skies a place can declare (`data/instances.js` `sky.kind`). One builder per kind, each
- * returning `{ object, spins }` exactly like a scenery model, so a sky hangs off its place's own
- * group and is shown and hidden with it. Visual only: every number here is a look, never a rule.
+ * returning `{ object, spins, dispose }` exactly like a scenery model, so a sky hangs off its
+ * place's own group and is shown and hidden with it. Visual only: every number here is a look,
+ * never a rule.
  *
- *   shattered  the owner's own panoramas (2026-11-14), shards drifting inside them — the
- *              somewhere a rift's run is: `variant` picks `rift` (teal maelstrom) or `deep`
- *              (near-black, one sable cluster). The place's own rock does the rest.
- *   shroud     real space (slice 14c): the owner's dark-grey nebula panorama with few stars —
- *              the somewhere inside a simple wormhole. No shards — the place's own formations
- *              are the scenery.
- *   panorama   a generated 4K skybox (`sky.skybox` is its id in `data/skyboxes.js`): `shattered`'s
- *              treatment with that skybox's image and nebula colour. How to make one: `tools/skybox/README.md`.
+ *   cube   a generated cube map (`sky.skybox` is an id in `data/skyboxes.js`, made with
+ *          `tools/skybox/skybox.py`; recipe 24): six 90-degree faces drawn on the inside of a box,
+ *          plus `shards` broken rocks drifting in front of them. Every sky in the game is one of
+ *          these, including normal space (`DEFAULT_SKY`, `data/places.js`).
+ *
+ * Why a box and not a sphere wearing a panorama: a cube map gives every direction the same texel
+ * density and has no poles, so nothing is stretched or pinched — on a 4K screen the old 4096x2048
+ * panorama was spread thin exactly where the camera looks most, and that was the blur and the
+ * distortion the owner saw (owner, 2026-11-15). One sky, one look, six files.
  */
 export const SKIES = {
   /**
-   * The somewhere a rift's run is: the owner's own two panoramas (2026-11-14), wrapped around the
-   * inside of a sphere, seen from the back — the same equirect-on-sphere treatment as the
-   * wormhole panorama, every star where the owner put it. One linear filter, no mips. `variant`
-   * picks the deep rift's darker sky; anything else (or nothing) gets the ordinary rift sky — a
-   * look, never a rule, so a typo costs a prettier sky and never the place. Debris drifts inside
-   * it, turning slowly, in the same rock shapes the place's field uses.
+   * The somewhere a pocket is: a generated cube map seen from the inside, with shattered rock
+   * drifting in it (owner 2026-11-14: "shattered asteroids in the background skybox").
+   *
+   * The six faces go on the box's own six faces, one picture each, in the order
+   * `BoxGeometry` groups them — which is `[px, nx, py, ny, pz, nz]`, the order `render/skyboxes.js`
+   * lists them in. That order is the OpenGL cube convention, and both `tools/skybox/skybox.py`'s
+   * `face_dirs` and `BoxGeometry`'s UVs follow it, so the pictures land the right way up with no
+   * rotation and no mirroring anywhere (`npm test` checks the two against each other). A single
+   * `CubeTexture` would need `envMap` and a shader hook in this three.js version; six plain
+   * textures on six faces is the same picture with nothing to go wrong.
+   *
+   * `BackSide` means we stand inside the box; unlit and depth-write-free, so it is only ever a
+   * picture behind everything else. No mipmaps and one linear filter, exactly as the panoramas
+   * were: nothing here is a thing the owner did not see approved.
    */
-  shattered(sky, override) {
-    const shards = Math.max(0, Math.floor(Number(sky.shards) || 0));
-    const variant = typeof sky?.variant === "string" && Object.prototype.hasOwnProperty.call(SHATTERED_URLS, sky.variant)
-      ? sky.variant
-      : "rift";
+  cube(sky) {
+    const urls = Object.prototype.hasOwnProperty.call(SKYBOX_URLS, sky?.skybox) ? SKYBOX_URLS[sky.skybox] : null;
+    const tint = Object.prototype.hasOwnProperty.call(SKYBOXES, sky?.skybox) ? SKYBOXES[sky.skybox].tint : undefined;
     const g = new THREE.Group();
+    if (!urls) return { object: g, spins: [], dispose: () => {} };   // `skyFor` normally catches this
 
-    // `override` is how `SKIES.panorama` reuses this builder with a generated skybox's image and tint.
-    const texture = new THREE.TextureLoader().load(override?.url || SHATTERED_URLS[variant]);
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
-    const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);
-    const shellMat = new THREE.MeshBasicMaterial({
-      map: texture,
+    // A data URL decodes off the main thread; the very first frames may render black before the
+    // faces land. That is the whole failure mode, and it is per face.
+    const textures = urls.map(url => {
+      const t = new THREE.TextureLoader().load(url);
+      t.generateMipmaps = false;
+      t.minFilter = THREE.LinearFilter;      // no mips and no trilinear: the sky never shimmers
+      return t;
+    });
+    const shellGeo = new THREE.BoxGeometry(SKY_RADIUS * 2, SKY_RADIUS * 2, SKY_RADIUS * 2);
+    // One material per face, in the box's own group order (px, nx, py, ny, pz, nz), each pointed
+    // right way up by `orientFace` — BoxGeometry's top and bottom frames disagree with the cube
+    // convention the files are painted in, and `tests/skybox.test.mjs` proves the table correct.
+    const shellMats = textures.map((map, i) => new THREE.MeshBasicMaterial({
+      map: orientFace(map, i),
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
-    });
-    const shell = new THREE.Mesh(shellGeo, shellMat);
+    }));
+    const shell = new THREE.Mesh(shellGeo, shellMats);
     g.add(shell);
 
-    // Shattered rock drifting inside it: the asteroids of a field that broke up with the pocket,
-    // silhouetted against the nebula and each turning at its own slow rate. They are cold and nearly
-    // unlit, so they read as shapes in the dark rather than as scenery — which is the point of them
-    // (owner 2026-11-14: "shattered asteroids in the background skybox").
-    const spins = [{ object: shell, rate: 0.0014 }];
+    const shards = Math.max(0, Math.floor(Number(sky.shards) || 0));
+    // No spin: a sky that turns under a fixed star pattern reads as the ship drifting, and now every
+    // star is fixed in a face — the place's own rock is what moves.
+    const spins = [];
     // Lit cool, with a breath of the nebula's teal caught in the rock: near-black, never bright.
-    const shardMat = mm(0x14161d, override?.tint ?? 0x2f6f78);
+    const shardMat = mm(0x14161d, tint ?? 0x2f6f78);
     shardMat.emissiveIntensity = 0.12;   // the teal bleeds into the rock, no more than that
     for (let i = 0; i < shards; i++) {
       const shard = new THREE.Mesh(rockShapeAt(i), shardMat);
-      // Spread through the whole shell, near and far: a handful close enough to be shapes with edges,
-      // and the rest a long way off, small against the nebula.
+      // Spread through the whole shell, near and far: a handful close enough to be shapes with
+      // edges, and the rest a long way off, small against the nebula.
       const d = R(1200, 9000),
         u = R(-1, 1),
         t = R(0, 6.283),
@@ -205,58 +215,10 @@ export const SKIES = {
       g.add(shard);
       spins.push({ object: shard, rate: R(-0.05, 0.05) });
     }
-
     // A run's sky is built for that run alone, so it is freed with it: an instance comes and goes,
-    // and its sphere, its panorama and its shard material must not stay on the card after
-    // it. The rock shapes are shared with every field in the game, so they are not this sky's to
-    // free.
-    const own = [shellGeo, shellMat, texture, shardMat];
-    return { object: g, spins, dispose: () => own.forEach(r => r && r.dispose && r.dispose()) };
-  },
-
-  /**
-   * A generated skybox (`tools/skybox/skybox.py`, listed in `data/skyboxes.js`, image in
-   * `render/skyboxes.js`): `sky.skybox` is its id. Everything else is `shattered`'s own treatment —
-   * the same sphere, the same unlit back-face wrap, `shards` of drifting rock — with the rock
-   * catching a breath of the skybox's own nebula colour instead of the rift's teal. An id that is
-   * not installed falls back to the ordinary rift sky: a look, never a rule, so a typo costs a
-   * prettier sky and never the place (and `npm test` fails on the typo).
-   */
-  panorama(sky) {
-    const url = Object.prototype.hasOwnProperty.call(SKYBOX_URLS, sky?.skybox) ? SKYBOX_URLS[sky.skybox] : null;
-    const tint = Object.prototype.hasOwnProperty.call(SKYBOXES, sky?.skybox) ? SKYBOXES[sky.skybox].tint : undefined;
-    return SKIES.shattered(sky, url ? { url, tint } : undefined);
-  },
-
-  /**
-   * The somewhere inside a simple wormhole (slice 14c): the owner's dark-grey nebula panorama
-   * with few stars (2026-11-14), wrapped around the inside of a sphere, seen from the back —
-   * an equirectangular image is exactly what a sphere's UV unwrap is, so the panorama hangs
-   * level all round with no painter in between and every star where the owner put it. One linear
-   * filter, no mips: nothing sampled here is anything the owner did not paint. No shards: the
-   * place's own asteroid formations are the scenery.
-   */
-  shroud() {
-    const g = new THREE.Group();
-
-    // A data URL decodes off the main thread; the very first frames may render black before the
-    // panorama lands. That is the whole failure mode.
-    const texture = new THREE.TextureLoader().load(shroudSkyUrl);
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
-    const shellGeo = new THREE.SphereGeometry(SKY_RADIUS, 64, 40);
-    const shellMat = new THREE.MeshBasicMaterial({
-      map: texture,
-      side: THREE.BackSide,
-      fog: false,
-      depthWrite: false,
-    });
-    const shell = new THREE.Mesh(shellGeo, shellMat);
-    g.add(shell);
-
-    // The shell turns so slowly it barely reads as moving — like a place that is not in a hurry.
-    const spins = [{ object: shell, rate: 0.0009 }];
-    const own = [shellGeo, shellMat, texture];
+    // and nothing else in the game may end up wearing this sky's textures. The rock shapes are
+    // shared with every field in the game, so they are not this sky's to dispose.
+    const own = [shellGeo, ...shellMats, ...textures, shardMat];
     return { object: g, spins, dispose: () => own.forEach(r => r && r.dispose && r.dispose()) };
   },
 };
