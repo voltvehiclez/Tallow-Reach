@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateGalaxy } from '../src/sim/galaxy.js';
 import { PLACE_DEFS } from '../src/data/places.js';
-import { planAsteroids, asteroidEnvelope } from '../src/sim/asteroids.js';
+import { planAsteroids, asteroidEnvelope, fieldDensityWeight } from '../src/sim/asteroids.js';
 
 function checkArc(id, field) {
   const plan = planAsteroids(id, [field]);
@@ -66,11 +66,44 @@ test('Slot positions survive skipped slots, reverse loading and respawn', async 
   const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
   const expected = planAsteroids('reach', [field]);
   resetPlaces();
-  for (const slot of [100, 9, 0, 749]) {
+  for (const slot of [100, 9, 0, field.count - 1]) {
     const rock = spawnAsteroid('reach', field, slot);
     assert.deepEqual(rock.pos, expected.get(`field:${slot}`).pos);
   }
   placeWorld('reach').asteroids.length = 0;
   const restored = spawnAsteroid('reach', field, 9);
   assert.deepEqual(restored.pos, expected.get('field:9').pos);
+});
+
+
+test('Belts are 30% flatter and 20% less dense per volume, with tapered ends', () => {
+  const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
+  assert.equal(field.height, 400 * 0.7);
+  assert.equal(field.count, 750 * 0.7 * 0.8);
+  const arc = field.arc, span = 2 * Math.PI - arc.gap;
+  const at = fraction => ({ x: Math.cos(arc.angle + arc.gap / 2 + span * fraction),
+    z: Math.sin(arc.angle + arc.gap / 2 + span * fraction) });
+  assert.ok(fieldDensityWeight(field, at(0.01)) < fieldDensityWeight(field, at(0.1)));
+  assert.ok(fieldDensityWeight(field, at(0.1)) < fieldDensityWeight(field, at(0.3)));
+  assert.ok(Math.abs(fieldDensityWeight(field, at(0.1)) - fieldDensityWeight(field, at(0.9))) < 1e-10);
+  const rocks = [...planAsteroids('reach', [field]).values()];
+  let ends = 0, middle = 0;
+  for (const rock of rocks) {
+    const angle = ((Math.atan2(rock.pos.z - field.pos[2], rock.pos.x - field.pos[0]) - arc.angle - arc.gap / 2) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    const t = angle / span;
+    if (t < 0.1 || t > 0.9) ends++;
+    if (t > 0.4 && t < 0.6) middle++;
+  }
+  assert.ok(ends < middle * 0.65, `ends ${ends}, middle ${middle}`);
+});
+
+test('Smaller ordinary fields widen and gradually thin toward their edges', async () => {
+  const { templateFeatures } = await import('../src/data/place-templates.js');
+  const field = templateFeatures('frontier', { id: 'taper-test', template: 'frontier' }).features.find(f => f.kind === 'asteroidField');
+  assert.equal(field.radialFalloff, true);
+  assert.ok(field.radius >= 875 && field.radius <= 1250);
+  const weights = [0, 0.25, 0.5, 0.75, 1].map(t => fieldDensityWeight(field, { x: t * field.radius, z: 0 }));
+  for (let i = 1; i < weights.length; i++) assert.ok(weights[i] < weights[i - 1]);
+  assert.equal(weights[0], 1);
+  assert.ok(Math.abs(weights.at(-1) - 0.3) < 1e-10);
 });

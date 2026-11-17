@@ -199,7 +199,12 @@ function varyTemplateFeatures(templateId, place, features) {
  */
 export function templateFeatures(templateId, place = {}) {
   const template = templateAt(templateId);
-  const features = varyTemplateFeatures(templateId, place, JSON.parse(JSON.stringify(template.features || [])));
+  const features = varyTemplateFeatures(templateId, place, JSON.parse(JSON.stringify(template.features || []))).map(feature => {
+    if (feature.kind !== "asteroidField") return feature;
+    // 25% broader footprint; the radial taper averages ~65% acceptance,
+    // balancing the 1.25² area increase without inflating the central density.
+    return { ...feature, radius: Math.round(feature.radius * 1.25), radialFalloff: true };
+  });
   const explicitFeatures = [
     ...(Array.isArray(place.features) ? place.features : []),
     ...(Array.isArray(place.extraFeatures) ? place.extraFeatures : []),

@@ -5,6 +5,45 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
+
+Owner: "collision boxes that are not no-clipable stop all types of weapons / projectiles in a logical way. So all
+cannons, missiles etc should impact when hitting a collision box. I notice if I shoot meridian station with cannons it
+goes through it. Not sure how it works with asteroids but make sure the hit boxes stop them so its realistic."
+**No save change (v21).** `npm test` **619/619**, `npm run build` 2999 KB.
+
+- **The bug:** `updateBullets` tested hostiles (a sphere), then rocks (a distance-to-centre circle), and **never looked at
+  a place's colliders at all**. A station had nothing to hit, so every shot passed through it. Enemy fire had the same
+  hole in reverse — and because bolts stopped on a rock's *bounding circle* rather than its mesh, a shot could also die
+  on empty space beside a lumpy one.
+- **The fix, in `sim/colliders.js`:** `sweepColliders` / `segmentColliderHit` / `segmentRockHit` walk the **segment a
+  projectile covered that tick** (Möller–Trumbore, two-sided) across the place's colliders and the rock soups, and return
+  the nearest hit with its fraction along the path. Sweeping rather than sampling the end point matters: a 900 m/s bolt
+  covers 15 m a tick, so a station spoke or a small rock can sit entirely between two ticks. Unit checks: a thin sheet
+  between two ticks is caught; the nearest of two colliders wins regardless of list order; a rock is transformed into
+  model space rather than every vertex out.
+- **Bolt rule, in order:** a hostile's hull, then the scenery and rocks, then the pilot's hull for a hostile's shot. The
+  wall is checked for both sides, because a wall is a wall whoever fired. A shot that meets scenery dies **at the impact
+  point** with a spark, and damages nothing — scenery has no hull points.
+- **Missiles** sweep the same swath and burst on scenery and rocks instead of sailing through. **The mining beam** is
+  blocked too: a station wall between the ship and the rock stops the cut, the beam is drawn to the wall, and `beamT`
+  does not advance, so a rock cannot be mined through a station.
+- **The owner's exact case is a test.** `tests/projectile-collision.test.mjs` builds Meridian Station's real geometry
+  (ring, hub, base, dock box; the four `noclip.spin` spokes correctly excluded), and checks a bolt down the station's axis
+  stops on the hub, one at the ring hits the ring, and shots 400 m clear or 200 m above fly on.
+- **`noclip` and `collide: false` still let projectiles through**, which is what they are for: only clipping colliders
+  stop a weapon. That is asserted, not assumed.
+- **Balance effect, measured rather than assumed:** the Meridian belt is sparse — of 24 lines out from the station, one
+  meets a rock within 4 km — so combat does not become a corridor. Enemy fire can now be blocked by a rock when the pilot
+  takes cover behind one, which is the realism the owner asked for.
+- **One golden fixture re-recorded** (`tests/fixtures/step8b-combat-lifecycle.json`) and the reason is written into the
+  test file. Every player position, heading, velocity, power reading, cooldown, missile, ore count, credit and docked
+  flag is byte-identical; what changed is that shots stop at the rock and the pilot keeps the shields the raider's fire
+  used to take **by passing through that same rock** (10 instead of falling to 0), so hull stays 10 and saved hp is 1, not
+  0.6. Its three narrative assertions (mined ore, a missile launched, died and docked) all still hold.
+
+---
+
 ## 2026-11-15: The skies are cube maps — six 2048 faces each, no distortion and no seams
 
 The owner: "the skyboxes look a bit distorted and also a little bit blurry since im using 4k monitor. Make the Skybox

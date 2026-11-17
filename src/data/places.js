@@ -153,8 +153,8 @@ export const PLACE_DEFS = {
         arc: { inner: 2000, width: 1600, gap: Math.PI / 2, angle: Math.PI / 2 },
         focus: [1800, 200, -1500],
         radius: 3600,
-        height: 400,
-        count: 750,
+        height: 280,
+        count: 420, // 0.7 height × 0.8 volume density
         ore: "asteroid",
         respawnSec: 420,
         stable: true,

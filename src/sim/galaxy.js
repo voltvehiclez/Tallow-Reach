@@ -411,8 +411,8 @@ function addGeneratedBelts(world, tuning, seed) {
       asteroidField.layout = "arc";
       asteroidField.arc = { inner: 2000, width: 2200, gap: Math.PI / 2, angle: beltRng() * Math.PI * 2 };
       asteroidField.radius = 4200;
-      asteroidField.height = 600;
-      asteroidField.count = Math.round(700 + richness * 250);
+      asteroidField.height = 420;
+      asteroidField.count = Math.round((700 + richness * 250) * 0.56);
       const features = [asteroidField];
       // Hostility scales with advisory distance/tier; most belts are working space.
       const tier = Math.max(1, Number(system.tier) || 1);
@@ -472,7 +472,8 @@ function addGeneratedPlanets(world, tuning, seed) {
           id: "field",
           n: `${planet.n} rocks`,
           pos: polarPosition(rng, 1600, 3500, 500),
-          radius: Math.round(400 + rng() * 500),
+          radius: Math.round((400 + rng() * 500) * 1.25),
+          radialFalloff: true,
           height: Math.round(150 + rng() * 150),
           count: planet.rockCount,
           ore: planet.ore,

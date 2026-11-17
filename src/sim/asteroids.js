@@ -84,6 +84,24 @@ export function asteroidEnvelope(rock) {
   return radius;
 }
 
+/** Smooth angular/radial density profiles shared by stable and ad-hoc rocks. */
+export function fieldDensityWeight(field, local) {
+  if (field.layout === "arc") {
+    const arc = field.arc;
+    const span = Math.PI * 2 - arc.gap;
+    const angle = ((Math.atan2(local.z, local.x) - arc.angle - arc.gap / 2) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    const edge = Math.min(angle, span - angle) / span;
+    // Taper the outer quarter at either end; leave a broad, populated middle.
+    const t = Math.max(0, Math.min(1, edge / 0.25));
+    return 0.12 + 0.88 * t * t * (3 - 2 * t);
+  }
+  if (field.radialFalloff) {
+    const r = Math.min(1, Math.hypot(local.x, local.z) / field.radius);
+    return 1 - 0.7 * r * r;
+  }
+  return 1;
+}
+
 const layouts = new Map();
 /** Reserve ALL slots, even mined ones. Respawn/load order cannot move neighbours.
  * Pack largest first, across all fields, with a finite retry budget. If an authored
@@ -111,6 +129,7 @@ export function planAsteroids(placeId, fields) {
         p = V(roll(rng, -field.radius, field.radius), roll(rng, -field.height, field.height), roll(rng, -field.radius, field.radius));
         if (p.length() > field.radius) continue;
       }
+      if (rng() > fieldDensityWeight(field, p)) continue;
       p.add(V(...field.pos));
       if (placed.some(other => p.distanceToSquared(other.data.pos) < (bound + other.bound + 20) ** 2)) continue;
       data.pos = p;
@@ -144,6 +163,7 @@ export function spawnAsteroid(placeId = state.place, field = fieldAt(placeId), s
         const radial = arc.inner + bound + random() * Math.max(0, arc.width - 2 * bound);
         data.pos.set(field.pos[0] + Math.cos(angle) * radial, field.pos[1] + roll(random, -field.height, field.height), field.pos[2] + Math.sin(angle) * radial);
       }
+      if (random() > fieldDensityWeight(field, data.pos.clone().sub(V(...field.pos)))) { data = null; continue; }
       if (!placeWorld(placeId).asteroids.some(other => data.pos.distanceTo(other.pos) < bound + asteroidEnvelope(other) + 20)) break;
       data = null;
     }

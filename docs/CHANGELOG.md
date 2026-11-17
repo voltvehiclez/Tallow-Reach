@@ -20,6 +20,29 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Flatter, lighter belts with naturally thinning edges
+
+Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS
+density, and gradual thinning toward both tips. Meridian's centre-height range
+is now ±280 m (was ±400); dedicated belts ±420 m (was ±600). Counts scale by
+0.7 × 0.8 = 0.56 so reducing height does not inadvertently INCREASE volume
+density: Meridian has 420 rocks; generated belts 392–532. Arc-tip density uses
+a smoothstep taper over the outer quarter of each end, down to 12% placement
+weight at the tips; the broad middle remains populated. The ~2 km clear centre,
+non-overlap bounds, giant sizes and stable slot planning remain unchanged.
+
+Ordinary template fields (including secondary/extended fields) and planet fields
+are 25% wider, with quadratic radial falloff from weight 1 at the centre to 0.3
+at the edge. Counts stay similar: the larger footprint offsets the falloff,
+keeping central density approximately as before. Smaller-field heights unchanged.
+Both stable and ad-hoc spawns apply the same density profiles.
+
+Files: `src/data/{places,place-templates}.js`, `src/sim/{asteroids,galaxy}.js`,
+`tests/pocket-density.test.mjs`, generated HTML and handoff. **Save stays v21**.
+`npm run build` green; **655/655 tests pass**, including profile symmetry,
+actual arc-tip thinning, field widening, spacing and arrival-clearance tests.
+Updated taper visuals still need owner preview.
+
 ## 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids
 
 Owner: make belts a tightly packed big C, arrive in the middle with the nearest
@@ -287,46 +310,9 @@ Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/render/models.j
 `docs/GLB_MODELS.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `docs/HANDOFF.md`, `docs/LESSONS.md`,
 `game/tallow-reach.html`.
 
-## 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
-
-Owner: "collision boxes that are not no-clipable stop all types of weapons / projectiles in a logical way. So all
-cannons, missiles etc should impact when hitting a collision box. I notice if I shoot meridian station with cannons it
-goes through it. Not sure how it works with asteroids but make sure the hit boxes stop them so its realistic."
-**No save change (v21).** `npm test` **619/619**, `npm run build` 2999 KB.
-
-- **The bug:** `updateBullets` tested hostiles (a sphere), then rocks (a distance-to-centre circle), and **never looked at
-  a place's colliders at all**. A station had nothing to hit, so every shot passed through it. Enemy fire had the same
-  hole in reverse — and because bolts stopped on a rock's *bounding circle* rather than its mesh, a shot could also die
-  on empty space beside a lumpy one.
-- **The fix, in `sim/colliders.js`:** `sweepColliders` / `segmentColliderHit` / `segmentRockHit` walk the **segment a
-  projectile covered that tick** (Möller–Trumbore, two-sided) across the place's colliders and the rock soups, and return
-  the nearest hit with its fraction along the path. Sweeping rather than sampling the end point matters: a 900 m/s bolt
-  covers 15 m a tick, so a station spoke or a small rock can sit entirely between two ticks. Unit checks: a thin sheet
-  between two ticks is caught; the nearest of two colliders wins regardless of list order; a rock is transformed into
-  model space rather than every vertex out.
-- **Bolt rule, in order:** a hostile's hull, then the scenery and rocks, then the pilot's hull for a hostile's shot. The
-  wall is checked for both sides, because a wall is a wall whoever fired. A shot that meets scenery dies **at the impact
-  point** with a spark, and damages nothing — scenery has no hull points.
-- **Missiles** sweep the same swath and burst on scenery and rocks instead of sailing through. **The mining beam** is
-  blocked too: a station wall between the ship and the rock stops the cut, the beam is drawn to the wall, and `beamT`
-  does not advance, so a rock cannot be mined through a station.
-- **The owner's exact case is a test.** `tests/projectile-collision.test.mjs` builds Meridian Station's real geometry
-  (ring, hub, base, dock box; the four `noclip.spin` spokes correctly excluded), and checks a bolt down the station's axis
-  stops on the hub, one at the ring hits the ring, and shots 400 m clear or 200 m above fly on.
-- **`noclip` and `collide: false` still let projectiles through**, which is what they are for: only clipping colliders
-  stop a weapon. That is asserted, not assumed.
-- **Balance effect, measured rather than assumed:** the Meridian belt is sparse — of 24 lines out from the station, one
-  meets a rock within 4 km — so combat does not become a corridor. Enemy fire can now be blocked by a rock when the pilot
-  takes cover behind one, which is the realism the owner asked for.
-- **One golden fixture re-recorded** (`tests/fixtures/step8b-combat-lifecycle.json`) and the reason is written into the
-  test file. Every player position, heading, velocity, power reading, cooldown, missile, ore count, credit and docked
-  flag is byte-identical; what changed is that shots stop at the rock and the pilot keeps the shields the raider's fire
-  used to take **by passing through that same rock** (10 instead of falling to 0), so hull stays 10 and saved hp is 1, not
-  0.6. Its three narrative assertions (mined ore, a missile launched, died and docked) all still hold.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
 
 - 2026-11-15: The skies are cube maps — six 2048 faces each, no distortion and no seams
 
