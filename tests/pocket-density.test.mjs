@@ -22,12 +22,12 @@ function checkArc(id, field) {
     }
   }
   assert.ok(sectors.size >= 6, 'rocks surround the centre across the C');
-  assert.ok(nearest >= 2000 && nearest < 2200, `${id}: nearest surface ${nearest}`);
+  assert.ok(nearest >= 4000 && nearest < 4200, `${id}: nearest surface ${nearest}`);
   assert.ok(rocks.some(r => r.r >= 180));
   assert.ok(rocks.some(r => r.r < 85));
   return plan;
 }
-test('Meridian is a packed C surrounding the station with a 2 km clear centre', () => {
+test('Meridian is a packed C surrounding the station with a 4 km clear centre', () => {
   const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
   checkArc('reach', field);
   const world = generateGalaxy(42);
@@ -79,7 +79,7 @@ test('Slot positions survive skipped slots, reverse loading and respawn', async 
 test('Belts are 30% flatter and 20% less dense per volume, with tapered ends', () => {
   const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
   assert.equal(field.height, 400 * 0.7);
-  assert.equal(field.count, 750 * 0.7 * 0.8);
+  assert.equal(field.count, Math.round(420 * ((6000 ** 2 - 4000 ** 2) / (3600 ** 2 - 2000 ** 2))));
   const arc = field.arc, span = 2 * Math.PI - arc.gap;
   const at = fraction => ({ x: Math.cos(arc.angle + arc.gap / 2 + span * fraction),
     z: Math.sin(arc.angle + arc.gap / 2 + span * fraction) });

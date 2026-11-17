@@ -138,6 +138,7 @@ export const PLACE_DEFS = {
         kind: "station",
         id: "meridian",
         n: "Meridian Station",
+        model: "original-meridian",
         pos: [0, 0, 0],
         dockRange: 300,        // G docks inside this range
         dockSpeed: 70,         // ...and below this speed (m/s)
@@ -150,11 +151,11 @@ export const PLACE_DEFS = {
         n: "Asteroid field",
         pos: [0, 0, 600],
         layout: "arc",
-        arc: { inner: 2000, width: 1600, gap: Math.PI / 2, angle: Math.PI / 2 },
+        arc: { inner: 4000, width: 2000, gap: Math.PI / 2, angle: Math.PI / 2 },
         focus: [1800, 200, -1500],
-        radius: 3600,
+        radius: 6000,
         height: 280,
-        count: 420, // 0.7 height × 0.8 volume density
+        count: 938, // preserve density across the larger annular footprint
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
@@ -195,6 +196,7 @@ export const PLACES = {
     def: "meridian",
     parent: "meridian",
     n: "Meridian Station",
+        model: "original-meridian",
     d: "Meridian Station and the asteroid belt.",
     enter: { kind: "warp", pos: [0, 0, 300] },
     leave: { kind: "warp" },

@@ -349,3 +349,11 @@ and reading the shield bar — not at the plumbing that carries it.
 - **Enforced by:** `tests/collision-damage.test.mjs` (bake defaults, the hull really takes the rock-rate damage,
   the factor scales it, `collideDmg: 0` opts out, slow contact is free, rock and station cost the same) and
   `tests/enemy-collision.test.mjs` (scenery damages a hostile, `collideDmg: 0` does not).
+
+### Sky points need circular masks; primitive joins need geometric bounds
+
+WebGL PointsMaterial renders square pixels by default. For celestial/pocket dots,
+mask gl_PointCoord outside a circle; test both belt and ordinary-marker materials.
+For stacked primitives, compare bottom/top bounds (centre ± half height), not just
+centres: the commerce cap must start at the core top. Regression tests live in
+`tests/visual-refinement.test.mjs`; visual owner preview still required.

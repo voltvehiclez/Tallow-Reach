@@ -22,7 +22,6 @@ import * as THREE from "three";
 import { placeAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
 import { AU_METRES } from "../data/planets.js";
-import { planetTexture } from "./planetmaps.js";
 import { state } from "../state/state.js";
 import { systemSpatialLayout } from "../sim/galaxy.js";
 
@@ -80,10 +79,9 @@ function getHaloTexture() {
 
 function buildPlanetOrb(planet, position, radiusPx, local = false) {
   const group = new THREE.Group();
-  const texture = planetTexture(planet);
   const geometry = new THREE.SphereGeometry(radiusPx, local ? 36 : 20, local ? 24 : 14);
   const material = new THREE.MeshLambertMaterial({
-    map: texture,
+    color: planet.col,
     emissive: planet.emissive || 0x000000,
     emissiveIntensity: planet.classId === "volcanic" ? 0.55 : 0.06,
   });
@@ -170,8 +168,10 @@ export function buildSystemSkyLayer(id) {
     if (!planet) continue;
     if (node.id === id) {
       const dir = new THREE.Vector3(...(planet.approach || [0, 0, 1])).normalize();
-      const radiusPx = L * 0.57;
-      const position = dir.multiplyScalar(L * 0.72);
+      dir.y = -0.55;
+      dir.normalize();
+      const radiusPx = L * 0.26;
+      const position = dir.multiplyScalar(L * 0.85);
       const local = buildPlanetOrb(planet, position, radiusPx, true);
       g.add(local.group);
       disposables.push(...local.disposables);
@@ -236,6 +236,13 @@ export function buildSystemSkyLayer(id) {
       depthWrite: false,
       fog: false,
     });
+    // WebGL points are square unless explicitly masked into circular pinpricks.
+    dotMat.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace("void main() {", `void main() {
+        float pointRadius = length(gl_PointCoord - vec2(0.5));
+        if (pointRadius > 0.5) discard;`);
+    };
+    dotMat.customProgramCacheKey = () => "circular-pocket-point";
     const dots = new THREE.Points(dotGeo, dotMat);
     dots.name = "belt-dots";
     g.add(dots);
@@ -273,6 +280,13 @@ export function buildSystemSkyLayer(id) {
       depthWrite: false,
       fog: false,
     });
+    // WebGL points are square unless explicitly masked into circular pinpricks.
+    dotMat.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace("void main() {", `void main() {
+        float pointRadius = length(gl_PointCoord - vec2(0.5));
+        if (pointRadius > 0.5) discard;`);
+    };
+    dotMat.customProgramCacheKey = () => "circular-pocket-point";
     const dots = new THREE.Points(dotGeo, dotMat);
     dots.name = "pocket-dots";
     g.add(dots);

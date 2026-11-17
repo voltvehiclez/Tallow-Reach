@@ -309,7 +309,8 @@ function finalizeArrivals(world) {
         // A unique point off to one side of the low-orbit backdrop; facing the
         // fixed approach vector puts the planet dominating the view.
         const pos = roundVec([(rng() - 0.5) * 3600, (rng() - 0.5) * 2200, (rng() - 0.5) * 3600]);
-        const dir = normalize3(pocket.planet.approach || [0, 0, 1]);
+        const approach = pocket.planet.approach || [0, 0, 1];
+        const dir = normalize3([approach[0], 0, approach[2]]);
         pocket.enter = {
           kind: "warp",
           pos,
@@ -409,10 +410,10 @@ function addGeneratedBelts(world, tuning, seed) {
       };
 
       asteroidField.layout = "arc";
-      asteroidField.arc = { inner: 2000, width: 2200, gap: Math.PI / 2, angle: beltRng() * Math.PI * 2 };
-      asteroidField.radius = 4200;
+      asteroidField.arc = { inner: 4000, width: 2750, gap: Math.PI / 2, angle: beltRng() * Math.PI * 2 };
+      asteroidField.radius = 6750;
       asteroidField.height = 420;
-      asteroidField.count = Math.round((700 + richness * 250) * 0.56);
+      asteroidField.count = Math.round((700 + richness * 250) * 0.56 * ((6750 ** 2 - 4000 ** 2) / (4200 ** 2 - 2000 ** 2)));
       const features = [asteroidField];
       // Hostility scales with advisory distance/tier; most belts are working space.
       const tier = Math.max(1, Number(system.tier) || 1);
