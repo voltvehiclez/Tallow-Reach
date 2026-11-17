@@ -20,6 +20,15 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: The edge-compression lens is removed
+
+Owner: "oh remove the lense thing i wont use it in the future" — after saying the current view looks good. The experiment is deleted, not merely disabled: `src/render/remap.js`, `src/render/remapmath.js` and `tests/remap.test.mjs` are gone; `main.js` renders the flight/pause paths with `renderer.render(scene, camera)` directly; `render/camera.js` widens FOV on boost/warp unconditionally again; the HUD lock ring and marker project through the stock projection only; the `src/render/README.md` lens rows are gone. The current look is the stock horizontal-85° + aspect-derived vertical camera. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). ROADMAP stays unticked until a formal playtest tick.
+
+Files: `src/render/remap.js` (removed), `src/render/remapmath.js` (removed), `tests/remap.test.mjs` (removed), `src/main.js`, `src/render/camera.js`, `src/render/README.md`, `src/data/camera.js`, `src/ui/hud.js`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`. **649/649 pass** (9 remap tests deleted with the code); build green.
+
+
+---
+
 ## 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)
 
 Owner, after rejecting narrow FOV: bodies and sky points read as ovals at the frame's edge because rectilinear projection magnifies the periphery (about 2.2x at our edge; EVE measures about 1.45x there; StarMade on 16:9 measures about 1.18x). This implements the full-frame re-map both AIs proposed, with the numbers checked and the implementation fixed where the preview's claims didn't hold — including a centre-stretch on windows not in 16:9 and a source-coverage bug that clamped the frame rim (the blurry border and too-tall edge planets). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). With `REMAP.on = false`, the stock pipeline renders byte-for-byte. Owner rejected the look during playtest (too distorted); this branch now builds with `REMAP.on = false` so the stock pipeline renders. The lens code remains in the tree behind the knob; ROADMAP stays unticked.
@@ -325,31 +334,8 @@ then picked the picture and said "keep it for later". **No save change. `npm run
 
 ---
 
-## 2026-11-15: A skybox generator, so every new instance can have a dark, realistic 4K sky
-
-**No save change. `npm run build` and `npm test` needed.** No skybox is installed yet, so the game looks exactly as before.
-
-- **`tools/skybox/skybox.py`** (Python, numpy + Pillow; not part of the game bundle) renders a 4096×2048 equirectangular
-  WebP in about 40 s and ~400 KB: luminous nebula gas, a mist behind it, dark dust clouds in front (rim-lit where thin,
-  ragged fractal edges), hot cores, an optional Milky Way band, and stars with a power-law brightness spread, blackbody
-  colours and equal-area placement (stretched correctly for the projection; dust hides them). Every layer is a function of
-  view direction, so there is no seam and no pole pinching. It bloom-filters, **auto-exposes to a mood** (`black`,
-  `very_dark`, `dark` default, `dim`; the owner wants dark space), tone-maps, dithers, and prints a report that must say OK.
-  `--install` refuses on any warning. Eight looks in `tools/skybox/presets.json`: void, maelstrom, ember, violet_veil, ash,
-  milky_way, cobalt_cluster, emerald_mist. `--preview` writes a contact sheet with four 70-degree pilot's-eye views.
-- **Game side:** new sky kind `panorama` (`sky: { kind: "panorama", skybox: "<id>", shards: 30 }`) in `data/instances.js`
-  `SKY_KINDS`; `SKIES.panorama` in `render/scene.js` reuses `SKIES.shattered` (it now takes an optional `{ url, tint }`
-  override, behaviour for the existing skies unchanged). New `src/data/skyboxes.js` (data) and `src/render/skyboxes.js`
-  (image imports), both with `GENERATED` blocks the tool maintains. Verified in headless Chromium with the real scene code.
-- **For AI assistants:** `tools/skybox/README.md` (workflow, "owner says -> run this" table, warnings), **recipe 24** (23 was
-  taken by the GLB-model recipe), a line in `AGENTS.md` and `HANDOFF.md`. `tests/skybox.test.mjs` guards manifest, image (2:1,
-  size, budget), import, recipe and the template's skybox name, and the presets file.
-- Known: 4096 wide is about 0.09 degrees per pixel, so on a 4K monitor at the 70-degree camera the sky is magnified about 2.4
-  times; `--size 8192` is the sharper option (about 3 GB RAM, bigger game file). Do not commit the tool's `skybox-out/` folder.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+- 2026-11-15: A skybox generator, so every new instance can have a dark, realistic 4K sky
 - 2026-11-15: The Test Ship — a 1-credit hull with 100× Hull HP and 10× damage, flown with the owner's GLB
 - 2026-11-14: Models and collision are real models now — drop-in `.glb` files, hulls flush with the drawing
 - 2026-11-14: Two owner bugs, part two — the Sell/Discard confirm sits with the cursor, and hunt contracts clear the area they were taken in

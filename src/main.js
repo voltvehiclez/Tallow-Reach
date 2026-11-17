@@ -2,7 +2,6 @@
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
 import { renderer, scene, camera, stars, showPlace, updateScenery, forgetPlace } from "./render/scene.js";
-import { renderFlightFrame } from "./render/remap.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
 import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
@@ -241,7 +240,7 @@ function drawFrame(now) {
     return;
   }
   if (isSimulationPaused()) {
-    renderFlightFrame();
+    renderer.render(scene, camera);
     return;
   }
 
@@ -282,7 +281,7 @@ function drawFrame(now) {
 
   const offset = shakeOffset(P, dt, SHIPS[state.profile.ship].sc);
   if (offset) camera.position.add(offset);
-  renderFlightFrame();
+  renderer.render(scene, camera);
   if (offset) camera.position.sub(offset);
 
   // Draws its own canvas and does nothing unless the Outfitting tab is open.
