@@ -8,15 +8,17 @@
 // view running away. The trail is now a deliberate, bounded line in speed:
 // idle, flat out and reversing all land on the distances below.
 
-// Test tune (owner 2026-11-16): lower the stock vertical FOV to 55° and pull
-// the chase camera back by the matching factor, tan(35°) / tan(27.5°) ≈ 1.345,
-// so the ship keeps the same on-screen size while the perspective compresses.
-export const BASE_FOV = 55;
+// Test tune (owner 2026-11-16): the StarMade screenshots fit an ordinary
+// rectilinear camera at about 50° vertical (≈79° horizontal at 16:9), not 85°
+// vertical. Lower the stock vertical FOV to 50° and pull the chase camera back
+// by the matching factor, tan(35°) / tan(25°) ≈ 1.502, so the ship keeps the
+// same on-screen size while the perspective compresses.
+export const BASE_FOV = 50;
 
 export const CAMERA = {
-  base: 14.8,     // distance behind the ship when it is standing still
-  fast: 22.9,     // at full forward speed (full throttle + boost)
-  reverse: 14.1,  // at maximum reverse thrust
+  base: 16.5,     // distance behind the ship when it is standing still
+  fast: 25.5,     // at full forward speed (full throttle + boost)
+  reverse: 15.8,  // at maximum reverse thrust
 };
 
 /**
