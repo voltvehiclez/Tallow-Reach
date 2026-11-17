@@ -20,6 +20,26 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Denser pockets, close warp-ins and massive asteroids
+
+Owner preview: overall good, but pockets were too spread out and rocks too small.
+Restored Meridian's original 70-rock field at [1800, 200, -1500], radius 700 m;
+five connected 90-rock sections extend it ~6.4 km outward (520 rocks total).
+Dedicated belts now chain 5–7 dense sections, each 750–1000 m radius and roughly
+65–120 rocks. Frontiers regain dense local fields with outward extensions or a
+second field; trade/outpost/planet fields and encounter positions move closer.
+Stations arrive at roughly 650–1200 m plus small jitter; fields arrive 500–800 m
+outside their first section. Seeded facing and planet approaches remain intact.
+Rare low-poly giants mix with normal rocks: radii 180–400 m in frontier fields,
+180–360 m in Meridian extensions, 200–500 m in dedicated belts. Independent
+size RNG preserves ordinary stable slots; existing shapes/collision are reused.
+
+Files: `src/data/{places,place-templates}.js`, `src/sim/{galaxy,asteroids}.js`,
+`tests/pocket-density.test.mjs`, loader test and combat fixture (only original
+launch quaternions restored), generated HTML and handoff. **Save stays v21.**
+`npm run build` passes; **652/652 tests pass**. Visual density and frame-rate
+still need owner preview.
+
 ## 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
 
 Owner: "Let's do a real variety pass on the generated universe … asteroid belts should be their own dedicated pockets …
@@ -325,49 +345,9 @@ that replace the current ones." He asked for at least 4096 per face, was shown t
 
 ---
 
-## 2026-11-15: Every sky is a generated skybox now — normal space, rifts and wormholes, and the starfield is gone
-
-The owner picked the skies and asked for three things in one go: normal space wears the sky we kept earlier, rifts get
-a black-and-teal chaotic one, wormholes a dark grey one, and "remove the existing starfield. This is because our
-previously generated skybox already has some stars baked in it. I might re-add star fields in the future but not now."
-**No save change (v21).** `npm test` **604/604**, `npm run build` 3016 KB (was 2466 KB).
-
-- **Three skies installed** with the tool (recipe 24), each `OK: dark, seamless and within budget`:
-  `normal_space` (140 KB, preset `void`, seed 3 — the sky the owner kept on 2026-11-15, re-made under its final name),
-  `rift_chaos` (239 KB, preset `maelstrom`, seed 23, turbulence 1.2, wisps 0.9, dust 1.0/0.85/1.5 — black space torn
-  open by chaotic teal gas), `wormhole_grey` (173 KB, preset `ash`, seed 5, `very_dark`, saturation 0.7 — dark grey, no
-  purple cast). Recipes in `tools/skybox/specs/`.
-- **Normal space is a sky, not a template.** New `DEFAULT_SKY = { kind: "panorama", skybox: "normal_space", shards: 0,
-  starfield: false }` in `data/places.js`; `render/scene.js` uses `placeAt(id).sky || DEFAULT_SKY`, so every ordinary
-  pocket wears it and a place may still override it. **The starfield is off:** `STARFIELD = { enabled: false }` keeps the
-  geometry and the per-frame follow, `showPlace` shows it only for a sky that says `starfield: true`, and
-  `menuview.js` clones it only when the switch is on — nothing draws two sets of stars. Re-adding star fields later is
-  that one flag plus a `starfield: true` on whichever sky wants them.
-- **Rifts and wormholes re-skinned.** Both rift templates now wear `rift_chaos` (the deep rift keeps its 40 shards and its
-  deeper damage; the owner asked for one rift look, so it no longer wears `variant: "deep"`), and all three `wh_*`
-  simple-wormhole templates wear `wormhole_grey` instead of `shroud`.
-- **`skyFor(def)`** in `scene.js` drops a sky nothing can draw — a `panorama` whose skybox id is not installed — so a
-  typo costs a background and never the place (and `npm test` names it).
-- **The tool gained `remove`** (`skybox.py remove <id>`): it deletes the image, the recipe and both registry lines, in
-  that order, because `src/assets/skyboxes/` is the tool's folder. The duplicate `teal_black_test` was removed with it
-  (the same picture as `normal_space`, and the build would have inlined the same sky twice).
-- **Not restructured, deliberately.** The owner asked about file structure and then ruled it out: "skyboxes aren't part
-  of refactor plan, also isn't 14d a part for wormhole systems" — correct on both counts, so nothing moved. The three
-  owner panoramas in `src/assets/` stay where they are (no template names two of them; `sky-deeprift` only as
-  `SKIES.shattered`'s fallback) and `src/assets/README.md` says so.
-- **Tests:** `tests/skybox.test.mjs` now checks `DEFAULT_SKY` as well as every template (a skybox only normal space names
-  would otherwise be unchecked) and adds "normal space wears a generated sky, and the drawn starfield is off", which reads
-  `showPlace`'s own expression so writer and reader cannot drift apart (L19). `tests/step14c-wormholes.test.mjs` now
-  expects the generated grey sky on the far side.
-- Files: `src/assets/skyboxes/*.webp`, `tools/skybox/specs/*.json`, `tools/skybox/skybox.py`, `tools/skybox/README.md`,
-  `src/data/skyboxes.js`, `src/render/skyboxes.js`, `src/data/places.js`, `src/data/instances.js`, `src/render/scene.js`,
-  `src/render/menuview.js`, `tests/skybox.test.mjs`, `tests/step14c-wormholes.test.mjs`, the folder READMEs,
-  `src/assets/README.md`, `game/tallow-reach.html`.
-
----
-
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-15: Every sky is a generated skybox now — normal space, rifts and wormholes, and the starfield is gone
 - 2026-11-15: Kept for later — a black-and-teal sky, installed but worn by no place yet
 - 2026-11-15: A skybox generator, so every new instance can have a dark, realistic 4K sky
 - 2026-11-15: The Test Ship — a 1-credit hull with 100× Hull HP and 10× damage, flown with the owner's GLB

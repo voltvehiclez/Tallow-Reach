@@ -320,16 +320,16 @@ function finalizeArrivals(world) {
       const features = recordFeatures(pocket);
       const stations = features.filter(f => f.kind === "station" && Array.isArray(f.pos));
       const fields = features.filter(f => f.kind === "asteroidField" && Array.isArray(f.pos));
-      const main = stations[0] || fields.sort((a, b) => (b.radius || 0) - (a.radius || 0) || (b.count || 0) - (a.count || 0))[0] || null;
+      const main = stations[0] || fields[0] || null;
       if (main) {
         const p = main.pos;
         const length = Math.hypot(p[0], p[1], p[2]);
         const u = length > 1 ? [p[0] / length, p[1] / length, p[2] / length]
           : normalize3([rng() - 0.5, rng() - 0.5, rng() - 0.5]);
         const distance = main.kind === "station"
-          ? 2800 + rng() * 4200
-          : Math.max(2500, (Number(main.radius) || 3000) + 2500 + rng() * 4200);
-        const jitter = 700 + rng() * 700;
+          ? 650 + rng() * 550
+          : (Number(main.radius) || 700) + 500 + rng() * 300;
+        const jitter = 50 + rng() * 100;
         const side = normalize3([rng() - 0.5, rng() - 0.5, rng() - 0.5]);
         const pos = roundVec([
           p[0] - u[0] * distance + side[0] * jitter,
@@ -380,14 +380,14 @@ function addGeneratedBelts(world, tuning, seed) {
       const base = systemCoreName(system);
       const richness = rng();
       const beltRng = makeRng((seed ^ hashId(`belt:${id}`)) >>> 0);
-      const rockCount = Math.round(34 + richness * richness * 126 + beltRng() * 22);   // mostly huge, some lean
+      const rockCount = Math.round(65 + richness * 40 + beltRng() * 15);   // mostly huge, some lean
       const asteroidField = {
         kind: "asteroidField",
         id: "field",
         n: `${base} - Asteroid belt ${n}`,
-        pos: polarPosition(beltRng, 13000, 26000, 6500),
-        radius: Math.round(7800 + beltRng() * 10500),       // 7.8–18.3 km
-        height: Math.round(3000 + beltRng() * 3200),
+        pos: polarPosition(beltRng, 1800, 3000, 400),
+        radius: Math.round(750 + beltRng() * 250),       // dense sections, extended below
+        height: Math.round(250 + beltRng() * 100),
         count: Math.max(24, rockCount),
         ore: "asteroid",
         respawnSec: 420,
@@ -395,12 +395,22 @@ function addGeneratedBelts(world, tuning, seed) {
         rock: {
           rMin: Math.round(16 + beltRng() * 14),
           rMax: Math.round(66 + beltRng() * 54),
+          giantChance: 0.09, giantMin: 200, giantMax: 500,
           orePerR: 1.6,
         },
         salvage: { spread: [900 + beltRng() * 250, 260 + beltRng() * 120, 900 + beltRng() * 250] },
       };
       const fieldRadius = asteroidField.radius;
-      const features = [asteroidField];
+      // A chain of populated sections: kilometres of exploration without empty gaps.
+      const angle = Math.atan2(asteroidField.pos[2], asteroidField.pos[0]);
+      const features = [asteroidField, ...Array.from({ length: 4 + Math.floor(richness * 3) }, (_, j) => ({
+        ...asteroidField,
+        id: `field-extension-${j + 1}`,
+        n: `${asteroidField.n} outer ${j + 1}`,
+        pos: [Math.round(asteroidField.pos[0] + Math.cos(angle) * (j + 1) * fieldRadius * 1.6),
+          asteroidField.pos[1] + Math.round(Math.sin(j) * 100),
+          Math.round(asteroidField.pos[2] + Math.sin(angle) * (j + 1) * fieldRadius * 1.6)],
+      }))];
       // Hostility scales with advisory distance/tier; most belts are working space.
       const tier = Math.max(1, Number(system.tier) || 1);
       const pirateRoll = beltRng();
@@ -458,9 +468,9 @@ function addGeneratedPlanets(world, tuning, seed) {
           kind: "asteroidField",
           id: "field",
           n: `${planet.n} rocks`,
-          pos: polarPosition(rng, 7000, 17000, 4200),
-          radius: Math.round(2200 + rng() * 4200),
-          height: Math.round(800 + rng() * 1300),
+          pos: polarPosition(rng, 1600, 3500, 500),
+          radius: Math.round(400 + rng() * 500),
+          height: Math.round(150 + rng() * 150),
           count: planet.rockCount,
           ore: planet.ore,
           respawnSec: 420,

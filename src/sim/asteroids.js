@@ -37,8 +37,13 @@ export function spawnAsteroid(placeId = state.place, field = fieldAt(placeId), s
     ? makeRng(hash(`${placeId}:${field.id || "field"}:${slot}`))
     : random;
   const rock = field.rock || { rMin: 18, rMax: 70, orePerR: 1.6 };
-  const r = roll(rng, rock.rMin, rock.rMax),
-    type = pickLoot(field.ore, rng);
+  let r = roll(rng, rock.rMin, rock.rMax);
+  const type = pickLoot(field.ore, rng);
+  // Independent size stream preserves existing stable slots and combat RNG.
+  const sizeRng = stable ? makeRng(hash(`giant:${placeId}:${field.id}:${slot}`)) : random;
+  if (rock.giantChance > 0 && sizeRng() < rock.giantChance) {
+    r = roll(sizeRng, rock.giantMin || 180, rock.giantMax || 400);
+  }
 
   // Stable slots use the same order on every load: size, ore, shape, position,
   // then tumble. Unslotted callers retain the ordinary session RNG behaviour.

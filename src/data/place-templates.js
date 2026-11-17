@@ -20,10 +20,10 @@ export const PLACE_TEMPLATES = {
         kind: "asteroidField",
         id: "field",
         n: "Frontier belt",
-        pos: [17000, 2200, -23000],
-        radius: 9000,
-        height: 3600,
-        count: 24,
+        pos: [1800, 200, -1500],
+        radius: 850,
+        height: 280,
+        count: 90,
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
@@ -47,10 +47,10 @@ export const PLACE_TEMPLATES = {
         kind: "asteroidField",
         id: "field",
         n: "Trade-lane asteroid field",
-        pos: [19000, -1600, -26000],
-        radius: 5200,
-        height: 2200,
-        count: 10,
+        pos: [1900, -160, -1600],
+        radius: 650,
+        height: 220,
+        count: 45,
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
@@ -74,10 +74,10 @@ export const PLACE_TEMPLATES = {
         kind: "asteroidField",
         id: "field",
         n: "Outpost rocks",
-        pos: [-15000, 1800, -19000],
-        radius: 4200,
-        height: 1800,
-        count: 8,
+        pos: [-1500, 180, -1900],
+        radius: 550,
+        height: 200,
+        count: 30,
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
@@ -125,7 +125,7 @@ export function encounterIdsFor(templateId, tier = 1) {
   return [...(template.tiers?.[chosen] || [])];
 }
 
-function polarPoint(rng, min = 15000, max = 33000, height = 7000) {
+function polarPoint(rng, min = 1200, max = 3500, height = 600) {
   const angle = rng() * Math.PI * 2;
   const distance = min + rng() * (max - min);
   return [
@@ -141,8 +141,8 @@ const seededRng = (place, salt) => makeRng(hashId(`${place?.template || "test"}:
  * resolves to the same scenery, but two pockets of one template no longer share one
  * belt, station or patrol position. */
 const twinField = (feature, rng) => {
-  const pos = polarPoint(rng, 15000, 33000, 8500);
-  const fixed = Math.hypot(pos[0] - feature.pos[0], pos[1] - feature.pos[1], pos[2] - feature.pos[2]) > feature.radius + 2000
+  const pos = polarPoint(rng, 1800, 4500, 700);
+  const fixed = Math.hypot(pos[0] - feature.pos[0], pos[1] - feature.pos[1], pos[2] - feature.pos[2]) > feature.radius + 1000
     ? pos
     : [-pos[0], pos[1], -pos[2]];
   return {
@@ -151,8 +151,8 @@ const twinField = (feature, rng) => {
     n: `${feature.n || "Field"} pocket`,
     pos: fixed,
     count: Math.max(3, Math.round(feature.count * (0.35 + rng() * 0.3))),
-    radius: Math.max(1200, Math.round(feature.radius * (0.38 + rng() * 0.3))),
-    height: Math.max(600, Math.round(feature.height * (0.5 + rng() * 0.4))),
+    radius: Math.max(500, Math.round(feature.radius * (0.38 + rng() * 0.3))),
+    height: Math.max(180, Math.round(feature.height * (0.5 + rng() * 0.4))),
   };
 };
 
@@ -160,28 +160,34 @@ function varyTemplateFeatures(templateId, place, features) {
   return features.flatMap((feature) => {
     if (feature.kind !== "asteroidField") return [feature];
     const rng = seededRng(place, `field:${feature.id || "field"}`);
-    feature.pos = polarPoint(rng, 15000, 33000, 8500);
+    feature.pos = polarPoint(rng, 1800, 4500, 700);
     if (templateId === "frontier") {
-      feature.count = 16 + Math.floor(rng() * 22);   // 16–37, not a stamp
-      feature.radius = Math.round(6800 + rng() * 7600); // 6.8–14.4 km
-      feature.height = Math.round(2600 + rng() * 2600);
-      feature.rock = { ...(feature.rock || {}), rMax: Math.round(76 + rng() * 34) };
+      feature.count = 65 + Math.floor(rng() * 55);   // Dense local mining, not a stamp
+      feature.radius = Math.round(700 + rng() * 300); // 0.7–1 km
+      feature.height = Math.round(220 + rng() * 130);
+      feature.rock = { ...(feature.rock || {}), rMax: Math.round(76 + rng() * 34), giantChance: 0.07, giantMin: 180, giantMax: 400 };
       if (rng() < 0.3) return [feature, twinField(feature, rng)];   // some frontiers run two separated fields
-      return [feature];
+      const direction = Math.atan2(feature.pos[2], feature.pos[0]);
+      return [feature, ...Array.from({ length: 3 }, (_, i) => ({
+        ...feature, id: `${feature.id}-extension-${i + 1}`,
+        n: `${feature.n} outer ${i + 1}`,
+        pos: [feature.pos[0] + Math.cos(direction) * (i + 1) * feature.radius * 1.6,
+          feature.pos[1], feature.pos[2] + Math.sin(direction) * (i + 1) * feature.radius * 1.6],
+      }))];
     }
     if (templateId === "trade_lane") {
       if (rng() < 0.2) return [];                    // some trade lanes are clean lanes
-      feature.count = 4 + Math.floor(rng() * 12);    // 4–15
-      feature.radius = Math.round(2800 + rng() * 4200);
-      feature.height = Math.round(1100 + rng() * 1500);
+      feature.count = 30 + Math.floor(rng() * 30);    // 30–59
+      feature.radius = Math.round(500 + rng() * 250);
+      feature.height = Math.round(180 + rng() * 100);
       if (rng() < 0.12) return [feature, twinField(feature, rng)];
       return [feature];
     }
     // Outposts are deliberately not all useful mining pockets: many are quiet.
     if (rng() < 0.45) return [];
-    feature.count = 3 + Math.floor(rng() * 10);      // 3–12
-    feature.radius = Math.round(1700 + rng() * 3200);
-    feature.height = Math.round(800 + rng() * 1300);
+    feature.count = 20 + Math.floor(rng() * 25);      // 20–44
+    feature.radius = Math.round(400 + rng() * 250);
+    feature.height = Math.round(150 + rng() * 100);
     if (rng() < 0.15) return [feature, twinField(feature, rng)];
     return [feature];
   });
@@ -210,8 +216,8 @@ export function templateFeatures(templateId, place = {}) {
   ids.forEach((encounterId, index) => {
     const encounter = encounterDef(encounterId);
     const pos = positions[index]
-      ? polarPoint(seededRng(place, `encounter-fallback:${index}`), 10500, 18500, 4500)
-      : polarPoint(seededRng(place, `encounter:${index}`), 10500 + index * 1200, 31500, 6500);
+      ? polarPoint(seededRng(place, `encounter-fallback:${index}`), 300, 1000, 250)
+      : polarPoint(seededRng(place, `encounter:${index}`), 700 + index * 300, 2200, 450);
     const featureId = `${encounterId}-${index}`;
     const stationClass = stationClassForId(place?.id || `${templateId}:${featureId}`);
     if (encounter.kind === "friendlyTrader") {

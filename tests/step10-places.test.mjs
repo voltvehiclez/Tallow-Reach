@@ -77,7 +77,7 @@ test("10a: the loader builds per-place containers once and keeps rocks separate"
   loadPlace("hollow");
   loadPlace("reach");
   const reach = placeWorld("reach"), hollow = placeWorld("hollow");
-  assert.equal(reach.asteroids.length, placeDef("reach").features.find(f => f.kind === "asteroidField").count);
+  assert.equal(reach.asteroids.length, placeDef("reach").features.filter(f => f.kind === "asteroidField").reduce((n, f) => n + f.count, 0));
   assert.equal(hollow.asteroids.length, 0);
   assert.notEqual(reach, hollow);
   assert.ok(reach.asteroids.every(a => a.place === "reach"));

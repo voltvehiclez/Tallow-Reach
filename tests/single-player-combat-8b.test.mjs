@@ -18,6 +18,7 @@
 // every snapshot from i=600 on carries a different quaternion. Nothing else moved:
 // every player position, velocity, power reading, gun cooldown, missile, ore count,
 // credit and docked flag in the run is byte-identical.
+// Density follow-up: restored the original home-field position and launch quaternions.
 // The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
 // still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";

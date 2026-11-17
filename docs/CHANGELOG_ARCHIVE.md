@@ -5,6 +5,48 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-15: Every sky is a generated skybox now — normal space, rifts and wormholes, and the starfield is gone
+
+The owner picked the skies and asked for three things in one go: normal space wears the sky we kept earlier, rifts get
+a black-and-teal chaotic one, wormholes a dark grey one, and "remove the existing starfield. This is because our
+previously generated skybox already has some stars baked in it. I might re-add star fields in the future but not now."
+**No save change (v21).** `npm test` **604/604**, `npm run build` 3016 KB (was 2466 KB).
+
+- **Three skies installed** with the tool (recipe 24), each `OK: dark, seamless and within budget`:
+  `normal_space` (140 KB, preset `void`, seed 3 — the sky the owner kept on 2026-11-15, re-made under its final name),
+  `rift_chaos` (239 KB, preset `maelstrom`, seed 23, turbulence 1.2, wisps 0.9, dust 1.0/0.85/1.5 — black space torn
+  open by chaotic teal gas), `wormhole_grey` (173 KB, preset `ash`, seed 5, `very_dark`, saturation 0.7 — dark grey, no
+  purple cast). Recipes in `tools/skybox/specs/`.
+- **Normal space is a sky, not a template.** New `DEFAULT_SKY = { kind: "panorama", skybox: "normal_space", shards: 0,
+  starfield: false }` in `data/places.js`; `render/scene.js` uses `placeAt(id).sky || DEFAULT_SKY`, so every ordinary
+  pocket wears it and a place may still override it. **The starfield is off:** `STARFIELD = { enabled: false }` keeps the
+  geometry and the per-frame follow, `showPlace` shows it only for a sky that says `starfield: true`, and
+  `menuview.js` clones it only when the switch is on — nothing draws two sets of stars. Re-adding star fields later is
+  that one flag plus a `starfield: true` on whichever sky wants them.
+- **Rifts and wormholes re-skinned.** Both rift templates now wear `rift_chaos` (the deep rift keeps its 40 shards and its
+  deeper damage; the owner asked for one rift look, so it no longer wears `variant: "deep"`), and all three `wh_*`
+  simple-wormhole templates wear `wormhole_grey` instead of `shroud`.
+- **`skyFor(def)`** in `scene.js` drops a sky nothing can draw — a `panorama` whose skybox id is not installed — so a
+  typo costs a background and never the place (and `npm test` names it).
+- **The tool gained `remove`** (`skybox.py remove <id>`): it deletes the image, the recipe and both registry lines, in
+  that order, because `src/assets/skyboxes/` is the tool's folder. The duplicate `teal_black_test` was removed with it
+  (the same picture as `normal_space`, and the build would have inlined the same sky twice).
+- **Not restructured, deliberately.** The owner asked about file structure and then ruled it out: "skyboxes aren't part
+  of refactor plan, also isn't 14d a part for wormhole systems" — correct on both counts, so nothing moved. The three
+  owner panoramas in `src/assets/` stay where they are (no template names two of them; `sky-deeprift` only as
+  `SKIES.shattered`'s fallback) and `src/assets/README.md` says so.
+- **Tests:** `tests/skybox.test.mjs` now checks `DEFAULT_SKY` as well as every template (a skybox only normal space names
+  would otherwise be unchecked) and adds "normal space wears a generated sky, and the drawn starfield is off", which reads
+  `showPlace`'s own expression so writer and reader cannot drift apart (L19). `tests/step14c-wormholes.test.mjs` now
+  expects the generated grey sky on the far side.
+- Files: `src/assets/skyboxes/*.webp`, `tools/skybox/specs/*.json`, `tools/skybox/skybox.py`, `tools/skybox/README.md`,
+  `src/data/skyboxes.js`, `src/render/skyboxes.js`, `src/data/places.js`, `src/data/instances.js`, `src/render/scene.js`,
+  `src/render/menuview.js`, `tests/skybox.test.mjs`, `tests/step14c-wormholes.test.mjs`, the folder READMEs,
+  `src/assets/README.md`, `game/tallow-reach.html`.
+
+---
+
+
 ## 2026-11-15: Kept for later — a black-and-teal sky, installed but worn by no place yet
 
 The owner asked to see the new skybox generator make a 4K sky: "black and teal highlights of nebula, few stars",
