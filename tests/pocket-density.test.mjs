@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateGalaxy } from '../src/sim/galaxy.js';
 import { PLACE_DEFS } from '../src/data/places.js';
-import { planAsteroids, asteroidEnvelope, fieldDensityWeight, arcContour } from '../src/sim/asteroids.js';
+import { planAsteroids, asteroidEnvelope, fieldDensityWeight, arcContour, fieldMarkerPosition } from '../src/sim/asteroids.js';
 
 function checkArc(id, field) {
   const plan = planAsteroids(id, [field]);
@@ -127,4 +127,21 @@ test('C contours are irregular and deterministic, with occasional separated oute
   });
   assert.ok(strays.length > 5 && strays.length < rocks.length * 0.08, `strays: ${strays.length}`);
   assert.ok(rocks.every(r => Math.abs(r.pos.y - field.pos[1]) <= field.height));
+});
+
+
+test('Field markers sit midway through the populated arc, not at the warp centre', () => {
+  const home = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
+  for (const angle of [home.arc.angle, 0, 1.2, 5.8]) {
+    const field = { ...home, arc: { ...home.arc, angle } };
+    const original = structuredClone(field);
+    const marker = fieldMarkerPosition(field);
+    const contour = arcContour(field, angle + Math.PI);
+    const dx = marker[0] - field.pos[0], dz = marker[2] - field.pos[2];
+    assert.ok(Math.abs(Math.hypot(dx, dz) - contour.inner - contour.width / 2) < 1e-8);
+    assert.ok(Math.abs(dx / Math.hypot(dx, dz) - Math.cos(angle + Math.PI)) < 1e-8);
+    assert.equal(marker[1], field.pos[1]);
+    assert.deepEqual(field, original, 'marker must not move the field or arrival centre');
+  }
+  assert.deepEqual(fieldMarkerPosition({ pos: [1, 2, 3] }), [1, 2, 3]);
 });

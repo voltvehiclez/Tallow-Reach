@@ -78,6 +78,13 @@ Files: `data/{places,scenery}.js`, `sim/galaxy.js`, `render/{models,systemsky}.j
 density/visual tests, generated HTML and handoff. Save v21. `npm run build` passes;
 **660/660 tests pass**. Owner preview pending.
 
+Marker follow-up: arc-field HUD labels now sit halfway through the band at the
+angular midpoint of the populated C (opposite its opening), using the seeded
+contour at that angle. The field origin and central warp arrival do not move.
+Ordinary field markers remain at their centres. Files: `sim/asteroids.js`,
+`ui/hud.js`, `tests/pocket-density.test.mjs`, generated HTML and handoff.
+Save v21; build green; **661/661 tests pass**. Owner preview pending.
+
 ## 2026-11-16: Flatter, lighter belts with naturally thinning edges
 
 Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS

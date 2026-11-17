@@ -115,6 +115,16 @@ export function arcContour(field, angle) {
   };
 }
 
+/** HUD destination inside the densest arc section, independent of its warp centre. */
+export function fieldMarkerPosition(field) {
+  if (field.layout !== "arc") return [...field.pos];
+  const angle = field.arc.angle + Math.PI;
+  const contour = arcContour(field, angle);
+  const radius = contour.inner + contour.width / 2;
+  return [field.pos[0] + Math.cos(angle) * radius, field.pos[1],
+    field.pos[2] + Math.sin(angle) * radius];
+}
+
 function arcPosition(field, bound, rng, stray) {
   const arc = field.arc;
   const angle = arc.angle + arc.gap / 2 + rng() * (Math.PI * 2 - arc.gap);
