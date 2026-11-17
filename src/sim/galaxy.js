@@ -414,7 +414,7 @@ function addGeneratedBelts(world, tuning, seed) {
       asteroidField.arc = { inner: 4000, width: 2750, gap: Math.PI / 2, angle: beltRng() * Math.PI * 2 };
       asteroidField.radius = 6750;
       asteroidField.height = 420;
-      asteroidField.count = Math.round((700 + richness * 250) * 0.56 * ((6750 ** 2 - 4000 ** 2) / (4200 ** 2 - 2000 ** 2)));
+      asteroidField.count = Math.round((700 + richness * 250) * 0.28 * ((6750 ** 2 - 4000 ** 2) / (4200 ** 2 - 2000 ** 2)));
       const features = [asteroidField];
       // Hostility scales with advisory distance/tier; most belts are working space.
       const tier = Math.max(1, Number(system.tier) || 1);

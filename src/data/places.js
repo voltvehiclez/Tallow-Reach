@@ -155,7 +155,7 @@ export const PLACE_DEFS = {
         focus: [1800, 200, -1500],
         radius: 6000,
         height: 280,
-        count: 938, // preserve density across the larger annular footprint
+        count: 469, // half-density follow-up; footprint and height unchanged
         ore: "asteroid",
         respawnSec: 420,
         stable: true,

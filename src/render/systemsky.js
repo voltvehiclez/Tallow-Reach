@@ -21,7 +21,7 @@
 import * as THREE from "three";
 import { placeAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
-import { PLANET_VIEW } from "../data/scenery.js";
+import { PLANET_VIEW, atmosphereRadius } from "../data/scenery.js";
 import { AU_METRES } from "../data/planets.js";
 import { state } from "../state/state.js";
 import { systemSpatialLayout } from "../sim/galaxy.js";
@@ -92,7 +92,7 @@ function buildPlanetOrb(planet, position, radiusPx, local = false) {
   group.add(orb);
 
   const atmosphereScale = Math.max(1.06, Number(planet.atmosphere || planet.radiusM * 1.14) / Math.max(1, Number(planet.radiusM) || 1));
-  const atmoGeo = new THREE.SphereGeometry(radiusPx * atmosphereScale, local ? 36 : 20, local ? 24 : 14);
+  const atmoGeo = new THREE.SphereGeometry(atmosphereRadius(radiusPx, radiusPx * atmosphereScale), local ? 36 : 20, local ? 24 : 14);
   const atmoMat = new THREE.MeshBasicMaterial({
     color: planet.atmoCol || 0x8fb3c7,
     transparent: true,
@@ -208,7 +208,7 @@ export function buildSystemSkyLayer(id) {
       fog: false,
     });
     const halo = new THREE.Sprite(haloMat);
-    halo.scale.setScalar(radiusPx * 3.2);
+    halo.scale.setScalar(atmosphereRadius(radiusPx * 2, radiusPx * 3.2));
     halo.position.copy(position);
     g.add(halo);
     disposables.push(haloMat);

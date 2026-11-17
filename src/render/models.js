@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import { SHIPS } from "../data/ships.js";
+import { atmosphereRadius } from "../data/scenery.js";
 import { stationClass } from "../data/stations.js";
 import { R } from "../util/math.js";
 import { instantiateModel, modelTemplate, spinNodes, engNodes } from "./gltf.js";
@@ -151,7 +152,7 @@ export function planetModel(f) {
     const object = new THREE.Group();
     object.add(gltf);
     const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(f.atmosphere, 48, 32),
+      new THREE.SphereGeometry(atmosphereRadius(f.radius, f.atmosphere), 48, 32),
       new THREE.MeshBasicMaterial({
         color: f.atmoCol, transparent: true, opacity: 0.18,
         side: THREE.BackSide, blending: THREE.AdditiveBlending,
@@ -173,7 +174,7 @@ export function planetModel(f) {
   );
   planet.position.set(...f.pos);
   const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(f.atmosphere, 48, 32),
+    new THREE.SphereGeometry(atmosphereRadius(f.radius, f.atmosphere), 48, 32),
     new THREE.MeshBasicMaterial({
       color: f.atmoCol, transparent: true, opacity: 0.18,
       side: THREE.BackSide, blending: THREE.AdditiveBlending,

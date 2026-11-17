@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
-import { PLANET_VIEW } from '../src/data/scenery.js';
+import { PLANET_VIEW, atmosphereRadius } from '../src/data/scenery.js';
 import { PLACE_DEFS } from '../src/data/places.js';
 const bundled = await build({ entryPoints: ['src/render/models.js'], bundle: true, write: false, format: 'esm', platform: 'node', loader: { '.glb': 'dataurl' } });
 const { stationModel, planetModel } = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64'));
@@ -38,4 +38,16 @@ test('Planet surfaces are solid colours, and sky point shaders discard square co
   const surface = meshes(planet.object).find(p => p.material.type === 'MeshStandardMaterial');
   assert.equal(surface.material.map, null);
   assert.equal(surface.material.color.getHex(), 0x778899);
+});
+
+
+test('Atmosphere thickness is one third without changing the planet surface', () => {
+  assert.equal(atmosphereRadius(300, 342), 314);
+  assert.equal(atmosphereRadius(300, 366), 322);
+  const planet = planetModel({ pos: [0, 0, 0], radius: 300, atmosphere: 342, col: 0x778899, atmoCol: 0x778899 });
+  const parts = meshes(planet.object);
+  assert.equal(parts.find(p => p.material.type === 'MeshStandardMaterial').geometry.parameters.radius, 300);
+  assert.equal(parts.find(p => p.name === 'noclip.atmosphere').geometry.parameters.radius, 314);
+  const source = readFileSync('src/render/systemsky.js', 'utf8');
+  assert.ok(source.includes('atmosphereRadius(radiusPx, radiusPx * atmosphereScale)'));
 });

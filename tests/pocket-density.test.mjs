@@ -79,7 +79,7 @@ test('Slot positions survive skipped slots, reverse loading and respawn', async 
 test('Belts are 30% flatter and 20% less dense per volume, with tapered ends', () => {
   const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
   assert.equal(field.height, 400 * 0.7);
-  assert.equal(field.count, Math.round(420 * ((6000 ** 2 - 4000 ** 2) / (3600 ** 2 - 2000 ** 2))));
+  assert.equal(field.count, Math.round(210 * ((6000 ** 2 - 4000 ** 2) / (3600 ** 2 - 2000 ** 2))));
   const arc = field.arc, span = 2 * Math.PI - arc.gap;
   const at = fraction => ({ x: Math.cos(arc.angle + arc.gap / 2 + span * fraction),
     z: Math.sin(arc.angle + arc.gap / 2 + span * fraction) });
@@ -87,7 +87,8 @@ test('Belts are 30% flatter and 20% less dense per volume, with tapered ends', (
   assert.ok(fieldDensityWeight(field, at(0.1)) < fieldDensityWeight(field, at(0.3)));
   assert.ok(fieldDensityWeight(field, at(0.3)) < fieldDensityWeight(field, at(0.5)));
   assert.ok(fieldDensityWeight(field, at(0.01)) < 0.012);
-  assert.ok(fieldDensityWeight(field, at(0.1)) < 0.11);
+  assert.ok(fieldDensityWeight(field, at(0.1)) < 0.012);
+  assert.ok(fieldDensityWeight(field, at(0.25)) < 0.26);
   assert.ok(Math.abs(fieldDensityWeight(field, at(0.1)) - fieldDensityWeight(field, at(0.9))) < 1e-10);
   const rocks = [...planAsteroids('reach', [field]).values()];
   let ends = 0, middle = 0;
@@ -97,7 +98,7 @@ test('Belts are 30% flatter and 20% less dense per volume, with tapered ends', (
     if (t < 0.1 || t > 0.9) ends++;
     if (t > 0.4 && t < 0.6) middle++;
   }
-  assert.ok(ends < middle * 0.2, `ends ${ends}, middle ${middle}`);
+  assert.ok(ends < middle * 0.1, `ends ${ends}, middle ${middle}`);
 });
 
 test('Smaller ordinary fields widen and gradually thin toward their edges', async () => {

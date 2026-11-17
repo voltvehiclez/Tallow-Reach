@@ -66,6 +66,18 @@ irregular contours, strays and collision spacing stay unchanged. Files:
 `data/scenery.js`, `sim/asteroids.js`, density/visual tests, generated HTML and
 handoff. Save v21; `npm run build` passes; **659/659 tests pass**. Owner preview pending.
 
+Third preview follow-up: owner requested half overall belt density, stronger
+thinning from the C middle, and atmosphere shells one third as thick. Meridian
+now has 469 rocks; dedicated belt count scaling halved from 0.56 to 0.28 (same
+footprint/height). Arc weighting is sine-to-the-fourth with a 0.2% tip floor,
+rather than sine-squared with a 1% floor. Strays and non-overlap rules remain.
+Atmospheres scale the shell's excess radius by 1/3, never the surface radius;
+applied to system-sky planets, authored/menu planets, GLB atmosphere fallback,
+and distant-planet halo extent. Surface size, elevation and colours unchanged.
+Files: `data/{places,scenery}.js`, `sim/galaxy.js`, `render/{models,systemsky}.js`,
+density/visual tests, generated HTML and handoff. Save v21. `npm run build` passes;
+**660/660 tests pass**. Owner preview pending.
+
 ## 2026-11-16: Flatter, lighter belts with naturally thinning edges
 
 Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS
