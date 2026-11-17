@@ -29,41 +29,6 @@ export const CAMERA = {
 };
 
 /**
- * The edge-compression lens, 2026-11-16. The flight scene renders into a wider
- * off-screen image and a full-screen shader re-draws it through a blend of the
- * rectilinear and stereographic projections: bodies at the frame's edge stop
- * reading as ovals, and the skybox is corrected by the same amount (one pass
- * fixes world and sky together). The frame's edge is exactly `edge` degrees off
- * axis; the centre zoom is lower than today by a fixed factor (zoom-lock is
- * impossible when the frame widens). Tuning knob for the owner's playtest —
- * tune it here, never in the shader.
- *
- * `strength` — 0 = plain rectilinear over the edge angle; 1 = fully
- *   stereographic (circles stay circles everywhere, straightest bend of every
- *   curve tested); 0.75 keeps lines nearly straight and lands the oval factor
- *   at about 1.24 at the edge (EVE measures about 1.21) with a 38-degree half
- *   angle (the centre feels unchanged, -2% zoom).
- * `edge` — the frame's half-angle in degrees. 38 keeps the feel closest to
- *   today (a 76-degree vertical view with corrected edges); 46.5 is the wide
- *   "panel 2" variant (a 93-degree vertical view, noticeably smaller centre,
- *   ~2.3x the pixels); 41° is the balanced pick (82-degree view, ~1.6x pixels,
- *   oval factor about 1.22 at the edge).
- * `on` — false restores the stock rectilinear pipeline byte-for-byte (plain
- *   render, old HUD maths, old +4 boost / +16 warp FOV widening).
- *
- * Note: boost/warp FOV widening is disabled in lens mode; camera.fov stays
- * static. The warp streaks and flash still carry the speed feel.
- */
-export const REMAP = {
-  // Disabled: the owner rejected the look (too distorted) during playtest.
-  // Kept behind the knob so the experiment can be revisited or replaced;
-  // false restores the stock rectilinear pipeline exactly.
-  on: false,
-  strength: 0.75,
-  edge: 38,
-};
-
-/**
  * How far behind the ship the camera sits, in world units.
  * `vf` is the ship's speed along its own forward axis (negative when reversing),
  * `fwdTop` the fastest it can go forward (throttle 1 plus boost) and `revTop` the

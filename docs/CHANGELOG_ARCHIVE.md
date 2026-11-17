@@ -55,6 +55,30 @@ Files: `src/assets/sky-rift.webp` (new), `src/assets/sky-deeprift.webp` (new), `
 When entries are moved out of `CHANGELOG.md`, paste them directly under this paragraph so the
 newest stay first.
 
+## 2026-11-15: A skybox generator, so every new instance can have a dark, realistic 4K sky
+
+**No save change. `npm run build` and `npm test` needed.** No skybox is installed yet, so the game looks exactly as before.
+
+- **`tools/skybox/skybox.py`** (Python, numpy + Pillow; not part of the game bundle) renders a 4096×2048 equirectangular
+  WebP in about 40 s and ~400 KB: luminous nebula gas, a mist behind it, dark dust clouds in front (rim-lit where thin,
+  ragged fractal edges), hot cores, an optional Milky Way band, and stars with a power-law brightness spread, blackbody
+  colours and equal-area placement (stretched correctly for the projection; dust hides them). Every layer is a function of
+  view direction, so there is no seam and no pole pinching. It bloom-filters, **auto-exposes to a mood** (`black`,
+  `very_dark`, `dark` default, `dim`; the owner wants dark space), tone-maps, dithers, and prints a report that must say OK.
+  `--install` refuses on any warning. Eight looks in `tools/skybox/presets.json`: void, maelstrom, ember, violet_veil, ash,
+  milky_way, cobalt_cluster, emerald_mist. `--preview` writes a contact sheet with four 70-degree pilot's-eye views.
+- **Game side:** new sky kind `panorama` (`sky: { kind: "panorama", skybox: "<id>", shards: 30 }`) in `data/instances.js`
+  `SKY_KINDS`; `SKIES.panorama` in `render/scene.js` reuses `SKIES.shattered` (it now takes an optional `{ url, tint }`
+  override, behaviour for the existing skies unchanged). New `src/data/skyboxes.js` (data) and `src/render/skyboxes.js`
+  (image imports), both with `GENERATED` blocks the tool maintains. Verified in headless Chromium with the real scene code.
+- **For AI assistants:** `tools/skybox/README.md` (workflow, "owner says -> run this" table, warnings), **recipe 24** (23 was
+  taken by the GLB-model recipe), a line in `AGENTS.md` and `HANDOFF.md`. `tests/skybox.test.mjs` guards manifest, image (2:1,
+  size, budget), import, recipe and the template's skybox name, and the presets file.
+- Known: 4096 wide is about 0.09 degrees per pixel, so on a 4K monitor at the 70-degree camera the sky is magnified about 2.4
+  times; `--size 8192` is the sharper option (about 3 GB RAM, bigger game file). Do not commit the tool's `skybox-out/` folder.
+
+---
+
 ## 2026-11-14: Models and collision are real models now — drop-in `.glb` files, hulls flush with the drawing
 
 Owner: every object in the game should accept a `.glb` when one exists (hardcoded model otherwise), and collision should sit flush with the actual 3D model for all objects — Meridian Station can no longer be one big ball: the rings and the inner cylinder must be reachable and touchable. Complex future objects (a big rock cave) are in scope. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet.
