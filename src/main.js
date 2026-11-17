@@ -2,12 +2,14 @@
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
 import { renderer, scene, camera, stars, showPlace, updateScenery, forgetPlace } from "./render/scene.js";
+import { renderFlightFrame } from "./render/remap.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
 import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
 import { loadAutosave, saveAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { SHIPS } from "./data/ships.js";
+import { verticalFovForAspect } from "./data/camera.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
@@ -205,6 +207,7 @@ addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
+  camera.fov = verticalFovForAspect(camera.aspect);
   camera.updateProjectionMatrix();
   resizeMenuView();
 });
@@ -238,7 +241,7 @@ function drawFrame(now) {
     return;
   }
   if (isSimulationPaused()) {
-    renderer.render(scene, camera);
+    renderFlightFrame();
     return;
   }
 
@@ -279,7 +282,7 @@ function drawFrame(now) {
 
   const offset = shakeOffset(P, dt, SHIPS[state.profile.ship].sc);
   if (offset) camera.position.add(offset);
-  renderer.render(scene, camera);
+  renderFlightFrame();
   if (offset) camera.position.sub(offset);
 
   // Draws its own canvas and does nothing unless the Outfitting tab is open.

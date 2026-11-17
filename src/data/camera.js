@@ -8,10 +8,59 @@
 // view running away. The trail is now a deliberate, bounded line in speed:
 // idle, flat out and reversing all land on the distances below.
 
+// Test tune (owner 2026-11-16): keep the horizontal FOV fixed at 85° and let
+// the vertical FOV fall out of the window's aspect ratio (vertical =
+// 2 * atan(tan(85° / 2) / aspect)). On 16:9 that is ≈54.54° vertical — very
+// close to the 55° trial. Chase distances are pulled back for 16:9 by the
+// matching factor tan(35°) / tan(27.268°) ≈ 1.358 so the ship keeps the same
+// on-screen size; on non-16:9 windows the vertical FOV changes while this
+// static distance cannot, so framing differences are expected.
+export const BASE_HFOV = 85;
+
+export function verticalFovForAspect(aspect = 1) {
+  const a = aspect > 0 ? aspect : 1;
+  return (2 * Math.atan(Math.tan((BASE_HFOV * Math.PI) / 360) / a) * 180) / Math.PI;
+}
+
 export const CAMERA = {
-  base: 11,     // distance behind the ship when it is standing still
-  fast: 17,     // at full forward speed (full throttle + boost)
-  reverse: 10.5, // at maximum reverse thrust
+  base: 14.9,     // distance behind the ship when it is standing still
+  fast: 23.1,     // at full forward speed (full throttle + boost)
+  reverse: 14.3,  // at maximum reverse thrust
+};
+
+/**
+ * The edge-compression lens, 2026-11-16. The flight scene renders into a wider
+ * off-screen image and a full-screen shader re-draws it through a blend of the
+ * rectilinear and stereographic projections: bodies at the frame's edge stop
+ * reading as ovals, and the skybox is corrected by the same amount (one pass
+ * fixes world and sky together). The frame's edge is exactly `edge` degrees off
+ * axis; the centre zoom is lower than today by a fixed factor (zoom-lock is
+ * impossible when the frame widens). Tuning knob for the owner's playtest —
+ * tune it here, never in the shader.
+ *
+ * `strength` — 0 = plain rectilinear over the edge angle; 1 = fully
+ *   stereographic (circles stay circles everywhere, straightest bend of every
+ *   curve tested); 0.75 keeps lines nearly straight and lands the oval factor
+ *   at about 1.24 at the edge (EVE measures about 1.21) with a 38-degree half
+ *   angle (the centre feels unchanged, -2% zoom).
+ * `edge` — the frame's half-angle in degrees. 38 keeps the feel closest to
+ *   today (a 76-degree vertical view with corrected edges); 46.5 is the wide
+ *   "panel 2" variant (a 93-degree vertical view, noticeably smaller centre,
+ *   ~2.3x the pixels); 41° is the balanced pick (82-degree view, ~1.6x pixels,
+ *   oval factor about 1.22 at the edge).
+ * `on` — false restores the stock rectilinear pipeline byte-for-byte (plain
+ *   render, old HUD maths, old +4 boost / +16 warp FOV widening).
+ *
+ * Note: boost/warp FOV widening is disabled in lens mode; camera.fov stays
+ * static. The warp streaks and flash still carry the speed feel.
+ */
+export const REMAP = {
+  // Disabled: the owner rejected the look (too distorted) during playtest.
+  // Kept behind the knob so the experiment can be revisited or replaced;
+  // false restores the stock rectilinear pipeline exactly.
+  on: false,
+  strength: 0.75,
+  edge: 38,
 };
 
 /**

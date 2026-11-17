@@ -7,7 +7,7 @@ import { state } from "../state/state.js";
 import { cosmeticRandom } from "../util/rng.js";
 const R = (a, b) => a + cosmeticRandom() * (b - a);
 import { FLIGHT } from "../data/ships.js";
-import { cameraTrail } from "../data/camera.js";
+import { cameraTrail, REMAP, verticalFovForAspect } from "../data/camera.js";
 import { camera } from "./scene.js";
 import { shipCameraScale } from "./models.js";
 
@@ -88,10 +88,12 @@ export function chaseView(dt, P, fc, pose = P) {
     camera.quaternion.slerp(pose.quat, 1 - Math.exp(-5 * dt));
   }
   // A warp widens the view; state.warp.fx runs 0 -> 1 -> 0. It must not turn or
-  // roll the picture: nothing rotates when the drive engages.
+  // roll the picture: nothing rotates when the drive engages. With the lens on, the camera's field of view stays static and the warp streaks/flash carry the speed feel.
   const warp = state.warp ? state.warp.fx : 0;
-  camera.fov += (70 + 4 * pose.bs + 16 * warp - camera.fov) * Math.min(1, dt * 4);
-  camera.updateProjectionMatrix();
+  if (!REMAP.on) {
+    camera.fov += (verticalFovForAspect(camera.aspect) + 4 * pose.bs + 16 * warp - camera.fov) * Math.min(1, dt * 4);
+    camera.updateProjectionMatrix();
+  }
 }
 
 /** Random offset for the current shake level. Null when there is no shake. */
