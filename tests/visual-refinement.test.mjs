@@ -33,7 +33,7 @@ test('Planet surfaces are solid colours, and sky point shaders discard square co
   assert.ok(source.includes('dir.y = PLANET_VIEW.elevation'));
   assert.equal(PLANET_VIEW.elevation, 0);
   assert.ok(source.includes('L * PLANET_VIEW.radius'));
-  assert.ok(Math.abs(PLANET_VIEW.radius / 0.26 - 1.3) < 1e-10);
+  assert.ok(Math.abs(PLANET_VIEW.radius / 0.338 - 1.3) < 1e-10);
   const planet = planetModel({ pos: [0, 0, 0], radius: 100, atmosphere: 114, col: 0x778899, atmoCol: 0x778899 });
   const surface = meshes(planet.object).find(p => p.material.type === 'MeshStandardMaterial');
   assert.equal(surface.material.map, null);

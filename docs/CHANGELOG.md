@@ -55,6 +55,17 @@ Tapered tips, rock counts and stable slot planning remain. Tuning lives in new
 `render/systemsky.js`, density/visual tests and generated HTML. Save v21;
 `npm run build` passes; **659/659 tests pass**. Updated visual/performance preview still pending.
 
+Second preview follow-up: owner approved planet elevation but wanted another 30%
+size increase and a much more visible belt-tip falloff. Planet sky radius is now
+0.4394 (was 0.338), with distance/elevation/POI alignment unchanged. Arc density
+now follows a full-length sine-squared falloff from the populated middle to a
+1% weight at each tip, instead of a short end taper with a 12% floor. Actual
+packed-rock tests require the outermost two 10% sectors combined to contain less
+than one fifth of the equal-width central sector. Counts, height, clearance,
+irregular contours, strays and collision spacing stay unchanged. Files:
+`data/scenery.js`, `sim/asteroids.js`, density/visual tests, generated HTML and
+handoff. Save v21; `npm run build` passes; **659/659 tests pass**. Owner preview pending.
+
 ## 2026-11-16: Flatter, lighter belts with naturally thinning edges
 
 Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS

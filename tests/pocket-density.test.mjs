@@ -85,6 +85,9 @@ test('Belts are 30% flatter and 20% less dense per volume, with tapered ends', (
     z: Math.sin(arc.angle + arc.gap / 2 + span * fraction) });
   assert.ok(fieldDensityWeight(field, at(0.01)) < fieldDensityWeight(field, at(0.1)));
   assert.ok(fieldDensityWeight(field, at(0.1)) < fieldDensityWeight(field, at(0.3)));
+  assert.ok(fieldDensityWeight(field, at(0.3)) < fieldDensityWeight(field, at(0.5)));
+  assert.ok(fieldDensityWeight(field, at(0.01)) < 0.012);
+  assert.ok(fieldDensityWeight(field, at(0.1)) < 0.11);
   assert.ok(Math.abs(fieldDensityWeight(field, at(0.1)) - fieldDensityWeight(field, at(0.9))) < 1e-10);
   const rocks = [...planAsteroids('reach', [field]).values()];
   let ends = 0, middle = 0;
@@ -94,7 +97,7 @@ test('Belts are 30% flatter and 20% less dense per volume, with tapered ends', (
     if (t < 0.1 || t > 0.9) ends++;
     if (t > 0.4 && t < 0.6) middle++;
   }
-  assert.ok(ends < middle * 0.65, `ends ${ends}, middle ${middle}`);
+  assert.ok(ends < middle * 0.2, `ends ${ends}, middle ${middle}`);
 });
 
 test('Smaller ordinary fields widen and gradually thin toward their edges', async () => {

@@ -92,9 +92,11 @@ export function fieldDensityWeight(field, local) {
     const span = Math.PI * 2 - arc.gap;
     const angle = ((Math.atan2(local.z, local.x) - arc.angle - arc.gap / 2) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
     const edge = Math.min(angle, span - angle) / span;
-    // Taper the outer quarter at either end; leave a broad, populated middle.
-    const t = Math.max(0, Math.min(1, edge / 0.25));
-    return 0.12 + 0.88 * t * t * (3 - 2 * t);
+    // Thin over the entire half-arc, not only its last quarter. Near-empty
+    // tips make the falloff readable from the central arrival point.
+    const t = Math.max(0, Math.min(0.5, edge));
+    return BELT_VARIATION.tipDensity + (1 - BELT_VARIATION.tipDensity)
+      * Math.sin(Math.PI * t) ** BELT_VARIATION.taperPower;
   }
   if (field.radialFalloff) {
     const r = Math.min(1, Math.hypot(local.x, local.z) / field.radius);
