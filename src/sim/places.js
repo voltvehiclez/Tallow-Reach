@@ -51,7 +51,7 @@ on("place-memory-ready", ({ placeId, kind, id } = {}) => {
     return;
   }
   if (kind === "rock") {
-    const field = placeDef(placeId).features.find(f => f.kind === "asteroidField");
+    const field = placeDef(placeId).features.find(f => f.kind === "asteroidField" && String(id).startsWith(`${f.id || "field"}:`));
     if (!field || !id) return;
     const prefix = `${field.id || "field"}:`;
     if (!String(id).startsWith(prefix)) return;
@@ -98,5 +98,5 @@ export const fieldAt = id => featureOf(id, "asteroidField");
 /** Resolve a station launch `face` target (a named feature) to a vector. */
 export function launchFace(placeId, station) {
   const target = station.launch && station.launch.face ? featureById(placeId, station.launch.face) : null;
-  return target ? V(...target.pos) : V(...(station.launch?.pos || station.pos));
+  return target ? V(...(target.focus || target.pos)) : V(...(station.launch?.pos || station.pos));
 }

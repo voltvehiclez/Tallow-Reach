@@ -21,6 +21,8 @@
 import * as THREE from "three";
 import { placeAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
+import { AU_METRES } from "../data/planets.js";
+import { planetTexture } from "./planetmaps.js";
 import { state } from "../state/state.js";
 import { systemSpatialLayout } from "../sim/galaxy.js";
 
@@ -76,6 +78,38 @@ function getHaloTexture() {
   return haloTexture;
 }
 
+function buildPlanetOrb(planet, position, radiusPx, local = false) {
+  const group = new THREE.Group();
+  const texture = planetTexture(planet);
+  const geometry = new THREE.SphereGeometry(radiusPx, local ? 36 : 20, local ? 24 : 14);
+  const material = new THREE.MeshLambertMaterial({
+    map: texture,
+    emissive: planet.emissive || 0x000000,
+    emissiveIntensity: planet.classId === "volcanic" ? 0.55 : 0.06,
+  });
+  const orb = new THREE.Mesh(geometry, material);
+  orb.name = local ? "low-orbit-planet" : "planet";
+  orb.position.copy(position);
+  group.add(orb);
+
+  const atmosphereScale = Math.max(1.06, Number(planet.atmosphere || planet.radiusM * 1.14) / Math.max(1, Number(planet.radiusM) || 1));
+  const atmoGeo = new THREE.SphereGeometry(radiusPx * atmosphereScale, local ? 36 : 20, local ? 24 : 14);
+  const atmoMat = new THREE.MeshBasicMaterial({
+    color: planet.atmoCol || 0x8fb3c7,
+    transparent: true,
+    opacity: Number(planet.atmoOpacity ?? 0.18),
+    side: THREE.BackSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+  });
+  const atmosphere = new THREE.Mesh(atmoGeo, atmoMat);
+  atmosphere.name = "planet-atmosphere";
+  atmosphere.position.copy(position);
+  group.add(atmosphere);
+  return { group, disposables: [geometry, material, atmoGeo, atmoMat], radiusPx };
+}
+
 /**
  * Build the layer for one pocket, or null off the systems. Returns `{ object, dispose }` shaped
  * like a sky builder so the caller can hang it off the sky group (which follows the camera) and
@@ -127,12 +161,94 @@ export function buildSystemSkyLayer(id) {
   g.add(halo);
   disposables.push(haloMat);
 
-  // The sibling pockets: one point each, fixed in direction, barely there. The pocket the pilot
-  // is standing in has no direction at all and is skipped.
+  // Planets: real bodies in the visitor's sky. In a planet pocket it is a huge low-orbit
+  // body; elsewhere its angular size follows the AU separation divided by its radius.
+  const planetNodes = spatial.nodes.filter(node => node.role === "planet");
+  for (const node of planetNodes) {
+    const record = placeAt(node.id);
+    const planet = record?.planet;
+    if (!planet) continue;
+    if (node.id === id) {
+      const dir = new THREE.Vector3(...(planet.approach || [0, 0, 1])).normalize();
+      const radiusPx = L * 0.57;
+      const position = dir.multiplyScalar(L * 0.72);
+      const local = buildPlanetOrb(planet, position, radiusPx, true);
+      g.add(local.group);
+      disposables.push(...local.disposables);
+      continue;
+    }
+    const offset = new THREE.Vector3(
+      node.pos[0] - here.pos[0],
+      node.pos[1] - here.pos[1],
+      node.pos[2] - here.pos[2]
+    );
+    const distanceAu = offset.length();
+    if (distanceAu < 1e-9) continue;
+    const distanceM = Math.max(distanceAu * AU_METRES, Number(planet.radiusM) * 1.001);
+    const direction = offset.normalize();
+    const angularRadius = Math.asin(Math.min(1, Number(planet.radiusM) / distanceM));
+    const radiusPx = THREE.MathUtils.clamp(L * Math.tan(angularRadius), 5, 150);
+    const position = direction.multiplyScalar(L);
+    const body = buildPlanetOrb(planet, position, radiusPx, false);
+    g.add(body.group);
+    disposables.push(...body.disposables);
+    // A faint atmospheric limb so the dot still reads as a world, not a star.
+    const haloMat = new THREE.SpriteMaterial({
+      map: getHaloTexture(),
+      color: planet.atmoCol || 0x8fb3c7,
+      transparent: true,
+      opacity: 0.28,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: true,
+      fog: false,
+    });
+    const halo = new THREE.Sprite(haloMat);
+    halo.scale.setScalar(radiusPx * 3.2);
+    halo.position.copy(position);
+    g.add(halo);
+    disposables.push(haloMat);
+  }
+
+  // Belt pockets get their own barely-visible ochre dots; planets replace theirs with bodies.
+  const beltOffsets = new Float32Array(spatial.nodes.length * 3);
+  let beltCount = 0;
+  for (const node of spatial.nodes) {
+    if (node.id === id || node.role !== "belt") continue;
+    const dir = new THREE.Vector3(node.pos[0] - here.pos[0], node.pos[1] - here.pos[1], node.pos[2] - here.pos[2]);
+    if (dir.lengthSq() < 1e-12) continue;
+    dir.normalize().multiplyScalar(L);
+    beltOffsets[beltCount * 3] = dir.x;
+    beltOffsets[beltCount * 3 + 1] = dir.y;
+    beltOffsets[beltCount * 3 + 2] = dir.z;
+    beltCount += 1;
+  }
+  if (beltCount > 0) {
+    const dotGeo = new THREE.BufferGeometry();
+    dotGeo.setAttribute("position", new THREE.BufferAttribute(beltOffsets.subarray(0, beltCount * 3), 3));
+    const beltTuning = GALAXY.systemMap.beltDot || { size: 4.2, color: 0xc8b18a, opacity: 0.85 };
+    const dotMat = new THREE.PointsMaterial({
+      size: beltTuning.size,
+      sizeAttenuation: false,
+      color: beltTuning.color,
+      transparent: true,
+      opacity: beltTuning.opacity,
+      depthWrite: false,
+      fog: false,
+    });
+    const dots = new THREE.Points(dotGeo, dotMat);
+    dots.name = "belt-dots";
+    g.add(dots);
+    disposables.push(dotGeo, dotMat);
+  }
+
+  // The sibling ordinary pockets: one point each, fixed in direction, barely there. The pocket
+  // The sibling ordinary pockets: one point each, fixed in direction, barely there. The pocket
+  // the pilot is standing in has no direction at all and is skipped, as are planets and belts.
   const offsets = new Float32Array(spatial.nodes.length * 3);
   let count = 0;
   for (const node of spatial.nodes) {
-    if (node.id === id) continue;
+    if (node.id === id || node.role === "planet" || node.role === "belt") continue;
     const dir = new THREE.Vector3(
       node.pos[0] - here.pos[0],
       node.pos[1] - here.pos[1],

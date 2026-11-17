@@ -12,13 +12,21 @@
 // reads the live world, so no save, place or ship can change what it shows.
 
 import * as THREE from "three";
-import { DEFAULT_PLACE, placeDef } from "../data/places.js";
 import { MENU_CAMERA, menuPose } from "../data/camera.js";
-import { planetModel, stationModel, stars, STARFIELD } from "./scene.js";
+import { planetModel, stationModel, stars, STARFIELD, SKIES } from "./scene.js";
+import { DEFAULT_PLACE, DEFAULT_SKY, placeDef } from "../data/places.js";
+import { makePlanet } from "../data/planets.js";
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(MENU_CAMERA.fov, innerWidth / innerHeight, 0.5, 40000);
 scene.add(camera);
+
+// The title is the normal-space sky, not a black void. The generated sky is built
+// once for the authored home pocket so the backdrop matches where the pilot spawns.
+const menuPlace = placeDef(DEFAULT_PLACE);
+const menuSkyDef = menuPlace?.sky || DEFAULT_SKY;
+const menuSky = menuSkyDef && SKIES[menuSkyDef.kind] ? SKIES[menuSkyDef.kind](menuSkyDef) : null;
+if (menuSky) scene.add(menuSky.object);
 
 // The same light rig as the game, so the station reads the same way there and here.
 scene.add(new THREE.HemisphereLight(0x5a6e80, 0x120e0c, 0.45));
@@ -26,14 +34,19 @@ const sun = new THREE.DirectionalLight(0xffe2b8, 2.1);
 sun.position.set(-1, 0.4, 0.6);
 scene.add(sun);
 
-// A copy of the open-world starfield: same geometry and material, parked at the
-// origin because this camera never leaves the station. It is off while the starfield is off
-// (owner 2026-11-15: normal space wears a generated skybox that has its own stars), and the title
-// scene does not draw that skybox, so the title's black is deliberate.
+// A copy of the open-world starfield can still ride along if the master switch is ever
+// re-enabled; normally the generated sky is the title's only star source.
 if (STARFIELD.enabled) scene.add(stars.clone());
 
 const spins = [];
-let planetDir = [-0.568, -0.122, -0.812];
+// The menu keeps its own procedural planet backdrop: the home pocket is pure space
+// now (planets are warpable pockets), so the title builds a fixed class world here
+// instead of reading one from place data.
+const MENU_PLANET = makePlanet("menu-backdrop", "Meridian", "b", "meridian", 0x5eed);
+const MENU_PLANET_DIST = 2500;
+const MENU_PLANET_RADIUS = 760;
+const menuPlanetPos = MENU_PLANET.approach.map(n => n * MENU_PLANET_DIST);
+let planetDir = menuPlanetPos;
 let t = 0;
 let built = false;
 
@@ -47,21 +60,26 @@ function ensureBuilt() {
       const model = stationModel(feature);
       scene.add(model.object);
       spins.push(...model.spins);
-    } else if (feature.kind === "planet") {
-      const model = planetModel(feature);
-      scene.add(model.object);
-      spins.push(...model.spins);
-      // Point the camera at the side of the station away from this planet, so the
-      // planet sits behind the station instead of off-screen.
-      planetDir = [feature.pos[0], feature.pos[1], feature.pos[2]];
     }
   }
+  const backdrop = planetModel({
+    pos: menuPlanetPos,
+    radius: MENU_PLANET_RADIUS,
+    atmosphere: MENU_PLANET_RADIUS * 1.18,
+    spin: MENU_PLANET.spin,
+    col: MENU_PLANET.col,
+    atmoCol: MENU_PLANET.atmoCol,
+    planet: MENU_PLANET,
+  });
+  scene.add(backdrop.object);
+  spins.push(...backdrop.spins);
 }
 
 /** One frame of the title view: slow camera arc, and the station's own spin. */
 export function updateMenuView(dt) {
   ensureBuilt();
   t += Math.max(0, dt);
+  if (menuSky) menuSky.object.position.copy(camera.position);
   for (const spin of spins) spin.object.rotation.y += dt * spin.rate;
   const pose = menuPose(t, planetDir);
   camera.position.set(...pose.pos);

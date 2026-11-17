@@ -64,6 +64,34 @@ export const LOOT_TABLES = {
     ],
   },
 
+
+  // Planet-pocket rock tables. Reuses the same ore items, but shifts the mix by
+  // class so an ice or volcanic world feels materially different to mine.
+  rocky_rock: {
+    kind: "pick",
+    entries: [
+      { i: "ferrite", w: 58 },
+      { i: "cobalt", w: 32 },
+      { i: "voidite", w: 10 },
+    ],
+  },
+  ice_rock: {
+    kind: "pick",
+    entries: [
+      { i: "ferrite", w: 48 },
+      { i: "cobalt", w: 38 },
+      { i: "voidite", w: 14 },
+    ],
+  },
+  volcanic_rock: {
+    kind: "pick",
+    entries: [
+      { i: "ferrite", w: 52 },
+      { i: "cobalt", w: 24 },
+      { i: "voidite", w: 24 },
+    ],
+  },
+
   // The ore a rock is made of: about six in ten ferrite, three in ten cobalt and
   // eight in a hundred voidite.
   asteroid: {

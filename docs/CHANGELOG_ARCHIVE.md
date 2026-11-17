@@ -5,6 +5,153 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
+
+Owner: "collision boxes that are not no-clipable stop all types of weapons / projectiles in a logical way. So all
+cannons, missiles etc should impact when hitting a collision box. I notice if I shoot meridian station with cannons it
+goes through it. Not sure how it works with asteroids but make sure the hit boxes stop them so its realistic."
+**No save change (v21).** `npm test` **619/619**, `npm run build` 2999 KB.
+
+- **The bug:** `updateBullets` tested hostiles (a sphere), then rocks (a distance-to-centre circle), and **never looked at
+  a place's colliders at all**. A station had nothing to hit, so every shot passed through it. Enemy fire had the same
+  hole in reverse — and because bolts stopped on a rock's *bounding circle* rather than its mesh, a shot could also die
+  on empty space beside a lumpy one.
+- **The fix, in `sim/colliders.js`:** `sweepColliders` / `segmentColliderHit` / `segmentRockHit` walk the **segment a
+  projectile covered that tick** (Möller–Trumbore, two-sided) across the place's colliders and the rock soups, and return
+  the nearest hit with its fraction along the path. Sweeping rather than sampling the end point matters: a 900 m/s bolt
+  covers 15 m a tick, so a station spoke or a small rock can sit entirely between two ticks. Unit checks: a thin sheet
+  between two ticks is caught; the nearest of two colliders wins regardless of list order; a rock is transformed into
+  model space rather than every vertex out.
+- **Bolt rule, in order:** a hostile's hull, then the scenery and rocks, then the pilot's hull for a hostile's shot. The
+  wall is checked for both sides, because a wall is a wall whoever fired. A shot that meets scenery dies **at the impact
+  point** with a spark, and damages nothing — scenery has no hull points.
+- **Missiles** sweep the same swath and burst on scenery and rocks instead of sailing through. **The mining beam** is
+  blocked too: a station wall between the ship and the rock stops the cut, the beam is drawn to the wall, and `beamT`
+  does not advance, so a rock cannot be mined through a station.
+- **The owner's exact case is a test.** `tests/projectile-collision.test.mjs` builds Meridian Station's real geometry
+  (ring, hub, base, dock box; the four `noclip.spin` spokes correctly excluded), and checks a bolt down the station's axis
+  stops on the hub, one at the ring hits the ring, and shots 400 m clear or 200 m above fly on.
+- **`noclip` and `collide: false` still let projectiles through**, which is what they are for: only clipping colliders
+  stop a weapon. That is asserted, not assumed.
+- **Balance effect, measured rather than assumed:** the Meridian belt is sparse — of 24 lines out from the station, one
+  meets a rock within 4 km — so combat does not become a corridor. Enemy fire can now be blocked by a rock when the pilot
+  takes cover behind one, which is the realism the owner asked for.
+- **One golden fixture re-recorded** (`tests/fixtures/step8b-combat-lifecycle.json`) and the reason is written into the
+  test file. Every player position, heading, velocity, power reading, cooldown, missile, ore count, credit and docked
+  flag is byte-identical; what changed is that shots stop at the rock and the pilot keeps the shields the raider's fire
+  used to take **by passing through that same rock** (10 instead of falling to 0), so hull stays 10 and saved hp is 1, not
+  0.6. Its three narrative assertions (mined ore, a missile launched, died and docked) all still hold.
+
+---
+
+## 2026-11-15: The skies are cube maps — six 2048 faces each, no distortion and no seams
+
+The owner: "the skyboxes look a bit distorted and also a little bit blurry since im using 4k monitor. Make the Skybox
+generator be a box, ie 6 square faces forming a cube. So remove the equirectangular ones we have now. Generate new ones
+that replace the current ones." He asked for at least 4096 per face, was shown the cost (4096 = 100.7 Mpx, ~1.7–2.8 MB,
+384 MB of GPU memory, 10–13 min a sky), and **chose 2048** (`--face` is still one flag away). **No save change (v21).**
+`npm test` **610/610**, `npm run build` 2997 KB (was 3016 KB — smaller, with six times the pixel density where it counts).
+
+- **The tool writes cube maps now.** `tools/skybox/skybox.py` builds the soft layers **once on a sphere in direction
+  space** (`SOFT_FACE_WIDTHS = 2.0` face widths, i.e. the same texel density the old panorama had, so the looks did not
+  change), then cuts six faces out of it with a 2× supersampled box filter. Every layer is a function of the direction a
+  pixel looks in, never of a face's x/y, so the faces agree at their edges by construction — no margins, no per-face
+  special cases, one face in memory at a time (~3 GB). One exposure for all six faces; stars placed once in direction
+  space and thinned by the dust; `finish_face` tone-maps and dithers each face.
+- **The seam check is new and honest.** `cube_seam_error` walks all 24 edges: for an edge pixel of a face it computes
+  the direction with `face_dirs` and samples the neighbouring face through `CUBE_NEIGHBOURS`. Measured on the three
+  installed skies: **worst edge 0.66/255** (a smooth sky reads ~0 here, so this is a sharp test, not a rubber stamp).
+  A smoke test at 1024 per face on a smooth field reads 1.81/0.43/0.22 at face 64/256/512 and trends to 0.
+- **CLI:** `--face`/`--face-size` replaces `--size` (1024 for a smoke test, 2048 the default, 4096 on the owner's word,
+  8192 the ceiling); a spec's `face` key replaces `size`. `make` takes about **4½ minutes** per sky at 2048.
+- **Three skies regenerated from their existing recipes**, same ids and same looks, at 2048 per face:
+  `normal_space` (258 KB), `rift_chaos` (470 KB), `wormhole_grey` (279 KB) — **~1 MB for the whole set**, and the built
+  page got 19 KB *smaller*. Each install wrote six faces to `src/assets/skyboxes/<id>/`, the recipe, and the registry
+  lines. `tests/skybox.test.mjs` now checks six square faces per sky, six imports, one array entry in cube order.
+- **The game draws a box.** `SKIES.cube` in `render/scene.js` replaces `shattered`, `panorama` and `shroud`
+  (all three are **gone**, with `SHATTERED_URLS` and the imports of the owner's panoramas): a `BoxGeometry` with six
+  face materials, `BackSide`, unlit, no depth write, no mipmaps, one linear filter — the same treatment the panoramas
+  had. The shell no longer spins: a star pattern turning under a fixed ship reads as the ship drifting.
+- **`src/render/cubemap.js` is new, and it fixed a real bug.** `BoxGeometry` groups its faces in cube order but frames
+  **+Y and -Y the other way up**, so the top and bottom faces would have arrived upside down. The new file holds
+  `CUBE_FACES`, `CUBE_FACE_FLIP` and `orientFace`, and `tests/skybox.test.mjs` reads `FACE_AXES` out of the generator,
+  rebuilds `BoxGeometry`'s frames with three.js, and proves each flip necessary and no flip redundant. (A single
+  `CubeTexture` would have needed `envMap` and a shader hook in three r128; six plain textures is the same picture
+  with nothing to go wrong.)
+- **Vocabulary is one word.** `SKY_KINDS = ["cube"]`, `DEFAULT_SKY.kind = "cube"`, five templates say `kind: "cube"`.
+  `data/skyboxes.js` lines carry `face` instead of `size`.
+- **The owner's three panoramas are kept as history** (`src/assets/sky-*.webp`, unused, recorded in
+  `src/assets/README.md`); nothing draws them any more and **do not delete them without his word**.
+- Docs: recipe 24, `tools/skybox/README.md` (how the cube is made, the face-size rule, the never-hand-flip rule),
+  `src/assets`, `src/data` and `src/render` READMEs, LESSONS L24.
+- **Needs the owner's playtest:** the numbers say seamless and the preview sheets look like the approved skies, but no
+  browser exists in the sandbox — only his 4K screen can confirm "sharp and undistorted".
+
+---
+
+## 2026-11-15: Every sky is a generated skybox now — normal space, rifts and wormholes, and the starfield is gone
+
+The owner picked the skies and asked for three things in one go: normal space wears the sky we kept earlier, rifts get
+a black-and-teal chaotic one, wormholes a dark grey one, and "remove the existing starfield. This is because our
+previously generated skybox already has some stars baked in it. I might re-add star fields in the future but not now."
+**No save change (v21).** `npm test` **604/604**, `npm run build` 3016 KB (was 2466 KB).
+
+- **Three skies installed** with the tool (recipe 24), each `OK: dark, seamless and within budget`:
+  `normal_space` (140 KB, preset `void`, seed 3 — the sky the owner kept on 2026-11-15, re-made under its final name),
+  `rift_chaos` (239 KB, preset `maelstrom`, seed 23, turbulence 1.2, wisps 0.9, dust 1.0/0.85/1.5 — black space torn
+  open by chaotic teal gas), `wormhole_grey` (173 KB, preset `ash`, seed 5, `very_dark`, saturation 0.7 — dark grey, no
+  purple cast). Recipes in `tools/skybox/specs/`.
+- **Normal space is a sky, not a template.** New `DEFAULT_SKY = { kind: "panorama", skybox: "normal_space", shards: 0,
+  starfield: false }` in `data/places.js`; `render/scene.js` uses `placeAt(id).sky || DEFAULT_SKY`, so every ordinary
+  pocket wears it and a place may still override it. **The starfield is off:** `STARFIELD = { enabled: false }` keeps the
+  geometry and the per-frame follow, `showPlace` shows it only for a sky that says `starfield: true`, and
+  `menuview.js` clones it only when the switch is on — nothing draws two sets of stars. Re-adding star fields later is
+  that one flag plus a `starfield: true` on whichever sky wants them.
+- **Rifts and wormholes re-skinned.** Both rift templates now wear `rift_chaos` (the deep rift keeps its 40 shards and its
+  deeper damage; the owner asked for one rift look, so it no longer wears `variant: "deep"`), and all three `wh_*`
+  simple-wormhole templates wear `wormhole_grey` instead of `shroud`.
+- **`skyFor(def)`** in `scene.js` drops a sky nothing can draw — a `panorama` whose skybox id is not installed — so a
+  typo costs a background and never the place (and `npm test` names it).
+- **The tool gained `remove`** (`skybox.py remove <id>`): it deletes the image, the recipe and both registry lines, in
+  that order, because `src/assets/skyboxes/` is the tool's folder. The duplicate `teal_black_test` was removed with it
+  (the same picture as `normal_space`, and the build would have inlined the same sky twice).
+- **Not restructured, deliberately.** The owner asked about file structure and then ruled it out: "skyboxes aren't part
+  of refactor plan, also isn't 14d a part for wormhole systems" — correct on both counts, so nothing moved. The three
+  owner panoramas in `src/assets/` stay where they are (no template names two of them; `sky-deeprift` only as
+  `SKIES.shattered`'s fallback) and `src/assets/README.md` says so.
+- **Tests:** `tests/skybox.test.mjs` now checks `DEFAULT_SKY` as well as every template (a skybox only normal space names
+  would otherwise be unchecked) and adds "normal space wears a generated sky, and the drawn starfield is off", which reads
+  `showPlace`'s own expression so writer and reader cannot drift apart (L19). `tests/step14c-wormholes.test.mjs` now
+  expects the generated grey sky on the far side.
+- Files: `src/assets/skyboxes/*.webp`, `tools/skybox/specs/*.json`, `tools/skybox/skybox.py`, `tools/skybox/README.md`,
+  `src/data/skyboxes.js`, `src/render/skyboxes.js`, `src/data/places.js`, `src/data/instances.js`, `src/render/scene.js`,
+  `src/render/menuview.js`, `tests/skybox.test.mjs`, `tests/step14c-wormholes.test.mjs`, the folder READMEs,
+  `src/assets/README.md`, `game/tallow-reach.html`.
+
+---
+
+
+## 2026-11-15: Kept for later — a black-and-teal sky, installed but worn by no place yet
+
+The owner asked to see the new skybox generator make a 4K sky: "black and teal highlights of nebula, few stars",
+then picked the picture and said "keep it for later". **No save change. `npm run build` and `npm test` needed**
+(the page grows by about 140 KB). **No place wears it**, so the game looks exactly as before.
+
+- **Installed:** `teal_black_test` — "Teal Black (kept for later)", preset `void`, seed `3`, 4096×2048 WebP,
+  **140 KB**, report `OK: dark, seamless and within budget` (mean brightness 0.040, seam 0.50/255, 4760 stars).
+  Registered by the tool in `src/data/skyboxes.js` and `src/render/skyboxes.js` (the GENERATED lines only) and
+  covered by `tests/skybox.test.mjs` like any other sky.
+- **Recipe kept** at `tools/skybox/specs/teal_black_test.json`: `mood very_dark`, gas `#2cb4c2`/`#1f78a6`,
+  `stars.density 0.14`, `stars.halos 0.5`, `nebula.amount 1.15`, `nebula.coverage 0.5`, `dust.amount 0.9`,
+  `dust.coverage 0.45`, `dust.rim 1.35`. Re-make it exactly with
+  `python3 tools/skybox/skybox.py make teal_black_test --spec tools/skybox/specs/teal_black_test.json --install`.
+- **To use it later**, no re-render needed: put `sky: { kind: "panorama", skybox: "teal_black_test", shards: 0 }`
+  on an instance template (`data/instances.js`, recipes 22 and 24). `shards` is how many broken rocks drift in
+  front of it; 0 suits an empty-pocket look.
+- The preview/test folder `skybox-out/` is scratch and intentionally not committed (recipe 24 rule).
+
+---
+
 ## 2026-11-15: The Test Ship — a 1-credit hull with 100× Hull HP and 10× damage, flown with the owner's GLB
 
 Owner: "make a new ship available in the Hangar that costs 1 credit. It is called 'Test Ship'. It has 100x hp of wasp, 10x multiplier to all damage output. Same slot layout as wasp. Same default slots come with it when you buy it already fitted. It will use this 3d model called heavyfighter.glb in my google drive." **Save version unchanged (v21)**; rebuild needed (`npm run build` — the page grows to ~19 MB — then `npm test`). NOT playtested yet.

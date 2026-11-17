@@ -13,8 +13,12 @@
 //     through that same rock, and now the rock stops it (10 instead of 9, 8, 7, 6, 4, 3, 2, 1, 0)
 //   * with the shields intact the ship survives, so hull stays 10 rather than 6, and the
 //     saved profile hp is 1 rather than 0.6
-// Nothing else moved: every player position, heading, velocity, power reading, gun cooldown,
-// missile, ore count, credit and docked flag in the run is byte-identical.
+// Re-recorded 2026-11-16 when the home field moved out to [9000, 1400, -13000] (the
+// universe-generation rework): the launch heading now points at the field's new place, so
+// every snapshot from i=600 on carries a different quaternion. Nothing else moved:
+// every player position, velocity, power reading, gun cooldown, missile, ore count,
+// credit and docked flag in the run is byte-identical.
+// Density follow-up: restored the original home-field position and launch quaternions.
 // The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
 // still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";

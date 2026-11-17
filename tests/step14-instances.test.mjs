@@ -10,6 +10,7 @@ import { newProfile, newWorld, sanitizeSave, SAVE_VERSION } from "../src/state/p
 import {
   setPlaceCatalog, placeAt, placeDef, isPocket, isInstancePlace, pocketsIn, DEFAULT_PLACE,
 } from "../src/data/places.js";
+import { featuresOf } from "../src/data/places.js";
 import {
   RIFT, RIFTS, WORMHOLE_SITE_POOL, INSTANCE_TEMPLATES, OBJECTIVE_KINDS, EXIT_REQUIREMENT_TYPES,
   EXPIRY_OUTCOME_TYPES, SKY_KINDS, instanceIdFor, waveGroups,
@@ -276,11 +277,14 @@ test("a rift opens only in clear space, and every margin is data", () => {
   assert.match(riftClearance(player), /Too close to/, "a station keeps its kilometre");
   assert.ok(riftClearance(player).includes(`${RIFT.clearance.station / 1000} km`), "and names the data's number");
 
-  player.pos.set(1800, 200, -700);
+  const field = featuresOf(DEFAULT_PLACE, "asteroidField")[0];
+  player.pos.set(field.pos[0] + field.radius + RIFT.clearance.field - 500, field.pos[1], field.pos[2]);
   assert.match(riftClearance(player), /asteroid field/i, "a field is measured to its edge, not its centre");
 
+  // There is no planet in the home pocket any more: planets are warpable destination
+  // pockets, and low-orbit space is open space apart from the rocks.
   player.pos.set(-7000, -1500, -6500);
-  assert.match(riftClearance(player), /planet/, "a planet is measured from its surface");
+  assert.equal(riftClearance(player), true, "the home pocket is empty space out here, planets or not");
 
   // A single rock has a much smaller margin, so a rift never opens inside one.
   player.pos.set(...CLEAR);

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { newProfile, newSave, newWorld, SAVE_VERSION, sanitizeSave } from "../src/state/profile.js";
 import { state, resetPlaces, placeWorld } from "../src/state/state.js";
-import { setPlaceCatalog, placeDef } from "../src/data/places.js";
+import { setPlaceCatalog, placeDef, registerInstancePlace, unregisterInstancePlace } from "../src/data/places.js";
 import { generateGalaxy } from "../src/sim/galaxy.js";
 import { createPlayer } from "../src/sim/player.js";
 import { configurePlayer } from "../src/sim/session.js";
@@ -60,10 +60,11 @@ test("generated pockets resolve three varied templates and fill their data-defin
     const world = placeWorld(place.id);
     const field = definition.features.find(feature => feature.kind === "asteroidField");
     const staticFeatures = definition.features.filter(feature => feature.kind === "encounter");
+    assert.ok(staticFeatures.length === 0, `${template} no longer generates ambient static loot features (owner 2026-11-16)`);
     assert.ok(field, `${template} has an asteroid field`);
-    assert.equal(world.asteroids.length, field.count, `${template} fills its field now`);
-    assert.ok(staticFeatures.length > 0, `${template} has a static encounter at this tier`);
-    assert.ok(world.crates.length > 0, `${template} turns its static encounter into loot crates`);
+    const totalRocks = definition.features.filter(f => f.kind === "asteroidField").reduce((sum, f) => sum + f.count, 0);
+    assert.equal(world.asteroids.length, totalRocks, `${template} fills its field now`);
+    assert.equal(world.crates.length, 0, `${template} holds no ambient loot crates (owner 2026-11-16)`);
     signatures.add(definition.features.map(feature => feature.kind + ":" + (feature.encounter || feature.id)).join("|"));
   }
   assert.equal(signatures.size, 3, "templates produce different pocket content");
@@ -167,26 +168,44 @@ test("mined rock memory counts simulation time, pauses with the simulation and r
 });
 
 test("cleared static encounters stay absent, save their cooldown and respond to a forced respawn event", () => {
+  // Generated pockets no longer declare ambient static loot features (owner 2026-11-16),
+  // so the static-encounter machinery is exercised with an ad-hoc authored record.
+  const id = "test-static-encounter";
   const player = fresh(12015);
-  const place = generatedPocket(definition => definition.features.some(feature => feature.kind === "encounter"));
-  enterPlace(place.id, player);
-  const definition = placeDef(place.id);
+  // fresh() installs a new galaxy and clears runtime instances, so the ad-hoc
+  // pocket is registered after it.
+  registerInstancePlace({
+    id,
+    kind: "pocket",
+    def: "empty",
+    n: "Static encounter test pocket",
+    d: "A pocket authored by the test with a derelict encounter.",
+    enter: { kind: "warp", pos: [0, 0, 300] },
+    leave: { kind: "warp" },
+    features: [{ kind: "encounter", id: "derelict-0", encounter: "derelict", pos: [1200, 0, -800] }],
+  });
+  try {
+  enterPlace(id, player);
+  const definition = placeDef(id);
   const feature = definition.features.find(candidate => candidate.kind === "encounter");
-  const world = placeWorld(place.id);
+  const world = placeWorld(id);
   assert.ok(world.crates.some(crate => crate.encounter === feature.id));
   player.pos.copy(V(...feature.pos));
 
   // Pull/pick up all crates belonging to this encounter. Other generated
   // encounters, if present, are well away and remain untouched.
-  for (let i = 0; i < 120 && world.crates.some(crate => crate.encounter === feature.id); i++) updateCrates(0.1, place.id);
+  for (let i = 0; i < 120 && world.crates.some(crate => crate.encounter === feature.id); i++) updateCrates(0.1, id);
   assert.equal(world.crates.some(crate => crate.encounter === feature.id), false, "the encounter is cleared by collecting its final crate");
-  assert.equal(memoryTimer(place.id, "encounter", feature.id), 420);
+  assert.equal(memoryTimer(id, "encounter", feature.id), 420);
   const afterClear = world.crates.length;
-  refreshPlace(place.id);
+  refreshPlace(id);
   assert.equal(world.crates.length, afterClear, "refresh does not duplicate a cooling encounter");
 
-  emit("respawn-place", { placeId: place.id, kind: "encounter", id: feature.id });
+  emit("respawn-place", { placeId: id, kind: "encounter", id: feature.id });
   assert.ok(world.crates.some(crate => crate.encounter === feature.id), "a future event can force the encounter back early");
+  } finally {
+    unregisterInstancePlace(id);
+  }
 });
 
 test("save version 20 preserves place memory and station stores, while older saves migrate", () => {

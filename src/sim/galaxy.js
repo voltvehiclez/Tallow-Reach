@@ -16,6 +16,8 @@ import { isPlaceTemplate, templateAt, templateFeatures, templateForPlace } from 
 import { term } from "../data/terms.js";
 import { makeRng } from "../util/rng.js";
 import { intraSystemPolicy } from "./travel.js";
+import { makePlanet, PLANET_CLASSES } from "../data/planets.js";
+import { stationStylesForClass, stationClassForId } from "../data/stations.js";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
@@ -53,6 +55,9 @@ export function generateGalaxy(seed = GALAXY.seed, tuning = GALAXY, overrides = 
   // already have tiers, so this second pass only fills the pocket records.
   assignTiers(world, config, makeRng((seed >>> 0) ^ 0x9e3779b9));
   assignCores(world, config);
+  addGeneratedBelts(world, config, seed >>> 0);
+  addGeneratedPlanets(world, config, seed >>> 0);
+  finalizeArrivals(world);
   index(world);
   const errors = validateGalaxy(world);
   if (errors.length) throw new Error(`Invalid galaxy:\n- ${errors.join("\n- ")}`);
@@ -84,9 +89,12 @@ export function validateTuning(tuning) {
   }
   if (!(map.transitionMs >= 0)) throw new Error("galaxy.map.transitionMs must be zero or more");
   if (!(map.panSpeed > 0)) throw new Error("galaxy.map.panSpeed must be positive");
-  for (const key of ["padding", "pocketRadius", "ordinaryRadius", "gateRadius", "exitLength", "minSeparation"]) {
+  for (const key of ["padding", "pocketRadius", "ordinaryRadius", "gateRadius", "beltRadius", "beltSpread", "planetInner", "planetOuter", "planetBand", "exitLength", "minSeparation"]) {
     if (!(sub[key] > 0)) throw new Error(`galaxy.systemMap.${key} must be positive`);
   }
+  if (!(sub.beltRadius > sub.ordinaryRadius)) throw new Error("galaxy.systemMap.beltRadius must sit outside ordinaryRadius");
+  if (!(sub.planetInner > sub.beltRadius)) throw new Error("galaxy.systemMap.planetInner must sit outside beltRadius");
+  if (!(sub.planetOuter >= sub.planetInner)) throw new Error("galaxy.systemMap.planetOuter must not be below planetInner");
   if (!(sub.minZoom > 0 && sub.maxZoom >= sub.minZoom)) {
     throw new Error("galaxy.systemMap zoom limits must be positive and ordered");
   }
@@ -269,6 +277,235 @@ function connectSystems(a, b, pockets, links, systemLinks, degree, tuning) {
   degree.set(b.id, degree.get(b.id) + 1);
 }
 
+const roundVec = values => values.map(value => Number(value.toFixed(1)));
+
+/** Resolve the features a record would build without touching the live catalog. */
+function recordFeatures(place) {
+  if (place?.template && templateAt(place.template)) {
+    return templateFeatures(place.template, place).features;
+  }
+  const definition = PLACE_DEFS[place?.def] || { features: [] };
+  const explicit = [
+    ...(Array.isArray(place?.features) ? place.features : []),
+    ...(Array.isArray(place?.extraFeatures) ? place.extraFeatures : []),
+  ];
+  return [...(definition.features || []), ...explicit].map(feature => JSON.parse(JSON.stringify(feature)));
+}
+
+const normalize3 = values => {
+  const len = Math.hypot(values[0], values[1], values[2]) || 1;
+  return [values[0] / len, values[1] / len, values[2] / len];
+};
+
+/** Every pocket gets its own fixed warp point and arrives facing the thing the
+ * pocket is about. The authored galaxy is resolved before this runs, so every
+ * pocket - generated and hand-authored - shares the same rule. */
+function finalizeArrivals(world) {
+  for (const system of world.systems) {
+    const spatial = systemPocketLayout(world, system.id, GALAXY.systemMap);
+    for (const pocket of Object.values(world.pockets).filter(p => p.parent === system.id)) {
+      const rng = makeRng(hashId(`arrival:${world.seed ?? GALAXY.seed}:${system.id}:${pocket.id}`));
+      if (pocket.role === "planet" && pocket.planet) {
+        // A unique point off to one side of the low-orbit backdrop; facing the
+        // fixed approach vector puts the planet dominating the view.
+        const pos = roundVec([(rng() - 0.5) * 3600, (rng() - 0.5) * 2200, (rng() - 0.5) * 3600]);
+        const dir = normalize3(pocket.planet.approach || [0, 0, 1]);
+        pocket.enter = {
+          kind: "warp",
+          pos,
+          face: roundVec([pos[0] + dir[0] * 10000, pos[1] + dir[1] * 10000, pos[2] + dir[2] * 10000]),
+        };
+        continue;
+      }
+      const features = recordFeatures(pocket);
+      const stations = features.filter(f => f.kind === "station" && Array.isArray(f.pos));
+      const fields = features.filter(f => f.kind === "asteroidField" && Array.isArray(f.pos));
+      const arc = fields.find(f => f.layout === "arc");
+      if (arc) {
+        const angle = arc.arc.angle + Math.PI;
+        pocket.enter = { kind: "warp", pos: [...arc.pos],
+          face: roundVec([arc.pos[0] + Math.cos(angle) * 3000, arc.pos[1], arc.pos[2] + Math.sin(angle) * 3000]) };
+        continue;
+      }
+      const main = stations[0] || fields[0] || null;
+      if (main) {
+        const p = main.pos;
+        const length = Math.hypot(p[0], p[1], p[2]);
+        const u = length > 1 ? [p[0] / length, p[1] / length, p[2] / length]
+          : normalize3([rng() - 0.5, rng() - 0.5, rng() - 0.5]);
+        const distance = main.kind === "station"
+          ? 650 + rng() * 550
+          : (Number(main.radius) || 700) + 500 + rng() * 300;
+        const jitter = 50 + rng() * 100;
+        const side = normalize3([rng() - 0.5, rng() - 0.5, rng() - 0.5]);
+        const pos = roundVec([
+          p[0] - u[0] * distance + side[0] * jitter,
+          p[1] - u[1] * distance + side[1] * jitter,
+          p[2] - u[2] * distance + side[2] * jitter,
+        ]);
+        pocket.enter = { kind: "warp", pos, face: roundVec(p) };
+        continue;
+      }
+      // Empty pockets look at the system's body. Map radius is enough for this:
+      // the direction toward the origin is the direction toward the star/black hole.
+      const here = spatial?.nodes?.find(node => node.id === pocket.id);
+      const toStar = here && Math.hypot(here.pos[0], here.pos[1]) > 1e-6
+        ? normalize3([-here.pos[0], 0, -here.pos[1]])
+        : normalize3([rng() - 0.5, rng() - 0.5, rng() - 0.5]);
+      const dir = normalize3([rng() - 0.5, rng() - 0.5, rng() - 0.5]);
+      const radius = 3200 + rng() * 4800;
+      const pos = roundVec([dir[0] * radius, dir[1] * radius, dir[2] * radius]);
+      pocket.enter = {
+        kind: "warp",
+        pos,
+        face: roundVec([pos[0] + toStar[0] * 10000, pos[1] + toStar[1] * 10000, pos[2] + toStar[2] * 10000]),
+      };
+    }
+  }
+}
+
+function polarPosition(rng, min = 15000, max = 33000, height = 8000) {
+  const angle = rng() * Math.PI * 2;
+  const distance = min + rng() * (max - min);
+  return [
+    Math.round(Math.cos(angle) * distance),
+    Math.round((rng() - 0.5) * height),
+    Math.round(Math.sin(angle) * distance),
+  ];
+}
+
+/** One to three dedicated mining destinations per system. Ordinary pockets may still
+ * carry smaller fields; these are the big, spread-out belts. */
+function addGeneratedBelts(world, tuning, seed) {
+  for (const system of world.systems) {
+    const rng = makeRng((seed ^ hashId(`belts:${system.id}`)) >>> 0);
+    const count = 1 + Math.floor(rng() * 3);
+    for (let i = 0; i < count; i++) {
+      const n = i + 1;
+      const id = `${system.id}-belt-${n}`;
+      if (world.pockets[id]) continue;
+      const base = systemCoreName(system);
+      const richness = rng();
+      const beltRng = makeRng((seed ^ hashId(`belt:${id}`)) >>> 0);
+      const rockCount = Math.round(65 + richness * 40 + beltRng() * 15);   // mostly huge, some lean
+      const asteroidField = {
+        kind: "asteroidField",
+        id: "field",
+        n: `${base} - Asteroid belt ${n}`,
+        pos: polarPosition(beltRng, 1800, 3000, 400),
+        radius: Math.round(750 + beltRng() * 250),       // dense sections, extended below
+        height: Math.round(250 + beltRng() * 100),
+        count: Math.max(24, rockCount),
+        ore: "asteroid",
+        respawnSec: 420,
+        stable: true,
+        rock: {
+          rMin: Math.round(16 + beltRng() * 14),
+          rMax: Math.round(66 + beltRng() * 54),
+          giantChance: 0.025, giantMin: 200, giantMax: 500,
+          orePerR: 1.6,
+        },
+        salvage: { spread: [900 + beltRng() * 250, 260 + beltRng() * 120, 900 + beltRng() * 250] },
+      };
+
+      asteroidField.layout = "arc";
+      asteroidField.arc = { inner: 2000, width: 2200, gap: Math.PI / 2, angle: beltRng() * Math.PI * 2 };
+      asteroidField.radius = 4200;
+      asteroidField.height = 420;
+      asteroidField.count = Math.round((700 + richness * 250) * 0.56);
+      const features = [asteroidField];
+      // Hostility scales with advisory distance/tier; most belts are working space.
+      const tier = Math.max(1, Number(system.tier) || 1);
+      const pirateRoll = beltRng();
+      if (pirateRoll < Math.min(0.18 + (tier - 1) * 0.13, 0.62)) {
+        features.push({
+          kind: "spawner",
+          id: "belt-patrol",
+          encounter: "hostile_patrol",
+          pos: polarPosition(beltRng, 10000, 24000, 5200),
+          anchor: "field",
+          nearRadius: Math.round(asteroidField.radius + 1500),
+          interval: [6, 12],
+          chance: Math.min(0.18 + (tier - 1) * 0.12, 0.55),
+          maxWanderers: Math.min(3, 1 + Math.floor(tier / 2)),
+          count: [1, Math.min(3, 1 + Math.floor(tier / 2))],
+          once: true,
+          respawnSec: 600,
+        });
+      }
+      world.pockets[id] = {
+        id,
+        kind: "pocket",
+        def: "empty",
+        parent: system.id,
+        role: "belt",
+        n: `${base} - Asteroid belt ${n}`,
+        d: "A dedicated asteroid belt. The rocks are spread across several kilometres of open space.",
+        features,
+        enter: { kind: "warp", pos: [0, 0, 300] },
+        leave: { kind: "warp" },
+      };
+      const hub = system.id === tuning.homeSystem ? DEFAULT_PLACE : `${system.id}-hub`;
+      addLink(world.links, `${id}-inner`, "internal", hub, id, tuning);
+    }
+  }
+}
+
+/** One to four planets per system, all systems included. Each planet is a warpable
+ * low-orbit pocket; other pockets see it as a true-angular-size body in the AU sky. */
+function addGeneratedPlanets(world, tuning, seed) {
+  const letters = ["b", "c", "d", "e"];
+  for (const system of world.systems) {
+    const rollRng = makeRng((seed ^ hashId(`planets:${system.id}`)) >>> 0);
+    const count = 1 + Math.floor(rollRng() * 4);
+    const coreName = system.core?.n || systemCoreName(system);
+    for (let i = 0; i < count; i++) {
+      const letter = letters[i];
+      const id = `${system.id}-planet-${letter}`;
+      if (world.pockets[id]) continue;
+      const planet = makePlanet(id, coreName, letter, system.id, seed);
+      const rng = makeRng((seed ^ hashId(`planet-field:${id}`)) >>> 0);
+      const features = [];
+      if (planet.rockCount > 0) {
+        features.push({
+          kind: "asteroidField",
+          id: "field",
+          n: `${planet.n} rocks`,
+          pos: polarPosition(rng, 1600, 3500, 500),
+          radius: Math.round((400 + rng() * 500) * 1.25),
+          radialFalloff: true,
+          height: Math.round(150 + rng() * 150),
+          count: planet.rockCount,
+          ore: planet.ore,
+          respawnSec: 420,
+          stable: true,
+          rock: {
+            rMin: Math.round(12 + rng() * 15),
+            rMax: Math.round(38 + rng() * 48),
+            orePerR: 1.5,
+          },
+          salvage: { spread: [620, 150, 620] },
+        });
+      }
+      world.pockets[id] = {
+        id,
+        kind: "pocket",
+        def: "empty",
+        parent: system.id,
+        role: "planet",
+        n: planet.n,
+        d: `${PLANET_CLASSES[planet.classId]?.n || "Planet"} orbiting ${coreName}.`,
+        features,
+        planet,
+        enter: { kind: "warp", pos: [0, 0, 300] },
+        leave: { kind: "warp" },
+      };
+      const hub = system.id === tuning.homeSystem ? DEFAULT_PLACE : `${system.id}-hub`;
+      addLink(world.links, `${id}-inner`, "internal", hub, id, tuning);
+    }
+  }
+}
+
 /**
  * A friendly trader selected by a generated gate template belongs in its own
  * pocket. The gate keeps its scenery and encounter content, but not the
@@ -338,17 +575,20 @@ function nameGeneratedStations(world, tuning) {
     if (!generated) continue;
     const system = world.systems.find(candidate => candidate.id === pocket.parent);
     if (!system) continue;
+    const generatedStyle = generated.style || stationClassForId(pocket.id);
+    const classStyles = stationStylesForClass(generatedStyle);
+    const useStyles = classStyles.length ? classStyles : styles;
     const base = systemCoreName(system);
-    const start = hashId(pocket.id) % styles.length;
+    const start = hashId(pocket.id) % useStyles.length;
     let name = null;
-    for (let offset = 0; offset < styles.length; offset++) {
-      const suffix = styles[(start + offset) % styles.length].trim();
+    for (let offset = 0; offset < useStyles.length; offset++) {
+      const suffix = useStyles[(start + offset) % useStyles.length].trim();
       const candidate = `${base} ${suffix}`;
       if (!usedNames.has(candidate)) { name = candidate; break; }
     }
     if (!name) {
       let serial = 2;
-      do name = `${base} ${styles[start].trim()} ${serial++}`;
+      do name = `${base} ${useStyles[start].trim()} ${serial++}`;
       while (usedNames.has(name));
     }
     pocket.stationName = name;
@@ -625,8 +865,10 @@ export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
   const system = world.systemsById?.[systemId] || world.systems.find(s => s.id === systemId);
   if (!system) return { system: null, nodes: [], byId: {} };
   const pockets = pocketsInSystem(world, systemId).sort((a, b) => a.id.localeCompare(b.id));
-  const ordinary = pockets.filter(p => p.role !== "gate");
+  const ordinary = pockets.filter(p => p.role !== "gate" && p.role !== "belt" && p.role !== "planet");
   const gates = pockets.filter(p => p.role === "gate");
+  const belts = pockets.filter(p => p.role === "belt");
+  const planets = pockets.filter(p => p.role === "planet");
   const nodes = [];
   const placed = [];
   const add = (pocket, pos, peerSystemId = null, direction = null) => {
@@ -655,10 +897,34 @@ export function systemPocketLayout(world, systemId, tuning = GALAXY.systemMap) {
     add(gate, pos, peerSystemId, direction);
   });
 
+  // Dedicated belt pockets occupy their own broad annulus. Wide seeded offsets
+  // mean no two belts sit in the same spot, but they stay chart-scale apart.
+  const spin = (hashId(`${world.seed ?? tuning.seed ?? GALAXY.seed}:${system.id}`) % 360) * Math.PI / 180;
+  const beltsToPlace = belts.filter(p => !validMapPos(p));
+  beltsToPlace.forEach((belt, index) => {
+    const rng = makeRng(hashId(`belt-orbit:${world.seed ?? tuning.seed ?? GALAXY.seed}:${system.id}:${belt.id}`));
+    const baseAngle = spin * 1.37 + (index / Math.max(1, beltsToPlace.length)) * Math.PI * 2;
+    const angle = baseAngle + (rng() - 0.5) * (Math.PI / Math.max(2, beltsToPlace.length * 1.5));
+    const radius = tuning.beltRadius + (rng() * 2 - 1) * tuning.beltSpread;
+    const pos = spreadPoint([Math.cos(angle) * radius, Math.sin(angle) * radius], placed, tuning.minSeparation);
+    add(belt, pos);
+  });
+
+  // Planets orbit outside the belts, one broad annulus per letter: b is the innermost.
+  const planetsToPlace = planets.filter(p => !validMapPos(p));
+  const planetBand = (tuning.planetOuter - tuning.planetInner) / Math.max(1, planetsToPlace.length);
+  planetsToPlace.forEach((planet, index) => {
+    const rng = makeRng(hashId(`planet-orbit:${world.seed ?? tuning.seed ?? GALAXY.seed}:${system.id}:${planet.id}`));
+    const baseAngle = spin * 2.13 + (index / Math.max(1, planetsToPlace.length)) * Math.PI * 2;
+    const angle = baseAngle + (rng() - 0.5) * 0.75;
+    const radius = tuning.planetInner + (index + 0.5) * planetBand + (rng() - 0.5) * tuning.planetBand;
+    const pos = spreadPoint([Math.cos(angle) * Math.max(tuning.planetInner, radius), Math.sin(angle) * Math.max(tuning.planetInner, radius)], placed, tuning.minSeparation * 1.15);
+    add(planet, pos);
+  });
+
   // Ordinary pockets orbit the central body. A stable per-system rotation keeps
   // the spread deterministic without consuming the gameplay RNG stream.
   const ring = ordinary.filter(p => !validMapPos(p));
-  const spin = (hashId(`${world.seed ?? tuning.seed ?? GALAXY.seed}:${system.id}`) % 360) * Math.PI / 180;
   ring.forEach((pocket, index) => {
     const angle = spin + (index / Math.max(1, ring.length)) * Math.PI * 2;
     const pos = spreadPoint([Math.cos(angle) * tuning.ordinaryRadius, Math.sin(angle) * tuning.ordinaryRadius], placed, tuning.minSeparation);

@@ -10,6 +10,8 @@ import { state, localPlayer, profileOf, msg, say, currentSave } from "../state/s
 import { saveAutosave } from "../state/storage.js";
 import { clearWorldObjects } from "./world.js";
 import { enterPlace, arrivalPos } from "./places.js";
+import { facePlayer } from "./pilot.js";
+import { V } from "../util/math.js";
 
 export const isWarping = (player = localPlayer()) => !!(player && player.warp);
 
@@ -95,6 +97,10 @@ function arrive(P, from, to) {
   // run. Mission scripts must never see the old pocket's position and spawn
   // content relative to stale coordinates.
   P.pos.copy(arrivalPos(to));
+  const arrivalFace = placeAt(to)?.enter?.face;
+  if (Array.isArray(arrivalFace) && arrivalFace.length === 3 && arrivalFace.every(Number.isFinite)) {
+    facePlayer(V(...arrivalFace), 1, P);
+  }
   P.v.set(0, 0, 0);
   P.thr = 0;
   P.acc = 0;

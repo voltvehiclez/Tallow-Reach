@@ -337,7 +337,7 @@ test("11B: the existing warp sequence crosses one gate to its exact reciprocal p
   const arrived = loadPlace(peer);
   assert.ok(placeAt(peer).template, "generated gate peers use a place template");
   assert.ok(arrived.entities.asteroids.length > 0, "generated pockets are filled with rocks");
-  assert.ok(arrived.entities.crates.length > 0, "generated pockets are filled with static encounter loot");
+  assert.equal(arrived.entities.crates.length, 0, "generated pockets hold no ambient static loot (owner 2026-11-16)");
   assert.ok(fieldAt(peer), "the generated pocket exposes its asteroid field");
   assert.equal(currentSave().world.place, peer);
 });
@@ -1104,8 +1104,12 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
   assert.equal(layout.nodes.length, Object.values(world.pockets).filter(p => p.parent === "meridian").length);
   assert.ok(layout.nodes.every(n => Math.hypot(...n.pos) > 0), "the centre belongs to the visual core");
   for (const node of layout.nodes) {
-    const radius = node.pocket.role === "gate" ? GALAXY.systemMap.gateRadius : GALAXY.systemMap.ordinaryRadius;
-    assert.ok(Math.abs(Math.hypot(...node.pos) - radius) < 1e-9, "pockets orbit the core on their own ring");
+    const radius = Math.hypot(...node.pos);
+    const role = node.pocket.role;
+    if (role === "gate") assert.ok(Math.abs(radius - GALAXY.systemMap.gateRadius) < 1e-9, "gates orbit the core on their ring");
+    else if (role === "belt") assert.ok(radius >= GALAXY.systemMap.beltRadius - GALAXY.systemMap.beltSpread && radius <= GALAXY.systemMap.beltRadius + GALAXY.systemMap.beltSpread, "belt pockets sit in their annulus");
+    else if (role === "planet") assert.ok(radius >= GALAXY.systemMap.planetInner && radius <= GALAXY.systemMap.planetOuter, "planet pockets sit in their annulus");
+    else assert.ok(Math.abs(radius - GALAXY.systemMap.ordinaryRadius) < 1e-9, "ordinary pockets orbit the core on their ring");
   }
   const chart = pocketConnections(world, "meridian");
   assert.equal(chart.policy, "free");
