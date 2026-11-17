@@ -130,8 +130,7 @@ const catalog = () => merged || rebuildCatalog();
 export const DEFAULT_SKY = { kind: "cube", skybox: "normal_space", shards: 0, starfield: false };
 
 export const PLACE_DEFS = {
-  // Today's Tallow Reach: the station, the asteroid belt, the planet backdrop
-  // and the raider spawner. Every position/radius/rule the sim used to hard-code
+  // Today's Tallow Reach: the station, the asteroid belt and the raider spawner. Every position/radius/rule the sim used to hard-code
   // is a feature here. The station is a feature of this pocket, not a child place.
   meridian: {
     features: [
@@ -149,15 +148,15 @@ export const PLACE_DEFS = {
         kind: "asteroidField",
         id: "field",
         n: "Asteroid field",
-        pos: [1800, 200, -1500],
-        radius: 700,           // horizontal spread
-        height: 250,           // vertical spread
-        count: 70,
+        pos: [9000, 1400, -13000],
+        radius: 3600,          // horizontal spread; Meridian keeps a smaller field beside the split belt
+        height: 1500,          // vertical spread
+        count: 22,
         ore: "asteroid",       // loot table id (data/loot.js)
         respawnSec: 420,       // seven minutes of simulation time; events may respawn it sooner
         stable: true,           // field slots keep their shape/ore/position across loads
-        rock: { rMin: 18, rMax: 70, orePerR: 1.6 },
-        salvage: { spread: [600, 150, 600] },
+        rock: { rMin: 18, rMax: 76, orePerR: 1.6 },
+        salvage: { spread: [750, 180, 750] },
       },
       {
         kind: "spawner",
@@ -166,23 +165,13 @@ export const PLACE_DEFS = {
         // The generic patrol spawner keeps today's wandering behaviour. Hunt
         // contracts still override its enemy and desired count in sim/ai.js.
         anchor: "field",
-        nearRadius: 1400,
+        nearRadius: 5200,
         farFromStation: 600,
-        interval: [4, 8],
+        interval: [5, 10],
         chance: 0.4,
         maxWanderers: 2,
         count: [1, 2],
         once: false,
-      },
-      {
-        kind: "planet",
-        id: "planet",
-        pos: [-7000, -1500, -10000],
-        radius: 2800,
-        atmosphere: 2950,
-        col: 0x2c3b45,
-        atmoCol: 0x4f7f95,
-        spin: 0.003,           // radians a second (visual only)
       },
     ],
   },

@@ -61,10 +61,14 @@ export const GALAXY = {
   // coords. Core radii are map units too, so the body grows with system zoom;
   // pocket dots and label text stay screen-sized for readability.
   systemMap: {
-    padding: 130, pocketRadius: 7, ordinaryRadius: 140, gateRadius: 280,
-    exitLength: 120, minSeparation: 78, minZoom: 1, maxZoom: 3,
+    padding: 130, pocketRadius: 7, ordinaryRadius: 130, gateRadius: 310,
+    beltRadius: 235, beltSpread: 90,
+    planetInner: 390, planetOuter: 560, planetBand: 46,
+    exitLength: 120, minSeparation: 82, minZoom: 1, maxZoom: 3,
     blackHoleChance: 0.05, coreRadius: 26, blackHoleRadius: 20,
     coreLabelOffset: 14, coreLabelLineHeight: 14, labelGap: 8,
+    beltDot: { size: 4.2, color: 0xc8b18a, opacity: 0.85 },
+    planetDot: { size: 5.2, color: 0x8fd2ff, opacity: 0.95 },
   },
 
   // System space: the system a pocket lives in, measured in AUs (1 AU = 150 million km),

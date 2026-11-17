@@ -5,6 +5,27 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-15: Kept for later — a black-and-teal sky, installed but worn by no place yet
+
+The owner asked to see the new skybox generator make a 4K sky: "black and teal highlights of nebula, few stars",
+then picked the picture and said "keep it for later". **No save change. `npm run build` and `npm test` needed**
+(the page grows by about 140 KB). **No place wears it**, so the game looks exactly as before.
+
+- **Installed:** `teal_black_test` — "Teal Black (kept for later)", preset `void`, seed `3`, 4096×2048 WebP,
+  **140 KB**, report `OK: dark, seamless and within budget` (mean brightness 0.040, seam 0.50/255, 4760 stars).
+  Registered by the tool in `src/data/skyboxes.js` and `src/render/skyboxes.js` (the GENERATED lines only) and
+  covered by `tests/skybox.test.mjs` like any other sky.
+- **Recipe kept** at `tools/skybox/specs/teal_black_test.json`: `mood very_dark`, gas `#2cb4c2`/`#1f78a6`,
+  `stars.density 0.14`, `stars.halos 0.5`, `nebula.amount 1.15`, `nebula.coverage 0.5`, `dust.amount 0.9`,
+  `dust.coverage 0.45`, `dust.rim 1.35`. Re-make it exactly with
+  `python3 tools/skybox/skybox.py make teal_black_test --spec tools/skybox/specs/teal_black_test.json --install`.
+- **To use it later**, no re-render needed: put `sky: { kind: "panorama", skybox: "teal_black_test", shards: 0 }`
+  on an instance template (`data/instances.js`, recipes 22 and 24). `shards` is how many broken rocks drift in
+  front of it; 0 suits an empty-pocket look.
+- The preview/test folder `skybox-out/` is scratch and intentionally not committed (recipe 24 rule).
+
+---
+
 ## 2026-11-15: The Test Ship — a 1-credit hull with 100× Hull HP and 10× damage, flown with the owner's GLB
 
 Owner: "make a new ship available in the Hangar that costs 1 credit. It is called 'Test Ship'. It has 100x hp of wasp, 10x multiplier to all damage output. Same slot layout as wasp. Same default slots come with it when you buy it already fitted. It will use this 3d model called heavyfighter.glb in my google drive." **Save version unchanged (v21)**; rebuild needed (`npm run build` — the page grows to ~19 MB — then `npm test`). NOT playtested yet.

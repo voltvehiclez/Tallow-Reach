@@ -8,105 +8,87 @@
 // or add a new template, without changing the spawner.
 
 import { ENCOUNTERS, encounterDef } from "./encounters.js";
+import { makeRng } from "../util/rng.js";
+import { stationClassForId } from "./stations.js";
 
 export const PLACE_TEMPLATES = {
   frontier: {
     n: "Frontier pocket",
-    d: "A rough frontier pocket with ore and pirate traffic.",
+    d: "A rough frontier pocket with a broad ore belt and sparse pirate traffic.",
     features: [
       {
         kind: "asteroidField",
         id: "field",
-        n: "Frontier asteroid field",
-        pos: [1200, 100, -900],
-        radius: 520,
-        height: 190,
-        count: 28,
+        n: "Frontier belt",
+        pos: [17000, 2200, -23000],
+        radius: 9000,
+        height: 3600,
+        count: 24,
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
-        rock: { rMin: 18, rMax: 66, orePerR: 1.6 },
-        salvage: { spread: [500, 120, 500] },
-      },
-      {
-        kind: "planet",
-        id: "planet",
-        pos: [-4800, -1200, -8200],
-        radius: 1900,
-        atmosphere: 2020,
-        col: 0x394851,
-        atmoCol: 0x527d8a,
-        spin: 0.002,
+        rock: { rMin: 18, rMax: 82, orePerR: 1.6 },
+        salvage: { spread: [820, 220, 820] },
       },
     ],
     tiers: {
-      1: ["hostile_patrol", "resource_cache"],
-      2: ["hostile_patrol", "derelict"],
-      3: ["hostile_patrol", "derelict", "resource_cache"],
+      1: ["hostile_patrol"],
+      2: ["hostile_patrol"],
+      3: ["hostile_patrol", "hostile_patrol"],
     },
     encounterPositions: [[750, 20, -500], [500, -30, 650], [1050, 80, -850]],
   },
 
   trade_lane: {
     n: "Trade lane",
-    d: "A busy trade pocket. A friendly counter is open near the rocks.",
+    d: "A busy trade pocket. A friendly counter sits out at the far side of a wide lane.",
     features: [
       {
         kind: "asteroidField",
         id: "field",
         n: "Trade-lane asteroid field",
-        pos: [1050, -80, -700],
-        radius: 430,
-        height: 160,
-        count: 22,
+        pos: [19000, -1600, -26000],
+        radius: 5200,
+        height: 2200,
+        count: 10,
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
         rock: { rMin: 16, rMax: 58, orePerR: 1.5 },
-        salvage: { spread: [450, 100, 450] },
-      },
-      {
-        kind: "planet",
-        id: "planet",
-        pos: [5200, 600, -7300],
-        radius: 1500,
-        atmosphere: 1600,
-        col: 0x4d3f54,
-        atmoCol: 0x896b9a,
-        spin: 0.0025,
+        salvage: { spread: [650, 150, 650] },
       },
     ],
     tiers: {
-      1: ["friendly_trader", "resource_cache"],
+      1: ["friendly_trader"],
       2: ["friendly_trader", "hostile_patrol"],
-      3: ["friendly_trader", "hostile_patrol", "derelict"],
+      3: ["friendly_trader", "hostile_patrol"],
     },
     encounterPositions: [[0, 0, 0], [650, 40, -450], [900, -60, 700]],
   },
 
   salvage_yard: {
-    n: "Salvage yard",
-    d: "A quiet graveyard of old ships and useful scrap.",
+    n: "Outpost pocket",
+    d: "A quiet outpost pocket with wide lanes and few rocks.",
     features: [
       {
         kind: "asteroidField",
         id: "field",
-        n: "Salvage-yard rocks",
-        pos: [-900, 120, -1150],
-        radius: 610,
-        height: 220,
-        count: 34,
+        n: "Outpost rocks",
+        pos: [-15000, 1800, -19000],
+        radius: 4200,
+        height: 1800,
+        count: 8,
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
-        rock: { rMin: 20, rMax: 74, orePerR: 1.7 },
-        salvage: { spread: [550, 130, 550] },
+        rock: { rMin: 18, rMax: 68, orePerR: 1.6 },
+        salvage: { spread: [650, 150, 650] },
       },
     ],
     tiers: {
-      1: ["derelict", "resource_cache"],
-      2: ["derelict", "hostile_patrol", "resource_cache"],
-      3: ["derelict", "hostile_patrol", "resource_cache"],
+      1: [],
+      2: ["hostile_patrol"],
+      3: ["hostile_patrol"],
     },
     encounterPositions: [[-350, 40, -500], [-700, -20, 450], [250, 80, -850]],
   },
@@ -143,13 +125,75 @@ export function encounterIdsFor(templateId, tier = 1) {
   return [...(template.tiers?.[chosen] || [])];
 }
 
+function polarPoint(rng, min = 15000, max = 33000, height = 7000) {
+  const angle = rng() * Math.PI * 2;
+  const distance = min + rng() * (max - min);
+  return [
+    Math.round(Math.cos(angle) * distance),
+    Math.round((rng() - 0.5) * height),
+    Math.round(Math.sin(angle) * distance),
+  ];
+}
+
+const seededRng = (place, salt) => makeRng(hashId(`${place?.template || "test"}:${place?.id || "template"}:${salt}`));
+
+/** Deterministic per-pocket variation for static template features. A place id always
+ * resolves to the same scenery, but two pockets of one template no longer share one
+ * belt, station or patrol position. */
+const twinField = (feature, rng) => {
+  const pos = polarPoint(rng, 15000, 33000, 8500);
+  const fixed = Math.hypot(pos[0] - feature.pos[0], pos[1] - feature.pos[1], pos[2] - feature.pos[2]) > feature.radius + 2000
+    ? pos
+    : [-pos[0], pos[1], -pos[2]];
+  return {
+    ...feature,
+    id: `${feature.id || "field"}-b`,
+    n: `${feature.n || "Field"} pocket`,
+    pos: fixed,
+    count: Math.max(3, Math.round(feature.count * (0.35 + rng() * 0.3))),
+    radius: Math.max(1200, Math.round(feature.radius * (0.38 + rng() * 0.3))),
+    height: Math.max(600, Math.round(feature.height * (0.5 + rng() * 0.4))),
+  };
+};
+
+function varyTemplateFeatures(templateId, place, features) {
+  return features.flatMap((feature) => {
+    if (feature.kind !== "asteroidField") return [feature];
+    const rng = seededRng(place, `field:${feature.id || "field"}`);
+    feature.pos = polarPoint(rng, 15000, 33000, 8500);
+    if (templateId === "frontier") {
+      feature.count = 16 + Math.floor(rng() * 22);   // 16–37, not a stamp
+      feature.radius = Math.round(6800 + rng() * 7600); // 6.8–14.4 km
+      feature.height = Math.round(2600 + rng() * 2600);
+      feature.rock = { ...(feature.rock || {}), rMax: Math.round(76 + rng() * 34) };
+      if (rng() < 0.3) return [feature, twinField(feature, rng)];   // some frontiers run two separated fields
+      return [feature];
+    }
+    if (templateId === "trade_lane") {
+      if (rng() < 0.2) return [];                    // some trade lanes are clean lanes
+      feature.count = 4 + Math.floor(rng() * 12);    // 4–15
+      feature.radius = Math.round(2800 + rng() * 4200);
+      feature.height = Math.round(1100 + rng() * 1500);
+      if (rng() < 0.12) return [feature, twinField(feature, rng)];
+      return [feature];
+    }
+    // Outposts are deliberately not all useful mining pockets: many are quiet.
+    if (rng() < 0.45) return [];
+    feature.count = 3 + Math.floor(rng() * 10);      // 3–12
+    feature.radius = Math.round(1700 + rng() * 3200);
+    feature.height = Math.round(800 + rng() * 1300);
+    if (rng() < 0.15) return [feature, twinField(feature, rng)];
+    return [feature];
+  });
+}
+
 /**
  * Turn a template plus its tier-selected encounter ids into ordinary place
  * features. The sim consumes these just like Meridian's authored features.
  */
 export function templateFeatures(templateId, place = {}) {
   const template = templateAt(templateId);
-  const features = JSON.parse(JSON.stringify(template.features || []));
+  const features = varyTemplateFeatures(templateId, place, JSON.parse(JSON.stringify(template.features || [])));
   const explicitFeatures = [
     ...(Array.isArray(place.features) ? place.features : []),
     ...(Array.isArray(place.extraFeatures) ? place.extraFeatures : []),
@@ -161,11 +205,15 @@ export function templateFeatures(templateId, place = {}) {
   const suppressTemplateStations = place.role === "gate" &&
     place.allowStation !== true && place.stationPlacement !== "gate";
   const ids = encounterIdsFor(templateId, place.tier || 1);
+  const fieldRadius = Number(features.find(f => f.kind === "asteroidField")?.radius) || 0;
   const positions = template.encounterPositions || [];
   ids.forEach((encounterId, index) => {
     const encounter = encounterDef(encounterId);
-    const pos = positions[index] ? [...positions[index]] : [0, 0, 0];
+    const pos = positions[index]
+      ? polarPoint(seededRng(place, `encounter-fallback:${index}`), 10500, 18500, 4500)
+      : polarPoint(seededRng(place, `encounter:${index}`), 10500 + index * 1200, 31500, 6500);
     const featureId = `${encounterId}-${index}`;
+    const stationClass = stationClassForId(place?.id || `${templateId}:${featureId}`);
     if (encounter.kind === "friendlyTrader") {
       if (suppressTemplateStations) return;
       const station = encounter.station || {};
@@ -177,6 +225,7 @@ export function templateFeatures(templateId, place = {}) {
         pos,
         dockRange: station.dockRange,
         dockSpeed: station.dockSpeed,
+        style: stationClass,
         launch: {
           ...launch,
           pos: [pos[0] + launch.pos[0], pos[1] + launch.pos[1], pos[2] + launch.pos[2]],
@@ -193,6 +242,7 @@ export function templateFeatures(templateId, place = {}) {
         encounter: encounterId,
         pos,
         anchor: "field",
+        nearRadius: Math.round((fieldRadius || 2500) + 1500),
         interval: [...encounter.interval],
         chance: encounter.chance,
         maxWanderers: encounter.maxActive,

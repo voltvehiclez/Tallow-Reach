@@ -1045,6 +1045,7 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const [x, y] = point(node.pos);
     const current = node.id === here.id;
     const station = placeDef(node.pocket.id).features.some(feature => feature.kind === "station");
+    const nodeRole = node.pocket.role || null;
     const label = labels.get(node.id);
     const role = routeRole(node.id, routePocketIds, routeStartPocket, routeDestinationPocket);
     const radius = (role?.start || role?.destination ? ROUTE_ICON_SCALE : 1) * pocketRadius;
@@ -1054,13 +1055,21 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const labelLink = label.moved
       ? `<line class="sm-label-link" x1="${x}" y1="${y}" x2="${lx}" y2="${ly}"/>`
       : "";
-    const dot = station
-      ? `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`
-      : `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
+    let dot;
+    if (station) {
+      dot = `<rect class="sm-dot sm-station-dot" x="${x - radius}" y="${y - radius}" width="${radius * 2}" height="${radius * 2}"/>`;
+    } else if (nodeRole === "planet") {
+      dot = `<ellipse class="sm-planet-ring" cx="${x}" cy="${y}" rx="${radius * 1.75}" ry="${radius * 0.62}"/><circle class="sm-dot sm-planet-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
+    } else if (nodeRole === "belt") {
+      dot = `<g class="sm-belt-icon"><circle class="sm-dot sm-belt-dot" cx="${x - radius * 0.72}" cy="${y + radius * 0.28}" r="${radius * 0.48}"/><circle class="sm-dot sm-belt-dot" cx="${x}" cy="${y - radius * 0.55}" r="${radius * 0.4}"/><circle class="sm-dot sm-belt-dot" cx="${x + radius * 0.72}" cy="${y + radius * 0.32}" r="${radius * 0.35}"/></g>`;
+    } else {
+      dot = `<circle class="sm-dot" cx="${x}" cy="${y}" r="${radius}"/>`;
+    }
+    const kindLabel = station ? ", station pocket" : nodeRole === "planet" ? ", planet" : nodeRole === "belt" ? ", asteroid belt" : "";
     const peerAttr = node.peerSystemId ? ` data-peer-system="${esc(node.peerSystemId)}"` : "";
     const hereLabel = current ? `<tspan class="sm-here-label" x="${lx}" dy="${12 * unit}">(You are here)</tspan>` : "";
-    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : ""}${current ? " current" : ""}${roleClass}" data-pocket="${esc(node.id)}"${peerAttr}
-      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${station ? ", station pocket" : ""}${current ? ", current pocket" : ""}">
+    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : nodeRole ? ` sm-${nodeRole}-node` : ""}${current ? " current" : ""}${roleClass}" data-pocket="${esc(node.id)}"${peerAttr}
+      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${kindLabel}${current ? ", current pocket" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
       ${labelLink}
       ${dot}

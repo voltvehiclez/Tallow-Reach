@@ -742,7 +742,8 @@ test("place templates are tiered, complete and data-only", () => {
     assert.ok(Object.keys(template.tiers || {}).length >= 3, `${id}: encounters by tier`);
     for (const tier of [1, 2, 3]) {
       const ids = encounterIdsFor(id, tier);
-      assert.ok(ids.length > 0, `${id} tier ${tier}: at least one encounter`);
+      // A tier may be quiet; ambient static loot is gone (owner 2026-11-16), so
+      // outpost tier 1 declares none. Every id that IS declared must exist.
       for (const encounter of ids) assert.ok(all.has(encounter), `${id} tier ${tier}: unknown encounter ${encounter}`);
     }
     for (const encounter of templateEncounterIds(id)) assert.ok(all.has(encounter), `${id}: unknown encounter ${encounter}`);
