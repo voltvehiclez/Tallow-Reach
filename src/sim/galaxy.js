@@ -309,7 +309,8 @@ function finalizeArrivals(world) {
         // A unique point off to one side of the low-orbit backdrop; facing the
         // fixed approach vector puts the planet dominating the view.
         const pos = roundVec([(rng() - 0.5) * 3600, (rng() - 0.5) * 2200, (rng() - 0.5) * 3600]);
-        const approach = pocket.planet.approach || [0, 0, 1];
+        const main = recordFeatures(pocket).find(f => f.kind === "station" || f.kind === "asteroidField");
+        const approach = main?.pos ? main.pos.map((value, i) => value - pos[i]) : pocket.planet.approach || [0, 0, 1];
         const dir = normalize3([approach[0], 0, approach[2]]);
         pocket.enter = {
           kind: "warp",

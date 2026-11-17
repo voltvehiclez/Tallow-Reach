@@ -21,6 +21,7 @@
 import * as THREE from "three";
 import { placeAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
+import { PLANET_VIEW } from "../data/scenery.js";
 import { AU_METRES } from "../data/planets.js";
 import { state } from "../state/state.js";
 import { systemSpatialLayout } from "../sim/galaxy.js";
@@ -167,11 +168,14 @@ export function buildSystemSkyLayer(id) {
     const planet = record?.planet;
     if (!planet) continue;
     if (node.id === id) {
-      const dir = new THREE.Vector3(...(planet.approach || [0, 0, 1])).normalize();
-      dir.y = -0.55;
+      const arrival = record.enter;
+      const sightline = arrival?.face && arrival?.pos
+        ? arrival.face.map((value, i) => value - arrival.pos[i]) : planet.approach || [0, 0, 1];
+      const dir = new THREE.Vector3(...sightline).normalize();
+      dir.y = PLANET_VIEW.elevation;
       dir.normalize();
-      const radiusPx = L * 0.26;
-      const position = dir.multiplyScalar(L * 0.85);
+      const radiusPx = L * PLANET_VIEW.radius;
+      const position = dir.multiplyScalar(L * PLANET_VIEW.distance);
       const local = buildPlanetOrb(planet, position, radiusPx, true);
       g.add(local.group);
       disposables.push(...local.disposables);

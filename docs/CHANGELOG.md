@@ -43,6 +43,18 @@ regression tests, generated HTML, handoff and lessons. **Save stays v21**.
 `npm run build` passes; **658/658 tests pass**. Owner preview pending;
 larger belts have more rocks, so check performance as well as appearance.
 
+Follow-up: owner requested planets 30% bigger and back in line with the main POI,
+plus less-perfect belt contours and occasional strays. Local planet radius now
+0.338 of sky depth (was 0.26), elevation zero, aligned with the POI/arrival heading.
+Planet arrivals face the local field's horizontal direction when present. Belt
+contours have seeded multi-wave inner/width variation; inner shifts only outward
+so the ~4 km clearance stays safe. ~3.5% of slots become outer strays, 250–800 m
+beyond the local band, still at the same height and with non-overlap spacing.
+Tapered tips, rock counts and stable slot planning remain. Tuning lives in new
+`src/data/scenery.js`; changes also touch `sim/asteroids.js`, `sim/galaxy.js`,
+`render/systemsky.js`, density/visual tests and generated HTML. Save v21;
+`npm run build` passes; **659/659 tests pass**. Updated visual/performance preview still pending.
+
 ## 2026-11-16: Flatter, lighter belts with naturally thinning edges
 
 Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateGalaxy } from '../src/sim/galaxy.js';
 import { PLACE_DEFS } from '../src/data/places.js';
-import { planAsteroids, asteroidEnvelope, fieldDensityWeight } from '../src/sim/asteroids.js';
+import { planAsteroids, asteroidEnvelope, fieldDensityWeight, arcContour } from '../src/sim/asteroids.js';
 
 function checkArc(id, field) {
   const plan = planAsteroids(id, [field]);
@@ -106,4 +106,21 @@ test('Smaller ordinary fields widen and gradually thin toward their edges', asyn
   for (let i = 1; i < weights.length; i++) assert.ok(weights[i] < weights[i - 1]);
   assert.equal(weights[0], 1);
   assert.ok(Math.abs(weights.at(-1) - 0.3) < 1e-10);
+});
+
+
+test('C contours are irregular and deterministic, with occasional separated outer strays', () => {
+  const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
+  const contours = Array.from({ length: 20 }, (_, i) => arcContour(field, i * 0.3));
+  assert.ok(Math.max(...contours.map(c => c.width)) - Math.min(...contours.map(c => c.width)) > 200);
+  assert.ok(contours.every(c => c.inner >= field.arc.inner));
+  assert.deepEqual(arcContour(field, 1), arcContour(structuredClone(field), 1));
+  const rocks = [...planAsteroids('reach', [field]).values()];
+  const strays = rocks.filter(rock => {
+    const x = rock.pos.x - field.pos[0], z = rock.pos.z - field.pos[2];
+    const contour = arcContour(field, Math.atan2(z, x));
+    return Math.hypot(x, z) - asteroidEnvelope(rock) > contour.inner + contour.width + 200;
+  });
+  assert.ok(strays.length > 5 && strays.length < rocks.length * 0.08, `strays: ${strays.length}`);
+  assert.ok(rocks.every(r => Math.abs(r.pos.y - field.pos[1]) <= field.height));
 });

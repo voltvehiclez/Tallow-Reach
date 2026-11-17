@@ -4,6 +4,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 
 | File | What it holds |
 |---|---|
+| `scenery.js` | Planet backdrop size/elevation and seeded belt irregularity/stray tuning. |
 | `simulation.js` | Fixed simulation tick (`SIM_DT`), maximum accepted render-frame time (`MAX_FRAME_DT`) and how often the resume point is autosaved (`AUTOSAVE_SECONDS`). |
 | `mounts.js` | Named hull-local gun, missile and beam mount offsets, shared by the sim and `PlayerShipView`. |
 | `ships.js` | Hulls the player can fly, and the `FLIGHT` table that scales every ship at once. A hull has no `spd`/`turn` and no Hull HP of its own: the fitted thrusters set speed and turn (`sim/drive.js`), the fitted shields set shield strength and recharge (`sim/shield.js`), the fitted hull module sets Hull HP (`sim/hull.js`, times the hull's `hpMul`), and an empty thruster bay means the ship cannot move. |
