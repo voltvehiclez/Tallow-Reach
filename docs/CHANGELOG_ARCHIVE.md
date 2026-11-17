@@ -5,6 +5,51 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-15: The skies are cube maps — six 2048 faces each, no distortion and no seams
+
+The owner: "the skyboxes look a bit distorted and also a little bit blurry since im using 4k monitor. Make the Skybox
+generator be a box, ie 6 square faces forming a cube. So remove the equirectangular ones we have now. Generate new ones
+that replace the current ones." He asked for at least 4096 per face, was shown the cost (4096 = 100.7 Mpx, ~1.7–2.8 MB,
+384 MB of GPU memory, 10–13 min a sky), and **chose 2048** (`--face` is still one flag away). **No save change (v21).**
+`npm test` **610/610**, `npm run build` 2997 KB (was 3016 KB — smaller, with six times the pixel density where it counts).
+
+- **The tool writes cube maps now.** `tools/skybox/skybox.py` builds the soft layers **once on a sphere in direction
+  space** (`SOFT_FACE_WIDTHS = 2.0` face widths, i.e. the same texel density the old panorama had, so the looks did not
+  change), then cuts six faces out of it with a 2× supersampled box filter. Every layer is a function of the direction a
+  pixel looks in, never of a face's x/y, so the faces agree at their edges by construction — no margins, no per-face
+  special cases, one face in memory at a time (~3 GB). One exposure for all six faces; stars placed once in direction
+  space and thinned by the dust; `finish_face` tone-maps and dithers each face.
+- **The seam check is new and honest.** `cube_seam_error` walks all 24 edges: for an edge pixel of a face it computes
+  the direction with `face_dirs` and samples the neighbouring face through `CUBE_NEIGHBOURS`. Measured on the three
+  installed skies: **worst edge 0.66/255** (a smooth sky reads ~0 here, so this is a sharp test, not a rubber stamp).
+  A smoke test at 1024 per face on a smooth field reads 1.81/0.43/0.22 at face 64/256/512 and trends to 0.
+- **CLI:** `--face`/`--face-size` replaces `--size` (1024 for a smoke test, 2048 the default, 4096 on the owner's word,
+  8192 the ceiling); a spec's `face` key replaces `size`. `make` takes about **4½ minutes** per sky at 2048.
+- **Three skies regenerated from their existing recipes**, same ids and same looks, at 2048 per face:
+  `normal_space` (258 KB), `rift_chaos` (470 KB), `wormhole_grey` (279 KB) — **~1 MB for the whole set**, and the built
+  page got 19 KB *smaller*. Each install wrote six faces to `src/assets/skyboxes/<id>/`, the recipe, and the registry
+  lines. `tests/skybox.test.mjs` now checks six square faces per sky, six imports, one array entry in cube order.
+- **The game draws a box.** `SKIES.cube` in `render/scene.js` replaces `shattered`, `panorama` and `shroud`
+  (all three are **gone**, with `SHATTERED_URLS` and the imports of the owner's panoramas): a `BoxGeometry` with six
+  face materials, `BackSide`, unlit, no depth write, no mipmaps, one linear filter — the same treatment the panoramas
+  had. The shell no longer spins: a star pattern turning under a fixed ship reads as the ship drifting.
+- **`src/render/cubemap.js` is new, and it fixed a real bug.** `BoxGeometry` groups its faces in cube order but frames
+  **+Y and -Y the other way up**, so the top and bottom faces would have arrived upside down. The new file holds
+  `CUBE_FACES`, `CUBE_FACE_FLIP` and `orientFace`, and `tests/skybox.test.mjs` reads `FACE_AXES` out of the generator,
+  rebuilds `BoxGeometry`'s frames with three.js, and proves each flip necessary and no flip redundant. (A single
+  `CubeTexture` would have needed `envMap` and a shader hook in three r128; six plain textures is the same picture
+  with nothing to go wrong.)
+- **Vocabulary is one word.** `SKY_KINDS = ["cube"]`, `DEFAULT_SKY.kind = "cube"`, five templates say `kind: "cube"`.
+  `data/skyboxes.js` lines carry `face` instead of `size`.
+- **The owner's three panoramas are kept as history** (`src/assets/sky-*.webp`, unused, recorded in
+  `src/assets/README.md`); nothing draws them any more and **do not delete them without his word**.
+- Docs: recipe 24, `tools/skybox/README.md` (how the cube is made, the face-size rule, the never-hand-flip rule),
+  `src/assets`, `src/data` and `src/render` READMEs, LESSONS L24.
+- **Needs the owner's playtest:** the numbers say seamless and the preview sheets look like the approved skies, but no
+  browser exists in the sandbox — only his 4K screen can confirm "sharp and undistorted".
+
+---
+
 ## 2026-11-15: Every sky is a generated skybox now — normal space, rifts and wormholes, and the starfield is gone
 
 The owner picked the skies and asked for three things in one go: normal space wears the sky we kept earlier, rifts get

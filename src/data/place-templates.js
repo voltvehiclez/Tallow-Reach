@@ -165,7 +165,7 @@ function varyTemplateFeatures(templateId, place, features) {
       feature.count = 65 + Math.floor(rng() * 55);   // Dense local mining, not a stamp
       feature.radius = Math.round(700 + rng() * 300); // 0.7–1 km
       feature.height = Math.round(220 + rng() * 130);
-      feature.rock = { ...(feature.rock || {}), rMax: Math.round(76 + rng() * 34), giantChance: 0.07, giantMin: 180, giantMax: 400 };
+      feature.rock = { ...(feature.rock || {}), rMax: Math.round(76 + rng() * 34), giantChance: 0.02, giantMin: 180, giantMax: 280 };
       if (rng() < 0.3) return [feature, twinField(feature, rng)];   // some frontiers run two separated fields
       const direction = Math.atan2(feature.pos[2], feature.pos[0]);
       return [feature, ...Array.from({ length: 3 }, (_, i) => ({

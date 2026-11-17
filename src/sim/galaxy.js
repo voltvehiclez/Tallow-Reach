@@ -320,6 +320,13 @@ function finalizeArrivals(world) {
       const features = recordFeatures(pocket);
       const stations = features.filter(f => f.kind === "station" && Array.isArray(f.pos));
       const fields = features.filter(f => f.kind === "asteroidField" && Array.isArray(f.pos));
+      const arc = fields.find(f => f.layout === "arc");
+      if (arc) {
+        const angle = arc.arc.angle + Math.PI;
+        pocket.enter = { kind: "warp", pos: [...arc.pos],
+          face: roundVec([arc.pos[0] + Math.cos(angle) * 3000, arc.pos[1], arc.pos[2] + Math.sin(angle) * 3000]) };
+        continue;
+      }
       const main = stations[0] || fields[0] || null;
       if (main) {
         const p = main.pos;
@@ -395,22 +402,18 @@ function addGeneratedBelts(world, tuning, seed) {
         rock: {
           rMin: Math.round(16 + beltRng() * 14),
           rMax: Math.round(66 + beltRng() * 54),
-          giantChance: 0.09, giantMin: 200, giantMax: 500,
+          giantChance: 0.025, giantMin: 200, giantMax: 500,
           orePerR: 1.6,
         },
         salvage: { spread: [900 + beltRng() * 250, 260 + beltRng() * 120, 900 + beltRng() * 250] },
       };
-      const fieldRadius = asteroidField.radius;
-      // A chain of populated sections: kilometres of exploration without empty gaps.
-      const angle = Math.atan2(asteroidField.pos[2], asteroidField.pos[0]);
-      const features = [asteroidField, ...Array.from({ length: 4 + Math.floor(richness * 3) }, (_, j) => ({
-        ...asteroidField,
-        id: `field-extension-${j + 1}`,
-        n: `${asteroidField.n} outer ${j + 1}`,
-        pos: [Math.round(asteroidField.pos[0] + Math.cos(angle) * (j + 1) * fieldRadius * 1.6),
-          asteroidField.pos[1] + Math.round(Math.sin(j) * 100),
-          Math.round(asteroidField.pos[2] + Math.sin(angle) * (j + 1) * fieldRadius * 1.6)],
-      }))];
+
+      asteroidField.layout = "arc";
+      asteroidField.arc = { inner: 2000, width: 2200, gap: Math.PI / 2, angle: beltRng() * Math.PI * 2 };
+      asteroidField.radius = 4200;
+      asteroidField.height = 600;
+      asteroidField.count = Math.round(700 + richness * 250);
+      const features = [asteroidField];
       // Hostility scales with advisory distance/tier; most belts are working space.
       const tier = Math.max(1, Number(system.tier) || 1);
       const pirateRoll = beltRng();
@@ -421,7 +424,7 @@ function addGeneratedBelts(world, tuning, seed) {
           encounter: "hostile_patrol",
           pos: polarPosition(beltRng, 10000, 24000, 5200),
           anchor: "field",
-          nearRadius: Math.round(fieldRadius + 1500),
+          nearRadius: Math.round(asteroidField.radius + 1500),
           interval: [6, 12],
           chance: Math.min(0.18 + (tier - 1) * 0.12, 0.55),
           maxWanderers: Math.min(3, 1 + Math.floor(tier / 2)),

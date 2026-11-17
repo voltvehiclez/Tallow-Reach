@@ -148,30 +148,19 @@ export const PLACE_DEFS = {
         kind: "asteroidField",
         id: "field",
         n: "Asteroid field",
-        pos: [1800, 200, -1500],
-        radius: 700,           // original close-in mining field
-        height: 250,           // vertical spread
-        count: 70,
-        ore: "asteroid",       // loot table id (data/loot.js)
-        respawnSec: 420,       // seven minutes of simulation time; events may respawn it sooner
-        stable: true,           // field slots keep their shape/ore/position across loads
-        rock: { rMin: 18, rMax: 70, orePerR: 1.6 },
-        salvage: { spread: [750, 180, 750] },
-      },
-      // Connected dense sections extend the familiar field, rather than diluting it.
-      ...Array.from({ length: 5 }, (_, i) => ({
-        kind: "asteroidField",
-        id: `field-extension-${i + 1}`,
-        n: `Outer asteroid field ${i + 1}`,
-        pos: [2800 + i * 1000, 200 + i * 40, -2300 - i * 800],
-        radius: 800,
-        height: 280,
-        count: 90,
+        pos: [0, 0, 600],
+        layout: "arc",
+        arc: { inner: 2000, width: 1600, gap: Math.PI / 2, angle: Math.PI / 2 },
+        focus: [1800, 200, -1500],
+        radius: 3600,
+        height: 400,
+        count: 750,
         ore: "asteroid",
         respawnSec: 420,
         stable: true,
-        rock: { rMin: 18, rMax: 85, giantChance: 0.06, giantMin: 180, giantMax: 360, orePerR: 1.6 },
-      })),
+        rock: { rMin: 18, rMax: 85, giantChance: 0.025, giantMin: 180, giantMax: 360, orePerR: 1.6 },
+        salvage: { spread: [750, 180, 750] },
+      },
       {
         kind: "spawner",
         id: "raiders",

@@ -558,7 +558,20 @@ export function riftClearance(player = localPlayer(), placeId = null) {
   for (const field of featuresOf(id, "asteroidField")) {
     const need = Number(clear.field) || 0;
     const radius = Number(field.radius) || 0;
-    const d = at.distanceTo(V(...field.pos)) - radius;
+    let d = at.distanceTo(V(...field.pos)) - radius;
+    if (field.layout === "arc") {
+      const x = at.x - field.pos[0], z = at.z - field.pos[2];
+      const arc = field.arc;
+      const relative = Math.atan2(Math.sin(Math.atan2(z, x) - arc.angle), Math.cos(Math.atan2(z, x) - arc.angle));
+      const clampedAngle = Math.abs(relative) < arc.gap / 2
+        ? arc.angle + (relative < 0 ? -1 : 1) * arc.gap / 2 : Math.atan2(z, x);
+      const projection = x * Math.cos(clampedAngle) + z * Math.sin(clampedAngle);
+      const nearestRadius = Math.max(arc.inner, Math.min(arc.inner + arc.width, projection));
+      const horizontal = Math.hypot(x - Math.cos(clampedAngle) * nearestRadius, z - Math.sin(clampedAngle) * nearestRadius);
+      // Include the maximum lump envelope at the edges of the arc volume.
+      const margin = Math.max(field.rock?.rMax || 70, field.rock?.giantMax || 0) * 1.5;
+      d = Math.hypot(horizontal, Math.max(0, Math.abs(at.y - field.pos[1]) - field.height)) - margin;
+    }
     if (d < need) return `Too close to ${field.n || "the asteroid field"}: ${Math.round(need / 100) / 10} km clear of its edge is needed.`;
   }
   for (const planet of featuresOf(id, "planet")) {
