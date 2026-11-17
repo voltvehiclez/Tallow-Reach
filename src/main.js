@@ -9,6 +9,7 @@ import { newSave } from "./state/profile.js";
 import { loadAutosave, saveAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { SHIPS } from "./data/ships.js";
+import { verticalFovForAspect } from "./data/camera.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
@@ -206,6 +207,7 @@ addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
+  camera.fov = verticalFovForAspect(camera.aspect);
   camera.updateProjectionMatrix();
   resizeMenuView();
 });

@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 import { DEFAULT_PLACE, DEFAULT_SKY, placeDef, placeAt } from "../data/places.js";
-import { BASE_FOV } from "../data/camera.js";
+import { verticalFovForAspect } from "../data/camera.js";
 import { mm, rockShapeAt, stationModel, planetModel } from "./models.js";
 import { orientFace } from "./cubemap.js";
 import { colliderFromObject } from "./collideModel.js";
@@ -26,7 +26,8 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 
 export const scene = new THREE.Scene();
-export const camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.5, 40000);
+const initialAspect = innerWidth / innerHeight;
+export const camera = new THREE.PerspectiveCamera(verticalFovForAspect(initialAspect), initialAspect, 0.5, 40000);
 scene.add(camera);
 
 // Each place's scenery hangs off its own group, so moving between pockets is a
