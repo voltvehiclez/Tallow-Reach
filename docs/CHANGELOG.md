@@ -20,6 +20,71 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
+
+Owner requested wider belts with the nearest surface ~4 km from central arrival,
+unchanged height and similar density. Meridian arc: inner 4 km, width 2 km,
+938 rocks, height ±280 m. Dedicated arcs: inner 4 km, width 2.75 km, height
+±420 m; counts scale by annular area. Taper and non-overlap packing remain.
+
+Meridian explicitly selects its original pre-rework 90 m ring/four-spoke model.
+Commerce rings use original grey/amber colours with uniform lights; top cap base
+now touches the core top (y=90), rather than clipping through it. Industrial
+refineries lose the detached bottom slab. Planets use solid class colours with
+lighting/atmosphere, no low-resolution procedural surface maps (generator retained
+unused for future work). Local planets shrink from ~105° to ~36° angular diameter
+and sit below the horizontal arrival view. Distant planet bodies remain coloured
+spheres. Pocket/belt PointsMaterial markers discard corners in their shaders so
+they are circular, not square. Menu still has its planet and generated sky.
+
+Files: `src/data/{places,stations}.js`, `src/sim/galaxy.js`,
+`src/render/{models,systemsky}.js`, render README, pocket-density and new visual
+regression tests, generated HTML, handoff and lessons. **Save stays v21**.
+`npm run build` passes; **658/658 tests pass**. Owner preview pending;
+larger belts have more rocks, so check performance as well as appearance.
+
+Follow-up: owner requested planets 30% bigger and back in line with the main POI,
+plus less-perfect belt contours and occasional strays. Local planet radius now
+0.338 of sky depth (was 0.26), elevation zero, aligned with the POI/arrival heading.
+Planet arrivals face the local field's horizontal direction when present. Belt
+contours have seeded multi-wave inner/width variation; inner shifts only outward
+so the ~4 km clearance stays safe. ~3.5% of slots become outer strays, 250–800 m
+beyond the local band, still at the same height and with non-overlap spacing.
+Tapered tips, rock counts and stable slot planning remain. Tuning lives in new
+`src/data/scenery.js`; changes also touch `sim/asteroids.js`, `sim/galaxy.js`,
+`render/systemsky.js`, density/visual tests and generated HTML. Save v21;
+`npm run build` passes; **659/659 tests pass**. Updated visual/performance preview still pending.
+
+Second preview follow-up: owner approved planet elevation but wanted another 30%
+size increase and a much more visible belt-tip falloff. Planet sky radius is now
+0.4394 (was 0.338), with distance/elevation/POI alignment unchanged. Arc density
+now follows a full-length sine-squared falloff from the populated middle to a
+1% weight at each tip, instead of a short end taper with a 12% floor. Actual
+packed-rock tests require the outermost two 10% sectors combined to contain less
+than one fifth of the equal-width central sector. Counts, height, clearance,
+irregular contours, strays and collision spacing stay unchanged. Files:
+`data/scenery.js`, `sim/asteroids.js`, density/visual tests, generated HTML and
+handoff. Save v21; `npm run build` passes; **659/659 tests pass**. Owner preview pending.
+
+Third preview follow-up: owner requested half overall belt density, stronger
+thinning from the C middle, and atmosphere shells one third as thick. Meridian
+now has 469 rocks; dedicated belt count scaling halved from 0.56 to 0.28 (same
+footprint/height). Arc weighting is sine-to-the-fourth with a 0.2% tip floor,
+rather than sine-squared with a 1% floor. Strays and non-overlap rules remain.
+Atmospheres scale the shell's excess radius by 1/3, never the surface radius;
+applied to system-sky planets, authored/menu planets, GLB atmosphere fallback,
+and distant-planet halo extent. Surface size, elevation and colours unchanged.
+Files: `data/{places,scenery}.js`, `sim/galaxy.js`, `render/{models,systemsky}.js`,
+density/visual tests, generated HTML and handoff. Save v21. `npm run build` passes;
+**660/660 tests pass**. Owner preview pending.
+
+Marker follow-up: arc-field HUD labels now sit halfway through the band at the
+angular midpoint of the populated C (opposite its opening), using the seeded
+contour at that angle. The field origin and central warp arrival do not move.
+Ordinary field markers remain at their centres. Files: `sim/asteroids.js`,
+`ui/hud.js`, `tests/pocket-density.test.mjs`, generated HTML and handoff.
+Save v21; build green; **661/661 tests pass**. Owner preview pending.
+
 ## 2026-11-16: Flatter, lighter belts with naturally thinning edges
 
 Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS
@@ -256,61 +321,9 @@ Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`,
 `tests/collision-damage.test.mjs` (new), `tests/enemy-collision.test.mjs`, `docs/GLB_MODELS.md`, `docs/HANDOFF.md`,
 `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
 
-## 2026-11-15: Big moving parts are solid, and a wormhole pocket is really there after a reload
-
-Two owner bug reports, both fixed at the level they live at rather than at the symptom.
-
-Owner, on collision: "Meridian station arms that connect to the ring have no collision box. I think its good if
-collision boxes are more accurate to the model by default. Obviously dont go completely crazy with collision box
-accuracy if it causes performance issues." And then the rule that set the design: **"the way you integrate this needs
-to be foundational so that big moving parts on structures have collision boxes by default. Very tiny details its ok
-if they dont have collision box, try to make collision boxes as accurate as possible by default while having a
-reasonable performance consideration."**
-
-**No save change (v21).** `npm test` **633/633**, `npm run build` 3002 KB.
-
-- **Why the arms had no collider.** They were tagged `noclip.spin`, and not by mistake: a collider is a *bake*, a
-  bake is a snapshot, and a snapshot of a turning part is wrong the moment it turns. Meridian's arms are 180 m long
-  at 0.1 rad/s, so a still hitbox is **144 m** away from the drawn arm inside a minute. Baking several copies
-  through the turn is the other wrong answer: fat between copies, and N× the triangles forever.
-- **The foundation: live colliders for moving parts.** A part named `spin` now bakes its soup **once in its own
-  space** and carries `mover = { pos, quat, scale, object }`; `render/scene.js` refreshes that from the part's world
-  matrix each frame (`refreshMover`), and `sim/colliders.js` carries the query into the part's space instead of
-  carrying triangles out — the same trick asteroid soups already used. Exact at every angle, no re-bake, no extra
-  triangles; a frame's cost for a mover is one `decompose()`. Both `collideSphereAt` (ships) and `segmentColliderHit`
-  (weapons) understand movers, so the arms are solid to the hull **and** to every weapon, per the rule shipped earlier
-  today. Small decoration (the twelve warning lights) stays `noclip` — the owner's exception.
-- **A real bug fell out of this: `closestPointTriangle` was wrong for most hits.** Its face-interior branch was
-  guarded by a triple product that is **identically zero**, so every query landing inside a triangle reported
-  *vertex A* as the closest point. Penetration was then measured from a far corner and the push-out normal pointed
-  at it. That affected ship-vs-scenery and ship-vs-rock everywhere, not just the arms; a box's broad flat face is
-  exactly where it showed. Fixed, with two tests that compare the push-out against the real analytic surface
-  distance. Flight feel is unchanged (`SHIP_RADIUS` still 4) — hulls are simply pushed out along the right normal now.
-- **The wormhole bug: the pocket was never loaded, so its rocks were never there.** Owner: "Going inside a simple
-  wormhole and exiting the game in the wormhole… open game again and go through the exit wormhole and you get back
-  to the simple wormhole pocket in normal space. This causes the debris around the wormhole in normal space
-  invisible, wormhole is visible though. The debris are visible again when you warp out and back into the simple
-  wormhole pocket." `loadPlace` only fills a place when the container is not loaded — and on a normal visit that
-  runs. But a pilot who quit **inside** the run is put straight back into the run by the load, so the pocket they
-  came through is never visited and nothing ever builds it. `leaveInstance` → `sendPilotsHome` then returned them
-  to a pocket with no world behind it: the door is rebuilt from the place definition either way, so it was visible,
-  while the asteroid field (which lives in the world) was empty and therefore invisible. **Fix:** `sendPilotsHome`
-  loads the place it sends the pilot back to. Idempotent, so the ordinary path is unchanged.
-- **Files:** `src/render/collideModel.js`, `src/render/scene.js`, `src/render/models.js`, `src/sim/colliders.js`,
-  `src/sim/instances.js`, `docs/GLB_MODELS.md`, two new tests below.
-- **Tests:** new `tests/moving-colliders.test.mjs` (11) — the hitbox is exactly on the arms at 24 spin phases and
-  clear between them, the soup is never rebuilt, a full turn does not drift it, ships are pushed out along the
-  part's own normal, the station's still parts keep their 840 triangles, the arms add 48 (not 48× samples), and the
-  source guard that the arms are still named `spin`. New `tests/wormhole-reload-return.test.mjs` (3) — quit in the
-  run, reload, exit, and the pocket's field matches a fresh visit exactly (it was 0 rocks before the fix).
-- **Not playtested.** The owner's own flight is the only visual check; both fixes are headless-verified only.
-
-Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/render/models.js`, `src/sim/colliders.js`,
-`src/sim/instances.js`, `tests/moving-colliders.test.mjs` (new), `tests/wormhole-reload-return.test.mjs` (new),
-`docs/GLB_MODELS.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `docs/HANDOFF.md`, `docs/LESSONS.md`,
-`game/tallow-reach.html`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-15: Big moving parts are solid, and a wormhole pocket is really there after a reload
 
 - 2026-11-15: Every weapon stops on a collider — shots no longer pass through the station
 

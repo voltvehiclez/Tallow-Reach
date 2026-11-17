@@ -7,9 +7,9 @@ export const STATION_CLASSES = {
     n: "Commerce freeport",
     style: "commerce",
     styles: ["Freeport", "Exchange", "Trading Hub", "Harbor", "Market", "Rest"],
-    col: 0x6d5b3f,
-    accent: 0xd8a85a,
-    lights: 0xffd28a,
+    col: 0x4a545c,
+    accent: 0x4a545c,
+    lights: 0xd9a45a,
     silhouette: "ring",
   },
   industrial: {

@@ -5,8 +5,8 @@
 
 import * as THREE from "three";
 import { SHIPS } from "../data/ships.js";
+import { atmosphereRadius } from "../data/scenery.js";
 import { stationClass } from "../data/stations.js";
-import { planetTexture } from "./planetmaps.js";
 import { R } from "../util/math.js";
 import { instantiateModel, modelTemplate, spinNodes, engNodes } from "./gltf.js";
 import { builtInRockPositions } from "../sim/colliders.js";
@@ -152,7 +152,7 @@ export function planetModel(f) {
     const object = new THREE.Group();
     object.add(gltf);
     const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(f.atmosphere, 48, 32),
+      new THREE.SphereGeometry(atmosphereRadius(f.radius, f.atmosphere), 48, 32),
       new THREE.MeshBasicMaterial({
         color: f.atmoCol, transparent: true, opacity: 0.18,
         side: THREE.BackSide, blending: THREE.AdditiveBlending,
@@ -167,7 +167,6 @@ export function planetModel(f) {
     new THREE.SphereGeometry(f.radius, 48, 32),
     new THREE.MeshStandardMaterial({
       color: f.col,
-      map: planetRecord ? planetTexture(planetRecord) : null,
       emissive: planetRecord?.emissive || 0x000000,
       emissiveIntensity: planetRecord?.classId === "volcanic" ? 0.48 : 0.04,
       roughness: 1,
@@ -175,7 +174,7 @@ export function planetModel(f) {
   );
   planet.position.set(...f.pos);
   const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(f.atmosphere, 48, 32),
+    new THREE.SphereGeometry(atmosphereRadius(f.radius, f.atmosphere), 48, 32),
     new THREE.MeshBasicMaterial({
       color: f.atmoCol, transparent: true, opacity: 0.18,
       side: THREE.BackSide, blending: THREE.AdditiveBlending,
@@ -195,6 +194,7 @@ export function planetModel(f) {
  * drop can replace one family without replacing all four.
  */
 export function stationModel(f) {
+  if (f.model === "original-meridian") return originalMeridianModel(f);
   const cls = stationClass(f.style || f.class || "commerce");
   const style = cls.style || "commerce";
   const gltf = instantiateModel(`station.${style}`) || instantiateModel("station");
@@ -240,7 +240,6 @@ export function stationModel(f) {
       const a = (i / 8) * Math.PI * 2;
       addLight(Math.cos(a) * 26, -80 + (i % 3) * 70, Math.sin(a) * 26);
     }
-    add(new THREE.BoxGeometry(90, 3, 45), dark, 0, -135, 0);
     return { object: stn, spins: [{ object: mast, rate: 0.18 }] };
   }
 
@@ -309,14 +308,61 @@ export function stationModel(f) {
   }
   add(new THREE.CylinderGeometry(16, 16, 180, 12), body, 0, 0, 0, stn);
   add(new THREE.CylinderGeometry(26, 26, 18, 12), accent, 0, -82, 0, stn);
-  add(new THREE.CylinderGeometry(11, 20, 90, 10), dark, 0, 88, 0, stn);
+  add(new THREE.CylinderGeometry(11, 20, 90, 10), dark, 0, 135, 0, stn);
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
-    const light = add(new THREE.BoxGeometry(6, 3, 2), new THREE.MeshBasicMaterial({ color: i % 4 === 0 ? 0x8ff0ff : cls.lights }), Math.cos(a) * 104, 9, Math.sin(a) * 104, spin);
+    const light = add(new THREE.BoxGeometry(6, 3, 2), new THREE.MeshBasicMaterial({ color: cls.lights }), Math.cos(a) * 104, 9, Math.sin(a) * 104, spin);
     light.rotation.y = -a;
     light.name = "noclip.spin";
   }
   add(new THREE.BoxGeometry(66, 3, 34), dark, 0, -66, 0, stn);
   add(new THREE.BoxGeometry(9, 9, 48), accent, 0, 0, 31, stn);
+  return { object: stn, spins: [{ object: spin, rate: 0.1 }] };
+}
+
+function originalMeridianModel(f) {
+  const gltf = instantiateModel("station");
+  if (gltf) {
+    gltf.position.set(...f.pos);
+    return { object: gltf, spins: spinNodes(gltf).map(node => ({ object: node, rate: 0.1 })) };
+  }
+  const stn = new THREE.Group();
+  const spin = new THREE.Group();
+  stn.add(spin);
+  stn.position.set(...f.pos);
+  const m = mm(0x4a545c);
+  const add = (geo, x, y, z, parent) => {
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z);
+    (parent || spin).add(o);
+    return o;
+  };
+  const ring = add(new THREE.TorusGeometry(90, 7, 8, 48), 0, 0, 0);
+  ring.rotation.x = Math.PI / 2;
+  // The arms are big moving parts, so they are solid like everything else (owner, 2026-11-15).
+  // They hang in a node named for the `spin` convention so the collider knows they turn: its soup
+  // is baked once in the arms' own frame and carried into the world by the live transform, so the
+  // hitbox follows them round exactly and never needs re-baking. See docs/GLB_MODELS.md.
+  const arms = new THREE.Group();
+  arms.name = "spin";
+  spin.add(arms);
+  for (let i = 0; i < 4; i++) {
+    const spoke = add(new THREE.BoxGeometry(180, 2.5, 2.5), 0, 0, 0, arms);
+    spoke.rotation.y = (i * Math.PI) / 4;
+  }
+  add(new THREE.CylinderGeometry(14, 14, 150, 12), 0, 0, 0, stn);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * 6.283;
+    const light = new THREE.Mesh(
+      new THREE.BoxGeometry(6, 3, 2),
+      new THREE.MeshBasicMaterial({ color: 0xd9a45a })
+    );
+    light.position.set(Math.cos(a) * 90, 8, Math.sin(a) * 90);
+    light.rotation.y = -a;
+    light.name = "noclip.spin";   // the collider is baked once; see docs/GLB_MODELS.md
+    spin.add(light);
+  }
+  add(new THREE.BoxGeometry(60, 2, 30), 0, -60, 0, stn);
+  add(new THREE.BoxGeometry(8, 8, 40), 0, 0, 26, stn);
   return { object: stn, spins: [{ object: spin, rate: 0.1 }] };
 }

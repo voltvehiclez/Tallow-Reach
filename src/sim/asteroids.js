@@ -4,6 +4,7 @@
 // Stable field slots let world.placeMemory remember which rock was mined across
 // a save/load; ad-hoc test rocks may still be spawned without a slot.
 
+import { BELT_VARIATION } from "../data/scenery.js";
 import { V, Q, E } from "../util/math.js";
 import { pickLoot } from "./loot.js";
 import { addEntity } from "./entity.js";
@@ -91,15 +92,47 @@ export function fieldDensityWeight(field, local) {
     const span = Math.PI * 2 - arc.gap;
     const angle = ((Math.atan2(local.z, local.x) - arc.angle - arc.gap / 2) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
     const edge = Math.min(angle, span - angle) / span;
-    // Taper the outer quarter at either end; leave a broad, populated middle.
-    const t = Math.max(0, Math.min(1, edge / 0.25));
-    return 0.12 + 0.88 * t * t * (3 - 2 * t);
+    // Thin over the entire half-arc, not only its last quarter. Near-empty
+    // tips make the falloff readable from the central arrival point.
+    const t = Math.max(0, Math.min(0.5, edge));
+    return BELT_VARIATION.tipDensity + (1 - BELT_VARIATION.tipDensity)
+      * Math.sin(Math.PI * t) ** BELT_VARIATION.taperPower;
   }
   if (field.radialFalloff) {
     const r = Math.min(1, Math.hypot(local.x, local.z) / field.radius);
     return 1 - 0.7 * r * r;
   }
   return 1;
+}
+
+/** Smooth seeded contour variation; the inner ripple never breaches arrival clearance. */
+export function arcContour(field, angle) {
+  const phase = hash(`${field.id}:${field.pos.join(":")}`) / 0xffffffff * Math.PI * 2;
+  const wave = Math.sin(angle * 3 + phase) * 0.65 + Math.sin(angle * 7 - phase) * 0.35;
+  return {
+    inner: field.arc.inner + BELT_VARIATION.innerRipple * (1 + wave),
+    width: field.arc.width * (1 + BELT_VARIATION.widthRipple * Math.sin(angle * 5 + phase)),
+  };
+}
+
+/** HUD destination inside the densest arc section, independent of its warp centre. */
+export function fieldMarkerPosition(field) {
+  if (field.layout !== "arc") return [...field.pos];
+  const angle = field.arc.angle + Math.PI;
+  const contour = arcContour(field, angle);
+  const radius = contour.inner + contour.width / 2;
+  return [field.pos[0] + Math.cos(angle) * radius, field.pos[1],
+    field.pos[2] + Math.sin(angle) * radius];
+}
+
+function arcPosition(field, bound, rng, stray) {
+  const arc = field.arc;
+  const angle = arc.angle + arc.gap / 2 + rng() * (Math.PI * 2 - arc.gap);
+  const contour = arcContour(field, angle);
+  const radial = stray
+    ? contour.inner + contour.width + bound + roll(rng, BELT_VARIATION.strayMin, BELT_VARIATION.strayMax)
+    : contour.inner + bound + rng() * Math.max(0, contour.width - 2 * bound);
+  return V(Math.cos(angle) * radial, roll(rng, -field.height, field.height), Math.sin(angle) * radial);
 }
 
 const layouts = new Map();
@@ -118,13 +151,11 @@ export function planAsteroids(placeId, fields) {
   for (const item of slots) {
     const { field, slot, data, bound } = item;
     const rng = makeRng(hash(`packing:${placeId}:${field.id}:${slot}`));
+    const stray = makeRng(hash(`stray:${placeId}:${field.id}:${slot}`))() < BELT_VARIATION.strayChance;
     for (let attempt = 0; attempt < 2500; attempt++) {
       let p;
       if (field.layout === "arc") {
-        const arc = field.arc;
-        const angle = arc.angle + arc.gap / 2 + rng() * (Math.PI * 2 - arc.gap);
-        const radial = arc.inner + bound + rng() * Math.max(0, arc.width - 2 * bound);
-        p = V(Math.cos(angle) * radial, roll(rng, -field.height, field.height), Math.sin(angle) * radial);
+        p = arcPosition(field, bound, rng, stray);
       } else {
         p = V(roll(rng, -field.radius, field.radius), roll(rng, -field.height, field.height), roll(rng, -field.radius, field.radius));
         if (p.length() > field.radius) continue;
@@ -158,10 +189,7 @@ export function spawnAsteroid(placeId = state.place, field = fieldAt(placeId), s
       data = rockData(placeId, field, slot);
       const bound = asteroidEnvelope(data);
       if (field.layout === "arc") {
-        const arc = field.arc;
-        const angle = arc.angle + arc.gap / 2 + random() * (Math.PI * 2 - arc.gap);
-        const radial = arc.inner + bound + random() * Math.max(0, arc.width - 2 * bound);
-        data.pos.set(field.pos[0] + Math.cos(angle) * radial, field.pos[1] + roll(random, -field.height, field.height), field.pos[2] + Math.sin(angle) * radial);
+        data.pos.copy(arcPosition(field, bound, random, random() < BELT_VARIATION.strayChance)).add(V(...field.pos));
       }
       if (random() > fieldDensityWeight(field, data.pos.clone().sub(V(...field.pos)))) { data = null; continue; }
       if (!placeWorld(placeId).asteroids.some(other => data.pos.distanceTo(other.pos) < bound + asteroidEnvelope(other) + 20)) break;

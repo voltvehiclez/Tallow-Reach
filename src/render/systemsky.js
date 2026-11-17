@@ -21,8 +21,8 @@
 import * as THREE from "three";
 import { placeAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
+import { PLANET_VIEW, atmosphereRadius } from "../data/scenery.js";
 import { AU_METRES } from "../data/planets.js";
-import { planetTexture } from "./planetmaps.js";
 import { state } from "../state/state.js";
 import { systemSpatialLayout } from "../sim/galaxy.js";
 
@@ -80,10 +80,9 @@ function getHaloTexture() {
 
 function buildPlanetOrb(planet, position, radiusPx, local = false) {
   const group = new THREE.Group();
-  const texture = planetTexture(planet);
   const geometry = new THREE.SphereGeometry(radiusPx, local ? 36 : 20, local ? 24 : 14);
   const material = new THREE.MeshLambertMaterial({
-    map: texture,
+    color: planet.col,
     emissive: planet.emissive || 0x000000,
     emissiveIntensity: planet.classId === "volcanic" ? 0.55 : 0.06,
   });
@@ -93,7 +92,7 @@ function buildPlanetOrb(planet, position, radiusPx, local = false) {
   group.add(orb);
 
   const atmosphereScale = Math.max(1.06, Number(planet.atmosphere || planet.radiusM * 1.14) / Math.max(1, Number(planet.radiusM) || 1));
-  const atmoGeo = new THREE.SphereGeometry(radiusPx * atmosphereScale, local ? 36 : 20, local ? 24 : 14);
+  const atmoGeo = new THREE.SphereGeometry(atmosphereRadius(radiusPx, radiusPx * atmosphereScale), local ? 36 : 20, local ? 24 : 14);
   const atmoMat = new THREE.MeshBasicMaterial({
     color: planet.atmoCol || 0x8fb3c7,
     transparent: true,
@@ -169,9 +168,14 @@ export function buildSystemSkyLayer(id) {
     const planet = record?.planet;
     if (!planet) continue;
     if (node.id === id) {
-      const dir = new THREE.Vector3(...(planet.approach || [0, 0, 1])).normalize();
-      const radiusPx = L * 0.57;
-      const position = dir.multiplyScalar(L * 0.72);
+      const arrival = record.enter;
+      const sightline = arrival?.face && arrival?.pos
+        ? arrival.face.map((value, i) => value - arrival.pos[i]) : planet.approach || [0, 0, 1];
+      const dir = new THREE.Vector3(...sightline).normalize();
+      dir.y = PLANET_VIEW.elevation;
+      dir.normalize();
+      const radiusPx = L * PLANET_VIEW.radius;
+      const position = dir.multiplyScalar(L * PLANET_VIEW.distance);
       const local = buildPlanetOrb(planet, position, radiusPx, true);
       g.add(local.group);
       disposables.push(...local.disposables);
@@ -204,7 +208,7 @@ export function buildSystemSkyLayer(id) {
       fog: false,
     });
     const halo = new THREE.Sprite(haloMat);
-    halo.scale.setScalar(radiusPx * 3.2);
+    halo.scale.setScalar(atmosphereRadius(radiusPx * 2, radiusPx * 3.2));
     halo.position.copy(position);
     g.add(halo);
     disposables.push(haloMat);
@@ -236,6 +240,13 @@ export function buildSystemSkyLayer(id) {
       depthWrite: false,
       fog: false,
     });
+    // WebGL points are square unless explicitly masked into circular pinpricks.
+    dotMat.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace("void main() {", `void main() {
+        float pointRadius = length(gl_PointCoord - vec2(0.5));
+        if (pointRadius > 0.5) discard;`);
+    };
+    dotMat.customProgramCacheKey = () => "circular-pocket-point";
     const dots = new THREE.Points(dotGeo, dotMat);
     dots.name = "belt-dots";
     g.add(dots);
@@ -273,6 +284,13 @@ export function buildSystemSkyLayer(id) {
       depthWrite: false,
       fog: false,
     });
+    // WebGL points are square unless explicitly masked into circular pinpricks.
+    dotMat.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace("void main() {", `void main() {
+        float pointRadius = length(gl_PointCoord - vec2(0.5));
+        if (pointRadius > 0.5) discard;`);
+    };
+    dotMat.customProgramCacheKey = () => "circular-pocket-point";
     const dots = new THREE.Points(dotGeo, dotMat);
     dots.name = "pocket-dots";
     g.add(dots);

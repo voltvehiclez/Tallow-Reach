@@ -12,6 +12,7 @@ import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
 import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
+import { fieldMarkerPosition } from "../sim/asteroids.js";
 import { stationAt } from "../sim/places.js";
 import { cacheUnits, exitDenial, instanceTimeLeft } from "../sim/instances.js";
 import { V } from "../util/math.js";
@@ -392,7 +393,7 @@ function drawMarkers() {
   for (const f of featuresOf(state.place, "station")) {
     if (!(F.lock && F.lock.k === "s")) mark(V(...f.pos), f.n, "i");
   }
-  for (const f of featuresOf(state.place, "asteroidField")) mark(V(...f.pos), f.n, "");
+  for (const f of featuresOf(state.place, "asteroidField")) mark(V(...fieldMarkerPosition(f)), f.n, "");
 
   pruneLock();
   const lock = F.lock;
