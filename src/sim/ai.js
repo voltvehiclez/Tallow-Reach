@@ -5,6 +5,8 @@
 // branch. Hunt contracts still take priority over the ambient encounter and use
 // the same desired-count/enemy rules as before.
 
+import { createBrain, flyFighter, clearFriendlyLane } from "./enemy-flight.js";
+import { AI_FLIGHT } from "../data/enemy-ai.js";
 import { V, Q, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { random } from "../util/rng.js";
@@ -16,27 +18,13 @@ import { missionForObjective, remainingObjective } from "./missions.js";
 import { state, placeWorld, instanceAt } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
 import { clearMissionDrops, fire, removeMissionDrop } from "./combat.js";
-import { enemyFwd, turnEnemy, enemyPos, dropEnemy, enemyHullRadius } from "./enemy.js";
-import { collideRockAt, collideSphereAt, placeCollidersOf, reflectVelocity } from "./colliders.js";
+import { enemyFwd, dropEnemy, enemyHullRadius } from "./enemy.js";
+import { collideRockAt, collideSphereAt, placeCollidersOf, reflectVelocity, sweepColliders } from "./colliders.js";
 import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
 
-/**
- * "chase": close in quickly from far, circle once near. Used by the raider.
- * `toTarget` is the vector from the enemy to the player (not normalised).
- */
-function chase(e, def, toTarget, dist, dt) {
-  const f = enemyFwd(e),
-    side = V(1, 0, 0).applyQuaternion(e.quat);
-  e.v.lerp(
-    f.clone().multiplyScalar(dist > def.circleAt ? def.spdFar : def.spdNear).addScaledVector(side, e.o * def.spdOrbit),
-    dt
-  );
-  enemyPos(e).addScaledVector(e.v, dt);
-}
-
-/** Behaviours an enemy def can name with `ai`. Add one here, then name it in data. */
-export const AI_BEHAVIOURS = { chase };
+// Keep the reusable behaviour id for authored content; personality is data-driven.
+export const AI_BEHAVIOURS = { chase: flyFighter };
 
 let nextId = 1;
 
@@ -70,6 +58,7 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null, opt
     v: V(0, 0, 0),
     fire: def.fireDelay,
     o: random() < 0.5 ? 1 : -1,
+    brain: createBrain(Math.floor(random() * 0xffffffff)),
   };
   placeWorld(placeId).enemies.push(e);
   emit("enemy-spawned", { id: e.id, def: e.def, place: placeId, encounter, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z } });
@@ -104,9 +93,9 @@ export function updateEnemies(dt, placeId = state.place) {
     const def = enemyDef(e.def);
     const toPlayer = pp.clone().sub(e.pos),
       dist = toPlayer.length();
-    turnEnemy(e, pp, dt * def.turn);
+    if (!e.brain) e.brain = createBrain(e.id);
 
-    (AI_BEHAVIOURS[def.ai] || AI_BEHAVIOURS.chase)(e, def, toPlayer, dist, dt);
+    (AI_BEHAVIOURS[def.ai] || AI_BEHAVIOURS.chase)(e, def, toPlayer, dist, dt, { world: W, target, players: state.players });
 
     if (dist > def.lostRange) {
       dropEnemy(e);
@@ -114,10 +103,12 @@ export function updateEnemies(dt, placeId = state.place) {
     }
 
     e.fire -= dt;
-    if (dist < def.fireRange && enemyFwd(e).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0) {
+    if (dist < def.fireRange && enemyFwd(e).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0 && clearFriendlyLane(e, pp, E) && !sweepColliders(placeCollidersOf(placeId), W.asteroids, e.pos, pp)) {
       e.fire = R(def.fireGap[0], def.fireGap[1]);
-      const dir = toPlayer
-        .add(V(R(-0.04, 0.04), R(-0.04, 0.04), R(-0.04, 0.04)))
+      // Angular spread, not a centimetre offset that becomes perfect aim at range.
+      const spread = AI_FLIGHT.aimSpread;
+      const dir = toPlayer.clone().normalize()
+        .add(V(R(-spread, spread), R(-spread, spread), R(-spread, spread)))
         .normalize();
       const missionId = String(e.encounter || "").startsWith("mission:")
         ? String(e.encounter).slice("mission:".length)

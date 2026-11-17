@@ -5,6 +5,45 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-15: Hitting the station hurts again — solid means collision damage, by default
+
+Owner: "Collision damage is gone from the meridian station. Everything that is solid should apply collision damage
+unless otherwise specific. Asteroids still apply collision damage correctly."
+
+Exactly right, and it was one default. A rock's collider carries `damage: 1` (hardcoded in `collideRockAt`), so rocks
+always hurt. Scenery went the other way: `colliderFromObject` took `damage = 0`, `scene.js` passed
+`f.collideDmg ?? 0`, and `player.js` gated on `hit.damage > 0` then multiplied by the factor — so a factor of 0
+zeroed the damage and the condition skipped it. Every station, planet and cave had been a free bounce since the
+model-fitted collision work, and **no test checked it either way**, which is why it survived three sessions.
+
+**No save change (v21).** `npm test` **640/640**, `npm run build` 3002 KB.
+
+- **The rule is now the owner's rule: solid means `damage: 1`, the same factor a rock uses.** Fly into Meridian above
+  25 m/s and it costs `speed * 0.015 * damage` — shields first, exactly the rock rate, measured. The 25 m/s threshold
+  is unchanged (drifting into a station is still free).
+- **Opt-outs are data, not defaults.** `collideDmg: 0` makes a surface solid but harmless (a bounce), `collideDmg: 2`
+  makes one hurt twice as much, `collide: false` still means no collider at all. Default `1` in both
+  `colliderFromObject` and `scene.js`.
+- **Hostiles obey the same rule.** `ai.js` used to bounce raiders off scenery for free while a rock hurt them; scenery
+  now damages them through the same `enemy-rammed` event with `byPlayer: null`, so it is an environmental kill that
+  credits no pilot and settles every kill objective the same way a rock kill does. The rock path's 25 m/s gate is
+  kept for both.
+- **A test-prop lesson, not a game bug:** a *single flat triangle* is a bad stand-in for a wall — a 4.8 m hull can
+  straddle a zero-thickness plane between two ticks and register nothing. Real scenery is closed geometry and every
+  Meridian part is thick enough (thinnest 2 m, so a 4.8 m hull overlaps it from 3.8 m away). The new hostile test
+  builds a closed slab.
+- **Files:** `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`, docs.
+- **Tests:** new `tests/collision-damage.test.mjs` (6) — the bake defaults to 1 for still parts and movers, flying
+  into the station costs hull, the cost is the rock rate scaled by the factor, `collideDmg: 0` bounces for free,
+  slow contact is still free, and a rock and a station cost the same for the same approach. `tests/enemy-collision.test.mjs`
+  gains one (scenery damages a hostile, `collideDmg: 0` does not). Two of these were checked to FAIL with the old
+  default restored.
+- **Not playtested.** Headless only; the owner's own flight is the visual check.
+
+Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`,
+`tests/collision-damage.test.mjs` (new), `tests/enemy-collision.test.mjs`, `docs/GLB_MODELS.md`, `docs/HANDOFF.md`,
+`docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
 ## 2026-11-15: Big moving parts are solid, and a wormhole pocket is really there after a reload
 
 Two owner bug reports, both fixed at the level they live at rather than at the symptom.
