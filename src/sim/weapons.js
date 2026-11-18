@@ -7,7 +7,7 @@ import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { SHIPS } from "../data/ships.js";
 
-import { state, say, msg, profileOf, placeWorld } from "../state/state.js";
+import { state, say, profileOf, placeWorld } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
@@ -64,10 +64,7 @@ export function setWeapon(slot, P = state.player) {
   const S = state.profile;
   S.pw = value;
   if (P) P.weapon = value;
-  const gun = (state.guns || []).find(g => g.i === s),
-    beam = (state.beams || []).find(b => b.i === s),
-    fitted = gun || beam || null;
-  msg(fitted ? `${fitted.n} equipped` : "Empty weapon slot", 1.5);
+
 }
 
 /** Secondary bay selection is independent of primary; switching cannot bypass reload. */
@@ -78,10 +75,7 @@ export function setSecondaryWeapon(slot, P = state.player) {
   P.secondaryWeapon = String(slot + 1);
   const lock = P.flight.missileLock;
   lock.target = null; lock.t = 0; lock.locked = false;
-  if (P === state.player) {
-    const fitted = (P.missiles || []).find(m => m.i === slot);
-    msg(fitted ? `${fitted.n} equipped` : "Empty secondary slot", 1.5);
-  }
+
 }
 
 /** Primary fire: the fitted guns when held, or the mining beam if its slot is

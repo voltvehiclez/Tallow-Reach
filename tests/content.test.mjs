@@ -449,9 +449,9 @@ test("any primary slot with nothing in it is called 'Empty weapon slot'", () => 
   const hud = readFileSync(new URL("../src/ui/weapon-slots.js", import.meta.url), "utf8");
   assert.match(hud, /Empty weapon slot/, "the HUD names the empty slot the same way");
   assert.doesNotMatch(hud, /"No guns"/, "the old 'No guns' wording is gone");
-  // The equipped line and the toast take the module's own name, and the HUD shows the bay key.
+  // The HUD names the fitted module and bay key without a redundant equip toast.
   assert.match(hud, /\$\{key\}: \$\{name\}/, "the slot tooltip names its key and fitted module");
-  assert.match(weapons, /fitted \? `\$\{fitted\.n\} equipped`/, "the equip toast names the fitted module");
+  assert.doesNotMatch(weapons, /\bmsg\(/, "selection no longer posts an equip toast");
   assert.doesNotMatch(weapons, /"Cannons equipped"/, "the hardcoded 'Cannons equipped' is gone");
 });
 
@@ -575,7 +575,7 @@ test("the beam loses its progress the moment contact stops", () => {
   // weapons.js imports the scene, so the rule is guarded rather than imported.
   const src = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
   assert.match(src, /if \(!F\.beamOn && F\.beamT > 0\)/, "the reset fires the moment contact stops");
-  assert.match(src, /state\.beams/, "which beam fits comes from the fitted modules");
+  assert.match(src, /P\.beams/, "which beam fits comes from the pilot fitted modules");
   assert.ok(!src.includes("beamIdle"), "no lingering idle timer: the reset is immediate");
 });
 

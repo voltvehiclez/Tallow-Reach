@@ -67,3 +67,5 @@ Rules:
 Targeting accepts the nearest visible mesh hit from the render layer for every lockable kind, validates it against live candidates and prioritizes it over angular assistance. Headless calls without a rendered hit retain asteroid collision soups and other-kind sphere proxies. Session validates permanent home stations and recovers there. Death always loans a fully fitted Wasp when no hull survives, irrespective of credits; existing surviving ships are reused. Ship ownership is still global, not station-local.
 
 Boost sets full throttle only on the ignition transition after its flat MJ debit, never on the initial press. Weapons support primary and secondary selected bay indices 0–4; selection banks are independent. A selected empty slot never falls back. Secondary switching clears acquisition but preserves the shared reload cooldown/ammo to prevent bypasses.
+
+Weapon selection updates the flight slot HUD without emitting redundant centre-screen equipped/empty messages. Independent selection and missile-lock reset behaviour are unchanged.

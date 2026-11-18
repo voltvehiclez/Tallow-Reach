@@ -93,3 +93,11 @@ test('Monochrome square slots show selected names and ammo only for ammo weapons
  assert.match(index,/<strong id="system-name"><\/strong><span id="pocket-name">/);
  const hud=readFileSync('src/ui/hud.js','utf8');assert.doesNotMatch(hud,/pocketMarkerMarkup/);
 });
+
+test('Selection uses the slot HUD without redundant centre messages; bank headings inset inward',()=>{
+ const source=readFileSync('src/sim/weapons.js','utf8');
+ assert.doesNotMatch(source.slice(source.indexOf('export function setWeapon'),source.indexOf('/** Primary fire:')),/\bmsg\(/);
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/\.weapon-bank-label \{[^}]*padding-left: 2px/);
+ assert.match(css,/\.weapon-bank.secondary \.weapon-bank-label \{[^}]*padding-left: 0; padding-right: 2px/);
+});

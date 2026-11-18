@@ -98,3 +98,5 @@ Square-slot follow-up: confirm equal box width/height, a divider only as tall as
 Framing follow-up: check headings sit close to slots, status tracks are centred under unmoved labels with matching frames/8px gaps, and speed appears inside the throttle box. Boost/fire/take damage to confirm the framed readings remain legible. Speed physics is unchanged here; pushed-speed correction remains slice 2.
 
 Signed-throttle follow-up: try -100%, -50%, 0%, +50%, +100%. Reverse should show a minus sign and same-blue striped fill growing from the right; forward is solid from the left. Check the raised throttle box, uniform status-column widths, usage centred under Power/Boost, and names 2px closer to unchanged bank headings.
+
+Select fitted and empty primary/secondary bays via keys and clicks: slot labels update without centre-screen equipped/empty messages. Check bank headings sit 2px farther inward; grey names stay fixed.

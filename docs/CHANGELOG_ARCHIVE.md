@@ -19,6 +19,17 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
+
+Implemented items 1 and 12 only. Hull/Shield now fill upward in small columns left
+of the existing horizontal MJ bar; Boost is a column on the right. Numeric readings
+remain, with absent/invalid pools safely empty. Route retains its top-left location.
+Left Alt toggles free camera once per non-repeat press; release no longer disables it.
+Existing modal/blur/dock/warp reset paths remain; pause now exits orbit too. Updated
+help text and tests. Save v21 unchanged. Build regenerated; owner visual playtest pending.
+Full batch plan and per-slice checklist: `testing/TESTING-BATCH2.md`. Other items pending.
+
 ## 2026-11-16: Nebula fill intensity increased 25%
 
 Owner approved the ambient lighting and requested a 25% increase. Default intensity

@@ -20,6 +20,13 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Remove duplicate weapon-selection messages
+
+Removed centre-screen equipped/empty messages from both bank selectors; the slot HUD
+already names each selected module. Other gameplay messages remain unchanged. Inset
+PRIMARY/SECONDARY headings 2px toward the middle without moving the grey weapon names.
+Added regression assertions; save v21 unchanged; build regenerated. Visual check pending.
+
 ## 2026-11-16: Signed throttle and final HUD alignment tweaks
 
 Weapon names move up 2px without moving PRIMARY/SECONDARY. Throttle/speed box moves
@@ -113,18 +120,9 @@ Shield / Hull — open centre — Power / Boost. Numeric MJ and MJ/s readings re
 windows lift both pairs together. Updated HUD/layout tests. Save v21 unchanged; build
 regenerated. Owner visual playtest pending; other batch slices remain pending.
 
-## 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
-
-Implemented items 1 and 12 only. Hull/Shield now fill upward in small columns left
-of the existing horizontal MJ bar; Boost is a column on the right. Numeric readings
-remain, with absent/invalid pools safely empty. Route retains its top-left location.
-Left Alt toggles free camera once per non-repeat press; release no longer disables it.
-Existing modal/blur/dock/warp reset paths remain; pause now exits orbit too. Updated
-help text and tests. Save v21 unchanged. Build regenerated; owner visual playtest pending.
-Full batch plan and per-slice checklist: `testing/TESTING-BATCH2.md`. Other items pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
 - 2026-11-16: Nebula fill intensity increased 25%
 - 2026-11-16: Subtle sky-tinted ambient fill trial
 - 2026-11-16: Exact F picking for all objects; stationary outfitting preview

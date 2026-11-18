@@ -63,3 +63,5 @@ HUD frame follow-up: weapon names reserve one line instead of two, with 1px gaps
 HUD tuning: weapon names alone shift up 2px; bank headings stay fixed. All status columns are 28px wide. Power usage centres beneath Power/Boost. Throttle/speed box is 18px higher; signed throttle uses absolute fill length, left-origin solid forward and right-origin same-hue striped reverse.
 
 Power MJ value uses the same ice-blue as the Power meter; usage text remains muted grey.
+
+Bank headings are optically inset 2px toward the middle; grey weapon names stay fixed.
