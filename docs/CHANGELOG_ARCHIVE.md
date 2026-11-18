@@ -9,6 +9,308 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+## 2026-11-16: Mirrored vertical HUD pairs
+
+Owner's slice-1 layout follow-up: shortened flight labels to Hull/Shield. Hull takes the
+previous inner-left column's X position; Shield moves just outside it. Power becomes a
+matching vertical meter at the old Boost X position; Boost moves just outside Power.
+Both pairs use an 8px gap, with labels/numbers fanning out to avoid overlap. Final order:
+Shield / Hull — open centre — Power / Boost. Numeric MJ and MJ/s readings remain; narrow
+windows lift both pairs together. Updated HUD/layout tests. Save v21 unchanged; build
+regenerated. Owner visual playtest pending; other batch slices remain pending.
+
+## 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
+
+Implemented items 1 and 12 only. Hull/Shield now fill upward in small columns left
+of the existing horizontal MJ bar; Boost is a column on the right. Numeric readings
+remain, with absent/invalid pools safely empty. Route retains its top-left location.
+Left Alt toggles free camera once per non-repeat press; release no longer disables it.
+Existing modal/blur/dock/warp reset paths remain; pause now exits orbit too. Updated
+help text and tests. Save v21 unchanged. Build regenerated; owner visual playtest pending.
+Full batch plan and per-slice checklist: `testing/TESTING-BATCH2.md`. Other items pending.
+
+## 2026-11-16: Nebula fill intensity increased 25%
+
+Owner approved the ambient lighting and requested a 25% increase. Default intensity
+is now 0.125 (was 0.10). Tint, softness, overrides and other lights are unchanged.
+Updated the default regression assertion and recipe 24. Save v21; build regenerated.
+
+## 2026-11-16: Subtle sky-tinted ambient fill trial
+
+Added one flight-scene AmbientLight at intensity 0.10, using active skybox generated
+nebula-tint metadata softened 60% toward white. Normal space has a restrained cyan fill;
+grey skies switch tint on arrival. No runtime pixel sampling, exposure changes, sunlight
+changes or material edits. Existing hemisphere and title/outfitting lighting stay unchanged.
+`data/lighting.js` supports global, sky-id and per-place sky.ambient tint/intensity overrides;
+null tint restores automatic colour, zero intensity disables the extra fill. Recipe 24
+explains tuning. Missing sky disables fill. Tests cover defaults, overrides, transition
+wiring and invalid settings. Save v21; build regenerated. Owner darkness/colour playtest pending.
+
+## 2026-11-16: Exact F picking for all objects; stationary outfitting preview
+
+Owner approved mission log and preview angle. Kept yaw/pitch unchanged and removed automatic
+preview rotation entirely (manual drag/zoom/reset remain). F now raycasts visible rendered mesh
+surfaces for every lockable kind: enemies, rocks, crates, stations, rifts/wormholes, exits and
+caches. Tagged model roots include GLB children and live animated station parts. Faint auras
+and invisible meshes do not intercept the ray. Sim receives only a plain target reference,
+checks live candidates, then preserves same-target unlock and no-hit angular assistance.
+Headless callers retain the existing sim intersection fallback. Regression tests cover every
+kind, overlapping bodies, station holes, child transforms, hidden geometry and preview stability.
+Save v21 unchanged; build regenerated. Follow-up owner playtest pending; PR #39 remains unmerged.
+
+## 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
+
+Continuation starts at main after PR #38; previous unpushed Part 2 was absent, so restored
+approved shape-preserving map/HUD icons, mechanical undock, modules-only Base and persistent
+Home Station. Optional backward-compatible v21 homeStation defaults to Meridian and validates
+against the restored galaxy; temporary/invalid homes fall back safely. No version bump per owner.
+
+Reproduced F selecting a large background rock and credits suppressing the only-ship loaner in
+failing tests. F now ranks actual asteroid surface hits along the rendered camera ray before
+angular assistance (other target kinds keep sphere proxies). Mission cards use compact grid
+spacing, one-line next guidance and a small native Details control containing untruncated
+information. Outfitting/reset starts front/top/left isometric. Death with no surviving hull now
+always lends a fitted Wasp regardless of credits; a surviving hull is reused, not duplicated.
+Ship ownership remains global: no new per-station ship-storage system was invented.
+
+Regression tests cover overlap/mesh misses, generated home recovery, old saves/export-import,
+invalid/temporary homes, rich pilots, existing hulls, icons, preview pose and Details. Build
+regenerated; owner visual/audio playtest pending. See `testing/TESTING-PART2.md`. No merge yet.
+
+## 2026-11-16: Feature batch Part 1 — targeting and missile UI (items 4–7)
+
+Nine requested features split into parts. Implemented ONLY items 4–7 here:
+F switches directly to a different crosshair candidate; same candidate or empty
+space releases the lock. Station identity comparisons use place/feature ids.
+Removed target-acquired notification and the redundant Locked label. Selected
+hostile names have compact blue shield / white hull percentage-fill bars above;
+current enemies have no shields, so the shield bar is empty, not fabricated.
+Missile brackets now travel from 106 to 34 px radius (was 58 to 34), with a small
+progress bar and percentage below. Valid F-selected enemies override the nearest
+crosshair candidate, preserving acquisition when another enemy crosses. Cone,
+range, free-camera, no-launcher and warp rules remain unchanged.
+
+Files: `sim/{targeting,weapons}.js`, `ui/hud.js`, `data/weapons.js`, `index.html`,
+styles, weapon/instance tests, generated HTML and handoff. Also fixed an unrelated
+flaky headless AI test: seed it and assert manoeuvring range, not the old uniform
+orbit's 300 m endpoint. No NPC behaviour changed. **Save v21.** Build passes;
+**677/677 tests pass**. Owner visual playtest pending; checklist `testing/TESTING-TARGETING.md`.
+
+**Still pending:** 1 map/route icons, 2 compact mission log, 3 mechanical undock
+sound, 8 Base-tab cleanup, 9 persistent home-station selection/death respawn.
+Do not claim these are implemented. Home-station persistence needs save review.
+
+Part 1 visual follow-up: target bars now fill the label width from the left,
+with a right-aligned percentage on each row. Offscreen/behind-camera/clipped
+selected targets retain the edge-pinned name/health label but no small target
+square; on-screen targets retain both. `ui/target-display.js` provides tested
+pure markup/visibility helpers; `hud.js`, CSS, UI README and regression tests
+updated. No gameplay/save change. Build passes; **679/679 tests pass**; preview pending.
+
+Owner revision: removed the missile-lock progress bar and percentage, including
+numeric acquisition hint. The expanded corner geometry, easing, colours, flash,
+lock timing and F-target priority are unchanged. NPC health bars/percentages stay.
+Files: `ui/hud.js`, `data/weapons.js`, `sim/weapons.js`, weapon tests, playtest guide,
+generated HTML and handoff. Save v21; build passes; **679/679 tests pass**.
+
+## 2026-11-16: Individual fighter pilots and per-enemy AI personalities
+
+Owner requested smarter, more varied NPC flight without a difficulty/stat increase:
+stop synchronized paths/merged ships, strafe, dodge, seek firing positions and avoid
+obstacles; Guardians should be more aggressive than newbie raiders.
+
+- `data/enemy-ai.js`: baseline movement profile plus explicit raider, smuggler,
+  freighter, hive/rift/deep guardian profiles. New enemies fall back to standard;
+  `aiProfile` selects a profile and `aiTuning` overrides individual settings.
+- `sim/enemy-flight.js`: per-pilot independent seeded brain, approach/attack/strafe/
+  breakaway decisions, different hands/phases/ranges/timers, vertical movement,
+  delayed probabilistic projectile dodges with cooldowns. Guardians favour close
+  attack runs; freighters are conservative. Brain state is transient (save v21).
+- Predictive rock/ship/player separation plus hull-width station collider probes.
+  Existing collision resolution remains the safety net; avoidance is not a promise
+  of collision-free flight in every crowded or concave environment.
+- Fire only with a clear scenery/rock/friendly lane. Existing damage, fire cadence,
+  hull stats and aim-cone gate retained. No target-velocity lead; angular shot spread
+  replaces the old centimetre-scale offset that was effectively perfect at range.
+- Combat lifecycle oracle re-recorded intentionally: paths, projectiles, locks and
+  combat damage differ, while player position/orientation/velocity and final profile
+  match the prior recording. Mining, missile use and death recovery assertions kept.
+
+Files: `data/{enemies,enemy-ai}.js`, `sim/{ai,enemy-flight}.js`, new flight tests,
+combat fixture/test, folder READMEs, handoff/lessons, generated HTML and playtest
+checklist `testing/TESTING-NPC-AI.md`. **Save v21**, no new dependency. Build and
+full suite pass (**668/668 tests**). Difficulty feel and crowded-belt performance need owner
+playtest; NOT claimed balanced from headless tests alone. No merge without approval.
+
+Scenery follow-up after owner approved AI: Meridian **Station pocket only** now
+rotates its C opening toward the sun's derived map direction, and lowers its field
+centre by 50 m. Other Meridian pockets are not excluded from the ordinary-field
+changes. Shared feature resolution applies a per-pocket override without mutating
+the authored catalog. C belts increase outer stray slots from 3.5% to 16%, with a
+continuous outward tail (no artificial gap). Symmetric smooth vertical falloff
+extends asteroid-centre height to 1.25×, sparse at both edges, not a hard slab.
+Other station/non-belt pocket fields widen 2.5× horizontally, preserving original
+core density weights and height. Counts include the integrated sparse quadratic
+outer wings; outer contours vary gently. Authored rift instances are unchanged.
+Files: `data/{scenery,places,place-templates}.js`, `sim/{asteroids,galaxy}.js`,
+density tests and rift/UI fixture positions (clear-space tests moved outside the
+rotated belt), generated HTML and handoff. Save v21; build passes and **671/671
+tests pass**. Visual preview pending.
+
+Meridian arrival follow-up: authored system-space Y is now exactly -0.049 AU
+(X/Z unchanged). The station pocket declares a 1000 m sunward arrival: generation
+uses the true 3D direction from its AU position to the sun and faces the station.
+The populated arc remains behind the station, opposite the opening: belt → station
+→ warp-in → sun. Other arrivals unchanged. Files: `data/places.js`, `sim/galaxy.js`,
+density/arrival tests, generated HTML and handoff. Save v21. Build passes;
+**672/672 tests pass**. Owner visual preview pending.
+
+## 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
+
+Owner requested wider belts with the nearest surface ~4 km from central arrival,
+unchanged height and similar density. Meridian arc: inner 4 km, width 2 km,
+938 rocks, height ±280 m. Dedicated arcs: inner 4 km, width 2.75 km, height
+±420 m; counts scale by annular area. Taper and non-overlap packing remain.
+
+Meridian explicitly selects its original pre-rework 90 m ring/four-spoke model.
+Commerce rings use original grey/amber colours with uniform lights; top cap base
+now touches the core top (y=90), rather than clipping through it. Industrial
+refineries lose the detached bottom slab. Planets use solid class colours with
+lighting/atmosphere, no low-resolution procedural surface maps (generator retained
+unused for future work). Local planets shrink from ~105° to ~36° angular diameter
+and sit below the horizontal arrival view. Distant planet bodies remain coloured
+spheres. Pocket/belt PointsMaterial markers discard corners in their shaders so
+they are circular, not square. Menu still has its planet and generated sky.
+
+Files: `src/data/{places,stations}.js`, `src/sim/galaxy.js`,
+`src/render/{models,systemsky}.js`, render README, pocket-density and new visual
+regression tests, generated HTML, handoff and lessons. **Save stays v21**.
+`npm run build` passes; **658/658 tests pass**. Owner preview pending;
+larger belts have more rocks, so check performance as well as appearance.
+
+Follow-up: owner requested planets 30% bigger and back in line with the main POI,
+plus less-perfect belt contours and occasional strays. Local planet radius now
+0.338 of sky depth (was 0.26), elevation zero, aligned with the POI/arrival heading.
+Planet arrivals face the local field's horizontal direction when present. Belt
+contours have seeded multi-wave inner/width variation; inner shifts only outward
+so the ~4 km clearance stays safe. ~3.5% of slots become outer strays, 250–800 m
+beyond the local band, still at the same height and with non-overlap spacing.
+Tapered tips, rock counts and stable slot planning remain. Tuning lives in new
+`src/data/scenery.js`; changes also touch `sim/asteroids.js`, `sim/galaxy.js`,
+`render/systemsky.js`, density/visual tests and generated HTML. Save v21;
+`npm run build` passes; **659/659 tests pass**. Updated visual/performance preview still pending.
+
+Second preview follow-up: owner approved planet elevation but wanted another 30%
+size increase and a much more visible belt-tip falloff. Planet sky radius is now
+0.4394 (was 0.338), with distance/elevation/POI alignment unchanged. Arc density
+now follows a full-length sine-squared falloff from the populated middle to a
+1% weight at each tip, instead of a short end taper with a 12% floor. Actual
+packed-rock tests require the outermost two 10% sectors combined to contain less
+than one fifth of the equal-width central sector. Counts, height, clearance,
+irregular contours, strays and collision spacing stay unchanged. Files:
+`data/scenery.js`, `sim/asteroids.js`, density/visual tests, generated HTML and
+handoff. Save v21; `npm run build` passes; **659/659 tests pass**. Owner preview pending.
+
+Third preview follow-up: owner requested half overall belt density, stronger
+thinning from the C middle, and atmosphere shells one third as thick. Meridian
+now has 469 rocks; dedicated belt count scaling halved from 0.56 to 0.28 (same
+footprint/height). Arc weighting is sine-to-the-fourth with a 0.2% tip floor,
+rather than sine-squared with a 1% floor. Strays and non-overlap rules remain.
+Atmospheres scale the shell's excess radius by 1/3, never the surface radius;
+applied to system-sky planets, authored/menu planets, GLB atmosphere fallback,
+and distant-planet halo extent. Surface size, elevation and colours unchanged.
+Files: `data/{places,scenery}.js`, `sim/galaxy.js`, `render/{models,systemsky}.js`,
+density/visual tests, generated HTML and handoff. Save v21. `npm run build` passes;
+**660/660 tests pass**. Owner preview pending.
+
+Marker follow-up: arc-field HUD labels now sit halfway through the band at the
+angular midpoint of the populated C (opposite its opening), using the seeded
+contour at that angle. The field origin and central warp arrival do not move.
+Ordinary field markers remain at their centres. Files: `sim/asteroids.js`,
+`ui/hud.js`, `tests/pocket-density.test.mjs`, generated HTML and handoff.
+Save v21; build green; **661/661 tests pass**. Owner preview pending.
+
+## 2026-11-16: Flatter, lighter belts with naturally thinning edges
+
+Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS
+density, and gradual thinning toward both tips. Meridian's centre-height range
+is now ±280 m (was ±400); dedicated belts ±420 m (was ±600). Counts scale by
+0.7 × 0.8 = 0.56 so reducing height does not inadvertently INCREASE volume
+density: Meridian has 420 rocks; generated belts 392–532. Arc-tip density uses
+a smoothstep taper over the outer quarter of each end, down to 12% placement
+weight at the tips; the broad middle remains populated. The ~2 km clear centre,
+non-overlap bounds, giant sizes and stable slot planning remain unchanged.
+
+Ordinary template fields (including secondary/extended fields) and planet fields
+are 25% wider, with quadratic radial falloff from weight 1 at the centre to 0.3
+at the edge. Counts stay similar: the larger footprint offsets the falloff,
+keeping central density approximately as before. Smaller-field heights unchanged.
+Both stable and ad-hoc spawns apply the same density profiles.
+
+Files: `src/data/{places,place-templates}.js`, `src/sim/{asteroids,galaxy}.js`,
+`tests/pocket-density.test.mjs`, generated HTML and handoff. **Save stays v21**.
+`npm run build` green; **655/655 tests pass**, including profile symmetry,
+actual arc-tip thinning, field widening, spacing and arrival-clearance tests.
+Updated taper visuals still need owner preview.
+
+## 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids
+
+Owner: make belts a tightly packed big C, arrive in the middle with the nearest
+asteroid about 2 km away; Meridian should feel surrounded rather than one blob.
+Meridian now has a 270-degree, 750-rock arc around [0, 0, 600], surrounding the
+station while keeping a clear approach opening. Dedicated belts have 700–950
+rocks in seeded-orientation 270-degree arcs. Arrivals are the arc centre, facing
+the populated side. Inner clearance is measured to conservative rock surfaces,
+not centres; tests check the nearest surface is 2.0–2.2 km away.
+
+Largest-first deterministic packing uses bounds of the actual built-in lumpy
+geometry and nonuniform scale, with 20 m extra spacing. All stable slots across
+all fields are reserved, including mined slots, so reload/respawn order cannot
+shift neighbours. A bounded layout cache avoids rebuilding each slot. Overfull
+custom fields omit unplaceable slots after finite retries, never force overlap.
+Giants remain, at lower frequency to leave room for dense smaller rocks. These
+bounds cover built-in shapes; custom GLB overrides need separate bounds review.
+Rift clearance now respects the C opening rather than treating it as a solid ball;
+secondary-field cooldown respawns resolve the correct field. Meridian's launch
+heading is preserved using an explicit field focus.
+
+Files: `src/data/{places,place-templates}.js`, `src/sim/{galaxy,asteroids,places,instances}.js`,
+`tests/pocket-density.test.mjs`, generated HTML and handoff. **Save stays v21**.
+`npm run build` green; **653/653 tests pass**. Owner visual/performance preview
+still required. Existing field slot cooldowns remain keyed by field id and slot.
+
+## 2026-11-16: Denser pockets, close warp-ins and massive asteroids
+
+Owner preview: overall good, but pockets were too spread out and rocks too small.
+Restored Meridian's original 70-rock field at [1800, 200, -1500], radius 700 m;
+five connected 90-rock sections extend it ~6.4 km outward (520 rocks total).
+Dedicated belts now chain 5–7 dense sections, each 750–1000 m radius and roughly
+65–120 rocks. Frontiers regain dense local fields with outward extensions or a
+second field; trade/outpost/planet fields and encounter positions move closer.
+Stations arrive at roughly 650–1200 m plus small jitter; fields arrive 500–800 m
+outside their first section. Seeded facing and planet approaches remain intact.
+Rare low-poly giants mix with normal rocks: radii 180–400 m in frontier fields,
+180–360 m in Meridian extensions, 200–500 m in dedicated belts. Independent
+size RNG preserves ordinary stable slots; existing shapes/collision are reused.
+
+Files: `src/data/{places,place-templates}.js`, `src/sim/{galaxy,asteroids}.js`,
+`tests/pocket-density.test.mjs`, loader test and combat fixture (only original
+launch quaternions restored), generated HTML and handoff. **Save stays v21.**
+`npm run build` passes; **652/652 tests pass**. Visual density and frame-rate
+still need owner preview.
+
 ## 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
 
 Owner: "Let's do a real variety pass on the generated universe … asteroid belts should be their own dedicated pockets …

@@ -52,18 +52,6 @@ body.no-reticle canvas {
   top: 20px;
   width: 210px;
 }
-/* A label with its reading on the right, like the power block's "100 / 100 MJ". */
-#tl .tl-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-#tl .tl-shield { color: var(--ice); }
-#tl .tl-hull { color: var(--ink); }
-#tl .tl-boost { color: var(--amber); }
-#tl .tl-label span {
-  font-variant-numeric: tabular-nums;
-}
 /* Remaining system names while flying. The ship HUD shows the complete route without an inner scroller. */
 #hud-route {
   margin-top: 12px;
@@ -129,44 +117,47 @@ body.no-reticle canvas {
 }
 #bc {
   left: 50%;
-  bottom: 24px;
+  bottom: 42px;
   transform: translateX(-50%);
   text-align: center;
 }
 
-/* Ship power, bottom centre, above the throttle line (#bc). */
-#pw {
-  left: 50%;
-  bottom: 56px;
-  transform: translateX(-50%);
-  width: 236px;
-  text-align: center;
+#throttle-track { position: relative; width: 210px; height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 8px; border: 1px solid var(--line); background: #141b20; }
+#throttle-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(127,183,196,.4); }
+#throttle-fill.reverse { left: auto; right: 0; background: repeating-linear-gradient(135deg, rgba(127,183,196,.4) 0 4px, rgba(127,183,196,.16) 4px 8px); }
+#throttle-label { position: relative; display: block; line-height: 22px; font-size: 12px; color: var(--ink); }
+#speed { position: relative; font-size: 12px; color: var(--ink); white-space: nowrap; }
+
+/* Paired vertical meters: shifted outward equally to frame the compact weapon strip. */
+#ship-vitals {
+  left: calc(50% + 28px); bottom: 98px; transform: translateX(-50%);
+  width: min(540px, calc(100vw - 160px)); height: 44px;
 }
-#pw .pw-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--dim);
-}
-#pw #pw-val {
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-#pw .bar {
-  height: 5px;
-  margin: 4px 0 3px;
-}
-#pw #pw-flow {
-  font-size: 11px;
-  letter-spacing: .04em;
-  color: var(--dim);
-}
+/* Inner label edges retain their previous coordinates. Outer labels remain 8px away.
+   All four tracks share the same width; absolute readouts cannot stretch them. */
+.vital-pair { position: absolute; top: 0; width: max-content; }
+.vital-left { left: -7px; }
+.vital-right { right: -7px; }
+.vital-column { position: relative; width: 28px; font-size: 11px; line-height: 1.2; isolation: isolate; }
+.vital-column > span:first-child { display: block; position: relative; width: max-content; left: 50%; transform: translateX(-50%); top: -17px; white-space: nowrap; text-align: center; }
+.vital-column > .vital-value, .vital-column > .vital-percent { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vital-column > .vital-value { top: 48px; }
+.vital-column > .vital-percent { top: 62px; }
+.vital-left .vital-shield { position: absolute; right: calc(100% + 8px); top: 0; }
+.vital-right .vital-boost { position: absolute; left: calc(100% + 8px); top: 0; }
+.vital-column::before { content: ""; position: absolute; z-index: -1; top: -22px; bottom: -64px; left: -3px; right: -3px; border: 1px solid #444; background: rgba(28,28,28,.9); pointer-events: none; }
+.vital-track { position: absolute; top: 0; left: 50%; transform: translateX(-50%); box-sizing: border-box; height: 44px; width: 100%; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
+.vital-track i { display: block; position: absolute; bottom: 0; width: 100%; height: 0; background: currentColor; }
+.vital-hull { color: var(--ink); }
+.vital-shield, .vital-power { color: var(--ice); }
+.vital-boost { color: var(--amber); }
+#pw-val { color: var(--ice); }
+#pw-flow { position: absolute; top: 78px; left: calc(100% + 4px); transform: translateX(-50%); font-size: 10px; color: var(--dim); white-space: nowrap; text-align: center; }
 /* Beam progress toward the next ore: a small bar directly under the "N left
    in rock" hint, shown only while the beam is cutting. */
 #bm {
   left: 50%;
-  top: calc(62% + 24px);
+  bottom: 158px;
   transform: translateX(-50%);
   width: 150px;
   text-align: center;
@@ -186,27 +177,12 @@ body.no-reticle canvas {
   height: 4px;
   margin: 2px 0 0;
 }
-/* Narrow windows: the controls list in the bottom-left is several lines tall,
-   so lift the power block above it rather than printing over it. */
-@media (max-width: 900px) {
-  #pw {
-    bottom: 132px;
-  }
-}
-
-#hint {
-  left: 20px;
-  bottom: 20px;
-  color: var(--dim);
-  font-size: 13px;
-  max-width: 300px;
-}
-
 #pr {
   left: 50%;
-  top: 62%;
+  bottom: 184px;
+  width: min(480px, calc(100vw - 40px));
   transform: translateX(-50%);
-  color: var(--amber);
+  color: #fff;
   text-align: center;
 }
 
@@ -1454,3 +1430,26 @@ textarea {
 .nav-pocket-icon.nav-destination g { fill: var(--amber); stroke: #ffd58e; }
 .nav-pocket-icon .nav-planet-ring { fill: none; }
 .nav-pocket-icon .nav-current-ring { fill: none; stroke: var(--amber); stroke-width: 1; stroke-dasharray: 1 3; stroke-linecap: round; }
+
+/* Weapon bays match outfitting order; selected primary and secondary stay independent. */
+#hud > #weapon-slots { left: calc(50% + 28px); bottom: 78px; transform: translateX(-50%); width: min(480px, calc(100vw - 220px)); --weapon-size: min(44px, calc((100vw - 260px) / 10)); display: flex; gap: 16px; pointer-events: auto; }
+.weapon-bank { flex: 1; min-width: 0; color: #c4c4c4; }
+#weapon-slots::after { content: ""; position: absolute; left: 50%; bottom: 0; height: var(--weapon-size); border-left: 1px solid #555; pointer-events: none; }
+.weapon-bank-label { color: #fff; font-size: 9px; line-height: 11px; margin-bottom: 1px; letter-spacing: 0; padding: 0; }
+.weapon-bank.secondary .weapon-bank-label { text-align: right; }
+.weapon-bank-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
+.weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--weapon-size); width: 100%; min-width: 0; margin: 0; padding: 3px 1px; background: rgba(28,28,28,.9); border: 1px solid #444; border-radius: 0; color: inherit; cursor: pointer; }
+.weapon-slot.selected { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; background: rgba(48,48,48,.9); color: #fff; }
+.weapon-slot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.weapon-slot:not(.fitted) svg { color: #808080; }
+.weapon-key { color: #aaa; font-size: 11px; line-height: 1; }
+.weapon-fitted-mark { width: 88%; height: 3px; background: #444; border-radius: 0; margin-top: auto; }
+.weapon-slot.fitted .weapon-fitted-mark { background: currentColor; }
+.weapon-bank-name { min-height: 12px; margin-bottom: 1px; position: relative; top: -2px; font-size: 10px; line-height: 12px; color: #aaa; overflow-wrap: anywhere; }
+.weapon-bank.secondary .weapon-bank-name { text-align: right; }
+.weapon-ammo { color: #aaa; }
+
+#hud-location { color: #fff; overflow-wrap: anywhere; }
+#system-name { display: block; font-size: 16px; font-weight: 700; }
+#pocket-name { display: block; font-size: 14px; font-weight: 400; margin-top: 2px; }
+.weapon-slot:hover, .weapon-slot:focus-visible { border-color: #fff; color: #fff; }

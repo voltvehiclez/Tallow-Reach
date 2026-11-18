@@ -6,7 +6,7 @@
 //   action        { name, repeat, key?, to? }
 //                                    key/bind pressed (see core/input.js); the
 //                                    starmap's travel action carries `to`
-//   freecam       boolean            Alt held / released
+//   freecam       boolean            free camera enabled / disabled (Left Alt toggle)
 //   look          { dx, dy }         mouse movement while orbiting
 //   wheel         deltaY             mouse wheel
 //   hurt          { shielded, player } player took damage

@@ -42,3 +42,5 @@ to click and what to expect, and add a row above. For missions, include the awkw
 [../docs/MISSION_RULES.md](../docs/MISSION_RULES.md) (undock early, warp away, full hold, die, reload).
 
 - [Part 2 and follow-up](TESTING-PART2.md) — owner playtest pending.
+
+- [Feature batch 2](TESTING-BATCH2.md) — slice 1 flight UI playtest; remaining slice plan and acceptance criteria.

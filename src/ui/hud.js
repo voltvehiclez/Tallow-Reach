@@ -1,11 +1,14 @@
+import { locationText } from "./location-display.js";
+import { weaponSlotsHtml } from "./weapon-slots.js";
+import { meterHeight, meterPercent, meterValue, throttleDisplay } from "./vitals.js";
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
 import { targetOnScreen, targetHealthMarkup } from "./target-display.js";
 import { fmtDist } from "../util/math.js";
-import { on } from "../util/events.js";
+import { on, emit } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
-import { placeAt, featuresOf } from "../data/places.js";
+import { featuresOf } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
 import { interpolatedPos } from "../render/views.js";
@@ -20,7 +23,7 @@ import { V } from "../util/math.js";
 import { MISSILE, MISSILE_HUD } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
 import { localPlayer, profileOf } from "../state/state.js";
-import { routeDisplay, flightRouteRows, escapeRouteText, pocketMarkerMarkup } from "./route-display.js";
+import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
 
 const $ = id => document.getElementById(id);
 const MARKER_POOL = 18;
@@ -32,6 +35,7 @@ let markerCount = 0;
 let markerRoot = null;
 let el = {};
 let routeCache = null;
+let weaponSlotsCache = null;
 
 /**
  * Show or hide the flight HUD, the world-space markers **and** the system pointer
@@ -55,6 +59,7 @@ function setReticle(visible) {
 export function setupHud() {
   el = {
     root: $("hud"),
+    weaponSlots: $("weapon-slots"),
     shield: $("b1"),
     hull: $("b2"),
     boost: $("b3"),
@@ -63,7 +68,15 @@ export function setupHud() {
     shieldVal: $("sh-val"),
     hullVal: $("hull-val"),
     topRight: $("tr"),
-    bottomCenter: $("bc"),
+    systemName: $("system-name"),
+    pocketName: $("pocket-name"),
+    throttleFill: $("throttle-fill"),
+    throttleLabel: $("throttle-label"),
+    speed: $("speed"),
+    shieldPercent: $("sh-pct"),
+    hullPercent: $("hull-pct"),
+    boostPercent: $("boost-pct"),
+    powerPercent: $("pw-pct"),
     powerBar: $("pwbar"),
     powerValue: $("pw-val"),
     powerFlow: $("pw-flow"),
@@ -77,10 +90,10 @@ export function setupHud() {
     cone: $("mcone"),
     reticle: $("retc").getContext("2d"),
     flash: $("flash"),
-    warpHint: $("warp-hint"),
   };
 
   routeCache = null;
+  weaponSlotsCache = null;
   markerRoot = $("mk");
   const container = markerRoot;
   for (let i = 0; i < MARKER_POOL; i++) {
@@ -92,8 +105,12 @@ export function setupHud() {
 
   // Clicking the route must not fire weapons.
   el.route?.addEventListener("mousedown", e => e.stopPropagation());
+  el.weaponSlots?.addEventListener("mousedown", e => e.stopPropagation());
+  el.weaponSlots?.addEventListener("click", e => {
+    const button = e.target.closest("button[data-weapon-action]");
+    if (button) emit("action", { name: button.dataset.weaponAction, repeat: false });
+  });
 
-  if (el.warpHint) el.warpHint.textContent = "M starmap";
 
   addEventListener("mousemove", e => {
     el.cursor.style.left = e.clientX + "px";
@@ -211,41 +228,45 @@ export function updateHud(dt) {
     d = SHIPS[S.ship],
     missions = activeMissions(S);
 
-  el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
-  el.hull.style.width = (P.hullMax > 0 ? Math.max(0, P.hull / P.hullMax) * 100 : 0) + "%";
-  el.boost.style.width = (P.enMax > 0 ? Math.max(0, Math.min(1, P.en / P.enMax)) : 0) * 100 + "%";
-  // Numbers beside every bar, so each pool can be read exactly as well as roughly.
-  el.shieldVal.textContent = P.shMax > 0 ? `${Math.round(P.sh)} / ${Math.round(P.shMax)}` : "none";
-  el.hullVal.textContent = P.hullMax > 0 ? `${Math.round(P.hull)} / ${Math.round(P.hullMax)}` : "none";
-  el.boostVal.textContent = P.enMax > 0 ? `${Math.round(P.en)} / ${Math.round(P.enMax)}` : "none";
+  el.shield.style.height = meterHeight(P.sh, P.shMax);
+  el.hull.style.height = meterHeight(P.hull, P.hullMax);
+  el.boost.style.height = meterHeight(P.en, P.enMax);
+  // Numbers below every column, so each pool can be read exactly as well as roughly.
+  el.shieldVal.textContent = meterValue(P.sh, P.shMax, " HP");
+  el.hullVal.textContent = meterValue(P.hull, P.hullMax, " HP");
+  el.boostVal.textContent = meterValue(P.en, P.enMax, " U");
+  el.shieldPercent.textContent = meterPercent(P.sh, P.shMax);
+  el.hullPercent.textContent = meterPercent(P.hull, P.hullMax);
+  el.boostPercent.textContent = meterPercent(P.en, P.enMax);
 
   updateHudRoute(dt);
 
-  // The primary line names what left click will do, using the name of the module
-  // in the selected primary bay (key 1 = bay one, key 2 = bay two) — the same
-  // "Empty weapon slot" when the bay holds nothing. The leading number is the
-  // key to press, so the selected weapon is always on screen.
-  const slot = S.pw === "2" ? 1 : 0;
-  const fitted =
-    (state.guns || []).find(g => g.i === slot) ||
-    (state.beams || []).find(b => b.i === slot) ||
-    null;
-  const primary = fitted ? `${slot + 1}: ${fitted.n}` : "Empty weapon slot";
+  const slotsHtml = weaponSlotsHtml(S);
+  if (el.weaponSlots && weaponSlotsCache !== slotsHtml) {
+    el.weaponSlots.innerHTML = slotsHtml;
+    weaponSlotsCache = slotsHtml;
+  }
 
+  const location = locationText(state.place);
+  el.systemName.textContent = location.system;
+  el.pocketName.textContent = location.pocket;
   el.topRight.innerHTML =
-    `${pocketMarkerMarkup(placeAt(state.place), true)}${escHud(placeAt(state.place).n)}<br>` +
     instanceHtml(instanceAt(state.place)) +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
-    `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
     missionsHtml(missions);
 
-  el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
+  const throttle = throttleDisplay(P.thr);
+  el.throttleFill.style.width = throttle.width;
+  el.throttleFill.classList.toggle("reverse", throttle.reverse);
+  el.throttleLabel.textContent = throttle.label;
+  el.speed.textContent = `${Math.round(P.v.length())} m/s`;
 
   // Ship power: what the cells hold, and what the powerplants are making.
   const pw = state.power,
     cap = Math.max(0, pw.cap);
-  el.powerBar.style.width = (cap ? Math.max(0, Math.min(1, pw.stored / cap)) * 100 : 0) + "%";
-  el.powerValue.textContent = cap ? `${Math.round(pw.stored)} / ${Math.round(cap)} MJ` : "No power cell";
+  el.powerBar.style.height = meterHeight(pw.stored, cap);
+  el.powerValue.textContent = meterValue(pw.stored, cap, " MJ");
+  el.powerPercent.textContent = meterPercent(pw.stored, cap);
   el.powerFlow.textContent = `Using ${round1(pw.draw)} of ${round1(pw.gen)} MJ/s`;
 
   // Beam progress toward the next ore: a small bar with the percentage, shown

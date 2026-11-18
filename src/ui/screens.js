@@ -69,7 +69,7 @@ export function introHtml() {
     `W/S throttle, A/D strafe, Space and C move up and down, Q/E roll, Shift boost, X all stop. ` +
     `The main drive is much the strongest thruster: going forward is fast, while strafing, moving up and down and reversing are slow. ` +
     `Left click fires your primary weapon and right click your secondary. ` +
-    `Keys 1 and 2 switch the primary between cannons and the mining beam. ` +
+    `Keys 1–5 select primary bays; 6–0 select secondary bays, matching Outfitting order. ` +
     `Missiles lock on when a hostile stays inside the dashed ring for about a second. ` +
     `Right click then fires a homing missile, or a dumbfire missile if you have no lock. ` +
     `The mining beam and missiles are sold in the Shop. ` +
@@ -80,7 +80,7 @@ export function introHtml() {
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `I shows the hold of the ship you are flying while you are in space; dock to move cargo. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
-    `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +
+    `Press Left Alt to toggle orbit view, move the mouse to orbit your ship, scroll to zoom. Press Left Alt again to return to flight view.</p>` +
     `<div class="main-menu-actions">` +
     `<button class="go" data-a="campaign" disabled>Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +

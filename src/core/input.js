@@ -84,11 +84,19 @@ export function clearControls() {
   emit("freecam", false);
 }
 
-// One-shot actions. Alt (free camera) is a hold action and is handled separately.
+// One-shot actions. Left Alt toggles free camera separately through its boolean event.
 export const BINDINGS = {
   KeyF: "lock",
   Digit1: "primary:1",
   Digit2: "primary:2",
+  Digit3: "primary:3",
+  Digit4: "primary:4",
+  Digit5: "primary:5",
+  Digit6: "secondary:1",
+  Digit7: "secondary:2",
+  Digit8: "secondary:3",
+  Digit9: "secondary:4",
+  Digit0: "secondary:5",
   KeyG: "dock",
   KeyR: "rift",
   KeyM: "starmap",
@@ -103,7 +111,7 @@ export function installInput() {
     if (e.target.tagName === "TEXTAREA" || (["INPUT", "SELECT"].includes(e.target.tagName) && !["Escape", "KeyM"].includes(e.code))) return;
     // Swallow Alt-key combinations before the browser can act on them. Alt+E and
     // siblings are menu accelerators in the browser's own chrome, so without
-    // this the free camera (hold Left Alt) also pops a menu. preventDefault
+    // this the free camera (Left Alt toggle) also pops a menu. preventDefault
     // consumes the chord in browsers that honour it; a few (Chrome on
     // Windows/Linux for its own menu keys) cannot be overruled by a page at all.
     if (e.altKey && e.code !== "AltLeft" && e.code !== "AltRight") e.preventDefault();
@@ -114,7 +122,7 @@ export function installInput() {
     syncControls();
     if (!modal && e.code === "AltLeft") {
       e.preventDefault();
-      emit("freecam", true);
+      if (!e.repeat) emit("freecam", !state.freeCam.on);
     }
     if (!modal && e.code === "Space") e.preventDefault();
     const name = BINDINGS[e.code];
@@ -127,7 +135,6 @@ export function installInput() {
     syncControls();
     if (e.code === "AltLeft") {
       e.preventDefault();
-      emit("freecam", false);
     }
   });
 

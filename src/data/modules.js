@@ -89,6 +89,7 @@ export const MODULES = {
   // sits in — the way cannons fired before they were a module. The rate and the
   // power draw are the same as with one barrel; only the bolt count doubled.
   cannon_basic: {
+    weaponFamily: "cannon",
     g: "primary",
     vol: 2,
     n: "Basic cannons",
@@ -106,6 +107,7 @@ export const MODULES = {
   // next ore is lost — the count starts over. It draws `draw` MJ/s only while it
   // is cutting. Bought in the Shop, not standard issue.
   beam_basic: {
+    weaponFamily: "mining",
     g: "primary",
     vol: 2,
     n: "Basic mining beam",
@@ -134,6 +136,7 @@ export const MODULES = {
   // bought at the shop, 4 seconds between launches. Bought in the Shop (priced
   // in data/shops.js), and a purchase fills the ship up to `ammo` missiles.
   missile_basic: {
+    weaponFamily: "missile",
     g: "secondary",
     vol: 2,
     n: "Basic missiles",

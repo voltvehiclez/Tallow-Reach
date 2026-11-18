@@ -151,3 +151,5 @@ These are real, current limits. None of them is a bug in play today.
   an item with a value), but there is no "move everything" button, and fitting in the field is not
   possible. Cargo no longer travels with you between ships: it stays in the ship you
   left it in, and the Base screen's Store/Load/Sell buttons act on the ship being flown.
+
+Weapon hotbar: primary keys 1–5, secondary keys 6–0 follow exact Outfitting bay order. Only the selected bay in each bank fires with its usual mouse button. Unsupported/empty positions fire nothing. sw is an optional v21 secondary-selection field (old saves default to first bay); pw accepts 1–5. Family icons use module.weaponFamily. Boost full-throttle snap happens only after paid ignition, not at keydown.

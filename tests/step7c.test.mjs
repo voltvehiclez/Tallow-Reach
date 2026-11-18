@@ -46,7 +46,7 @@ test("missile lock uses supplied camera direction and free camera disables lock"
   const side = { pos: new Vector3(100, 0, 0) };
   state.world.enemies = [forward, side];
   state.world.missiles = [];
-  state.missiles = [{ dmg: 8, cd: 4 }];
+  state.missiles = [{ i: 0, dmg: 8, cd: 4 }]; // runtime launchers retain their outfitting bay index
   state.controls.sec = false;
   state.warp = null;
   state.freeCam.on = false;

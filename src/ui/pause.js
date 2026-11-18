@@ -52,6 +52,7 @@ function showSoundState() {
 
 export function setPause(v) {
   state.paused = v;
+  if (v) emit("freecam", false);
   overlay.hidden = !v;
   // A trigger held when the game is paused must not fire on resume.
   keys.fire = keys.sec = 0;

@@ -442,16 +442,16 @@ test("basic cannons: 1 damage a shot, 3 a second per barrel, 2 MJ/s while firing
 });
 
 test("any primary slot with nothing in it is called 'Empty weapon slot'", () => {
-  // Player-facing wording lives in sim/weapons.js and ui/hud.js; guard both.
+  // Player-facing wording lives in sim/weapons.js and the weapon strip; guard both.
   const weapons = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
   assert.match(weapons, /"Empty weapon slot"/, "an empty slot says exactly that");
   assert.match(weapons, /const gun = P\.guns\.find\(g => g\.i === slot\)/, "only the gun in the selected bay fires");
-  const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
-  assert.match(hud, /"Empty weapon slot"/, "the HUD names the empty slot the same way");
+  const hud = readFileSync(new URL("../src/ui/weapon-slots.js", import.meta.url), "utf8");
+  assert.match(hud, /Empty weapon slot/, "the HUD names the empty slot the same way");
   assert.doesNotMatch(hud, /"No guns"/, "the old 'No guns' wording is gone");
-  // The equipped line and the toast take the module's own name, and the HUD shows the bay key.
-  assert.match(hud, /`\$\{slot \+ 1\}:/, "the HUD prefixes the fitted weapon with its slot number");
-  assert.match(weapons, /fitted \? `\$\{fitted\.n\} equipped`/, "the equip toast names the fitted module");
+  // The HUD names the fitted module and bay key without a redundant equip toast.
+  assert.match(hud, /\$\{key\}: \$\{name\}/, "the slot tooltip names its key and fitted module");
+  assert.doesNotMatch(weapons, /\bmsg\(/, "selection no longer posts an equip toast");
   assert.doesNotMatch(weapons, /"Cannons equipped"/, "the hardcoded 'Cannons equipped' is gone");
 });
 
@@ -559,10 +559,10 @@ test("the flight HUD lists every active mission by title", () => {
   assert.match(screens, /canCollectMissionReward\(m\)/, "reward collection checks current inventories");
 });
 
-test("the shield and hull bars show numbers with their HP units", () => {
+test("the shield and hull HUD uses short labels while outfitting retains HP units", () => {
   const html = readFileSync(new URL("../src/index.html", import.meta.url), "utf8");
-  assert.match(html, /Shield HP/, "the shield bar is labelled Shield HP");
-  assert.match(html, /Hull HP/, "the hull bar is labelled Hull HP");
+  assert.match(html, /<span>Shield<\/span>/, "the shield HUD label is short");
+  assert.match(html, /<span>Hull<\/span>/, "the hull HUD label is short");
   const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
   assert.match(hud, /sh-val/, "the shield bar has a numeric readout");
   assert.match(hud, /hull-val/, "the hull bar has a numeric readout");
@@ -575,7 +575,7 @@ test("the beam loses its progress the moment contact stops", () => {
   // weapons.js imports the scene, so the rule is guarded rather than imported.
   const src = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
   assert.match(src, /if \(!F\.beamOn && F\.beamT > 0\)/, "the reset fires the moment contact stops");
-  assert.match(src, /state\.beams/, "which beam fits comes from the fitted modules");
+  assert.match(src, /P\.beams/, "which beam fits comes from the pilot fitted modules");
   assert.ok(!src.includes("beamIdle"), "no lingering idle timer: the reset is immediate");
 });
 

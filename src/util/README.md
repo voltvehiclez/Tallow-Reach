@@ -12,3 +12,5 @@ Rules:
 - A new event must be added to the list at the top of `events.js`.
 - Never call `Math.random()`. Use `random()` from `rng.js` (or `R(a, b)` from `math.js`) for gameplay; use
   `cosmeticRandom()` for screen and sound only, so a seeded run stays repeatable.
+
+`freecam` remains a boolean enabled/disabled event; Left Alt now toggles it rather than holding it.

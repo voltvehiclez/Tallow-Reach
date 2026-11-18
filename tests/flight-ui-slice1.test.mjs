@@ -1,0 +1,108 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { meterHeight } from '../src/ui/vitals.js';
+import { state } from '../src/state/state.js';
+import { on } from '../src/util/events.js';
+import { installInput, clearControls } from '../src/core/input.js';
+
+test('Vertical meters safely represent empty, full, absent and out-of-range pools',()=>{
+ for(const [v,m,want] of [[25,100,'25%'],[100,100,'100%'],[0,100,'0%'],[-2,100,'0%'],[200,100,'100%'],[5,0,'0%'],[NaN,5,'0%']]) assert.equal(meterHeight(v,m),want);
+ const html=readFileSync('src/index.html','utf8');
+ assert.ok(html.indexOf('id="b2"')<html.indexOf('id="pw"'));
+ assert.ok(html.indexOf('id="b1"')<html.indexOf('id="pw"'));
+ assert.ok(html.indexOf('id="b3"')>html.indexOf('id="pw"'));
+ for(const id of ['b1','b2','b3','hull-val','sh-val','boost-val','pwbar','hud-route']) assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1);
+ const hud=readFileSync('src/ui/hud.js','utf8');
+ for(const meter of ['shield','hull','boost']) assert.match(hud,new RegExp(`el.${meter}.style.height = meterHeight`));
+ assert.match(hud,/el.powerBar.style.height = meterHeight/);
+ assert.ok(html.indexOf('id="b1"')<html.indexOf('id="b2"'));
+ assert.match(html,/<span>Power<\/span><div class="vital-track"><i id="pwbar"/);
+ assert.doesNotMatch(html,/Hull HP|Shield HP|pw-line/);
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/left: calc\(50% \+ 28px\)/);
+ assert.match(css,/width: min\(540px, calc\(100vw - 160px\)\)/);
+ assert.match(css,/right: calc\(100% \+ 8px\)/);
+ assert.match(css,/\.vital-left \{ left: -7px/);
+ assert.match(css,/\.vital-right \{ right: -7px/);
+});
+test('Left Alt toggles once per press, not on release/repeat; modal and blur are safe',()=>{
+ const handlers={}, previous=globalThis.addEventListener;
+ globalThis.addEventListener=(name,fn)=>{handlers[name]=fn;};
+ const off=on('freecam',enabled=>{state.freeCam.on=enabled;});
+ try {
+  state.ui.starmap=state.ui.cargo=state.ui.cache=null;state.freeCam.on=false;
+  installInput();
+  const key=(type,code='AltLeft',repeat=false,tagName='BODY')=>handlers[type]({code,repeat,target:{tagName},preventDefault(){}});
+  key('keydown');assert.equal(state.freeCam.on,true);
+  key('keyup');assert.equal(state.freeCam.on,true);
+  key('keydown','AltLeft',true);assert.equal(state.freeCam.on,true);
+  key('keydown');assert.equal(state.freeCam.on,false);
+  key('keydown','AltRight');assert.equal(state.freeCam.on,false);
+  key('keydown','AltLeft',false,'INPUT');assert.equal(state.freeCam.on,false);
+  state.ui.cargo={};key('keydown');assert.equal(state.freeCam.on,false);state.ui.cargo=null;
+  key('keydown');handlers.blur();assert.equal(state.freeCam.on,false);
+  key('keydown');clearControls();assert.equal(state.freeCam.on,false);
+ } finally {if(typeof off==='function')off();globalThis.addEventListener=previous;state.ui.cargo=null;state.freeCam.on=false;}
+});
+
+test('Current-only values, percentages and throttle fill retain safe boundary behaviour', async()=>{
+ const {meterValue,meterPercent}=await import('../src/ui/vitals.js');
+ assert.equal(meterValue(10,10,' HP'),'10 HP');
+ assert.equal(meterValue(10,10,' U'),'10 U');
+ const source=readFileSync('src/ui/hud.js','utf8');
+ assert.ok(source.includes('meterValue(P.sh, P.shMax, " HP")'));
+ assert.ok(source.includes('meterValue(P.hull, P.hullMax, " HP")'));
+ assert.ok(source.includes('meterValue(P.en, P.enMax, " U")'));assert.equal(meterPercent(10,10),'100%');
+ assert.equal(meterValue(100,200,' MJ'),'100 MJ');assert.equal(meterPercent(100,200),'50%');
+ assert.equal(meterValue(4,0),'0');assert.equal(meterPercent(4,0),'0%');
+ for(const [v,expected] of [[0,'0%'],[0.5,'50%'],[1,'100%'],[-1,'0%'],[2,'100%']]) assert.equal(meterHeight(v,1),expected);
+ const html=readFileSync('src/index.html','utf8');
+ for(const id of ['sh-pct','hull-pct','pw-pct','boost-pct','throttle-track','throttle-label','throttle-fill','speed']) assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1);
+ assert.ok(html.indexOf('id="pw-flow"')<html.indexOf('vital-boost'));
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/\.vital-column > span:first-child \{[^}]*white-space: nowrap/);
+ assert.match(css,/#pw-flow \{[^}]*left: calc\(100% \+ 4px\)/);
+ const hud=readFileSync('src/ui/hud.js','utf8');assert.match(hud,/const throttle = throttleDisplay\(P.thr\)/);
+ assert.doesNotMatch(hud,/el.bottomCenter.textContent/);
+});
+
+test('Meter frames follow fixed label anchors and speed is inside the throttle rectangle',()=>{
+ const html=readFileSync('src/index.html','utf8'),css=readFileSync('src/styles.css','utf8');
+ assert.match(html,/<div id="throttle-track">[\s\S]*?<span id="throttle-label">Throttle 0%<\/span><span id="speed"><\/span><\/div>/);
+ assert.match(css,/\.vital-column \{[^}]*width: 28px/);
+ assert.match(css,/\.vital-track \{[^}]*width: 100%/);
+ assert.match(css,/\.vital-column::before \{[^}]*border: 1px solid #444/);
+ assert.match(css,/\.vital-left \{ left: -7px/);
+ assert.match(css,/\.vital-right \{ right: -7px/);
+ assert.match(css,/\.vital-left \.vital-shield \{[^}]*right: calc\(100% \+ 8px\)/);
+ assert.match(css,/\.vital-right \.vital-boost \{[^}]*left: calc\(100% \+ 8px\)/);
+ assert.match(css,/\.weapon-bank-name \{ min-height: 12px; margin-bottom: 1px/);
+});
+
+test('Signed throttle retains reverse percentage and fills from the right with the same blue hue',async()=>{
+ const {throttleDisplay}=await import('../src/ui/vitals.js');
+ for(const [value,width,label,reverse] of [[-1,'100%','Throttle -100%',true],[-0.5,'50%','Throttle -50%',true],[0,'0%','Throttle 0%',false],[0.5,'50%','Throttle 50%',false],[1,'100%','Throttle 100%',false],[-2,'100%','Throttle -100%',true],[NaN,'0%','Throttle 0%',false]]) {
+  assert.deepEqual(throttleDisplay(value),{width,label,reverse});
+ }
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/#throttle-fill.reverse \{ left: auto; right: 0; background: repeating-linear-gradient/);
+ assert.match(css,/\.weapon-bank-name \{[^}]*position: relative; top: -2px/);
+ const hud=readFileSync('src/ui/hud.js','utf8');
+ assert.match(hud,/classList.toggle\("reverse", throttle.reverse\)/);
+});
+
+test('Power MJ readout matches the blue meter without recolouring usage text',()=>{
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/#pw-val \{ color: var\(--ice\); \}/);
+ assert.match(css,/#pw-flow \{[^}]*color: var\(--dim\)/);
+});
+
+test('All status contents share an explicit centre without resizing tracks or moving frames',()=>{
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/\.vital-column > span:first-child \{[^}]*width: max-content; left: 50%; transform: translateX\(-50%\)/);
+ assert.match(css,/\.vital-track \{[^}]*left: 50%; transform: translateX\(-50%\)/);
+ assert.match(css,/\.vital-column > \.vital-value, \.vital-column > \.vital-percent \{[^}]*left: 50%; transform: translateX\(-50%\)/);
+ assert.match(css,/\.vital-column \{[^}]*width: 28px; font-size: 11px/);
+ assert.match(css,/\.vital-column::before \{[^}]*top: -22px; bottom: -64px; left: -3px; right: -3px/);
+});
