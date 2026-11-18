@@ -41,3 +41,5 @@ Part 2: route-display shares shape-preserving icons with HUD/map (current blue w
 Outfitting preview no longer auto-rotates or resumes spinning after a drag. The approved start/reset angle, drag and zoom are unchanged.
 
 Batch 2 slice 1: compact Hull/Shield columns left of MJ and Boost right, with numeric readings. Route stays top-left. Left Alt toggles orbit; pausing exits it.
+
+HUD pairing follow-up: all four meters are vertical, ordered Shield / Hull — open centre — Power / Boost. Hull keeps the previous inner-left X position; Power takes the previous Boost X position. Both pairs have an 8px track gap. Labels are Hull/Shield (no HP suffix); numeric values and MJ/s readout remain. Narrow windows lift both pairs together.

@@ -245,7 +245,7 @@ export function updateHud(dt) {
   // Ship power: what the cells hold, and what the powerplants are making.
   const pw = state.power,
     cap = Math.max(0, pw.cap);
-  el.powerBar.style.width = (cap ? Math.max(0, Math.min(1, pw.stored / cap)) * 100 : 0) + "%";
+  el.powerBar.style.height = meterHeight(pw.stored, cap);
   el.powerValue.textContent = cap ? `${Math.round(pw.stored)} / ${Math.round(cap)} MJ` : "No power cell";
   el.powerFlow.textContent = `Using ${round1(pw.draw)} of ${round1(pw.gen)} MJ/s`;
 

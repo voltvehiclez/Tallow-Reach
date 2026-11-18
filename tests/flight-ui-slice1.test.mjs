@@ -15,7 +15,16 @@ test('Vertical meters safely represent empty, full, absent and out-of-range pool
  for(const id of ['b1','b2','b3','hull-val','sh-val','boost-val','pwbar','hud-route']) assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1);
  const hud=readFileSync('src/ui/hud.js','utf8');
  for(const meter of ['shield','hull','boost']) assert.match(hud,new RegExp(`el.${meter}.style.height = meterHeight`));
- assert.match(hud,/el.powerBar.style.width/);
+ assert.match(hud,/el.powerBar.style.height = meterHeight/);
+ assert.ok(html.indexOf('id="b1"')<html.indexOf('id="b2"'));
+ assert.match(html,/<span>Power<\/span><div class="vital-track"><i id="pwbar"/);
+ assert.doesNotMatch(html,/Hull HP|Shield HP|pw-line/);
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/left: calc\(50% \+ 28px\)/);
+ assert.match(css,/width: min\(300px, calc\(100vw - 160px\)\)/);
+ assert.match(css,/\.vital-pair \{[^}]*gap: 8px/);
+ assert.match(css,/\.vital-left \{ right: calc\(100% - 7px\)/);
+ assert.match(css,/\.vital-right \{ left: calc\(100% - 7px\)/);
 });
 test('Left Alt toggles once per press, not on release/repeat; modal and blur are safe',()=>{
  const handlers={}, previous=globalThis.addEventListener;

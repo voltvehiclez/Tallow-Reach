@@ -122,40 +122,28 @@ body.no-reticle canvas {
   text-align: center;
 }
 
-/* Compact status columns around the unchanged horizontal MJ bar. */
+/* Paired vertical meters. Keep previous inner centres at screen-centre -122/+178px:
+   the old asymmetric MJ layout's centre was 28px right of screen centre. */
 #ship-vitals {
-  left: 50%; bottom: 56px; transform: translateX(-50%);
-  display: grid; grid-template-columns: 48px 48px minmax(140px, 236px) 48px;
-  align-items: center; gap: 8px; width: max-content; max-width: calc(100vw - 24px);
+  left: calc(50% + 28px); bottom: 76px; transform: translateX(-50%);
+  width: min(300px, calc(100vw - 160px)); height: 44px;
 }
-.vital-column { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; line-height: 1.2; }
-.vital-column > span:last-child { font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.vital-track { position: relative; height: 44px; width: 12px; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
+.vital-pair { position: absolute; top: 0; display: flex; gap: 8px; }
+.vital-left { right: calc(100% - 7px); }
+.vital-right { left: calc(100% - 7px); }
+.vital-column { position: relative; width: 14px; font-size: 11px; line-height: 1.2; }
+.vital-column > span { position: absolute; top: -17px; white-space: nowrap; }
+.vital-column > span:last-child { top: 48px; font-size: 10px; font-variant-numeric: tabular-nums; }
+/* Labels fan away from each pair's tight gap instead of overlapping one another. */
+.vital-pair .vital-column:first-child > span { right: 7px; text-align: right; }
+.vital-pair .vital-column:last-child > span { left: 7px; text-align: left; }
+.vital-track { position: relative; box-sizing: border-box; height: 44px; width: 14px; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
 .vital-track i { display: block; position: absolute; bottom: 0; width: 100%; height: 0; background: currentColor; }
 .vital-hull { color: var(--ink); }
-.vital-shield { color: var(--ice); }
+.vital-shield, .vital-power { color: var(--ice); }
 .vital-boost { color: var(--amber); }
-#pw { width: 100%; min-width: 0; text-align: center; }
-#pw .pw-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--dim);
-}
-#pw #pw-val {
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-#pw .bar {
-  height: 5px;
-  margin: 4px 0 3px;
-}
-#pw #pw-flow {
-  font-size: 11px;
-  letter-spacing: .04em;
-  color: var(--dim);
-}
+#pw-val { color: var(--ink); }
+#pw-flow { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dim); white-space: nowrap; }
 /* Beam progress toward the next ore: a small bar directly under the "N left
    in rock" hint, shown only while the beam is cutting. */
 #bm {
@@ -180,11 +168,10 @@ body.no-reticle canvas {
   height: 4px;
   margin: 2px 0 0;
 }
-/* Narrow windows: the controls list in the bottom-left is several lines tall,
-   so lift the power block above it rather than printing over it. */
+/* Narrow windows: lift both pairs clear of the multiline controls hint. */
 @media (max-width: 900px) {
-  #pw {
-    bottom: 132px;
+  #ship-vitals {
+    bottom: 152px;
   }
 }
 

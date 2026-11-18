@@ -4,13 +4,15 @@
 
 Implemented; owner playtest pending. Save v21 unchanged.
 
-- Hull and shield are small bottom-up columns left of the horizontal MJ bar; boost
-  is a small column to its right. Numeric readings remain. Route stays top-left.
+- All meters are bottom-up columns: Shield/Hull on the left, Power/Boost on the right.
+  Hull keeps the previous inner-left X position; Power takes the previous Boost position.
+  Both pairs have a tight matching gap. Numeric readings remain. Route stays top-left.
 - Left Alt toggles orbit view. Key release/repeat does not toggle it. Blur, modal
   opening, pause, docking and warp reset it through the existing/reset paths.
 
 Quick playtest:
-1. Launch: confirm Hull / Shield / MJ / Boost ordering and compact layout.
+1. Launch: confirm Shield / Hull — open centre — Power / Boost ordering, short labels
+   and matching tight gaps. Check that Power drains vertically and retains its MJ reading.
 2. Boost and take some shield/hull damage: columns drain/refill vertically; readings
    agree. Without a shield/boost pool, its column is empty and reads none.
 3. Tap and release Left Alt: mouse orbits and wheel zooms. Tap again to return.

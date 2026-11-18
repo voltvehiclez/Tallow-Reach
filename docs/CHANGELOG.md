@@ -20,6 +20,16 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Mirrored vertical HUD pairs
+
+Owner's slice-1 layout follow-up: shortened flight labels to Hull/Shield. Hull takes the
+previous inner-left column's X position; Shield moves just outside it. Power becomes a
+matching vertical meter at the old Boost X position; Boost moves just outside Power.
+Both pairs use an 8px gap, with labels/numbers fanning out to avoid overlap. Final order:
+Shield / Hull — open centre — Power / Boost. Numeric MJ and MJ/s readings remain; narrow
+windows lift both pairs together. Updated HUD/layout tests. Save v21 unchanged; build
+regenerated. Owner visual playtest pending; other batch slices remain pending.
+
 ## 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
 
 Implemented items 1 and 12 only. Hull/Shield now fill upward in small columns left
@@ -254,34 +264,9 @@ Files: `src/data/{places,place-templates}.js`, `src/sim/{asteroids,galaxy}.js`,
 actual arc-tip thinning, field widening, spacing and arrival-clearance tests.
 Updated taper visuals still need owner preview.
 
-## 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids
-
-Owner: make belts a tightly packed big C, arrive in the middle with the nearest
-asteroid about 2 km away; Meridian should feel surrounded rather than one blob.
-Meridian now has a 270-degree, 750-rock arc around [0, 0, 600], surrounding the
-station while keeping a clear approach opening. Dedicated belts have 700–950
-rocks in seeded-orientation 270-degree arcs. Arrivals are the arc centre, facing
-the populated side. Inner clearance is measured to conservative rock surfaces,
-not centres; tests check the nearest surface is 2.0–2.2 km away.
-
-Largest-first deterministic packing uses bounds of the actual built-in lumpy
-geometry and nonuniform scale, with 20 m extra spacing. All stable slots across
-all fields are reserved, including mined slots, so reload/respawn order cannot
-shift neighbours. A bounded layout cache avoids rebuilding each slot. Overfull
-custom fields omit unplaceable slots after finite retries, never force overlap.
-Giants remain, at lower frequency to leave room for dense smaller rocks. These
-bounds cover built-in shapes; custom GLB overrides need separate bounds review.
-Rift clearance now respects the C opening rather than treating it as a solid ball;
-secondary-field cooldown respawns resolve the correct field. Meridian's launch
-heading is preserved using an explicit field focus.
-
-Files: `src/data/{places,place-templates}.js`, `src/sim/{galaxy,asteroids,places,instances}.js`,
-`tests/pocket-density.test.mjs`, generated HTML and handoff. **Save stays v21**.
-`npm run build` green; **653/653 tests pass**. Owner visual/performance preview
-still required. Existing field slot cooldowns remain keyed by field id and slot.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids
 - 2026-11-16: Denser pockets, close warp-ins and massive asteroids
 - 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
 - 2026-11-16: The edge-compression lens is removed

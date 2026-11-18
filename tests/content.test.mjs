@@ -559,10 +559,10 @@ test("the flight HUD lists every active mission by title", () => {
   assert.match(screens, /canCollectMissionReward\(m\)/, "reward collection checks current inventories");
 });
 
-test("the shield and hull bars show numbers with their HP units", () => {
+test("the shield and hull HUD uses short labels while outfitting retains HP units", () => {
   const html = readFileSync(new URL("../src/index.html", import.meta.url), "utf8");
-  assert.match(html, /Shield HP/, "the shield bar is labelled Shield HP");
-  assert.match(html, /Hull HP/, "the hull bar is labelled Hull HP");
+  assert.match(html, /<span>Shield<\/span>/, "the shield HUD label is short");
+  assert.match(html, /<span>Hull<\/span>/, "the hull HUD label is short");
   const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
   assert.match(hud, /sh-val/, "the shield bar has a numeric readout");
   assert.match(hud, /hull-val/, "the hull bar has a numeric readout");
