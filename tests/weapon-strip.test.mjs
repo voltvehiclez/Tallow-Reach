@@ -51,7 +51,7 @@ test('Strip has ten numbered boxes, shared family icons and no redundant top-rig
  assert.equal((html.match(/data-weapon-action=/g)||[]).length,10);
  assert.match(html,/data-weapon-action="primary:1"/);assert.match(html,/data-weapon-action="secondary:5"/);
  assert.match(html,/data-family="mining"/);assert.match(html,/data-family="cannon"/);assert.match(html,/data-family="missile"/);
- assert.match(html,/weapon-ammo">8/);
+ assert.match(html,/weapon-ammo"> · 8 missiles/);
  assert.equal(weaponFamily({...MODULES.cannon_basic,n:'Future cannon'}),'cannon');
  assert.equal(weaponFamily({...MODULES.beam_basic,n:'Future beam'}),'mining');
  assert.equal(weaponFamily({...MODULES.missile_basic,n:'Future missile'}),'missile');
@@ -62,7 +62,7 @@ test('Strip has ten numbered boxes, shared family icons and no redundant top-rig
 
 test('Compact strip fits between unchanged meter pairs at desktop and narrower widths',()=>{
  const css=readFileSync('src/styles.css','utf8');
- assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: 98px/);
+ assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: 78px/);
  assert.match(css,/width: min\(340px, calc\(100vw - 220px\)\)/);
  assert.match(css,/width: min\(400px, calc\(100vw - 160px\)\)/);
  assert.match(css,/\.weapon-slot \{[^}]*height: 44px/);
@@ -72,4 +72,20 @@ test('Compact strip fits between unchanged meter pairs at desktop and narrower w
   const centres=Math.min(400,viewport-160), strip=Math.min(340,viewport-220);
   assert.equal(centres-strip,60,'strip leaves 30px each side before inner track centres');
  }
+});
+
+test('Monochrome square slots show selected names and ammo only for ammo weapons',()=>{
+ const p=newProfile();p.loadout.wasp.primary=['beam_basic','cannon_basic'];p.loadout.wasp.secondary=['missile_basic'];p.msl=8;
+ const html=weaponSlotsHtml(p);
+ assert.match(html,/weapon-bank-name[^>]*>Basic mining beam/);
+ assert.match(html,/weapon-bank-name[^>]*>Basic missiles/);
+ assert.equal((html.match(/class="weapon-ammo"/g)||[]).length,1);
+ p.sw='2';assert.doesNotMatch(weaponSlotsHtml(p),/class="weapon-ammo"/);
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/\.weapon-slot \{[^}]*border-radius: 0/);
+ assert.match(css,/\.weapon-slot.selected \{ border-color: #fff/);
+ const index=readFileSync('src/index.html','utf8');
+ assert.doesNotMatch(index,/id="hint"|id="warp-hint"/);
+ assert.match(index,/<strong id="system-name"><\/strong><span id="pocket-name">/);
+ const hud=readFileSync('src/ui/hud.js','utf8');assert.doesNotMatch(hud,/pocketMarkerMarkup/);
 });

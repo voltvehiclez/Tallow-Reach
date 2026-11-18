@@ -1,3 +1,4 @@
+import { locationText } from "./location-display.js";
 import { weaponSlotsHtml } from "./weapon-slots.js";
 import { meterHeight, meterPercent, meterValue } from "./vitals.js";
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
@@ -7,7 +8,7 @@ import { targetOnScreen, targetHealthMarkup } from "./target-display.js";
 import { fmtDist } from "../util/math.js";
 import { on, emit } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
-import { placeAt, featuresOf } from "../data/places.js";
+import { featuresOf } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
 import { interpolatedPos } from "../render/views.js";
@@ -22,7 +23,7 @@ import { V } from "../util/math.js";
 import { MISSILE, MISSILE_HUD } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
 import { localPlayer, profileOf } from "../state/state.js";
-import { routeDisplay, flightRouteRows, escapeRouteText, pocketMarkerMarkup } from "./route-display.js";
+import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
 
 const $ = id => document.getElementById(id);
 const MARKER_POOL = 18;
@@ -67,6 +68,8 @@ export function setupHud() {
     shieldVal: $("sh-val"),
     hullVal: $("hull-val"),
     topRight: $("tr"),
+    systemName: $("system-name"),
+    pocketName: $("pocket-name"),
     throttleFill: $("throttle-fill"),
     throttleLabel: $("throttle-label"),
     speed: $("speed"),
@@ -87,7 +90,6 @@ export function setupHud() {
     cone: $("mcone"),
     reticle: $("retc").getContext("2d"),
     flash: $("flash"),
-    warpHint: $("warp-hint"),
   };
 
   routeCache = null;
@@ -109,7 +111,6 @@ export function setupHud() {
     if (button) emit("action", { name: button.dataset.weaponAction, repeat: false });
   });
 
-  if (el.warpHint) el.warpHint.textContent = "M starmap";
 
   addEventListener("mousemove", e => {
     el.cursor.style.left = e.clientX + "px";
@@ -246,8 +247,10 @@ export function updateHud(dt) {
     weaponSlotsCache = slotsHtml;
   }
 
+  const location = locationText(state.place);
+  el.systemName.textContent = location.system;
+  el.pocketName.textContent = location.pocket;
   el.topRight.innerHTML =
-    `${pocketMarkerMarkup(placeAt(state.place), true)}${escHud(placeAt(state.place).n)}<br>` +
     instanceHtml(instanceAt(state.place)) +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     missionsHtml(missions);

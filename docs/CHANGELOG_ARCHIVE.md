@@ -15,6 +15,26 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
+
+Continuation starts at main after PR #38; previous unpushed Part 2 was absent, so restored
+approved shape-preserving map/HUD icons, mechanical undock, modules-only Base and persistent
+Home Station. Optional backward-compatible v21 homeStation defaults to Meridian and validates
+against the restored galaxy; temporary/invalid homes fall back safely. No version bump per owner.
+
+Reproduced F selecting a large background rock and credits suppressing the only-ship loaner in
+failing tests. F now ranks actual asteroid surface hits along the rendered camera ray before
+angular assistance (other target kinds keep sphere proxies). Mission cards use compact grid
+spacing, one-line next guidance and a small native Details control containing untruncated
+information. Outfitting/reset starts front/top/left isometric. Death with no surviving hull now
+always lends a fitted Wasp regardless of credits; a surviving hull is reused, not duplicated.
+Ship ownership remains global: no new per-station ship-storage system was invented.
+
+Regression tests cover overlap/mesh misses, generated home recovery, old saves/export-import,
+invalid/temporary homes, rich pilots, existing hulls, icons, preview pose and Details. Build
+regenerated; owner visual/audio playtest pending. See `testing/TESTING-PART2.md`. No merge yet.
+
 ## 2026-11-16: Feature batch Part 1 — targeting and missile UI (items 4–7)
 
 Nine requested features split into parts. Implemented ONLY items 4–7 here:

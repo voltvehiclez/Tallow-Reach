@@ -20,6 +20,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Monochrome weapon strip and top-left location
+
+Lowered weapon strip 20px toward throttle; square boxes, white active borders, dark
+grey inactive backgrounds, muted grey labels/icons and a vertical divider. Each bank
+now names its selected module below PRIMARY/SECONDARY, with ammo only for ammo-using
+weapons (including zero remaining). Removed duplicate ammo badges on boxes. Top-left
+shows bold white system and regular white pocket, no icon; route remains underneath.
+Instances say Outside known systems rather than claiming Meridian. Removed bottom-left
+controls reminder and obsolete narrow-window hint offsets; main-menu help stays.
+Added location/markup tests. Save v21; build regenerated. Owner visual playtest pending.
+
 ## 2026-11-16: Compact weapon strip between the HUD columns
 
 Shrank the ten-slot strip from 580px to 340px wide and boxes from 62px to 44px tall,
@@ -112,27 +123,9 @@ Headless callers retain the existing sim intersection fallback. Regression tests
 kind, overlapping bodies, station holes, child transforms, hidden geometry and preview stability.
 Save v21 unchanged; build regenerated. Follow-up owner playtest pending; PR #39 remains unmerged.
 
-## 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
-
-Continuation starts at main after PR #38; previous unpushed Part 2 was absent, so restored
-approved shape-preserving map/HUD icons, mechanical undock, modules-only Base and persistent
-Home Station. Optional backward-compatible v21 homeStation defaults to Meridian and validates
-against the restored galaxy; temporary/invalid homes fall back safely. No version bump per owner.
-
-Reproduced F selecting a large background rock and credits suppressing the only-ship loaner in
-failing tests. F now ranks actual asteroid surface hits along the rendered camera ray before
-angular assistance (other target kinds keep sphere proxies). Mission cards use compact grid
-spacing, one-line next guidance and a small native Details control containing untruncated
-information. Outfitting/reset starts front/top/left isometric. Death with no surviving hull now
-always lends a fitted Wasp regardless of credits; a surviving hull is reused, not duplicated.
-Ship ownership remains global: no new per-station ship-storage system was invented.
-
-Regression tests cover overlap/mesh misses, generated home recovery, old saves/export-import,
-invalid/temporary homes, rich pilots, existing hulls, icons, preview pose and Details. Build
-regenerated; owner visual/audio playtest pending. See `testing/TESTING-PART2.md`. No merge yet.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
 - 2026-11-16: Feature batch Part 1 — targeting and missile UI (items 4–7)
 - 2026-11-16: Individual fighter pilots and per-enemy AI personalities
 - 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers

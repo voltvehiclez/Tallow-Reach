@@ -24,8 +24,12 @@ export function weaponSlotsHtml(profile) {
       const family=weaponFamily(module), active=selected===index;
       const name=module?.n || (available?'Empty weapon slot':'No fitted bay');
       const ammo=family==='missile' ? ` · ${profile.msl || 0} missiles` : '';
-      return `<button type="button" class="weapon-slot${active?' selected':''}${module?' fitted':''}${available?'':' unavailable'}" data-weapon-action="${group}:${index+1}" title="${esc(`${key}: ${name}${ammo}`)}" aria-label="${esc(`${key}: ${name}${ammo}`)}" aria-pressed="${active}"><span class="weapon-key">${key}</span><svg viewBox="0 0 24 24" aria-hidden="true" data-family="${family}">${ICONS[family]}</svg>${family==='missile'?`<small class="weapon-ammo">${Math.max(0,Math.floor(profile.msl||0))}</small>`:''}<i class="weapon-fitted-mark" aria-hidden="true"></i></button>`;
+      return `<button type="button" class="weapon-slot${active?' selected':''}${module?' fitted':''}${available?'':' unavailable'}" data-weapon-action="${group}:${index+1}" title="${esc(`${key}: ${name}${ammo}`)}" aria-label="${esc(`${key}: ${name}${ammo}`)}" aria-pressed="${active}"><span class="weapon-key">${key}</span><svg viewBox="0 0 24 24" aria-hidden="true" data-family="${family}">${ICONS[family]}</svg><i class="weapon-fitted-mark" aria-hidden="true"></i></button>`;
     }).join('');
-    return `<section class="weapon-bank ${group}" aria-label="${secondary?'Secondary':'Primary'} weapon slots"><div class="weapon-bank-label">${secondary?'SECONDARY':'PRIMARY'}</div><div class="weapon-bank-slots">${buttons}</div></section>`;
+    const selectedModule = selected < (layout[group] || 0) ? MODULES[fit[group]?.[selected]] : null;
+    const selectedName = selectedModule?.n || 'Empty slot';
+    const selectedAmmo = weaponFamily(selectedModule) === 'missile'
+      ? ` · ${Math.max(0, Math.floor(profile.msl || 0))} missiles` : '';
+    return `<section class="weapon-bank ${group}" aria-label="${secondary?'Secondary':'Primary'} weapon slots"><div class="weapon-bank-label">${secondary?'SECONDARY':'PRIMARY'}</div><div class="weapon-bank-name" title="${esc(selectedName + selectedAmmo)}">${esc(selectedName)}${selectedAmmo ? `<span class="weapon-ammo">${esc(selectedAmmo)}</span>` : ""}</div><div class="weapon-bank-slots">${buttons}</div></section>`;
   }).join('');
 }

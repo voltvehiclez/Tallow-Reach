@@ -4,6 +4,7 @@ Reads `state`, calls sim actions. No game rules here.
 
 | File | What it does |
 |---|---|
+| `location-display.js` | Plain current system/pocket text; instances use Outside known systems, not a false system. |
 | `weapon-slots.js` | Pure ten-slot hotbar markup: primary 1–5, secondary 6–0, family icons, fitted markers, ammo and independent selected banks. |
 | `vitals.js` | Pure clamped vertical HUD meter fill calculation. |
 | `target-display.js` | Pure selected-target bar markup and view-frustum visibility check; offscreen targets keep their label but not their small square. |
@@ -52,3 +53,5 @@ Current HUD readings carry units: Shield/Hull HP, Boost U (fuel units), Power MJ
 Weapon strip is above the throttle/vitals. It maps outfitting bay indices without packing gaps, and supports click or number selection. Clicking cannot fire weapons. Family icons derive from module.weaponFamily, not variant names; missile stock is on the icon. Top-right selected-weapon line removed.
 
 Weapon strip compact follow-up: 340px desktop width and 44px-high boxes, positioned between Hull and Power at the same vertical level. Meter pairs move 50px outward per side; their geometry/styles are unchanged. Responsive widths retain 30px clearance from strip edge to inner track centre.
+
+Weapon strip follow-up: square monochrome slots, white active borders, grey labels and separator; selected names/ammo beneath bank headings. Lowered 20px toward throttle. Top-left shows bold white system and regular white pocket text, no icon; route stays below. Bottom-left control reminder removed (main-menu help remains).

@@ -83,3 +83,12 @@ Give a short playtest after each implemented slice. Do not label pending slices 
 5. Compare the compact strip at normal and narrow window sizes: it fits BETWEEN Hull
    and Power, above throttle. Column pairs are farther apart but otherwise unchanged.
    Check number/icon/ammo readability and click selection. Remaining batch slices are pending.
+
+### Monochrome/position follow-up
+
+- Weapon boxes sit 20px lower, with square corners, white active borders and grey
+  inactive slots/labels. Bank headings have selected weapon names beneath; missiles
+  show ammo, non-ammo weapons show no ammo line. Check long names at smaller widths.
+- Top-left: bold white system, regular white current pocket, no icon; route beneath.
+  Warp to another pocket/system to check both names. Instances must not claim Meridian.
+- Bottom-left instructions are gone; main-menu help still describes controls.
