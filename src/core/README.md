@@ -21,3 +21,5 @@ Mechanical undock layers live in data/audio.js; undockSound schedules them on th
 Left Alt emits the inverse of the authoritative freeCam.on on non-repeat keydown. Keyup does not disable orbit; clearControls still disables it on blur/modal entry. No separate input latch can get out of sync with docking/warp.
 
 Digit1–Digit5 emit primary:1–primary:5; Digit6–Digit0 emit secondary:1–secondary:5. The HUD buttons emit these same actions.
+
+N emits navigation; main gates it to active flight and toggles the read-only HUD list without taking over flight controls.

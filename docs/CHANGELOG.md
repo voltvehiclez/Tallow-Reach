@@ -20,6 +20,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Batch slice 2 — navigation, lead and actual speed
+
+Moved the complete lower HUD down 18px without changing internal spacing; missile
+icon faces up. N toggles a read-only, live pocket-object list: spatial features and
+runtime entities, all distances, future detection-policy hook. Cannon lead uses
+locked-enemy velocity, inherited shooter velocity, selected muzzle and bullet speed;
+no marker for beams, empty bays, unreachable or offscreen intercepts. Shared bullet
+lifetime caps prediction. Speed measures each flight step including collision pushes,
+not teleport/warp displacement; place entry resets it. Added regression tests and
+owner checklist. Save v21; slices 3–5 pending. Build regenerated; playtest pending.
+
 ## 2026-11-16: Missile icon and lower interaction prompts
 
 Replaced the windowed rocket glyph with a simple diagonal finned missile outline,
@@ -111,18 +122,9 @@ Shield and Hull current values now include HP (e.g. 10 HP); Boost includes U for
 fuel units (e.g. 10 U). Power remains MJ. Labels, percentages, spacing and gameplay
 are unchanged. Updated HUD tests; save v21; build regenerated.
 
-## 2026-11-16: Tight HUD readings, pool percentages and throttle fill
-
-Moved label and number edges closer so their gap matches the 8px column gap. All
-four pools show current values only (Power retains MJ), with percentage underneath.
-Power usage sits inside the Power column below its readings. Throttle text now sits
-inside a horizontal bar, empty at 0 and full at 100%; speed stays separate below.
-Raised the columns slightly to fit the extra readout lines. Absent pools show 0/0%.
-Updated formatting/layout regression tests. Save v21; build regenerated. Visual
-playtest pending; remaining batch slices unchanged.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Tight HUD readings, pool percentages and throttle fill
 - 2026-11-16: Mirrored vertical HUD pairs
 - 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
 - 2026-11-16: Nebula fill intensity increased 25%

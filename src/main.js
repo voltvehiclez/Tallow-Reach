@@ -140,6 +140,9 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
   const playing = !state.ui.intro && !localPlayer().docked && !state.paused && !isStarmapOpen() &&
     !isCargoOpen() && !isCacheOpen();
   switch (name) {
+    case "navigation":
+      if (playing && !repeat) emit("navigation-toggle");
+      break;
     case "lock":
       if (playing && !repeat) {
         const aim = cameraAim.set(0, 0, -1).applyQuaternion(camera.quaternion);

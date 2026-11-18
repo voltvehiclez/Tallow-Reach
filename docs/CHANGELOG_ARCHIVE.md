@@ -21,6 +21,17 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Tight HUD readings, pool percentages and throttle fill
+
+Moved label and number edges closer so their gap matches the 8px column gap. All
+four pools show current values only (Power retains MJ), with percentage underneath.
+Power usage sits inside the Power column below its readings. Throttle text now sits
+inside a horizontal bar, empty at 0 and full at 100%; speed stays separate below.
+Raised the columns slightly to fit the extra readout lines. Absent pools show 0/0%.
+Updated formatting/layout regression tests. Save v21; build regenerated. Visual
+playtest pending; remaining batch slices unchanged.
+
 ## 2026-11-16: Mirrored vertical HUD pairs
 
 Owner's slice-1 layout follow-up: shortened flight labels to Hull/Shield. Hull takes the

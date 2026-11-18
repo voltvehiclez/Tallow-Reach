@@ -26,3 +26,7 @@ The generic 0–100% resource clamp hid reverse throttle. Use a separate signed
 presentation helper: preserve the sign in text, use absolute magnitude for width,
 and choose the fill origin/pattern from direction. Regression covers -100%, -50%,
 zero, +50%, +100%, clamping and invalid values in flight-ui-slice1.test.mjs.
+
+## Displacement is not engine velocity
+
+Moving colliders can push position without adding velocity. Speed instruments must measure a single flight-step displacement after collision resolution. Do not measure between render frames across warp/load/teleport boundaries. tests/flight-slice2.test.mjs covers zero-velocity scenery pushes and travel discontinuities.

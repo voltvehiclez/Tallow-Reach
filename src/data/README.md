@@ -46,3 +46,5 @@ Imported ship visuals may set `modelYaw` (radians) and `modelLength` (metres alo
 Optional `cameraPadding` multiplies automatic model-relative camera framing (default 1); Test Ship uses 1.2 after owner playtesting. It does not change model or flight scale.
 
 Weapon modules may declare `weaponFamily` (cannon, mining, missile) for shared hotbar icons across variants. Existing bay counts are unchanged; hotbar exposes five positions per bank.
+
+weapons.js exports BULLET_LIFETIME shared by projectile expiry and the ballistic intercept instrument.

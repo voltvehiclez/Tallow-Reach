@@ -68,6 +68,7 @@ export function enterPlace(id, player = state.player) {
   const instance = isInstancePlace(id);
   if (!instance && !isPocket(id)) return false;
   loadPlace(id);
+  if (player) player.measuredSpeed = 0;
   const local = player === state.player;
   // An instance belongs to no system, so there is no system visit to record for it.
   if (local && !instance) recordSystemVisit(state.galaxy, state.worldState.galaxy?.knowledge, id);

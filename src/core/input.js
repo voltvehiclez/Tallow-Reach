@@ -86,6 +86,7 @@ export function clearControls() {
 
 // One-shot actions. Left Alt toggles free camera separately through its boolean event.
 export const BINDINGS = {
+  KeyN: "navigation",
   KeyF: "lock",
   Digit1: "primary:1",
   Digit2: "primary:2",

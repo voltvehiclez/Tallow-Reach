@@ -1,3 +1,4 @@
+import { BULLET_LIFETIME } from '../data/weapons.js';
 // Projectiles, hostile kills, loot crates and pickups.
 //
 // Bullets and crates are plain data now (refactor step 7b): a bullet is
@@ -199,7 +200,7 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = 
     own,
     owner: own ? player : null,
     dmg,
-    l: 2.4,
+    l: BULLET_LIFETIME,
   };
   return addEntity(placeWorld(placeId).bullets, e);
 }

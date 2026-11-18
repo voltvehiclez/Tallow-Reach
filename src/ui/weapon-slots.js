@@ -4,7 +4,7 @@ import { layoutFor } from '../data/outfitting.js';
 
 const ICONS = {
   cannon: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5m0 10v5M2 12h5m10 0h5"/>',
-  missile: '<g transform="rotate(45 12 12)"><path d="M9 9Q9 4 12 2Q15 4 15 9V20H9ZM9 14L6 17V20L9 18M15 14L18 17V20L15 18M9 9H15M9 11H15M9 17H15"/></g>',
+  missile: '<g><path d="M9 9Q9 4 12 2Q15 4 15 9V20H9ZM9 14L6 17V20L9 18M15 14L18 17V20L15 18M9 9H15M9 11H15M9 17H15"/></g>',
   mining: '<path d="m13 2-10 12h8l-1 8 11-13h-8z"/>',
   empty: '<path d="M12 5v14M5 12h14"/>',
 };

@@ -1,3 +1,7 @@
+import { playerMount } from '../sim/pilot.js';
+import { pocketObjects, interceptPoint } from '../sim/flight-instruments.js';
+import { primarySlotIndex } from '../sim/weapons.js';
+import { enemyVel } from '../sim/enemy.js';
 import { locationText } from "./location-display.js";
 import { weaponSlotsHtml } from "./weapon-slots.js";
 import { meterHeight, meterPercent, meterValue, throttleDisplay } from "./vitals.js";
@@ -20,7 +24,7 @@ import { fieldMarkerPosition } from "../sim/asteroids.js";
 import { stationAt } from "../sim/places.js";
 import { cacheUnits, exitDenial, instanceTimeLeft } from "../sim/instances.js";
 import { V } from "../util/math.js";
-import { MISSILE, MISSILE_HUD } from "../data/weapons.js";
+import { MISSILE, MISSILE_HUD, BULLET_LIFETIME } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
 import { localPlayer, profileOf } from "../state/state.js";
 import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
@@ -36,6 +40,7 @@ let markerRoot = null;
 let el = {};
 let routeCache = null;
 let weaponSlotsCache = null;
+let navigationOpen = false, navigationTimer = 0;
 
 /**
  * Show or hide the flight HUD, the world-space markers **and** the system pointer
@@ -50,6 +55,7 @@ let weaponSlotsCache = null;
  */
 function setReticle(visible) {
   el.root.hidden = !visible;
+  if (!visible) { navigationOpen = false; if (el.navigation) el.navigation.hidden = true; }
   if (markerRoot) markerRoot.style.display = visible ? "" : "none";
   if (document.body && document.body.classList) {
     document.body.classList.toggle("no-reticle", !visible);
@@ -59,6 +65,9 @@ function setReticle(visible) {
 export function setupHud() {
   el = {
     root: $("hud"),
+    navigation: $("pocket-objects"),
+    navigationRows: $("pocket-object-rows"),
+    lead: $("weapon-lead"),
     weaponSlots: $("weapon-slots"),
     shield: $("b1"),
     hull: $("b2"),
@@ -111,6 +120,15 @@ export function setupHud() {
     if (button) emit("action", { name: button.dataset.weaponAction, repeat: false });
   });
 
+
+  on("navigation-toggle", () => {
+    navigationOpen = !navigationOpen;
+    el.navigation.hidden = !navigationOpen;
+    navigationTimer = 0;
+  });
+  el.navigation.addEventListener("mousedown", e => e.stopPropagation());
+  el.navigation.addEventListener("wheel", e => e.stopPropagation());
+  $("close-pocket-objects").addEventListener("click", () => { navigationOpen = false; el.navigation.hidden = true; });
 
   addEventListener("mousemove", e => {
     el.cursor.style.left = e.clientX + "px";
@@ -259,7 +277,7 @@ export function updateHud(dt) {
   el.throttleFill.style.width = throttle.width;
   el.throttleFill.classList.toggle("reverse", throttle.reverse);
   el.throttleLabel.textContent = throttle.label;
-  el.speed.textContent = `${Math.round(P.v.length())} m/s`;
+  el.speed.textContent = `${Math.round(state.warp || P.docked ? 0 : P.measuredSpeed ?? P.v.length())} m/s`;
 
   // Ship power: what the cells hold, and what the powerplants are making.
   const pw = state.power,
@@ -302,6 +320,8 @@ export function updateHud(dt) {
   }
 
   drawMarkers();
+  updateInstruments(dt, P, F);
+
 }
 
 /** Refresh the route immediately on destination/place changes and periodically for
@@ -456,4 +476,29 @@ function drawMarkers() {
   }
 
   for (let i = markerCount; i < MARKER_POOL; i++) markers[i].style.display = "none";
+}
+
+// Read-only navigation overlay: flight continues; N or Close hides it.
+function updateInstruments(dt, P, F) {
+  navigationTimer -= dt;
+  if (navigationOpen && navigationTimer <= 0) {
+    navigationTimer = 0.25;
+    const rows = pocketObjects(P);
+    el.navigationRows.innerHTML = rows.length ? rows.map(row => `<li><span>${escHud(row.name)}<small>${escHud(row.kind)}</small></span><span>${fmtDist(row.distance)}</span></li>`).join('') : '<li>No objects in this pocket.</li>';
+  }
+  el.lead.hidden = true;
+  const lock = F.lock;
+  if (state.warp || P.docked || lock?.k !== 'e' || lock.o.hp <= 0) return;
+  const gun = P.guns.find(g => g.i === primarySlotIndex(state.profile.pw, P));
+  if (!gun) return; // Empty bays and hitscan mining beams must not suggest a ballistic lead.
+  const barrels = Math.max(1, gun.barrels || 1);
+  const origin = playerMount('gun', gun.i, 0, barrels, P, state.profile.ship);
+  if (barrels > 1) origin.add(playerMount('gun', gun.i, barrels-1, barrels, P, state.profile.ship)).multiplyScalar(0.5);
+  const point = interceptPoint(origin, P.v, lock.o.pos, enemyVel(lock.o), gun.speed, BULLET_LIFETIME);
+  if (!point) return;
+  const screen = point.project(camera);
+  if (screen.z < -1 || screen.z > 1 || Math.abs(screen.x) > 1 || Math.abs(screen.y) > 1) return;
+  el.lead.hidden = false;
+  el.lead.style.left = `${(screen.x+1)*innerWidth/2}px`;
+  el.lead.style.top = `${(1-screen.y)*innerHeight/2}px`;
 }

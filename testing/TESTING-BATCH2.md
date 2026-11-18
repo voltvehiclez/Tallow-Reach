@@ -24,7 +24,7 @@ Quick playtest:
 4. Open inventory/map, pause, or switch browser tabs during orbit: camera exits
    cleanly. Test the layout at your usual window size and a smaller window.
 
-## Slice 2 — navigation, aiming and motion (pending: items 2, 10, 11)
+## Slice 2 — navigation, aiming and motion (implemented: items 2, 10, 11; playtest pending)
 
 - N opens a clean list of every object in the current pocket. Keep detection/range
   filtering extensible for future ship/module sensors, but no range restriction now.
@@ -104,3 +104,19 @@ Select fitted and empty primary/secondary bays via keys and clicks: slot labels 
 Check the new finned missile outline against the reference. Dock, acquire missile lock, approach a wormhole and mine: shared prompts should appear white above the weapon strip, mining progress beneath prompts, without overlapping slot headings. Check both bank headings align with the name edges.
 
 Check Shield/Hull/Power/Boost labels, bars and numeric readouts share the centre of each grey frame. Frames, 28px track widths and text sizes must remain unchanged.
+
+## Slice 2 quick playtest
+
+1. Lower HUD: all slots, columns, throttle, prompts and mining bar are 18px lower,
+   with their relative spacing unchanged. Missile outline points straight upwards.
+2. Press N in flight: scroll through the live pocket list (including far-away rocks,
+   stations, planets/scenery where present, hostiles, cargo, rifts/gates/caches and
+   projectiles). No range cap. N or Close hides it; it is read-only and flight continues.
+   Move to a new pocket while open: entries should change, not retain old objects.
+3. Lock a moving hostile with F and select a cannon: white circle leads the target.
+   Match its movement and the lead shrinks; select a beam/empty slot or unlock and it
+   disappears. Offscreen or unreachable targets must not show a misleading lead.
+4. At zero throttle, let a Meridian moving arm/ring push the ship: speed should rise
+   while being displaced. Warp/reload should not produce a huge teleport-speed spike.
+
+Save remains v21. Slices 3–5 are still pending; no shop/inventory/mission changes here.
