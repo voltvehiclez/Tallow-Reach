@@ -17,6 +17,18 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Subtle sky-tinted ambient fill trial
+
+Added one flight-scene AmbientLight at intensity 0.10, using active skybox generated
+nebula-tint metadata softened 60% toward white. Normal space has a restrained cyan fill;
+grey skies switch tint on arrival. No runtime pixel sampling, exposure changes, sunlight
+changes or material edits. Existing hemisphere and title/outfitting lighting stay unchanged.
+`data/lighting.js` supports global, sky-id and per-place sky.ambient tint/intensity overrides;
+null tint restores automatic colour, zero intensity disables the extra fill. Recipe 24
+explains tuning. Missing sky disables fill. Tests cover defaults, overrides, transition
+wiring and invalid settings. Save v21; build regenerated. Owner darkness/colour playtest pending.
+
 ## 2026-11-16: Exact F picking for all objects; stationary outfitting preview
 
 Owner approved mission log and preview angle. Kept yaw/pitch unchanged and removed automatic

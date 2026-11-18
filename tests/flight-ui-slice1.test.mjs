@@ -22,9 +22,9 @@ test('Vertical meters safely represent empty, full, absent and out-of-range pool
  const css=readFileSync('src/styles.css','utf8');
  assert.match(css,/left: calc\(50% \+ 28px\)/);
  assert.match(css,/width: min\(540px, calc\(100vw - 160px\)\)/);
- assert.match(css,/\.vital-pair \{[^}]*gap: 8px/);
- assert.match(css,/\.vital-left \{ right: calc\(100% - 7px\)/);
- assert.match(css,/\.vital-right \{ left: calc\(100% - 7px\)/);
+ assert.match(css,/right: calc\(100% \+ 8px\)/);
+ assert.match(css,/\.vital-left \{ left: -7px/);
+ assert.match(css,/\.vital-right \{ right: -7px/);
 });
 test('Left Alt toggles once per press, not on release/repeat; modal and blur are safe',()=>{
  const handlers={}, previous=globalThis.addEventListener;
@@ -61,8 +61,21 @@ test('Current-only values, percentages and throttle fill retain safe boundary be
  for(const id of ['sh-pct','hull-pct','pw-pct','boost-pct','throttle-track','throttle-label','throttle-fill','speed']) assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1);
  assert.ok(html.indexOf('id="pw-flow"')<html.indexOf('vital-boost'));
  const css=readFileSync('src/styles.css','utf8');
- assert.match(css,/first-child > span \{ right: 0;/);assert.match(css,/last-child > span \{ left: 0;/);
+ assert.match(css,/\.vital-column > span:first-child \{[^}]*white-space: nowrap/);
  assert.match(css,/#pw-flow \{[^}]*right: 0/);
  const hud=readFileSync('src/ui/hud.js','utf8');assert.match(hud,/el.throttleFill.style.width = meterHeight\(P.thr, 1\)/);
  assert.doesNotMatch(hud,/el.bottomCenter.textContent/);
+});
+
+test('Meter frames follow fixed label anchors and speed is inside the throttle rectangle',()=>{
+ const html=readFileSync('src/index.html','utf8'),css=readFileSync('src/styles.css','utf8');
+ assert.match(html,/<div id="throttle-track">[\s\S]*?<span id="throttle-label">Throttle 0%<\/span><span id="speed"><\/span><\/div>/);
+ assert.match(css,/\.vital-column \{[^}]*width: max-content/);
+ assert.match(css,/\.vital-track \{[^}]*width: 100%/);
+ assert.match(css,/\.vital-column::before \{[^}]*border: 1px solid #444/);
+ assert.match(css,/\.vital-left \{ left: -7px/);
+ assert.match(css,/\.vital-right \{ right: -7px/);
+ assert.match(css,/\.vital-left \.vital-shield \{[^}]*right: calc\(100% \+ 8px\)/);
+ assert.match(css,/\.vital-right \.vital-boost \{[^}]*left: calc\(100% \+ 8px\)/);
+ assert.match(css,/\.weapon-bank-name \{ min-height: 12px; margin-bottom: 1px/);
 });

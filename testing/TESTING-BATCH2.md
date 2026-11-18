@@ -94,3 +94,5 @@ Give a short playtest after each implemented slice. Do not label pending slices 
 - Bottom-left instructions are gone; main-menu help still describes controls.
 
 Square-slot follow-up: confirm equal box width/height, a divider only as tall as the slot row, white PRIMARY/SECONDARY and grey weapon names. Meter appearance should be unchanged, only farther apart.
+
+Framing follow-up: check headings sit close to slots, status tracks are centred under unmoved labels with matching frames/8px gaps, and speed appears inside the throttle box. Boost/fire/take damage to confirm the framed readings remain legible. Speed physics is unchanged here; pushed-speed correction remains slice 2.

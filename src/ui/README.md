@@ -57,3 +57,5 @@ Weapon strip compact follow-up: 340px desktop width and 44px-high boxes, positio
 Weapon strip follow-up: square monochrome slots, white active borders, grey labels and separator; selected names/ammo beneath bank headings. Lowered 20px toward throttle. Top-left shows bold white system and regular white pocket text, no icon; route stays below. Bottom-left control reminder removed (main-menu help remains).
 
 Weapon boxes are now 44×44px at desktop width (480px strip), scaling square with available width. Meter pairs move outward equally without changing their appearance. The separator spans only the slot row; PRIMARY/SECONDARY headings are white, weapon names grey.
+
+HUD frame follow-up: weapon names reserve one line instead of two, with 1px gaps to headings/boxes. Status labels retain their inner-edge anchors; tracks size to label width and stay 8px apart. Each status column has a square grey frame. Speed is inside the wider throttle rectangle, not beneath it.

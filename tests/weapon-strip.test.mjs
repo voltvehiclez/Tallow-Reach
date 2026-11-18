@@ -68,8 +68,8 @@ test('Compact strip fits between unchanged meter pairs at desktop and narrower w
  assert.match(css,/\.weapon-slot \{[^}]*height: var\(--weapon-size\); width: 100%/);
  assert.match(css,/#weapon-slots::after \{[^}]*bottom: 0; height: var\(--weapon-size\)/);
  assert.match(css,/\.weapon-bank-label \{ color: #fff/);
- assert.match(css,/\.vital-track \{[^}]*height: 44px; width: 14px/);
- assert.match(css,/\.vital-pair \{[^}]*gap: 8px/);
+ assert.match(css,/\.vital-track \{[^}]*height: 44px; width: 100%/);
+ assert.match(css,/right: calc\(100% \+ 8px\)/);
  for(const viewport of [480,640,900,1280,1920]) {
   const centres=Math.min(540,viewport-160), strip=Math.min(480,viewport-220);
   assert.equal(centres-strip,60,'strip leaves 30px each side before inner track centres');

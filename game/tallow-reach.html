@@ -130,27 +130,30 @@ body.no-reticle canvas {
   text-align: center;
 }
 
-#throttle-track { position: relative; width: 150px; height: 20px; border: 1px solid var(--line); background: #141b20; }
+#throttle-track { position: relative; width: 210px; height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 8px; border: 1px solid var(--line); background: #141b20; }
 #throttle-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(127,183,196,.4); }
-#throttle-label { position: relative; display: block; line-height: 20px; font-size: 12px; color: var(--ink); }
-#speed { margin-top: 3px; font-size: 12px; }
+#throttle-label { position: relative; display: block; line-height: 22px; font-size: 12px; color: var(--ink); }
+#speed { position: relative; font-size: 12px; color: var(--ink); white-space: nowrap; }
 
 /* Paired vertical meters: shifted outward equally to frame the compact weapon strip. */
 #ship-vitals {
   left: calc(50% + 28px); bottom: 98px; transform: translateX(-50%);
   width: min(540px, calc(100vw - 160px)); height: 44px;
 }
-.vital-pair { position: absolute; top: 0; display: flex; gap: 8px; }
-.vital-left { right: calc(100% - 7px); }
-.vital-right { left: calc(100% - 7px); }
-.vital-column { position: relative; width: 14px; font-size: 11px; line-height: 1.2; }
-.vital-column > span { position: absolute; top: -17px; white-space: nowrap; }
-.vital-column > .vital-value { top: 48px; font-size: 10px; font-variant-numeric: tabular-nums; }
-.vital-column > .vital-percent { top: 62px; font-size: 10px; font-variant-numeric: tabular-nums; }
-/* Text edges share the tracks' 8px gap, including current values and percentages. */
-.vital-pair .vital-column:first-child > span { right: 0; text-align: right; }
-.vital-pair .vital-column:last-child > span { left: 0; text-align: left; }
-.vital-track { position: relative; box-sizing: border-box; height: 44px; width: 14px; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
+/* Inner label edges retain their previous coordinates. Outer labels remain 8px away.
+   Label intrinsic widths size the tracks; absolute readouts cannot stretch them. */
+.vital-pair { position: absolute; top: 0; width: max-content; }
+.vital-left { left: -7px; }
+.vital-right { right: -7px; }
+.vital-column { position: relative; width: max-content; font-size: 11px; line-height: 1.2; isolation: isolate; }
+.vital-column > span:first-child { display: block; position: relative; top: -17px; white-space: nowrap; }
+.vital-column > .vital-value, .vital-column > .vital-percent { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vital-column > .vital-value { top: 48px; }
+.vital-column > .vital-percent { top: 62px; }
+.vital-left .vital-shield { position: absolute; right: calc(100% + 8px); top: 0; }
+.vital-right .vital-boost { position: absolute; left: calc(100% + 8px); top: 0; }
+.vital-column::before { content: ""; position: absolute; z-index: -1; top: -22px; bottom: -64px; left: -3px; right: -3px; border: 1px solid #444; background: rgba(28,28,28,.9); pointer-events: none; }
+.vital-track { position: absolute; top: 0; box-sizing: border-box; height: 44px; width: 100%; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
 .vital-track i { display: block; position: absolute; bottom: 0; width: 100%; height: 0; background: currentColor; }
 .vital-hull { color: var(--ink); }
 .vital-shield, .vital-power { color: var(--ice); }
@@ -1438,7 +1441,7 @@ textarea {
 #hud > #weapon-slots { left: calc(50% + 28px); bottom: 78px; transform: translateX(-50%); width: min(480px, calc(100vw - 220px)); --weapon-size: min(44px, calc((100vw - 260px) / 10)); display: flex; gap: 16px; pointer-events: auto; }
 .weapon-bank { flex: 1; min-width: 0; color: #c4c4c4; }
 #weapon-slots::after { content: ""; position: absolute; left: 50%; bottom: 0; height: var(--weapon-size); border-left: 1px solid #555; pointer-events: none; }
-.weapon-bank-label { color: #fff; font-size: 9px; margin-bottom: 2px; letter-spacing: .06em; }
+.weapon-bank-label { color: #fff; font-size: 9px; line-height: 11px; margin-bottom: 1px; letter-spacing: .06em; }
 .weapon-bank.secondary .weapon-bank-label { text-align: right; }
 .weapon-bank-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
 .weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--weapon-size); width: 100%; min-width: 0; margin: 0; padding: 3px 1px; background: rgba(28,28,28,.9); border: 1px solid #444; border-radius: 0; color: inherit; cursor: pointer; }
@@ -1448,7 +1451,7 @@ textarea {
 .weapon-key { color: #aaa; font-size: 11px; line-height: 1; }
 .weapon-fitted-mark { width: 88%; height: 3px; background: #444; border-radius: 0; margin-top: auto; }
 .weapon-slot.fitted .weapon-fitted-mark { background: currentColor; }
-.weapon-bank-name { min-height: 24px; margin-bottom: 3px; font-size: 10px; line-height: 12px; color: #aaa; overflow-wrap: anywhere; }
+.weapon-bank-name { min-height: 12px; margin-bottom: 1px; font-size: 10px; line-height: 12px; color: #aaa; overflow-wrap: anywhere; }
 .weapon-bank.secondary .weapon-bank-name { text-align: right; }
 .weapon-ammo { color: #aaa; }
 
@@ -1463,7 +1466,7 @@ textarea {
 <div id="hud" hidden>
 <div id="tl"><div id="hud-location"><strong id="system-name"></strong><span id="pocket-name"></span></div><section id="hud-route" aria-label="Route" hidden></section></div>
 <div id="weapon-slots" aria-label="Weapon selection"></div>
-<div id="tr"></div><div id="bc"><div id="throttle-track"><i id="throttle-fill"></i><span id="throttle-label">Throttle 0%</span></div><div id="speed"></div></div>
+<div id="tr"></div><div id="bc"><div id="throttle-track"><i id="throttle-fill"></i><span id="throttle-label">Throttle 0%</span><span id="speed"></span></div></div>
 <div id="ship-vitals" aria-label="Ship status">
 <div class="vital-pair vital-left">
 <div class="vital-column vital-shield"><span>Shield</span><div class="vital-track"><i id="b1"></i></div><span class="vital-value" id="sh-val"></span><span class="vital-percent" id="sh-pct"></span></div>
