@@ -161,3 +161,15 @@ test("new-shot visual correction is skipped for teleports and non-player shots",
   const enemyShot = app.fire(app.V(10, 20, 30), app.V(0, 0, -1), 500, false, 1, P);
   assert.ok(app.interpolatedPos(enemyShot, 0).distanceTo(enemyShot.pos) < 1e-9);
 });
+
+test('Lead instruments interpolate velocity with position rather than jumping at every tick',()=>{
+ app.applySave(app.newSave());app.createPlayer();app.setShip('wasp');app.launch();
+ const p=app.localPlayer();p.pos.set(0,0,0);p.v.set(0,0,0);p.snap=false;
+ app.snapshotSimPoses();p.pos.set(4,0,0);p.v.set(40,0,0);
+ for(const alpha of [0,0.25,0.5,0.75,1]) {
+  assert.ok(Math.abs(app.interpolatedPos(p,alpha).x-4*alpha)<1e-8);
+  assert.ok(Math.abs(app.interpolatedVelocity(p,alpha).x-40*alpha)<1e-8);
+ }
+ p.pos.set(1e6,0,0);
+ assert.equal(app.interpolatedVelocity(p,0.5).x,40,'teleports bypass stale velocity history');
+});

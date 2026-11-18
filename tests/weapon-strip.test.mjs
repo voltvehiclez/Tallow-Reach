@@ -62,7 +62,7 @@ test('Strip has ten numbered boxes, shared family icons and no redundant top-rig
 
 test('Compact strip fits between unchanged meter pairs at desktop and narrower widths',()=>{
  const css=readFileSync('src/styles.css','utf8');
- assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: 78px/);
+ assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: var\(--weapon-bottom\)/);
  assert.match(css,/width: min\(480px, calc\(100vw - 220px\)\)/);
  assert.match(css,/width: min\(540px, calc\(100vw - 160px\)\)/);
  assert.match(css,/\.weapon-slot \{[^}]*height: var\(--weapon-size\); width: 100%/);
@@ -104,10 +104,11 @@ test('Selection uses the slot HUD without redundant centre messages; bank headin
 
 test('Interaction prompts sit above weapon slots in white, with mining progress below them',()=>{
  const css=readFileSync('src/styles.css','utf8');
- assert.match(css,/#pr \{[^}]*bottom: 184px;[^}]*color: #fff/);
- assert.match(css,/#bm \{[^}]*bottom: 158px/);
+ assert.match(css,/#pr \{[^}]*bottom: calc\(184px - 18px\);[^}]*color: #fff/);
+ assert.match(css,/#bm \{[^}]*bottom: calc\(158px - 18px\)/);
  const profile=newProfile(); profile.loadout.wasp.secondary=['missile_basic'];
  const html=weaponSlotsHtml(profile);
- assert.match(html,/rotate\(45 12 12\)/);
+ assert.doesNotMatch(html,/rotate\(45 12 12\)/);
+ assert.match(html,/M9 9Q9 4 12 2/);
  assert.doesNotMatch(html,/<circle cx="16" cy="8"/);
 });

@@ -35,3 +35,5 @@ The current player hull and beam views follow the **local** player only; see the
 Outfitting preview/reset uses data/camera.js SHIP_PREVIEW: front/top/left isometric yaw/pitch. Drag and zoom remain unchanged; automatic rotation is removed, with the approved initial angle preserved.
 
 Flight scene has one faint nebula AmbientLight, updated on showPlace from data/lighting.js. Sky tint defaults to generator metadata, not pixel sampling. Existing sun, hemisphere light, title and outfitting lights are unchanged.
+
+views.js also exports interpolatedVelocity for HUD ballistic prediction at the same frame alpha as interpolatedPos/renderPlayerPose. Missing history or teleport jumps use current velocity.

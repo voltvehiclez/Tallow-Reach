@@ -1,3 +1,4 @@
+import { flightSpeed } from './flight-instruments.js';
 // The player's ship: flight model, Shield HP and Hull HP, and taking damage.
 
 import { V, Q, fwdQ, clamp } from "../util/math.js";
@@ -53,6 +54,7 @@ export function createPlayerRecord(controls = neutralControls()) {
     place: state.place,
     pos: V(0, 0, 0),    // where the ship is (world metres)
     quat: Q(),          // which way it points
+    measuredSpeed: 0,
     v: V(0, 0, 0),      // current velocity
     thr: 0,            // throttle, -1..1
     hull: 0,
@@ -124,6 +126,7 @@ export function flight(dt, P = state.player, runtime = null) {
     freeCam: P === state.player ? state.freeCam : null,
     warp: P === state.player ? state.warp : P.warp,
   };
+  const stepStart = P.pos.clone(), stepPlace = P.place;
   const fc = r.freeCam || { on: false },
     c = P.controls;
 
@@ -297,6 +300,7 @@ export function flight(dt, P = state.player, runtime = null) {
     if (hit.damage > 0 && speed > 25) hurt(speed * 0.015 * hit.damage, P);
   }
 
+  P.measuredSpeed = flightSpeed(stepStart, P.pos, dt, !W && stepPlace === P.place && !P.docked && P.hull > 0);
 }
 
 /** Reflect the ship's velocity off a collision normal, keeping 40% of its energy. */

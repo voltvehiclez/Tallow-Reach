@@ -26,3 +26,11 @@ The generic 0–100% resource clamp hid reverse throttle. Use a separate signed
 presentation helper: preserve the sign in text, use absolute magnitude for width,
 and choose the fill origin/pattern from direction. Regression covers -100%, -50%,
 zero, +50%, +100%, clamping and invalid values in flight-ui-slice1.test.mjs.
+
+## Displacement is not engine velocity
+
+Moving colliders can push position without adding velocity. Speed instruments must measure a single flight-step displacement after collision resolution. Do not measure between render frames across warp/load/teleport boundaries. tests/flight-slice2.test.mjs covers zero-velocity scenery pushes and travel discontinuities.
+
+## Exercise the action boundary and share render time
+
+N failed with emit undefined because a new main action used an unimported bus helper. Enumeration tests did not exercise the handler. flight-slice2 now executes the real handler body with main’s imported event bindings, including playing/repeat guards. Close-range lead jitter came from projecting fixed-step poses against an interpolated camera; interpolate muzzle pose, target position and velocities at the same render alpha instead of smoothing screen coordinates after projection. render-interp tests verify continuous interpolation and teleport reset.

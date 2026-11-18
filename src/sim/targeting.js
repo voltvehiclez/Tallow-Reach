@@ -1,3 +1,4 @@
+import { pocketObjects } from './flight-instruments.js';
 // Target lock (F). First surface under the camera reticle, then angular assistance: hostiles,
 // rocks, crates, the outpost, and — since step 14 — a rift door, the way out of
 // a run and its prize canister. F switches to a new candidate, or releases the
@@ -87,6 +88,7 @@ export function lockPosition(lock) {
 
 /** Label shown on the lock marker. */
 export function lockName(lock) {
+  if (lock.k === "n") return lock.o.name;
   if (lock.k === "e") return lock.o.n || "hostile";
   if (lock.k === "a") return itemName(lock.o.type) + " rock, " + Math.ceil(lock.o.ore) + " left";
   if (lock.k === "c") return lock.o.item === "core" ? "reactor core" : "crate";
@@ -107,6 +109,12 @@ export function pruneLock(P = state.player) {
     W = placeWorld(P.place || state.place),
     L = F.lock;
   if (!L) return;
+  if (L.k === "n") {
+    const row = pocketObjects(P).find(row => samePocketObject(row, L.o.source));
+    if (L.o.place !== (P.place || state.place) || !row) F.lock = null;
+    else L.o.pos = Array.isArray(row.object.pos) ? V(...row.object.pos) : row.object.pos || V(...row.object.center);
+    return;
+  }
   if (L.k === "s") {
     if (L.o.place !== (P.place || state.place)) F.lock = null;
     return;
@@ -128,4 +136,24 @@ export function targetHealth(enemy) {
   const percent = (value, max) => Number.isFinite(value) && Number.isFinite(max) && max > 0
     ? Math.round(clamp(value / max, 0, 1) * 100) : 0;
   return { shield: percent(enemy.sh, enemy.maxSh), hull: percent(enemy.hp, enemy.mx) };
+}
+
+// placeDef returns derived feature copies; match their stable authored identity, not reference.
+function samePocketObject(row, object) {
+  return row.object === object || (row.feature && object?.id != null && row.object.id === object.id && row.object.kind === object.kind);
+}
+
+/** Selecting a live list row shares F lock records, including same-target unlock. */
+export function selectPocketObject(object, P = state.player) {
+  const row = pocketObjects(P).find(row => samePocketObject(row, object));
+  if (!row) return false; // A row may disappear between its render and click.
+  const place = P.place || state.place;
+  const kind = ({Hostile:'e',Asteroid:'a',Cargo:'c',Rift:'r',Gate:'g',Cache:'k',station:'s'})[row.kind];
+  const next = kind === 's' ? {k:'s',o:{place,feature:object.id}} : kind ? {k:kind,o:object} : {
+    k:'n',o:{source:object,place,name:row.name,pos:Array.isArray(object.pos) ? V(...object.pos) : object.pos || V(...object.center)}
+  };
+  const old = P.flight.lock;
+  const same = old?.k === next.k && (kind === 's' ? old.o.place === place && old.o.feature === object.id : kind ? old.o === object : samePocketObject(row, old.o.source));
+  P.flight.lock = same ? null : next;
+  return true;
 }

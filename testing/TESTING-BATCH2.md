@@ -24,7 +24,7 @@ Quick playtest:
 4. Open inventory/map, pause, or switch browser tabs during orbit: camera exits
    cleanly. Test the layout at your usual window size and a smaller window.
 
-## Slice 2 — navigation, aiming and motion (pending: items 2, 10, 11)
+## Slice 2 — navigation, aiming and motion (implemented: items 2, 10, 11; playtest pending)
 
 - N opens a clean list of every object in the current pocket. Keep detection/range
   filtering extensible for future ship/module sensors, but no range restriction now.
@@ -104,3 +104,25 @@ Select fitted and empty primary/secondary bays via keys and clicks: slot labels 
 Check the new finned missile outline against the reference. Dock, acquire missile lock, approach a wormhole and mine: shared prompts should appear white above the weapon strip, mining progress beneath prompts, without overlapping slot headings. Check both bank headings align with the name edges.
 
 Check Shield/Hull/Power/Boost labels, bars and numeric readouts share the centre of each grey frame. Frames, 28px track widths and text sizes must remain unchanged.
+
+## Slice 2 quick playtest
+
+1. Lower HUD: all slots, columns, throttle, prompts and mining bar are 18px lower,
+   with their relative spacing unchanged. Missile outline points straight upwards.
+2. Press N in flight: scroll through the live pocket list (including far-away rocks,
+   stations, planets/scenery where present, hostiles, cargo, rifts/gates/caches and
+   projectiles). No range cap. N or Close hides it; it is read-only and flight continues.
+   Move to a new pocket while open: entries should change, not retain old objects.
+3. Lock a moving hostile with F and select a cannon: white circle leads the target.
+   Match its movement and the lead shrinks; select a beam/empty slot or unlock and it
+   disappears. Offscreen or unreachable targets must not show a misleading lead.
+4. At zero throttle, let a Meridian moving arm/ring push the ship: speed should rise
+   while being displaced. Warp/reload should not produce a huge teleport-speed spike.
+
+Save remains v21. Slices 3–5 are still pending; no shop/inventory/mission changes here.
+
+Slice 2 repair playtest: refresh the preview, press N twice (opens/closes without error), and hold N (no repeated toggles). Close/turn past a locked moving hostile with a cannon: lead should move with the rendered target, not jump at tick boundaries. Check all four grey stat frames end at the same height as the throttle border; horizontal positions and sizes are unchanged.
+
+Confirm throttle and weapon strip share a horizontal centre; throttle size/height remain unchanged.
+
+Pocket-list follow-up: at 720p or taller check at least 35 single-line rows with Filters collapsed. Tick/untick categories and reload: choices persist, including all-off. Try all three sort buttons twice. Click an enemy, rock, station and gate/cache; F lock marker should appear, and clicking the same target releases it. Removed entities must not leave a stale lock. Mouse movement/clicks must not steer/fire while browsing; close with N/Esc and steering resumes without a stale turn. Objectives should be hidden behind the list and return on close. Check bank-heading tops align with grey-frame tops and the gap above throttle matches the 6px lateral gap.

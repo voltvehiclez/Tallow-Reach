@@ -10,7 +10,7 @@
 // change BINDINGS (one-off actions) or HELD (the flight and weapon controls).
 // Nothing else needs to change.
 
-import { emit } from "../util/events.js";
+import { emit, on } from "../util/events.js";
 import { state, localPlayer } from "../state/state.js";
 
 /**
@@ -67,6 +67,10 @@ export function syncControls() {
   c.steer.y = pointer.y;
   c.fire = !!keys.fire;
   c.sec = !!keys.sec;
+  if (state.ui.navigation) {
+    c.steer.x = c.steer.y = 0;
+    c.fire = c.sec = false;
+  }
   // A modal surface takes the flight keys while open, even though the world keeps
   // running behind the overlay.
   if (modalSurface()) {
@@ -84,8 +88,16 @@ export function clearControls() {
   emit("freecam", false);
 }
 
+on("navigation-input", () => {
+  pointer.x = pointer.y = 0;
+  keys.fire = keys.sec = 0;
+  syncControls();
+  emit("freecam", false);
+});
+
 // One-shot actions. Left Alt toggles free camera separately through its boolean event.
 export const BINDINGS = {
+  KeyN: "navigation",
   KeyF: "lock",
   Digit1: "primary:1",
   Digit2: "primary:2",
@@ -120,7 +132,7 @@ export function installInput() {
     const modal = modalSurface();
     if (!modal) keys[e.code] = 1;
     syncControls();
-    if (!modal && e.code === "AltLeft") {
+    if (!modal && !state.ui.navigation && e.code === "AltLeft") {
       e.preventDefault();
       if (!e.repeat) emit("freecam", !state.freeCam.on);
     }
@@ -142,6 +154,7 @@ export function installInput() {
   addEventListener("blur", clearControls);
 
   addEventListener("mousemove", e => {
+    if (state.ui.navigation) { pointer.x = pointer.y = 0; syncControls(); return; }
     pointer.x = (e.clientX / innerWidth - 0.5) * 2;
     pointer.y = (e.clientY / innerHeight - 0.5) * 2;
     syncControls();
@@ -150,8 +163,8 @@ export function installInput() {
 
   addEventListener("mousedown", e => {
     // A click inside a modal surface is a click on the panel, never a trigger pull.
-    if (!modalSurface() && e.button === 0) keys.fire = 1;
-    if (!modalSurface() && e.button === 2) keys.sec = 1;
+    if (!modalSurface() && !state.ui.navigation && e.button === 0) keys.fire = 1;
+    if (!modalSurface() && !state.ui.navigation && e.button === 2) keys.sec = 1;
     syncControls();
   });
   addEventListener("mouseup", e => {

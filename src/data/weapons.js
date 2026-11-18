@@ -20,3 +20,6 @@ export const MISSILE = {
 
 // HUD-only geometry; lock duration/range above are gameplay tuning.
 export const MISSILE_HUD = { canvas: 260, startRadius: 106, endRadius: 34 };
+
+// Shared by projectile expiry and the ballistic lead instrument.
+export const BULLET_LIFETIME = 2.4;

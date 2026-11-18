@@ -20,6 +20,41 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Compact selectable pocket list and aligned lower HUD
+
+Pocket list now has 16px single-line rows (35+ at 720p), opaque top-right placement,
+category checkbox filters saved safely between sessions, and reversible Name/Type/
+Distance sorting. It hides mission objectives while open. Clicking a live row toggles
+its F-compatible lock; extra object classes get generic tracked locks. Derived spatial
+features match stable kind/id because place definitions return copies. Mouse steering,
+orbit and firing are released while browsing; keyboard flight continues. N/Esc/Close
+restore normal control. Hover/focus holds row order for safe clicks. Bank headings
+align with grey-frame tops, and throttle spacing matches the 6px lateral gap. Tests
+cover filters/storage, sorting, selection/pruning, controls and geometry. Save v21;
+build regenerated. Owner playtest pending; batch slices 3–5 still pending.
+
+## 2026-11-16: Repair N action, stabilise lead and align status bottoms
+
+Fixed missing emit import in main's N handler; reproduced the reported ReferenceError
+with a test executing that action against its actual imported event helpers. Lead
+prediction now shares interpolated player/muzzle, target position and velocities
+with the rendered camera; avoids raw 60Hz pose jumps at close range while turning.
+Added interpolation/teleport regression coverage. Lowered status groups only: grey
+frame bottoms align with throttle at 24px, with their X positions and geometry unchanged.
+Throttle shifts 28px right to share the weapon strip centre; its size/height stay fixed.
+Save v21; build regenerated; owner repeat playtest pending.
+
+## 2026-11-16: Batch slice 2 — navigation, lead and actual speed
+
+Moved the complete lower HUD down 18px without changing internal spacing; missile
+icon faces up. N toggles a read-only, live pocket-object list: spatial features and
+runtime entities, all distances, future detection-policy hook. Cannon lead uses
+locked-enemy velocity, inherited shooter velocity, selected muzzle and bullet speed;
+no marker for beams, empty bays, unreachable or offscreen intercepts. Shared bullet
+lifetime caps prediction. Speed measures each flight step including collision pushes,
+not teleport/warp displacement; place entry resets it. Added regression tests and
+owner checklist. Save v21; slices 3–5 pending. Build regenerated; playtest pending.
+
 ## 2026-11-16: Missile icon and lower interaction prompts
 
 Replaced the windowed rocket glyph with a simple diagonal finned missile outline,
@@ -87,42 +122,11 @@ Strip and pairs share the same centre and responsive vertical offset; responsive
 widths leave 30px from each strip edge to the neighbouring inner column centre.
 Layout regression tests updated. Save v21; build regenerated; visual playtest pending.
 
-## 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
-
-Reproduced free full-throttle jumps on Shift taps/dry ignition in failing tests. Throttle
-now snaps only after boost spool-up succeeds and the flat MJ cost is deducted. Held boost
-does not continually pin throttle. Existing continuous draw timing is unchanged.
-
-Added ten boxed weapon slots above the throttle: primary 1–5, secondary 6–0, exact
-Outfitting bay order, independent cyan/orange selections. Each weapon family has a shared
-SVG icon (module.weaponFamily), fitted markers and missile ammo count. Clicks select but
-do not fire. Empty/unsupported slots remain empty and never fall back. Removed redundant
-top-right selected-weapon line. Secondary fire resolves the selected bay; switching clears
-acquisition but keeps reload/ammo. No extra bays added to ships. Optional v21 sw defaults
-to first secondary; pw accepts 1–5, preserving legacy beam/cannon migration.
-
-Tests cover paid ignition, ten bindings, both fire banks, empty slots, reload preservation,
-pilot isolation, save defaults, family icons and UI. Build regenerated; owner playtest
-pending in `testing/TESTING-BATCH2.md`. Other slices remain pending; no merge yet.
-
-## 2026-11-16: HUD pool units
-
-Shield and Hull current values now include HP (e.g. 10 HP); Boost includes U for
-fuel units (e.g. 10 U). Power remains MJ. Labels, percentages, spacing and gameplay
-are unchanged. Updated HUD tests; save v21; build regenerated.
-
-## 2026-11-16: Tight HUD readings, pool percentages and throttle fill
-
-Moved label and number edges closer so their gap matches the 8px column gap. All
-four pools show current values only (Power retains MJ), with percentage underneath.
-Power usage sits inside the Power column below its readings. Throttle text now sits
-inside a horizontal bar, empty at 0 and full at 100%; speed stays separate below.
-Raised the columns slightly to fit the extra readout lines. Absent pools show 0/0%.
-Updated formatting/layout regression tests. Save v21; build regenerated. Visual
-playtest pending; remaining batch slices unchanged.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
+- 2026-11-16: HUD pool units
+- 2026-11-16: Tight HUD readings, pool percentages and throttle fill
 - 2026-11-16: Mirrored vertical HUD pairs
 - 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
 - 2026-11-16: Nebula fill intensity increased 25%
