@@ -5,6 +5,46 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-16: System space — AUs, a true 3D position for every pocket, and a sky that shows the system you're in
+
+Owner: "All pockets in a system should have a type of 3d position in x, y, z. This is to prepare the game for a
+potential feature in the future if i make warping within a system more dynamic by putting you in a so called 'warp
+space' … Another reason is so that the skybox will now have another layer that is dependant on the 3d position of the
+pocket and celestials." Owner's playtests of everything pending (14c, cube-map skies, collision damage, Test Ship,
+both bug rounds) **passed**; 14c is ticked in ROADMAP. **Save version unchanged (v21)**; rebuild needed (`npm run
+build`, then `npm test`). NOT playtested yet.
+
+- **Pockets have 3D AU positions, derived — never saved.** `systemSpatialLayout(world, systemId)` in `sim/galaxy.js`
+  lifts the same deterministic layout the 2D pocket map uses into AUs (1 AU = 150 million km): map `x` → AU `x`, map
+  `y` → AU `z`, and a tiny seeded height per pocket inside `±heightAmplitudeAu` (1.2 AU) so bodies don't ride one
+  line; an authored `mapHeight` wins the roll (the owner's future manual-height path). The map stays 2D and unchanged;
+  no save shape changes. Runtime-registered wormhole pockets are included via their authored `mapPos`, like their
+  siblings. Snapshot: systems are measured in AUs — flying inside a pocket never meaningfully moves it in the system.
+- **Systems have their own size, and it's dynamic.** Each system rolls a stable seeded multiplier in [0.6, 1.6]
+  (`systemScale`, hashed from seed + system id) on `auPerMapUnit` (0.05) — that is the one fixed conversion; some
+  systems come out compact, some vast, and each keeps its own. A system's outer boundary (`radiusAu`) is simply its
+  farthest pocket from the core, so adding a farther pocket makes the system bigger by itself. No field is stored.
+- **The sky has a system layer now (`render/systemsky.js`).** Every ordinary pocket of a system — including a spawned
+  simple wormhole's pocket — hangs the system's star/black hole in its true direction and every sibling pocket as a
+  barely-visible dot. The body renders as a real 3D sphere at the sky's depth with an additive halo: it cannot be
+  flown to (the sky follows the camera), and its apparent size is its set AU size over the flying pocket's distance
+  (`star.radiusAu` 0.16 / `blackHole.radiusAu` 0.1) — closer pocket → bigger body, compact system → bigger sun.
+  Black hole: dimmer, slight orange tint; stars are one look, with room for shades later. Instances (rifts, the far
+  side of a wormhole) are in no system and keep their own skies, unchanged.
+- **The light always comes from the body you can see.** `showPlace` re-aims the one DirectionalLight per pocket from
+  the star/black hole direction; black hole light is dimmer (1.35 vs 2.1) and orange-tinted. Instances get the old
+  default back; hemisphere light unchanged.
+- **Tests:** new `tests/system-spatial.test.mjs` (9) pins the derivation (heights inside the band, map↔3D lift, scale
+  bounds and stability, boundary growth, origin-centred body, star/blackHole core, runtime wormhole inject, tuning
+  validation). **649/649 pass**; build 3008 KB.
+- **Not done, deliberately:** the warp-space flight itself (step TBD), star shades, authored per-system scale
+  override, per-pocket authored heights beyond the `mapHeight` hook, lighting from a raised body on the 2D map
+  (map stays 2D).
+
+Files: `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/render/systemsky.js` (new), `src/render/scene.js`, `tests/system-spatial.test.mjs` (new), `src/render/README.md`, `src/sim/README.md`, `src/data/README.md`, `testing/TESTING-SYSTEM-SKY.md` (new), `docs/architecture/world-and-map.md`, `docs/architecture/simulation-and-rendering.md`, `docs/HANDOFF.md`, `docs/ROADMAP.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
+
+---
+
 ## 2026-11-15: Hitting the station hurts again — solid means collision damage, by default
 
 Owner: "Collision damage is gone from the meridian station. Everything that is solid should apply collision damage

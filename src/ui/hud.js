@@ -11,12 +11,12 @@ import { interpolatedPos } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
-import { pruneLock, lockPosition, lockName } from "../sim/targeting.js";
+import { pruneLock, lockPosition, lockName, targetHealth } from "../sim/targeting.js";
 import { fieldMarkerPosition } from "../sim/asteroids.js";
 import { stationAt } from "../sim/places.js";
 import { cacheUnits, exitDenial, instanceTimeLeft } from "../sim/instances.js";
 import { V } from "../util/math.js";
-import { MISSILE } from "../data/weapons.js";
+import { MISSILE, MISSILE_HUD } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
 import { localPlayer, profileOf } from "../state/state.js";
 import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
@@ -318,15 +318,15 @@ const round1 = v => (Math.round(v * 10) / 10).toString();
 /** Corner brackets that tighten as the missile lock builds, then flash red. */
 function drawLockRing(ML, radius) {
   const ctx = el.reticle;
-  ctx.clearRect(0, 0, 160, 160);
+  ctx.clearRect(0, 0, MISSILE_HUD.canvas, MISSILE_HUD.canvas);
   if (!(state.missiles || []).length || state.player.docked || !ML.target) return;
 
   const raw = ML.locked ? 1 : Math.min(1, ML.t / MISSILE.lock);
   const pr = raw < 1 ? raw * 0.5 * (1 + raw) : 1;
-  const cx = 80,
-    cy = 80;
+  const cx = MISSILE_HUD.canvas / 2,
+    cy = MISSILE_HUD.canvas / 2;
   const flashOn = ML.locked && Math.sin(state.time * 18) > 0;
-  const r = 58 - 24 * pr,
+  const r = MISSILE_HUD.startRadius - (MISSILE_HUD.startRadius - MISSILE_HUD.endRadius) * pr,
     len = r * 0.45;
 
   ctx.lineCap = "square";
@@ -343,13 +343,21 @@ function drawLockRing(ML, radius) {
     ctx.lineTo(bx, by - sy * len);
     ctx.stroke();
   });
+  const width = MISSILE_HUD.barWidth, left = cx - width / 2;
+  ctx.fillStyle = "rgba(12,18,24,0.85)";
+  ctx.fillRect(left, MISSILE_HUD.barY, width, 4);
+  ctx.fillStyle = ML.locked ? "#ffffff" : "#e0a458";
+  ctx.fillRect(left, MISSILE_HUD.barY, width * raw, 4);
+  ctx.font = "11px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`${Math.round(raw * 100)}%`, cx, MISSILE_HUD.textY);
 }
 
 /**
  * Place a label on screen for a world point. Off-screen points are pinned
  * to the screen edge in their direction.
  */
-function mark(p, text, cls, ox, oy) {
+function mark(p, text, cls, ox, oy, health = null) {
   if (markerCount >= MARKER_POOL) return;
   camera.updateMatrixWorld();
   const el_ = markers[markerCount++];
@@ -381,7 +389,9 @@ function mark(p, text, cls, ox, oy) {
 
   el_.style.cssText = `display:block;left:${x}px;top:${y}px`;
   el_.className = "mk " + cls;
-  el_.textContent = text === null ? "" : text + " " + fmtDist(state.player.pos.distanceTo(p));
+  const label = text === null ? "" : text + " " + fmtDist(state.player.pos.distanceTo(p));
+  if (health) el_.innerHTML = `<span class="target-health" aria-label="Shield ${health.shield}%, hull ${health.hull}%"><span class="target-shield"><i style="width:${health.shield}%"></i></span><span class="target-hull"><i style="width:${health.hull}%"></i></span></span><span>${escHud(label)}</span>`;
+  else el_.textContent = label;
 }
 
 function drawMarkers() {
@@ -406,7 +416,7 @@ function drawMarkers() {
   if (lock) {
     const hostile = lock.k === "e";
     const pos = lock.o && lock.o.pos ? interpolatedPos(lock.o) : lockPosition(lock);
-    mark(pos, "Locked " + lockName(lock), hostile ? "h lock" : "lock", 70, -36);
+    mark(pos, lockName(lock), hostile ? "h lock" : "lock", 70, -36, hostile ? targetHealth(lock.o) : null);
     mark(pos, null, hostile ? "h lk" : "lk");
   }
 

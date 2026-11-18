@@ -281,7 +281,9 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     let best = null,
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!local || !state.freeCam.on) {
+      const selected = F.lock?.k === "e" && W.enemies.includes(F.lock.o) && F.lock.o.hp > 0 ? F.lock.o : null;
       for (const e of W.enemies) {
+        if (e.hp <= 0) continue;
         const q = enemyPos(e).clone().sub(pp),
           d = q.length();
         if (d > MISSILE.range) continue;
@@ -290,6 +292,13 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
           bestAngle = angle;
           best = e;
         }
+      }
+      // A valid F-selected hostile wins even when another ship crosses nearer the reticle.
+      // Range/cone/free-camera limits still apply; there is no through-space lock cheat.
+      if (selected) {
+        const q = enemyPos(selected).clone().sub(pp), d = q.length();
+        const angle = d > 0 ? Math.acos(clamp(q.dot(cf) / d, -1, 1)) : Infinity;
+        if (d <= MISSILE.range && angle < (MISSILE.cone * Math.PI) / 180) best = selected;
       }
     }
 

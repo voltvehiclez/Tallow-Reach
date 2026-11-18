@@ -1,6 +1,7 @@
 // Target lock (F). Locks onto whatever is nearest the crosshair: hostiles,
 // rocks, crates, the outpost, and — since step 14 — a rift door, the way out of
-// a run and its prize canister. Pressing F again releases the lock.
+// a run and its prize canister. F switches to a new candidate, or releases the
+// same candidate / an old lock when the view has no candidate.
 
 import { clamp } from "../util/math.js";
 import { itemName } from "../data/items.js";
@@ -18,11 +19,7 @@ export function toggleLock(P = state.player) {
   const F = P.flight,
     W = placeWorld(P.place || state.place);
   const notify = text => { if (P === state.player) msg(text, 1.5); };
-  if (F.lock) {
-    F.lock = null;
-    notify("Target released");
-    return;
-  }
+  const previous = F.lock;
 
   const f = playerFwd(P),
     pp = playerPos(P);
@@ -51,13 +48,11 @@ export function toggleLock(P = state.player) {
   const station = featureOf(placeId, "station");
   if (station) test("s", { place: placeId, feature: station.id }, V(...station.pos), 100);
 
-  if (best) {
-    if (best.k === "s") best.o = { place: placeId, feature: station.id };
-    F.lock = best;
-    notify("Target locked");
-  } else {
-    notify("No object to lock");
-  }
+  const same = best && previous && best.k === previous.k &&
+    (best.k === "s" ? best.o.place === previous.o.place && best.o.feature === previous.o.feature : best.o === previous.o);
+  F.lock = same || !best ? null : best;
+  if (!F.lock && previous) notify("Target released");
+  else if (!best) notify("No object to lock");
 }
 
 /** Current world position of a lock target. */
@@ -71,7 +66,7 @@ export function lockPosition(lock) {
 
 /** Label shown on the lock marker. */
 export function lockName(lock) {
-  if (lock.k === "e") return (lock.o.n || "hostile") + " " + Math.round((lock.o.hp / lock.o.mx) * 100) + "%";
+  if (lock.k === "e") return lock.o.n || "hostile";
   if (lock.k === "a") return itemName(lock.o.type) + " rock, " + Math.ceil(lock.o.ore) + " left";
   if (lock.k === "c") return lock.o.item === "core" ? "reactor core" : "crate";
   if (lock.k === "r") return lock.o.dest || lock.o.n || "Rift";
@@ -104,4 +99,12 @@ export function pruneLock(P = state.player) {
     : L.k === "k" ? W.caches
     : null;
   if (!list || !list.includes(L.o)) F.lock = null;
+}
+
+
+/** Percentages for compact NPC bars. Current hostiles have no shield pool. */
+export function targetHealth(enemy) {
+  const percent = (value, max) => Number.isFinite(value) && Number.isFinite(max) && max > 0
+    ? Math.round(clamp(value / max, 0, 1) * 100) : 0;
+  return { shield: percent(enemy.sh, enemy.maxSh), hull: percent(enemy.hp, enemy.mx) };
 }

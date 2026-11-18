@@ -1042,7 +1042,7 @@ test("a rift's wave is its own hostile, and no contract is paid by killing it", 
   player.quat.identity();
   toggleLock(player);
   assert.equal(player.flight.lock?.k, "e", "the first guardian locks");
-  assert.match(lockName(player.flight.lock), /^Rift Guardian \d+%$/,
+  assert.match(lockName(player.flight.lock), /^Rift Guardian$/,
     `the lock says "${lockName(player.flight.lock)}"`);
   pruneLock(player);
 

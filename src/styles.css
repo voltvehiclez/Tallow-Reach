@@ -1414,3 +1414,10 @@ textarea {
 .sm-planet-ring { fill: none; stroke: rgba(188,229,255,.72); stroke-width: 1.4px; transform-origin: center; }
 .sm-belt-dot { fill: #c9a765; stroke: #f2d89a; }
 .sm-belt-icon { filter: drop-shadow(0 0 2px rgba(242,216,154,.35)); }
+
+/* Compact selected-hostile vitals: shield above hull, no redundant lock label. */
+.target-health { display: flex; flex-direction: column; gap: 2px; width: 64px; margin: 2px auto 4px; }
+.target-health > span { display: block; height: 3px; background: rgba(120,140,160,.18); }
+.target-health i { display: block; height: 100%; }
+.target-shield i { background: #75c7ff; }
+.target-hull i { background: #f2f5f7; }
