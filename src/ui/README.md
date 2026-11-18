@@ -36,3 +36,5 @@ At boot, `setupMenu({ beforeStart })` gates Open World on the background model p
 
 
 Part 2: route-display shares shape-preserving icons with HUD/map (current blue with dotted orange ring, destination orange). Mission log has compact one-line next-step summaries and native Details with full guidance/dialogue. Base keeps upgrades/storage/refinery statistics; station header sets Home Station.
+
+Outfitting preview no longer auto-rotates or resumes spinning after a drag. The approved start/reset angle, drag and zoom are unchanged.

@@ -16,7 +16,7 @@ import { playerPos, playerFwd } from "./pilot.js";
  * A lock is { k, o }: k is "e" hostile, "a" asteroid, "c" crate, "s" station, "r" rift door,
  * "g" the way out of a run, "k" a run's prize canister. o is the world object (null for the station).
  */
-export function toggleLock(P = state.player) {
+export function toggleLock(P = state.player, surfaceHit = undefined) {
   const F = P.flight,
     W = placeWorld(P.place || state.place);
   const notify = text => { if (P === state.player) msg(text, 1.5); };
@@ -36,7 +36,13 @@ export function toggleLock(P = state.player) {
       score = Math.acos(clamp(q.dot(f) / d, -1, 1)) - Math.atan(radius / d);
     const along = q.dot(f), sideSq = Math.max(0, d * d - along * along);
     let distance = Infinity;
-    if (k === "a") {
+    const matchesSurface = surfaceHit?.k === k && (k === "s"
+      ? surfaceHit.o.place === o.place && surfaceHit.o.feature === o.feature : surfaceHit.o === o);
+    if (matchesSurface) { firstHit = { k, o }; firstDistance = -1; }
+    // Browser supplies exact rendered geometry for every kind. Headless pilots retain sim proxies.
+    if (surfaceHit !== undefined) {
+      // A miss must not manufacture a sphere hit; angular assistance below is still available.
+    } else if (k === "a") {
       // The same transformed triangles used by projectiles, including GLBs and nonuniform rocks.
       const length = d + radius * 2 + 1;
       const hit = segmentRockHit(o, pp, pp.clone().addScaledVector(f, length));

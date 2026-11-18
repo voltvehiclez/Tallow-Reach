@@ -1,6 +1,7 @@
 // Three.js setup: renderer, lights, starfield, and per-place scenery built from
 // data/places.js features. Visual only; gameplay positions live in the sim/data.
 
+import { tagLockView } from "./target-picking.js";
 import * as THREE from "three";
 import { DEFAULT_PLACE, DEFAULT_SKY, placeDef, placeAt } from "../data/places.js";
 import { verticalFovForAspect } from "../data/camera.js";
@@ -111,6 +112,7 @@ function buildScenery(id, group) {
     if (f.kind === "planet") built = planetModel(f);
     else if (f.kind === "station") built = stationModel(f);
     if (!built) continue;
+    if (f.kind === "station") tagLockView(built.object, { k: "s", o: { place: id, feature: f.id } });
     spins.push(...addModel(built, group));
     // Collision mirrors what is drawn (see docs/GLB_MODELS.md): the baked triangles are the
     // collider. `collide: false` in a feature opts a glow or decoration out. The feature

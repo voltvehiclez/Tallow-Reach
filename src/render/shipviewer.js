@@ -18,7 +18,6 @@ import { buildPlayerShip } from "./models.js";
 
 const FOV = 30;
 const RADIUS = 1.8;       // every hull is scaled to this bounding-sphere radius
-const SPIN = 0.16;        // idle turntable speed, radians per second
 const DIST = 8.5;         // default camera distance
 const ZOOM_MIN = 5.5;
 const ZOOM_MAX = 13;
@@ -186,10 +185,9 @@ export function resetShipView() {
   placeCamera();
 }
 
-/** Draw one frame, turning the stand by `spin` radians per second. */
-export function renderShip(dt, spin = SPIN) {
+/** Draw the manually positioned preview without automatic rotation. */
+export function renderShip() {
   const v = ensure();
   if (!v.ship) return;
-  v.turntable.rotation.y += spin * dt;
   v.renderer.render(v.scene, v.camera);
 }

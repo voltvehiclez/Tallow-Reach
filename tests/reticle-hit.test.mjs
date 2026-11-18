@@ -30,3 +30,10 @@ test('A pilot with credits but no surviving hull receives a complete loaner',()=
  assert.deepEqual(state.profile.ships,['wasp']); assert.ok(state.profile.loadout.wasp);
  assert.equal(p.docked,true);
 });
+test('Rendered non-rock reference wins and repeats unlock; stale references cannot acquire',()=>{
+ const p=setup(), large=rock(-20,10), crate={pos:V(20,3,-30),id:'crate',kind:'crate'};
+ state.world.asteroids.push(large);state.world.crates.push(crate);
+ toggleLock(p,{k:'c',o:crate});assert.equal(p.flight.lock.o,crate);
+ toggleLock(p,{k:'c',o:crate});assert.equal(p.flight.lock,null);
+ state.world.crates.length=0;toggleLock(p,{k:'c',o:crate});assert.notEqual(p.flight.lock?.o,crate);
+});

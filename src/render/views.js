@@ -20,6 +20,7 @@
 // crates, particles, rocks and the player's own ship, plus the mining beam);
 // step 7c gives the player hull a view class with named mount points.
 
+import { tagLockView, LOCK_VIEW_KINDS } from "./target-picking.js";
 import * as THREE from "three";
 import { scene } from "./scene.js";
 import { mkShip, mm, rockShapeAt } from "./models.js";
@@ -564,6 +565,8 @@ function addView(e, handler) {
   capturePose(e);
   const mesh = handler.build(e);
   if (!mesh) return null;
+  const lockKind = LOCK_VIEW_KINDS[e.kind];
+  if (lockKind) tagLockView(mesh, { k: lockKind, o: e });
   scene.add(mesh);
   const view = { mesh, kind: e.kind, group: handler.group, handler };
   drawn.set(key, view);

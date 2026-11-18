@@ -20,6 +20,18 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Exact F picking for all objects; stationary outfitting preview
+
+Owner approved mission log and preview angle. Kept yaw/pitch unchanged and removed automatic
+preview rotation entirely (manual drag/zoom/reset remain). F now raycasts visible rendered mesh
+surfaces for every lockable kind: enemies, rocks, crates, stations, rifts/wormholes, exits and
+caches. Tagged model roots include GLB children and live animated station parts. Faint auras
+and invisible meshes do not intercept the ray. Sim receives only a plain target reference,
+checks live candidates, then preserves same-target unlock and no-hit angular assistance.
+Headless callers retain the existing sim intersection fallback. Regression tests cover every
+kind, overlapping bodies, station holes, child transforms, hidden geometry and preview stability.
+Save v21 unchanged; build regenerated. Follow-up owner playtest pending; PR #39 remains unmerged.
+
 ## 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
 
 Continuation starts at main after PR #38; previous unpushed Part 2 was absent, so restored
@@ -324,24 +336,9 @@ Files: `src/render/remap.js` (removed), `src/render/remapmath.js` (removed), `te
 
 ---
 
-## 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)
-
-Owner, after rejecting narrow FOV: bodies and sky points read as ovals at the frame's edge because rectilinear projection magnifies the periphery (about 2.2x at our edge; EVE measures about 1.45x there; StarMade on 16:9 measures about 1.18x). This implements the full-frame re-map both AIs proposed, with the numbers checked and the implementation fixed where the preview's claims didn't hold — including a centre-stretch on windows not in 16:9 and a source-coverage bug that clamped the frame rim (the blurry border and too-tall edge planets). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). With `REMAP.on = false`, the stock pipeline renders byte-for-byte. Owner rejected the look during playtest (too distorted); this branch now builds with `REMAP.on = false` so the stock pipeline renders. The lens code remains in the tree behind the knob; ROADMAP stays unticked.
-
-- **One pass fixes world and sky together.** The flight scene renders into a wider rectilinear render target and a full-screen shader re-draws it through a blend of the rectilinear and stereographic projections, `G(a) = (1−s)·tan a + s·2·tan(a/2)` per axis shared by shader and HUD via `src/render/remapmath.js` (no three.js), with per-axis normalisers (`axisNorms`) so the centre maps at the same scale on both axes on any window shape. The frame's edge lands exactly at `REMAP.edge`; the skybox is scene geometry under this pass, so the nebula is corrected by the same amount — no sky/world drift, no repainting, no art changes.
-- **Honest geometry of the knob.** Keeping today's on-axis zoom exactly while widening the frame is impossible for this curve family, so the centre zoom dips by a fixed factor instead: `strength`/`edge` in `src/data/camera.js` choose it (default `0.75` / `38°`: zoom −1.6%, oval factor 1.06 @20°, 1.20 @35°, 1.24 at the edge — EVE measures 1.21; vfov 76°; ~1.3x pixels). `0.6`/`46.5°` is the wide "panel 2" look (zoom −25%, oval factor 1.26 @35°, vfov 93°, ~2.3x pixels); `0.9`/`41°` is balanced (zoom −8%, oval factor ~1.20 at the edge, vfov 82°, ~1.6x pixels). A body dead-centre is drawn with exact horizontal/vertical pixel parity in a square or portrait window as well as 16:9. The curve is separable, not a conformal 2-D projection: at the left/right rim a small body reads wider than tall; at the top/bottom rim it still reads taller than wide (same sign as rectilinear, smaller magnitude).
-- **Why not the cubic the preview implied:** the first version compressed too hard — mid-frame circles flipped to taller-than-wide (oval factor 0.79). The blend is the stable shape; `tests/remap.test.mjs` pins the centre parity at every aspect, the monotonicity, the round trip, and the per-axis coverage guarantee.
-- **Stock-camera horizontal-85° test (owner request).** The horizontal FOV is now fixed at `BASE_HFOV = 85` (`data/camera.js`); the vertical FOV is derived from the window aspect (`verticalFovForAspect`, ≈54.54° on 16:9 — essentially the 55° trial with an explicit horizontal target). Chase distances were pulled back for 16:9 by tan(35°)/tan(27.268°) ≈ 1.358 (`CAMERA`: idle 14.9, flat-out 23.1, reverse 14.3) so the ship keeps the same on-screen size. On non-16:9 windows the vertical FOV changes while the camera distance stays static, so framing differences are expected. Boost/warp widening keys off `verticalFovForAspect(camera.aspect)`. Not playtested; judge by reload.
-- **Coverage, not clamp.** The first build checked `G(alpha)` in the coverage test instead of `tan(alpha)`, so the outermost pixels sampled clamped edge texels — the blurry frame border and the horizontally-squashed edge planets (which then read too tall). `sourceHalfTanB()` now solves the inverse projection on both axes and the test checks `tan(alpha)`; the shader still clamps only as a last-ditch guard.
-- **Cost and fallbacks.** MSAA where WebGL2 + pixel ratio 1; otherwise the supersampled source carries edges. Render targets recreate on resize. `REMAP.on = false` restores the stock pipeline byte-for-byte (plain render, old HUD maths, old +4/+16 warp FOV widening). The crash fallback still renders plainly; title screen, docking orbit, pause frame (shared pass), Outfitting viewer and the starmap are unaffected. Boost/warp FOV widening is disabled in lens mode — the warp streaks and flash carry the speed feel instead (the lens cannot widen past its source coverage).
-- **HUD stays aligned.** `mark()` and `coneRadiusPx()` in `src/ui/hud.js` project through the same curve when the lens is on (off-screen marker pinning unchanged); `tests/remap.test.mjs` covers the curve, the centre parity, the per-axis coverage guarantee for any aspect, and the small-angle limit of the lock ring.
-
-Files: `src/render/remapmath.js` (new), `src/render/remap.js` (new), `src/data/camera.js` (`REMAP`, `BASE_HFOV`, `verticalFovForAspect`, `CAMERA` distances), `src/render/camera.js`, `src/render/scene.js`, `src/main.js`, `src/ui/hud.js`, `src/render/README.md`, `tests/remap.test.mjs` (new, 9 tests), `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`. **658/658 pass**; build green.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)
 - 2026-11-16: The system sky passed its playtest
 - 2026-11-16: System space — AUs, a true 3D position for every pocket, and a sky that shows the system you're in
 
