@@ -12,6 +12,7 @@
 // Derived runtime catalog, never saved. sim/galaxy-session.js replaces it when
 // a seed is loaded. Keeping lookup here lets existing sim/render callers use
 // generated pockets without importing the map screen or knowing the generator.
+import { sceneryFeatures } from "./scenery.js";
 import { templateAt, templateFeatures } from "./place-templates.js";
 
 let livePlaces = null;
@@ -149,7 +150,7 @@ export const PLACE_DEFS = {
         kind: "asteroidField",
         id: "field",
         n: "Asteroid field",
-        pos: [0, 0, 600],
+        pos: [0, -50, 600],
         layout: "arc",
         arc: { inner: 4000, width: 2000, gap: Math.PI / 2, angle: Math.PI / 2 },
         focus: [1800, 200, -1500],
@@ -255,9 +256,8 @@ export function placeDef(id) {
     ...(Array.isArray(place.features) ? place.features : []),
     ...(Array.isArray(place.extraFeatures) ? place.extraFeatures : []),
   ];
-  if (!explicit.length) return definition;
   const additions = JSON.parse(JSON.stringify(explicit));
-  return { ...definition, features: [...(definition.features || []).map(feature => ({ ...feature })), ...additions] };
+  return { ...definition, features: sceneryFeatures(place, [...(definition.features || []).map(feature => ({ ...feature })), ...additions]) };
 }
 
 /** Stable inventory key for the station feature in a pocket. Generated station

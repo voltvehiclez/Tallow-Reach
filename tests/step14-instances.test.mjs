@@ -45,7 +45,8 @@ import { V } from "../src/util/math.js";
 import { on } from "../src/util/events.js";
 
 /** A clear spot in the home pocket: over a km from the station, the field's edge and the planet. */
-const CLEAR = [0, 0, 4000];
+// Outside the rotated Meridian arc and its diffuse stray envelope.
+const CLEAR = [0, 0, 10000];
 
 // The bus has no unsubscribe, so listeners registered here live for the whole file. Each test that
 // watches an event clears its own list first, which keeps later tests from tripping earlier ones.
@@ -278,7 +279,9 @@ test("a rift opens only in clear space, and every margin is data", () => {
   assert.ok(riftClearance(player).includes(`${RIFT.clearance.station / 1000} km`), "and names the data's number");
 
   const field = featuresOf(DEFAULT_PLACE, "asteroidField")[0];
-  player.pos.set(field.pos[0] + field.radius + RIFT.clearance.field - 500, field.pos[1], field.pos[2]);
+  const edgeAngle = field.arc.angle + Math.PI;
+  const edgeDistance = field.radius + RIFT.clearance.field - 500;
+  player.pos.set(field.pos[0] + Math.cos(edgeAngle) * edgeDistance, field.pos[1], field.pos[2] + Math.sin(edgeAngle) * edgeDistance);
   assert.match(riftClearance(player), /asteroid field/i, "a field is measured to its edge, not its centre");
 
   // There is no planet in the home pocket any more: planets are warpable destination

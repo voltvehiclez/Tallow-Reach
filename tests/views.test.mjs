@@ -232,7 +232,7 @@ test("a rift door and a locked cache are drawn from their records, and go when t
   views.setPlaceCatalog(views.generateGalaxy(4242));
   views.createPlayer();
   S.player.docked = false;
-  S.player.pos.set(0, 0, 4000);
+  S.player.pos.set(0, 0, 10000);
 
   // A real door, made the way `sim/instances.js` makes one when a pilot uses a rift, and a cache
   // record with the fields `spawnCache` writes. Both are plain data: neither holds a mesh. A view is
@@ -269,9 +269,9 @@ test("a rift door and a locked cache are drawn from their records, and go when t
     [door.r, cache.r].sort((a, b) => a - b),
     "both are drawn at the radius their records declare"
   );
-  assert.ok(meshes.some(m => m.position.z === 4000), "the door hangs where it was opened");
+  assert.ok(meshes.some(m => m.position.z === 10000), "the door hangs where it was opened");
   assert.ok(meshes.some(m => m.position.y === -30 && m.position.z === -520), "and the cache where the template put it");
-  assert.deepEqual([door.pos.z, cache.pos.z], [4000, -520], "drawing never moves either record");
+  assert.deepEqual([door.pos.z, cache.pos.z], [10000, -520], "drawing never moves either record");
 
   // Clearing the world the way docking and warping do takes both, so a pocket never keeps a door
   // nobody can fly through again and an instance never keeps a prize nobody can win.

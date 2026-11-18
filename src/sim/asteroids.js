@@ -4,7 +4,7 @@
 // Stable field slots let world.placeMemory remember which rock was mined across
 // a save/load; ad-hoc test rocks may still be spawned without a slot.
 
-import { BELT_VARIATION } from "../data/scenery.js";
+import { BELT_VARIATION, FIELD_DIFFUSION } from "../data/scenery.js";
 import { V, Q, E } from "../util/math.js";
 import { pickLoot } from "./loot.js";
 import { addEntity } from "./entity.js";
@@ -98,6 +98,18 @@ export function fieldDensityWeight(field, local) {
     return BELT_VARIATION.tipDensity + (1 - BELT_VARIATION.tipDensity)
       * Math.sin(Math.PI * t) ** BELT_VARIATION.taperPower;
   }
+  if (field.coreRadius) {
+    const radius = Math.hypot(local.x, local.z);
+    // Low-amplitude uneven edges avoid a geometrically perfect outer circle.
+    const angle = Math.atan2(local.z, local.x);
+    const phase = hash(`${field.id}:${field.pos.join(":")}`) / 0xffffffff * Math.PI * 2;
+    const edge = field.radius * (0.94 + 0.06 * Math.sin(angle * 5 + phase));
+    if (radius > field.coreRadius) {
+      const t = Math.max(0, 1 - (radius - field.coreRadius) / (edge - field.coreRadius));
+      return FIELD_DIFFUSION.wingDensity * t * t;
+    }
+    return field.radialFalloff ? 1 - 0.7 * (radius / field.coreRadius) ** 2 : 1;
+  }
   if (field.radialFalloff) {
     const r = Math.min(1, Math.hypot(local.x, local.z) / field.radius);
     return 1 - 0.7 * r * r;
@@ -130,9 +142,17 @@ function arcPosition(field, bound, rng, stray) {
   const angle = arc.angle + arc.gap / 2 + rng() * (Math.PI * 2 - arc.gap);
   const contour = arcContour(field, angle);
   const radial = stray
-    ? contour.inner + contour.width + bound + roll(rng, BELT_VARIATION.strayMin, BELT_VARIATION.strayMax)
+    ? contour.inner + contour.width + bound + BELT_VARIATION.strayMin + rng() ** 2 * (BELT_VARIATION.strayMax - BELT_VARIATION.strayMin)
     : contour.inner + bound + rng() * Math.max(0, contour.width - 2 * bound);
-  return V(Math.cos(angle) * radial, roll(rng, -field.height, field.height), Math.sin(angle) * radial);
+  // A smooth symmetric fade, not two extra flat layers of rocks.
+  let y, acceptance;
+  do {
+    y = roll(rng, -field.height, field.height) * BELT_VARIATION.heightScale;
+    const t = Math.max(0, Math.min(1, (BELT_VARIATION.heightScale - Math.abs(y) / field.height)
+      / (BELT_VARIATION.heightScale - BELT_VARIATION.verticalFadeStart)));
+    acceptance = t * t * (3 - 2 * t);
+  } while (rng() > acceptance);
+  return V(Math.cos(angle) * radial, y, Math.sin(angle) * radial);
 }
 
 const layouts = new Map();

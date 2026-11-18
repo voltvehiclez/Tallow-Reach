@@ -49,6 +49,21 @@ checklist `testing/TESTING-NPC-AI.md`. **Save v21**, no new dependency. Build an
 full suite pass (**668/668 tests**). Difficulty feel and crowded-belt performance need owner
 playtest; NOT claimed balanced from headless tests alone. No merge without approval.
 
+Scenery follow-up after owner approved AI: Meridian **Station pocket only** now
+rotates its C opening toward the sun's derived map direction, and lowers its field
+centre by 50 m. Other Meridian pockets are not excluded from the ordinary-field
+changes. Shared feature resolution applies a per-pocket override without mutating
+the authored catalog. C belts increase outer stray slots from 3.5% to 16%, with a
+continuous outward tail (no artificial gap). Symmetric smooth vertical falloff
+extends asteroid-centre height to 1.25×, sparse at both edges, not a hard slab.
+Other station/non-belt pocket fields widen 2.5× horizontally, preserving original
+core density weights and height. Counts include the integrated sparse quadratic
+outer wings; outer contours vary gently. Authored rift instances are unchanged.
+Files: `data/{scenery,places,place-templates}.js`, `sim/{asteroids,galaxy}.js`,
+density tests and rift/UI fixture positions (clear-space tests moved outside the
+rotated belt), generated HTML and handoff. Save v21; build passes and **671/671
+tests pass**. Visual preview pending.
+
 ## 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
 
 Owner requested wider belts with the nearest surface ~4 km from central arrival,

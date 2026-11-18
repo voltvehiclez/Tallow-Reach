@@ -10,6 +10,7 @@
 // `(seed, tuning, rng)` contract and name it in data/galaxy.js. Map/travel code
 // consumes the resolved records and does not know which generator made them.
 
+import { sceneryFeatures } from "../data/scenery.js";
 import { GALAXY, GALAXY_OVERRIDES, SYSTEM_NAME_PARTS } from "../data/galaxy.js";
 import { PLACES, PLACE_LINKS, PLACE_DEFS, DEFAULT_PLACE } from "../data/places.js";
 import { isPlaceTemplate, templateAt, templateFeatures, templateForPlace } from "../data/place-templates.js";
@@ -289,7 +290,7 @@ function recordFeatures(place) {
     ...(Array.isArray(place?.features) ? place.features : []),
     ...(Array.isArray(place?.extraFeatures) ? place.extraFeatures : []),
   ];
-  return [...(definition.features || []), ...explicit].map(feature => JSON.parse(JSON.stringify(feature)));
+  return sceneryFeatures(place, [...(definition.features || []), ...explicit].map(feature => JSON.parse(JSON.stringify(feature))));
 }
 
 const normalize3 = values => {
@@ -318,6 +319,16 @@ function finalizeArrivals(world) {
           face: roundVec([pos[0] + dir[0] * 10000, pos[1] + dir[1] * 10000, pos[2] + dir[2] * 10000]),
         };
         continue;
+      }
+      // Only Meridian Station's belt opens toward its system sun. The map's
+      // X/Y correspond to flight X/Z; the sun is at the system origin.
+      if (pocket.id === DEFAULT_PLACE && pocket.parent === "meridian") {
+        const node = spatial.nodes.find(node => node.id === pocket.id);
+        const field = recordFeatures(pocket).find(f => f.kind === "asteroidField" && f.layout === "arc");
+        if (node && field) pocket.featureOverrides = {
+          ...pocket.featureOverrides,
+          [field.id]: { arc: { ...field.arc, angle: Math.atan2(-node.pos[1], -node.pos[0]) } },
+        };
       }
       const features = recordFeatures(pocket);
       const stations = features.filter(f => f.kind === "station" && Array.isArray(f.pos));

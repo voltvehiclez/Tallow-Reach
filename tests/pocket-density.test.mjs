@@ -125,8 +125,8 @@ test('C contours are irregular and deterministic, with occasional separated oute
     const contour = arcContour(field, Math.atan2(z, x));
     return Math.hypot(x, z) - asteroidEnvelope(rock) > contour.inner + contour.width + 200;
   });
-  assert.ok(strays.length > 5 && strays.length < rocks.length * 0.08, `strays: ${strays.length}`);
-  assert.ok(rocks.every(r => Math.abs(r.pos.y - field.pos[1]) <= field.height));
+  assert.ok(strays.length > rocks.length * 0.07 && strays.length < rocks.length * 0.25, `strays: ${strays.length}`);
+  assert.ok(rocks.every(r => Math.abs(r.pos.y - field.pos[1]) <= field.height * 1.25));
 });
 
 
@@ -144,4 +144,47 @@ test('Field markers sit midway through the populated arc, not at the warp centre
     assert.deepEqual(field, original, 'marker must not move the field or arrival centre');
   }
   assert.deepEqual(fieldMarkerPosition({ pos: [1, 2, 3] }), [1, 2, 3]);
+});
+
+
+test('Meridian Station alone rotates its opening toward the sun and lowers its field', async () => {
+  const { systemSpatialLayout } = await import('../src/sim/galaxy.js');
+  const { setPlaceCatalog, placeDef } = await import('../src/data/places.js');
+  for (const seed of [1, 42]) {
+    const world = generateGalaxy(seed);
+    setPlaceCatalog(world);
+    try {
+      const field = placeDef('reach').features.find(f => f.kind === 'asteroidField');
+      const node = systemSpatialLayout(world, 'meridian').byId.reach;
+      const angle = Math.atan2(-node.pos[2], -node.pos[0]);
+      assert.ok(Math.abs(Math.sin(field.arc.angle - angle)) < 1e-8);
+      assert.ok(Math.cos(field.arc.angle - angle) > 0.999);
+      assert.equal(field.pos[1], -50);
+    } finally { setPlaceCatalog(null); }
+  }
+});
+
+test('Ordinary fields including other Meridian pockets widen without changing core density or height', async () => {
+  const { sceneryFeatures } = await import('../src/data/scenery.js');
+  const source = { kind: 'asteroidField', id: 'field', pos: [0,0,0], radius: 1000,
+    count: 100, height: 200, radialFalloff: true };
+  const wide = sceneryFeatures({ id: 'other-meridian-pocket', parent: 'meridian' }, [source])[0];
+  assert.equal(wide.radius, 2500);
+  assert.equal(wide.height, 200);
+  assert.equal(wide.coreRadius, 1000);
+  assert.ok(wide.count > source.count);
+  for (const r of [0, 300, 900]) assert.ok(Math.abs(fieldDensityWeight(wide, {x:r,z:0}) - fieldDensityWeight(source, {x:r,z:0})) < 1e-12);
+  assert.ok(fieldDensityWeight(wide, {x:1500,z:0}) > fieldDensityWeight(wide, {x:2200,z:0}));
+  assert.equal(sceneryFeatures({ id: 'reach', parent:'meridian' }, [source])[0].radius, 1000);
+  assert.equal(sceneryFeatures({ id: 'belt', role:'belt', parent:'meridian' }, [source])[0].radius, 1000);
+});
+
+test('Arc strays diffuse above and below the old height with a sparse outer fringe', () => {
+  const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
+  const rocks = [...planAsteroids('reach', [field]).values()];
+  const above = rocks.filter(r => r.pos.y - field.pos[1] > field.height);
+  const below = rocks.filter(r => r.pos.y - field.pos[1] < -field.height);
+  assert.ok(above.length > 0 && below.length > 0);
+  assert.ok(above.length + below.length < rocks.length * 0.18);
+  assert.ok(rocks.every(r => Math.abs(r.pos.y-field.pos[1]) <= field.height * 1.25));
 });
