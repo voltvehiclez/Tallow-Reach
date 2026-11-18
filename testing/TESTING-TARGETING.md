@@ -9,7 +9,9 @@ Only request items **4–7** are included; other requested features remain pendi
 2. **Other targets:** repeat with a rock or station. Selecting the same station
    twice must release it. Crates, rift doors and gates should remain selectable.
 3. **Target label:** no "Locked" prefix/acquired message. A selected NPC has two
-   narrow bars above its name: blue shield above white hull. Current NPCs have no
+   left-aligned bars above its name: blue shield above white hull, each with a
+   percentage on the right. Turn until the target leaves the view: only its
+   name/health rectangle should stay at the edge, not the small targeting square. Current NPCs have no
    shields, so blue is empty. Damage should shorten the white bar. No giant panels.
 4. **Missile progress:** equip a launcher and keep an enemy inside the cone. Corners
    start much farther out, then move inward; the bar and percentage grow to 100%.

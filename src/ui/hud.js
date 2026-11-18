@@ -1,6 +1,7 @@
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
+import { targetOnScreen, targetHealthMarkup } from "./target-display.js";
 import { fmtDist } from "../util/math.js";
 import { on } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
@@ -367,7 +368,8 @@ function mark(p, text, cls, ox, oy, health = null) {
   // Frame NDC of the point through the stock projection.
   let v = null;
   const pv = p.clone().project(camera);
-  if (pc.z < 0) v = { x: pv.x, y: pv.y };
+  const visible = targetOnScreen(pc.z, pv);
+  if (visible) v = { x: pv.x, y: pv.y };
 
   let x, y;
   if (v && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1) {
@@ -390,8 +392,9 @@ function mark(p, text, cls, ox, oy, health = null) {
   el_.style.cssText = `display:block;left:${x}px;top:${y}px`;
   el_.className = "mk " + cls;
   const label = text === null ? "" : text + " " + fmtDist(state.player.pos.distanceTo(p));
-  if (health) el_.innerHTML = `<span class="target-health" aria-label="Shield ${health.shield}%, hull ${health.hull}%"><span class="target-shield"><i style="width:${health.shield}%"></i></span><span class="target-hull"><i style="width:${health.hull}%"></i></span></span><span>${escHud(label)}</span>`;
+  if (health) el_.innerHTML = `${targetHealthMarkup(health)}<span>${escHud(label)}</span>`;
   else el_.textContent = label;
+  return visible;
 }
 
 function drawMarkers() {
@@ -416,8 +419,8 @@ function drawMarkers() {
   if (lock) {
     const hostile = lock.k === "e";
     const pos = lock.o && lock.o.pos ? interpolatedPos(lock.o) : lockPosition(lock);
-    mark(pos, lockName(lock), hostile ? "h lock" : "lock", 70, -36, hostile ? targetHealth(lock.o) : null);
-    mark(pos, null, hostile ? "h lk" : "lk");
+    const visible = mark(pos, lockName(lock), hostile ? "h lock" : "lock", 70, -36, hostile ? targetHealth(lock.o) : null);
+    if (visible) mark(pos, null, hostile ? "h lk" : "lk");
   }
 
   W.crates.forEach(c => {

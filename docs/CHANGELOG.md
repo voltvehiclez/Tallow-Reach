@@ -43,6 +43,13 @@ orbit's 300 m endpoint. No NPC behaviour changed. **Save v21.** Build passes;
 sound, 8 Base-tab cleanup, 9 persistent home-station selection/death respawn.
 Do not claim these are implemented. Home-station persistence needs save review.
 
+Part 1 visual follow-up: target bars now fill the label width from the left,
+with a right-aligned percentage on each row. Offscreen/behind-camera/clipped
+selected targets retain the edge-pinned name/health label but no small target
+square; on-screen targets retain both. `ui/target-display.js` provides tested
+pure markup/visibility helpers; `hud.js`, CSS, UI README and regression tests
+updated. No gameplay/save change. Build passes; **679/679 tests pass**; preview pending.
+
 ## 2026-11-16: Individual fighter pilots and per-enemy AI personalities
 
 Owner requested smarter, more varied NPC flight without a difficulty/stat increase:
