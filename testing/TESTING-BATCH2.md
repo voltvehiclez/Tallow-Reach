@@ -13,8 +13,11 @@ Implemented; owner playtest pending. Save v21 unchanged.
 Quick playtest:
 1. Launch: confirm Shield / Hull — open centre — Power / Boost ordering, short labels
    and matching tight gaps. Check that Power drains vertically and retains its MJ reading.
-2. Boost and take some shield/hull damage: columns drain/refill vertically; readings
-   agree. Without a shield/boost pool, its column is empty and reads none.
+2. Check current-only values and percentages below (full Shield: 10 then 100% on Wasp).
+   Power usage should sit under its MJ/percentage readings; text gaps match the tracks.
+   Check the throttle bar at 0%, half and full. Speed remains readable below it.
+   Boost and take some shield/hull damage: columns drain/refill vertically; readings
+   agree. Without a shield/boost pool, its column is empty and reads 0 / 0%.
 3. Tap and release Left Alt: mouse orbits and wheel zooms. Tap again to return.
    Hold it: keyboard repeat must not flicker the camera.
 4. Open inventory/map, pause, or switch browser tabs during orbit: camera exits

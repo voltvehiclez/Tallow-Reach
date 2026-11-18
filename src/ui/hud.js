@@ -1,4 +1,4 @@
-import { meterHeight } from "./vitals.js";
+import { meterHeight, meterPercent, meterValue } from "./vitals.js";
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
@@ -64,7 +64,13 @@ export function setupHud() {
     shieldVal: $("sh-val"),
     hullVal: $("hull-val"),
     topRight: $("tr"),
-    bottomCenter: $("bc"),
+    throttleFill: $("throttle-fill"),
+    throttleLabel: $("throttle-label"),
+    speed: $("speed"),
+    shieldPercent: $("sh-pct"),
+    hullPercent: $("hull-pct"),
+    boostPercent: $("boost-pct"),
+    powerPercent: $("pw-pct"),
     powerBar: $("pwbar"),
     powerValue: $("pw-val"),
     powerFlow: $("pw-flow"),
@@ -216,9 +222,12 @@ export function updateHud(dt) {
   el.hull.style.height = meterHeight(P.hull, P.hullMax);
   el.boost.style.height = meterHeight(P.en, P.enMax);
   // Numbers below every column, so each pool can be read exactly as well as roughly.
-  el.shieldVal.textContent = P.shMax > 0 ? `${Math.round(P.sh)} / ${Math.round(P.shMax)}` : "none";
-  el.hullVal.textContent = P.hullMax > 0 ? `${Math.round(P.hull)} / ${Math.round(P.hullMax)}` : "none";
-  el.boostVal.textContent = P.enMax > 0 ? `${Math.round(P.en)} / ${Math.round(P.enMax)}` : "none";
+  el.shieldVal.textContent = meterValue(P.sh, P.shMax);
+  el.hullVal.textContent = meterValue(P.hull, P.hullMax);
+  el.boostVal.textContent = meterValue(P.en, P.enMax);
+  el.shieldPercent.textContent = meterPercent(P.sh, P.shMax);
+  el.hullPercent.textContent = meterPercent(P.hull, P.hullMax);
+  el.boostPercent.textContent = meterPercent(P.en, P.enMax);
 
   updateHudRoute(dt);
 
@@ -240,13 +249,16 @@ export function updateHud(dt) {
     `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
     missionsHtml(missions);
 
-  el.bottomCenter.textContent = `Throttle ${Math.round(P.thr * 100)}%   ${Math.round(P.v.length())} m/s`;
+  el.throttleFill.style.width = meterHeight(P.thr, 1);
+  el.throttleLabel.textContent = `Throttle ${meterPercent(P.thr, 1)}`;
+  el.speed.textContent = `${Math.round(P.v.length())} m/s`;
 
   // Ship power: what the cells hold, and what the powerplants are making.
   const pw = state.power,
     cap = Math.max(0, pw.cap);
   el.powerBar.style.height = meterHeight(pw.stored, cap);
-  el.powerValue.textContent = cap ? `${Math.round(pw.stored)} / ${Math.round(cap)} MJ` : "No power cell";
+  el.powerValue.textContent = meterValue(pw.stored, cap, " MJ");
+  el.powerPercent.textContent = meterPercent(pw.stored, cap);
   el.powerFlow.textContent = `Using ${round1(pw.draw)} of ${round1(pw.gen)} MJ/s`;
 
   // Beam progress toward the next ore: a small bar with the percentage, shown

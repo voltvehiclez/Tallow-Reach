@@ -20,6 +20,16 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Tight HUD readings, pool percentages and throttle fill
+
+Moved label and number edges closer so their gap matches the 8px column gap. All
+four pools show current values only (Power retains MJ), with percentage underneath.
+Power usage sits inside the Power column below its readings. Throttle text now sits
+inside a horizontal bar, empty at 0 and full at 100%; speed stays separate below.
+Raised the columns slightly to fit the extra readout lines. Absent pools show 0/0%.
+Updated formatting/layout regression tests. Save v21; build regenerated. Visual
+playtest pending; remaining batch slices unchanged.
+
 ## 2026-11-16: Mirrored vertical HUD pairs
 
 Owner's slice-1 layout follow-up: shortened flight labels to Hull/Shield. Hull takes the
@@ -241,31 +251,9 @@ Ordinary field markers remain at their centres. Files: `sim/asteroids.js`,
 `ui/hud.js`, `tests/pocket-density.test.mjs`, generated HTML and handoff.
 Save v21; build green; **661/661 tests pass**. Owner preview pending.
 
-## 2026-11-16: Flatter, lighter belts with naturally thinning edges
-
-Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS
-density, and gradual thinning toward both tips. Meridian's centre-height range
-is now ±280 m (was ±400); dedicated belts ±420 m (was ±600). Counts scale by
-0.7 × 0.8 = 0.56 so reducing height does not inadvertently INCREASE volume
-density: Meridian has 420 rocks; generated belts 392–532. Arc-tip density uses
-a smoothstep taper over the outer quarter of each end, down to 12% placement
-weight at the tips; the broad middle remains populated. The ~2 km clear centre,
-non-overlap bounds, giant sizes and stable slot planning remain unchanged.
-
-Ordinary template fields (including secondary/extended fields) and planet fields
-are 25% wider, with quadratic radial falloff from weight 1 at the centre to 0.3
-at the edge. Counts stay similar: the larger footprint offsets the falloff,
-keeping central density approximately as before. Smaller-field heights unchanged.
-Both stable and ad-hoc spawns apply the same density profiles.
-
-Files: `src/data/{places,place-templates}.js`, `src/sim/{asteroids,galaxy}.js`,
-`tests/pocket-density.test.mjs`, generated HTML and handoff. **Save stays v21**.
-`npm run build` green; **655/655 tests pass**, including profile symmetry,
-actual arc-tip thinning, field widening, spacing and arrival-clearance tests.
-Updated taper visuals still need owner preview.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Flatter, lighter belts with naturally thinning edges
 - 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids
 - 2026-11-16: Denser pockets, close warp-ins and massive asteroids
 - 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes

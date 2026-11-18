@@ -45,3 +45,19 @@ test('Left Alt toggles once per press, not on release/repeat; modal and blur are
   key('keydown');clearControls();assert.equal(state.freeCam.on,false);
  } finally {if(typeof off==='function')off();globalThis.addEventListener=previous;state.ui.cargo=null;state.freeCam.on=false;}
 });
+
+test('Current-only values, percentages and throttle fill retain safe boundary behaviour', async()=>{
+ const {meterValue,meterPercent}=await import('../src/ui/vitals.js');
+ assert.equal(meterValue(10,10),'10');assert.equal(meterPercent(10,10),'100%');
+ assert.equal(meterValue(100,200,' MJ'),'100 MJ');assert.equal(meterPercent(100,200),'50%');
+ assert.equal(meterValue(4,0),'0');assert.equal(meterPercent(4,0),'0%');
+ for(const [v,expected] of [[0,'0%'],[0.5,'50%'],[1,'100%'],[-1,'0%'],[2,'100%']]) assert.equal(meterHeight(v,1),expected);
+ const html=readFileSync('src/index.html','utf8');
+ for(const id of ['sh-pct','hull-pct','pw-pct','boost-pct','throttle-track','throttle-label','throttle-fill','speed']) assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1);
+ assert.ok(html.indexOf('id="pw-flow"')<html.indexOf('vital-boost'));
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/first-child > span \{ right: 0;/);assert.match(css,/last-child > span \{ left: 0;/);
+ assert.match(css,/#pw-flow \{[^}]*right: 0/);
+ const hud=readFileSync('src/ui/hud.js','utf8');assert.match(hud,/el.throttleFill.style.width = meterHeight\(P.thr, 1\)/);
+ assert.doesNotMatch(hud,/el.bottomCenter.textContent/);
+});

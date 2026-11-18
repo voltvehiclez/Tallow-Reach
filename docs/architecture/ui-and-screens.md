@@ -97,3 +97,5 @@ These are real, current limits. None of them is a bug in play today.
 Batch 2 slice 1: the bottom-centre MJ bar is flanked by small vertical Hull/Shield columns on its left and Boost on its right. Numeric pool readings remain; route stays top-left. Left Alt toggles free camera; blur/modals/pause reset it. Save v21 unchanged.
 
 HUD pairing follow-up: all four meters are vertical, ordered Shield / Hull — open centre — Power / Boost. Hull keeps the previous inner-left X position; Power takes the previous Boost X position. Both pairs have an 8px track gap. Labels are Hull/Shield (no HP suffix); numeric values and MJ/s readout remain. Narrow windows lift both pairs together.
+
+HUD readout follow-up: label/value/percentage text edges share the 8px track gap. Values show current only (Power includes MJ), percentages appear beneath, and MJ/s usage is within the Power column below those readings. Throttle text overlays a horizontal 0–100% fill bar; speed remains below it. Missing pools read 0 and 0%.

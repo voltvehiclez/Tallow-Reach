@@ -11,6 +11,30 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Flatter, lighter belts with naturally thinning edges
+
+Owner approved the C arcs, then requested 30% less height, confirmed 20% LESS
+density, and gradual thinning toward both tips. Meridian's centre-height range
+is now ±280 m (was ±400); dedicated belts ±420 m (was ±600). Counts scale by
+0.7 × 0.8 = 0.56 so reducing height does not inadvertently INCREASE volume
+density: Meridian has 420 rocks; generated belts 392–532. Arc-tip density uses
+a smoothstep taper over the outer quarter of each end, down to 12% placement
+weight at the tips; the broad middle remains populated. The ~2 km clear centre,
+non-overlap bounds, giant sizes and stable slot planning remain unchanged.
+
+Ordinary template fields (including secondary/extended fields) and planet fields
+are 25% wider, with quadratic radial falloff from weight 1 at the centre to 0.3
+at the edge. Counts stay similar: the larger footprint offsets the falloff,
+keeping central density approximately as before. Smaller-field heights unchanged.
+Both stable and ad-hoc spawns apply the same density profiles.
+
+Files: `src/data/{places,place-templates}.js`, `src/sim/{asteroids,galaxy}.js`,
+`tests/pocket-density.test.mjs`, generated HTML and handoff. **Save stays v21**.
+`npm run build` green; **655/655 tests pass**, including profile symmetry,
+actual arc-tip thinning, field widening, spacing and arrival-clearance tests.
+Updated taper visuals still need owner preview.
+
 ## 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids
 
 Owner: make belts a tightly packed big C, arrive in the middle with the nearest
