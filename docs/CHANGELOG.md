@@ -20,6 +20,19 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Compact selectable pocket list and aligned lower HUD
+
+Pocket list now has 16px single-line rows (35+ at 720p), opaque top-right placement,
+category checkbox filters saved safely between sessions, and reversible Name/Type/
+Distance sorting. It hides mission objectives while open. Clicking a live row toggles
+its F-compatible lock; extra object classes get generic tracked locks. Derived spatial
+features match stable kind/id because place definitions return copies. Mouse steering,
+orbit and firing are released while browsing; keyboard flight continues. N/Esc/Close
+restore normal control. Hover/focus holds row order for safe clicks. Bank headings
+align with grey-frame tops, and throttle spacing matches the 6px lateral gap. Tests
+cover filters/storage, sorting, selection/pruning, controls and geometry. Save v21;
+build regenerated. Owner playtest pending; batch slices 3–5 still pending.
+
 ## 2026-11-16: Repair N action, stabilise lead and align status bottoms
 
 Fixed missing emit import in main's N handler; reproduced the reported ReferenceError
@@ -109,26 +122,9 @@ Strip and pairs share the same centre and responsive vertical offset; responsive
 widths leave 30px from each strip edge to the neighbouring inner column centre.
 Layout regression tests updated. Save v21; build regenerated; visual playtest pending.
 
-## 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
-
-Reproduced free full-throttle jumps on Shift taps/dry ignition in failing tests. Throttle
-now snaps only after boost spool-up succeeds and the flat MJ cost is deducted. Held boost
-does not continually pin throttle. Existing continuous draw timing is unchanged.
-
-Added ten boxed weapon slots above the throttle: primary 1–5, secondary 6–0, exact
-Outfitting bay order, independent cyan/orange selections. Each weapon family has a shared
-SVG icon (module.weaponFamily), fitted markers and missile ammo count. Clicks select but
-do not fire. Empty/unsupported slots remain empty and never fall back. Removed redundant
-top-right selected-weapon line. Secondary fire resolves the selected bay; switching clears
-acquisition but keeps reload/ammo. No extra bays added to ships. Optional v21 sw defaults
-to first secondary; pw accepts 1–5, preserving legacy beam/cannon migration.
-
-Tests cover paid ignition, ten bindings, both fire banks, empty slots, reload preservation,
-pilot isolation, save defaults, family icons and UI. Build regenerated; owner playtest
-pending in `testing/TESTING-BATCH2.md`. Other slices remain pending; no merge yet.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
 - 2026-11-16: HUD pool units
 - 2026-11-16: Tight HUD readings, pool percentages and throttle fill
 - 2026-11-16: Mirrored vertical HUD pairs

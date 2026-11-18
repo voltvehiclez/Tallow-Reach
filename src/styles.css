@@ -9,6 +9,8 @@
   --red:#d0503f;
   --ice:#7fb7c4;
   --line:#27323a;
+  --weapon-size: min(44px, calc((100vw - 260px) / 10));
+  --weapon-bottom: calc(123.2px - 25px - var(--weapon-size));
   color-scheme: dark;
 }
 
@@ -117,7 +119,7 @@ body.no-reticle canvas {
 }
 #bc {
   left: calc(50% + 28px);
-  bottom: calc(42px - 18px);
+  bottom: calc(var(--weapon-bottom) - 6px - 24px);
   transform: translateX(-50%);
   text-align: center;
 }
@@ -1432,7 +1434,7 @@ textarea {
 .nav-pocket-icon .nav-current-ring { fill: none; stroke: var(--amber); stroke-width: 1; stroke-dasharray: 1 3; stroke-linecap: round; }
 
 /* Weapon bays match outfitting order; selected primary and secondary stay independent. */
-#hud > #weapon-slots { left: calc(50% + 28px); bottom: calc(78px - 18px); transform: translateX(-50%); width: min(480px, calc(100vw - 220px)); --weapon-size: min(44px, calc((100vw - 260px) / 10)); display: flex; gap: 16px; pointer-events: auto; }
+#hud > #weapon-slots { left: calc(50% + 28px); bottom: var(--weapon-bottom); transform: translateX(-50%); width: min(480px, calc(100vw - 220px)); --weapon-size: min(44px, calc((100vw - 260px) / 10)); display: flex; gap: 16px; pointer-events: auto; }
 .weapon-bank { flex: 1; min-width: 0; color: #c4c4c4; }
 #weapon-slots::after { content: ""; position: absolute; left: 50%; bottom: 0; height: var(--weapon-size); border-left: 1px solid #555; pointer-events: none; }
 .weapon-bank-label { color: #fff; font-size: 9px; line-height: 11px; margin-bottom: 1px; letter-spacing: 0; padding: 0; }
@@ -1445,7 +1447,7 @@ textarea {
 .weapon-key { color: #aaa; font-size: 11px; line-height: 1; }
 .weapon-fitted-mark { width: 88%; height: 3px; background: #444; border-radius: 0; margin-top: auto; }
 .weapon-slot.fitted .weapon-fitted-mark { background: currentColor; }
-.weapon-bank-name { min-height: 12px; margin-bottom: 1px; position: relative; top: -2px; font-size: 10px; line-height: 12px; color: #aaa; overflow-wrap: anywhere; }
+.weapon-bank-name { min-height: 12px; margin-bottom: 1px; position: relative; top: -2px; font-size: 10px; line-height: 12px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .weapon-bank.secondary .weapon-bank-name { text-align: right; }
 .weapon-ammo { color: #aaa; }
 
@@ -1454,11 +1456,23 @@ textarea {
 #pocket-name { display: block; font-size: 14px; font-weight: 400; margin-top: 2px; }
 .weapon-slot:hover, .weapon-slot:focus-visible { border-color: #fff; color: #fff; }
 
-#hud > #pocket-objects { right: 20px; top: 100px; width: min(340px, calc(100vw - 40px)); max-height: 60vh; background: rgba(18,18,18,.94); border: 1px solid #444; pointer-events: auto; color: #ddd; }
+#hud > #pocket-objects { right: 20px; top: 20px; bottom: 160px; width: min(380px, calc(100vw - 40px)); z-index: 20; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; pointer-events: auto; color: #ddd; }
 #pocket-objects[hidden], #weapon-lead[hidden] { display: none; }
-#pocket-objects header { padding: 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #444; }
-#pocket-objects button { margin: 0; padding: 4px 8px; }
-#pocket-object-rows { list-style: none; margin: 0; padding: 0 8px; max-height: 50vh; overflow-y: auto; }
-#pocket-object-rows li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid #333; font-size: 12px; }
-#pocket-object-rows small { display: block; color: #888; }
+body.navigation-open #tr { visibility: hidden; }
+body.navigation-open canvas { cursor: default; }
+#pocket-objects header { padding: 4px 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #444; font-size: 13px; }
+#pocket-objects button { margin: 0; padding: 2px 6px; font-size: 11px; }
+.pocket-tools { display: flex; gap: 4px; padding: 3px 6px; align-items: center; }
+.pocket-tools details { margin-left: auto; font-size: 12px; }
+#pocket-filters { position: absolute; right: 6px; z-index: 1; background: #181818; border: 1px solid #666; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
+#pocket-filters label { display: flex; align-items: center; gap: 4px; }
+#pocket-object-rows { list-style: none; margin: 0; padding: 0 6px; flex: 1; min-height: 0; overflow-y: auto; }
+#pocket-object-rows li { margin: 0; padding: 0; }
+#pocket-object-rows button { display: flex; justify-content: space-between; gap: 8px; width: 100%; height: 16px; padding: 0 2px; border: 0; border-radius: 0; background: transparent; line-height: 16px; text-align: left; color: #ddd; }
+#pocket-object-rows button:hover, #pocket-object-rows button:focus-visible { background: #333; color: #fff; }
+#pocket-object-rows button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pocket-object-rows button > span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+#pocket-object-rows small { display: inline; color: #888; font-size: inherit; }
+#pocket-objects [aria-pressed="true"] { border-color: #fff; color: #fff; }
+@media (max-height: 820px) { #hud > #pocket-objects { bottom: 24px; } }
 #weapon-lead { width: 12px; height: 12px; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }

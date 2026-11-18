@@ -7,16 +7,16 @@ import { itemName } from '../data/items.js';
 /** A sensor policy can later filter by range/signature. Today every object is visible. */
 export function pocketObjects(P, detect = () => true) {
   const place = P.place || state.place, world = placeWorld(place), rows = [];
-  const add = (kind, object, name, position) => {
+  const add = (kind, object, name, position, feature = false) => {
     const pos = Array.isArray(position) ? V(...position) : position;
     if (!pos || !Number.isFinite(pos.x + pos.y + pos.z)) return;
-    const row = { kind, object, name, distance: P.pos.distanceTo(pos) };
+    const row = { kind, object, name, feature, distance: P.pos.distanceTo(pos) };
     if (detect(row, P)) rows.push(row);
   };
   for (const f of placeDef(place).features) {
     // Encounter/spawner records are recipes, not additional physical objects.
     if (['encounter', 'spawner'].includes(f.kind)) continue;
-    add(f.kind, f, f.n || f.kind, f.pos || f.center);
+    add(f.kind, f, f.n || f.kind, f.pos || f.center, true);
   }
   for (const [key, kind] of [['enemies','Hostile'],['asteroids','Asteroid'],['crates','Cargo'],['rifts','Rift'],['gates','Gate'],['caches','Cache'],['bullets','Projectile'],['missiles','Missile']]) {
     for (const o of world[key] || []) {

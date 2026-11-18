@@ -78,7 +78,7 @@ export function introHtml() {
     `R enters a wormhole when you are close to one, and R again leaves an instance through the way you came in — never by contact, and a sealed way out says why. ` +
     `M opens the starmap: right-click a system to set a destination, then press J while flying for each next warp. You can also choose individual pockets to warp to. The world keeps running while the map is open; M or Esc closes it. ` +
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
-    `N toggles a read-only list of every object in the pocket; flight continues while you browse. ` +
+    `N toggles a pocket object list with filters and sorting; click a row to lock it. Mouse steering and firing are released while browsing; keyboard flight continues. ` +
     `I shows the hold of the ship you are flying while you are in space; dock to move cargo. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
     `Press Left Alt to toggle orbit view, move the mouse to orbit your ship, scroll to zoom. Press Left Alt again to return to flight view.</p>` +

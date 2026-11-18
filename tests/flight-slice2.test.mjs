@@ -53,7 +53,7 @@ test('Displacement speed includes scenery push with zero engine velocity, never 
 });
 test('Lower HUD translates uniformly while missile points straight up',()=>{
  const css=readFileSync('src/styles.css','utf8');
- for(const bottom of [42,78,184,158]) assert.ok(css.includes(`bottom: calc(${bottom}px - 18px)`));
+ for(const bottom of [184,158]) assert.ok(css.includes(`bottom: calc(${bottom}px - 18px)`));
  assert.doesNotMatch(readFileSync('src/ui/weapon-slots.js','utf8'),/rotate\(45/);
 });
 

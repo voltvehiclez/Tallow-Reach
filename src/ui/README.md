@@ -4,6 +4,7 @@ Reads `state`, calls sim actions. No game rules here.
 
 | File | What it does |
 |---|---|
+| `pocket-list.js` | Pocket type labels, safe browser-local checkbox preferences, filtering and reversible sorting. |
 | `location-display.js` | Plain current system/pocket text; instances use Outside known systems, not a false system. |
 | `weapon-slots.js` | Pure ten-slot hotbar markup: primary 1–5, secondary 6–0, family icons, fitted markers, ammo and independent selected banks. |
 | `vitals.js` | Pure clamped vertical HUD meter fill calculation. |
@@ -75,3 +76,14 @@ Slice 2: N toggles a live, scrollable read-only pocket-object list (no range fil
 Slice 2 repair: navigation-toggle now has its required emit import in main. Lead prediction uses interpolated hull/muzzle, target position and velocities at the camera render time rather than raw 60Hz poses. Status frame bottoms align with throttle at 24px from screen bottom; all X geometry and sizes are unchanged.
 
 Throttle centre now matches the weapon strip at 50% + 28px; its size and vertical position are unchanged.
+
+Pocket list follow-up: 16px single-line selectable rows, Ship/Station/Asteroid and all
+other categories under Filters; ticks persist in localStorage separately from saves.
+Name/Type/Distance buttons reverse their sort on repeated clicks. Opaque top-right
+panel hides mission objectives while open (restored on close). At 720p, over 35 rows
+fit with filters collapsed. Row order freezes while hovered/focused to prevent a
+refresh switching the target under a click. Mouse steering/fire are released while
+open; keyboard flight continues. Click rows to toggle the same F lock records, with
+extra generic locks for spatial features/projectiles. Esc/N/Close dismiss the list.
+Weapon headings align with status-frame tops; throttle has the same 6px gap as the
+weapon-strip/status-frame horizontal gap. Names truncate to one line with tooltips.

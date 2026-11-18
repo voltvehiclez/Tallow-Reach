@@ -101,3 +101,5 @@ HUD pairing follow-up: all four meters are vertical, ordered Shield / Hull — o
 HUD readout follow-up: label/value/percentage text edges share the 8px track gap. Values show current only (Power includes MJ), percentages appear beneath, and MJ/s usage is within the Power column below those readings. Throttle text overlays a horizontal 0–100% fill bar; speed remains below it. Missing pools read 0 and 0%.
 
 Flight location is now top-left: bold white system then regular white pocket, without a pocket icon. Instances say Outside known systems. Weapon banks use square monochrome slots, selected weapon names/ammo beneath headings, and sit closer to throttle. Bottom-left help removed; main menu retains controls.
+
+The N pocket list has one-line 16px rows, browser-local saved category filters, reversible Name/Type/Distance sorting, and click-to-lock. It overlays/hides top-right mission objectives while open; keyboard flight continues, mouse steering/fire do not. At 720p with filters collapsed it fits over 35 rows. A hovered/focused list holds its order until pointer/focus leaves to prevent selecting a different moving row.

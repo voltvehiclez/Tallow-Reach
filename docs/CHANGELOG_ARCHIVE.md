@@ -23,6 +23,25 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
+
+Reproduced free full-throttle jumps on Shift taps/dry ignition in failing tests. Throttle
+now snaps only after boost spool-up succeeds and the flat MJ cost is deducted. Held boost
+does not continually pin throttle. Existing continuous draw timing is unchanged.
+
+Added ten boxed weapon slots above the throttle: primary 1–5, secondary 6–0, exact
+Outfitting bay order, independent cyan/orange selections. Each weapon family has a shared
+SVG icon (module.weaponFamily), fitted markers and missile ammo count. Clicks select but
+do not fire. Empty/unsupported slots remain empty and never fall back. Removed redundant
+top-right selected-weapon line. Secondary fire resolves the selected bay; switching clears
+acquisition but keeps reload/ammo. No extra bays added to ships. Optional v21 sw defaults
+to first secondary; pw accepts 1–5, preserving legacy beam/cannon migration.
+
+Tests cover paid ignition, ten bindings, both fire banks, empty slots, reload preservation,
+pilot isolation, save defaults, family icons and UI. Build regenerated; owner playtest
+pending in `testing/TESTING-BATCH2.md`. Other slices remain pending; no merge yet.
+
 ## 2026-11-16: HUD pool units
 
 Shield and Hull current values now include HP (e.g. 10 HP); Boost includes U for

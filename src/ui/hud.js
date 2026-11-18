@@ -1,3 +1,4 @@
+import { POCKET_FILTERS, pocketType, readPocketFilters, savePocketFilters, sortedPocketRows } from './pocket-list.js';
 import { playerMount } from '../sim/pilot.js';
 import { pocketObjects, interceptPoint } from '../sim/flight-instruments.js';
 import { primarySlotIndex } from '../sim/weapons.js';
@@ -39,7 +40,19 @@ let markerRoot = null;
 let el = {};
 let routeCache = null;
 let weaponSlotsCache = null;
-let navigationOpen = false, navigationTimer = 0;
+let navigationOpen = false, navigationTimer = 0, navigationRows = [], navigationSort = 'distance', navigationDirection = 1;
+let navigationFilters;
+const preferenceStorage = {
+  getItem: key => globalThis.localStorage.getItem(key),
+  setItem: (key,value) => globalThis.localStorage.setItem(key,value),
+};
+function setNavigation(open) {
+  navigationOpen = state.ui.navigation = open;
+  if (el.navigation) el.navigation.hidden = !open;
+  document.body.classList.toggle('navigation-open', open);
+  navigationTimer = 0;
+  emit('navigation-input');
+}
 
 /**
  * Show or hide the flight HUD, the world-space markers **and** the system pointer
@@ -54,7 +67,7 @@ let navigationOpen = false, navigationTimer = 0;
  */
 function setReticle(visible) {
   el.root.hidden = !visible;
-  if (!visible) { navigationOpen = false; if (el.navigation) el.navigation.hidden = true; }
+  if (!visible) setNavigation(false);
   if (markerRoot) markerRoot.style.display = visible ? "" : "none";
   if (document.body && document.body.classList) {
     document.body.classList.toggle("no-reticle", !visible);
@@ -120,14 +133,38 @@ export function setupHud() {
   });
 
 
-  on("navigation-toggle", () => {
-    navigationOpen = !navigationOpen;
-    el.navigation.hidden = !navigationOpen;
-    navigationTimer = 0;
-  });
+  navigationFilters = readPocketFilters(preferenceStorage);
+  $("pocket-filters").innerHTML = POCKET_FILTERS.map(type=>`<label><input type="checkbox" data-pocket-filter="${type}" ${navigationFilters[type]?'checked':''}>${type}</label>`).join('');
+  on("navigation-toggle", () => setNavigation(!navigationOpen));
   el.navigation.addEventListener("mousedown", e => e.stopPropagation());
   el.navigation.addEventListener("wheel", e => e.stopPropagation());
-  $("close-pocket-objects").addEventListener("click", () => { navigationOpen = false; el.navigation.hidden = true; });
+  el.navigation.addEventListener("change", e => {
+    const type = e.target.dataset.pocketFilter;
+    if (!type) return;
+    navigationFilters[type] = e.target.checked;
+    savePocketFilters(preferenceStorage, navigationFilters);
+    navigationTimer = 0;
+  });
+  el.navigation.addEventListener("click", e => {
+    const sort = e.target.closest('[data-pocket-sort]');
+    if (sort) {
+      const key = sort.dataset.pocketSort;
+      navigationDirection = navigationSort === key ? -navigationDirection : 1;
+      navigationSort = key;
+      for (const button of el.navigation.querySelectorAll('[data-pocket-sort]')) {
+        button.setAttribute('aria-pressed', String(button === sort));
+        button.textContent = button.dataset.pocketSort.replace(/^./, c=>c.toUpperCase()) + (button === sort ? (navigationDirection===1?' ↑':' ↓'):'');
+      }
+      navigationTimer = 0;
+    }
+    const row = e.target.closest('[data-pocket-row]');
+    if (row && navigationRows[Number(row.dataset.pocketRow)]) emit('navigation-select', navigationRows[Number(row.dataset.pocketRow)].object);
+  });
+  $("close-pocket-objects").addEventListener("click", () => setNavigation(false));
+  // Avoid replacing a row between pointer-down and click, or a focused keyboard action.
+  el.navigationRows.addEventListener('pointerenter', () => el.navigationRows.dataset.hover = '1');
+  el.navigationRows.addEventListener('pointerleave', () => { delete el.navigationRows.dataset.hover; navigationTimer = 0; });
+
 
   addEventListener("mousemove", e => {
     el.cursor.style.left = e.clientX + "px";
@@ -477,13 +514,15 @@ function drawMarkers() {
   for (let i = markerCount; i < MARKER_POOL; i++) markers[i].style.display = "none";
 }
 
-// Read-only navigation overlay: flight continues; N or Close hides it.
+// Navigation overlay: keyboard flight continues; N, Escape or Close hides it.
 function updateInstruments(dt, P, F) {
   navigationTimer -= dt;
   if (navigationOpen && navigationTimer <= 0) {
     navigationTimer = 0.25;
-    const rows = pocketObjects(P);
-    el.navigationRows.innerHTML = rows.length ? rows.map(row => `<li><span>${escHud(row.name)}<small>${escHud(row.kind)}</small></span><span>${fmtDist(row.distance)}</span></li>`).join('') : '<li>No objects in this pocket.</li>';
+    if (!el.navigationRows.dataset.hover && !el.navigationRows.contains(document.activeElement)) {
+      navigationRows = sortedPocketRows(pocketObjects(P), navigationFilters, navigationSort, navigationDirection);
+      el.navigationRows.innerHTML = navigationRows.length ? navigationRows.map((row,index) => `<li><button type="button" data-pocket-row="${index}" title="${escHud(row.name)} (${pocketType(row.kind)})"><span>${escHud(row.name)} <small>(${pocketType(row.kind)})</small></span><span>${(row.distance/1000).toFixed(2)} km</span></button></li>`).join('') : '<li class="pocket-empty">No matching objects.</li>';
+    }
   }
   el.lead.hidden = true;
   const lock = F.lock;

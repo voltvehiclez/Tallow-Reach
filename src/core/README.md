@@ -23,3 +23,5 @@ Left Alt emits the inverse of the authoritative freeCam.on on non-repeat keydown
 Digit1–Digit5 emit primary:1–primary:5; Digit6–Digit0 emit secondary:1–secondary:5. The HUD buttons emit these same actions.
 
 N emits navigation; main gates it to active flight and toggles the read-only HUD list without taking over flight controls.
+
+Navigation browsing suppresses mouse steering, orbit and firing but leaves keyboard flight available. navigation-input resets pointer/fire when opening or closing, so closing does not resume stale mouse commands.

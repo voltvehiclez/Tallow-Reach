@@ -70,3 +70,5 @@ Targeting accepts the nearest visible mesh hit from the render layer for every l
 Boost sets full throttle only on the ignition transition after its flat MJ debit, never on the initial press. Weapons support primary and secondary selected bay indices 0–4; selection banks are independent. A selected empty slot never falls back. Secondary switching clears acquisition but preserves the shared reload cooldown/ammo to prevent bypasses.
 
 Weapon selection updates the flight slot HUD without emitting redundant centre-screen equipped/empty messages. Independent selection and missile-lock reset behaviour are unchanged.
+
+Pocket row selection validates live membership, uses standard F-lock records for supported target kinds, and toggles the same target off. Additional spatial features/projectiles use generic locks pruned on removal/place change. Derived feature copies match by stable kind/id rather than reference.

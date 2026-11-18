@@ -62,7 +62,7 @@ test('Strip has ten numbered boxes, shared family icons and no redundant top-rig
 
 test('Compact strip fits between unchanged meter pairs at desktop and narrower widths',()=>{
  const css=readFileSync('src/styles.css','utf8');
- assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: calc\(78px - 18px\)/);
+ assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: var\(--weapon-bottom\)/);
  assert.match(css,/width: min\(480px, calc\(100vw - 220px\)\)/);
  assert.match(css,/width: min\(540px, calc\(100vw - 160px\)\)/);
  assert.match(css,/\.weapon-slot \{[^}]*height: var\(--weapon-size\); width: 100%/);

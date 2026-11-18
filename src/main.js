@@ -1,3 +1,4 @@
+import { selectPocketObject } from './sim/targeting.js';
 import { pickLockSurface } from "./render/target-picking.js";
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
@@ -134,6 +135,10 @@ on("instances-forgotten", ({ ids }) => {
 showPlace(state.place);
 
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
+on("navigation-select", object => {
+  const P = localPlayer();
+  if (P && state.ui.navigation && !state.paused && !P.docked && !state.warp) selectPocketObject(object, P);
+});
 
 on("action", ({ name, repeat, to: nameTo, key }) => {
   const pauseKey = key !== "Escape";
@@ -195,6 +200,11 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       if (!state.ui.intro && !state.paused && !localPlayer().docked) startWarp(localPlayer(), nameTo);
       break;
     case "pause":
+      if (state.ui.navigation) {
+        emit("navigation-toggle");
+        if (pauseKey) setPause(true);
+        break;
+      }
       if (isStarmapOpen()) {
         closeStarmap();
         if (name === "pause" && pauseKey) setPause(true);
