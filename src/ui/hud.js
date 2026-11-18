@@ -1,7 +1,6 @@
 import { playerMount } from '../sim/pilot.js';
 import { pocketObjects, interceptPoint } from '../sim/flight-instruments.js';
 import { primarySlotIndex } from '../sim/weapons.js';
-import { enemyVel } from '../sim/enemy.js';
 import { locationText } from "./location-display.js";
 import { weaponSlotsHtml } from "./weapon-slots.js";
 import { meterHeight, meterPercent, meterValue, throttleDisplay } from "./vitals.js";
@@ -15,7 +14,7 @@ import { SHIPS } from "../data/ships.js";
 import { featuresOf } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
-import { interpolatedPos } from "../render/views.js";
+import { interpolatedPos, interpolatedVelocity, renderPlayerPose } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
@@ -491,10 +490,12 @@ function updateInstruments(dt, P, F) {
   if (state.warp || P.docked || lock?.k !== 'e' || lock.o.hp <= 0) return;
   const gun = P.guns.find(g => g.i === primarySlotIndex(state.profile.pw, P));
   if (!gun) return; // Empty bays and hitscan mining beams must not suggest a ballistic lead.
+  // Use the camera/hull render time, not the next fixed-step pose.
+  const pose = renderPlayerPose(P);
   const barrels = Math.max(1, gun.barrels || 1);
-  const origin = playerMount('gun', gun.i, 0, barrels, P, state.profile.ship);
-  if (barrels > 1) origin.add(playerMount('gun', gun.i, barrels-1, barrels, P, state.profile.ship)).multiplyScalar(0.5);
-  const point = interceptPoint(origin, P.v, lock.o.pos, enemyVel(lock.o), gun.speed, BULLET_LIFETIME);
+  const origin = playerMount('gun', gun.i, 0, barrels, pose, state.profile.ship);
+  if (barrels > 1) origin.add(playerMount('gun', gun.i, barrels-1, barrels, pose, state.profile.ship)).multiplyScalar(0.5);
+  const point = interceptPoint(origin, pose.v, interpolatedPos(lock.o), interpolatedVelocity(lock.o), gun.speed, BULLET_LIFETIME);
   if (!point) return;
   const screen = point.project(camera);
   if (screen.z < -1 || screen.z > 1 || Math.abs(screen.x) > 1 || Math.abs(screen.y) > 1) return;

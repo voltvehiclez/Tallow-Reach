@@ -249,6 +249,14 @@ export function interpolatedPos(e, alpha = frameAlpha, out = new THREE.Vector3()
   return out.copy(p.pos).lerp(e.pos, alpha);
 }
 
+/** Velocity at the same render time as interpolatedPos (for ballistic instruments). */
+export function interpolatedVelocity(e, alpha = frameAlpha, out = new THREE.Vector3()) {
+  if (!e?.v) return out.set(0, 0, 0);
+  const p = prevPoses.get(e);
+  if (!p?.v || alpha >= 1 || p.pos.distanceToSquared(e.pos) > TELEPORT_DIST_SQ) return out.copy(e.v);
+  return out.copy(p.v).lerp(e.v, alpha);
+}
+
 /** Interpolated pose for `P` at fractional tick `alpha` (shared by hull view and camera). */
 export function renderPlayerPose(P = localPlayer(), alpha = frameAlpha) {
   if (!P || !P.pos) return P;

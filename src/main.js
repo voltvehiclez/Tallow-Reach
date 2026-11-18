@@ -12,7 +12,7 @@ import { SHIPS } from "./data/ships.js";
 import { verticalFovForAspect } from "./data/camera.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
-import { on } from "./util/events.js";
+import { on, emit } from "./util/events.js";
 import { createPlayer, setShip } from "./sim/player.js";
 import { setWeapon, setSecondaryWeapon, refreshGuns } from "./sim/weapons.js";
 import { loadPlace } from "./sim/places.js";

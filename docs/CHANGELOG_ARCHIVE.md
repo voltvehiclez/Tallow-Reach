@@ -22,6 +22,13 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: HUD pool units
+
+Shield and Hull current values now include HP (e.g. 10 HP); Boost includes U for
+fuel units (e.g. 10 U). Power remains MJ. Labels, percentages, spacing and gameplay
+are unchanged. Updated HUD tests; save v21; build regenerated.
+
 ## 2026-11-16: Tight HUD readings, pool percentages and throttle fill
 
 Moved label and number edges closer so their gap matches the 8px column gap. All

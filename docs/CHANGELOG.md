@@ -20,6 +20,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Repair N action, stabilise lead and align status bottoms
+
+Fixed missing emit import in main's N handler; reproduced the reported ReferenceError
+with a test executing that action against its actual imported event helpers. Lead
+prediction now shares interpolated player/muzzle, target position and velocities
+with the rendered camera; avoids raw 60Hz pose jumps at close range while turning.
+Added interpolation/teleport regression coverage. Lowered status groups only: grey
+frame bottoms align with throttle at 24px, with their X positions and geometry unchanged.
+Throttle shifts 28px right to share the weapon strip centre; its size/height stay fixed.
+Save v21; build regenerated; owner repeat playtest pending.
+
 ## 2026-11-16: Batch slice 2 — navigation, lead and actual speed
 
 Moved the complete lower HUD down 18px without changing internal spacing; missile
@@ -116,14 +127,9 @@ Tests cover paid ignition, ten bindings, both fire banks, empty slots, reload pr
 pilot isolation, save defaults, family icons and UI. Build regenerated; owner playtest
 pending in `testing/TESTING-BATCH2.md`. Other slices remain pending; no merge yet.
 
-## 2026-11-16: HUD pool units
-
-Shield and Hull current values now include HP (e.g. 10 HP); Boost includes U for
-fuel units (e.g. 10 U). Power remains MJ. Labels, percentages, spacing and gameplay
-are unchanged. Updated HUD tests; save v21; build regenerated.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: HUD pool units
 - 2026-11-16: Tight HUD readings, pool percentages and throttle fill
 - 2026-11-16: Mirrored vertical HUD pairs
 - 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera

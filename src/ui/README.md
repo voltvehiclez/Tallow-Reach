@@ -71,3 +71,7 @@ Latest visual correction: bank headings have zero inset/tracking to align with t
 Status tracks and intrinsic-width labels now use the same explicit 50%/translateX centre as value/percentage readouts. Track widths, font sizes and frame bounds stay unchanged.
 
 Slice 2: N toggles a live, scrollable read-only pocket-object list (no range filter; flight continues). A white circle shows ballistic lead only for the selected primary gun and a valid locked hostile, within projectile lifetime and screen bounds. Empty bays/mining beams hide it. HUD speed includes collision displacement. The whole lower HUD moves down 18px; missile glyph points upward.
+
+Slice 2 repair: navigation-toggle now has its required emit import in main. Lead prediction uses interpolated hull/muzzle, target position and velocities at the camera render time rather than raw 60Hz poses. Status frame bottoms align with throttle at 24px from screen bottom; all X geometry and sizes are unchanged.
+
+Throttle centre now matches the weapon strip at 50% + 28px; its size and vertical position are unchanged.

@@ -116,7 +116,7 @@ body.no-reticle canvas {
   white-space: nowrap;
 }
 #bc {
-  left: 50%;
+  left: calc(50% + 28px);
   bottom: calc(42px - 18px);
   transform: translateX(-50%);
   text-align: center;
@@ -128,9 +128,9 @@ body.no-reticle canvas {
 #throttle-label { position: relative; display: block; line-height: 22px; font-size: 12px; color: var(--ink); }
 #speed { position: relative; font-size: 12px; color: var(--ink); white-space: nowrap; }
 
-/* Paired vertical meters: shifted outward equally to frame the compact weapon strip. */
+/* Frame bottom matches throttle bottom (24px): label line 13.2 + frame overhang 64 - parent height 44. */
 #ship-vitals {
-  left: calc(50% + 28px); bottom: calc(98px - 18px); transform: translateX(-50%);
+  left: calc(50% + 28px); bottom: calc(24px + 13.2px + 64px - 44px); transform: translateX(-50%);
   width: min(540px, calc(100vw - 160px)); height: 44px;
 }
 /* Inner label edges retain their previous coordinates. Outer labels remain 8px away.

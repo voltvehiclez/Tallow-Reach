@@ -120,3 +120,7 @@ Check Shield/Hull/Power/Boost labels, bars and numeric readouts share the centre
    while being displaced. Warp/reload should not produce a huge teleport-speed spike.
 
 Save remains v21. Slices 3–5 are still pending; no shop/inventory/mission changes here.
+
+Slice 2 repair playtest: refresh the preview, press N twice (opens/closes without error), and hold N (no repeated toggles). Close/turn past a locked moving hostile with a cannon: lead should move with the rendered target, not jump at tick boundaries. Check all four grey stat frames end at the same height as the throttle border; horizontal positions and sizes are unchanged.
+
+Confirm throttle and weapon strip share a horizontal centre; throttle size/height remain unchanged.

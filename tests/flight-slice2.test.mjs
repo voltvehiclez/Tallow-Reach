@@ -53,6 +53,42 @@ test('Displacement speed includes scenery push with zero engine velocity, never 
 });
 test('Lower HUD translates uniformly while missile points straight up',()=>{
  const css=readFileSync('src/styles.css','utf8');
- for(const bottom of [42,98,78,184,158]) assert.ok(css.includes(`bottom: calc(${bottom}px - 18px)`));
+ for(const bottom of [42,78,184,158]) assert.ok(css.includes(`bottom: calc(${bottom}px - 18px)`));
  assert.doesNotMatch(readFileSync('src/ui/weapon-slots.js','utf8'),/rotate\(45/);
+});
+
+test('Navigation action executes with the event helpers actually imported by main',async()=>{
+ const main=readFileSync('src/main.js','utf8');
+ const imports=main.match(/import \{([^}]+)\} from "\.\/util\/events.js"/)[1].split(',').map(s=>s.trim());
+ const events=await import('../src/util/events.js');
+ const action=main.match(/case "navigation":([\s\S]*?)break;/)[1];
+ let calls=0;events.on('navigation-toggle',()=>calls++);
+ try {
+  const run=new Function(...imports,'playing','repeat',action);
+  run(...imports.map(key=>events[key]),true,false);assert.equal(calls,1);
+  run(...imports.map(key=>events[key]),true,true);assert.equal(calls,1);
+  run(...imports.map(key=>events[key]),false,false);assert.equal(calls,1);
+ } finally { /* Event listeners are confined to this test process. */ }
+});
+
+test('Status frame bottoms align with throttle without changing X positions or track geometry',()=>{
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/#ship-vitals \{[^}]*left: calc\(50% \+ 28px\); bottom: calc\(24px \+ 13.2px \+ 64px - 44px\)/);
+ const baseline=24+13.2+64-44;
+ assert.ok(Math.abs((baseline+44-13.2-64)-24)<1e-9);
+ assert.match(css,/\.vital-column \{[^}]*width: 28px; font-size: 11px; line-height: 1.2/);
+ assert.match(css,/\.vital-left \{ left: -7px/);assert.match(css,/\.vital-right \{ right: -7px/);
+});
+test('Lead prediction shares the rendered target and player poses instead of raw tick positions',()=>{
+ const hud=readFileSync('src/ui/hud.js','utf8');
+ assert.match(hud,/const pose = renderPlayerPose\(P\)/);
+ assert.match(hud,/interceptPoint\(origin, pose.v, interpolatedPos\(lock.o\), interpolatedVelocity\(lock.o\)/);
+ assert.doesNotMatch(hud,/interceptPoint\(origin, P.v, lock.o.pos/);
+});
+
+test('Throttle shares the weapon strip horizontal centre without resizing',()=>{
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/#bc \{\s*left: calc\(50% \+ 28px\);/);
+ assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\);/);
+ assert.match(css,/#throttle-track \{[^}]*width: 210px; height: 24px;/);
 });
