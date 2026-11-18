@@ -1,10 +1,11 @@
+import { weaponSlotsHtml } from "./weapon-slots.js";
 import { meterHeight, meterPercent, meterValue } from "./vitals.js";
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
 import { targetOnScreen, targetHealthMarkup } from "./target-display.js";
 import { fmtDist } from "../util/math.js";
-import { on } from "../util/events.js";
+import { on, emit } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
 import { placeAt, featuresOf } from "../data/places.js";
 import { term } from "../data/terms.js";
@@ -33,6 +34,7 @@ let markerCount = 0;
 let markerRoot = null;
 let el = {};
 let routeCache = null;
+let weaponSlotsCache = null;
 
 /**
  * Show or hide the flight HUD, the world-space markers **and** the system pointer
@@ -56,6 +58,7 @@ function setReticle(visible) {
 export function setupHud() {
   el = {
     root: $("hud"),
+    weaponSlots: $("weapon-slots"),
     shield: $("b1"),
     hull: $("b2"),
     boost: $("b3"),
@@ -88,6 +91,7 @@ export function setupHud() {
   };
 
   routeCache = null;
+  weaponSlotsCache = null;
   markerRoot = $("mk");
   const container = markerRoot;
   for (let i = 0; i < MARKER_POOL; i++) {
@@ -99,6 +103,11 @@ export function setupHud() {
 
   // Clicking the route must not fire weapons.
   el.route?.addEventListener("mousedown", e => e.stopPropagation());
+  el.weaponSlots?.addEventListener("mousedown", e => e.stopPropagation());
+  el.weaponSlots?.addEventListener("click", e => {
+    const button = e.target.closest("button[data-weapon-action]");
+    if (button) emit("action", { name: button.dataset.weaponAction, repeat: false });
+  });
 
   if (el.warpHint) el.warpHint.textContent = "M starmap";
 
@@ -231,22 +240,16 @@ export function updateHud(dt) {
 
   updateHudRoute(dt);
 
-  // The primary line names what left click will do, using the name of the module
-  // in the selected primary bay (key 1 = bay one, key 2 = bay two) — the same
-  // "Empty weapon slot" when the bay holds nothing. The leading number is the
-  // key to press, so the selected weapon is always on screen.
-  const slot = S.pw === "2" ? 1 : 0;
-  const fitted =
-    (state.guns || []).find(g => g.i === slot) ||
-    (state.beams || []).find(b => b.i === slot) ||
-    null;
-  const primary = fitted ? `${slot + 1}: ${fitted.n}` : "Empty weapon slot";
+  const slotsHtml = weaponSlotsHtml(S);
+  if (el.weaponSlots && weaponSlotsCache !== slotsHtml) {
+    el.weaponSlots.innerHTML = slotsHtml;
+    weaponSlotsCache = slotsHtml;
+  }
 
   el.topRight.innerHTML =
     `${pocketMarkerMarkup(placeAt(state.place), true)}${escHud(placeAt(state.place).n)}<br>` +
     instanceHtml(instanceAt(state.place)) +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
-    `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +
     missionsHtml(missions);
 
   el.throttleFill.style.width = meterHeight(P.thr, 1);

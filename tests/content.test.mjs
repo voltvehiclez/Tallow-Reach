@@ -442,15 +442,15 @@ test("basic cannons: 1 damage a shot, 3 a second per barrel, 2 MJ/s while firing
 });
 
 test("any primary slot with nothing in it is called 'Empty weapon slot'", () => {
-  // Player-facing wording lives in sim/weapons.js and ui/hud.js; guard both.
+  // Player-facing wording lives in sim/weapons.js and the weapon strip; guard both.
   const weapons = readFileSync(new URL("../src/sim/weapons.js", import.meta.url), "utf8");
   assert.match(weapons, /"Empty weapon slot"/, "an empty slot says exactly that");
   assert.match(weapons, /const gun = P\.guns\.find\(g => g\.i === slot\)/, "only the gun in the selected bay fires");
-  const hud = readFileSync(new URL("../src/ui/hud.js", import.meta.url), "utf8");
-  assert.match(hud, /"Empty weapon slot"/, "the HUD names the empty slot the same way");
+  const hud = readFileSync(new URL("../src/ui/weapon-slots.js", import.meta.url), "utf8");
+  assert.match(hud, /Empty weapon slot/, "the HUD names the empty slot the same way");
   assert.doesNotMatch(hud, /"No guns"/, "the old 'No guns' wording is gone");
   // The equipped line and the toast take the module's own name, and the HUD shows the bay key.
-  assert.match(hud, /`\$\{slot \+ 1\}:/, "the HUD prefixes the fitted weapon with its slot number");
+  assert.match(hud, /\$\{key\}: \$\{name\}/, "the slot tooltip names its key and fitted module");
   assert.match(weapons, /fitted \? `\$\{fitted\.n\} equipped`/, "the equip toast names the fitted module");
   assert.doesNotMatch(weapons, /"Cannons equipped"/, "the hardcoded 'Cannons equipped' is gone");
 });

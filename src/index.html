@@ -12,6 +12,7 @@
 <body>
 <div id="hud" hidden>
 <div id="tl"><section id="hud-route" aria-label="Route" hidden></section></div>
+<div id="weapon-slots" aria-label="Weapon selection"></div>
 <div id="tr"></div><div id="bc"><div id="throttle-track"><i id="throttle-fill"></i><span id="throttle-label">Throttle 0%</span></div><div id="speed"></div></div>
 <div id="ship-vitals" aria-label="Ship status">
 <div class="vital-pair vital-left">
@@ -22,7 +23,7 @@
 <div id="pw" class="vital-column vital-power"><span>Power</span><div class="vital-track"><i id="pwbar"></i></div><span class="vital-value" id="pw-val"></span><span class="vital-percent" id="pw-pct"></span><div id="pw-flow"></div></div>
 <div class="vital-column vital-boost"><span>Boost</span><div class="vital-track"><i id="b3"></i></div><span class="vital-value" id="boost-val"></span><span class="vital-percent" id="boost-pct"></span></div>
 </div>
-</div><div id="hint">Mouse steer. W/S throttle, A/D strafe, Space/C up and down, Q/E roll, Shift boost, X stop. Left click primary, right click secondary, 1/2 select primary slot 1/2, F target lock, G dock, R enter or leave a wormhole, <span id="warp-hint">M starmap</span>, P pause, Left Alt toggles free cam.</div>
+</div><div id="hint">Mouse steer. W/S throttle, A/D strafe, Space/C up and down, Q/E roll, Shift boost, X stop. Left click primary, right click secondary, 1–5 primary slots, 6–0 secondary slots, F target lock, G dock, R enter or leave a wormhole, <span id="warp-hint">M starmap</span>, P pause, Left Alt toggles free cam.</div>
 <div id="pr"></div><div id="bm" hidden><div class="bm-line"><span id="bm-name">Basic mining beam</span><span id="bm-pct">0%</span></div><div class="bar"><i id="bmbar" style="width:0;background:var(--amber)"></i></div></div><div id="msg"></div><div id="cur"></div><div id="ctr"></div><div id="mcone"></div><canvas id="retc" width="260" height="260"></canvas></div>
 <div id="mk"></div><div id="flash"></div><div id="panel"></div>
 <script>

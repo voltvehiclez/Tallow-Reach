@@ -20,6 +20,24 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
+
+Reproduced free full-throttle jumps on Shift taps/dry ignition in failing tests. Throttle
+now snaps only after boost spool-up succeeds and the flat MJ cost is deducted. Held boost
+does not continually pin throttle. Existing continuous draw timing is unchanged.
+
+Added ten boxed weapon slots above the throttle: primary 1–5, secondary 6–0, exact
+Outfitting bay order, independent cyan/orange selections. Each weapon family has a shared
+SVG icon (module.weaponFamily), fitted markers and missile ammo count. Clicks select but
+do not fire. Empty/unsupported slots remain empty and never fall back. Removed redundant
+top-right selected-weapon line. Secondary fire resolves the selected bay; switching clears
+acquisition but keeps reload/ammo. No extra bays added to ships. Optional v21 sw defaults
+to first secondary; pw accepts 1–5, preserving legacy beam/cannon migration.
+
+Tests cover paid ignition, ten bindings, both fire banks, empty slots, reload preservation,
+pilot isolation, save defaults, family icons and UI. Build regenerated; owner playtest
+pending in `testing/TESTING-BATCH2.md`. Other slices remain pending; no merge yet.
+
 ## 2026-11-16: HUD pool units
 
 Shield and Hull current values now include HP (e.g. 10 HP); Boost includes U for
@@ -140,60 +158,9 @@ lock timing and F-target priority are unchanged. NPC health bars/percentages sta
 Files: `ui/hud.js`, `data/weapons.js`, `sim/weapons.js`, weapon tests, playtest guide,
 generated HTML and handoff. Save v21; build passes; **679/679 tests pass**.
 
-## 2026-11-16: Individual fighter pilots and per-enemy AI personalities
-
-Owner requested smarter, more varied NPC flight without a difficulty/stat increase:
-stop synchronized paths/merged ships, strafe, dodge, seek firing positions and avoid
-obstacles; Guardians should be more aggressive than newbie raiders.
-
-- `data/enemy-ai.js`: baseline movement profile plus explicit raider, smuggler,
-  freighter, hive/rift/deep guardian profiles. New enemies fall back to standard;
-  `aiProfile` selects a profile and `aiTuning` overrides individual settings.
-- `sim/enemy-flight.js`: per-pilot independent seeded brain, approach/attack/strafe/
-  breakaway decisions, different hands/phases/ranges/timers, vertical movement,
-  delayed probabilistic projectile dodges with cooldowns. Guardians favour close
-  attack runs; freighters are conservative. Brain state is transient (save v21).
-- Predictive rock/ship/player separation plus hull-width station collider probes.
-  Existing collision resolution remains the safety net; avoidance is not a promise
-  of collision-free flight in every crowded or concave environment.
-- Fire only with a clear scenery/rock/friendly lane. Existing damage, fire cadence,
-  hull stats and aim-cone gate retained. No target-velocity lead; angular shot spread
-  replaces the old centimetre-scale offset that was effectively perfect at range.
-- Combat lifecycle oracle re-recorded intentionally: paths, projectiles, locks and
-  combat damage differ, while player position/orientation/velocity and final profile
-  match the prior recording. Mining, missile use and death recovery assertions kept.
-
-Files: `data/{enemies,enemy-ai}.js`, `sim/{ai,enemy-flight}.js`, new flight tests,
-combat fixture/test, folder READMEs, handoff/lessons, generated HTML and playtest
-checklist `testing/TESTING-NPC-AI.md`. **Save v21**, no new dependency. Build and
-full suite pass (**668/668 tests**). Difficulty feel and crowded-belt performance need owner
-playtest; NOT claimed balanced from headless tests alone. No merge without approval.
-
-Scenery follow-up after owner approved AI: Meridian **Station pocket only** now
-rotates its C opening toward the sun's derived map direction, and lowers its field
-centre by 50 m. Other Meridian pockets are not excluded from the ordinary-field
-changes. Shared feature resolution applies a per-pocket override without mutating
-the authored catalog. C belts increase outer stray slots from 3.5% to 16%, with a
-continuous outward tail (no artificial gap). Symmetric smooth vertical falloff
-extends asteroid-centre height to 1.25×, sparse at both edges, not a hard slab.
-Other station/non-belt pocket fields widen 2.5× horizontally, preserving original
-core density weights and height. Counts include the integrated sparse quadratic
-outer wings; outer contours vary gently. Authored rift instances are unchanged.
-Files: `data/{scenery,places,place-templates}.js`, `sim/{asteroids,galaxy}.js`,
-density tests and rift/UI fixture positions (clear-space tests moved outside the
-rotated belt), generated HTML and handoff. Save v21; build passes and **671/671
-tests pass**. Visual preview pending.
-
-Meridian arrival follow-up: authored system-space Y is now exactly -0.049 AU
-(X/Z unchanged). The station pocket declares a 1000 m sunward arrival: generation
-uses the true 3D direction from its AU position to the sun and faces the station.
-The populated arc remains behind the station, opposite the opening: belt → station
-→ warp-in → sun. Other arrivals unchanged. Files: `data/places.js`, `sim/galaxy.js`,
-density/arrival tests, generated HTML and handoff. Save v21. Build passes;
-**672/672 tests pass**. Owner visual preview pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Individual fighter pilots and per-enemy AI personalities
 - 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
 - 2026-11-16: Flatter, lighter belts with naturally thinning edges
 - 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids

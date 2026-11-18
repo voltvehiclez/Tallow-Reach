@@ -188,7 +188,8 @@ export function newProfile() {
     done: 0,            // contracts completed
     kills: 0,
     msl: 0,             // missiles carried
-    pw: "1",           // selected primary bay: "1" (key 1) or "2" (key 2)
+    pw: "1",           // selected primary bay 1–5
+    sw: "1",           // optional v21 selection for secondary bays 1–5 (keys 6–0)
     hp: { [DEFAULT_SHIP]: 1 },   // hull fraction per owned ship (1 = intact)
     loadout: allStockFit(),      // fitted modules per hull, group -> bay array
   });
@@ -513,6 +514,7 @@ export function sanitizeProfile(raw) {
     kills,
     msl,
     pw,
+    sw: /^[1-5]$/.test(String(raw.sw)) ? String(raw.sw) : "1",
     hp,
     loadout,
   });
@@ -981,7 +983,7 @@ function clampLevel(value, lo, hi) {
  * normalises to "1".
  */
 function cleanPrimarySelection(rawPw, loadout, ship) {
-  if (rawPw === "1" || rawPw === "2") return rawPw;
+  if (/^[1-5]$/.test(String(rawPw))) return String(rawPw);
   const bays =
     (loadout && loadout[ship] && loadout[ship].primary) || [];
   const slotHolding = kind => {
@@ -989,7 +991,7 @@ function cleanPrimarySelection(rawPw, loadout, ship) {
       const m = bays[i] && MODULES[bays[i]];
       if (!m || m.g !== "primary") continue;
       const isBeam = !!m.period;
-      if ((kind === "beam") === isBeam) return i === 0 ? "1" : "2";
+      if ((kind === "beam") === isBeam) return String(Math.min(4, i) + 1);
     }
     return null;
   };

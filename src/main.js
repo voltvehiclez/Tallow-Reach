@@ -14,7 +14,7 @@ import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
 import { on } from "./util/events.js";
 import { createPlayer, setShip } from "./sim/player.js";
-import { setWeapon, refreshGuns } from "./sim/weapons.js";
+import { setWeapon, setSecondaryWeapon, refreshGuns } from "./sim/weapons.js";
 import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
 import { tryDock, resumeFromSave } from "./sim/session.js";
@@ -148,11 +148,11 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
         toggleLock(localPlayer(), pickLockSurface(scene, camera));
       }
       break;
-    case "primary:1":
-      if (playing) setWeapon(0);
+    case "primary:1": case "primary:2": case "primary:3": case "primary:4": case "primary:5":
+      if (playing && !repeat) setWeapon(Number(name.split(":")[1]) - 1);
       break;
-    case "primary:2":
-      if (playing) setWeapon(1);
+    case "secondary:1": case "secondary:2": case "secondary:3": case "secondary:4": case "secondary:5":
+      if (playing && !repeat) setSecondaryWeapon(Number(name.split(":")[1]) - 1);
       break;
     case "dock":
       if (playing && !state.warp) tryDock();

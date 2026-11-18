@@ -13,3 +13,9 @@
   home. Test both no-hull and surviving-hull paths at generated stations in `home-station.test.mjs`.
 
 `tests/target-picking.test.mjs` covers every kind, station holes, moving children and faint auras.
+
+## Boost input is not successful ignition
+
+A Shift press set full throttle before spool-up/MJ debit, allowing free throttle jumps.
+Move the snap into the successful ignition transaction, after payment. Tests in
+`boost-ignition.test.mjs` cover taps, spool-up, dry power/fuel and held-key throttle control.

@@ -69,7 +69,7 @@ export function introHtml() {
     `W/S throttle, A/D strafe, Space and C move up and down, Q/E roll, Shift boost, X all stop. ` +
     `The main drive is much the strongest thruster: going forward is fast, while strafing, moving up and down and reversing are slow. ` +
     `Left click fires your primary weapon and right click your secondary. ` +
-    `Keys 1 and 2 switch the primary between cannons and the mining beam. ` +
+    `Keys 1–5 select primary bays; 6–0 select secondary bays, matching Outfitting order. ` +
     `Missiles lock on when a hostile stays inside the dashed ring for about a second. ` +
     `Right click then fires a homing missile, or a dumbfire missile if you have no lock. ` +
     `The mining beam and missiles are sold in the Shop. ` +

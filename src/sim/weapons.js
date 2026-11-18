@@ -30,7 +30,7 @@ import { placeCollidersOf, sweepColliders } from "./colliders.js";
 // `state.flight.beamStart` / `beamEnd` / `beamOn`, which the view copies.
 
 /**
- * Which primary bay (0 or 1) the pilot has selected. Keys 1 and 2 select
+ * Which primary bay (0 through 4) the pilot has selected. Keys 1 and 2 select
  * primary slot 1 and primary slot 2; only the selected slot's module fires —
  * a gun from that bay, or the mining beam fitted there. Legacy values fold in:
  * "beam" was the old any-bay beam mode and "cannon" the old cannon mode, so a
@@ -38,8 +38,7 @@ import { placeCollidersOf, sweepColliders } from "./colliders.js";
  * used to answer.
  */
 export function primarySlotIndex(weapon, P) {
-  if (weapon === "2") return 1;
-  if (weapon === "1") return 0;
+  if (/^[1-5]$/.test(String(weapon))) return Number(weapon) - 1;
   const guns = (P && P.guns) || [],
     beams = (P && P.beams) || [];
   if (weapon === "beam") {
@@ -50,11 +49,12 @@ export function primarySlotIndex(weapon, P) {
   return g ? g.i : 0;   // "cannon" and anything unrecognised
 }
 
-/** Select primary slot `slot` (0 = key 1, 1 = key 2). A slot with nothing in it
+/** Select primary slot `slot` (0–4 = numbered buttons 1–5). A slot with nothing in it
  *  is an "Empty weapon slot": left click does nothing. */
 export function setWeapon(slot, P = state.player) {
-  const s = slot === 1 || slot === "2" ? 1 : 0,
-    value = s === 1 ? "2" : "1";
+  const s = typeof slot === "string" ? Number(slot) - 1 : slot;
+  if (!Number.isInteger(s) || s < 0 || s >= 5) return;
+  const value = String(s + 1);
   const prof = profileOf(P);
   if (P !== state.player) {
     if (prof) prof.pw = value;
@@ -68,6 +68,20 @@ export function setWeapon(slot, P = state.player) {
     beam = (state.beams || []).find(b => b.i === s),
     fitted = gun || beam || null;
   msg(fitted ? `${fitted.n} equipped` : "Empty weapon slot", 1.5);
+}
+
+/** Secondary bay selection is independent of primary; switching cannot bypass reload. */
+export function setSecondaryWeapon(slot, P = state.player) {
+  if (!P || !Number.isInteger(slot) || slot < 0 || slot >= 5) return;
+  const profile = profileOf(P);
+  if (profile) profile.sw = String(slot + 1);
+  P.secondaryWeapon = String(slot + 1);
+  const lock = P.flight.missileLock;
+  lock.target = null; lock.t = 0; lock.locked = false;
+  if (P === state.player) {
+    const fitted = (P.missiles || []).find(m => m.i === slot);
+    msg(fitted ? `${fitted.n} equipped` : "Empty secondary slot", 1.5);
+  }
 }
 
 /** Primary fire: the fitted guns when held, or the mining beam if its slot is
@@ -262,7 +276,8 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
   }
 
   // Which fitted launcher (if any) decides the damage, the stock and the reload.
-  const launcher = (P.missiles || [])[0];
+  const secondary = Number(profileOf(P)?.sw || P.secondaryWeapon || "1") - 1;
+  const launcher = (P.missiles || []).find(m => m.i === secondary);
   if (!launcher) {
     F.coneAngle = 0;
     ML.target = null;

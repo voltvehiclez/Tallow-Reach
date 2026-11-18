@@ -65,3 +65,19 @@ Quick playtest:
   document which time basis is used and test anti-reroll bypasses.
 
 Give a short playtest after each implemented slice. Do not label pending slices complete.
+
+## Slice 1 follow-up — boost ignition and weapon strip
+
+1. Start at low throttle, tap Shift and release before ignition: no jump to 100%.
+   Hold until the ignition sound and flat MJ debit: throttle now jumps to 100%.
+   Repeat without enough ignition MJ: it must not jump. Normal throttle control
+   still works while boost is held after ignition.
+2. Fit cannon/mining beam in primary bays 1/2; use keys 1/2 and left click.
+   Verify icon, cyan selection and fired weapon match Outfitting order. Select an
+   empty slot 3–5: no weapon fires and no automatic fallback occurs.
+3. Fit missiles in the first secondary bay, press 6 and right click. Its orange
+   selection is independent of the primary. Select an empty 7–0 slot: no launch.
+   The code supports additional secondary bays without adding bays to current ships.
+4. Click hotbar boxes: selection works without firing. Check shared missile ammo on
+   its icon and no redundant weapon line at top-right. Reload: both selections persist.
+5. Compare the strip at normal and narrow window sizes. Remaining batch slices are pending.

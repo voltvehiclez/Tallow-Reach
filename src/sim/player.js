@@ -63,7 +63,6 @@ export function createPlayerRecord(controls = neutralControls()) {
     enMax: 0,          // tank size, set from the fitted thrusters (sim/drive.js)
     bs: 0,             // boost ramp, 0..1
     boost: false,
-    boostKeyWasDown: false, // detects a fresh Shift press without locking throttle while held
     last: 0,           // time of last hit (shields recharge after a pause)
     acc: 0,            // fractional ore carried over between frames
     snap: false,       // snap the camera to the ship on the next frame
@@ -176,11 +175,7 @@ export function flight(dt, P = state.player, runtime = null) {
     }
   }
 
-  // A fresh boost press snaps the throttle to full forward once. Holding boost
-  // does not hold the throttle there; the pilot can still change it afterward.
   const boostKey = c.boost;
-  if (boostKey && !P.boostKeyWasDown && powered && !W) P.thr = 1;
-  P.boostKeyWasDown = boostKey;
 
   // Power budget for this frame: the thrusters draw while the throttle is off
   // centre, and a little more while the boost is burning. The boost figure comes
@@ -205,6 +200,8 @@ export function flight(dt, P = state.player, runtime = null) {
     emit("sfx", { name: "boost" });
     // The ignition: one flat gulp out of the cells, not a trickle.
     r.power.stored = Math.max(0, r.power.stored - (drv.ignite || 0));
+    // Full throttle is earned only by ignition, never a tap during spool-up.
+    P.thr = 1;
   }
   // The tank fills by itself whenever the boost is not burning. Both rates come
   // from the fitted thrusters, so a bigger tank or a thirstier boost is a change in
