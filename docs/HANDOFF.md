@@ -5,7 +5,7 @@ code**: give complete files (or exact find-and-replace edits) with full paths, a
 run and what to click. Different AI assistants work in separate chats and none remembers earlier ones.
 **The docs are the memory.** Do not read every doc: read this file, then only what your task needs.
 
-*Last checked: 2026-11-16. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
+*Last checked: 2026-11-18. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
 
 ## Start here (every chat)
 
@@ -37,8 +37,8 @@ run and what to click. Different AI assistants work in separate chats and none r
   not repeat it); tick steps there. A step that is "built" but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first.
 - **Playtests passed (2026-11-16):** 14c, the cube-map skies, the collision-damage fix, the Test Ship, both bug rounds and system space. ROADMAP 14c ticked.
-- **Previous nine-feature batch + nebula fill:** merged PR #39. Fill approved at 0.125; recipe 24 has overrides. All-lockable surface F picking, compact mission log, stationary outfitting preview and home recovery implemented.
-- **New 12-feature batch:** slice 1 (items 1,12) implemented: paired Shield/Hull — Power/Boost with current values/% and throttle fill; Left Alt toggle. Ten-slot HUD (1–5/6–0), top-left location, paid-ignition throttle snap. Slice 2: N object list, ballistic lead, displacement speed; playtest pending. Remaining slices 3–5: `testing/TESTING-BATCH2.md`. Save v21 unchanged. No merge without approval.
+- **Previous nine-feature batch + nebula fill:** merged PR #39. Fill tuned to 0.175; recipe 24 has overrides. All-lockable surface F picking, compact mission log, stationary outfitting preview and home recovery implemented.
+- **New 12-feature batch:** slices 1–2 (1,2,10–12) built, playtest pending: Shield/Hull — Power/Boost, ten-slot HUD, top-left location, paid-ignition throttle, cannon lead, displacement speed, `N` pocket list (N/Close fix, 16px row separators, white selected row, shared slight HUD/throttle transparency). Slices 3–5 pending (`testing/TESTING-BATCH2.md`); save v21; no merge without approval.
 - **NPC flight AI (merged PR #37, owner approved):** profiles in `data/enemy-ai.js`, independent brains in `sim/enemy-flight.js`, predictive avoidance and delayed dodges. Guardians aggressive, raiders baseline. No damage/fire-rate/hull buffs. Save v21; see `testing/TESTING-NPC-AI.md` and CHANGELOG.
 - **Scenery follow-up (preview pending):** Meridian Station ONLY: sun-facing C opening and -50 m field height offset. Station pocket Y is -0.049 AU; arrival sits 1000 m sunward of station and faces it (belt → station → arrival → sun). All C arcs: more radial strays (16%) and soft vertical fringe extending centre-height envelope by 25%. Other ordinary fields, including other Meridian pockets: 2.5× wider with unchanged height/core density and sparse irregular wings. Authored rift instances unchanged. Shared `sceneryFeatures` applies overrides without source mutation. Earlier PR #36 visual changes remain; save v21.
 - **Stock camera (2026-11-16):** horizontal FOV is fixed at `BASE_HFOV = 85` (`data/camera.js`); vertical FOV is derived from the window aspect (`verticalFovForAspect`, ≈54.54° on 16:9). Chase distances are pulled back for 16:9 by tan(35°)/tan(27.268°) ≈ 1.358 (`CAMERA`: 14.9 / 23.1 / 14.3) so the ship keeps the same on-screen size. The owner says the current view looks good and asked for the rejected edge-compression lens to be removed entirely; it is gone from the tree. Save **v21**; ROADMAP stays unticked until a formal playtest tick.

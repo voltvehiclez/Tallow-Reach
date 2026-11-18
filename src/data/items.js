@@ -7,6 +7,8 @@
 //   v     sell value in credits per unit (mission objects may use 0 and cannot be sold)
 //   vol   m³ one unit takes up (1 unless the entry says otherwise)
 //   st    most that fit in one stack (no limit unless the entry says otherwise)
+//   col   for `cat: "ore"`: the asteroid's base surface colour as 0xrrggbb (shaded by scene light,
+//         never self-glowing). Read through `rockColor(id)`, which falls back to `DEFAULT_ROCK_COLOR`.
 //   use   OPTIONAL: the in-flight action this item can be used for (a key of `USE_ACTIONS`
 //         in sim/consumables.js). Read it through `itemUse(id)`, never by hand.
 //   rift  OPTIONAL: the rift kind it opens (an id in `RIFTS`, data/instances.js), read
@@ -34,12 +36,15 @@ import { MODULES } from "./modules.js";
 
 export const ITEM_CATEGORIES = ["ore", "salvage", "mission", "module", "ammo", "consumable", "trade"];
 
+/** Fallback asteroid surface colour (ferrite brown) when a rock type names no `col`. */
+export const DEFAULT_ROCK_COLOR = 0x4a4540;
+
 export const ITEMS = {
-  ferrite: { n: "Ferrite", cat: "ore", v: 10 },
-  cobalt: { n: "Cobalt", cat: "ore", v: 24 },
-  voidite: { n: "Voidite", cat: "ore", v: 60 },
+  ferrite: { n: "Ferrite", cat: "ore", v: 10, col: 0x4a4540 },
+  cobalt: { n: "Cobalt", cat: "ore", v: 24, col: 0x2e5585 },
+  voidite: { n: "Voidite", cat: "ore", v: 60, col: 0x543888 },
   // The rare belt ore: what the mining-belt wormhole site pays in. Tunable.
-  lumenite: { n: "Lumenite", cat: "ore", v: 150 },
+  lumenite: { n: "Lumenite", cat: "ore", v: 150, col: 0x625636 },
   salv: { n: "Salvage", cat: "salvage", v: 70 },
   core: { n: "Reactor core", cat: "salvage", v: 350 },
   // Seized smuggling cargo: what a smuggler's freighter drops. Tunable.
@@ -113,3 +118,9 @@ export const itemUse = id => (isItem(id) ? ITEMS[id].use || null : null);
 
 /** The rift kind an item opens (an id in `RIFTS`, data/instances.js), or null. */
 export const itemRift = id => (isItem(id) ? ITEMS[id].rift || null : null);
+
+/** Base surface colour (`0xrrggbb`) for an ore asteroid; defaults to `DEFAULT_ROCK_COLOR`. */
+export function rockColor(id) {
+  const col = isItem(id) ? ITEMS[id].col : null;
+  return Number.isInteger(col) && col >= 0 && col <= 0xffffff ? col : DEFAULT_ROCK_COLOR;
+}

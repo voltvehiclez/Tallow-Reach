@@ -120,7 +120,8 @@ export const BINDINGS = {
 
 export function installInput() {
   addEventListener("keydown", e => {
-    if (e.target.tagName === "TEXTAREA" || (["INPUT", "SELECT"].includes(e.target.tagName) && !["Escape", "KeyM"].includes(e.code))) return;
+    const textControl = e.target.tagName === "SELECT" || (e.target.tagName === "INPUT" && e.target.type !== "checkbox");
+    if (e.target.tagName === "TEXTAREA" || (textControl && !["Escape", "KeyM"].includes(e.code))) return;
     // Swallow Alt-key combinations before the browser can act on them. Alt+E and
     // siblings are menu accelerators in the browser's own chrome, so without
     // this the free camera (Left Alt toggle) also pops a menu. preventDefault
@@ -136,7 +137,7 @@ export function installInput() {
       e.preventDefault();
       if (!e.repeat) emit("freecam", !state.freeCam.on);
     }
-    if (!modal && e.code === "Space") e.preventDefault();
+    if (!modal && e.code === "Space" && e.target.type !== "checkbox") e.preventDefault();
     const name = BINDINGS[e.code];
     if (name) emit("action", { name, repeat: e.repeat, key: e.code });
   });

@@ -14,7 +14,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { ITEMS } from "../src/data/items.js";
 import { loadHeadless } from "./headless.mjs";
+
+const { mm } = await loadHeadless("src/render/models.js", {}, { keep: ["models.js"] });
 
 // `render/views.js` is the code under test, so it is bundled for real even
 // though it lives in render/; the scene and the mesh builder it calls stay
@@ -420,4 +423,62 @@ test("particle views fade and dispose their own material on event and sweep remo
     views.updateEntityViews();
     assert.equal(disposed, 1);
   }
+});
+
+test("every ore asteroid uses its own base surface colour with zero self-glow, matching ferrite shading", () => {
+  const S = fresh();
+  views.installEnemyViews();
+
+  const ores = Object.keys(ITEMS).filter(id => ITEMS[id].cat === "ore");
+  assert.ok(ores.includes("ferrite") && ores.includes("cobalt") && ores.includes("voidite"));
+
+  const materials = new Map();
+  for (const type of [...ores, "unknown_ore"]) {
+    const mark = views.__calls.length;
+    const rock = views.addEntity(S.world.asteroids, {
+      kind: "rock",
+      place: S.place,
+      type,
+      shape: 0,
+      pos: views.V(0, 0, 0),
+      quat: views.Q(),
+      scale: views.V(20, 20, 20),
+      s0: views.V(20, 20, 20),
+      r: 20,
+      ore: 30,
+      max: 30,
+    });
+    views.emit("entity-spawned", { id: rock.id, kind: "rock" });
+    const mmCall = views.__calls.slice(mark).find(c => c.name === "mm");
+    assert.ok(mmCall, `${type}: builds a standard rock material`);
+    const [color, emissive] = mmCall.args;
+    assert.ok(!emissive, `${type}: no built-in self-glow (got emissive ${emissive})`);
+    const mat = mm(color, emissive);
+    assert.equal(mat.emissive.getHex(), 0, `${type}: shadow side has zero emissive light`);
+    materials.set(type, { color, mat });
+  }
+
+  const ferrite = materials.get("ferrite");
+  assert.equal(ferrite.color, 0x4a4540, "ferrite keeps its original brown rock colour");
+  assert.equal(materials.get("unknown_ore").color, ferrite.color, "unlisted rock types fall back to default rock colour");
+
+  // Every ore shares the exact same PBR shading response as ferrite; only base surface colour differs.
+  const seenColors = new Set();
+  for (const type of ores) {
+    const { color, mat } = materials.get(type);
+    assert.equal(mat.metalness, ferrite.mat.metalness, `${type}: same metalness as ferrite`);
+    assert.equal(mat.roughness, ferrite.mat.roughness, `${type}: same roughness as ferrite`);
+    assert.equal(mat.flatShading, ferrite.mat.flatShading, `${type}: same flat shading as ferrite`);
+    assert.ok(!seenColors.has(color), `${type}: distinct surface colour from other ores`);
+    seenColors.add(color);
+  }
+
+  const rgb = hex => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
+  const [cr, cg, cb] = rgb(materials.get("cobalt").color);
+  assert.ok(cb > cg && cg > cr, "cobalt has a blue surface colour");
+  const [vr, vg, vb] = rgb(materials.get("voidite").color);
+  assert.ok(vb > vr && vr > vg, "voidite has a purple surface colour");
+
+  for (const { mat } of materials.values()) mat.dispose();
+  fresh();
 });

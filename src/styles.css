@@ -9,6 +9,9 @@
   --red:#d0503f;
   --ice:#7fb7c4;
   --line:#27323a;
+  --hud-surface:rgba(28,28,28,.72);
+  --hud-surface-selected:rgba(48,48,48,.72);
+  --hud-throttle-bg:rgba(20,27,32,.72);
   --weapon-size: min(44px, calc((100vw - 260px) / 10));
   --weapon-bottom: calc(123.2px - 25px - var(--weapon-size));
   color-scheme: dark;
@@ -124,7 +127,7 @@ body.no-reticle canvas {
   text-align: center;
 }
 
-#throttle-track { position: relative; width: 210px; height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 8px; border: 1px solid var(--line); background: #141b20; }
+#throttle-track { position: relative; width: 210px; height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 8px; border: 1px solid var(--line); background: var(--hud-throttle-bg); }
 #throttle-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(127,183,196,.4); }
 #throttle-fill.reverse { left: auto; right: 0; background: repeating-linear-gradient(135deg, rgba(127,183,196,.4) 0 4px, rgba(127,183,196,.16) 4px 8px); }
 #throttle-label { position: relative; display: block; line-height: 22px; font-size: 12px; color: var(--ink); }
@@ -147,8 +150,8 @@ body.no-reticle canvas {
 .vital-column > .vital-percent { top: 62px; }
 .vital-left .vital-shield { position: absolute; right: calc(100% + 8px); top: 0; }
 .vital-right .vital-boost { position: absolute; left: calc(100% + 8px); top: 0; }
-.vital-column::before { content: ""; position: absolute; z-index: -1; top: -22px; bottom: -64px; left: -3px; right: -3px; border: 1px solid #444; background: rgba(28,28,28,.9); pointer-events: none; }
-.vital-track { position: absolute; top: 0; left: 50%; transform: translateX(-50%); box-sizing: border-box; height: 44px; width: 100%; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
+.vital-column::before { content: ""; position: absolute; z-index: -1; top: -22px; bottom: -64px; left: -3px; right: -3px; border: 1px solid #444; background: var(--hud-surface); pointer-events: none; }
+.vital-track { position: absolute; top: 0; left: 50%; transform: translateX(-50%); box-sizing: border-box; height: 44px; width: 100%; background: var(--hud-throttle-bg); border: 1px solid rgba(188,229,255,.18); }
 .vital-track i { display: block; position: absolute; bottom: 0; width: 100%; height: 0; background: currentColor; }
 .vital-hull { color: var(--ink); }
 .vital-shield, .vital-power { color: var(--ice); }
@@ -245,34 +248,34 @@ body.no-reticle canvas {
   font-size: 18px;
 }
 
+.mk, .pocket-icon {
+  --marker-color: var(--amber);
+}
+.mk.h, .pocket-icon.h {
+  --marker-color: var(--red);
+}
+.mk.i, .pocket-icon.i {
+  --marker-color: var(--ice);
+}
 .mk {
   position: fixed;
   display: none;
   transform: translate(-50%,-50%);
   font-size: 12px;
-  color: var(--amber);
-  border: 1px solid currentColor;
+  color: var(--marker-color);
+  border: 1px solid var(--marker-color);
   padding: 1px 6px;
   background: rgba(7,9,11,.5);
   white-space: nowrap;
   pointer-events: none;
 }
-.mk.h {
-  color: var(--red);
-}
-.mk.i {
-  color: var(--ice);
-}
 .mk.dim {
   opacity: .55;
 }
 .mk.lock {
-  background: rgba(224,164,88,.22);
-  color: #ffe2b8;
-}
-.mk.lock.h {
-  background: rgba(208,80,63,.25);
-  color: #ffb4a8;
+  background: color-mix(in srgb, var(--marker-color) 24%, rgba(7,9,11,.45));
+  color: var(--marker-color);
+  color: color-mix(in srgb, var(--marker-color) 58%, #fff);
 }
 .mk.lk {
   width: 36px;
@@ -1440,8 +1443,8 @@ textarea {
 .weapon-bank-label { color: #fff; font-size: 9px; line-height: 11px; margin-bottom: 1px; letter-spacing: 0; padding: 0; }
 .weapon-bank.secondary .weapon-bank-label { text-align: right; }
 .weapon-bank-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
-.weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--weapon-size); width: 100%; min-width: 0; margin: 0; padding: 3px 1px; background: rgba(28,28,28,.9); border: 1px solid #444; border-radius: 0; color: inherit; cursor: pointer; }
-.weapon-slot.selected { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; background: rgba(48,48,48,.9); color: #fff; }
+.weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--weapon-size); width: 100%; min-width: 0; margin: 0; padding: 3px 1px; background: var(--hud-surface); border: 1px solid #444; border-radius: 0; color: inherit; cursor: pointer; }
+.weapon-slot.selected { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; background: var(--hud-surface-selected); color: #fff; }
 .weapon-slot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .weapon-slot:not(.fitted) svg { color: #808080; }
 .weapon-key { color: #aaa; font-size: 11px; line-height: 1; }
@@ -1456,23 +1459,32 @@ textarea {
 #pocket-name { display: block; font-size: 14px; font-weight: 400; margin-top: 2px; }
 .weapon-slot:hover, .weapon-slot:focus-visible { border-color: #fff; color: #fff; }
 
-#hud > #pocket-objects { right: 20px; top: 20px; bottom: 160px; width: min(380px, calc(100vw - 40px)); z-index: 20; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; pointer-events: auto; color: #ddd; }
-#pocket-objects[hidden], #weapon-lead[hidden] { display: none; }
+#hud > #pocket-objects { right: 20px; top: 20px; bottom: 160px; width: min(380px, calc(100vw - 40px)); z-index: 20; display: flex; flex-direction: column; background: var(--hud-surface); border: 1px solid #444; pointer-events: auto; color: #ddd; }
+#hud[hidden], #panel[hidden], #bm[hidden], #hud > #pocket-objects[hidden], #pocket-objects[hidden], #weapon-lead[hidden] { display: none; }
 body.navigation-open #tr { visibility: hidden; }
 body.navigation-open canvas { cursor: default; }
 #pocket-objects header { padding: 4px 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #444; font-size: 13px; }
 #pocket-objects button { margin: 0; padding: 2px 6px; font-size: 11px; }
-.pocket-tools { display: flex; gap: 4px; padding: 3px 6px; align-items: center; }
+.pocket-tools { display: flex; gap: 4px; padding: 3px 6px; align-items: center; border-bottom: 1px solid rgba(170,170,170,.18); }
 .pocket-tools details { margin-left: auto; font-size: 12px; }
-#pocket-filters { position: absolute; right: 6px; z-index: 1; background: #181818; border: 1px solid #666; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
+.pocket-tools summary { cursor: pointer; }
+#pocket-filters { position: absolute; right: 6px; z-index: 1; background: rgba(24,24,24,.92); border: 1px solid #666; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
 #pocket-filters label { display: flex; align-items: center; gap: 4px; }
-#pocket-object-rows { list-style: none; margin: 0; padding: 0 6px; flex: 1; min-height: 0; overflow-y: auto; }
-#pocket-object-rows li { margin: 0; padding: 0; }
-#pocket-object-rows button { display: flex; justify-content: space-between; gap: 8px; width: 100%; height: 16px; padding: 0 2px; border: 0; border-radius: 0; background: transparent; line-height: 16px; text-align: left; color: #ddd; }
-#pocket-object-rows button:hover, #pocket-object-rows button:focus-visible { background: #333; color: #fff; }
-#pocket-object-rows button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pocket-object-rows { list-style: none; margin: 0; padding: 2px 6px; flex: 1; min-height: 0; overflow-y: auto; }
+#pocket-object-rows li { margin: 0; padding: 0; height: 16px; }
+#pocket-object-rows li.pocket-empty { padding: 0 4px; color: var(--dim); font-size: 11px; line-height: 16px; }
+#pocket-object-rows button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 16px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 rgba(170,170,170,.18); line-height: 14px; text-align: left; color: #ddd; }
+#pocket-object-rows li:not(.selected):has(+ li.selected) > button:not(:focus-visible) { box-shadow: none; }
+#pocket-object-rows li > button:hover, #pocket-object-rows li > button:focus-visible { background: rgba(255,255,255,.1); color: #fff; outline: none; }
+#pocket-object-rows li > button:focus-visible { box-shadow: inset 0 0 0 1px var(--ice); }
+#pocket-object-rows li.selected > button, #pocket-object-rows li.selected > button:hover, #pocket-object-rows li.selected > button:focus-visible { background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px #fff; color: #fff; outline: none; }
+#pocket-object-rows li.selected > button:hover, #pocket-object-rows li.selected > button:focus-visible { background: rgba(255,255,255,.14); }
+#pocket-object-rows li.selected > button small { color: #bbb; }
+#pocket-object-rows button > .pocket-label { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; }
+#pocket-object-rows .pocket-icon { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; box-sizing: border-box; border: 1px solid var(--marker-color); background: none; }
+#pocket-object-rows .pocket-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #pocket-object-rows button > span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 #pocket-object-rows small { display: inline; color: #888; font-size: inherit; }
-#pocket-objects [aria-pressed="true"] { border-color: #fff; color: #fff; }
+#pocket-objects [data-pocket-sort][aria-pressed="true"] { border-color: #fff; color: #fff; }
 @media (max-height: 820px) { #hud > #pocket-objects { bottom: 24px; } }
 #weapon-lead { width: 12px; height: 12px; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }

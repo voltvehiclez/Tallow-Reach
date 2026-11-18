@@ -20,9 +20,10 @@ voidglass: { n: "Void glass", cat: "salvage", v: 120, vol: 2 },
 
 **Nothing appears in the world on its own.** To make the new item findable:
 
-- *Ore in rocks*: add a weighted line to the `asteroid` table in `src/data/loot.js` (recipe 18), and
-  give the ore a glow colour in `spawnAsteroid()` in `src/sim/asteroids.js` — that one line is the
-  only place a rock's colour is chosen.
+- *Ore in rocks*: give the `cat: "ore"` entry in `src/data/items.js` a `col: 0xrrggbb` rock surface
+  colour (asteroids are shaded by scene light with no self-glow; `tests/content.test.mjs` checks `col`
+  is set), and add a weighted line to the `asteroid` (or planet/rift/wormhole) table in
+  `src/data/loot.js` (recipe 18).
 - *Loot from kills*: add a line to a table in `src/data/loot.js` (recipe 18).
 - *Mine contracts for a new ore*: add its id to `MINE_ORES` in `src/data/contracts.js`.
 - *Sold at the station*: add a row to Meridian in `src/data/shops.js` (recipe 4).
