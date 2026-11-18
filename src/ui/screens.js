@@ -1,3 +1,4 @@
+import { canSetHomeStation, homeStationPlace } from "../sim/session.js";
 // HTML for each outpost screen. These are pure functions of the game state,
 // so the look of a screen can be changed without touching game logic.
 
@@ -93,6 +94,8 @@ export function outpostHtml(ui) {
     ([k, n]) => `<button data-a="tab" data-b="${k}" class="${ui.tab === k ? "on" : ""}">${n}</button>`
   ).join("")}</nav>`;
 
+  const isHome = homeStationPlace(S) === state.place;
+  h += `<div class="home-station"><button data-a="home" ${isHome || !canSetHomeStation(state.place) ? "disabled" : ""}>${isHome ? "Home station" : "Set Home Station"}</button><small>Recover here after death.</small></div>`;
   const render = SCREENS[ui.tab];
   if (render) h += render(ui);
 
@@ -379,36 +382,8 @@ function outfittingHtml() {
 }
 
 function baseHtml() {
-  const S = state.profile,
-    W = state.worldState,
-    ship = SHIPS[S.ship],
-    cargo = stockOf(S.ship),
-    station = stockOf(STATION);
-  const load = holdLoad(),
-    used = storedUnits(),
-    cap = storageCap();
-  // Sell buttons cover everything with a sell value: ore, salvage and spare
-  // modules alike. A part fitted in a bay is in no place, so it is not for sale.
-  const sellable = stock => Object.keys(stock || {}).filter(id => isItem(id) && canSell(id)).length;
-  const sellHeld = sellable(cargo),
-    sellStored = sellable(station);
-
-  let h =
-    `<h2>Cargo and storage</h2><div class="sub">Hold ${load}/${ship.cargo} m³. ${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n} storage ${used}/${cap} m³. Refinery bonus +${Math.round(
-      REFINERY_BONUS_PER_LEVEL * 100 * W.base.refinery
-    )}%.</div>` +
-    ITEM_IDS.filter(id => !isModule(id))
-      .map(
-        id =>
-          `<div class="row"><div>${itemName(id)}<small>${cargo[id] || 0} in hold, ${station[id] || 0} stored, ${itemValue(id)} cr each</small></div></div>`
-      )
-      .join("") +
-    `<div class="row"><button data-a="dep">Store hold</button><button data-a="wd">Load stored</button><button data-a="sellh" ${
-      sellHeld ? "" : "disabled"
-    }>Sell hold ${valueOf(cargo)} cr</button><button data-a="sells" ${
-      sellStored ? "" : "disabled"
-    }>Sell stored ${valueOf(station)} cr</button></div>` +
-    `<div class="sub">Selling takes ore, salvage and spare modules from the current station or hold, and leaves parts fitted on a ship alone.</div><h2>Base modules</h2>`;
+  const S = state.profile, W = state.worldState;
+  let h = `<h2>Base modules</h2><div class="sub">Station storage ${storedUnits()}/${storageCap()} m³. Refinery bonus +${Math.round(REFINERY_BONUS_PER_LEVEL * 100 * W.base.refinery)}%.</div>`;
 
   h += Object.keys(BASE_MODULES)
     .map(k => {

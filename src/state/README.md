@@ -19,3 +19,6 @@ Rules:
   `addShipRecords`, never with a bare `ships.push`, and repair an incomplete one with `ensureShipRecords`.
 - `profile.loadout` holds the modules fitted to each hull: group id -> one entry per bay (`null` = empty). Only `sim/fitting.js` writes it. `cleanLoadouts` drops unknown ids and bays past the hull's layout, and gives a hull with no saved loadout the stock fit. `cleanStock` keeps a place to known items, whole counts above zero.
 
+
+
+Optional v21 profile.homeStation is a bounded pocket-id string, default DEFAULT_PLACE. Runtime checks the restored galaxy before respawn and falls back if missing/temporary/non-station. aimOrigin is runtime-only camera picking data; it is not serialized.

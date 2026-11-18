@@ -1,8 +1,9 @@
-// Target lock (F). Locks onto whatever is nearest the crosshair: hostiles,
+// Target lock (F). First surface under the camera reticle, then angular assistance: hostiles,
 // rocks, crates, the outpost, and — since step 14 — a rift door, the way out of
 // a run and its prize canister. F switches to a new candidate, or releases the
 // same candidate / an old lock when the view has no candidate.
 
+import { segmentRockHit } from "./colliders.js";
 import { clamp } from "../util/math.js";
 import { itemName } from "../data/items.js";
 import { featureOf, featureById } from "../data/places.js";
@@ -21,17 +22,30 @@ export function toggleLock(P = state.player) {
   const notify = text => { if (P === state.player) msg(text, 1.5); };
   const previous = F.lock;
 
-  const f = playerFwd(P),
-    pp = playerPos(P);
+  const renderedRay = P === state.player && state.aimOrigin;
+  const f = renderedRay ? V(state.aimDirection.x, state.aimDirection.y, state.aimDirection.z).normalize() : playerFwd(P),
+    pp = renderedRay ? V(state.aimOrigin.x, state.aimOrigin.y, state.aimOrigin.z) : playerPos(P);
+  let firstHit = null, firstDistance = Infinity;
   let best = null,
     bestScore = 0.45;
 
-  // Score is the angle off-axis, minus the angular size of the target.
+  // A real surface under the reticle beats angular assistance. Rank hits by depth, not size.
   const test = (k, o, p, radius) => {
     const q = p.clone().sub(pp),
       d = q.length(),
       score = Math.acos(clamp(q.dot(f) / d, -1, 1)) - Math.atan(radius / d);
-    if (score < bestScore) {
+    const along = q.dot(f), sideSq = Math.max(0, d * d - along * along);
+    let distance = Infinity;
+    if (k === "a") {
+      // The same transformed triangles used by projectiles, including GLBs and nonuniform rocks.
+      const length = d + radius * 2 + 1;
+      const hit = segmentRockHit(o, pp, pp.clone().addScaledVector(f, length));
+      if (hit) distance = hit.t * length;
+    } else if (along >= 0 && sideSq <= radius * radius) {
+      distance = Math.max(0, along - Math.sqrt(radius * radius - sideSq));
+    }
+    if (distance < firstDistance) { firstDistance = distance; firstHit = { k, o }; }
+    if (along > 0 && score < bestScore) {
       bestScore = score;
       best = { k, o };
     }
@@ -48,6 +62,7 @@ export function toggleLock(P = state.player) {
   const station = featureOf(placeId, "station");
   if (station) test("s", { place: placeId, feature: station.id }, V(...station.pos), 100);
 
+  best = firstHit || best;
   const same = best && previous && best.k === previous.k &&
     (best.k === "s" ? best.o.place === previous.o.place && best.o.feature === previous.o.feature : best.o === previous.o);
   F.lock = same || !best ? null : best;

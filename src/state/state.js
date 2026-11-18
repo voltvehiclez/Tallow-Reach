@@ -195,6 +195,7 @@ export const state = {
     }
     this.players[this.localPlayerIndex] = player;
   },
+  aimOrigin: null, // camera origin for exact reticle picking, runtime only
   aimDirection: { x: 0, y: 0, z: -1 }, // last rendered camera direction, supplied by the frame loop
   paused: false,
   time: 0,             // seconds of unpaused play

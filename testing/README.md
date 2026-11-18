@@ -40,3 +40,5 @@ the guides without a folder; they were all in the project root then.
 Number it after the step (`TESTING-14-WORMHOLES.md`), write each check as a checkbox the owner can tick, say exactly what
 to click and what to expect, and add a row above. For missions, include the awkward cases in
 [../docs/MISSION_RULES.md](../docs/MISSION_RULES.md) (undock early, warp away, full hold, die, reload).
+
+- [Part 2 and follow-up](TESTING-PART2.md) — owner playtest pending.

@@ -110,6 +110,8 @@ export function clearWormholePlaces() {
   return true;
 }
 
+export const isWormholePlace = id => !!wormholePlaces && Object.prototype.hasOwnProperty.call(wormholePlaces, id);
+
 const catalog = () => merged || rebuildCatalog();
 
 /**

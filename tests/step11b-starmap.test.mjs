@@ -656,7 +656,7 @@ test("11B: system destination popup, route display and J follow ordinary checked
   assert.match(mapRoot.innerHTML, /class="route-marker route-marker-start"/);
   assert.match(mapRoot.innerHTML, /class="route-marker route-marker-intermediate"/);
   assert.match(mapRoot.innerHTML, /class="route-marker route-marker-destination"/);
-  assert.match(mapRoot.innerHTML, /class="sm-route-marker sm-route-marker-destination-check"/);
+  assert.match(mapRoot.innerHTML, /class="sm-route-marker sm-current-ring"/);
   assert.doesNotMatch(mapRoot.innerHTML, /sm-route-marker-start|sm-route-marker-destination-inner/);
   const connectionPaths = [...mapRoot.innerHTML.matchAll(/class="sm-edge" data-edge="[^"]+" d="([^"]+)"/g)].map(m => m[1]);
   const highlightedPaths = [...mapRoot.innerHTML.matchAll(/class="sm-route-edge" d="([^"]+)"/g)].map(m => m[1]);
@@ -723,7 +723,7 @@ test("11B: a routed system map separates solid local hops from dotted gate exits
   assert.match(galaxyMarkup, /class="sm-node[^"]*route-start/);
   assert.match(galaxyMarkup, /class="sm-node[^"]*route-intermediate/);
   assert.match(galaxyMarkup, /class="sm-node[^"]*route-destination/);
-  assert.match(galaxyMarkup, /class="sm-route-marker sm-route-marker-destination-check"/);
+  assert.match(galaxyMarkup, /class="sm-route-marker sm-current-ring"/);
   mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: galereach.id } }) }, preventDefault() {} });
   const html = mapRoot.innerHTML;
   const incomingFrom = route[1], incomingTo = route[2], localFrom = route[2], localTo = route[3], outgoingFrom = route[3], outgoingTo = route[4];
@@ -832,10 +832,10 @@ test("11B: local route segments contain only consecutive pocket hops in the sele
   assert.match(css, /\.route-marker-intermediate/);
   assert.match(css, /\.route-marker-destination/);
   assert.match(css, /\.route-marker\s*\{[^}]*width:\s*12px[^}]*height:\s*12px/);
-  assert.match(css, /\.route-marker-destination::after\s*\{[^}]*border:\s*1px dotted var\(--amber\)/);
-  assert.match(css, /\.route-marker-destination-tick\s*\{[^}]*border-width:\s*0 2px 2px 0/);
-  assert.match(css, /\.sm-route-marker-destination-outer\s*\{[^}]*stroke-dasharray:\s*1 3/);
-  assert.match(css, /\.sm-route-marker-destination-check\s*\{[^}]*stroke:\s*var\(--amber\)/);
+  assert.match(css, /\.route-marker-start::after\s*\{[^}]*border:\s*1px dotted var\(--amber\)/);
+  assert.doesNotMatch(css, /\.route-marker-destination-tick/);
+  assert.match(css, /\.sm-current-ring\s*\{[^}]*stroke-dasharray:\s*1 3/);
+  assert.match(css, /\.sm-current-ring\s*\{[^}]*stroke:\s*var\(--amber\)/);
   assert.doesNotMatch(css, /sm-route-marker-destination-inner|sm-route-marker-start/);
   assert.match(css, /#hud-route ol:has\(li \+ li\)::before, \.sm-route-list:has\(li \+ li\)::before/);
   assert.match(css, /\.sm-here-label\s*\{/);

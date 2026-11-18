@@ -29,3 +29,6 @@ Rules:
   or the scene, and `tests/views.test.mjs` counts the meshes.
 
 The current player hull and beam views follow the **local** player only; see the still-local-only table in `docs/TARGET_ARCHITECTURE.md`.
+
+
+Outfitting preview/reset uses data/camera.js SHIP_PREVIEW: front/top/left isometric yaw/pitch. Drag, zoom and idle rotation remain unchanged.

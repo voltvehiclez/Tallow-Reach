@@ -6,7 +6,7 @@
 
 import { GALAXY } from "../data/galaxy.js";
 import { chartGalaxy, straightEdgeBlockers } from "./chart-lines.js";
-import { routeDisplay, flightRouteRows } from "./route-display.js";
+import { routeDisplay, flightRouteRows, pocketMarkerMarkup } from "./route-display.js";
 import { placeAt, placeDef } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
@@ -24,7 +24,6 @@ let transition = null;
 let transitionFrame = null;
 let pendingNavigationClick = null;
 const DOUBLE_CLICK_DELAY = 500;
-const ROUTE_ICON_SCALE = 0.8;
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[c]));
@@ -55,13 +54,9 @@ function routeRole(id, routeIds, startId, destinationId) {
   return { start: id === startId, destination: id === destinationId, intermediate: id !== startId && id !== destinationId };
 }
 
-function routeMarkerMarkup(x, y, radius, role, unit) {
-  if (!role) return "";
-  const rings = role.destination
-    ? `<circle class="sm-route-marker sm-route-marker-destination-outer" cx="${x}" cy="${y}" r="${radius + 7 * unit * ROUTE_ICON_SCALE}"/>
-       <path class="sm-route-marker sm-route-marker-destination-check" d="M${x - 3.5 * unit * ROUTE_ICON_SCALE} ${y} L${x - 1 * unit * ROUTE_ICON_SCALE} ${y + 3 * unit * ROUTE_ICON_SCALE} L${x + 4.5 * unit * ROUTE_ICON_SCALE} ${y - 4 * unit * ROUTE_ICON_SCALE}"/>`
-    : "";
-  return rings;
+function routeMarkerMarkup(x, y, radius, current, unit) {
+  if (!current) return "";
+  return `<circle class="sm-route-marker sm-current-ring" cx="${x}" cy="${y}" r="${radius + 5 * unit}"/>`;
 }
 
 /** Pure view helpers (tested without a browser). */
@@ -980,10 +975,10 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
     const current = s.id === here.parent;
     const chosen = s.id === view.selected;
     const role = routeRole(s.id, routeIds, routeStart, routeDestination);
-    const iconScale = role?.start || role?.destination || current ? ROUTE_ICON_SCALE : 1;
-    const radius = (current ? GALAXY.map.homeRadius : GALAXY.map.nodeRadius) * iconScale * unit;
+    const iconScale = 1;
+    const radius = GALAXY.map.nodeRadius * iconScale * unit;
     const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
-    const marker = routeMarkerMarkup(s.pos[0], -s.pos[1], radius, role, unit);
+    const marker = routeMarkerMarkup(s.pos[0], -s.pos[1], radius, current, unit);
     const label = chosen || current || view.labels;
     const labelX = s.pos[0] + radius + 5 * unit;
     const labelY = -s.pos[1] + 3 * unit;
@@ -1048,9 +1043,9 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const nodeRole = node.pocket.role || null;
     const label = labels.get(node.id);
     const role = routeRole(node.id, routePocketIds, routeStartPocket, routeDestinationPocket);
-    const radius = (role?.start || role?.destination ? ROUTE_ICON_SCALE : 1) * pocketRadius;
+    const radius = pocketRadius;
     const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
-    const marker = routeMarkerMarkup(x, y, radius, role, unit);
+    const marker = routeMarkerMarkup(x, y, radius, current, unit);
     const { x: lx, y: ly, anchor } = label;
     const labelLink = label.moved
       ? `<line class="sm-label-link" x1="${x}" y1="${y}" x2="${lx}" y2="${ly}"/>`
@@ -1177,7 +1172,7 @@ function render() {
         </section>
         <aside class="sm-details" aria-label="System overview">
           ${selected ? `<h2>${esc(selected.n)}</h2>
-            <p class="sm-current"><span>Current pocket</span> ${esc(here.n)}</p>
+            <p class="sm-current"><span>Current pocket</span> ${pocketMarkerMarkup(here, true)}${esc(here.n)}</p>
             <h3>${esc(Term("flyable"))}s</h3>
             <ul class="sm-pockets">${rows}</ul>${routeDetails}` : `<h2>No visible ${esc(terms("mapNode"))}</h2>`}
         </aside>

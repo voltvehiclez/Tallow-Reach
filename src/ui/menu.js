@@ -1,3 +1,4 @@
+import { setHomeStation } from "../sim/session.js";
 // The outpost panel: renders the current screen and runs the actions behind
 // its buttons. Buttons carry a data-a action name and an optional data-b argument.
 
@@ -133,6 +134,7 @@ function loadedMessage(text) {
 }
 
 const ACTIONS = {
+  home: () => toast(setHomeStation()),
   // "Open World": leave the start screen and deploy the pilot where the save put
   // them — docked at a station, or flying at that pocket's arrival point. The
   // existing `intro` action is deliberately kept as the Open World button's

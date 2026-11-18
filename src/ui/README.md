@@ -33,3 +33,6 @@ Rules:
 `chart-lines.js` computes a cached, derived visual layout that nudges unrelated dots away from straight gate connections; it does not alter simulation positions. In crowded cases the chart masks only obstructing unrelated dots, never both endpoints globally. Highlighted routes reuse the same straight geometry.
 
 At boot, `setupMenu({ beforeStart })` gates Open World on the background model promise, with a disabled “Loading models…” button while pending; the title renders independently.
+
+
+Part 2: route-display shares shape-preserving icons with HUD/map (current blue with dotted orange ring, destination orange). Mission log has compact one-line next-step summaries and native Details with full guidance/dialogue. Base keeps upgrades/storage/refinery statistics; station header sets Home Station.

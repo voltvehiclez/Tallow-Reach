@@ -14,3 +14,6 @@ Rules:
   `sfx` for sound and reads the player's `controls` for input. `tests/layers.test.mjs` enforces it.
 
 Input populates only the local player's controls; remote input/transport is not implemented. See `docs/TARGET_ARCHITECTURE.md`.
+
+
+Mechanical undock layers live in data/audio.js; undockSound schedules them on the audio clock with mute/suspension guards.

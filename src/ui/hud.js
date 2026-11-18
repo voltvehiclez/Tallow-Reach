@@ -20,7 +20,7 @@ import { V } from "../util/math.js";
 import { MISSILE, MISSILE_HUD } from "../data/weapons.js";
 import { findDestinationRoute } from "../sim/travel.js";
 import { localPlayer, profileOf } from "../state/state.js";
-import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
+import { routeDisplay, flightRouteRows, escapeRouteText, pocketMarkerMarkup } from "./route-display.js";
 
 const $ = id => document.getElementById(id);
 const MARKER_POOL = 18;
@@ -233,7 +233,7 @@ export function updateHud(dt) {
   const primary = fitted ? `${slot + 1}: ${fitted.n}` : "Empty weapon slot";
 
   el.topRight.innerHTML =
-    `${placeAt(state.place).n}<br>` +
+    `${pocketMarkerMarkup(placeAt(state.place), true)}${escHud(placeAt(state.place).n)}<br>` +
     instanceHtml(instanceAt(state.place)) +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     `${primary}${(state.missiles || []).length ? ", missiles " + S.msl : ""}<br>` +

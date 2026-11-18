@@ -94,8 +94,8 @@ test("route rows omit pockets and mark the final destination", () => {
   assert.match(rows, /class="route-here" aria-current="location"/);
   assert.match(rows, /class="route-destination"/);
   assert.match(rows, /aria-label="[^"]+, destination"/);
-  assert.match(rows, /route-marker-destination-tick/, "the destination marker contains a tick");
-  assert.ok(rows.includes(`<small>(${remoteLocal.n})</small>`), "only the final system names the destination pocket");
+  assert.doesNotMatch(rows, /route-marker-destination-tick/, "destination preserves its icon instead of adding a tick");
+  assert.ok(rows.includes(`(${remoteLocal.n})</small>`), "only the final system names the destination pocket");
   assert.doesNotMatch(rows, /◆|route-goal/);
   assert.ok(!rows.includes(local.n));
   assert.equal((rows.match(/<li(?: [^>]*)?>/g) || []).length, 2);

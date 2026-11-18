@@ -5,6 +5,16 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+
+## 2026-11-16: The system sky passed its playtest
+
+Owner: "good, play test so far passed" (2026-11-16) — the system-space work from the previous entry is confirmed:
+star/black hole visible and correctly placed, dots, per-pocket lighting, per-system sizes. Docs-only status change; no
+code moved. HANDOFF and the ROADMAP current position and log line now say the playtest passed; 14c remains ticked. Save
+version unchanged (**v21**); `npm run build` and `npm test` re-run green.
+
+---
+
 ## 2026-11-16: System space — AUs, a true 3D position for every pocket, and a sky that shows the system you're in
 
 Owner: "All pockets in a system should have a type of 3d position in x, y, z. This is to prepare the game for a

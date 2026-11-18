@@ -67,3 +67,6 @@
   one nothing emits). To add a sound: an `SFX` entry plus an `emit` — see HOW_TO_ADD.md recipe 9.
   Mute and pause are handled inside `tone()`/`nz()` as before. UI sounds go through `uiSound()`
   and `hoverSound()`, which the screens call directly (they are not game sounds).
+
+
+2026-11-16 follow-up: F receives camera origin/direction at keypress and ranks asteroid triangle intersections by depth before using angular aim assistance. Non-rock kinds retain sphere proxies; selection of the same candidate still unlocks. UNDOCK_SOUND schedules mechanical layers, not a rising pitch sweep.

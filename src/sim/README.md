@@ -62,3 +62,6 @@ Rules:
 - `docs/HOW_TO_ADD.md` recipes 3, 4, 6, 10, 11 touch this folder.
 
 `navigation.js` implements destination navigation: `jumpRoute` recalculates the next pocket hop and calls `startWarp`, which requotes it. No destination and unavailable routes produce HUD notices; it never automatically chains warps.
+
+
+Targeting first checks the rendered camera ray against asteroid triangle soups (same as projectile collision), choosing the nearest hit before angular assistance; other target kinds retain sphere proxies. Session validates permanent home stations and recovers there. Death always loans a fully fitted Wasp when no hull survives, irrespective of credits; existing surviving ships are reused. Ship ownership is still global, not station-local.
