@@ -16,6 +16,19 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Exact F picking for all objects; stationary outfitting preview
+
+Owner approved mission log and preview angle. Kept yaw/pitch unchanged and removed automatic
+preview rotation entirely (manual drag/zoom/reset remain). F now raycasts visible rendered mesh
+surfaces for every lockable kind: enemies, rocks, crates, stations, rifts/wormholes, exits and
+caches. Tagged model roots include GLB children and live animated station parts. Faint auras
+and invisible meshes do not intercept the ray. Sim receives only a plain target reference,
+checks live candidates, then preserves same-target unlock and no-hit angular assistance.
+Headless callers retain the existing sim intersection fallback. Regression tests cover every
+kind, overlapping bodies, station holes, child transforms, hidden geometry and preview stability.
+Save v21 unchanged; build regenerated. Follow-up owner playtest pending; PR #39 remains unmerged.
+
 ## 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
 
 Continuation starts at main after PR #38; previous unpushed Part 2 was absent, so restored

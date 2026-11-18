@@ -63,14 +63,18 @@ test('Strip has ten numbered boxes, shared family icons and no redundant top-rig
 test('Compact strip fits between unchanged meter pairs at desktop and narrower widths',()=>{
  const css=readFileSync('src/styles.css','utf8');
  assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: 78px/);
- assert.match(css,/width: min\(340px, calc\(100vw - 220px\)\)/);
- assert.match(css,/width: min\(400px, calc\(100vw - 160px\)\)/);
- assert.match(css,/\.weapon-slot \{[^}]*height: 44px/);
+ assert.match(css,/width: min\(480px, calc\(100vw - 220px\)\)/);
+ assert.match(css,/width: min\(540px, calc\(100vw - 160px\)\)/);
+ assert.match(css,/\.weapon-slot \{[^}]*height: var\(--weapon-size\); width: 100%/);
+ assert.match(css,/#weapon-slots::after \{[^}]*bottom: 0; height: var\(--weapon-size\)/);
+ assert.match(css,/\.weapon-bank-label \{ color: #fff/);
  assert.match(css,/\.vital-track \{[^}]*height: 44px; width: 14px/);
  assert.match(css,/\.vital-pair \{[^}]*gap: 8px/);
  for(const viewport of [480,640,900,1280,1920]) {
-  const centres=Math.min(400,viewport-160), strip=Math.min(340,viewport-220);
+  const centres=Math.min(540,viewport-160), strip=Math.min(480,viewport-220);
   assert.equal(centres-strip,60,'strip leaves 30px each side before inner track centres');
+  const width=(strip-16-8*3)/10, height=Math.min(44,(viewport-260)/10);
+  assert.ok(Math.abs(width-height)<1e-9,'each box and its divider share the square height');
  }
 });
 

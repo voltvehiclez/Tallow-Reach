@@ -20,6 +20,14 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Square weapon boxes and slot-height divider
+
+Widened the strip to 480px so all ten boxes are 44×44px at desktop width; narrower
+windows scale width/height together. Shifted meter pairs outward equally while
+preserving appearance and internal spacing. Replaced the full-bank separator with
+a divider the same height as the slot row. PRIMARY/SECONDARY headings are white;
+weapon names stay grey. Added square-geometry assertions. Save v21; build regenerated.
+
 ## 2026-11-16: Monochrome weapon strip and top-left location
 
 Lowered weapon strip 20px toward throttle; square boxes, white active borders, dark
@@ -111,20 +119,9 @@ null tint restores automatic colour, zero intensity disables the extra fill. Rec
 explains tuning. Missing sky disables fill. Tests cover defaults, overrides, transition
 wiring and invalid settings. Save v21; build regenerated. Owner darkness/colour playtest pending.
 
-## 2026-11-16: Exact F picking for all objects; stationary outfitting preview
-
-Owner approved mission log and preview angle. Kept yaw/pitch unchanged and removed automatic
-preview rotation entirely (manual drag/zoom/reset remain). F now raycasts visible rendered mesh
-surfaces for every lockable kind: enemies, rocks, crates, stations, rifts/wormholes, exits and
-caches. Tagged model roots include GLB children and live animated station parts. Faint auras
-and invisible meshes do not intercept the ray. Sim receives only a plain target reference,
-checks live candidates, then preserves same-target unlock and no-hit angular assistance.
-Headless callers retain the existing sim intersection fallback. Regression tests cover every
-kind, overlapping bodies, station holes, child transforms, hidden geometry and preview stability.
-Save v21 unchanged; build regenerated. Follow-up owner playtest pending; PR #39 remains unmerged.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Exact F picking for all objects; stationary outfitting preview
 - 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
 - 2026-11-16: Feature batch Part 1 — targeting and missile UI (items 4–7)
 - 2026-11-16: Individual fighter pilots and per-enemy AI personalities

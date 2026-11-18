@@ -21,7 +21,7 @@ test('Vertical meters safely represent empty, full, absent and out-of-range pool
  assert.doesNotMatch(html,/Hull HP|Shield HP|pw-line/);
  const css=readFileSync('src/styles.css','utf8');
  assert.match(css,/left: calc\(50% \+ 28px\)/);
- assert.match(css,/width: min\(400px, calc\(100vw - 160px\)\)/);
+ assert.match(css,/width: min\(540px, calc\(100vw - 160px\)\)/);
  assert.match(css,/\.vital-pair \{[^}]*gap: 8px/);
  assert.match(css,/\.vital-left \{ right: calc\(100% - 7px\)/);
  assert.match(css,/\.vital-right \{ left: calc\(100% - 7px\)/);

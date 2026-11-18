@@ -92,3 +92,5 @@ Give a short playtest after each implemented slice. Do not label pending slices 
 - Top-left: bold white system, regular white current pocket, no icon; route beneath.
   Warp to another pocket/system to check both names. Instances must not claim Meridian.
 - Bottom-left instructions are gone; main-menu help still describes controls.
+
+Square-slot follow-up: confirm equal box width/height, a divider only as tall as the slot row, white PRIMARY/SECONDARY and grey weapon names. Meter appearance should be unchanged, only farther apart.

@@ -55,3 +55,5 @@ Weapon strip is above the throttle/vitals. It maps outfitting bay indices withou
 Weapon strip compact follow-up: 340px desktop width and 44px-high boxes, positioned between Hull and Power at the same vertical level. Meter pairs move 50px outward per side; their geometry/styles are unchanged. Responsive widths retain 30px clearance from strip edge to inner track centre.
 
 Weapon strip follow-up: square monochrome slots, white active borders, grey labels and separator; selected names/ammo beneath bank headings. Lowered 20px toward throttle. Top-left shows bold white system and regular white pocket text, no icon; route stays below. Bottom-left control reminder removed (main-menu help remains).
+
+Weapon boxes are now 44×44px at desktop width (480px strip), scaling square with available width. Meter pairs move outward equally without changing their appearance. The separator spans only the slot row; PRIMARY/SECONDARY headings are white, weapon names grey.
