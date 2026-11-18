@@ -222,9 +222,9 @@ export function updateHud(dt) {
   el.hull.style.height = meterHeight(P.hull, P.hullMax);
   el.boost.style.height = meterHeight(P.en, P.enMax);
   // Numbers below every column, so each pool can be read exactly as well as roughly.
-  el.shieldVal.textContent = meterValue(P.sh, P.shMax);
-  el.hullVal.textContent = meterValue(P.hull, P.hullMax);
-  el.boostVal.textContent = meterValue(P.en, P.enMax);
+  el.shieldVal.textContent = meterValue(P.sh, P.shMax, " HP");
+  el.hullVal.textContent = meterValue(P.hull, P.hullMax, " HP");
+  el.boostVal.textContent = meterValue(P.en, P.enMax, " U");
   el.shieldPercent.textContent = meterPercent(P.sh, P.shMax);
   el.hullPercent.textContent = meterPercent(P.hull, P.hullMax);
   el.boostPercent.textContent = meterPercent(P.en, P.enMax);

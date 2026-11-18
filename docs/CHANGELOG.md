@@ -20,6 +20,12 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: HUD pool units
+
+Shield and Hull current values now include HP (e.g. 10 HP); Boost includes U for
+fuel units (e.g. 10 U). Power remains MJ. Labels, percentages, spacing and gameplay
+are unchanged. Updated HUD tests; save v21; build regenerated.
+
 ## 2026-11-16: Tight HUD readings, pool percentages and throttle fill
 
 Moved label and number edges closer so their gap matches the 8px column gap. All
@@ -186,73 +192,9 @@ The populated arc remains behind the station, opposite the opening: belt → sta
 density/arrival tests, generated HTML and handoff. Save v21. Build passes;
 **672/672 tests pass**. Owner visual preview pending.
 
-## 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
-
-Owner requested wider belts with the nearest surface ~4 km from central arrival,
-unchanged height and similar density. Meridian arc: inner 4 km, width 2 km,
-938 rocks, height ±280 m. Dedicated arcs: inner 4 km, width 2.75 km, height
-±420 m; counts scale by annular area. Taper and non-overlap packing remain.
-
-Meridian explicitly selects its original pre-rework 90 m ring/four-spoke model.
-Commerce rings use original grey/amber colours with uniform lights; top cap base
-now touches the core top (y=90), rather than clipping through it. Industrial
-refineries lose the detached bottom slab. Planets use solid class colours with
-lighting/atmosphere, no low-resolution procedural surface maps (generator retained
-unused for future work). Local planets shrink from ~105° to ~36° angular diameter
-and sit below the horizontal arrival view. Distant planet bodies remain coloured
-spheres. Pocket/belt PointsMaterial markers discard corners in their shaders so
-they are circular, not square. Menu still has its planet and generated sky.
-
-Files: `src/data/{places,stations}.js`, `src/sim/galaxy.js`,
-`src/render/{models,systemsky}.js`, render README, pocket-density and new visual
-regression tests, generated HTML, handoff and lessons. **Save stays v21**.
-`npm run build` passes; **658/658 tests pass**. Owner preview pending;
-larger belts have more rocks, so check performance as well as appearance.
-
-Follow-up: owner requested planets 30% bigger and back in line with the main POI,
-plus less-perfect belt contours and occasional strays. Local planet radius now
-0.338 of sky depth (was 0.26), elevation zero, aligned with the POI/arrival heading.
-Planet arrivals face the local field's horizontal direction when present. Belt
-contours have seeded multi-wave inner/width variation; inner shifts only outward
-so the ~4 km clearance stays safe. ~3.5% of slots become outer strays, 250–800 m
-beyond the local band, still at the same height and with non-overlap spacing.
-Tapered tips, rock counts and stable slot planning remain. Tuning lives in new
-`src/data/scenery.js`; changes also touch `sim/asteroids.js`, `sim/galaxy.js`,
-`render/systemsky.js`, density/visual tests and generated HTML. Save v21;
-`npm run build` passes; **659/659 tests pass**. Updated visual/performance preview still pending.
-
-Second preview follow-up: owner approved planet elevation but wanted another 30%
-size increase and a much more visible belt-tip falloff. Planet sky radius is now
-0.4394 (was 0.338), with distance/elevation/POI alignment unchanged. Arc density
-now follows a full-length sine-squared falloff from the populated middle to a
-1% weight at each tip, instead of a short end taper with a 12% floor. Actual
-packed-rock tests require the outermost two 10% sectors combined to contain less
-than one fifth of the equal-width central sector. Counts, height, clearance,
-irregular contours, strays and collision spacing stay unchanged. Files:
-`data/scenery.js`, `sim/asteroids.js`, density/visual tests, generated HTML and
-handoff. Save v21; `npm run build` passes; **659/659 tests pass**. Owner preview pending.
-
-Third preview follow-up: owner requested half overall belt density, stronger
-thinning from the C middle, and atmosphere shells one third as thick. Meridian
-now has 469 rocks; dedicated belt count scaling halved from 0.56 to 0.28 (same
-footprint/height). Arc weighting is sine-to-the-fourth with a 0.2% tip floor,
-rather than sine-squared with a 1% floor. Strays and non-overlap rules remain.
-Atmospheres scale the shell's excess radius by 1/3, never the surface radius;
-applied to system-sky planets, authored/menu planets, GLB atmosphere fallback,
-and distant-planet halo extent. Surface size, elevation and colours unchanged.
-Files: `data/{places,scenery}.js`, `sim/galaxy.js`, `render/{models,systemsky}.js`,
-density/visual tests, generated HTML and handoff. Save v21. `npm run build` passes;
-**660/660 tests pass**. Owner preview pending.
-
-Marker follow-up: arc-field HUD labels now sit halfway through the band at the
-angular midpoint of the populated C (opposite its opening), using the seeded
-contour at that angle. The field origin and central warp arrival do not move.
-Ordinary field markers remain at their centres. Files: `sim/asteroids.js`,
-`ui/hud.js`, `tests/pocket-density.test.mjs`, generated HTML and handoff.
-Save v21; build green; **661/661 tests pass**. Owner preview pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
 - 2026-11-16: Flatter, lighter belts with naturally thinning edges
 - 2026-11-16: C-shaped belts, central arrivals and non-intersecting asteroids
 - 2026-11-16: Denser pockets, close warp-ins and massive asteroids

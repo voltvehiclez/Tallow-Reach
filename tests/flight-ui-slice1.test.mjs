@@ -48,7 +48,12 @@ test('Left Alt toggles once per press, not on release/repeat; modal and blur are
 
 test('Current-only values, percentages and throttle fill retain safe boundary behaviour', async()=>{
  const {meterValue,meterPercent}=await import('../src/ui/vitals.js');
- assert.equal(meterValue(10,10),'10');assert.equal(meterPercent(10,10),'100%');
+ assert.equal(meterValue(10,10,' HP'),'10 HP');
+ assert.equal(meterValue(10,10,' U'),'10 U');
+ const source=readFileSync('src/ui/hud.js','utf8');
+ assert.ok(source.includes('meterValue(P.sh, P.shMax, " HP")'));
+ assert.ok(source.includes('meterValue(P.hull, P.hullMax, " HP")'));
+ assert.ok(source.includes('meterValue(P.en, P.enMax, " U")'));assert.equal(meterPercent(10,10),'100%');
  assert.equal(meterValue(100,200,' MJ'),'100 MJ');assert.equal(meterPercent(100,200),'50%');
  assert.equal(meterValue(4,0),'0');assert.equal(meterPercent(4,0),'0%');
  for(const [v,expected] of [[0,'0%'],[0.5,'50%'],[1,'100%'],[-1,'0%'],[2,'100%']]) assert.equal(meterHeight(v,1),expected);

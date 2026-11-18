@@ -13,7 +13,8 @@ Implemented; owner playtest pending. Save v21 unchanged.
 Quick playtest:
 1. Launch: confirm Shield / Hull — open centre — Power / Boost ordering, short labels
    and matching tight gaps. Check that Power drains vertically and retains its MJ reading.
-2. Check current-only values and percentages below (full Shield: 10 then 100% on Wasp).
+2. Check current-only values and percentages below (full Shield: 10 HP then 100% on Wasp).
+   Shield/Hull show HP; Boost shows U; Power shows MJ.
    Power usage should sit under its MJ/percentage readings; text gaps match the tracks.
    Check the throttle bar at 0%, half and full. Speed remains readable below it.
    Boost and take some shield/hull damage: columns drain/refill vertically; readings
