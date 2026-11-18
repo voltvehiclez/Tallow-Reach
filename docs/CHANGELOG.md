@@ -20,6 +20,16 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
+
+Implemented items 1 and 12 only. Hull/Shield now fill upward in small columns left
+of the existing horizontal MJ bar; Boost is a column on the right. Numeric readings
+remain, with absent/invalid pools safely empty. Route retains its top-left location.
+Left Alt toggles free camera once per non-repeat press; release no longer disables it.
+Existing modal/blur/dock/warp reset paths remain; pause now exits orbit too. Updated
+help text and tests. Save v21 unchanged. Build regenerated; owner visual playtest pending.
+Full batch plan and per-slice checklist: `testing/TESTING-BATCH2.md`. Other items pending.
+
 ## 2026-11-16: Nebula fill intensity increased 25%
 
 Owner approved the ambient lighting and requested a 25% increase. Default intensity
@@ -270,28 +280,9 @@ Files: `src/data/{places,place-templates}.js`, `src/sim/{galaxy,asteroids,places
 `npm run build` green; **653/653 tests pass**. Owner visual/performance preview
 still required. Existing field slot cooldowns remain keyed by field id and slot.
 
-## 2026-11-16: Denser pockets, close warp-ins and massive asteroids
-
-Owner preview: overall good, but pockets were too spread out and rocks too small.
-Restored Meridian's original 70-rock field at [1800, 200, -1500], radius 700 m;
-five connected 90-rock sections extend it ~6.4 km outward (520 rocks total).
-Dedicated belts now chain 5–7 dense sections, each 750–1000 m radius and roughly
-65–120 rocks. Frontiers regain dense local fields with outward extensions or a
-second field; trade/outpost/planet fields and encounter positions move closer.
-Stations arrive at roughly 650–1200 m plus small jitter; fields arrive 500–800 m
-outside their first section. Seeded facing and planet approaches remain intact.
-Rare low-poly giants mix with normal rocks: radii 180–400 m in frontier fields,
-180–360 m in Meridian extensions, 200–500 m in dedicated belts. Independent
-size RNG preserves ordinary stable slots; existing shapes/collision are reused.
-
-Files: `src/data/{places,place-templates}.js`, `src/sim/{galaxy,asteroids}.js`,
-`tests/pocket-density.test.mjs`, loader test and combat fixture (only original
-launch quaternions restored), generated HTML and handoff. **Save stays v21.**
-`npm run build` passes; **652/652 tests pass**. Visual density and frame-rate
-still need owner preview.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Denser pockets, close warp-ins and massive asteroids
 - 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
 - 2026-11-16: The edge-compression lens is removed
 - 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)

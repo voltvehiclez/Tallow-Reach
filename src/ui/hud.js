@@ -1,3 +1,4 @@
+import { meterHeight } from "./vitals.js";
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
@@ -211,10 +212,10 @@ export function updateHud(dt) {
     d = SHIPS[S.ship],
     missions = activeMissions(S);
 
-  el.shield.style.width = (P.shMax > 0 ? Math.max(0, P.sh / P.shMax) : 0) * 100 + "%";
-  el.hull.style.width = (P.hullMax > 0 ? Math.max(0, P.hull / P.hullMax) * 100 : 0) + "%";
-  el.boost.style.width = (P.enMax > 0 ? Math.max(0, Math.min(1, P.en / P.enMax)) : 0) * 100 + "%";
-  // Numbers beside every bar, so each pool can be read exactly as well as roughly.
+  el.shield.style.height = meterHeight(P.sh, P.shMax);
+  el.hull.style.height = meterHeight(P.hull, P.hullMax);
+  el.boost.style.height = meterHeight(P.en, P.enMax);
+  // Numbers below every column, so each pool can be read exactly as well as roughly.
   el.shieldVal.textContent = P.shMax > 0 ? `${Math.round(P.sh)} / ${Math.round(P.shMax)}` : "none";
   el.hullVal.textContent = P.hullMax > 0 ? `${Math.round(P.hull)} / ${Math.round(P.hullMax)}` : "none";
   el.boostVal.textContent = P.enMax > 0 ? `${Math.round(P.en)} / ${Math.round(P.enMax)}` : "none";

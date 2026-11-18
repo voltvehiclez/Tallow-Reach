@@ -93,3 +93,5 @@ These are real, current limits. None of them is a bug in play today.
 
 
 2026-11-16 follow-up: compact mission summaries retain status/progress/actions and clamp only the summary next-step line; native keyboard-accessible Details exposes the full next step and dialogue. Outfitting starts/reset front/top/left. Base retains upgrades and storage/refinery statistics; cargo is in Inventory. Station header sets persistent Home Station. Current icons stay blue with dotted orange rings; destination shapes are orange, including the right-hand destination pocket in route rows.
+
+Batch 2 slice 1: the bottom-centre MJ bar is flanked by small vertical Hull/Shield columns on its left and Boost on its right. Numeric pool readings remain; route stays top-left. Left Alt toggles free camera; blur/modals/pause reset it. Save v21 unchanged.

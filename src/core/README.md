@@ -17,3 +17,5 @@ Input populates only the local player's controls; remote input/transport is not 
 
 
 Mechanical undock layers live in data/audio.js; undockSound schedules them on the audio clock with mute/suspension guards.
+
+Left Alt emits the inverse of the authoritative freeCam.on on non-repeat keydown. Keyup does not disable orbit; clearControls still disables it on blur/modal entry. No separate input latch can get out of sync with docking/warp.

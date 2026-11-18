@@ -52,18 +52,6 @@ body.no-reticle canvas {
   top: 20px;
   width: 210px;
 }
-/* A label with its reading on the right, like the power block's "100 / 100 MJ". */
-#tl .tl-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-#tl .tl-shield { color: var(--ice); }
-#tl .tl-hull { color: var(--ink); }
-#tl .tl-boost { color: var(--amber); }
-#tl .tl-label span {
-  font-variant-numeric: tabular-nums;
-}
 /* Remaining system names while flying. The ship HUD shows the complete route without an inner scroller. */
 #hud-route {
   margin-top: 12px;
@@ -134,14 +122,20 @@ body.no-reticle canvas {
   text-align: center;
 }
 
-/* Ship power, bottom centre, above the throttle line (#bc). */
-#pw {
-  left: 50%;
-  bottom: 56px;
-  transform: translateX(-50%);
-  width: 236px;
-  text-align: center;
+/* Compact status columns around the unchanged horizontal MJ bar. */
+#ship-vitals {
+  left: 50%; bottom: 56px; transform: translateX(-50%);
+  display: grid; grid-template-columns: 48px 48px minmax(140px, 236px) 48px;
+  align-items: center; gap: 8px; width: max-content; max-width: calc(100vw - 24px);
 }
+.vital-column { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; line-height: 1.2; }
+.vital-column > span:last-child { font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vital-track { position: relative; height: 44px; width: 12px; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
+.vital-track i { display: block; position: absolute; bottom: 0; width: 100%; height: 0; background: currentColor; }
+.vital-hull { color: var(--ink); }
+.vital-shield { color: var(--ice); }
+.vital-boost { color: var(--amber); }
+#pw { width: 100%; min-width: 0; text-align: center; }
 #pw .pw-line {
   display: flex;
   justify-content: space-between;

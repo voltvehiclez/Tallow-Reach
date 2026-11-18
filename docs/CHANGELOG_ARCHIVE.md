@@ -9,6 +9,27 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Denser pockets, close warp-ins and massive asteroids
+
+Owner preview: overall good, but pockets were too spread out and rocks too small.
+Restored Meridian's original 70-rock field at [1800, 200, -1500], radius 700 m;
+five connected 90-rock sections extend it ~6.4 km outward (520 rocks total).
+Dedicated belts now chain 5–7 dense sections, each 750–1000 m radius and roughly
+65–120 rocks. Frontiers regain dense local fields with outward extensions or a
+second field; trade/outpost/planet fields and encounter positions move closer.
+Stations arrive at roughly 650–1200 m plus small jitter; fields arrive 500–800 m
+outside their first section. Seeded facing and planet approaches remain intact.
+Rare low-poly giants mix with normal rocks: radii 180–400 m in frontier fields,
+180–360 m in Meridian extensions, 200–500 m in dedicated belts. Independent
+size RNG preserves ordinary stable slots; existing shapes/collision are reused.
+
+Files: `src/data/{places,place-templates}.js`, `src/sim/{galaxy,asteroids}.js`,
+`tests/pocket-density.test.mjs`, loader test and combat fixture (only original
+launch quaternions restored), generated HTML and handoff. **Save stays v21.**
+`npm run build` passes; **652/652 tests pass**. Visual density and frame-rate
+still need owner preview.
+
 ## 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
 
 Owner: "Let's do a real variety pass on the generated universe … asteroid belts should be their own dedicated pockets …

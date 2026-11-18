@@ -1,0 +1,38 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { meterHeight } from '../src/ui/vitals.js';
+import { state } from '../src/state/state.js';
+import { on } from '../src/util/events.js';
+import { installInput, clearControls } from '../src/core/input.js';
+
+test('Vertical meters safely represent empty, full, absent and out-of-range pools',()=>{
+ for(const [v,m,want] of [[25,100,'25%'],[100,100,'100%'],[0,100,'0%'],[-2,100,'0%'],[200,100,'100%'],[5,0,'0%'],[NaN,5,'0%']]) assert.equal(meterHeight(v,m),want);
+ const html=readFileSync('src/index.html','utf8');
+ assert.ok(html.indexOf('id="b2"')<html.indexOf('id="pw"'));
+ assert.ok(html.indexOf('id="b1"')<html.indexOf('id="pw"'));
+ assert.ok(html.indexOf('id="b3"')>html.indexOf('id="pw"'));
+ for(const id of ['b1','b2','b3','hull-val','sh-val','boost-val','pwbar','hud-route']) assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1);
+ const hud=readFileSync('src/ui/hud.js','utf8');
+ for(const meter of ['shield','hull','boost']) assert.match(hud,new RegExp(`el.${meter}.style.height = meterHeight`));
+ assert.match(hud,/el.powerBar.style.width/);
+});
+test('Left Alt toggles once per press, not on release/repeat; modal and blur are safe',()=>{
+ const handlers={}, previous=globalThis.addEventListener;
+ globalThis.addEventListener=(name,fn)=>{handlers[name]=fn;};
+ const off=on('freecam',enabled=>{state.freeCam.on=enabled;});
+ try {
+  state.ui.starmap=state.ui.cargo=state.ui.cache=null;state.freeCam.on=false;
+  installInput();
+  const key=(type,code='AltLeft',repeat=false,tagName='BODY')=>handlers[type]({code,repeat,target:{tagName},preventDefault(){}});
+  key('keydown');assert.equal(state.freeCam.on,true);
+  key('keyup');assert.equal(state.freeCam.on,true);
+  key('keydown','AltLeft',true);assert.equal(state.freeCam.on,true);
+  key('keydown');assert.equal(state.freeCam.on,false);
+  key('keydown','AltRight');assert.equal(state.freeCam.on,false);
+  key('keydown','AltLeft',false,'INPUT');assert.equal(state.freeCam.on,false);
+  state.ui.cargo={};key('keydown');assert.equal(state.freeCam.on,false);state.ui.cargo=null;
+  key('keydown');handlers.blur();assert.equal(state.freeCam.on,false);
+  key('keydown');clearControls();assert.equal(state.freeCam.on,false);
+ } finally {if(typeof off==='function')off();globalThis.addEventListener=previous;state.ui.cargo=null;state.freeCam.on=false;}
+});

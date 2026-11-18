@@ -80,7 +80,7 @@ export function introHtml() {
     `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
     `I shows the hold of the ship you are flying while you are in space; dock to move cargo. ` +
     `P or Esc pauses, and the pause menu has the sound switch. ` +
-    `Hold left Alt and move the mouse to orbit your ship, scroll to zoom.</p>` +
+    `Press Left Alt to toggle orbit view, move the mouse to orbit your ship, scroll to zoom. Press Left Alt again to return to flight view.</p>` +
     `<div class="main-menu-actions">` +
     `<button class="go" data-a="campaign" disabled>Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +
