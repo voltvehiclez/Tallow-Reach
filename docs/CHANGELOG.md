@@ -20,6 +20,12 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Nebula fill intensity increased 25%
+
+Owner approved the ambient lighting and requested a 25% increase. Default intensity
+is now 0.125 (was 0.10). Tint, softness, overrides and other lights are unchanged.
+Updated the default regression assertion and recipe 24. Save v21; build regenerated.
+
 ## 2026-11-16: Subtle sky-tinted ambient fill trial
 
 Added one flight-scene AmbientLight at intensity 0.10, using active skybox generated
@@ -284,62 +290,9 @@ launch quaternions restored), generated HTML and handoff. **Save stays v21.**
 `npm run build` passes; **652/652 tests pass**. Visual density and frame-rate
 still need owner preview.
 
-## 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
-
-Owner: "Let's do a real variety pass on the generated universe … asteroid belts should be their own dedicated pockets …
-makes 100–1000 km planets … 1–4 seeded planets per system … four station classes … EVE-like scale …" **Save version
-unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet — built low-poly first for
-owner preview; heavy shader/texture polish waits for that preview.
-
-- **Pockets are vast and EVE-like, and every pocket is different.** Frontier/trade-lane/outpost templates were
-  rescaled to kilometres-wide spreads (a frontier belt can be 6.8–14.4 km radius; trade lanes and outposts vary or
-  lose their field entirely) with seeded per-pocket variation (`varyTemplateFeatures` in `data/place-templates.js`):
-  position, radius, rock count, two-separated-fields rolls, and encounter positions rolled per pocket. Meridian is
-  vast too (the home field sits ~16 km out at radius 3.6 km); it keeps only a small home-field convenience.
-- **Ambient static loot is gone.** Generated pockets no longer declare derelict/resource-cache raw-crate features;
-  kill drops, hostile drops, mission drops, recovery contracts and authored mission crates are untouched. Existing
-  save placeMemory migrates untouched (v21).
-- **Dedicated belt pockets.** 1–3 per system, named `<System> - Asteroid belt N`, each its own **`role: "belt"`** pocket
-  on its own map annulus (`beltRadius`/`beltSpread`), 34–182 rocks with a seeded lean/rich roll, fields 7.8–18.3 km
-  radius, with tier-scaled one-shot hostile patrols (chance/wanderers/count scale with the system's advisory tier).
-  Internal hub↔belt links keep them warpable (and reachable in a `links`-policy system); map icon is three ochre dots.
-- **Seeded planets.** 1–4 per system (all systems, black holes included), named `<Core proper name>-b`…`-e` after the
-  core proper name (never `-a`). Four classes — rocky, ice, gas giant, volcanic — with per-class radius (~110–1000 km),
-  palette, atmosphere, spin, orbit-rock counts and rock ore tables (`data/planets.js`, `data/loot.js`). Each planet is a
-  warpable low-orbit pocket with some orbit-rock fields; it renders as a true-angular-size body elsewhere in the system
-  (`systemsky.js`, AU-based) and as a dominating sky backdrop inside its own pocket (procedural maps in
-  `render/planetmaps.js`, Lambert day/night shading, additive atmosphere shell). Positions are fixed — no orbits, no
-  artificial boundary anywhere. Planets also get internal hub↔planet links and a ring+disc map icon.
-- **Stations: four classes with real silhouettes.** `commerce` (spun ring), `industrial` (foundry tower stack),
-  `military` (octagonal citadel), `mining` (excavation platform with drill arm), chosen by place id hash; generated
-  station names are class-weighted (`data/stations.js`). Built-ins today; `station.<class>.glb` (then `station.glb`)
-  overrides later — drop-in, no code changes.
-- **Warp-in is fixed, seeded and unique per pocket:** generally 3–8 km from the pocket's main POI on a line facing it
-  (belts/planets face their field/approach direction; station pockets face their station; empty pockets face the
-  star/black hole). Computed once at resolve time (`finalizeArrivals` in `sim/galaxy.js`), carried on the place record
-  (`enter.pos`/`enter.face`); `sim/sectors.js` applies the face on arrival.
-- **The menu wears the normal-space generated skybox** (in addition to its station/planet composition; the planet is a
-  fixed in-scene class world now — planets are pockets, not scenery). **The title keeps its planet backdrop** (owner).
-- **Map:** belt/planet annuli and icons; `minZoom` semantics unchanged (1 = system fit; zooming out from fit exits to
-  the galaxy). **Save stays v21.** **649/649 tests pass** (the 8b fixture was re-recorded: launch heading follows the
-  moved home field; several tests were updated to the vast world; the static-encounter machinery is now tested with an
-  ad-hoc authored record since generated pockets no longer emit one).
-
-Files: `src/data/planets.js` (new), `src/data/stations.js` (new), `src/render/planetmaps.js` (new), `src/data/place-templates.js`,
-`src/data/places.js`, `src/data/galaxy.js`, `src/data/loot.js`, `src/sim/galaxy.js`, `src/sim/sectors.js`, `src/render/systemsky.js`,
-`src/render/models.js`, `src/render/menuview.js`, `src/ui/starmap.js`, `src/styles.css`,
-`tests/fixtures/step8b-combat-lifecycle.json`, `tests/single-player-combat-8b.test.mjs`, `tests/content.test.mjs`,
-`tests/step11b-starmap.test.mjs`, `tests/step12-places.test.mjs`, `tests/step14-instances.test.mjs`,
-`src/data/README.md`, `src/render/README.md`, `game/tallow-reach.html`.
-
-Known follow-ups: true-scale AU flight is a later decision (planets are warp-gated today; the sky's AU math is
-distance-correct); 3 km-wide fields will need the frame budget/graphics-settings pass before texture work; station/planet
-GLB drops; playtest not done yet (owner 2026-11-16 build).
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
 - 2026-11-16: The edge-compression lens is removed
 - 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)
 - 2026-11-16: The system sky passed its playtest

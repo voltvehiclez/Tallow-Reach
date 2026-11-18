@@ -6,7 +6,7 @@ import { SKYBOXES } from '../src/data/skyboxes.js';
 const sky = id => ({kind:'cube',skybox:id});
 test('Default fill is faint and automatically follows the installed sky tint',()=>{
  const cyan=nebulaFillFor(sky('normal_space')), grey=nebulaFillFor(sky('wormhole_grey'));
- assert.equal(cyan.intensity,0.1); assert.notEqual(cyan.color,grey.color);
+ assert.equal(cyan.intensity,0.125); assert.notEqual(cyan.color,grey.color);
  assert.ok((cyan.color&255)>((cyan.color>>16)&255));
  for(const id of Object.keys(SKYBOXES)) {
   assert.equal(nebulaFillFor(sky(id),{...NEBULA_FILL,tintStrength:1}).color,SKYBOXES[id].tint);

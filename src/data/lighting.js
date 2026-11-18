@@ -2,7 +2,7 @@
 import { SKYBOXES } from './skyboxes.js';
 
 export const NEBULA_FILL = {
-  intensity: 0.10,       // 0 disables the extra fill; keep small to preserve dark space
+  intensity: 0.125,       // 0 disables the extra fill; keep small to preserve dark space
   tint: null,            // null = current skybox's generated nebula tint; or 0xrrggbb
   tintStrength: 0.4,      // mix with neutral white so shadows do not become saturated cyan
   // Optional per-sky overrides, independent of the generator-maintained skybox registry.
