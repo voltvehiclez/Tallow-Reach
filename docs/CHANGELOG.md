@@ -20,6 +20,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Signed throttle and final HUD alignment tweaks
+
+Weapon names move up 2px without moving PRIMARY/SECONDARY. Throttle/speed box moves
+up 18px. Fixed reverse throttle disappearing behind a resource-pool clamp: a dedicated
+signed helper preserves negative text, uses magnitude for fill length, and reverses
+fill origin. Reverse uses the same blue hue in diagonal stripes, forward stays solid.
+All four stat columns now share 28px width, with centred labels/readings. Power usage
+centres beneath the combined Power/Boost pair. Power MJ readout matches the blue meter;
+usage text retains its muted grey. Added signed/boundary and layout tests.
+Save v21 unchanged; build regenerated; owner visual playtest pending.
+
 ## 2026-11-16: Framed status columns and integrated throttle/speed
 
 Reduced weapon-name reserved height to one line and heading/name gaps to 1px so
@@ -112,14 +123,9 @@ Existing modal/blur/dock/warp reset paths remain; pause now exits orbit too. Upd
 help text and tests. Save v21 unchanged. Build regenerated; owner visual playtest pending.
 Full batch plan and per-slice checklist: `testing/TESTING-BATCH2.md`. Other items pending.
 
-## 2026-11-16: Nebula fill intensity increased 25%
-
-Owner approved the ambient lighting and requested a 25% increase. Default intensity
-is now 0.125 (was 0.10). Tint, softness, overrides and other lights are unchanged.
-Updated the default regression assertion and recipe 24. Save v21; build regenerated.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Nebula fill intensity increased 25%
 - 2026-11-16: Subtle sky-tinted ambient fill trial
 - 2026-11-16: Exact F picking for all objects; stationary outfitting preview
 - 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups

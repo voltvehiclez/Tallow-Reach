@@ -18,6 +18,13 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Nebula fill intensity increased 25%
+
+Owner approved the ambient lighting and requested a 25% increase. Default intensity
+is now 0.125 (was 0.10). Tint, softness, overrides and other lights are unchanged.
+Updated the default regression assertion and recipe 24. Save v21; build regenerated.
+
 ## 2026-11-16: Subtle sky-tinted ambient fill trial
 
 Added one flight-scene AmbientLight at intensity 0.10, using active skybox generated

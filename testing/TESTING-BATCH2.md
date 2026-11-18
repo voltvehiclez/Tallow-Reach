@@ -96,3 +96,5 @@ Give a short playtest after each implemented slice. Do not label pending slices 
 Square-slot follow-up: confirm equal box width/height, a divider only as tall as the slot row, white PRIMARY/SECONDARY and grey weapon names. Meter appearance should be unchanged, only farther apart.
 
 Framing follow-up: check headings sit close to slots, status tracks are centred under unmoved labels with matching frames/8px gaps, and speed appears inside the throttle box. Boost/fire/take damage to confirm the framed readings remain legible. Speed physics is unchanged here; pushed-speed correction remains slice 2.
+
+Signed-throttle follow-up: try -100%, -50%, 0%, +50%, +100%. Reverse should show a minus sign and same-blue striped fill growing from the right; forward is solid from the left. Check the raised throttle box, uniform status-column widths, usage centred under Power/Boost, and names 2px closer to unchanged bank headings.

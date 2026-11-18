@@ -59,3 +59,7 @@ Weapon strip follow-up: square monochrome slots, white active borders, grey labe
 Weapon boxes are now 44×44px at desktop width (480px strip), scaling square with available width. Meter pairs move outward equally without changing their appearance. The separator spans only the slot row; PRIMARY/SECONDARY headings are white, weapon names grey.
 
 HUD frame follow-up: weapon names reserve one line instead of two, with 1px gaps to headings/boxes. Status labels retain their inner-edge anchors; tracks size to label width and stay 8px apart. Each status column has a square grey frame. Speed is inside the wider throttle rectangle, not beneath it.
+
+HUD tuning: weapon names alone shift up 2px; bank headings stay fixed. All status columns are 28px wide. Power usage centres beneath Power/Boost. Throttle/speed box is 18px higher; signed throttle uses absolute fill length, left-origin solid forward and right-origin same-hue striped reverse.
+
+Power MJ value uses the same ice-blue as the Power meter; usage text remains muted grey.

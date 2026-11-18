@@ -1,6 +1,6 @@
 import { locationText } from "./location-display.js";
 import { weaponSlotsHtml } from "./weapon-slots.js";
-import { meterHeight, meterPercent, meterValue } from "./vitals.js";
+import { meterHeight, meterPercent, meterValue, throttleDisplay } from "./vitals.js";
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
@@ -255,8 +255,10 @@ export function updateHud(dt) {
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     missionsHtml(missions);
 
-  el.throttleFill.style.width = meterHeight(P.thr, 1);
-  el.throttleLabel.textContent = `Throttle ${meterPercent(P.thr, 1)}`;
+  const throttle = throttleDisplay(P.thr);
+  el.throttleFill.style.width = throttle.width;
+  el.throttleFill.classList.toggle("reverse", throttle.reverse);
+  el.throttleLabel.textContent = throttle.label;
   el.speed.textContent = `${Math.round(P.v.length())} m/s`;
 
   // Ship power: what the cells hold, and what the powerplants are making.

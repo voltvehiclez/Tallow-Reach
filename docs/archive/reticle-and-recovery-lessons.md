@@ -19,3 +19,10 @@
 A Shift press set full throttle before spool-up/MJ debit, allowing free throttle jumps.
 Move the snap into the successful ignition transaction, after payment. Tests in
 `boost-ignition.test.mjs` cover taps, spool-up, dry power/fuel and held-key throttle control.
+
+## Signed controls are not resource pools
+
+The generic 0–100% resource clamp hid reverse throttle. Use a separate signed
+presentation helper: preserve the sign in text, use absolute magnitude for width,
+and choose the fill origin/pattern from direction. Regression covers -100%, -50%,
+zero, +50%, +100%, clamping and invalid values in flight-ui-slice1.test.mjs.

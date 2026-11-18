@@ -117,13 +117,14 @@ body.no-reticle canvas {
 }
 #bc {
   left: 50%;
-  bottom: 24px;
+  bottom: 42px;
   transform: translateX(-50%);
   text-align: center;
 }
 
 #throttle-track { position: relative; width: 210px; height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 8px; border: 1px solid var(--line); background: #141b20; }
 #throttle-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(127,183,196,.4); }
+#throttle-fill.reverse { left: auto; right: 0; background: repeating-linear-gradient(135deg, rgba(127,183,196,.4) 0 4px, rgba(127,183,196,.16) 4px 8px); }
 #throttle-label { position: relative; display: block; line-height: 22px; font-size: 12px; color: var(--ink); }
 #speed { position: relative; font-size: 12px; color: var(--ink); white-space: nowrap; }
 
@@ -133,12 +134,12 @@ body.no-reticle canvas {
   width: min(540px, calc(100vw - 160px)); height: 44px;
 }
 /* Inner label edges retain their previous coordinates. Outer labels remain 8px away.
-   Label intrinsic widths size the tracks; absolute readouts cannot stretch them. */
+   All four tracks share the same width; absolute readouts cannot stretch them. */
 .vital-pair { position: absolute; top: 0; width: max-content; }
 .vital-left { left: -7px; }
 .vital-right { right: -7px; }
-.vital-column { position: relative; width: max-content; font-size: 11px; line-height: 1.2; isolation: isolate; }
-.vital-column > span:first-child { display: block; position: relative; top: -17px; white-space: nowrap; }
+.vital-column { position: relative; width: 28px; font-size: 11px; line-height: 1.2; isolation: isolate; }
+.vital-column > span:first-child { display: block; position: relative; top: -17px; white-space: nowrap; text-align: center; }
 .vital-column > .vital-value, .vital-column > .vital-percent { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vital-column > .vital-value { top: 48px; }
 .vital-column > .vital-percent { top: 62px; }
@@ -150,8 +151,8 @@ body.no-reticle canvas {
 .vital-hull { color: var(--ink); }
 .vital-shield, .vital-power { color: var(--ice); }
 .vital-boost { color: var(--amber); }
-#pw-val { color: var(--ink); }
-#pw-flow { position: absolute; top: 78px; right: 0; font-size: 10px; color: var(--dim); white-space: nowrap; text-align: right; }
+#pw-val { color: var(--ice); }
+#pw-flow { position: absolute; top: 78px; left: calc(100% + 4px); transform: translateX(-50%); font-size: 10px; color: var(--dim); white-space: nowrap; text-align: center; }
 /* Beam progress toward the next ore: a small bar directly under the "N left
    in rock" hint, shown only while the beam is cutting. */
 #bm {
@@ -1443,7 +1444,7 @@ textarea {
 .weapon-key { color: #aaa; font-size: 11px; line-height: 1; }
 .weapon-fitted-mark { width: 88%; height: 3px; background: #444; border-radius: 0; margin-top: auto; }
 .weapon-slot.fitted .weapon-fitted-mark { background: currentColor; }
-.weapon-bank-name { min-height: 12px; margin-bottom: 1px; font-size: 10px; line-height: 12px; color: #aaa; overflow-wrap: anywhere; }
+.weapon-bank-name { min-height: 12px; margin-bottom: 1px; position: relative; top: -2px; font-size: 10px; line-height: 12px; color: #aaa; overflow-wrap: anywhere; }
 .weapon-bank.secondary .weapon-bank-name { text-align: right; }
 .weapon-ammo { color: #aaa; }
 
