@@ -357,3 +357,10 @@ mask gl_PointCoord outside a circle; test both belt and ordinary-marker material
 For stacked primitives, compare bottom/top bounds (centre ± half height), not just
 centres: the commerce cap must start at the core top. Regression tests live in
 `tests/visual-refinement.test.mjs`; visual owner preview still required.
+
+### Shared targets need independent flight paths
+
+Give pilots seeded phases/timers and predictive separation; collision bounce alone
+cannot fix synchronized paths. Exact overlaps need tie-break directions. Test
+trajectories and delayed reactions (`tests/enemy-flight.test.mjs`). Unchanged
+weapon stats do not prove unchanged difficulty: owner playtest is required.

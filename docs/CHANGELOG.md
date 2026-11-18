@@ -20,6 +20,58 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Individual fighter pilots and per-enemy AI personalities
+
+Owner requested smarter, more varied NPC flight without a difficulty/stat increase:
+stop synchronized paths/merged ships, strafe, dodge, seek firing positions and avoid
+obstacles; Guardians should be more aggressive than newbie raiders.
+
+- `data/enemy-ai.js`: baseline movement profile plus explicit raider, smuggler,
+  freighter, hive/rift/deep guardian profiles. New enemies fall back to standard;
+  `aiProfile` selects a profile and `aiTuning` overrides individual settings.
+- `sim/enemy-flight.js`: per-pilot independent seeded brain, approach/attack/strafe/
+  breakaway decisions, different hands/phases/ranges/timers, vertical movement,
+  delayed probabilistic projectile dodges with cooldowns. Guardians favour close
+  attack runs; freighters are conservative. Brain state is transient (save v21).
+- Predictive rock/ship/player separation plus hull-width station collider probes.
+  Existing collision resolution remains the safety net; avoidance is not a promise
+  of collision-free flight in every crowded or concave environment.
+- Fire only with a clear scenery/rock/friendly lane. Existing damage, fire cadence,
+  hull stats and aim-cone gate retained. No target-velocity lead; angular shot spread
+  replaces the old centimetre-scale offset that was effectively perfect at range.
+- Combat lifecycle oracle re-recorded intentionally: paths, projectiles, locks and
+  combat damage differ, while player position/orientation/velocity and final profile
+  match the prior recording. Mining, missile use and death recovery assertions kept.
+
+Files: `data/{enemies,enemy-ai}.js`, `sim/{ai,enemy-flight}.js`, new flight tests,
+combat fixture/test, folder READMEs, handoff/lessons, generated HTML and playtest
+checklist `testing/TESTING-NPC-AI.md`. **Save v21**, no new dependency. Build and
+full suite pass (**668/668 tests**). Difficulty feel and crowded-belt performance need owner
+playtest; NOT claimed balanced from headless tests alone. No merge without approval.
+
+Scenery follow-up after owner approved AI: Meridian **Station pocket only** now
+rotates its C opening toward the sun's derived map direction, and lowers its field
+centre by 50 m. Other Meridian pockets are not excluded from the ordinary-field
+changes. Shared feature resolution applies a per-pocket override without mutating
+the authored catalog. C belts increase outer stray slots from 3.5% to 16%, with a
+continuous outward tail (no artificial gap). Symmetric smooth vertical falloff
+extends asteroid-centre height to 1.25×, sparse at both edges, not a hard slab.
+Other station/non-belt pocket fields widen 2.5× horizontally, preserving original
+core density weights and height. Counts include the integrated sparse quadratic
+outer wings; outer contours vary gently. Authored rift instances are unchanged.
+Files: `data/{scenery,places,place-templates}.js`, `sim/{asteroids,galaxy}.js`,
+density tests and rift/UI fixture positions (clear-space tests moved outside the
+rotated belt), generated HTML and handoff. Save v21; build passes and **671/671
+tests pass**. Visual preview pending.
+
+Meridian arrival follow-up: authored system-space Y is now exactly -0.049 AU
+(X/Z unchanged). The station pocket declares a 1000 m sunward arrival: generation
+uses the true 3D direction from its AU position to the sun and faces the station.
+The populated arc remains behind the station, opposite the opening: belt → station
+→ warp-in → sun. Other arrivals unchanged. Files: `data/places.js`, `sim/galaxy.js`,
+density/arrival tests, generated HTML and handoff. Save v21. Build passes;
+**672/672 tests pass**. Owner visual preview pending.
+
 ## 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
 
 Owner requested wider belts with the nearest surface ~4 km from central arrival,
@@ -282,46 +334,9 @@ Files: `src/data/galaxy.js`, `src/sim/galaxy.js`, `src/render/systemsky.js` (new
 
 ---
 
-## 2026-11-15: Hitting the station hurts again — solid means collision damage, by default
-
-Owner: "Collision damage is gone from the meridian station. Everything that is solid should apply collision damage
-unless otherwise specific. Asteroids still apply collision damage correctly."
-
-Exactly right, and it was one default. A rock's collider carries `damage: 1` (hardcoded in `collideRockAt`), so rocks
-always hurt. Scenery went the other way: `colliderFromObject` took `damage = 0`, `scene.js` passed
-`f.collideDmg ?? 0`, and `player.js` gated on `hit.damage > 0` then multiplied by the factor — so a factor of 0
-zeroed the damage and the condition skipped it. Every station, planet and cave had been a free bounce since the
-model-fitted collision work, and **no test checked it either way**, which is why it survived three sessions.
-
-**No save change (v21).** `npm test` **640/640**, `npm run build` 3002 KB.
-
-- **The rule is now the owner's rule: solid means `damage: 1`, the same factor a rock uses.** Fly into Meridian above
-  25 m/s and it costs `speed * 0.015 * damage` — shields first, exactly the rock rate, measured. The 25 m/s threshold
-  is unchanged (drifting into a station is still free).
-- **Opt-outs are data, not defaults.** `collideDmg: 0` makes a surface solid but harmless (a bounce), `collideDmg: 2`
-  makes one hurt twice as much, `collide: false` still means no collider at all. Default `1` in both
-  `colliderFromObject` and `scene.js`.
-- **Hostiles obey the same rule.** `ai.js` used to bounce raiders off scenery for free while a rock hurt them; scenery
-  now damages them through the same `enemy-rammed` event with `byPlayer: null`, so it is an environmental kill that
-  credits no pilot and settles every kill objective the same way a rock kill does. The rock path's 25 m/s gate is
-  kept for both.
-- **A test-prop lesson, not a game bug:** a *single flat triangle* is a bad stand-in for a wall — a 4.8 m hull can
-  straddle a zero-thickness plane between two ticks and register nothing. Real scenery is closed geometry and every
-  Meridian part is thick enough (thinnest 2 m, so a 4.8 m hull overlaps it from 3.8 m away). The new hostile test
-  builds a closed slab.
-- **Files:** `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`, docs.
-- **Tests:** new `tests/collision-damage.test.mjs` (6) — the bake defaults to 1 for still parts and movers, flying
-  into the station costs hull, the cost is the rock rate scaled by the factor, `collideDmg: 0` bounces for free,
-  slow contact is still free, and a rock and a station cost the same for the same approach. `tests/enemy-collision.test.mjs`
-  gains one (scenery damages a hostile, `collideDmg: 0` does not). Two of these were checked to FAIL with the old
-  default restored.
-- **Not playtested.** Headless only; the owner's own flight is the visual check.
-
-Files: `src/render/collideModel.js`, `src/render/scene.js`, `src/sim/player.js`, `src/sim/ai.js`,
-`tests/collision-damage.test.mjs` (new), `tests/enemy-collision.test.mjs`, `docs/GLB_MODELS.md`, `docs/HANDOFF.md`,
-`docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-15: Hitting the station hurts again — solid means collision damage, by default
 
 - 2026-11-15: Big moving parts are solid, and a wormhole pocket is really there after a reload
 

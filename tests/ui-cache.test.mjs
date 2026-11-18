@@ -96,7 +96,7 @@ function insideRift(seed = 4242) {
   player.docked = false;
   player.flight.spawnT = 1e9;
   enterPlace(DEFAULT_PLACE, player);
-  player.pos.set(0, 0, 4000);
+  player.pos.set(0, 0, 10000);
   setSeed(seed);
   addItem(state.profile.ship, "rift_basic", 2, state.profile);
   const rift = openRift("basic", player, seed);

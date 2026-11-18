@@ -13,6 +13,8 @@
 //   scale      model scale
 //   f          faction id from data/factions.js
 //   ai         behaviour id from AI_BEHAVIOURS in sim/ai.js ("chase" today)
+//   aiProfile  movement personality in data/enemy-ai.js; omitted → standard
+//   aiTuning   optional per-type personality overrides
 //   turn       how fast it swings around to face you (per-second slerp factor)
 //   spdFar     speed closing in from far away (m/s)
 //   spdNear    speed once it is near the player (m/s)
@@ -40,6 +42,7 @@ export const ENEMIES = {
     scale: 1.2,
     f: "pirates",
     ai: "chase",
+    aiProfile: "raider",
     turn: 1.4,
     spdFar: 125,
     spdNear: 25,
@@ -68,6 +71,7 @@ export const ENEMIES = {
     scale: 1.15,
     f: "pirates",
     ai: "chase",
+    aiProfile: "smuggler",
     turn: 1.5,
     spdFar: 120,
     spdNear: 24,
@@ -96,6 +100,7 @@ export const ENEMIES = {
     scale: 2.1,
     f: "pirates",
     ai: "chase",
+    aiProfile: "freighter",
     turn: 0.9,
     spdFar: 55,
     spdNear: 16,
@@ -124,6 +129,7 @@ export const ENEMIES = {
     scale: 1.5,
     f: "rift",
     ai: "chase",
+    aiProfile: "hiveguardian",
     turn: 1.9,
     spdFar: 145,
     spdNear: 38,
@@ -154,6 +160,7 @@ export const ENEMIES = {
     scale: 1.15,
     f: "rift",
     ai: "chase",
+    aiProfile: "riftguardian",
     turn: 1.8,                 // it is defending a pocket, not running a raid: it swings round fast
     spdFar: 140,
     spdNear: 34,
@@ -180,6 +187,7 @@ export const ENEMIES = {
     scale: 1.4,
     f: "rift",
     ai: "chase",
+    aiProfile: "deepguardian",
     turn: 2,
     spdFar: 155,
     spdNear: 40,

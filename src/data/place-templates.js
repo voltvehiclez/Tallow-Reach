@@ -7,6 +7,7 @@
 // above a place's tier supplies the encounter ids. Add an encounter to a tier,
 // or add a new template, without changing the spawner.
 
+import { sceneryFeatures } from "./scenery.js";
 import { ENCOUNTERS, encounterDef } from "./encounters.js";
 import { makeRng } from "../util/rng.js";
 import { stationClassForId } from "./stations.js";
@@ -271,7 +272,7 @@ export function templateFeatures(templateId, place = {}) {
     });
   });
   features.push(...explicitFeatures);
-  return { ...template, features };
+  return { ...template, features: sceneryFeatures(place, features) };
 }
 
 /** A small validation helper used by the content tests and future tools. */
