@@ -16,3 +16,7 @@ export const MISSILE = {
   lock: 2.34,           // seconds inside the ring to acquire a lock
   cone: 20,             // lock cone half-angle (degrees)
 };
+
+
+// HUD-only geometry; lock duration/range above are gameplay tuning.
+export const MISSILE_HUD = { canvas: 260, startRadius: 106, endRadius: 34 };

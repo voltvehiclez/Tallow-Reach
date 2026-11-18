@@ -18,6 +18,8 @@ import { loadHeadless } from "./headless.mjs";
 
 const sim = await loadHeadless("src/sim/ai.js", {
   state: "src/state/state.js",
+  setSeed: "src/util/rng.js",
+  enemyDef: "src/data/enemies.js",
   on: "src/util/events.js",
   emit: "src/util/events.js",
   V: "src/util/math.js",
@@ -33,6 +35,7 @@ const TICKS = 600;          // ten seconds
 
 /** A world with the player parked at the origin and the spawner switched off. */
 function freshWorld() {
+  sim.setSeed(42); // Independent pilot personalities must be reproducible in regression tests.
   const S = sim.state;
   S.world.enemies.length = 0;
   S.world.bullets.length = 0;
@@ -66,7 +69,7 @@ test("600 ticks with no browser: the raider closes in, turns, and shoots", () =>
 
   const end = dist(e);
   assert.ok(end < start - 200, `it approached: ${start.toFixed(0)} m -> ${end.toFixed(0)} m`);
-  assert.ok(end < 300, `it is on top of the player after ten seconds (${end.toFixed(0)} m)`);
+  assert.ok(end < sim.enemyDef(e.def).circleAt * 2, `it reached manoeuvring range after ten seconds (${end.toFixed(0)} m)`);
   assert.ok(shots > 0, "and it opened fire");
   assert.ok(S.world.bullets.length > 0, "its shots are in the world");
 
