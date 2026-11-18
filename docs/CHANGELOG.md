@@ -50,6 +50,12 @@ square; on-screen targets retain both. `ui/target-display.js` provides tested
 pure markup/visibility helpers; `hud.js`, CSS, UI README and regression tests
 updated. No gameplay/save change. Build passes; **679/679 tests pass**; preview pending.
 
+Owner revision: removed the missile-lock progress bar and percentage, including
+numeric acquisition hint. The expanded corner geometry, easing, colours, flash,
+lock timing and F-target priority are unchanged. NPC health bars/percentages stay.
+Files: `ui/hud.js`, `data/weapons.js`, `sim/weapons.js`, weapon tests, playtest guide,
+generated HTML and handoff. Save v21; build passes; **679/679 tests pass**.
+
 ## 2026-11-16: Individual fighter pilots and per-enemy AI personalities
 
 Owner requested smarter, more varied NPC flight without a difficulty/stat increase:

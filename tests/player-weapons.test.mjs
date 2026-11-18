@@ -127,16 +127,19 @@ test('NPC health bars clamp percentages, show no invented shields and leave name
   assert.equal(lockName({ k: 'e', o: { n: 'Guardian', hp: 5, mx: 10 } }), 'Guardian');
 });
 
-test('Missile HUD has visibly expanded travel and an explicit bar plus percentage', async () => {
+test('Missile HUD retains expanded corner animation without a bar or percentage', async () => {
   const { MISSILE_HUD } = await import('../src/data/weapons.js');
   const { readFileSync } = await import('node:fs');
   const hud = readFileSync('src/ui/hud.js', 'utf8');
   const html = readFileSync('src/index.html', 'utf8');
   assert.ok(MISSILE_HUD.startRadius - MISSILE_HUD.endRadius >= 70);
-  assert.ok(MISSILE_HUD.canvas / 2 + MISSILE_HUD.startRadius < MISSILE_HUD.barY);
-  assert.ok(MISSILE_HUD.textY < MISSILE_HUD.canvas);
+  assert.equal(MISSILE_HUD.startRadius, 106);
+  assert.equal(MISSILE_HUD.endRadius, 34);
   assert.ok(html.includes(`id="retc" width="${MISSILE_HUD.canvas}" height="${MISSILE_HUD.canvas}"`));
-  assert.ok(hud.includes('width * raw'));
-  assert.ok(hud.includes('Math.round(raw * 100)'));
+  const ring = hud.slice(hud.indexOf('function drawLockRing'), hud.indexOf('function mark('));
+  assert.ok(!ring.includes('fillRect'));
+  assert.ok(!ring.includes('fillText'));
+  assert.ok(ring.includes('raw * 0.5 * (1 + raw)'));
+  assert.ok(ring.includes('ctx.stroke()'));
   assert.ok(!hud.includes('"Locked " + lockName'));
 });

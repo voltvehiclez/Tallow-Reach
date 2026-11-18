@@ -315,7 +315,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     }
 
     if (ML.target) {
-      sayFor(ML.locked ? "MISSILE LOCK" : "Acquiring lock " + Math.round(Math.min(1, ML.t / MISSILE.lock) * 100) + "%");
+      sayFor(ML.locked ? "MISSILE LOCK" : "Acquiring lock");
     }
 
     if (c.sec && F.missileCd <= 0) {

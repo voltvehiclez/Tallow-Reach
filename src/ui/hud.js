@@ -344,14 +344,7 @@ function drawLockRing(ML, radius) {
     ctx.lineTo(bx, by - sy * len);
     ctx.stroke();
   });
-  const width = MISSILE_HUD.barWidth, left = cx - width / 2;
-  ctx.fillStyle = "rgba(12,18,24,0.85)";
-  ctx.fillRect(left, MISSILE_HUD.barY, width, 4);
-  ctx.fillStyle = ML.locked ? "#ffffff" : "#e0a458";
-  ctx.fillRect(left, MISSILE_HUD.barY, width * raw, 4);
-  ctx.font = "11px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(`${Math.round(raw * 100)}%`, cx, MISSILE_HUD.textY);
+
 }
 
 /**

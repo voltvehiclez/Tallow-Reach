@@ -19,4 +19,4 @@ export const MISSILE = {
 
 
 // HUD-only geometry; lock duration/range above are gameplay tuning.
-export const MISSILE_HUD = { canvas: 260, startRadius: 106, endRadius: 34, barWidth: 84, barY: 242, textY: 257 };
+export const MISSILE_HUD = { canvas: 260, startRadius: 106, endRadius: 34 };

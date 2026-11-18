@@ -14,7 +14,8 @@ Only request items **4–7** are included; other requested features remain pendi
    name/health rectangle should stay at the edge, not the small targeting square. Current NPCs have no
    shields, so blue is empty. Damage should shorten the white bar. No giant panels.
 4. **Missile progress:** equip a launcher and keep an enemy inside the cone. Corners
-   start much farther out, then move inward; the bar and percentage grow to 100%.
+   start much farther out, then move inward. No missile progress bar or percentage
+   should appear; NPC health percentages remain.
    Look away or leave range: progress should reset appropriately.
 5. **Priority:** F-select an enemy slightly off-centre but inside the missile cone.
    While acquiring, allow another ship to cross the centre. Progress must stay on
