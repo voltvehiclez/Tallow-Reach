@@ -20,6 +20,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Subtle sky-tinted ambient fill trial
+
+Added one flight-scene AmbientLight at intensity 0.10, using active skybox generated
+nebula-tint metadata softened 60% toward white. Normal space has a restrained cyan fill;
+grey skies switch tint on arrival. No runtime pixel sampling, exposure changes, sunlight
+changes or material edits. Existing hemisphere and title/outfitting lighting stay unchanged.
+`data/lighting.js` supports global, sky-id and per-place sky.ambient tint/intensity overrides;
+null tint restores automatic colour, zero intensity disables the extra fill. Recipe 24
+explains tuning. Missing sky disables fill. Tests cover defaults, overrides, transition
+wiring and invalid settings. Save v21; build regenerated. Owner darkness/colour playtest pending.
+
 ## 2026-11-16: Exact F picking for all objects; stationary outfitting preview
 
 Owner approved mission log and preview angle. Kept yaw/pitch unchanged and removed automatic
@@ -327,17 +338,9 @@ GLB drops; playtest not done yet (owner 2026-11-16 build).
 
 ---
 
-## 2026-11-16: The edge-compression lens is removed
-
-Owner: "oh remove the lense thing i wont use it in the future" — after saying the current view looks good. The experiment is deleted, not merely disabled: `src/render/remap.js`, `src/render/remapmath.js` and `tests/remap.test.mjs` are gone; `main.js` renders the flight/pause paths with `renderer.render(scene, camera)` directly; `render/camera.js` widens FOV on boost/warp unconditionally again; the HUD lock ring and marker project through the stock projection only; the `src/render/README.md` lens rows are gone. The current look is the stock horizontal-85° + aspect-derived vertical camera. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). ROADMAP stays unticked until a formal playtest tick.
-
-Files: `src/render/remap.js` (removed), `src/render/remapmath.js` (removed), `tests/remap.test.mjs` (removed), `src/main.js`, `src/render/camera.js`, `src/render/README.md`, `src/data/camera.js`, `src/ui/hud.js`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`. **649/649 pass** (9 remap tests deleted with the code); build green.
-
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: The edge-compression lens is removed
 - 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)
 - 2026-11-16: The system sky passed its playtest
 - 2026-11-16: System space — AUs, a true 3D position for every pocket, and a sky that shows the system you're in

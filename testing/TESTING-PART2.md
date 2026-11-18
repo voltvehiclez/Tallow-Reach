@@ -23,3 +23,11 @@ Owner approved the navigation icons, mission log, preview angle and Home Station
 
 Save stays v21. Old saves default to Meridian; missing/temporary homes fall back safely.
 Run `npm run build` and `npm test`, then play `game/tallow-reach.html`.
+
+## Subtle nebula fill trial
+
+Face the sun and inspect the back of your ship and shadowed rocks: details should be
+slightly easier to read, not brightly lit or strongly cyan. Compare a black-hole system,
+then a grey-sky instance and return. Main lighting and contrast should remain intact.
+For A/B or custom tint, see `docs/recipes/24-a-new-skybox.md` (intensity 0 disables fill).
+Owner visual tuning pending; automated tests cannot establish the desired darkness.

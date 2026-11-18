@@ -5,6 +5,7 @@ Plain objects and numbers only. No imports from other layers (except other data 
 | File | What it holds |
 |---|---|
 | `scenery.js` | Planet backdrop size/elevation and seeded belt irregularity/stray tuning. |
+| `lighting.js` | Subtle nebula ambient fill: automatic generated skybox tint, global/per-sky/per-place overrides and safe pure resolver. |
 | `audio.js` | Scheduled mechanical undocking layers. |
 | `simulation.js` | Fixed simulation tick (`SIM_DT`), maximum accepted render-frame time (`MAX_FRAME_DT`) and how often the resume point is autosaved (`AUTOSAVE_SECONDS`). |
 | `mounts.js` | Named hull-local gun, missile and beam mount offsets, shared by the sim and `PlayerShipView`. |
