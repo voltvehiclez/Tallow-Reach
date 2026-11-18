@@ -177,6 +177,7 @@ function attachMissionCompat(profile) {
 /** Fresh portable character profile (travels with a pilot across worlds). */
 export function newProfile() {
   return attachMissionCompat({
+    homeStation: DEFAULT_PLACE, // optional backward-compatible v21 field
     v: SAVE_VERSION,
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
@@ -500,6 +501,7 @@ export function sanitizeProfile(raw) {
   const missions = rawMissions.map(cleanMission).filter(Boolean);
 
   return attachMissionCompat({
+    homeStation: typeof raw.homeStation === "string" && raw.homeStation.length <= 160 ? raw.homeStation : DEFAULT_PLACE,
     v: SAVE_VERSION,
     cr,
     holds,

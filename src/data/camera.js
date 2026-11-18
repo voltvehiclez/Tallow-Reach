@@ -95,3 +95,6 @@ export function menuPose(t, planetDir = [-0.568, -0.122, -0.812]) {
     dist,
   };
 }
+
+// Model forward is -Z. Camera on +Z sees front/top/left at this turntable yaw.
+export const SHIP_PREVIEW = { yaw: Math.PI * 3 / 4, pitch: Math.atan(1 / Math.sqrt(2)) };

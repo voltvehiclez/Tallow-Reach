@@ -20,6 +20,54 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Nebula fill intensity increased 25%
+
+Owner approved the ambient lighting and requested a 25% increase. Default intensity
+is now 0.125 (was 0.10). Tint, softness, overrides and other lights are unchanged.
+Updated the default regression assertion and recipe 24. Save v21; build regenerated.
+
+## 2026-11-16: Subtle sky-tinted ambient fill trial
+
+Added one flight-scene AmbientLight at intensity 0.10, using active skybox generated
+nebula-tint metadata softened 60% toward white. Normal space has a restrained cyan fill;
+grey skies switch tint on arrival. No runtime pixel sampling, exposure changes, sunlight
+changes or material edits. Existing hemisphere and title/outfitting lighting stay unchanged.
+`data/lighting.js` supports global, sky-id and per-place sky.ambient tint/intensity overrides;
+null tint restores automatic colour, zero intensity disables the extra fill. Recipe 24
+explains tuning. Missing sky disables fill. Tests cover defaults, overrides, transition
+wiring and invalid settings. Save v21; build regenerated. Owner darkness/colour playtest pending.
+
+## 2026-11-16: Exact F picking for all objects; stationary outfitting preview
+
+Owner approved mission log and preview angle. Kept yaw/pitch unchanged and removed automatic
+preview rotation entirely (manual drag/zoom/reset remain). F now raycasts visible rendered mesh
+surfaces for every lockable kind: enemies, rocks, crates, stations, rifts/wormholes, exits and
+caches. Tagged model roots include GLB children and live animated station parts. Faint auras
+and invisible meshes do not intercept the ray. Sim receives only a plain target reference,
+checks live candidates, then preserves same-target unlock and no-hit angular assistance.
+Headless callers retain the existing sim intersection fallback. Regression tests cover every
+kind, overlapping bodies, station holes, child transforms, hidden geometry and preview stability.
+Save v21 unchanged; build regenerated. Follow-up owner playtest pending; PR #39 remains unmerged.
+
+## 2026-11-16: Part 2 restored, precise asteroid selection and recovery/UI follow-ups
+
+Continuation starts at main after PR #38; previous unpushed Part 2 was absent, so restored
+approved shape-preserving map/HUD icons, mechanical undock, modules-only Base and persistent
+Home Station. Optional backward-compatible v21 homeStation defaults to Meridian and validates
+against the restored galaxy; temporary/invalid homes fall back safely. No version bump per owner.
+
+Reproduced F selecting a large background rock and credits suppressing the only-ship loaner in
+failing tests. F now ranks actual asteroid surface hits along the rendered camera ray before
+angular assistance (other target kinds keep sphere proxies). Mission cards use compact grid
+spacing, one-line next guidance and a small native Details control containing untruncated
+information. Outfitting/reset starts front/top/left isometric. Death with no surviving hull now
+always lends a fitted Wasp regardless of credits; a surviving hull is reused, not duplicated.
+Ship ownership remains global: no new per-station ship-storage system was invented.
+
+Regression tests cover overlap/mesh misses, generated home recovery, old saves/export-import,
+invalid/temporary homes, rich pilots, existing hulls, icons, preview pose and Details. Build
+regenerated; owner visual/audio playtest pending. See `testing/TESTING-PART2.md`. No merge yet.
+
 ## 2026-11-16: Feature batch Part 1 — targeting and missile UI (items 4–7)
 
 Nine requested features split into parts. Implemented ONLY items 4–7 here:
@@ -242,96 +290,12 @@ launch quaternions restored), generated HTML and handoff. **Save stays v21.**
 `npm run build` passes; **652/652 tests pass**. Visual density and frame-rate
 still need owner preview.
 
-## 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
-
-Owner: "Let's do a real variety pass on the generated universe … asteroid belts should be their own dedicated pockets …
-makes 100–1000 km planets … 1–4 seeded planets per system … four station classes … EVE-like scale …" **Save version
-unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). NOT playtested yet — built low-poly first for
-owner preview; heavy shader/texture polish waits for that preview.
-
-- **Pockets are vast and EVE-like, and every pocket is different.** Frontier/trade-lane/outpost templates were
-  rescaled to kilometres-wide spreads (a frontier belt can be 6.8–14.4 km radius; trade lanes and outposts vary or
-  lose their field entirely) with seeded per-pocket variation (`varyTemplateFeatures` in `data/place-templates.js`):
-  position, radius, rock count, two-separated-fields rolls, and encounter positions rolled per pocket. Meridian is
-  vast too (the home field sits ~16 km out at radius 3.6 km); it keeps only a small home-field convenience.
-- **Ambient static loot is gone.** Generated pockets no longer declare derelict/resource-cache raw-crate features;
-  kill drops, hostile drops, mission drops, recovery contracts and authored mission crates are untouched. Existing
-  save placeMemory migrates untouched (v21).
-- **Dedicated belt pockets.** 1–3 per system, named `<System> - Asteroid belt N`, each its own **`role: "belt"`** pocket
-  on its own map annulus (`beltRadius`/`beltSpread`), 34–182 rocks with a seeded lean/rich roll, fields 7.8–18.3 km
-  radius, with tier-scaled one-shot hostile patrols (chance/wanderers/count scale with the system's advisory tier).
-  Internal hub↔belt links keep them warpable (and reachable in a `links`-policy system); map icon is three ochre dots.
-- **Seeded planets.** 1–4 per system (all systems, black holes included), named `<Core proper name>-b`…`-e` after the
-  core proper name (never `-a`). Four classes — rocky, ice, gas giant, volcanic — with per-class radius (~110–1000 km),
-  palette, atmosphere, spin, orbit-rock counts and rock ore tables (`data/planets.js`, `data/loot.js`). Each planet is a
-  warpable low-orbit pocket with some orbit-rock fields; it renders as a true-angular-size body elsewhere in the system
-  (`systemsky.js`, AU-based) and as a dominating sky backdrop inside its own pocket (procedural maps in
-  `render/planetmaps.js`, Lambert day/night shading, additive atmosphere shell). Positions are fixed — no orbits, no
-  artificial boundary anywhere. Planets also get internal hub↔planet links and a ring+disc map icon.
-- **Stations: four classes with real silhouettes.** `commerce` (spun ring), `industrial` (foundry tower stack),
-  `military` (octagonal citadel), `mining` (excavation platform with drill arm), chosen by place id hash; generated
-  station names are class-weighted (`data/stations.js`). Built-ins today; `station.<class>.glb` (then `station.glb`)
-  overrides later — drop-in, no code changes.
-- **Warp-in is fixed, seeded and unique per pocket:** generally 3–8 km from the pocket's main POI on a line facing it
-  (belts/planets face their field/approach direction; station pockets face their station; empty pockets face the
-  star/black hole). Computed once at resolve time (`finalizeArrivals` in `sim/galaxy.js`), carried on the place record
-  (`enter.pos`/`enter.face`); `sim/sectors.js` applies the face on arrival.
-- **The menu wears the normal-space generated skybox** (in addition to its station/planet composition; the planet is a
-  fixed in-scene class world now — planets are pockets, not scenery). **The title keeps its planet backdrop** (owner).
-- **Map:** belt/planet annuli and icons; `minZoom` semantics unchanged (1 = system fit; zooming out from fit exits to
-  the galaxy). **Save stays v21.** **649/649 tests pass** (the 8b fixture was re-recorded: launch heading follows the
-  moved home field; several tests were updated to the vast world; the static-encounter machinery is now tested with an
-  ad-hoc authored record since generated pockets no longer emit one).
-
-Files: `src/data/planets.js` (new), `src/data/stations.js` (new), `src/render/planetmaps.js` (new), `src/data/place-templates.js`,
-`src/data/places.js`, `src/data/galaxy.js`, `src/data/loot.js`, `src/sim/galaxy.js`, `src/sim/sectors.js`, `src/render/systemsky.js`,
-`src/render/models.js`, `src/render/menuview.js`, `src/ui/starmap.js`, `src/styles.css`,
-`tests/fixtures/step8b-combat-lifecycle.json`, `tests/single-player-combat-8b.test.mjs`, `tests/content.test.mjs`,
-`tests/step11b-starmap.test.mjs`, `tests/step12-places.test.mjs`, `tests/step14-instances.test.mjs`,
-`src/data/README.md`, `src/render/README.md`, `game/tallow-reach.html`.
-
-Known follow-ups: true-scale AU flight is a later decision (planets are warp-gated today; the sky's AU math is
-distance-correct); 3 km-wide fields will need the frame budget/graphics-settings pass before texture work; station/planet
-GLB drops; playtest not done yet (owner 2026-11-16 build).
-
----
-
-## 2026-11-16: The edge-compression lens is removed
-
-Owner: "oh remove the lense thing i wont use it in the future" — after saying the current view looks good. The experiment is deleted, not merely disabled: `src/render/remap.js`, `src/render/remapmath.js` and `tests/remap.test.mjs` are gone; `main.js` renders the flight/pause paths with `renderer.render(scene, camera)` directly; `render/camera.js` widens FOV on boost/warp unconditionally again; the HUD lock ring and marker project through the stock projection only; the `src/render/README.md` lens rows are gone. The current look is the stock horizontal-85° + aspect-derived vertical camera. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). ROADMAP stays unticked until a formal playtest tick.
-
-Files: `src/render/remap.js` (removed), `src/render/remapmath.js` (removed), `tests/remap.test.mjs` (removed), `src/main.js`, `src/render/camera.js`, `src/render/README.md`, `src/data/camera.js`, `src/ui/hud.js`, `docs/HANDOFF.md`, `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`. **649/649 pass** (9 remap tests deleted with the code); build green.
-
-
----
-
-## 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)
-
-Owner, after rejecting narrow FOV: bodies and sky points read as ovals at the frame's edge because rectilinear projection magnifies the periphery (about 2.2x at our edge; EVE measures about 1.45x there; StarMade on 16:9 measures about 1.18x). This implements the full-frame re-map both AIs proposed, with the numbers checked and the implementation fixed where the preview's claims didn't hold — including a centre-stretch on windows not in 16:9 and a source-coverage bug that clamped the frame rim (the blurry border and too-tall edge planets). **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). With `REMAP.on = false`, the stock pipeline renders byte-for-byte. Owner rejected the look during playtest (too distorted); this branch now builds with `REMAP.on = false` so the stock pipeline renders. The lens code remains in the tree behind the knob; ROADMAP stays unticked.
-
-- **One pass fixes world and sky together.** The flight scene renders into a wider rectilinear render target and a full-screen shader re-draws it through a blend of the rectilinear and stereographic projections, `G(a) = (1−s)·tan a + s·2·tan(a/2)` per axis shared by shader and HUD via `src/render/remapmath.js` (no three.js), with per-axis normalisers (`axisNorms`) so the centre maps at the same scale on both axes on any window shape. The frame's edge lands exactly at `REMAP.edge`; the skybox is scene geometry under this pass, so the nebula is corrected by the same amount — no sky/world drift, no repainting, no art changes.
-- **Honest geometry of the knob.** Keeping today's on-axis zoom exactly while widening the frame is impossible for this curve family, so the centre zoom dips by a fixed factor instead: `strength`/`edge` in `src/data/camera.js` choose it (default `0.75` / `38°`: zoom −1.6%, oval factor 1.06 @20°, 1.20 @35°, 1.24 at the edge — EVE measures 1.21; vfov 76°; ~1.3x pixels). `0.6`/`46.5°` is the wide "panel 2" look (zoom −25%, oval factor 1.26 @35°, vfov 93°, ~2.3x pixels); `0.9`/`41°` is balanced (zoom −8%, oval factor ~1.20 at the edge, vfov 82°, ~1.6x pixels). A body dead-centre is drawn with exact horizontal/vertical pixel parity in a square or portrait window as well as 16:9. The curve is separable, not a conformal 2-D projection: at the left/right rim a small body reads wider than tall; at the top/bottom rim it still reads taller than wide (same sign as rectilinear, smaller magnitude).
-- **Why not the cubic the preview implied:** the first version compressed too hard — mid-frame circles flipped to taller-than-wide (oval factor 0.79). The blend is the stable shape; `tests/remap.test.mjs` pins the centre parity at every aspect, the monotonicity, the round trip, and the per-axis coverage guarantee.
-- **Stock-camera horizontal-85° test (owner request).** The horizontal FOV is now fixed at `BASE_HFOV = 85` (`data/camera.js`); the vertical FOV is derived from the window aspect (`verticalFovForAspect`, ≈54.54° on 16:9 — essentially the 55° trial with an explicit horizontal target). Chase distances were pulled back for 16:9 by tan(35°)/tan(27.268°) ≈ 1.358 (`CAMERA`: idle 14.9, flat-out 23.1, reverse 14.3) so the ship keeps the same on-screen size. On non-16:9 windows the vertical FOV changes while the camera distance stays static, so framing differences are expected. Boost/warp widening keys off `verticalFovForAspect(camera.aspect)`. Not playtested; judge by reload.
-- **Coverage, not clamp.** The first build checked `G(alpha)` in the coverage test instead of `tan(alpha)`, so the outermost pixels sampled clamped edge texels — the blurry frame border and the horizontally-squashed edge planets (which then read too tall). `sourceHalfTanB()` now solves the inverse projection on both axes and the test checks `tan(alpha)`; the shader still clamps only as a last-ditch guard.
-- **Cost and fallbacks.** MSAA where WebGL2 + pixel ratio 1; otherwise the supersampled source carries edges. Render targets recreate on resize. `REMAP.on = false` restores the stock pipeline byte-for-byte (plain render, old HUD maths, old +4/+16 warp FOV widening). The crash fallback still renders plainly; title screen, docking orbit, pause frame (shared pass), Outfitting viewer and the starmap are unaffected. Boost/warp FOV widening is disabled in lens mode — the warp streaks and flash carry the speed feel instead (the lens cannot widen past its source coverage).
-- **HUD stays aligned.** `mark()` and `coneRadiusPx()` in `src/ui/hud.js` project through the same curve when the lens is on (off-screen marker pinning unchanged); `tests/remap.test.mjs` covers the curve, the centre parity, the per-axis coverage guarantee for any aspect, and the small-angle limit of the lock ring.
-
-Files: `src/render/remapmath.js` (new), `src/render/remap.js` (new), `src/data/camera.js` (`REMAP`, `BASE_HFOV`, `verticalFovForAspect`, `CAMERA` distances), `src/render/camera.js`, `src/render/scene.js`, `src/main.js`, `src/ui/hud.js`, `src/render/README.md`, `tests/remap.test.mjs` (new, 9 tests), `docs/CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `game/tallow-reach.html`. **658/658 pass**; build green.
-
----
-
-## 2026-11-16: The system sky passed its playtest
-
-Owner: "good, play test so far passed" (2026-11-16) — the system-space work from the previous entry is confirmed:
-star/black hole visible and correctly placed, dots, per-pocket lighting, per-system sizes. Docs-only status change; no
-code moved. HANDOFF and the ROADMAP current position and log line now say the playtest passed; 14c remains ticked. Save
-version unchanged (**v21**); `npm run build` and `npm test` re-run green.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: The generated universe rework — vast EVE-like pockets, seeded planets, dedicated belts, four station classes
+- 2026-11-16: The edge-compression lens is removed
+- 2026-11-16: The frame edges are gently stretched — the edge-compression lens (owner's panel 2)
+- 2026-11-16: The system sky passed its playtest
 - 2026-11-16: System space — AUs, a true 3D position for every pocket, and a sky that shows the system you're in
 
 - 2026-11-15: Hitting the station hurts again — solid means collision damage, by default

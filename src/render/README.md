@@ -19,6 +19,7 @@ Visual only. Reads `state` and the sim, never changes game rules. Visual random 
 | `menuview.js` | The title screen's own scene: the home station turning with its planet behind it, plus the **generated normal-space skybox** (`SKIES[kind]` from `scene.js`, the authored home pocket's sky or `DEFAULT_SKY`), on the camera path in `MENU_CAMERA`/`menuPose` (`data/camera.js`). The planet is a fixed class world made in-scene (`makePlanet("menu-backdrop", …)`), not a place feature — planets are warpable pockets now. Independent of the game scene, so the menu never shows the last game view. `updateMenuView(dt)`, `menuView()`, `resizeMenuView()`; driven by `main.js` only. |
 | `camera.js` | Docked orbit, chase camera, free orbit (Alt), screen shake, the FOV/roll kick during a warp. The Wasp chase distance is the `CAMERA` table in `data/camera.js`; every other ship scales both distance and height by its actual fitted model bounding diagonal relative to Wasp (`shipCameraScale` in `models.js`, cached), with optional per-hull `cameraPadding` (Test Ship: 1.2). Free-orbit distance/zoom limits use the same ratio, and Wasp stays exactly unchanged: the camera rides along with the ship's movement and only eases the offset. The free orbit looks at the ship with the **ship's** up vector (`faceUp` in `util/math.js`), so roll (E/Q) rolls the view with the hull — the mouse orbits and the wheel zooms, and nothing else does while Alt is held. |
 | `warpfx.js` | The warp streaks: additive lines hanging off the camera, driven by `state.warp.fx`. Hidden when no warp is running. |
+| `target-picking.js` | Exact visible-surface reticle raycast for all lockable meshes, including station children and animated parts; returns only a plain target reference to the sim. Faint glow/aura geometry is ignored. |
 | `shipviewer.js` | The Outfitting ship view: its own renderer, scene, lights and turntable. `setShip(id)`, `dragShip`, `zoomShip`, `resizeShipViewer`, `renderShip(dt)`. Owned by `ui/outfitting.js`. |
 
 Rules:
@@ -29,3 +30,8 @@ Rules:
   or the scene, and `tests/views.test.mjs` counts the meshes.
 
 The current player hull and beam views follow the **local** player only; see the still-local-only table in `docs/TARGET_ARCHITECTURE.md`.
+
+
+Outfitting preview/reset uses data/camera.js SHIP_PREVIEW: front/top/left isometric yaw/pitch. Drag and zoom remain unchanged; automatic rotation is removed, with the approved initial angle preserved.
+
+Flight scene has one faint nebula AmbientLight, updated on showPlace from data/lighting.js. Sky tint defaults to generator metadata, not pixel sampling. Existing sun, hemisphere light, title and outfitting lights are unchanged.

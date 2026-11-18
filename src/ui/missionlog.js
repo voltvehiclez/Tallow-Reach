@@ -115,9 +115,11 @@ function missionStatus(mission, profile) {
     `<header><h3>${esc(mission.title || "Mission")}</h3><span>${esc(missionKindWord(mission))}</span></header>` +
     `<p class="mission-log-status">${stateText}${progressText}</p>` +
     progressBar +
-    preview +
     `<p class="mission-log-next"><strong>Next:</strong> ${esc(missionNextText(mission, profile))}</p>` +
     `<div class="mission-log-actions">${action}</div>` +
+    `<details class="mission-log-details"><summary>Details</summary><div class="mission-log-full">` +
+    `<h4>${esc(mission.title || "Mission")}</h4><p>${stateText}${progressText}</p>` +
+    preview + `<p><strong>Next:</strong> ${esc(missionNextText(mission, profile))}</p></div></details>` +
     `</article>`
   );
 }

@@ -11,23 +11,23 @@
 // mean a hole in the panel. The context is created the first time this file is
 // asked for a canvas, so a session that never opens the tab pays nothing.
 
+import { SHIP_PREVIEW } from "../data/camera.js";
 import * as THREE from "three";
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { buildPlayerShip } from "./models.js";
 
 const FOV = 30;
 const RADIUS = 1.8;       // every hull is scaled to this bounding-sphere radius
-const SPIN = 0.16;        // idle turntable speed, radians per second
 const DIST = 8.5;         // default camera distance
 const ZOOM_MIN = 5.5;
 const ZOOM_MAX = 13;
 const PITCH_MIN = -0.7;   // low, looking up at the belly
 const PITCH_MAX = 0.8;    // high, looking down on the deck
-const START_YAW = 0.5;    // a three-quarter view rather than dead astern
+const START_YAW = SHIP_PREVIEW.yaw;    // front/top/left rather than dead astern
 
 let view = null;          // built on first use: { renderer, scene, camera, ... }
 let current = null;       // id of the ship in the scene
-let pitch = 0.12;
+let pitch = SHIP_PREVIEW.pitch;
 let dist = DIST;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -180,15 +180,14 @@ export function zoomShip(delta) {
 export function resetShipView() {
   const v = ensure();
   v.turntable.rotation.y = START_YAW;
-  pitch = 0.12;
+  pitch = SHIP_PREVIEW.pitch;
   dist = DIST;
   placeCamera();
 }
 
-/** Draw one frame, turning the stand by `spin` radians per second. */
-export function renderShip(dt, spin = SPIN) {
+/** Draw the manually positioned preview without automatic rotation. */
+export function renderShip() {
   const v = ensure();
   if (!v.ship) return;
-  v.turntable.rotation.y += spin * dt;
   v.renderer.render(v.scene, v.camera);
 }

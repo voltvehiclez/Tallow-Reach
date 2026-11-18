@@ -90,3 +90,6 @@ These are real, current limits. None of them is a bug in play today.
   and live dialogue panel without moving story text into UI code. Contract tiers remain fixed at 1 to 3
   (`generateContract` in `sim/contracts.js`, definitions in `data/missions/contracts.js`).
 - **Muting is not saved.** Sound starts on every time the game opens.
+
+
+2026-11-16 follow-up: compact mission summaries retain status/progress/actions and clamp only the summary next-step line; native keyboard-accessible Details exposes the full next step and dialogue. Outfitting starts/reset front/top/left. Base retains upgrades and storage/refinery statistics; cargo is in Inventory. Station header sets persistent Home Station. Current icons stay blue with dotted orange rings; destination shapes are orange, including the right-hand destination pocket in route rows.

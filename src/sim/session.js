@@ -6,7 +6,7 @@
 import { V, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
-import { DEFAULT_PLACE } from "../data/places.js";
+import { DEFAULT_PLACE, isPocket, isInstancePlace, isWormholePlace } from "../data/places.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
 import { state, msg, profileOf, currentSave, placeWorld } from "../state/state.js";
 import { addShipRecords, ensureShipRecords } from "../state/profile.js";
@@ -27,6 +27,22 @@ import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
 import { restoreInstances, populateInstances } from "./instances.js";
 import { restoreWormholes } from "./wormholes.js";
+
+/** Permanent stations only; saved ids are resolved after the galaxy catalogue is restored. */
+export function canSetHomeStation(id = state.place) {
+  return isPocket(id) && !isInstancePlace(id) && !isWormholePlace(id) && !!stationAt(id);
+}
+export function homeStationPlace(profile = state.profile) {
+  const id = profile?.homeStation || DEFAULT_PLACE;
+  return canSetHomeStation(id) ? id : DEFAULT_PLACE;
+}
+export function setHomeStation(P = state.player, profile = profileOf(P)) {
+  const id = P?.place || state.place;
+  if (!P?.docked || !canSetHomeStation(id)) return "Dock at a permanent station to set your home.";
+  profile.homeStation = id;
+  if (P === state.player) saveAutosave(currentSave());
+  return `Home station set to ${stationAt(id).n}. You will recover here after death.`;
+}
 
 function assertSessionPilot(P, profile, verb) {
   if (P && P !== state.player && (!profile || profile === state.profile)) {
@@ -275,7 +291,7 @@ export function die() {
     // fill in anything a very old save left out rather than flying half a ship.
     ensureShipRecords(S, S.ship);
     setShip(S.ship);
-  } else if (S.cr < SHIPS[DEFAULT_SHIP].price) {
+  } else {
     S.ships = [DEFAULT_SHIP];
     S.ship = DEFAULT_SHIP;
     // The lent Wasp is a complete ship: empty hold, no damage, stock modules.
@@ -283,10 +299,12 @@ export function die() {
     addShipRecords(S, DEFAULT_SHIP);
     setShip(DEFAULT_SHIP);
     text += " The station lent you a spare Wasp.";
-  } else {
-    text += " Buy a new ship in the Hangar.";
   }
 
+  clearTransient(state.player.place || state.place);
+  const home = homeStationPlace(S);
+  S.homeStation = home;
+  enterPlace(home, state.player);
   dock();
   emit("died", text);
 }

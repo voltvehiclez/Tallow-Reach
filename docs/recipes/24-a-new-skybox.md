@@ -32,3 +32,29 @@ the top and bottom over itself in `src/render/cubemap.js`, because `BoxGeometry`
 Face size is the owner's call: `--face 4096` is one flag away, but it is about 4× the pixels, ~4× the file size and
 ~13 minutes instead of ~4, so do not raise it without asking him. How the picture is made, and how to add a look: the
 end of `tools/skybox/README.md`.
+
+
+## Subtle nebula lighting (2026-11-16)
+
+`src/data/lighting.js` controls an extra faint flight-scene ambient light. Defaults:
+`intensity: 0.125`, `tint: null`, `tintStrength: 0.4`. Null tint uses the active
+skybox's generator-produced `SKYBOXES[id].tint` (not a runtime image average).
+The colour is mixed toward white so normal space adds only a restrained cyan tint.
+The sun/black-hole light, existing hemisphere, exposure and materials are unchanged.
+One shared fill updates on pocket/instance transitions; missing skies have no extra fill.
+
+Set `NEBULA_FILL.tint = 0x83cbd4` for a global custom tint, or add an override in
+`NEBULA_FILL.skies`, without touching generated registry lines:
+
+```js
+skies: {
+  normal_space: { tint: 0x83cbd4, intensity: 0.08, tintStrength: 0.4 },
+},
+```
+
+For one place/template, add `ambient: { tint: 0x83cbd4, intensity: 0.08 }` to its
+existing `sky` object. Precedence: place > sky id > global. Set `tint: null` to
+restore automatic colour, `tintStrength: 1` for the unsoftened custom colour,
+or `intensity: 0` to turn off this extra fill. Save version is unchanged.
+Playtest facing the sun: shadowed hull panels should remain dark but readable;
+then visit a grey wormhole sky and return to confirm tint follows the current sky.

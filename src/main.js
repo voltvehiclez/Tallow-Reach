@@ -1,3 +1,4 @@
+import { pickLockSurface } from "./render/target-picking.js";
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
@@ -140,7 +141,12 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
     !isCargoOpen() && !isCacheOpen();
   switch (name) {
     case "lock":
-      if (playing && !repeat) toggleLock();
+      if (playing && !repeat) {
+        const aim = cameraAim.set(0, 0, -1).applyQuaternion(camera.quaternion);
+        state.aimOrigin = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+        Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
+        toggleLock(localPlayer(), pickLockSurface(scene, camera));
+      }
       break;
     case "primary:1":
       if (playing) setWeapon(0);

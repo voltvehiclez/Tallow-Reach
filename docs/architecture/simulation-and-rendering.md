@@ -67,3 +67,8 @@
   one nothing emits). To add a sound: an `SFX` entry plus an `emit` — see HOW_TO_ADD.md recipe 9.
   Mute and pause are handled inside `tone()`/`nz()` as before. UI sounds go through `uiSound()`
   and `hoverSound()`, which the screens call directly (they are not game sounds).
+
+
+2026-11-16 follow-up: F receives camera origin/direction at keypress and ranks asteroid triangle intersections by depth before using angular aim assistance. Browser F now uses `render/target-picking.js` for exact visible meshes of ALL lockable kinds (including animated station parts). Headless calls retain sim proxies. The render layer passes only a plain target reference; sim validates it against live candidates. Selection of the same candidate still unlocks. UNDOCK_SOUND schedules mechanical layers, not a rising pitch sweep.
+
+Nebula fill: one low-intensity AmbientLight in the flight scene follows the current sky on showPlace. `data/lighting.js` resolves generator tint metadata plus optional overrides; recipe 24 documents tuning. No exposure/key-light changes, runtime pixel reads or save changes.

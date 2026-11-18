@@ -364,3 +364,6 @@ Give pilots seeded phases/timers and predictive separation; collision bounce alo
 cannot fix synchronized paths. Exact overlaps need tie-break directions. Test
 trajectories and delayed reactions (`tests/enemy-flight.test.mjs`). Unchanged
 weapon stats do not prove unchanged difficulty: owner playtest is required.
+
+
+[More lessons](archive/reticle-and-recovery-lessons.md)

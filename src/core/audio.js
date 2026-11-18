@@ -1,3 +1,4 @@
+import { UNDOCK_SOUND } from "../data/audio.js";
 // Procedural audio. Everything is synthesised with the Web Audio API, so the
 // game ships no sound files. The simulation never calls the speakers itself:
 // it emits `sfx { name, ...rest }` and this file plays the matching SFX entry
@@ -336,11 +337,33 @@ function clank() {
   }
 }
 
+export function undockSound() {
+  if (!ctx || muted || suspended) return;
+  for (const layer of UNDOCK_SOUND) {
+    const at = ctx.currentTime + layer.delay, gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, at);
+    gain.gain.linearRampToValueAtTime(layer.gain, at + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + layer.duration);
+    gain.connect(master);
+    let source;
+    if (layer.noise) {
+      source = ctx.createBufferSource(); source.buffer = noiseBuf;
+      const filter = ctx.createBiquadFilter(); filter.type = "bandpass";
+      filter.frequency.setValueAtTime(layer.noise, at); filter.Q.value = 0.8;
+      source.connect(filter); filter.connect(gain);
+    } else {
+      source = ctx.createOscillator(); source.type = layer.type;
+      source.frequency.setValueAtTime(layer.frequency, at);
+      source.connect(gain);
+    }
+    source.start(at); source.stop(at + layer.duration);
+  }
+}
+
 /** UI click feedback. `kind` is "go", "confirm", or anything else for a plain click. */
 export function uiSound(kind) {
   if (kind === "go") {
-    tone(200, 420, 0.25, 0.08, "triangle");
-    nz(0.2, 1800, 0.12);
+    undockSound();
   } else if (kind === "confirm") {
     tone(660, 990, 0.08, 0.06, "triangle");
     setTimeout(() => tone(990, 1320, 0.1, 0.05, "triangle"), 70);

@@ -23,16 +23,6 @@ let canvas = null;        // the viewer's canvas, kept across panel re-renders
 let observer = null;      // watches the box the canvas has to fill
 let drag = null;          // { id, x, y } while the pointer is down
 let failed = false;       // the browser refused a second WebGL context
-let holdSpinUntil = 0;    // the idle turntable pauses while you look around
-
-const prefersStill = () =>
-  typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-/** You moved the ship yourself: stop the idle turn for a moment. */
-const tookControl = () => {
-  holdSpinUntil = performance.now() + 3000;
-};
-
 /** Called by menu.render() whenever the Outfitting tab has just been drawn. */
 export function mountOutfitting() {
   host = document.getElementById("shipview");
@@ -61,7 +51,6 @@ function bindOnce() {
 
   canvas.addEventListener("pointerdown", e => {
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
-    tookControl();
     canvas.setPointerCapture(e.pointerId);
     canvas.classList.add("dragging");
   });
@@ -69,7 +58,6 @@ function bindOnce() {
   canvas.addEventListener("pointermove", e => {
     if (!drag) return;
     dragShip(e.clientX - drag.x, e.clientY - drag.y);
-    tookControl();
     drag.x = e.clientX;
     drag.y = e.clientY;
   });
@@ -88,14 +76,12 @@ function bindOnce() {
     e => {
       e.preventDefault();       // do not scroll the panel while zooming the ship
       zoomShip(e.deltaY);
-      tookControl();
     },
     { passive: false }
   );
 
   canvas.addEventListener("dblclick", () => {
     resetShipView();
-    tookControl();
   });
 }
 
@@ -121,6 +107,5 @@ export function updateOutfitting(dt) {
   if (failed || !canvas || !canvas.isConnected) return;
   if (state.ui.intro || state.ui.tab !== "o") return;
   if (!state.player || !state.player.docked) return;
-  const still = prefersStill() || performance.now() < holdSpinUntil;
-  renderShip(dt, still ? 0 : undefined);
+  renderShip();
 }

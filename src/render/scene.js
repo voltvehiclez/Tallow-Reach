@@ -1,8 +1,10 @@
 // Three.js setup: renderer, lights, starfield, and per-place scenery built from
 // data/places.js features. Visual only; gameplay positions live in the sim/data.
 
+import { tagLockView } from "./target-picking.js";
 import * as THREE from "three";
 import { DEFAULT_PLACE, DEFAULT_SKY, placeDef, placeAt } from "../data/places.js";
+import { nebulaFillFor } from "../data/lighting.js";
 import { verticalFovForAspect } from "../data/camera.js";
 import { mm, rockShapeAt, stationModel, planetModel } from "./models.js";
 import { orientFace } from "./cubemap.js";
@@ -61,6 +63,10 @@ export function showPlace(id) {
   // picture is the stars (owner 2026-11-15).
   const skyDef = placeAt(id).sky || DEFAULT_SKY;
   stars.visible = STARFIELD.enabled && skyDef.starfield === true;
+  // One shared ambient fill follows the active sky, never cached per-pocket lights that stack.
+  const fill = nebulaFillFor(skyFor(skyDef));
+  nebulaFill.color.setHex(fill.color);
+  nebulaFill.intensity = fill.intensity;
   // The one scene light always comes from the central body of the system you are in (star, or
   // black hole — dimmer and orange-tinted). Instances are in no system: the old default stands.
   const light = systemLightFor(id);
@@ -111,6 +117,7 @@ function buildScenery(id, group) {
     if (f.kind === "planet") built = planetModel(f);
     else if (f.kind === "station") built = stationModel(f);
     if (!built) continue;
+    if (f.kind === "station") tagLockView(built.object, { k: "s", o: { place: id, feature: f.id } });
     spins.push(...addModel(built, group));
     // Collision mirrors what is drawn (see docs/GLB_MODELS.md): the baked triangles are the
     // collider. `collide: false` in a feature opts a glow or decoration out. The feature
@@ -297,6 +304,9 @@ function addModel(model, group) {
 }
 
 scene.add(new THREE.HemisphereLight(0x5a6e80, 0x120e0c, 0.45));
+const initialFill = nebulaFillFor(DEFAULT_SKY);
+const nebulaFill = new THREE.AmbientLight(initialFill.color, initialFill.intensity);
+scene.add(nebulaFill);
 const SUN_DEFAULT = { color: 0xffe2b8, intensity: 2.1, position: new THREE.Vector3(-1, 0.4, 0.6) };
 const sun = new THREE.DirectionalLight(SUN_DEFAULT.color, SUN_DEFAULT.intensity);
 sun.position.copy(SUN_DEFAULT.position);
