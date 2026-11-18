@@ -4,7 +4,7 @@ Reads `state`, calls sim actions. No game rules here.
 
 | File | What it does |
 |---|---|
-| `pocket-list.js` | Pocket type labels, safe browser-local checkbox preferences, filtering and reversible sorting. |
+| `pocket-list.js` | Pocket type labels, safe browser-local checkbox preferences, filtering, reversible sorting and pure selectable-row HTML (`pocketRowsHtml`). |
 | `location-display.js` | Plain current system/pocket text; instances use Outside known systems, not a false system. |
 | `weapon-slots.js` | Pure ten-slot hotbar markup: primary 1–5, secondary 6–0, family icons, fitted markers, ammo and independent selected banks. |
 | `vitals.js` | Pure clamped vertical HUD meter fill calculation. |
@@ -77,13 +77,4 @@ Slice 2 repair: navigation-toggle now has its required emit import in main. Lead
 
 Throttle centre now matches the weapon strip at 50% + 28px; its size and vertical position are unchanged.
 
-Pocket list follow-up: 16px single-line selectable rows, Ship/Station/Asteroid and all
-other categories under Filters; ticks persist in localStorage separately from saves.
-Name/Type/Distance buttons reverse their sort on repeated clicks. Opaque top-right
-panel hides mission objectives while open (restored on close). At 720p, over 35 rows
-fit with filters collapsed. Row order freezes while hovered/focused to prevent a
-refresh switching the target under a click. Mouse steering/fire are released while
-open; keyboard flight continues. Click rows to toggle the same F lock records, with
-extra generic locks for spatial features/projectiles. Esc/N/Close dismiss the list.
-Weapon headings align with status-frame tops; throttle has the same 6px gap as the
-weapon-strip/status-frame horizontal gap. Names truncate to one line with tooltips.
+Pocket list polish (2026-11-18): `#hud > #pocket-objects[hidden]` beats `#hud > #pocket-objects` so N, Close · N, Esc, P and docking reliably hide the panel; closing clears hover freeze, open filter `<details>` and inner focus. Rows stay strictly 16px tall with faint inset grey bottom separators, a left 9×9px hollow-square `.pocket-icon`, and a full-width 1px white inset rectangle on the active lock row that updates immediately even while hovered. `markerStyle` / `lockMarkerStyle` (`ui/target-display.js`) and `--marker-color` are the single source of truth shared by floating `.mk` labels, active `.mk.lock`/`.mk.lk` target locks and `.pocket-icon` squares (friendly stations/ships/rifts/gates/caches blue, hostiles red, asteroids/fields/crates amber-brown; future `markerTone`/`markerColor` objects inherit automatically). The N panel, `.weapon-slot` and `.vital-column::before` share `--hud-surface` slight transparency (coloured `.vital-track i` fills stay solid); `#throttle-track` uses `--hud-throttle-bg` slight transparency while preserving its original base, border, blue fills and labels.

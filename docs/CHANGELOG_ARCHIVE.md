@@ -24,6 +24,34 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+## 2026-11-16: Square weapon boxes and slot-height divider
+
+Widened the strip to 480px so all ten boxes are 44×44px at desktop width; narrower
+windows scale width/height together. Shifted meter pairs outward equally while
+preserving appearance and internal spacing. Replaced the full-bank separator with
+a divider the same height as the slot row. PRIMARY/SECONDARY headings are white;
+weapon names stay grey. Added square-geometry assertions. Save v21; build regenerated.
+
+## 2026-11-16: Monochrome weapon strip and top-left location
+
+Lowered weapon strip 20px toward throttle; square boxes, white active borders, dark
+grey inactive backgrounds, muted grey labels/icons and a vertical divider. Each bank
+now names its selected module below PRIMARY/SECONDARY, with ammo only for ammo-using
+weapons (including zero remaining). Removed duplicate ammo badges on boxes. Top-left
+shows bold white system and regular white pocket, no icon; route remains underneath.
+Instances say Outside known systems rather than claiming Meridian. Removed bottom-left
+controls reminder and obsolete narrow-window hint offsets; main-menu help stays.
+Added location/markup tests. Save v21; build regenerated. Owner visual playtest pending.
+
+## 2026-11-16: Compact weapon strip between the HUD columns
+
+Shrank the ten-slot strip from 580px to 340px wide and boxes from 62px to 44px tall,
+with smaller icons and tighter gaps. Moved it down into the Hull/Power gap. Both
+meter pairs move 50px outward, preserving track size, appearance and pair spacing.
+Strip and pairs share the same centre and responsive vertical offset; responsive
+widths leave 30px from each strip edge to the neighbouring inner column centre.
+Layout regression tests updated. Save v21; build regenerated; visual playtest pending.
+
 ## 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
 
 Reproduced free full-throttle jumps on Shift taps/dry ignition in failing tests. Throttle

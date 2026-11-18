@@ -23,4 +23,4 @@ Rules:
 
 Optional v21 profile.homeStation is a bounded pocket-id string, default DEFAULT_PLACE. Runtime checks the restored galaxy before respawn and falls back if missing/temporary/non-station. aimOrigin is runtime-only camera picking data; it is not serialized.
 
-Optional backward-compatible v21 weapon selection extension: pw accepts primary bay strings 1–5; sw accepts secondary bay strings 1–5 and defaults to 1 for older saves. No extra ship bays are added.
+Optional backward-compatible v21 weapon selection extension: pw accepts primary bay strings 1–5; sw accepts secondary bay strings 1–5 and defaults to 1 for older saves. No extra ship bays are added. Session-only `state.ui.navigation` tracks whether the flight N pocket list is open and is never written to saves.

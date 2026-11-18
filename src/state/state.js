@@ -244,6 +244,7 @@ export const state = {
 
   ui: {
     intro: true,
+    navigation: false, // the in-flight N pocket-object list; false while closed
     starmap: null,     // active chart; null while closed
     cargo: null,       // the in-flight ship inventory; null while closed
     cache: null,       // the rift-cache trade (ui/cache.js); null while closed

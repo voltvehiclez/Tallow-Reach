@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { SHIPS, DEFAULT_SHIP, FLIGHT } from "../src/data/ships.js";
 import {
-  ITEMS, ITEM_IDS, ITEM_CATEGORIES, canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol,
+  ITEMS, ITEM_IDS, ITEM_CATEGORIES, DEFAULT_ROCK_COLOR, canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol, rockColor,
 } from "../src/data/items.js";
 import { MISSILE } from "../src/data/weapons.js";
 import { SHOPS, isShop, shopRow } from "../src/data/shops.js";
@@ -83,7 +83,13 @@ test("every item is complete, and the catalogue agrees with the module table", (
       `${id}: v (value) must be positive unless it is a non-sellable mission object`);
     assert.ok(it.vol == null || (isNum(it.vol) && it.vol > 0), `${id}: vol (m³) must be above 0`);
     assert.ok(it.st == null || (Number.isInteger(it.st) && it.st > 0), `${id}: st (stack) must be a whole number above 0`);
+    if (it.cat === "ore") {
+      assert.ok(Number.isInteger(it.col) && it.col >= 0 && it.col <= 0xffffff,
+        `${id}: ore must define a 24-bit surface col (0xrrggbb)`);
+      assert.equal(rockColor(id), it.col, `${id}: rockColor returns the ore's surface colour`);
+    }
   }
+  assert.equal(rockColor("unknown_ore"), DEFAULT_ROCK_COLOR, "rockColor falls back to the default asteroid colour");
 
   // A module is an item too — that is what lets it be carried, stored and moved —
   // and an item that says "module" must be a real module.

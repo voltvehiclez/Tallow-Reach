@@ -134,7 +134,7 @@ a shot passing through a station arm is not.
 
 - No new systems, no animation system, no morph targets: baked vertices only, plus `spin`/`eng` conventions.
 - No per-place station skins: one `station.glb` replaces all stations. Per-place variation is future work.
-- Colour swaps per variant (enemy tints, ore glows) are baked or lost — the built-ins' emissive seam is gone with them.
+- Colour swaps per variant (enemy tints, ore surface colours) are baked or lost — the built-ins' per-ore tint is gone with them.
 - GLB does not bypass the sim's `collide: false` handling — both are honoured, no exceptions.
 
 ## Known limits (honest ones)

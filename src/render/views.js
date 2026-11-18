@@ -28,6 +28,7 @@ import { state, localPlayer } from "../state/state.js";
 import { on } from "../util/events.js";
 import { UP } from "../util/math.js";
 import { enemyDef } from "../data/enemies.js";
+import { rockColor } from "../data/items.js";
 import { SHIPS } from "../data/ships.js";
 import { mountOffset } from "../data/mounts.js";
 import { buildPlayerShip, ROCK_SHAPES } from "./models.js";
@@ -155,9 +156,6 @@ const cacheBandGeo = new THREE.TorusGeometry(0.45, 0.05, 8, 20);
 const cacheMat = mm(0x3a3129, 0x2a1c0c);
 const cacheSealedMat = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
 const cacheOpenMat = new THREE.MeshBasicMaterial({ color: 0x8dffab });
-
-/** A rock's faint glow by the ore inside it (the colours it always had). */
-const rockGlow = type => (type === "cobalt" ? 0x14304a : type === "voidite" ? 0x3a1a55 : 0);
 
 // Enemy IDs and other entity IDs come from separate counters, so a single map
 // must namespace them. `group` also preserves the two existing frame updates.
@@ -410,7 +408,7 @@ registerEntityView("fx", {
 registerEntityView("rock", {
   list: () => state.world.asteroids,
   build: e => {
-    // One `asteroid.glb` replaces the six built-in rock shapes (the ore's glow is baked
+    // One `asteroid.glb` replaces the six built-in rock shapes (per-ore surface colour is baked
     // into the model, or lost — see docs/GLB_MODELS.md).
     ensureGlbRockSoup();
     const gltf = instantiateModel("asteroid");
@@ -418,13 +416,13 @@ registerEntityView("rock", {
       gltf.scale.copy(e.scale);
       return initialPose(e, gltf);
     }
-    const m = initialPose(e, new THREE.Mesh(rockShapeAt(e.shape || 0), mm(0x4a4540, rockGlow(e.type))));
+    const m = initialPose(e, new THREE.Mesh(rockShapeAt(e.shape || 0), mm(rockColor(e.type))));
     m.scale.copy(e.scale);
     return m;
   },
   update: (e, m) => { updatePose(e, m); m.scale.copy(e.scale); },
-  // The shape is shared, but every rock carries its own material (its ore's faint glow), so it is
-  // freed with the rock — an instance's field comes and goes, and the card must not keep it.
+  // The shape is shared, but every rock carries its own material (its ore's surface colour), so it
+  // is freed with the rock — an instance's field comes and goes, and the card must not keep it.
   remove: m => { if (m.material) m.material.dispose(); },
 });
 /**

@@ -126,3 +126,12 @@ Slice 2 repair playtest: refresh the preview, press N twice (opens/closes withou
 Confirm throttle and weapon strip share a horizontal centre; throttle size/height remain unchanged.
 
 Pocket-list follow-up: at 720p or taller check at least 35 single-line rows with Filters collapsed. Tick/untick categories and reload: choices persist, including all-off. Try all three sort buttons twice. Click an enemy, rock, station and gate/cache; F lock marker should appear, and clicking the same target releases it. Removed entities must not leave a stale lock. Mouse movement/clicks must not steer/fire while browsing; close with N/Esc and steering resumes without a stale turn. Objectives should be hidden behind the list and return on close. Check bank-heading tops align with grey-frame tops and the gap above throttle matches the 6px lateral gap.
+
+### N-panel & HUD transparency finish (2026-11-18)
+
+1. Launch into flight: confirm the N pocket panel starts completely hidden and top-right credits/hold/missions show normally.
+2. Press **N** to open the pocket list, then press **N** again: it disappears cleanly and credits/missions return. Re-open with **N**, click **Close · N**: it disappears cleanly. Re-open with **N**, open **Filters**, tick a checkbox, then press **N**: it still closes immediately. Also verify **Esc** closes it without pausing.
+3. With **N** open, check the faint grey horizontal separator lines between rows and confirm rows remain tight single-line 16px height (35+ rows at 720p with Filters collapsed).
+4. Click several objects (station, asteroid, asteroid field, hostile) and also lock/unlock with **F**: the entire selected row (name, type and km distance) is outlined immediately in a crisp white rectangle; clicking the selected row again or destroying the target clears the outline.
+5. Turn the camera past Meridian Station, a planet or an asteroid field: check that the **N** panel, the ten weapon-slot boxes and the four grey Shield/Hull/Power/Boost status frames all have matching slight transparency while the coloured Shield, Hull, Power and Boost meter fills remain solid.
+6. Check forward, zero and reverse throttle over bright scenery: the dark throttle background is slightly transparent while its dark-slate tone, border, forward solid blue fill, reverse striped blue fill and text stay crisp.

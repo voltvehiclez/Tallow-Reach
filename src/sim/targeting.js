@@ -138,9 +138,30 @@ export function targetHealth(enemy) {
   return { shield: percent(enemy.sh, enemy.maxSh), hull: percent(enemy.hp, enemy.mx) };
 }
 
+const LOCK_KIND_BY_ROW = {
+  Hostile: "e",
+  Asteroid: "a",
+  Cargo: "c",
+  Rift: "r",
+  Gate: "g",
+  Cache: "k",
+  station: "s",
+};
+
 // placeDef returns derived feature copies; match their stable authored identity, not reference.
 function samePocketObject(row, object) {
   return row.object === object || (row.feature && object?.id != null && row.object.id === object.id && row.object.kind === object.kind);
+}
+
+/** True when a pocket-list row corresponds to the pilot's active lock (from F or list click). */
+export function isPocketRowLocked(row, lock, place = state.place) {
+  if (!row || !lock) return false;
+  const kind = LOCK_KIND_BY_ROW[row.kind];
+  if (kind === "s") {
+    return lock.k === "s" && lock.o?.place === place && lock.o?.feature === row.object?.id;
+  }
+  if (kind) return lock.k === kind && lock.o === row.object;
+  return lock.k === "n" && lock.o?.place === place && samePocketObject(row, lock.o?.source);
 }
 
 /** Selecting a live list row shares F lock records, including same-target unlock. */
@@ -148,12 +169,10 @@ export function selectPocketObject(object, P = state.player) {
   const row = pocketObjects(P).find(row => samePocketObject(row, object));
   if (!row) return false; // A row may disappear between its render and click.
   const place = P.place || state.place;
-  const kind = ({Hostile:'e',Asteroid:'a',Cargo:'c',Rift:'r',Gate:'g',Cache:'k',station:'s'})[row.kind];
-  const next = kind === 's' ? {k:'s',o:{place,feature:object.id}} : kind ? {k:kind,o:object} : {
-    k:'n',o:{source:object,place,name:row.name,pos:Array.isArray(object.pos) ? V(...object.pos) : object.pos || V(...object.center)}
+  const kind = LOCK_KIND_BY_ROW[row.kind];
+  const next = kind === "s" ? { k: "s", o: { place, feature: object.id } } : kind ? { k: kind, o: object } : {
+    k: "n", o: { source: object, rowKind: row.kind, place, name: row.name, pos: Array.isArray(object.pos) ? V(...object.pos) : object.pos || V(...object.center) },
   };
-  const old = P.flight.lock;
-  const same = old?.k === next.k && (kind === 's' ? old.o.place === place && old.o.feature === object.id : kind ? old.o === object : samePocketObject(row, old.o.source));
-  P.flight.lock = same ? null : next;
+  P.flight.lock = isPocketRowLocked(row, P.flight.lock, place) ? null : next;
   return true;
 }

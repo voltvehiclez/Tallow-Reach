@@ -1,4 +1,4 @@
-import { POCKET_FILTERS, pocketType, readPocketFilters, savePocketFilters, sortedPocketRows } from './pocket-list.js';
+import { POCKET_FILTERS, pocketRowsHtml, readPocketFilters, savePocketFilters, sortedPocketRows } from './pocket-list.js';
 import { playerMount } from '../sim/pilot.js';
 import { pocketObjects, interceptPoint } from '../sim/flight-instruments.js';
 import { primarySlotIndex } from '../sim/weapons.js';
@@ -8,18 +8,18 @@ import { meterHeight, meterPercent, meterValue, throttleDisplay } from "./vitals
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
-import { targetOnScreen, targetHealthMarkup } from "./target-display.js";
+import { targetOnScreen, targetHealthMarkup, markerStyle, lockMarkerStyle, markerClasses } from "./target-display.js";
 import { fmtDist } from "../util/math.js";
 import { on, emit } from "../util/events.js";
 import { SHIPS } from "../data/ships.js";
-import { featuresOf } from "../data/places.js";
+import { featuresOf, featureById } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
 import { interpolatedPos, interpolatedVelocity, renderPlayerPose } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
-import { pruneLock, lockPosition, lockName, targetHealth } from "../sim/targeting.js";
+import { pruneLock, lockPosition, lockName, targetHealth, isPocketRowLocked } from "../sim/targeting.js";
 import { fieldMarkerPosition } from "../sim/asteroids.js";
 import { stationAt } from "../sim/places.js";
 import { cacheUnits, exitDenial, instanceTimeLeft } from "../sim/instances.js";
@@ -40,18 +40,40 @@ let markerRoot = null;
 let el = {};
 let routeCache = null;
 let weaponSlotsCache = null;
-let navigationOpen = false, navigationTimer = 0, navigationRows = [], navigationSort = 'distance', navigationDirection = 1;
+let navigationTimer = 0, navigationRows = [], navigationSort = 'distance', navigationDirection = 1;
 let navigationFilters;
 const preferenceStorage = {
   getItem: key => globalThis.localStorage.getItem(key),
   setItem: (key,value) => globalThis.localStorage.setItem(key,value),
 };
 function setNavigation(open) {
-  navigationOpen = state.ui.navigation = open;
-  if (el.navigation) el.navigation.hidden = !open;
-  document.body.classList.toggle('navigation-open', open);
+  const next = Boolean(open);
+  state.ui.navigation = next;
+  if (el.navigation) {
+    el.navigation.hidden = !next;
+    if (!next) {
+      if (el.navigationRows?.dataset) delete el.navigationRows.dataset.hover;
+      const filters = el.navigation.querySelector?.('details');
+      if (filters) filters.open = false;
+      const active = document.activeElement;
+      if (active && el.navigation.contains?.(active)) active.blur?.();
+    }
+  }
+  document.body?.classList?.toggle('navigation-open', next);
   navigationTimer = 0;
   emit('navigation-input');
+}
+function syncNavigationSelection(P = localPlayer()) {
+  if (!el.navigationRows?.querySelectorAll) return;
+  const lock = P?.flight?.lock || null;
+  const place = P?.place || state.place;
+  for (const button of el.navigationRows.querySelectorAll('button[data-pocket-row]')) {
+    const row = navigationRows[Number(button.dataset.pocketRow)];
+    const selected = isPocketRowLocked(row, lock, place);
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    button.parentElement?.classList?.toggle('selected', selected);
+  }
 }
 
 /**
@@ -133,9 +155,16 @@ export function setupHud() {
   });
 
 
+  navigationRows = [];
+  navigationSort = 'distance';
+  navigationDirection = 1;
   navigationFilters = readPocketFilters(preferenceStorage);
   $("pocket-filters").innerHTML = POCKET_FILTERS.map(type=>`<label><input type="checkbox" data-pocket-filter="${type}" ${navigationFilters[type]?'checked':''}>${type}</label>`).join('');
-  on("navigation-toggle", () => setNavigation(!navigationOpen));
+  on("navigation-toggle", open => setNavigation(typeof open === "boolean" ? open : !state.ui.navigation));
+  on("place-entered", () => {
+    if (el.navigationRows?.dataset) delete el.navigationRows.dataset.hover;
+    navigationTimer = 0;
+  });
   el.navigation.addEventListener("mousedown", e => e.stopPropagation());
   el.navigation.addEventListener("wheel", e => e.stopPropagation());
   el.navigation.addEventListener("change", e => {
@@ -146,7 +175,12 @@ export function setupHud() {
     navigationTimer = 0;
   });
   el.navigation.addEventListener("click", e => {
-    const sort = e.target.closest('[data-pocket-sort]');
+    if (e.target.closest?.('#close-pocket-objects')) {
+      e.preventDefault?.();
+      setNavigation(false);
+      return;
+    }
+    const sort = e.target.closest?.('[data-pocket-sort]');
     if (sort) {
       const key = sort.dataset.pocketSort;
       navigationDirection = navigationSort === key ? -navigationDirection : 1;
@@ -155,12 +189,23 @@ export function setupHud() {
         button.setAttribute('aria-pressed', String(button === sort));
         button.textContent = button.dataset.pocketSort.replace(/^./, c=>c.toUpperCase()) + (button === sort ? (navigationDirection===1?' ↑':' ↓'):'');
       }
+      if (e.detail > 0) sort.blur?.();
       navigationTimer = 0;
+      return;
     }
-    const row = e.target.closest('[data-pocket-row]');
-    if (row && navigationRows[Number(row.dataset.pocketRow)]) emit('navigation-select', navigationRows[Number(row.dataset.pocketRow)].object);
+    const row = e.target.closest?.('[data-pocket-row]');
+    const entry = row && navigationRows[Number(row.dataset.pocketRow)];
+    if (entry) {
+      emit('navigation-select', entry.object);
+      syncNavigationSelection(localPlayer());
+      if (e.detail > 0) row.blur?.();
+    }
   });
-  $("close-pocket-objects").addEventListener("click", () => setNavigation(false));
+  $("close-pocket-objects").addEventListener("click", e => {
+    e.preventDefault?.();
+    e.stopPropagation?.();
+    setNavigation(false);
+  });
   // Avoid replacing a row between pointer-down and click, or a focused keyboard action.
   el.navigationRows.addEventListener('pointerenter', () => el.navigationRows.dataset.hover = '1');
   el.navigationRows.addEventListener('pointerleave', () => { delete el.navigationRows.dataset.hover; navigationTimer = 0; });
@@ -186,7 +231,8 @@ export function setupHud() {
   });
 
   // The title screen boots with the HUD hidden (index.html), so sync the pointer
-  // with whatever the shell started with.
+  // with whatever the shell started with, and always start with the N list closed.
+  setNavigation(false);
   setReticle(!el.root.hidden);
   on("hurt", ({ shielded, player }) => {
     if (player && player !== state.player) return;
@@ -428,7 +474,7 @@ function drawLockRing(ML, radius) {
  * Place a label on screen for a world point. Off-screen points are pinned
  * to the screen edge in their direction.
  */
-function mark(p, text, cls, ox, oy, health = null) {
+function mark(p, text, style, ox, oy, health = null, extraCls = "") {
   if (markerCount >= MARKER_POOL) return;
   camera.updateMatrixWorld();
   const el_ = markers[markerCount++];
@@ -459,8 +505,10 @@ function mark(p, text, cls, ox, oy, health = null) {
   x = Math.max(MARKER_MARGIN_X, Math.min(W - MARKER_MARGIN_X, x));
   y = Math.max(MARKER_MARGIN_Y, Math.min(H - MARKER_MARGIN_Y, y));
 
-  el_.style.cssText = `display:block;left:${x}px;top:${y}px`;
-  el_.className = "mk " + cls;
+  const tone = typeof style === "string" ? style : style?.tone || "";
+  const color = typeof style === "object" && style?.color ? `;--marker-color:${style.color}` : "";
+  el_.style.cssText = `display:block;left:${x}px;top:${y}px${color}`;
+  el_.className = markerClasses("mk", tone, extraCls);
   const label = text === null ? "" : text + " " + fmtDist(state.player.pos.distanceTo(p));
   if (health) el_.innerHTML = `${targetHealthMarkup(health)}<span>${escHud(label)}</span>`;
   else el_.textContent = label;
@@ -473,42 +521,48 @@ function drawMarkers() {
     P = state.player;
   markerCount = 0;
 
-  for (const f of featuresOf(state.place, "station")) {
-    if (!(F.lock && F.lock.k === "s")) mark(V(...f.pos), f.n, "i");
-  }
-  for (const f of featuresOf(state.place, "asteroidField")) mark(V(...fieldMarkerPosition(f)), f.n, "");
-
   pruneLock();
   const lock = F.lock;
 
+  for (const f of featuresOf(state.place, "station")) {
+    const locked = lock && lock.k === "s" && lock.o?.place === state.place && lock.o?.feature === f.id;
+    if (!locked) mark(V(...f.pos), f.n, markerStyle("station", f));
+  }
+  for (const f of featuresOf(state.place, "asteroidField")) {
+    const locked = lock && lock.k === "n" && lock.o?.place === state.place
+      && lock.o?.source?.kind === "asteroidField" && lock.o?.source?.id === f.id;
+    if (!locked) mark(V(...fieldMarkerPosition(f)), f.n, markerStyle("asteroidField", f));
+  }
+
   W.enemies.forEach(e => {
     if (lock && lock.o === e) return;
-    mark(interpolatedPos(e), "Hostile", lock ? "h dim" : "h", 70, -36);
+    mark(interpolatedPos(e), "Hostile", markerStyle("Hostile", e), 70, -36, null, lock ? "dim" : "");
   });
 
   if (lock) {
     const hostile = lock.k === "e";
+    const style = lockMarkerStyle(lock, o => featureById(o?.place, o?.feature));
     const pos = lock.o && lock.o.pos ? interpolatedPos(lock.o) : lockPosition(lock);
-    const visible = mark(pos, lockName(lock), hostile ? "h lock" : "lock", 70, -36, hostile ? targetHealth(lock.o) : null);
-    if (visible) mark(pos, null, hostile ? "h lk" : "lk");
+    const visible = mark(pos, lockName(lock), style, 70, -36, hostile ? targetHealth(lock.o) : null, "lock");
+    if (visible) mark(pos, null, style, 0, 0, null, "lk");
   }
 
   W.crates.forEach(c => {
     if (c !== (lock && lock.o) && P.pos.distanceTo(c.pos) < 900) {
-      mark(interpolatedPos(c), "Crate", "");
+      mark(interpolatedPos(c), "Crate", markerStyle("Cargo", c));
     }
   });
 
   // Step 14: the doors, the way out and the prize canister are always labelled — a run is a place
   // with nothing else in it to judge distance by, and losing the way out is losing the ship.
   for (const r of W.rifts || []) {
-    if (r !== (lock && lock.o)) mark(interpolatedPos(r), r.dest || r.n || "Rift", "i");
+    if (r !== (lock && lock.o)) mark(interpolatedPos(r), r.dest || r.n || "Rift", markerStyle("Rift", r));
   }
   for (const g of W.gates || []) {
-    if (g !== (lock && lock.o)) mark(interpolatedPos(g), g.locked ? `${g.n} (sealed)` : `${g.n} (open)`, "i");
+    if (g !== (lock && lock.o)) mark(interpolatedPos(g), g.locked ? `${g.n} (sealed)` : `${g.n} (open)`, markerStyle("Gate", g));
   }
   for (const k of W.caches || []) {
-    if (k !== (lock && lock.o)) mark(interpolatedPos(k), k.locked ? `${k.n} (locked)` : `${k.n} (open)`, "i");
+    if (k !== (lock && lock.o)) mark(interpolatedPos(k), k.locked ? `${k.n} (locked)` : `${k.n} (open)`, markerStyle("Cache", k));
   }
 
   for (let i = markerCount; i < MARKER_POOL; i++) markers[i].style.display = "none";
@@ -517,11 +571,19 @@ function drawMarkers() {
 // Navigation overlay: keyboard flight continues; N, Escape or Close hides it.
 function updateInstruments(dt, P, F) {
   navigationTimer -= dt;
-  if (navigationOpen && navigationTimer <= 0) {
-    navigationTimer = 0.25;
-    if (!el.navigationRows.dataset.hover && !el.navigationRows.contains(document.activeElement)) {
-      navigationRows = sortedPocketRows(pocketObjects(P), navigationFilters, navigationSort, navigationDirection);
-      el.navigationRows.innerHTML = navigationRows.length ? navigationRows.map((row,index) => `<li><button type="button" data-pocket-row="${index}" title="${escHud(row.name)} (${pocketType(row.kind)})"><span>${escHud(row.name)} <small>(${pocketType(row.kind)})</small></span><span>${(row.distance/1000).toFixed(2)} km</span></button></li>`).join('') : '<li class="pocket-empty">No matching objects.</li>';
+  if (state.ui.navigation) {
+    if (navigationTimer <= 0) {
+      navigationTimer = 0.25;
+      const focused = document.activeElement && el.navigationRows.contains?.(document.activeElement);
+      if (!el.navigationRows.dataset?.hover && !focused) {
+        const place = P.place || state.place;
+        navigationRows = sortedPocketRows(pocketObjects(P), navigationFilters, navigationSort, navigationDirection);
+        el.navigationRows.innerHTML = pocketRowsHtml(navigationRows, row => isPocketRowLocked(row, F.lock, place));
+      } else {
+        syncNavigationSelection(P);
+      }
+    } else {
+      syncNavigationSelection(P);
     }
   }
   el.lead.hidden = true;

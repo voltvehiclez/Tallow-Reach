@@ -34,3 +34,18 @@ Moving colliders can push position without adding velocity. Speed instruments mu
 ## Exercise the action boundary and share render time
 
 N failed with emit undefined because a new main action used an unimported bus helper. Enumeration tests did not exercise the handler. flight-slice2 now executes the real handler body with main’s imported event bindings, including playing/repeat guards. Close-range lead jitter came from projecting fixed-step poses against an interpolated camera; interpolate muzzle pose, target position and velocities at the same render alpha instead of smoothing screen coordinates after projection. render-interp tests verify continuous interpolation and teleport reset.
+
+### Sky points need circular masks; primitive joins need geometric bounds
+
+WebGL PointsMaterial renders square pixels by default. For celestial/pocket dots,
+mask gl_PointCoord outside a circle; test both belt and ordinary-marker materials.
+For stacked primitives, compare bottom/top bounds (centre ± half height), not just
+centres: the commerce cap must start at the core top. Regression tests live in
+`tests/visual-refinement.test.mjs`; visual owner preview still required.
+
+### Shared targets need independent flight paths
+
+Give pilots seeded phases/timers and predictive separation; collision bounce alone
+cannot fix synchronized paths. Exact overlaps need tie-break directions. Test
+trajectories and delayed reactions (`tests/enemy-flight.test.mjs`). Unchanged
+weapon stats do not prove unchanged difficulty: owner playtest is required.

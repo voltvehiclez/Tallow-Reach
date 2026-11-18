@@ -20,6 +20,53 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-18: Nebula fill 0.175, unified label/lock colours and N-tab lock-square icons
+
+Raised default `NEBULA_FILL.intensity` from `0.125` to `0.175` in `src/data/lighting.js`
+(tint, softness, overrides and sunlight unchanged). Unified floating world labels (`.mk`),
+target lock labels/boxes (`.mk.lock`, `.mk.lk`) and new `N`-tab left hollow-square row
+icons (`.pocket-icon`, 9×9px inside unchanged 16px rows) behind a single helper
+(`markerStyle` / `lockMarkerStyle` in `src/ui/target-display.js`) and one shared CSS
+variable (`--marker-color`). Friendly stations (including Meridian Station), friendly
+ships, rifts, gates and caches stay blue when locked instead of turning brown; hostiles
+are red; asteroids, fields and crates are amber-brown; future objects with a new
+`markerTone` or `markerColor` inherit across labels, lock boxes and the `N` tab without
+duplicate code. Files: `src/data/lighting.js`, `src/ui/target-display.js`,
+`src/ui/pocket-list.js`, `src/ui/hud.js`, `src/sim/targeting.js`, `src/styles.css`,
+`tests/nebula-lighting.test.mjs`, `tests/target-display.test.mjs`,
+`tests/pocket-list.test.mjs`, docs. Save v21 unchanged; build regenerated.
+
+## 2026-11-18: Ore asteroids use natural shaded surface colours with no self-glow
+
+Removed the hardcoded emissive self-glow (`rockGlow` in `src/render/views.js`) that kept
+the shadow side of Cobalt and Voidite asteroids artificially bright. Every `cat: "ore"`
+entry in `src/data/items.js` now defines its own base surface `col` (read through
+`rockColor(id)`, defaulting to `DEFAULT_ROCK_COLOR` `0x4a4540`): Ferrite `0x4a4540`
+(unchanged brown), Cobalt `0x2e5585` (blue), Voidite `0x543888` (purple) and Lumenite
+`0x625636` (golden-amber). All asteroids share the exact same non-emissive PBR shading,
+so dark sides drop naturally into shadow like Ferrite. Enforced by `tests/views.test.mjs`
+and `tests/content.test.mjs`; updated recipe 2 and folder READMEs. Save v21 unchanged;
+build regenerated; owner playtest pending.
+
+## 2026-11-18: Fix N panel closing, selected-row outline, row separators and HUD transparency
+
+Fixed `#pocket-objects` staying visible on N, Close and Escape: `#hud > #pocket-objects`
+(`display: flex`, two IDs) outranked `#pocket-objects[hidden]` (`display: none`), and
+focused filter checkboxes swallowed `KeyN` in `core/input.js`. Added `#hud > #pocket-objects[hidden]`
+and explicit `[hidden]` rules, exempted checkboxes from the typing-field guard, unified
+navigation state on `state.ui.navigation`, reset hover/filter-menu/focus on close, and
+ordered modal Escape dismissal before navigation in `main.js`. Added faint inset grey
+row separators that keep rows strictly 16px tall (35+ at 720p), and a full-row 1px
+white inset outline (`isPocketRowLocked` + `pocketRowsHtml` + immediate hover-safe sync)
+for the locked target across all target kinds and derived feature copies. Matched slight
+surface transparency (`--hud-surface`, alpha 0.72) across the N panel, weapon slots and
+grey status boxes while keeping coloured meter fills solid; gave `#throttle-track` slight
+transparency (`--hud-throttle-bg`) preserving its `#141b20` base, blue fills and labels.
+Files: `src/styles.css`, `src/index.html`, `src/ui/hud.js`, `src/ui/pocket-list.js`,
+`src/sim/targeting.js`, `src/core/input.js`, `src/state/state.js`, `src/main.js`,
+`tests/pocket-list.test.mjs`, docs and `testing/TESTING-BATCH2.md`. Save v21 unchanged;
+build regenerated; owner playtest pending.
+
 ## 2026-11-16: Compact selectable pocket list and aligned lower HUD
 
 Pocket list now has 16px single-line rows (35+ at 720p), opaque top-right placement,
@@ -94,36 +141,11 @@ readouts centre on their columns. Speed now sits inside the wider throttle recta
 beside the throttle label. No speed-physics changes (pushed-speed fix remains pending
 in slice 2). Layout tests updated; save v21; build regenerated; visual playtest pending.
 
-## 2026-11-16: Square weapon boxes and slot-height divider
-
-Widened the strip to 480px so all ten boxes are 44×44px at desktop width; narrower
-windows scale width/height together. Shifted meter pairs outward equally while
-preserving appearance and internal spacing. Replaced the full-bank separator with
-a divider the same height as the slot row. PRIMARY/SECONDARY headings are white;
-weapon names stay grey. Added square-geometry assertions. Save v21; build regenerated.
-
-## 2026-11-16: Monochrome weapon strip and top-left location
-
-Lowered weapon strip 20px toward throttle; square boxes, white active borders, dark
-grey inactive backgrounds, muted grey labels/icons and a vertical divider. Each bank
-now names its selected module below PRIMARY/SECONDARY, with ammo only for ammo-using
-weapons (including zero remaining). Removed duplicate ammo badges on boxes. Top-left
-shows bold white system and regular white pocket, no icon; route remains underneath.
-Instances say Outside known systems rather than claiming Meridian. Removed bottom-left
-controls reminder and obsolete narrow-window hint offsets; main-menu help stays.
-Added location/markup tests. Save v21; build regenerated. Owner visual playtest pending.
-
-## 2026-11-16: Compact weapon strip between the HUD columns
-
-Shrank the ten-slot strip from 580px to 340px wide and boxes from 62px to 44px tall,
-with smaller icons and tighter gaps. Moved it down into the Hull/Power gap. Both
-meter pairs move 50px outward, preserving track size, appearance and pair spacing.
-Strip and pairs share the same centre and responsive vertical offset; responsive
-widths leave 30px from each strip edge to the neighbouring inner column centre.
-Layout regression tests updated. Save v21; build regenerated; visual playtest pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Square weapon boxes and slot-height divider
+- 2026-11-16: Monochrome weapon strip and top-left location
+- 2026-11-16: Compact weapon strip between the HUD columns
 - 2026-11-16: Paid boost ignition and ten-slot weapon hotbar
 - 2026-11-16: HUD pool units
 - 2026-11-16: Tight HUD readings, pool percentages and throttle fill

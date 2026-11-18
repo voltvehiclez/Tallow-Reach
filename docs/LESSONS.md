@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-14.*
+*Last checked: 2026-11-18.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -350,20 +350,11 @@ and reading the shield bar — not at the plumbing that carries it.
   the factor scales it, `collideDmg: 0` opts out, slow contact is free, rock and station cost the same) and
   `tests/enemy-collision.test.mjs` (scenery damages a hostile, `collideDmg: 0` does not).
 
-### Sky points need circular masks; primitive joins need geometric bounds
+### L28. A `[hidden]` toggle fails when a container selector outranks it or a checkbox traps the key
 
-WebGL PointsMaterial renders square pixels by default. For celestial/pocket dots,
-mask gl_PointCoord outside a circle; test both belt and ordinary-marker materials.
-For stacked primitives, compare bottom/top bounds (centre ± half height), not just
-centres: the commerce cap must start at the core top. Regression tests live in
-`tests/visual-refinement.test.mjs`; visual owner preview still required.
-
-### Shared targets need independent flight paths
-
-Give pilots seeded phases/timers and predictive separation; collision bounce alone
-cannot fix synchronized paths. Exact overlaps need tie-break directions. Test
-trajectories and delayed reactions (`tests/enemy-flight.test.mjs`). Unchanged
-weapon stats do not prove unchanged difficulty: owner playtest is required.
-
+- **Seen (owner, 2026-11-18):** the `N` panel would not close with `N` or its Close button.
+- **Cause:** `#hud > #pocket-objects` (`display: flex`, two IDs) outranked `#pocket-objects[hidden]`, and `core/input.js` blocked non-Escape keys on checkbox `INPUT`s.
+- **Rule:** every `[hidden]` rule must outrank every `display` rule for that element; typing guards apply only to text/number/select controls, never checkboxes.
+- **Enforced by:** `tests/pocket-list.test.mjs` (all 13 `.hidden` surfaces, checkbox `KeyN`, and live N/Close/Esc/dock tests).
 
 [More lessons](archive/reticle-and-recovery-lessons.md)

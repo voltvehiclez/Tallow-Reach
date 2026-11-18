@@ -37,7 +37,7 @@ end of `tools/skybox/README.md`.
 ## Subtle nebula lighting (2026-11-16)
 
 `src/data/lighting.js` controls an extra faint flight-scene ambient light. Defaults:
-`intensity: 0.125`, `tint: null`, `tintStrength: 0.4`. Null tint uses the active
+`intensity: 0.175`, `tint: null`, `tintStrength: 0.4`. Null tint uses the active
 skybox's generator-produced `SKYBOXES[id].tint` (not a runtime image average).
 The colour is mixed toward white so normal space adds only a restrained cyan tint.
 The sun/black-hole light, existing hemisphere, exposure and materials are unchanged.

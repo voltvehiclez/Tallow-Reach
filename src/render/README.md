@@ -36,4 +36,4 @@ Outfitting preview/reset uses data/camera.js SHIP_PREVIEW: front/top/left isomet
 
 Flight scene has one faint nebula AmbientLight, updated on showPlace from data/lighting.js. Sky tint defaults to generator metadata, not pixel sampling. Existing sun, hemisphere light, title and outfitting lights are unchanged.
 
-views.js also exports interpolatedVelocity for HUD ballistic prediction at the same frame alpha as interpolatedPos/renderPlayerPose. Missing history or teleport jumps use current velocity.
+views.js also exports interpolatedVelocity for HUD ballistic prediction at the same frame alpha as interpolatedPos/renderPlayerPose. Missing history or teleport jumps use current velocity. Built-in ore asteroids use `mm(rockColor(e.type))` with zero emissive self-glow, so every ore is shaded by scene light identically to Ferrite.

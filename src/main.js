@@ -200,22 +200,29 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       if (!state.ui.intro && !state.paused && !localPlayer().docked) startWarp(localPlayer(), nameTo);
       break;
     case "pause":
-      if (state.ui.navigation) {
-        emit("navigation-toggle");
-        if (pauseKey) setPause(true);
-        break;
-      }
       if (isStarmapOpen()) {
         closeStarmap();
-        if (name === "pause" && pauseKey) setPause(true);
+        if (name === "pause" && pauseKey) {
+          if (state.ui.navigation) emit("navigation-toggle", false);
+          setPause(true);
+        }
       } else if (isCargoOpen()) {
         // Esc just closes the hold; P closes it and opens the pause card.
         closeCargo();
-        if (name === "pause" && pauseKey) setPause(true);
+        if (name === "pause" && pauseKey) {
+          if (state.ui.navigation) emit("navigation-toggle", false);
+          setPause(true);
+        }
       } else if (isCacheOpen()) {
         // The same, for a canister: Esc puts the trade away, P puts it away and pauses.
         closeCache();
-        if (name === "pause" && pauseKey) setPause(true);
+        if (name === "pause" && pauseKey) {
+          if (state.ui.navigation) emit("navigation-toggle", false);
+          setPause(true);
+        }
+      } else if (state.ui.navigation) {
+        emit("navigation-toggle", false);
+        if (pauseKey) setPause(true);
       } else if (canPause()) setPause(!state.paused);
       break;
   }
