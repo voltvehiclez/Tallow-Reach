@@ -80,4 +80,6 @@ Give a short playtest after each implemented slice. Do not label pending slices 
    The code supports additional secondary bays without adding bays to current ships.
 4. Click hotbar boxes: selection works without firing. Check shared missile ammo on
    its icon and no redundant weapon line at top-right. Reload: both selections persist.
-5. Compare the strip at normal and narrow window sizes. Remaining batch slices are pending.
+5. Compare the compact strip at normal and narrow window sizes: it fits BETWEEN Hull
+   and Power, above throttle. Column pairs are farther apart but otherwise unchanged.
+   Check number/icon/ammo readability and click selection. Remaining batch slices are pending.

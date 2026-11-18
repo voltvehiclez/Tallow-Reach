@@ -14,6 +14,43 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Feature batch Part 1 — targeting and missile UI (items 4–7)
+
+Nine requested features split into parts. Implemented ONLY items 4–7 here:
+F switches directly to a different crosshair candidate; same candidate or empty
+space releases the lock. Station identity comparisons use place/feature ids.
+Removed target-acquired notification and the redundant Locked label. Selected
+hostile names have compact blue shield / white hull percentage-fill bars above;
+current enemies have no shields, so the shield bar is empty, not fabricated.
+Missile brackets now travel from 106 to 34 px radius (was 58 to 34), with a small
+progress bar and percentage below. Valid F-selected enemies override the nearest
+crosshair candidate, preserving acquisition when another enemy crosses. Cone,
+range, free-camera, no-launcher and warp rules remain unchanged.
+
+Files: `sim/{targeting,weapons}.js`, `ui/hud.js`, `data/weapons.js`, `index.html`,
+styles, weapon/instance tests, generated HTML and handoff. Also fixed an unrelated
+flaky headless AI test: seed it and assert manoeuvring range, not the old uniform
+orbit's 300 m endpoint. No NPC behaviour changed. **Save v21.** Build passes;
+**677/677 tests pass**. Owner visual playtest pending; checklist `testing/TESTING-TARGETING.md`.
+
+**Still pending:** 1 map/route icons, 2 compact mission log, 3 mechanical undock
+sound, 8 Base-tab cleanup, 9 persistent home-station selection/death respawn.
+Do not claim these are implemented. Home-station persistence needs save review.
+
+Part 1 visual follow-up: target bars now fill the label width from the left,
+with a right-aligned percentage on each row. Offscreen/behind-camera/clipped
+selected targets retain the edge-pinned name/health label but no small target
+square; on-screen targets retain both. `ui/target-display.js` provides tested
+pure markup/visibility helpers; `hud.js`, CSS, UI README and regression tests
+updated. No gameplay/save change. Build passes; **679/679 tests pass**; preview pending.
+
+Owner revision: removed the missile-lock progress bar and percentage, including
+numeric acquisition hint. The expanded corner geometry, easing, colours, flash,
+lock timing and F-target priority are unchanged. NPC health bars/percentages stay.
+Files: `ui/hud.js`, `data/weapons.js`, `sim/weapons.js`, weapon tests, playtest guide,
+generated HTML and handoff. Save v21; build passes; **679/679 tests pass**.
+
 ## 2026-11-16: Individual fighter pilots and per-enemy AI personalities
 
 Owner requested smarter, more varied NPC flight without a difficulty/stat increase:

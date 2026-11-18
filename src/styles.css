@@ -127,11 +127,10 @@ body.no-reticle canvas {
 #throttle-label { position: relative; display: block; line-height: 20px; font-size: 12px; color: var(--ink); }
 #speed { margin-top: 3px; font-size: 12px; }
 
-/* Paired vertical meters. Keep previous inner centres at screen-centre -122/+178px:
-   the old asymmetric MJ layout's centre was 28px right of screen centre. */
+/* Paired vertical meters: shifted outward equally to frame the compact weapon strip. */
 #ship-vitals {
   left: calc(50% + 28px); bottom: 98px; transform: translateX(-50%);
-  width: min(300px, calc(100vw - 160px)); height: 44px;
+  width: min(400px, calc(100vw - 160px)); height: 44px;
 }
 .vital-pair { position: absolute; top: 0; display: flex; gap: 8px; }
 .vital-left { right: calc(100% - 7px); }
@@ -1443,20 +1442,20 @@ textarea {
 .nav-pocket-icon .nav-current-ring { fill: none; stroke: var(--amber); stroke-width: 1; stroke-dasharray: 1 3; stroke-linecap: round; }
 
 /* Weapon bays match outfitting order; selected primary and secondary stay independent. */
-#hud > #weapon-slots { left: 50%; bottom: 174px; transform: translateX(-50%); width: min(580px, calc(100vw - 32px)); display: flex; gap: 14px; pointer-events: auto; }
+#hud > #weapon-slots { left: calc(50% + 28px); bottom: 98px; transform: translateX(-50%); width: min(340px, calc(100vw - 220px)); display: flex; gap: 8px; pointer-events: auto; }
 .weapon-bank { flex: 1; min-width: 0; color: #2bb8ee; }
-.weapon-bank.secondary { color: #f3a000; border-left: 1px solid var(--line); padding-left: 12px; }
-.weapon-bank-label { font-size: 10px; margin-bottom: 4px; letter-spacing: .06em; }
+.weapon-bank.secondary { color: #f3a000; border-left: 1px solid var(--line); padding-left: 7px; }
+.weapon-bank-label { font-size: 9px; margin-bottom: 4px; letter-spacing: .06em; }
 .weapon-bank.secondary .weapon-bank-label { text-align: right; }
-.weapon-bank-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
-.weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 62px; min-width: 0; margin: 0; padding: 4px; background: rgba(3,7,10,.72); border: 1px solid #30383d; border-radius: 7px; color: inherit; cursor: pointer; }
+.weapon-bank-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
+.weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 44px; min-width: 0; margin: 0; padding: 3px 1px; background: rgba(3,7,10,.72); border: 1px solid #30383d; border-radius: 7px; color: inherit; cursor: pointer; }
 .weapon-slot.selected { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; background: rgba(24,65,80,.32); }
 .secondary .weapon-slot.selected { background: rgba(84,51,0,.28); }
-.weapon-slot svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.weapon-slot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .weapon-slot:not(.fitted) svg { color: #7c858b; }
 .weapon-key { color: #d0d5d8; font-size: 11px; line-height: 1; }
 .weapon-fitted-mark { width: 88%; height: 3px; background: #30383d; border-radius: 2px; margin-top: auto; }
 .weapon-slot.fitted .weapon-fitted-mark { background: currentColor; }
-.weapon-ammo { position: absolute; right: 3px; bottom: 10px; font-size: 9px; }
-@media (max-width: 900px) { #hud > #weapon-slots { bottom: 228px; } }
+.weapon-ammo { position: absolute; right: 3px; bottom: 7px; font-size: 8px; }
+@media (max-width: 900px) { #hud > #weapon-slots { bottom: 152px; } }
 @media (max-width: 480px) { .weapon-bank-slots { gap: 3px; } #hud > #weapon-slots { gap: 8px; } .weapon-bank.secondary { padding-left: 7px; } .weapon-slot { padding: 3px 1px; } }

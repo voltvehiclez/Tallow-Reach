@@ -59,3 +59,17 @@ test('Strip has ten numbered boxes, shared family icons and no redundant top-rig
  const hud=readFileSync('src/ui/hud.js','utf8');assert.doesNotMatch(hud,/\$\{primary\}/);
  assert.match(hud,/weaponSlots\?\.addEventListener\("mousedown", e => e.stopPropagation\(\)\)/);
 });
+
+test('Compact strip fits between unchanged meter pairs at desktop and narrower widths',()=>{
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/#hud > #weapon-slots \{ left: calc\(50% \+ 28px\); bottom: 98px/);
+ assert.match(css,/width: min\(340px, calc\(100vw - 220px\)\)/);
+ assert.match(css,/width: min\(400px, calc\(100vw - 160px\)\)/);
+ assert.match(css,/\.weapon-slot \{[^}]*height: 44px/);
+ assert.match(css,/\.vital-track \{[^}]*height: 44px; width: 14px/);
+ assert.match(css,/\.vital-pair \{[^}]*gap: 8px/);
+ for(const viewport of [480,640,900,1280,1920]) {
+  const centres=Math.min(400,viewport-160), strip=Math.min(340,viewport-220);
+  assert.equal(centres-strip,60,'strip leaves 30px each side before inner track centres');
+ }
+});

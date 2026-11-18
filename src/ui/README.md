@@ -50,3 +50,5 @@ HUD readout follow-up: label/value/percentage text edges share the 8px track gap
 Current HUD readings carry units: Shield/Hull HP, Boost U (fuel units), Power MJ. Percentages remain on the next line.
 
 Weapon strip is above the throttle/vitals. It maps outfitting bay indices without packing gaps, and supports click or number selection. Clicking cannot fire weapons. Family icons derive from module.weaponFamily, not variant names; missile stock is on the icon. Top-right selected-weapon line removed.
+
+Weapon strip compact follow-up: 340px desktop width and 44px-high boxes, positioned between Hull and Power at the same vertical level. Meter pairs move 50px outward per side; their geometry/styles are unchanged. Responsive widths retain 30px clearance from strip edge to inner track centre.
