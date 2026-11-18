@@ -97,3 +97,12 @@ test('Power MJ readout matches the blue meter without recolouring usage text',()
  assert.match(css,/#pw-val \{ color: var\(--ice\); \}/);
  assert.match(css,/#pw-flow \{[^}]*color: var\(--dim\)/);
 });
+
+test('All status contents share an explicit centre without resizing tracks or moving frames',()=>{
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/\.vital-column > span:first-child \{[^}]*width: max-content; left: 50%; transform: translateX\(-50%\)/);
+ assert.match(css,/\.vital-track \{[^}]*left: 50%; transform: translateX\(-50%\)/);
+ assert.match(css,/\.vital-column > \.vital-value, \.vital-column > \.vital-percent \{[^}]*left: 50%; transform: translateX\(-50%\)/);
+ assert.match(css,/\.vital-column \{[^}]*width: 28px; font-size: 11px/);
+ assert.match(css,/\.vital-column::before \{[^}]*top: -22px; bottom: -64px; left: -3px; right: -3px/);
+});

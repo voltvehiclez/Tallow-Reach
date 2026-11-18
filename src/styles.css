@@ -139,14 +139,14 @@ body.no-reticle canvas {
 .vital-left { left: -7px; }
 .vital-right { right: -7px; }
 .vital-column { position: relative; width: 28px; font-size: 11px; line-height: 1.2; isolation: isolate; }
-.vital-column > span:first-child { display: block; position: relative; top: -17px; white-space: nowrap; text-align: center; }
+.vital-column > span:first-child { display: block; position: relative; width: max-content; left: 50%; transform: translateX(-50%); top: -17px; white-space: nowrap; text-align: center; }
 .vital-column > .vital-value, .vital-column > .vital-percent { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vital-column > .vital-value { top: 48px; }
 .vital-column > .vital-percent { top: 62px; }
 .vital-left .vital-shield { position: absolute; right: calc(100% + 8px); top: 0; }
 .vital-right .vital-boost { position: absolute; left: calc(100% + 8px); top: 0; }
 .vital-column::before { content: ""; position: absolute; z-index: -1; top: -22px; bottom: -64px; left: -3px; right: -3px; border: 1px solid #444; background: rgba(28,28,28,.9); pointer-events: none; }
-.vital-track { position: absolute; top: 0; box-sizing: border-box; height: 44px; width: 100%; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
+.vital-track { position: absolute; top: 0; left: 50%; transform: translateX(-50%); box-sizing: border-box; height: 44px; width: 100%; background: #141b20; border: 1px solid rgba(188,229,255,.18); }
 .vital-track i { display: block; position: absolute; bottom: 0; width: 100%; height: 0; background: currentColor; }
 .vital-hull { color: var(--ink); }
 .vital-shield, .vital-power { color: var(--ice); }
@@ -157,7 +157,7 @@ body.no-reticle canvas {
    in rock" hint, shown only while the beam is cutting. */
 #bm {
   left: 50%;
-  top: calc(62% + 24px);
+  bottom: 158px;
   transform: translateX(-50%);
   width: 150px;
   text-align: center;
@@ -179,9 +179,10 @@ body.no-reticle canvas {
 }
 #pr {
   left: 50%;
-  top: 62%;
+  bottom: 184px;
+  width: min(480px, calc(100vw - 40px));
   transform: translateX(-50%);
-  color: var(--amber);
+  color: #fff;
   text-align: center;
 }
 
@@ -1434,8 +1435,8 @@ textarea {
 #hud > #weapon-slots { left: calc(50% + 28px); bottom: 78px; transform: translateX(-50%); width: min(480px, calc(100vw - 220px)); --weapon-size: min(44px, calc((100vw - 260px) / 10)); display: flex; gap: 16px; pointer-events: auto; }
 .weapon-bank { flex: 1; min-width: 0; color: #c4c4c4; }
 #weapon-slots::after { content: ""; position: absolute; left: 50%; bottom: 0; height: var(--weapon-size); border-left: 1px solid #555; pointer-events: none; }
-.weapon-bank-label { color: #fff; font-size: 9px; line-height: 11px; margin-bottom: 1px; letter-spacing: .06em; padding-left: 2px; }
-.weapon-bank.secondary .weapon-bank-label { text-align: right; padding-left: 0; padding-right: 2px; }
+.weapon-bank-label { color: #fff; font-size: 9px; line-height: 11px; margin-bottom: 1px; letter-spacing: 0; padding: 0; }
+.weapon-bank.secondary .weapon-bank-label { text-align: right; }
 .weapon-bank-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
 .weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--weapon-size); width: 100%; min-width: 0; margin: 0; padding: 3px 1px; background: rgba(28,28,28,.9); border: 1px solid #444; border-radius: 0; color: inherit; cursor: pointer; }
 .weapon-slot.selected { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; background: rgba(48,48,48,.9); color: #fff; }

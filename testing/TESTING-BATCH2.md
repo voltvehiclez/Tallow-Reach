@@ -100,3 +100,7 @@ Framing follow-up: check headings sit close to slots, status tracks are centred 
 Signed-throttle follow-up: try -100%, -50%, 0%, +50%, +100%. Reverse should show a minus sign and same-blue striped fill growing from the right; forward is solid from the left. Check the raised throttle box, uniform status-column widths, usage centred under Power/Boost, and names 2px closer to unchanged bank headings.
 
 Select fitted and empty primary/secondary bays via keys and clicks: slot labels update without centre-screen equipped/empty messages. Check bank headings sit 2px farther inward; grey names stay fixed.
+
+Check the new finned missile outline against the reference. Dock, acquire missile lock, approach a wormhole and mine: shared prompts should appear white above the weapon strip, mining progress beneath prompts, without overlapping slot headings. Check both bank headings align with the name edges.
+
+Check Shield/Hull/Power/Boost labels, bars and numeric readouts share the centre of each grey frame. Frames, 28px track widths and text sizes must remain unchanged.

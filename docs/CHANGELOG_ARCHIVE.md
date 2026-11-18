@@ -20,6 +20,17 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+
+## 2026-11-16: Mirrored vertical HUD pairs
+
+Owner's slice-1 layout follow-up: shortened flight labels to Hull/Shield. Hull takes the
+previous inner-left column's X position; Shield moves just outside it. Power becomes a
+matching vertical meter at the old Boost X position; Boost moves just outside Power.
+Both pairs use an 8px gap, with labels/numbers fanning out to avoid overlap. Final order:
+Shield / Hull — open centre — Power / Boost. Numeric MJ and MJ/s readings remain; narrow
+windows lift both pairs together. Updated HUD/layout tests. Save v21 unchanged; build
+regenerated. Owner visual playtest pending; other batch slices remain pending.
+
 ## 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
 
 Implemented items 1 and 12 only. Hull/Shield now fill upward in small columns left

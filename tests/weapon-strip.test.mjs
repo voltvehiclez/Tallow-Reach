@@ -94,10 +94,20 @@ test('Monochrome square slots show selected names and ammo only for ammo weapons
  const hud=readFileSync('src/ui/hud.js','utf8');assert.doesNotMatch(hud,/pocketMarkerMarkup/);
 });
 
-test('Selection uses the slot HUD without redundant centre messages; bank headings inset inward',()=>{
+test('Selection uses the slot HUD without redundant centre messages; bank headings align with names',()=>{
  const source=readFileSync('src/sim/weapons.js','utf8');
  assert.doesNotMatch(source.slice(source.indexOf('export function setWeapon'),source.indexOf('/** Primary fire:')),/\bmsg\(/);
  const css=readFileSync('src/styles.css','utf8');
- assert.match(css,/\.weapon-bank-label \{[^}]*padding-left: 2px/);
- assert.match(css,/\.weapon-bank.secondary \.weapon-bank-label \{[^}]*padding-left: 0; padding-right: 2px/);
+ assert.match(css,/\.weapon-bank-label \{[^}]*letter-spacing: 0; padding: 0/);
+ assert.match(css,/\.weapon-bank.secondary \.weapon-bank-label \{ text-align: right; \}/);
+});
+
+test('Interaction prompts sit above weapon slots in white, with mining progress below them',()=>{
+ const css=readFileSync('src/styles.css','utf8');
+ assert.match(css,/#pr \{[^}]*bottom: 184px;[^}]*color: #fff/);
+ assert.match(css,/#bm \{[^}]*bottom: 158px/);
+ const profile=newProfile(); profile.loadout.wasp.secondary=['missile_basic'];
+ const html=weaponSlotsHtml(profile);
+ assert.match(html,/rotate\(45 12 12\)/);
+ assert.doesNotMatch(html,/<circle cx="16" cy="8"/);
 });

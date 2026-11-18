@@ -65,3 +65,7 @@ HUD tuning: weapon names alone shift up 2px; bank headings stay fixed. All statu
 Power MJ value uses the same ice-blue as the Power meter; usage text remains muted grey.
 
 Bank headings are optically inset 2px toward the middle; grey weapon names stay fixed.
+
+Latest visual correction: bank headings have zero inset/tracking to align with the grey name edges. Missile family icon is a diagonal finned missile with body bands, not a windowed rocket. Shared interaction prompt is white and bottom-anchored at 184px, with mining progress at 158px above the weapon strip.
+
+Status tracks and intrinsic-width labels now use the same explicit 50%/translateX centre as value/percentage readouts. Track widths, font sizes and frame bounds stay unchanged.

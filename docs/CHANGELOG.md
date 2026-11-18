@@ -20,6 +20,17 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-16: Missile icon and lower interaction prompts
+
+Replaced the windowed rocket glyph with a simple diagonal finned missile outline,
+using the supplied reference. Shared interaction prompts (dock, lock acquisition,
+wormholes and other contextual actions) now appear white, bottom-anchored above the
+weapon strip. Mining progress follows them down. Removed the heading inset and
+tracking so PRIMARY/SECONDARY align with the grey name edges. Added markup/layout
+guards. Explicitly centre all status tracks, labels and readouts on their frames
+without changing 28px widths, text sizes or frame positions. Save v21 unchanged;
+build regenerated. Owner visual check pending.
+
 ## 2026-11-16: Remove duplicate weapon-selection messages
 
 Removed centre-screen equipped/empty messages from both bank selectors; the slot HUD
@@ -110,18 +121,9 @@ Raised the columns slightly to fit the extra readout lines. Absent pools show 0/
 Updated formatting/layout regression tests. Save v21; build regenerated. Visual
 playtest pending; remaining batch slices unchanged.
 
-## 2026-11-16: Mirrored vertical HUD pairs
-
-Owner's slice-1 layout follow-up: shortened flight labels to Hull/Shield. Hull takes the
-previous inner-left column's X position; Shield moves just outside it. Power becomes a
-matching vertical meter at the old Boost X position; Boost moves just outside Power.
-Both pairs use an 8px gap, with labels/numbers fanning out to avoid overlap. Final order:
-Shield / Hull — open centre — Power / Boost. Numeric MJ and MJ/s readings remain; narrow
-windows lift both pairs together. Updated HUD/layout tests. Save v21 unchanged; build
-regenerated. Owner visual playtest pending; other batch slices remain pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Mirrored vertical HUD pairs
 - 2026-11-16: Feature batch 2 slice 1 — compact flight meters and toggle camera
 - 2026-11-16: Nebula fill intensity increased 25%
 - 2026-11-16: Subtle sky-tinted ambient fill trial
