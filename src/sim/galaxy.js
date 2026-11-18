@@ -333,6 +333,17 @@ function finalizeArrivals(world) {
       const features = recordFeatures(pocket);
       const stations = features.filter(f => f.kind === "station" && Array.isArray(f.pos));
       const fields = features.filter(f => f.kind === "asteroidField" && Array.isArray(f.pos));
+      if (stations.length && pocket.sunwardArrival > 0) {
+        const here = systemSpatialLayout(world, system.id)?.byId[pocket.id];
+        if (here) {
+          const towardSun = normalize3(here.pos.map(value => -value));
+          const station = stations[0].pos;
+          pocket.enter = { kind: "warp",
+            pos: roundVec(station.map((value, i) => value + towardSun[i] * pocket.sunwardArrival)),
+            face: roundVec(station) };
+          continue;
+        }
+      }
       const arc = fields.find(f => f.layout === "arc");
       if (arc) {
         const angle = arc.arc.angle + Math.PI;

@@ -198,6 +198,8 @@ export const PLACES = {
     parent: "meridian",
     n: "Meridian Station",
         model: "original-meridian",
+    mapHeight: -0.049,       // AU below the sun’s system-space plane
+    sunwardArrival: 1000,   // metres from the station, facing back toward it
     d: "Meridian Station and the asteroid belt.",
     enter: { kind: "warp", pos: [0, 0, 300] },
     leave: { kind: "warp" },

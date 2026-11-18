@@ -31,7 +31,8 @@ test('Meridian is a packed C surrounding the station with a 4 km clear centre', 
   const field = PLACE_DEFS.meridian.features.find(f => f.kind === 'asteroidField');
   checkArc('reach', field);
   const world = generateGalaxy(42);
-  assert.deepEqual(world.pockets.reach.enter.pos, field.pos);
+  assert.deepEqual(world.pockets.reach.enter.face, [0, 0, 0]);
+  assert.notDeepEqual(world.pockets.reach.enter.pos, field.pos);
 });
 test('Dedicated belts use dense C arcs and warp at the centre across seeds', () => {
   for (const seed of [1, 42, 728]) {
@@ -187,4 +188,23 @@ test('Arc strays diffuse above and below the old height with a sparse outer frin
   assert.ok(above.length > 0 && below.length > 0);
   assert.ok(above.length + below.length < rocks.length * 0.18);
   assert.ok(rocks.every(r => Math.abs(r.pos.y-field.pos[1]) <= field.height * 1.25));
+});
+
+
+test('Meridian has authored negative AU height and a sunward arrival facing the station', async () => {
+  const { systemSpatialLayout } = await import('../src/sim/galaxy.js');
+  for (const seed of [1, 42, 11082026]) {
+    const world = generateGalaxy(seed);
+    const pocket = world.pockets.reach;
+    const here = systemSpatialLayout(world, 'meridian').byId.reach;
+    assert.equal(here.pos[1], -0.049);
+    const len = Math.hypot(...here.pos);
+    const sunward = here.pos.map(x => -x / len);
+    assert.deepEqual(pocket.enter.face, [0,0,0]);
+    assert.ok(Math.abs(Math.hypot(...pocket.enter.pos) - 1000) < 0.1);
+    pocket.enter.pos.forEach((value, i) => assert.ok(Math.abs(value - sunward[i] * 1000) <= 0.051));
+    const angle = pocket.featureOverrides.field.arc.angle;
+    // Densest arc midpoint is opposite the opening, away from the sun/arrival.
+    assert.ok(Math.cos(angle + Math.PI) * sunward[0] + Math.sin(angle + Math.PI) * sunward[2] < -0.99);
+  }
 });

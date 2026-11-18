@@ -64,6 +64,14 @@ density tests and rift/UI fixture positions (clear-space tests moved outside the
 rotated belt), generated HTML and handoff. Save v21; build passes and **671/671
 tests pass**. Visual preview pending.
 
+Meridian arrival follow-up: authored system-space Y is now exactly -0.049 AU
+(X/Z unchanged). The station pocket declares a 1000 m sunward arrival: generation
+uses the true 3D direction from its AU position to the sun and faces the station.
+The populated arc remains behind the station, opposite the opening: belt → station
+→ warp-in → sun. Other arrivals unchanged. Files: `data/places.js`, `sim/galaxy.js`,
+density/arrival tests, generated HTML and handoff. Save v21. Build passes;
+**672/672 tests pass**. Owner visual preview pending.
+
 ## 2026-11-16: Wider 4 km belts, restored Meridian, quieter planets and circular sky markers
 
 Owner requested wider belts with the nearest surface ~4 km from central arrival,
