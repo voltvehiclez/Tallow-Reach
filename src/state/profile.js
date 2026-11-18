@@ -8,7 +8,7 @@
 import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
 import { isItem, isModule, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
-import { CONTRACT_TYPES, missionFromContract } from "../data/contracts.js";
+import { CONTRACT_TYPES, CONTRACT_REFRESH_SECONDS, missionFromContract } from "../data/contracts.js";
 import { isMissionKind, isMissionStepKind, STORY_MISSIONS } from "../data/missions/index.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
@@ -78,7 +78,10 @@ function worldWithStationStores(fields, stationStores) {
 //      how much of its 20 minutes is left. A run's own record also keeps how much of
 //      a mine-ore objective it has mined. v20 and older saves have no wormholes;
 //      the universe fills itself on the next load.
-export const SAVE_VERSION = 21;
+//   22 adds world.boardTimers: per-station unpaused simulation-second cooldowns for
+//      contract board refreshes, and keeps emptied per-station boards empty across
+//      save/load until the station's timer finishes and the pilot clicks Refresh.
+export const SAVE_VERSION = 22;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -202,6 +205,7 @@ export function newWorld() {
     base: { ...BASE_DEFAULT },
     board: [],       // the home station's contract offers (kept as the old field)
     boards: {},      // other stations' offers: place id -> compact offers
+    boardTimers: {}, // station place id -> remaining unpaused refresh cooldown seconds (0 = ready)
     galaxy: newGalaxyRecord(),
     place: DEFAULT_PLACE,
     destination: null, // local session destination, saved with this world
@@ -820,14 +824,26 @@ export function sanitizeWorld(raw) {
   stationStores[homeStation] = homeStore;
 
   const board = Array.isArray(raw.board) ? raw.board.map(cleanContract).filter(Boolean) : [];
+  // v22: per-station contract refresh cooldowns in unpaused simulation seconds.
+  // A station present with `0` has already generated a board whose cooldown finished,
+  // so an emptied board stays empty across save/load until the pilot clicks Refresh.
+  const boardTimers = {};
+  if (raw.boardTimers && typeof raw.boardTimers === "object" && !Array.isArray(raw.boardTimers)) {
+    for (const [placeId, seconds] of Object.entries(raw.boardTimers)) {
+      if (!isPocket(placeId) || typeof seconds !== "number" || !Number.isFinite(seconds)) continue;
+      boardTimers[placeId] = Math.min(CONTRACT_REFRESH_SECONDS, Math.max(0, seconds));
+    }
+  }
   // Per-station boards are additive (v19): the home station keeps using `board`,
   // every other station has its own list here, generated when it is first read.
   const boards = {};
   if (raw.boards && typeof raw.boards === "object" && !Array.isArray(raw.boards)) {
     for (const [placeId, offers] of Object.entries(raw.boards)) {
-      if (!isPocket(placeId) || placeId === DEFAULT_PLACE) continue;   // home is `board`
-      const clean = Array.isArray(offers) ? offers.map(cleanContract).filter(Boolean) : [];
-      if (clean.length) boards[placeId] = clean;
+      if (!isPocket(placeId) || placeId === DEFAULT_PLACE || !Array.isArray(offers)) continue;
+      const clean = offers.map(cleanContract).filter(Boolean);
+      if (clean.length || Object.prototype.hasOwnProperty.call(boardTimers, placeId)) {
+        boards[placeId] = clean;
+      }
     }
   }
   // v15 and older had galaxy:null. Never trust/save generated geography here;
@@ -854,6 +870,7 @@ export function sanitizeWorld(raw) {
     base,
     board,
     boards,
+    boardTimers,
     galaxy,
     place,
     destination: cleanDestination(raw.destination),

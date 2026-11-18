@@ -3,7 +3,7 @@ import { pickLockSurface } from "./render/target-picking.js";
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
-import { renderer, scene, camera, stars, showPlace, updateScenery, forgetPlace } from "./render/scene.js";
+import { renderer, scene, camera, stars, showPlace, stepScenery, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
 import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
@@ -241,8 +241,11 @@ addEventListener("resize", () => {
 
 let last = performance.now();
 const cameraAim = camera.position.clone();
-const simClock = createSimClock( undefined, {
-  beforeStep: snapshotSimPoses,
+const simClock = createSimClock(undefined, {
+  beforeStep: () => {
+    snapshotSimPoses();
+    stepScenery(SIM_DT);
+  },
   afterStep: snapRenderedPlayer,
 });
 
@@ -272,7 +275,6 @@ function drawFrame(now) {
 
   const P = localPlayer(),
     F = state.flight;
-  updateScenery(dt);
 
   updateAudio({
     time: state.time,
@@ -303,6 +305,7 @@ function drawFrame(now) {
     chaseView(dt, P, state.freeCam, renderPlayerPose(P, alpha));
     updateHud(dt);
   }
+  updateScenery(alpha);
   stars.position.copy(camera.position);
 
   const offset = shakeOffset(P, dt, SHIPS[state.profile.ship].sc);

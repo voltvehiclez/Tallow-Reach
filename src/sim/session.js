@@ -250,7 +250,8 @@ export function tryDock(P = state.player, profile = profileOf(P), world = state.
   const station = stationAt(P.place || state.place);
   if (!station) return false;   // no station in this pocket
   const at = V(...station.pos);
-  if (P.pos.distanceTo(at) < (station.dockRange ?? DOCK_RANGE) && P.v.length() < (station.dockSpeed ?? DOCK_MAX_SPEED)) {
+  const dockSpd = Math.max(P.v.length(), P.measuredSpeed || 0);
+  if (P.pos.distanceTo(at) < (station.dockRange ?? DOCK_RANGE) && dockSpd < (station.dockSpeed ?? DOCK_MAX_SPEED)) {
     dock(P, profile, world);
     return true;
   }

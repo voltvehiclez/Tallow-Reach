@@ -55,6 +55,7 @@ export function createPlayerRecord(controls = neutralControls()) {
     pos: V(0, 0, 0),    // where the ship is (world metres)
     quat: Q(),          // which way it points
     measuredSpeed: 0,
+    pushed: false,      // true when a solid collider displaced the ship this tick
     v: V(0, 0, 0),      // current velocity
     thr: 0,            // throttle, -1..1
     hull: 0,
@@ -238,6 +239,7 @@ export function flight(dt, P = state.player, runtime = null) {
   // place's colliders. `collide: false` on a feature opts it out (glow shells). The
   // ship itself is a sphere of SHIP_RADIUS. Resolution is the same push-out bounce the
   // old sphere tests used; only the hull is different.
+  let pushed = false;
   for (const a of state.world.asteroids) {
     const speed = P.v.length();
     const hit = collideRockAt(a.shape || 0, a.pos, a.quat, a.scale, P.pos.x, P.pos.y, P.pos.z, SHIP_RADIUS);
@@ -245,6 +247,7 @@ export function flight(dt, P = state.player, runtime = null) {
     P.pos.x += hit.x * hit.depth;
     P.pos.y += hit.y * hit.depth;
     P.pos.z += hit.z * hit.depth;
+    if (hit.depth > 0) pushed = true;
     bounceOff(P, hit);
     if (speed > 25) hurt(speed * 0.015 * (hit.damage || 1), P);   // 1/10th of the old 100-point-hull rule
   }
@@ -263,6 +266,7 @@ export function flight(dt, P = state.player, runtime = null) {
     const overlap = rr - d, half = overlap * 0.5;
     P.pos.x += nx * half; P.pos.y += ny * half; P.pos.z += nz * half;
     e.pos.x -= nx * half; e.pos.y -= ny * half; e.pos.z -= nz * half;
+    if (half > 0) pushed = true;
     // Impact energy: the relative speed at the moment of contact — the same 25 m/s /
     // 0.015 rule the pilot's rock hits use, applied to both ships of a collision.
     // (Absolute own-speed would let a stationary victim escape, which is not how
@@ -293,6 +297,7 @@ export function flight(dt, P = state.player, runtime = null) {
     P.pos.x += hit.x * hit.depth;
     P.pos.y += hit.y * hit.depth;
     P.pos.z += hit.z * hit.depth;
+    if (hit.depth > 0) pushed = true;
     bounceOff(P, hit);
     // Everything solid hurts, at the same rate a rock does (owner, 2026-11-15): a station ring, a
     // planet, a cave wall. `collideDmg: 0` in a place's data is the only way to make one bounce
@@ -300,7 +305,9 @@ export function flight(dt, P = state.player, runtime = null) {
     if (hit.damage > 0 && speed > 25) hurt(speed * 0.015 * hit.damage, P);
   }
 
-  P.measuredSpeed = flightSpeed(stepStart, P.pos, dt, !W && stepPlace === P.place && !P.docked && P.hull > 0);
+  const continuous = !W && stepPlace === P.place && !P.docked && P.hull > 0;
+  P.pushed = continuous && pushed;
+  P.measuredSpeed = flightSpeed(stepStart, P.pos, dt, continuous);
 }
 
 /** Reflect the ship's velocity off a collision normal, keeping 40% of its energy. */

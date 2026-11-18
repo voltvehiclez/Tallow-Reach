@@ -81,13 +81,36 @@ export function showPlace(id) {
   }
 }
 
-/** Rotate the active place's scenery (planet, station ring) and carry its sky with the camera. */
-export function updateScenery(dt) {
-  for (const spin of scenerySpins.get(activePlace) || []) spin.object.rotation.y += dt * spin.rate;
-  // A turning part's collider is exact without ever being re-baked: the soup stays in the part's
-  // own space and this hands the sim the part's live transform. Cheap — one decompose per moving
-  // node per frame, not one per triangle.
+/**
+ * Advance the active place's turning scenery by one fixed simulation step and
+ * refresh its live mover colliders. Running this per 60 Hz sim tick instead of
+ * once per display frame keeps every multi-tick frame (e.g. 30–50 Hz or a slow
+ * frame) moving the collider on every step — never leaving a second step with
+ * zero push and a false 0 m/s speed — and keeps high-refresh displays free of
+ * uneven per-tick sweep jitter.
+ */
+export function stepScenery(dt) {
+  if (!(dt > 0)) return;
+  for (const spin of scenerySpins.get(activePlace) || []) {
+    if (spin.angle === undefined) spin.angle = spin.object.rotation.y;
+    spin.prevAngle = spin.angle;
+    spin.angle += dt * spin.rate;
+    spin.object.rotation.y = spin.angle;
+  }
   for (const mover of sceneryMovers.get(activePlace) || []) refreshMover(mover);
+}
+
+/**
+ * Draw the active place's turning scenery at the frame's interpolation fraction
+ * `alpha` (matching the rendered ship pose) and carry its sky with the camera.
+ */
+export function updateScenery(alpha = 1) {
+  const t = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 1;
+  for (const spin of scenerySpins.get(activePlace) || []) {
+    if (spin.angle === undefined) continue;
+    const prev = spin.prevAngle ?? spin.angle;
+    spin.object.rotation.y = prev + (spin.angle - prev) * t;
+  }
   const sky = scenerySkies.get(activePlace);
   if (sky) sky.position.copy(camera.position);
 }
@@ -166,6 +189,10 @@ function buildScenery(id, group) {
       scenerySkies.set(id, holder);
       skyDisposers.set(id, layer.dispose);
     }
+  }
+  for (const spin of spins) {
+    spin.angle = spin.object.rotation.y;
+    spin.prevAngle = spin.angle;
   }
   scenerySpins.set(id, spins);
   sceneryMovers.set(id, movers);

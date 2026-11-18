@@ -33,6 +33,9 @@ export const DESCRIBE = {
 
 export const CONTRACTS_PER_BOARD = 4;
 
+/** Unpaused simulation seconds between contract board refreshes at a single station (10 minutes). */
+export const CONTRACT_REFRESH_SECONDS = 600;
+
 // Contracts hand their goods over at a station, so their guidance says where the
 // cargo goes (`{station}`) and `handIn.objective` says what is still owed. A
 // contract must never claim to be accomplished before that hand-in: the runner

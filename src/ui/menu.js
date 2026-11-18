@@ -75,6 +75,13 @@ export function setupMenu(options = {}) {
     if (state.ui.intro || panel.hidden) return;
     render();
   });
+  // Tick this station's contract refresh countdown live once a second while the
+  // Contracts tab is open, and unlock the Refresh button the moment it finishes.
+  on("board-timer-changed", ({ placeId } = {}) => {
+    if (state.ui.intro || panel.hidden || state.ui.tab !== "m") return;
+    if (placeId && placeId !== state.place) return;
+    render();
+  });
 
   contracts.ensureBoard();
   render();
@@ -164,8 +171,9 @@ const ACTIONS = {
     toast(contracts.acceptContract(+i));
   },
   ref() {
-    // Only this station's board reshuffles; other stations keep their offers.
-    contracts.rerollBoard(state.worldState, state.place);
+    // Only this station's board reshuffles, gated by its own 10-minute cooldown.
+    const msgText = contracts.refreshBoard(state.worldState, state.place);
+    if (msgText) toast(msgText);
   },
   drop(i) {
     // Abandon used to be silent; keep that contract-board behavior while the
@@ -200,6 +208,7 @@ const ACTIONS = {
   sel(id) {
     const msgText = eco.selectShip(id);
     if (msgText) toast(msgText);
+    inventoryChanged();
   },
   buy(id) {
     eco.buyShip(id);
@@ -369,6 +378,7 @@ function cycleShip(dir) {
   const next = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
   const msgText = eco.selectShip(next);
   if (msgText) toast(msgText);
+  inventoryChanged();
 }
 
 /** Step the Inventory tab through the hangar's ships without changing the ship being flown. */

@@ -20,6 +20,27 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers
+
+Moving scenery (`stepScenery` in `src/render/scene.js`) now advances per 60 Hz sim tick
+inside `simClock`'s `beforeStep` (with `updateScenery(alpha)` interpolating drawn angles
+and moving the sky after the camera), scaled movers compute true world-metre push-out
+(`src/sim/colliders.js`), and sub-0.5 m/s pushes never round to `0 m/s` (`displayedSpeed`
+in `src/sim/flight-instruments.js`), so being pushed by Meridian's turning arms or any
+station mover always shows true speed across all refresh rates. Station Mission log and
+active mission rows now report exact live available inventory counts for mining, deliver,
+recovery, cargo hand-over and reached story item objectives (`missionItemRequirements` in
+`src/sim/missions.js`, scoped to the mission's hand-in station plus active ship hold),
+and allow immediate hand-in when a mine/deliver load is already stocked. Contract boards
+now remove only the accepted offer, keep empty boards empty, and enforce an independent
+10-minute (`CONTRACT_REFRESH_SECONDS = 600`) unpaused play-time cooldown per station
+saved in `world.boardTimers` (`SAVE_VERSION = 22` in `src/state/profile.js`, backward-
+compatible with all v1–v21 saves). Files: `src/main.js`, `src/render/scene.js`,
+`src/sim/{colliders,flight-instruments,player,places,session,missions,contracts,step}.js`,
+`src/data/{contracts,missions/contracts}.js`, `src/state/profile.js`,
+`src/ui/{hud,missionlog,screens,menu}.js`, `tests/slice1-speed-missions-contracts.test.mjs`.
+Build regenerated; owner playtest pending before Slice 2.
+
 ## 2026-11-18: Nebula fill 0.175, unified label/lock colours and N-tab lock-square icons
 
 Raised default `NEBULA_FILL.intensity` from `0.125` to `0.175` in `src/data/lighting.js`
@@ -131,18 +152,9 @@ centres beneath the combined Power/Boost pair. Power MJ readout matches the blue
 usage text retains its muted grey. Added signed/boundary and layout tests.
 Save v21 unchanged; build regenerated; owner visual playtest pending.
 
-## 2026-11-16: Framed status columns and integrated throttle/speed
-
-Reduced weapon-name reserved height to one line and heading/name gaps to 1px so
-labels sit closer to slot boxes. Added square grey frames to the status columns.
-Retained existing label-edge positions; tracks now match their labels' intrinsic
-widths, centred underneath, retaining the 8px inter-track gap. Current/percentage
-readouts centre on their columns. Speed now sits inside the wider throttle rectangle
-beside the throttle label. No speed-physics changes (pushed-speed fix remains pending
-in slice 2). Layout tests updated; save v21; build regenerated; visual playtest pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Framed status columns and integrated throttle/speed
 - 2026-11-16: Square weapon boxes and slot-height divider
 - 2026-11-16: Monochrome weapon strip and top-left location
 - 2026-11-16: Compact weapon strip between the HUD columns

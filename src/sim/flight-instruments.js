@@ -47,5 +47,19 @@ export function interceptPoint(origin, shooterVelocity, target, targetVelocity, 
 
 /** Measure only a single flight step, never the distance across travel/load boundaries. */
 export function flightSpeed(start, end, dt, continuous = true) {
-  return continuous && dt > 0 ? start.distanceTo(end)/dt : 0;
+  return continuous && dt > 0 ? start.distanceTo(end) / dt : 0;
+}
+
+/** True current ship speed in m/s, including displacement caused by moving colliders. */
+export function truePlayerSpeed(P, warping = false) {
+  if (!P || P.docked || warping) return 0;
+  const raw = P.measuredSpeed ?? P.v?.length?.() ?? 0;
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+/** Whole-number HUD speed readout; an active collision push never rounds down to 0 m/s. */
+export function displayedSpeed(P, warping = false) {
+  const raw = truePlayerSpeed(P, warping);
+  const rounded = Math.round(raw);
+  return rounded === 0 && P?.pushed && raw > 0.01 ? 1 : rounded;
 }

@@ -22,11 +22,14 @@ import {
   describe,
   activeMissions,
   boardAt,
+  boardRefreshRemaining,
+  formatBoardCooldown,
   atMissionHandInStation,
   canCollectMissionReward,
   canCompleteMissionHere,
   missionHandInStationName,
   missionHandIn,
+  missionItemRequirements,
   missionNextText,
   missionObjectivesDone,
   missionProgress,
@@ -115,15 +118,17 @@ function contractsHtml() {
         const requirement = missionHandIn(m),
           // The reward is only collected at the mission's own station, so the
           // row offers the button there and says where to go everywhere else.
-          cargoReady = missionObjectivesDone(m) && canCollectMissionReward(m),
+          cargoReady = canCollectMissionReward(m),
           here = atMissionHandInStation(m),
           ready = cargoReady && here,
           station = missionHandInStationName(m),
+          items = missionItemRequirements(m),
+          itemText = items.length ? `${items.map(r => `${r.name}: ${r.available} of ${r.required} available`).join(", ")}. ` : "",
           progress = m.type === "hunt" ? missionProgress(m) : null,
           // With every step done the row says what is still owed (the hand-in,
           // or the reward trip) instead of leaving a bare Abandon button.
-          owed = missionObjectivesDone(m) ? `${missionNextText(m)} ` : "",
-          detail = `${owed}${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
+          owed = missionObjectivesDone(m) || cargoReady ? `${missionNextText(m)} ` : "",
+          detail = `${owed}${itemText}${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
         return `<div class="row"><div>${describe(m)}<small>${detail}</small></div>${
           ready
             ? `<button data-a="done" data-b="${m.id}">${requirement ? "Hand in cargo" : "Collect reward"}</button>`
@@ -133,16 +138,25 @@ function contractsHtml() {
         }</div>`;
       }).join("")
     : `<p>No active missions here.</p>`;
+  const offers = boardAt(state.place);
+  const wait = boardRefreshRemaining(state.place);
+  const cooling = wait > 0;
+  const waitText = formatBoardCooldown(wait);
+  const offersHtml = offers.length
+    ? offers.map(
+        (c, i) =>
+          `<div class="row"><div>${describe(c)}<small>Threat ${c.tier} of 3. Reward ${c.r} cr.</small></div><button data-a="acc" data-b="${i}">Accept</button></div>`
+      ).join("")
+    : `<p>No contracts available at this station right now.${cooling ? ` Wait ${waitText} to refresh, or visit another station.` : " Press Refresh for new contracts."}</p>`;
+  const refreshNote = cooling
+    ? `Next refresh available in ${waitText} of play time.`
+    : `This station's board can be refreshed now.`;
+  const refreshLabel = cooling ? `Refresh (${waitText})` : "Refresh";
   return (
     activeHtml +
     `<h2>Contract board</h2>` +
-    boardAt(state.place)
-      .map(
-        (c, i) =>
-          `<div class="row"><div>${describe(c)}<small>Threat ${c.tier} of 3. Reward ${c.r} cr.</small></div><button data-a="acc" data-b="${i}">Accept</button></div>`
-      )
-      .join("") +
-    `<div class="row"><small>This station's board reshuffles when you refresh it.</small><button data-a="ref">Refresh</button></div>`
+    offersHtml +
+    `<div class="row"><small>${refreshNote}</small><button data-a="ref" ${cooling ? "disabled" : ""}>${refreshLabel}</button></div>`
   );
 }
 

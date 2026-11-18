@@ -17,26 +17,8 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ## Missions
 
-<!-- L1, L2, L4 and L5 were moved verbatim to docs/archive/LESSONS_1-5.md on 2026-11-15 to keep
+<!-- L1–L6 were moved verbatim to [archive/LESSONS_1-5.md](archive/LESSONS_1-5.md) to keep
      this file under its size limit. -->
-
-### L3. Warping or undocking during a dialogue failed the mission
-- **Seen:** leaving mid-conversation (warp, undock) marked the mission failed, or killed the dialogue.
-- **Cause:** "the player left the place" was interpreted as abandonment.
-- **Rule:** leaving **pauses**; it never fails a mission. Failure comes only from a declared, explained cause
-  (`fails.on`, with `fails.message`). A conversation that needs the pilot docked simply waits and the objective
-  says to return.
-- **Enforced by:** the wandering invariant (the pilot is moved to a different place before every action); the
-  linter (`fails.message`, allowed failure reasons); `step13b` warp-before-Close test.
-
-### L6. A mission item appeared in the hold by itself
-- **Seen:** with a full hold the item dropped; after unloading cargo at the station the item suddenly appeared in
-  the inventory instead of having to be retrieved.
-- **Cause:** the game held the item aside and delivered it automatically once space freed up.
-- **Rule (the realism rule):** nothing enters or leaves the hold or wallet except by a real pickup, purchase,
-  loading at the dock or hand-over the player performs. Never as a side effect of space or a timer.
-- **Enforced by:** the item-integrity invariant (a storm of docking, undocking, ticks and inventory events must
-  not change mission items except through recorded pickups and hand-overs).
 
 ### L7. One mission's trigger advanced another mission
 - **Seen:** two active missions interfered (a wave-clear for one moved the other).
@@ -356,5 +338,18 @@ and reading the shield bar — not at the plumbing that carries it.
 - **Cause:** `#hud > #pocket-objects` (`display: flex`, two IDs) outranked `#pocket-objects[hidden]`, and `core/input.js` blocked non-Escape keys on checkbox `INPUT`s.
 - **Rule:** every `[hidden]` rule must outrank every `display` rule for that element; typing guards apply only to text/number/select controls, never checkboxes.
 - **Enforced by:** `tests/pocket-list.test.mjs` (all 13 `.hidden` surfaces, checkbox `KeyN`, and live N/Close/Esc/dock tests).
+
+### L29. Moving colliders stepped once per render frame gave `0 m/s` on multi-tick frames
+
+- **Seen (owner, 2026-11-18):** being pushed by Meridian Station's turning structure showed `0 m/s` while moving.
+- **Cause:** `updateScenery(dt)` advanced movers once per render frame before `simClock.advance(dt)` — on any 2-tick frame tick 1 took the whole push and tick 2 saw a frozen mover (`0 m/s`), while high-Hz frames jittered; scaled movers also multiplied local distance by `rLoc / radius` instead of `radius / rLoc`.
+- **Rule:** every live collider moves inside the fixed `SIM_DT` step (`stepScenery`), scales local distances back to world metres, and never rounds an active collision push down to `0 m/s`.
+- **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (24–240 Hz sweeps, scaled movers, sub-0.5 m/s push).
+
+### L30. Event counters and wrong-station reads misrepresented live mission inventory
+
+- **Seen (owner, 2026-11-18):** Mission log item progress ignored pre-stored goods, stayed full after selling/discarding ore, and checked `state.place`'s store instead of the mission's hand-in station.
+- **Rule:** item-requiring missions report live inventory counts (`missionItemRequirements`), scoping hand-ins to `missionHandInStation` plus the active ship hold and script `take-item` steps to their target container.
+- **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (mine, deliver, recovery, cargo hand-over, story collect, parallel items and cross-station reads).
 
 [More lessons](archive/reticle-and-recovery-lessons.md)

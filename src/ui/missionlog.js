@@ -15,6 +15,7 @@ import {
   isMissionFailed,
   missionDialogue,
   missionHandIn,
+  missionItemRequirements,
   missionOfferStation,
   missionHandInStationName,
   missionKindWord,
@@ -73,19 +74,21 @@ function missionStatus(mission, profile) {
   const requirement = missionHandIn(mission);
   const atStation = atMissionHandInStation(mission);
   const station = missionHandInStationName(mission);
-  const cargoReady = objectivesDone && canCollectMissionReward(mission, profile);
+  const cargoReady = canCollectMissionReward(mission, profile);
   const ready = cargoReady && atStation;
   // "Complete" is reserved for a mission with nothing left to hand over, at the
   // one station that takes it. A mission that owes items is only ready once they
-  // are aboard or at the station, and one that must be handed in elsewhere says
-  // where to go instead of pretending it can be paid here.
+  // are aboard or at its hand-in station, and one that must be handed in
+  // elsewhere says where to go instead of pretending it can be paid here.
   const stateText = failed
     ? "Failed"
     : ready
       ? requirement ? "Ready to hand in" : "Complete"
-      : objectivesDone
-        ? cargoReady ? `Deliver to ${station}` : "Awaiting cargo"
-        : "Active";
+      : cargoReady
+        ? `Deliver to ${esc(station)}`
+        : objectivesDone
+          ? "Awaiting cargo"
+          : "Active";
   // A not-yet-ready mission always offers Abandon, so no state is a dead end.
   const action = ready
     ? `<button data-a="done" data-b="${esc(mission.id)}">${requirement ? "Hand in cargo" : "Collect reward"}</button>`
@@ -97,18 +100,29 @@ function missionStatus(mission, profile) {
   const preview = dialogue
     ? `<p class="mission-log-dialogue"><strong>${esc(dialogue.speaker || "Mission contact")}:</strong> ${esc(dialogue.line)}</p>`
     : "";
-  // A dialogue's 0/2 is the number of lines in the current conversation, not
-  // mission completion. Keep that implementation detail out of the log; only
-  // show a labelled numeric count for contracts with a meaningful target.
-  const showProgress = mission.kind === "contract" && progress.total > 1;
-  // A recovery contract counts crates it put in space itself, so it says so in
-  // plain words instead of a bare "0 of 3".
+  // Any mission requiring an item reports the exact live count available in
+  // inventory right now; recovery jobs also keep their recovered-crate tally,
+  // and dialogue line counts stay hidden.
+  const items = missionItemRequirements(mission, profile);
+  const itemText = items.map(r => `${r.name}: ${r.available} of ${r.required} available`).join(" · ");
+  const itemDone = items.reduce((n, r) => n + Math.min(r.required, r.available), 0);
+  const itemTotal = items.reduce((n, r) => n + r.required, 0);
   const recovered = missionRecoveryText(mission);
-  const progressText = showProgress
-    ? ` <span>· ${recovered || `Objective progress: ${progress.done} of ${progress.total}`}</span>`
-    : "";
-  const progressBar = showProgress
-    ? `<div class="mission-log-bar"><i style="width:${Math.round((progress.done / progress.total) * 100)}%"></i></div>`
+  const contractCount = mission.kind === "contract" && progress.total > 1;
+  const parts = [];
+  if (recovered) parts.push(recovered);
+  if (itemText) parts.push(itemText);
+  else if (contractCount) parts.push(`Objective progress: ${progress.done} of ${progress.total}`);
+  const progressText = parts.length ? ` <span>· ${esc(parts.join(" · "))}</span>` : "";
+  const barRatio = items.length
+    ? recovered && !objectivesDone
+      ? progress.total > 0 ? progress.done / progress.total : 0
+      : itemTotal > 0 ? itemDone / itemTotal : 0
+    : contractCount
+      ? progress.done / progress.total
+      : null;
+  const progressBar = barRatio !== null
+    ? `<div class="mission-log-bar"><i style="width:${Math.round(Math.min(1, Math.max(0, barRatio)) * 100)}%"></i></div>`
     : "";
   return (
     `<article class="mission-log-card">` +

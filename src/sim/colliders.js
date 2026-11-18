@@ -340,8 +340,8 @@ export function collideSphereAt(colliders, cx, cy, cz, radius) {
       const d2 = ex * ex + ey * ey + ez * ez;
       if (d2 >= r2) continue;
       const d = Math.sqrt(d2);
-      // `d` and `rLoc` are in the part's own space; report the push-out in world metres.
-      const depth = radius - (d * (rLoc / radius));
+      // `d` and `rLoc` are in the part's own space; scale `d` back up to world metres.
+      const depth = radius - d * (rLoc > 0 ? radius / rLoc : 1);
       if (!hit || depth > hit.depth) {
         let nx, ny, nz;
         if (d > 1e-9) { nx = ex / d; ny = ey / d; nz = ez / d; }

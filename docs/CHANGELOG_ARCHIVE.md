@@ -24,6 +24,16 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+## 2026-11-16: Framed status columns and integrated throttle/speed
+
+Reduced weapon-name reserved height to one line and heading/name gaps to 1px so
+labels sit closer to slot boxes. Added square grey frames to the status columns.
+Retained existing label-edge positions; tracks now match their labels' intrinsic
+widths, centred underneath, retaining the 8px inter-track gap. Current/percentage
+readouts centre on their columns. Speed now sits inside the wider throttle rectangle
+beside the throttle label. No speed-physics changes (pushed-speed fix remains pending
+in slice 2). Layout tests updated; save v21; build regenerated; visual playtest pending.
+
 ## 2026-11-16: Square weapon boxes and slot-height divider
 
 Widened the strip to 480px so all ten boxes are 44×44px at desktop width; narrower

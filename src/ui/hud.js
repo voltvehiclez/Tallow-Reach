@@ -1,6 +1,6 @@
 import { POCKET_FILTERS, pocketRowsHtml, readPocketFilters, savePocketFilters, sortedPocketRows } from './pocket-list.js';
 import { playerMount } from '../sim/pilot.js';
-import { pocketObjects, interceptPoint } from '../sim/flight-instruments.js';
+import { pocketObjects, interceptPoint, displayedSpeed } from '../sim/flight-instruments.js';
 import { primarySlotIndex } from '../sim/weapons.js';
 import { locationText } from "./location-display.js";
 import { weaponSlotsHtml } from "./weapon-slots.js";
@@ -359,7 +359,7 @@ export function updateHud(dt) {
   el.throttleFill.style.width = throttle.width;
   el.throttleFill.classList.toggle("reverse", throttle.reverse);
   el.throttleLabel.textContent = throttle.label;
-  el.speed.textContent = `${Math.round(state.warp || P.docked ? 0 : P.measuredSpeed ?? P.v.length())} m/s`;
+  el.speed.textContent = `${displayedSpeed(P, !!state.warp)} m/s`;
 
   // Ship power: what the cells hold, and what the powerplants are making.
   const pw = state.power,
@@ -383,7 +383,8 @@ export function updateHud(dt) {
 
   const station = stationAt(state.place);
   if (!state.warp && station && P.pos.distanceTo(V(...station.pos)) < (station.dockRange ?? 300)) {
-    say(P.v.length() < (station.dockSpeed ?? 70) ? `Press G to dock at ${station.n}` : `Slow below ${station.dockSpeed ?? 70} m/s to dock`);
+    const dockSpd = Math.max(P.v.length(), P.measuredSpeed || 0);
+    say(dockSpd < (station.dockSpeed ?? 70) ? `Press G to dock at ${station.n}` : `Slow below ${station.dockSpeed ?? 70} m/s to dock`);
   }
   // A ship with no thrusters cannot move, so say why the controls do nothing.
   el.prompt.textContent =

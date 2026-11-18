@@ -35,10 +35,10 @@ function mockStorage() {
 }
 
 test("10c: new saves are v20 and store world.place, not world.sector", () => {
-  assert.equal(SAVE_VERSION, 21);
+  assert.equal(SAVE_VERSION, 22);
   const s = newSave();
-  assert.equal(s.v, 21);
-  assert.equal(s.world.v, 21);
+  assert.equal(s.v, 22);
+  assert.equal(s.world.v, 22);
   assert.equal(s.world.place, DEFAULT_PLACE);
   assert.equal("sector" in s.world, false);
   assert.deepEqual(sanitizeSave(s), s);
@@ -46,7 +46,7 @@ test("10c: new saves are v20 and store world.place, not world.sector", () => {
 
 test("10c: v13 sector ids migrate to place; unknown ids fall back to the starting pocket", () => {
   const migrated = sanitizeSave(V13_SAVE);
-  assert.equal(migrated.v, 21);
+  assert.equal(migrated.v, 22);
   assert.equal(migrated.world.place, "hollow");
   assert.equal("sector" in migrated.world, false);
   assert.equal(migrated.profile.cr, V13_SAVE.profile.cr);
@@ -62,10 +62,10 @@ test("10c: v13 sector ids migrate to place; unknown ids fall back to the startin
 
 test("10c: an old v13 export code and an older v12 code still load", () => {
   const fromV13 = decodeSave(legacyEncode(V13_SAVE));
-  assert.equal(fromV13.v, 21);
+  assert.equal(fromV13.v, 22);
   assert.equal(fromV13.world.place, "hollow");
   const fromV12 = decodeSave(legacyEncode(V12_SAVE));
-  assert.equal(fromV12.v, 21);
+  assert.equal(fromV12.v, 22);
   assert.equal(fromV12.profile.cr, 4850);
   const round = encodeSave(fromV13);
   assert.deepEqual(decodeSave(round), fromV13);
@@ -77,10 +77,10 @@ test("10c: old localStorage autosave and slots migrate on read and write back v2
     mem.set("tr1", JSON.stringify(V13_SAVE));
     mem.set("tr_s1", JSON.stringify(V12_SAVE));
     const auto = loadAutosave();
-    assert.equal(auto.v, 21);
+    assert.equal(auto.v, 22);
     assert.equal(auto.world.place, "hollow");
     const slot = sanitizeSave(readSlot(1));
-    assert.equal(slot.v, 21);
+    assert.equal(slot.v, 22);
     assert.equal(saveAutosave(auto), true);
     assert.equal(writeSlot(2, auto), true);
     assert.deepEqual(loadAutosave(), auto);
