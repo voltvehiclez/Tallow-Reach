@@ -27,6 +27,7 @@ import {
   takeFromSlot,
 } from "../sim/inventory.js";
 import { notifyCacheMove } from "../sim/instances.js";
+import { fitModuleFrom } from "../sim/fitting.js";
 
 let ghostEl = null;
 let trackingMove = false;
@@ -89,12 +90,11 @@ export function clearHeldGhost() {
   syncPointerListener(false);
 }
 
-function syncHeldGhost(clientX, clientY) {
-  const held = state.ui.invHeld;
+function renderGhostCard(id, n, clientX, clientY) {
   if (typeof clientX === "number" && typeof clientY === "number" && (clientX !== 0 || clientY !== 0)) {
     lastPointer = { x: clientX, y: clientY, known: true };
   }
-  if (!held || !(held.n > 0)) {
+  if (!id || !(n > 0)) {
     clearHeldGhost();
     return;
   }
@@ -109,13 +109,27 @@ function syncHeldGhost(clientX, clientY) {
     document.body.append(ghostEl);
   }
   ghostEl.innerHTML =
-    `<span class="inv-item-top"><span class="inv-kind">${heldKindBadge(held.id)}</span>` +
-    `<span class="inv-n">&times;${held.n}</span></span>` +
-    `<span class="inv-item-name">${esc(itemName(held.id))}</span>` +
-    `<span class="inv-item-meta">${itemVol(held.id)} m³ each</span>`;
+    `<span class="inv-item-top"><span class="inv-kind">${heldKindBadge(id)}</span>` +
+    `<span class="inv-n">&times;${n}</span></span>` +
+    `<span class="inv-item-name">${esc(itemName(id))}</span>` +
+    `<span class="inv-item-meta">${itemVol(id)} m³ each</span>`;
   ghostEl.hidden = false;
   if (lastPointer.known) updateGhostPosition(lastPointer.x, lastPointer.y);
   syncPointerListener(true);
+}
+
+/** Show a temporary floating ghost card during a pointer drag (Inventory <-> Outfitting). */
+export function showDragGhost(id, n, clientX, clientY) {
+  renderGhostCard(id, n, clientX, clientY);
+}
+
+function syncHeldGhost(clientX, clientY) {
+  const held = state.ui.invHeld;
+  if (!held || !(held.n > 0)) {
+    clearHeldGhost();
+    return;
+  }
+  renderGhostCard(held.id, held.n, clientX, clientY);
 }
 
 /** Stack currently held on the cursor (`{ where, slot, id, n, ... }` or `null`). */
@@ -448,4 +462,28 @@ export function buildAssetStationContextMenu(doc, placeId) {
     menu.append(clearBtn);
   }
   return menu;
+}
+
+/**
+ * Equip 1 unit of a cursor-held inventory stack into an Outfitting bay on the
+ * active ship, returning any remaining stack (or swapped module) cleanly to its
+ * source inventory and removing the cursor ghost.
+ */
+export function placeHeldOnOutfittingBay({
+  group,
+  bay,
+  player = state.player,
+  profile = state.profile,
+  world = state.worldState,
+}) {
+  const held = getHeldStack();
+  if (!held) return { handled: false, changed: false, message: "" };
+  const originWhere = held.where;
+  const originSlot = held.slot;
+  const itemId = held.id;
+  state.ui.invHeld = null;
+  clearHeldGhost();
+  returnHeldStack(held, profile, world);
+  const res = fitModuleFrom(originWhere, originSlot, group, Math.floor(+bay), itemId, player, profile, world);
+  return { handled: true, changed: Boolean(res.ok), message: res.message || "" };
 }

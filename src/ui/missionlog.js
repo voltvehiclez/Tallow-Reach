@@ -138,7 +138,7 @@ function missionStatus(mission, profile) {
   );
 }
 
-/** Render all active missions plus data-defined story missions not yet accepted. */
+/** Pure docked mission-log screen rendered inside the left-side window on the Missions tab. */
 export function missionLogHtml(profileOrUi = state.profile) {
   const profile = Array.isArray(profileOrUi?.missions) ? profileOrUi : state.profile;
   // Progress is readable anywhere: an active mission follows the pilot and is
@@ -146,24 +146,33 @@ export function missionLogHtml(profileOrUi = state.profile) {
   // Galereach. Only the *offers* are station-bound (each names the station that
   // gives it out), and only the station that takes the hand-in pays.
   const active = activeMissions(profile);
-  const activeIds = new Set(active.map(mission => mission.id));
+  let html = `<h2>Mission log</h2><div class="sub">Active missions, contracts and current objectives.</div>`;
+  html += active.length
+    ? active.map(mission => missionStatus(mission, profile)).join("")
+    : `<p>No active missions here.</p>`;
+  return html;
+}
+
+/**
+ * Pure Story missions offer block for the right-hand Missions tab. Keeps the
+ * `Story missions` heading visible even after every offer at this station has
+ * been accepted, showing "No more story missions available." when none remain.
+ */
+export function storyOffersHtml(profileOrUi = state.profile) {
+  const profile = Array.isArray(profileOrUi?.missions) ? profileOrUi : state.profile;
+  const activeIds = new Set(activeMissions(profile).map(mission => mission.id));
   const storyOffers = STORY_MISSIONS.filter(mission =>
     !activeIds.has(mission.id) && missionOfferStation(mission) === state.place);
   // The framework test missions are for the owner and for AI chats checking the
   // mission rules; they appear only when the game is opened with ?testmissions.
   const showTest = typeof location !== "undefined" && /[?&]testmissions(&|=|$)/.test(location.search || "");
   const testOffers = showTest ? TEST_MISSIONS.filter(mission => !activeIds.has(mission.id)) : [];
-  let html = `<h2>Missions</h2><div class="sub">Active missions, current objectives and the next thing to do.</div>`;
-  html += active.length
-    // Indexes would address the wrong mission: the list is this station's only,
-    // while the runner counts every active mission. Name the mission instead.
-    ? active.map(mission => missionStatus(mission, profile)).join("")
-    : `<p>No active missions here.</p>`;
-  if (storyOffers.length) {
-    html += `<h2>Story missions</h2>` + storyOffers.map(mission =>
-      `<div class="row"><div>${esc(mission.title)}<small>Story mission · hand in at ${esc(missionHandInStationName(mission))}</small></div><button data-a="story" data-b="${esc(mission.id)}">Start</button></div>`
-    ).join("");
-  }
+  let html = `<h2>Story missions</h2>`;
+  html += storyOffers.length
+    ? storyOffers.map(mission =>
+        `<div class="row"><div>${esc(mission.title)}<small>Story mission · hand in at ${esc(missionHandInStationName(mission))}</small></div><button data-a="story" data-b="${esc(mission.id)}">Start</button></div>`
+      ).join("")
+    : `<p>No more story missions available.</p>`;
   if (testOffers.length) {
     html += `<h2>Test missions</h2>` + testOffers.map(mission =>
       `<div class="row"><div>${esc(mission.title)}<small>Framework test mission</small></div><button data-a="story" data-b="${esc(mission.id)}">Start</button></div>`

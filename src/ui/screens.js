@@ -9,13 +9,20 @@ import { MISSILE } from "../data/weapons.js";
 import { shopDef } from "../data/shops.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
-import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import { CACHE, STATION, capacityOf, loadOf, slotsAt } from "../sim/inventory.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import {
-  storedUnits, storageCap, repairCost, hangarCap, listPlayerAssets, localShips, shipBaseStats, shopCatalogue,
+  storedUnits,
+  storageCap,
+  repairCost,
+  hangarCap,
+  filterPlayerAssets,
+  listPlayerAssets,
+  localShips,
+  shipBaseStats,
+  shopCatalogue,
 } from "../sim/economy.js";
 import {
   describe,
@@ -26,7 +33,7 @@ import {
 import { DEFAULT_PLACE } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { stationAt } from "../sim/places.js";
-import { missionLogHtml } from "./missionlog.js";
+import { missionLogHtml, storyOffersHtml } from "./missionlog.js";
 import { LEFT_TOGGLE_KEYS, activeLeftPanel, activeRightTab } from "./left-panel.js";
 
 const esc = text => String(text ?? "")
@@ -37,7 +44,8 @@ const esc = text => String(text ?? "")
 
 // Station menu buttons:
 // - Missions, Inventory, Base, Saves switch the right-hand station panel
-//   (Missions also opens the Contract board in the left window).
+//   (Missions accepts Story missions & Contracts on the right and opens the
+//   Mission log in the left window).
 // - Outfitting and Shop toggle the shared mutually exclusive left-side window.
 export const TABS = [
   ["l", "Missions"],
@@ -50,7 +58,7 @@ export const TABS = [
 
 // Right-hand station panel screens.
 const SCREENS = {
-  l: missionLogHtml,
+  l: missionsHtml,
   i: inventoryHtml,
   b: baseHtml,
   s: savesHtml,
@@ -58,33 +66,38 @@ const SCREENS = {
 
 // Left-hand reusable station window screens.
 const LEFT_SCREENS = {
-  m: contractsHtml,
+  m: missionLogHtml,
   o: outfittingHtml,
   p: shopHtml,
 };
+
+const HOME_ICON_SVG =
+  `<svg class="home-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">` +
+  `<path d="M2 7.4L8 2.4l6 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>` +
+  `<path d="M3.6 6.6v6.8h3.1V9.8h2.6v3.6h3.1V6.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>` +
+  `</svg>`;
 
 export function introHtml() {
   return (
     `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +
     `<p>You fly out of ${stationAt(DEFAULT_PLACE).n}, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +
     `<h2>Controls</h2>` +
-    `<p>Mouse steers (distance from centre sets turn rate). ` +
-    `W/S throttle, A/D strafe, Space and C move up and down, Q/E roll, Shift boost, X all stop. ` +
-    `The main drive is much the strongest thruster: going forward is fast, while strafing, moving up and down and reversing are slow. ` +
-    `Left click fires your primary weapon and right click your secondary. ` +
-    `Keys 1–5 select primary bays; 6–0 select secondary bays, matching Outfitting order. ` +
-    `Missiles lock on when a hostile stays inside the dashed ring for about a second. ` +
-    `Right click then fires a homing missile, or a dumbfire missile if you have no lock. ` +
-    `The mining beam and missiles are sold in the Shop. ` +
-    `F locks whatever is nearest your crosshair, such as hostiles, rocks, crates or the station, and F again releases it. ` +
-    `G docks when you are within 300 m of the station and slower than 70 m/s. ` +
-    `R enters a wormhole when you are close to one, and R again leaves an instance through the way you came in — never by contact, and a sealed way out says why. ` +
-    `M opens the starmap: right-click a system to set a destination, then press J while flying for each next warp. You can also choose individual pockets to warp to. The world keeps running while the map is open; M or Esc closes it. ` +
-    `The drive takes about two seconds: it releases the throttle and eases your turn back to neutral, so you coast while it winds up, and weapons are offline until it settles. ` +
-    `N toggles a pocket object list with filters and sorting; click a row to lock it. Mouse steering and firing are released while browsing; keyboard flight continues. ` +
-    `I shows the hold of the ship you are flying while you are in space; dock to move cargo. ` +
-    `P or Esc pauses, and the pause menu has the sound switch. ` +
-    `Press Left Alt to toggle orbit view, move the mouse to orbit your ship, scroll to zoom. Press Left Alt again to return to flight view.</p>` +
+    `<dl class="controls-grid">` +
+    `<div><dt>Mouse</dt><dd>Steer</dd></div>` +
+    `<div><dt>W / S</dt><dd>Throttle / reverse</dd></div>` +
+    `<div><dt>A / D</dt><dd>Strafe</dd></div>` +
+    `<div><dt>Space / C</dt><dd>Up / down</dd></div>` +
+    `<div><dt>Q / E</dt><dd>Roll</dd></div>` +
+    `<div><dt>Shift / X</dt><dd>Boost / stop</dd></div>` +
+    `<div><dt>LMB / RMB</dt><dd>Primary / secondary</dd></div>` +
+    `<div><dt>1–5 / 6–0</dt><dd>Weapon bays</dd></div>` +
+    `<div><dt>F</dt><dd>Target lock</dd></div>` +
+    `<div><dt>G / R</dt><dd>Dock / wormhole</dd></div>` +
+    `<div><dt>M / J</dt><dd>Starmap / jump</dd></div>` +
+    `<div><dt>N / I</dt><dd>Objects / cargo</dd></div>` +
+    `<div><dt>Left Alt</dt><dd>Orbit camera</dd></div>` +
+    `<div><dt>P / Esc</dt><dd>Pause</dd></div>` +
+    `</dl>` +
     `<div class="main-menu-actions">` +
     `<button class="go" data-a="campaign" disabled>Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +
@@ -106,10 +119,21 @@ export function outpostHtml(ui = state.ui) {
     }
     return `<button type="button" data-a="tab" data-b="${k}" class="${activeTab === k ? "on" : ""}">${n}</button>`;
   }).join("");
-  let h = `<h1>${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n}</h1><div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${navHtml}</nav>`;
-
   const isHome = homeStationPlace(S) === state.place;
-  h += `<div class="home-station"><button data-a="home" ${isHome || !canSetHomeStation(state.place) ? "disabled" : ""}>${isHome ? "Home station" : "Set Home Station"}</button><small>Recover here after death.</small></div>`;
+  const canHome = canSetHomeStation(state.place);
+  const homeTip = isHome
+    ? "Home station — recover here after death."
+    : canHome
+      ? "Set home station — recover here after death."
+      : "Cannot set home station here.";
+  const homeBtn =
+    `<button type="button" class="home-icon-btn${isHome ? " is-home" : ""}" data-a="home" ` +
+    `${isHome || !canHome ? "disabled " : ""}title="${esc(homeTip)}" aria-label="${esc(homeTip)}">` +
+    `${HOME_ICON_SVG}</button>`;
+  let h =
+    `<div class="station-head"><h1>${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n}</h1>${homeBtn}</div>` +
+    `<div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${navHtml}</nav>`;
+
   const draw = SCREENS[activeTab];
   if (draw) h += draw(ui);
 
@@ -126,7 +150,7 @@ export function leftPanelHtml(ui = state.ui) {
   return draw ? draw(ui) : "";
 }
 
-/** Contract board rendered inside the left window when Missions is active. */
+/** Pure contract-offers block shown on the right-hand Missions tab. */
 export function contractsHtml() {
   const offers = boardAt(state.place);
   const wait = boardRefreshRemaining(state.place);
@@ -147,6 +171,11 @@ export function contractsHtml() {
     offersHtml +
     `<div class="row"><small>${refreshNote}</small><button data-a="ref" ${cooling ? "disabled" : ""}>${refreshLabel}</button></div>`
   );
+}
+
+/** Right-hand Missions tab: accept story missions and contracts offered here. */
+export function missionsHtml(profileOrUi = state.profile) {
+  return storyOffersHtml(profileOrUi) + contractsHtml();
 }
 
 // The bays fitted to the ship being flown, group id -> module ids per bay.
@@ -171,96 +200,58 @@ function moduleStat(m) {
 /** How many groups sit in the left column; the rest go to the right. */
 const leftRail = list => list.slice(0, Math.ceil(list.length / 2));
 
-/** Is this the bay whose picker is open? */
-const isBayOpen = (g, i) =>
-  !!(state.ui.fit && state.ui.fit.kind === "module" && state.ui.fit.g === g && state.ui.fit.i === i);
-
 /** Is this the paint bay whose picker is open? */
 const isPaintOpen = k =>
   !!(state.ui.fit && state.ui.fit.kind === "paint" && state.ui.fit.k === k);
 
+/** Group of the module currently held on the cursor, if any. */
+function heldModuleGroup() {
+  const held = state.ui.invHeld;
+  if (!held || !(held.n > 0) || !isModule(held.id)) return null;
+  return MODULES[held.id]?.g || null;
+}
+
 /**
- * One bay. Every bay is a button: clicking it opens the picker under the card
- * (or closes it again if it was already open).
+ * One Outfitting module bay. Modules are equipped directly from Inventory (via
+ * drag-and-drop or right-click Equip) and dragged back to Inventory to unequip,
+ * so clicking a bay does not open a separate "modules in storage" popup.
  */
 function bayHtml(group, i, id) {
   const m = MODULES[id];
-  const open = isBayOpen(group.k, i);
+  const dropMatch = heldModuleGroup() === group.k;
   const attrs =
-    `data-a="slot" data-b="${group.k}:${i}" aria-expanded="${open}"`;
+    `type="button" data-a="slot" data-b="${group.k}:${i}" data-fit-group="${esc(group.k)}" data-fit-bay="${i}"`;
   if (!m) {
     return (
-      `<button class="mod-bay empty${open ? " on" : ""}" ${attrs} ` +
-      `aria-label="${group.n} bay ${i + 1}: empty, click to fit a module">` +
+      `<button class="mod-bay empty${dropMatch ? " is-drop-match" : ""}" ${attrs} ` +
+      `title="${esc(group.n)} bay ${i + 1}: drag a matching module from Inventory or right-click one to equip." ` +
+      `aria-label="${esc(group.n)} bay ${i + 1}: empty, drag a module from Inventory to equip">` +
       `<span class="bay-no">Bay ${i + 1}</span><span class="bay-empty">Empty</span></button>`
     );
   }
   return (
-    `<button class="mod-bay fitted${open ? " on" : ""}" ${attrs} data-module="${id}" ` +
-    `aria-label="${group.n} bay ${i + 1}: ${m.n}, click to change">` +
+    `<button class="mod-bay fitted${dropMatch ? " is-drop-match" : ""}" ${attrs} data-module="${esc(id)}" ` +
+    `title="${esc(m.n)} (${esc(moduleStat(m))}). Drag to Inventory or right-click to unequip." ` +
+    `aria-label="${esc(group.n)} bay ${i + 1}: ${esc(m.n)}, drag to Inventory to unequip">` +
     `<span class="bay-no">Bay ${i + 1}</span>` +
-    `<span class="bay-val">${m.n}</span>` +
-    `<span class="bay-stat">${moduleStat(m)}</span>` +
+    `<span class="bay-val">${esc(m.n)}</span>` +
+    `<span class="bay-stat">${esc(moduleStat(m))}</span>` +
     `</button>`
   );
 }
 
-/**
- * The picker under a card: every stored part that fits this group, as squares,
- * plus Unequip when the bay is holding something. This is the whole fitting UI.
- */
-function pickerHtml(group) {
-  const i = state.ui.fit.i;
-  const current = fittedAt(group.k, i);
-  const stored = storedFor(group.k);
-
-  // One square per kind of part, with how many the station holds ("x3").
-  const kinds = [];
-  for (const id of stored) {
-    const hit = kinds.find(k => k.id === id);
-    if (hit) hit.n++;
-    else kinds.push({ id, n: 1 });
-  }
-  const squares = kinds.length
-    ? `<div class="fit-squares">` +
-      kinds
-        .map(({ id, n }) => {
-          const m = MODULES[id];
-          return (
-            `<button class="fit-sq" data-a="fit" data-b="${id}" aria-label="Fit ${m.n}${n > 1 ? ", " + n + " in storage" : ""}">` +
-            `<span>${m.n}${n > 1 ? ` &times;${n}` : ""}</span><small>${moduleStat(m)}</small></button>`
-          );
-        })
-        .join("") +
-      `</div>`
-    : `<div class="fit-empty">No modules in storage.</div>`;
-
-  return (
-    `<div class="fit-picker">` +
-    `<div class="fit-head"><span>${group.n} &middot; bay ${i + 1}</span>` +
-    `<button class="fit-close" data-a="slot" data-b="${group.k}:${i}">Close</button></div>` +
-    squares +
-    (current
-      ? `<button class="fit-unfit" data-a="unfit">Unequip ${MODULES[current].n} to storage</button>`
-      : "") +
-    `</div>`
-  );
-}
-
-/** One module group: a heading, its bays, the picker if open, and what it decides. */
+/** One module group: a heading, its drag/drop bays, and what it decides. */
 function groupHtml(group) {
   const slots = slotsFor(group, state.profile.ship),
     fitted = baysOf()[group.k] || [];
   let bays = "";
   for (let i = 0; i < slots; i++) bays += bayHtml(group, i, fitted[i]);
   const used = fitted.filter(Boolean).length;
-  const open = state.ui.fit && state.ui.fit.g === group.k && isBayGroup(group.k);
 
   return (
-    `<section class="mod${open ? " open" : ""}" data-group="${group.k}">` +
+    `<section class="mod" data-group="${group.k}">` +
     `<header><h3>${group.n}</h3><span class="mod-count">${used} / ${slots}</span></header>` +
     `<div class="mod-bays">${bays}</div>` +
-    (open ? pickerHtml(group) : "") +
     `<p>${group.d}</p>` +
     `</section>`
   );
@@ -414,12 +405,13 @@ export function outfittingHtml() {
   const left = leftRail(MODULE_GROUPS),
     right = MODULE_GROUPS.slice(left.length);
 
-  // Services for the hull in the viewer (the selected ship): paid repair of its
-  // plating and paid restock of its missiles.
+  // Services for the hull in the viewer (the selected ship): compact tiles inside
+  // the fixed-size Services card (sits below modules; sized to hold 7+ services).
   const repCost = repairCost(S.ship),
     repPct = Math.round((S.hp[S.ship] ?? 1) * 100);
-  let serviceRows =
-    `<div class="row"><div>Hull repairs<small>Hull HP ${repPct}%. Costs more the more damaged it is.</small></div>` +
+  let serviceBoxes =
+    `<div class="service-box" title="Hull HP ${repPct}%. Costs more the more damaged it is.">` +
+    `<span class="service-label">Hull repairs <small>${repPct}%</small></span>` +
     `<button data-a="rp" data-b="${S.ship}" ${repCost <= 0 || S.cr < repCost ? "disabled" : ""}>${
       repCost <= 0 ? "Intact" : "Repair " + repCost + " cr"
     }</button></div>`;
@@ -428,18 +420,20 @@ export function outfittingHtml() {
     const cap = fittedLauncher.cap,
       canRestock = S.msl < cap && S.cr >= MISSILE.unitPrice,
       n = Math.min(cap - S.msl, Math.floor(S.cr / MISSILE.unitPrice));
-    serviceRows +=
-      `<div class="row"><div>Missile restock<small>${S.msl} of ${cap} loaded. ${MISSILE.unitPrice} cr each.</small></div>` +
+    serviceBoxes +=
+      `<div class="service-box" title="${S.msl} of ${cap} missiles loaded (${MISSILE.unitPrice} cr each).">` +
+      `<span class="service-label">Missile restock <small>${S.msl}/${cap}</small></span>` +
       `<button data-a="wr" ${canRestock ? "" : "disabled"}>${
         S.msl >= cap ? "Full" : "Restock " + n * MISSILE.unitPrice + " cr"
       }</button></div>`;
   }
   const services =
-    `<div class="outfit-service"><div class="outfit-service-title">Services</div>` + serviceRows + `</div>`;
+    `<div class="outfit-service"><div class="outfit-service-title">Services</div>` +
+    `<div class="service-grid">${serviceBoxes}</div></div>`;
 
   return (
     `<h2>Outfitting</h2>` +
-    `<div class="sub">Fit modules from station storage and paint your ship. Right-click the ship for details.</div>` +
+    `<div class="sub">Drag modules between Inventory and bays, or right-click a module in Inventory to equip.</div>` +
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
     `<div class="outfit-mid">` +
@@ -450,9 +444,9 @@ export function outfittingHtml() {
     `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset &middot; right-click for details</div>` +
     `</div>` +
     `</div>` +
-    services +
     `</div>` +
     `<div class="outfit-rail">${right.map(groupHtml).join("")}${appearanceHtml()}</div>` +
+    services +
     `</div>`
   );
 }
@@ -578,14 +572,15 @@ function invRow({
   destWord = dir === "s" ? "ship" : "station",
 }) {
   const label = kind === "c" ? (itemUse(id) ? "USE" : "ORE") : "MOD";
+  const modGroup = isModule(id) && MODULES[id] ? ` data-mod-group="${esc(MODULES[id].g)}"` : "";
   const shiftHint = move ? ` Shift-click to move stack to ${destWord}.` : "";
   const inner =
     `<span class="inv-item-top"><span class="inv-kind">${label}</span><span class="inv-n">&times;${count}</span></span>` +
     `<span class="inv-item-name">${esc(name)}</span><span class="inv-item-meta">${vol} m³ each</span>`;
   return (
     `<button type="button" class="inv-item" data-a="invSlot" data-where="${esc(place)}" data-slot="${slot}" ` +
-    `data-kind="${kind}" data-id="${esc(id)}" data-dir="${esc(dir)}" data-count="${count}" ` +
-    `title="${esc(name)}: ${esc(sub)}. Click to pick up, drop or swap.${shiftHint} Right-click for options (or to place 1 while holding)." ` +
+    `data-kind="${kind}" data-id="${esc(id)}" data-dir="${esc(dir)}" data-count="${count}"${modGroup} ` +
+    `title="${esc(name)}: ${esc(sub)}. Click or drag to move.${shiftHint} Right-click for options (or to place 1 while holding)." ` +
     `aria-label="${esc(name)}, quantity ${count}, slot ${slot + 1}.">${inner}</button>`
   );
 }
@@ -643,11 +638,11 @@ function invColumn(where, title, dir, {
   const room = Number.isFinite(cap) ? `${used} / ${cap} m³` : `${used} m³`;
   const canStack = filledCount > 0 || (holding && held.where === where);
   return (
-    `<section class="inv-col">` +
+    `<section class="inv-col" data-inv-where="${esc(where)}">` +
     `<header><span class="inv-col-title"><h3>${esc(title)}</h3>${headControls}</span>` +
     `<span class="inv-col-tools"><span class="mod-count">${room}</span>` +
-    `<button type="button" class="inv-stack-btn" data-a="stackAll" data-where="${esc(where)}"${canStack ? "" : " disabled"} ` +
-    `title="Combine split stacks and compact empty slots">Stack all</button></span></header>` +
+    `<button type="button" class="inv-stack-btn" data-a="stackAll" data-b="${esc(where)}" data-where="${esc(where)}"${canStack ? "" : " disabled"} ` +
+    `title="Combine split stacks and move all items to top left">Stack all</button></span></header>` +
     `<div class="inv-grid${holding ? " is-holding" : ""}">${rows.join("")}</div>` +
     `</section>`
   );
@@ -664,26 +659,35 @@ function invSubtabsHtml(action, firstKey, firstLabel, activeKey) {
   );
 }
 
+const SEARCH_ICON_SVG =
+  `<svg class="assets-search-icon" viewBox="0 0 14 14" width="12" height="12" aria-hidden="true" focusable="false">` +
+  `<circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.35"/>` +
+  `<path d="M9.2 9.2L12.4 12.4" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>` +
+  `</svg>`;
+
 /**
- * Compact N-menu-style `My Assets` view listing every station where the pilot
- * has stored items or ships in the hangar. Clicking a station expands its ships
- * and station-hold items in single-line rows.
+ * Pure station/ship/cargo/item list inside `My Assets` (re-rendered live when
+ * typing in the search input so focus and caret stay untouched).
  */
-export function assetsHtml(profile = state.profile, world = state.worldState, opts = {}) {
+export function assetsResultsHtml(profile = state.profile, world = state.worldState, opts = {}) {
   const docked = opts.docked ?? Boolean(state.player?.docked);
   const openMap = opts.openMap || state.ui.assetsOpen || {};
-  const stations = listPlayerAssets(profile, world, { docked, place: opts.place });
+  const shipOpenMap = opts.shipOpenMap || state.ui.assetShipsOpen || {};
+  const rawQuery = String(opts.query ?? state.ui.assetsQuery ?? "");
+  const trimmed = rawQuery.trim();
+  const allStations = listPlayerAssets(profile, world, { docked, place: opts.place });
+  if (!allStations.length) {
+    return `<div class="assets-empty">No ships or items stored at any station.</div>`;
+  }
+  const stations = trimmed ? filterPlayerAssets(allStations, trimmed) : allStations;
   if (!stations.length) {
-    return (
-      `<div class="sub">Stations where you have ships in the hangar or items in station storage.</div>` +
-      `<div class="assets-empty">No ships or items stored at any station.</div>`
-    );
+    return `<div class="assets-empty">No assets starting with &ldquo;${esc(trimmed)}&rdquo;.</div>`;
   }
   const destPocket = state.ui.destination && typeof state.ui.destination === "object"
     ? state.ui.destination.pocketId
     : null;
   const blocks = stations.map(st => {
-    const isOpen = !!openMap[st.placeId];
+    const isOpen = Boolean(st.autoOpen || openMap[st.placeId]);
     const isDest = Boolean(destPocket && destPocket === st.placeId);
     const parts = [];
     if (st.ships.length) parts.push(`${st.ships.length} ${st.ships.length === 1 ? "ship" : "ships"}`);
@@ -695,14 +699,39 @@ export function assetsHtml(profile = state.profile, world = state.worldState, op
     if (isOpen) {
       const lines = [];
       for (const s of st.ships) {
-        const holdNote = s.cargoUnits > 0 ? ` · ${s.cargoUsed}/${s.cargoCap} m³ cargo` : "";
+        const shipKey = `${st.placeId}::${s.id}`;
+        const cargoList = Array.isArray(s.cargoItems) ? s.cargoItems : [];
+        const shipOpen = Boolean(s.cargoMatched || shipOpenMap[shipKey]);
+        const holdNote = ` · ${s.cargoUsed}/${s.cargoCap} m³ cargo`;
         const dmgNote = s.hpPct < 100 ? ` · ${s.hpPct}% hull` : "";
         const right = s.active ? "Active ship" : "Hangar ship";
+        const cargoRows = shipOpen
+          ? `<ul class="assets-ship-cargo">` +
+            (cargoList.length
+              ? cargoList
+                  .map(
+                    c =>
+                      `<li class="assets-line assets-item assets-ship-item" data-asset-item="${esc(c.id)}" ` +
+                      `data-asset-ship-cargo="${esc(s.id)}" title="${esc(c.name)} (${esc(c.catLabel)}) in ${esc(s.name)} — ${c.vol} m³ total.">` +
+                      `<span class="pocket-label"><span class="pocket-icon i" aria-hidden="true"></span>` +
+                      `<span class="pocket-name">${esc(c.name)} <small>${esc(c.catLabel)}</small></span></span>` +
+                      `<span class="assets-qty">&times;${c.n} <small>${c.vol} m³</small></span></li>`
+                  )
+                  .join("")
+              : `<li class="assets-line assets-cargo-empty"><small>Empty hold</small></li>`) +
+            `</ul>`
+          : "";
         lines.push(
-          `<li class="assets-line assets-ship" data-ship-type="${esc(s.type)}" title="${esc(s.name)} — ${esc(s.role)}. Right-click for ship info.">` +
-          `<span class="pocket-label"><span class="pocket-icon${s.active ? " asset-active" : ""}" aria-hidden="true"></span>` +
+          `<li class="assets-ship-entry${shipOpen ? " is-open" : ""}">` +
+          `<button type="button" class="assets-line assets-ship assets-ship-toggle" ` +
+          `data-a="assetShip" data-b="${esc(shipKey)}" data-ship-type="${esc(s.type)}" ` +
+          `aria-expanded="${shipOpen}" ` +
+          `title="${esc(s.name)} — ${esc(s.role)}. Click to inspect hold, right-click for ship info.">` +
+          `<span class="pocket-label"><span class="shop-caret assets-ship-caret" aria-hidden="true">${shipOpen ? "&#9662;" : "&#9656;"}</span>` +
+          `<span class="pocket-icon${s.active ? " asset-active" : ""}" aria-hidden="true"></span>` +
           `<span class="pocket-name">${esc(s.name)} <small>${esc(s.role)}${holdNote}${dmgNote}</small></span></span>` +
-          `<span class="assets-qty">${right}</span></li>`
+          `<span class="assets-qty">${right}</span></button>` +
+          `${cargoRows}</li>`
         );
       }
       for (const it of st.items) {
@@ -729,8 +758,32 @@ export function assetsHtml(profile = state.profile, world = state.worldState, op
     );
   });
 
+  return `<div class="assets-list">${blocks.join("")}</div>`;
+}
+
+/**
+ * Compact N-menu-style `My Assets` view listing every station where the pilot
+ * has stored items or ships (with collapsible ship cargo holds and a live
+ * prefix-search bar that filters ships, ship cargo, and station items).
+ */
+export function assetsHtml(profile = state.profile, world = state.worldState, opts = {}) {
+  const rawQuery = String(opts.query ?? state.ui.assetsQuery ?? "");
+  const searchOpen = Boolean(opts.searchOpen ?? state.ui.assetsSearchOpen ?? rawQuery.length > 0);
+  const inputHtml = searchOpen
+    ? `<input type="text" class="assets-search-input" data-asset-search value="${esc(rawQuery)}" ` +
+      `placeholder="Search items or ships…" aria-label="Search assets" autocomplete="off" spellcheck="false">` +
+      `<button type="button" class="assets-search-clear" data-a="assetSearchClear" ` +
+      `${rawQuery ? "" : "hidden "}title="Clear search" aria-label="Clear search">&times;</button>`
+    : "";
+  const toolbar =
+    `<div class="assets-toolbar">` +
+    `<button type="button" class="assets-search-btn${searchOpen ? " on" : ""}" data-a="assetSearchToggle" ` +
+    `aria-expanded="${searchOpen}" title="Search items, ships and ship holds">${SEARCH_ICON_SVG}<span>Search</span></button>` +
+    inputHtml +
+    `</div>`;
   return (
-    `<div class="assets-list">${blocks.join("")}</div>`
+    toolbar +
+    `<div class="assets-results" data-assets-results>${assetsResultsHtml(profile, world, opts)}</div>`
   );
 }
 
@@ -738,7 +791,16 @@ function inventoryHtml(ui) {
   const view = ui?.invView === "assets" ? "assets" : "inv";
   const subtabs = invSubtabsHtml("invView", "inv", "Storage & Hold", view);
   if (view === "assets") {
-    return `<h2>Inventory</h2>${subtabs}${assetsHtml(state.profile, state.worldState, { docked: true, openMap: ui?.assetsOpen })}`;
+    return (
+      `<h2>Inventory</h2>${subtabs}` +
+      assetsHtml(state.profile, state.worldState, {
+        docked: true,
+        openMap: ui?.assetsOpen,
+        shipOpenMap: ui?.assetShipsOpen,
+        query: ui?.assetsQuery,
+        searchOpen: ui?.assetsSearchOpen,
+      })
+    );
   }
 
   const S = state.profile;

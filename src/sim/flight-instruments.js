@@ -1,5 +1,5 @@
 // Read-only instruments: no steering, targeting or projectile changes.
-import { V } from '../util/math.js';
+import { V, fwdQ } from '../util/math.js';
 import { placeDef } from '../data/places.js';
 import { state, placeWorld } from '../state/state.js';
 import { itemName } from '../data/items.js';
@@ -57,9 +57,27 @@ export function truePlayerSpeed(P, warping = false) {
   return Number.isFinite(raw) && raw > 0 ? raw : 0;
 }
 
-/** Whole-number HUD speed readout; an active collision push never rounds down to 0 m/s. */
+/** True when the ship's motion has a backward component relative to its nose. */
+function isReversing(P) {
+  if (!P) return false;
+  if (Number.isFinite(P.forwardSpeed) && (P.measuredSpeed > 0 || Math.abs(P.forwardSpeed) > 1e-4)) {
+    return P.forwardSpeed < -0.01;
+  }
+  if (P.v && P.quat && typeof P.v.dot === "function") {
+    return P.v.dot(fwdQ(P.quat)) < -0.01;
+  }
+  return false;
+}
+
+/**
+ * Whole-number signed HUD velocity readout in m/s: negative when moving
+ * backwards relative to the ship's nose, and never rounding an active collider
+ * push down to 0 m/s.
+ */
 export function displayedSpeed(P, warping = false) {
   const raw = truePlayerSpeed(P, warping);
   const rounded = Math.round(raw);
-  return rounded === 0 && P?.pushed && raw > 0.01 ? 1 : rounded;
+  const mag = rounded === 0 && P?.pushed && raw > 0.01 ? 1 : rounded;
+  if (mag === 0) return 0;
+  return isReversing(P) ? -mag : mag;
 }

@@ -9,7 +9,7 @@
 import { state, localPlayer, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { on, emit } from "../util/events.js";
-import { cargoHtml, shipDetailsHtml } from "./screens.js";
+import { assetsResultsHtml, cargoHtml, shipDetailsHtml } from "./screens.js";
 import { discardItem, countOf, slotAt } from "../sim/inventory.js";
 import { useItem, canUse } from "../sim/consumables.js";
 import { holdShip } from "../sim/pilot.js";
@@ -328,6 +328,41 @@ function onCargoClick(event) {
     renderCargo();
     return;
   }
+  const assetShipBtn = event.target.closest("button[data-a='assetShip']");
+  if (assetShipBtn) {
+    const shipKey = assetShipBtn.dataset.b;
+    if (shipKey) {
+      const open = state.ui.assetShipsOpen || (state.ui.assetShipsOpen = {});
+      if (open[shipKey]) delete open[shipKey];
+      else open[shipKey] = true;
+      uiSound("click");
+      renderCargo();
+    }
+    return;
+  }
+  const searchToggle = event.target.closest("button[data-a='assetSearchToggle']");
+  if (searchToggle) {
+    state.ui.assetsSearchOpen = !state.ui.assetsSearchOpen;
+    if (!state.ui.assetsSearchOpen) state.ui.assetsQuery = "";
+    uiSound("click");
+    renderCargo();
+    if (state.ui.assetsSearchOpen) root?.querySelector?.("[data-asset-search]")?.focus?.();
+    return;
+  }
+  const searchClear = event.target.closest("button[data-a='assetSearchClear']");
+  if (searchClear) {
+    state.ui.assetsQuery = "";
+    uiSound("click");
+    const input = root?.querySelector?.("[data-asset-search]");
+    if (input) {
+      input.value = "";
+      refreshCargoAssetResults();
+      input.focus?.();
+    } else {
+      renderCargo();
+    }
+    return;
+  }
   const slotBtn = event.target.closest("button[data-a='invSlot']");
   if (slotBtn) {
     closeContextMenu();
@@ -398,6 +433,29 @@ function onCargoClick(event) {
   else if (!event.target.closest(".inv-context")) closeContextMenu();
 }
 
+function refreshCargoAssetResults() {
+  const results = root?.querySelector?.("[data-assets-results]");
+  if (results) {
+    results.innerHTML = assetsResultsHtml(state.profile, state.worldState, {
+      docked: false,
+      openMap: state.ui.assetsOpen,
+      shipOpenMap: state.ui.assetShipsOpen,
+      query: state.ui.assetsQuery,
+      searchOpen: state.ui.assetsSearchOpen,
+    });
+  }
+  const clearBtn = root?.querySelector?.("button[data-a='assetSearchClear']");
+  if (clearBtn) clearBtn.hidden = !state.ui.assetsQuery;
+}
+
+function onCargoInput(event) {
+  const input = event.target?.closest?.("[data-asset-search]");
+  if (!input) return;
+  state.ui.assetsSearchOpen = true;
+  state.ui.assetsQuery = String(input.value || "");
+  refreshCargoAssetResults();
+}
+
 /** Install the overlay once. It sits outside the docked panel and never moves it. */
 export function setupCargo() {
   root = document.createElement("section");
@@ -413,6 +471,7 @@ export function setupCargo() {
     `<div id="cargo-body"></div>` +
     `</div>`;
   root.addEventListener("click", onCargoClick);
+  root.addEventListener("input", onCargoInput);
   root.addEventListener("contextmenu", onCargoContextMenu);
   document.body.appendChild(root);
   // A station, the title screen or death ends the flight view.

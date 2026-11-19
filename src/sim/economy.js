@@ -386,50 +386,9 @@ export function listPlayerAssets(
     return entry;
   };
 
-  // 1. Hangar ships at each station (active ship included only while docked there).
-  const shipGroups = new Map();
-  for (const id of profile?.ships || []) {
-    if (!shipDef(id)) continue;
-    if (!docked && id === profile.ship) continue;
-    const at = shipStation(profile, id, fallback);
-    if (!at) continue;
-    if (!shipGroups.has(at)) shipGroups.set(at, []);
-    shipGroups.get(at).push(id);
-  }
-  for (const [placeId, ids] of shipGroups.entries()) {
-    const entry = bucket(placeId);
-    if (!entry) continue;
-    for (const id of ids) {
-      const def = shipDef(id);
-      const holdStock = profile?.holds?.[id] || {};
-      let holdUsed = 0;
-      let holdUnits = 0;
-      for (const [itemId, n] of Object.entries(holdStock)) {
-        if (!(n > 0) || !isItem(itemId)) continue;
-        holdUnits += n;
-        holdUsed += n * (itemVol(itemId) || 0);
-      }
-      entry.ships.push({
-        id,
-        type: shipTypeOf(id),
-        name: shipLabel(id, ids),
-        role: def.role || "Ship",
-        active: docked && id === profile.ship,
-        cargoCap: def.cargo || 0,
-        cargoUsed: holdUsed,
-        cargoUnits: holdUnits,
-        hpPct: Math.round(Math.min(1, Math.max(0, profile?.hp?.[id] ?? 1)) * 100),
-      });
-    }
-  }
-
-  // 2. Station-storage items across all stations in `world.stationStores`.
-  const stores = world?.stationStores || {};
-  for (const [key, stock] of Object.entries(stores)) {
-    if (!key || !stock || typeof stock !== "object") continue;
-    const sep = key.indexOf(":");
-    const placeId = sep > 0 ? key.slice(0, sep) : key;
+  const stockRows = stock => {
     const rows = [];
+    if (!stock || typeof stock !== "object") return rows;
     const pushItem = id => {
       const n = Math.floor(+(stock[id] || 0));
       if (!(n > 0) || !isItem(id)) return;
@@ -450,6 +409,53 @@ export function listPlayerAssets(
     for (const id of Object.keys(stock)) {
       if (isModule(id) && stock[id] > 0) pushItem(id);
     }
+    return rows;
+  };
+
+  // 1. Hangar ships at each station (active ship included only while docked there).
+  const shipGroups = new Map();
+  for (const id of profile?.ships || []) {
+    if (!shipDef(id)) continue;
+    if (!docked && id === profile.ship) continue;
+    const at = shipStation(profile, id, fallback);
+    if (!at) continue;
+    if (!shipGroups.has(at)) shipGroups.set(at, []);
+    shipGroups.get(at).push(id);
+  }
+  for (const [placeId, ids] of shipGroups.entries()) {
+    const entry = bucket(placeId);
+    if (!entry) continue;
+    for (const id of ids) {
+      const def = shipDef(id);
+      const cargoItems = stockRows(profile?.holds?.[id]);
+      let holdUsed = 0;
+      let holdUnits = 0;
+      for (const row of cargoItems) {
+        holdUnits += row.n;
+        holdUsed += row.vol;
+      }
+      entry.ships.push({
+        id,
+        type: shipTypeOf(id),
+        name: shipLabel(id, ids),
+        role: def.role || "Ship",
+        active: docked && id === profile.ship,
+        cargoCap: def.cargo || 0,
+        cargoUsed: holdUsed,
+        cargoUnits: holdUnits,
+        cargoItems,
+        hpPct: Math.round(Math.min(1, Math.max(0, profile?.hp?.[id] ?? 1)) * 100),
+      });
+    }
+  }
+
+  // 2. Station-storage items across all stations in `world.stationStores`.
+  const stores = world?.stationStores || {};
+  for (const [key, stock] of Object.entries(stores)) {
+    if (!key || !stock || typeof stock !== "object") continue;
+    const sep = key.indexOf(":");
+    const placeId = sep > 0 ? key.slice(0, sep) : key;
+    const rows = stockRows(stock);
     if (!rows.length) continue;
     const entry = bucket(placeId);
     if (!entry) continue;
@@ -466,6 +472,55 @@ export function listPlayerAssets(
       if (a.here !== b.here) return a.here ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
+}
+
+/** Case-insensitive prefix match used by the My Assets search filter. */
+export function matchesAssetQuery(name, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  return String(name || "").trim().toLowerCase().startsWith(q);
+}
+
+/**
+ * Filter `listPlayerAssets()` rows by a prefix query across ships, each ship's
+ * cargo contents, and station-hold items. Keeps only stations with at least one
+ * match and marks ships whose cargo matched so the UI reveals those contents.
+ */
+export function filterPlayerAssets(stations, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return Array.isArray(stations) ? stations : [];
+  const out = [];
+  for (const st of stations || []) {
+    const ships = [];
+    for (const s of st.ships || []) {
+      const shipMatched = matchesAssetQuery(s.name, q);
+      const allCargo = Array.isArray(s.cargoItems) ? s.cargoItems : [];
+      const matchingCargo = allCargo.filter(c => matchesAssetQuery(c.name, q));
+      if (!shipMatched && !matchingCargo.length) continue;
+      ships.push({
+        ...s,
+        cargoItems: matchingCargo.length ? matchingCargo : allCargo,
+        cargoMatched: matchingCargo.length > 0,
+      });
+    }
+    const items = (st.items || []).filter(it => matchesAssetQuery(it.name, q));
+    if (!ships.length && !items.length) continue;
+    let itemUnits = 0;
+    let itemVolSum = 0;
+    for (const it of items) {
+      itemUnits += it.n;
+      itemVolSum += it.vol;
+    }
+    out.push({
+      ...st,
+      ships,
+      items,
+      itemUnits,
+      itemVol: itemVolSum,
+      autoOpen: true,
+    });
+  }
+  return out;
 }
 
 export function repairShip(id, P = state.player, profile = profileOf(P)) {

@@ -70,6 +70,7 @@ export function enterPlace(id, player = state.player) {
   loadPlace(id);
   if (player) {
     player.measuredSpeed = 0;
+    player.forwardSpeed = 0;
     player.pushed = false;
   }
   const local = player === state.player;

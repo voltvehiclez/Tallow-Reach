@@ -17,13 +17,15 @@ import { refreshShield } from "../sim/shield.js";
 import { refreshHull } from "../sim/hull.js";
 import { refreshGuns } from "../sim/guns.js";
 import * as fitting from "../sim/fitting.js";
-import { toggleModulePicker, togglePaintPicker } from "./picker.js";
+import { togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
 import { canSell, canDiscard, itemName } from "../data/items.js";
+import { MODULES } from "../data/modules.js";
 import { storyMission } from "../data/missions/index.js";
 import {
+  assetsResultsHtml,
   introHtml,
   leftPanelHtml,
   outpostHtml,
@@ -35,6 +37,7 @@ import {
 import {
   LEFT_TOGGLE_KEYS,
   activeLeftPanel,
+  activeRightTab,
   closeLeftPanel,
   hideLeftPanelElement,
   resetStationPanels,
@@ -53,9 +56,11 @@ import {
   clickInventorySlot,
   hasHeldStack,
   openTakeAmountPopover,
+  placeHeldOnOutfittingBay,
   rightClickInventorySlot,
   runStackAll,
   setAssetStationDestination,
+  showDragGhost,
 } from "./inventory-ui.js";
 
 const $ = id => document.getElementById(id);
@@ -63,11 +68,17 @@ let panel;
 let leftPanel;
 let beforeStart = null;
 let starting = false;
+let activeDrag = null;
+let dragDoc = null;
+let suppressClickUntil = 0;
 
 function wirePanelSurface(el) {
   if (!el || typeof el.addEventListener !== "function") return;
   el.addEventListener("click", onClick);
   el.addEventListener("dblclick", onDblClick);
+  el.addEventListener("input", onPanelInput);
+  el.addEventListener("pointerdown", onPanelPointerDown);
+  el.addEventListener("dragstart", onPreventNativeDrag);
   el.addEventListener("contextmenu", onInventoryContextMenu);
   el.addEventListener("mouseover", e => {
     if (e.target.closest("button:not(:disabled)")) hoverSound();
@@ -96,6 +107,7 @@ export function setupMenu(options = {}) {
   setupNotices();
   wirePanelSurface(panel);
   wirePanelSurface(leftPanel);
+  installDragListeners();
 
   // While the start screen is up it owns the panel: booting a save prepares the
   // ship (docked or flying) but must not replace or hide the start screen.
@@ -138,11 +150,12 @@ export function setupMenu(options = {}) {
     render();
   });
   // Tick this station's contract refresh countdown live once a second while the
-  // left Contract board window is open, unlocking Refresh when it finishes.
+  // right-hand Missions (Contract board) tab is visible, without touching any
+  // expanded Details row in the left-hand Mission log window.
   on("board-timer-changed", ({ placeId } = {}) => {
-    if (state.ui.intro || panel.hidden || activeLeftPanel(state.ui) !== "m") return;
+    if (state.ui.intro || panel.hidden || activeRightTab(state.ui) !== "l") return;
     if (placeId && placeId !== state.place) return;
-    renderLeft();
+    panel.innerHTML = outpostHtml(state.ui);
   });
 
   contracts.ensureBoard();
@@ -335,6 +348,12 @@ const ACTIONS = {
     if (open[placeId]) delete open[placeId];
     else open[placeId] = true;
   },
+  assetShip(shipKey) {
+    if (!shipKey) return;
+    const open = state.ui.assetShipsOpen || (state.ui.assetShipsOpen = {});
+    if (open[shipKey]) delete open[shipKey];
+    else open[shipKey] = true;
+  },
   invPrev() {
     cancelHeldStack();
     cycleInvShip(-1);
@@ -360,29 +379,27 @@ const ACTIONS = {
   },
 
 
-  // Outfitting
+  // Outfitting: modules are equipped directly from Inventory (right-click Equip
+  // or drag-and-drop onto a bay) and dragged back to Inventory to unequip.
   slot(arg) {
-    // data-b is "group:bay". Clicking the open bay again closes the picker.
+    if (!hasHeldStack()) return;
     const [g, i] = String(arg || "").split(":");
-    state.ui.fit = toggleModulePicker(state.ui.fit, g, +i);
+    const res = placeHeldOnOutfittingBay({ group: g, bay: +i });
+    if (res.message) toast(res.message);
+    if (res.changed) inventoryChanged();
   },
   paint(k) {
-    // Paint bays behave like module bays: one picker, click again to close.
     state.ui.fit = togglePaintPicker(state.ui.fit, k);
   },
-  fit(id) {
-    const open = state.ui.fit;
-    if (!open || open.kind !== "module") return;
-    const text = fitting.fitModule(open.g, open.i, id);
-    if (text) toast(text);
-    inventoryChanged();
-  },
-  unfit() {
-    const open = state.ui.fit;
-    if (!open || open.kind !== "module") return;
-    const text = fitting.unequip(open.g, open.i);
-    if (text) toast(text);
-    inventoryChanged();
+  bayUnequip(arg) {
+    const [g, i] = String(arg || "").split(":");
+    let res = fitting.unequipTo(g, +i, inv.STATION, -1);
+    if (!res.ok && state.profile.ship) {
+      const alt = fitting.unequipTo(g, +i, state.profile.ship, -1);
+      if (alt.ok) res = alt;
+    }
+    if (res.message) toast(res.message);
+    if (res.ok) inventoryChanged();
   },
 
   // Base
@@ -675,6 +692,12 @@ export function closePanelPopovers({ returnHeld = false, dismissLeft = false } =
       open.forEach(node => node.remove());
       closed = true;
     }
+  }
+  if (!closed && returnHeld && activeDrag) {
+    activeDrag = null;
+    clearDragHighlights();
+    clearHeldGhost();
+    closed = true;
   }
   if (!closed && returnHeld && cancelHeldStack()) {
     inventoryChanged();
@@ -1048,6 +1071,12 @@ function onInventoryContextMenu(e) {
 
   const tile = e.target.closest("button.inv-item[data-kind]");
   if (!tile) {
+    const fittedBay = e.target.closest("button.mod-bay.fitted[data-fit-group][data-fit-bay]");
+    if (fittedBay && fittedBay.dataset.module) {
+      e.preventDefault();
+      openFittedBayContext(fittedBay, e.clientX, e.clientY);
+      return;
+    }
     const assetStation = e.target.closest("[data-asset-station]");
     if (assetStation && assetStation.dataset.assetStation) {
       e.preventDefault();
@@ -1073,6 +1102,26 @@ function onInventoryContextMenu(e) {
   const menu = document.createElement("div");
   menu.className = "inv-context";
   menu.setAttribute("role", "menu");
+
+  const tileWhere = tile.dataset.where || inv.STATION;
+  const equipCheck = fitting.canEquipModule(tile.dataset.id, tileWhere);
+  const equip = document.createElement("button");
+  equip.type = "button";
+  equip.dataset.a = "invEquip";
+  equip.dataset.b = tile.dataset.id;
+  equip.dataset.where = tileWhere;
+  equip.dataset.slot = tile.dataset.slot || "0";
+  equip.setAttribute("role", "menuitem");
+  equip.textContent = "Equip";
+  if (!equipCheck.ok) {
+    equip.disabled = true;
+    equip.title = equipCheck.reason || "Cannot equip this item.";
+  } else {
+    equip.title = equipCheck.replaced
+      ? `Equip onto active ship (replaces ${MODULES[equipCheck.replaced]?.n || equipCheck.replaced}).`
+      : "Equip onto your active ship.";
+  }
+  menu.append(equip);
 
   const take = document.createElement("button");
   take.type = "button";
@@ -1119,13 +1168,275 @@ function onInventoryContextMenu(e) {
 
   const rect = panel.getBoundingClientRect();
   const x = Math.min(panel.scrollLeft + panel.clientWidth - 136, Math.max(panel.scrollLeft, e.clientX - rect.left + panel.scrollLeft));
-  const y = Math.min(panel.scrollTop + panel.clientHeight - 104, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
+  const y = Math.min(panel.scrollTop + panel.clientHeight - 132, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
   menu.dataset.anchorLeft = String(x);
   menu.dataset.anchorTop = String(y);
   menu.dataset.anchorWidth = "0";
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   panel.append(menu);
+}
+
+function openFittedBayContext(bayBtn, clientX, clientY) {
+  const host = hostPanelFor(bayBtn);
+  if (!host) return;
+  closePanelPopovers();
+  const group = bayBtn.dataset.fitGroup;
+  const bay = bayBtn.dataset.fitBay;
+  const modName = MODULES[bayBtn.dataset.module]?.n || "module";
+  const menu = document.createElement("div");
+  menu.className = "inv-context";
+  menu.setAttribute("role", "menu");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.dataset.a = "bayUnequip";
+  btn.dataset.b = `${group}:${bay}`;
+  btn.setAttribute("role", "menuitem");
+  btn.textContent = "Unequip";
+  btn.title = `Move ${modName} back to inventory.`;
+  menu.append(btn);
+  const local = clientToPanel(host, clientX, clientY);
+  placePanelPopover(menu, local.x, local.y, 136, 42, host);
+  host.append(menu);
+}
+
+function refreshDockedAssetResults() {
+  const results = panel?.querySelector?.("[data-assets-results]");
+  if (results) {
+    results.innerHTML = assetsResultsHtml(state.profile, state.worldState, {
+      docked: true,
+      openMap: state.ui.assetsOpen,
+      shipOpenMap: state.ui.assetShipsOpen,
+      query: state.ui.assetsQuery,
+      searchOpen: state.ui.assetsSearchOpen,
+    });
+  }
+  const clearBtn = panel?.querySelector?.("button[data-a='assetSearchClear']");
+  if (clearBtn) clearBtn.hidden = !state.ui.assetsQuery;
+}
+
+function onPanelInput(e) {
+  const input = e.target?.closest?.("[data-asset-search]");
+  if (!input) return;
+  state.ui.assetsSearchOpen = true;
+  state.ui.assetsQuery = String(input.value || "");
+  refreshDockedAssetResults();
+}
+
+function onPreventNativeDrag(e) {
+  if (e.target?.closest?.("button.inv-item, button.mod-bay")) {
+    e.preventDefault?.();
+  }
+}
+
+function forEachDropNode(selector, fn) {
+  for (const surface of [panel, leftPanel]) {
+    if (!surface || surface.hidden || typeof surface.querySelectorAll !== "function") continue;
+    for (const node of surface.querySelectorAll(selector)) fn(node);
+  }
+}
+
+function clearDragHighlights() {
+  forEachDropNode(".is-drop-match, .is-drop-over, .is-drag-source", node => {
+    node.classList?.remove?.("is-drop-match", "is-drop-over", "is-drag-source");
+  });
+}
+
+function applyDragHighlights(drag) {
+  clearDragHighlights();
+  if (drag.sourceEl) drag.sourceEl.classList?.add?.("is-drag-source");
+  if (drag.kind === "inv" && drag.modGroup) {
+    forEachDropNode("button.mod-bay", node => {
+      if (node.dataset?.fitGroup === drag.modGroup) node.classList?.add?.("is-drop-match");
+    });
+  } else if (drag.kind === "bay") {
+    forEachDropNode(".inv-col", node => {
+      if (node.dataset?.invWhere) node.classList?.add?.("is-drop-match");
+    });
+    forEachDropNode("button.mod-bay", node => {
+      if (node.dataset?.fitGroup === drag.group && Number(node.dataset?.fitBay) !== drag.bay) {
+        node.classList?.add?.("is-drop-match");
+      }
+    });
+  }
+}
+
+function updateDragHover(drag, clientX, clientY, fallbackTarget) {
+  forEachDropNode(".is-drop-over", node => node.classList?.remove?.("is-drop-over"));
+  const under = resolvePointTarget(clientX, clientY, fallbackTarget);
+  if (!under || typeof under.closest !== "function") return;
+  const hit = drag.kind === "inv"
+    ? under.closest("button.mod-bay[data-fit-group], button[data-a='invSlot']")
+    : under.closest("button[data-a='invSlot'], button.mod-bay[data-fit-group], .inv-col[data-inv-where]");
+  if (hit && hit !== drag.sourceEl) hit.classList?.add?.("is-drop-over");
+}
+
+function resolvePointTarget(clientX, clientY, fallbackTarget) {
+  if (
+    typeof document !== "undefined" &&
+    typeof document.elementFromPoint === "function" &&
+    Number.isFinite(clientX) &&
+    Number.isFinite(clientY)
+  ) {
+    const hit = document.elementFromPoint(clientX, clientY);
+    if (hit) return hit;
+  }
+  return fallbackTarget || null;
+}
+
+/**
+ * Execute a completed docked drag-and-drop between Inventory slots and
+ * Outfitting module bays.
+ */
+function finishStationDrag(drag, dropTarget) {
+  if (!drag || !dropTarget || typeof dropTarget.closest !== "function") {
+    return { ok: false, message: "" };
+  }
+  if (drag.kind === "inv") {
+    const bayBtn = dropTarget.closest("button.mod-bay[data-fit-group][data-fit-bay]");
+    if (bayBtn) {
+      return fitting.fitModuleFrom(
+        drag.where,
+        drag.slot,
+        bayBtn.dataset.fitGroup,
+        Number(bayBtn.dataset.fitBay),
+        drag.id
+      );
+    }
+    const modCard = dropTarget.closest("section.mod[data-group]");
+    if (modCard && modCard.dataset.group) {
+      const group = modCard.dataset.group;
+      const bays = state.profile.loadout?.[state.profile.ship]?.[group];
+      const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+      const targetBay = emptyIdx >= 0 ? emptyIdx : 0;
+      return fitting.fitModuleFrom(drag.where, drag.slot, group, targetBay, drag.id);
+    }
+    const slotBtn = dropTarget.closest("button[data-a='invSlot']");
+    if (slotBtn) {
+      const toWhere = slotBtn.dataset.where;
+      const toSlot = Number(slotBtn.dataset.slot);
+      if (!toWhere || !Number.isInteger(toSlot) || (toWhere === drag.where && toSlot === drag.slot)) {
+        return { ok: false, message: "" };
+      }
+      const picked = inv.pickupSlot(drag.where, drag.slot);
+      if (!picked.ok || !picked.held) return { ok: false, message: "" };
+      const placed = inv.placeHeldStack(picked.held, toWhere, toSlot);
+      if (placed.held) inv.returnHeldStack(placed.held);
+      return { ok: Boolean(placed.ok), message: placed.message || "" };
+    }
+    const invCol = dropTarget.closest(".inv-col[data-inv-where]");
+    if (invCol && invCol.dataset.invWhere && invCol.dataset.invWhere !== drag.where) {
+      return inv.shiftMoveSlot(drag.where, drag.slot, invCol.dataset.invWhere);
+    }
+    return { ok: false, message: "" };
+  }
+
+  if (drag.kind === "bay") {
+    const slotBtn = dropTarget.closest("button[data-a='invSlot']");
+    if (slotBtn && slotBtn.dataset.where) {
+      return fitting.unequipTo(drag.group, drag.bay, slotBtn.dataset.where, Number(slotBtn.dataset.slot));
+    }
+    const invCol = dropTarget.closest(".inv-col[data-inv-where]");
+    if (invCol && invCol.dataset.invWhere) {
+      return fitting.unequipTo(drag.group, drag.bay, invCol.dataset.invWhere, -1);
+    }
+    const bayBtn = dropTarget.closest("button.mod-bay[data-fit-group][data-fit-bay]");
+    if (bayBtn) {
+      const toGroup = bayBtn.dataset.fitGroup;
+      const toBay = Number(bayBtn.dataset.fitBay);
+      if (toGroup === drag.group && toBay === drag.bay) return { ok: false, message: "" };
+      if (toGroup !== drag.group) {
+        const m = MODULES[drag.id];
+        return {
+          ok: false,
+          message: m ? `${m.n} only fits in its own module group.` : "That module does not fit there.",
+        };
+      }
+      return fitting.swapFittedBays(drag.group, drag.bay, toBay);
+    }
+  }
+  return { ok: false, message: "" };
+}
+
+function onPanelPointerDown(e) {
+  if (state.ui.intro || starting || hasHeldStack()) return;
+  if ((e.button ?? 0) !== 0 || e.shiftKey) return;
+  const tile = e.target?.closest?.("button.inv-item[data-a='invSlot']");
+  if (tile && !tile.disabled && tile.dataset.id) {
+    activeDrag = {
+      kind: "inv",
+      where: tile.dataset.where || inv.STATION,
+      slot: Number(tile.dataset.slot),
+      id: tile.dataset.id,
+      n: Math.max(1, Number(tile.dataset.count) || 1),
+      modGroup: tile.dataset.modGroup || null,
+      startX: e.clientX ?? 0,
+      startY: e.clientY ?? 0,
+      started: false,
+      sourceEl: tile,
+    };
+    return;
+  }
+  const bay = e.target?.closest?.("button.mod-bay.fitted[data-fit-group][data-fit-bay]");
+  if (bay && !bay.disabled && bay.dataset.module) {
+    activeDrag = {
+      kind: "bay",
+      group: bay.dataset.fitGroup,
+      bay: Number(bay.dataset.fitBay),
+      id: bay.dataset.module,
+      n: 1,
+      startX: e.clientX ?? 0,
+      startY: e.clientY ?? 0,
+      started: false,
+      sourceEl: bay,
+    };
+  }
+}
+
+function onDocPointerMove(e) {
+  if (!activeDrag) return;
+  const x = e.clientX ?? 0;
+  const y = e.clientY ?? 0;
+  if (!activeDrag.started) {
+    if (Math.hypot(x - activeDrag.startX, y - activeDrag.startY) < 5) return;
+    activeDrag.started = true;
+    closePanelPopovers();
+    applyDragHighlights(activeDrag);
+  }
+  e.preventDefault?.();
+  showDragGhost(activeDrag.id, activeDrag.n, x, y);
+  updateDragHover(activeDrag, x, y, e.target);
+}
+
+function onDocPointerUp(e) {
+  if (!activeDrag) return;
+  const drag = activeDrag;
+  activeDrag = null;
+  if (!drag.started) return;
+  clearDragHighlights();
+  clearHeldGhost();
+  suppressClickUntil = Date.now() + 250;
+  if (e?.type === "pointercancel") return;
+  const dropTarget = resolvePointTarget(e?.clientX, e?.clientY, e?.target);
+  const res = finishStationDrag(drag, dropTarget);
+  if (res?.message) toast(res.message);
+  if (res?.ok) {
+    inventoryChanged();
+    uiSound("click");
+    save();
+    render();
+  }
+}
+
+function installDragListeners() {
+  if (typeof document === "undefined" || typeof document.addEventListener !== "function") {
+    return;
+  }
+  if (dragDoc === document) return;
+  dragDoc = document;
+  document.addEventListener("pointermove", onDocPointerMove);
+  document.addEventListener("pointerup", onDocPointerUp);
+  document.addEventListener("pointercancel", onDocPointerUp);
 }
 
 function onDblClick(e) {
@@ -1142,9 +1453,30 @@ function onDblClick(e) {
 }
 
 async function onClick(e) {
+  if (suppressClickUntil > 0) {
+    const blocked = Date.now() <= suppressClickUntil;
+    suppressClickUntil = 0;
+    if (blocked) return;
+  }
   const btn = e.target.closest("button[data-a]");
   if (!btn) {
     if (e.target.closest(".inv-sell-popover") || e.target.closest(".inv-take-popover") || e.target.closest(".inv-discard-popover")) return;
+    const modCard = hasHeldStack() ? e.target.closest("section.mod[data-group]") : null;
+    if (modCard && modCard.dataset.group) {
+      closePanelPopovers();
+      const group = modCard.dataset.group;
+      const bays = state.profile.loadout?.[state.profile.ship]?.[group];
+      const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+      const res = placeHeldOnOutfittingBay({ group, bay: emptyIdx >= 0 ? emptyIdx : 0 });
+      if (res.message) toast(res.message);
+      if (res.changed) {
+        inventoryChanged();
+        uiSound("click");
+        save();
+      }
+      render();
+      return;
+    }
     closePanelPopovers();
     return;
   }
@@ -1202,6 +1534,55 @@ async function onClick(e) {
     closePanelPopovers();
     clearAssetStationDestination();
     uiSound("click");
+    render();
+    return;
+  }
+  if (name === "assetSearchToggle") {
+    closePanelPopovers();
+    state.ui.assetsSearchOpen = !state.ui.assetsSearchOpen;
+    if (!state.ui.assetsSearchOpen) state.ui.assetsQuery = "";
+    uiSound("click");
+    render();
+    if (state.ui.assetsSearchOpen) panel?.querySelector?.("[data-asset-search]")?.focus?.();
+    return;
+  }
+  if (name === "assetSearchClear") {
+    state.ui.assetsQuery = "";
+    uiSound("click");
+    const input = panel?.querySelector?.("[data-asset-search]");
+    if (input) {
+      input.value = "";
+      refreshDockedAssetResults();
+      input.focus?.();
+    } else {
+      render();
+    }
+    return;
+  }
+  if (name === "stackAll") {
+    closePanelPopovers();
+    ACTIONS.stackAll(btn.dataset.where || btn.dataset.b || inv.STATION);
+    uiSound("click");
+    save();
+    render();
+    return;
+  }
+  if (name === "invEquip") {
+    const itemId = btn.dataset.b;
+    const where = btn.dataset.where || inv.STATION;
+    const slotIdx = Number(btn.dataset.slot);
+    closePanelPopovers();
+    const res = fitting.equipModuleFromInventory(
+      where,
+      Number.isInteger(slotIdx) ? slotIdx : -1,
+      itemId
+    );
+    if (res.message) toast(res.message);
+    uiSound(res.ok ? "confirm" : "click");
+    if (res.ok) {
+      inventoryChanged();
+      save();
+    }
     render();
     return;
   }

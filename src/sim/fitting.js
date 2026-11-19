@@ -6,15 +6,49 @@
 // refreshes the target pilot's power, drive, shields, hull and guns.
 
 import { MODULES } from "../data/modules.js";
-import { layoutFor } from "../data/outfitting.js";
-import { isModule, itemVol } from "../data/items.js";
+import { MODULE_GROUPS, layoutFor } from "../data/outfitting.js";
+import { isModule, itemName, itemVol } from "../data/items.js";
+import { shipDef, shipName } from "../data/ships.js";
+import { shipStation } from "../state/profile.js";
 import { state, profileOf } from "../state/state.js";
-import { STATION, addItem, countOf, freeOf, itemsAt, nameOf, takeItem } from "./inventory.js";
+import {
+  STATION,
+  addItem,
+  addItemToSlot,
+  countOf,
+  freeOf,
+  itemsAt,
+  nameOf,
+  slotAt,
+  spaceFor,
+  takeItem,
+  takeItemFromSlot,
+} from "./inventory.js";
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
 import { refreshHull } from "./hull.js";
 import { refreshGuns } from "./guns.js";
+
+const groupTitle = key => MODULE_GROUPS.find(g => g.k === key)?.n || key;
+
+function refreshFittedShip(P, profile) {
+  refillPower(P, profile);
+  refreshDrive(P, profile);
+  refreshShield(P, profile);
+  refreshHull(P, profile);
+  refreshGuns(P, profile);
+}
+
+function activeShipHere(profile = state.profile, world = state.worldState) {
+  const ship = profile?.ship;
+  if (!ship || !shipDef(ship) || !Array.isArray(profile?.ships) || !profile.ships.includes(ship)) {
+    return false;
+  }
+  if (!profile.shipAt || !profile.shipAt[ship]) return true;
+  const here = world === state.worldState ? state.place : (world?.place || state.place);
+  return shipStation(profile, ship, here) === here;
+}
 
 function assertFitTarget(P, profile) {
   if (P && P !== state.player && (!profile || profile === state.profile)) {
@@ -115,12 +149,217 @@ export function unequip(
   list[i] = null;
   addItem(STATION, id, 1, profile, world);
 
-  refillPower(P, profile);
-  refreshDrive(P, profile);
-  refreshShield(P, profile);
-  refreshHull(P, profile);
-  refreshGuns(P, profile);
+  refreshFittedShip(P, profile);
   return `${MODULES[id].n} moved to storage.`;
+}
+
+function pickReturnPlace(replacedId, fromWhere, freedVol, profile, world) {
+  if (!replacedId) return STATION;
+  const need = itemVol(replacedId) || 0;
+  if (fromWhere && need <= freeOf(fromWhere, profile, world) + freedVol) return fromWhere;
+  if (fromWhere !== STATION && need <= freeOf(STATION, profile, world)) return STATION;
+  return null;
+}
+
+/**
+ * Inspect whether item `id` in `fromWhere` can be equipped directly onto the
+ * pilot's active ship (without opening Outfitting). Equips into the first empty
+ * bay of its group, or swaps a 1-bay group when fitted with a different module.
+ */
+export function canEquipModule(
+  id,
+  fromWhere = STATION,
+  profile = state.profile,
+  world = state.worldState
+) {
+  if (!isModule(id) || !MODULES[id]) {
+    return { ok: false, group: null, bay: -1, replaced: null, reason: "This item cannot be equipped." };
+  }
+  const m = MODULES[id];
+  if (!activeShipHere(profile, world)) {
+    return { ok: false, group: m.g, bay: -1, replaced: null, reason: "No active ship stored at this station." };
+  }
+  const shipLabelText = shipName(profile.ship);
+  const fit = profile.loadout?.[profile.ship];
+  const list = fit?.[m.g];
+  if (!Array.isArray(list) || list.length === 0) {
+    return { ok: false, group: m.g, bay: -1, replaced: null, reason: `${m.n} does not fit on ${shipLabelText}.` };
+  }
+  const emptyBay = list.findIndex(cur => !cur);
+  if (emptyBay >= 0) {
+    return { ok: true, group: m.g, bay: emptyBay, replaced: null, reason: "" };
+  }
+  if (list.length === 1 && list[0] !== id) {
+    const replaced = list[0];
+    const dest = pickReturnPlace(replaced, fromWhere, itemVol(id) || 0, profile, world);
+    if (!dest) {
+      return {
+        ok: false,
+        group: m.g,
+        bay: -1,
+        replaced,
+        reason: `No room to unequip ${MODULES[replaced]?.n || replaced}.`,
+      };
+    }
+    return { ok: true, group: m.g, bay: 0, replaced, reason: "" };
+  }
+  if (list.length === 1 && list[0] === id) {
+    return {
+      ok: false,
+      group: m.g,
+      bay: -1,
+      replaced: list[0],
+      reason: `${m.n} is already equipped on ${shipLabelText}.`,
+    };
+  }
+  return {
+    ok: false,
+    group: m.g,
+    bay: -1,
+    replaced: null,
+    reason: `All ${groupTitle(m.g)} bays on ${shipLabelText} are full.`,
+  };
+}
+
+/**
+ * Fit one unit of module `id` from any docked inventory `(where, slotIndex)`
+ * into `(group, i)` on `profile`'s active ship, placing any displaced module
+ * back into `where` (or station storage if `where` is a full ship hold).
+ */
+export function fitModuleFrom(
+  where,
+  slotIndex,
+  group,
+  i,
+  id,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  assertFitTarget(P, profile);
+  if (!isModule(id) || !MODULES[id]) {
+    return { ok: false, replaced: null, message: `${itemName(id) || "That item"} cannot be equipped.` };
+  }
+  const m = MODULES[id];
+  if (!activeShipHere(profile, world)) {
+    return { ok: false, replaced: null, message: "No active ship stored at this station." };
+  }
+  if (m.g !== group) {
+    return { ok: false, replaced: null, message: `${m.n} fits ${groupTitle(m.g)}, not ${groupTitle(group)}.` };
+  }
+  const list = bayList(group, i, profile);
+  if (!list) {
+    return { ok: false, replaced: null, message: `${m.n} does not fit on ${shipName(profile.ship)}.` };
+  }
+  const source = where || STATION;
+  if (!(countOf(source, id, profile, world) > 0)) {
+    return { ok: false, replaced: null, message: `${m.n} is not in ${nameOf(source)}.` };
+  }
+  const replaced = list[i] || null;
+  if (replaced === id) {
+    return { ok: false, replaced, message: `${m.n} is already fitted in that bay.` };
+  }
+  const returnWhere = pickReturnPlace(replaced, source, itemVol(id) || 0, profile, world);
+  if (replaced && !returnWhere) {
+    return {
+      ok: false,
+      replaced,
+      message: `No room in ${nameOf(source)} for the ${MODULES[replaced].n}.`,
+    };
+  }
+  const idx = Number.isInteger(slotIndex) ? slotIndex : -1;
+  const took = takeItemFromSlot(source, idx, id, 1, profile, world);
+  if (!(took > 0)) {
+    return { ok: false, replaced: null, message: `${m.n} is not in ${nameOf(source)}.` };
+  }
+  if (replaced) {
+    const returnSlot = returnWhere === source && idx >= 0 && !slotAt(source, idx, profile, world) ? idx : -1;
+    addItemToSlot(returnWhere, returnSlot, replaced, 1, profile, world);
+  }
+  list[i] = id;
+  refreshFittedShip(P, profile);
+  return {
+    ok: true,
+    replaced,
+    message: replaced
+      ? `Equipped ${m.n}. ${MODULES[replaced].n} moved to ${nameOf(returnWhere)}.`
+      : `Equipped ${m.n}.`,
+  };
+}
+
+/** Right-click `Equip` action from any Inventory slot onto the active ship. */
+export function equipModuleFromInventory(
+  where,
+  slotIndex,
+  id,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  assertFitTarget(P, profile);
+  const check = canEquipModule(id, where || STATION, profile, world);
+  if (!check.ok) return { ok: false, replaced: null, message: check.reason };
+  return fitModuleFrom(where || STATION, slotIndex, check.group, check.bay, id, P, profile, world);
+}
+
+/**
+ * Unequip bay `(group, i)` from the active ship into `(toWhere, toSlot)`. If
+ * dropped onto a slot holding a single compatible module of the same group,
+ * swaps the two cleanly.
+ */
+export function unequipTo(
+  group,
+  i,
+  toWhere = STATION,
+  toSlot = -1,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  assertFitTarget(P, profile);
+  if (!activeShipHere(profile, world)) {
+    return { ok: false, id: null, message: "No active ship stored at this station." };
+  }
+  const list = bayList(group, i, profile);
+  if (!list) return { ok: false, id: null, message: "That bay does not exist." };
+  const id = list[i];
+  if (!id) return { ok: false, id: null, message: "That bay is already empty." };
+  const dest = toWhere || STATION;
+  const idx = Number.isInteger(toSlot) ? toSlot : -1;
+  if (idx >= 0) {
+    const target = slotAt(dest, idx, profile, world);
+    if (target && isModule(target.id) && MODULES[target.id]?.g === group && target.id !== id && target.n === 1) {
+      const swapRes = fitModuleFrom(dest, idx, group, i, target.id, P, profile, world);
+      return { ok: swapRes.ok, id, message: swapRes.message };
+    }
+  }
+  if (spaceFor(dest, id, profile, world) < 1) {
+    return {
+      ok: false,
+      id,
+      message: `No room in ${nameOf(dest)} for the ${MODULES[id].n}.`,
+    };
+  }
+  list[i] = null;
+  addItemToSlot(dest, idx, id, 1, profile, world);
+  refreshFittedShip(P, profile);
+  return { ok: true, id, message: `Unequipped ${MODULES[id].n} to ${nameOf(dest)}.` };
+}
+
+/** Swap two bays within the same module group on the active ship. */
+export function swapFittedBays(group, fromBay, toBay, P = state.player, profile = profileOf(P)) {
+  assertFitTarget(P, profile);
+  if (fromBay === toBay) return { ok: false, message: "" };
+  const list = bayList(group, fromBay, profile);
+  if (!list || !Number.isInteger(toBay) || toBay < 0 || toBay >= list.length) {
+    return { ok: false, message: "" };
+  }
+  if (!list[fromBay] && !list[toBay]) return { ok: false, message: "" };
+  const tmp = list[fromBay];
+  list[fromBay] = list[toBay];
+  list[toBay] = tmp;
+  refreshFittedShip(P, profile);
+  return { ok: true, message: "" };
 }
 
 /** True when `group` is a real bay group on the ship being flown. */

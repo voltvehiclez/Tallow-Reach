@@ -1,5 +1,5 @@
 // Reusable left-side station window shared by Outfitting ("o"), Shop ("p"), and
-// the Missions companion Contract board ("m").
+// the Missions companion Mission log ("m").
 //
 // All left-side views mount into the single `#station-left` element with fixed
 // positioning, dimensions, surface styling, and entrance/content-swap CSS
@@ -24,7 +24,7 @@ export const DEFAULT_LEFT_PANEL = "m";
 const VIEW_LABELS = {
   o: "Outfitting",
   p: "Shop",
-  m: "Contract board",
+  m: "Mission log",
 };
 
 /** Currently active right-panel tab key, normalized to a valid station tab. */

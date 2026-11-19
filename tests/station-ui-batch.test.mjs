@@ -9,19 +9,45 @@ import "./headless.mjs";
 import { state, applySave } from "../src/state/state.js";
 import { newSave } from "../src/state/profile.js";
 import { prepareGalaxySave } from "../src/sim/galaxy-session.js";
-import { createPlayer } from "../src/sim/player.js";
-import { resumeFromSave } from "../src/sim/session.js";
+import { createPlayer, flight } from "../src/sim/player.js";
+import { displayedSpeed } from "../src/sim/flight-instruments.js";
+const SIM_DT = 1 / 60;
+import { launch, resumeFromSave } from "../src/sim/session.js";
 import { DEFAULT_PLACE } from "../src/data/places.js";
+import { BORDER_SIGNAL_MISSION } from "../src/data/missions/index.js";
 import { stationAt } from "../src/sim/places.js";
-import { STATION, addItem, capacityOf, freeOf } from "../src/sim/inventory.js";
-import { buyItem, selectShip } from "../src/sim/economy.js";
+import {
+  STATION,
+  addItem,
+  addItemToSlot,
+  capacityOf,
+  countOf,
+  freeOf,
+  slotsAt,
+} from "../src/sim/inventory.js";
+import {
+  buyItem,
+  filterPlayerAssets,
+  listPlayerAssets,
+  selectShip,
+} from "../src/sim/economy.js";
+import {
+  canEquipModule,
+  equipModuleFromInventory,
+  fitModuleFrom,
+  fittedAt,
+  unequipTo,
+} from "../src/sim/fitting.js";
 import { acceptMission, ensureBoard } from "../src/sim/contracts.js";
 import {
   TABS,
   assetsHtml,
+  assetsResultsHtml,
   cargoHtml,
   contractsHtml,
+  introHtml,
   leftPanelHtml,
+  missionsHtml,
   outfittingHtml,
   outpostHtml,
   viewedShip,
@@ -193,17 +219,24 @@ test("Items #3, #6, #7, #8: Missions + left Contracts, reusable mutually exclusi
     ["s", "Saves"],
   ]);
 
-  // Default & clicking Missions shows Missions on the right AND Contract board on the left,
-  // and Contract board omits the redundant Active missions section.
+  // Default & clicking Missions: right accepts Story missions + Contracts, left shows in-progress Mission log.
   assert.equal(activeRightTab(state.ui), "l");
   assert.equal(activeLeftPanel(state.ui), "m");
   const rightMissions = outpostHtml(state.ui);
-  const leftContracts = leftPanelHtml(state.ui);
-  assert.match(rightMissions, /<h2>Missions<\/h2>/);
-  assert.match(rightMissions, /Ferrite/, "active contract shows in right Missions tab");
-  assert.match(leftContracts, /<h2>Contract board<\/h2>/);
-  assert.match(leftContracts, /data-a="ref"/, "Contract board keeps Refresh button");
+  const leftLog = leftPanelHtml(state.ui);
+  assert.match(rightMissions, /<h2>Story missions<\/h2>/);
+  assert.match(rightMissions, /<h2>Contract board<\/h2>/);
+  assert.match(rightMissions, /data-a="ref"/, "right Missions tab keeps contract Refresh button");
+  assert.match(leftLog, /<h2>Mission log<\/h2>/);
+  assert.match(leftLog, /Ferrite/, "active contract shows in the left Mission log window");
   assert.doesNotMatch(contractsHtml(), /Active missions|data-a="drop"|data-a="done"/, "Active missions stripped from Contract board");
+
+  // Accepting the only story mission leaves Story missions visible with "No more story missions available."
+  acceptMission(BORDER_SIGNAL_MISSION, state.profile, DEFAULT_PLACE);
+  const afterStory = missionsHtml(state.profile);
+  assert.match(afterStory, /<h2>Story missions<\/h2>/);
+  assert.match(afterStory, /No more story missions available\./);
+  assert.match(leftPanelHtml(state.ui), /The Border Signal/, "accepted story mission moves into left Mission log");
 
   // Switching to Inventory closes companion Contracts, leaving left panel closed.
   selectRightTab("i", state.ui);
@@ -512,13 +545,14 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
   };
   try {
     setupMenu();
-    // Initial docked view: Missions on the right + Contract board on the left, zero .wide on #panel.
+    // Initial docked view: right accepts Story missions & Contract board, left shows in-progress Mission log.
     assert.equal(right.hidden, false);
     assert.equal(right.classList.contains("wide"), false);
-    assert.match(right.innerHTML, /<h2>Missions<\/h2>/);
+    assert.match(right.innerHTML, /<h2>Story missions<\/h2>/);
+    assert.match(right.innerHTML, /<h2>Contract board<\/h2>/);
     assert.equal(left.hidden, false);
     assert.equal(left.dataset.view, "m");
-    assert.match(left.innerHTML, /<h2>Contract board<\/h2>/);
+    assert.match(left.innerHTML, /<h2>Mission log<\/h2>/);
 
     // Switch right panel to Inventory -> companion Contract board closes; toggle Outfitting then Shop.
     await clickAction(right, "tab", "i");
@@ -556,13 +590,15 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
     assert.match(right.innerHTML, /<h3>Prospector hold<\/h3>/);
     assert.match(left.innerHTML, /data-ship-id="prospector"/, "left Outfitting viewer switches live to newly flown ship");
 
-    // Escape helper dismisses toggleable Outfitting window; clicking Missions reopens both Missions + Contracts.
+    // Escape helper dismisses toggleable Outfitting window; clicking Missions reopens offers (right) + Mission log (left).
     assert.equal(closePanelPopovers({ returnHeld: true, dismissLeft: true }), true);
     assert.equal(left.hidden, true);
     await clickAction(right, "tab", "l");
-    assert.match(right.innerHTML, /<h2>Missions<\/h2>/);
+    assert.match(right.innerHTML, /<h2>Story missions<\/h2>/);
+    assert.match(right.innerHTML, /<h2>Contract board<\/h2>/);
     assert.equal(left.hidden, false);
     assert.equal(left.dataset.view, "m");
+    assert.match(left.innerHTML, /<h2>Mission log<\/h2>/);
 
     // Switch Inventory -> My Assets, right-click remote station -> Set destination menu -> click Set destination.
     await clickAction(right, "tab", "i");
@@ -586,7 +622,221 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
     await clickAction(right, "assetSetDest", remoteStation.id);
     assert.deepEqual(state.ui.destination, { pocketId: remoteStation.id });
     assert.match(right.innerHTML, /Destination/, "station row updates to show Destination");
+
+    // Verify ship-hold Stack all button in live menu compacts spread ship-hold items to slot 0 (not station!).
+    await clickAction(right, "invView", "inv");
+    addItemToSlot(state.profile.ship, 6, "ferrite", 2);
+    addItemToSlot(state.profile.ship, 12, "cobalt", 1);
+    addItemToSlot(state.profile.ship, 18, "ferrite", 3);
+    assert.equal(slotsAt(state.profile.ship)[0], null, "ship hold starts with empty top-left slots");
+    const stackShipBtn = makeSurface("button");
+    stackShipBtn.dataset = { a: "stackAll", b: state.profile.ship, where: state.profile.ship };
+    stackShipBtn.closest = sel => (sel === "button[data-a]" ? stackShipBtn : null);
+    await right.handlers.click[0]({ target: stackShipBtn, shiftKey: false, clientX: 0, clientY: 0 });
+    assert.deepEqual(slotsAt(state.profile.ship), [
+      { id: "ferrite", n: 5 },
+      { id: "cobalt", n: 1 },
+    ], "Stack all on ship hold packs and merges every item starting at top-left slot 0");
+
+    // Verify right-click Equip works while Outfitting is CLOSED and only targets the active ship.
+    assert.equal(left.hidden, true, "Outfitting is closed");
+    addItemToSlot(STATION, 0, "beam_basic", 1);
+    addItemToSlot(STATION, 1, "ferrite", 2);
+    const modTile = makeSurface("button");
+    modTile.dataset = { kind: "m", id: "beam_basic", where: STATION, slot: "0", dir: "s", count: "1" };
+    modTile.closest = sel => (sel === "button.inv-item[data-kind]" ? modTile : null);
+    right.handlers.contextmenu[0]({ target: modTile, clientX: 1500, clientY: 300, preventDefault() {} });
+    const modMenu = right.children.find(c => c.classList.contains("inv-context"));
+    const equipBtn = modMenu.children.find(c => c.dataset.a === "invEquip");
+    assert.ok(equipBtn && !equipBtn.disabled, "module fitting active ship offers enabled Equip");
+    equipBtn.closest = sel => (sel === "button[data-a]" ? equipBtn : null);
+    await right.handlers.click[0]({ target: equipBtn, shiftKey: false, clientX: 0, clientY: 0 });
+    assert.equal(fittedAt("primary", 1), "beam_basic", "Equip fits module into active ship's open bay with Outfitting closed");
+    assert.equal(countOf(STATION, "beam_basic"), 0);
+
+    // Non-module ore offers disabled Equip and refuses if invoked.
+    const oreTile = makeSurface("button");
+    oreTile.dataset = { kind: "c", id: "ferrite", where: STATION, slot: "1", dir: "s", count: "2" };
+    oreTile.closest = sel => (sel === "button.inv-item[data-kind]" ? oreTile : null);
+    right.handlers.contextmenu[0]({ target: oreTile, clientX: 1500, clientY: 300, preventDefault() {} });
+    const oreMenu = right.children.find(c => c.classList.contains("inv-context"));
+    assert.equal(oreMenu.children[0].dataset.a, "invEquip");
+    assert.equal(oreMenu.children[0].disabled, true, "ore cannot be equipped");
+
+    // Verify pointer drag-and-drop: Outfitting bay -> ship hold slot 4, then ship hold slot 4 -> Outfitting bay!
+    const docHandlers = {};
+    globalThis.document.addEventListener = (type, fn) => { (docHandlers[type] ||= []).push(fn); };
+    // Re-init on fresh doc reference so document drag listeners attach.
+    globalThis.document = { ...globalThis.document, addEventListener: globalThis.document.addEventListener };
+    setupMenu();
+    await clickAction(right, "tab", "i");
+    await clickAction(right, "leftTab", "o");
+    assert.doesNotMatch(left.innerHTML, /No modules in storage|fit-picker/, "no Modules in storage box");
+
+    // Drag fitted beam_basic from primary bay 1 into active ship hold slot 4.
+    const fromBay = makeSurface("button");
+    fromBay.dataset = { fitGroup: "primary", fitBay: "1", module: "beam_basic" };
+    fromBay.closest = sel => (sel.includes("button.mod-bay.fitted") ? fromBay : null);
+    const toInvSlot = makeSurface("button");
+    toInvSlot.dataset = { a: "invSlot", where: state.profile.ship, slot: "4" };
+    toInvSlot.closest = sel => (sel === "button[data-a='invSlot']" ? toInvSlot : null);
+    globalThis.document.elementFromPoint = () => toInvSlot;
+
+    left.handlers.pointerdown[0]({ button: 0, shiftKey: false, clientX: 700, clientY: 260, target: fromBay });
+    docHandlers.pointermove[0]({ clientX: 1550, clientY: 520, target: toInvSlot, preventDefault() {} });
+    docHandlers.pointerup[0]({ type: "pointerup", clientX: 1550, clientY: 520, target: toInvSlot });
+    assert.equal(fittedAt("primary", 1), null, "dragging fitted module to Inventory unequips it");
+    assert.deepEqual(slotsAt(state.profile.ship)[4], { id: "beam_basic", n: 1 }, "lands in exact dropped hold slot");
+    assert.equal(
+      globalThis.document.body.children.filter(c => c.id === "inv-held-ghost").length,
+      0,
+      "drag ghost removed on drop"
+    );
+
+    // Drag beam_basic back from active ship hold slot 4 onto Outfitting primary bay 1.
+    const fromInv = makeSurface("button");
+    fromInv.dataset = {
+      a: "invSlot", where: state.profile.ship, slot: "4", id: "beam_basic", count: "1", modGroup: "primary",
+    };
+    fromInv.closest = sel => (sel.includes("button.inv-item") ? fromInv : null);
+    const targetBay = makeSurface("button");
+    targetBay.dataset = { fitGroup: "primary", fitBay: "1" };
+    targetBay.closest = sel => (sel.includes("button.mod-bay") ? targetBay : null);
+    globalThis.document.elementFromPoint = () => targetBay;
+
+    right.handlers.pointerdown[0]({ button: 0, shiftKey: false, clientX: 1550, clientY: 520, target: fromInv });
+    docHandlers.pointermove[0]({ clientX: 700, clientY: 260, target: targetBay, preventDefault() {} });
+    docHandlers.pointerup[0]({ type: "pointerup", clientX: 700, clientY: 260, target: targetBay });
+    assert.equal(fittedAt("primary", 1), "beam_basic", "dragging module from Inventory onto Outfitting bay equips it");
+    assert.equal(countOf(state.profile.ship, "beam_basic"), 0);
+    assert.equal(
+      globalThis.document.body.children.filter(c => c.id === "inv-held-ghost").length,
+      0,
+      "drag ghost removed on equip drop"
+    );
   } finally {
     globalThis.document = prevDoc;
   }
+});
+
+test("Controls condensation, minimalist top-right home icon, uncropped item text, and compact Services below modules", () => {
+  freshDocked(5000);
+  const intro = introHtml();
+  const controlsBlock = intro.slice(intro.indexOf("<h2>Controls</h2>"), intro.indexOf('<div class="main-menu-actions">'));
+  const plainControls = controlsBlock.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  // Old prose was ~1,520 characters; new controls-only table must stay well under 1/4 of that (< 340 chars).
+  assert.ok(plainControls.length < 340, `Controls text is compact (${plainControls.length} chars)`);
+  assert.match(controlsBlock, /class="controls-grid"/);
+  assert.doesNotMatch(controlsBlock, /sold in the Shop|strongest thruster|world keeps running/);
+
+  // Minimalistic top-right home station icon button with hover explanation and no visible description text.
+  const station = outpostHtml(state.ui);
+  assert.match(station, /<div class="station-head"><h1>[^<]+<\/h1><button[^>]*class="home-icon-btn[^"]*"[^>]*data-a="home"/);
+  assert.match(station, /title="[^"]*recover here after death\."/i, "hover tooltip explains home station recovery");
+  assert.doesNotMatch(station, /<small>Recover here after death\.<\/small>|Set Home Station/);
+
+  // Outfitting places Services after module rails (Ship 3D -> Modules -> Services in stacked layout),
+  // omits "Modules in storage" picker, and keeps compact service-box tiles fitting >= 7 services in 126px.
+  const outfit = outfittingHtml();
+  assert.doesNotMatch(outfit, /Modules in storage|No modules in storage|fit-picker/);
+  const viewIdx = outfit.indexOf('class="outfit-view"');
+  const lastRailIdx = outfit.lastIndexOf('class="outfit-rail"');
+  const svcIdx = outfit.indexOf('class="outfit-service"');
+  assert.ok(viewIdx > 0 && lastRailIdx > viewIdx && svcIdx > lastRailIdx, "Services comes below module rails");
+  assert.match(outfit, /class="service-grid"/);
+  assert.match(outfit, /class="service-box"/);
+
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.match(css, /\.outfit-service\s*\{[\s\S]*?height:\s*126px/, "Services box retains fixed height");
+  assert.match(css, /\.service-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)[\s\S]*?grid-auto-rows:\s*21px/,
+    "2x4 compact service boxes fit 8 (>= 7) services inside the fixed Services space");
+  assert.match(css, /\.inv-item-name\s*\{[\s\S]*?font-size:\s*9\.5px/, "inventory item text scaled down so names never clip");
+  assert.match(css, /\.inv-item-meta\s*\{[\s\S]*?font-size:\s*8\.5px/, "inventory volume meta scaled down cleanly");
+});
+
+test("My Assets prefix search + collapsible ship cargo menu (including ship cargo in search)", () => {
+  freshDocked(10000);
+  buyItem("meridian", "prospector", 1, state.player, state.profile, state.worldState, "ship");
+  addItem("wasp", "ferrite", 4);
+  addItem("prospector", "wire", 2);
+  addItem(STATION, "power_basic", 6);
+  addItem(STATION, "cobalt", 3);
+
+  const all = listPlayerAssets(state.profile, state.worldState, { docked: true });
+  assert.equal(all.length, 1);
+  const waspRow = all[0].ships.find(s => s.id === "wasp");
+  assert.deepEqual(waspRow.cargoItems.map(c => [c.id, c.n]), [["ferrite", 4]], "ship lists its hold contents");
+
+  // Search button + collapsible ship cargo sub-menu when expanded.
+  state.ui.assetsOpen = { [DEFAULT_PLACE]: true };
+  state.ui.assetShipsOpen = {};
+  const collapsedHtml = assetsHtml(state.profile, state.worldState, { docked: true });
+  assert.match(collapsedHtml, /data-a="assetSearchToggle"/, "My Assets includes Search button");
+  assert.match(collapsedHtml, /data-a="assetShip" data-b="reach::wasp"/, "ships are collapsible");
+  assert.doesNotMatch(collapsedHtml, /data-asset-ship-cargo="wasp"/, "ship cargo stays collapsed until clicked");
+
+  state.ui.assetShipsOpen = { "reach::wasp": true };
+  const expandedHtml = assetsHtml(state.profile, state.worldState, { docked: true });
+  assert.match(expandedHtml, /data-asset-ship-cargo="wasp"[\s\S]*?Ferrite/, "expanding a ship shows its cargo contents");
+
+  // Prefix filtering: typing "W" matches Wasp (and Copper wire? No — "Copper wire" starts with C!),
+  // and does NOT match "Basic powerplant" even though "powerplant" contains a "w".
+  const wFiltered = filterPlayerAssets(all, "W");
+  assert.equal(wFiltered.length, 1);
+  assert.deepEqual(wFiltered[0].ships.map(s => s.name), ["Wasp"]);
+  assert.deepEqual(wFiltered[0].items, [], "Basic powerplant does not match prefix W");
+
+  // Typing "F" matches Ferrite inside Wasp's cargo hold and auto-expands Wasp's cargo!
+  const fHtml = assetsResultsHtml(state.profile, state.worldState, {
+    docked: true,
+    openMap: {},
+    shipOpenMap: {},
+    query: "f",
+  });
+  assert.match(fHtml, /Ferrite/, "ship hold cargo starting with F appears in search");
+  assert.match(fHtml, /data-asset-ship-cargo="wasp"/, "matching ship hold auto-expands");
+  assert.doesNotMatch(fHtml, /Basic powerplant|Cobalt|Prospector/, "non-matching items and ships are filtered out");
+
+  // Typing "B" matches Basic powerplant (station) but not Ferrite/Cobalt/Wasp/Prospector.
+  const bHtml = assetsResultsHtml(state.profile, state.worldState, { docked: true, query: "B" });
+  assert.match(bHtml, /Basic powerplant/);
+  assert.doesNotMatch(bHtml, /Wasp|Prospector|Cobalt|Ferrite/);
+
+  // Direct fitting rules: cannot equip onto inactive ship, refuses when multi-bay full, swaps 1-bay upgrades.
+  addItem(STATION, "beam_basic", 2);
+  assert.equal(canEquipModule("beam_basic", STATION).ok, true);
+  assert.equal(equipModuleFromInventory(STATION, -1, "beam_basic").ok, true);
+  assert.equal(canEquipModule("beam_basic", STATION).ok, false, "all 2 primary bays full -> refuses overwrite");
+  assert.equal(fitModuleFrom(STATION, -1, "shield", 0, "beam_basic").ok, false, "wrong bay group rejected");
+  assert.equal(unequipTo("primary", 1, "wasp", 3).ok, true, "unequips straight into chosen ship hold slot");
+  assert.deepEqual(slotsAt("wasp")[3], { id: "beam_basic", n: 1 });
+});
+
+test("HUD ship velocity in m/s is negative when reversing, 0 at rest, and positive moving forward", () => {
+  freshDocked();
+  launch();
+  const p = state.player;
+  p.pos.set(500, 0, 500);
+  p.v.set(0, 0, 0);
+  p.thr = 0;
+  flight(SIM_DT, p);
+  assert.equal(displayedSpeed(p), 0);
+  assert.equal(Object.is(displayedSpeed(p), -0), false, "zero never renders as -0");
+
+  // Reverse throttle accelerates backwards -> negative m/s (~ -45 m/s on stock Wasp).
+  p.thr = -1;
+  for (let i = 0; i < 180; i++) flight(SIM_DT, p);
+  const rev = displayedSpeed(p);
+  assert.ok(rev < -40, `reversing reports negative speed (${rev} m/s)`);
+
+  // Coasting backwards with throttle cut stays negative until stopped.
+  p.thr = 0;
+  flight(SIM_DT, p);
+  assert.ok(displayedSpeed(p) < 0, "coasting backwards still reads negative m/s");
+
+  // Forward throttle accelerates forward -> positive m/s (~ +150 m/s on stock Wasp).
+  p.thr = 1;
+  for (let i = 0; i < 240; i++) flight(SIM_DT, p);
+  const fwd = displayedSpeed(p);
+  assert.ok(fwd > 140, `forward flight reports positive speed (${fwd} m/s)`);
 });

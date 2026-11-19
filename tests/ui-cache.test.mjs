@@ -128,7 +128,7 @@ test("beside an unlocked canister, R opens the trade: the hold on the left, the 
 
   const html = root.querySelector("#cache-body").innerHTML;
   assert.match(html, new RegExp(`<h2>${record.cache.n}</h2>`), "it says which canister this is");
-  const cols = [...html.matchAll(/<section class="inv-col">/g)];
+  const cols = [...html.matchAll(/<section class="inv-col"[^>]*>/g)];
   assert.equal(cols.length, 2, "two columns: a trade is two containers");
   const shipAt = html.indexOf(`${SHIPS[state.profile.ship].n} hold`),
     cacheAt = html.indexOf(`<h3>${record.cache.n}</h3>`);

@@ -293,7 +293,8 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(economy, /sellInventoryItem/, "inventory selling uses an economy action");
   assert.match(economy, /takeItemFromSlot\(where, slotIndex, id, count|takeItem\(where, id, count/, "only the requested amount is removed");
   assert.doesNotMatch(screens, /ownsModule/, "the shop no longer hides Buy once you own one");
-  assert.match(screens, /&times;\$\{n\}/, "the picker shows how many of a part there are");
+  assert.doesNotMatch(screens, /No modules in storage/, "Outfitting slots no longer open the redundant modules-in-storage box");
+  assert.match(menu, /dataset\.a = "invEquip"/, "right-clicking an item in Inventory offers Equip");
   for (const action of ["invPrev", "invNext"]) {
     assert.match(menu, new RegExp(`\\b${action}\\(`), `menu.js has the ${action} action`);
     assert.match(screens, new RegExp(`data-a="${action}`), `a button in screens.js uses ${action}`);
