@@ -153,7 +153,7 @@ export function missionLogHtml(profileOrUi = state.profile) {
   // mission rules; they appear only when the game is opened with ?testmissions.
   const showTest = typeof location !== "undefined" && /[?&]testmissions(&|=|$)/.test(location.search || "");
   const testOffers = showTest ? TEST_MISSIONS.filter(mission => !activeIds.has(mission.id)) : [];
-  let html = `<h2>Mission log</h2><div class="sub">Active missions, current objectives and the next thing to do.</div>`;
+  let html = `<h2>Missions</h2><div class="sub">Active missions, current objectives and the next thing to do.</div>`;
   html += active.length
     // Indexes would address the wrong mission: the list is this station's only,
     // while the runner counts every active mission. Name the mission instead.

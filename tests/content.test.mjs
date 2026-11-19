@@ -571,13 +571,14 @@ test("the flight HUD lists every active mission by title", () => {
   assert.match(css, /#tr \.hud-mission \{[^}]*color: var\(--amber\)/, "story missions keep the amber");
   assert.match(css, /#tr \.hud-mission\.hud-mission-contract \{[^}]*color: var\(--ice\)/, "contract names are light blue");
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
+  const missionlog = readFileSync(new URL("../src/ui/missionlog.js", import.meta.url), "utf8");
   assert.doesNotMatch(hud, /missionRequirementText/, "the HUD has no obsolete item-requirement text");
   assert.doesNotMatch(screens, /missionRequirementText/, "contract rows have no obsolete item-requirement text");
   assert.match(hud, /mission\.type === "hunt"/, "Destroy missions show their progress in flight");
   assert.match(hud, /missionProgress\(mission\)/, "the flight HUD renders Destroy progress");
-  assert.match(screens, /m\.type === "hunt"/, "Destroy missions show their progress while docked");
-  assert.match(screens, /missionProgress\(m\)/, "the Contracts screen renders Destroy progress");
-  assert.match(screens, /canCollectMissionReward\(m\)/, "reward collection checks current inventories");
+  assert.match(missionlog, /missionProgress\(mission\)/, "the Missions screen renders Destroy progress while docked");
+  assert.match(missionlog, /canCollectMissionReward\(mission/, "reward collection checks current inventories");
+  assert.doesNotMatch(screens, /<h2>Active missions<\/h2>/, "Active missions are shown only in Missions, not duplicated in Contracts");
 });
 
 test("the shield and hull HUD uses short labels while outfitting retains HP units", () => {
@@ -1008,16 +1009,14 @@ test("the bay box style sits on .mod-bay itself, so paint bays get a box too", (
   );
 });
 
-test("outfitting has the ship switcher above the 3D viewer; the Hangar shows no berth count", () => {
+test("outfitting omits the ship-switcher box; ship switching lives inside Inventory with a Fly button", () => {
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
-  // The Hangar tab used to read "Berths 2/3"; the switcher replaces it.
-  assert.ok(!screens.includes("Berths"), "the berth count is gone from the Hangar");
-  assert.match(screens, /class="ship-switch"/, "the outfitting screen has the ship switcher");
-  assert.match(screens, /data-a="shipPrev"/, "the switcher has a left arrow");
-  assert.match(screens, /data-a="shipNext"/, "the switcher has a right arrow");
+  assert.ok(!screens.includes("Berths"), "the old Berths heading is gone");
+  assert.doesNotMatch(screens, /class="ship-switch"/, "outfitting has no ship-switch box above the 3D viewer");
+  assert.doesNotMatch(screens, /data-a="shipPrev"|data-a="shipNext"/, "the outfitting ship-switch arrows are removed");
+  assert.match(screens, /class="hangar-fly-btn" data-a="hangarFly"/, "Inventory ship rows carry a quick Fly button");
   const menu = readFileSync(new URL("../src/ui/menu.js", import.meta.url), "utf8");
-  assert.match(menu, /shipPrev\(\)/, "the left arrow is wired to an action");
-  assert.match(menu, /shipNext\(\)/, "the right arrow is wired to an action");
+  assert.doesNotMatch(menu, /\bshipPrev\(\)|\bshipNext\(\)/, "menu.js has no dead outfitting arrow actions");
 });
 
 test("paid repairs and missile restock live in outfitting, not the hangar or the shop", () => {

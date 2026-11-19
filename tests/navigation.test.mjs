@@ -129,7 +129,8 @@ test("pause Exit to main menu saves, unpauses and emits the title-screen transit
 
   assert.equal(transitions, 1);
   assert.equal(pause.state.ui.intro, true);
-  assert.equal(pause.state.ui.tab, "m");
+  assert.equal(pause.state.ui.tab, "l");
+  assert.equal(pause.state.ui.leftPanel, "m");
   assert.equal(pause.shownNotice(), "", "the panel's old message is gone with the game");
   assert.equal("toast" in pause.state.ui, false, "and the panel no longer carries message text at all");
   assert.equal(pause.state.paused, false);

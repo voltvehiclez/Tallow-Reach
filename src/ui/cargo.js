@@ -17,12 +17,16 @@ import { canDiscard, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
 import {
+  buildAssetStationContextMenu,
   cancelHeldStack,
+  clearAssetStationDestination,
+  clearHeldGhost,
   clickInventorySlot,
   hasHeldStack,
   openTakeAmountPopover,
   rightClickInventorySlot,
   runStackAll,
+  setAssetStationDestination,
 } from "./inventory-ui.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
@@ -89,7 +93,7 @@ function openCargoShipDetails(type, event, card) {
   if (!html) return;
   closeContextMenu();
   const pop = document.createElement("div");
-  pop.className = "ship-info-popover";
+  pop.className = "inv-sell-popover ship-info-popover";
   pop.setAttribute("role", "dialog");
   pop.innerHTML = html;
   const rect = card.getBoundingClientRect();
@@ -125,6 +129,19 @@ function onCargoContextMenu(event) {
 
   if (hasHeldStack()) {
     event.preventDefault();
+    return;
+  }
+
+  const stationBtn = event.target.closest("[data-asset-station]");
+  if (stationBtn && stationBtn.dataset.assetStation) {
+    event.preventDefault();
+    closeContextMenu();
+    menu = buildAssetStationContextMenu(document, stationBtn.dataset.assetStation);
+    const rect = card.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, event.clientX - rect.left + (card.scrollLeft || 0))}px`;
+    menu.style.top = `${Math.max(4, event.clientY - rect.top + (card.scrollTop || 0))}px`;
+    card.append(menu);
+    uiSound();
     return;
   }
 
@@ -340,13 +357,21 @@ function onCargoClick(event) {
     renderCargo();
     return;
   }
-  const retBtn = event.target.closest("button[data-a='invReturn']");
-  if (retBtn) {
-    if (cancelHeldStack()) {
-      uiSound("click");
-      saveQuietly();
-      renderCargo();
-    }
+  const setDestBtn = event.target.closest("button[data-a='assetSetDest']");
+  if (setDestBtn && !setDestBtn.disabled) {
+    closeContextMenu();
+    const res = setAssetStationDestination(setDestBtn.dataset.b);
+    if (res.message) notify(res.message);
+    uiSound(res.ok ? "confirm" : "click");
+    renderCargo();
+    return;
+  }
+  const clearDestBtn = event.target.closest("button[data-a='assetClearDest']");
+  if (clearDestBtn && !clearDestBtn.disabled) {
+    closeContextMenu();
+    clearAssetStationDestination();
+    uiSound("click");
+    renderCargo();
     return;
   }
   if (event.target.closest("button[data-a='shipInfoClose']")) {
@@ -413,6 +438,7 @@ export function openCargo() {
 export function closeCargo({ silent = false } = {}) {
   if (!isCargoOpen()) return false;
   if (cancelHeldStack()) saveQuietly();
+  clearHeldGhost();
   state.ui.cargo = null;
   closeContextMenu();
   if (root) root.hidden = true;

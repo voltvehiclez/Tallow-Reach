@@ -141,7 +141,8 @@ test("beside an unlocked canister, R opens the trade: the hold on the left, the 
   assert.match(html, /data-dir="take"/, "and the canister's tiles identify the canister side");
   const slots = html.match(/data-a="invSlot"/g) || [];
   assert.equal(slots.length, 70, "each column keeps the flight card's full slot field");
-  assert.match(html, /Shift-click transfers a whole stack either way/, "the panel explains slot moves both ways");
+  assert.match(html, /Shift-click to move stack to hold/, "tiles keep their Shift-click transfer hint");
+  assert.doesNotMatch(html, /inv-held-bar|Put back/, "redundant held banner is absent");
   // A canister has no measured volume, so its column says what is in it and nothing more.
   const head = html.slice(cacheAt, cacheAt + 240);
   assert.match(head, /m³<\/span>/, "the canister's column reports its load");

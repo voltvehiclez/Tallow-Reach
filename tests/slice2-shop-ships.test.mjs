@@ -33,7 +33,7 @@ import { enterPlace } from "../src/sim/places.js";
 import { updatePrimary, setWeapon } from "../src/sim/weapons.js";
 import { launchMissile } from "../src/sim/missile.js";
 import { V } from "../src/util/math.js";
-import { TABS, outpostHtml, shipDetailsHtml, shopBuyHtml, viewedShip } from "../src/ui/screens.js";
+import { TABS, leftPanelHtml, outpostHtml, shipDetailsHtml, shopBuyHtml, viewedShip } from "../src/ui/screens.js";
 
 function freshDocked(cr = 10000) {
   resetPlaces();
@@ -103,17 +103,17 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
   assert.equal(cat.find(g => g.k === "ores").items.length, 0, "Meridian stocks no ores today");
   assert.equal(cat.find(g => g.k === "loot").items.length, 0, "Meridian stocks no loot today");
 
-  // Collapsed Shop tab renders only the 5 group lines, no item Buy buttons yet.
-  state.ui.tab = "p";
+  // Collapsed left Shop window renders only the 5 group lines, no item Buy buttons yet.
+  state.ui.leftPanel = "p";
   state.ui.shopOpen = {};
-  const collapsed = outpostHtml(state.ui);
+  const collapsed = leftPanelHtml(state.ui);
   assert.equal((collapsed.match(/data-a="shopGroup"/g) || []).length, 5);
   assert.doesNotMatch(collapsed, /class="shop-buy"/);
 
   // Expanding Modules -> Primary weapons shows Cannons, Missiles & Mining beams toggles;
   // expanding each reveals its own modules (Missiles shows None in stock until future missiles arrive).
   state.ui.shopOpen = { modules: true, "modules:primary": true, ores: true, ships: true };
-  const expanded = outpostHtml(state.ui);
+  const expanded = leftPanelHtml(state.ui);
   assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:cannons"/);
   assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:missiles"/);
   assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:mining"/);
@@ -126,7 +126,7 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
   state.ui.shopOpen["modules:primary:cannons"] = true;
   state.ui.shopOpen["modules:primary:missiles"] = true;
   state.ui.shopOpen["modules:primary:mining"] = true;
-  const deepExpanded = outpostHtml(state.ui);
+  const deepExpanded = leftPanelHtml(state.ui);
   assert.match(deepExpanded, /data-a="wb" data-b="meridian:item:cannon_basic"/);
   assert.match(deepExpanded, /data-a="wb" data-b="meridian:item:beam_basic"/);
 
@@ -163,8 +163,9 @@ test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or In
   const { P, remoteStation } = freshDocked(10000);
   assert.equal(SAVE_VERSION, 24);
 
-  // Hangar tab is present in station navigation, and Outfitting no longer lists stored ships.
-  assert.equal(TABS.some(([k, n]) => k === "h" && n === "Hangar"), true, "Hangar tab is in station menu");
+  // Separate Hangar tab is removed (ship list lives inside Inventory); Outfitting has no ship list.
+  assert.equal(TABS.some(([k, n]) => k === "h" || n === "Hangar"), false, "Hangar tab is merged into Inventory");
+  assert.equal(TABS.some(([k, n]) => k === "i" && n === "Inventory"), true, "Inventory tab is in station menu");
 
   // Default hangar level 1 -> cap 2 berths (1 used by starter Wasp -> 1 free berth).
   assert.equal(hangarCap(state.worldState), 2);
@@ -255,20 +256,22 @@ test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or In
   assert.deepEqual(localShips(state.profile, state.worldState, remoteStation.id), ["prospector#2", "bulwark"]);
   assert.deepEqual(localShips(state.profile, state.worldState, DEFAULT_PLACE), ["wasp", "wasp#2", "prospector"]);
 
-  // Hangar tab at remote station renders the compact stored-ship list with NO click-to-equip button,
-  // and NO ship purchase rows; Outfitting has no stored-ship list.
-  state.ui.tab = "h";
+  // Inventory at the remote station embeds the compact ship list above Station/ship holds,
+  // with a quick Fly button beside Active/Stored and no single-click-row auto-equip or ship buy rows.
+  state.ui.tab = "i";
+  state.ui.invView = "inv";
   const hHtml = outpostHtml(state.ui);
-  assert.match(hHtml, /class="hangar-ships"/, "Hangar uses the compact stored-ship list");
+  assert.match(hHtml, /class="hangar-ships"/, "Inventory embeds the compact stored-ship list");
   assert.match(hHtml, /data-hangar-ship="prospector#2"/);
   assert.match(hHtml, /data-hangar-ship="bulwark"/);
-  assert.doesNotMatch(hHtml, /data-hangar-ship="wasp"/, "Meridian ships are not in remote Hangar");
-  assert.doesNotMatch(hHtml, /data-a="sel"/, "clicking a Hangar row does not auto-equip it");
-  assert.doesNotMatch(hHtml, /data-a="buy"/, "ships are bought in Shop, not Hangar");
+  assert.match(hHtml, /class="hangar-fly-btn" data-a="hangarFly" data-b="bulwark"/, "stored ship offers quick Fly button");
+  assert.doesNotMatch(hHtml, /data-hangar-ship="wasp"/, "Meridian ships are not in remote station list");
+  assert.doesNotMatch(hHtml, /data-a="sel"/, "clicking a ship row itself does not auto-equip it");
+  assert.doesNotMatch(hHtml, /data-a="buy"/, "ships are bought in Shop, not Inventory");
 
-  state.ui.tab = "o";
-  const outfitHtml = outpostHtml(state.ui);
-  assert.match(outfitHtml, /1 of 2 in the hangar/);
+  state.ui.leftPanel = "o";
+  const outfitHtml = leftPanelHtml(state.ui);
+  assert.doesNotMatch(outfitHtml, /ship-switch|in the hangar/, "Outfitting ship-switch box and arrows are removed");
   assert.doesNotMatch(outfitHtml, /hangar-ships|outfit-ships/, "stored-ship list removed from Outfitting");
   assert.match(outfitHtml, /data-ship-type="prospector"/, "active ship stays inspectable in Outfitting");
   assert.doesNotMatch(outfitHtml, /data-ship-type="bulwark"/, "stored ship list is not rendered in Outfitting");

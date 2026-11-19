@@ -279,7 +279,8 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(styles, /height: calc\(3 \* var\(--inv-row-height\) \+ 2 \* var\(--inv-row-gap\)\)/, "each hold grid keeps a three-row viewport");
   assert.match(styles, /height: calc\(5 \* var\(--inv-row-height\) \+ 4 \* var\(--inv-row-gap\)\)/, "and the flight hold shows five rows");
   assert.match(styles, /overflow-y: auto/, "each hold grid scrolls independently");
-  assert.match(screens, /Shift-click transfers a whole stack/, "the Inventory explains stack movement");
+  assert.match(screens, /Shift-click to move stack/, "item tooltips explain Shift-click stack transfer");
+  assert.doesNotMatch(screens, /Click a stack to pick it up/, "redundant inventory description paragraph is removed");
   assert.match(screens, /data-a="stackAll"/, "every inventory column offers Stack all");
   assert.match(menu, /name === "invSlot"/, "slots support pickup, place, swap and Shift-click");
   assert.doesNotMatch(menu, /inv\.moveCargo|inv\.moveModule/, "one move handles goods and parts");

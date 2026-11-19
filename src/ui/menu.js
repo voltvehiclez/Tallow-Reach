@@ -23,34 +23,79 @@ import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
 import { canSell, canDiscard, itemName } from "../data/items.js";
 import { storyMission } from "../data/missions/index.js";
-import { introHtml, outpostHtml, shipDetailsHtml, shipSellConfirmHtml, shopBuyHtml, viewedShip } from "./screens.js";
+import {
+  introHtml,
+  leftPanelHtml,
+  outpostHtml,
+  shipDetailsHtml,
+  shipSellConfirmHtml,
+  shopBuyHtml,
+  viewedShip,
+} from "./screens.js";
+import {
+  LEFT_TOGGLE_KEYS,
+  activeLeftPanel,
+  closeLeftPanel,
+  hideLeftPanelElement,
+  resetStationPanels,
+  selectRightTab,
+  syncLeftPanelElement,
+  toggleLeftPanel,
+} from "./left-panel.js";
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
 import { openDiscardPopover } from "./discard.js";
 import {
+  buildAssetStationContextMenu,
   cancelHeldStack,
+  clearAssetStationDestination,
+  clearHeldGhost,
   clickInventorySlot,
   hasHeldStack,
   openTakeAmountPopover,
   rightClickInventorySlot,
   runStackAll,
+  setAssetStationDestination,
 } from "./inventory-ui.js";
 
 const $ = id => document.getElementById(id);
 let panel;
+let leftPanel;
 let beforeStart = null;
 let starting = false;
+
+function wirePanelSurface(el) {
+  if (!el || typeof el.addEventListener !== "function") return;
+  el.addEventListener("click", onClick);
+  el.addEventListener("dblclick", onDblClick);
+  el.addEventListener("contextmenu", onInventoryContextMenu);
+  el.addEventListener("mouseover", e => {
+    if (e.target.closest("button:not(:disabled)")) hoverSound();
+  });
+}
+
+function hostPanelFor(node) {
+  if (!leftPanel) return panel;
+  if (node === leftPanel || node?.closest?.("#station-left")) return leftPanel;
+  return panel;
+}
 
 export function setupMenu(options = {}) {
   beforeStart = options.beforeStart || null;
   panel = $("panel");
+  leftPanel = $("station-left");
+  if (!leftPanel && typeof document !== "undefined" && typeof document.createElement === "function" && document.body) {
+    const created = document.createElement("aside");
+    created.id = "station-left";
+    created.className = "station-side-panel";
+    created.hidden = true;
+    created.setAttribute?.("aria-label", "Station window");
+    (document.body.append || document.body.appendChild)?.call(document.body, created);
+    leftPanel = created;
+  }
   setupNotices();
-  panel.addEventListener("click", onClick);
-  panel.addEventListener("dblclick", onDblClick);
-  panel.addEventListener("contextmenu", onInventoryContextMenu);
-  panel.addEventListener("mouseover", e => {
-    if (e.target.closest("button:not(:disabled)")) hoverSound();
-  });
+  wirePanelSurface(panel);
+  wirePanelSurface(leftPanel);
 
   // While the start screen is up it owns the panel: booting a save prepares the
   // ship (docked or flying) but must not replace or hide the start screen.
@@ -58,40 +103,46 @@ export function setupMenu(options = {}) {
     if (player && player !== state.player) return;
     if (state.ui.intro) return;
     hideNotice();
+    if (state.ui.tab === "l" && !activeLeftPanel(state.ui)) state.ui.leftPanel = "m";
     render();
   });
   on("launched", ({ player } = {}) => {
     if (player && player !== state.player) return;
     if (state.ui.intro) return;
+    clearHeldGhost();
     panel.hidden = true;
+    hideLeftPanelElement(leftPanel);
   });
   on("died", text => {
     cancelHeldStack();
     showNotice(text);
-    state.ui.tab = "h";
+    state.ui.tab = "i";
+    state.ui.invView = "inv";
+    state.ui.leftPanel = null;
+    state.ui.fit = null;
     render();
   });
   on("main-menu", () => {
     cancelHeldStack();
     state.ui.intro = true;
-    state.ui.tab = "m";
+    resetStationPanels(state.ui);
     hideNotice();
     render();
   });
   // A mission changed while a docked screen is open — the last dialogue line
   // closed, a dock-side script finished, a hand-in or an abandon went through.
-  // The panel is a snapshot, so redraw it; otherwise the Mission log keeps
+  // The panel is a snapshot, so redraw it; otherwise the Missions tab keeps
   // showing the old state (an Abandon button on a mission ready to hand in).
   on("mission-ui-refresh", () => {
     if (state.ui.intro || panel.hidden) return;
     render();
   });
   // Tick this station's contract refresh countdown live once a second while the
-  // Contracts tab is open, and unlock the Refresh button the moment it finishes.
+  // left Contract board window is open, unlocking Refresh when it finishes.
   on("board-timer-changed", ({ placeId } = {}) => {
-    if (state.ui.intro || panel.hidden || state.ui.tab !== "m") return;
+    if (state.ui.intro || panel.hidden || activeLeftPanel(state.ui) !== "m") return;
     if (placeId && placeId !== state.place) return;
-    render();
+    renderLeft();
   });
 
   contracts.ensureBoard();
@@ -99,24 +150,34 @@ export function setupMenu(options = {}) {
 }
 
 /**
- * Show a docked tab from a key binding (I in a station opens the Inventory tab).
- * Does nothing on the title screen.
+ * Show a docked tab (or toggle a left station window) from a key binding
+ * (I in a station opens the Inventory tab). Does nothing on the title screen.
  */
 export function openStationTab(name) {
   if (state.ui.intro || !panel) return false;
-  state.ui.tab = name;
-  state.ui.confirmReset = false;
-  state.ui.fit = null;
+  cancelHeldStack();
+  closePanelPopovers();
+  selectRightTab(name, state.ui);
   render();
   return true;
 }
 
+/** Update only the shared `#station-left` window (Outfitting, Shop or Contracts). */
+export function renderLeft() {
+  if (!leftPanel) return;
+  if (state.ui.intro || !panel || panel.hidden) {
+    hideLeftPanelElement(leftPanel);
+    return;
+  }
+  const view = activeLeftPanel(state.ui);
+  syncLeftPanelElement(leftPanel, view, view ? leftPanelHtml(state.ui) : "");
+  if (view === "o") mountOutfitting();
+}
+
 export function render() {
   panel.hidden = false;
-  // Outfitting gives the panel the whole screen so the ship has room around it.
-  panel.classList.toggle("wide", !state.ui.intro && state.ui.tab === "o");
   panel.innerHTML = state.ui.intro ? introHtml() : outpostHtml(state.ui);
-  if (!state.ui.intro && state.ui.tab === "o") mountOutfitting();
+  renderLeft();
 }
 
 function save() {
@@ -159,7 +220,7 @@ const ACTIONS = {
   // implementation.
   intro() {
     state.ui.intro = false;
-    state.ui.tab = "m";
+    resetStationPanels(state.ui);
     initAudio();
     resumeFromSave();
     emit("mission-ui-refresh", {});
@@ -168,16 +229,25 @@ const ACTIONS = {
   },
   tab(name) {
     cancelHeldStack();
-    state.ui.tab = name;
     hideNotice();
     closePanelPopovers();
-    state.ui.confirmReset = false;
-    state.ui.fit = null;
+    selectRightTab(name, state.ui);
+  },
+  leftTab(name) {
+    cancelHeldStack();
+    hideNotice();
+    closePanelPopovers();
+    toggleLeftPanel(name, state.ui);
+  },
+  closeLeft() {
+    closePanelPopovers();
+    closeLeftPanel(state.ui);
   },
   go() {
     cancelHeldStack();
     closePanelPopovers();
     state.ui.fit = null;
+    hideLeftPanelElement(leftPanel);
     launch();
   },
 
@@ -219,10 +289,12 @@ const ACTIONS = {
     toast(contracts.acceptMission(definition) ? "Story mission accepted." : "Could not start that story mission.");
   },
 
-  // Hangar
+  // Stored ships (inside Inventory)
   sel(id) {
     const msgText = eco.selectShip(id);
     if (msgText) toast(msgText);
+    state.ui.invShip = null;
+    state.ui.fit = null;
     inventoryChanged();
   },
   buy(id) {
@@ -251,15 +323,6 @@ const ACTIONS = {
     toast(eco.restockMissiles());
   },
 
-  // The arrows above the 3D viewer in Outfitting: cycle through the ships in the
-  // hangar (same selection as the Hangar's Fly button).
-  shipPrev() {
-    cycleShip(-1);
-  },
-  shipNext() {
-    cycleShip(1);
-  },
-
   // Inventory: switch between Storage & Hold and My Assets, step through local ships'
   // holds, pick up/place/swap/split stacks, or consolidate stacks with Stack all.
   invView(view) {
@@ -279,9 +342,6 @@ const ACTIONS = {
   invNext() {
     cancelHeldStack();
     cycleInvShip(1);
-  },
-  invReturn() {
-    if (cancelHeldStack()) inventoryChanged();
   },
   stackAll(where) {
     const target = where || inv.STATION;
@@ -408,18 +468,6 @@ const ACTIONS = {
   },
 };
 
-/** Step the flown ship through this station's hangar. The arrows do nothing with one ship. */
-function cycleShip(dir) {
-  const S = state.profile,
-    owned = eco.localShips(S, state.worldState);
-  if (!owned || owned.length < 2) return;
-  const i = owned.indexOf(S.ship);
-  const next = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
-  const msgText = eco.selectShip(next);
-  if (msgText) toast(msgText);
-  inventoryChanged();
-}
-
 /** Step the Inventory tab through this station's ships without changing the ship being flown. */
 function cycleInvShip(dir) {
   const owned = eco.localShips(state.profile, state.worldState);
@@ -443,6 +491,8 @@ function afterSaveChange() {
   refreshGuns();
   state.shops = {};
   state.ui.fit = null;
+  if (state.ui.tab === "l") state.ui.leftPanel = "m";
+  else if (state.ui.leftPanel === "m") state.ui.leftPanel = null;
   state.ui.invShip = null;
   state.ui.invView = "inv";
   state.ui.cargoView = "hold";
@@ -615,11 +665,12 @@ function openInventoryDiscard(button) {
 const POPOVER_SELECTOR =
   ".inv-context, .inv-sell-popover, .inv-take-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover, .ship-sell-popover";
 
-/** Close any open docked context menu or popover (and optionally return a held stack). */
-export function closePanelPopovers({ returnHeld = false } = {}) {
+/** Close any open docked context menu/popover (and optionally return held stack or close toggleable left window). */
+export function closePanelPopovers({ returnHeld = false, dismissLeft = false } = {}) {
   let closed = false;
-  if (panel) {
-    const open = panel.querySelectorAll(POPOVER_SELECTOR);
+  for (const surface of [panel, leftPanel]) {
+    if (!surface || typeof surface.querySelectorAll !== "function") continue;
+    const open = surface.querySelectorAll(POPOVER_SELECTOR);
     if (open.length) {
       open.forEach(node => node.remove());
       closed = true;
@@ -631,31 +682,41 @@ export function closePanelPopovers({ returnHeld = false } = {}) {
     if (panel && !panel.hidden) render();
     closed = true;
   }
+  if (
+    !closed &&
+    dismissLeft &&
+    !state.ui.intro &&
+    panel &&
+    !panel.hidden &&
+    LEFT_TOGGLE_KEYS.has(state.ui.leftPanel) &&
+    closeLeftPanel(state.ui)
+  ) {
+    render();
+    closed = true;
+  }
   return closed;
 }
 
-/** Clamp a floating popover of rough `(w, h)` inside the visible scroll window of `panel`. */
-function placePanelPopover(popover, x, y, w = 248, h = 175) {
-  const scrollLeft = panel.scrollLeft || 0, scrollTop = panel.scrollTop || 0;
-  const maxLeft = Math.max(scrollLeft, scrollLeft + (panel.clientWidth || 0) - w - 8);
-  const maxTop = Math.max(scrollTop, scrollTop + (panel.clientHeight || 0) - h - 8);
+/** Clamp a floating popover of rough `(w, h)` inside the visible scroll window of `host`. */
+function placePanelPopover(popover, x, y, w = 248, h = 175, host = panel) {
+  const scrollLeft = host.scrollLeft || 0, scrollTop = host.scrollTop || 0;
+  const maxLeft = Math.max(scrollLeft, scrollLeft + (host.clientWidth || 0) - w - 8);
+  const maxTop = Math.max(scrollTop, scrollTop + (host.clientHeight || 0) - h - 8);
   popover.style.left = `${Math.max(scrollLeft + 8, Math.min(x, maxLeft))}px`;
   popover.style.top = `${Math.max(scrollTop + 8, Math.min(y, maxTop))}px`;
 }
 
 /**
- * Position an already-mounted `popover` inside `panel` so that the centre of
+ * Position an already-mounted `popover` inside `host` so that the centre of
  * `targetBtn` (the popup's own Buy button) lands directly over `(localX,
- * localY)` in panel scroll coordinates — matching Inventory Sell's low-travel
- * layout while staying clamped inside the visible panel bounds. Near the bottom
- * edge of the panel, flips the header row to the bottom so Buy still lands
- * straight under the cursor.
+ * localY)` in host scroll coordinates — keeping Buy straight under the cursor
+ * inside the left Shop window while staying clamped to visible bounds.
  */
-function placePopoverButtonOverCursor(popover, targetBtn, localX, localY, opts = {}) {
-  const scrollLeft = panel.scrollLeft || 0;
-  const scrollTop = panel.scrollTop || 0;
-  const panelW = panel.clientWidth || 0;
-  const panelH = panel.clientHeight || 0;
+function placePopoverButtonOverCursor(popover, targetBtn, localX, localY, opts = {}, host = panel) {
+  const scrollLeft = host.scrollLeft || 0;
+  const scrollTop = host.scrollTop || 0;
+  const panelW = host.clientWidth || 0;
+  const panelH = host.clientHeight || 0;
   const fallbackW = opts.w || 248;
   const fallbackH = opts.h || 158;
   const defaultBtnX = opts.defaultBtnX ?? fallbackW - 34;
@@ -706,18 +767,19 @@ function openShopBuy(button, clickEvent = null) {
   const maxBuy = eco.shopMaxBuy(shopId, id, state.profile, state.worldState, row.kind);
   if (!(maxBuy > 0)) return;
 
-  const rect = panel.getBoundingClientRect();
+  const host = hostPanelFor(button);
+  const rect = host.getBoundingClientRect();
   const btnRect = button.getBoundingClientRect();
-  const scrollLeft = panel.scrollLeft || 0, scrollTop = panel.scrollTop || 0;
+  const scrollLeft = host.scrollLeft || 0, scrollTop = host.scrollTop || 0;
   const hasPointer =
     clickEvent &&
     Number.isFinite(clickEvent.clientX) &&
     Number.isFinite(clickEvent.clientY) &&
     (clickEvent.clientX !== 0 || clickEvent.clientY !== 0);
   const cursorX = (hasPointer ? clickEvent.clientX : btnRect.left + btnRect.width / 2)
-    - rect.left - (panel.clientLeft || 0) + scrollLeft;
+    - rect.left - (host.clientLeft || 0) + scrollLeft;
   const cursorY = (hasPointer ? clickEvent.clientY : btnRect.top + btnRect.height / 2)
-    - rect.top - (panel.clientTop || 0) + scrollTop;
+    - rect.top - (host.clientTop || 0) + scrollTop;
   closePanelPopovers();
 
   const popover = document.createElement("div");
@@ -754,7 +816,7 @@ function openShopBuy(button, clickEvent = null) {
     }
   });
 
-  panel.append(popover);
+  host.append(popover);
   const confirmBtn = popover.querySelector('button[data-a="shopBuyConfirm"]');
   placePopoverButtonOverCursor(popover, confirmBtn, cursorX, cursorY, {
     w: 248,
@@ -762,7 +824,7 @@ function openShopBuy(button, clickEvent = null) {
     defaultBtnX: 214,
     defaultBtnY: 46,
     allowFlipUp: true,
-  });
+  }, host);
   if (input) {
     try { input.focus({ preventScroll: true }); } catch { input.focus?.(); }
     input.select?.();
@@ -797,12 +859,13 @@ function confirmShopBuy(node) {
   render();
 }
 
-/** Open the right-click Ship details card for a ship in the Shop, Outfitting, or Hangar. */
-function openShipDetails(shipType, clientX, clientY, localPos = null) {
+/** Open the right-click Ship details card for a ship in Shop, Outfitting, or Inventory. */
+function openShipDetails(shipType, clientX, clientY, localPos = null, host = panel) {
   const html = shipDetailsHtml(shipType);
   if (!html) return false;
   const stats = eco.shipBaseStats(shipType);
-  const rect = localPos ? null : panel.getBoundingClientRect();
+  const targetHost = host || panel;
+  const rect = localPos ? null : targetHost.getBoundingClientRect();
   closePanelPopovers();
 
   const popover = document.createElement("div");
@@ -812,9 +875,9 @@ function openShipDetails(shipType, clientX, clientY, localPos = null) {
   popover.dataset.shipType = stats.type;
   popover.innerHTML = html;
 
-  const x = localPos ? localPos.left : clientX - rect.left + (panel.scrollLeft || 0) + 6;
-  const y = localPos ? localPos.top : clientY - rect.top + (panel.scrollTop || 0) + 6;
-  placePanelPopover(popover, x, y, 256, 195);
+  const x = localPos ? localPos.left : clientX - rect.left + (targetHost.scrollLeft || 0) + 6;
+  const y = localPos ? localPos.top : clientY - rect.top + (targetHost.scrollTop || 0) + 6;
+  placePanelPopover(popover, x, y, 256, 195, targetHost);
 
   popover.addEventListener("keydown", event => {
     if (event.key === "Escape") {
@@ -824,7 +887,25 @@ function openShipDetails(shipType, clientX, clientY, localPos = null) {
     }
   });
 
-  panel.append(popover);
+  targetHost.append(popover);
+  uiSound();
+  return true;
+}
+
+/** Open the My Assets right-click menu on a station row: Set / Clear destination. */
+function openAssetStationContext(stationEl, clientX, clientY) {
+  const placeId = stationEl?.dataset?.assetStation;
+  if (!placeId) return false;
+  const host = hostPanelFor(stationEl);
+  closePanelPopovers();
+  const menu = buildAssetStationContextMenu(document, placeId);
+  const rect = host.getBoundingClientRect();
+  const scrollLeft = host.scrollLeft || 0, scrollTop = host.scrollTop || 0;
+  const x = Math.min(scrollLeft + (host.clientWidth || 0) - 148, Math.max(scrollLeft, clientX - rect.left + scrollLeft));
+  const y = Math.min(scrollTop + (host.clientHeight || 0) - 72, Math.max(scrollTop, clientY - rect.top + scrollTop));
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  host.append(menu);
   uiSound();
   return true;
 }
@@ -967,6 +1048,12 @@ function onInventoryContextMenu(e) {
 
   const tile = e.target.closest("button.inv-item[data-kind]");
   if (!tile) {
+    const assetStation = e.target.closest("[data-asset-station]");
+    if (assetStation && assetStation.dataset.assetStation) {
+      e.preventDefault();
+      openAssetStationContext(assetStation, e.clientX, e.clientY);
+      return;
+    }
     const hangarRow = e.target.closest("[data-hangar-ship]");
     if (hangarRow && hangarRow.dataset.hangarShip) {
       e.preventDefault();
@@ -976,7 +1063,7 @@ function onInventoryContextMenu(e) {
     const shipEl = e.target.closest("[data-ship-type]");
     if (shipEl && shipEl.dataset.shipType) {
       e.preventDefault();
-      openShipDetails(shipEl.dataset.shipType, e.clientX, e.clientY);
+      openShipDetails(shipEl.dataset.shipType, e.clientX, e.clientY, null, hostPanelFor(shipEl));
     }
     return;
   }
@@ -1042,6 +1129,7 @@ function onInventoryContextMenu(e) {
 }
 
 function onDblClick(e) {
+  if (e.target.closest("button")) return;
   const hangarRow = e.target.closest("[data-hangar-ship]");
   if (!hangarRow || !hangarRow.dataset.hangarShip) return;
   const shipId = hangarRow.dataset.hangarShip;
@@ -1095,10 +1183,26 @@ async function onClick(e) {
   }
   if (name === "hangarInfo") {
     const ctx = btn.closest(".inv-context");
+    const host = hostPanelFor(btn);
     const localPos = ctx
       ? { left: Number(ctx.dataset.anchorLeft || 0), top: Number(ctx.dataset.anchorTop || 0) }
       : null;
-    openShipDetails(btn.dataset.b, 0, 0, localPos);
+    openShipDetails(btn.dataset.b, 0, 0, localPos, host);
+    return;
+  }
+  if (name === "assetSetDest") {
+    closePanelPopovers();
+    const res = setAssetStationDestination(btn.dataset.b);
+    if (res.message) toast(res.message);
+    uiSound(res.ok ? "confirm" : "click");
+    render();
+    return;
+  }
+  if (name === "assetClearDest") {
+    closePanelPopovers();
+    clearAssetStationDestination();
+    uiSound("click");
+    render();
     return;
   }
   if (name === "hangarFly") {
@@ -1181,6 +1285,10 @@ async function onClick(e) {
   save();
   if (name !== "go") {
     if (!state.player || state.player.docked) render();
-    else panel.hidden = true;   // the action put the pilot back out in space
+    else {
+      // The action put the pilot back out in space: hide both station panels.
+      panel.hidden = true;
+      hideLeftPanelElement(leftPanel);
+    }
   }
 }

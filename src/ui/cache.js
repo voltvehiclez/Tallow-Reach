@@ -25,6 +25,7 @@ import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
 import {
   cancelHeldStack,
+  clearHeldGhost,
   clickInventorySlot,
   hasHeldStack,
   openTakeAmountPopover,
@@ -319,15 +320,6 @@ function onCacheClick(event) {
     renderCache();
     return;
   }
-  const retBtn = event.target.closest("button[data-a='invReturn']");
-  if (retBtn) {
-    if (cancelHeldStack()) {
-      uiSound("click");
-      saveQuietly();
-      renderCache();
-    }
-    return;
-  }
   const takeAmt = event.target.closest("[data-a='cacheTakeOpen']");
   if (takeAmt && !takeAmt.disabled) {
     openCacheTakeAmount(takeAmt);
@@ -410,6 +402,7 @@ export function openCache() {
 export function closeCache({ silent = false } = {}) {
   if (!isCacheOpen()) return false;
   if (cancelHeldStack()) saveQuietly();
+  clearHeldGhost();
   state.ui.cache = null;
   closeContextMenu();
   if (root) root.hidden = true;

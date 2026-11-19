@@ -20,6 +20,27 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-18: Station UI rework, reusable left window, Inventory ship list and My Assets destination
+
+Merged PR #43 (Slices 1–3, save v24) to `main`, then implemented the 11-item station UI
+and inventory polish batch: fixed the lingering empty `#inv-held-ghost` box when placing
+held items (`clearHeldGhost` removes the node and `.inv-held-ghost[hidden]` overrides
+`display: flex`; L28) and removed the redundant `"Holding … Put back"` bar across all
+inventories; stopped dimming inventory tiles when the destination hold is full; removed
+the Inventory intro paragraph and merged the compact stored-ship list into Inventory
+above Station and ship holds with a small `Fly` button to the right of `Active`/`Stored`
+(removing the `Hangar` nav tab and Outfitting's ship-switcher arrow box); added a
+reusable `#station-left` window (`src/ui/left-panel.js`, fixed container, dimensions,
+positioning and animations) shared by mutually exclusive toggleable `Outfitting` (scaled
+3-column layout) and `Shop` plus `Missions` paired with the left `Contract board`
+(renamed `Mission log` to `Missions`, removed `Contracts` button and duplicate Active
+missions), while scaling `#panel` to a single fixed width with `#panel.wide` removed;
+and added right-click `Set destination` / `Clear destination` on station rows in
+`My Assets` (docked and in flight `I`). Files: `src/index.html`, `src/styles.css`,
+`src/main.js`, `src/state/state.js`, `src/ui/{left-panel,screens,menu,outfitting,missionlog,inventory-ui,cargo,cache,pause,README}.js/.md`,
+`tests/station-ui-batch.test.mjs`. Save **v24** unchanged; `game/tallow-reach.html`
+rebuilt; owner playtest pending.
+
 ## 2026-11-18: Roadmap slice 3 — My Assets, Minecraft-style inventory slots, Mining beams subgroup and 0 MJ power fix
 
 Slice 2 playtest passed. Fixed the `0 MJ` power bug across every MJ consumer (`hasPower`
@@ -178,19 +199,9 @@ lifetime caps prediction. Speed measures each flight step including collision pu
 not teleport/warp displacement; place entry resets it. Added regression tests and
 owner checklist. Save v21; slices 3–5 pending. Build regenerated; playtest pending.
 
-## 2026-11-16: Missile icon and lower interaction prompts
-
-Replaced the windowed rocket glyph with a simple diagonal finned missile outline,
-using the supplied reference. Shared interaction prompts (dock, lock acquisition,
-wormholes and other contextual actions) now appear white, bottom-anchored above the
-weapon strip. Mining progress follows them down. Removed the heading inset and
-tracking so PRIMARY/SECONDARY align with the grey name edges. Added markup/layout
-guards. Explicitly centre all status tracks, labels and readouts on their frames
-without changing 28px widths, text sizes or frame positions. Save v21 unchanged;
-build regenerated. Owner visual check pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Missile icon and lower interaction prompts
 - 2026-11-16: Remove duplicate weapon-selection messages
 - 2026-11-16: Signed throttle and final HUD alignment tweaks
 - 2026-11-16: Framed status columns and integrated throttle/speed

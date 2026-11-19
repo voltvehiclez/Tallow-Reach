@@ -102,11 +102,11 @@ function fit() {
 
 /**
  * One frame. Called from the main loop; does nothing unless the ship window is
- * actually on screen (docked, on the Outfitting tab, canvas attached).
+ * actually on screen (docked, left Outfitting window open, canvas attached).
  */
 export function updateOutfitting(dt) {
   if (failed || !canvas || !canvas.isConnected) return;
-  if (state.ui.intro || state.ui.tab !== "o") return;
+  if (state.ui.intro || state.ui.leftPanel !== "o") return;
   if (!state.player || !state.player.docked) return;
   renderShip();
 }

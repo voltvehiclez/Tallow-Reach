@@ -225,8 +225,8 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       } else if (state.ui.navigation) {
         emit("navigation-toggle", false);
         if (pauseKey) setPause(true);
-      } else if (!pauseKey && closePanelPopovers({ returnHeld: true })) {
-        // Esc dismisses an open docked popover or returns a cursor-held stack before pausing.
+      } else if (!pauseKey && closePanelPopovers({ returnHeld: true, dismissLeft: true })) {
+        // Esc dismisses docked popovers/held stacks first, then a toggleable left window.
       } else if (canPause()) setPause(!state.paused);
       break;
   }

@@ -3,42 +3,31 @@ import { canSetHomeStation, homeStationPlace } from "../sim/session.js";
 // so the look of a screen can be changed without touching game logic.
 
 import { shipDef, shipLabel, shipTypeOf } from "../data/ships.js";
-import { ITEM_IDS, canSell, isItem, isModule, itemCat, itemName, itemUse, itemValue, itemVol } from "../data/items.js";
+import { isModule, itemCat, itemName, itemUse, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
 import { shopDef } from "../data/shops.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
 import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
-import {
-  CACHE, STATION, capacityOf, freeOf, loadOf, slotsAt, stockOf, valueOf,
-} from "../sim/inventory.js";
+import { CACHE, STATION, capacityOf, loadOf, slotsAt } from "../sim/inventory.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import {
-  holdLoad, storedUnits, storageCap, repairCost, hangarCap, listPlayerAssets, localShips, shipBaseStats, shopCatalogue,
+  storedUnits, storageCap, repairCost, hangarCap, listPlayerAssets, localShips, shipBaseStats, shopCatalogue,
 } from "../sim/economy.js";
 import {
   describe,
-  activeMissions,
   boardAt,
   boardRefreshRemaining,
   formatBoardCooldown,
-  atMissionHandInStation,
-  canCollectMissionReward,
-  canCompleteMissionHere,
-  missionHandInStationName,
-  missionHandIn,
-  missionItemRequirements,
-  missionNextText,
-  missionObjectivesDone,
-  missionProgress,
 } from "../sim/contracts.js";
-import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
-import { term, terms } from "../data/terms.js";
+import { DEFAULT_PLACE } from "../data/places.js";
+import { term } from "../data/terms.js";
 import { stationAt } from "../sim/places.js";
 import { missionLogHtml } from "./missionlog.js";
+import { LEFT_TOGGLE_KEYS, activeLeftPanel, activeRightTab } from "./left-panel.js";
 
 const esc = text => String(text ?? "")
   .replace(/&/g, "&amp;")
@@ -46,28 +35,32 @@ const esc = text => String(text ?? "")
   .replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;");
 
+// Station menu buttons:
+// - Missions, Inventory, Base, Saves switch the right-hand station panel
+//   (Missions also opens the Contract board in the left window).
+// - Outfitting and Shop toggle the shared mutually exclusive left-side window.
 export const TABS = [
-  ["m", "Contracts"],
-  ["l", "Mission log"],
-  ["h", "Hangar"],
-  ["o", "Outfitting"],
+  ["l", "Missions"],
   ["i", "Inventory"],
+  ["o", "Outfitting"],
   ["p", "Shop"],
   ["b", "Base"],
   ["s", "Saves"],
 ];
 
-// Which function draws which tab. To add a tab: add it to TABS above, write a
-// function that returns HTML, and list it here under the same key.
+// Right-hand station panel screens.
 const SCREENS = {
-  m: contractsHtml,
   l: missionLogHtml,
-  h: hangarHtml,
-  o: outfittingHtml,
   i: inventoryHtml,
-  p: shopHtml,
   b: baseHtml,
   s: savesHtml,
+};
+
+// Left-hand reusable station window screens.
+const LEFT_SCREENS = {
+  m: contractsHtml,
+  o: outfittingHtml,
+  p: shopHtml,
 };
 
 export function introHtml() {
@@ -99,17 +92,26 @@ export function introHtml() {
   );
 }
 
-export function outpostHtml(ui) {
+export function outpostHtml(ui = state.ui) {
   const S = state.profile;
-  let h = `<h1>${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n}</h1><div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${TABS.map(
-    ([k, n]) => `<button data-a="tab" data-b="${k}" class="${ui.tab === k ? "on" : ""}">${n}</button>`
-  ).join("")}</nav>`;
+  const activeTab = activeRightTab(ui);
+  const openLeft = activeLeftPanel(ui);
+  const navHtml = TABS.map(([k, n]) => {
+    if (LEFT_TOGGLE_KEYS.has(k)) {
+      const open = openLeft === k;
+      return (
+        `<button type="button" data-a="leftTab" data-b="${k}" class="${open ? "on" : ""}" ` +
+        `aria-pressed="${open}">${n}</button>`
+      );
+    }
+    return `<button type="button" data-a="tab" data-b="${k}" class="${activeTab === k ? "on" : ""}">${n}</button>`;
+  }).join("");
+  let h = `<h1>${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n}</h1><div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${navHtml}</nav>`;
 
   const isHome = homeStationPlace(S) === state.place;
   h += `<div class="home-station"><button data-a="home" ${isHome || !canSetHomeStation(state.place) ? "disabled" : ""}>${isHome ? "Home station" : "Set Home Station"}</button><small>Recover here after death.</small></div>`;
-  const activeTab = SCREENS[ui.tab] ? ui.tab : "m";
-  const render = SCREENS[activeTab];
-  if (render) h += render(ui);
+  const draw = SCREENS[activeTab];
+  if (draw) h += draw(ui);
 
   const local = localShips(S, state.worldState);
   const own = local.includes(S.ship);
@@ -117,36 +119,15 @@ export function outpostHtml(ui) {
   return h;
 }
 
-function contractsHtml() {
-  // Active missions are the pilot's own: they are listed here and in the Mission
-  // log wherever the pilot docks, with the hand-in button live only at the one
-  // station that takes it.
-  const active = activeMissions();
-  const activeHtml = active.length
-    ? `<h2>Active missions</h2>` + active.map(m => {
-        const requirement = missionHandIn(m),
-          // The reward is only collected at the mission's own station, so the
-          // row offers the button there and says where to go everywhere else.
-          cargoReady = canCollectMissionReward(m),
-          here = atMissionHandInStation(m),
-          ready = cargoReady && here,
-          station = missionHandInStationName(m),
-          items = missionItemRequirements(m),
-          itemText = items.length ? `${items.map(r => `${r.name}: ${r.available} of ${r.required} available`).join(", ")}. ` : "",
-          progress = m.type === "hunt" ? missionProgress(m) : null,
-          // With every step done the row says what is still owed (the hand-in,
-          // or the reward trip) instead of leaving a bare Abandon button.
-          owed = missionObjectivesDone(m) || cargoReady ? `${missionNextText(m)} ` : "",
-          detail = `${owed}${itemText}${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
-        return `<div class="row"><div>${describe(m)}<small>${detail}</small></div>${
-          ready
-            ? `<button data-a="done" data-b="${m.id}">${requirement ? "Hand in cargo" : "Collect reward"}</button>`
-            : cargoReady
-              ? `<button data-a="done" data-b="${m.id}" disabled>${requirement ? "Hand in" : "Collect"} at ${station}</button><button data-a="drop" data-b="${m.id}">Abandon</button>`
-              : `<button data-a="drop" data-b="${m.id}">Abandon</button>`
-        }</div>`;
-      }).join("")
-    : `<p>No active missions here.</p>`;
+/** Pure HTML content for the reusable left-side station window (`"o" | "p" | "m"`). */
+export function leftPanelHtml(ui = state.ui) {
+  const view = activeLeftPanel(ui);
+  const draw = view && LEFT_SCREENS[view];
+  return draw ? draw(ui) : "";
+}
+
+/** Contract board rendered inside the left window when Missions is active. */
+export function contractsHtml() {
   const offers = boardAt(state.place);
   const wait = boardRefreshRemaining(state.place);
   const cooling = wait > 0;
@@ -162,7 +143,6 @@ function contractsHtml() {
     : `This station's board can be refreshed now.`;
   const refreshLabel = cooling ? `Refresh (${waitText})` : "Refresh";
   return (
-    activeHtml +
     `<h2>Contract board</h2>` +
     offersHtml +
     `<div class="row"><small>${refreshNote}</small><button data-a="ref" ${cooling ? "disabled" : ""}>${refreshLabel}</button></div>`
@@ -377,56 +357,60 @@ export function shipSellConfirmHtml(check) {
 }
 
 /**
- * Station Hangar tab: compact stored-ship list for this station. Left-clicking a
- * row does not auto-equip; right-clicking opens Show info, Fly ship, or Sell.
+ * Compact stored-ship list shown at the top of the docked Inventory tab (above
+ * Station hold and the ship's hold). Single left-clicking a row does not equip;
+ * use the small Fly button, double-click the row, or right-click for Show info,
+ * Fly ship, or Sell.
  */
 export function hangarHtml() {
   const S = state.profile;
   const owned = localShips(S, state.worldState);
   const cap = hangarCap(state.worldState);
-  if (!owned.length) {
-    return (
-      `<h2>Hangar</h2>` +
-      `<div class="sub">No ships stored at this station (0 of ${cap} berths). Buy a ship in the Shop to store it here.</div>`
-    );
-  }
-  const rows = owned
-    .map(id => {
-      const active = id === S.ship;
-      const hpPct = Math.round((S.hp[id] ?? 1) * 100);
-      const t = shipTypeOf(id);
-      const label = shipLabel(id, owned);
-      return (
-        `<li class="hangar-ship-row${active ? " selected" : ""}" data-hangar-ship="${esc(id)}" data-ship-type="${t}" ` +
-        `${active ? 'aria-current="true" ' : ""}` +
-        `title="${esc(label)} — ${active ? "active ship" : "double-click to fly"}. Right-click for options.">` +
-        `<span class="hangar-ship-name">${esc(label)}</span>` +
-        `<small>${active ? "Active" : "Stored"}${hpPct < 100 ? ` &middot; ${hpPct}%` : ""}</small>` +
-        `</li>`
-      );
-    })
-    .join("");
+  const body = owned.length
+    ? `<ul class="hangar-ships" aria-label="Ships stored at this station">` +
+      owned
+        .map(id => {
+          const active = id === S.ship;
+          const hpPct = Math.round((S.hp[id] ?? 1) * 100);
+          const t = shipTypeOf(id);
+          const label = shipLabel(id, owned);
+          return (
+            `<li class="hangar-ship-row${active ? " selected" : ""}" data-hangar-ship="${esc(id)}" data-ship-type="${t}" ` +
+            `${active ? 'aria-current="true" ' : ""}` +
+            `title="${esc(label)} — ${active ? "active ship" : "press Fly or double-click to fly"}. Right-click for options.">` +
+            `<span class="hangar-ship-name">${esc(label)}</span>` +
+            `<span class="hangar-ship-meta">` +
+            `<small>${active ? "Active" : "Stored"}${hpPct < 100 ? ` &middot; ${hpPct}%` : ""}</small>` +
+            `<button type="button" class="hangar-fly-btn" data-a="hangarFly" data-b="${esc(id)}" ` +
+            `${active ? 'disabled title="Already flying this ship."' : `aria-label="Fly ${esc(label)}"`}>Fly</button>` +
+            `</span>` +
+            `</li>`
+          );
+        })
+        .join("") +
+      `</ul>`
+    : `<div class="hangar-empty">No ships stored here. Buy a ship in the Shop.</div>`;
   return (
-    `<h2>Hangar</h2>` +
-    `<div class="sub">${owned.length} of ${cap} berths used at this station. Double-click a ship to fly it, or right-click for Show info, Fly ship, or Sell.</div>` +
-    `<ul class="hangar-ships" aria-label="Ships stored at this station">${rows}</ul>`
+    `<section class="inv-col inv-ships">` +
+    `<header><h3>Ships</h3><span class="mod-count">${owned.length} / ${cap} berths</span></header>` +
+    body +
+    `</section>`
   );
 }
 
-function outfittingHtml() {
+/** Outfitting screen rendered inside the reusable left-side station window. */
+export function outfittingHtml() {
   const S = state.profile;
   const owned = localShips(S, state.worldState);
   if (!owned.length || !shipDef(S.ship)) {
     return (
       `<h2>Outfitting</h2>` +
-      `<div class="sub">No ship is stored at this station. Buy a ship in the Shop to store it in the Hangar.</div>`
+      `<div class="sub">No ship is stored at this station. Buy a ship in the Shop to store it here.</div>`
     );
   }
   const ship = shipDef(S.ship);
   const shipType = shipTypeOf(S.ship);
   const label = shipLabel(S.ship, owned);
-  const idx = Math.max(0, owned.indexOf(S.ship));
-  const many = owned.length > 1 ? "" : "disabled";
   const left = leftRail(MODULE_GROUPS),
     right = MODULE_GROUPS.slice(left.length);
 
@@ -459,15 +443,10 @@ function outfittingHtml() {
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
     `<div class="outfit-mid">` +
-    `<div class="ship-switch" data-ship-type="${shipType}" data-ship-id="${esc(S.ship)}" title="Right-click for ship details">` +
-    `<button class="ship-arrow" data-a="shipPrev" ${many} aria-label="Previous ship">&#8249;</button>` +
-    `<div class="ship-switch-mid"><div class="ship-switch-name">${esc(label)}</div><div class="ship-switch-count">${idx + 1} of ${owned.length} in the hangar</div></div>` +
-    `<button class="ship-arrow" data-a="shipNext" ${many} aria-label="Next ship">&#8250;</button>` +
-    `</div>` +
     `<div class="outfit-view">` +
     // ui/outfitting.js mounts the 3D ship into #shipview after this HTML is drawn.
     `<div class="outfit-stage" id="shipview" data-ship-type="${shipType}" data-ship-id="${esc(S.ship)}">` +
-    `<div class="outfit-title">${esc(ship.n)}<small>${esc(ship.d)}</small></div>` +
+    `<div class="outfit-title">${esc(label)}<small>${esc(ship.d)}</small></div>` +
     `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset &middot; right-click for details</div>` +
     `</div>` +
     `</div>` +
@@ -564,7 +543,8 @@ function shopNodeHtml(shopId, node, key, open, depth = 0) {
   );
 }
 
-function shopHtml(ui = state.ui) {
+/** Station Shop screen rendered inside the reusable left-side station window. */
+export function shopHtml(ui = state.ui) {
   const shopId = (stationAt(state.place) || stationAt(DEFAULT_PLACE)).shop;
   const def = shopDef(shopId);
   const open = (ui && ui.shopOpen) || {};
@@ -594,7 +574,7 @@ export function viewedShip(ui = state.ui) {
  * same tile serves a station, a hold and a canister without any of them knowing about each other.
  */
 function invRow({
-  name, sub, kind, id, count, dir, free, vol, move = true, place = "", slot = 0,
+  name, sub, kind, id, count, dir, vol, move = true, place = "", slot = 0,
   destWord = dir === "s" ? "ship" : "station",
 }) {
   const label = kind === "c" ? (itemUse(id) ? "USE" : "ORE") : "MOD";
@@ -602,37 +582,21 @@ function invRow({
   const inner =
     `<span class="inv-item-top"><span class="inv-kind">${label}</span><span class="inv-n">&times;${count}</span></span>` +
     `<span class="inv-item-name">${esc(name)}</span><span class="inv-item-meta">${vol} m³ each</span>`;
-  const room = move ? Math.floor(free / (vol || 1)) : 1;
-  const noRoom = move && room <= 0 ? "true" : "false";
   return (
     `<button type="button" class="inv-item" data-a="invSlot" data-where="${esc(place)}" data-slot="${slot}" ` +
-    `data-kind="${kind}" data-id="${esc(id)}" data-dir="${esc(dir)}" data-count="${count}" aria-disabled="${noRoom}" ` +
+    `data-kind="${kind}" data-id="${esc(id)}" data-dir="${esc(dir)}" data-count="${count}" ` +
     `title="${esc(name)}: ${esc(sub)}. Click to pick up, drop or swap.${shiftHint} Right-click for options (or to place 1 while holding)." ` +
     `aria-label="${esc(name)}, quantity ${count}, slot ${slot + 1}.">${inner}</button>`
-  );
-}
-
-function heldBannerHtml() {
-  const held = state.ui.invHeld;
-  if (!held || !(held.n > 0)) return "";
-  return (
-    `<div class="inv-held-bar" role="status">` +
-    `<span>Holding <strong>${esc(itemName(held.id))} &times;${held.n}</strong> ` +
-    `<small>Click slot to place/swap · Right-click slot to place 1 · Esc to put back</small></span>` +
-    `<button type="button" class="inv-stack-btn" data-a="invReturn">Put back</button>` +
-    `</div>`
   );
 }
 
 /** One inventory panel: a heading with m³ in use + Stack all, then an interactive slot grid. */
 function invColumn(where, title, dir, {
   move = true, profile = state.profile, slots = 25, cols = 5,
-  dest = where === STATION ? viewedShip() : STATION,
-  destWord = null,
+  destWord = null, headControls = "",
 } = {}) {
   const used = loadOf(where, profile),
-    cap = capacityOf(where, profile),
-    destFree = move ? freeOf(dest, profile) : 0;
+    cap = capacityOf(where, profile);
   const held = state.ui.invHeld;
   const holding = Boolean(held && held.n > 0);
   const slotList = slotsAt(where, profile);
@@ -660,7 +624,6 @@ function invColumn(where, title, dir, {
           id,
           count: n,
           dir,
-          free: destFree,
           vol: itemVol(id),
           move,
           place: where,
@@ -681,7 +644,7 @@ function invColumn(where, title, dir, {
   const canStack = filledCount > 0 || (holding && held.where === where);
   return (
     `<section class="inv-col">` +
-    `<header><h3>${esc(title)}</h3>` +
+    `<header><span class="inv-col-title"><h3>${esc(title)}</h3>${headControls}</span>` +
     `<span class="inv-col-tools"><span class="mod-count">${room}</span>` +
     `<button type="button" class="inv-stack-btn" data-a="stackAll" data-where="${esc(where)}"${canStack ? "" : " disabled"} ` +
     `title="Combine split stacks and compact empty slots">Stack all</button></span></header>` +
@@ -716,13 +679,17 @@ export function assetsHtml(profile = state.profile, world = state.worldState, op
       `<div class="assets-empty">No ships or items stored at any station.</div>`
     );
   }
+  const destPocket = state.ui.destination && typeof state.ui.destination === "object"
+    ? state.ui.destination.pocketId
+    : null;
   const blocks = stations.map(st => {
     const isOpen = !!openMap[st.placeId];
+    const isDest = Boolean(destPocket && destPocket === st.placeId);
     const parts = [];
     if (st.ships.length) parts.push(`${st.ships.length} ${st.ships.length === 1 ? "ship" : "ships"}`);
     if (st.items.length) parts.push(`${st.itemUnits} ${st.itemUnits === 1 ? "item" : "items"} (${st.itemVol} m³)`);
     const sysTag = st.system && st.system !== st.name ? st.system : "";
-    const metaTag = [sysTag, st.here ? "Docked" : ""].filter(Boolean).join(" · ");
+    const metaTag = [sysTag, st.here ? "Docked" : "", isDest ? "Destination" : ""].filter(Boolean).join(" · ");
 
     let detail = "";
     if (isOpen) {
@@ -750,8 +717,10 @@ export function assetsHtml(profile = state.profile, world = state.worldState, op
     }
 
     return (
-      `<div class="assets-station${isOpen ? " is-open" : ""}">` +
-      `<button type="button" class="assets-toggle" data-a="assetStation" data-b="${esc(st.placeId)}" aria-expanded="${isOpen}">` +
+      `<div class="assets-station${isOpen ? " is-open" : ""}${isDest ? " is-destination" : ""}">` +
+      `<button type="button" class="assets-toggle" data-a="assetStation" data-b="${esc(st.placeId)}" ` +
+      `data-asset-station="${esc(st.placeId)}" aria-expanded="${isOpen}" ` +
+      `title="${esc(st.name)} — click to expand, right-click to set destination.">` +
       `<span class="assets-left"><span class="shop-caret" aria-hidden="true">${isOpen ? "&#9662;" : "&#9656;"}</span>` +
       `<span class="assets-name">${esc(st.name)}</span>` +
       `${metaTag ? `<small class="assets-sys">${esc(metaTag)}</small>` : ""}</span>` +
@@ -761,7 +730,6 @@ export function assetsHtml(profile = state.profile, world = state.worldState, op
   });
 
   return (
-    `<div class="sub">Click a station to inspect the ships in its hangar and the items in its hold.</div>` +
     `<div class="assets-list">${blocks.join("")}</div>`
   );
 }
@@ -776,27 +744,24 @@ function inventoryHtml(ui) {
   const S = state.profile;
   const local = localShips(S, state.worldState);
   const id = viewedShip(ui),
-    ship = shipDef(id),
-    label = shipLabel(id, local),
-    idx = Math.max(0, local.indexOf(id)),
-    many = local.length > 1 ? "" : "disabled";
+    ship = local.length ? shipDef(id) : null,
+    label = shipLabel(id, local);
+
+  const holdArrows = local.length > 1
+    ? `<span class="inv-hold-nav">` +
+      `<button type="button" class="inv-hold-arrow" data-a="invPrev" aria-label="Previous ship hold" title="Inspect previous ship hold">&#8249;</button>` +
+      `<button type="button" class="inv-hold-arrow" data-a="invNext" aria-label="Next ship hold" title="Inspect next ship hold">&#8250;</button>` +
+      `</span>`
+    : "";
 
   const shipSection = ship
-    ? `<div class="ship-switch inv-switch">` +
-      `<button class="ship-arrow" data-a="invPrev" ${many} aria-label="Previous ship">&#8249;</button>` +
-      `<div class="ship-switch-mid"><div class="ship-switch-name">${esc(label)}${id === S.ship ? " (flying)" : ""}</div>` +
-      `<div class="ship-switch-count">${idx + 1} of ${local.length} in the hangar</div></div>` +
-      `<button class="ship-arrow" data-a="invNext" ${many} aria-label="Next ship">&#8250;</button>` +
-      `</div>` +
-      invColumn(id, `${label} hold`, "t")
+    ? invColumn(id, `${label} hold`, "t", { headControls: holdArrows })
     : "";
 
   return (
-    `<h2>Inventory</h2>${subtabs}` +
-    `<div class="sub">Click a stack to pick it up, then click any slot to place, merge or swap it (right-click places 1). ` +
-    `Shift-click transfers a whole stack. Right-click a stack to take an exact amount, sell or discard. ` +
-    `Items you buy go to the station; bought ships sit in Hangar. Each ship has its own hold.</div>` +
-    heldBannerHtml() +
+    `<h2>Inventory</h2>` +
+    subtabs +
+    hangarHtml() +
     invColumn(STATION, "Station", "s") +
     shipSection
   );
@@ -816,7 +781,6 @@ export function cargoHtml(profile = state.profile) {
   }
   return (
     `<h2>Ship inventory</h2>${subtabs}` +
-    heldBannerHtml() +
     invColumn(id, `${ship.n} hold`, "t", { move: false, profile, slots: 35, cols: 7 })
   );
 }
@@ -834,13 +798,10 @@ export function cacheHtml(profile = state.profile) {
   const id = profile.ship, hull = shipDef(id), left = cacheUnits(cache);
   return (
     `<h2>${esc(cache.n)}</h2>` +
-    `<div class="sub">Click a stack to pick it up, then click any slot to place, merge or swap (right-click places 1). ` +
-    `Shift-click transfers a whole stack either way. Right-click a stack for Take amount, Use or Discard. ` +
-    `${left ? `${left} inside.` : "The canister is empty."}</div>` +
-    heldBannerHtml() +
+    `<div class="sub">${left ? `${left} inside.` : "The canister is empty."}</div>` +
     `<div class="cache-cols">` +
-    invColumn(id, `${hull.n} hold`, "stow", { move: true, profile, slots: 35, cols: 5, dest: CACHE, destWord: "canister" }) +
-    invColumn(CACHE, cache.n, "take", { move: true, profile, slots: 35, cols: 5, dest: id, destWord: "hold" }) +
+    invColumn(id, `${hull.n} hold`, "stow", { move: true, profile, slots: 35, cols: 5, destWord: "canister" }) +
+    invColumn(CACHE, cache.n, "take", { move: true, profile, slots: 35, cols: 5, destWord: "hold" }) +
     `</div>`
   );
 }

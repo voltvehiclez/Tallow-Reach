@@ -12,8 +12,11 @@
 //   - `Stack all` button on each inventory header: merge split stacks and compact gaps.
 //   - Escape / tab change / closing an inventory returns any held stack safely to its origin.
 
-import { state } from "../state/state.js";
+import { state, localPlayer } from "../state/state.js";
+import { setDestination } from "../state/destination.js";
 import { isModule, itemName, itemUse, itemVol } from "../data/items.js";
+import { findDestinationRoute } from "../sim/travel.js";
+import { stationAt } from "../sim/places.js";
 import {
   CACHE,
   pickupSlot,
@@ -67,23 +70,38 @@ function syncPointerListener(active) {
   }
 }
 
+/** Remove the floating cursor-held item card completely so no empty box can linger. */
+export function clearHeldGhost() {
+  if (ghostEl) {
+    ghostEl.hidden = true;
+    ghostEl.innerHTML = "";
+    ghostEl.remove?.();
+    ghostEl = null;
+  }
+  if (typeof document !== "undefined" && typeof document.getElementById === "function") {
+    const stray = document.getElementById("inv-held-ghost");
+    if (stray) {
+      stray.hidden = true;
+      stray.innerHTML = "";
+      stray.remove?.();
+    }
+  }
+  syncPointerListener(false);
+}
+
 function syncHeldGhost(clientX, clientY) {
   const held = state.ui.invHeld;
   if (typeof clientX === "number" && typeof clientY === "number" && (clientX !== 0 || clientY !== 0)) {
     lastPointer = { x: clientX, y: clientY, known: true };
   }
   if (!held || !(held.n > 0)) {
-    if (ghostEl) {
-      ghostEl.hidden = true;
-      ghostEl.innerHTML = "";
-    }
-    syncPointerListener(false);
+    clearHeldGhost();
     return;
   }
   if (typeof document === "undefined" || !document.body || typeof document.createElement !== "function") {
     return;
   }
-  if (!ghostEl || !ghostEl.isConnected) {
+  if (!ghostEl || ghostEl.isConnected === false) {
     ghostEl = document.createElement("div");
     ghostEl.id = "inv-held-ghost";
     ghostEl.className = "inv-held-ghost";
@@ -340,4 +358,94 @@ export function openTakeAmountPopover({ host, anchor, where, slot, id, count, on
   input?.focus?.();
   input?.select?.();
   return popover;
+}
+
+/** Check whether a station pocket in My Assets is or can become the saved destination. */
+export function stationDestinationStatus(placeId) {
+  const player = localPlayer();
+  const from = player?.place || state.place;
+  const galaxy = state.galaxy;
+  const pocket = galaxy?.pocketsById?.[placeId];
+  const st = stationAt(placeId);
+  const name = st?.n || pocket?.n || String(placeId || "station");
+  const cur = state.ui.destination;
+  const isSet = Boolean(
+    placeId &&
+    cur &&
+    typeof cur === "object" &&
+    cur.pocketId === placeId
+  );
+  if (!placeId) {
+    return { placeId: "", name, isCurrent: false, isSet: false, canSet: false, reason: "Unknown station." };
+  }
+  if (placeId === from) {
+    return { placeId, name, isCurrent: true, isSet, canSet: false, reason: "Already at this station." };
+  }
+  if (isSet) {
+    return { placeId, name, isCurrent: false, isSet: true, canSet: false, reason: "Already set as destination." };
+  }
+  if (!galaxy) {
+    return { placeId, name, isCurrent: false, isSet: false, canSet: false, reason: "No route available." };
+  }
+  const route = findDestinationRoute(galaxy, from, { pocketId: placeId }, {
+    player,
+    profile: state.profile,
+    world: state.worldState,
+  });
+  if (!route || route.length < 2) {
+    return { placeId, name, isCurrent: false, isSet: false, canSet: false, reason: "No route to this station." };
+  }
+  return { placeId, name, isCurrent: false, isSet: false, canSet: true, reason: "", hops: route.length - 1 };
+}
+
+/** Set a My Assets station pocket as the active navigation destination. */
+export function setAssetStationDestination(placeId) {
+  const status = stationDestinationStatus(placeId);
+  if (!status.canSet) {
+    return { ok: false, message: status.reason || "No route to this station." };
+  }
+  setDestination({ pocketId: status.placeId });
+  return { ok: true, message: "" };
+}
+
+/** Clear the active navigation destination when cleared from a My Assets station menu. */
+export function clearAssetStationDestination() {
+  if (!state.ui.destination) return { ok: false, message: "" };
+  setDestination(null);
+  return { ok: true, message: "" };
+}
+
+/** Build the right-click context menu for a station header inside My Assets. */
+export function buildAssetStationContextMenu(doc, placeId) {
+  const status = stationDestinationStatus(placeId);
+  const menu = doc.createElement("div");
+  menu.className = "inv-context assets-context";
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", status.name);
+
+  const setBtn = doc.createElement("button");
+  setBtn.type = "button";
+  setBtn.dataset.a = "assetSetDest";
+  setBtn.dataset.b = status.placeId;
+  setBtn.setAttribute("role", "menuitem");
+  setBtn.textContent = "Set destination";
+  if (!status.canSet) {
+    setBtn.disabled = true;
+    if (status.reason) setBtn.title = status.reason;
+  } else {
+    setBtn.title = `Set navigation destination to ${status.name}.`;
+  }
+  menu.append(setBtn);
+
+  if (status.isSet) {
+    const clearBtn = doc.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.dataset.a = "assetClearDest";
+    clearBtn.dataset.b = status.placeId;
+    clearBtn.setAttribute("role", "menuitem");
+    clearBtn.textContent = "Clear destination";
+    clearBtn.title = `Clear destination to ${status.name}.`;
+    menu.append(clearBtn);
+  }
+  return menu;
 }
