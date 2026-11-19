@@ -868,9 +868,18 @@ test("Controls condensation, minimalist top-right home icon, uncropped item text
     "held inventory item ghost stays 1:1 square matching inventory slots");
   assert.match(css, /\.outfit-view\s*\{[\s\S]*?min-height:\s*clamp\(336px,\s*50vh,\s*460px\)/,
     "3D ship preview expanded vertically into removed description space");
-  assert.match(css, /\.outfit-service\s*\{[\s\S]*?width:\s*min\(100%,\s*468px\)[\s\S]*?min-height:\s*172px/,
-    "Services box is less horizontal and slightly enlarged for future services");
-  assert.match(css, /\.service-label\s*\{[\s\S]*?font-size:\s*15px/, "Service text is 50% larger (15px vs 10px)");
+  assert.match(css, /\.outfit-service\s*\{[\s\S]*?width:\s*100%;\s*height:\s*68px/,
+    "Services keeps its slim full-width 68px bounding box so small monitors never scroll");
+  assert.match(css, /\.service-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)[\s\S]*?grid-auto-rows:\s*21px[\s\S]*?overflow-y:\s*auto/,
+    "Services holds 2 rows x 4 boxes and scrolls cleanly for 9+ future services");
+  assert.match(css, /\.service-box\s*\{[\s\S]*?flex-direction:\s*row[\s\S]*?height:\s*21px[\s\S]*?padding:\s*0\s+2px\s+0\s+5px/,
+    "each service box fits on 1 line with tight left/right edge padding");
+  assert.match(css, /\.service-label\s*\{[\s\S]*?white-space:\s*nowrap[\s\S]*?font-size:\s*11px/,
+    "service label sized cleanly so full names fit without ellipsis");
+  assert.match(css, /\.service-box button\s*\{[\s\S]*?height:\s*16px;\s*padding:\s*0\s+5px;\s*font-size:\s*10px/,
+    "service button sits compactly by the right edge");
+  assert.match(css, /@media\s*\(max-width:\s*1180px\)[\s\S]*?\.service-grid\s*\{\s*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/,
+    "narrower panes step down column count so each service box stays wide enough for full labels");
   assert.match(css, /\.inv-item-name\s*\{[\s\S]*?font-size:\s*9\.5px/, "inventory item text scaled down so names never clip");
   assert.match(css, /\.inv-item-meta\s*\{[\s\S]*?font-size:\s*8\.5px/, "inventory volume meta scaled down cleanly");
 });
