@@ -78,15 +78,15 @@ export function refillPower(player = state.player, profile = state.profile) {
 }
 
 /**
- * Can the ship pay for `mjps` right now, out of the cells or straight off the
- * powerplant? False when the cells are empty and the plants make less than the
- * demand, which is what stops the thrusters when a ship runs dry. Pure.
+ * Can the ship pay for `mjps` right now out of its power cells? Every powered
+ * system draws from stored energy (`stored`), never directly from a bare
+ * powerplant — with 0 MJ in the tank (for example when no power cell is fitted,
+ * or the cells have run dry), nothing that uses MJ may run. Pure.
  */
 export function hasPower(mjps = 0, p = state.power) {
   p = p.power || p;
   if (mjps <= 0) return true;
-  if (p.stored > 0) return true;
-  return p.gen >= mjps;
+  return p.stored > 0;
 }
 
 /** One frame of the power budget: cells take in what is made, give out what is used. */

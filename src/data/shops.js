@@ -54,14 +54,14 @@ const MODULE_GROUP_SHOP_NAMES = {
 
 /**
  * Optional collapsible sub-categories inside a module subgroup in the Shop tree.
- * Under `Primary weapons`, `Cannons` and `Missiles` hold current and future
- * cannon and primary-missile types; any primary part outside those families
- * (such as the mining beam) lists directly beneath them under `Primary weapons`.
+ * Under `Primary weapons`, `Cannons`, `Missiles` and `Mining beams` each hold
+ * their current and future module variants.
  */
 export const MODULE_SUBCATEGORIES = {
   primary: [
     { k: "cannons", n: "Cannons", family: "cannon" },
     { k: "missiles", n: "Missiles", family: "missile" },
+    { k: "mining", n: "Mining beams", family: "mining" },
   ],
 };
 

@@ -98,19 +98,19 @@ test("every inventory tile says where it lives, so the menu trashes the right pl
 
     const flight = cargoHtml(profile);
     assert.match(flight, new RegExp(`data-where="${profile.ship}"`), "the flight tile names the ship");
-    assert.match(flight, /Right-click to discard/, "and says what right-click does");
+    assert.match(flight, /Right-click for options/, "and says what right-click does");
 
     const station = outpostHtml({ tab: "i" });
     assert.match(station, /data-where="station"/, "station tiles name the store");
     assert.match(station, new RegExp(`data-where="${profile.ship}"`), "ship tiles name the hold");
-    assert.match(station, /Right-click to discard/);
-    assert.match(station, /data-a="mv"/, "moving is still the left-click action");
+    assert.match(station, /Right-click for options/);
+    assert.match(station, /data-a="invSlot"/, "slot pick/place/swap is the left-click action");
   } finally {
     state.profile = previous;
   }
 });
 
-test("both menus offer Discard: the station panel next to Sell, the flight card alone", () => {
+test("both menus offer Discard alongside Take amount (and Sell at a station)", () => {
   const read = file => readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
   const menu = read("ui/menu.js");
   const cargo = read("ui/cargo.js");
@@ -121,13 +121,13 @@ test("both menus offer Discard: the station panel next to Sell, the flight card 
   assert.match(menu, /if \(name === "discard"\)/, "and a handler for it");
   assert.match(menu, /openInventoryDiscard\(btn\)/, "which opens the popover, not a silent trash");
   assert.match(menu, /openDiscardPopover\(\{/, "through the shared two-step popover");
-  assert.match(menu, /inv\.discardItem\(place, item, amount\)/, "discarding the amount asked for, from the tile's own place");
+  assert.match(menu, /inv\.discardItem\(\s*place,\s*item,\s*amount/, "discarding the amount asked for, from the tile's own place");
   assert.match(menu, /inventoryChanged\(\);/, "mission hand-offs retry after a discard");
 
   assert.match(cargo, /onCargoContextMenu/, "the flight card has a right-click menu");
   assert.match(cargo, /discard\.dataset\.a = "cargoDiscard"/);
   assert.match(cargo, /openCargoDiscard\(discard\)/, "the flight card uses the same two steps");
-  assert.match(cargo, /discardItem\(place, item, amount\)/);
+  assert.match(cargo, /discardItem\(\s*place,\s*itemId,\s*amount/);
 
   assert.match(items, /canDiscard = id => isItem\(id\) && itemCat\(id\) !== "mission"/,
     "one rule decides what may be trashed");

@@ -145,17 +145,23 @@ export function flight(dt, P = state.player, runtime = null) {
       };
 
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
-  // Speed and turn come from the fitted thrusters, not from the hull.
+  // Speed and turn come from the fitted thrusters, not from the hull. Thrusters
+  // require both a fitted drive and stored MJ in the power cells: at 0 MJ the
+  // engines stay cold and register 0 MJ/s draw.
   const drv = r.drive;
   const powered = hasDrive(drv);         // no thruster fitted: a dead ship
-  const turn = drv.turn * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
+  const driveEnergy = powered && (!drv.draw || hasPower(drv.draw, r.power));
+  const turn = (driveEnergy ? drv.turn : 0) * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
 
-  // A dead ship cannot answer the controls, so warn the moment the player asks
-  // it to move. The warning repeats while a control is still held, but slowly,
-  // so it reads as a reminder rather than a flicker.
+  // A dead or empty-tank ship cannot answer the controls, so warn the moment the
+  // player asks it to move. The warning repeats while a control is still held,
+  // but slowly, so it reads as a reminder rather than a flicker.
   P.noDriveT = Math.max(0, P.noDriveT - dt);
   if (!W && !powered && P.noDriveT === 0 && tryingToMove(c, stick)) {
     if (P === state.player) msg("Equip thrusters to move", NO_DRIVE_WARN);
+    P.noDriveT = NO_DRIVE_WARN + 0.5;
+  } else if (!W && !driveEnergy && P.noDriveT === 0 && tryingToMove(c, stick)) {
+    if (P === state.player) msg("No stored power", NO_DRIVE_WARN);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
   }
   // The ship turns on its own record; the view copies the rotation onto the model.
@@ -170,6 +176,12 @@ export function flight(dt, P = state.player, runtime = null) {
   } else if (!powered) {
     // No thrusters: the throttle does nothing and the engines stay cold.
     P.thr = 0;
+  } else if (!driveEnergy) {
+    // 0 MJ in the tank: cannot push throttle on (only cut it with X/brake); engines produce 0 thrust and 0 draw.
+    if (c.stop) P.thr = 0;
+    if (c.brake) {
+      P.thr = P.thr > 0 ? Math.max(0, P.thr - dt * 0.9) : P.thr < 0 ? Math.min(0, P.thr + dt * 0.9) : 0;
+    }
   } else {
     if (c.thrust > 0) P.thr = Math.min(1, P.thr + dt * 0.5);
     if (c.thrust < 0) P.thr = Math.max(-1, P.thr - dt * 0.5);
@@ -181,13 +193,17 @@ export function flight(dt, P = state.player, runtime = null) {
 
   const boostKey = c.boost;
 
-  // Power budget for this frame: the thrusters draw while the throttle is off
-  // centre, and a little more while the boost is burning. The boost figure comes
-  // from last frame, so the extra starts the frame after it lights. Refilling the
-  // boost meter is free — it never shows up in the draw, the way filling a car's
-  // tank with fuel does not run the engine.
-  setDraw("drive", driveDraw(drv, P.thr, P.boost), r.power);
-  const supply = hasPower(r.power.draw, r.power);
+  // Power budget for this frame: the thrusters draw while running (throttle,
+  // strafe, lift or active boost), and only when the power cells hold MJ to pay
+  // for them — an unpowered drive never reports phantom MJ/s usage on the HUD.
+  const activeAxis = !W && (P.thr !== 0 || c.strafe !== 0 || c.lift !== 0);
+  const wantDrive = driveDraw(drv, P.thr !== 0 ? P.thr : activeAxis ? 1 : 0, P.boost && driveEnergy);
+  const otherDriveDraw = r.power.draw - (r.power.use.drive || 0);
+  const supply = driveEnergy && (wantDrive <= 0 || hasPower(otherDriveDraw + wantDrive, r.power));
+  // Keep recorded draw strictly tied to paid thruster operation (throttle/boost,
+  // or lateral thrusters when off centre).
+  const paidDrive = supply ? (P.thr !== 0 || P.boost ? driveDraw(drv, P.thr, P.boost) : 0) : 0;
+  setDraw("drive", paidDrive, r.power);
 
   // The boost: lighting it is the hungry moment. It costs one big slug of stored
   // energy (20 MJ on the basic thrusters) once the spool-up has finished and the

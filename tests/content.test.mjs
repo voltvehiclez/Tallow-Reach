@@ -819,12 +819,12 @@ test("any throttle setting off zero runs the thrusters, and the boost adds its s
   assert.equal(driveDraw(PARKED, 1, true), 0, "no thrusters, nothing to pay for");
 });
 
-test("a ship with empty cells and no powerplant has no power to fly on", () => {
+test("nothing that uses MJ runs when the power tank holds 0 MJ", () => {
   assert.equal(hasPower(0, { stored: 0, gen: 0 }), true, "asking for nothing always works");
-  assert.equal(hasPower(2, { stored: 0, gen: 0 }), false, "empty cells and no plant: no thrust");
-  assert.equal(hasPower(2, { stored: 0, gen: 2 }), true, "a plant that covers the draw is enough");
-  assert.equal(hasPower(2, { stored: 0, gen: 1.5 }), false, "a plant that cannot cover it is not");
-  assert.equal(hasPower(2, { stored: 0.1, gen: 0 }), true, "anything left in the cells will do");
+  assert.equal(hasPower(2, { stored: 0, gen: 0 }), false, "empty cells and no plant: no power");
+  assert.equal(hasPower(2, { stored: 0, gen: 10 }), false, "0 MJ stored blocks power use even with a fitted plant");
+  assert.equal(hasPower(2, { stored: 0, gen: 1.5 }), false, "0 MJ stored blocks power use");
+  assert.equal(hasPower(2, { stored: 0.1, gen: 0 }), true, "stored MJ in the cells supplies demand");
 });
 
 test("every hull flies exactly like the old Wasp on the basic thrusters", () => {

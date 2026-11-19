@@ -27,6 +27,14 @@ import { introHtml, outpostHtml, shipDetailsHtml, shipSellConfirmHtml, shopBuyHt
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
 import { openDiscardPopover } from "./discard.js";
+import {
+  cancelHeldStack,
+  clickInventorySlot,
+  hasHeldStack,
+  openTakeAmountPopover,
+  rightClickInventorySlot,
+  runStackAll,
+} from "./inventory-ui.js";
 
 const $ = id => document.getElementById(id);
 let panel;
@@ -58,11 +66,13 @@ export function setupMenu(options = {}) {
     panel.hidden = true;
   });
   on("died", text => {
+    cancelHeldStack();
     showNotice(text);
     state.ui.tab = "h";
     render();
   });
   on("main-menu", () => {
+    cancelHeldStack();
     state.ui.intro = true;
     state.ui.tab = "m";
     hideNotice();
@@ -157,6 +167,7 @@ const ACTIONS = {
     if (notice) showNotice(notice);
   },
   tab(name) {
+    cancelHeldStack();
     state.ui.tab = name;
     hideNotice();
     closePanelPopovers();
@@ -164,6 +175,7 @@ const ACTIONS = {
     state.ui.fit = null;
   },
   go() {
+    cancelHeldStack();
     closePanelPopovers();
     state.ui.fit = null;
     launch();
@@ -248,19 +260,37 @@ const ACTIONS = {
     cycleShip(1);
   },
 
-  // Inventory: step through the ships' holds (this only changes which hold is shown,
-  // not which ship you fly), and move things between the station and that hold.
+  // Inventory: switch between Storage & Hold and My Assets, step through local ships'
+  // holds, pick up/place/swap/split stacks, or consolidate stacks with Stack all.
+  invView(view) {
+    cancelHeldStack();
+    state.ui.invView = view === "assets" ? "assets" : "inv";
+  },
+  assetStation(placeId) {
+    if (!placeId) return;
+    const open = state.ui.assetsOpen || (state.ui.assetsOpen = {});
+    if (open[placeId]) delete open[placeId];
+    else open[placeId] = true;
+  },
   invPrev() {
+    cancelHeldStack();
     cycleInvShip(-1);
   },
   invNext() {
+    cancelHeldStack();
     cycleInvShip(1);
   },
+  invReturn() {
+    if (cancelHeldStack()) inventoryChanged();
+  },
+  stackAll(where) {
+    const target = where || inv.STATION;
+    const res = runStackAll(target);
+    if (res.message) toast(res.message);
+    if (res.changed) inventoryChanged();
+  },
   mv(arg) {
-    // data-b is "kind:id:dir:n": dir s = station to the ship shown, t = from it to
-    // the station; n = a count or "all". The kind is only what the tile shows
-    // (ORE / MOD) — the item catalogue says what the thing is, so one move
-    // handles goods and parts alike.
+    // Legacy compatibility helper for direct programmatic transfers.
     const [, id, dir, n] = String(arg || "").split(":");
     const ship = viewedShip();
     const [from, to] = dir === "s" ? [inv.STATION, ship] : [ship, inv.STATION];
@@ -400,6 +430,7 @@ function cycleInvShip(dir) {
 
 /** Common work after the whole save is replaced (load, import, reset). */
 function afterSaveChange() {
+  cancelHeldStack();
   closeStarmap();
   const placeId = state.worldState.place;
   resetPlaces();
@@ -413,6 +444,9 @@ function afterSaveChange() {
   state.shops = {};
   state.ui.fit = null;
   state.ui.invShip = null;
+  state.ui.invView = "inv";
+  state.ui.cargoView = "hold";
+  state.ui.assetsOpen = {};
   state.ui.shopOpen = {};
   contracts.ensureBoard();
   state.flight.lock = null;
@@ -450,23 +484,23 @@ function openInventorySell(button) {
   const [kind, id, dir, stack] = String(button.dataset.b || "").split(":");
   if (!canSell(id)) return;
   const source = dir === "s" ? inv.STATION : viewedShip();
+  const slotIdx = Number.isInteger(Number(button.dataset.slot)) ? Number(button.dataset.slot) : -1;
   const available = inv.countOf(source, id);
   if (!(available > 0)) return;
 
   const anchor = popoverAnchorFor(panel, button);
-  panel.querySelector(".inv-context")?.remove();
-  panel.querySelector(".inv-sell-popover")?.remove();
-  panel.querySelector(".inv-discard-popover")?.remove();
+  closePanelPopovers();
 
   const popover = document.createElement("div");
   popover.className = "inv-sell-popover";
   popover.setAttribute("role", "dialog");
   popover.setAttribute("aria-label", "Sell item");
   popover.dataset.source = `${kind}:${id}:${dir}`;
+  popover.dataset.slot = String(slotIdx);
   popover.innerHTML =
     `<div class="inv-sell-head"><strong>Sell ${itemName(id)}</strong>` +
     `<div class="inv-sell-actions"><button type="button" data-a="invSellConfirm">Sell</button><button type="button" data-a="invSellCancel">Cancel</button></div></div>` +
-    `<label>Amount <span>(1–${available})</span><input class="inv-sell-amount" type="number" min="1" max="${available}" step="1" value="${stack || available}"></label>` +
+    `<label>Amount <span>(1–${available})</span><input class="inv-sell-amount" type="number" min="1" max="${available}" step="1" value="${Math.min(available, Math.max(1, Number(stack) || available))}"></label>` +
     `<div class="inv-sell-error" aria-live="polite"></div>`;
 
   const scrollLeft = panel.scrollLeft, scrollTop = panel.scrollTop;
@@ -497,12 +531,46 @@ function confirmInventorySell(button) {
     input.focus();
     return;
   }
-  const text = eco.sellInventoryItem(id, source, amount);
+  const slotIdx = Number(popover.dataset.slot);
+  const text = eco.sellInventoryItem(
+    id,
+    source,
+    amount,
+    state.profile,
+    state.worldState,
+    Number.isInteger(slotIdx) ? slotIdx : -1
+  );
   if (text) toast(text);
   inventoryChanged();
   uiSound("confirm");
   save();
   render();
+}
+
+/** Right-click -> Take amount: pick up an exact number from one slot onto the cursor. */
+function openInventoryTakeAmount(button) {
+  const id = button.dataset.b;
+  const where = button.dataset.where || inv.STATION;
+  const slot = Number(button.dataset.slot);
+  if (!Number.isInteger(slot) || slot < 0) return;
+  const entry = inv.slotAt(where, slot);
+  if (!entry || entry.id !== id || !(entry.n > 0)) return;
+
+  const anchor = popoverAnchorFor(panel, button);
+  closePanelPopovers();
+
+  openTakeAmountPopover({
+    host: panel,
+    anchor,
+    where,
+    slot,
+    id,
+    count: entry.n,
+    onTake: () => {
+      uiSound("click");
+      render();
+    },
+  });
 }
 
 /**
@@ -512,13 +580,14 @@ function confirmInventorySell(button) {
 function openInventoryDiscard(button) {
   const id = button.dataset.b;
   const where = button.dataset.where || inv.STATION;
+  const slotIdx = Number(button.dataset.slot);
   if (!canDiscard(id)) return;
-  const count = inv.countOf(where, id);
+  const slotEntry = Number.isInteger(slotIdx) && slotIdx >= 0 ? inv.slotAt(where, slotIdx) : null;
+  const count = slotEntry && slotEntry.id === id ? slotEntry.n : inv.countOf(where, id);
   if (!(count > 0)) return;
 
   const anchor = popoverAnchorFor(panel, button);
-  panel.querySelector(".inv-context")?.remove();
-  panel.querySelector(".inv-sell-popover")?.remove();
+  closePanelPopovers();
 
   openDiscardPopover({
     host: panel,
@@ -527,7 +596,14 @@ function openInventoryDiscard(button) {
     id,
     count,
     onDiscard: (place, item, amount) => {
-      toast(inv.discardItem(place, item, amount));
+      toast(inv.discardItem(
+        place,
+        item,
+        amount,
+        state.profile,
+        state.worldState,
+        Number.isInteger(slotIdx) ? slotIdx : -1
+      ));
       inventoryChanged();
       uiSound("confirm");
       save();
@@ -537,15 +613,25 @@ function openInventoryDiscard(button) {
 }
 
 const POPOVER_SELECTOR =
-  ".inv-context, .inv-sell-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover, .ship-sell-popover";
+  ".inv-context, .inv-sell-popover, .inv-take-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover, .ship-sell-popover";
 
-/** Close any open docked context menu or popover; returns true if anything closed. */
-export function closePanelPopovers() {
-  if (!panel) return false;
-  const open = panel.querySelectorAll(POPOVER_SELECTOR);
-  if (!open.length) return false;
-  open.forEach(node => node.remove());
-  return true;
+/** Close any open docked context menu or popover (and optionally return a held stack). */
+export function closePanelPopovers({ returnHeld = false } = {}) {
+  let closed = false;
+  if (panel) {
+    const open = panel.querySelectorAll(POPOVER_SELECTOR);
+    if (open.length) {
+      open.forEach(node => node.remove());
+      closed = true;
+    }
+  }
+  if (!closed && returnHeld && cancelHeldStack()) {
+    inventoryChanged();
+    save();
+    if (panel && !panel.hidden) render();
+    closed = true;
+  }
+  return closed;
 }
 
 /** Clamp a floating popover of rough `(w, h)` inside the visible scroll window of `panel`. */
@@ -853,6 +939,32 @@ function confirmHangarShipSell(target) {
 }
 
 function onInventoryContextMenu(e) {
+  // While holding a stack, right-clicking ANY slot places 1 item into it (Minecraft style).
+  const slotBtn = e.target.closest("button[data-a='invSlot']");
+  if (slotBtn && hasHeldStack()) {
+    e.preventDefault();
+    closePanelPopovers();
+    const res = rightClickInventorySlot({
+      where: slotBtn.dataset.where,
+      slot: Number(slotBtn.dataset.slot),
+      clientX: e.clientX,
+      clientY: e.clientY,
+    });
+    if (res?.message) toast(res.message);
+    if (res?.changed) {
+      inventoryChanged();
+      uiSound("click");
+      save();
+      render();
+    }
+    return;
+  }
+
+  if (hasHeldStack()) {
+    e.preventDefault();
+    return;
+  }
+
   const tile = e.target.closest("button.inv-item[data-kind]");
   if (!tile) {
     const hangarRow = e.target.closest("[data-hangar-ship]");
@@ -874,10 +986,23 @@ function onInventoryContextMenu(e) {
   const menu = document.createElement("div");
   menu.className = "inv-context";
   menu.setAttribute("role", "menu");
+
+  const take = document.createElement("button");
+  take.type = "button";
+  take.dataset.a = "invTakeOpen";
+  take.dataset.b = tile.dataset.id;
+  take.dataset.where = tile.dataset.where || "";
+  take.dataset.slot = tile.dataset.slot || "0";
+  take.setAttribute("role", "menuitem");
+  take.textContent = "Take amount";
+  take.title = "Pick up a chosen number of items onto the cursor.";
+  menu.append(take);
+
   const sell = document.createElement("button");
   sell.type = "button";
   sell.dataset.a = "invSellOpen";
   sell.dataset.b = `${tile.dataset.kind}:${tile.dataset.id}:${tile.dataset.dir}:${tile.dataset.count}`;
+  sell.dataset.slot = tile.dataset.slot || "0";
   sell.setAttribute("role", "menuitem");
   sell.textContent = "Sell";
   // Goods and spare modules both have a sell value, so both can be sold here; a
@@ -888,31 +1013,26 @@ function onInventoryContextMenu(e) {
   }
   menu.append(sell);
 
-  // Discard trashes the whole stack, here and in flight (ui/cargo.js). The
-  // label carries the count so the click says what it will cost.
+  // Discard trashes from the clicked stack, here and in flight (ui/cargo.js).
   const discard = document.createElement("button");
   discard.type = "button";
   discard.dataset.a = "discard";
   discard.dataset.b = tile.dataset.id;
   discard.dataset.where = tile.dataset.where || "";
+  discard.dataset.slot = tile.dataset.slot || "0";
   discard.setAttribute("role", "menuitem");
   discard.textContent = `Discard \u00d7${tile.dataset.count}`;
   if (!canDiscard(tile.dataset.id)) {
     discard.disabled = true;
     discard.title = "A mission item: hand it in, do not trash it.";
   } else {
-    discard.title = "Throw this whole stack away. It cannot be recovered.";
+    discard.title = "Throw this stack away. It cannot be recovered.";
   }
   menu.append(discard);
 
   const rect = panel.getBoundingClientRect();
-  // Anchor the sell/discard popovers where the mouse is, not beside the tile —
-  // the tile can sit a full tile-width to the left of the cursor, and hunting the
-  // popover across the panel was the whole complaint (owner, 2026-11-14). The
-  // flight card and the canister already anchor their popovers to the click point.
-  // Room for both entries (Sell, Discard) before the menu would leave the panel.
-  const x = Math.min(panel.scrollLeft + panel.clientWidth - 132, Math.max(panel.scrollLeft, e.clientX - rect.left + panel.scrollLeft));
-  const y = Math.min(panel.scrollTop + panel.clientHeight - 76, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
+  const x = Math.min(panel.scrollLeft + panel.clientWidth - 136, Math.max(panel.scrollLeft, e.clientX - rect.left + panel.scrollLeft));
+  const y = Math.min(panel.scrollTop + panel.clientHeight - 104, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
   menu.dataset.anchorLeft = String(x);
   menu.dataset.anchorTop = String(y);
   menu.dataset.anchorWidth = "0";
@@ -936,7 +1056,7 @@ function onDblClick(e) {
 async function onClick(e) {
   const btn = e.target.closest("button[data-a]");
   if (!btn) {
-    if (e.target.closest(".inv-sell-popover") || e.target.closest(".inv-discard-popover")) return;
+    if (e.target.closest(".inv-sell-popover") || e.target.closest(".inv-take-popover") || e.target.closest(".inv-discard-popover")) return;
     closePanelPopovers();
     return;
   }
@@ -1003,6 +1123,33 @@ async function onClick(e) {
     ACTIONS.shopGroup(btn.dataset.b);
     uiSound("click");
     render();
+    return;
+  }
+  if (name === "invSlot") {
+    closePanelPopovers();
+    const where = btn.dataset.where;
+    const ship = viewedShip();
+    const otherWhere = where === inv.STATION ? ship : inv.STATION;
+    const res = clickInventorySlot({
+      where,
+      slot: Number(btn.dataset.slot),
+      otherWhere,
+      shiftKey: Boolean(e.shiftKey),
+      clientX: e.clientX,
+      clientY: e.clientY,
+    });
+    if (res.message) toast(res.message);
+    if (res.changed) {
+      if (!res.picked) inventoryChanged();
+      uiSound("click");
+      save();
+      render();
+    }
+    return;
+  }
+  if (name === "invTakeOpen") {
+    openInventoryTakeAmount(btn);
+    uiSound();
     return;
   }
   if (name === "invSellOpen") {

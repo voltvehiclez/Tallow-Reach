@@ -19,7 +19,8 @@ import { createPlayer } from "../src/sim/player.js";
 import { generateGalaxy } from "../src/sim/galaxy.js";
 import { setPlaceCatalog, DEFAULT_PLACE } from "../src/data/places.js";
 import { enterPlace } from "../src/sim/places.js";
-import { addItem, countOf, CACHE } from "../src/sim/inventory.js";
+import { addItem, countOf, slotsAt, CACHE } from "../src/sim/inventory.js";
+import { cacheHtml } from "../src/ui/screens.js";
 import { openRift, enterRift, riftAction, updateInstances, cacheUnits } from "../src/sim/instances.js";
 import { setSeed } from "../src/util/rng.js";
 import { emit } from "../src/util/events.js";
@@ -108,12 +109,13 @@ function insideRift(seed = 4242) {
   return { player, record };
 }
 
-/** A click on a panel tile: `closest` answers for the selector the handler asks about first. */
-function clickOn(dataset, { shift = false } = {}) {
+/** A click or right-click on a slot in the cache panel. */
+function clickOn(dataset, { shift = false, right = false } = {}) {
   const tile = makeElement("button");
-  tile.dataset = dataset;
-  const target = { closest: sel => (sel.includes("cmv") ? tile : null) };
-  root.handlers.click({ target, shiftKey: shift, preventDefault() {} });
+  tile.dataset = { a: "invSlot", slot: "0", ...dataset };
+  const target = { closest: sel => (sel.includes("invSlot") ? tile : null) };
+  if (right) root.handlers.contextmenu({ target, preventDefault() {} });
+  else root.handlers.click({ target, shiftKey: shift, preventDefault() {} });
 }
 
 test("beside an unlocked canister, R opens the trade: the hold on the left, the canister on the right", () => {
@@ -133,46 +135,53 @@ test("beside an unlocked canister, R opens the trade: the hold on the left, the 
   assert.ok(shipAt > -1 && cacheAt > shipAt, "the ship's own hold comes first, the canister off to the right");
   assert.ok(html.indexOf(`<div class="cache-cols">`) < shipAt, "and they sit side by side");
 
-  // The same tiles as the station's Inventory tab, but with the trade's own move action, and pointing
-  // at the other column: stow goes hold to canister, take goes canister to hold.
-  assert.match(html, /data-a="cmv"/, "its tiles carry the trade's move action");
-  assert.match(html, /data-dir="stow"/, "the hold's tiles send cargo into the canister");
-  assert.match(html, /data-dir="take"/, "and the canister's tiles send it into the hold");
-  const slots = html.match(/class="inv-item"|class="inv-empty-slot"/g) || [];
+  assert.match(html, /data-a="invSlot"/, "its slots carry the shared pick/place/swap action");
+  assert.match(html, /data-a="stackAll"/, "both columns offer Stack all");
+  assert.match(html, /data-dir="stow"/, "the hold's tiles identify the hold side");
+  assert.match(html, /data-dir="take"/, "and the canister's tiles identify the canister side");
+  const slots = html.match(/data-a="invSlot"/g) || [];
   assert.equal(slots.length, 70, "each column keeps the flight card's full slot field");
-  assert.match(html, /Shift-click to move its whole stack/, "the panel explains the clicks");
-  assert.match(html, /goes both ways/, "and that cargo can be put back");
+  assert.match(html, /Shift-click transfers a whole stack either way/, "the panel explains slot moves both ways");
   // A canister has no measured volume, so its column says what is in it and nothing more.
-  const head = html.slice(cacheAt, cacheAt + 220);
+  const head = html.slice(cacheAt, cacheAt + 240);
   assert.match(head, /m³<\/span>/, "the canister's column reports its load");
   assert.doesNotMatch(head, /\/ [0-9.]+ m³|\/ Infinity/, "but has no capacity to show against");
   closeCache({ silent: true });
 });
 
-test("a click moves one and Shift moves the whole stack, in either direction", () => {
+test("left-click picks up and places, right-click places one, and Shift moves the whole stack either way", () => {
   installDom();
   const { player, record } = insideRift(777);
   const ship = state.profile.ship;
-  const first = Object.keys(record.cache.stock)[0];
-  const rolled = record.cache.stock[first];
+  const firstSlot = slotsAt(CACHE, state.profile)[0];
+  const first = firstSlot.id;
+  const rolled = firstSlot.n;
   assert.ok(rolled > 1, "this seed rolls a stack the test can take apart");
 
   openCache();
-  clickOn({ b: `c:${first}:take:1`, id: first, dir: "take", where: CACHE });
-  assert.equal(countOf(ship, first), 1, "a click takes one unit into the hold");
-  assert.equal(record.cache.stock[first], rolled - 1, "out of the canister");
+  // Pick up stack from cache slot 0, right-click ship empty slot 4 to place 1, put rest back in cache slot 0.
+  clickOn({ where: CACHE, slot: "0" });
+  clickOn({ where: ship, slot: "4" }, { right: true });
+  clickOn({ where: CACHE, slot: "0" });
+  assert.equal(countOf(ship, first), 1, "right-clicking a slot while holding places 1 into the hold");
+  assert.equal(record.cache.stock[first], rolled - 1, "and leaves the rest in the canister");
 
-  clickOn({ b: `c:${first}:take:1`, id: first, dir: "take", where: CACHE }, { shift: true });
+  // Shift-click takes the rest of the stack into the hold.
+  clickOn({ where: CACHE, slot: "0" }, { shift: true });
   assert.equal(countOf(ship, first), rolled, "Shift-click takes the rest of the stack");
   assert.equal(record.cache.stock[first], undefined, "and a stack that reaches zero leaves the canister");
 
-  clickOn({ b: `c:${first}:stow:1`, id: first, dir: "stow", where: ship });
-  assert.equal(countOf(ship, first), rolled - 1, "a click puts one back");
-  assert.equal(record.cache.stock[first], 1, "into the canister");
+  // Pick up from ship slot 4, right-click cache slot 0 to stow 1 back, return remainder to ship slot 4.
+  clickOn({ where: ship, slot: "4" });
+  clickOn({ where: CACHE, slot: "0" }, { right: true });
+  clickOn({ where: ship, slot: "4" });
+  assert.equal(countOf(ship, first), rolled - 1, "placing 1 back leaves the remainder aboard");
+  assert.equal(record.cache.stock[first], 1, "and puts 1 back into the canister");
   updateInstances(1 / 60);
   assert.equal(state.world.caches.length, 1, "which hangs in the world again");
   assert.equal(state.world.caches[0].locked, false, "still open, as the pilot left it");
   assert.equal(player.docked, false, "and none of this docked or hurt anybody");
+  closeCache({ silent: true });
 });
 
 test("the trade is offered to a pilot who may look at it, and refused to one who may not", () => {
@@ -238,24 +247,30 @@ test("an emptied canister keeps the panel open, and the hold's tiles still work 
   const ship = state.profile.ship;
   openCache();
 
-  // Empty it the way the pilot would: Shift-click each stack in the canister's column. The panel
-  // redraws after every move, so the tiles it offers are read back from what it is showing.
+  // Empty it the way the pilot would: Shift-click each occupied slot in the canister's column.
   for (let i = 0; i < 6; i++) {
-    const tile = root.querySelector("#cache-body").innerHTML.match(/data-b="c:([a-z_]+):take:1"/);
+    const tile = root.querySelector("#cache-body").innerHTML.match(/data-where="cache" data-slot="(\d+)" data-kind=/);
     if (!tile) break;
-    clickOn({ b: `c:${tile[1]}:take:1`, id: tile[1], dir: "take", where: CACHE }, { shift: true });
+    clickOn({ where: CACHE, slot: tile[1] }, { shift: true });
   }
   assert.equal(cacheUnits(record.cache), 0, "the canister is empty");
   assert.equal(isCacheOpen(), true, "and the panel stays open: the pilot is still standing at it");
   const html = root.querySelector("#cache-body").innerHTML;
   assert.match(html, /The canister is empty/, "it says so plainly");
-  assert.match(html, /data-dir="stow"/, "with the hold's tiles still offering to put something back");
+  assert.match(html, /data-dir="stow"/, "with the hold's tiles still ready to put something back");
 
-  clickOn({ b: `c:ferrite:stow:1`, id: "ferrite", dir: "stow", where: ship });
-  assert.equal(record.cache.stock.ferrite, undefined, "an empty hold has nothing to stow, and says nothing");
+  clickOn({ where: ship, slot: "30" }, { shift: true });
+  assert.equal(record.cache.stock.ferrite, undefined, "an empty slot stows nothing and says nothing");
   addItem(ship, "ferrite", 2, state.profile);
-  clickOn({ b: `c:ferrite:stow:1`, id: "ferrite", dir: "stow", where: ship });
-  assert.equal(record.cache.stock.ferrite, 1, "but once the hold holds something, a click stows it");
+  const fSlot = root.querySelector("#cache-body");
+  // Shift-click the new ferrite stack across into the emptied canister (or pick & drop 1).
+  const shipSlotsHtml = cacheHtml(state.profile);
+  const ferriteMatch = shipSlotsHtml.match(/data-where="[^"]+" data-slot="(\d+)" data-kind="c" data-id="ferrite"/);
+  assert.ok(fSlot && ferriteMatch, "ferrite sits in its own hold slot");
+  clickOn({ where: ship, slot: ferriteMatch[1] });
+  clickOn({ where: CACHE, slot: "2" }, { right: true });
+  clickOn({ where: ship, slot: ferriteMatch[1] });
+  assert.equal(record.cache.stock.ferrite, 1, "once the hold holds something, placing 1 stows it into the canister");
   updateInstances(1 / 60);
   assert.equal(state.world.caches.length, 1, "and the canister is back in the world, holding it");
   closeCache({ silent: true });

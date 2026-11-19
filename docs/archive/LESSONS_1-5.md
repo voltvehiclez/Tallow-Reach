@@ -55,3 +55,16 @@ Read them only when a task touches mission spawn counts, a full hold, dialogue d
   loading at the dock or hand-over the player performs. Never as a side effect of space or a timer.
 - **Enforced by:** the item-integrity invariant (a storm of docking, undocking, ticks and inventory events must
   not change mission items except through recorded pickups and hand-overs).
+
+### L7. One mission's trigger advanced another mission
+- **Seen:** two active missions interfered (a wave-clear for one moved the other).
+- **Cause:** mission-tagged events were not scoped to the mission that owned them.
+- **Rule:** every mission-tagged trigger carries its mission id and only that mission reacts.
+- **Enforced by:** "two missions at once" invariants; `step13b` trigger-isolation test.
+
+### L8. Authored mission fields were silently lost on save and load
+- **Seen / risk:** a field added to a mission step worked in play but vanished after a save and load, because the
+  save sanitizer (`cleanMissionStep` in `state/profile.js`) keeps only a list of known fields.
+- **Rule:** any new step field must be added to that list. A save and load must keep every authored field.
+- **Enforced by:** the save-and-load-at-every-step invariant, which compares every authored field of every step
+  after a round trip through `sanitizeSave`.

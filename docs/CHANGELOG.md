@@ -20,6 +20,32 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-18: Roadmap slice 3 — My Assets, Minecraft-style inventory slots, Mining beams subgroup and 0 MJ power fix
+
+Slice 2 playtest passed. Fixed the `0 MJ` power bug across every MJ consumer (`hasPower`
+now requires `p.stored > 0` with no bare-powerplant fallback; unequipped or emptied power
+cells disable thrusters, strafe, lift, turning, boost, shields, cannons and mining beam
+while reporting `Using 0 of Y MJ/s`; L31). Added a dedicated collapsible `Mining beams`
+sub-category under `Shop → Modules → Primary weapons` alongside `Cannons` and `Missiles`.
+Implemented Slice 3: added the `My Assets` sub-tab (`listPlayerAssets`, `assetsHtml`) in
+both docked Station Inventory and in-flight Ship Inventory (`I`), listing every station
+where the pilot has stored items or hangar ships and expanding compact N-menu-style
+1-line rows on click; and upgraded all inventory UIs (docked Station & Ship hold,
+in-flight `I` Ship hold, and in-flight `R` Rift Cache) to Minecraft-style slot
+manipulation (`ui/inventory-ui.js`, `slotsAt`, `pickupSlot`, `placeHeldStack`,
+`takeFromSlot`, `shiftMoveSlot`, `stackAll`, `returnHeldStack`) — left-click picks up a
+stack to place, merge or swap into any slot, right-click while holding places 1 item,
+right-click on a stack offers `Take amount` (plus slot-aware `Sell`/`Discard` and `Use`),
+Shift+left-click moves the whole stack across open inventories, `Stack all` consolidates
+split stacks and empty gaps on every inventory header, and Esc/close/save restores any
+held stack without item loss. Bumped `SAVE_VERSION = 24` (`profile.holdSlots`,
+`world.stationSlots`) with clean migration from v1–v23. Files:
+`src/data/shops.js`, `src/state/{profile,state}.js`,
+`src/sim/{power,player,shield,weapons,inventory,economy,session,instances}.js`,
+`src/ui/{inventory-ui,screens,menu,cargo,cache}.js`, `src/{main.js,styles.css}`,
+`tests/{slice3-assets-inventory-power,slice2-shop-ships,content,shield,inventory,inventory-discard,ui-cargo,ui-cache}.test.mjs`.
+Rebuild generated; owner Slice 3 playtest pending.
+
 ## 2026-11-18: Roadmap slice 2 — compact Shop, Hangar stored-ship list & context menu, Ship details/bonuses and unblurred cargo overlays
 
 Slice 1 playtest passed; includes owner's Slice 2 follow-ups. Rebuilt the Shop tab into a
@@ -163,15 +189,9 @@ guards. Explicitly centre all status tracks, labels and readouts on their frames
 without changing 28px widths, text sizes or frame positions. Save v21 unchanged;
 build regenerated. Owner visual check pending.
 
-## 2026-11-16: Remove duplicate weapon-selection messages
-
-Removed centre-screen equipped/empty messages from both bank selectors; the slot HUD
-already names each selected module. Other gameplay messages remain unchanged. Inset
-PRIMARY/SECONDARY headings 2px toward the middle without moving the grey weapon names.
-Added regression assertions; save v21 unchanged; build regenerated. Visual check pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Remove duplicate weapon-selection messages
 - 2026-11-16: Signed throttle and final HUD alignment tweaks
 - 2026-11-16: Framed status columns and integrated throttle/speed
 - 2026-11-16: Square weapon boxes and slot-height divider

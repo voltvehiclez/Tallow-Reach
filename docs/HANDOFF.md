@@ -32,12 +32,12 @@ run and what to click. Different AI assistants work in separate chats and none r
 
 ## Where the game is now
 
-- Save version: **v23**.
+- Save version: **v24**.
 - **Which steps are done, built or next: the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step status is kept (this file, REFACTOR_PLAN and the README do
   not repeat it); tick steps there. A step that is "built" but not ticked is waiting for the owner's playtest.
 - **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first.
-- **Playtests passed (2026-11-18):** Roadmap Slice 1 (true moving-collider `m/s` speed, live Mission log item counts, 10-min per-station contract timers) and PR #42; earlier 14c, cube skies, collision damage, Test Ship and system space passed.
-- **8-feature roadmap (in progress):** Slice 2 refined (playtest pending) — compact Shop tree (`Ships`, `Modules` subgroups, `Consumables`, `Ores`, `Loot`) + `Buy amount` popup, ships sold in Shop & stored per station in the compact Hangar list (right-click `Show info` / `Fly ship` / `Sell` at 60% resale; no left-click auto-equip; removed from Outfitting; `profile.shipPlaces`, duplicate hulls `id#2`, berth cap, save **v23**), Prospector `2×` mine/Wasp HP & Bulwark `1.5×` dmg, and unblurred `.cargo-overlay` inventories. Slice 3 next; no merge without approval.
+- **Playtests passed (2026-11-18):** Roadmap Slices 1 & 2 (true moving-collider speed, live Mission log counts, 10-min per-station contract timers, compact Shop + cursor-aligned Buy popup, Hangar stored ships & Sell, ship bonuses, unblurred overlays) and PR #42; earlier 14c, cube skies, collision damage, Test Ship and system space passed.
+- **8-feature roadmap (playtest pending on Slice 3):** added Shop `Mining beams` subgroup under `Primary weapons`, fixed the `0 MJ` power bug (`hasPower` requires `stored > 0`; all systems draw `0 MJ/s` and stay cold at `0 MJ`, L31), added the collapsible 1-line `My Assets` sub-tab in docked & flight (`I`) Inventory (`listPlayerAssets`), and converted all inventory UIs to Minecraft-style slots (`profile.holdSlots` / `world.stationSlots`, save **v24**, pick/place/merge/swap, right-click place-1, `Take amount`, Shift+click stack, `Stack all`). No merge without approval.
 - **Previous batches (PRs #37, #39, #42):** NPC flight AI (`data/enemy-ai.js`), surface F picking, compact mission log, stationary outfitting preview, home recovery, framed Shield/Hull + Power/Boost, ten-slot hotbar, paid-ignition throttle, cannon lead, true speed, unified marker colours and `N` pocket list.
 - **Scenery follow-up (preview pending):** Meridian Station ONLY: sun-facing C opening, -50 m field offset, pocket Y -0.049 AU, sunward 1000 m arrival. All C arcs: 16% radial strays, 25% vertical fringe. Other ordinary fields: 2.5× wider with sparse wings; rift instances unchanged (`sceneryFeatures`).
 - **Stock camera (2026-11-16):** `BASE_HFOV = 85` (`data/camera.js`), vertical FOV derived from aspect (`verticalFovForAspect`, ≈54.54° on 16:9), chase distances `CAMERA` 14.9 / 23.1 / 14.3, rejected edge-compression lens removed.

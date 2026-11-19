@@ -996,6 +996,28 @@ export function tradeCacheItem(dir, id, n = 1, player = localPlayer(), profile =
   return text;
 }
 
+/**
+ * Report a completed slot move into or out of the open rift canister so sound,
+ * events and world-entity cleanup match `tradeCacheItem`. While a stack lifted
+ * from the canister is still held on the cursor (`heldFromCache: true`), the
+ * canister is not declared emptied yet.
+ */
+export function notifyCacheMove(dir, id, moved, opts = {}) {
+  if (!(moved > 0)) return;
+  const record = canisterAt(opts.player || localPlayer());
+  if (!record?.cache?.open) return;
+  const cache = record.cache;
+  const take = dir === "take";
+  emit("sfx", { name: "pickup" });
+  emit("instance-cache-moved", { id: record.id, item: id, n: moved, dir: take ? "take" : "stow" });
+  if (take && !cacheUnits(cache) && !opts.heldFromCache) {
+    if (cache.entity) dropEntity(placeWorld(record.id).caches, cache.entity);
+    cache.entity = null;
+    emit("instance-cache-empty", { id: record.id, loot: cache.loot });
+    msg(`The ${cache.n} is empty.`, 6);
+  }
+}
+
 function completeObjective(record) {
   if (record.objective.met) return;
   record.objective.met = true;

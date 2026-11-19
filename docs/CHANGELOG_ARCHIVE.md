@@ -24,6 +24,13 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+## 2026-11-16: Remove duplicate weapon-selection messages
+
+Removed centre-screen equipped/empty messages from both bank selectors; the slot HUD
+already names each selected module. Other gameplay messages remain unchanged. Inset
+PRIMARY/SECONDARY headings 2px toward the middle without moving the grey weapon names.
+Added regression assertions; save v21 unchanged; build regenerated. Visual check pending.
+
 ## 2026-11-16: Signed throttle and final HUD alignment tweaks
 
 Weapon names move up 2px without moving PRIMARY/SECONDARY. Throttle/speed box moves

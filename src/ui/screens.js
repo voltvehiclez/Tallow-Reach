@@ -11,13 +11,13 @@ import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js
 import { MODULES } from "../data/modules.js";
 import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import {
-  CACHE, STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, valueOf,
+  CACHE, STATION, capacityOf, freeOf, loadOf, slotsAt, stockOf, valueOf,
 } from "../sim/inventory.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import {
-  holdLoad, storedUnits, storageCap, repairCost, hangarCap, localShips, shipBaseStats, shopCatalogue,
+  holdLoad, storedUnits, storageCap, repairCost, hangarCap, listPlayerAssets, localShips, shipBaseStats, shopCatalogue,
 } from "../sim/economy.js";
 import {
   describe,
@@ -594,85 +594,185 @@ export function viewedShip(ui = state.ui) {
  * same tile serves a station, a hold and a canister without any of them knowing about each other.
  */
 function invRow({
-  name, sub, kind, id, count, dir, free, vol, move = true, place = "",
-  action = "mv", destWord = dir === "s" ? "ship" : "station",
+  name, sub, kind, id, count, dir, free, vol, move = true, place = "", slot = 0,
+  destWord = dir === "s" ? "ship" : "station",
 }) {
-  const where = destWord;
-  // What the tile's corner says: a module, something you can use in flight (step 14), or ore —
-  // which keeps the "ORE" word every existing tile has always had.
   const label = kind === "c" ? (itemUse(id) ? "USE" : "ORE") : "MOD";
-  // What right-click does is the panel's business, not the tile's: a hold tile offers the menu the
-  // flight card has (Use / Stow all / Discard), a canister tile the one thing worth saying about it.
-  const rightClick = destWord === "hold"
-    ? "Right-click to take the whole stack."
-    : destWord === "canister"
-      ? (itemUse(id) ? "Right-click to use, stow or discard." : "Right-click to stow or discard.")
-      : itemUse(id) ? "Right-click to use or discard." : "Right-click to discard.";
+  const shiftHint = move ? ` Shift-click to move stack to ${destWord}.` : "";
   const inner =
     `<span class="inv-item-top"><span class="inv-kind">${label}</span><span class="inv-n">&times;${count}</span></span>` +
-    `<span class="inv-item-name">${name}</span><span class="inv-item-meta">${vol} m³ each</span>`;
-  if (!move) {
-    // In flight there is nowhere to move cargo to: the tile is a label, not a button.
-    return `<div class="inv-item inv-item-read" data-kind="${kind}" data-id="${id}" data-count="${count}" data-where="${place}" ` +
-      `title="${name}: ${sub}. ${rightClick}" aria-label="${name}, quantity ${count}. ${rightClick}">${inner}</div>`;
-  }
-  const room = Math.floor(free / (vol || 1));
-  const noRoom = room > 0 ? "false" : "true";
+    `<span class="inv-item-name">${esc(name)}</span><span class="inv-item-meta">${vol} m³ each</span>`;
+  const room = move ? Math.floor(free / (vol || 1)) : 1;
+  const noRoom = move && room <= 0 ? "true" : "false";
   return (
-    `<button class="inv-item" data-a="${action}" data-b="${kind}:${id}:${dir}:1" data-kind="${kind}" data-id="${id}" data-dir="${dir}" data-count="${count}" data-where="${place}" aria-disabled="${noRoom}" ` +
-    `title="${name}: ${sub}. Click to move one; Shift-click to move the whole stack. Right-click to discard." ` +
-    `aria-label="${name}, quantity ${count}. Click to move one to the ${where}; Shift-click to move the whole stack.">` +
-    inner +
-    `</button>`
+    `<button type="button" class="inv-item" data-a="invSlot" data-where="${esc(place)}" data-slot="${slot}" ` +
+    `data-kind="${kind}" data-id="${esc(id)}" data-dir="${esc(dir)}" data-count="${count}" aria-disabled="${noRoom}" ` +
+    `title="${esc(name)}: ${esc(sub)}. Click to pick up, drop or swap.${shiftHint} Right-click for options (or to place 1 while holding)." ` +
+    `aria-label="${esc(name)}, quantity ${count}, slot ${slot + 1}.">${inner}</button>`
   );
 }
 
-/** One inventory panel: a heading with the m³ in use, then a grid of contents. */
+function heldBannerHtml() {
+  const held = state.ui.invHeld;
+  if (!held || !(held.n > 0)) return "";
+  return (
+    `<div class="inv-held-bar" role="status">` +
+    `<span>Holding <strong>${esc(itemName(held.id))} &times;${held.n}</strong> ` +
+    `<small>Click slot to place/swap · Right-click slot to place 1 · Esc to put back</small></span>` +
+    `<button type="button" class="inv-stack-btn" data-a="invReturn">Put back</button>` +
+    `</div>`
+  );
+}
+
+/** One inventory panel: a heading with m³ in use + Stack all, then an interactive slot grid. */
 function invColumn(where, title, dir, {
-  move = true, profile = state.profile, slots = 25,
-  dest = where === STATION ? viewedShip() : STATION,   // where the buttons send things
-  action = "mv", destWord = null,
+  move = true, profile = state.profile, slots = 25, cols = 5,
+  dest = where === STATION ? viewedShip() : STATION,
+  destWord = null,
 } = {}) {
   const used = loadOf(where, profile),
     cap = capacityOf(where, profile),
     destFree = move ? freeOf(dest, profile) : 0;
+  const held = state.ui.invHeld;
+  const holding = Boolean(held && held.n > 0);
+  const slotList = slotsAt(where, profile);
+  let filledCount = 0;
+  for (const s of slotList) if (s) filledCount++;
+
+  // Keep the fixed minimum grid (5×5 station, 7×5 flight, 5×7 cache), and grow
+  // by full rows when custom placements exceed it or when holding a stack over
+  // a completely packed grid so an empty drop slot is always reachable.
+  let totalSlots = Math.max(slots, Math.ceil(slotList.length / cols) * cols);
+  if (holding && filledCount >= totalSlots) totalSlots += cols;
+
   const rows = [];
-  // One list for the whole place: goods in catalogue order, then spare modules
-  // in the order they arrived. The kind is what the tile shows (ORE / MOD) and
-  // what the move and sell actions read; the catalogue decides which is which.
-  for (const { id, n } of itemsAt(where, profile)) {
-    const part = isModule(id);
-    const word = part ? "Module" : itemCat(id) === "consumable" ? "Consumable" : "Ore";
-    rows.push(
-      invRow({
-        name: itemName(id),
-        sub: `${word}, ${itemVol(id)} m³ each`,
-        kind: part ? "m" : "c",
-        id,
-        count: n,
-        dir,
-        free: destFree,
-        vol: itemVol(id),
-        move,
-        place: where,
-        action,
-        ...(destWord ? { destWord } : {}),
-      })
-    );
+  for (let i = 0; i < totalSlots; i++) {
+    const entry = slotList[i] || null;
+    if (entry) {
+      const { id, n } = entry;
+      const part = isModule(id);
+      const word = part ? "Module" : itemCat(id) === "consumable" ? "Consumable" : "Ore";
+      rows.push(
+        invRow({
+          name: itemName(id),
+          sub: `${word}, ${itemVol(id)} m³ each`,
+          kind: part ? "m" : "c",
+          id,
+          count: n,
+          dir,
+          free: destFree,
+          vol: itemVol(id),
+          move,
+          place: where,
+          slot: i,
+          ...(destWord ? { destWord } : {}),
+        })
+      );
+    } else {
+      const isOrigin = holding && held.where === where && held.slot === i;
+      rows.push(
+        `<button type="button" class="inv-empty-slot${isOrigin ? " is-origin" : ""}" ` +
+        `data-a="invSlot" data-where="${esc(where)}" data-slot="${i}" aria-label="Empty slot ${i + 1}"></button>`
+      );
+    }
   }
-  // Keep a full slot field even when this hold contains fewer items, so the
-  // viewport stays the same size: 5×5 at a station, 7×5 in the flight card.
-  while (rows.length < slots) rows.push(`<div class="inv-empty-slot" aria-hidden="true"></div>`);
   // A container with no volume of its own (a rift's canister) says how much is in it and stops there.
   const room = Number.isFinite(cap) ? `${used} / ${cap} m³` : `${used} m³`;
+  const canStack = filledCount > 0 || (holding && held.where === where);
   return (
-    `<section class="inv-col"><header><h3>${title}</h3><span class="mod-count">${room}</span></header>` +
-    `<div class="inv-grid">${rows.join("")}</div>` +
+    `<section class="inv-col">` +
+    `<header><h3>${esc(title)}</h3>` +
+    `<span class="inv-col-tools"><span class="mod-count">${room}</span>` +
+    `<button type="button" class="inv-stack-btn" data-a="stackAll" data-where="${esc(where)}"${canStack ? "" : " disabled"} ` +
+    `title="Combine split stacks and compact empty slots">Stack all</button></span></header>` +
+    `<div class="inv-grid${holding ? " is-holding" : ""}">${rows.join("")}</div>` +
     `</section>`
   );
 }
 
+/** Sub-tab strip shared by docked Station Inventory and in-flight Ship Inventory `I`. */
+function invSubtabsHtml(action, firstKey, firstLabel, activeKey) {
+  const isFirst = activeKey !== "assets";
+  return (
+    `<div class="inv-subtabs" role="tablist">` +
+    `<button type="button" role="tab" data-a="${action}" data-b="${firstKey}" aria-selected="${isFirst}">${firstLabel}</button>` +
+    `<button type="button" role="tab" data-a="${action}" data-b="assets" aria-selected="${!isFirst}">My Assets</button>` +
+    `</div>`
+  );
+}
+
+/**
+ * Compact N-menu-style `My Assets` view listing every station where the pilot
+ * has stored items or ships in the hangar. Clicking a station expands its ships
+ * and station-hold items in single-line rows.
+ */
+export function assetsHtml(profile = state.profile, world = state.worldState, opts = {}) {
+  const docked = opts.docked ?? Boolean(state.player?.docked);
+  const openMap = opts.openMap || state.ui.assetsOpen || {};
+  const stations = listPlayerAssets(profile, world, { docked, place: opts.place });
+  if (!stations.length) {
+    return (
+      `<div class="sub">Stations where you have ships in the hangar or items in station storage.</div>` +
+      `<div class="assets-empty">No ships or items stored at any station.</div>`
+    );
+  }
+  const blocks = stations.map(st => {
+    const isOpen = !!openMap[st.placeId];
+    const parts = [];
+    if (st.ships.length) parts.push(`${st.ships.length} ${st.ships.length === 1 ? "ship" : "ships"}`);
+    if (st.items.length) parts.push(`${st.itemUnits} ${st.itemUnits === 1 ? "item" : "items"} (${st.itemVol} m³)`);
+    const sysTag = st.system && st.system !== st.name ? st.system : "";
+    const metaTag = [sysTag, st.here ? "Docked" : ""].filter(Boolean).join(" · ");
+
+    let detail = "";
+    if (isOpen) {
+      const lines = [];
+      for (const s of st.ships) {
+        const holdNote = s.cargoUnits > 0 ? ` · ${s.cargoUsed}/${s.cargoCap} m³ cargo` : "";
+        const dmgNote = s.hpPct < 100 ? ` · ${s.hpPct}% hull` : "";
+        const right = s.active ? "Active ship" : "Hangar ship";
+        lines.push(
+          `<li class="assets-line assets-ship" data-ship-type="${esc(s.type)}" title="${esc(s.name)} — ${esc(s.role)}. Right-click for ship info.">` +
+          `<span class="pocket-label"><span class="pocket-icon${s.active ? " asset-active" : ""}" aria-hidden="true"></span>` +
+          `<span class="pocket-name">${esc(s.name)} <small>${esc(s.role)}${holdNote}${dmgNote}</small></span></span>` +
+          `<span class="assets-qty">${right}</span></li>`
+        );
+      }
+      for (const it of st.items) {
+        lines.push(
+          `<li class="assets-line assets-item" data-asset-item="${esc(it.id)}" title="${esc(it.name)} (${esc(it.catLabel)}) — ${it.vol} m³ total.">` +
+          `<span class="pocket-label"><span class="pocket-icon i" aria-hidden="true"></span>` +
+          `<span class="pocket-name">${esc(it.name)} <small>${esc(it.catLabel)}</small></span></span>` +
+          `<span class="assets-qty">&times;${it.n} <small>${it.vol} m³</small></span></li>`
+        );
+      }
+      detail = `<ul class="assets-rows">${lines.join("")}</ul>`;
+    }
+
+    return (
+      `<div class="assets-station${isOpen ? " is-open" : ""}">` +
+      `<button type="button" class="assets-toggle" data-a="assetStation" data-b="${esc(st.placeId)}" aria-expanded="${isOpen}">` +
+      `<span class="assets-left"><span class="shop-caret" aria-hidden="true">${isOpen ? "&#9662;" : "&#9656;"}</span>` +
+      `<span class="assets-name">${esc(st.name)}</span>` +
+      `${metaTag ? `<small class="assets-sys">${esc(metaTag)}</small>` : ""}</span>` +
+      `<span class="assets-count">${esc(parts.join(" · "))}</span>` +
+      `</button>${detail}</div>`
+    );
+  });
+
+  return (
+    `<div class="sub">Click a station to inspect the ships in its hangar and the items in its hold.</div>` +
+    `<div class="assets-list">${blocks.join("")}</div>`
+  );
+}
+
 function inventoryHtml(ui) {
+  const view = ui?.invView === "assets" ? "assets" : "inv";
+  const subtabs = invSubtabsHtml("invView", "inv", "Storage & Hold", view);
+  if (view === "assets") {
+    return `<h2>Inventory</h2>${subtabs}${assetsHtml(state.profile, state.worldState, { docked: true, openMap: ui?.assetsOpen })}`;
+  }
+
   const S = state.profile;
   const local = localShips(S, state.worldState);
   const id = viewedShip(ui),
@@ -692,36 +792,40 @@ function inventoryHtml(ui) {
     : "";
 
   return (
-    `<h2>Inventory</h2><div class="sub">Click an item to move one; Shift-click to move its whole stack. Right-click an item to sell it — ore, salvage and spare modules alike. Items you buy are kept in the station; ships you buy are kept in Outfitting. ` +
-    `Outfitting fits modules from the station. Fitted modules take no space. Each ship has its own hold, and a lost ship takes its hold with it.</div>` +
+    `<h2>Inventory</h2>${subtabs}` +
+    `<div class="sub">Click a stack to pick it up, then click any slot to place, merge or swap it (right-click places 1). ` +
+    `Shift-click transfers a whole stack. Right-click a stack to take an exact amount, sell or discard. ` +
+    `Items you buy go to the station; bought ships sit in Hangar. Each ship has its own hold.</div>` +
+    heldBannerHtml() +
     invColumn(STATION, "Station", "s") +
     shipSection
   );
 }
 
 /**
- * The ship's own inventory, read in flight (press I in space). Same columns and
- * tiles as the station Inventory tab, but only the hold of the ship being flown,
- * read-only — there is no station to move cargo into out here.
+ * The ship's own inventory in flight (press I in space): interactive slots for
+ * sorting, splitting and stacking cargo in the active ship's hold, plus the
+ * `My Assets` sub-tab showing stored ships and items across every station.
  */
 export function cargoHtml(profile = state.profile) {
   const id = profile.ship, ship = shipDef(id);
-  // 7 tiles across and 5 rows down in the wider card (styles.css), still read-only.
+  const view = state.ui.cargoView === "assets" ? "assets" : "hold";
+  const subtabs = invSubtabsHtml("cargoView", "hold", "Ship hold", view);
+  if (view === "assets") {
+    return `<h2>Ship inventory</h2>${subtabs}${assetsHtml(profile, state.worldState, { docked: false, openMap: state.ui.assetsOpen })}`;
+  }
   return (
-    `<h2>Ship inventory</h2>` +
-    invColumn(id, `${ship.n} hold`, "t", { move: false, profile, slots: 35 })
+    `<h2>Ship inventory</h2>${subtabs}` +
+    heldBannerHtml() +
+    invColumn(id, `${ship.n} hold`, "t", { move: false, profile, slots: 35, cols: 7 })
   );
 }
 
 /**
- * A rift's canister, traded with in flight (press R beside it). The ship's own hold on the left and
- * the canister on the right, in the same tiles as the station's Inventory tab and the flight card,
- * and cargo moves between them the same way: a click moves one, Shift-click moves the whole stack —
- * in either direction, so a pilot can put something back (owner 2026-11-14).
- *
- * The moves are `cmv` actions, which `ui/cache.js` handles by way of `sim/instances.js`
- * (`tradeCacheItem`), so the canister obeys the ordinary inventory rules and nothing here knows how
- * a run keeps its prize.
+ * A rift's canister, traded with in flight (press R beside it). The ship's hold
+ * on the left and the canister on the right, sharing the same slot interactions:
+ * left-click picks up/places/merges/swaps, right-click while holding places 1,
+ * Shift-click transfers a whole stack, and right-click offers Take amount.
  */
 export function cacheHtml(profile = state.profile) {
   const record = cacheTradeRecord();
@@ -729,13 +833,14 @@ export function cacheHtml(profile = state.profile) {
   if (!cache) return "";
   const id = profile.ship, hull = shipDef(id), left = cacheUnits(cache);
   return (
-    `<h2>${cache.n}</h2>` +
-    `<div class="sub">Click an item to move one; Shift-click to move its whole stack. Cargo goes both ways: take it into your hold, or stow it back in the canister. ` +
-    `Right-click an item in your hold to use it or throw it away. ${left ? `${left} inside.` : "The canister is empty."}</div>` +
-    // The pilot's own hold on the left, the canister off to the right (owner 2026-11-14).
+    `<h2>${esc(cache.n)}</h2>` +
+    `<div class="sub">Click a stack to pick it up, then click any slot to place, merge or swap (right-click places 1). ` +
+    `Shift-click transfers a whole stack either way. Right-click a stack for Take amount, Use or Discard. ` +
+    `${left ? `${left} inside.` : "The canister is empty."}</div>` +
+    heldBannerHtml() +
     `<div class="cache-cols">` +
-    invColumn(id, `${hull.n} hold`, "stow", { move: true, profile, slots: 35, dest: CACHE, action: "cmv", destWord: "canister" }) +
-    invColumn(CACHE, cache.n, "take", { move: true, profile, slots: 35, dest: id, action: "cmv", destWord: "hold" }) +
+    invColumn(id, `${hull.n} hold`, "stow", { move: true, profile, slots: 35, cols: 5, dest: CACHE, destWord: "canister" }) +
+    invColumn(CACHE, cache.n, "take", { move: true, profile, slots: 35, cols: 5, dest: id, destWord: "hold" }) +
     `</div>`
   );
 }

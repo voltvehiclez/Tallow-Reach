@@ -69,31 +69,34 @@ test("I is the flight inventory key", () => {
   assert.equal(BINDINGS.KeyI, "cargo", "I opens the ship inventory");
 });
 
-test("the flight card uses the station Inventory layout, read-only", () => {
+test("the flight card uses the station Inventory slot layout with Stack all and My Assets", () => {
   const previous = state.profile;
   try {
     const profile = newProfile();
     state.profile = profile;
+    state.ui.cargoView = "hold";
     addItem(profile.ship, "ferrite", 3, profile, state.worldState);
     const html = cargoHtml(profile);
     assert.match(html, /Ship inventory/, "it says what it is");
+    assert.match(html, /My Assets/, "it includes the My Assets sub-tab");
     assert.match(html, /Wasp hold/, "it names the ship whose hold this is");
     assert.match(html, /inv-col/, "same column markup as the station tab");
     assert.match(html, /inv-grid/, "same tile grid");
+    assert.match(html, /data-a="stackAll"/, "includes Stack all");
     assert.match(html, /Ferrite/);
     assert.match(html, /&times;3/, "with the quantity on the tile");
     assert.match(html, /m³/, "and the hold's capacity");
-    assert.match(html, /inv-item-read/, "the tiles are labels, not move buttons");
-    // 7 across and 5 rows down: 35 slots, whatever the hold actually contains.
-    const slots = html.match(/<div class="inv-item inv-item-read"|<div class="inv-empty-slot"/g) || [];
+    // 7 across and 5 rows down: 35 interactive slots, whatever the hold contains.
+    const slots = html.match(/data-a="invSlot"/g) || [];
     assert.equal(slots.length, 35, "the flight card keeps a 7×5 slot field");
-    assert.doesNotMatch(html, /data-a="mv"/, "nothing can be moved in flight");
-    assert.doesNotMatch(html, /data-a="sell|data-a="invSell/, "and nothing can be sold");
+    assert.doesNotMatch(html, /data-a="mv"/, "no instant single-click transfer action");
+    assert.doesNotMatch(html, /data-a="sell|data-a="invSell/, "and nothing can be sold in space");
 
-    // The docked Inventory tab keeps its move buttons: only the flight view is read-only.
+    // The docked Inventory tab uses the same interactive slot grid and My Assets sub-tab.
     profile.holds[profile.ship].ferrite = 3;
     const station = outpostHtml({ tab: "i" });
-    assert.match(station, /data-a="mv"/, "the station Inventory tab still moves cargo");
+    assert.match(station, /data-a="invSlot"/, "the station Inventory tab uses interactive slots");
+    assert.match(station, /My Assets/, "and includes My Assets");
     assert.match(station, /inv-item/, "…with the same tiles");
   } finally {
     state.profile = previous;
@@ -231,9 +234,11 @@ test("right-click Discard asks how many, then asks for sure, then trashes", () =
       return event;
     };
 
-    // 1. The context menu offers the stack, and nothing else.
+    // 1. The context menu offers Take amount and Discard.
     rightClick(tile("c", "ferrite", "3", profile.ship));
-    const entry = cardMenu().children[0];
+    const takeEntry = cardMenu().children.find(c => c.dataset.a === "cargoTakeOpen");
+    assert.equal(takeEntry.textContent, "Take amount");
+    const entry = cardMenu().children.find(c => c.dataset.a === "cargoDiscard");
     assert.equal(entry.textContent, "Discard \u00d73");
     assert.equal(entry.dataset.a, "cargoDiscard");
     assert.equal(entry.dataset.where, profile.ship);
@@ -271,7 +276,7 @@ test("right-click Discard asks how many, then asks for sure, then trashes", () =
 
     // 6. Cancel backs out of the question without a scratch.
     rightClick(tile("c", "ferrite", "1", profile.ship));
-    press(root, "cargoDiscard", cardMenu().children[0]);
+    press(root, "cargoDiscard", cardMenu().children.find(c => c.dataset.a === "cargoDiscard"));
     const second = cardPopover();
     second.querySelector(".inv-sell-amount").value = "1";
     press(second, "discardAsk", undefined, root);
@@ -281,7 +286,7 @@ test("right-click Discard asks how many, then asks for sure, then trashes", () =
 
     // 7. A mission item is refused, not quietly eaten.
     rightClick(tile("c", "beacon", "1", profile.ship));
-    const refuse = cardMenu().children[0];
+    const refuse = cardMenu().children.find(c => c.dataset.a === "cargoDiscard");
     assert.equal(refuse.disabled, true, "a mission item cannot be discarded");
     assert.match(refuse.title, /mission item/i);
     closeCargo();

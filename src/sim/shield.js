@@ -105,15 +105,18 @@ export function updateShield(dt, P = state.player, sh = null, power = null) {
     return;
   }
 
-  // One flat bill while they are up, whatever they are doing.
-  setDraw("shield", shieldDraw(sh), power);
-
-  // Cannot pay for them: the field collapses, slowly, and does not come back
-  // until the ship can supply the draw again.
-  if (!hasPower(power.draw, power)) {
+  // Cannot pay for them out of stored MJ: nothing is drawn, the field collapses
+  // slowly, and it does not come back until the power cells hold energy again.
+  const want = shieldDraw(sh);
+  const otherDraw = power.draw - (power.use.shield || 0);
+  if (want > 0 && !hasPower(otherDraw + want, power)) {
+    setDraw("shield", 0, power);
     P.sh = Math.max(0, P.sh - sh.drain * dt);
     return;
   }
+
+  // One flat bill while powered and up, whatever the shields are doing.
+  setDraw("shield", want, power);
 
   // Powered, so the usual rule applies: no recharge until the lull is over.
   if (state.time - P.last < sh.delay) return;

@@ -288,6 +288,7 @@ export function die() {
     state.deathNotice = null;
   }
   delete S.holds[lost];      // its ore and any spare modules it carried go with it
+  if (S.holdSlots) delete S.holdSlots[lost];
   S.cr -= fee;
   S.ships = S.ships.filter(id => id !== lost);
   delete S.hp[lost];

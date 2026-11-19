@@ -29,8 +29,8 @@ import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog } from "./ui/missionlog.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
-import { setupCargo, openCargo, closeCargo, isCargoOpen, canOpenCargo } from "./ui/cargo.js";
-import { setupCache, closeCache, isCacheOpen } from "./ui/cache.js";
+import { setupCargo, openCargo, closeCargo, dismissCargoLayer, isCargoOpen, canOpenCargo } from "./ui/cargo.js";
+import { setupCache, closeCache, dismissCacheLayer, isCacheOpen } from "./ui/cache.js";
 import { canPause, canOpenStarmap } from "./ui/overlays.js";
 import { updateMenuView, menuView, resizeMenuView } from "./render/menuview.js";
 import { updateOutfitting } from "./ui/outfitting.js";
@@ -207,14 +207,16 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
           setPause(true);
         }
       } else if (isCargoOpen()) {
-        // Esc just closes the hold; P closes it and opens the pause card.
+        // Esc dismisses an open cargo popover or held stack first, then closes the hold; P pauses.
+        if (!pauseKey && dismissCargoLayer()) break;
         closeCargo();
         if (name === "pause" && pauseKey) {
           if (state.ui.navigation) emit("navigation-toggle", false);
           setPause(true);
         }
       } else if (isCacheOpen()) {
-        // The same, for a canister: Esc puts the trade away, P puts it away and pauses.
+        // The same for a canister: Esc puts back a held stack or popover first, then closes.
+        if (!pauseKey && dismissCacheLayer()) break;
         closeCache();
         if (name === "pause" && pauseKey) {
           if (state.ui.navigation) emit("navigation-toggle", false);
@@ -223,8 +225,8 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       } else if (state.ui.navigation) {
         emit("navigation-toggle", false);
         if (pauseKey) setPause(true);
-      } else if (!pauseKey && closePanelPopovers()) {
-        // Esc dismisses an open docked popover (Buy amount, Ship details, Sell, Discard) before pausing.
+      } else if (!pauseKey && closePanelPopovers({ returnHeld: true })) {
+        // Esc dismisses an open docked popover or returns a cursor-held stack before pausing.
       } else if (canPause()) setPause(!state.paused);
       break;
   }

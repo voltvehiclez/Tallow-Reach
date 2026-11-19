@@ -17,21 +17,8 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ## Missions
 
-<!-- L1–L6 were moved verbatim to [archive/LESSONS_1-5.md](archive/LESSONS_1-5.md) to keep
+<!-- L1–L8 were moved verbatim to [archive/LESSONS_1-5.md](archive/LESSONS_1-5.md) to keep
      this file under its size limit. -->
-
-### L7. One mission's trigger advanced another mission
-- **Seen:** two active missions interfered (a wave-clear for one moved the other).
-- **Cause:** mission-tagged events were not scoped to the mission that owned them.
-- **Rule:** every mission-tagged trigger carries its mission id and only that mission reacts.
-- **Enforced by:** "two missions at once" invariants; `step13b` trigger-isolation test.
-
-### L8. Authored mission fields were silently lost on save and load
-- **Seen / risk:** a field added to a mission step worked in play but vanished after a save and load, because the
-  save sanitizer (`cleanMissionStep` in `state/profile.js`) keeps only a list of known fields.
-- **Rule:** any new step field must be added to that list. A save and load must keep every authored field.
-- **Enforced by:** the save-and-load-at-every-step invariant, which compares every authored field of every step
-  after a round trip through `sanitizeSave`.
 
 ### L9. A step kind that nothing could ever complete
 - **Seen:** the `deliver` step kind existed, but nothing in the game emitted "delivered", so a mission using it
@@ -351,5 +338,12 @@ and reading the shield bar — not at the plumbing that carries it.
 - **Seen (owner, 2026-11-18):** Mission log item progress ignored pre-stored goods, stayed full after selling/discarding ore, and checked `state.place`'s store instead of the mission's hand-in station.
 - **Rule:** item-requiring missions report live inventory counts (`missionItemRequirements`), scoping hand-ins to `missionHandInStation` plus the active ship hold and script `take-item` steps to their target container.
 - **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (mine, deliver, recovery, cargo hand-over, story collect, parallel items and cross-station reads).
+
+### L31. Direct-from-plant fallback and pre-check `setDraw` let a `0 MJ` ship fly and show phantom MJ/s
+
+- **Seen (owner, 2026-11-18):** unequipping the power cell left the tank at `0 MJ`, yet the ship still flew and showed `Using X of Y MJ/s`.
+- **Cause:** `hasPower` fell back to `p.gen >= mjps` when `p.stored === 0`, `player.js`/`shield.js` called `setDraw` before checking power, and wall-blocked mining beams bypassed `hasPower`.
+- **Rule:** every system with `draw > 0` requires `p.stored > 0` (`hasPower`) and records `setDraw(..., 0)` whenever unpowered.
+- **Enforced by:** `tests/slice3-assets-inventory-power.test.mjs`, `tests/content.test.mjs`, `tests/shield.test.mjs`.
 
 [More lessons](archive/reticle-and-recovery-lessons.md)

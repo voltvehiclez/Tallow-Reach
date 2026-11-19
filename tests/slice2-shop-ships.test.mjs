@@ -87,12 +87,13 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
   assert.equal(primary.count, 2);
   assert.deepEqual(
     primary.subgroups.map(s => [s.k, s.n]),
-    [["cannons", "Cannons"], ["missiles", "Missiles"]],
-    "Primary weapons has Cannons and Missiles sub-groups for future weapon types"
+    [["cannons", "Cannons"], ["missiles", "Missiles"], ["mining", "Mining beams"]],
+    "Primary weapons has Cannons, Missiles and Mining beams sub-categories"
   );
   assert.deepEqual(primary.subgroups.find(s => s.k === "cannons").items.map(i => i.id), ["cannon_basic"]);
   assert.deepEqual(primary.subgroups.find(s => s.k === "missiles").items, []);
-  assert.deepEqual(primary.items.map(i => i.id), ["beam_basic"], "mining beam stays accessible under Primary weapons");
+  assert.deepEqual(primary.subgroups.find(s => s.k === "mining").items.map(i => i.id), ["beam_basic"]);
+  assert.deepEqual(primary.items, [], "every current primary weapon sits in its own sub-category");
   assert.deepEqual(
     mods.subgroups.find(s => s.k === "secondary").items.map(i => i.id),
     ["missile_basic"]
@@ -109,22 +110,25 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
   assert.equal((collapsed.match(/data-a="shopGroup"/g) || []).length, 5);
   assert.doesNotMatch(collapsed, /class="shop-buy"/);
 
-  // Expanding Modules -> Primary weapons shows Cannons & Missiles toggles plus the mining beam;
-  // expanding Cannons reveals Basic cannons; expanding Missiles shows None in stock until future missiles arrive.
+  // Expanding Modules -> Primary weapons shows Cannons, Missiles & Mining beams toggles;
+  // expanding each reveals its own modules (Missiles shows None in stock until future missiles arrive).
   state.ui.shopOpen = { modules: true, "modules:primary": true, ores: true, ships: true };
   const expanded = outpostHtml(state.ui);
   assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:cannons"/);
   assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:missiles"/);
+  assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:mining"/);
   assert.doesNotMatch(expanded, /data-b="meridian:item:cannon_basic"/, "cannons stay tucked inside Cannons until opened");
-  assert.match(expanded, /data-a="wb" data-b="meridian:item:beam_basic"/);
+  assert.doesNotMatch(expanded, /data-b="meridian:item:beam_basic"/, "mining beams stay tucked inside Mining beams until opened");
   assert.match(expanded, /data-a="wb" data-b="meridian:ship:prospector"/);
   assert.match(expanded, /data-ship-type="prospector"/, "ship rows support right-click Ship details");
   assert.match(expanded, /None in stock/, "empty Ores group explains nothing is stocked here yet");
 
   state.ui.shopOpen["modules:primary:cannons"] = true;
   state.ui.shopOpen["modules:primary:missiles"] = true;
+  state.ui.shopOpen["modules:primary:mining"] = true;
   const deepExpanded = outpostHtml(state.ui);
   assert.match(deepExpanded, /data-a="wb" data-b="meridian:item:cannon_basic"/);
+  assert.match(deepExpanded, /data-a="wb" data-b="meridian:item:beam_basic"/);
 
   // Future station stocking ores and loot classifies automatically without UI changes.
   SHOPS._future = {
@@ -157,7 +161,7 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
 
 test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or Inventory) with duplicate hulls, berth cap, Sell and v23 save", () => {
   const { P, remoteStation } = freshDocked(10000);
-  assert.equal(SAVE_VERSION, 23);
+  assert.equal(SAVE_VERSION, 24);
 
   // Hangar tab is present in station navigation, and Outfitting no longer lists stored ships.
   assert.equal(TABS.some(([k, n]) => k === "h" && n === "Hangar"), true, "Hangar tab is in station menu");
@@ -279,7 +283,7 @@ test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or In
   // Save/load round-trip preserves duplicate ship ids, per-ship holds/hp/loadouts and station locations.
   const encoded = encodeSave(currentSave());
   const decoded = decodeSave(encoded);
-  assert.equal(decoded.v, 23);
+  assert.equal(decoded.v, 24);
   assert.deepEqual(decoded.profile.ships, ["wasp", "wasp#2", "prospector", "prospector#2", "bulwark"]);
   assert.equal(decoded.profile.shipPlaces.wasp, DEFAULT_PLACE);
   assert.equal(decoded.profile.shipPlaces["wasp#2"], DEFAULT_PLACE);
@@ -299,7 +303,7 @@ test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or In
   v22Raw.world.place = remoteStation.id;
   v22Raw.world.resume = null;
   const migrated = sanitizeSave(v22Raw);
-  assert.equal(migrated.v, 23);
+  assert.equal(migrated.v, 24);
   assert.equal(migrated.profile.shipPlaces.wasp, remoteStation.id);
   assert.equal(migrated.profile.shipPlaces.prospector, remoteStation.id);
 

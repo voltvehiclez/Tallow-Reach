@@ -5,9 +5,9 @@
 // `profile` (`state.profile` by default, or an explicit pilot's `profile`).
 
 import { state, profileOf } from "../state/state.js";
-import { DEFAULT_PLACE, stationKeyAt } from "../data/places.js";
+import { DEFAULT_PLACE, featureOf, isPocket, placeAt, stationKeyAt, systemOf } from "../data/places.js";
 import { SHIPS, isShipType, nextShipId, shipDef, shipLabel, shipName, shipSellValue, shipTypeOf } from "../data/ships.js";
-import { canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol } from "../data/items.js";
+import { ITEMS, ITEM_CATEGORIES, canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
 import { MODULES, STOCK_FIT } from "../data/modules.js";
@@ -19,7 +19,7 @@ import { setShip } from "./player.js";
 import { addShipRecords, ensureShipRecords, shipStation, shipsAtStation } from "../state/profile.js";
 import {
   STATION, addItem, buyItem as buyInto, capacityOf, countOf, freeOf, hasRoomFor, holdOf, loadOf, moveItem,
-  spaceFor, stockOf, takeItem, unitsOf, valueOf,
+  spaceFor, stockOf, takeItem, takeItemFromSlot, unitsOf, valueOf,
 } from "./inventory.js";
 export { valueOf, shipStation, shipsAtStation };   // screens ask for local-station ships and stock values
 import { refillPower } from "./power.js";
@@ -147,7 +147,8 @@ export function sellInventoryItem(
   where,
   amount = null,
   profile = state.profile,
-  world = state.worldState
+  world = state.worldState,
+  slotIndex = -1
 ) {
   if (!canSell(id)) return "That cannot be sold.";
   const available = countOf(where, id, profile, world);
@@ -158,7 +159,11 @@ export function sellInventoryItem(
   // Same base value and refinery bonus as Base-tab selling.
   const value = Math.round(count * itemValue(id) * (1 + REFINERY_BONUS_PER_LEVEL * world.base.refinery));
   profile.cr += value;
-  takeItem(where, id, count, profile, world);
+  if (Number.isInteger(slotIndex) && slotIndex >= 0) {
+    takeItemFromSlot(where, slotIndex, id, count, profile, world);
+  } else {
+    takeItem(where, id, count, profile, world);
+  }
   return `Sold ${count} ${itemName(id)} for ${value} cr.`;
 }
 
@@ -309,6 +314,7 @@ export function sellShip(id, P = state.player, profile = profileOf(P), world = s
   }
   profile.ships = profile.ships.filter(other => other !== id);
   if (profile.holds) delete profile.holds[id];
+  if (profile.holdSlots) delete profile.holdSlots[id];
   if (profile.hp) delete profile.hp[id];
   if (profile.loadout) delete profile.loadout[id];
   if (profile.shipPlaces) delete profile.shipPlaces[id];
@@ -335,6 +341,131 @@ export function selectShip(id, P = state.player, profile = profileOf(P), world =
   refreshGuns(P, profile);       // and its primary bays what fires
   refreshHull(P, profile);       // and its Hull HP
   return undefined;
+}
+
+/**
+ * List every station where the pilot currently has stored items in station
+ * storage or ships parked in the station's hangar (powering the `My Assets`
+ * sub-tab in both docked Station Inventory and in-flight Ship Inventory `I`).
+ * Pure: reads `profile` and `world` without mutating either.
+ */
+export function listPlayerAssets(
+  profile = state.profile,
+  world = state.worldState,
+  opts = {}
+) {
+  const docked = opts.docked ?? Boolean(state.player?.docked);
+  const here = opts.place ?? (world === state.worldState ? state.place : world?.place) ?? DEFAULT_PLACE;
+  const fallback = docked && stationKeyAt(here) ? here : (profile?.homeStation || DEFAULT_PLACE);
+  const byPlace = new Map();
+
+  const bucket = placeId => {
+    if (!placeId || typeof placeId !== "string") return null;
+    let entry = byPlace.get(placeId);
+    if (!entry) {
+      let name = placeId;
+      let system = "";
+      if (isPocket(placeId)) {
+        const station = featureOf(placeId, "station");
+        name = station?.n || placeAt(placeId).n;
+        const sysId = systemOf(placeId);
+        if (sysId) system = placeAt(sysId).n || "";
+      }
+      entry = {
+        placeId,
+        name,
+        system,
+        here: docked && placeId === here,
+        ships: [],
+        items: [],
+        itemUnits: 0,
+        itemVol: 0,
+      };
+      byPlace.set(placeId, entry);
+    }
+    return entry;
+  };
+
+  // 1. Hangar ships at each station (active ship included only while docked there).
+  const shipGroups = new Map();
+  for (const id of profile?.ships || []) {
+    if (!shipDef(id)) continue;
+    if (!docked && id === profile.ship) continue;
+    const at = shipStation(profile, id, fallback);
+    if (!at) continue;
+    if (!shipGroups.has(at)) shipGroups.set(at, []);
+    shipGroups.get(at).push(id);
+  }
+  for (const [placeId, ids] of shipGroups.entries()) {
+    const entry = bucket(placeId);
+    if (!entry) continue;
+    for (const id of ids) {
+      const def = shipDef(id);
+      const holdStock = profile?.holds?.[id] || {};
+      let holdUsed = 0;
+      let holdUnits = 0;
+      for (const [itemId, n] of Object.entries(holdStock)) {
+        if (!(n > 0) || !isItem(itemId)) continue;
+        holdUnits += n;
+        holdUsed += n * (itemVol(itemId) || 0);
+      }
+      entry.ships.push({
+        id,
+        type: shipTypeOf(id),
+        name: shipLabel(id, ids),
+        role: def.role || "Ship",
+        active: docked && id === profile.ship,
+        cargoCap: def.cargo || 0,
+        cargoUsed: holdUsed,
+        cargoUnits: holdUnits,
+        hpPct: Math.round(Math.min(1, Math.max(0, profile?.hp?.[id] ?? 1)) * 100),
+      });
+    }
+  }
+
+  // 2. Station-storage items across all stations in `world.stationStores`.
+  const stores = world?.stationStores || {};
+  for (const [key, stock] of Object.entries(stores)) {
+    if (!key || !stock || typeof stock !== "object") continue;
+    const sep = key.indexOf(":");
+    const placeId = sep > 0 ? key.slice(0, sep) : key;
+    const rows = [];
+    const pushItem = id => {
+      const n = Math.floor(+(stock[id] || 0));
+      if (!(n > 0) || !isItem(id)) return;
+      const cat = ITEMS[id]?.cat || "item";
+      const vol = n * (itemVol(id) || 0);
+      rows.push({
+        id,
+        name: itemName(id),
+        cat,
+        catLabel: ITEM_CATEGORIES[cat] || cat,
+        n,
+        vol,
+      });
+    };
+    for (const id of Object.keys(ITEMS)) {
+      if (!isModule(id) && stock[id] > 0) pushItem(id);
+    }
+    for (const id of Object.keys(stock)) {
+      if (isModule(id) && stock[id] > 0) pushItem(id);
+    }
+    if (!rows.length) continue;
+    const entry = bucket(placeId);
+    if (!entry) continue;
+    for (const row of rows) {
+      entry.items.push(row);
+      entry.itemUnits += row.n;
+      entry.itemVol += row.vol;
+    }
+  }
+
+  return [...byPlace.values()]
+    .filter(entry => entry.ships.length > 0 || entry.items.length > 0)
+    .sort((a, b) => {
+      if (a.here !== b.here) return a.here ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
 }
 
 export function repairShip(id, P = state.player, profile = profileOf(P)) {

@@ -145,7 +145,7 @@ test("with no power to pay for them the shields bleed away and stay flat at 0", 
 
   updateShield(1);
   assert.equal(P.sh, 4, "1 point a second lost while the ship cannot pay");
-  assert.equal(state.power.use.shield, 2, "it still asks for its 2 MJ/s");
+  assert.equal(state.power.use.shield, 0, "at 0 MJ stored it registers 0 MJ/s draw rather than phantom usage");
 
   state.time = 21;
   updateShield(10);

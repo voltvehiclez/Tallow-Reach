@@ -6,7 +6,7 @@
 // Everything saved to disk goes through this file so older saves and export codes keep loading.
 
 import { SHIPS, DEFAULT_SHIP, isShipId, shipTypeOf } from "../data/ships.js";
-import { isItem, isModule, newStock } from "../data/items.js";
+import { ITEMS, isItem, isModule, itemStack, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES, CONTRACT_REFRESH_SECONDS, missionFromContract } from "../data/contracts.js";
 import { isMissionKind, isMissionStepKind, STORY_MISSIONS } from "../data/missions/index.js";
@@ -84,7 +84,10 @@ function worldWithStationStores(fields, stationStores) {
 //   23 adds profile.shipPlaces (station pocket id per owned ship) and numbered
 //      duplicate ship instance ids (`wasp#2`, `prospector#2`, ...) so pilots can buy
 //      and park multiple copies of any hull across different stations' hangars.
-export const SAVE_VERSION = 23;
+//   24 adds profile.holdSlots and world.stationSlots: optional per-container slot
+//      layouts (`Array<[itemId, count] | null>`) preserving split stacks and custom
+//      slot positions while always summing to the authoritative stock maps.
+export const SAVE_VERSION = 24;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -218,6 +221,7 @@ export function newProfile() {
     v: SAVE_VERSION,
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
+    holdSlots: {},                          // per ship: optional `[itemId, count] | null` slot layout
     ships: [DEFAULT_SHIP],
     shipPlaces: { [DEFAULT_SHIP]: DEFAULT_PLACE }, // per ship: station pocket id where it sits
     ship: DEFAULT_SHIP,
@@ -249,6 +253,7 @@ export function newWorld() {
     wormholes: [],     // simple wormhole pockets in normal space; see cleanWormholes
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
     missionState: {},  // story-script state keyed by place id
+    stationSlots: {},  // station key -> optional `[itemId, count] | null` slot layout
   }, { [HOME_STATION_KEY]: newStock() });
 }
 
@@ -542,6 +547,7 @@ export function sanitizeProfile(raw) {
   const oldCargo = raw.holds ? null : raw.cargo;
   const holds = cleanHolds(raw.holds, ships, oldShape);
   if (oldCargo && holds[ship]) mergeStock(holds[ship], cleanStock(oldCargo));
+  const holdSlots = cleanHoldSlots(raw.holdSlots, ships, holds);
 
   const done = Math.max(0, Math.floor(+raw.done || 0));
   const kills = Math.max(0, Math.floor(+raw.kills || 0));
@@ -557,6 +563,7 @@ export function sanitizeProfile(raw) {
     v: SAVE_VERSION,
     cr,
     holds,
+    holdSlots,
     ships,
     shipPlaces,
     ship,
@@ -785,6 +792,95 @@ function cleanMissionState(raw) {
   return out;
 }
 
+const MAX_SAVED_SLOTS = 512;
+
+/**
+ * Sanitize one container's optional slot layout (`Array<[id, count] | null>`)
+ * against its authoritative `stock` so slot totals always equal `stock` exactly
+ * while preserving explicit empty gaps and split stacks. Returns `null` when
+ * no custom layout is present or the container is empty.
+ */
+export function cleanSlotList(raw, stock) {
+  if (!Array.isArray(raw) || !stock || typeof stock !== "object") return null;
+  const rem = {};
+  let total = 0;
+  for (const id of Object.keys(ITEMS)) {
+    if (!isModule(id) && stock[id] > 0) { rem[id] = stock[id]; total += stock[id]; }
+  }
+  for (const id of Object.keys(stock)) {
+    if (isModule(id) && stock[id] > 0) { rem[id] = stock[id]; total += stock[id]; }
+  }
+  if (!(total > 0)) return null;
+  const out = [];
+  const len = Math.min(raw.length, MAX_SAVED_SLOTS);
+  for (let i = 0; i < len; i++) {
+    const entry = raw[i];
+    if (!Array.isArray(entry) || entry.length < 2) {
+      out.push(null);
+      continue;
+    }
+    const [id, rawN] = entry;
+    const n = Math.floor(+rawN || 0);
+    const left = rem[id] || 0;
+    if (!isItem(id) || !(n > 0) || !(left > 0)) {
+      out.push(null);
+      continue;
+    }
+    const take = Math.min(left, n, itemStack(id));
+    if (take > 0) {
+      out.push([id, take]);
+      rem[id] = left - take;
+    } else {
+      out.push(null);
+    }
+  }
+  for (const [id, startLeft] of Object.entries(rem)) {
+    let left = startLeft;
+    if (!(left > 0)) continue;
+    const cap = itemStack(id);
+    for (let i = 0; i < out.length && left > 0; i++) {
+      const slot = out[i];
+      if (!slot || slot[0] !== id || slot[1] >= cap) continue;
+      const add = Math.min(left, cap - slot[1]);
+      slot[1] += add;
+      left -= add;
+    }
+    for (let i = 0; i < out.length && left > 0; i++) {
+      if (out[i] !== null) continue;
+      const add = Math.min(left, cap);
+      out[i] = [id, add];
+      left -= add;
+    }
+    while (left > 0) {
+      const add = Math.min(left, cap);
+      out.push([id, add]);
+      left -= add;
+    }
+  }
+  while (out.length && out[out.length - 1] === null) out.pop();
+  return out.length ? out : null;
+}
+
+function cleanHoldSlots(raw, ships, holds) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const id of ships) {
+    const clean = cleanSlotList(raw[id], holds[id]);
+    if (clean) out[id] = clean;
+  }
+  return out;
+}
+
+function cleanStationSlots(raw, stationStores) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [key, stock] of Object.entries(stationStores || {})) {
+    const clean = cleanSlotList(raw[key], stock);
+    if (clean) out[key] = clean;
+  }
+  return out;
+}
+
 /** Clean each station's independent stock. Unknown station keys are retained
  * as namespaced save records so a catalog can be regenerated before use. */
 function cleanStationStores(raw) {
@@ -913,6 +1009,19 @@ export function sanitizeWorld(raw) {
         ? raw.sector
         : DEFAULT_PLACE);
 
+  const rawStationSlots = raw.stationSlots && typeof raw.stationSlots === "object" && !Array.isArray(raw.stationSlots)
+    ? { ...raw.stationSlots }
+    : {};
+  if (detachedStation && hasStationStores) {
+    const oldPrefix = `${savedPlace}:`;
+    for (const key of Object.keys(rawStationSlots)) {
+      if (!key.startsWith(oldPrefix)) continue;
+      if (!rawStationSlots[detachedStation]) rawStationSlots[detachedStation] = rawStationSlots[key];
+      delete rawStationSlots[key];
+    }
+  }
+  const stationSlots = cleanStationSlots(rawStationSlots, stationStores);
+
   return worldWithStationStores({
     v: SAVE_VERSION,
     base,
@@ -927,6 +1036,7 @@ export function sanitizeWorld(raw) {
     wormholes,
     placeMemory: cleanPlaceMemory(raw.placeMemory),
     missionState: cleanMissionState(raw.missionState),
+    stationSlots,
   }, stationStores);
 }
 
