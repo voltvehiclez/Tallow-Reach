@@ -5,7 +5,7 @@ import { V, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
-import { SHIPS } from "../data/ships.js";
+import { shipDef } from "../data/ships.js";
 
 import { state, say, profileOf, placeWorld } from "../state/state.js";
 import { holdLoad } from "./economy.js";
@@ -88,7 +88,7 @@ export function updatePrimary(dt, P = state.player) {
     weapon = prof ? prof.pw : P.weapon,
     slot = primarySlotIndex(weapon, P),
     c = P.controls,
-    d = SHIPS[ship],
+    d = shipDef(ship),
     sayFor = text => { if (local) say(text); };
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.

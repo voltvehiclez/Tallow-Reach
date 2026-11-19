@@ -5,7 +5,7 @@
 //     galaxy and current pocket)
 // Everything saved to disk goes through this file so older saves and export codes keep loading.
 
-import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
+import { SHIPS, DEFAULT_SHIP, isShipId, shipTypeOf } from "../data/ships.js";
 import { isItem, isModule, newStock } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { CONTRACT_TYPES, CONTRACT_REFRESH_SECONDS, missionFromContract } from "../data/contracts.js";
@@ -81,7 +81,10 @@ function worldWithStationStores(fields, stationStores) {
 //   22 adds world.boardTimers: per-station unpaused simulation-second cooldowns for
 //      contract board refreshes, and keeps emptied per-station boards empty across
 //      save/load until the station's timer finishes and the pilot clicks Refresh.
-export const SAVE_VERSION = 22;
+//   23 adds profile.shipPlaces (station pocket id per owned ship) and numbered
+//      duplicate ship instance ids (`wasp#2`, `prospector#2`, ...) so pilots can buy
+//      and park multiple copies of any hull across different stations' hangars.
+export const SAVE_VERSION = 23;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -119,27 +122,58 @@ function allStockFit() {
  * is not just an id: without `loadout[ship]` it has no bays at all, so it can be
  * neither fitted in Outfitting nor flown (no thrusters, no Hull HP).
  */
-export function addShipRecords(profile, id) {
-  if (!profile || !SHIPS[id]) return profile;
+export function addShipRecords(profile, id, placeId = null) {
+  if (!profile || !isShipId(id)) return profile;
   if (!profile.holds || typeof profile.holds !== "object") profile.holds = {};
   if (!profile.hp || typeof profile.hp !== "object") profile.hp = {};
   if (!profile.loadout || typeof profile.loadout !== "object") profile.loadout = {};
+  if (!profile.shipPlaces || typeof profile.shipPlaces !== "object") profile.shipPlaces = {};
   profile.holds[id] = newHold();
   profile.hp[id] = 1;           // a fresh hull has no damage to remember
   profile.loadout[id] = stockFor(id);
+  if (typeof placeId === "string" && placeId) profile.shipPlaces[id] = placeId;
   return profile;
 }
 
 /** Fill in only what hull `id` is missing, leaving anything it already has. */
-export function ensureShipRecords(profile, id) {
-  if (!profile || !SHIPS[id]) return profile;
+export function ensureShipRecords(profile, id, placeId = null) {
+  if (!profile || !isShipId(id)) return profile;
   if (!profile.holds || typeof profile.holds !== "object") profile.holds = {};
   if (!profile.hp || typeof profile.hp !== "object") profile.hp = {};
   if (!profile.loadout || typeof profile.loadout !== "object") profile.loadout = {};
+  if (!profile.shipPlaces || typeof profile.shipPlaces !== "object") profile.shipPlaces = {};
   if (!profile.holds[id]) profile.holds[id] = newHold();
   if (!(Number(profile.hp[id]) > 0)) profile.hp[id] = 1;
   if (!profile.loadout[id]) profile.loadout[id] = stockFor(id);
+  if (typeof placeId === "string" && placeId && !profile.shipPlaces[id]) {
+    profile.shipPlaces[id] = placeId;
+  }
   return profile;
+}
+
+/**
+ * Station pocket where owned ship `id` is stored, falling back to `fallback`
+ * (or the pilot's home station / starting pocket) for unsanitized legacy records.
+ */
+export function shipStation(profile, id, fallback = null) {
+  const saved = profile?.shipPlaces?.[id];
+  if (typeof saved === "string" && saved) return saved;
+  if (typeof fallback === "string" && fallback) return fallback;
+  const home = profile?.homeStation;
+  return typeof home === "string" && home ? home : DEFAULT_PLACE;
+}
+
+/**
+ * Owned ship ids parked at station pocket `placeId`, in fleet order. When
+ * `docked` is false (the pilot is flying in space), the actively flown ship is
+ * excluded because it is out in space rather than sitting in the hangar.
+ */
+export function shipsAtStation(profile, placeId, { docked = true, fallback = null } = {}) {
+  if (!profile || !Array.isArray(profile.ships) || !placeId) return [];
+  return profile.ships.filter(id => {
+    if (!docked && id === profile.ship) return false;
+    return shipStation(profile, id, fallback) === placeId;
+  });
 }
 
 /**
@@ -185,6 +219,7 @@ export function newProfile() {
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
     ships: [DEFAULT_SHIP],
+    shipPlaces: { [DEFAULT_SHIP]: DEFAULT_PLACE }, // per ship: station pocket id where it sits
     ship: DEFAULT_SHIP,
     missions: [],       // active mission records; several may run at once
     flags: {},          // remembered story facts (used by later mission slices)
@@ -464,13 +499,25 @@ export function sanitizeProfile(raw) {
   const oldShape = rawVersion < 12;
 
   const cr = Math.max(0, Math.floor(+raw.cr || 0));
-  let ships = [...new Set(raw.ships.filter(id => SHIPS[id]))];
+  let ships = [...new Set(raw.ships.filter(id => isShipId(id)))];
   let ship = ships.includes(raw.ship) ? raw.ship : ships[0] || DEFAULT_SHIP;
 
   // Lost every ship and cannot afford another: the station lends a Wasp.
   if (!ships.length && cr < SHIPS.wasp.price) {
     ships = [DEFAULT_SHIP];
     ship = DEFAULT_SHIP;
+  }
+
+  const homeStation = typeof raw.homeStation === "string" && raw.homeStation.length <= 160
+    ? raw.homeStation
+    : DEFAULT_PLACE;
+  const rawPlaces = raw.shipPlaces && typeof raw.shipPlaces === "object" && !Array.isArray(raw.shipPlaces)
+    ? raw.shipPlaces
+    : {};
+  const shipPlaces = {};
+  for (const id of ships) {
+    const at = rawPlaces[id];
+    shipPlaces[id] = typeof at === "string" && at && at.length <= 160 ? at : homeStation;
   }
 
   const msl = Math.max(0, Math.min(MODULES.missile_basic.cap, Math.floor(+raw.msl || 0)));
@@ -482,7 +529,7 @@ export function sanitizeProfile(raw) {
     hp[id] = v > 0 && v <= 1 ? v : 1;
   }
 
-  const loadout = cleanLoadouts(raw.loadout, rawVersion);
+  const loadout = cleanLoadouts(raw.loadout, rawVersion, ships);
   // Keys 1 and 2 select primary bay one and primary bay two; the save stores the
   // selected bay as "1" or "2". Older saves stored the old mode switch instead
   // ("cannon" / "beam"): map it to the bay holding that kind of module on the
@@ -506,11 +553,12 @@ export function sanitizeProfile(raw) {
   const missions = rawMissions.map(cleanMission).filter(Boolean);
 
   return attachMissionCompat({
-    homeStation: typeof raw.homeStation === "string" && raw.homeStation.length <= 160 ? raw.homeStation : DEFAULT_PLACE,
+    homeStation,
     v: SAVE_VERSION,
     cr,
     holds,
     ships,
+    shipPlaces,
     ship,
     missions,
     flags: cleanFlags(raw.flags),
@@ -882,6 +930,43 @@ export function sanitizeWorld(raw) {
   }, stationStores);
 }
 
+/** True when `placeId` is a persistent open-world pocket with a dockable station. */
+function isRealStationPocket(placeId, world) {
+  if (typeof placeId !== "string" || !isPocket(placeId) || !stationKeyAt(placeId)) return false;
+  if (world?.wormholes?.some(w => w.id === placeId)) return false;
+  if (world?.instances?.some(r => r.id === placeId)) return false;
+  return true;
+}
+
+/**
+ * Align pre-v23 fleet locations with the saved station and recover any ship
+ * whose station pocket no longer exists without ever losing a ship.
+ */
+function reconcileShipPlaces(profile, world, rawProfile) {
+  const hadPlaces = !!(rawProfile?.shipPlaces && typeof rawProfile.shipPlaces === "object" && !Array.isArray(rawProfile.shipPlaces));
+  const fallback = isRealStationPocket(profile.homeStation, world) ? profile.homeStation : DEFAULT_PLACE;
+  const legacyAt = !hadPlaces && isRealStationPocket(world.place, world) ? world.place : null;
+  for (const id of profile.ships) {
+    if (legacyAt) {
+      profile.shipPlaces[id] = legacyAt;
+      continue;
+    }
+    const at = profile.shipPlaces[id];
+    if (!isRealStationPocket(at, world)) {
+      const detached = `${at}-station`;
+      profile.shipPlaces[id] = isRealStationPocket(detached, world) ? detached : fallback;
+    }
+  }
+  // If docked at a station pocket, ensure the flown ship sits at that station (or pick a ship here).
+  if (world.resume == null && isRealStationPocket(world.place, world) && profile.ships.includes(profile.ship)) {
+    if (profile.shipPlaces[profile.ship] !== world.place) {
+      const local = profile.ships.find(id => profile.shipPlaces[id] === world.place);
+      if (local) profile.ship = local;
+      else profile.shipPlaces[profile.ship] = world.place;
+    }
+  }
+}
+
 /**
  * Validate and upgrade a complete save. Accepts both the v13 split shape
  * `{ v: 13, profile, world }` and any legacy v1..v12 flat save object.
@@ -891,18 +976,16 @@ export function sanitizeSave(raw) {
     throw new Error("not a Tallow Reach save");
   }
   if (raw.profile && typeof raw.profile === "object") {
-    return {
-      v: SAVE_VERSION,
-      profile: sanitizeProfile(raw.profile),
-      world: sanitizeWorld(raw.world && typeof raw.world === "object" ? raw.world : {}),
-    };
+    const profile = sanitizeProfile(raw.profile);
+    const world = sanitizeWorld(raw.world && typeof raw.world === "object" ? raw.world : {});
+    reconcileShipPlaces(profile, world, raw.profile);
+    return { v: SAVE_VERSION, profile, world };
   }
   if (Array.isArray(raw.ships)) {
-    return {
-      v: SAVE_VERSION,
-      profile: sanitizeProfile(raw),
-      world: sanitizeWorld(raw),
-    };
+    const profile = sanitizeProfile(raw);
+    const world = sanitizeWorld(raw);
+    reconcileShipPlaces(profile, world, raw);
+    return { v: SAVE_VERSION, profile, world };
   }
   throw new Error("not a Tallow Reach save");
 }
@@ -1016,14 +1099,15 @@ function cleanPrimarySelection(rawPw, loadout, ship) {
   return slotHolding("gun") || slotHolding("beam") || "1";
 }
 
-function cleanLoadouts(saved, version) {
+function cleanLoadouts(saved, version, ships = []) {
   const addedLater = [];
   if (version < 5) addedLater.push("thruster");
   if (version < 6) addedLater.push("shield");
   if (version < 7) addedLater.push("primary");
   if (version < 10) addedLater.push("hull");
   const out = {};
-  for (const id of Object.keys(SHIPS)) {
+  const ids = new Set([...Object.keys(SHIPS), ...ships.filter(id => shipTypeOf(id))]);
+  for (const id of ids) {
     const layout = layoutFor(id),
       stock = stockFor(id),
       forShip = saved && saved[id];

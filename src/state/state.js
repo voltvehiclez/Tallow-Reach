@@ -250,8 +250,9 @@ export const state = {
     cache: null,       // the rift-cache trade (ui/cache.js); null while closed
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
-    tab: "m",          // m contracts, l mission log, h hangar, o outfitting, i inventory, p shop, b base, s saves
+    tab: "m",          // m contracts, l mission log, o outfitting, i inventory, p shop, b base, s saves
     invShip: null,     // the ship whose hold the Inventory tab shows (null = the one being flown)
+    shopOpen: {},      // expanded group/subgroup keys in the compact Shop tab (session-only)
     get board() {
       return state.worldState.board;
     },

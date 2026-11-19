@@ -19,8 +19,8 @@
 // with no Hull HP until it is fitted again, but fitting it back restores
 // the fraction it had; it takes actual repairs to top it up.
 
-import { MODULES } from "../data/modules.js";
-import { SHIPS } from "../data/ships.js";
+import { MODULES, STOCK_FIT } from "../data/modules.js";
+import { shipDef, shipTypeOf, shipBonuses } from "../data/ships.js";
 import { state } from "../state/state.js";
 import { clamp } from "../util/math.js";
 
@@ -51,7 +51,36 @@ export function hullOf(loadout) {
  * multiplier for that hull; without it the raw module HP is returned.
  */
 export function effectiveHullOf(loadout, ship) {
-  return hullOf(loadout) * ((ship && SHIPS[ship] && SHIPS[ship].hpMul) || 1);
+  const def = ship ? shipDef(ship) : null;
+  return hullOf(loadout) * ((def && def.hpMul) || 1);
+}
+
+/**
+ * Unmodified baseline Hull HP for hull class or ship instance `ship`, before any
+ * custom outfitting change (stock hull plating multiplied by the ship's `hpMul`).
+ */
+export function baseHullOf(ship) {
+  if (!shipDef(ship)) return 0;
+  return effectiveHullOf({ hull: STOCK_FIT.hull || [] }, ship);
+}
+
+/**
+ * Pure baseline hull sheet for right-click Ship details in Shop and Outfitting:
+ * base Hull HP (without custom fitted modules), cargo hold space, and unique bonuses.
+ */
+export function shipBaseStats(ship) {
+  const type = shipTypeOf(ship);
+  const def = type ? shipDef(type) : null;
+  if (!def) return null;
+  return {
+    type,
+    name: def.n,
+    desc: def.d,
+    price: def.price,
+    hullHp: baseHullOf(type),
+    cargo: def.cargo,
+    bonuses: shipBonuses(type),
+  };
 }
 
 /**

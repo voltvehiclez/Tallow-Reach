@@ -1,28 +1,27 @@
-// Hulls the player can fly. Right now every hull is the same ship apart from
-// its hold: identical gun damage, mining rate, model scale and price. The hold
-// is measured in cubic metres, one cargo unit = 1 m³, and that is the only
-// thing that differs between them (the Hull HP come from the fitted hull
-// module now, not from the hull itself):
+// Hulls the player can fly. Each class carries its own hold, base Hull HP
+// multiplier and hull bonuses:
 //
-//   cargo   hold capacity, in m³           dmg     multiplier on EVERYTHING the ship's weapons output
-//   mine    multiplier on mining rate (1 for now)
-//   price   cost in the Hangar             col     hull colour (hex)
-//   sc      model scale                    hpMul   multiplier on Hull HP from the fitted hull module (1 for now)
+//   cargo    hold capacity, in m³           dmg     multiplier on EVERYTHING the ship's weapons output
+//   mine     multiplier on mining speed     price   base cost in the Shop
+//   col      hull colour (hex)              sc      model scale
+//   hpMul    multiplier on Hull HP from the fitted hull module (default 1)
+//   bonuses  OPTIONAL extra bonus lines for the Ship details card
 //
-// Ship-specific bonuses will arrive later as hull attributes; the first is the
-// Test Ship's, below. Until then the baseline hulls are identical apart from
-// their holds. Hull HP come from the fitted
-// hull module (data/modules.js, sim/hull.js): a hull with no module in its
-// hull bay has no Hull HP at all, and any hit reaching it kills the ship.
+// Baseline hulls:
+//   - Wasp:       20 m³ hold, baseline HP, no bonuses
+//   - Prospector: 70 m³ hold, baseline HP (same as Wasp), 2× mining speed
+//   - Bulwark:    30 m³ hold, baseline HP, 1.5× damage on all weapons
+//   - Test Ship:  20 m³ hold, 100× Hull HP, 10× damage on all weapons (1 cr)
 //
-// Shields are not a hull stat: the fitted shield module decides how many Shield HP
-// the ship has, how fast they come back and how long a lull has to last
-// (data/modules.js, sim/shield.js). No shield module means no shields at all.
+// Hull HP come from the fitted hull module (data/modules.js, sim/hull.js) scaled
+// by `hpMul`; no module fitted means 0 Hull HP, while right-click Ship details
+// reports the unmodified baseline Hull HP (stock hull × hpMul). Shields and
+// speed/turn come from the fitted shield and thruster modules.
 //
-// A hull has no speed or turn of its own: both come from the thrusters fitted in
-// the thruster bay (data/modules.js, sim/drive.js). A ship with an empty thruster
-// bay cannot move at all. When hulls should fly differently that will be a
-// multiplier in sim/drive.js, not a base speed here.
+// Pilots may own multiple copies of the same hull class across stations. The
+// first copy uses the bare hull id (`"wasp"`); extra copies use `"wasp#2"`,
+// `"wasp#3"`, etc. Resolve a ship record through `shipTypeOf` / `shipDef` rather
+// than indexing `SHIPS` with a fleet instance id directly.
 //
 // FLIGHT scales every ship at once. The forward speed comes from the drive; the
 // other directions are a fraction of it, because side, vertical and reverse
@@ -38,23 +37,23 @@ export const FLIGHT = {
 export const SHIPS = {
   wasp: {
     n: "Wasp",
-    d: "The baseline hull. A small hold.",
+    d: "The baseline hull. A small hold and no hull bonuses.",
     cargo: 20,
-    dmg: 1, mine: 1, sc: 1,
+    dmg: 1, mine: 1, hpMul: 1, sc: 1,
     price: 600, col: 0x59636b,
   },
   prospector: {
     n: "Prospector",
-    d: "The baseline hull, with the deep hold for ore.",
+    d: "Mining hull with a deep hold and 2× mining speed.",
     cargo: 70,
-    dmg: 1, mine: 1, sc: 1,
+    dmg: 1, mine: 2, hpMul: 1, sc: 1,
     price: 600, col: 0x6b5b45,
   },
   bulwark: {
     n: "Bulwark",
-    d: "The baseline hull, with a slightly larger hold.",
+    d: "Combat hull with a larger hold and 1.5× damage on all weapons.",
     cargo: 30,
-    dmg: 1, mine: 1, sc: 1,
+    dmg: 1.5, mine: 1, hpMul: 1, sc: 1,
     price: 600, col: 0x434b53,
   },
   // The owner's stress hull (2026-11-15): deliberately cheap and deliberately
@@ -72,4 +71,86 @@ export const SHIPS = {
   },
 };
 
+export const SHIP_IDS = Object.keys(SHIPS);
+
 export const DEFAULT_SHIP = "wasp";
+
+/** True when `type` is a base hull class key in `SHIPS`. */
+export const isShipType = type =>
+  typeof type === "string" && Object.prototype.hasOwnProperty.call(SHIPS, type);
+
+/**
+ * Valid owned-ship instance id: either a bare hull key (`"wasp"`) or a numbered
+ * duplicate (`"wasp#2"`, `"wasp#3"`, ...).
+ */
+export function isShipId(id) {
+  if (typeof id !== "string" || id.length > 64) return false;
+  const hash = id.indexOf("#");
+  if (hash < 0) return isShipType(id);
+  const base = id.slice(0, hash);
+  const suffix = id.slice(hash + 1);
+  if (!isShipType(base) || !/^[1-9]\d{0,5}$/.test(suffix)) return false;
+  return Number(suffix) >= 2;
+}
+
+/** Base hull key in `SHIPS` for a hull key or owned instance id, or `null`. */
+export function shipTypeOf(id) {
+  if (!isShipId(id)) return null;
+  const hash = id.indexOf("#");
+  return hash < 0 ? id : id.slice(0, hash);
+}
+
+/** Hull definition from `SHIPS` for a hull key or owned instance id, or `null`. */
+export function shipDef(id) {
+  const type = shipTypeOf(id);
+  return type ? SHIPS[type] : null;
+}
+
+/** Display class name for a hull key or owned instance id (`"Wasp"`). */
+export const shipName = id => shipDef(id)?.n || String(id);
+
+/**
+ * Display label for `id` inside a list of ships (such as a station hangar):
+ * `"Wasp"` when only one Wasp is listed, `"Wasp #1"` / `"Wasp #2"` when two or
+ * more share that class so the pilot can tell duplicates apart.
+ */
+export function shipLabel(id, list = null) {
+  const type = shipTypeOf(id);
+  const def = type ? SHIPS[type] : null;
+  if (!def) return String(id);
+  if (!Array.isArray(list)) return def.n;
+  const same = list.filter(other => shipTypeOf(other) === type);
+  if (same.length < 2) return def.n;
+  const pos = same.indexOf(id);
+  return pos >= 0 ? `${def.n} #${pos + 1}` : def.n;
+}
+
+/** Next unused instance id for a new ship of class `type` joining `ships`. */
+export function nextShipId(type, ships = []) {
+  if (!isShipType(type)) return null;
+  const taken = new Set(Array.isArray(ships) ? ships : []);
+  if (!taken.has(type)) return type;
+  let n = 2;
+  while (taken.has(`${type}#${n}`)) n++;
+  return `${type}#${n}`;
+}
+
+/** Format a stat multiplier cleanly (`1.5×`, `2×`, `100×`). */
+const fmtMul = v => `${Number.isInteger(v) ? v : +v.toFixed(2)}\u00d7`;
+
+/**
+ * Unique hull bonus lines for `id`, derived purely from its `SHIPS` entry so a
+ * new bonus multiplier or authored `bonuses` list shows automatically in Ship details.
+ */
+export function shipBonuses(id) {
+  const s = shipDef(id);
+  if (!s) return [];
+  const out = [];
+  if (typeof s.hpMul === "number" && s.hpMul !== 1) out.push(`${fmtMul(s.hpMul)} Hull HP`);
+  if (typeof s.dmg === "number" && s.dmg !== 1) out.push(`${fmtMul(s.dmg)} damage (all weapons)`);
+  if (typeof s.mine === "number" && s.mine !== 1) out.push(`${fmtMul(s.mine)} mining speed`);
+  if (Array.isArray(s.bonuses)) {
+    for (const line of s.bonuses) if (typeof line === "string" && line) out.push(line);
+  }
+  return out;
+}

@@ -331,9 +331,13 @@ body.no-reticle canvas {
 }
 #panel-notice[hidden] { display: none; }
 
-/* ---- Flight inventory (I in space): the station Inventory layout in a wider,
-   read-only card. A modal surface of its own, outside the docked panel. ---- */
-#cargo {
+/* ---- Flight inventory (I in space) and every in-space cargo transfer surface
+   (.cargo-overlay): never blur the live space view behind the card. Every future
+   cargo-transfer modal (ship-to-ship, canister, container, wreck) uses .cargo-overlay
+   and inherits this unblurred frame. ---- */
+.cargo-overlay,
+#cargo,
+#cache {
   position: fixed;
   inset: 0;
   z-index: 70;
@@ -341,9 +345,12 @@ body.no-reticle canvas {
   place-items: center;
   padding: 24px;
   background: rgba(4, 6, 8, .55);
-  backdrop-filter: blur(3px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
-#cargo[hidden] { display: none; }
+.cargo-overlay[hidden],
+#cargo[hidden],
+#cache[hidden] { display: none; }
 .cargo-card {
   position: relative;
   width: min(880px, 100%);   /* wider than the 580px station panel */
@@ -372,19 +379,10 @@ body.no-reticle canvas {
 }
 
 /* ---- Rift cache trade (R beside a canister): the hold on the left, the canister on the right.
-   The flight card's frame and the station Inventory's tiles, side by side, because a trade is two
-   containers and the pilot should see both at once (owner 2026-11-14). ---- */
+   Uses the shared unblurred .cargo-overlay frame above so space behind it stays crisp. ---- */
 #cache {
-  position: fixed;
-  inset: 0;
   z-index: 72;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(4, 6, 8, .55);
-  backdrop-filter: blur(3px);
 }
-#cache[hidden] { display: none; }
 .cache-card {
   width: min(1160px, 100%);   /* two grids of five tiles across, and the gap between them */
 }
@@ -901,6 +899,246 @@ button.mod-bay.on {
 .ship-switch-count {
   margin-top: 1px;
   font-size: 11px;
+  color: var(--dim);
+}
+
+/* Compact one-line list of ships stored in this station's Outfitting hangar. */
+.outfit-ships {
+  list-style: none;
+  margin: 0;
+  padding: 2px 6px;
+  max-height: 112px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  background: rgba(14, 19, 23, .72);
+}
+.outfit-ships li {
+  margin: 0;
+  padding: 0;
+}
+.outfit-ships li > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 rgba(170, 170, 170, .14);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink);
+  text-align: left;
+}
+.outfit-ships li:last-child > button { box-shadow: none; }
+.outfit-ships li > button:hover,
+.outfit-ships li > button:focus-visible {
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+  outline: none;
+}
+.outfit-ships li.selected > button {
+  background: rgba(224, 164, 88, .12);
+  box-shadow: inset 0 0 0 1px rgba(224, 164, 88, .55);
+  color: var(--amber);
+}
+.outfit-ships .outfit-ship-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.outfit-ships small {
+  display: inline;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* ---- Compact collapsible one-line Shop catalogue ---- */
+.shop-tree,
+.shop-subgroups,
+.shop-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.shop-tree {
+  border: 1px solid var(--line);
+  background: rgba(12, 16, 20, .82);
+}
+.shop-node {
+  margin: 0;
+  padding: 0;
+}
+.shop-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 rgba(170, 170, 170, .16);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  line-height: 20px;
+  color: var(--ink);
+  text-align: left;
+}
+.shop-sub-toggle {
+  padding-left: 20px;
+  font-weight: 400;
+  letter-spacing: .02em;
+  color: #d4dce2;
+  background: rgba(255, 255, 255, .02);
+}
+.shop-toggle:hover:not(:disabled),
+.shop-toggle:focus-visible {
+  background: rgba(255, 255, 255, .09);
+  color: #fff;
+  border-color: transparent;
+  outline: none;
+}
+.shop-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-caret {
+  display: inline-block;
+  width: 10px;
+  flex: 0 0 10px;
+  color: var(--ice);
+  font-size: 11px;
+}
+.shop-count {
+  display: inline;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.shop-item,
+.shop-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 22px;
+  padding: 0 6px 0 22px;
+  box-shadow: inset 0 -1px 0 rgba(170, 170, 170, .14);
+  font-size: 12px;
+  line-height: 20px;
+  background: rgba(6, 9, 12, .55);
+}
+.shop-depth-2 > .shop-item,
+.shop-depth-2 > .shop-empty {
+  padding-left: 34px;
+}
+.shop-item:hover {
+  background: rgba(255, 255, 255, .07);
+}
+.shop-item[data-ship-type] {
+  cursor: context-menu;
+}
+.shop-empty {
+  color: var(--dim);
+  font-size: 11px;
+}
+.shop-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e2e8ec;
+}
+.shop-item-name small {
+  display: inline;
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.shop-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.shop-price {
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.shop-buy {
+  height: 17px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 15px;
+}
+.shop-buy-total {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.shop-buy-total strong {
+  color: var(--ink);
+}
+
+/* ---- Right-click Ship details popover (Shop and Outfitting) ---- */
+.ship-info-popover {
+  width: min(260px, calc(100% - 16px));
+}
+.ship-info-sub {
+  margin-top: 7px;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ice);
+}
+.ship-info-stats {
+  margin: 4px 0 0;
+  display: grid;
+  gap: 2px;
+}
+.ship-info-stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 1px 0;
+  box-shadow: inset 0 -1px 0 rgba(170, 170, 170, .14);
+}
+.ship-info-stats dt { color: var(--dim); }
+.ship-info-stats dd {
+  margin: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ship-info-bonuses {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--amber);
+}
+.ship-info-bonuses li.none {
   color: var(--dim);
 }
 

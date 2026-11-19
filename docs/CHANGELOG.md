@@ -20,6 +20,28 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-18: Roadmap slice 2 — compact Shop, ships in Outfitting, Ship details/bonuses and unblurred cargo overlays
+
+Slice 1 playtest passed. Rebuilt the Shop tab into a compact single-line collapsible tree
+(`SHOP_GROUPS`: `Ships`, `Modules` with 1-line subgroups matching every `MODULE_GROUPS`
+group, `Consumables`, `Ores`, `Loot`) with a right-side `Buy` button opening a bounded
+`Buy amount` popover (`shopBuyHtml` / `shopMaxBuy`); `Ores` and `Loot` show none in stock
+at Meridian today and populate automatically for future station shops. Removed the Hangar
+tab: ships are sold in Shop and stored per station in Outfitting (`profile.shipPlaces` in
+`SAVE_VERSION = 23`, migrating v1–v22 saves cleanly), never in Inventory, supporting
+multiple copies of the same hull (`wasp#2`, `prospector#2`) across stations while keeping
+each station's `world.base.hangar + 1` berth cap and lending a local Wasp on death without
+moving remote ships. Updated hull bonuses (Wasp none, Prospector `2×` mining speed with
+Wasp Hull HP, Bulwark `1.5×` damage on all weapons, Test Ship unchanged) and added right-
+click `Ship details` (`shipBaseStats` / `shipDetailsHtml`) on ships in Shop and Outfitting
+showing unfitted base Hull HP, cargo space and ship bonuses. Removed background blur from
+flight inventory (`#cargo`), rift cache (`#cache`) and shared `.cargo-overlay` for all
+future cargo transfers. Files: `src/data/{ships,outfitting,mounts,shops}.js`,
+`src/state/{profile,state}.js`, `src/sim/{hull,inventory,fitting,combat,weapons,missile,pilot,session,economy}.js`,
+`src/render/{models,shipviewer,views}.js`, `src/ui/{hud,outfitting,cargo,cache,screens,menu}.js`,
+`src/main.js`, `src/styles.css`, `tests/slice2-shop-ships.test.mjs`. Build regenerated;
+owner playtest pending before Slice 3.
+
 ## 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers
 
 Moving scenery (`stepScenery` in `src/render/scene.js`) now advances per 60 Hz sim tick
@@ -141,19 +163,9 @@ already names each selected module. Other gameplay messages remain unchanged. In
 PRIMARY/SECONDARY headings 2px toward the middle without moving the grey weapon names.
 Added regression assertions; save v21 unchanged; build regenerated. Visual check pending.
 
-## 2026-11-16: Signed throttle and final HUD alignment tweaks
-
-Weapon names move up 2px without moving PRIMARY/SECONDARY. Throttle/speed box moves
-up 18px. Fixed reverse throttle disappearing behind a resource-pool clamp: a dedicated
-signed helper preserves negative text, uses magnitude for fill length, and reverses
-fill origin. Reverse uses the same blue hue in diagonal stripes, forward stays solid.
-All four stat columns now share 28px width, with centred labels/readings. Power usage
-centres beneath the combined Power/Boost pair. Power MJ readout matches the blue meter;
-usage text retains its muted grey. Added signed/boundary and layout tests.
-Save v21 unchanged; build regenerated; owner visual playtest pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Signed throttle and final HUD alignment tweaks
 - 2026-11-16: Framed status columns and integrated throttle/speed
 - 2026-11-16: Square weapon boxes and slot-height divider
 - 2026-11-16: Monochrome weapon strip and top-left location

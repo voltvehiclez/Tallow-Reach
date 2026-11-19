@@ -24,6 +24,17 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+## 2026-11-16: Signed throttle and final HUD alignment tweaks
+
+Weapon names move up 2px without moving PRIMARY/SECONDARY. Throttle/speed box moves
+up 18px. Fixed reverse throttle disappearing behind a resource-pool clamp: a dedicated
+signed helper preserves negative text, uses magnitude for fill length, and reverses
+fill origin. Reverse uses the same blue hue in diagonal stripes, forward stays solid.
+All four stat columns now share 28px width, with centred labels/readings. Power usage
+centres beneath the combined Power/Boost pair. Power MJ readout matches the blue meter;
+usage text retains its muted grey. Added signed/boundary and layout tests.
+Save v21 unchanged; build regenerated; owner visual playtest pending.
+
 ## 2026-11-16: Framed status columns and integrated throttle/speed
 
 Reduced weapon-name reserved height to one line and heading/name gaps to 1px so

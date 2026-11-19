@@ -9,7 +9,7 @@ import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
 import { loadAutosave, saveAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
-import { SHIPS } from "./data/ships.js";
+import { shipDef } from "./data/ships.js";
 import { verticalFovForAspect } from "./data/camera.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
@@ -25,7 +25,7 @@ import { restoreWormholes } from "./sim/wormholes.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
-import { setupMenu, openStationTab } from "./ui/menu.js";
+import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog } from "./ui/missionlog.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
@@ -223,6 +223,8 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       } else if (state.ui.navigation) {
         emit("navigation-toggle", false);
         if (pauseKey) setPause(true);
+      } else if (!pauseKey && closePanelPopovers()) {
+        // Esc dismisses an open docked popover (Buy amount, Ship details, Sell, Discard) before pausing.
       } else if (canPause()) setPause(!state.paused);
       break;
   }
@@ -308,7 +310,7 @@ function drawFrame(now) {
   updateScenery(alpha);
   stars.position.copy(camera.position);
 
-  const offset = shakeOffset(P, dt, SHIPS[state.profile.ship].sc);
+  const offset = shakeOffset(P, dt, shipDef(state.profile.ship)?.sc ?? 1);
   if (offset) camera.position.add(offset);
   renderer.render(scene, camera);
   if (offset) camera.position.sub(offset);

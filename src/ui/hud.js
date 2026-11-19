@@ -11,7 +11,7 @@ import { meterHeight, meterPercent, meterValue, throttleDisplay } from "./vitals
 import { targetOnScreen, targetHealthMarkup, markerStyle, lockMarkerStyle, markerClasses } from "./target-display.js";
 import { fmtDist } from "../util/math.js";
 import { on, emit } from "../util/events.js";
-import { SHIPS } from "../data/ships.js";
+import { shipDef } from "../data/ships.js";
 import { featuresOf, featureById } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
@@ -325,7 +325,7 @@ export function updateHud(dt) {
     S = state.profile,
     F = state.flight,
     H = state.hud,
-    d = SHIPS[S.ship],
+    d = shipDef(S.ship),
     missions = activeMissions(S);
 
   el.shield.style.height = meterHeight(P.sh, P.shMax);

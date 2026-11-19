@@ -23,7 +23,7 @@ import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
 import { canSell, canDiscard, itemName } from "../data/items.js";
 import { storyMission } from "../data/missions/index.js";
-import { introHtml, outpostHtml, viewedShip } from "./screens.js";
+import { introHtml, outpostHtml, shipDetailsHtml, shopBuyHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
 import { openDiscardPopover } from "./discard.js";
@@ -58,7 +58,7 @@ export function setupMenu(options = {}) {
   });
   on("died", text => {
     showNotice(text);
-    state.ui.tab = "h";
+    state.ui.tab = "o";
     render();
   });
   on("main-menu", () => {
@@ -158,10 +158,12 @@ const ACTIONS = {
   tab(name) {
     state.ui.tab = name;
     hideNotice();
+    closePanelPopovers();
     state.ui.confirmReset = false;
     state.ui.fit = null;
   },
   go() {
+    closePanelPopovers();
     state.ui.fit = null;
     launch();
   },
@@ -218,11 +220,17 @@ const ACTIONS = {
     if (msgText) toast(msgText);
   },
 
-  // Shop. data-b is "shopId:itemId" — the shop is data (data/shops.js), so the
-  // same action serves every counter.
+  // Shop: expand/collapse compact one-line groups & subgroups, or direct purchase.
+  shopGroup(key) {
+    if (!key) return;
+    const open = state.ui.shopOpen || (state.ui.shopOpen = {});
+    if (open[key]) delete open[key];
+    else open[key] = true;
+  },
   wb(arg) {
-    const [shop, id] = String(arg || "").split(":");
-    const msgText = eco.buyItem(shop, id);
+    const parts = String(arg || "").split(":");
+    const [shop, kind, id] = parts.length >= 3 ? parts : [parts[0], null, parts[1]];
+    const msgText = eco.buyItem(shop, id, 1, state.player, state.profile, state.worldState, kind);
     if (msgText) toast(msgText);
     inventoryChanged();
   },
@@ -369,10 +377,10 @@ const ACTIONS = {
   },
 };
 
-/** Step the flown ship through the hangar. The arrows do nothing with one ship. */
+/** Step the flown ship through this station's hangar. The arrows do nothing with one ship. */
 function cycleShip(dir) {
   const S = state.profile,
-    owned = S.ships;
+    owned = eco.localShips(S, state.worldState);
   if (!owned || owned.length < 2) return;
   const i = owned.indexOf(S.ship);
   const next = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
@@ -381,9 +389,9 @@ function cycleShip(dir) {
   inventoryChanged();
 }
 
-/** Step the Inventory tab through the hangar's ships without changing the ship being flown. */
+/** Step the Inventory tab through this station's ships without changing the ship being flown. */
 function cycleInvShip(dir) {
-  const owned = state.profile.ships;
+  const owned = eco.localShips(state.profile, state.worldState);
   if (!owned || owned.length < 2) return;
   const i = owned.indexOf(viewedShip());
   state.ui.invShip = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
@@ -404,6 +412,7 @@ function afterSaveChange() {
   state.shops = {};
   state.ui.fit = null;
   state.ui.invShip = null;
+  state.ui.shopOpen = {};
   contracts.ensureBoard();
   state.flight.lock = null;
   state.flight.missileLock = { target: null, t: 0, locked: false };
@@ -526,12 +535,156 @@ function openInventoryDiscard(button) {
   });
 }
 
+const POPOVER_SELECTOR =
+  ".inv-context, .inv-sell-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover";
+
+/** Close any open docked context menu or popover; returns true if anything closed. */
+export function closePanelPopovers() {
+  if (!panel) return false;
+  const open = panel.querySelectorAll(POPOVER_SELECTOR);
+  if (!open.length) return false;
+  open.forEach(node => node.remove());
+  return true;
+}
+
+/** Clamp a floating popover of rough `(w, h)` inside the visible scroll window of `panel`. */
+function placePanelPopover(popover, x, y, w = 248, h = 175) {
+  const scrollLeft = panel.scrollLeft || 0, scrollTop = panel.scrollTop || 0;
+  const maxLeft = Math.max(scrollLeft, scrollLeft + (panel.clientWidth || 0) - w - 8);
+  const maxTop = Math.max(scrollTop, scrollTop + (panel.clientHeight || 0) - h - 8);
+  popover.style.left = `${Math.max(scrollLeft + 8, Math.min(x, maxLeft))}px`;
+  popover.style.top = `${Math.max(scrollTop + 8, Math.min(y, maxTop))}px`;
+}
+
+/** Open the compact Shop's "Buy amount" popover anchored beside the clicked Buy button. */
+function openShopBuy(button) {
+  const parts = String(button.dataset.b || "").split(":");
+  const [shopId, rawKind, id] = parts.length >= 3 ? parts : [parts[0], null, parts[1]];
+  const kind = rawKind === "ship" || rawKind === "item" ? rawKind : null;
+  const row = eco.shopList(shopId).find(r => r.id === id && (!kind || r.kind === kind));
+  if (!row) return;
+  const maxBuy = eco.shopMaxBuy(shopId, id, state.profile, state.worldState, row.kind);
+  if (!(maxBuy > 0)) return;
+
+  const rect = panel.getBoundingClientRect();
+  const btnRect = button.getBoundingClientRect();
+  closePanelPopovers();
+
+  const popover = document.createElement("div");
+  popover.className = "inv-sell-popover shop-buy-popover";
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-label", `Buy ${row.n}`);
+  popover.dataset.shop = shopId;
+  popover.dataset.kind = row.kind;
+  popover.dataset.id = row.id;
+  popover.dataset.price = String(row.price);
+  popover.innerHTML = shopBuyHtml(row, maxBuy, 1);
+
+  const x = btnRect.right - rect.left + (panel.scrollLeft || 0) - 248;
+  const y = btnRect.top - rect.top + (panel.scrollTop || 0) - 8;
+  placePanelPopover(popover, x, y, 248, 170);
+
+  const input = popover.querySelector(".inv-sell-amount");
+  const totalEl = popover.querySelector("[data-buy-total]");
+  input?.addEventListener("input", () => {
+    const liveMax = Math.max(1, eco.shopMaxBuy(shopId, id, state.profile, state.worldState, row.kind));
+    const n = Number(input.value);
+    if (totalEl && Number.isInteger(n) && n >= 1 && n <= liveMax) {
+      totalEl.textContent = `${n * row.price} cr`;
+    }
+    const err = popover.querySelector(".inv-sell-error");
+    if (err) err.textContent = "";
+  });
+  popover.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      event.preventDefault();
+      popover.remove();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      confirmShopBuy(popover);
+    }
+  });
+
+  panel.append(popover);
+  input?.focus?.();
+  input?.select?.();
+}
+
+function confirmShopBuy(node) {
+  const popover = node?.classList?.contains("shop-buy-popover")
+    ? node
+    : node?.closest?.(".shop-buy-popover");
+  if (!popover) return;
+  const { shop, kind, id } = popover.dataset;
+  const maxBuy = eco.shopMaxBuy(shop, id, state.profile, state.worldState, kind || null);
+  const input = popover.querySelector(".inv-sell-amount");
+  const amount = Number(input?.value);
+  if (!(maxBuy > 0)) {
+    popover.remove();
+    render();
+    return;
+  }
+  if (!Number.isInteger(amount) || amount < 1 || amount > maxBuy) {
+    const error = popover.querySelector(".inv-sell-error");
+    if (error) error.textContent = `Enter a whole number from 1 to ${maxBuy}.`;
+    input?.focus?.();
+    return;
+  }
+  const text = eco.buyItem(shop, id, amount, state.player, state.profile, state.worldState, kind || null);
+  if (text) toast(text);
+  inventoryChanged();
+  uiSound("confirm");
+  save();
+  render();
+}
+
+/** Open the right-click Ship details card for a ship in the Shop or Outfitting. */
+function openShipDetails(shipType, clientX, clientY) {
+  const html = shipDetailsHtml(shipType);
+  if (!html) return false;
+  const stats = eco.shipBaseStats(shipType);
+  const rect = panel.getBoundingClientRect();
+  closePanelPopovers();
+
+  const popover = document.createElement("div");
+  popover.className = "inv-sell-popover ship-info-popover";
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-label", `${stats.name} details`);
+  popover.dataset.shipType = stats.type;
+  popover.innerHTML = html;
+
+  const x = clientX - rect.left + (panel.scrollLeft || 0) + 6;
+  const y = clientY - rect.top + (panel.scrollTop || 0) + 6;
+  placePanelPopover(popover, x, y, 256, 195);
+
+  popover.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      event.preventDefault();
+      popover.remove();
+    }
+  });
+
+  panel.append(popover);
+  uiSound();
+  return true;
+}
+
 function onInventoryContextMenu(e) {
   const tile = e.target.closest("button.inv-item[data-kind]");
-  if (!tile) return;
+  if (!tile) {
+    const shipEl = e.target.closest("[data-ship-type]");
+    if (shipEl && shipEl.dataset.shipType) {
+      e.preventDefault();
+      openShipDetails(shipEl.dataset.shipType, e.clientX, e.clientY);
+    }
+    return;
+  }
   e.preventDefault();
-  panel.querySelector(".inv-context")?.remove();
-  panel.querySelector(".inv-sell-popover")?.remove();
+  closePanelPopovers();
 
   const menu = document.createElement("div");
   menu.className = "inv-context";
@@ -587,8 +740,7 @@ async function onClick(e) {
   const btn = e.target.closest("button[data-a]");
   if (!btn) {
     if (e.target.closest(".inv-sell-popover") || e.target.closest(".inv-discard-popover")) return;
-    panel.querySelector(".inv-context")?.remove();
-    panel.querySelector(".inv-sell-popover")?.remove();
+    closePanelPopovers();
     return;
   }
   if (btn.disabled) return;
@@ -611,6 +763,26 @@ async function onClick(e) {
       btn.textContent = label;
     }
   }
+  if (name === "wb") {
+    openShopBuy(btn);
+    uiSound();
+    return;
+  }
+  if (name === "shopBuyConfirm") {
+    confirmShopBuy(btn);
+    return;
+  }
+  if (name === "shopBuyCancel" || name === "shipInfoClose") {
+    closePanelPopovers();
+    return;
+  }
+  if (name === "shopGroup") {
+    closePanelPopovers();
+    ACTIONS.shopGroup(btn.dataset.b);
+    uiSound("click");
+    render();
+    return;
+  }
   if (name === "invSellOpen") {
     openInventorySell(btn);
     uiSound();
@@ -622,8 +794,7 @@ async function onClick(e) {
     return;
   }
   if (name === "invSellCancel") {
-    panel.querySelector(".inv-context")?.remove();
-    panel.querySelector(".inv-sell-popover")?.remove();
+    closePanelPopovers();
     return;
   }
   if (name === "invSellConfirm") {

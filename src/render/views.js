@@ -29,7 +29,7 @@ import { on } from "../util/events.js";
 import { UP } from "../util/math.js";
 import { enemyDef } from "../data/enemies.js";
 import { rockColor } from "../data/items.js";
-import { SHIPS } from "../data/ships.js";
+import { DEFAULT_SHIP, shipDef, shipTypeOf } from "../data/ships.js";
 import { mountOffset } from "../data/mounts.js";
 import { buildPlayerShip, ROCK_SHAPES } from "./models.js";
 import { instantiateModel, modelTemplate, engNodes } from "./gltf.js";
@@ -641,7 +641,7 @@ export class PlayerShipView {
     scene.add(this.mesh);
   }
   mount(name, bay = 0, barrel = 0, count = 1) {
-    return mountOffset(this.hull, name, SHIPS[this.hull].sc, bay, barrel, count);
+    return mountOffset(this.hull, name, shipDef(this.hull)?.sc ?? 1, bay, barrel, count);
   }
   update(player) {
     const m = this.mesh;
@@ -655,7 +655,7 @@ export class PlayerShipView {
 
 let activePlayerView = null;
 function ensurePlayerView() {
-  const hull = state.profile.ship;
+  const hull = shipTypeOf(state.profile.ship) || DEFAULT_SHIP;
   if (!activePlayerView || activePlayerView.hull !== hull) {
     if (activePlayerView) activePlayerView.remove();
     activePlayerView = new PlayerShipView(hull);
@@ -735,7 +735,7 @@ function updateBeamView() {
     const pose = renderPlayerPose(P, frameAlpha);
     const hull = state.profile.ship;
     _beamOrigin
-      .copy(mountOffset(hull, "beam", SHIPS[hull].sc))
+      .copy(mountOffset(hull, "beam", shipDef(hull)?.sc ?? 1))
       .applyQuaternion(pose.quat)
       .add(pose.pos);
     start = _beamOrigin;

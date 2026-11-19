@@ -186,6 +186,7 @@ function onCargoClick(event) {
 export function setupCargo() {
   root = document.createElement("section");
   root.id = "cargo";
+  root.className = "cargo-overlay";
   root.hidden = true;
   root.setAttribute("role", "dialog");
   root.setAttribute("aria-modal", "true");

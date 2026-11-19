@@ -129,7 +129,7 @@ export const isBayGroup = (group, profile = state.profile) =>
 
 /**
  * How many of module `id` are owned across `world`'s station storage,
- * `profile`'s ship holds, and bays of `profile`'s loadouts.
+ * `profile`'s ship holds, and fitted bays of `profile`'s loadouts.
  */
 export function ownedCount(id, profile = state.profile, world = state.worldState) {
   let n = countOf(STATION, id, profile, world);

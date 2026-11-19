@@ -5,25 +5,55 @@
 // `profile` (`state.profile` by default, or an explicit pilot's `profile`).
 
 import { state, profileOf } from "../state/state.js";
-import { SHIPS } from "../data/ships.js";
-import { canSell, isItem, isModule, itemName, itemValue } from "../data/items.js";
+import { DEFAULT_PLACE, stationKeyAt } from "../data/places.js";
+import { SHIPS, isShipType, nextShipId, shipDef, shipName, shipTypeOf } from "../data/ships.js";
+import { canSell, isItem, isModule, itemName, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
 import { MODULES } from "../data/modules.js";
-import { isShop, shopDef, shopRow } from "../data/shops.js";
+import {
+  SHOP_GROUPS, isShop, isShipRow, shopDef, shopGroupFor, shopModuleSubgroups, shopRow, shopRowKind,
+} from "../data/shops.js";
 import { ownedCount } from "./fitting.js";
 import { setShip } from "./player.js";
-import { addShipRecords, ensureShipRecords } from "../state/profile.js";
+import { addShipRecords, ensureShipRecords, shipStation, shipsAtStation } from "../state/profile.js";
 import {
-  STATION, buyItem as buyInto, capacityOf, countOf, hasRoomFor, holdOf, loadOf, moveItem, stockOf,
-  takeItem, unitsOf, valueOf,
+  STATION, buyItem as buyInto, capacityOf, countOf, hasRoomFor, holdOf, loadOf, moveItem, spaceFor,
+  stockOf, takeItem, unitsOf, valueOf,
 } from "./inventory.js";
-export { valueOf };   // the Base tab and the Inventory sell box both ask for it
+export { valueOf, shipStation, shipsAtStation };   // screens ask for local-station ships and stock values
 import { refillPower } from "./power.js";
 import { refreshDrive } from "./drive.js";
 import { refreshShield } from "./shield.js";
-import { refreshHull, effectiveHullOf } from "./hull.js";
+import { refreshHull, effectiveHullOf, shipBaseStats } from "./hull.js";
+export { shipBaseStats };
 import { refreshGuns } from "./guns.js";
+
+function activeStationPlace(world = state.worldState, placeId = null) {
+  const candidate = placeId
+    || (world === state.worldState ? state.place || world?.place : world?.place || state.place)
+    || DEFAULT_PLACE;
+  return stationKeyAt(candidate) ? candidate : DEFAULT_PLACE;
+}
+
+/** Maximum ships a station hangar may hold for new purchases (`hangar` level + 1). */
+export const hangarCap = (world = state.worldState) => Math.max(1, (world?.base?.hangar ?? 0) + 1);
+
+/** Owned ship instance ids docked in `placeId`'s hangar (current station by default). */
+export function localShips(profile = state.profile, world = state.worldState, placeId = null) {
+  const at = activeStationPlace(world, placeId);
+  return shipsAtStation(profile, at, { docked: true, fallback: at });
+}
+
+/** Free hangar berths available for buying ships at `placeId` (current station by default). */
+export function freeBerths(profile = state.profile, world = state.worldState, placeId = null) {
+  return Math.max(0, hangarCap(world) - localShips(profile, world, placeId).length);
+}
+
+/** How many ships of hull class `type` the pilot has parked at this station. */
+export function localShipTypeCount(type, profile = state.profile, world = state.worldState, placeId = null) {
+  return localShips(profile, world, placeId).filter(id => shipTypeOf(id) === type).length;
+}
 
 function assertEconomyPilot(P, profile) {
   if (P && P !== state.player && (!profile || profile === state.profile)) {
@@ -140,23 +170,56 @@ export function upgradeBase(mod, profile = state.profile, world = state.worldSta
   world.base[mod]++;
 }
 
-export function buyShip(id, profile = state.profile, world = state.worldState) {
-  const price = SHIPS[id].price;
-  if (profile.cr < price || profile.ships.length >= world.base.hangar + 1) return;
-  profile.cr -= price;
-  profile.ships.push(id);
-  // Its own empty hold, no damage and the stock modules fitted: one shared
-  // definition of a complete ship, so a bought hull and a replacement hull can
-  // never differ in which records exist.
-  addShipRecords(profile, id);
+/**
+ * Buy `qty` hulls of class `type` and park each as its own fitted ship instance
+ * at the current station (visible in Outfitting here, never in Inventory).
+ * Multiple copies of the same class receive distinct ids (`wasp`, `wasp#2`, ...).
+ */
+export function buyShip(
+  type,
+  profile = state.profile,
+  world = state.worldState,
+  qty = 1,
+  unitPrice = null,
+  P = null
+) {
+  if (!isShipType(type)) return undefined;
+  const n = Math.max(1, Math.floor(+qty) || 1);
+  const price = unitPrice == null ? SHIPS[type].price : unitPrice;
+  const at = P && P !== state.player && P.place ? P.place : activeStationPlace(world);
+  if (profile.cr < price * n) return undefined;
+  if (freeBerths(profile, world, at) < n) {
+    return "No free hangar berth at this station. Upgrade Hangar berth in Base.";
+  }
+  profile.cr -= price * n;
+  const added = [];
+  for (let i = 0; i < n; i++) {
+    const id = nextShipId(type, profile.ships);
+    profile.ships.push(id);
+    // Its own empty hold, intact hull, stock modules and station berth.
+    addShipRecords(profile, id, at);
+    added.push(id);
+  }
+  // If the pilot had no active ship parked here (for example after losing every ship), board the first.
+  const local = localShips(profile, world, at);
+  if (!local.includes(profile.ship) && added.length) {
+    const target = P || (profile === state.profile ? state.player : null);
+    selectShip(added[0], target, profile, world);
+  }
+  const label = SHIPS[type].n;
+  return n > 1
+    ? `${n} ${label} stored in Outfitting at this station.`
+    : `${label} stored in Outfitting at this station.`;
 }
 
-export function selectShip(id, P = state.player, profile = profileOf(P)) {
+export function selectShip(id, P = state.player, profile = profileOf(P), world = state.worldState) {
   assertEconomyPilot(P, profile);
-  // Each ship has its own hold now, so cargo stays with the ship it is in and
-  // nothing has to fit before you can switch. Fill in anything an old save left
-  // out: a hull with no fit has no bays and nothing to fly with.
-  ensureShipRecords(profile, id);
+  if (!profile?.ships?.includes(id)) return "You do not own that ship.";
+  const at = P && P !== state.player && P.place ? P.place : activeStationPlace(world);
+  const parked = profile.shipPlaces?.[id];
+  if (parked && parked !== at) return "That ship is stored at another station.";
+  // Each ship instance keeps its own hold, hull fraction and fitted bays.
+  ensureShipRecords(profile, id, at);
   profile.ship = id;
   setShip(id, P, profile);
   refillPower(P, profile);       // docked: the new hull's cells are full
@@ -174,18 +237,22 @@ export function repairShip(id, P = state.player, profile = profileOf(P)) {
   profile.cr -= c;
   profile.hp[id] = 1;
   if (P && id === profile.ship) P.hull = P.hullMax;
-  return `${SHIPS[id].n} repaired for ${c} cr.`;
+  return `${shipName(id)} repaired for ${c} cr.`;
+}
+
+function shopStockKey(shopId, row) {
+  return shopRowKind(row) === "ship" ? `${shopId}:ship:${row.id}` : `${shopId}:${row.id}`;
 }
 
 /**
- * How much of shop `shopId`'s row for item `id` is left, or `null` when that row
+ * How much of shop `shopId`'s row for `id` is left, or `null` when that row
  * never runs out (no `max` in data/shops.js — every Meridian row today). The
  * count is made on first use and lives in `state.shops` (session only).
  */
-export function shopStock(shopId, id) {
-  const row = shopRow(shopId, id);
+export function shopStock(shopId, id, kind = null) {
+  const row = shopRow(shopId, id, kind);
   if (!row || !(row.max > 0)) return null;
-  const key = `${shopId}:${id}`;
+  const key = shopStockKey(shopId, row);
   const shops = state.shops || (state.shops = {});
   if (!(key in shops)) shops[key] = Math.floor(row.max);
   return shops[key];
@@ -196,39 +263,113 @@ export function shopStock(shopId, id) {
  * restock event or a random roll uses later; nothing needs saving today, so
  * buying from a fresh save always starts from the row's `max`.
  */
-export function setShopStock(shopId, id, n) {
-  const row = shopRow(shopId, id);
+export function setShopStock(shopId, id, n, kind = null) {
+  const row = shopRow(shopId, id, kind);
   if (!row || !(row.max > 0)) return;
   const shops = state.shops || (state.shops = {});
-  shops[`${shopId}:${id}`] = Math.max(0, Math.floor(+n || 0));
+  shops[shopStockKey(shopId, row)] = Math.max(0, Math.floor(+n || 0));
 }
 
 /**
- * The rows the Shop tab draws for shop `shopId`: for sale, in data order, each
- * with what the screen needs and nothing it has to work out. Pure apart from
- * reading the limited rows' counts.
+ * Maximum whole units of `(shopId, id)` purchasable right now, capped by credits,
+ * finite shop stock (`max`), and destination capacity (hangar berths for ships,
+ * station storage m³ and stack limit for regular items).
+ */
+export function shopMaxBuy(
+  shopId,
+  id,
+  profile = state.profile,
+  world = state.worldState,
+  kind = null
+) {
+  const row = shopRow(shopId, id, kind);
+  if (!isShop(shopId) || !row || !(row.price > 0)) return 0;
+  const ship = isShipRow(row);
+  if (!ship && !isItem(row.id)) return 0;
+  const byCr = Math.floor(Math.max(0, profile.cr) / row.price);
+  const left = shopStock(shopId, row.id, shopRowKind(row));
+  const byStock = left === null ? Infinity : Math.max(0, left);
+  const byRoom = ship
+    ? freeBerths(profile, world)
+    : Math.max(0, spaceFor(STATION, row.id, profile, world));
+  return Math.max(0, Math.min(byCr, byStock, byRoom));
+}
+
+/**
+ * Flat list of rows the Shop sells for `shopId`, in data order, each with every
+ * derived figure the compact tree and Buy-amount popup need.
  */
 export function shopList(shopId, profile = state.profile, world = state.worldState) {
   return (shopDef(shopId).stock || []).map(row => {
     const id = row.id;
-    const bought = isItem(id);
+    const kind = shopRowKind(row);
+    const ship = isShipRow(row);
+    const bought = !ship && isItem(id);
+    const { group, subgroup } = shopGroupFor(row);
+    const left = shopStock(shopId, id, kind);
+    const room = ship
+      ? freeBerths(profile, world) > 0
+      : bought
+        ? hasRoomFor(STATION, id, 1, profile, world)
+        : false;
+    const byCr = row.price > 0 ? Math.floor(Math.max(0, profile.cr) / row.price) : 0;
+    const byStock = left === null ? Infinity : Math.max(0, left);
+    const byRoom = ship
+      ? freeBerths(profile, world)
+      : bought
+        ? Math.max(0, spaceFor(STATION, id, profile, world))
+        : 0;
     return {
+      kind,
+      group,
+      subgroup,
       id,
-      n: row.n || (bought ? itemName(id) : String(id)),
+      n: row.n || (ship ? shipDef(id).n : bought ? itemName(id) : String(id)),
       d: row.d || "",
       price: row.price,
-      vol: bought ? (MODULES[id] ? MODULES[id].vol : 1) : 0,
-      owned: bought && isModule(id) && row.own !== false ? ownedCount(id, profile, world) : 0,
-      left: shopStock(shopId, id),
-      room: bought ? hasRoomFor(STATION, id, 1, profile, world) : false,
+      vol: ship ? 0 : bought ? itemVol(id) : 0,
+      owned: ship
+        ? row.own === false ? 0 : localShipTypeCount(id, profile, world)
+        : bought && isModule(id) && row.own !== false
+          ? ownedCount(id, profile, world)
+          : 0,
+      left,
+      room,
+      maxBuy: ship || bought ? Math.max(0, Math.min(byCr, byStock, byRoom)) : 0,
     };
   });
 }
 
 /**
- * Buy `qty` of shop `shopId`'s row for item `id`. Purchases land in `world`'s
- * station storage, charge `profile.cr`, and top up `profile.msl` when a launcher
- * module defines `ammo`.
+ * Compact collapsible tree for `shopId`: top-level groups (`Ships`, `Modules`,
+ * `Consumables`, `Ores`, `Loot`), with `Modules` split into one subgroup per
+ * entry of `MODULE_GROUPS` (powerplants, power cells, thrusters, shield
+ * generators, primary weapons, secondary weapons, hulls, plus any future group).
+ */
+export function shopCatalogue(shopId, profile = state.profile, world = state.worldState) {
+  const rows = shopList(shopId, profile, world);
+  const subDefs = shopModuleSubgroups();
+  return SHOP_GROUPS.map(g => {
+    if (g.nested) {
+      const modRows = rows.filter(r => r.group === g.k);
+      const known = new Set(subDefs.map(s => s.k));
+      const subgroups = subDefs.map(sub => {
+        const items = modRows.filter(r => r.subgroup === sub.k);
+        return { k: sub.k, n: sub.n, count: items.length, items };
+      });
+      const extras = modRows.filter(r => !known.has(r.subgroup));
+      if (extras.length) subgroups.push({ k: "other", n: "Other modules", count: extras.length, items: extras });
+      return { k: g.k, n: g.n, count: modRows.length, subgroups };
+    }
+    const items = rows.filter(r => r.group === g.k);
+    return { k: g.k, n: g.n, count: items.length, items };
+  });
+}
+
+/**
+ * Buy `qty` of shop `shopId`'s row for `id` (optionally scoped by `kind`:
+ * `"ship"` or `"item"`). Regular items land in this station's Inventory; ships
+ * land in this station's Outfitting hangar as distinct ship instances.
  */
 export function buyItem(
   shopId,
@@ -236,23 +377,37 @@ export function buyItem(
   qty = 1,
   P = state.player,
   profile = profileOf(P),
-  world = state.worldState
+  world = state.worldState,
+  kind = null
 ) {
   assertEconomyPilot(P, profile);
-  const row = shopRow(shopId, id);
-  if (!isShop(shopId) || !row || !isItem(id)) return;
+  if (!isShop(shopId)) return;
+  const row = shopRow(shopId, id, kind);
+  if (!row) return;
+  const rowKind = shopRowKind(row);
   const n = Math.max(1, Math.floor(+qty) || 1);
   const total = row.price * n;
-  const left = shopStock(shopId, id);
+  const left = shopStock(shopId, id, rowKind);
   if (profile.cr < total) return;
   if (left !== null && left < n) return;
+
+  if (isShipRow(row)) {
+    if (freeBerths(profile, world) < n) {
+      return `No free hangar berth at this station for ${row.n || shipName(id)}. Upgrade Hangar berth in Base.`;
+    }
+    const msg = buyShip(id, profile, world, n, row.price, P);
+    if (left !== null) setShopStock(shopId, id, left - n, rowKind);
+    return msg;
+  }
+
+  if (!isItem(id)) return;
   if (!hasRoomFor(STATION, id, n, profile, world)) {
     return `No room in the station for the ${row.n || itemName(id)}.`;
   }
   // Everything is checked, so nothing below can fail half way: `buyInto` takes
   // the credits and stores the items together.
   buyInto(id, row.price, STATION, n, profile, world);
-  if (left !== null) setShopStock(shopId, id, left - n);
+  if (left !== null) setShopStock(shopId, id, left - n, rowKind);
   const mod = MODULES[id];
   const ammo = (mod && mod.ammo) || 0;
   const gave = ammo > 0 && profile.msl < ammo;

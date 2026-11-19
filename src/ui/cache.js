@@ -248,6 +248,7 @@ function onCacheClick(event) {
 export function setupCache() {
   root = document.createElement("section");
   root.id = "cache";
+  root.className = "cargo-overlay";
   root.hidden = true;
   root.setAttribute("role", "dialog");
   root.setAttribute("aria-modal", "true");

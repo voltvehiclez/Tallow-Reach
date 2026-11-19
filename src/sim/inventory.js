@@ -18,7 +18,7 @@
 
 import { state } from "../state/state.js";
 import { DEFAULT_PLACE, stationKeyAt } from "../data/places.js";
-import { SHIPS } from "../data/ships.js";
+import { shipDef, shipName } from "../data/ships.js";
 import { ITEMS, isItem, isModule, itemName, itemStack, itemValue, itemVol, newStock } from "../data/items.js";
 import { REFINERY_BONUS_PER_LEVEL, STORAGE_PER_LEVEL } from "../data/station.js";
 
@@ -92,7 +92,7 @@ export const holdOf = (id, profile = state.profile) => stockOf(id ?? profile.shi
 export function capacityOf(where, profile = state.profile, world = state.worldState) {
   if (isStation(where)) return STORAGE_PER_LEVEL * world.base.store;
   if (isCache(where)) return cacheRecord() ? Infinity : 0;
-  return SHIPS[where].cargo;
+  return shipDef(where)?.cargo || 0;
 }
 
 /** How many m³ are in use at a place. */
@@ -144,7 +144,7 @@ export const hasRoomFor = (where, id, n = 1, profile = state.profile, world = st
 export function nameOf(where) {
   if (isStation(where)) return "the station";
   if (isCache(where)) return `the ${(cacheRecord()?.cache.n || "cache").toLowerCase()}`;
-  return `the ${SHIPS[where].n}`;
+  return `the ${shipName(where)}`;
 }
 
 /**

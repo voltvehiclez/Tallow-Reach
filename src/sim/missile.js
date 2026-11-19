@@ -11,7 +11,7 @@
 
 import { V, Q, faceQ } from "../util/math.js";
 import { MISSILE } from "../data/weapons.js";
-import { SHIPS } from "../data/ships.js";
+import { shipDef } from "../data/ships.js";
 import { emit } from "../util/events.js";
 import { state, localPlayer, placeWorld, profileOf } from "../state/state.js";
 import { enemyPos, enemyVel } from "./enemy.js";
@@ -33,7 +33,7 @@ export function launchMissile(target, launcher, dir, muzzle, player = localPlaye
   // The hull's own multiplier applies to everything it fires (the baseline
   // hulls carry 1; the Test Ship carries 10).
   const prof = P ? profileOf(P) : null;
-  const dMul = (prof && SHIPS[prof.ship]?.dmg) || (P && SHIPS[P.ship]?.dmg) || 1;
+  const dMul = (prof && shipDef(prof.ship)?.dmg) || (P && shipDef(P.ship)?.dmg) || 1;
   const m = {
     kind: "missile",
     place: P.place || state.place,
