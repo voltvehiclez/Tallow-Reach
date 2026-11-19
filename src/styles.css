@@ -992,6 +992,11 @@ button.mod-bay.on {
   color: #d4dce2;
   background: rgba(255, 255, 255, .02);
 }
+.shop-toggle-depth-2 {
+  padding-left: 32px;
+  color: #c5d0d7;
+  background: rgba(255, 255, 255, .012);
+}
 .shop-toggle:hover:not(:disabled),
 .shop-toggle:focus-visible {
   background: rgba(255, 255, 255, .09);
@@ -1039,6 +1044,10 @@ button.mod-bay.on {
 .shop-depth-2 > .shop-item,
 .shop-depth-2 > .shop-empty {
   padding-left: 34px;
+}
+.shop-depth-3 > .shop-item,
+.shop-depth-3 > .shop-empty {
+  padding-left: 46px;
 }
 .shop-item:hover {
   background: rgba(255, 255, 255, .07);
@@ -1089,6 +1098,30 @@ button.mod-bay.on {
 }
 .shop-buy-total strong {
   color: var(--ink);
+}
+/* Shop Buy popup extends left from the right-edge Buy button: keep its own Buy
+   button on the right (and flip to bottom near the bottom of the panel) so it
+   lands directly over the cursor with no extra mouse travel. */
+.shop-buy-popover {
+  display: flex;
+  flex-direction: column;
+}
+.shop-buy-popover .inv-sell-head > strong {
+  text-align: right;
+}
+.shop-buy-popover .inv-sell-head .inv-sell-actions {
+  justify-content: flex-end;
+}
+.shop-buy-popover.flip-up .inv-sell-head {
+  order: 2;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+.shop-buy-popover.flip-up .inv-sell-head > strong {
+  order: 1;
+}
+.shop-buy-popover.flip-up .inv-sell-head .inv-sell-actions {
+  order: 2;
 }
 
 /* ---- Right-click Ship details popover (Shop and Outfitting) ---- */

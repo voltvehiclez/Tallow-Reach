@@ -22,18 +22,20 @@ the next person must know (save version, rebuild needed, known issues).
 
 ## 2026-11-18: Roadmap slice 2 — compact Shop, Hangar stored-ship list & context menu, Ship details/bonuses and unblurred cargo overlays
 
-Slice 1 playtest passed; includes owner's Slice 2 follow-up. Rebuilt the Shop tab into a
+Slice 1 playtest passed; includes owner's Slice 2 follow-ups. Rebuilt the Shop tab into a
 compact single-line collapsible tree (`SHOP_GROUPS`: `Ships`, `Modules` with 1-line
-subgroups matching every `MODULE_GROUPS` group, `Consumables`, `Ores`, `Loot`) with a
-right-side `Buy` button opening a bounded `Buy amount` popover (`shopBuyHtml` /
-`shopMaxBuy`); `Ores` and `Loot` show none in stock at Meridian today and populate
-automatically for future station shops. Ships are bought in Shop (never in Inventory) and
-stored per station in the restored **Hangar** tab's compact one-line `.hangar-ships` list
-(removed from Outfitting): left-click never auto-equips; right-click offers `Show info`,
-`Fly ship`, and `Sell` (`canSellShip` / `sellShip` at 60% resale via `shipSellValue`,
-moving cargo and non-stock fitted upgrades into station storage and refusing when active
-or short on storage space). Supports duplicate hulls (`wasp#2`, `prospector#2`) across
-stations via `profile.shipPlaces` in `SAVE_VERSION = 23` (clean v1–v22 migration), keeps
+subgroups matching every `MODULE_GROUPS` group plus `Cannons` and `Missiles` sub-groups
+under `Primary weapons`, `Consumables`, `Ores`, `Loot`) with a right-side `Buy` button
+opening a bounded `Buy amount` popover (`shopBuyHtml` / `shopMaxBuy`) anchored so the
+popup's right-aligned `Buy` button lands directly over the cursor (`placePopoverButtonOverCursor`,
+flipping at the bottom edge); `Ores`, `Loot` and primary `Missiles` show none in stock
+at Meridian today and populate automatically for future items/weapons. Ships are bought in
+Shop (never in Inventory) and stored per station in the restored **Hangar** tab's compact
+one-line `.hangar-ships` list (removed from Outfitting): single left-click never auto-
+equips, double-click flies the ship, and right-click offers `Show info`, `Fly ship`, and
+`Sell` (`canSellShip` / `sellShip` at 60% resale via `shipSellValue`, moving cargo and
+non-stock fitted upgrades into station storage and refusing when active or short on
+storage space). Supports duplicate hulls (`wasp#2`, `prospector#2`) across stations via `profile.shipPlaces` in `SAVE_VERSION = 23` (clean v1–v22 migration), keeps
 each station's `world.base.hangar + 1` berth cap, and lends a local Wasp on death without
 moving remote ships. Updated hull bonuses (Wasp none, Prospector `2×` mining speed with
 Wasp Hull HP, Bulwark `1.5×` damage on all weapons, Test Ship unchanged) with right-click

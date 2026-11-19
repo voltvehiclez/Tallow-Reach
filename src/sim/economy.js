@@ -412,7 +412,7 @@ export function shopList(shopId, profile = state.profile, world = state.worldSta
     const kind = shopRowKind(row);
     const ship = isShipRow(row);
     const bought = !ship && isItem(id);
-    const { group, subgroup } = shopGroupFor(row);
+    const { group, subgroup, subcat } = shopGroupFor(row);
     const left = shopStock(shopId, id, kind);
     const room = ship
       ? freeBerths(profile, world) > 0
@@ -430,6 +430,7 @@ export function shopList(shopId, profile = state.profile, world = state.worldSta
       kind,
       group,
       subgroup,
+      subcat,
       id,
       n: row.n || (ship ? shipDef(id).n : bought ? itemName(id) : String(id)),
       d: row.d || "",
@@ -462,6 +463,15 @@ export function shopCatalogue(shopId, profile = state.profile, world = state.wor
       const known = new Set(subDefs.map(s => s.k));
       const subgroups = subDefs.map(sub => {
         const items = modRows.filter(r => r.subgroup === sub.k);
+        if (sub.subgroups && sub.subgroups.length) {
+          const knownSub = new Set(sub.subgroups.map(sc => sc.k));
+          const nested = sub.subgroups.map(sc => {
+            const scItems = items.filter(r => r.subcat === sc.k);
+            return { k: sc.k, n: sc.n, count: scItems.length, items: scItems };
+          });
+          const direct = items.filter(r => !r.subcat || !knownSub.has(r.subcat));
+          return { k: sub.k, n: sub.n, count: items.length, subgroups: nested, items: direct };
+        }
         return { k: sub.k, n: sub.n, count: items.length, items };
       });
       const extras = modRows.filter(r => !known.has(r.subgroup));

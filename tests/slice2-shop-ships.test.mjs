@@ -83,10 +83,16 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
   assert.equal(mods.subgroups.find(s => s.k === "thruster").items[0].id, "thruster_basic");
   assert.equal(mods.subgroups.find(s => s.k === "shield").items[0].id, "shield_basic");
   assert.equal(mods.subgroups.find(s => s.k === "hull").items[0].id, "hull_basic");
+  const primary = mods.subgroups.find(s => s.k === "primary");
+  assert.equal(primary.count, 2);
   assert.deepEqual(
-    mods.subgroups.find(s => s.k === "primary").items.map(i => i.id),
-    ["beam_basic", "cannon_basic"]
+    primary.subgroups.map(s => [s.k, s.n]),
+    [["cannons", "Cannons"], ["missiles", "Missiles"]],
+    "Primary weapons has Cannons and Missiles sub-groups for future weapon types"
   );
+  assert.deepEqual(primary.subgroups.find(s => s.k === "cannons").items.map(i => i.id), ["cannon_basic"]);
+  assert.deepEqual(primary.subgroups.find(s => s.k === "missiles").items, []);
+  assert.deepEqual(primary.items.map(i => i.id), ["beam_basic"], "mining beam stays accessible under Primary weapons");
   assert.deepEqual(
     mods.subgroups.find(s => s.k === "secondary").items.map(i => i.id),
     ["missile_basic"]
@@ -103,13 +109,22 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
   assert.equal((collapsed.match(/data-a="shopGroup"/g) || []).length, 5);
   assert.doesNotMatch(collapsed, /class="shop-buy"/);
 
-  // Expanding Modules reveals subgroups; expanding a subgroup reveals one-line items with right Buy buttons.
+  // Expanding Modules -> Primary weapons shows Cannons & Missiles toggles plus the mining beam;
+  // expanding Cannons reveals Basic cannons; expanding Missiles shows None in stock until future missiles arrive.
   state.ui.shopOpen = { modules: true, "modules:primary": true, ores: true, ships: true };
   const expanded = outpostHtml(state.ui);
+  assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:cannons"/);
+  assert.match(expanded, /data-a="shopGroup" data-b="modules:primary:missiles"/);
+  assert.doesNotMatch(expanded, /data-b="meridian:item:cannon_basic"/, "cannons stay tucked inside Cannons until opened");
   assert.match(expanded, /data-a="wb" data-b="meridian:item:beam_basic"/);
   assert.match(expanded, /data-a="wb" data-b="meridian:ship:prospector"/);
   assert.match(expanded, /data-ship-type="prospector"/, "ship rows support right-click Ship details");
   assert.match(expanded, /None in stock/, "empty Ores group explains nothing is stocked here yet");
+
+  state.ui.shopOpen["modules:primary:cannons"] = true;
+  state.ui.shopOpen["modules:primary:missiles"] = true;
+  const deepExpanded = outpostHtml(state.ui);
+  assert.match(deepExpanded, /data-a="wb" data-b="meridian:item:cannon_basic"/);
 
   // Future station stocking ores and loot classifies automatically without UI changes.
   SHOPS._future = {
@@ -515,26 +530,43 @@ test("menu wiring: clicking Buy opens Buy-amount popup and right-clicking a ship
   };
   try {
     setupMenu();
-    // 1. Click Buy on Prospector in Shop -> opens Buy-amount popup, type 2, confirm -> 2 Prospectors in Outfitting!
+    // 1. Click Buy on Prospector at right-edge cursor (526, 220): Buy button sits right-aligned
+    // directly under the cursor (zero extra travel), typing 2 updates total, confirming buys 2 ships.
     const buyBtn = makeEl("button");
     buyBtn.dataset = { a: "wb", b: "meridian:ship:prospector" };
-    buyBtn.getBoundingClientRect = () => ({ left: 480, top: 120, right: 530, bottom: 138, width: 50, height: 18 });
+    buyBtn.getBoundingClientRect = () => ({ left: 506, top: 211, right: 546, bottom: 228, width: 40, height: 17 });
     buyBtn.closest = sel => (sel === "button[data-a]" ? buyBtn : null);
-    await panel.handlers.click[0]({ target: buyBtn, shiftKey: false });
+    await panel.handlers.click[0]({ target: buyBtn, shiftKey: false, clientX: 526, clientY: 220 });
 
     const buyPop = panel.children.find(c => c.classList.contains("shop-buy-popover"));
     assert.ok(buyPop, "clicking Buy opens the Buy-amount popup");
     assert.match(buyPop.innerHTML, /Buy Prospector/);
-    const input = buyPop.querySelector(".inv-sell-amount");
+    assert.match(
+      buyPop.innerHTML,
+      /data-a="shopBuyCancel">Cancel<\/button><button[^>]*data-a="shopBuyConfirm">Buy<\/button>/,
+      "popup puts Cancel left and Buy right so Buy sits over the right-edge cursor"
+    );
+    const popLeft = parseFloat(buyPop.style.left);
+    const popTop = parseFloat(buyPop.style.top);
+    assert.equal(popLeft + 214, 526, "popup Buy button X centre lands straight on the cursor");
+    assert.equal(popTop + 46, 220, "popup Buy button Y centre lands straight on the cursor");
+
+    // Clicking Buy near the bottom edge flips the popup header down so Buy still sits under the cursor.
+    await panel.handlers.click[0]({ target: buyBtn, shiftKey: false, clientX: 526, clientY: 690 });
+    const lowPop = panel.children.find(c => c.classList.contains("shop-buy-popover"));
+    assert.equal(lowPop.classList.contains("flip-up"), true, "bottom-edge Buy popup flips header to bottom");
+    assert.ok(Math.abs(parseFloat(lowPop.style.top) + (158 - 24) - 690) <= 6, "flipped Buy button stays over cursor");
+
+    const input = lowPop.querySelector(".inv-sell-amount");
     input.value = "2";
     input.dispatch("input", {});
-    assert.equal(buyPop.querySelector("[data-buy-total]").textContent, "1200 cr");
+    assert.equal(lowPop.querySelector("[data-buy-total]").textContent, "1200 cr");
 
     const confirmBtn = makeEl("button");
     confirmBtn.dataset = { a: "shopBuyConfirm" };
     confirmBtn.closest = sel => {
       if (sel === "button[data-a]") return confirmBtn;
-      if (sel === ".shop-buy-popover") return buyPop;
+      if (sel === ".shop-buy-popover") return lowPop;
       return null;
     };
     await panel.handlers.click[0]({ target: confirmBtn, shiftKey: false });
@@ -542,12 +574,20 @@ test("menu wiring: clicking Buy opens Buy-amount popup and right-clicking a ship
     assert.equal(itemsAt(STATION).length, 0, "ships went to Hangar, not Inventory");
     assert.equal(state.profile.cr, 8800);
 
-    // 2. Hangar row: left-click does NOT auto-equip; right-click opens Show info / Fly ship / Sell.
+    // 2. Hangar row: single left-click does NOT auto-equip; double-click flies it; right-click opens menu.
     const hangarRow = makeEl("li");
     hangarRow.dataset = { hangarShip: "prospector", shipType: "prospector" };
     hangarRow.closest = sel => (sel === "[data-hangar-ship]" ? hangarRow : null);
     await panel.handlers.click[0]({ target: hangarRow, shiftKey: false });
-    assert.equal(state.profile.ship, "wasp", "left-clicking a stored ship in Hangar does not equip it");
+    assert.equal(state.profile.ship, "wasp", "single left-clicking a stored ship in Hangar does not equip it");
+
+    const waspRow = makeEl("li");
+    waspRow.dataset = { hangarShip: "wasp", shipType: "wasp" };
+    waspRow.closest = sel => (sel === "[data-hangar-ship]" ? waspRow : null);
+    panel.handlers.dblclick[0]({ target: hangarRow });
+    assert.equal(state.profile.ship, "prospector", "double-clicking a stored ship in Hangar flies it");
+    panel.handlers.dblclick[0]({ target: waspRow });
+    assert.equal(state.profile.ship, "wasp", "double-clicking Wasp switches back so context-menu Fly can be tested");
 
     let ctxPrevented = false;
     panel.handlers.contextmenu[0]({

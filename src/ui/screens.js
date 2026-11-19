@@ -346,14 +346,18 @@ export function shipDetailsHtml(shipId) {
   );
 }
 
-/** Pure "Buy amount" popup body for a compact Shop row. */
+/**
+ * Pure "Buy amount" popup body for a compact Shop row. Because every row's Buy
+ * button sits on the right side of the Shop panel, the popup extends leftward
+ * and places its own Buy button on the right so it lands directly under the cursor.
+ */
 export function shopBuyHtml(row, maxBuy, amount = 1) {
   const safeMax = Math.max(1, Math.floor(+maxBuy) || 1);
   const qty = Math.min(safeMax, Math.max(1, Math.floor(+amount) || 1));
   const dest = row.kind === "ship" ? " &middot; Hangar" : "";
   return (
     `<div class="inv-sell-head"><strong>Buy ${esc(row.n)}</strong>` +
-    `<div class="inv-sell-actions"><button type="button" data-a="shopBuyConfirm">Buy</button><button type="button" data-a="shopBuyCancel">Cancel</button></div></div>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="shopBuyCancel">Cancel</button><button type="button" data-a="shopBuyConfirm">Buy</button></div></div>` +
     `<label>Buy amount <span>(1–${safeMax})</span><input class="inv-sell-amount" type="number" min="1" max="${safeMax}" step="1" value="${qty}"></label>` +
     `<div class="shop-buy-total">Total: <strong data-buy-total>${qty * row.price} cr</strong>${dest}</div>` +
     `<div class="inv-sell-error" aria-live="polite"></div>`
@@ -395,7 +399,7 @@ export function hangarHtml() {
       return (
         `<li class="hangar-ship-row${active ? " selected" : ""}" data-hangar-ship="${esc(id)}" data-ship-type="${t}" ` +
         `${active ? 'aria-current="true" ' : ""}` +
-        `title="${esc(label)} — ${active ? "active ship" : "stored ship"}. Right-click for options.">` +
+        `title="${esc(label)} — ${active ? "active ship" : "double-click to fly"}. Right-click for options.">` +
         `<span class="hangar-ship-name">${esc(label)}</span>` +
         `<small>${active ? "Active" : "Stored"}${hpPct < 100 ? ` &middot; ${hpPct}%` : ""}</small>` +
         `</li>`
@@ -404,7 +408,7 @@ export function hangarHtml() {
     .join("");
   return (
     `<h2>Hangar</h2>` +
-    `<div class="sub">${owned.length} of ${cap} berths used at this station. Right-click a ship for Show info, Fly ship, or Sell.</div>` +
+    `<div class="sub">${owned.length} of ${cap} berths used at this station. Double-click a ship to fly it, or right-click for Show info, Fly ship, or Sell.</div>` +
     `<ul class="hangar-ships" aria-label="Ships stored at this station">${rows}</ul>`
   );
 }
@@ -529,51 +533,43 @@ function shopItemsHtml(shopId, items, depth = 1) {
   return `<ul class="shop-items shop-depth-${depth}">${rows}</ul>`;
 }
 
+function shopNodeHtml(shopId, node, key, open, depth = 0) {
+  const isOpen = !!open[key];
+  let inner = "";
+  if (isOpen) {
+    if (node.subgroups && node.subgroups.length) {
+      inner =
+        `<ul class="shop-subgroups shop-sub-depth-${depth + 1}">` +
+        node.subgroups.map(sub => shopNodeHtml(shopId, sub, `${key}:${sub.k}`, open, depth + 1)).join("") +
+        `</ul>`;
+      if (node.items && node.items.length) {
+        inner += shopItemsHtml(shopId, node.items, depth + 1);
+      }
+    } else {
+      inner = shopItemsHtml(shopId, node.items || [], depth + 1);
+    }
+  }
+  const nodeCls = depth === 0 ? "shop-group" : "shop-subgroup";
+  const toggleCls = depth === 0
+    ? "shop-toggle"
+    : `shop-toggle shop-sub-toggle shop-toggle-depth-${depth}`;
+  return (
+    `<li class="shop-node ${nodeCls}${isOpen ? " open" : ""}">` +
+    `<button type="button" class="${toggleCls}" data-a="shopGroup" data-b="${esc(key)}" aria-expanded="${isOpen}">` +
+    `<span class="shop-label"><span class="shop-caret" aria-hidden="true">${isOpen ? "&#9662;" : "&#9656;"}</span>${esc(node.n)}</span>` +
+    `<small class="shop-count">${node.count}</small>` +
+    `</button>` +
+    inner +
+    `</li>`
+  );
+}
+
 function shopHtml(ui = state.ui) {
   const shopId = (stationAt(state.place) || stationAt(DEFAULT_PLACE)).shop;
   const def = shopDef(shopId);
   const open = (ui && ui.shopOpen) || {};
   const groups = shopCatalogue(shopId);
-
-  const tree = groups
-    .map(g => {
-      const isOpen = !!open[g.k];
-      let inner = "";
-      if (isOpen) {
-        if (g.subgroups) {
-          inner =
-            `<ul class="shop-subgroups">` +
-            g.subgroups
-              .map(sub => {
-                const subKey = `${g.k}:${sub.k}`;
-                const subOpen = !!open[subKey];
-                return (
-                  `<li class="shop-node shop-subgroup${subOpen ? " open" : ""}">` +
-                  `<button type="button" class="shop-toggle shop-sub-toggle" data-a="shopGroup" data-b="${esc(subKey)}" aria-expanded="${subOpen}">` +
-                  `<span class="shop-label"><span class="shop-caret" aria-hidden="true">${subOpen ? "&#9662;" : "&#9656;"}</span>${esc(sub.n)}</span>` +
-                  `<small class="shop-count">${sub.count}</small>` +
-                  `</button>` +
-                  (subOpen ? shopItemsHtml(shopId, sub.items, 2) : "") +
-                  `</li>`
-                );
-              })
-              .join("") +
-            `</ul>`;
-        } else {
-          inner = shopItemsHtml(shopId, g.items, 1);
-        }
-      }
-      return (
-        `<li class="shop-node shop-group${isOpen ? " open" : ""}">` +
-        `<button type="button" class="shop-toggle" data-a="shopGroup" data-b="${esc(g.k)}" aria-expanded="${isOpen}">` +
-        `<span class="shop-label"><span class="shop-caret" aria-hidden="true">${isOpen ? "&#9662;" : "&#9656;"}</span>${esc(g.n)}</span>` +
-        `<small class="shop-count">${g.count}</small>` +
-        `</button>` +
-        inner +
-        `</li>`
-      );
-    })
-    .join("");
+  const tree = groups.map(g => shopNodeHtml(shopId, g, g.k, open, 0)).join("");
 
   return (
     `<h2>${esc(def.n)}</h2><div class="sub">${esc(def.d)}</div>` +

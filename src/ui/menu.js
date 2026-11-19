@@ -38,6 +38,7 @@ export function setupMenu(options = {}) {
   panel = $("panel");
   setupNotices();
   panel.addEventListener("click", onClick);
+  panel.addEventListener("dblclick", onDblClick);
   panel.addEventListener("contextmenu", onInventoryContextMenu);
   panel.addEventListener("mouseover", e => {
     if (e.target.closest("button:not(:disabled)")) hoverSound();
@@ -556,8 +557,61 @@ function placePanelPopover(popover, x, y, w = 248, h = 175) {
   popover.style.top = `${Math.max(scrollTop + 8, Math.min(y, maxTop))}px`;
 }
 
-/** Open the compact Shop's "Buy amount" popover anchored beside the clicked Buy button. */
-function openShopBuy(button) {
+/**
+ * Position an already-mounted `popover` inside `panel` so that the centre of
+ * `targetBtn` (the popup's own Buy button) lands directly over `(localX,
+ * localY)` in panel scroll coordinates — matching Inventory Sell's low-travel
+ * layout while staying clamped inside the visible panel bounds. Near the bottom
+ * edge of the panel, flips the header row to the bottom so Buy still lands
+ * straight under the cursor.
+ */
+function placePopoverButtonOverCursor(popover, targetBtn, localX, localY, opts = {}) {
+  const scrollLeft = panel.scrollLeft || 0;
+  const scrollTop = panel.scrollTop || 0;
+  const panelW = panel.clientWidth || 0;
+  const panelH = panel.clientHeight || 0;
+  const fallbackW = opts.w || 248;
+  const fallbackH = opts.h || 158;
+  const defaultBtnX = opts.defaultBtnX ?? fallbackW - 34;
+  const defaultBtnY = opts.defaultBtnY ?? 46;
+
+  const measure = () => {
+    const popRect = popover.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
+    const btnRect = targetBtn?.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
+    const popW = popRect.width > 0 && popRect.width < panelW ? popRect.width : fallbackW;
+    const popH = popRect.height > 0 && popRect.height < panelH ? popRect.height : fallbackH;
+    const realBtn =
+      btnRect.width > 0 &&
+      btnRect.height > 0 &&
+      btnRect.width < popW &&
+      btnRect.height < popH;
+    const offX = realBtn ? btnRect.left - popRect.left + btnRect.width / 2 : defaultBtnX;
+    const offY = realBtn ? btnRect.top - popRect.top + btnRect.height / 2 : defaultBtnY;
+    return { popW, popH, offX, offY, realBtn };
+  };
+
+  popover.style.left = `${scrollLeft}px`;
+  popover.style.top = `${scrollTop}px`;
+  let m = measure();
+
+  if (opts.allowFlipUp && panelH > 0 && localY - m.offY + m.popH > scrollTop + panelH - 4) {
+    popover.classList.add("flip-up");
+    m = measure();
+    if (!m.realBtn) m.offY = Math.max(24, m.popH - 24);
+  }
+
+  const minLeft = scrollLeft + 4;
+  const maxLeft = Math.max(minLeft, scrollLeft + panelW - m.popW - 4);
+  const minTop = scrollTop + 4;
+  const maxTop = Math.max(minTop, scrollTop + panelH - m.popH - 4);
+  const left = Math.round(Math.max(minLeft, Math.min(localX - m.offX, maxLeft)));
+  const top = Math.round(Math.max(minTop, Math.min(localY - m.offY, maxTop)));
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+}
+
+/** Open the compact Shop's "Buy amount" popover with its Buy button directly over the cursor. */
+function openShopBuy(button, clickEvent = null) {
   const parts = String(button.dataset.b || "").split(":");
   const [shopId, rawKind, id] = parts.length >= 3 ? parts : [parts[0], null, parts[1]];
   const kind = rawKind === "ship" || rawKind === "item" ? rawKind : null;
@@ -568,6 +622,16 @@ function openShopBuy(button) {
 
   const rect = panel.getBoundingClientRect();
   const btnRect = button.getBoundingClientRect();
+  const scrollLeft = panel.scrollLeft || 0, scrollTop = panel.scrollTop || 0;
+  const hasPointer =
+    clickEvent &&
+    Number.isFinite(clickEvent.clientX) &&
+    Number.isFinite(clickEvent.clientY) &&
+    (clickEvent.clientX !== 0 || clickEvent.clientY !== 0);
+  const cursorX = (hasPointer ? clickEvent.clientX : btnRect.left + btnRect.width / 2)
+    - rect.left - (panel.clientLeft || 0) + scrollLeft;
+  const cursorY = (hasPointer ? clickEvent.clientY : btnRect.top + btnRect.height / 2)
+    - rect.top - (panel.clientTop || 0) + scrollTop;
   closePanelPopovers();
 
   const popover = document.createElement("div");
@@ -579,10 +643,6 @@ function openShopBuy(button) {
   popover.dataset.id = row.id;
   popover.dataset.price = String(row.price);
   popover.innerHTML = shopBuyHtml(row, maxBuy, 1);
-
-  const x = btnRect.right - rect.left + (panel.scrollLeft || 0) - 248;
-  const y = btnRect.top - rect.top + (panel.scrollTop || 0) - 8;
-  placePanelPopover(popover, x, y, 248, 170);
 
   const input = popover.querySelector(".inv-sell-amount");
   const totalEl = popover.querySelector("[data-buy-total]");
@@ -609,8 +669,18 @@ function openShopBuy(button) {
   });
 
   panel.append(popover);
-  input?.focus?.();
-  input?.select?.();
+  const confirmBtn = popover.querySelector('button[data-a="shopBuyConfirm"]');
+  placePopoverButtonOverCursor(popover, confirmBtn, cursorX, cursorY, {
+    w: 248,
+    h: 158,
+    defaultBtnX: 214,
+    defaultBtnY: 46,
+    allowFlipUp: true,
+  });
+  if (input) {
+    try { input.focus({ preventScroll: true }); } catch { input.focus?.(); }
+    input.select?.();
+  }
 }
 
 function confirmShopBuy(node) {
@@ -851,6 +921,18 @@ function onInventoryContextMenu(e) {
   panel.append(menu);
 }
 
+function onDblClick(e) {
+  const hangarRow = e.target.closest("[data-hangar-ship]");
+  if (!hangarRow || !hangarRow.dataset.hangarShip) return;
+  const shipId = hangarRow.dataset.hangarShip;
+  closePanelPopovers();
+  if (shipId === state.profile.ship) return;
+  ACTIONS.sel(shipId);
+  uiSound("click");
+  save();
+  render();
+}
+
 async function onClick(e) {
   const btn = e.target.closest("button[data-a]");
   if (!btn) {
@@ -879,7 +961,7 @@ async function onClick(e) {
     }
   }
   if (name === "wb") {
-    openShopBuy(btn);
+    openShopBuy(btn, e);
     uiSound();
     return;
   }

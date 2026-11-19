@@ -52,30 +52,56 @@ const MODULE_GROUP_SHOP_NAMES = {
   hull: "Hulls",
 };
 
-/** All module subgroups in `MODULE_GROUPS` order, for the Shop's Modules tree. */
+/**
+ * Optional collapsible sub-categories inside a module subgroup in the Shop tree.
+ * Under `Primary weapons`, `Cannons` and `Missiles` hold current and future
+ * cannon and primary-missile types; any primary part outside those families
+ * (such as the mining beam) lists directly beneath them under `Primary weapons`.
+ */
+export const MODULE_SUBCATEGORIES = {
+  primary: [
+    { k: "cannons", n: "Cannons", family: "cannon" },
+    { k: "missiles", n: "Missiles", family: "missile" },
+  ],
+};
+
+/** All module subgroups in `MODULE_GROUPS` order, with any nested sub-categories. */
 export const shopModuleSubgroups = () =>
-  MODULE_GROUPS.map(g => ({ k: g.k, n: MODULE_GROUP_SHOP_NAMES[g.k] || g.n }));
+  MODULE_GROUPS.map(g => {
+    const subcats = MODULE_SUBCATEGORIES[g.k];
+    return subcats
+      ? { k: g.k, n: MODULE_GROUP_SHOP_NAMES[g.k] || g.n, subgroups: subcats.map(s => ({ k: s.k, n: s.n })) }
+      : { k: g.k, n: MODULE_GROUP_SHOP_NAMES[g.k] || g.n };
+  });
 
 /** Canonical row kind (`"ship"` or `"item"`). */
 export const shopRowKind = row => (row && row.kind === "ship" ? "ship" : "item");
 
-/** Classify a shop row into `{ group, subgroup }` inside `SHOP_GROUPS`. */
+/** Classify a shop row into `{ group, subgroup, subcat }` inside `SHOP_GROUPS`. */
 export function shopGroupFor(row) {
-  if (!row) return { group: "loot", subgroup: null };
-  if (shopRowKind(row) === "ship") return { group: "ships", subgroup: null };
+  if (!row) return { group: "loot", subgroup: null, subcat: null };
+  if (shopRowKind(row) === "ship") return { group: "ships", subgroup: null, subcat: null };
   const id = row.id;
-  if (isModule(id) && MODULES[id]) return { group: "modules", subgroup: MODULES[id].g };
+  if (isModule(id) && MODULES[id]) {
+    const mod = MODULES[id];
+    const subgroup = mod.g;
+    const subcats = MODULE_SUBCATEGORIES[subgroup] || [];
+    const matched = row.subcat
+      ? subcats.find(s => s.k === row.subcat)
+      : subcats.find(s => s.family && mod.weaponFamily === s.family);
+    return { group: "modules", subgroup, subcat: matched ? matched.k : null };
+  }
   const cat = itemCat(id);
-  if (cat === "ore") return { group: "ores", subgroup: null };
-  if (cat === "consumable" || cat === "ammo") return { group: "consumables", subgroup: null };
-  return { group: "loot", subgroup: null };
+  if (cat === "ore") return { group: "ores", subgroup: null, subcat: null };
+  if (cat === "consumable" || cat === "ammo") return { group: "consumables", subgroup: null, subcat: null };
+  return { group: "loot", subgroup: null, subcat: null };
 }
 
 export const SHOPS = {
   meridian: {
     n: "Shop",
     d:
-      "Click a group to browse. Items go to this station's Inventory; bought ships are stored in Outfitting here. Right-click a ship for its base stats and bonuses.",
+      "Click a group to browse. Items go to this station's Inventory; bought ships go to this station's Hangar. Right-click a ship for details.",
     stock: [
       // Ships: stored in this station's Outfitting hangar, never as cargo items.
       {
