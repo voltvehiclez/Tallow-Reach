@@ -20,7 +20,7 @@ import { CACHE, countOf, discardItem, slotAt } from "../sim/inventory.js";
 import { cacheTradeRecord, closeCacheTrade } from "../sim/instances.js";
 import { holdShip } from "../sim/pilot.js";
 import { useItem, canUse } from "../sim/consumables.js";
-import { canDiscard, itemName } from "../data/items.js";
+import { canDiscard, isModule, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
 import {
@@ -28,6 +28,8 @@ import {
   clearHeldGhost,
   clickInventorySlot,
   hasHeldStack,
+  measureSlotSquare,
+  openModuleInfoPopover,
   openTakeAmountPopover,
   rightClickInventorySlot,
   runStackAll,
@@ -71,10 +73,11 @@ function closeContextMenu() {
   menu = null;
   const card = root && root.querySelector(".cache-card");
   if (card?.querySelectorAll) {
-    card.querySelectorAll(".inv-discard-popover, .inv-take-popover").forEach(n => n.remove());
+    card.querySelectorAll(".inv-discard-popover, .inv-take-popover, .mod-info-popover").forEach(n => n.remove());
   } else {
     card?.querySelector?.(".inv-discard-popover")?.remove?.();
     card?.querySelector?.(".inv-take-popover")?.remove?.();
+    card?.querySelector?.(".mod-info-popover")?.remove?.();
   }
 }
 
@@ -82,7 +85,7 @@ function closeContextMenu() {
 export function dismissCacheLayer() {
   if (!isCacheOpen()) return false;
   const card = root && root.querySelector(".cache-card");
-  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover");
+  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover, .mod-info-popover");
   if (open && open.length) {
     closeContextMenu();
     return true;
@@ -160,6 +163,9 @@ function onCacheContextMenu(event) {
     return btn;
   };
 
+  if (isModule(tile.dataset.id)) {
+    entry("cacheModInfo", "Show info", `Inspect ${itemName(tile.dataset.id)} stats.`);
+  }
   entry("cacheTakeOpen", "Take amount", "Pick up a chosen number of items onto the cursor.");
 
   if (inCache) {
@@ -293,6 +299,7 @@ function onCacheClick(event) {
     closeContextMenu();
     const where = slotBtn.dataset.where;
     const otherWhere = where === CACHE ? state.profile.ship : CACHE;
+    const slotSize = slotBtn.classList?.contains?.("inv-item") ? measureSlotSquare(slotBtn) : undefined;
     const res = clickInventorySlot({
       where,
       slot: Number(slotBtn.dataset.slot),
@@ -300,6 +307,7 @@ function onCacheClick(event) {
       shiftKey: Boolean(event.shiftKey),
       clientX: event.clientX,
       clientY: event.clientY,
+      slotSize,
     });
     if (res.message) notify(res.message);
     if (res.changed) {
@@ -318,6 +326,21 @@ function onCacheClick(event) {
     uiSound("click");
     saveQuietly();
     renderCache();
+    return;
+  }
+  if (event.target.closest("button[data-a='modInfoClose']")) {
+    closeContextMenu();
+    return;
+  }
+  const modInfo = event.target.closest("[data-a='cacheModInfo']");
+  if (modInfo && !modInfo.disabled) {
+    const card = root && root.querySelector(".cache-card");
+    const anchor = card ? menuAnchorIn(card) : null;
+    const modId = modInfo.dataset.b;
+    closeContextMenu();
+    if (card && openModuleInfoPopover({ host: card, moduleId: modId, anchor, clientX: event.clientX, clientY: event.clientY })) {
+      uiSound();
+    }
     return;
   }
   const takeAmt = event.target.closest("[data-a='cacheTakeOpen']");
@@ -350,7 +373,7 @@ function onCacheClick(event) {
     openCacheDiscard(discard);
     return;
   }
-  if (event.target.closest(".inv-discard-popover, .inv-take-popover")) return;
+  if (event.target.closest(".inv-discard-popover, .inv-take-popover, .mod-info-popover")) return;
   if (event.target.closest("[data-cache-close]") || event.target === root) closeCache();
   else if (!event.target.closest(".inv-context")) closeContextMenu();
 }

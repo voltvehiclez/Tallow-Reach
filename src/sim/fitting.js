@@ -7,8 +7,10 @@
 
 import { MODULES } from "../data/modules.js";
 import { MODULE_GROUPS, layoutFor } from "../data/outfitting.js";
-import { isModule, itemName, itemVol } from "../data/items.js";
-import { shipDef, shipName } from "../data/ships.js";
+import { isModule, itemName, itemStack, itemValue, itemVol } from "../data/items.js";
+import { FLIGHT, shipDef, shipName } from "../data/ships.js";
+import { SHOPS } from "../data/shops.js";
+import { BULLET_LIFETIME, MISSILE } from "../data/weapons.js";
 import { shipStation } from "../state/profile.js";
 import { state, profileOf } from "../state/state.js";
 import {
@@ -360,6 +362,473 @@ export function swapFittedBays(group, fromBay, toBay, P = state.player, profile 
   list[toBay] = tmp;
   refreshFittedShip(P, profile);
   return { ok: true, message: "" };
+}
+
+/**
+ * Pick up a fitted module from bay `(group, i)` onto the cursor (identical to
+ * left-clicking a slot in Inventory). Returns the held record or `null`.
+ */
+export function pickupFittedBay(
+  group,
+  i,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  assertFitTarget(P, profile);
+  if (!activeShipHere(profile, world)) return null;
+  const idx = Math.floor(+i);
+  const list = bayList(group, idx, profile);
+  if (!list || !list[idx]) return null;
+  const id = list[idx];
+  list[idx] = null;
+  refreshFittedShip(P, profile);
+  return { fromBay: true, ship: profile.ship, group, bay: idx, id, n: 1 };
+}
+
+/**
+ * Safely return a cursor-held module picked from an Outfitting bay: refits its
+ * original bay if still empty (or another empty bay in the same group), else
+ * stores it in Station storage or the ship's hold so nothing is ever lost.
+ */
+export function returnBayHeld(
+  held,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  if (!held || !held.fromBay || !held.id || !(held.n > 0)) return false;
+  assertFitTarget(P, profile);
+  const ship = held.ship && profile?.loadout?.[held.ship] ? held.ship : profile?.ship;
+  const list = ship ? profile?.loadout?.[ship]?.[held.group] : null;
+  if (Array.isArray(list)) {
+    const idx = Number.isInteger(held.bay) && held.bay >= 0 && held.bay < list.length ? held.bay : -1;
+    if (idx >= 0 && !list[idx]) {
+      list[idx] = held.id;
+      if (ship === profile.ship) refreshFittedShip(P, profile);
+      return true;
+    }
+    const empty = list.findIndex(x => !x);
+    if (empty >= 0) {
+      list[empty] = held.id;
+      if (ship === profile.ship) refreshFittedShip(P, profile);
+      return true;
+    }
+  }
+  const placed = addItem(STATION, held.id, 1, profile, world);
+  if (placed < 1 && profile?.ship) {
+    addItem(profile.ship, held.id, 1, profile, world);
+  }
+  return true;
+}
+
+/**
+ * Place a module held from an Outfitting bay into Inventory slot `(where, idx)`.
+ * Empty/matching slots take the module; occupied slots swap onto the cursor
+ * when capacity allows — identical to regular Inventory clicks.
+ */
+export function placeBayHeldInSlot(
+  held,
+  where,
+  slotIndex,
+  profile = state.profile,
+  world = state.worldState
+) {
+  if (!held || !held.fromBay || !held.id || !(held.n > 0)) {
+    return { ok: false, moved: 0, held: null, message: "" };
+  }
+  const dest = where || STATION;
+  const idx = Math.floor(+slotIndex);
+  if (!Number.isInteger(idx) || idx < 0) {
+    return { ok: false, moved: 0, held, message: "" };
+  }
+  const target = slotAt(dest, idx, profile, world);
+  const stackCap = itemStack(held.id);
+  const canMerge = target && target.id === held.id && target.n < stackCap;
+  if (!target || canMerge) {
+    if (spaceFor(dest, held.id, profile, world) < 1) {
+      const m = MODULES[held.id];
+      return {
+        ok: false,
+        moved: 0,
+        held,
+        message: `No room in ${nameOf(dest)} for ${m ? m.n : itemName(held.id)}.`,
+      };
+    }
+    addItemToSlot(dest, idx, held.id, 1, profile, world);
+    return { ok: true, moved: 1, held: null, message: "" };
+  }
+  // Swap with the occupied slot if removing `target` leaves room for `held.id`.
+  const freed = target.n * (itemVol(target.id) || 0);
+  const needed = itemVol(held.id) || 0;
+  const free = freeOf(dest, profile, world);
+  if (Number.isFinite(free) && free + freed < needed) {
+    const m = MODULES[held.id];
+    return {
+      ok: false,
+      moved: 0,
+      held,
+      message: `No room in ${nameOf(dest)} for ${m ? m.n : itemName(held.id)}.`,
+    };
+  }
+  const took = takeItemFromSlot(dest, idx, target.id, target.n, profile, world);
+  if (!(took > 0)) return { ok: false, moved: 0, held, message: "" };
+  addItemToSlot(dest, idx, held.id, 1, profile, world);
+  return {
+    ok: true,
+    moved: 1,
+    swapped: true,
+    held: { where: dest, slot: idx, id: target.id, n: took },
+    message: "",
+  };
+}
+
+/**
+ * Place a cursor-held item (picked from Inventory or from an Outfitting bay)
+ * into Outfitting bay `(group, i)` on the active ship. Swaps a displaced fitted
+ * module onto the cursor when holding a single module, matching Inventory feel.
+ */
+export function placeHeldInBay(
+  held,
+  group,
+  i,
+  P = state.player,
+  profile = profileOf(P),
+  world = state.worldState
+) {
+  if (!held || !(held.n > 0)) return { ok: false, held: null, message: "" };
+  assertFitTarget(P, profile);
+  if (!activeShipHere(profile, world)) {
+    return { ok: false, held, message: "No active ship stored at this station." };
+  }
+  if (!isModule(held.id) || !MODULES[held.id]) {
+    return { ok: false, held, message: `${itemName(held.id)} cannot be equipped.` };
+  }
+  const m = MODULES[held.id];
+  const idx = Math.floor(+i);
+  const list = bayList(group, idx, profile);
+  if (!list) {
+    return { ok: false, held, message: `${m.n} does not fit on ${shipName(profile.ship)}.` };
+  }
+  if (m.g !== group) {
+    return { ok: false, held, message: `${m.n} only fits in ${groupTitle(m.g)} bays.` };
+  }
+  const prev = list[idx] || null;
+  if (prev === held.id && !held.fromBay) {
+    return { ok: false, held, message: `${m.n} is already fitted in that bay.` };
+  }
+  if (held.n === 1) {
+    list[idx] = held.id;
+    refreshFittedShip(P, profile);
+    const nextHeld = prev
+      ? { fromBay: true, ship: profile.ship, group, bay: idx, id: prev, n: 1 }
+      : null;
+    return {
+      ok: true,
+      held: nextHeld,
+      message: prev ? "" : `Equipped ${m.n}.`,
+    };
+  }
+  // Holding a multi-module stack: fit 1 into the bay, store any displaced part,
+  // and keep the rest of the stack on the cursor.
+  const source = held.where || STATION;
+  if (prev) {
+    const dest = spaceFor(source, prev, profile, world) >= 1
+      ? source
+      : spaceFor(STATION, prev, profile, world) >= 1
+        ? STATION
+        : spaceFor(profile.ship, prev, profile, world) >= 1
+          ? profile.ship
+          : null;
+    if (!dest) {
+      return {
+        ok: false,
+        held,
+        message: `No room in ${nameOf(source)} for the ${MODULES[prev].n}.`,
+      };
+    }
+    addItem(dest, prev, 1, profile, world);
+  }
+  list[idx] = held.id;
+  refreshFittedShip(P, profile);
+  return {
+    ok: true,
+    held: { ...held, n: held.n - 1 },
+    message: prev
+      ? `Equipped ${m.n}. ${MODULES[prev].n} moved to storage.`
+      : `Equipped ${m.n}.`,
+  };
+}
+
+const fmtNum = v => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return String(+n.toFixed(2));
+};
+
+function moduleShopPrice(id) {
+  for (const shop of Object.values(SHOPS || {})) {
+    for (const row of shop?.stock || []) {
+      if ((row.kind || "item") === "item" && row.id === id && Number.isFinite(row.price)) {
+        return row.price;
+      }
+    }
+  }
+  return null;
+}
+
+const KNOWN_MODULE_KEYS = new Set([
+  "g", "n", "d", "vol", "weaponFamily",
+  "mjps", "mj", "outputs",
+  "spd", "turn", "draw", "boost", "ign", "bmax", "buse", "bfill",
+  "dmg", "rate", "bspd", "barrels", "life",
+  "period", "range",
+  "cap", "cd", "ammo",
+  "hp",
+  "sh", "regen", "delay", "drain",
+  "stats",
+]);
+
+function humaniseStatKey(key) {
+  return String(key)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/^\w/, c => c.toUpperCase());
+}
+
+/** Approximate maximum straight-line flight distance of a homing/dumbfire missile. */
+function missileMaxReach(spec = MISSILE) {
+  const sp0 = spec.sp0 || 0;
+  const max = spec.max || sp0;
+  const acc = spec.acc || 0;
+  const life = spec.life || 0;
+  if (!(acc > 0) || max <= sp0) return Math.round(max * life);
+  const tAcc = Math.min(life, (max - sp0) / acc);
+  const dAcc = sp0 * tAcc + 0.5 * acc * tAcc * tAcc;
+  const dCruise = Math.max(0, life - tAcc) * max;
+  return Math.round(dAcc + dCruise);
+}
+
+/**
+ * Full player-facing statistics for any module `id` (equipped, stored, carried,
+ * in a rift cache, in the Shop, or in My Assets). Extensible: any module adding
+ * `stats: [[label, value], ...]` or new primitive fields in `data/modules.js`
+ * surfaces them automatically without needing a UI rewrite.
+ */
+export function moduleInfoData(id, profile = state.profile) {
+  if (!id || !isModule(id) || !MODULES[id]) return null;
+  const m = MODULES[id];
+  const group = MODULE_GROUPS.find(g => g.k === m.g);
+  const groupName = group ? group.n : groupTitle(m.g);
+  const hull = profile?.ship ? shipDef(profile.ship) : null;
+  const sections = [];
+  let kindLabel = `${groupName} module`;
+
+  if (m.weaponFamily === "cannon" || (m.dmg != null && m.rate != null)) {
+    kindLabel = `${groupName} · Autocannon`;
+    const outputs = Math.max(1, m.barrels || 1);
+    const volley = m.dmg * outputs;
+    const dps = volley * m.rate;
+    const bspd = m.bspd || 0;
+    const life = m.life || BULLET_LIFETIME;
+    const range = Math.round(bspd * life);
+    const draw = m.draw ?? 0;
+    const outRows = [
+      ["Outputs", `${outputs} ${outputs === 1 ? "barrel" : "linked barrels"}`],
+      ["Damage per bolt", `${fmtNum(m.dmg)} HP`],
+      ["Volley damage", outputs > 1 ? `${fmtNum(volley)} HP (${fmtNum(m.dmg)} × ${outputs})` : `${fmtNum(volley)} HP`],
+      ["Fire rate", `${fmtNum(m.rate)} shots/s (${fmtNum(1 / m.rate)} s cycle)`],
+      ["Bolts per second", `${fmtNum(m.rate * outputs)}/s`],
+      ["Sustained DPS", `${fmtNum(dps)} HP/s`],
+    ];
+    if (hull && Number.isFinite(hull.dmg) && hull.dmg !== 1) {
+      outRows.push(["On " + hull.n, `${fmtNum(dps * hull.dmg)} HP/s (${fmtNum(hull.dmg)}× hull)`]);
+    }
+    sections.push({ title: "Weapon performance", rows: outRows });
+    sections.push({
+      title: "Range & energy",
+      rows: [
+        ["Effective range", bspd > 0 ? `${range} m` : "—"],
+        ["Projectile speed", bspd > 0 ? `${fmtNum(bspd)} m/s` : "—"],
+        ["Projectile lifetime", `${fmtNum(life)} s`],
+        ["MJ usage (firing)", `${fmtNum(draw)} MJ/s`],
+        ["MJ per shot", m.rate > 0 ? `${fmtNum(draw / m.rate)} MJ` : `${fmtNum(draw)} MJ`],
+      ],
+    });
+  } else if (m.weaponFamily === "mining" || m.period != null) {
+    kindLabel = `${groupName} · Mining beam`;
+    const outputs = Math.max(1, m.barrels || m.outputs || 1);
+    const rate = m.period > 0 ? outputs / m.period : 0;
+    const draw = m.draw ?? 0;
+    const beamRows = [
+      ["Outputs", `${outputs} ${outputs === 1 ? "emitter" : "emitters"}`],
+      ["Beam range", `${fmtNum(m.range ?? 0)} m (min 5 m)`],
+      ["Cycle time", `${fmtNum(m.period)} s / ore`],
+      ["Extraction rate", `${fmtNum(rate)} ore/s`],
+      ["Contact rule", "Continuous (resets if broken)"],
+    ];
+    if (hull && Number.isFinite(hull.mine) && hull.mine !== 1 && m.period > 0) {
+      beamRows.push(["On " + hull.n, `${fmtNum(m.period / hull.mine)} s / ore (${fmtNum(hull.mine)}× hull)`]);
+    }
+    sections.push({ title: "Beam performance", rows: beamRows });
+    sections.push({
+      title: "Energy",
+      rows: [
+        ["MJ usage (cutting)", `${fmtNum(draw)} MJ/s`],
+        ["MJ per ore", `${fmtNum(draw * (m.period || 0))} MJ`],
+      ],
+    });
+  } else if (m.weaponFamily === "missile" || (m.dmg != null && m.cd != null)) {
+    kindLabel = `${groupName} · Missile launcher`;
+    const outputs = Math.max(1, m.barrels || m.outputs || 1);
+    const salvo = m.dmg * outputs;
+    const dps = m.cd > 0 ? salvo / m.cd : 0;
+    const draw = m.draw ?? 0;
+    const outRows = [
+      ["Outputs", `${outputs} ${outputs === 1 ? "launch tube" : "launch tubes"}`],
+      ["Damage per missile", `${fmtNum(m.dmg)} HP`],
+      ...(outputs > 1 ? [["Salvo damage", `${fmtNum(salvo)} HP`]] : []),
+      ["Reload time", `${fmtNum(m.cd)} s (${m.cd > 0 ? fmtNum(1 / m.cd) : "0"}/s)`],
+      ["Sustained DPS", `${fmtNum(dps)} HP/s`],
+      ["Magazine capacity", `${fmtNum(m.cap ?? 0)} missiles (${fmtNum((m.cap ?? 0) * m.dmg)} HP total)`],
+      ["Included ammo", `${fmtNum(m.ammo ?? 0)} missiles`],
+      ["Restock price", `${fmtNum(MISSILE.unitPrice)} cr / missile`],
+      ["MJ usage", `${fmtNum(draw)} MJ/s`],
+    ];
+    if (hull && Number.isFinite(hull.dmg) && hull.dmg !== 1) {
+      outRows.splice(2, 0, ["On " + hull.n, `${fmtNum(m.dmg * hull.dmg)} HP (${fmtNum(hull.dmg)}× hull)`]);
+    }
+    sections.push({ title: "Launcher performance", rows: outRows });
+    sections.push({
+      title: "Range & guidance",
+      rows: [
+        ["Lock-on range", `${fmtNum(MISSILE.range)} m`],
+        ["Max flight reach", `~${missileMaxReach(MISSILE)} m (${fmtNum(MISSILE.life)} s)`],
+        ["Lock time", `${fmtNum(MISSILE.lock)} s`],
+        ["Lock cone", `±${fmtNum(MISSILE.cone)}°`],
+        ["Launch / top speed", `${fmtNum(MISSILE.sp0)} → ${fmtNum(MISSILE.max)} m/s`],
+        ["Acceleration", `${fmtNum(MISSILE.acc)} m/s²`],
+        ["Homing turn rate", `${fmtNum(MISSILE.turn)} rad/s (${Math.round((MISSILE.turn * 180) / Math.PI)}°/s)`],
+      ],
+    });
+  } else if (m.spd != null) {
+    kindLabel = `${groupName} · Drive`;
+    const draw = m.draw ?? 0;
+    const boost = m.boost ?? 0;
+    sections.push({
+      title: "Flight performance",
+      rows: [
+        ["Forward speed", `${fmtNum(m.spd)} m/s`],
+        ["Boost speed", `${fmtNum(m.spd * 2)} m/s`],
+        ["Reverse speed", `${fmtNum(m.spd * FLIGHT.reverse)} m/s`],
+        ["Strafe / vertical", `${fmtNum(m.spd * FLIGHT.strafe)} m/s`],
+        ["Turn multiplier", `${fmtNum(m.turn ?? 1)}×`],
+      ],
+    });
+    const boostDur = m.buse > 0 ? `${fmtNum((m.bmax || 0) / m.buse)} s` : "—";
+    const boostRefill = m.bfill > 0 ? `${fmtNum((m.bmax || 0) / m.bfill)} s` : "—";
+    sections.push({
+      title: "Energy & boost",
+      rows: [
+        ["MJ usage (thrusting)", `${fmtNum(draw)} MJ/s`],
+        ["MJ usage (boosting)", `${fmtNum(draw + boost)} MJ/s (+${fmtNum(boost)} MJ/s)`],
+        ["Boost ignition cost", `${fmtNum(m.ign ?? 0)} MJ`],
+        ["Boost tank", `${fmtNum(m.bmax ?? 0)} units`],
+        ["Boost burn rate", `${fmtNum(m.buse ?? 0)}/s (${boostDur} full burn)`],
+        ["Boost recharge", `${fmtNum(m.bfill ?? 0)}/s (${boostRefill} to full)`],
+      ],
+    });
+  } else if (m.sh != null) {
+    kindLabel = `${groupName} · Deflector`;
+    const fullTime = m.regen > 0 ? ` (${fmtNum(m.sh / m.regen)} s to full)` : "";
+    sections.push({
+      title: "Shield & energy",
+      rows: [
+        ["Shield capacity", `${fmtNum(m.sh)} HP`],
+        ["Recharge rate", `${fmtNum(m.regen ?? 0)} HP/s${fullTime}`],
+        ["Recharge delay", `${fmtNum(m.delay ?? 0)} s without hit`],
+        ["MJ usage (upkeep)", `${fmtNum(m.draw ?? 0)} MJ/s`],
+        ["Unpowered drain", `${fmtNum(m.drain ?? 0)} HP/s`],
+      ],
+    });
+  } else if (m.hp != null) {
+    kindLabel = `${groupName} · Armour`;
+    const rows = [["Hull HP", `${fmtNum(m.hp)} HP`]];
+    if (hull && Number.isFinite(hull.hpMul) && hull.hpMul !== 1) {
+      rows.push(["On " + hull.n, `${fmtNum(m.hp * hull.hpMul)} HP (${fmtNum(hull.hpMul)}× hull)`]);
+    }
+    rows.push(["MJ usage", `${fmtNum(m.draw ?? 0)} MJ/s (passive)`]);
+    sections.push({ title: "Armour stats", rows });
+  } else if (m.mjps != null) {
+    kindLabel = `${groupName} · Reactor`;
+    const outputs = Math.max(1, m.outputs || 1);
+    sections.push({
+      title: "Power generation",
+      rows: [
+        ["Power output", `+${fmtNum(m.mjps)} MJ/s`],
+        ["Outputs", `${outputs} ${outputs === 1 ? "power bus" : "power buses"}`],
+        ["MJ usage", "0 MJ/s (generates power)"],
+      ],
+    });
+  } else if (m.mj != null) {
+    kindLabel = `${groupName} · Capacitor`;
+    sections.push({
+      title: "Energy storage",
+      rows: [
+        ["Capacity", `${fmtNum(m.mj)} MJ`],
+        ["MJ usage", `${fmtNum(m.draw ?? 0)} MJ/s (passive)`],
+      ],
+    });
+  }
+
+  // Forward-compatible extension hook: any `stats: [[label, value], ...]` array
+  // or future custom fields added in `data/modules.js` render here automatically.
+  const extraRows = [];
+  if (Array.isArray(m.stats)) {
+    for (const entry of m.stats) {
+      if (Array.isArray(entry) && entry.length >= 2) {
+        extraRows.push([String(entry[0]), String(entry[1])]);
+      } else if (entry && typeof entry === "object" && entry.label != null) {
+        extraRows.push([String(entry.label), String(entry.value ?? "")]);
+      }
+    }
+  }
+  for (const [k, v] of Object.entries(m)) {
+    if (KNOWN_MODULE_KEYS.has(k) || v == null) continue;
+    if (typeof v === "number" || typeof v === "string" || typeof v === "boolean") {
+      extraRows.push([humaniseStatKey(k), typeof v === "number" ? fmtNum(v) : String(v)]);
+    }
+  }
+  if (extraRows.length) {
+    sections.push({ title: "Additional stats", rows: extraRows });
+  }
+
+  const layout = profile?.ship ? layoutFor(profile.ship) : null;
+  const totalSlots = layout && Number.isFinite(layout[m.g]) ? layout[m.g] : null;
+  const fittedList = profile?.ship ? profile?.loadout?.[profile.ship]?.[m.g] : null;
+  const fittedCount = Array.isArray(fittedList) ? fittedList.filter(Boolean).length : 0;
+  const stack = itemStack(id);
+  const buyPrice = moduleShopPrice(id);
+  const resale = itemValue(id);
+  const fitRows = [["Fits slot", groupName]];
+  if (totalSlots !== null && hull) {
+    fitRows.push([`${hull.n} bays`, totalSlots > 0 ? `${fittedCount} / ${totalSlots} fitted` : "No bays"]);
+  }
+  fitRows.push(["Volume", `${fmtNum(itemVol(id))} m³`]);
+  fitRows.push(["Stack size", Number.isFinite(stack) ? String(stack) : "Unlimited"]);
+  if (buyPrice !== null) fitRows.push(["Shop price", `${buyPrice} cr`]);
+  if (resale > 0) fitRows.push(["Resale value", `${resale} cr`]);
+  sections.push({ title: "Fitting & storage", rows: fitRows });
+
+  return {
+    id,
+    name: m.n || itemName(id),
+    group: m.g,
+    groupName,
+    kindLabel,
+    description: m.d || "",
+    sections,
+  };
 }
 
 /** True when `group` is a real bay group on the ship being flown. */

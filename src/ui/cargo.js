@@ -13,16 +13,19 @@ import { assetsResultsHtml, cargoHtml, shipDetailsHtml } from "./screens.js";
 import { discardItem, countOf, slotAt } from "../sim/inventory.js";
 import { useItem, canUse } from "../sim/consumables.js";
 import { holdShip } from "../sim/pilot.js";
-import { canDiscard, itemName } from "../data/items.js";
+import { canDiscard, isModule, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
 import {
   buildAssetStationContextMenu,
+  buildModuleContextMenu,
   cancelHeldStack,
   clearAssetStationDestination,
   clearHeldGhost,
   clickInventorySlot,
   hasHeldStack,
+  measureSlotSquare,
+  openModuleInfoPopover,
   openTakeAmountPopover,
   rightClickInventorySlot,
   runStackAll,
@@ -63,11 +66,12 @@ function closeContextMenu() {
   menu = null;
   const card = root && root.querySelector(".cargo-card");
   if (card?.querySelectorAll) {
-    card.querySelectorAll(".inv-discard-popover, .inv-take-popover, .ship-info-popover").forEach(n => n.remove());
+    card.querySelectorAll(".inv-discard-popover, .inv-take-popover, .ship-info-popover, .mod-info-popover").forEach(n => n.remove());
   } else {
     card?.querySelector?.(".inv-discard-popover")?.remove?.();
     card?.querySelector?.(".inv-take-popover")?.remove?.();
     card?.querySelector?.(".ship-info-popover")?.remove?.();
+    card?.querySelector?.(".mod-info-popover")?.remove?.();
   }
 }
 
@@ -75,7 +79,7 @@ function closeContextMenu() {
 export function dismissCargoLayer() {
   if (!isCargoOpen()) return false;
   const card = root && root.querySelector(".cargo-card");
-  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover, .ship-info-popover");
+  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover, .ship-info-popover, .mod-info-popover");
   if (open && open.length) {
     closeContextMenu();
     return true;
@@ -145,6 +149,21 @@ function onCargoContextMenu(event) {
     return;
   }
 
+  const modRow = event.target.closest("[data-module-id]");
+  if (modRow && modRow.dataset.moduleId && isModule(modRow.dataset.moduleId)) {
+    event.preventDefault();
+    closeContextMenu();
+    menu = buildModuleContextMenu(document, modRow.dataset.moduleId, "cargoModInfo");
+    if (menu) {
+      const rect = card.getBoundingClientRect();
+      menu.style.left = `${Math.max(4, event.clientX - rect.left + (card.scrollLeft || 0))}px`;
+      menu.style.top = `${Math.max(4, event.clientY - rect.top + (card.scrollTop || 0))}px`;
+      card.append(menu);
+      uiSound();
+    }
+    return;
+  }
+
   const shipRow = event.target.closest("[data-ship-type]");
   if (shipRow && shipRow.dataset.shipType) {
     event.preventDefault();
@@ -160,6 +179,16 @@ function onCargoContextMenu(event) {
   menu = document.createElement("div");
   menu.className = "inv-context";
   menu.setAttribute("role", "menu");
+
+  if (isModule(tile.dataset.id)) {
+    const info = document.createElement("button");
+    info.type = "button";
+    info.dataset.a = "cargoModInfo";
+    info.dataset.b = tile.dataset.id;
+    info.setAttribute("role", "menuitem");
+    info.textContent = "Show info";
+    menu.append(info);
+  }
 
   const take = document.createElement("button");
   take.type = "button";
@@ -366,6 +395,7 @@ function onCargoClick(event) {
   const slotBtn = event.target.closest("button[data-a='invSlot']");
   if (slotBtn) {
     closeContextMenu();
+    const slotSize = slotBtn.classList?.contains?.("inv-item") ? measureSlotSquare(slotBtn) : undefined;
     const res = clickInventorySlot({
       where: slotBtn.dataset.where,
       slot: Number(slotBtn.dataset.slot),
@@ -373,6 +403,7 @@ function onCargoClick(event) {
       shiftKey: Boolean(event.shiftKey),
       clientX: event.clientX,
       clientY: event.clientY,
+      slotSize,
     });
     if (res.message) notify(res.message);
     if (res.changed) {
@@ -409,8 +440,19 @@ function onCargoClick(event) {
     renderCargo();
     return;
   }
-  if (event.target.closest("button[data-a='shipInfoClose']")) {
+  if (event.target.closest("button[data-a='shipInfoClose'], button[data-a='modInfoClose']")) {
     closeContextMenu();
+    return;
+  }
+  const modInfo = event.target.closest("[data-a='cargoModInfo']");
+  if (modInfo && !modInfo.disabled) {
+    const card = root && root.querySelector(".cargo-card");
+    const anchor = card ? menuAnchorIn(card) : null;
+    const modId = modInfo.dataset.b;
+    closeContextMenu();
+    if (card && openModuleInfoPopover({ host: card, moduleId: modId, anchor, clientX: event.clientX, clientY: event.clientY })) {
+      uiSound();
+    }
     return;
   }
   const take = event.target.closest("[data-a='cargoTakeOpen']");
@@ -428,7 +470,7 @@ function onCargoClick(event) {
     openCargoDiscard(discard);
     return;
   }
-  if (event.target.closest(".inv-discard-popover, .inv-take-popover, .ship-info-popover")) return;
+  if (event.target.closest(".inv-discard-popover, .inv-take-popover, .ship-info-popover, .mod-info-popover")) return;
   if (event.target.closest("[data-cargo-close]") || event.target === root) closeCargo();
   else if (!event.target.closest(".inv-context")) closeContextMenu();
 }

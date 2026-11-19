@@ -2,6 +2,7 @@
 // dialogue panel. Mission text comes from mission data; this file only renders
 // the generic vocabulary and sends dialogue actions back through the runner.
 
+import { itemName } from "../data/items.js";
 import { STORY_MISSIONS, TEST_MISSIONS } from "../data/missions/index.js";
 import { state, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
@@ -67,6 +68,86 @@ export function dialogueHtml(mission, { blocked = false, stationName = "" } = {}
   );
 }
 
+/**
+ * Extra spoiler-safe continuation lines rendered when a mission card is expanded
+ * with `Details`. Never duplicates the title, status or `Next:` line already
+ * shown on the card, and never reveals future unreached story steps.
+ */
+function missionExtraHtml(mission, { station, nextText, preview }) {
+  const blocks = [];
+  if (typeof mission.briefing === "string" && mission.briefing.trim()) {
+    blocks.push(`<p class="mission-log-note">${esc(mission.briefing.trim())}</p>`);
+  }
+  if (preview) blocks.push(preview);
+
+  // Additional current parallel sub-objectives or explicit extra details, if any.
+  const steps = Array.isArray(mission.steps) ? mission.steps : [];
+  const stepIdx = Number.isInteger(mission.step) ? mission.step : 0;
+  const activeStep = steps[stepIdx] || null;
+  const extraObjectives = [];
+  if (activeStep?.kind === "parallel" && Array.isArray(activeStep.steps)) {
+    for (const sub of activeStep.steps) {
+      if (typeof sub?.objective === "string" && sub.objective && sub.objective !== nextText) {
+        extraObjectives.push(sub.objective);
+      }
+    }
+  }
+  if (Array.isArray(mission.details)) {
+    for (const line of mission.details) {
+      if (typeof line === "string" && line.trim()) extraObjectives.push(line.trim());
+    }
+  }
+  if (extraObjectives.length) {
+    blocks.push(
+      `<ul class="mission-log-list">` +
+      extraObjectives.map(line => `<li>${esc(line)}</li>`).join("") +
+      `</ul>`
+    );
+  }
+
+  // Completed objectives so far (without internal step numbers or future spoilers).
+  const completed = [];
+  const seen = new Set([nextText]);
+  const limit = Math.min(steps.length, Math.max(0, stepIdx));
+  for (let i = 0; i < limit; i++) {
+    const obj = steps[i]?.objective;
+    if (typeof obj !== "string" || !obj.trim() || obj.includes("{")) continue;
+    const clean = obj.trim();
+    if (seen.has(clean)) continue;
+    seen.add(clean);
+    completed.push(clean);
+  }
+  if (completed.length) {
+    blocks.push(
+      `<ul class="mission-log-list mission-log-done">` +
+      completed.map(line => `<li><span>Done:</span> ${esc(line)}</li>`).join("") +
+      `</ul>`
+    );
+  }
+
+  // Concise reward, threat and hand-in metadata not already shown above.
+  const meta = [];
+  const credits = Math.max(0, Math.floor(+mission.rewards?.credits || +mission.r || 0));
+  const rewardParts = [];
+  if (credits > 0) rewardParts.push(`${credits} cr`);
+  if (Array.isArray(mission.rewards?.items)) {
+    for (const it of mission.rewards.items) {
+      if (!it?.id) continue;
+      const qty = Math.max(1, Math.floor(+it.count || +it.n || 1));
+      rewardParts.push(`${qty}× ${itemName(it.id)}`);
+    }
+  }
+  if (rewardParts.length) meta.push(`<span><strong>Reward:</strong> ${esc(rewardParts.join(", "))}</span>`);
+  if (Number.isFinite(+mission.tier) && +mission.tier > 0) {
+    meta.push(`<span><strong>Threat:</strong> ${Math.floor(+mission.tier)} of 3</span>`);
+  }
+  if (station) meta.push(`<span><strong>Hand in:</strong> ${esc(station)}</span>`);
+  if (meta.length) {
+    blocks.push(`<p class="mission-log-meta">${meta.join(" &middot; ")}</p>`);
+  }
+  return blocks.join("");
+}
+
 function missionStatus(mission, profile) {
   const progress = missionProgress(mission);
   const objectivesDone = missionObjectivesDone(mission);
@@ -124,16 +205,17 @@ function missionStatus(mission, profile) {
   const progressBar = barRatio !== null
     ? `<div class="mission-log-bar"><i style="width:${Math.round(Math.min(1, Math.max(0, barRatio)) * 100)}%"></i></div>`
     : "";
+  const nextText = missionNextText(mission, profile);
+  const extra = missionExtraHtml(mission, { station, nextText, preview });
   return (
     `<article class="mission-log-card">` +
     `<header><h3>${esc(mission.title || "Mission")}</h3><span>${esc(missionKindWord(mission))}</span></header>` +
     `<p class="mission-log-status">${stateText}${progressText}</p>` +
     progressBar +
-    `<p class="mission-log-next"><strong>Next:</strong> ${esc(missionNextText(mission, profile))}</p>` +
+    `<p class="mission-log-next"><strong>Next:</strong> ${esc(nextText)}</p>` +
     `<div class="mission-log-actions">${action}</div>` +
-    `<details class="mission-log-details"><summary>Details</summary><div class="mission-log-full">` +
-    `<h4>${esc(mission.title || "Mission")}</h4><p>${stateText}${progressText}</p>` +
-    preview + `<p><strong>Next:</strong> ${esc(missionNextText(mission, profile))}</p></div></details>` +
+    `<details class="mission-log-details"><summary>Details</summary>` +
+    `<div class="mission-log-full">${extra}</div></details>` +
     `</article>`
   );
 }

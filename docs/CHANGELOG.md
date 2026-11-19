@@ -32,23 +32,29 @@ above Station and ship holds with a small `Fly` button to the right of `Active`/
 (removing the `Hangar` nav tab and Outfitting's ship-switcher arrow box); added a
 reusable `#station-left` window (`src/ui/left-panel.js`, fixed container, dimensions,
 positioning and animations) shared by mutually exclusive toggleable `Outfitting` (scaled
-3-column layout) and `Shop` plus `Missions` (right accepts `Story missions` — keeping
-its heading with `"No more story missions available."` when none remain — and `Contract
-board`; left opens the in-progress `Mission log`; `Contracts` button removed) beside a
-fixed-width `#panel` with a minimalist top-right home-station icon button (hover tooltip
-only) and a condensed controls-only main-menu `Controls` grid; scaled `.inv-item` text
-so names fit uncropped and fixed ship-hold `Stack all` compacting items to top-left;
-added right-click `Equip` from Inventory (active ship only, works with Outfitting closed)
-and bidirectional Inventory ↔ Outfitting drag-and-drop, removed Outfitting's `"Modules
-in storage"` slot picker, and placed compact `.service-box` tiles (fitting 8 services in
-the unchanged `Services` box) below modules; added `My Assets` prefix `Search`,
-collapsible ship cargo holds included in search, and station right-click `Set
-destination` / `Clear destination` (docked and flight `I`); and made HUD ship velocity
-(`displayedSpeed`) read negative `m/s` when reversing. Files: `src/{index.html,styles.css,main.js}`,
+3-column layout with no top subtitle and a taller `#shipview`) and `Shop` plus
+`Missions` (right accepts `Story missions` — keeping its heading with `"No more story
+missions available."` when none remain — and `Contract board`; left opens the
+in-progress `Mission log` whose `Details` toggle enlarges the same card inline without
+duplicating text; `Contracts` button removed) beside a fixed-width `#panel` with an
+always-clickable minimalist top-right home-station icon button and game-themed `.home-tip`
+hover card, plus a condensed controls-only main-menu `Controls` grid; kept the cursor
+`#inv-held-ghost` 1:1 square matching inventory slots, scaled `.inv-item` text so names
+fit uncropped, and fixed ship-hold `Stack all` compacting items to top-left; added
+Inventory-style single-click pick/place/swap and drag-and-drop between Outfitting and
+Inventory, right-click `Equip` (active ship, even with Outfitting closed), right-click
+`Unequip` + comprehensive module `Show info` (`moduleInfoData`, `moduleDetailsHtml` —
+outputs, range, speeds, DPS, hull modifiers, MJ usage, magazine, lock/flight stats,
+fitting & prices) across Outfitting, all inventories, Shop, My Assets, flight `I` and
+Rift Cache `R`, removed `"Modules in storage"` slot picker, and placed less-horizontal,
+50%-larger-text `.service-box` cards (no browser tooltips) below modules; added `My
+Assets` prefix `Search`, collapsible ship cargo holds included in search, and station
+right-click `Set destination` / `Clear destination`; and made HUD `displayedSpeed` read
+negative `m/s` when reversing. Files: `src/{index.html,styles.css,main.js}`,
 `src/core/input.js`, `src/state/state.js`, `src/sim/{economy,fitting,flight-instruments,inventory,places,player}.js`,
 `src/ui/{left-panel,screens,menu,outfitting,missionlog,inventory-ui,cargo,cache,pause,README}.js/.md`,
-`tests/station-ui-batch.test.mjs`. Save **v24** unchanged; `game/tallow-reach.html`
-rebuilt; owner playtest pending.
+`tests/{station-ui-batch,part2-ui}.test.mjs`. Save **v24** unchanged;
+`game/tallow-reach.html` rebuilt; owner playtest pending.
 
 ## 2026-11-18: Roadmap slice 3 — My Assets, Minecraft-style inventory slots, Mining beams subgroup and 0 MJ power fix
 

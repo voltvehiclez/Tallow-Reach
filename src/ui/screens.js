@@ -10,6 +10,7 @@ import { shopDef } from "../data/shops.js";
 import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js";
 import { MODULES } from "../data/modules.js";
 import { CACHE, STATION, capacityOf, loadOf, slotsAt } from "../sim/inventory.js";
+import { moduleInfoData } from "../sim/fitting.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
@@ -121,15 +122,20 @@ export function outpostHtml(ui = state.ui) {
   }).join("");
   const isHome = homeStationPlace(S) === state.place;
   const canHome = canSetHomeStation(state.place);
-  const homeTip = isHome
-    ? "Home station — recover here after death."
+  const homeHead = isHome ? "Home station" : canHome ? "Set home station" : "Home station";
+  const homeBody = isHome
+    ? "Active home station. You recover here after death."
     : canHome
-      ? "Set home station — recover here after death."
-      : "Cannot set home station here.";
+      ? "Click to set as your home station and recover here after death."
+      : "Cannot set a home station here.";
+  const homeAria = `${homeHead}: ${homeBody}`;
   const homeBtn =
-    `<button type="button" class="home-icon-btn${isHome ? " is-home" : ""}" data-a="home" ` +
-    `${isHome || !canHome ? "disabled " : ""}title="${esc(homeTip)}" aria-label="${esc(homeTip)}">` +
-    `${HOME_ICON_SVG}</button>`;
+    `<div class="home-ctl${isHome ? " is-home" : ""}${!canHome ? " is-unavailable" : ""}">` +
+    `<button type="button" class="home-icon-btn${isHome ? " is-home" : ""}${!canHome ? " is-unavailable" : ""}" ` +
+    `data-a="home" aria-pressed="${isHome}" aria-label="${esc(homeAria)}">` +
+    `${HOME_ICON_SVG}</button>` +
+    `<div class="home-tip" role="tooltip"><strong>${esc(homeHead)}</strong><span>${esc(homeBody)}</span></div>` +
+    `</div>`;
   let h =
     `<div class="station-head"><h1>${(stationAt(state.place) || stationAt(DEFAULT_PLACE)).n}</h1>${homeBtn}</div>` +
     `<div class="sub">${S.cr} cr. Contracts done ${S.done}. Kills ${S.kills}.</div><nav>${navHtml}</nav>`;
@@ -212,27 +218,28 @@ function heldModuleGroup() {
 }
 
 /**
- * One Outfitting module bay. Modules are equipped directly from Inventory (via
- * drag-and-drop or right-click Equip) and dragged back to Inventory to unequip,
- * so clicking a bay does not open a separate "modules in storage" popup.
+ * One Outfitting module bay. Behaves the same way as Inventory: click a fitted
+ * bay to pick it up onto the cursor (or click a bay while holding a module to
+ * equip/swap it), drag between Inventory and bays, or right-click a fitted bay
+ * for Unequip / Show info.
  */
 function bayHtml(group, i, id) {
   const m = MODULES[id];
+  const held = state.ui.invHeld;
   const dropMatch = heldModuleGroup() === group.k;
+  const isOrigin = Boolean(held && held.fromBay && held.group === group.k && held.bay === i);
   const attrs =
     `type="button" data-a="slot" data-b="${group.k}:${i}" data-fit-group="${esc(group.k)}" data-fit-bay="${i}"`;
   if (!m) {
     return (
-      `<button class="mod-bay empty${dropMatch ? " is-drop-match" : ""}" ${attrs} ` +
-      `title="${esc(group.n)} bay ${i + 1}: drag a matching module from Inventory or right-click one to equip." ` +
-      `aria-label="${esc(group.n)} bay ${i + 1}: empty, drag a module from Inventory to equip">` +
+      `<button class="mod-bay empty${dropMatch ? " is-drop-match" : ""}${isOrigin ? " is-origin" : ""}" ${attrs} ` +
+      `aria-label="${esc(group.n)} bay ${i + 1}: empty">` +
       `<span class="bay-no">Bay ${i + 1}</span><span class="bay-empty">Empty</span></button>`
     );
   }
   return (
     `<button class="mod-bay fitted${dropMatch ? " is-drop-match" : ""}" ${attrs} data-module="${esc(id)}" ` +
-    `title="${esc(m.n)} (${esc(moduleStat(m))}). Drag to Inventory or right-click to unequip." ` +
-    `aria-label="${esc(group.n)} bay ${i + 1}: ${esc(m.n)}, drag to Inventory to unequip">` +
+    `aria-label="${esc(group.n)} bay ${i + 1}: ${esc(m.n)}, click to pick up or right-click for options">` +
     `<span class="bay-no">Bay ${i + 1}</span>` +
     `<span class="bay-val">${esc(m.n)}</span>` +
     `<span class="bay-stat">${esc(moduleStat(m))}</span>` +
@@ -314,6 +321,33 @@ export function shipDetailsHtml(shipId) {
     `</dl>` +
     `<div class="ship-info-sub">Ship bonuses</div>` +
     `<ul class="ship-info-bonuses">${bonusRows}</ul>`
+  );
+}
+
+/**
+ * Pure right-click Module info card, shared across Outfitting, docked Inventory,
+ * Shop, My Assets, in-flight Ship Inventory (I), and Rift Cache (R).
+ */
+export function moduleDetailsHtml(moduleId, profile = state.profile) {
+  const info = moduleInfoData(moduleId, profile);
+  if (!info) return "";
+  const sectionsHtml = info.sections
+    .map(
+      sec =>
+        `<div class="ship-info-sub">${esc(sec.title)}</div>` +
+        `<dl class="ship-info-stats mod-info-stats">` +
+        sec.rows
+          .map(([label, value]) => `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`)
+          .join("") +
+        `</dl>`
+    )
+    .join("");
+  return (
+    `<div class="inv-sell-head"><strong>${esc(info.name)}</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="modInfoClose">Close</button></div></div>` +
+    `<div class="mod-info-kind">${esc(info.kindLabel)}</div>` +
+    (info.description ? `<p class="mod-info-desc">${esc(info.description)}</p>` : "") +
+    `<div class="mod-info-body">${sectionsHtml}</div>`
   );
 }
 
@@ -405,12 +439,12 @@ export function outfittingHtml() {
   const left = leftRail(MODULE_GROUPS),
     right = MODULE_GROUPS.slice(left.length);
 
-  // Services for the hull in the viewer (the selected ship): compact tiles inside
-  // the fixed-size Services card (sits below modules; sized to hold 7+ services).
+  // Services for the hull in the viewer (the selected ship): sits below the
+  // modules with compact, non-horizontal cards and no native browser tooltips.
   const repCost = repairCost(S.ship),
     repPct = Math.round((S.hp[S.ship] ?? 1) * 100);
   let serviceBoxes =
-    `<div class="service-box" title="Hull HP ${repPct}%. Costs more the more damaged it is.">` +
+    `<div class="service-box">` +
     `<span class="service-label">Hull repairs <small>${repPct}%</small></span>` +
     `<button data-a="rp" data-b="${S.ship}" ${repCost <= 0 || S.cr < repCost ? "disabled" : ""}>${
       repCost <= 0 ? "Intact" : "Repair " + repCost + " cr"
@@ -421,7 +455,7 @@ export function outfittingHtml() {
       canRestock = S.msl < cap && S.cr >= MISSILE.unitPrice,
       n = Math.min(cap - S.msl, Math.floor(S.cr / MISSILE.unitPrice));
     serviceBoxes +=
-      `<div class="service-box" title="${S.msl} of ${cap} missiles loaded (${MISSILE.unitPrice} cr each).">` +
+      `<div class="service-box">` +
       `<span class="service-label">Missile restock <small>${S.msl}/${cap}</small></span>` +
       `<button data-a="wr" ${canRestock ? "" : "disabled"}>${
         S.msl >= cap ? "Full" : "Restock " + n * MISSILE.unitPrice + " cr"
@@ -433,7 +467,6 @@ export function outfittingHtml() {
 
   return (
     `<h2>Outfitting</h2>` +
-    `<div class="sub">Drag modules between Inventory and bays, or right-click a module in Inventory to equip.</div>` +
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
     `<div class="outfit-mid">` +
@@ -483,9 +516,10 @@ function shopItemsHtml(shopId, items, depth = 1) {
       else if (s.left !== null) notes.push(`${s.left} left`);
       if (!s.room) notes.push(s.kind === "ship" ? "hangar full" : "no space");
       else if (s.owned) notes.push(s.kind === "ship" ? `${s.owned} here` : `own ${s.owned}`);
+      const isMod = s.kind !== "ship" && isModule(s.id);
       const tip = s.kind === "ship"
         ? `${s.n}: ${s.d} Stored in Hangar. Right-click for ship details.`
-        : `${s.n}: ${s.d} Takes ${s.vol} m³.`;
+        : `${s.n}: ${s.d} Takes ${s.vol} m³.${isMod ? " Right-click for Show info." : ""}`;
       const buyReason = soldOut
         ? "Sold out."
         : !s.room
@@ -493,8 +527,13 @@ function shopItemsHtml(shopId, items, depth = 1) {
           : S.cr < s.price
             ? `Need ${s.price} cr.`
             : `Choose how many ${s.n} to buy.`;
+      const itemDataAttr = s.kind === "ship"
+        ? ` data-ship-type="${esc(s.id)}"`
+        : isMod
+          ? ` data-module-id="${esc(s.id)}"`
+          : "";
       return (
-        `<li class="shop-item"${s.kind === "ship" ? ` data-ship-type="${esc(s.id)}"` : ""} title="${esc(tip)}">` +
+        `<li class="shop-item"${itemDataAttr} title="${esc(tip)}">` +
         `<span class="shop-item-name">${esc(s.n)}${notes.length ? ` <small>${esc(notes.join(" · "))}</small>` : ""}</span>` +
         `<span class="shop-item-right">` +
         `<span class="shop-price">${s.price} cr</span>` +
@@ -711,8 +750,11 @@ export function assetsResultsHtml(profile = state.profile, world = state.worldSt
               ? cargoList
                   .map(
                     c =>
-                      `<li class="assets-line assets-item assets-ship-item" data-asset-item="${esc(c.id)}" ` +
-                      `data-asset-ship-cargo="${esc(s.id)}" title="${esc(c.name)} (${esc(c.catLabel)}) in ${esc(s.name)} — ${c.vol} m³ total.">` +
+                      `<li class="assets-line assets-item assets-ship-item" data-asset-item="${esc(c.id)}"${
+                        isModule(c.id) ? ` data-module-id="${esc(c.id)}"` : ""
+                      } data-asset-ship-cargo="${esc(s.id)}" title="${esc(c.name)} (${esc(c.catLabel)}) in ${esc(s.name)} — ${c.vol} m³ total.${
+                        isModule(c.id) ? " Right-click for Show info." : ""
+                      }">` +
                       `<span class="pocket-label"><span class="pocket-icon i" aria-hidden="true"></span>` +
                       `<span class="pocket-name">${esc(c.name)} <small>${esc(c.catLabel)}</small></span></span>` +
                       `<span class="assets-qty">&times;${c.n} <small>${c.vol} m³</small></span></li>`
@@ -735,8 +777,10 @@ export function assetsResultsHtml(profile = state.profile, world = state.worldSt
         );
       }
       for (const it of st.items) {
+        const modAttr = isModule(it.id) ? ` data-module-id="${esc(it.id)}"` : "";
+        const modHint = isModule(it.id) ? " Right-click for Show info." : "";
         lines.push(
-          `<li class="assets-line assets-item" data-asset-item="${esc(it.id)}" title="${esc(it.name)} (${esc(it.catLabel)}) — ${it.vol} m³ total.">` +
+          `<li class="assets-line assets-item" data-asset-item="${esc(it.id)}"${modAttr} title="${esc(it.name)} (${esc(it.catLabel)}) — ${it.vol} m³ total.${modHint}">` +
           `<span class="pocket-label"><span class="pocket-icon i" aria-hidden="true"></span>` +
           `<span class="pocket-name">${esc(it.name)} <small>${esc(it.catLabel)}</small></span></span>` +
           `<span class="assets-qty">&times;${it.n} <small>${it.vol} m³</small></span></li>`

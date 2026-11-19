@@ -36,13 +36,18 @@ import {
   equipModuleFromInventory,
   fitModuleFrom,
   fittedAt,
+  moduleInfoData,
   unequipTo,
 } from "../src/sim/fitting.js";
+import { MODULES } from "../src/data/modules.js";
+import { enterPlace } from "../src/sim/places.js";
+import { homeStationPlace } from "../src/sim/session.js";
 import { acceptMission, ensureBoard } from "../src/sim/contracts.js";
 import {
   TABS,
   assetsHtml,
   assetsResultsHtml,
+  moduleDetailsHtml,
   cargoHtml,
   contractsHtml,
   introHtml,
@@ -647,6 +652,8 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
     modTile.closest = sel => (sel === "button.inv-item[data-kind]" ? modTile : null);
     right.handlers.contextmenu[0]({ target: modTile, clientX: 1500, clientY: 300, preventDefault() {} });
     const modMenu = right.children.find(c => c.classList.contains("inv-context"));
+    const modInfoBtn = modMenu.children.find(c => c.dataset.a === "modInfo");
+    assert.ok(modInfoBtn && modInfoBtn.textContent === "Show info", "module in Inventory has Show info");
     const equipBtn = modMenu.children.find(c => c.dataset.a === "invEquip");
     assert.ok(equipBtn && !equipBtn.disabled, "module fitting active ship offers enabled Equip");
     equipBtn.closest = sel => (sel === "button[data-a]" ? equipBtn : null);
@@ -654,12 +661,13 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
     assert.equal(fittedAt("primary", 1), "beam_basic", "Equip fits module into active ship's open bay with Outfitting closed");
     assert.equal(countOf(STATION, "beam_basic"), 0);
 
-    // Non-module ore offers disabled Equip and refuses if invoked.
+    // Non-module ore offers disabled Equip (and no module Show info) and refuses if invoked.
     const oreTile = makeSurface("button");
     oreTile.dataset = { kind: "c", id: "ferrite", where: STATION, slot: "1", dir: "s", count: "2" };
     oreTile.closest = sel => (sel === "button.inv-item[data-kind]" ? oreTile : null);
     right.handlers.contextmenu[0]({ target: oreTile, clientX: 1500, clientY: 300, preventDefault() {} });
     const oreMenu = right.children.find(c => c.classList.contains("inv-context"));
+    assert.equal(oreMenu.children.find(c => c.dataset.a === "modInfo"), undefined);
     assert.equal(oreMenu.children[0].dataset.a, "invEquip");
     assert.equal(oreMenu.children[0].disabled, true, "ore cannot be equipped");
 
@@ -714,6 +722,103 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
       0,
       "drag ghost removed on equip drop"
     );
+
+    // Browser fires a trailing click right after pointerup on a completed drag (ignored by guard).
+    await left.handlers.click[0]({ target: targetBay, shiftKey: false, clientX: 700, clientY: 260 });
+
+    // Click-to-pick & click-to-place in Outfitting (no drag, identical to Inventory!):
+    // 1) Click fitted beam_basic in primary bay 1 -> picks onto square cursor ghost & empties bay.
+    await clickAction(left, "slot", "primary:1");
+    assert.equal(fittedAt("primary", 1), null, "single click lifts fitted module from bay");
+    assert.equal(state.ui.invHeld?.fromBay, true);
+    assert.equal(state.ui.invHeld?.id, "beam_basic");
+    // 2) Click Station slot 6 -> places module into Station slot 6 and removes cursor ghost.
+    const dropStationSlot = makeSurface("button");
+    dropStationSlot.dataset = { a: "invSlot", where: STATION, slot: "6" };
+    dropStationSlot.closest = sel => (sel === "button[data-a]" ? dropStationSlot : null);
+    await right.handlers.click[0]({ target: dropStationSlot, shiftKey: false, clientX: 1500, clientY: 300 });
+    assert.equal(state.ui.invHeld, null);
+    assert.deepEqual(slotsAt(STATION)[6], { id: "beam_basic", n: 1 }, "click places bay-picked module into inventory slot");
+    assert.equal(globalThis.document.body.children.filter(c => c.id === "inv-held-ghost").length, 0);
+    // 3) Click beam_basic in Station slot 6, then click primary bay 0 (holding cannon_basic) -> swaps onto cursor!
+    await right.handlers.click[0]({ target: dropStationSlot, shiftKey: false, clientX: 1500, clientY: 300 });
+    assert.equal(state.ui.invHeld?.id, "beam_basic");
+    await clickAction(left, "slot", "primary:0");
+    assert.equal(fittedAt("primary", 0), "beam_basic", "clicked module fitted into bay 0");
+    assert.equal(state.ui.invHeld?.id, "cannon_basic", "displaced cannon_basic is now held on the cursor");
+    // 4) Click primary bay 1 to drop cannon_basic there -> both bays fitted, cursor empty!
+    await clickAction(left, "slot", "primary:1");
+    assert.equal(fittedAt("primary", 1), "cannon_basic");
+    assert.equal(state.ui.invHeld, null);
+
+    // Right-clicking an equipped module in Outfitting NEVER throws ReferenceError
+    // and presents both "Unequip" and "Show info"!
+    const rcBay = makeSurface("button");
+    rcBay.dataset = { fitGroup: "primary", fitBay: "1", module: "cannon_basic" };
+    rcBay.closest = sel => {
+      if (sel.includes("button.mod-bay.fitted")) return rcBay;
+      if (sel === "#station-left") return left;
+      return null;
+    };
+    left.handlers.contextmenu[0]({ target: rcBay, clientX: 720, clientY: 250, preventDefault() {} });
+    const bayMenu = left.children.find(c => c.classList.contains("bay-context"));
+    assert.ok(bayMenu, "right-clicking fitted bay opens context menu without throwing");
+    assert.deepEqual(
+      bayMenu.children.map(c => [c.dataset.a, c.textContent]),
+      [["bayUnequip", "Unequip"], ["modInfo", "Show info"]],
+      "equipped module context menu offers Unequip and Show info"
+    );
+
+    // Clicking "Show info" opens the full module stats popover inside Outfitting.
+    const bayInfoBtn = bayMenu.children[1];
+    bayInfoBtn.closest = sel => {
+      if (sel === "button[data-a]") return bayInfoBtn;
+      if (sel === ".inv-context") return bayMenu;
+      if (sel === "#station-left") return left;
+      return null;
+    };
+    await left.handlers.click[0]({ target: bayInfoBtn, shiftKey: false, clientX: 720, clientY: 250 });
+    const infoPop = left.children.find(c => c.classList.contains("mod-info-popover"));
+    assert.ok(infoPop, "Show info mounts module info card in Outfitting");
+    assert.match(infoPop.innerHTML, /Basic cannons/);
+    assert.match(infoPop.innerHTML, /2 linked barrels/);
+    assert.match(infoPop.innerHTML, /2160 m/);
+    assert.match(infoPop.innerHTML, /2 MJ\/s/);
+
+    // Re-open bay menu and click "Unequip" -> moves cannon_basic straight to Station storage.
+    left.handlers.contextmenu[0]({ target: rcBay, clientX: 720, clientY: 250, preventDefault() {} });
+    const bayMenu2 = left.children.find(c => c.classList.contains("bay-context"));
+    const unequipBtn = bayMenu2.children[0];
+    unequipBtn.closest = sel => (sel === "button[data-a]" ? unequipBtn : null);
+    await left.handlers.click[0]({ target: unequipBtn, shiftKey: false, clientX: 720, clientY: 250 });
+    assert.equal(fittedAt("primary", 1), null, "right-click Unequip removes module from bay");
+    assert.equal(countOf(STATION, "cannon_basic"), 1, "unequipped module lands in station storage");
+
+    // Right-clicking a module row in Shop or My Assets also offers "Show info".
+    const shopModRow = makeSurface("li");
+    shopModRow.dataset = { moduleId: "missile_basic" };
+    shopModRow.closest = sel => {
+      if (sel === "[data-module-id]") return shopModRow;
+      if (sel === "#station-left") return left;
+      return null;
+    };
+    left.handlers.contextmenu[0]({ target: shopModRow, clientX: 640, clientY: 300, preventDefault() {} });
+    const shopModMenu = left.children.find(c => c.classList.contains("mod-context"));
+    assert.ok(shopModMenu, "right-clicking a module row offers Show info");
+    assert.equal(shopModMenu.children[0].textContent, "Show info");
+
+    // Clicking the Home icon button works at both current home and another station.
+    await clickAction(right, "home");
+    assert.equal(homeStationPlace(state.profile), DEFAULT_PLACE);
+    const otherStation = Object.values(state.galaxy.pocketsById)
+      .find(p => p.id !== DEFAULT_PLACE && stationAt(p.id));
+    if (otherStation) {
+      enterPlace(otherStation.id, state.player);
+      state.player.docked = true;
+      await clickAction(right, "home");
+      assert.equal(homeStationPlace(state.profile), otherStation.id, "clicking home button updates home station");
+      assert.match(right.innerHTML, /class="home-icon-btn is-home"/, "header updates immediately to active home");
+    }
   } finally {
     globalThis.document = prevDoc;
   }
@@ -729,29 +834,99 @@ test("Controls condensation, minimalist top-right home icon, uncropped item text
   assert.match(controlsBlock, /class="controls-grid"/);
   assert.doesNotMatch(controlsBlock, /sold in the Shop|strongest thruster|world keeps running/);
 
-  // Minimalistic top-right home station icon button with hover explanation and no visible description text.
+  // Minimalistic top-right home station icon button: always clickable (not disabled),
+  // no browser title tooltip, with an in-game themed .home-tip hover card.
   const station = outpostHtml(state.ui);
-  assert.match(station, /<div class="station-head"><h1>[^<]+<\/h1><button[^>]*class="home-icon-btn[^"]*"[^>]*data-a="home"/);
-  assert.match(station, /title="[^"]*recover here after death\."/i, "hover tooltip explains home station recovery");
-  assert.doesNotMatch(station, /<small>Recover here after death\.<\/small>|Set Home Station/);
+  assert.match(
+    station,
+    /<div class="station-head"><h1>[^<]+<\/h1><div class="home-ctl[^"]*"><button[^>]*class="home-icon-btn[^"]*"[^>]*data-a="home"/
+  );
+  assert.doesNotMatch(station, /<button[^>]*class="home-icon-btn[^"]*"[^>]*disabled/, "home button stays clickable");
+  assert.doesNotMatch(station, /<button[^>]*class="home-icon-btn[^"]*"[^>]*title=/, "no native browser title tooltip on home button");
+  assert.match(station, /<div class="home-tip" role="tooltip"><strong>Home station<\/strong><span>[^<]*recover here after death\.<\/span><\/div>/i,
+    "in-game themed hover card explains home station recovery");
+  assert.doesNotMatch(station, /<small>Recover here after death\.<\/small>/);
 
-  // Outfitting places Services after module rails (Ship 3D -> Modules -> Services in stacked layout),
-  // omits "Modules in storage" picker, and keeps compact service-box tiles fitting >= 7 services in 126px.
+  // Outfitting removes the top drag description, places Services below module rails with no browser
+  // title tooltips, less horizontal width, ~50% bigger service text, and taller 3D preview box.
   const outfit = outfittingHtml();
   assert.doesNotMatch(outfit, /Modules in storage|No modules in storage|fit-picker/);
+  assert.doesNotMatch(outfit, /Drag modules between Inventory/i, "Outfitting top description removed");
+  assert.match(outfit, /^<h2>Outfitting<\/h2><div class="outfit">/, "ship preview immediately follows heading");
   const viewIdx = outfit.indexOf('class="outfit-view"');
   const lastRailIdx = outfit.lastIndexOf('class="outfit-rail"');
   const svcIdx = outfit.indexOf('class="outfit-service"');
   assert.ok(viewIdx > 0 && lastRailIdx > viewIdx && svcIdx > lastRailIdx, "Services comes below module rails");
   assert.match(outfit, /class="service-grid"/);
   assert.match(outfit, /class="service-box"/);
+  const svcHtml = outfit.slice(svcIdx);
+  assert.doesNotMatch(svcHtml, /title=/, "no browser hover tooltip on Services");
 
   const css = readFileSync("src/styles.css", "utf8");
-  assert.match(css, /\.outfit-service\s*\{[\s\S]*?height:\s*126px/, "Services box retains fixed height");
-  assert.match(css, /\.service-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)[\s\S]*?grid-auto-rows:\s*21px/,
-    "2x4 compact service boxes fit 8 (>= 7) services inside the fixed Services space");
+  assert.match(css, /\.home-ctl:hover \.home-tip[\s\S]*?opacity:\s*1/, "hovering home button reveals game-themed tooltip");
+  assert.match(css, /\.inv-held-ghost\s*\{[\s\S]*?width:\s*var\(--ghost-size,\s*64px\);\s*height:\s*var\(--ghost-size,\s*64px\);\s*aspect-ratio:\s*1\s*\/\s*1/,
+    "held inventory item ghost stays 1:1 square matching inventory slots");
+  assert.match(css, /\.outfit-view\s*\{[\s\S]*?min-height:\s*clamp\(336px,\s*50vh,\s*460px\)/,
+    "3D ship preview expanded vertically into removed description space");
+  assert.match(css, /\.outfit-service\s*\{[\s\S]*?width:\s*min\(100%,\s*468px\)[\s\S]*?min-height:\s*172px/,
+    "Services box is less horizontal and slightly enlarged for future services");
+  assert.match(css, /\.service-label\s*\{[\s\S]*?font-size:\s*15px/, "Service text is 50% larger (15px vs 10px)");
   assert.match(css, /\.inv-item-name\s*\{[\s\S]*?font-size:\s*9\.5px/, "inventory item text scaled down so names never clip");
   assert.match(css, /\.inv-item-meta\s*\{[\s\S]*?font-size:\s*8\.5px/, "inventory volume meta scaled down cleanly");
+});
+
+test("Module Show info lists complete player stats for every module type and Mission log Details expands inline", () => {
+  freshDocked(10000);
+  // Every module in MODULES produces rich multi-section stats with MJ usage, slot & volume info.
+  for (const id of Object.keys(MODULES)) {
+    const info = moduleInfoData(id, state.profile);
+    assert.ok(info && info.sections.length >= 2, `${id} has rich stat sections`);
+    const html = moduleDetailsHtml(id, state.profile);
+    assert.match(html, new RegExp(info.name));
+    assert.match(html, /MJ/);
+    assert.match(html, /m³/);
+  }
+  // Cannons: outputs, range, projectile speed, fire rate, DPS, MJ usage.
+  const cannonHtml = moduleDetailsHtml("cannon_basic", state.profile);
+  assert.match(cannonHtml, /Outputs<\/dt><dd>2 linked barrels/);
+  assert.match(cannonHtml, /Effective range<\/dt><dd>2160 m/);
+  assert.match(cannonHtml, /Projectile speed<\/dt><dd>900 m\/s/);
+  assert.match(cannonHtml, /Sustained DPS<\/dt><dd>6 HP\/s/);
+  assert.match(cannonHtml, /MJ usage \(firing\)<\/dt><dd>2 MJ\/s/);
+
+  // Mining beam: outputs, beam range, cycle time, MJ usage, plus Prospector 2x bonus when flown.
+  buyItem("meridian", "prospector", 1, state.player, state.profile, state.worldState, "ship");
+  selectShip("prospector");
+  const beamHtml = moduleDetailsHtml("beam_basic", state.profile);
+  assert.match(beamHtml, /Outputs<\/dt><dd>1 emitter/);
+  assert.match(beamHtml, /Beam range<\/dt><dd>340 m/);
+  assert.match(beamHtml, /Cycle time<\/dt><dd>4 s \/ ore/);
+  assert.match(beamHtml, /On Prospector<\/dt><dd>2 s \/ ore \(2× hull\)/);
+  assert.match(beamHtml, /MJ usage \(cutting\)<\/dt><dd>2 MJ\/s/);
+  assert.match(beamHtml, /Shop price<\/dt><dd>900 cr/);
+
+  // Missiles: outputs, damage, reload, magazine, lock-on range, max flight reach, MJ usage.
+  state.worldState.base.hangar = 2;
+  buyItem("meridian", "bulwark", 1, state.player, state.profile, state.worldState, "ship");
+  selectShip("bulwark");
+  const mslHtml = moduleDetailsHtml("missile_basic", state.profile);
+  assert.match(mslHtml, /Outputs<\/dt><dd>1 launch tube/);
+  assert.match(mslHtml, /Damage per missile<\/dt><dd>8 HP/);
+  assert.match(mslHtml, /On Bulwark<\/dt><dd>12 HP \(1\.5× hull\)/);
+  assert.match(mslHtml, /Lock-on range<\/dt><dd>2500 m/);
+  assert.match(mslHtml, /Max flight reach<\/dt><dd>~\d+ m/);
+  assert.match(mslHtml, /Magazine capacity<\/dt><dd>12 missiles/);
+  assert.match(mslHtml, /MJ usage<\/dt><dd>0 MJ\/s/);
+
+  // Mission log Details: grows the same card inline without duplicating title, status or Next.
+  const m = acceptMission(BORDER_SIGNAL_MISSION);
+  m.details = ["Bring back telemetry from the hollow."];
+  const log = leftPanelHtml({ tab: "l", leftPanel: "m" });
+  assert.equal((log.match(/The Border Signal/g) || []).length, 1, "mission title is not duplicated in Details");
+  assert.equal((log.match(/<strong>Next:<\/strong>/g) || []).length, 1, "Next objective is not duplicated in Details");
+  assert.doesNotMatch(log, /<h4>/, "no duplicate inner heading box");
+  assert.match(log, /Bring back telemetry from the hollow\./, "extra mission details continue inside card");
+  assert.match(log, /<strong>Hand in:<\/strong> Meridian Station/, "hand-in station shown inside expanded card");
 });
 
 test("My Assets prefix search + collapsible ship cargo menu (including ship cargo in search)", () => {
