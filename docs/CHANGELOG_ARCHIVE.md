@@ -24,6 +24,34 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+## 2026-11-16: Remove duplicate weapon-selection messages
+
+Removed centre-screen equipped/empty messages from both bank selectors; the slot HUD
+already names each selected module. Other gameplay messages remain unchanged. Inset
+PRIMARY/SECONDARY headings 2px toward the middle without moving the grey weapon names.
+Added regression assertions; save v21 unchanged; build regenerated. Visual check pending.
+
+## 2026-11-16: Signed throttle and final HUD alignment tweaks
+
+Weapon names move up 2px without moving PRIMARY/SECONDARY. Throttle/speed box moves
+up 18px. Fixed reverse throttle disappearing behind a resource-pool clamp: a dedicated
+signed helper preserves negative text, uses magnitude for fill length, and reverses
+fill origin. Reverse uses the same blue hue in diagonal stripes, forward stays solid.
+All four stat columns now share 28px width, with centred labels/readings. Power usage
+centres beneath the combined Power/Boost pair. Power MJ readout matches the blue meter;
+usage text retains its muted grey. Added signed/boundary and layout tests.
+Save v21 unchanged; build regenerated; owner visual playtest pending.
+
+## 2026-11-16: Framed status columns and integrated throttle/speed
+
+Reduced weapon-name reserved height to one line and heading/name gaps to 1px so
+labels sit closer to slot boxes. Added square grey frames to the status columns.
+Retained existing label-edge positions; tracks now match their labels' intrinsic
+widths, centred underneath, retaining the 8px inter-track gap. Current/percentage
+readouts centre on their columns. Speed now sits inside the wider throttle rectangle
+beside the throttle label. No speed-physics changes (pushed-speed fix remains pending
+in slice 2). Layout tests updated; save v21; build regenerated; visual playtest pending.
+
 ## 2026-11-16: Square weapon boxes and slot-height divider
 
 Widened the strip to 480px so all ten boxes are 44×44px at desktop width; narrower

@@ -55,6 +55,7 @@ export function createPlayerRecord(controls = neutralControls()) {
     pos: V(0, 0, 0),    // where the ship is (world metres)
     quat: Q(),          // which way it points
     measuredSpeed: 0,
+    pushed: false,      // true when a solid collider displaced the ship this tick
     v: V(0, 0, 0),      // current velocity
     thr: 0,            // throttle, -1..1
     hull: 0,
@@ -144,17 +145,23 @@ export function flight(dt, P = state.player, runtime = null) {
       };
 
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
-  // Speed and turn come from the fitted thrusters, not from the hull.
+  // Speed and turn come from the fitted thrusters, not from the hull. Thrusters
+  // require both a fitted drive and stored MJ in the power cells: at 0 MJ the
+  // engines stay cold and register 0 MJ/s draw.
   const drv = r.drive;
   const powered = hasDrive(drv);         // no thruster fitted: a dead ship
-  const turn = drv.turn * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
+  const driveEnergy = powered && (!drv.draw || hasPower(drv.draw, r.power));
+  const turn = (driveEnergy ? drv.turn : 0) * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
 
-  // A dead ship cannot answer the controls, so warn the moment the player asks
-  // it to move. The warning repeats while a control is still held, but slowly,
-  // so it reads as a reminder rather than a flicker.
+  // A dead or empty-tank ship cannot answer the controls, so warn the moment the
+  // player asks it to move. The warning repeats while a control is still held,
+  // but slowly, so it reads as a reminder rather than a flicker.
   P.noDriveT = Math.max(0, P.noDriveT - dt);
   if (!W && !powered && P.noDriveT === 0 && tryingToMove(c, stick)) {
     if (P === state.player) msg("Equip thrusters to move", NO_DRIVE_WARN);
+    P.noDriveT = NO_DRIVE_WARN + 0.5;
+  } else if (!W && !driveEnergy && P.noDriveT === 0 && tryingToMove(c, stick)) {
+    if (P === state.player) msg("No stored power", NO_DRIVE_WARN);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
   }
   // The ship turns on its own record; the view copies the rotation onto the model.
@@ -169,6 +176,12 @@ export function flight(dt, P = state.player, runtime = null) {
   } else if (!powered) {
     // No thrusters: the throttle does nothing and the engines stay cold.
     P.thr = 0;
+  } else if (!driveEnergy) {
+    // 0 MJ in the tank: cannot push throttle on (only cut it with X/brake); engines produce 0 thrust and 0 draw.
+    if (c.stop) P.thr = 0;
+    if (c.brake) {
+      P.thr = P.thr > 0 ? Math.max(0, P.thr - dt * 0.9) : P.thr < 0 ? Math.min(0, P.thr + dt * 0.9) : 0;
+    }
   } else {
     if (c.thrust > 0) P.thr = Math.min(1, P.thr + dt * 0.5);
     if (c.thrust < 0) P.thr = Math.max(-1, P.thr - dt * 0.5);
@@ -180,13 +193,17 @@ export function flight(dt, P = state.player, runtime = null) {
 
   const boostKey = c.boost;
 
-  // Power budget for this frame: the thrusters draw while the throttle is off
-  // centre, and a little more while the boost is burning. The boost figure comes
-  // from last frame, so the extra starts the frame after it lights. Refilling the
-  // boost meter is free — it never shows up in the draw, the way filling a car's
-  // tank with fuel does not run the engine.
-  setDraw("drive", driveDraw(drv, P.thr, P.boost), r.power);
-  const supply = hasPower(r.power.draw, r.power);
+  // Power budget for this frame: the thrusters draw while running (throttle,
+  // strafe, lift or active boost), and only when the power cells hold MJ to pay
+  // for them — an unpowered drive never reports phantom MJ/s usage on the HUD.
+  const activeAxis = !W && (P.thr !== 0 || c.strafe !== 0 || c.lift !== 0);
+  const wantDrive = driveDraw(drv, P.thr !== 0 ? P.thr : activeAxis ? 1 : 0, P.boost && driveEnergy);
+  const otherDriveDraw = r.power.draw - (r.power.use.drive || 0);
+  const supply = driveEnergy && (wantDrive <= 0 || hasPower(otherDriveDraw + wantDrive, r.power));
+  // Keep recorded draw strictly tied to paid thruster operation (throttle/boost,
+  // or lateral thrusters when off centre).
+  const paidDrive = supply ? (P.thr !== 0 || P.boost ? driveDraw(drv, P.thr, P.boost) : 0) : 0;
+  setDraw("drive", paidDrive, r.power);
 
   // The boost: lighting it is the hungry moment. It costs one big slug of stored
   // energy (20 MJ on the basic thrusters) once the spool-up has finished and the
@@ -238,6 +255,7 @@ export function flight(dt, P = state.player, runtime = null) {
   // place's colliders. `collide: false` on a feature opts it out (glow shells). The
   // ship itself is a sphere of SHIP_RADIUS. Resolution is the same push-out bounce the
   // old sphere tests used; only the hull is different.
+  let pushed = false;
   for (const a of state.world.asteroids) {
     const speed = P.v.length();
     const hit = collideRockAt(a.shape || 0, a.pos, a.quat, a.scale, P.pos.x, P.pos.y, P.pos.z, SHIP_RADIUS);
@@ -245,6 +263,7 @@ export function flight(dt, P = state.player, runtime = null) {
     P.pos.x += hit.x * hit.depth;
     P.pos.y += hit.y * hit.depth;
     P.pos.z += hit.z * hit.depth;
+    if (hit.depth > 0) pushed = true;
     bounceOff(P, hit);
     if (speed > 25) hurt(speed * 0.015 * (hit.damage || 1), P);   // 1/10th of the old 100-point-hull rule
   }
@@ -263,6 +282,7 @@ export function flight(dt, P = state.player, runtime = null) {
     const overlap = rr - d, half = overlap * 0.5;
     P.pos.x += nx * half; P.pos.y += ny * half; P.pos.z += nz * half;
     e.pos.x -= nx * half; e.pos.y -= ny * half; e.pos.z -= nz * half;
+    if (half > 0) pushed = true;
     // Impact energy: the relative speed at the moment of contact — the same 25 m/s /
     // 0.015 rule the pilot's rock hits use, applied to both ships of a collision.
     // (Absolute own-speed would let a stationary victim escape, which is not how
@@ -293,6 +313,7 @@ export function flight(dt, P = state.player, runtime = null) {
     P.pos.x += hit.x * hit.depth;
     P.pos.y += hit.y * hit.depth;
     P.pos.z += hit.z * hit.depth;
+    if (hit.depth > 0) pushed = true;
     bounceOff(P, hit);
     // Everything solid hurts, at the same rate a rock does (owner, 2026-11-15): a station ring, a
     // planet, a cave wall. `collideDmg: 0` in a place's data is the only way to make one bounce
@@ -300,7 +321,9 @@ export function flight(dt, P = state.player, runtime = null) {
     if (hit.damage > 0 && speed > 25) hurt(speed * 0.015 * hit.damage, P);
   }
 
-  P.measuredSpeed = flightSpeed(stepStart, P.pos, dt, !W && stepPlace === P.place && !P.docked && P.hull > 0);
+  const continuous = !W && stepPlace === P.place && !P.docked && P.hull > 0;
+  P.pushed = continuous && pushed;
+  P.measuredSpeed = flightSpeed(stepStart, P.pos, dt, continuous);
 }
 
 /** Reflect the ship's velocity off a collision normal, keeping 40% of its energy. */

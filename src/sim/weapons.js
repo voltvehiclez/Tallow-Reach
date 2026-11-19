@@ -5,7 +5,7 @@ import { V, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
-import { SHIPS } from "../data/ships.js";
+import { shipDef } from "../data/ships.js";
 
 import { state, say, profileOf, placeWorld } from "../state/state.js";
 import { holdLoad } from "./economy.js";
@@ -88,7 +88,7 @@ export function updatePrimary(dt, P = state.player) {
     weapon = prof ? prof.pw : P.weapon,
     slot = primarySlotIndex(weapon, P),
     c = P.controls,
-    d = SHIPS[ship],
+    d = shipDef(ship),
     sayFor = text => { if (local) say(text); };
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.
@@ -118,6 +118,7 @@ export function updatePrimary(dt, P = state.player) {
   const gunsOn = wantGuns && hasPower(otherDraw + gunDraw, power);
   if (local) setDraw("guns", gunsOn ? gunDraw : 0);
   else setDraw("guns", gunsOn ? gunDraw : 0, power);
+  if (wantGuns && !gunsOn && gunDraw > 0) sayFor("Not enough power");
 
   if (gunsOn) {
     const gi = P.guns.indexOf(gun);
@@ -172,13 +173,17 @@ export function updatePrimary(dt, P = state.player) {
     // The beam is a cutting torch, not a ghost: it stops on whatever stops a shot, so a station wall
     // between the ship and the rock stops the cut. Without this the beam reached through the
     // station's hull to a rock on the far side of it.
-    if (best) {
+    // Never light the beam — not even onto a wall — when the power tank is empty.
+    if (best && !hasPower(beamOtherDraw + beam.draw, power)) {
+      sayFor("Not enough power");
+    } else if (best) {
       const reach = Math.max(0, bestDist - best.r * 0.5);
       const wall = sweepColliders(placeCollidersOf(P.place || state.place), [], pp, pp.clone().addScaledVector(f, reach));
       if (wall) {
         F.beamOn = true;
         F.beamStart = playerMount("beam", beam.i, 0, 1, P, ship);
         F.beamEnd = V(wall.x, wall.y, wall.z);
+        setDraw("beam", beam.draw, power);
         sayFor("Beam blocked");
         F.beamT = 0;                 // no progress toward an ore through a wall
         return;
@@ -186,10 +191,10 @@ export function updatePrimary(dt, P = state.player) {
     }
     if (!best) {
       sayFor("No asteroid in beam range");
-    } else if (prof && holdLoad(prof) >= d.cargo) {
-      sayFor("Cargo hold full");
     } else if (!hasPower(beamOtherDraw + beam.draw, power)) {
       sayFor("Not enough power");
+    } else if (prof && holdLoad(prof) >= d.cargo) {
+      sayFor("Cargo hold full");
     } else {
       // The beam cuts continuously. Draw it, charge for it, and bank whole ores
       // as they complete.
@@ -330,7 +335,10 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     if (c.sec && F.missileCd <= 0) {
       const prof = profileOf(P);
       const stock = prof ? prof.msl : P.missileStock;
-      if (stock <= 0) sayFor("Out of missiles");
+      const power = P.power || (P === state.player ? state.power : null);
+      if (launcher.draw > 0 && power && !hasPower(power.draw + launcher.draw, power)) {
+        sayFor("Not enough power");
+      } else if (stock <= 0) sayFor("Out of missiles");
       else {
         fireMissile(ML.locked ? ML.target : null, launcher, P);
         F.missileCd = launcher.cd;

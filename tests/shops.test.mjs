@@ -10,9 +10,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { loadHeadless } from "./headless.mjs";
 import { ITEMS, itemVol } from "../src/data/items.js";
+import { SHIPS } from "../src/data/ships.js";
 import { MODULES } from "../src/data/modules.js";
 import { MISSILE } from "../src/data/weapons.js";
-import { SHOPS, isShop, shopRow } from "../src/data/shops.js";
+import { SHOPS, isShop, shopRow, shopRowKind } from "../src/data/shops.js";
 import { DEFAULT_PLACE } from "../src/data/places.js";
 import { stationAt } from "../src/sim/places.js";
 
@@ -56,7 +57,7 @@ function withShop(id, def, fn) {
   }
 }
 
-test("every shop row is complete, and names a real item", () => {
+test("every shop row is complete, and names a real item or ship", () => {
   assert.ok(isShop(M), "the outpost's shop must exist in SHOPS");
   for (const [id, shop] of Object.entries(SHOPS)) {
     assert.equal(typeof shop.n, "string", `${id}: n (the heading)`);
@@ -64,7 +65,11 @@ test("every shop row is complete, and names a real item", () => {
     assert.ok(Array.isArray(shop.stock) && shop.stock.length > 0, `${id}: stock must list rows`);
     for (const row of shop.stock) {
       const where = `${id} / ${row.id}`;
-      assert.ok(ITEMS[row.id], `${where}: the item must be in data/items.js`);
+      if (shopRowKind(row) === "ship") {
+        assert.ok(SHIPS[row.id], `${where}: a ship row must name a hull in data/ships.js`);
+      } else {
+        assert.ok(ITEMS[row.id], `${where}: the item must be in data/items.js`);
+      }
       assert.ok(Number.isInteger(row.price) && row.price > 0, `${where}: price must be a whole number above 0`);
       assert.equal(typeof row.n, "string", `${where}: n (the row's name)`);
       assert.equal(typeof row.d, "string", `${where}: d (the sales pitch)`);
@@ -74,33 +79,37 @@ test("every shop row is complete, and names a real item", () => {
     // A row is the only way something reaches the screen: a hidden "already
     // owned" list (the old `kit`) would list a part twice.
     assert.equal(shop.kit, undefined, `${id}: no kit list — every part shown is a stock row`);
-    // One row per item: two rows for the same item would make the Buy buttons ambiguous.
-    const ids = shop.stock.map(r => r.id);
-    assert.equal(new Set(ids).size, ids.length, `${id}: one row per item`);
+    // One row per (kind, id) pair so Buy buttons are never ambiguous.
+    const ids = shop.stock.map(r => `${shopRowKind(r)}:${r.id}`);
+    assert.equal(new Set(ids).size, ids.length, `${id}: one row per ship or item`);
   }
 });
 
-test("Meridian sells exactly what it always has, at the prices the owner set", () => {
+test("Meridian sells its ships, modules and consumable at the prices the owner set", () => {
   const rows = SHOPS[M].stock;
-  const price = id => (shopRow(M, id) || {}).price;
-  // The two real purchases, unchanged since they were shop weapons.
-  assert.equal(price("beam_basic"), 900, "the mining beam is 900 cr");
-  assert.equal(price("missile_basic"), 1500, "the missile pod is 1500 cr");
-  assert.equal(SHOPS[M].n, "Weapons shop", "the heading is the one the player knows");
+  const price = (id, kind = null) => (shopRow(M, id, kind) || {}).price;
+  assert.equal(SHOPS[M].n, "Shop", "compact unified shop heading");
+  // Ships moved from the removed Hangar tab into the Shop at their unchanged prices.
+  for (const id of Object.keys(SHIPS)) {
+    assert.equal(price(id, "ship"), SHIPS[id].price, `${id} costs ${SHIPS[id].price} cr in the shop`);
+  }
+  // The two real module purchases, unchanged since they were shop weapons.
+  assert.equal(price("beam_basic", "item"), 900, "the mining beam is 900 cr");
+  assert.equal(price("missile_basic", "item"), 1500, "the missile pod is 1500 cr");
   // The six standard parts, one credit each (the owner's decision, 2026-11-07).
   for (const id of ["power_basic", "cell_basic", "thruster_basic", "shield_basic", "cannon_basic", "hull_basic"]) {
-    assert.equal(price(id), 1, `${id} costs 1 cr`);
-    assert.equal(shopRow(M, id).own, false, `${id}: no "You own N" (it counts every hull's stock fit)`);
+    assert.equal(price(id, "item"), 1, `${id} costs 1 cr`);
+    assert.equal(shopRow(M, id, "item").own, false, `${id}: no "You own N" (it counts every hull's stock fit)`);
   }
   // Step 14: the first consumable, at the price the owner set on 2026-11-14.
-  assert.equal(price("rift_basic"), 10, "a Basic rift is 10 cr");
+  assert.equal(price("rift_basic", "item"), 10, "a Basic rift is 10 cr");
   assert.equal(ITEMS.rift_basic.cat, "consumable", "and it is a consumable, not a part");
-  // Nothing else is sold yet: no ore, no spare anything.
-  assert.equal(rows.length, 9, "nine rows in the shop");
+  // Four ships + eight modules + one consumable; ores and loot are empty at Meridian today.
+  assert.equal(rows.length, 13, "thirteen rows in Meridian's shop");
   for (const row of rows) {
     assert.ok(
-      ITEMS[row.id].cat === "module" || row.id === "rift_basic",
-      `${row.id}: only parts and the Basic rift are sold today`
+      shopRowKind(row) === "ship" || ITEMS[row.id].cat === "module" || row.id === "rift_basic",
+      `${row.id}: only ships, parts and the Basic rift are sold at Meridian today`
     );
   }
   // Every part is listed once. The old standard-issue "Autocannons" line is gone:
@@ -233,7 +242,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 21, "Step 13 mission progress is now part of the save");
+  assert.equal(p.v, 24, "Step 13 mission progress is now part of the save");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {
@@ -242,10 +251,10 @@ test("the Shop tab draws its rows from SHOPS", () => {
   const weapons = readFileSync(new URL("../src/data/weapons.js", import.meta.url), "utf8");
   assert.doesNotMatch(weapons, /SHOP_WEAPONS/, "the hard-coded shop list is gone");
   assert.doesNotMatch(screens, /SHOP_WEAPONS/, "and no screen reads it");
-  assert.match(screens, /shopList\(shopId\)/, "the rows come from the station's shop");
+  assert.match(screens, /shopCatalogue\(shopId\)/, "the rows come from the station's shop catalogue");
   assert.match(screens, /shopDef\(shopId\)/, "so does the heading and the blurb");
-  assert.match(screens, /data-a="wb" data-b="\$\{shopId\}:\$\{s\.id\}"/, "a Buy button names its shop and item");
-  assert.match(menu, /eco\.buyItem\(shop, id\)/, "the Buy action is the one generic purchase");
+  assert.match(screens, /data-a="wb" data-b="\$\{esc\(shopId\)\}:\$\{s\.kind\}:\$\{esc\(s\.id\)\}"/, "a Buy button names its shop, kind and id");
+  assert.match(menu, /eco\.buyItem\(shop, id, amount/, "the Buy-amount popup delegates to the one generic purchase");
   assert.doesNotMatch(menu, /buyWeapon/, "the old special-case purchase is gone");
 });
 
@@ -255,8 +264,9 @@ test("the 8 starter missiles belong to the missile item, not the shop code", () 
   for (const [id, m] of Object.entries(MODULES)) {
     assert.ok(m.ammo == null || (Number.isInteger(m.ammo) && m.ammo > 0), `${id}: ammo must be a whole number above 0 when given`);
   }
-  // Buying an item sells it by its own volume, so the shop cannot disagree with a hold.
+  // Buying an item sells it by its own volume; ship rows go to Outfitting instead of storage.
   for (const row of SHOPS[M].stock) {
+    if (shopRowKind(row) === "ship") continue;
     const vol = MODULES[row.id] ? MODULES[row.id].vol : itemVol(row.id);
     assert.ok(Number.isInteger(vol) && vol > 0, `${row.id}: a row's item must take up room`);
   }

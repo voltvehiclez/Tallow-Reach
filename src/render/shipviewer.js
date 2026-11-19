@@ -13,7 +13,7 @@
 
 import { SHIP_PREVIEW } from "../data/camera.js";
 import * as THREE from "three";
-import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
+import { DEFAULT_SHIP, shipTypeOf } from "../data/ships.js";
 import { buildPlayerShip } from "./models.js";
 
 const FOV = 30;
@@ -123,7 +123,7 @@ export function shipViewerCanvas() {
  */
 export function setShip(id) {
   const v = ensure();
-  const key = SHIPS[id] ? id : DEFAULT_SHIP;
+  const key = shipTypeOf(id) || DEFAULT_SHIP;
   if (current === key && v.ship) return;
 
   if (v.ship) {

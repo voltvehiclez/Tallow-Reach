@@ -15,7 +15,7 @@ import { rollLoot } from "./loot.js";
 import { emit, on } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { placeAt } from "../data/places.js";
-import { SHIPS } from "../data/ships.js";
+import { shipDef } from "../data/ships.js";
 import { state, msg, say, localPlayer, profileOf, placeWorld } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
@@ -418,7 +418,7 @@ export function updateCrates(dt, placeId = state.place) {
       if (!prof) continue;
       const k = c.item,
         local = p === state.player;
-      if (holdLoad(prof) >= SHIPS[prof.ship].cargo || !addItem(prof.ship, k, 1, prof)) {
+      if (holdLoad(prof) >= shipDef(prof.ship).cargo || !addItem(prof.ship, k, 1, prof)) {
         if (local) say("Cargo hold full");
       } else {
         // Remove it before announcing pickup so a place-memory listener can see

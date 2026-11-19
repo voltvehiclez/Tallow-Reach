@@ -13,6 +13,7 @@ import { updateEnemies } from "./ai.js";
 import { updateBullets, updateCrates } from "./combat.js";
 import { updateEffects } from "./effects.js";
 import { updatePlaceMemory } from "./place-memory.js";
+import { updateContractTimers } from "./contracts.js";
 import { updateInstances, updateRifts } from "./instances.js";
 import { updateWormholes } from "./wormholes.js";
 import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
@@ -29,6 +30,7 @@ export function isSimulationPaused() {
 export function stepSim(dt) {
   state.time += dt;
   updatePlaceMemory(dt);
+  updateContractTimers(dt);
   // A hint lasts until the next sim tick, not just a display frame. This keeps
   // it visible when a display renders more than once between sim ticks.
   state.hud.prompt = "";

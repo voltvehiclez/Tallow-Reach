@@ -4,7 +4,7 @@
 // geometry, so an asset drop-in replaces — never duplicates — what is drawn.
 
 import * as THREE from "three";
-import { SHIPS } from "../data/ships.js";
+import { SHIPS, DEFAULT_SHIP, shipTypeOf } from "../data/ships.js";
 import { atmosphereRadius } from "../data/scenery.js";
 import { stationClass } from "../data/stations.js";
 import { R } from "../util/math.js";
@@ -79,19 +79,20 @@ export function fitShipModel(model, data) {
 
 /** The player's ship, including the per-class add-ons — or its `ship.<id>.glb`, if one is registered. */
 export function buildPlayerShip(id) {
-  const d = SHIPS[id];
-  const gltf = instantiateModel(`ship.${id}`);
+  const key = shipTypeOf(id) || DEFAULT_SHIP;
+  const d = SHIPS[key];
+  const gltf = instantiateModel(`ship.${key}`);
   if (gltf) {
     return fitShipModel(gltf, d);
   }
   const g = mkShip(d.col, d.sc, false);
-  if (id === "prospector") {
+  if (key === "prospector") {
     const drill = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 0.6, 2, 8), mm(0xb08a3c));
     drill.rotation.x = Math.PI / 2;
     drill.position.set(0, -1, -8);
     g.add(drill);
   }
-  if (id === "bulwark") {
+  if (key === "bulwark") {
     [-1.5, 1.5].forEach(x => {
       const plate = new THREE.Mesh(new THREE.BoxGeometry(1, 0.8, 2.4), mm(0x2a3036));
       plate.position.set(x, 1, -1);
@@ -114,12 +115,13 @@ const framingCache = new Map();
  * Cache per template pair; an early fallback measurement cannot mask later preload.
  */
 export function shipCameraScale(id) {
-  if (id === "wasp") return 1; // the owner's gold-standard view never changes
-  const source = modelTemplate(`ship.${id}`), wasp = modelTemplate("ship.wasp");
-  const cached = framingCache.get(id);
+  const key = shipTypeOf(id) || DEFAULT_SHIP;
+  if (key === "wasp") return 1; // the owner's gold-standard view never changes
+  const source = modelTemplate(`ship.${key}`), wasp = modelTemplate("ship.wasp");
+  const cached = framingCache.get(key);
   if (cached && cached.source === source && cached.wasp === wasp) return cached.scale;
-  const scale = modelFramingRatio(buildPlayerShip(id), buildPlayerShip("wasp")) * (SHIPS[id]?.cameraPadding ?? 1);
-  framingCache.set(id, { source, wasp, scale });
+  const scale = modelFramingRatio(buildPlayerShip(key), buildPlayerShip("wasp")) * (SHIPS[key]?.cameraPadding ?? 1);
+  framingCache.set(key, { source, wasp, scale });
   return scale;
 }
 

@@ -3,13 +3,13 @@ import { pickLockSurface } from "./render/target-picking.js";
 // Entry point. Wires the systems together and runs the frame loop.
 // Update order matches the prototype: input, flight, weapons, AI, projectiles, render.
 
-import { renderer, scene, camera, stars, showPlace, updateScenery, forgetPlace } from "./render/scene.js";
+import { renderer, scene, camera, stars, showPlace, stepScenery, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
 import { state, localPlayer, applySave, currentSave } from "./state/state.js";
 import { newSave } from "./state/profile.js";
 import { loadAutosave, saveAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
-import { SHIPS } from "./data/ships.js";
+import { shipDef } from "./data/ships.js";
 import { verticalFovForAspect } from "./data/camera.js";
 import { installInput, syncControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
@@ -25,12 +25,12 @@ import { restoreWormholes } from "./sim/wormholes.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
-import { setupMenu, openStationTab } from "./ui/menu.js";
+import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog } from "./ui/missionlog.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
-import { setupCargo, openCargo, closeCargo, isCargoOpen, canOpenCargo } from "./ui/cargo.js";
-import { setupCache, closeCache, isCacheOpen } from "./ui/cache.js";
+import { setupCargo, openCargo, closeCargo, dismissCargoLayer, isCargoOpen, canOpenCargo } from "./ui/cargo.js";
+import { setupCache, closeCache, dismissCacheLayer, isCacheOpen } from "./ui/cache.js";
 import { canPause, canOpenStarmap } from "./ui/overlays.js";
 import { updateMenuView, menuView, resizeMenuView } from "./render/menuview.js";
 import { updateOutfitting } from "./ui/outfitting.js";
@@ -207,14 +207,16 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
           setPause(true);
         }
       } else if (isCargoOpen()) {
-        // Esc just closes the hold; P closes it and opens the pause card.
+        // Esc dismisses an open cargo popover or held stack first, then closes the hold; P pauses.
+        if (!pauseKey && dismissCargoLayer()) break;
         closeCargo();
         if (name === "pause" && pauseKey) {
           if (state.ui.navigation) emit("navigation-toggle", false);
           setPause(true);
         }
       } else if (isCacheOpen()) {
-        // The same, for a canister: Esc puts the trade away, P puts it away and pauses.
+        // The same for a canister: Esc puts back a held stack or popover first, then closes.
+        if (!pauseKey && dismissCacheLayer()) break;
         closeCache();
         if (name === "pause" && pauseKey) {
           if (state.ui.navigation) emit("navigation-toggle", false);
@@ -223,6 +225,8 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       } else if (state.ui.navigation) {
         emit("navigation-toggle", false);
         if (pauseKey) setPause(true);
+      } else if (!pauseKey && closePanelPopovers({ returnHeld: true })) {
+        // Esc dismisses an open docked popover or returns a cursor-held stack before pausing.
       } else if (canPause()) setPause(!state.paused);
       break;
   }
@@ -241,8 +245,11 @@ addEventListener("resize", () => {
 
 let last = performance.now();
 const cameraAim = camera.position.clone();
-const simClock = createSimClock( undefined, {
-  beforeStep: snapshotSimPoses,
+const simClock = createSimClock(undefined, {
+  beforeStep: () => {
+    snapshotSimPoses();
+    stepScenery(SIM_DT);
+  },
   afterStep: snapRenderedPlayer,
 });
 
@@ -272,7 +279,6 @@ function drawFrame(now) {
 
   const P = localPlayer(),
     F = state.flight;
-  updateScenery(dt);
 
   updateAudio({
     time: state.time,
@@ -303,9 +309,10 @@ function drawFrame(now) {
     chaseView(dt, P, state.freeCam, renderPlayerPose(P, alpha));
     updateHud(dt);
   }
+  updateScenery(alpha);
   stars.position.copy(camera.position);
 
-  const offset = shakeOffset(P, dt, SHIPS[state.profile.ship].sc);
+  const offset = shakeOffset(P, dt, shipDef(state.profile.ship)?.sc ?? 1);
   if (offset) camera.position.add(offset);
   renderer.render(scene, camera);
   if (offset) camera.position.sub(offset);

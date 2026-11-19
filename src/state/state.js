@@ -132,25 +132,77 @@ export function captureWormholes() {
 }
 
 /**
+ * Build a save-safe profile/world pair that restores any cursor-held inventory
+ * stack back into its source container without cancelling an active live drag.
+ */
+function withHeldStackRestored(profile, world, held) {
+  if (!held || !held.id || !(held.n > 0)) return { profile, world };
+  const p = JSON.parse(JSON.stringify(profile));
+  const w = JSON.parse(JSON.stringify(world));
+  const putBack = (stock, slotMap, key, slotIdx) => {
+    if (!stock) return;
+    stock[held.id] = (stock[held.id] || 0) + held.n;
+    if (slotMap && Array.isArray(slotMap[key])) {
+      const list = slotMap[key];
+      const idx = Number.isInteger(slotIdx) && slotIdx >= 0 ? slotIdx : -1;
+      if (idx >= 0) {
+        while (list.length <= idx) list.push(null);
+        if (list[idx] === null) list[idx] = [held.id, held.n];
+        else if (Array.isArray(list[idx]) && list[idx][0] === held.id) list[idx][1] += held.n;
+        else list.push([held.id, held.n]);
+      } else {
+        list.push([held.id, held.n]);
+      }
+    }
+  };
+  if (held.kind === "station" && held.stationKey) {
+    w.stationStores = w.stationStores || {};
+    const stock = w.stationStores[held.stationKey] || (w.stationStores[held.stationKey] = {});
+    putBack(stock, w.stationSlots, held.stationKey, held.slot);
+  } else if (held.kind === "cache" && held.instanceId) {
+    const run = Array.isArray(w.instances) ? w.instances.find(r => r.id === held.instanceId) : null;
+    if (run) {
+      run.prize = run.prize || {};
+      run.prize[held.id] = (run.prize[held.id] || 0) + held.n;
+    } else {
+      const ship = held.ship && p.holds?.[held.ship] ? held.ship : p.ship;
+      if (ship) {
+        p.holds = p.holds || {};
+        putBack(p.holds[ship] || (p.holds[ship] = {}), p.holdSlots, ship, -1);
+      }
+    }
+  } else {
+    const ship = held.ship && p.holds?.[held.ship] ? held.ship : p.ship;
+    if (ship) {
+      p.holds = p.holds || {};
+      putBack(p.holds[ship] || (p.holds[ship] = {}), p.holdSlots, ship, held.slot);
+    }
+  }
+  return { profile: p, world: w };
+}
+
+/**
  * Snapshot the local profile and hosted world as a combined save object.
  * Captures the live resume point and every temporary run first, so every save
  * path — autosave, slot and export code — records where the pilot actually is,
- * including inside a rift.
+ * including inside a rift (and never drops a stack held on the cursor).
  */
 export function currentSave() {
   captureResume();
   captureInstances();
   captureWormholes();
   state.worldState.destination = state.ui.destination;
+  const { profile, world } = withHeldStackRestored(state.profile, state.worldState, state.ui.invHeld);
   return {
     v: SAVE_VERSION,
-    profile: state.profile,
-    world: state.worldState,
+    profile,
+    world,
   };
 }
 
 /** Install a validated `{ v, profile, world }` save into runtime state. */
 export function applySave(save) {
+  state.ui.invHeld = null;
   state.profile = save.profile;
   state.worldState = save.world;
   // Chart presentation belongs to this runtime session, not a loaded save.
@@ -250,8 +302,13 @@ export const state = {
     cache: null,       // the rift-cache trade (ui/cache.js); null while closed
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
-    tab: "m",          // m contracts, l mission log, h hangar, o outfitting, i inventory, p shop, b base, s saves
+    tab: "m",          // m contracts, l mission log, o outfitting, h hangar, i inventory, p shop, b base, s saves
     invShip: null,     // the ship whose hold the Inventory tab shows (null = the one being flown)
+    invView: "inv",    // docked Inventory sub-tab: "inv" (station & ship slots) or "assets" (My Assets)
+    cargoView: "hold", // in-flight I sub-tab: "hold" (ship slots) or "assets" (My Assets)
+    assetsOpen: {},    // expanded station pocket ids in My Assets (session-only)
+    invHeld: null,     // stack currently held on the cursor (session-only; restored on close/save)
+    shopOpen: {},      // expanded group/subgroup keys in the compact Shop tab (session-only)
     get board() {
       return state.worldState.board;
     },

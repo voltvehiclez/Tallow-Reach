@@ -8,6 +8,7 @@ export {
   CONTRACT,
   DESCRIBE,
   CONTRACTS_PER_BOARD,
+  CONTRACT_REFRESH_SECONDS,
   CONTRACT_MISSION_TEMPLATES,
   missionFromContract,
   describeMission,

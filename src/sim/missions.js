@@ -9,7 +9,7 @@ import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
 import { placeAt, placeDef, isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { state, profileOf } from "../state/state.js";
-import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stockOf, takeItem } from "./inventory.js";
+import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stationStock, stockOf, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos, stationAt } from "./places.js";
 
 let nextMissionId = 0;
@@ -1131,6 +1131,162 @@ function itemRequirementStep(steps = []) {
   return null;
 }
 
+/** Count `item` in `placeId`'s station storage (or the current station when unnamed). */
+function stationItemCount(placeId, item, profile = state.profile, world = state.worldState) {
+  if (placeId) return Math.max(0, Number(stationStock(world, placeId)[item]) || 0);
+  return countOf(STATION, item, profile, world);
+}
+
+/** Collect every item-bearing objective step with the top-level step index where it enters play. */
+function collectObjectiveItemSteps(mission) {
+  const steps = Array.isArray(mission?.steps) ? mission.steps : [];
+  const entries = [];
+  const visit = (step, topIndex, inParallel = false) => {
+    if (!step) return;
+    if (step.item && ["collect", "deliver", "mine"].includes(step.kind)) {
+      const count = mission?.type === "salvage"
+        ? Math.max(1, Math.floor(+mission.n || +step.count || 1))
+        : Math.max(1, Math.floor(+step.count || 1));
+      entries.push({ item: step.item, count, kind: step.kind, topIndex, inParallel });
+      return;
+    }
+    if (step.kind === "parallel") {
+      for (const child of step.steps || []) visit(child, topIndex, true);
+    }
+  };
+  steps.forEach((step, topIndex) => visit(step, topIndex, false));
+  if (!entries.length && mission?.type === "salvage") {
+    entries.push({
+      item: "salv",
+      count: Math.max(1, Math.floor(+mission.n || 1)),
+      kind: "collect",
+      topIndex: 0,
+      inParallel: false,
+    });
+  }
+  return entries;
+}
+
+/** Merge item-objective entries into live `{ item, name, required, available, station, hold, ... }` rows. */
+function mergeHandInEntries(entries, mission, profile = state.profile, world = state.worldState) {
+  if (!entries.length) return [];
+  const byItem = new Map();
+  for (const entry of entries) {
+    const prev = byItem.get(entry.item);
+    if (!prev) {
+      byItem.set(entry.item, { item: entry.item, required: entry.count, parallelIndex: entry.inParallel ? entry.topIndex : -1 });
+    } else if (entry.inParallel && prev.parallelIndex === entry.topIndex) {
+      prev.required += entry.count;
+    } else {
+      // Sequential steps naming the same item (e.g. mine then deliver) refer to the same load.
+      prev.required = Math.max(prev.required, entry.count);
+    }
+  }
+  const stationPlace = missionHandInStation(mission);
+  const hold = id => countOf(profile.ship, id, profile, world);
+  const rows = [];
+  for (const { item, required } of byItem.values()) {
+    const station = stationItemCount(stationPlace, item, profile, world);
+    const aboard = hold(item);
+    rows.push({
+      item,
+      name: itemName(item),
+      required,
+      available: station + aboard,
+      station,
+      hold: aboard,
+      scope: "hand-in",
+      stationPlace,
+    });
+  }
+  return rows;
+}
+
+/** All hand-in item requirements for a mission, measured against the hand-in station + active ship hold. */
+function handInRequirements(mission, profile = state.profile, world = state.worldState) {
+  return mergeHandInEntries(collectObjectiveItemSteps(mission), mission, profile, world);
+}
+
+/** Whether an earlier step already handed out `item`, so an upcoming `take-item` delivery is live. */
+function gaveItemEarlier(steps, beforeIndex, item) {
+  for (let i = 0; i < beforeIndex && i < steps.length; i++) {
+    for (const action of scriptActions(steps[i])) {
+      if (scriptKind(action) === "give-item" && action?.item === item) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Live inventory availability for every item a mission currently needs — covering
+ * mining, deliver, recovery/collect hand-ins, parallel item objectives, and
+ * `take-item` cargo deliveries (such as `loadCargo` -> `handOver`). Unreached
+ * late-story collect steps stay hidden until reached so dialogue is never spoiled.
+ */
+export function missionItemRequirements(mission, profile = state.profile, world = state.worldState) {
+  if (!mission || isMissionFailed(mission)) return [];
+  const done = missionObjectivesDone(mission);
+  const currentIndex = Math.max(0, Number(mission.step) || 0);
+  const activeObjectives = collectObjectiveItemSteps(mission)
+    .filter(entry => done || currentIndex >= entry.topIndex);
+  const rows = mergeHandInEntries(activeObjectives, mission, profile, world);
+  if (done) return rows;
+
+  const seen = new Set(rows.map(row => row.item));
+  const steps = Array.isArray(mission.steps) ? mission.steps : [];
+  for (let i = currentIndex; i < steps.length; i++) {
+    const step = steps[i];
+    for (const action of scriptActions(step)) {
+      if (scriptKind(action) !== "take-item" || !action?.item || seen.has(action.item)) continue;
+      const item = action.item;
+      const required = Math.max(1, Math.floor(+action.count || 1));
+      const forStation = action.target === "station";
+      const stationPlace = forStation ? stationPocket(step?.place || action.place) : null;
+      const station = stationItemCount(stationPlace, item, profile, world);
+      const hold = countOf(profile.ship, item, profile, world);
+      const available = forStation ? station : hold;
+      const active = i === currentIndex || gaveItemEarlier(steps, currentIndex, item) || available > 0;
+      if (!active) continue;
+      seen.add(item);
+      rows.push({
+        item,
+        name: itemName(item),
+        required,
+        available,
+        station,
+        hold,
+        scope: forStation ? "station" : "ship",
+        stationPlace,
+      });
+    }
+  }
+  return rows;
+}
+
+/** True when all remaining steps are plain mine/deliver objectives and required stock is already in hand. */
+function deliveryStockReady(mission, profile = state.profile, world = state.worldState) {
+  if (!mission || isMissionFailed(mission) || missionObjectivesDone(mission)) return false;
+  const steps = Array.isArray(mission.steps) ? mission.steps : [];
+  const remaining = steps.slice(Math.max(0, Number(mission.step) || 0));
+  if (!remaining.length) return false;
+  const plainItemStep = step => {
+    if (!step) return false;
+    if (step.kind === "parallel") {
+      return Array.isArray(step.steps) && step.steps.length > 0 && step.steps.every(plainItemStep);
+    }
+    return !!step.item && (step.kind === "mine" || step.kind === "deliver");
+  };
+  if (!remaining.every(plainItemStep)) return false;
+  const needs = handInRequirements(mission, profile, world);
+  return needs.length > 0 && needs.every(req => req.available >= req.required);
+}
+
+/** True when a mission's steps are done or a mine/deliver load is already stocked for hand-in. */
+export function missionReadyForHandIn(mission, profile = state.profile, world = state.worldState) {
+  return !!mission && !isMissionFailed(mission) &&
+    (missionObjectivesDone(mission) || deliveryStockReady(mission, profile, world));
+}
+
 /**
  * The items a mission must hand over before it is accomplished, or null. What
  * counts as a hand-in is data: any item-bearing `collect`, `mine` or `deliver`
@@ -1150,12 +1306,13 @@ export function missionHandIn(mission) {
   return { item, count };
 }
 
-export function missionDeliveryRequirement(mission, profile = state.profile) {
+export function missionDeliveryRequirement(mission, profile = state.profile, world = state.worldState) {
   const requirement = missionHandIn(mission);
   if (!requirement) return null;
-  const station = countOf(STATION, requirement.item, profile, state.worldState);
-  const hold = countOf(profile.ship, requirement.item, profile, state.worldState);
-  return { ...requirement, station, hold };
+  const stationPlace = missionHandInStation(mission);
+  const station = stationItemCount(stationPlace, requirement.item, profile, world);
+  const hold = countOf(profile.ship, requirement.item, profile, world);
+  return { ...requirement, station, hold, available: station + hold, stationPlace };
 }
 
 /** Ready to be paid at the station the pilot is at right now. */
@@ -1163,21 +1320,25 @@ export function canCompleteMissionHere(mission, profile = state.profile) {
   return canCollectMissionReward(mission, profile) && atMissionHandInStation(mission);
 }
 
-export function canCollectMissionReward(mission, profile = state.profile) {
-  if (!missionObjectivesDone(mission)) return false;
-  const requirement = missionDeliveryRequirement(mission, profile);
-  return !requirement || requirement.station + requirement.hold >= requirement.count;
+export function canCollectMissionReward(mission, profile = state.profile, world = state.worldState) {
+  if (!missionReadyForHandIn(mission, profile, world)) return false;
+  const needs = handInRequirements(mission, profile, world);
+  return needs.every(req => req.available >= req.required);
 }
 
-function consumeDelivery(mission, profile) {
-  const requirement = missionDeliveryRequirement(mission, profile);
-  if (!requirement) return null;
-  if (requirement.station + requirement.hold < requirement.count) {
-    return `Need ${requirement.count} ${itemName(requirement.item)} in this station or your ship.`;
+function consumeDelivery(mission, profile, world = state.worldState) {
+  const needs = handInRequirements(mission, profile, world);
+  if (!needs.length) return null;
+  for (const req of needs) {
+    if (req.available < req.required) {
+      return `Need ${req.required} ${itemName(req.item)} in this station or your ship.`;
+    }
   }
-  let left = requirement.count;
-  left -= takeItem(STATION, requirement.item, left, profile, state.worldState);
-  if (left > 0) takeItem(profile.ship, requirement.item, left, profile, state.worldState);
+  for (const req of needs) {
+    let left = req.required;
+    left -= takeItem(STATION, req.item, left, profile, world);
+    if (left > 0) takeItem(profile.ship, req.item, left, profile, world);
+  }
   return null;
 }
 
@@ -1185,8 +1346,8 @@ export function completeMission(indexOrId, profile = state.profile, player = pro
   if (player && (state.loading || player.loading || player.dead || player.warp || player.inCombat || player.docked !== true)) {
     return "Dock at a station to collect the reward.";
   }
-  const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(missionObjectivesDone);
-  if (!mission || !missionObjectivesDone(mission)) return undefined;
+  const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(m => missionReadyForHandIn(m, profile));
+  if (!mission || !missionReadyForHandIn(mission, profile)) return undefined;
   // One station takes the hand-in. Anywhere else pays nothing and says where to
   // go, so the reward can never be collected at the wrong counter.
   if (!atMissionHandInStation(mission)) return `Hand this in at ${missionHandInStationName(mission)}.`;

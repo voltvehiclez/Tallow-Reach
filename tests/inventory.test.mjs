@@ -269,9 +269,9 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(screens, /\["i",\s*"Inventory"\]/, "there is an Inventory tab");
   assert.match(screens, /i:\s*inventoryHtml/, "and a screen for it");
-  assert.match(screens, /class="inv-grid"/, "inventory contents render as a grid of item tiles");
+  assert.match(screens, /class="inv-grid/, "inventory contents render as a grid of item tiles");
   assert.match(screens, /class="inv-item"/, "each item is shown as an individual tile");
-  assert.match(screens, /while \(rows\.length < slots\)/, "empty slots keep each inventory grid at its slot minimum");
+  assert.match(screens, /Math\.max\(slots,/, "empty slots keep each inventory grid at its slot minimum");
   assert.match(screens, /slots = 25/, "a station grid stays 5×5");
   assert.match(screens, /slots: 35/, "the in-flight hold is 7×5");
   assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/, "each station inventory row has five slots");
@@ -279,28 +279,27 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(styles, /height: calc\(3 \* var\(--inv-row-height\) \+ 2 \* var\(--inv-row-gap\)\)/, "each hold grid keeps a three-row viewport");
   assert.match(styles, /height: calc\(5 \* var\(--inv-row-height\) \+ 4 \* var\(--inv-row-gap\)\)/, "and the flight hold shows five rows");
   assert.match(styles, /overflow-y: auto/, "each hold grid scrolls independently");
-  assert.match(screens, /Shift-click to move its whole stack/, "the Inventory explains stack movement");
-  assert.match(menu, /name === "mv" && e\.shiftKey/, "Shift-click moves the full stack");
+  assert.match(screens, /Shift-click transfers a whole stack/, "the Inventory explains stack movement");
+  assert.match(screens, /data-a="stackAll"/, "every inventory column offers Stack all");
+  assert.match(menu, /name === "invSlot"/, "slots support pickup, place, swap and Shift-click");
   assert.doesNotMatch(menu, /inv\.moveCargo|inv\.moveModule/, "one move handles goods and parts");
   assert.match(menu, /addEventListener\("contextmenu", onInventoryContextMenu\)/, "inventory tiles open a right-click menu");
+  assert.match(menu, /dataset\.a = "invTakeOpen"/, "the item context menu offers Take amount");
   assert.match(menu, /dataset\.a = "invSellOpen"/, "the item context menu opens the in-game Sell box");
   assert.match(menu, /className = "inv-sell-popover"/, "Sell uses a styled in-game popover");
-  assert.match(menu, /value="\$\{stack \|\| available\}"/, "the amount field defaults to the whole stack");
+  assert.match(menu, /Number\(stack\) \|\| available/, "the amount field defaults to the clicked stack");
   assert.doesNotMatch(menu, /window\.prompt/, "selling does not use a browser prompt");
   assert.match(economy, /sellInventoryItem/, "inventory selling uses an economy action");
-  assert.match(economy, /takeItem\(where, id, count/, "only the requested amount is removed");
+  assert.match(economy, /takeItemFromSlot\(where, slotIndex, id, count|takeItem\(where, id, count/, "only the requested amount is removed");
   assert.doesNotMatch(screens, /ownsModule/, "the shop no longer hides Buy once you own one");
   assert.match(screens, /&times;\$\{n\}/, "the picker shows how many of a part there are");
   for (const action of ["invPrev", "invNext"]) {
     assert.match(menu, new RegExp(`\\b${action}\\(`), `menu.js has the ${action} action`);
     assert.match(screens, new RegExp(`data-a="${action}`), `a button in screens.js uses ${action}`);
   }
-  // A move tile carries its own panel's action name, which is `mv` unless the panel says otherwise:
-  // the station's Inventory tab takes the default and the rift-cache trade (ui/cache.js) passes `cmv`,
-  // so one tile serves both and each panel's clicks stay its own business.
-  assert.match(menu, /\bmv\(/, "menu.js has the mv action");
-  assert.match(screens, /action = "mv"/, "a tile in screens.js moves with mv unless its panel names another");
-  assert.match(screens, /data-a="\$\{action\}"/, "and the tile really carries that action");
+  // Every slot across Station, Flight and Rift Cache shares the `invSlot` action and `stackAll`.
+  assert.match(screens, /data-a="invSlot"/, "every slot in screens.js carries the shared invSlot action");
+  assert.match(screens, /data-slot="\$\{slot\}"/, "and identifies its exact slot index");
   assert.match(economy, /buyInto\(id, row\.price, STATION, n/, "the shop buys through the inventory (no Owned limit)");
   assert.doesNotMatch(economy, /Store your cargo first/, "ships keep their own cargo, so switching is never refused");
 

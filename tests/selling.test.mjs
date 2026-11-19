@@ -38,9 +38,11 @@ test("every item that can be sold is worth something — parts included", () => 
     if (!canSell(id)) continue;
     assert.ok(Number.isInteger(itemValue(id)) && itemValue(id) > 0, `${id}: a sellable item must be worth whole credits`);
   }
-  // Spare parts sell at 60% of the shop price, never below 1 credit.
+  // Spare parts and goods sell at 60% of the shop price, never below 1 credit;
+  // ship rows are stored in Outfitting rather than Inventory.
   for (const shop of Object.values(SHOPS)) {
     for (const row of shop.stock || []) {
+      if (row.kind === "ship") continue;
       const expected = Math.max(1, Math.floor(row.price * 0.6));
       assert.equal(canSell(row.id), true, `${row.id} is sold by a shop, so a spare one must be sellable`);
       assert.ok(itemValue(row.id) >= 1, `${row.id}: at least 1 credit, or it could never be sold`);

@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { SHIPS, DEFAULT_SHIP, FLIGHT } from "../src/data/ships.js";
+import { SHIPS, DEFAULT_SHIP, FLIGHT, isShipType, shipBonuses } from "../src/data/ships.js";
 import {
   ITEMS, ITEM_IDS, ITEM_CATEGORIES, DEFAULT_ROCK_COLOR, canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol, rockColor,
 } from "../src/data/items.js";
@@ -56,22 +56,33 @@ test("every ship has all the fields the game reads", () => {
   }
 });
 
-test("every hull is the same ship apart from its hold (m³)", () => {
-  // The Test Ship is the owner's deliberate exception (2026-11-15): 100× Hull
-  // HP, 10× damage, 1 cr — how a proof-of-concept hull is supposed to differ.
-  const [first, ...rest] = Object.values(SHIPS).filter(s => s.n !== "Test Ship");
-  for (const s of rest) {
-    for (const f of ["hull", "dmg", "mine", "sc", "price"]) {
-      assert.equal(s[f], first[f], `every hull ships the same ${f} — only the hold differs`);
-    }
-  }
-  const testship = Object.entries(SHIPS).find(([id]) => id === "testship");
-  assert.ok(testship, "the Test Ship exists");
-  assert.equal(testship[1].price, 1, "the Test Ship costs 1 credit");
-  assert.equal(testship[1].dmg, 10, "the Test Ship does 10× damage");
-  assert.equal(testship[1].hpMul, 100, "the Test Ship has 100× Hull HP");
+test("each hull carries its intended hold, base Hull HP multiplier and unique bonuses", () => {
+  // Baseline hulls share the same 1× Hull HP multiplier, scale and price; Wasp has no bonuses,
+  // Prospector has 2× mining speed, Bulwark has 1.5× all-weapon damage, and Test Ship keeps 100× HP + 10× dmg.
+  assert.equal(SHIPS.wasp.cargo, 20);
+  assert.equal(SHIPS.wasp.dmg, 1);
+  assert.equal(SHIPS.wasp.mine, 1);
+  assert.equal(SHIPS.wasp.hpMul, 1);
+  assert.deepEqual(shipBonuses("wasp"), []);
+
+  assert.equal(SHIPS.prospector.cargo, 70);
+  assert.equal(SHIPS.prospector.dmg, 1);
+  assert.equal(SHIPS.prospector.mine, 2, "Prospector has a 2× bonus to mining speed");
+  assert.equal(SHIPS.prospector.hpMul, SHIPS.wasp.hpMul, "Prospector has the same Hull HP as the Wasp");
+  assert.deepEqual(shipBonuses("prospector"), ["2× mining speed"]);
+
+  assert.equal(SHIPS.bulwark.cargo, 30);
+  assert.equal(SHIPS.bulwark.dmg, 1.5, "Bulwark has a 1.5× damage bonus on all weapons");
+  assert.equal(SHIPS.bulwark.mine, 1);
+  assert.equal(SHIPS.bulwark.hpMul, SHIPS.wasp.hpMul, "Bulwark has the same base Hull HP as the Wasp");
+  assert.deepEqual(shipBonuses("bulwark"), ["1.5× damage (all weapons)"]);
+
+  assert.ok(SHIPS.testship, "the Test Ship exists");
+  assert.equal(SHIPS.testship.price, 1, "the Test Ship costs 1 credit");
+  assert.equal(SHIPS.testship.dmg, 10, "the Test Ship does 10× damage");
+  assert.equal(SHIPS.testship.hpMul, 100, "the Test Ship has 100× Hull HP");
   const holds = Object.values(SHIPS).map(s => s.cargo);
-  assert.ok(new Set(holds).size > 1, "the hulls differ in hold size (that is the point of them)");
+  assert.ok(new Set(holds).size > 1, "the hulls differ in hold size");
 });
 
 test("every item is complete, and the catalogue agrees with the module table", () => {
@@ -124,7 +135,11 @@ test("weapon data is complete", () => {
   assert.ok(isShop(stationAt(DEFAULT_PLACE).shop), `the outpost's shop (${stationAt(DEFAULT_PLACE).shop}) must exist in SHOPS`);
   for (const [id, shop] of Object.entries(SHOPS)) {
     for (const row of shop.stock || []) {
-      assert.ok(isItem(row.id), `${id} / ${row.id}: not in data/items.js`);
+      if (row.kind === "ship") {
+        assert.ok(isShipType(row.id), `${id} / ${row.id}: ship row not in data/ships.js`);
+      } else {
+        assert.ok(isItem(row.id), `${id} / ${row.id}: not in data/items.js`);
+      }
       assert.ok(isNum(row.price) && row.price > 0, `${id} / ${row.id}: price`);
     }
   }
@@ -139,7 +154,7 @@ test("a spare module sells for 60% of what a shop charges for it", () => {
   // from leaving the sell price behind.
   for (const [shopId, shop] of Object.entries(SHOPS)) {
     for (const row of shop.stock || []) {
-      if (!isModule(row.id)) continue;
+      if (row.kind === "ship" || !isModule(row.id)) continue;
       const expected = Math.max(1, Math.floor(row.price * 0.6));
       assert.equal(
         itemValue(row.id),
@@ -804,12 +819,12 @@ test("any throttle setting off zero runs the thrusters, and the boost adds its s
   assert.equal(driveDraw(PARKED, 1, true), 0, "no thrusters, nothing to pay for");
 });
 
-test("a ship with empty cells and no powerplant has no power to fly on", () => {
+test("nothing that uses MJ runs when the power tank holds 0 MJ", () => {
   assert.equal(hasPower(0, { stored: 0, gen: 0 }), true, "asking for nothing always works");
-  assert.equal(hasPower(2, { stored: 0, gen: 0 }), false, "empty cells and no plant: no thrust");
-  assert.equal(hasPower(2, { stored: 0, gen: 2 }), true, "a plant that covers the draw is enough");
-  assert.equal(hasPower(2, { stored: 0, gen: 1.5 }), false, "a plant that cannot cover it is not");
-  assert.equal(hasPower(2, { stored: 0.1, gen: 0 }), true, "anything left in the cells will do");
+  assert.equal(hasPower(2, { stored: 0, gen: 0 }), false, "empty cells and no plant: no power");
+  assert.equal(hasPower(2, { stored: 0, gen: 10 }), false, "0 MJ stored blocks power use even with a fitted plant");
+  assert.equal(hasPower(2, { stored: 0, gen: 1.5 }), false, "0 MJ stored blocks power use");
+  assert.equal(hasPower(2, { stored: 0.1, gen: 0 }), true, "stored MJ in the cells supplies demand");
 });
 
 test("every hull flies exactly like the old Wasp on the basic thrusters", () => {

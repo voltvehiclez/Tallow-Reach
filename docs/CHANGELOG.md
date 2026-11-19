@@ -20,6 +20,82 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-18: Roadmap slice 3 — My Assets, Minecraft-style inventory slots, Mining beams subgroup and 0 MJ power fix
+
+Slice 2 playtest passed. Fixed the `0 MJ` power bug across every MJ consumer (`hasPower`
+now requires `p.stored > 0` with no bare-powerplant fallback; unequipped or emptied power
+cells disable thrusters, strafe, lift, turning, boost, shields, cannons and mining beam
+while reporting `Using 0 of Y MJ/s`; L31). Added a dedicated collapsible `Mining beams`
+sub-category under `Shop → Modules → Primary weapons` alongside `Cannons` and `Missiles`.
+Implemented Slice 3: added the `My Assets` sub-tab (`listPlayerAssets`, `assetsHtml`) in
+both docked Station Inventory and in-flight Ship Inventory (`I`), listing every station
+where the pilot has stored items or hangar ships and expanding compact N-menu-style
+1-line rows on click; and upgraded all inventory UIs (docked Station & Ship hold,
+in-flight `I` Ship hold, and in-flight `R` Rift Cache) to Minecraft-style slot
+manipulation (`ui/inventory-ui.js`, `slotsAt`, `pickupSlot`, `placeHeldStack`,
+`takeFromSlot`, `shiftMoveSlot`, `stackAll`, `returnHeldStack`) — left-click picks up a
+stack to place, merge or swap into any slot, right-click while holding places 1 item,
+right-click on a stack offers `Take amount` (plus slot-aware `Sell`/`Discard` and `Use`),
+Shift+left-click moves the whole stack across open inventories, `Stack all` consolidates
+split stacks and empty gaps on every inventory header, and Esc/close/save restores any
+held stack without item loss. Bumped `SAVE_VERSION = 24` (`profile.holdSlots`,
+`world.stationSlots`) with clean migration from v1–v23. Files:
+`src/data/shops.js`, `src/state/{profile,state}.js`,
+`src/sim/{power,player,shield,weapons,inventory,economy,session,instances}.js`,
+`src/ui/{inventory-ui,screens,menu,cargo,cache}.js`, `src/{main.js,styles.css}`,
+`tests/{slice3-assets-inventory-power,slice2-shop-ships,content,shield,inventory,inventory-discard,ui-cargo,ui-cache}.test.mjs`.
+Rebuild generated; owner Slice 3 playtest pending.
+
+## 2026-11-18: Roadmap slice 2 — compact Shop, Hangar stored-ship list & context menu, Ship details/bonuses and unblurred cargo overlays
+
+Slice 1 playtest passed; includes owner's Slice 2 follow-ups. Rebuilt the Shop tab into a
+compact single-line collapsible tree (`SHOP_GROUPS`: `Ships`, `Modules` with 1-line
+subgroups matching every `MODULE_GROUPS` group plus `Cannons` and `Missiles` sub-groups
+under `Primary weapons`, `Consumables`, `Ores`, `Loot`) with a right-side `Buy` button
+opening a bounded `Buy amount` popover (`shopBuyHtml` / `shopMaxBuy`) anchored so the
+popup's right-aligned `Buy` button lands directly over the cursor (`placePopoverButtonOverCursor`,
+flipping at the bottom edge); `Ores`, `Loot` and primary `Missiles` show none in stock
+at Meridian today and populate automatically for future items/weapons. Ships are bought in
+Shop (never in Inventory) and stored per station in the restored **Hangar** tab's compact
+one-line `.hangar-ships` list (removed from Outfitting): single left-click never auto-
+equips, double-click flies the ship, and right-click offers `Show info`, `Fly ship`, and
+`Sell` (`canSellShip` / `sellShip` at 60% resale via `shipSellValue`, moving cargo and
+non-stock fitted upgrades into station storage and refusing when active or short on
+storage space). Supports duplicate hulls (`wasp#2`, `prospector#2`) across stations via `profile.shipPlaces` in `SAVE_VERSION = 23` (clean v1–v22 migration), keeps
+each station's `world.base.hangar + 1` berth cap, and lends a local Wasp on death without
+moving remote ships. Updated hull bonuses (Wasp none, Prospector `2×` mining speed with
+Wasp Hull HP, Bulwark `1.5×` damage on all weapons, Test Ship unchanged) with right-click
+`Ship details` (`shipBaseStats` / `shipDetailsHtml`) in Shop, Outfitting and Hangar.
+Removed background blur from flight inventory (`#cargo`), rift cache (`#cache`) and
+shared `.cargo-overlay` for all future cargo transfers. Files:
+`src/data/{ships,outfitting,mounts,shops}.js`, `src/state/{profile,state}.js`,
+`src/sim/{hull,inventory,fitting,combat,weapons,missile,pilot,session,economy}.js`,
+`src/render/{models,shipviewer,views}.js`,
+`src/ui/{hud,notice,outfitting,cargo,cache,screens,menu}.js`, `src/main.js`,
+`src/styles.css`, `tests/slice2-shop-ships.test.mjs`. Build regenerated; owner playtest
+pending before Slice 3.
+
+## 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers
+
+Moving scenery (`stepScenery` in `src/render/scene.js`) now advances per 60 Hz sim tick
+inside `simClock`'s `beforeStep` (with `updateScenery(alpha)` interpolating drawn angles
+and moving the sky after the camera), scaled movers compute true world-metre push-out
+(`src/sim/colliders.js`), and sub-0.5 m/s pushes never round to `0 m/s` (`displayedSpeed`
+in `src/sim/flight-instruments.js`), so being pushed by Meridian's turning arms or any
+station mover always shows true speed across all refresh rates. Station Mission log and
+active mission rows now report exact live available inventory counts for mining, deliver,
+recovery, cargo hand-over and reached story item objectives (`missionItemRequirements` in
+`src/sim/missions.js`, scoped to the mission's hand-in station plus active ship hold),
+and allow immediate hand-in when a mine/deliver load is already stocked. Contract boards
+now remove only the accepted offer, keep empty boards empty, and enforce an independent
+10-minute (`CONTRACT_REFRESH_SECONDS = 600`) unpaused play-time cooldown per station
+saved in `world.boardTimers` (`SAVE_VERSION = 22` in `src/state/profile.js`, backward-
+compatible with all v1–v21 saves). Files: `src/main.js`, `src/render/scene.js`,
+`src/sim/{colliders,flight-instruments,player,places,session,missions,contracts,step}.js`,
+`src/data/{contracts,missions/contracts}.js`, `src/state/profile.js`,
+`src/ui/{hud,missionlog,screens,menu}.js`, `tests/slice1-speed-missions-contracts.test.mjs`.
+Build regenerated; owner playtest pending before Slice 2.
+
 ## 2026-11-18: Nebula fill 0.175, unified label/lock colours and N-tab lock-square icons
 
 Raised default `NEBULA_FILL.intensity` from `0.125` to `0.175` in `src/data/lighting.js`
@@ -113,36 +189,11 @@ guards. Explicitly centre all status tracks, labels and readouts on their frames
 without changing 28px widths, text sizes or frame positions. Save v21 unchanged;
 build regenerated. Owner visual check pending.
 
-## 2026-11-16: Remove duplicate weapon-selection messages
-
-Removed centre-screen equipped/empty messages from both bank selectors; the slot HUD
-already names each selected module. Other gameplay messages remain unchanged. Inset
-PRIMARY/SECONDARY headings 2px toward the middle without moving the grey weapon names.
-Added regression assertions; save v21 unchanged; build regenerated. Visual check pending.
-
-## 2026-11-16: Signed throttle and final HUD alignment tweaks
-
-Weapon names move up 2px without moving PRIMARY/SECONDARY. Throttle/speed box moves
-up 18px. Fixed reverse throttle disappearing behind a resource-pool clamp: a dedicated
-signed helper preserves negative text, uses magnitude for fill length, and reverses
-fill origin. Reverse uses the same blue hue in diagonal stripes, forward stays solid.
-All four stat columns now share 28px width, with centred labels/readings. Power usage
-centres beneath the combined Power/Boost pair. Power MJ readout matches the blue meter;
-usage text retains its muted grey. Added signed/boundary and layout tests.
-Save v21 unchanged; build regenerated; owner visual playtest pending.
-
-## 2026-11-16: Framed status columns and integrated throttle/speed
-
-Reduced weapon-name reserved height to one line and heading/name gaps to 1px so
-labels sit closer to slot boxes. Added square grey frames to the status columns.
-Retained existing label-edge positions; tracks now match their labels' intrinsic
-widths, centred underneath, retaining the 8px inter-track gap. Current/percentage
-readouts centre on their columns. Speed now sits inside the wider throttle rectangle
-beside the throttle label. No speed-physics changes (pushed-speed fix remains pending
-in slice 2). Layout tests updated; save v21; build regenerated; visual playtest pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-16: Remove duplicate weapon-selection messages
+- 2026-11-16: Signed throttle and final HUD alignment tweaks
+- 2026-11-16: Framed status columns and integrated throttle/speed
 - 2026-11-16: Square weapon boxes and slot-height divider
 - 2026-11-16: Monochrome weapon strip and top-left location
 - 2026-11-16: Compact weapon strip between the HUD columns

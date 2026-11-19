@@ -5,7 +5,7 @@
 
 import { V, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
-import { SHIPS, DEFAULT_SHIP } from "../data/ships.js";
+import { DEFAULT_SHIP, nextShipId, shipName } from "../data/ships.js";
 import { DEFAULT_PLACE, isPocket, isInstancePlace, isWormholePlace } from "../data/places.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
 import { state, msg, profileOf, currentSave, placeWorld } from "../state/state.js";
@@ -166,6 +166,10 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   // own pocket so its named shop can be used.
   const dockedAt = stationAt(placeId) ? placeId : DEFAULT_PLACE;
   if (local) enterPlace(dockedAt, P);
+  // Park the flown ship in this station's hangar so Outfitting and Inventory scope to it.
+  if (profile.ships.includes(profile.ship)) {
+    (profile.shipPlaces || (profile.shipPlaces = {}))[profile.ship] = dockedAt;
+  }
   // The board the pilot walks up to is this station's own (home keeps `board`).
   ensureBoard(world, dockedAt);
   if (local) saveAutosave(currentSave());
@@ -237,6 +241,9 @@ export function resumeFromSave(P = state.player, profile = profileOf(P)) {
   } else {
     P.docked = true;
     P.pos.set(...station.pos);
+    if (profile.ships.includes(profile.ship)) {
+      (profile.shipPlaces || (profile.shipPlaces = {}))[profile.ship] = placeId;
+    }
     emit("docked", { player: P });
   }
   populateInstances();   // the pilot is standing in the run now, so it can be filled in
@@ -250,7 +257,8 @@ export function tryDock(P = state.player, profile = profileOf(P), world = state.
   const station = stationAt(P.place || state.place);
   if (!station) return false;   // no station in this pocket
   const at = V(...station.pos);
-  if (P.pos.distanceTo(at) < (station.dockRange ?? DOCK_RANGE) && P.v.length() < (station.dockSpeed ?? DOCK_MAX_SPEED)) {
+  const dockSpd = Math.max(P.v.length(), P.measuredSpeed || 0);
+  if (P.pos.distanceTo(at) < (station.dockRange ?? DOCK_RANGE) && dockSpd < (station.dockSpeed ?? DOCK_MAX_SPEED)) {
     dock(P, profile, world);
     return true;
   }
@@ -272,7 +280,7 @@ export function die() {
   const fee = Math.min(S.cr, RECOVERY_FEE);
   boom(state.player.pos, 30, 0xffa050);
 
-  let text = `Your ${SHIPS[lost].n} was destroyed and is gone for good. Cargo lost, ${fee} cr recovery fee.`;
+  let text = `Your ${shipName(lost)} was destroyed and is gone for good. Cargo lost, ${fee} cr recovery fee.`;
   // What ran out of time says why first (`onExpire.message` in data/instances.js), then the ordinary
   // sentence follows, so the notice is one line of lore and one line of consequences.
   if (state.deathNotice) {
@@ -280,30 +288,35 @@ export function die() {
     state.deathNotice = null;
   }
   delete S.holds[lost];      // its ore and any spare modules it carried go with it
+  if (S.holdSlots) delete S.holdSlots[lost];
   S.cr -= fee;
   S.ships = S.ships.filter(id => id !== lost);
   delete S.hp[lost];
   delete S.loadout[lost];
+  if (S.shipPlaces) delete S.shipPlaces[lost];
 
-  if (S.ships.length) {
-    S.ship = S.ships[0];
-    // A ship you fall back to must have its own hold, fit and hull fraction;
-    // fill in anything a very old save left out rather than flying half a ship.
-    ensureShipRecords(S, S.ship);
+  const home = homeStationPlace(S);
+  S.homeStation = home;
+  // Fall back to a ship parked at the home station (or an unplaced legacy ship).
+  // Ships explicitly parked at other stations stay safely parked where they were left,
+  // and if the home hangar is empty the station lends a spare Wasp here.
+  const atHome = S.ships.filter(id => !S.shipPlaces?.[id] || S.shipPlaces[id] === home);
+  if (atHome.length) {
+    S.ship = atHome[0];
+    ensureShipRecords(S, S.ship, home);
+    S.shipPlaces[S.ship] = home;
     setShip(S.ship);
   } else {
-    S.ships = [DEFAULT_SHIP];
-    S.ship = DEFAULT_SHIP;
+    const lent = nextShipId(DEFAULT_SHIP, S.ships);
+    S.ships.push(lent);
+    S.ship = lent;
     // The lent Wasp is a complete ship: empty hold, no damage, stock modules.
-    // Without this it had no bays, so it could not be fitted or flown at all.
-    addShipRecords(S, DEFAULT_SHIP);
-    setShip(DEFAULT_SHIP);
+    addShipRecords(S, lent, home);
+    setShip(lent);
     text += " The station lent you a spare Wasp.";
   }
 
   clearTransient(state.player.place || state.place);
-  const home = homeStationPlace(S);
-  S.homeStation = home;
   enterPlace(home, state.player);
   dock();
   emit("died", text);

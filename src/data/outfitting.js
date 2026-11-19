@@ -5,6 +5,8 @@
 // This file only describes bays. What is fitted in them is saved data
 // (profile.loadout), and the modules themselves are in data/modules.js.
 
+import { shipTypeOf } from "./ships.js";
+
 //   k   short id, used by SHIP_LAYOUTS, module data and saves
 //   n   name shown above the bays
 //   d   one line: what fitting this group changes
@@ -35,8 +37,8 @@ export const SHIP_LAYOUTS = {
   testship: { power: 1, cell: 1, thruster: 1, shield: 1, primary: 2, secondary: 1, hull: 1 },
 };
 
-/** The bay counts for hull `shipId`, falling back to the Wasp. */
-export const layoutFor = shipId => SHIP_LAYOUTS[shipId] || SHIP_LAYOUTS.wasp;
+/** The bay counts for hull or ship instance `shipId`, falling back to the Wasp. */
+export const layoutFor = shipId => SHIP_LAYOUTS[shipTypeOf(shipId) || shipId] || SHIP_LAYOUTS.wasp;
 
 /** How many bays group `g` has on hull `shipId`. */
 export const slotsFor = (g, shipId) => layoutFor(shipId)[g.k] || 0;

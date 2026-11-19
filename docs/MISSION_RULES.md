@@ -1,6 +1,6 @@
 # MISSION RULES: read before writing or changing any mission, dialogue or trigger
 
-*Last checked: 2026-11-13.*
+*Last checked: 2026-11-18.*
 
 Missions are a story the player is living in. Every beat must pass one test:
 
@@ -50,10 +50,10 @@ the sentence for any `collect`/`mine`/`deliver` objective with an item. Contract
 `data/missions/contracts.js` (`{station}` is filled in with the mission's hand-in station); Border Signal supplies
 `"Return to {station} with the beacon."` and names its station (`handIn.station: "reach"`).
 
-**Delivery contracts say where the cargo goes, not how much is aboard.** `mine` is flagged `delivery: true`, so
-`missionNextText` shows the hand-in sentence from the start ("Deliver the Ferrite to Meridian Station.") instead of a
-step count, and `handInNextText` never appends "You have 2 of 3." — the tally saw only the hold while the station
-store may hold the rest. Hunt contracts keep their count: kills cannot be banked.
+**Delivery guidance and live log counts.** `mine` uses `delivery: true`, so `missionNextText` shows `"Deliver the Ferrite
+to Meridian Station."`; the Mission log reports exact live stock (`missionItemRequirements`: hand-in station + ship hold,
+or `take-item` target) and unlocks hand-in when stocked. Contract boards drop only accepted offers and refresh every
+600 s of unpaused play time (`world.boardTimers`, save v22).
 
 **A recovery (`salvage`) contract owns the crates it puts in space.** Launching spawns exactly `n` crates, each tagged
 with the mission id and a crate `slot` (`session.js` `ensureSalvageCrates`). Only those move its count — another

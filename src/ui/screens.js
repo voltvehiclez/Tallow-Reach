@@ -2,7 +2,7 @@ import { canSetHomeStation, homeStationPlace } from "../sim/session.js";
 // HTML for each outpost screen. These are pure functions of the game state,
 // so the look of a screen can be changed without touching game logic.
 
-import { SHIPS } from "../data/ships.js";
+import { shipDef, shipLabel, shipTypeOf } from "../data/ships.js";
 import { ITEM_IDS, canSell, isItem, isModule, itemCat, itemName, itemUse, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
@@ -11,22 +11,26 @@ import { MODULE_GROUPS, slotsFor, APPEARANCE_SLOTS } from "../data/outfitting.js
 import { MODULES } from "../data/modules.js";
 import { storedFor, fittedAt, isBayGroup } from "../sim/fitting.js";
 import {
-  CACHE, STATION, capacityOf, freeOf, itemsAt, loadOf, stockOf, valueOf,
+  CACHE, STATION, capacityOf, freeOf, loadOf, slotsAt, stockOf, valueOf,
 } from "../sim/inventory.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
-import { effectiveHullOf } from "../sim/hull.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
-import { holdLoad, storedUnits, storageCap, repairCost, shopList } from "../sim/economy.js";
+import {
+  holdLoad, storedUnits, storageCap, repairCost, hangarCap, listPlayerAssets, localShips, shipBaseStats, shopCatalogue,
+} from "../sim/economy.js";
 import {
   describe,
   activeMissions,
   boardAt,
+  boardRefreshRemaining,
+  formatBoardCooldown,
   atMissionHandInStation,
   canCollectMissionReward,
   canCompleteMissionHere,
   missionHandInStationName,
   missionHandIn,
+  missionItemRequirements,
   missionNextText,
   missionObjectivesDone,
   missionProgress,
@@ -35,6 +39,12 @@ import { placeAt, DEFAULT_PLACE, nextPocket } from "../data/places.js";
 import { term, terms } from "../data/terms.js";
 import { stationAt } from "../sim/places.js";
 import { missionLogHtml } from "./missionlog.js";
+
+const esc = text => String(text ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
 
 export const TABS = [
   ["m", "Contracts"],
@@ -97,11 +107,13 @@ export function outpostHtml(ui) {
 
   const isHome = homeStationPlace(S) === state.place;
   h += `<div class="home-station"><button data-a="home" ${isHome || !canSetHomeStation(state.place) ? "disabled" : ""}>${isHome ? "Home station" : "Set Home Station"}</button><small>Recover here after death.</small></div>`;
-  const render = SCREENS[ui.tab];
+  const activeTab = SCREENS[ui.tab] ? ui.tab : "m";
+  const render = SCREENS[activeTab];
   if (render) h += render(ui);
 
-  const own = S.ships.includes(S.ship);
-  h += `<button class="go" data-a="go" ${own ? "" : "disabled"}>${own ? "Launch" : "Buy a ship in the Hangar to launch"}</button>`;
+  const local = localShips(S, state.worldState);
+  const own = local.includes(S.ship);
+  h += `<button class="go" data-a="go" ${own ? "" : "disabled"}>${own ? "Launch" : "Buy a ship in the Shop to launch"}</button>`;
   return h;
 }
 
@@ -115,15 +127,17 @@ function contractsHtml() {
         const requirement = missionHandIn(m),
           // The reward is only collected at the mission's own station, so the
           // row offers the button there and says where to go everywhere else.
-          cargoReady = missionObjectivesDone(m) && canCollectMissionReward(m),
+          cargoReady = canCollectMissionReward(m),
           here = atMissionHandInStation(m),
           ready = cargoReady && here,
           station = missionHandInStationName(m),
+          items = missionItemRequirements(m),
+          itemText = items.length ? `${items.map(r => `${r.name}: ${r.available} of ${r.required} available`).join(", ")}. ` : "",
           progress = m.type === "hunt" ? missionProgress(m) : null,
           // With every step done the row says what is still owed (the hand-in,
           // or the reward trip) instead of leaving a bare Abandon button.
-          owed = missionObjectivesDone(m) ? `${missionNextText(m)} ` : "",
-          detail = `${owed}${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
+          owed = missionObjectivesDone(m) || cargoReady ? `${missionNextText(m)} ` : "",
+          detail = `${owed}${itemText}${progress ? `Progress ${progress.done}/${progress.total}. ` : ""}Reward ${m.rewards?.credits ?? m.r ?? 0} cr.`;
         return `<div class="row"><div>${describe(m)}<small>${detail}</small></div>${
           ready
             ? `<button data-a="done" data-b="${m.id}">${requirement ? "Hand in cargo" : "Collect reward"}</button>`
@@ -133,40 +147,25 @@ function contractsHtml() {
         }</div>`;
       }).join("")
     : `<p>No active missions here.</p>`;
+  const offers = boardAt(state.place);
+  const wait = boardRefreshRemaining(state.place);
+  const cooling = wait > 0;
+  const waitText = formatBoardCooldown(wait);
+  const offersHtml = offers.length
+    ? offers.map(
+        (c, i) =>
+          `<div class="row"><div>${describe(c)}<small>Threat ${c.tier} of 3. Reward ${c.r} cr.</small></div><button data-a="acc" data-b="${i}">Accept</button></div>`
+      ).join("")
+    : `<p>No contracts available at this station right now.${cooling ? ` Wait ${waitText} to refresh, or visit another station.` : " Press Refresh for new contracts."}</p>`;
+  const refreshNote = cooling
+    ? `Next refresh available in ${waitText} of play time.`
+    : `This station's board can be refreshed now.`;
+  const refreshLabel = cooling ? `Refresh (${waitText})` : "Refresh";
   return (
     activeHtml +
     `<h2>Contract board</h2>` +
-    boardAt(state.place)
-      .map(
-        (c, i) =>
-          `<div class="row"><div>${describe(c)}<small>Threat ${c.tier} of 3. Reward ${c.r} cr.</small></div><button data-a="acc" data-b="${i}">Accept</button></div>`
-      )
-      .join("") +
-    `<div class="row"><small>This station's board reshuffles when you refresh it.</small><button data-a="ref">Refresh</button></div>`
-  );
-}
-
-function hangarHtml() {
-  const S = state.profile,
-    W = state.worldState;
-
-  return (
-    `<h2>Hangar</h2><div class="sub">Repairs and missile restock live in the Outfitting tab now.</div>` +
-    Object.keys(SHIPS)
-      .map(id => {
-        const s = SHIPS[id],
-          owned = S.ships.includes(id),
-          hp = effectiveHullOf((S.loadout || {})[id], id);
-        const action = owned
-          ? S.ship === id
-            ? `<span class="ok">In use</span>`
-            : `<button data-a="sel" data-b="${id}">Fly</button>`
-          : `<button data-a="buy" data-b="${id}" ${
-              S.cr < s.price || S.ships.length >= W.base.hangar + 1 ? "disabled" : ""
-            }>Buy ${s.price} cr</button>`;
-        return `<div class="row"><div>${s.n}<small>${s.d} Hull HP ${hp}, hold ${s.cargo} m³.</small></div>${action}</div>`;
-      })
-      .join("")
+    offersHtml +
+    `<div class="row"><small>${refreshNote}</small><button data-a="ref" ${cooling ? "disabled" : ""}>${refreshLabel}</button></div>`
   );
 }
 
@@ -324,17 +323,115 @@ function appearanceHtml() {
   );
 }
 
+/**
+ * Pure right-click Ship details card, shared by Outfitting and the Shop:
+ * unmodified baseline stats (Hull HP, Cargo space) and unique ship bonuses.
+ */
+export function shipDetailsHtml(shipId) {
+  const stats = shipBaseStats(shipId);
+  if (!stats) return "";
+  const bonusRows = stats.bonuses.length
+    ? stats.bonuses.map(line => `<li>${esc(line)}</li>`).join("")
+    : `<li class="none">None</li>`;
+  return (
+    `<div class="inv-sell-head"><strong>${esc(stats.name)}</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="shipInfoClose">Close</button></div></div>` +
+    `<div class="ship-info-sub">Base stats (unfitted)</div>` +
+    `<dl class="ship-info-stats">` +
+    `<div><dt>Hull HP</dt><dd>${stats.hullHp} HP</dd></div>` +
+    `<div><dt>Cargo space</dt><dd>${stats.cargo} m³</dd></div>` +
+    `</dl>` +
+    `<div class="ship-info-sub">Ship bonuses</div>` +
+    `<ul class="ship-info-bonuses">${bonusRows}</ul>`
+  );
+}
+
+/**
+ * Pure "Buy amount" popup body for a compact Shop row. Because every row's Buy
+ * button sits on the right side of the Shop panel, the popup extends leftward
+ * and places its own Buy button on the right so it lands directly under the cursor.
+ */
+export function shopBuyHtml(row, maxBuy, amount = 1) {
+  const safeMax = Math.max(1, Math.floor(+maxBuy) || 1);
+  const qty = Math.min(safeMax, Math.max(1, Math.floor(+amount) || 1));
+  const dest = row.kind === "ship" ? " &middot; Hangar" : "";
+  return (
+    `<div class="inv-sell-head"><strong>Buy ${esc(row.n)}</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="shopBuyCancel">Cancel</button><button type="button" data-a="shopBuyConfirm">Buy</button></div></div>` +
+    `<label>Buy amount <span>(1–${safeMax})</span><input class="inv-sell-amount" type="number" min="1" max="${safeMax}" step="1" value="${qty}"></label>` +
+    `<div class="shop-buy-total">Total: <strong data-buy-total>${qty * row.price} cr</strong>${dest}</div>` +
+    `<div class="inv-sell-error" aria-live="polite"></div>`
+  );
+}
+
+/** Pure confirmation popup body for selling a stored ship from the Hangar. */
+export function shipSellConfirmHtml(check) {
+  const unpackNote = check.unpackVol > 0
+    ? ` Cargo and fitted upgrades (${check.unpackVol} m³) will move to station storage.`
+    : "";
+  return (
+    `<div class="inv-sell-head"><strong>Sell ${esc(check.label)} for ${check.price} cr?</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="shipSellConfirm">Sell</button><button type="button" data-a="shipSellCancel">Cancel</button></div></div>` +
+    `<p class="inv-discard-note">This permanently sells the ship.${esc(unpackNote)}</p>`
+  );
+}
+
+/**
+ * Station Hangar tab: compact stored-ship list for this station. Left-clicking a
+ * row does not auto-equip; right-clicking opens Show info, Fly ship, or Sell.
+ */
+export function hangarHtml() {
+  const S = state.profile;
+  const owned = localShips(S, state.worldState);
+  const cap = hangarCap(state.worldState);
+  if (!owned.length) {
+    return (
+      `<h2>Hangar</h2>` +
+      `<div class="sub">No ships stored at this station (0 of ${cap} berths). Buy a ship in the Shop to store it here.</div>`
+    );
+  }
+  const rows = owned
+    .map(id => {
+      const active = id === S.ship;
+      const hpPct = Math.round((S.hp[id] ?? 1) * 100);
+      const t = shipTypeOf(id);
+      const label = shipLabel(id, owned);
+      return (
+        `<li class="hangar-ship-row${active ? " selected" : ""}" data-hangar-ship="${esc(id)}" data-ship-type="${t}" ` +
+        `${active ? 'aria-current="true" ' : ""}` +
+        `title="${esc(label)} — ${active ? "active ship" : "double-click to fly"}. Right-click for options.">` +
+        `<span class="hangar-ship-name">${esc(label)}</span>` +
+        `<small>${active ? "Active" : "Stored"}${hpPct < 100 ? ` &middot; ${hpPct}%` : ""}</small>` +
+        `</li>`
+      );
+    })
+    .join("");
+  return (
+    `<h2>Hangar</h2>` +
+    `<div class="sub">${owned.length} of ${cap} berths used at this station. Double-click a ship to fly it, or right-click for Show info, Fly ship, or Sell.</div>` +
+    `<ul class="hangar-ships" aria-label="Ships stored at this station">${rows}</ul>`
+  );
+}
+
 function outfittingHtml() {
   const S = state.profile;
-  const ship = SHIPS[S.ship];
-  const owned = S.ships;
+  const owned = localShips(S, state.worldState);
+  if (!owned.length || !shipDef(S.ship)) {
+    return (
+      `<h2>Outfitting</h2>` +
+      `<div class="sub">No ship is stored at this station. Buy a ship in the Shop to store it in the Hangar.</div>`
+    );
+  }
+  const ship = shipDef(S.ship);
+  const shipType = shipTypeOf(S.ship);
+  const label = shipLabel(S.ship, owned);
   const idx = Math.max(0, owned.indexOf(S.ship));
   const many = owned.length > 1 ? "" : "disabled";
   const left = leftRail(MODULE_GROUPS),
     right = MODULE_GROUPS.slice(left.length);
 
   // Services for the hull in the viewer (the selected ship): paid repair of its
-  // plating and paid restock of its missiles. Moved out of the Hangar and the Shop.
+  // plating and paid restock of its missiles.
   const repCost = repairCost(S.ship),
     repPct = Math.round((S.hp[S.ship] ?? 1) * 100);
   let serviceRows =
@@ -358,21 +455,20 @@ function outfittingHtml() {
 
   return (
     `<h2>Outfitting</h2>` +
-    `<div class="sub">Your ship flies with the basic powerplant and power cell fitted. More modules and paints arrive in a later update.</div>` +
+    `<div class="sub">Fit modules from station storage and paint your ship. Right-click the ship for details.</div>` +
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
     `<div class="outfit-mid">` +
-    // Cycle through the ships in the hangar; the arrows carry the same action as the Hangar's Fly button.
-    `<div class="ship-switch">` +
+    `<div class="ship-switch" data-ship-type="${shipType}" data-ship-id="${esc(S.ship)}" title="Right-click for ship details">` +
     `<button class="ship-arrow" data-a="shipPrev" ${many} aria-label="Previous ship">&#8249;</button>` +
-    `<div class="ship-switch-mid"><div class="ship-switch-name">${ship.n}</div><div class="ship-switch-count">${idx + 1} of ${owned.length} in the hangar</div></div>` +
+    `<div class="ship-switch-mid"><div class="ship-switch-name">${esc(label)}</div><div class="ship-switch-count">${idx + 1} of ${owned.length} in the hangar</div></div>` +
     `<button class="ship-arrow" data-a="shipNext" ${many} aria-label="Next ship">&#8250;</button>` +
     `</div>` +
     `<div class="outfit-view">` +
     // ui/outfitting.js mounts the 3D ship into #shipview after this HTML is drawn.
-    `<div class="outfit-stage" id="shipview">` +
-    `<div class="outfit-title">${ship.n}<small>${ship.d}</small></div>` +
-    `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset</div>` +
+    `<div class="outfit-stage" id="shipview" data-ship-type="${shipType}" data-ship-id="${esc(S.ship)}">` +
+    `<div class="outfit-title">${esc(ship.n)}<small>${esc(ship.d)}</small></div>` +
+    `<div class="outfit-tip">Drag to rotate &middot; scroll to zoom &middot; double click to reset &middot; right-click for details</div>` +
     `</div>` +
     `</div>` +
     services +
@@ -400,34 +496,94 @@ function baseHtml() {
   return h;
 }
 
-function shopHtml() {
+function shopItemsHtml(shopId, items, depth = 1) {
+  if (!items.length) {
+    return `<ul class="shop-items shop-depth-${depth}"><li class="shop-empty">None in stock</li></ul>`;
+  }
   const S = state.profile;
-  // The shop is data (data/shops.js) and sim/economy.js's shopList() turns it
-  // into these rows; the screen only decides how a row looks.
-  const shopId = (stationAt(state.place) || stationAt(DEFAULT_PLACE)).shop;
-  const def = shopDef(shopId);
-  // One row per part: everything the shop offers comes from `stock`, so a part
-  // is never listed twice (a part the ship already flies with is simply on sale).
-  let h = `<h2>${def.n}</h2><div class="sub">${def.d}</div>`;
-
-  h += shopList(shopId)
+  const rows = items
     .map(s => {
-      // A limited row shows what is left and greys out when it is gone; an
-      // unlimited row (every row today) shows nothing extra.
       const soldOut = s.left !== null && s.left < 1;
-      return `<div class="row"><div>${s.n}<small>${s.d} Takes ${s.vol} m³.${s.owned ? ` You own ${s.owned}.` : ""}${
-        soldOut ? " Sold out." : s.left !== null ? ` ${s.left} left.` : ""
-      }${s.room ? "" : " No room in the station's storage."}</small></div>` +
-        `<button data-a="wb" data-b="${shopId}:${s.id}" ${S.cr < s.price || !s.room || soldOut ? "disabled" : ""}>Buy ${s.price} cr</button></div>`;
+      const disabled = S.cr < s.price || !s.room || soldOut || s.maxBuy < 1;
+      const notes = [];
+      if (soldOut) notes.push("sold out");
+      else if (s.left !== null) notes.push(`${s.left} left`);
+      if (!s.room) notes.push(s.kind === "ship" ? "hangar full" : "no space");
+      else if (s.owned) notes.push(s.kind === "ship" ? `${s.owned} here` : `own ${s.owned}`);
+      const tip = s.kind === "ship"
+        ? `${s.n}: ${s.d} Stored in Hangar. Right-click for ship details.`
+        : `${s.n}: ${s.d} Takes ${s.vol} m³.`;
+      const buyReason = soldOut
+        ? "Sold out."
+        : !s.room
+          ? (s.kind === "ship" ? "Hangar full at this station — upgrade Hangar berth in Base." : "No room in station storage.")
+          : S.cr < s.price
+            ? `Need ${s.price} cr.`
+            : `Choose how many ${s.n} to buy.`;
+      return (
+        `<li class="shop-item"${s.kind === "ship" ? ` data-ship-type="${esc(s.id)}"` : ""} title="${esc(tip)}">` +
+        `<span class="shop-item-name">${esc(s.n)}${notes.length ? ` <small>${esc(notes.join(" · "))}</small>` : ""}</span>` +
+        `<span class="shop-item-right">` +
+        `<span class="shop-price">${s.price} cr</span>` +
+        `<button type="button" class="shop-buy" data-a="wb" data-b="${esc(shopId)}:${s.kind}:${esc(s.id)}" ${disabled ? "disabled" : ""} title="${esc(buyReason)}">Buy</button>` +
+        `</span></li>`
+      );
     })
     .join("");
-  return h;
+  return `<ul class="shop-items shop-depth-${depth}">${rows}</ul>`;
 }
 
-/** The ship whose hold the Inventory tab shows: the one picked with its arrows, else the one being flown. */
+function shopNodeHtml(shopId, node, key, open, depth = 0) {
+  const isOpen = !!open[key];
+  let inner = "";
+  if (isOpen) {
+    if (node.subgroups && node.subgroups.length) {
+      inner =
+        `<ul class="shop-subgroups shop-sub-depth-${depth + 1}">` +
+        node.subgroups.map(sub => shopNodeHtml(shopId, sub, `${key}:${sub.k}`, open, depth + 1)).join("") +
+        `</ul>`;
+      if (node.items && node.items.length) {
+        inner += shopItemsHtml(shopId, node.items, depth + 1);
+      }
+    } else {
+      inner = shopItemsHtml(shopId, node.items || [], depth + 1);
+    }
+  }
+  const nodeCls = depth === 0 ? "shop-group" : "shop-subgroup";
+  const toggleCls = depth === 0
+    ? "shop-toggle"
+    : `shop-toggle shop-sub-toggle shop-toggle-depth-${depth}`;
+  return (
+    `<li class="shop-node ${nodeCls}${isOpen ? " open" : ""}">` +
+    `<button type="button" class="${toggleCls}" data-a="shopGroup" data-b="${esc(key)}" aria-expanded="${isOpen}">` +
+    `<span class="shop-label"><span class="shop-caret" aria-hidden="true">${isOpen ? "&#9662;" : "&#9656;"}</span>${esc(node.n)}</span>` +
+    `<small class="shop-count">${node.count}</small>` +
+    `</button>` +
+    inner +
+    `</li>`
+  );
+}
+
+function shopHtml(ui = state.ui) {
+  const shopId = (stationAt(state.place) || stationAt(DEFAULT_PLACE)).shop;
+  const def = shopDef(shopId);
+  const open = (ui && ui.shopOpen) || {};
+  const groups = shopCatalogue(shopId);
+  const tree = groups.map(g => shopNodeHtml(shopId, g, g.k, open, 0)).join("");
+
+  return (
+    `<h2>${esc(def.n)}</h2><div class="sub">${esc(def.d)}</div>` +
+    `<ul class="shop-tree" aria-label="Shop catalogue">${tree}</ul>`
+  );
+}
+
+/** The ship whose hold the Inventory tab shows: one parked in this station's hangar. */
 export function viewedShip(ui = state.ui) {
   const S = state.profile;
-  return S.ships.includes(ui.invShip) ? ui.invShip : S.ship;
+  const local = localShips(S, state.worldState);
+  if (local.includes(ui.invShip)) return ui.invShip;
+  if (local.includes(S.ship)) return S.ship;
+  return local[0] || S.ship;
 }
 
 /**
@@ -438,142 +594,253 @@ export function viewedShip(ui = state.ui) {
  * same tile serves a station, a hold and a canister without any of them knowing about each other.
  */
 function invRow({
-  name, sub, kind, id, count, dir, free, vol, move = true, place = "",
-  action = "mv", destWord = dir === "s" ? "ship" : "station",
+  name, sub, kind, id, count, dir, free, vol, move = true, place = "", slot = 0,
+  destWord = dir === "s" ? "ship" : "station",
 }) {
-  const where = destWord;
-  // What the tile's corner says: a module, something you can use in flight (step 14), or ore —
-  // which keeps the "ORE" word every existing tile has always had.
   const label = kind === "c" ? (itemUse(id) ? "USE" : "ORE") : "MOD";
-  // What right-click does is the panel's business, not the tile's: a hold tile offers the menu the
-  // flight card has (Use / Stow all / Discard), a canister tile the one thing worth saying about it.
-  const rightClick = destWord === "hold"
-    ? "Right-click to take the whole stack."
-    : destWord === "canister"
-      ? (itemUse(id) ? "Right-click to use, stow or discard." : "Right-click to stow or discard.")
-      : itemUse(id) ? "Right-click to use or discard." : "Right-click to discard.";
+  const shiftHint = move ? ` Shift-click to move stack to ${destWord}.` : "";
   const inner =
     `<span class="inv-item-top"><span class="inv-kind">${label}</span><span class="inv-n">&times;${count}</span></span>` +
-    `<span class="inv-item-name">${name}</span><span class="inv-item-meta">${vol} m³ each</span>`;
-  if (!move) {
-    // In flight there is nowhere to move cargo to: the tile is a label, not a button.
-    return `<div class="inv-item inv-item-read" data-kind="${kind}" data-id="${id}" data-count="${count}" data-where="${place}" ` +
-      `title="${name}: ${sub}. ${rightClick}" aria-label="${name}, quantity ${count}. ${rightClick}">${inner}</div>`;
-  }
-  const room = Math.floor(free / (vol || 1));
-  const noRoom = room > 0 ? "false" : "true";
+    `<span class="inv-item-name">${esc(name)}</span><span class="inv-item-meta">${vol} m³ each</span>`;
+  const room = move ? Math.floor(free / (vol || 1)) : 1;
+  const noRoom = move && room <= 0 ? "true" : "false";
   return (
-    `<button class="inv-item" data-a="${action}" data-b="${kind}:${id}:${dir}:1" data-kind="${kind}" data-id="${id}" data-dir="${dir}" data-count="${count}" data-where="${place}" aria-disabled="${noRoom}" ` +
-    `title="${name}: ${sub}. Click to move one; Shift-click to move the whole stack. Right-click to discard." ` +
-    `aria-label="${name}, quantity ${count}. Click to move one to the ${where}; Shift-click to move the whole stack.">` +
-    inner +
-    `</button>`
+    `<button type="button" class="inv-item" data-a="invSlot" data-where="${esc(place)}" data-slot="${slot}" ` +
+    `data-kind="${kind}" data-id="${esc(id)}" data-dir="${esc(dir)}" data-count="${count}" aria-disabled="${noRoom}" ` +
+    `title="${esc(name)}: ${esc(sub)}. Click to pick up, drop or swap.${shiftHint} Right-click for options (or to place 1 while holding)." ` +
+    `aria-label="${esc(name)}, quantity ${count}, slot ${slot + 1}.">${inner}</button>`
   );
 }
 
-/** One inventory panel: a heading with the m³ in use, then a grid of contents. */
+function heldBannerHtml() {
+  const held = state.ui.invHeld;
+  if (!held || !(held.n > 0)) return "";
+  return (
+    `<div class="inv-held-bar" role="status">` +
+    `<span>Holding <strong>${esc(itemName(held.id))} &times;${held.n}</strong> ` +
+    `<small>Click slot to place/swap · Right-click slot to place 1 · Esc to put back</small></span>` +
+    `<button type="button" class="inv-stack-btn" data-a="invReturn">Put back</button>` +
+    `</div>`
+  );
+}
+
+/** One inventory panel: a heading with m³ in use + Stack all, then an interactive slot grid. */
 function invColumn(where, title, dir, {
-  move = true, profile = state.profile, slots = 25,
-  dest = where === STATION ? viewedShip() : STATION,   // where the buttons send things
-  action = "mv", destWord = null,
+  move = true, profile = state.profile, slots = 25, cols = 5,
+  dest = where === STATION ? viewedShip() : STATION,
+  destWord = null,
 } = {}) {
   const used = loadOf(where, profile),
     cap = capacityOf(where, profile),
     destFree = move ? freeOf(dest, profile) : 0;
+  const held = state.ui.invHeld;
+  const holding = Boolean(held && held.n > 0);
+  const slotList = slotsAt(where, profile);
+  let filledCount = 0;
+  for (const s of slotList) if (s) filledCount++;
+
+  // Keep the fixed minimum grid (5×5 station, 7×5 flight, 5×7 cache), and grow
+  // by full rows when custom placements exceed it or when holding a stack over
+  // a completely packed grid so an empty drop slot is always reachable.
+  let totalSlots = Math.max(slots, Math.ceil(slotList.length / cols) * cols);
+  if (holding && filledCount >= totalSlots) totalSlots += cols;
+
   const rows = [];
-  // One list for the whole place: goods in catalogue order, then spare modules
-  // in the order they arrived. The kind is what the tile shows (ORE / MOD) and
-  // what the move and sell actions read; the catalogue decides which is which.
-  for (const { id, n } of itemsAt(where, profile)) {
-    const part = isModule(id);
-    const word = part ? "Module" : itemCat(id) === "consumable" ? "Consumable" : "Ore";
-    rows.push(
-      invRow({
-        name: itemName(id),
-        sub: `${word}, ${itemVol(id)} m³ each`,
-        kind: part ? "m" : "c",
-        id,
-        count: n,
-        dir,
-        free: destFree,
-        vol: itemVol(id),
-        move,
-        place: where,
-        action,
-        ...(destWord ? { destWord } : {}),
-      })
-    );
+  for (let i = 0; i < totalSlots; i++) {
+    const entry = slotList[i] || null;
+    if (entry) {
+      const { id, n } = entry;
+      const part = isModule(id);
+      const word = part ? "Module" : itemCat(id) === "consumable" ? "Consumable" : "Ore";
+      rows.push(
+        invRow({
+          name: itemName(id),
+          sub: `${word}, ${itemVol(id)} m³ each`,
+          kind: part ? "m" : "c",
+          id,
+          count: n,
+          dir,
+          free: destFree,
+          vol: itemVol(id),
+          move,
+          place: where,
+          slot: i,
+          ...(destWord ? { destWord } : {}),
+        })
+      );
+    } else {
+      const isOrigin = holding && held.where === where && held.slot === i;
+      rows.push(
+        `<button type="button" class="inv-empty-slot${isOrigin ? " is-origin" : ""}" ` +
+        `data-a="invSlot" data-where="${esc(where)}" data-slot="${i}" aria-label="Empty slot ${i + 1}"></button>`
+      );
+    }
   }
-  // Keep a full slot field even when this hold contains fewer items, so the
-  // viewport stays the same size: 5×5 at a station, 7×5 in the flight card.
-  while (rows.length < slots) rows.push(`<div class="inv-empty-slot" aria-hidden="true"></div>`);
   // A container with no volume of its own (a rift's canister) says how much is in it and stops there.
   const room = Number.isFinite(cap) ? `${used} / ${cap} m³` : `${used} m³`;
+  const canStack = filledCount > 0 || (holding && held.where === where);
   return (
-    `<section class="inv-col"><header><h3>${title}</h3><span class="mod-count">${room}</span></header>` +
-    `<div class="inv-grid">${rows.join("")}</div>` +
+    `<section class="inv-col">` +
+    `<header><h3>${esc(title)}</h3>` +
+    `<span class="inv-col-tools"><span class="mod-count">${room}</span>` +
+    `<button type="button" class="inv-stack-btn" data-a="stackAll" data-where="${esc(where)}"${canStack ? "" : " disabled"} ` +
+    `title="Combine split stacks and compact empty slots">Stack all</button></span></header>` +
+    `<div class="inv-grid${holding ? " is-holding" : ""}">${rows.join("")}</div>` +
     `</section>`
   );
 }
 
-function inventoryHtml(ui) {
-  const S = state.profile;
-  const id = viewedShip(ui),
-    ship = SHIPS[id],
-    idx = Math.max(0, S.ships.indexOf(id)),
-    many = S.ships.length > 1 ? "" : "disabled";
-
+/** Sub-tab strip shared by docked Station Inventory and in-flight Ship Inventory `I`. */
+function invSubtabsHtml(action, firstKey, firstLabel, activeKey) {
+  const isFirst = activeKey !== "assets";
   return (
-    `<h2>Inventory</h2><div class="sub">Click an item to move one; Shift-click to move its whole stack. Right-click an item to sell it — ore, salvage and spare modules alike. Everything you buy is kept in the station. ` +
-    `Outfitting fits modules from the station. Fitted modules take no space. Each ship has its own hold, and a lost ship takes its hold with it.</div>` +
-    invColumn(STATION, "Station", "s") +
-    `<div class="ship-switch inv-switch">` +
-    `<button class="ship-arrow" data-a="invPrev" ${many} aria-label="Previous ship">&#8249;</button>` +
-    `<div class="ship-switch-mid"><div class="ship-switch-name">${ship.n}${id === S.ship ? " (flying)" : ""}</div>` +
-    `<div class="ship-switch-count">${idx + 1} of ${S.ships.length} in the hangar</div></div>` +
-    `<button class="ship-arrow" data-a="invNext" ${many} aria-label="Next ship">&#8250;</button>` +
-    `</div>` +
-    invColumn(id, `${ship.n} hold`, "t")
+    `<div class="inv-subtabs" role="tablist">` +
+    `<button type="button" role="tab" data-a="${action}" data-b="${firstKey}" aria-selected="${isFirst}">${firstLabel}</button>` +
+    `<button type="button" role="tab" data-a="${action}" data-b="assets" aria-selected="${!isFirst}">My Assets</button>` +
+    `</div>`
   );
 }
 
 /**
- * The ship's own inventory, read in flight (press I in space). Same columns and
- * tiles as the station Inventory tab, but only the hold of the ship being flown,
- * read-only — there is no station to move cargo into out here.
+ * Compact N-menu-style `My Assets` view listing every station where the pilot
+ * has stored items or ships in the hangar. Clicking a station expands its ships
+ * and station-hold items in single-line rows.
+ */
+export function assetsHtml(profile = state.profile, world = state.worldState, opts = {}) {
+  const docked = opts.docked ?? Boolean(state.player?.docked);
+  const openMap = opts.openMap || state.ui.assetsOpen || {};
+  const stations = listPlayerAssets(profile, world, { docked, place: opts.place });
+  if (!stations.length) {
+    return (
+      `<div class="sub">Stations where you have ships in the hangar or items in station storage.</div>` +
+      `<div class="assets-empty">No ships or items stored at any station.</div>`
+    );
+  }
+  const blocks = stations.map(st => {
+    const isOpen = !!openMap[st.placeId];
+    const parts = [];
+    if (st.ships.length) parts.push(`${st.ships.length} ${st.ships.length === 1 ? "ship" : "ships"}`);
+    if (st.items.length) parts.push(`${st.itemUnits} ${st.itemUnits === 1 ? "item" : "items"} (${st.itemVol} m³)`);
+    const sysTag = st.system && st.system !== st.name ? st.system : "";
+    const metaTag = [sysTag, st.here ? "Docked" : ""].filter(Boolean).join(" · ");
+
+    let detail = "";
+    if (isOpen) {
+      const lines = [];
+      for (const s of st.ships) {
+        const holdNote = s.cargoUnits > 0 ? ` · ${s.cargoUsed}/${s.cargoCap} m³ cargo` : "";
+        const dmgNote = s.hpPct < 100 ? ` · ${s.hpPct}% hull` : "";
+        const right = s.active ? "Active ship" : "Hangar ship";
+        lines.push(
+          `<li class="assets-line assets-ship" data-ship-type="${esc(s.type)}" title="${esc(s.name)} — ${esc(s.role)}. Right-click for ship info.">` +
+          `<span class="pocket-label"><span class="pocket-icon${s.active ? " asset-active" : ""}" aria-hidden="true"></span>` +
+          `<span class="pocket-name">${esc(s.name)} <small>${esc(s.role)}${holdNote}${dmgNote}</small></span></span>` +
+          `<span class="assets-qty">${right}</span></li>`
+        );
+      }
+      for (const it of st.items) {
+        lines.push(
+          `<li class="assets-line assets-item" data-asset-item="${esc(it.id)}" title="${esc(it.name)} (${esc(it.catLabel)}) — ${it.vol} m³ total.">` +
+          `<span class="pocket-label"><span class="pocket-icon i" aria-hidden="true"></span>` +
+          `<span class="pocket-name">${esc(it.name)} <small>${esc(it.catLabel)}</small></span></span>` +
+          `<span class="assets-qty">&times;${it.n} <small>${it.vol} m³</small></span></li>`
+        );
+      }
+      detail = `<ul class="assets-rows">${lines.join("")}</ul>`;
+    }
+
+    return (
+      `<div class="assets-station${isOpen ? " is-open" : ""}">` +
+      `<button type="button" class="assets-toggle" data-a="assetStation" data-b="${esc(st.placeId)}" aria-expanded="${isOpen}">` +
+      `<span class="assets-left"><span class="shop-caret" aria-hidden="true">${isOpen ? "&#9662;" : "&#9656;"}</span>` +
+      `<span class="assets-name">${esc(st.name)}</span>` +
+      `${metaTag ? `<small class="assets-sys">${esc(metaTag)}</small>` : ""}</span>` +
+      `<span class="assets-count">${esc(parts.join(" · "))}</span>` +
+      `</button>${detail}</div>`
+    );
+  });
+
+  return (
+    `<div class="sub">Click a station to inspect the ships in its hangar and the items in its hold.</div>` +
+    `<div class="assets-list">${blocks.join("")}</div>`
+  );
+}
+
+function inventoryHtml(ui) {
+  const view = ui?.invView === "assets" ? "assets" : "inv";
+  const subtabs = invSubtabsHtml("invView", "inv", "Storage & Hold", view);
+  if (view === "assets") {
+    return `<h2>Inventory</h2>${subtabs}${assetsHtml(state.profile, state.worldState, { docked: true, openMap: ui?.assetsOpen })}`;
+  }
+
+  const S = state.profile;
+  const local = localShips(S, state.worldState);
+  const id = viewedShip(ui),
+    ship = shipDef(id),
+    label = shipLabel(id, local),
+    idx = Math.max(0, local.indexOf(id)),
+    many = local.length > 1 ? "" : "disabled";
+
+  const shipSection = ship
+    ? `<div class="ship-switch inv-switch">` +
+      `<button class="ship-arrow" data-a="invPrev" ${many} aria-label="Previous ship">&#8249;</button>` +
+      `<div class="ship-switch-mid"><div class="ship-switch-name">${esc(label)}${id === S.ship ? " (flying)" : ""}</div>` +
+      `<div class="ship-switch-count">${idx + 1} of ${local.length} in the hangar</div></div>` +
+      `<button class="ship-arrow" data-a="invNext" ${many} aria-label="Next ship">&#8250;</button>` +
+      `</div>` +
+      invColumn(id, `${label} hold`, "t")
+    : "";
+
+  return (
+    `<h2>Inventory</h2>${subtabs}` +
+    `<div class="sub">Click a stack to pick it up, then click any slot to place, merge or swap it (right-click places 1). ` +
+    `Shift-click transfers a whole stack. Right-click a stack to take an exact amount, sell or discard. ` +
+    `Items you buy go to the station; bought ships sit in Hangar. Each ship has its own hold.</div>` +
+    heldBannerHtml() +
+    invColumn(STATION, "Station", "s") +
+    shipSection
+  );
+}
+
+/**
+ * The ship's own inventory in flight (press I in space): interactive slots for
+ * sorting, splitting and stacking cargo in the active ship's hold, plus the
+ * `My Assets` sub-tab showing stored ships and items across every station.
  */
 export function cargoHtml(profile = state.profile) {
-  const id = profile.ship, ship = SHIPS[id];
-  // 7 tiles across and 5 rows down in the wider card (styles.css), still read-only.
+  const id = profile.ship, ship = shipDef(id);
+  const view = state.ui.cargoView === "assets" ? "assets" : "hold";
+  const subtabs = invSubtabsHtml("cargoView", "hold", "Ship hold", view);
+  if (view === "assets") {
+    return `<h2>Ship inventory</h2>${subtabs}${assetsHtml(profile, state.worldState, { docked: false, openMap: state.ui.assetsOpen })}`;
+  }
   return (
-    `<h2>Ship inventory</h2>` +
-    invColumn(id, `${ship.n} hold`, "t", { move: false, profile, slots: 35 })
+    `<h2>Ship inventory</h2>${subtabs}` +
+    heldBannerHtml() +
+    invColumn(id, `${ship.n} hold`, "t", { move: false, profile, slots: 35, cols: 7 })
   );
 }
 
 /**
- * A rift's canister, traded with in flight (press R beside it). The ship's own hold on the left and
- * the canister on the right, in the same tiles as the station's Inventory tab and the flight card,
- * and cargo moves between them the same way: a click moves one, Shift-click moves the whole stack —
- * in either direction, so a pilot can put something back (owner 2026-11-14).
- *
- * The moves are `cmv` actions, which `ui/cache.js` handles by way of `sim/instances.js`
- * (`tradeCacheItem`), so the canister obeys the ordinary inventory rules and nothing here knows how
- * a run keeps its prize.
+ * A rift's canister, traded with in flight (press R beside it). The ship's hold
+ * on the left and the canister on the right, sharing the same slot interactions:
+ * left-click picks up/places/merges/swaps, right-click while holding places 1,
+ * Shift-click transfers a whole stack, and right-click offers Take amount.
  */
 export function cacheHtml(profile = state.profile) {
   const record = cacheTradeRecord();
   const cache = record?.cache;
   if (!cache) return "";
-  const id = profile.ship, hull = SHIPS[id], left = cacheUnits(cache);
+  const id = profile.ship, hull = shipDef(id), left = cacheUnits(cache);
   return (
-    `<h2>${cache.n}</h2>` +
-    `<div class="sub">Click an item to move one; Shift-click to move its whole stack. Cargo goes both ways: take it into your hold, or stow it back in the canister. ` +
-    `Right-click an item in your hold to use it or throw it away. ${left ? `${left} inside.` : "The canister is empty."}</div>` +
-    // The pilot's own hold on the left, the canister off to the right (owner 2026-11-14).
+    `<h2>${esc(cache.n)}</h2>` +
+    `<div class="sub">Click a stack to pick it up, then click any slot to place, merge or swap (right-click places 1). ` +
+    `Shift-click transfers a whole stack either way. Right-click a stack for Take amount, Use or Discard. ` +
+    `${left ? `${left} inside.` : "The canister is empty."}</div>` +
+    heldBannerHtml() +
     `<div class="cache-cols">` +
-    invColumn(id, `${hull.n} hold`, "stow", { move: true, profile, slots: 35, dest: CACHE, action: "cmv", destWord: "canister" }) +
-    invColumn(CACHE, cache.n, "take", { move: true, profile, slots: 35, dest: id, action: "cmv", destWord: "hold" }) +
+    invColumn(id, `${hull.n} hold`, "stow", { move: true, profile, slots: 35, cols: 5, dest: CACHE, destWord: "canister" }) +
+    invColumn(CACHE, cache.n, "take", { move: true, profile, slots: 35, cols: 5, dest: id, destWord: "hold" }) +
     `</div>`
   );
 }

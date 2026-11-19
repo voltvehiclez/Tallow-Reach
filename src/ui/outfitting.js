@@ -50,6 +50,7 @@ function bindOnce() {
   canvas.dataset.bound = "1";
 
   canvas.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;   // right-click opens Ship details rather than orbiting
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
     canvas.setPointerCapture(e.pointerId);
     canvas.classList.add("dragging");

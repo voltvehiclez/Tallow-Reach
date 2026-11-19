@@ -16,13 +16,21 @@ import { state, localPlayer, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { on, emit } from "../util/events.js";
 import { cacheHtml } from "./screens.js";
-import { CACHE, countOf, discardItem } from "../sim/inventory.js";
-import { cacheTradeRecord, closeCacheTrade, tradeCacheItem } from "../sim/instances.js";
+import { CACHE, countOf, discardItem, slotAt } from "../sim/inventory.js";
+import { cacheTradeRecord, closeCacheTrade } from "../sim/instances.js";
 import { holdShip } from "../sim/pilot.js";
 import { useItem, canUse } from "../sim/consumables.js";
 import { canDiscard, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
+import {
+  cancelHeldStack,
+  clickInventorySlot,
+  hasHeldStack,
+  openTakeAmountPopover,
+  rightClickInventorySlot,
+  runStackAll,
+} from "./inventory-ui.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
 
@@ -49,43 +57,84 @@ function renderCache() {
   if (body) body.innerHTML = cacheHtml();
 }
 
-function closeContextMenu() {
-  if (menu) menu.remove();
-  menu = null;
-  const card = root && root.querySelector(".cache-card");
-  card?.querySelector(".inv-discard-popover")?.remove();
-}
-
-/**
- * One click's worth of moving: `dir` says which way, `count` how many (Infinity for a whole stack,
- * which is what Shift asks for). The canister and the hold are ordinary containers to
- * `sim/inventory.js`, so the sim's own sentence is what the panel says — but only when nothing moved.
- * A move that worked is its own answer: the tile changes side, and the pickup sound is the sim's.
- */
-function moveCache(dir, id, count) {
-  const to = dir === "take" ? state.profile.ship : CACHE;
-  const before = countOf(to, id);
-  const text = tradeCacheItem(dir, id, count);
-  if (countOf(to, id) === before) notify(text);
-  // The run's prize is part of the save, so a trade is saved like any other change of cargo.
-  emit("mission-inventory-changed", { profile: state.profile, player: state.player });
+function saveQuietly() {
   try {
     saveAutosave(currentSave());
   } catch {
     // An autosave that cannot be written must not eat the move itself.
   }
+}
+
+function closeContextMenu() {
+  if (menu) menu.remove();
+  menu = null;
+  const card = root && root.querySelector(".cache-card");
+  if (card?.querySelectorAll) {
+    card.querySelectorAll(".inv-discard-popover, .inv-take-popover").forEach(n => n.remove());
+  } else {
+    card?.querySelector?.(".inv-discard-popover")?.remove?.();
+    card?.querySelector?.(".inv-take-popover")?.remove?.();
+  }
+}
+
+/** Dismiss an open cache context menu/popover or return a held stack before closing the trade. */
+export function dismissCacheLayer() {
+  if (!isCacheOpen()) return false;
+  const card = root && root.querySelector(".cache-card");
+  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover");
+  if (open && open.length) {
+    closeContextMenu();
+    return true;
+  }
+  if (cancelHeldStack()) {
+    saveQuietly();
+    renderCache();
+    return true;
+  }
+  return false;
+}
+
+function transferCacheSlot(where, slot) {
+  const otherWhere = where === CACHE ? state.profile.ship : CACHE;
+  const res = clickInventorySlot({ where, slot, otherWhere, shiftKey: true });
+  if (!res.changed && res.message) notify(res.message);
+  emit("mission-inventory-changed", { profile: state.profile, player: state.player });
+  saveQuietly();
   renderCache();
 }
 
-/**
- * Right-click a tile. In the hold: the same menu the flight inventory card offers — **Use** for
- * anything the item catalogue gives a use to, and **Discard**. In the canister: **Take all**, the one
- * thing worth saying about a stack the pilot is standing next to but cannot carry.
- */
 function onCacheContextMenu(event) {
-  const tile = event.target.closest("[data-kind][data-where]");
   const card = root && root.querySelector(".cache-card");
-  if (!tile || !card) return;
+  if (!card) return;
+
+  // Right-click while holding places 1 item into an empty or matching slot.
+  const slotBtn = event.target.closest("button[data-a='invSlot']");
+  if (slotBtn && hasHeldStack()) {
+    event.preventDefault();
+    closeContextMenu();
+    const res = rightClickInventorySlot({
+      where: slotBtn.dataset.where,
+      slot: Number(slotBtn.dataset.slot),
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    if (res?.message) notify(res.message);
+    if (res?.changed) {
+      emit("mission-inventory-changed", { profile: state.profile, player: state.player });
+      uiSound("click");
+      saveQuietly();
+      renderCache();
+    }
+    return;
+  }
+
+  if (hasHeldStack()) {
+    event.preventDefault();
+    return;
+  }
+
+  const tile = event.target.closest("[data-kind][data-where]");
+  if (!tile) return;
   event.preventDefault();
   closeContextMenu();
 
@@ -101,6 +150,7 @@ function onCacheContextMenu(event) {
     btn.dataset.b = tile.dataset.id;
     btn.dataset.dir = tile.dataset.dir;
     btn.dataset.where = tile.dataset.where;
+    btn.dataset.slot = tile.dataset.slot || "0";
     btn.setAttribute("role", "menuitem");
     btn.textContent = label;
     btn.title = title;
@@ -109,13 +159,12 @@ function onCacheContextMenu(event) {
     return btn;
   };
 
+  entry("cacheTakeOpen", "Take amount", "Pick up a chosen number of items onto the cursor.");
+
   if (inCache) {
     entry("cacheTake", `Take all \u00d7${tile.dataset.count}`,
       `Move the whole stack of ${itemName(tile.dataset.id)} into your hold.`);
   } else {
-    // Step 14: anything with a `use` field in data/items.js gets a **Use** entry beside Discard. What
-    // using it does is data (`USE_ACTIONS` in sim/consumables.js), so this menu never grows a second
-    // special case for the next consumable.
     if (canUse(tile.dataset.id)) {
       entry("cacheUse", "Use", `Use one ${itemName(tile.dataset.id)}.`);
     }
@@ -123,7 +172,7 @@ function onCacheContextMenu(event) {
       `Move the whole stack of ${itemName(tile.dataset.id)} into the canister.`);
     const discard = entry("cacheDiscard", `Discard \u00d7${tile.dataset.count}`,
       canDiscard(tile.dataset.id)
-        ? "Throw this whole stack away. It cannot be recovered."
+        ? "Throw this stack away. It cannot be recovered."
         : "A mission item: hand it in, do not trash it.",
       !canDiscard(tile.dataset.id));
     if (discard.disabled) discard.title = "A mission item: hand it in, do not trash it.";
@@ -136,24 +185,55 @@ function onCacheContextMenu(event) {
   uiSound();
 }
 
-/** Discard, both steps, in the trade card — ui/discard.js, as the station and the flight card do it. */
-function openCacheDiscard(entry) {
-  const id = entry.dataset.b;
-  const where = entry.dataset.where || state.profile.ship;
-  if (!canDiscard(id)) return;
-  const count = countOf(where, id);
-  if (!(count > 0)) return;
-  const card = root && root.querySelector(".cache-card");
-  if (!card) return;
-
-  // Place the popover where the context menu was.
+function menuAnchorIn(card) {
   const hostRect = card.getBoundingClientRect();
   const menuRect = menu ? menu.getBoundingClientRect() : hostRect;
-  const anchor = {
+  return {
     left: menuRect.left - hostRect.left + (card.scrollLeft || 0),
     top: menuRect.top - hostRect.top + (card.scrollTop || 0),
     width: 0,
   };
+}
+
+function openCacheTakeAmount(entry) {
+  const id = entry.dataset.b;
+  const where = entry.dataset.where || state.profile.ship;
+  const slot = Number(entry.dataset.slot);
+  if (!Number.isInteger(slot) || slot < 0) return;
+  const item = slotAt(where, slot);
+  if (!item || item.id !== id || !(item.n > 0)) return;
+  const card = root && root.querySelector(".cache-card");
+  if (!card) return;
+  const anchor = menuAnchorIn(card);
+  closeContextMenu();
+  openTakeAmountPopover({
+    host: card,
+    anchor,
+    where,
+    slot,
+    id,
+    count: item.n,
+    onTake: () => {
+      uiSound("click");
+      renderCache();
+    },
+  });
+  uiSound();
+}
+
+/** Discard, both steps, in the trade card — ui/discard.js, as the station and the flight card do it. */
+function openCacheDiscard(entry) {
+  const id = entry.dataset.b;
+  const where = entry.dataset.where || state.profile.ship;
+  const slotIdx = Number(entry.dataset.slot);
+  if (!canDiscard(id)) return;
+  const item = Number.isInteger(slotIdx) && slotIdx >= 0 ? slotAt(where, slotIdx) : null;
+  const count = item && item.id === id ? item.n : countOf(where, id);
+  if (!(count > 0)) return;
+  const card = root && root.querySelector(".cache-card");
+  if (!card) return;
+
+  const anchor = menuAnchorIn(card);
   closeContextMenu();
 
   openDiscardPopover({
@@ -162,17 +242,18 @@ function openCacheDiscard(entry) {
     where,
     id,
     count,
-    onDiscard: (place, item, amount) => {
-      // The same message the station's Discard shows, and the same save.
-      notify(discardItem(place, item, amount));
+    onDiscard: (place, itemId, amount) => {
+      notify(discardItem(
+        place,
+        itemId,
+        amount,
+        state.profile,
+        state.worldState,
+        Number.isInteger(slotIdx) ? slotIdx : -1
+      ));
       uiSound("confirm");
-      // Mission hand-offs waiting on a change of cargo get their retry.
       emit("mission-inventory-changed", { profile: state.profile, player: state.player });
-      try {
-        saveAutosave(currentSave());
-      } catch {
-        // An autosave that cannot be written must not eat the discard itself.
-      }
+      saveQuietly();
       renderCache();
     },
   });
@@ -206,31 +287,69 @@ function useConsumable(entry) {
 }
 
 function onCacheClick(event) {
-  const move = event.target.closest("[data-a='cmv']");
-  if (move) {
+  const slotBtn = event.target.closest("button[data-a='invSlot']");
+  if (slotBtn) {
     closeContextMenu();
-    const [, id, dir, n] = String(move.dataset.b || "").split(":");
-    // A normal click moves one; Shift-click moves the whole stack, as it does at a station.
-    moveCache(dir, id, event.shiftKey ? Infinity : Math.max(1, +n || 1));
+    const where = slotBtn.dataset.where;
+    const otherWhere = where === CACHE ? state.profile.ship : CACHE;
+    const res = clickInventorySlot({
+      where,
+      slot: Number(slotBtn.dataset.slot),
+      otherWhere,
+      shiftKey: Boolean(event.shiftKey),
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    if (res.message) notify(res.message);
+    if (res.changed) {
+      if (!res.picked) emit("mission-inventory-changed", { profile: state.profile, player: state.player });
+      uiSound("click");
+      saveQuietly();
+      renderCache();
+    }
+    return;
+  }
+  const stackBtn = event.target.closest("button[data-a='stackAll']");
+  if (stackBtn && !stackBtn.disabled) {
+    closeContextMenu();
+    const res = runStackAll(stackBtn.dataset.where || state.profile.ship);
+    if (res.message) notify(res.message);
     uiSound("click");
+    saveQuietly();
+    renderCache();
+    return;
+  }
+  const retBtn = event.target.closest("button[data-a='invReturn']");
+  if (retBtn) {
+    if (cancelHeldStack()) {
+      uiSound("click");
+      saveQuietly();
+      renderCache();
+    }
+    return;
+  }
+  const takeAmt = event.target.closest("[data-a='cacheTakeOpen']");
+  if (takeAmt && !takeAmt.disabled) {
+    openCacheTakeAmount(takeAmt);
     return;
   }
   const take = event.target.closest("[data-a='cacheTake']");
   if (take && !take.disabled) {
     closeContextMenu();
-    moveCache(take.dataset.dir, take.dataset.b, Infinity);
+    transferCacheSlot(CACHE, Number(take.dataset.slot));
     uiSound("confirm");
     return;
   }
   const stow = event.target.closest("[data-a='cacheStow']");
   if (stow && !stow.disabled) {
     closeContextMenu();
-    moveCache(stow.dataset.dir, stow.dataset.b, Infinity);
+    transferCacheSlot(stow.dataset.where || state.profile.ship, Number(stow.dataset.slot));
     uiSound("confirm");
     return;
   }
   const use = event.target.closest("[data-a='cacheUse']");
   if (use && !use.disabled) {
+    cancelHeldStack();
     useConsumable(use);
     return;
   }
@@ -239,7 +358,7 @@ function onCacheClick(event) {
     openCacheDiscard(discard);
     return;
   }
-  if (event.target.closest(".inv-discard-popover")) return;
+  if (event.target.closest(".inv-discard-popover, .inv-take-popover")) return;
   if (event.target.closest("[data-cache-close]") || event.target === root) closeCache();
   else if (!event.target.closest(".inv-context")) closeContextMenu();
 }
@@ -248,6 +367,7 @@ function onCacheClick(event) {
 export function setupCache() {
   root = document.createElement("section");
   root.id = "cache";
+  root.className = "cargo-overlay";
   root.hidden = true;
   root.setAttribute("role", "dialog");
   root.setAttribute("aria-modal", "true");
@@ -289,6 +409,7 @@ export function openCache() {
 /** Close it and hand the controls and sound back to the flight the pilot left. */
 export function closeCache({ silent = false } = {}) {
   if (!isCacheOpen()) return false;
+  if (cancelHeldStack()) saveQuietly();
   state.ui.cache = null;
   closeContextMenu();
   if (root) root.hidden = true;

@@ -1,43 +1,138 @@
-// What each shop sells and what it charges. A shop is a list of rows; a row is
-// an item id (from data/items.js), a price in credits and, if the shop can run
-// out, how many it has.
+// What each shop sells, what it charges, and how the compact Shop screen groups
+// entries. A shop is a list of stock rows; each row names either a regular item
+// (`data/items.js`, default `kind: "item"`) or a ship hull (`data/ships.js`,
+// `kind: "ship"`):
 //
 //   n      the shop's name, shown as the screen's heading
 //   d      the line of explanation under the heading
 //   stock  the rows for sale, top to bottom in the order written here:
-//            id     item id from data/items.js (a module's stats are in data/modules.js)
+//            kind   OPTIONAL: `"ship"` for a hull in data/ships.js, omitted or
+//                   `"item"` for an item/module/consumable/ore/loot in data/items.js.
+//                   Bought items go to this station's inventory; bought ships go
+//                   to this station's Outfitting hangar (never the Inventory grid).
+//            id     item id (data/items.js) or hull id (data/ships.js)
 //            price  credits for one
-//            n, d   how the row is sold: its name and its sales pitch. Kept here,
-//                   not in data/modules.js, so a trader can word things its own
-//                   way and two shops can price the same part differently.
-//            max    OPTIONAL. The most this shop has of the item. Leave it out
+//            n, d   how the row is sold: its name and its description. Kept here
+//                   so a trader can word or price its own stock independently.
+//            max    OPTIONAL. The most this shop has of the row. Leave it out
 //                   and the shop never runs out (that is how Meridian works).
-//                   A number means it runs out: the screen shows "N left", the
-//                   Buy button greys out at zero, and `buyItem()` refuses.
 //            own    OPTIONAL. `false` hides the "You own N" count on the row.
-//                   Parts every hull is delivered with need it: the count would
-//                   include the stock fit of hulls you have not bought.
 //
-// **Stock is not saved yet.** How much is left of a limited row lives in
-// session state (`state.shops`, `shopStock()` / `setShopStock()` in
-// sim/economy.js) and resets when a save is loaded or a new game starts. That is
-// deliberate: a restock timer, a restock event or a random roll later only has
-// to call `setShopStock()`, and if persistent finite stock is added later it
-// belongs in `world` alongside `store`, `base` and `board`.
+// **Stock is not saved yet.** Finite row counts live in session state
+// (`state.shops`, `shopStock()` / `setShopStock()` in sim/economy.js).
 //
-// A row is the only way something appears on the shop screen: a part the ship
-// flies with is either on sale (the six standard parts at 1 cr) or not shown at
-// all. Do not add a second list of "already owned" lines — one entry per part.
-//
-// A new trader is one entry here; a station feature in data/places.js names its shop id.
-// Add a row to an existing shop with one line. See docs/HOW_TO_ADD.md recipe 4.
+// `SHOP_GROUPS` drives the compact collapsible one-line Shop tree. Under
+// `modules`, `shopModuleSubgroups()` walks `MODULE_GROUPS` (data/outfitting.js)
+// so a new module group appears automatically. Ores and loot are shown even when
+// a station has none in stock, ready for future traders that sell them.
+// See docs/HOW_TO_ADD.md recipe 4.
+
+import { SHIPS, isShipType } from "./ships.js";
+import { MODULE_GROUPS } from "./outfitting.js";
+import { MODULES } from "./modules.js";
+import { isModule, itemCat } from "./items.js";
+
+/** Top-level one-line collapsible groups in the compact Shop tab. */
+export const SHOP_GROUPS = [
+  { k: "ships", n: "Ships" },
+  { k: "modules", n: "Modules", nested: true },
+  { k: "consumables", n: "Consumables" },
+  { k: "ores", n: "Ores" },
+  { k: "loot", n: "Loot" },
+];
+
+/** Plural subgroup labels for `MODULE_GROUPS`; any new module group falls back to its own `n`. */
+const MODULE_GROUP_SHOP_NAMES = {
+  power: "Powerplants",
+  cell: "Power cells",
+  thruster: "Thrusters",
+  shield: "Shield generators",
+  primary: "Primary weapons",
+  secondary: "Secondary weapons",
+  hull: "Hulls",
+};
+
+/**
+ * Optional collapsible sub-categories inside a module subgroup in the Shop tree.
+ * Under `Primary weapons`, `Cannons`, `Missiles` and `Mining beams` each hold
+ * their current and future module variants.
+ */
+export const MODULE_SUBCATEGORIES = {
+  primary: [
+    { k: "cannons", n: "Cannons", family: "cannon" },
+    { k: "missiles", n: "Missiles", family: "missile" },
+    { k: "mining", n: "Mining beams", family: "mining" },
+  ],
+};
+
+/** All module subgroups in `MODULE_GROUPS` order, with any nested sub-categories. */
+export const shopModuleSubgroups = () =>
+  MODULE_GROUPS.map(g => {
+    const subcats = MODULE_SUBCATEGORIES[g.k];
+    return subcats
+      ? { k: g.k, n: MODULE_GROUP_SHOP_NAMES[g.k] || g.n, subgroups: subcats.map(s => ({ k: s.k, n: s.n })) }
+      : { k: g.k, n: MODULE_GROUP_SHOP_NAMES[g.k] || g.n };
+  });
+
+/** Canonical row kind (`"ship"` or `"item"`). */
+export const shopRowKind = row => (row && row.kind === "ship" ? "ship" : "item");
+
+/** Classify a shop row into `{ group, subgroup, subcat }` inside `SHOP_GROUPS`. */
+export function shopGroupFor(row) {
+  if (!row) return { group: "loot", subgroup: null, subcat: null };
+  if (shopRowKind(row) === "ship") return { group: "ships", subgroup: null, subcat: null };
+  const id = row.id;
+  if (isModule(id) && MODULES[id]) {
+    const mod = MODULES[id];
+    const subgroup = mod.g;
+    const subcats = MODULE_SUBCATEGORIES[subgroup] || [];
+    const matched = row.subcat
+      ? subcats.find(s => s.k === row.subcat)
+      : subcats.find(s => s.family && mod.weaponFamily === s.family);
+    return { group: "modules", subgroup, subcat: matched ? matched.k : null };
+  }
+  const cat = itemCat(id);
+  if (cat === "ore") return { group: "ores", subgroup: null, subcat: null };
+  if (cat === "consumable" || cat === "ammo") return { group: "consumables", subgroup: null, subcat: null };
+  return { group: "loot", subgroup: null, subcat: null };
+}
 
 export const SHOPS = {
   meridian: {
-    n: "Weapons shop",
+    n: "Shop",
     d:
-      "Left click fires your primary weapon (keys 1 and 2 switch). Right click fires your secondary weapon. Everything you buy goes into the station inventory, as many as you like: fit it in Outfitting or move it to a ship in Inventory.",
+      "Click a group to browse. Items go to this station's Inventory; bought ships go to this station's Hangar. Right-click a ship for details.",
     stock: [
+      // Ships: stored in this station's Outfitting hangar, never as cargo items.
+      {
+        kind: "ship",
+        id: "wasp",
+        price: SHIPS.wasp.price,
+        n: SHIPS.wasp.n,
+        d: SHIPS.wasp.d,
+      },
+      {
+        kind: "ship",
+        id: "prospector",
+        price: SHIPS.prospector.price,
+        n: SHIPS.prospector.n,
+        d: SHIPS.prospector.d,
+      },
+      {
+        kind: "ship",
+        id: "bulwark",
+        price: SHIPS.bulwark.price,
+        n: SHIPS.bulwark.n,
+        d: SHIPS.bulwark.d,
+      },
+      {
+        kind: "ship",
+        id: "testship",
+        price: SHIPS.testship.price,
+        n: SHIPS.testship.n,
+        d: SHIPS.testship.d,
+      },
+      // Modules: grouped automatically under their module subgroup.
       {
         id: "beam_basic",
         price: 900,
@@ -52,8 +147,6 @@ export const SHOPS = {
       },
       // The six standard parts, one credit each: a pilot who takes a powerplant
       // or a hull off a ship (or loses one with the ship) can always buy it back.
-      // The two parts above stay at their real prices, so the only things that
-      // really cost money at the outpost are the beam and the missile pod.
       {
         id: "power_basic",
         price: 1,
@@ -119,5 +212,14 @@ export const isShop = id => Object.prototype.hasOwnProperty.call(SHOPS, id);
 /** A shop's definition, or Meridian's when the id is unknown (a screen never blanks). */
 export const shopDef = id => (isShop(id) ? SHOPS[id] : SHOPS[DEFAULT_SHOP]);
 
-/** The row a shop sells item `id` under, or null when this shop does not sell it. */
-export const shopRow = (shopId, id) => (shopDef(shopId).stock || []).find(r => r.id === id) || null;
+/**
+ * The row a shop sells `id` under, or null when this shop does not sell it.
+ * Pass `kind` (`"ship"` or `"item"`) to restrict the lookup to that row kind.
+ */
+export const shopRow = (shopId, id, kind = null) =>
+  (shopDef(shopId).stock || []).find(
+    r => r.id === id && (!kind || shopRowKind(r) === kind)
+  ) || null;
+
+/** True when `row` points to a real ship hull (`kind: "ship"`) in `SHIPS`. */
+export const isShipRow = row => shopRowKind(row) === "ship" && isShipType(row.id);

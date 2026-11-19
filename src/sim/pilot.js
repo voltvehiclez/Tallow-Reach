@@ -17,7 +17,7 @@
 // view class in `render/views.js`).
 
 import { V, fwdQ, faceQ } from "../util/math.js";
-import { SHIPS } from "../data/ships.js";
+import { shipDef } from "../data/ships.js";
 import { mountOffset } from "../data/mounts.js";
 import { state, localPlayer } from "../state/state.js";
 
@@ -80,7 +80,7 @@ export function playerLocal(v, player = localPlayer(), ship = player === localPl
 }
 
 /** The model scale of the ship being flown. */
-export const shipScale = (ship = state.profile.ship) => SHIPS[ship].sc;
+export const shipScale = (ship = state.profile.ship) => shipDef(ship)?.sc ?? 1;
 
 /** The pilot's own velocity (zero before `createPlayer`). */
 export const playerVel = (player = localPlayer()) => player.v || V(0, 0, 0);

@@ -1,7 +1,7 @@
-# Lessons archive: L1, L2, L4, L5
+# Lessons archive: L1–L6
 
-Moved out of [docs/LESSONS.md](../LESSONS.md) verbatim on 2026-11-15 to keep it under its size limit.
-Read them only when a task touches mission spawn counts, a full hold, mission hand-in, or dialogue buttons.
+Moved out of [docs/LESSONS.md](../LESSONS.md) verbatim to keep it under its size limit.
+Read them only when a task touches mission spawn counts, a full hold, dialogue departure, item integrity, or dialogue buttons.
 
 ### L1. Starting a mission again spawned more ships each time
 - **Seen:** accepting and abandoning a mission repeatedly made more and more NPCs appear.
@@ -21,6 +21,15 @@ Read them only when a task touches mission spawn counts, a full hold, mission ha
 - **Enforced by:** the full-hold invariant (every mission, every step); `tests/step13b-missions.test.mjs`
   (blocked beacon hand-off); `blockedScriptText` and the "Dock at a station and make room" hint.
 
+### L3. Warping or undocking during a dialogue failed the mission
+- **Seen:** leaving mid-conversation (warp, undock) marked the mission failed, or killed the dialogue.
+- **Cause:** "the player left the place" was interpreted as abandonment.
+- **Rule:** leaving **pauses**; it never fails a mission. Failure comes only from a declared, explained cause
+  (`fails.on`, with `fails.message`). A conversation that needs the pilot docked simply waits and the objective
+  says to return.
+- **Enforced by:** the wandering invariant (the pilot is moved to a different place before every action); the
+  linter (`fails.message`, allowed failure reasons); `step13b` warp-before-Close test.
+
 ### L4. A finished mission failed or vanished afterwards
 - **Seen:** after completing the objective, a later sector change or death removed the mission before the reward
   could be claimed, and it re-appeared as a fresh "Start".
@@ -37,3 +46,25 @@ Read them only when a task touches mission spawn counts, a full hold, mission ha
   flying.
 - **Enforced by:** invariant (the world is snapshotted around every dialogue click and must be unchanged);
   invariant (measured spawn distance); linter (every spawn needs `spawnDist`, `requiresFlying`).
+
+### L6. A mission item appeared in the hold by itself
+- **Seen:** with a full hold the item dropped; after unloading cargo at the station the item suddenly appeared in
+  the inventory instead of having to be retrieved.
+- **Cause:** the game held the item aside and delivered it automatically once space freed up.
+- **Rule (the realism rule):** nothing enters or leaves the hold or wallet except by a real pickup, purchase,
+  loading at the dock or hand-over the player performs. Never as a side effect of space or a timer.
+- **Enforced by:** the item-integrity invariant (a storm of docking, undocking, ticks and inventory events must
+  not change mission items except through recorded pickups and hand-overs).
+
+### L7. One mission's trigger advanced another mission
+- **Seen:** two active missions interfered (a wave-clear for one moved the other).
+- **Cause:** mission-tagged events were not scoped to the mission that owned them.
+- **Rule:** every mission-tagged trigger carries its mission id and only that mission reacts.
+- **Enforced by:** "two missions at once" invariants; `step13b` trigger-isolation test.
+
+### L8. Authored mission fields were silently lost on save and load
+- **Seen / risk:** a field added to a mission step worked in play but vanished after a save and load, because the
+  save sanitizer (`cleanMissionStep` in `state/profile.js`) keeps only a list of known fields.
+- **Rule:** any new step field must be added to that list. A save and load must keep every authored field.
+- **Enforced by:** the save-and-load-at-every-step invariant, which compares every authored field of every step
+  after a round trip through `sanitizeSave`.

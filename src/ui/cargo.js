@@ -9,13 +9,21 @@
 import { state, localPlayer, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { on, emit } from "../util/events.js";
-import { cargoHtml } from "./screens.js";
-import { discardItem, countOf } from "../sim/inventory.js";
+import { cargoHtml, shipDetailsHtml } from "./screens.js";
+import { discardItem, countOf, slotAt } from "../sim/inventory.js";
 import { useItem, canUse } from "../sim/consumables.js";
 import { holdShip } from "../sim/pilot.js";
 import { canDiscard, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
+import {
+  cancelHeldStack,
+  clickInventorySlot,
+  hasHeldStack,
+  openTakeAmountPopover,
+  rightClickInventorySlot,
+  runStackAll,
+} from "./inventory-ui.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
 
@@ -38,22 +46,97 @@ function renderCargo() {
   if (body) body.innerHTML = cargoHtml();
 }
 
+function saveQuietly() {
+  try {
+    saveAutosave(currentSave());
+  } catch {
+    // An autosave that cannot be written must not interrupt inventory actions.
+  }
+}
+
 function closeContextMenu() {
   if (menu) menu.remove();
   menu = null;
   const card = root && root.querySelector(".cargo-card");
-  card?.querySelector(".inv-discard-popover")?.remove();
+  if (card?.querySelectorAll) {
+    card.querySelectorAll(".inv-discard-popover, .inv-take-popover, .ship-info-popover").forEach(n => n.remove());
+  } else {
+    card?.querySelector?.(".inv-discard-popover")?.remove?.();
+    card?.querySelector?.(".inv-take-popover")?.remove?.();
+    card?.querySelector?.(".ship-info-popover")?.remove?.();
+  }
 }
 
-/**
- * Right-click a tile for the only thing there is to do with cargo in space:
- * throw the stack away. Nothing can be moved out here, so Discard is the whole
- * menu — the station panel's menu (ui/menu.js) offers the same entry next to Sell.
- */
-function onCargoContextMenu(event) {
-  const tile = event.target.closest("[data-kind][data-where]");
+/** Close any open cargo popover or return a cursor-held stack before closing the card itself. */
+export function dismissCargoLayer() {
+  if (!isCargoOpen()) return false;
   const card = root && root.querySelector(".cargo-card");
-  if (!tile || !card) return;
+  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover, .ship-info-popover");
+  if (open && open.length) {
+    closeContextMenu();
+    return true;
+  }
+  if (cancelHeldStack()) {
+    saveQuietly();
+    renderCargo();
+    return true;
+  }
+  return false;
+}
+
+function openCargoShipDetails(type, event, card) {
+  const html = shipDetailsHtml(type);
+  if (!html) return;
+  closeContextMenu();
+  const pop = document.createElement("div");
+  pop.className = "ship-info-popover";
+  pop.setAttribute("role", "dialog");
+  pop.innerHTML = html;
+  const rect = card.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, event.clientX - rect.left + (card.scrollLeft || 0))}px`;
+  pop.style.top = `${Math.max(8, event.clientY - rect.top + (card.scrollTop || 0))}px`;
+  card.append(pop);
+  uiSound();
+}
+
+function onCargoContextMenu(event) {
+  const card = root && root.querySelector(".cargo-card");
+  if (!card) return;
+
+  // While holding a stack, right-clicking any slot places 1 item into it.
+  const slotBtn = event.target.closest("button[data-a='invSlot']");
+  if (slotBtn && hasHeldStack()) {
+    event.preventDefault();
+    closeContextMenu();
+    const res = rightClickInventorySlot({
+      where: slotBtn.dataset.where,
+      slot: Number(slotBtn.dataset.slot),
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    if (res?.message) notify(res.message);
+    if (res?.changed) {
+      uiSound("click");
+      saveQuietly();
+      renderCargo();
+    }
+    return;
+  }
+
+  if (hasHeldStack()) {
+    event.preventDefault();
+    return;
+  }
+
+  const shipRow = event.target.closest("[data-ship-type]");
+  if (shipRow && shipRow.dataset.shipType) {
+    event.preventDefault();
+    openCargoShipDetails(shipRow.dataset.shipType, event, card);
+    return;
+  }
+
+  const tile = event.target.closest("[data-kind][data-where]");
+  if (!tile) return;
   event.preventDefault();
   closeContextMenu();
 
@@ -61,9 +144,18 @@ function onCargoContextMenu(event) {
   menu.className = "inv-context";
   menu.setAttribute("role", "menu");
 
-  // Step 14: anything with a `use` field in data/items.js gets a **Use** entry beside Discard. What
-  // using it does is data (`USE_ACTIONS` in sim/consumables.js), so this menu never grows a second
-  // special case for the next consumable.
+  const take = document.createElement("button");
+  take.type = "button";
+  take.dataset.a = "cargoTakeOpen";
+  take.dataset.b = tile.dataset.id;
+  take.dataset.where = tile.dataset.where;
+  take.dataset.slot = tile.dataset.slot || "0";
+  take.setAttribute("role", "menuitem");
+  take.textContent = "Take amount";
+  take.title = "Pick up a chosen number of items onto the cursor.";
+  menu.append(take);
+
+  // Step 14: anything with a `use` field in data/items.js gets a **Use** entry beside Discard.
   if (canUse(tile.dataset.id)) {
     const use = document.createElement("button");
     use.type = "button";
@@ -81,6 +173,7 @@ function onCargoContextMenu(event) {
   discard.dataset.a = "cargoDiscard";
   discard.dataset.b = tile.dataset.id;
   discard.dataset.where = tile.dataset.where;
+  discard.dataset.slot = tile.dataset.slot || "0";
   discard.setAttribute("role", "menuitem");
   discard.textContent = `Discard \u00d7${tile.dataset.count}`;
   if (!canDiscard(tile.dataset.id)) {
@@ -98,24 +191,55 @@ function onCargoContextMenu(event) {
   uiSound();
 }
 
-/** Discard, both steps, in the flight card — ui/discard.js, as the station does it. */
-function openCargoDiscard(entry) {
-  const id = entry.dataset.b;
-  const where = entry.dataset.where || state.profile.ship;
-  if (!canDiscard(id)) return;
-  const count = countOf(where, id);
-  if (!(count > 0)) return;
-  const card = root && root.querySelector(".cargo-card");
-  if (!card) return;
-
-  // Place the popover where the context menu was.
+function menuAnchorIn(card) {
   const hostRect = card.getBoundingClientRect();
   const menuRect = menu ? menu.getBoundingClientRect() : hostRect;
-  const anchor = {
+  return {
     left: menuRect.left - hostRect.left + (card.scrollLeft || 0),
     top: menuRect.top - hostRect.top + (card.scrollTop || 0),
     width: 0,
   };
+}
+
+function openCargoTakeAmount(entry) {
+  const id = entry.dataset.b;
+  const where = entry.dataset.where || state.profile.ship;
+  const slot = Number(entry.dataset.slot);
+  if (!Number.isInteger(slot) || slot < 0) return;
+  const item = slotAt(where, slot);
+  if (!item || item.id !== id || !(item.n > 0)) return;
+  const card = root && root.querySelector(".cargo-card");
+  if (!card) return;
+  const anchor = menuAnchorIn(card);
+  closeContextMenu();
+  openTakeAmountPopover({
+    host: card,
+    anchor,
+    where,
+    slot,
+    id,
+    count: item.n,
+    onTake: () => {
+      uiSound("click");
+      renderCargo();
+    },
+  });
+  uiSound();
+}
+
+/** Discard, both steps, in the flight card — ui/discard.js, as the station does it. */
+function openCargoDiscard(entry) {
+  const id = entry.dataset.b;
+  const where = entry.dataset.where || state.profile.ship;
+  const slotIdx = Number(entry.dataset.slot);
+  if (!canDiscard(id)) return;
+  const item = Number.isInteger(slotIdx) && slotIdx >= 0 ? slotAt(where, slotIdx) : null;
+  const count = item && item.id === id ? item.n : countOf(where, id);
+  if (!(count > 0)) return;
+  const card = root && root.querySelector(".cargo-card");
+  if (!card) return;
+
+  const anchor = menuAnchorIn(card);
   closeContextMenu();
 
   openDiscardPopover({
@@ -124,17 +248,18 @@ function openCargoDiscard(entry) {
     where,
     id,
     count,
-    onDiscard: (place, item, amount) => {
-      // The same message the station's Discard shows, and the same save.
-      notify(discardItem(place, item, amount));
+    onDiscard: (place, itemId, amount) => {
+      notify(discardItem(
+        place,
+        itemId,
+        amount,
+        state.profile,
+        state.worldState,
+        Number.isInteger(slotIdx) ? slotIdx : -1
+      ));
       uiSound("confirm");
-      // Mission hand-offs waiting on a change of cargo get their retry.
       emit("mission-inventory-changed", { profile: state.profile, player: state.player });
-      try {
-        saveAutosave(currentSave());
-      } catch {
-        // An autosave that cannot be written must not eat the discard itself.
-      }
+      saveQuietly();
       renderCargo();
     },
   });
@@ -167,6 +292,72 @@ function useConsumable(entry) {
 }
 
 function onCargoClick(event) {
+  const subtab = event.target.closest("button[data-a='cargoView']");
+  if (subtab) {
+    cancelHeldStack();
+    state.ui.cargoView = subtab.dataset.b === "assets" ? "assets" : "hold";
+    uiSound("click");
+    saveQuietly();
+    renderCargo();
+    return;
+  }
+  const assetBtn = event.target.closest("button[data-a='assetStation']");
+  if (assetBtn) {
+    const placeId = assetBtn.dataset.b;
+    const open = state.ui.assetsOpen || (state.ui.assetsOpen = {});
+    if (open[placeId]) delete open[placeId];
+    else open[placeId] = true;
+    uiSound("click");
+    renderCargo();
+    return;
+  }
+  const slotBtn = event.target.closest("button[data-a='invSlot']");
+  if (slotBtn) {
+    closeContextMenu();
+    const res = clickInventorySlot({
+      where: slotBtn.dataset.where,
+      slot: Number(slotBtn.dataset.slot),
+      otherWhere: null,
+      shiftKey: Boolean(event.shiftKey),
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    if (res.message) notify(res.message);
+    if (res.changed) {
+      uiSound("click");
+      saveQuietly();
+      renderCargo();
+    }
+    return;
+  }
+  const stackBtn = event.target.closest("button[data-a='stackAll']");
+  if (stackBtn && !stackBtn.disabled) {
+    closeContextMenu();
+    const res = runStackAll(stackBtn.dataset.where || state.profile.ship);
+    if (res.message) notify(res.message);
+    uiSound("click");
+    saveQuietly();
+    renderCargo();
+    return;
+  }
+  const retBtn = event.target.closest("button[data-a='invReturn']");
+  if (retBtn) {
+    if (cancelHeldStack()) {
+      uiSound("click");
+      saveQuietly();
+      renderCargo();
+    }
+    return;
+  }
+  if (event.target.closest("button[data-a='shipInfoClose']")) {
+    closeContextMenu();
+    return;
+  }
+  const take = event.target.closest("[data-a='cargoTakeOpen']");
+  if (take && !take.disabled) {
+    openCargoTakeAmount(take);
+    return;
+  }
   const use = event.target.closest("[data-a='cargoUse']");
   if (use && !use.disabled) {
     useConsumable(use);
@@ -177,7 +368,7 @@ function onCargoClick(event) {
     openCargoDiscard(discard);
     return;
   }
-  if (event.target.closest(".inv-discard-popover")) return;
+  if (event.target.closest(".inv-discard-popover, .inv-take-popover, .ship-info-popover")) return;
   if (event.target.closest("[data-cargo-close]") || event.target === root) closeCargo();
   else if (!event.target.closest(".inv-context")) closeContextMenu();
 }
@@ -186,6 +377,7 @@ function onCargoClick(event) {
 export function setupCargo() {
   root = document.createElement("section");
   root.id = "cargo";
+  root.className = "cargo-overlay";
   root.hidden = true;
   root.setAttribute("role", "dialog");
   root.setAttribute("aria-modal", "true");
@@ -220,6 +412,7 @@ export function openCargo() {
 /** Close it and hand the controls and sound back to the flight the pilot left. */
 export function closeCargo({ silent = false } = {}) {
   if (!isCargoOpen()) return false;
+  if (cancelHeldStack()) saveQuietly();
   state.ui.cargo = null;
   closeContextMenu();
   if (root) root.hidden = true;
