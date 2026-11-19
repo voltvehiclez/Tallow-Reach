@@ -440,7 +440,7 @@ export function outfittingHtml() {
     right = MODULE_GROUPS.slice(left.length);
 
   // Services for the hull in the viewer (the selected ship): sits below the
-  // modules with compact, non-horizontal cards and no native browser tooltips.
+  // modules in a compact 2x4 single-line grid with no native browser tooltips.
   const repCost = repairCost(S.ship),
     repPct = Math.round((S.hp[S.ship] ?? 1) * 100);
   let serviceBoxes =
