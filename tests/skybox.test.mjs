@@ -142,8 +142,8 @@ test("every sky a place declares is a cube naming an installed skybox", () => {
     assert.ok(SKYBOXES[sky.skybox], `${id}: sky.skybox "${sky.skybox}" is not in data/skyboxes.js`);
     assert.ok(Number.isInteger(sky.shards) && sky.shards >= 0, `${id}: sky.shards is a whole number (0 for none)`);
     for (const k of Object.keys(sky)) {
-      assert.ok(["kind", "skybox", "shards", "starfield"].includes(k),
-        `${id}: a cube sky carries kind, skybox, shards, starfield only, not ${k}`);
+      assert.ok(["kind", "skybox", "shards", "starfield", "ambient"].includes(k),
+        `${id}: a cube sky carries kind, skybox, shards, starfield and optional ambient fill, not ${k}`);
     }
   }
 });

@@ -738,12 +738,29 @@ export function systemCoreName(system) {
  *  An authored `core: { kind, n }` override wins. Each id gets its own seeded
  *  roll, so overrides and system order cannot shift another system's body. This
  *  also leaves the generator's ids/links and the gameplay RNG stream untouched. */
+export function seededCoreKind(seed, id, chance = GALAXY.systemMap.blackHoleChance) {
+  return makeRng((seed ^ hashId(id)) >>> 0)() < chance ? "blackHole" : "star";
+}
+
+export function environmentalCore(seed, id, environment) {
+  const kind = seededCoreKind(seed, id, environment?.blackHoleChance);
+  return {kind, radiusScale:kind === 'blackHole' ? environment?.blackHoleRadiusScale ?? 1 : 1};
+}
+
+// An isolated instance uses its persistent place id for a repeatable position around its own core.
+export function instanceSkyContext(id, seed = GALAXY.seed, environment) {
+  const rng = makeRng(seed ^ hashId(`instance-sky:${id}`));
+  const angle = rng() * 2 * Math.PI;
+  const radius = GALAXY.systemMap.ordinaryRadius * GALAXY.systemSpace.auPerMapUnit;
+  const core = environmentalCore(seed,id,environment);
+  return { spatial: { starKind: core.kind, core, nodes: [] },
+    here: { pos: [Math.cos(angle) * radius, (rng()*2-1) * GALAXY.systemSpace.heightAmplitudeAu, Math.sin(angle) * radius] } };
+}
+
 export function assignCores(world, tuning = GALAXY) {
-  const chance = tuning.systemMap.blackHoleChance;
   const seed = (world.seed ?? tuning.seed) >>> 0;
   for (const system of world.systems) {
-    const roll = makeRng((seed ^ hashId(system.id)) >>> 0)();
-    const kind = system.core?.kind ?? (roll < chance ? "blackHole" : "star");
+    const kind = system.core?.kind ?? seededCoreKind(seed, system.id, tuning.systemMap.blackHoleChance);
     const n = system.core?.n || systemCoreName(system);
     system.core = { kind, n };
   }
@@ -1032,6 +1049,7 @@ export function systemSpatialLayout(world, systemId, tuning = GALAXY.systemSpace
   return {
     system,
     starKind,
+    core: system.core,
     starName: system.core?.n || systemCoreName(system),
     starPos: [0, 0, 0],
     scale,

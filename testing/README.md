@@ -10,6 +10,8 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 ## Current guides
 
+- [14d: wormhole systems](TESTING-14D.md)
+
 | Guide | Covers |
 | --- | --- |
 | [TESTING-NPC-AI.md](TESTING-NPC-AI.md) | Individual flight, Guardian aggression, obstacle avoidance, difficulty and crowded-belt performance. |

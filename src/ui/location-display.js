@@ -2,5 +2,5 @@
 import { placeAt, systemOf } from '../data/places.js';
 export function locationText(id) {
   const pocket = placeAt(id), system = systemOf(id);
-  return { system: system ? placeAt(system).n : 'Outside known systems', pocket: pocket.n };
+  return { system: system && pocket.kind !== 'instance' ? placeAt(system).n : 'Uncharted Space', pocket: pocket.n };
 }

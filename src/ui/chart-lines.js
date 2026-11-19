@@ -59,7 +59,7 @@ export function chartGalaxy(world) {
     }
     if (!overlaps) break;
   }
-  const value = { ...world, systems, systemsById: byId };
+  const value = { ...world, systems, systemsById: { ...world.systemsById, ...byId } };
   projected.add(value);
   cache.set(world, { signature, value });
   return value;

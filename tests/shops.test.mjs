@@ -242,7 +242,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 24, "Step 13 mission progress is now part of the save");
+  assert.equal(p.v, 25, "Step 13 mission progress is now part of the save");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {

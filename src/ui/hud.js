@@ -8,7 +8,7 @@ import { meterHeight, meterPercent, meterValue, throttleDisplay } from "./vitals
 // In-flight HUD: shield, hull and boost bars, cargo and mission readout,
 // the missile lock ring, and the markers for targets and the outpost.
 
-import { targetOnScreen, targetHealthMarkup, markerStyle, lockMarkerStyle, markerClasses } from "./target-display.js";
+import { beltLabelGroups, targetOnScreen, targetHealthMarkup, markerStyle, lockMarkerStyle, markerClasses } from "./target-display.js";
 import { fmtDist } from "../util/math.js";
 import { on, emit } from "../util/events.js";
 import { shipDef } from "../data/ships.js";
@@ -37,6 +37,7 @@ const MARKER_MARGIN_Y = 30;
 let markers = [];
 let markerCount = 0;
 let markerRoot = null;
+let beltPlace = null, beltGroups = [];
 let el = {};
 let routeCache = null;
 let weaponSlotsCache = null;
@@ -162,6 +163,7 @@ export function setupHud() {
   $("pocket-filters").innerHTML = POCKET_FILTERS.map(type=>`<label><input type="checkbox" data-pocket-filter="${type}" ${navigationFilters[type]?'checked':''}>${type}</label>`).join('');
   on("navigation-toggle", open => setNavigation(typeof open === "boolean" ? open : !state.ui.navigation));
   on("place-entered", () => {
+    beltPlace = null;
     if (el.navigationRows?.dataset) delete el.navigationRows.dataset.hover;
     navigationTimer = 0;
   });
@@ -529,10 +531,16 @@ function drawMarkers() {
     const locked = lock && lock.k === "s" && lock.o?.place === state.place && lock.o?.feature === f.id;
     if (!locked) mark(V(...f.pos), f.n, markerStyle("station", f));
   }
-  for (const f of featuresOf(state.place, "asteroidField")) {
-    const locked = lock && lock.k === "n" && lock.o?.place === state.place
-      && lock.o?.source?.kind === "asteroidField" && lock.o?.source?.id === f.id;
-    if (!locked) mark(V(...fieldMarkerPosition(f)), f.n, markerStyle("asteroidField", f));
+  if (beltPlace !== state.place) {
+    beltGroups = beltLabelGroups(featuresOf(state.place, "asteroidField"));
+    beltPlace = state.place;
+  }
+  const fieldLock = lock?.k === "n" && lock.o?.place === state.place && lock.o.source?.kind === "asteroidField"
+    ? lock.o.source : null;
+  let lockedBeltName;
+  for (const {main, members} of beltGroups) {
+    if (fieldLock && members.some(f => f.id === fieldLock.id)) lockedBeltName = main.n;
+    else mark(V(...fieldMarkerPosition(main)), main.n, markerStyle("asteroidField", main));
   }
 
   W.enemies.forEach(e => {
@@ -544,7 +552,7 @@ function drawMarkers() {
     const hostile = lock.k === "e";
     const style = lockMarkerStyle(lock, o => featureById(o?.place, o?.feature));
     const pos = lock.o && lock.o.pos ? interpolatedPos(lock.o) : lockPosition(lock);
-    const visible = mark(pos, lockName(lock), style, 70, -36, hostile ? targetHealth(lock.o) : null, "lock");
+    const visible = mark(pos, lockedBeltName ?? lockName(lock), style, 70, -36, hostile ? targetHealth(lock.o) : null, "lock");
     if (visible) mark(pos, null, style, 0, 0, null, "lk");
   }
 

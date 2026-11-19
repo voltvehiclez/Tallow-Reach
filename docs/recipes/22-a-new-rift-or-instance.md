@@ -232,3 +232,9 @@ v19 migration and a run that cannot be rebuilt); `tests/layers.test.mjs` pins th
 forbids `sim/` from reaching `ui/`, `render/` or `core/`; `tests/views.test.mjs` counts the registered
 views; `tests/docs.test.mjs` insists this recipe is indexed and that every new `src/<folder>/*.js` is
 named in that folder's `README.md`.
+
+## Persistent systems (14d)
+
+`WORMHOLE_SYSTEMS` in `src/data/instances.js` sets the population and pocket templates. Keep existing system indices and pocket suffixes stable: they identify saved places. A connection is rebuilt from the galaxy seed, its system index and saved generation; only the generation and remaining seconds are saved. Both ends are replaced together. See [the playtest](../../testing/TESTING-14D.md).
+
+`maxPerSystem` caps live doors, including arrivals. The first slot guarantees a regular-space exit; the second pairs systems. Additional paired slots open with `extraSlotChance` and roll `otherSystemChance` (0.5) for another system rather than regular space. The same `sky` on all S-system pockets selects the grey cube and neutral ambient tint. Regular-space entrances keep their host sky. `blackHoleChance` and `blackHoleRadiusScale` in `WORMHOLE_ENVIRONMENT` tune both simple wormhole interiors and named S-systems (80% and twice regular black-hole radius).

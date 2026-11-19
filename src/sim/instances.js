@@ -327,7 +327,8 @@ export function createInstance(templateId, seed, opts = {}) {
     instance: templateId,
     features: template.features || [],
     // The sky of somewhere else: `render/scene.js` reads it and hides the ordinary starfield.
-    sky: template.sky || null,
+    environment: template.environment,
+    sky: template.environment?.sky || template.sky || null,
     // The system the entry pocket belongs to, so a chart opened inside one still reads sensibly.
     parent: origin ? placeAt(origin).parent || null : null,
     enter: { pos: [...record.enterPos.toArray()] },
@@ -654,6 +655,15 @@ export function enterRift(rift, player = localPlayer()) {
   if (rift.place !== placeId) return "That rift is somewhere else.";
   if (playerPos(P).distanceTo(rift.pos) > (Number(RIFT.enterRange) || 0)) {
     return `Fly closer to the ${rift.dest || rift.n || "rift"} (within ${Number(RIFT.enterRange) || 0} m) and press R again.`;
+  }
+  if (rift.peer) {
+    const denied = exitDenial(rift);
+    if (denied) return denied;
+    const peer = state.galaxy?.pocketsById?.[rift.peer];
+    if (peer?.peer !== placeId || !enterPlace(peer.id,P)) return "That wormhole has collapsed.";
+    P.pos.set(...peer.enter.pos); P.v.set(0,0,0); P.thr=0; P.warp=null; P.snap=true;
+    emit("place-changed", {from:placeId,to:peer.id,player:P});
+    return true;
   }
   const record = createInstance(rift.template, rift.seed, { origin: placeId });
   if (!record) return "That rift leads nowhere.";

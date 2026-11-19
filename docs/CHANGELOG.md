@@ -20,6 +20,34 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-19: One HUD label per nearby belt group
+
+Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
+
+## 2026-11-19: Shared natural wormhole environments
+
+Simple sites and named wormhole systems use one environment definition: 80% black holes, double black-hole radius, grey sky and neutral ambient fill. Rifts and entrance pockets retain their own environment. No save change.
+
+## 2026-11-19: Larger, more common black holes in wormhole systems
+
+S-systems roll 80% black holes and render them at twice the usual physical radius. Regular systems, rifts and simple wormholes keep their existing cores. Derived from the world seed; no save migration.
+
+## 2026-11-19: Multiple wormhole routes and grey system skies
+
+Off-chart systems support up to four live paired doors, balancing S-to-S routes with regular-space exits. All S-system pockets now use the grey wormhole cube and neutral ambient fill. Existing v25 clocks and original endpoints are preserved; extra routes derive from the saved seed and generation.
+
+## 2026-11-19: Start with 30 wormhole systems
+
+Raised `WORMHOLE_SYSTEMS.count` from 5 to 30. Existing v25 saves keep their first five connections; the additional systems start on load. Simple wormhole population unchanged.
+
+## 2026-11-19: Step 14d — persistent wormhole systems
+
+Five named off-chart systems with seeded cores, warpable pockets and paired 20-minute connections. M switches between the local and regular charts; renewal creates two fresh endpoints without stranding the pilot. Save v25 migrates older worlds. Playtest pending: `testing/TESTING-14D.md`.
+
+## 2026-11-19: Uncharted Space HUD label and 14d exit decision
+
+Rift and simple-wormhole interiors show Uncharted Space above the pocket name. The 14d plan records that a replacement exit connects to a fresh wormhole in a random regular-space location. Named wormhole systems are planned as S0001 etc.; isolated instances now gain a visible seeded core and matching lighting using normal star/black-hole odds. No save change.
+
 ## 2026-11-18: Station UI rework, reusable left window, Inventory ship list and My Assets destination
 
 Merged PR #43 (Slices 1–3, save v24) to `main`, then implemented the 11-item station UI
@@ -114,111 +142,15 @@ shared `.cargo-overlay` for all future cargo transfers. Files:
 `src/styles.css`, `tests/slice2-shop-ships.test.mjs`. Build regenerated; owner playtest
 pending before Slice 3.
 
-## 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers
-
-Moving scenery (`stepScenery` in `src/render/scene.js`) now advances per 60 Hz sim tick
-inside `simClock`'s `beforeStep` (with `updateScenery(alpha)` interpolating drawn angles
-and moving the sky after the camera), scaled movers compute true world-metre push-out
-(`src/sim/colliders.js`), and sub-0.5 m/s pushes never round to `0 m/s` (`displayedSpeed`
-in `src/sim/flight-instruments.js`), so being pushed by Meridian's turning arms or any
-station mover always shows true speed across all refresh rates. Station Mission log and
-active mission rows now report exact live available inventory counts for mining, deliver,
-recovery, cargo hand-over and reached story item objectives (`missionItemRequirements` in
-`src/sim/missions.js`, scoped to the mission's hand-in station plus active ship hold),
-and allow immediate hand-in when a mine/deliver load is already stocked. Contract boards
-now remove only the accepted offer, keep empty boards empty, and enforce an independent
-10-minute (`CONTRACT_REFRESH_SECONDS = 600`) unpaused play-time cooldown per station
-saved in `world.boardTimers` (`SAVE_VERSION = 22` in `src/state/profile.js`, backward-
-compatible with all v1–v21 saves). Files: `src/main.js`, `src/render/scene.js`,
-`src/sim/{colliders,flight-instruments,player,places,session,missions,contracts,step}.js`,
-`src/data/{contracts,missions/contracts}.js`, `src/state/profile.js`,
-`src/ui/{hud,missionlog,screens,menu}.js`, `tests/slice1-speed-missions-contracts.test.mjs`.
-Build regenerated; owner playtest pending before Slice 2.
-
-## 2026-11-18: Nebula fill 0.175, unified label/lock colours and N-tab lock-square icons
-
-Raised default `NEBULA_FILL.intensity` from `0.125` to `0.175` in `src/data/lighting.js`
-(tint, softness, overrides and sunlight unchanged). Unified floating world labels (`.mk`),
-target lock labels/boxes (`.mk.lock`, `.mk.lk`) and new `N`-tab left hollow-square row
-icons (`.pocket-icon`, 9×9px inside unchanged 16px rows) behind a single helper
-(`markerStyle` / `lockMarkerStyle` in `src/ui/target-display.js`) and one shared CSS
-variable (`--marker-color`). Friendly stations (including Meridian Station), friendly
-ships, rifts, gates and caches stay blue when locked instead of turning brown; hostiles
-are red; asteroids, fields and crates are amber-brown; future objects with a new
-`markerTone` or `markerColor` inherit across labels, lock boxes and the `N` tab without
-duplicate code. Files: `src/data/lighting.js`, `src/ui/target-display.js`,
-`src/ui/pocket-list.js`, `src/ui/hud.js`, `src/sim/targeting.js`, `src/styles.css`,
-`tests/nebula-lighting.test.mjs`, `tests/target-display.test.mjs`,
-`tests/pocket-list.test.mjs`, docs. Save v21 unchanged; build regenerated.
-
-## 2026-11-18: Ore asteroids use natural shaded surface colours with no self-glow
-
-Removed the hardcoded emissive self-glow (`rockGlow` in `src/render/views.js`) that kept
-the shadow side of Cobalt and Voidite asteroids artificially bright. Every `cat: "ore"`
-entry in `src/data/items.js` now defines its own base surface `col` (read through
-`rockColor(id)`, defaulting to `DEFAULT_ROCK_COLOR` `0x4a4540`): Ferrite `0x4a4540`
-(unchanged brown), Cobalt `0x2e5585` (blue), Voidite `0x543888` (purple) and Lumenite
-`0x625636` (golden-amber). All asteroids share the exact same non-emissive PBR shading,
-so dark sides drop naturally into shadow like Ferrite. Enforced by `tests/views.test.mjs`
-and `tests/content.test.mjs`; updated recipe 2 and folder READMEs. Save v21 unchanged;
-build regenerated; owner playtest pending.
-
-## 2026-11-18: Fix N panel closing, selected-row outline, row separators and HUD transparency
-
-Fixed `#pocket-objects` staying visible on N, Close and Escape: `#hud > #pocket-objects`
-(`display: flex`, two IDs) outranked `#pocket-objects[hidden]` (`display: none`), and
-focused filter checkboxes swallowed `KeyN` in `core/input.js`. Added `#hud > #pocket-objects[hidden]`
-and explicit `[hidden]` rules, exempted checkboxes from the typing-field guard, unified
-navigation state on `state.ui.navigation`, reset hover/filter-menu/focus on close, and
-ordered modal Escape dismissal before navigation in `main.js`. Added faint inset grey
-row separators that keep rows strictly 16px tall (35+ at 720p), and a full-row 1px
-white inset outline (`isPocketRowLocked` + `pocketRowsHtml` + immediate hover-safe sync)
-for the locked target across all target kinds and derived feature copies. Matched slight
-surface transparency (`--hud-surface`, alpha 0.72) across the N panel, weapon slots and
-grey status boxes while keeping coloured meter fills solid; gave `#throttle-track` slight
-transparency (`--hud-throttle-bg`) preserving its `#141b20` base, blue fills and labels.
-Files: `src/styles.css`, `src/index.html`, `src/ui/hud.js`, `src/ui/pocket-list.js`,
-`src/sim/targeting.js`, `src/core/input.js`, `src/state/state.js`, `src/main.js`,
-`tests/pocket-list.test.mjs`, docs and `testing/TESTING-BATCH2.md`. Save v21 unchanged;
-build regenerated; owner playtest pending.
-
-## 2026-11-16: Compact selectable pocket list and aligned lower HUD
-
-Pocket list now has 16px single-line rows (35+ at 720p), opaque top-right placement,
-category checkbox filters saved safely between sessions, and reversible Name/Type/
-Distance sorting. It hides mission objectives while open. Clicking a live row toggles
-its F-compatible lock; extra object classes get generic tracked locks. Derived spatial
-features match stable kind/id because place definitions return copies. Mouse steering,
-orbit and firing are released while browsing; keyboard flight continues. N/Esc/Close
-restore normal control. Hover/focus holds row order for safe clicks. Bank headings
-align with grey-frame tops, and throttle spacing matches the 6px lateral gap. Tests
-cover filters/storage, sorting, selection/pruning, controls and geometry. Save v21;
-build regenerated. Owner playtest pending; batch slices 3–5 still pending.
-
-## 2026-11-16: Repair N action, stabilise lead and align status bottoms
-
-Fixed missing emit import in main's N handler; reproduced the reported ReferenceError
-with a test executing that action against its actual imported event helpers. Lead
-prediction now shares interpolated player/muzzle, target position and velocities
-with the rendered camera; avoids raw 60Hz pose jumps at close range while turning.
-Added interpolation/teleport regression coverage. Lowered status groups only: grey
-frame bottoms align with throttle at 24px, with their X positions and geometry unchanged.
-Throttle shifts 28px right to share the weapon strip centre; its size/height stay fixed.
-Save v21; build regenerated; owner repeat playtest pending.
-
-## 2026-11-16: Batch slice 2 — navigation, lead and actual speed
-
-Moved the complete lower HUD down 18px without changing internal spacing; missile
-icon faces up. N toggles a read-only, live pocket-object list: spatial features and
-runtime entities, all distances, future detection-policy hook. Cannon lead uses
-locked-enemy velocity, inherited shooter velocity, selected muzzle and bullet speed;
-no marker for beams, empty bays, unreachable or offscreen intercepts. Shared bullet
-lifetime caps prediction. Speed measures each flight step including collision pushes,
-not teleport/warp displacement; place entry resets it. Added regression tests and
-owner checklist. Save v21; slices 3–5 pending. Build regenerated; playtest pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers
+- 2026-11-18: Nebula fill 0.175, unified label/lock colours and N-tab lock-square icons
+- 2026-11-18: Ore asteroids use natural shaded surface colours with no self-glow
+- 2026-11-18: Fix N panel closing, selected-row outline, row separators and HUD transparency
+- 2026-11-16: Compact selectable pocket list and aligned lower HUD
+- 2026-11-16: Repair N action, stabilise lead and align status bottoms
+- 2026-11-16: Batch slice 2 — navigation, lead and actual speed
 - 2026-11-16: Missile icon and lower interaction prompts
 - 2026-11-16: Remove duplicate weapon-selection messages
 - 2026-11-16: Signed throttle and final HUD alignment tweaks

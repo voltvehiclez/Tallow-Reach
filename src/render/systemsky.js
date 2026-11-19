@@ -4,7 +4,7 @@
 // its system like any sibling — gets the dynamic layer: the system's star or black hole hangs in
 // its true direction from that pocket, and every *other* pocket of the system hangs as a barely
 // visible dot, the way a settlement shows up as a pinprick from orbit. Instances (rifts, the far
-// side of a wormhole) are not pockets of a system and get nothing here: they keep their own skies.
+// side of a wormhole) are not pockets of a system and get a seeded central body over their own skies.
 //
 // Everything is positioned from the derived AU layout (`systemSpatialLayout`), so what you see
 // hangs exactly where the pocket map says each place is. The central body renders as a real 3D
@@ -24,7 +24,7 @@ import { GALAXY } from "../data/galaxy.js";
 import { PLANET_VIEW, atmosphereRadius } from "../data/scenery.js";
 import { AU_METRES } from "../data/planets.js";
 import { state } from "../state/state.js";
-import { systemSpatialLayout } from "../sim/galaxy.js";
+import { systemSpatialLayout, instanceSkyContext } from "../sim/galaxy.js";
 
 /**
  * Resolve the system a place belongs to, or null when the place is not an ordinary pocket of one
@@ -33,6 +33,7 @@ import { systemSpatialLayout } from "../sim/galaxy.js";
  */
 export function systemSkyContext(id) {
   const place = placeAt(id);
+  if (place?.kind === "instance") return instanceSkyContext(id, state.galaxy?.seed, place.environment);
   if (!place || place.kind !== "pocket" || !place.parent) return null;
   const galaxy = state.galaxy;
   if (!galaxy || !galaxy.pocketsById || !galaxy.pocketsById[id]) return null;
@@ -133,7 +134,8 @@ export function buildSystemSkyLayer(id) {
 
   // The body: its set size in AU over the pocket's distance — the apparent size the eye should
   // get. Clamped so a very close pass still leaves an on-screen (but never screen-filling) disc.
-  const apparent = L * Math.tan(Math.asin(Math.min(1, body.radiusAu / dist)));
+  const radiusAu = body.radiusAu * (spatial.core?.radiusScale ?? 1);
+  const apparent = L * Math.tan(Math.asin(Math.min(1, radiusAu / dist)));
   const radiusPx = THREE.MathUtils.clamp(apparent, tuning.minBodyPx, tuning.maxBodyPx);
   const bodyGeo = new THREE.SphereGeometry(radiusPx, 28, 18);
   const bodyMat = new THREE.MeshBasicMaterial({ color: body.color, fog: false });

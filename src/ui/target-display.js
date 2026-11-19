@@ -1,3 +1,25 @@
+import { BELT_LABEL_GAP_METRES } from '../data/scenery.js';
+
+// Connected components of the field footprints, not screen-space clusters: turning the
+// camera cannot split a belt. Use dense cores rather than the sparse fringe of outliers.
+export function beltLabelGroups(fields) {
+  const remaining = new Set(fields), groups = [];
+  const radius = f => f.coreRadius ?? f.radius ?? 0;
+  for (const main of fields) {
+    if (!remaining.delete(main)) continue;
+    const members = [main];
+    for (const a of members) for (const b of remaining) {
+      const horizontal = Math.hypot(a.pos[0]-b.pos[0], a.pos[2]-b.pos[2]);
+      const gapXZ = Math.max(0, horizontal-radius(a)-radius(b));
+      const gapY = Math.max(0, Math.abs(a.pos[1]-b.pos[1])-(a.height ?? 0)-(b.height ?? 0));
+      if (Math.hypot(gapXZ,gapY) > BELT_LABEL_GAP_METRES) continue;
+      remaining.delete(b); members.push(b);
+    }
+    groups.push({main, members}); // first authored field is the stable label/anchor
+  }
+  return groups;
+}
+
 // Pure display helpers shared by the HUD and headless regression tests.
 export function targetOnScreen(cameraZ, projected) {
   return cameraZ < 0 && Math.abs(projected.x) <= 1 && Math.abs(projected.y) <= 1

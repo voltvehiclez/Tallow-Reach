@@ -131,6 +131,12 @@ export const EXPIRY_OUTCOME_TYPES = ["kill", "collapse"];
  */
 export const SKY_KINDS = ["cube"];
 
+// Shared by natural wormhole interiors. Connection counts and timers are topology, not environment.
+export const WORMHOLE_ENVIRONMENT = {
+  blackHoleChance: 0.8, blackHoleRadiusScale: 2,
+  sky: {kind:'cube', skybox:'wormhole_grey', shards:0, starfield:false, ambient:{tint:0xbababa}},
+};
+
 export const INSTANCE_TEMPLATES = {
   // The Basic rift's usual run: four hardened guardians hold a small, rich pocket shut.
   guardian_rift: {
@@ -273,7 +279,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 320] },
-    sky: { kind: "cube", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
+    environment: WORMHOLE_ENVIRONMENT, sky: WORMHOLE_ENVIRONMENT.sky,
     features: [
       {
         kind: "asteroidField",
@@ -317,7 +323,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "cube", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
+    environment: WORMHOLE_ENVIRONMENT, sky: WORMHOLE_ENVIRONMENT.sky,
     features: [
       {
         kind: "asteroidField",
@@ -373,7 +379,7 @@ export const INSTANCE_TEMPLATES = {
     },
     onExpire: { kind: "collapse", message: "The Simple Wormhole collapses." },
     enter: { pos: [0, 0, 330] },
-    sky: { kind: "cube", skybox: "wormhole_grey", shards: 0, starfield: false },  // a dark grey somewhere else
+    environment: WORMHOLE_ENVIRONMENT, sky: WORMHOLE_ENVIRONMENT.sky,
     features: [
       {
         kind: "asteroidField",
@@ -513,4 +519,23 @@ export function waveGroups(guardians) {
   if (Array.isArray(guardians.groups)) return guardians.groups.map(norm).filter(Boolean);
   const one = norm(guardians);
   return one ? [one] : [];
+}
+
+// 14d: persistent off-chart systems; only the paired entrances rotate.
+export const WORMHOLE_SYSTEMS = {
+  environment: WORMHOLE_ENVIRONMENT,
+  maxPerSystem: 4, extraSlotChance: 0.65, otherSystemChance: 0.5,
+  count: 30, tier: 3, doorName: 'System Wormhole', mapRadius: 210, doorRadius: 30, spin: 0.12, exit:{requires:[]},
+  pockets: [{suffix:'Belt', template:'frontier'}, {suffix:'Wrecks', template:'salvage_yard'}],
+};
+export const unchartedName = i => `S${String(i + 1).padStart(4, '0')}`;
+// Save v25 migration: every older world starts with its first generation of links.
+export function cleanConnections(raw) {
+  return Array.from({length: WORMHOLE_SYSTEMS.count}, (_, i) => {
+    const row = Array.isArray(raw) ? raw[i] : null;
+    const epoch = Number.isSafeInteger(row?.epoch) && row.epoch >= 0 ? row.epoch : 0;
+    const lifetime = Number.isFinite(row?.lifetime) && row.lifetime > 0
+      ? Math.min(row.lifetime, WORMHOLE_SPAWN.lifetimeSec) : WORMHOLE_SPAWN.lifetimeSec;
+    return {epoch, lifetime};
+  });
 }

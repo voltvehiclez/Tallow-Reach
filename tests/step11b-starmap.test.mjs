@@ -69,7 +69,7 @@ function oldV15() {
 }
 
 test("11B: new saves are v20 and store only seed plus compact system knowledge", () => {
-  assert.equal(SAVE_VERSION, 24);
+  assert.equal(SAVE_VERSION, 25);
   const s = newSave();
   assert.deepEqual(Object.keys(s.world.galaxy).sort(), ["knowledge", "seed"]);
   assert.equal(s.world.galaxy.seed, GALAXY.seed);
@@ -82,7 +82,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
   const old = oldV15();
   const before = JSON.parse(JSON.stringify(old));
   const s = prepareGalaxySave(old);
-  assert.equal(s.v, 24);
+  assert.equal(s.v, 25);
   assert.equal(s.world.place, "hollow");
   assert.deepEqual(s.world.resume, before.world.resume);
   assert.equal(s.profile.cr, 4850);
@@ -95,7 +95,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
 test("11B: v13 and v12 fixtures still migrate through the world-aware loader", () => {
   for (const raw of [V13, V12]) {
     const s = prepareGalaxySave(raw);
-    assert.equal(s.v, 24);
+    assert.equal(s.v, 25);
     assert.equal(s.profile.cr, raw.profile?.cr ?? raw.cr);
     assert.deepEqual(s.profile.holds, raw.profile?.holds ?? raw.holds);
     assert.ok(state.galaxy.pocketsById[s.world.place]);
@@ -104,7 +104,8 @@ test("11B: v13 and v12 fixtures still migrate through the world-aware loader", (
 
 test("11B: a custom seed and generated-pocket resume regenerate exactly from compact data", () => {
   fresh(42);
-  const expected = JSON.stringify(generateGalaxy(42));
+  // Include the off-chart extension installed on the resolved galaxy in v25.
+  const expected = JSON.stringify(state.galaxy);
   state.worldState.place = "sys-010-hub";
   state.player.place = "sys-010-hub";
   state.place = "sys-010-hub";
@@ -202,7 +203,7 @@ test("11B: autosave, slots and TR1 codes keep their keys/prefix and use the same
     const code = encodeSave(save);
     assert.ok(code.startsWith("TR1:"));
     assert.equal(decodeSave(code, prepareGalaxySave).world.galaxy.seed, 77);
-    assert.equal(JSON.parse(mem.get("tr1")).v, 24);
+    assert.equal(JSON.parse(mem.get("tr1")).v, 25);
   } finally {
     if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
   }
@@ -1048,8 +1049,8 @@ test("11B: the pre-11B v15 fixture resumes flying with its character and cargo i
   fresh();
   const save = prepareGalaxySave(V15);
   assert.equal(V15.v, 15);
-  assert.equal(save.v, 24);
-  assert.equal(save.profile.v, 24);
+  assert.equal(save.v, 25);
+  assert.equal(save.profile.v, 25);
   assert.equal(save.profile.missions.length, 1);
   assert.deepEqual(save.profile.mission, V15.profile.mission, "the singular compatibility view keeps the old contract");
   assert.deepEqual(save.profile.flags, {});
@@ -1109,6 +1110,7 @@ test("11B: pocket layout is deterministic, gate exits point at peers, and mapPos
     if (role === "gate") assert.ok(Math.abs(radius - GALAXY.systemMap.gateRadius) < 1e-9, "gates orbit the core on their ring");
     else if (role === "belt") assert.ok(radius >= GALAXY.systemMap.beltRadius - GALAXY.systemMap.beltSpread && radius <= GALAXY.systemMap.beltRadius + GALAXY.systemMap.beltSpread, "belt pockets sit in their annulus");
     else if (role === "planet") assert.ok(radius >= GALAXY.systemMap.planetInner && radius <= GALAXY.systemMap.planetOuter, "planet pockets sit in their annulus");
+    else if (node.pocket.connection) assert.deepEqual(node.pos,node.pocket.mapPos,"wormhole entrances keep their seeded map positions");
     else assert.ok(Math.abs(radius - GALAXY.systemMap.ordinaryRadius) < 1e-9, "ordinary pockets orbit the core on their ring");
   }
   const chart = pocketConnections(world, "meridian");

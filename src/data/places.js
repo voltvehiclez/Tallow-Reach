@@ -42,8 +42,8 @@ function rebuildCatalog() {
 
 export function setPlaceCatalog(galaxy = null) {
   livePlaces = galaxy ? {
-    ...Object.fromEntries(galaxy.systems.map(s => [s.id, s])),
-    ...galaxy.pockets,
+    ...(galaxy.systemsById || Object.fromEntries(galaxy.systems.map(s => [s.id, s]))),
+    ...Object.fromEntries(Object.entries(galaxy.pockets).filter(([,p]) => !p.connection)),
   } : null;
   // A replaced world leaves no instance or wormhole behind: they belong to the session that made
   // them. The save carries the wormholes (slice 14c) and re-registers them on load.

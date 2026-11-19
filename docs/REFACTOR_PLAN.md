@@ -194,9 +194,9 @@ The eight architecture principles applied to missions (enforcement, and the limi
   makes its objective and locked cache strictly one-time per wormhole. Objectives beyond a fight (mining a special ore,
   say) are new `OBJECTIVE_KINDS` entries, and the spawn rule (which system, how often, how many alive at once) is data.
 - **14d — wormhole systems (uncharted space).** Entered exactly like a simple wormhole, but the far side is a
-  **system** that is not on the existing starmap: pockets the pilot uses like any other system's, **persistent and
+  **system** with a stable S-number name (S0001, S0002, …), used for its pockets and core like regular system names. It is not on the existing starmap: pockets the pilot uses like any other system's, **persistent and
   saved** like one. Its own wormhole pockets are the dynamic part (the same 20-minute timer), and if one expires while
-  the pilot is inside, a new one spawns so they can still get out. The starmap opens on the wormhole system's pocket
+  the pilot is inside, a new one spawns so they can still get out. Its replacement connects to a newly spawned wormhole at a random location in regular space, not a fixed return to the original entrance. The starmap opens on the wormhole system's pocket
   map, with a button to view the normal-space map and the same button to come back.
 **Do.** Entering and leaving are rules in data (`exit.requires`), never code, so the owner can add criteria later. A
 difficulty scalar well above the map's. A lifetime, and a data-declared outcome for running out: a **rift kills** the
