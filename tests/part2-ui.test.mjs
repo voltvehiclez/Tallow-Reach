@@ -30,11 +30,14 @@ test('Mechanical undock keeps low tones and multiple scheduled noise layers',()=
  assert.ok(UNDOCK_SOUND.some(l=>l.frequency<=105));
  assert.ok(Math.max(...UNDOCK_SOUND.map(l=>l.delay+l.duration))>=0.8);
 });
-test('Mission summary has keyboard-accessible native Details and untruncated full guidance',()=>{
+test('Mission summary has keyboard-accessible native Details expanding inline without duplicate lines',()=>{
  const p=newProfile();
  p.missions=[missionFromContract({type:'hunt',tier:1,n:6,p:3,r:100,e:'raider'})];
  const html=missionLogHtml(p);
  assert.match(html,/<details class="mission-log-details"><summary>Details<\/summary>/);
  assert.match(html,/mission-log-full/); assert.match(html,/data-a="drop"/);
- assert.equal((html.match(/<strong>Next:<\/strong>/g)||[]).length,2);
+ assert.equal((html.match(/<strong>Next:<\/strong>/g)||[]).length,1);
+ assert.doesNotMatch(html,/<h4>/);
+ assert.match(html,/<strong>Reward:<\/strong> 100 cr/);
+ assert.match(html,/<strong>Threat:<\/strong> 1 of 3/);
 });

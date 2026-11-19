@@ -55,6 +55,7 @@ export function createPlayerRecord(controls = neutralControls()) {
     pos: V(0, 0, 0),    // where the ship is (world metres)
     quat: Q(),          // which way it points
     measuredSpeed: 0,
+    forwardSpeed: 0,    // signed velocity along the ship's nose (negative when reversing)
     pushed: false,      // true when a solid collider displaced the ship this tick
     v: V(0, 0, 0),      // current velocity
     thr: 0,            // throttle, -1..1
@@ -324,6 +325,9 @@ export function flight(dt, P = state.player, runtime = null) {
   const continuous = !W && stepPlace === P.place && !P.docked && P.hull > 0;
   P.pushed = continuous && pushed;
   P.measuredSpeed = flightSpeed(stepStart, P.pos, dt, continuous);
+  P.forwardSpeed = continuous && dt > 0
+    ? V(P.pos.x - stepStart.x, P.pos.y - stepStart.y, P.pos.z - stepStart.z).dot(fwdQ(P.quat)) / dt
+    : 0;
 }
 
 /** Reflect the ship's velocity off a collision normal, keeping 40% of its energy. */

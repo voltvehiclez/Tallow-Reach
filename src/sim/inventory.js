@@ -343,6 +343,37 @@ export function takeItemFromSlot(where, slotIndex, id, n = 1, profile = state.pr
   return took;
 }
 
+/**
+ * Add up to `n` of `id` into `where`, preferring `slotIndex` when it is empty
+ * or holds a non-full stack of `id`, and spilling any remainder into matching
+ * or first-open slots so stock and slot lists stay exact.
+ */
+export function addItemToSlot(where, slotIndex, id, n = 1, profile = state.profile, world = state.worldState) {
+  if (!isItem(id) || !(n > 0)) return 0;
+  const list = ensureSlotList(where, profile, world).map(s => (s ? [s[0], s[1]] : null));
+  const put = addItem(where, id, n, profile, world);
+  if (!(put > 0)) return 0;
+  let rem = put;
+  const cap = itemStack(id);
+  const idx = Number.isInteger(slotIndex) ? slotIndex : -1;
+  if (idx >= 0) {
+    while (list.length <= idx) list.push(null);
+    const cur = list[idx];
+    if (!cur) {
+      const add = Math.min(rem, cap);
+      list[idx] = [id, add];
+      rem -= add;
+    } else if (cur[0] === id && cur[1] < cap) {
+      const add = Math.min(rem, cap - cur[1]);
+      cur[1] += add;
+      rem -= add;
+    }
+  }
+  if (rem > 0) insertIntoSlotList(list, id, rem);
+  writeRawSlots(where, list, profile, world);
+  return put;
+}
+
 /** Pick up the whole stack sitting in `(where, slotIndex)` onto the cursor. */
 export function pickupSlot(where, slotIndex, profile = state.profile, world = state.worldState) {
   const idx = Math.floor(+slotIndex);

@@ -302,11 +302,15 @@ export const state = {
     cache: null,       // the rift-cache trade (ui/cache.js); null while closed
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
-    tab: "m",          // m contracts, l mission log, o outfitting, h hangar, i inventory, p shop, b base, s saves
+    tab: "l",          // right station panel: l missions (accept), i inventory, b base, s saves
+    leftPanel: "m",    // left station window: o outfitting, p shop, m mission log, or null
     invShip: null,     // the ship whose hold the Inventory tab shows (null = the one being flown)
     invView: "inv",    // docked Inventory sub-tab: "inv" (station & ship slots) or "assets" (My Assets)
     cargoView: "hold", // in-flight I sub-tab: "hold" (ship slots) or "assets" (My Assets)
     assetsOpen: {},    // expanded station pocket ids in My Assets (session-only)
+    assetShipsOpen: {}, // expanded "placeId::shipId" ship cargo rows in My Assets (session-only)
+    assetsSearchOpen: false, // whether the My Assets search box is expanded (session-only)
+    assetsQuery: "",   // active My Assets prefix-search string (session-only)
     invHeld: null,     // stack currently held on the cursor (session-only; restored on close/save)
     shopOpen: {},      // expanded group/subgroup keys in the compact Shop tab (session-only)
     get board() {

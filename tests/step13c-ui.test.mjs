@@ -47,7 +47,7 @@ test("13c: mission log lists active missions, objective, progress and next actio
   const profile = newProfile();
   profile.missions.push(storyMission());
   const html = missionLogHtml(profile);
-  assert.match(html, /Mission log/, "the log has a heading");
+  assert.match(html, /<h2>Mission log<\/h2>/, "the left companion window has the Mission log heading");
   const previousProfile = state.profile;
   state.profile = profile;
   try {
@@ -116,8 +116,10 @@ test("13c: mission log lists active missions, objective, progress and next actio
 
   const screens = readFileSync(new URL("../src/ui/screens.js", import.meta.url), "utf8");
   const ui = readFileSync(new URL("../src/ui/missionlog.js", import.meta.url), "utf8");
-  assert.match(screens, /\["l", "Mission log"\]/, "the mission log is an outpost tab");
-  assert.match(screens, /l: missionLogHtml/, "the tab is wired to the mission-log renderer");
+  assert.match(screens, /\["l", "Missions"\]/, "Missions is an outpost tab");
+  assert.doesNotMatch(screens, /\["m", "Contracts"\]/, "redundant Contracts nav button is removed");
+  assert.match(screens, /l: missionsHtml/, "the right Missions tab lists story missions and contracts to accept");
+  assert.match(screens, /m: missionLogHtml/, "the left companion window renders the in-progress mission log");
   assert.doesNotMatch(ui, /Archivist Vale|Kestrel Hollow|I will investigate/, "story text stays in mission data");
 });
 

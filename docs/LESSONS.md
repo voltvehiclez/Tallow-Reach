@@ -321,10 +321,9 @@ and reading the shield bar — not at the plumbing that carries it.
 
 ### L28. A `[hidden]` toggle fails when a container selector outranks it or a checkbox traps the key
 
-- **Seen (owner, 2026-11-18):** the `N` panel would not close with `N` or its Close button.
-- **Cause:** `#hud > #pocket-objects` (`display: flex`, two IDs) outranked `#pocket-objects[hidden]`, and `core/input.js` blocked non-Escape keys on checkbox `INPUT`s.
-- **Rule:** every `[hidden]` rule must outrank every `display` rule for that element; typing guards apply only to text/number/select controls, never checkboxes.
-- **Enforced by:** `tests/pocket-list.test.mjs` (all 13 `.hidden` surfaces, checkbox `KeyN`, and live N/Close/Esc/dock tests).
+- **Seen (owner, 2026-11-18):** the `N` panel wouldn't close (`#hud > #pocket-objects` outranked `[hidden]` and checkbox `INPUT`s trapped keys), and `#inv-held-ghost` (`display: flex`) lingered as an empty box after dropping an item.
+- **Rule:** every `[hidden]` rule must outrank every `display` rule for that element (and transient cursor ghosts remove on clear); typing guards apply only to text/number/select controls, never checkboxes.
+- **Enforced by:** `tests/pocket-list.test.mjs`, `tests/station-ui-batch.test.mjs`.
 
 ### L29. Moving colliders stepped once per render frame gave `0 m/s` on multi-tick frames
 

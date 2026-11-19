@@ -45,7 +45,7 @@ import {
   updateContractTimers,
 } from "../src/sim/contracts.js";
 import { missionLogHtml } from "../src/ui/missionlog.js";
-import { outpostHtml } from "../src/ui/screens.js";
+import { contractsHtml } from "../src/ui/screens.js";
 import { moveTo, newPilot } from "./mission-driver.mjs";
 
 const DEPOT = {
@@ -382,10 +382,11 @@ test("per-station 10-minute unpaused contract refresh timer removes only accepte
       acceptContract(0, state.profile, state.worldState, "reach");
     }
     assert.deepEqual(boardAt("reach"), [], "empty board does not auto-refill");
-    const emptyUi = outpostHtml({ tab: "m" });
+    const emptyUi = contractsHtml();
     assert.match(emptyUi, /No contracts available/);
     assert.match(emptyUi, /data-a="ref"[^>]*disabled/);
     assert.match(emptyUi, /Refresh \(10:00\)/);
+    assert.doesNotMatch(emptyUi, /Active missions/, "Contracts board excludes redundant Active missions");
 
     // Unpaused sim time advances Meridian's timer (e.g. 240 s -> 360 s / 6:00 left).
     updateContractTimers(240, state.worldState);
@@ -425,7 +426,7 @@ test("per-station 10-minute unpaused contract refresh timer removes only accepte
     applySave(decodeSave(encodeSave(currentSave())));
     assert.deepEqual(boardAt("reach"), []);
     state.place = "reach";
-    const readyUi = outpostHtml({ tab: "m" });
+    const readyUi = contractsHtml();
     assert.doesNotMatch(readyUi, /data-a="ref"[^>]*disabled/, "Refresh button enables once 10 minutes pass");
 
     // Pressing Refresh posts 4 new contracts at Meridian and starts a fresh 10:00 timer; Depot is untouched.

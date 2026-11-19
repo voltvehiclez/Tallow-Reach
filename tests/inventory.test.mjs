@@ -279,7 +279,8 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(styles, /height: calc\(3 \* var\(--inv-row-height\) \+ 2 \* var\(--inv-row-gap\)\)/, "each hold grid keeps a three-row viewport");
   assert.match(styles, /height: calc\(5 \* var\(--inv-row-height\) \+ 4 \* var\(--inv-row-gap\)\)/, "and the flight hold shows five rows");
   assert.match(styles, /overflow-y: auto/, "each hold grid scrolls independently");
-  assert.match(screens, /Shift-click transfers a whole stack/, "the Inventory explains stack movement");
+  assert.match(screens, /Shift-click to move stack/, "item tooltips explain Shift-click stack transfer");
+  assert.doesNotMatch(screens, /Click a stack to pick it up/, "redundant inventory description paragraph is removed");
   assert.match(screens, /data-a="stackAll"/, "every inventory column offers Stack all");
   assert.match(menu, /name === "invSlot"/, "slots support pickup, place, swap and Shift-click");
   assert.doesNotMatch(menu, /inv\.moveCargo|inv\.moveModule/, "one move handles goods and parts");
@@ -292,7 +293,8 @@ test("the Inventory tab, the shop and the picker are wired up (source guards)", 
   assert.match(economy, /sellInventoryItem/, "inventory selling uses an economy action");
   assert.match(economy, /takeItemFromSlot\(where, slotIndex, id, count|takeItem\(where, id, count/, "only the requested amount is removed");
   assert.doesNotMatch(screens, /ownsModule/, "the shop no longer hides Buy once you own one");
-  assert.match(screens, /&times;\$\{n\}/, "the picker shows how many of a part there are");
+  assert.doesNotMatch(screens, /No modules in storage/, "Outfitting slots no longer open the redundant modules-in-storage box");
+  assert.match(menu, /dataset\.a = "invEquip"/, "right-clicking an item in Inventory offers Equip");
   for (const action of ["invPrev", "invNext"]) {
     assert.match(menu, new RegExp(`\\b${action}\\(`), `menu.js has the ${action} action`);
     assert.match(screens, new RegExp(`data-a="${action}`), `a button in screens.js uses ${action}`);

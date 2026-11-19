@@ -45,7 +45,7 @@ import {
   runStackAll,
   takeAmountHtml,
 } from "../src/ui/inventory-ui.js";
-import { assetsHtml, cargoHtml, outpostHtml } from "../src/ui/screens.js";
+import { assetsHtml, cargoHtml, leftPanelHtml, outpostHtml } from "../src/ui/screens.js";
 
 function freshSession({ docked = true } = {}) {
   cancelHeldStack();
@@ -185,14 +185,14 @@ test("Shop: Mining beams has its own collapsible sub-category under Primary weap
   assert.equal(mining.n, "Mining beams");
   assert.deepEqual(mining.items.map(i => i.id), ["beam_basic"]);
 
-  state.ui.tab = "p";
+  state.ui.leftPanel = "p";
   state.ui.shopOpen = { modules: true, "modules:primary": true };
-  const closedSub = outpostHtml(state.ui);
+  const closedSub = leftPanelHtml(state.ui);
   assert.match(closedSub, /Mining beams/);
   assert.doesNotMatch(closedSub, /data-b="meridian:item:beam_basic"/);
 
   state.ui.shopOpen["modules:primary:mining"] = true;
-  const openSub = outpostHtml(state.ui);
+  const openSub = leftPanelHtml(state.ui);
   assert.match(openSub, /data-a="wb" data-b="meridian:item:beam_basic"/);
 });
 

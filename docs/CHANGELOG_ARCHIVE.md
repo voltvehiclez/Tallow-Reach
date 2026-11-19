@@ -24,6 +24,17 @@ in here: open this file only when the index shows an entry that matters to what 
 
 
 
+## 2026-11-16: Missile icon and lower interaction prompts
+
+Replaced the windowed rocket glyph with a simple diagonal finned missile outline,
+using the supplied reference. Shared interaction prompts (dock, lock acquisition,
+wormholes and other contextual actions) now appear white, bottom-anchored above the
+weapon strip. Mining progress follows them down. Removed the heading inset and
+tracking so PRIMARY/SECONDARY align with the grey name edges. Added markup/layout
+guards. Explicitly centre all status tracks, labels and readouts on their frames
+without changing 28px widths, text sizes or frame positions. Save v21 unchanged;
+build regenerated. Owner visual check pending.
+
 ## 2026-11-16: Remove duplicate weapon-selection messages
 
 Removed centre-screen equipped/empty messages from both bank selectors; the slot HUD

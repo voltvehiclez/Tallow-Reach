@@ -9,20 +9,27 @@
 import { state, localPlayer, currentSave } from "../state/state.js";
 import { saveAutosave } from "../state/storage.js";
 import { on, emit } from "../util/events.js";
-import { cargoHtml, shipDetailsHtml } from "./screens.js";
+import { assetsResultsHtml, cargoHtml, shipDetailsHtml } from "./screens.js";
 import { discardItem, countOf, slotAt } from "../sim/inventory.js";
 import { useItem, canUse } from "../sim/consumables.js";
 import { holdShip } from "../sim/pilot.js";
-import { canDiscard, itemName } from "../data/items.js";
+import { canDiscard, isModule, itemName } from "../data/items.js";
 import { notify } from "./notice.js";
 import { openDiscardPopover } from "./discard.js";
 import {
+  buildAssetStationContextMenu,
+  buildModuleContextMenu,
   cancelHeldStack,
+  clearAssetStationDestination,
+  clearHeldGhost,
   clickInventorySlot,
   hasHeldStack,
+  measureSlotSquare,
+  openModuleInfoPopover,
   openTakeAmountPopover,
   rightClickInventorySlot,
   runStackAll,
+  setAssetStationDestination,
 } from "./inventory-ui.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
@@ -59,11 +66,12 @@ function closeContextMenu() {
   menu = null;
   const card = root && root.querySelector(".cargo-card");
   if (card?.querySelectorAll) {
-    card.querySelectorAll(".inv-discard-popover, .inv-take-popover, .ship-info-popover").forEach(n => n.remove());
+    card.querySelectorAll(".inv-discard-popover, .inv-take-popover, .ship-info-popover, .mod-info-popover").forEach(n => n.remove());
   } else {
     card?.querySelector?.(".inv-discard-popover")?.remove?.();
     card?.querySelector?.(".inv-take-popover")?.remove?.();
     card?.querySelector?.(".ship-info-popover")?.remove?.();
+    card?.querySelector?.(".mod-info-popover")?.remove?.();
   }
 }
 
@@ -71,7 +79,7 @@ function closeContextMenu() {
 export function dismissCargoLayer() {
   if (!isCargoOpen()) return false;
   const card = root && root.querySelector(".cargo-card");
-  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover, .ship-info-popover");
+  const open = card?.querySelectorAll(".inv-context, .inv-discard-popover, .inv-take-popover, .ship-info-popover, .mod-info-popover");
   if (open && open.length) {
     closeContextMenu();
     return true;
@@ -89,7 +97,7 @@ function openCargoShipDetails(type, event, card) {
   if (!html) return;
   closeContextMenu();
   const pop = document.createElement("div");
-  pop.className = "ship-info-popover";
+  pop.className = "inv-sell-popover ship-info-popover";
   pop.setAttribute("role", "dialog");
   pop.innerHTML = html;
   const rect = card.getBoundingClientRect();
@@ -128,6 +136,34 @@ function onCargoContextMenu(event) {
     return;
   }
 
+  const stationBtn = event.target.closest("[data-asset-station]");
+  if (stationBtn && stationBtn.dataset.assetStation) {
+    event.preventDefault();
+    closeContextMenu();
+    menu = buildAssetStationContextMenu(document, stationBtn.dataset.assetStation);
+    const rect = card.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, event.clientX - rect.left + (card.scrollLeft || 0))}px`;
+    menu.style.top = `${Math.max(4, event.clientY - rect.top + (card.scrollTop || 0))}px`;
+    card.append(menu);
+    uiSound();
+    return;
+  }
+
+  const modRow = event.target.closest("[data-module-id]");
+  if (modRow && modRow.dataset.moduleId && isModule(modRow.dataset.moduleId)) {
+    event.preventDefault();
+    closeContextMenu();
+    menu = buildModuleContextMenu(document, modRow.dataset.moduleId, "cargoModInfo");
+    if (menu) {
+      const rect = card.getBoundingClientRect();
+      menu.style.left = `${Math.max(4, event.clientX - rect.left + (card.scrollLeft || 0))}px`;
+      menu.style.top = `${Math.max(4, event.clientY - rect.top + (card.scrollTop || 0))}px`;
+      card.append(menu);
+      uiSound();
+    }
+    return;
+  }
+
   const shipRow = event.target.closest("[data-ship-type]");
   if (shipRow && shipRow.dataset.shipType) {
     event.preventDefault();
@@ -143,6 +179,16 @@ function onCargoContextMenu(event) {
   menu = document.createElement("div");
   menu.className = "inv-context";
   menu.setAttribute("role", "menu");
+
+  if (isModule(tile.dataset.id)) {
+    const info = document.createElement("button");
+    info.type = "button";
+    info.dataset.a = "cargoModInfo";
+    info.dataset.b = tile.dataset.id;
+    info.setAttribute("role", "menuitem");
+    info.textContent = "Show info";
+    menu.append(info);
+  }
 
   const take = document.createElement("button");
   take.type = "button";
@@ -311,9 +357,45 @@ function onCargoClick(event) {
     renderCargo();
     return;
   }
+  const assetShipBtn = event.target.closest("button[data-a='assetShip']");
+  if (assetShipBtn) {
+    const shipKey = assetShipBtn.dataset.b;
+    if (shipKey) {
+      const open = state.ui.assetShipsOpen || (state.ui.assetShipsOpen = {});
+      if (open[shipKey]) delete open[shipKey];
+      else open[shipKey] = true;
+      uiSound("click");
+      renderCargo();
+    }
+    return;
+  }
+  const searchToggle = event.target.closest("button[data-a='assetSearchToggle']");
+  if (searchToggle) {
+    state.ui.assetsSearchOpen = !state.ui.assetsSearchOpen;
+    if (!state.ui.assetsSearchOpen) state.ui.assetsQuery = "";
+    uiSound("click");
+    renderCargo();
+    if (state.ui.assetsSearchOpen) root?.querySelector?.("[data-asset-search]")?.focus?.();
+    return;
+  }
+  const searchClear = event.target.closest("button[data-a='assetSearchClear']");
+  if (searchClear) {
+    state.ui.assetsQuery = "";
+    uiSound("click");
+    const input = root?.querySelector?.("[data-asset-search]");
+    if (input) {
+      input.value = "";
+      refreshCargoAssetResults();
+      input.focus?.();
+    } else {
+      renderCargo();
+    }
+    return;
+  }
   const slotBtn = event.target.closest("button[data-a='invSlot']");
   if (slotBtn) {
     closeContextMenu();
+    const slotSize = slotBtn.classList?.contains?.("inv-item") ? measureSlotSquare(slotBtn) : undefined;
     const res = clickInventorySlot({
       where: slotBtn.dataset.where,
       slot: Number(slotBtn.dataset.slot),
@@ -321,6 +403,7 @@ function onCargoClick(event) {
       shiftKey: Boolean(event.shiftKey),
       clientX: event.clientX,
       clientY: event.clientY,
+      slotSize,
     });
     if (res.message) notify(res.message);
     if (res.changed) {
@@ -340,17 +423,36 @@ function onCargoClick(event) {
     renderCargo();
     return;
   }
-  const retBtn = event.target.closest("button[data-a='invReturn']");
-  if (retBtn) {
-    if (cancelHeldStack()) {
-      uiSound("click");
-      saveQuietly();
-      renderCargo();
-    }
+  const setDestBtn = event.target.closest("button[data-a='assetSetDest']");
+  if (setDestBtn && !setDestBtn.disabled) {
+    closeContextMenu();
+    const res = setAssetStationDestination(setDestBtn.dataset.b);
+    if (res.message) notify(res.message);
+    uiSound(res.ok ? "confirm" : "click");
+    renderCargo();
     return;
   }
-  if (event.target.closest("button[data-a='shipInfoClose']")) {
+  const clearDestBtn = event.target.closest("button[data-a='assetClearDest']");
+  if (clearDestBtn && !clearDestBtn.disabled) {
     closeContextMenu();
+    clearAssetStationDestination();
+    uiSound("click");
+    renderCargo();
+    return;
+  }
+  if (event.target.closest("button[data-a='shipInfoClose'], button[data-a='modInfoClose']")) {
+    closeContextMenu();
+    return;
+  }
+  const modInfo = event.target.closest("[data-a='cargoModInfo']");
+  if (modInfo && !modInfo.disabled) {
+    const card = root && root.querySelector(".cargo-card");
+    const anchor = card ? menuAnchorIn(card) : null;
+    const modId = modInfo.dataset.b;
+    closeContextMenu();
+    if (card && openModuleInfoPopover({ host: card, moduleId: modId, anchor, clientX: event.clientX, clientY: event.clientY })) {
+      uiSound();
+    }
     return;
   }
   const take = event.target.closest("[data-a='cargoTakeOpen']");
@@ -368,9 +470,32 @@ function onCargoClick(event) {
     openCargoDiscard(discard);
     return;
   }
-  if (event.target.closest(".inv-discard-popover, .inv-take-popover, .ship-info-popover")) return;
+  if (event.target.closest(".inv-discard-popover, .inv-take-popover, .ship-info-popover, .mod-info-popover")) return;
   if (event.target.closest("[data-cargo-close]") || event.target === root) closeCargo();
   else if (!event.target.closest(".inv-context")) closeContextMenu();
+}
+
+function refreshCargoAssetResults() {
+  const results = root?.querySelector?.("[data-assets-results]");
+  if (results) {
+    results.innerHTML = assetsResultsHtml(state.profile, state.worldState, {
+      docked: false,
+      openMap: state.ui.assetsOpen,
+      shipOpenMap: state.ui.assetShipsOpen,
+      query: state.ui.assetsQuery,
+      searchOpen: state.ui.assetsSearchOpen,
+    });
+  }
+  const clearBtn = root?.querySelector?.("button[data-a='assetSearchClear']");
+  if (clearBtn) clearBtn.hidden = !state.ui.assetsQuery;
+}
+
+function onCargoInput(event) {
+  const input = event.target?.closest?.("[data-asset-search]");
+  if (!input) return;
+  state.ui.assetsSearchOpen = true;
+  state.ui.assetsQuery = String(input.value || "");
+  refreshCargoAssetResults();
 }
 
 /** Install the overlay once. It sits outside the docked panel and never moves it. */
@@ -388,6 +513,7 @@ export function setupCargo() {
     `<div id="cargo-body"></div>` +
     `</div>`;
   root.addEventListener("click", onCargoClick);
+  root.addEventListener("input", onCargoInput);
   root.addEventListener("contextmenu", onCargoContextMenu);
   document.body.appendChild(root);
   // A station, the title screen or death ends the flight view.
@@ -413,6 +539,7 @@ export function openCargo() {
 export function closeCargo({ silent = false } = {}) {
   if (!isCargoOpen()) return false;
   if (cancelHeldStack()) saveQuietly();
+  clearHeldGhost();
   state.ui.cargo = null;
   closeContextMenu();
   if (root) root.hidden = true;

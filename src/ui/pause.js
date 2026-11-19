@@ -12,6 +12,7 @@ import { saveAutosave } from "../state/storage.js";
 import { emit } from "../util/events.js";
 import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
+import { resetStationPanels } from "./left-panel.js";
 
 let overlay, soundBtn, soundLabel;
 
@@ -37,7 +38,7 @@ export function setupPause() {
 function exitToMainMenu() {
   saveAutosave(currentSave());
   state.ui.intro = true;
-  state.ui.tab = "m";
+  resetStationPanels(state.ui);
   hideNotice();
   setPause(false);
   emit("main-menu", {});

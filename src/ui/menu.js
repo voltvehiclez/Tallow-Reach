@@ -1,4 +1,4 @@
-import { setHomeStation } from "../sim/session.js";
+import { homeStationPlace, setHomeStation } from "../sim/session.js";
 // The outpost panel: renders the current screen and runs the actions behind
 // its buttons. Buttons carry a data-a action name and an optional data-b argument.
 
@@ -17,40 +17,101 @@ import { refreshShield } from "../sim/shield.js";
 import { refreshHull } from "../sim/hull.js";
 import { refreshGuns } from "../sim/guns.js";
 import * as fitting from "../sim/fitting.js";
-import { toggleModulePicker, togglePaintPicker } from "./picker.js";
+import { togglePaintPicker } from "./picker.js";
 import * as eco from "../sim/economy.js";
 import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
-import { canSell, canDiscard, itemName } from "../data/items.js";
+import { canSell, canDiscard, isModule, itemName } from "../data/items.js";
+import { MODULES } from "../data/modules.js";
 import { storyMission } from "../data/missions/index.js";
-import { introHtml, outpostHtml, shipDetailsHtml, shipSellConfirmHtml, shopBuyHtml, viewedShip } from "./screens.js";
+import {
+  assetsResultsHtml,
+  introHtml,
+  leftPanelHtml,
+  outpostHtml,
+  shipDetailsHtml,
+  shipSellConfirmHtml,
+  shopBuyHtml,
+  viewedShip,
+} from "./screens.js";
+import {
+  LEFT_TOGGLE_KEYS,
+  activeLeftPanel,
+  activeRightTab,
+  closeLeftPanel,
+  hideLeftPanelElement,
+  resetStationPanels,
+  selectRightTab,
+  syncLeftPanelElement,
+  toggleLeftPanel,
+} from "./left-panel.js";
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
 import { openDiscardPopover } from "./discard.js";
 import {
+  buildAssetStationContextMenu,
+  buildModuleContextMenu,
   cancelHeldStack,
+  clearAssetStationDestination,
+  clearHeldGhost,
   clickInventorySlot,
+  clickOutfittingBay,
   hasHeldStack,
+  measureSlotSquare,
+  openModuleInfoPopover,
   openTakeAmountPopover,
+  placeHeldOnOutfittingBay,
   rightClickInventorySlot,
   runStackAll,
+  setAssetStationDestination,
+  showDragGhost,
 } from "./inventory-ui.js";
 
 const $ = id => document.getElementById(id);
 let panel;
+let leftPanel;
 let beforeStart = null;
 let starting = false;
+let activeDrag = null;
+let dragDoc = null;
+let suppressClickUntil = 0;
+
+function wirePanelSurface(el) {
+  if (!el || typeof el.addEventListener !== "function") return;
+  el.addEventListener("click", onClick);
+  el.addEventListener("dblclick", onDblClick);
+  el.addEventListener("input", onPanelInput);
+  el.addEventListener("pointerdown", onPanelPointerDown);
+  el.addEventListener("dragstart", onPreventNativeDrag);
+  el.addEventListener("contextmenu", onInventoryContextMenu);
+  el.addEventListener("mouseover", e => {
+    if (e.target.closest("button:not(:disabled)")) hoverSound();
+  });
+}
+
+function hostPanelFor(node) {
+  if (!leftPanel) return panel;
+  if (node === leftPanel || node?.closest?.("#station-left")) return leftPanel;
+  return panel;
+}
 
 export function setupMenu(options = {}) {
   beforeStart = options.beforeStart || null;
   panel = $("panel");
+  leftPanel = $("station-left");
+  if (!leftPanel && typeof document !== "undefined" && typeof document.createElement === "function" && document.body) {
+    const created = document.createElement("aside");
+    created.id = "station-left";
+    created.className = "station-side-panel";
+    created.hidden = true;
+    created.setAttribute?.("aria-label", "Station window");
+    (document.body.append || document.body.appendChild)?.call(document.body, created);
+    leftPanel = created;
+  }
   setupNotices();
-  panel.addEventListener("click", onClick);
-  panel.addEventListener("dblclick", onDblClick);
-  panel.addEventListener("contextmenu", onInventoryContextMenu);
-  panel.addEventListener("mouseover", e => {
-    if (e.target.closest("button:not(:disabled)")) hoverSound();
-  });
+  wirePanelSurface(panel);
+  wirePanelSurface(leftPanel);
+  installDragListeners();
 
   // While the start screen is up it owns the panel: booting a save prepares the
   // ship (docked or flying) but must not replace or hide the start screen.
@@ -58,40 +119,47 @@ export function setupMenu(options = {}) {
     if (player && player !== state.player) return;
     if (state.ui.intro) return;
     hideNotice();
+    if (state.ui.tab === "l" && !activeLeftPanel(state.ui)) state.ui.leftPanel = "m";
     render();
   });
   on("launched", ({ player } = {}) => {
     if (player && player !== state.player) return;
     if (state.ui.intro) return;
+    clearHeldGhost();
     panel.hidden = true;
+    hideLeftPanelElement(leftPanel);
   });
   on("died", text => {
     cancelHeldStack();
     showNotice(text);
-    state.ui.tab = "h";
+    state.ui.tab = "i";
+    state.ui.invView = "inv";
+    state.ui.leftPanel = null;
+    state.ui.fit = null;
     render();
   });
   on("main-menu", () => {
     cancelHeldStack();
     state.ui.intro = true;
-    state.ui.tab = "m";
+    resetStationPanels(state.ui);
     hideNotice();
     render();
   });
   // A mission changed while a docked screen is open — the last dialogue line
   // closed, a dock-side script finished, a hand-in or an abandon went through.
-  // The panel is a snapshot, so redraw it; otherwise the Mission log keeps
+  // The panel is a snapshot, so redraw it; otherwise the Missions tab keeps
   // showing the old state (an Abandon button on a mission ready to hand in).
   on("mission-ui-refresh", () => {
     if (state.ui.intro || panel.hidden) return;
     render();
   });
   // Tick this station's contract refresh countdown live once a second while the
-  // Contracts tab is open, and unlock the Refresh button the moment it finishes.
+  // right-hand Missions (Contract board) tab is visible, without touching any
+  // expanded Details row in the left-hand Mission log window.
   on("board-timer-changed", ({ placeId } = {}) => {
-    if (state.ui.intro || panel.hidden || state.ui.tab !== "m") return;
+    if (state.ui.intro || panel.hidden || activeRightTab(state.ui) !== "l") return;
     if (placeId && placeId !== state.place) return;
-    render();
+    panel.innerHTML = outpostHtml(state.ui);
   });
 
   contracts.ensureBoard();
@@ -99,24 +167,34 @@ export function setupMenu(options = {}) {
 }
 
 /**
- * Show a docked tab from a key binding (I in a station opens the Inventory tab).
- * Does nothing on the title screen.
+ * Show a docked tab (or toggle a left station window) from a key binding
+ * (I in a station opens the Inventory tab). Does nothing on the title screen.
  */
 export function openStationTab(name) {
   if (state.ui.intro || !panel) return false;
-  state.ui.tab = name;
-  state.ui.confirmReset = false;
-  state.ui.fit = null;
+  cancelHeldStack();
+  closePanelPopovers();
+  selectRightTab(name, state.ui);
   render();
   return true;
 }
 
+/** Update only the shared `#station-left` window (Outfitting, Shop or Contracts). */
+export function renderLeft() {
+  if (!leftPanel) return;
+  if (state.ui.intro || !panel || panel.hidden) {
+    hideLeftPanelElement(leftPanel);
+    return;
+  }
+  const view = activeLeftPanel(state.ui);
+  syncLeftPanelElement(leftPanel, view, view ? leftPanelHtml(state.ui) : "");
+  if (view === "o") mountOutfitting();
+}
+
 export function render() {
   panel.hidden = false;
-  // Outfitting gives the panel the whole screen so the ship has room around it.
-  panel.classList.toggle("wide", !state.ui.intro && state.ui.tab === "o");
   panel.innerHTML = state.ui.intro ? introHtml() : outpostHtml(state.ui);
-  if (!state.ui.intro && state.ui.tab === "o") mountOutfitting();
+  renderLeft();
 }
 
 function save() {
@@ -159,7 +237,7 @@ const ACTIONS = {
   // implementation.
   intro() {
     state.ui.intro = false;
-    state.ui.tab = "m";
+    resetStationPanels(state.ui);
     initAudio();
     resumeFromSave();
     emit("mission-ui-refresh", {});
@@ -168,16 +246,31 @@ const ACTIONS = {
   },
   tab(name) {
     cancelHeldStack();
-    state.ui.tab = name;
     hideNotice();
     closePanelPopovers();
-    state.ui.confirmReset = false;
-    state.ui.fit = null;
+    selectRightTab(name, state.ui);
+  },
+  leftTab(name) {
+    // Keep an inventory-picked stack on the cursor when opening Outfitting so
+    // clicking a module then opening Outfitting lets you click it straight in;
+    // always return a bay-picked module when closing or switching away from Outfitting.
+    if (name !== "o" || state.ui.leftPanel === "o" || state.ui.invHeld?.fromBay) {
+      cancelHeldStack();
+    }
+    hideNotice();
+    closePanelPopovers();
+    toggleLeftPanel(name, state.ui);
+  },
+  closeLeft() {
+    cancelHeldStack();
+    closePanelPopovers();
+    closeLeftPanel(state.ui);
   },
   go() {
     cancelHeldStack();
     closePanelPopovers();
     state.ui.fit = null;
+    hideLeftPanelElement(leftPanel);
     launch();
   },
 
@@ -219,10 +312,13 @@ const ACTIONS = {
     toast(contracts.acceptMission(definition) ? "Story mission accepted." : "Could not start that story mission.");
   },
 
-  // Hangar
+  // Stored ships (inside Inventory)
   sel(id) {
+    cancelHeldStack();
     const msgText = eco.selectShip(id);
     if (msgText) toast(msgText);
+    state.ui.invShip = null;
+    state.ui.fit = null;
     inventoryChanged();
   },
   buy(id) {
@@ -251,15 +347,6 @@ const ACTIONS = {
     toast(eco.restockMissiles());
   },
 
-  // The arrows above the 3D viewer in Outfitting: cycle through the ships in the
-  // hangar (same selection as the Hangar's Fly button).
-  shipPrev() {
-    cycleShip(-1);
-  },
-  shipNext() {
-    cycleShip(1);
-  },
-
   // Inventory: switch between Storage & Hold and My Assets, step through local ships'
   // holds, pick up/place/swap/split stacks, or consolidate stacks with Stack all.
   invView(view) {
@@ -272,6 +359,12 @@ const ACTIONS = {
     if (open[placeId]) delete open[placeId];
     else open[placeId] = true;
   },
+  assetShip(shipKey) {
+    if (!shipKey) return;
+    const open = state.ui.assetShipsOpen || (state.ui.assetShipsOpen = {});
+    if (open[shipKey]) delete open[shipKey];
+    else open[shipKey] = true;
+  },
   invPrev() {
     cancelHeldStack();
     cycleInvShip(-1);
@@ -279,9 +372,6 @@ const ACTIONS = {
   invNext() {
     cancelHeldStack();
     cycleInvShip(1);
-  },
-  invReturn() {
-    if (cancelHeldStack()) inventoryChanged();
   },
   stackAll(where) {
     const target = where || inv.STATION;
@@ -300,29 +390,27 @@ const ACTIONS = {
   },
 
 
-  // Outfitting
+  // Outfitting: works just like Inventory — left-click a fitted bay to pick it
+  // up onto the cursor, left-click any bay while holding a module to equip/swap,
+  // Shift+click to quick-unequip, drag-and-drop, or right-click for Unequip / Show info.
   slot(arg) {
-    // data-b is "group:bay". Clicking the open bay again closes the picker.
     const [g, i] = String(arg || "").split(":");
-    state.ui.fit = toggleModulePicker(state.ui.fit, g, +i);
+    const res = clickOutfittingBay({ group: g, bay: +i });
+    if (res.message) toast(res.message);
+    if (res.changed && !res.picked) inventoryChanged();
   },
   paint(k) {
-    // Paint bays behave like module bays: one picker, click again to close.
     state.ui.fit = togglePaintPicker(state.ui.fit, k);
   },
-  fit(id) {
-    const open = state.ui.fit;
-    if (!open || open.kind !== "module") return;
-    const text = fitting.fitModule(open.g, open.i, id);
-    if (text) toast(text);
-    inventoryChanged();
-  },
-  unfit() {
-    const open = state.ui.fit;
-    if (!open || open.kind !== "module") return;
-    const text = fitting.unequip(open.g, open.i);
-    if (text) toast(text);
-    inventoryChanged();
+  bayUnequip(arg) {
+    const [g, i] = String(arg || "").split(":");
+    let res = fitting.unequipTo(g, +i, inv.STATION, -1);
+    if (!res.ok && state.profile.ship) {
+      const alt = fitting.unequipTo(g, +i, state.profile.ship, -1);
+      if (alt.ok) res = alt;
+    }
+    if (res.message) toast(res.message);
+    if (res.ok) inventoryChanged();
   },
 
   // Base
@@ -408,18 +496,6 @@ const ACTIONS = {
   },
 };
 
-/** Step the flown ship through this station's hangar. The arrows do nothing with one ship. */
-function cycleShip(dir) {
-  const S = state.profile,
-    owned = eco.localShips(S, state.worldState);
-  if (!owned || owned.length < 2) return;
-  const i = owned.indexOf(S.ship);
-  const next = owned[(Math.max(0, i) + dir + owned.length) % owned.length];
-  const msgText = eco.selectShip(next);
-  if (msgText) toast(msgText);
-  inventoryChanged();
-}
-
 /** Step the Inventory tab through this station's ships without changing the ship being flown. */
 function cycleInvShip(dir) {
   const owned = eco.localShips(state.profile, state.worldState);
@@ -443,6 +519,8 @@ function afterSaveChange() {
   refreshGuns();
   state.shops = {};
   state.ui.fit = null;
+  if (state.ui.tab === "l") state.ui.leftPanel = "m";
+  else if (state.ui.leftPanel === "m") state.ui.leftPanel = null;
   state.ui.invShip = null;
   state.ui.invView = "inv";
   state.ui.cargoView = "hold";
@@ -613,17 +691,24 @@ function openInventoryDiscard(button) {
 }
 
 const POPOVER_SELECTOR =
-  ".inv-context, .inv-sell-popover, .inv-take-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover, .ship-sell-popover";
+  ".inv-context, .inv-sell-popover, .inv-take-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover, .mod-info-popover, .ship-sell-popover";
 
-/** Close any open docked context menu or popover (and optionally return a held stack). */
-export function closePanelPopovers({ returnHeld = false } = {}) {
+/** Close any open docked context menu/popover (and optionally return held stack or close toggleable left window). */
+export function closePanelPopovers({ returnHeld = false, dismissLeft = false } = {}) {
   let closed = false;
-  if (panel) {
-    const open = panel.querySelectorAll(POPOVER_SELECTOR);
+  for (const surface of [panel, leftPanel]) {
+    if (!surface || typeof surface.querySelectorAll !== "function") continue;
+    const open = surface.querySelectorAll(POPOVER_SELECTOR);
     if (open.length) {
       open.forEach(node => node.remove());
       closed = true;
     }
+  }
+  if (!closed && returnHeld && activeDrag) {
+    activeDrag = null;
+    clearDragHighlights();
+    clearHeldGhost();
+    closed = true;
   }
   if (!closed && returnHeld && cancelHeldStack()) {
     inventoryChanged();
@@ -631,31 +716,41 @@ export function closePanelPopovers({ returnHeld = false } = {}) {
     if (panel && !panel.hidden) render();
     closed = true;
   }
+  if (
+    !closed &&
+    dismissLeft &&
+    !state.ui.intro &&
+    panel &&
+    !panel.hidden &&
+    LEFT_TOGGLE_KEYS.has(state.ui.leftPanel) &&
+    closeLeftPanel(state.ui)
+  ) {
+    render();
+    closed = true;
+  }
   return closed;
 }
 
-/** Clamp a floating popover of rough `(w, h)` inside the visible scroll window of `panel`. */
-function placePanelPopover(popover, x, y, w = 248, h = 175) {
-  const scrollLeft = panel.scrollLeft || 0, scrollTop = panel.scrollTop || 0;
-  const maxLeft = Math.max(scrollLeft, scrollLeft + (panel.clientWidth || 0) - w - 8);
-  const maxTop = Math.max(scrollTop, scrollTop + (panel.clientHeight || 0) - h - 8);
+/** Clamp a floating popover of rough `(w, h)` inside the visible scroll window of `host`. */
+function placePanelPopover(popover, x, y, w = 248, h = 175, host = panel) {
+  const scrollLeft = host.scrollLeft || 0, scrollTop = host.scrollTop || 0;
+  const maxLeft = Math.max(scrollLeft, scrollLeft + (host.clientWidth || 0) - w - 8);
+  const maxTop = Math.max(scrollTop, scrollTop + (host.clientHeight || 0) - h - 8);
   popover.style.left = `${Math.max(scrollLeft + 8, Math.min(x, maxLeft))}px`;
   popover.style.top = `${Math.max(scrollTop + 8, Math.min(y, maxTop))}px`;
 }
 
 /**
- * Position an already-mounted `popover` inside `panel` so that the centre of
+ * Position an already-mounted `popover` inside `host` so that the centre of
  * `targetBtn` (the popup's own Buy button) lands directly over `(localX,
- * localY)` in panel scroll coordinates — matching Inventory Sell's low-travel
- * layout while staying clamped inside the visible panel bounds. Near the bottom
- * edge of the panel, flips the header row to the bottom so Buy still lands
- * straight under the cursor.
+ * localY)` in host scroll coordinates — keeping Buy straight under the cursor
+ * inside the left Shop window while staying clamped to visible bounds.
  */
-function placePopoverButtonOverCursor(popover, targetBtn, localX, localY, opts = {}) {
-  const scrollLeft = panel.scrollLeft || 0;
-  const scrollTop = panel.scrollTop || 0;
-  const panelW = panel.clientWidth || 0;
-  const panelH = panel.clientHeight || 0;
+function placePopoverButtonOverCursor(popover, targetBtn, localX, localY, opts = {}, host = panel) {
+  const scrollLeft = host.scrollLeft || 0;
+  const scrollTop = host.scrollTop || 0;
+  const panelW = host.clientWidth || 0;
+  const panelH = host.clientHeight || 0;
   const fallbackW = opts.w || 248;
   const fallbackH = opts.h || 158;
   const defaultBtnX = opts.defaultBtnX ?? fallbackW - 34;
@@ -706,18 +801,19 @@ function openShopBuy(button, clickEvent = null) {
   const maxBuy = eco.shopMaxBuy(shopId, id, state.profile, state.worldState, row.kind);
   if (!(maxBuy > 0)) return;
 
-  const rect = panel.getBoundingClientRect();
+  const host = hostPanelFor(button);
+  const rect = host.getBoundingClientRect();
   const btnRect = button.getBoundingClientRect();
-  const scrollLeft = panel.scrollLeft || 0, scrollTop = panel.scrollTop || 0;
+  const scrollLeft = host.scrollLeft || 0, scrollTop = host.scrollTop || 0;
   const hasPointer =
     clickEvent &&
     Number.isFinite(clickEvent.clientX) &&
     Number.isFinite(clickEvent.clientY) &&
     (clickEvent.clientX !== 0 || clickEvent.clientY !== 0);
   const cursorX = (hasPointer ? clickEvent.clientX : btnRect.left + btnRect.width / 2)
-    - rect.left - (panel.clientLeft || 0) + scrollLeft;
+    - rect.left - (host.clientLeft || 0) + scrollLeft;
   const cursorY = (hasPointer ? clickEvent.clientY : btnRect.top + btnRect.height / 2)
-    - rect.top - (panel.clientTop || 0) + scrollTop;
+    - rect.top - (host.clientTop || 0) + scrollTop;
   closePanelPopovers();
 
   const popover = document.createElement("div");
@@ -754,7 +850,7 @@ function openShopBuy(button, clickEvent = null) {
     }
   });
 
-  panel.append(popover);
+  host.append(popover);
   const confirmBtn = popover.querySelector('button[data-a="shopBuyConfirm"]');
   placePopoverButtonOverCursor(popover, confirmBtn, cursorX, cursorY, {
     w: 248,
@@ -762,7 +858,7 @@ function openShopBuy(button, clickEvent = null) {
     defaultBtnX: 214,
     defaultBtnY: 46,
     allowFlipUp: true,
-  });
+  }, host);
   if (input) {
     try { input.focus({ preventScroll: true }); } catch { input.focus?.(); }
     input.select?.();
@@ -797,12 +893,13 @@ function confirmShopBuy(node) {
   render();
 }
 
-/** Open the right-click Ship details card for a ship in the Shop, Outfitting, or Hangar. */
-function openShipDetails(shipType, clientX, clientY, localPos = null) {
+/** Open the right-click Ship details card for a ship in Shop, Outfitting, or Inventory. */
+function openShipDetails(shipType, clientX, clientY, localPos = null, host = panel) {
   const html = shipDetailsHtml(shipType);
   if (!html) return false;
   const stats = eco.shipBaseStats(shipType);
-  const rect = localPos ? null : panel.getBoundingClientRect();
+  const targetHost = host || panel;
+  const rect = localPos ? null : targetHost.getBoundingClientRect();
   closePanelPopovers();
 
   const popover = document.createElement("div");
@@ -812,9 +909,9 @@ function openShipDetails(shipType, clientX, clientY, localPos = null) {
   popover.dataset.shipType = stats.type;
   popover.innerHTML = html;
 
-  const x = localPos ? localPos.left : clientX - rect.left + (panel.scrollLeft || 0) + 6;
-  const y = localPos ? localPos.top : clientY - rect.top + (panel.scrollTop || 0) + 6;
-  placePanelPopover(popover, x, y, 256, 195);
+  const x = localPos ? localPos.left : clientX - rect.left + (targetHost.scrollLeft || 0) + 6;
+  const y = localPos ? localPos.top : clientY - rect.top + (targetHost.scrollTop || 0) + 6;
+  placePanelPopover(popover, x, y, 256, 195, targetHost);
 
   popover.addEventListener("keydown", event => {
     if (event.key === "Escape") {
@@ -824,7 +921,25 @@ function openShipDetails(shipType, clientX, clientY, localPos = null) {
     }
   });
 
-  panel.append(popover);
+  targetHost.append(popover);
+  uiSound();
+  return true;
+}
+
+/** Open the My Assets right-click menu on a station row: Set / Clear destination. */
+function openAssetStationContext(stationEl, clientX, clientY) {
+  const placeId = stationEl?.dataset?.assetStation;
+  if (!placeId) return false;
+  const host = hostPanelFor(stationEl);
+  closePanelPopovers();
+  const menu = buildAssetStationContextMenu(document, placeId);
+  const rect = host.getBoundingClientRect();
+  const scrollLeft = host.scrollLeft || 0, scrollTop = host.scrollTop || 0;
+  const x = Math.min(scrollLeft + (host.clientWidth || 0) - 148, Math.max(scrollLeft, clientX - rect.left + scrollLeft));
+  const y = Math.min(scrollTop + (host.clientHeight || 0) - 72, Math.max(scrollTop, clientY - rect.top + scrollTop));
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  host.append(menu);
   uiSound();
   return true;
 }
@@ -938,6 +1053,29 @@ function confirmHangarShipSell(target) {
   render();
 }
 
+/** Open the right-click context menu carrying `Show info` for a module in Shop or My Assets. */
+function openModuleRowContext(modEl, clientX, clientY) {
+  const modId = modEl?.dataset?.moduleId;
+  if (!modId || !isModule(modId)) return false;
+  const host = hostPanelFor(modEl);
+  if (!host) return false;
+  closePanelPopovers();
+  const menu = buildModuleContextMenu(document, modId, "modInfo");
+  if (!menu) return false;
+  const rect = host.getBoundingClientRect();
+  const scrollLeft = host.scrollLeft || 0;
+  const scrollTop = host.scrollTop || 0;
+  const rawX = clientX - rect.left + scrollLeft;
+  const rawY = clientY - rect.top + scrollTop;
+  menu.dataset.anchorLeft = String(rawX);
+  menu.dataset.anchorTop = String(rawY);
+  menu.dataset.anchorWidth = "0";
+  placePanelPopover(menu, rawX, rawY, 136, 42, host);
+  host.append(menu);
+  uiSound();
+  return true;
+}
+
 function onInventoryContextMenu(e) {
   // While holding a stack, right-clicking ANY slot places 1 item into it (Minecraft style).
   const slotBtn = e.target.closest("button[data-a='invSlot']");
@@ -967,6 +1105,24 @@ function onInventoryContextMenu(e) {
 
   const tile = e.target.closest("button.inv-item[data-kind]");
   if (!tile) {
+    const fittedBay = e.target.closest("button.mod-bay.fitted[data-fit-group][data-fit-bay]");
+    if (fittedBay && fittedBay.dataset.module) {
+      e.preventDefault();
+      openFittedBayContext(fittedBay, e.clientX, e.clientY);
+      return;
+    }
+    const modRow = e.target.closest("[data-module-id]");
+    if (modRow && modRow.dataset.moduleId) {
+      e.preventDefault();
+      openModuleRowContext(modRow, e.clientX, e.clientY);
+      return;
+    }
+    const assetStation = e.target.closest("[data-asset-station]");
+    if (assetStation && assetStation.dataset.assetStation) {
+      e.preventDefault();
+      openAssetStationContext(assetStation, e.clientX, e.clientY);
+      return;
+    }
     const hangarRow = e.target.closest("[data-hangar-ship]");
     if (hangarRow && hangarRow.dataset.hangarShip) {
       e.preventDefault();
@@ -976,7 +1132,7 @@ function onInventoryContextMenu(e) {
     const shipEl = e.target.closest("[data-ship-type]");
     if (shipEl && shipEl.dataset.shipType) {
       e.preventDefault();
-      openShipDetails(shipEl.dataset.shipType, e.clientX, e.clientY);
+      openShipDetails(shipEl.dataset.shipType, e.clientX, e.clientY, null, hostPanelFor(shipEl));
     }
     return;
   }
@@ -986,6 +1142,36 @@ function onInventoryContextMenu(e) {
   const menu = document.createElement("div");
   menu.className = "inv-context";
   menu.setAttribute("role", "menu");
+
+  if (isModule(tile.dataset.id)) {
+    const info = document.createElement("button");
+    info.type = "button";
+    info.dataset.a = "modInfo";
+    info.dataset.b = tile.dataset.id;
+    info.setAttribute("role", "menuitem");
+    info.textContent = "Show info";
+    menu.append(info);
+  }
+
+  const tileWhere = tile.dataset.where || inv.STATION;
+  const equipCheck = fitting.canEquipModule(tile.dataset.id, tileWhere);
+  const equip = document.createElement("button");
+  equip.type = "button";
+  equip.dataset.a = "invEquip";
+  equip.dataset.b = tile.dataset.id;
+  equip.dataset.where = tileWhere;
+  equip.dataset.slot = tile.dataset.slot || "0";
+  equip.setAttribute("role", "menuitem");
+  equip.textContent = "Equip";
+  if (!equipCheck.ok) {
+    equip.disabled = true;
+    equip.title = equipCheck.reason || "Cannot equip this item.";
+  } else {
+    equip.title = equipCheck.replaced
+      ? `Equip onto active ship (replaces ${MODULES[equipCheck.replaced]?.n || equipCheck.replaced}).`
+      : "Equip onto your active ship.";
+  }
+  menu.append(equip);
 
   const take = document.createElement("button");
   take.type = "button";
@@ -1031,8 +1217,9 @@ function onInventoryContextMenu(e) {
   menu.append(discard);
 
   const rect = panel.getBoundingClientRect();
+  const menuH = isModule(tile.dataset.id) ? 162 : 132;
   const x = Math.min(panel.scrollLeft + panel.clientWidth - 136, Math.max(panel.scrollLeft, e.clientX - rect.left + panel.scrollLeft));
-  const y = Math.min(panel.scrollTop + panel.clientHeight - 104, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
+  const y = Math.min(panel.scrollTop + panel.clientHeight - menuH, Math.max(panel.scrollTop, e.clientY - rect.top + panel.scrollTop));
   menu.dataset.anchorLeft = String(x);
   menu.dataset.anchorTop = String(y);
   menu.dataset.anchorWidth = "0";
@@ -1041,7 +1228,291 @@ function onInventoryContextMenu(e) {
   panel.append(menu);
 }
 
+/** Right-click menu on an equipped Outfitting module bay: Unequip and Show info. */
+function openFittedBayContext(bayBtn, clientX, clientY) {
+  const host = hostPanelFor(bayBtn);
+  if (!host) return;
+  const group = bayBtn.dataset.fitGroup;
+  const bay = bayBtn.dataset.fitBay;
+  const modId = bayBtn.dataset.module;
+  if (!group || bay == null || !modId) return;
+  closePanelPopovers();
+
+  const menu = document.createElement("div");
+  menu.className = "inv-context bay-context";
+  menu.setAttribute("role", "menu");
+
+  const unequip = document.createElement("button");
+  unequip.type = "button";
+  unequip.dataset.a = "bayUnequip";
+  unequip.dataset.b = `${group}:${bay}`;
+  unequip.setAttribute("role", "menuitem");
+  unequip.textContent = "Unequip";
+  menu.append(unequip);
+
+  const info = document.createElement("button");
+  info.type = "button";
+  info.dataset.a = "modInfo";
+  info.dataset.b = modId;
+  info.setAttribute("role", "menuitem");
+  info.textContent = "Show info";
+  menu.append(info);
+
+  const rect = host.getBoundingClientRect();
+  const scrollLeft = host.scrollLeft || 0;
+  const scrollTop = host.scrollTop || 0;
+  const x = clientX - rect.left + scrollLeft;
+  const y = clientY - rect.top + scrollTop;
+  menu.dataset.anchorLeft = String(x);
+  menu.dataset.anchorTop = String(y);
+  menu.dataset.anchorWidth = "0";
+  placePanelPopover(menu, x, y, 140, 74, host);
+  host.append(menu);
+  uiSound();
+}
+
+function refreshDockedAssetResults() {
+  const results = panel?.querySelector?.("[data-assets-results]");
+  if (results) {
+    results.innerHTML = assetsResultsHtml(state.profile, state.worldState, {
+      docked: true,
+      openMap: state.ui.assetsOpen,
+      shipOpenMap: state.ui.assetShipsOpen,
+      query: state.ui.assetsQuery,
+      searchOpen: state.ui.assetsSearchOpen,
+    });
+  }
+  const clearBtn = panel?.querySelector?.("button[data-a='assetSearchClear']");
+  if (clearBtn) clearBtn.hidden = !state.ui.assetsQuery;
+}
+
+function onPanelInput(e) {
+  const input = e.target?.closest?.("[data-asset-search]");
+  if (!input) return;
+  state.ui.assetsSearchOpen = true;
+  state.ui.assetsQuery = String(input.value || "");
+  refreshDockedAssetResults();
+}
+
+function onPreventNativeDrag(e) {
+  if (e.target?.closest?.("button.inv-item, button.mod-bay")) {
+    e.preventDefault?.();
+  }
+}
+
+function forEachDropNode(selector, fn) {
+  for (const surface of [panel, leftPanel]) {
+    if (!surface || surface.hidden || typeof surface.querySelectorAll !== "function") continue;
+    for (const node of surface.querySelectorAll(selector)) fn(node);
+  }
+}
+
+function clearDragHighlights() {
+  forEachDropNode(".is-drop-match, .is-drop-over, .is-drag-source", node => {
+    node.classList?.remove?.("is-drop-match", "is-drop-over", "is-drag-source");
+  });
+}
+
+function applyDragHighlights(drag) {
+  clearDragHighlights();
+  if (drag.sourceEl) drag.sourceEl.classList?.add?.("is-drag-source");
+  if (drag.kind === "inv" && drag.modGroup) {
+    forEachDropNode("button.mod-bay", node => {
+      if (node.dataset?.fitGroup === drag.modGroup) node.classList?.add?.("is-drop-match");
+    });
+  } else if (drag.kind === "bay") {
+    forEachDropNode(".inv-col", node => {
+      if (node.dataset?.invWhere) node.classList?.add?.("is-drop-match");
+    });
+    forEachDropNode("button.mod-bay", node => {
+      if (node.dataset?.fitGroup === drag.group && Number(node.dataset?.fitBay) !== drag.bay) {
+        node.classList?.add?.("is-drop-match");
+      }
+    });
+  }
+}
+
+function updateDragHover(drag, clientX, clientY, fallbackTarget) {
+  forEachDropNode(".is-drop-over", node => node.classList?.remove?.("is-drop-over"));
+  const under = resolvePointTarget(clientX, clientY, fallbackTarget);
+  if (!under || typeof under.closest !== "function") return;
+  const hit = drag.kind === "inv"
+    ? under.closest("button.mod-bay[data-fit-group], button[data-a='invSlot']")
+    : under.closest("button[data-a='invSlot'], button.mod-bay[data-fit-group], .inv-col[data-inv-where]");
+  if (hit && hit !== drag.sourceEl) hit.classList?.add?.("is-drop-over");
+}
+
+function resolvePointTarget(clientX, clientY, fallbackTarget) {
+  if (
+    typeof document !== "undefined" &&
+    typeof document.elementFromPoint === "function" &&
+    Number.isFinite(clientX) &&
+    Number.isFinite(clientY)
+  ) {
+    const hit = document.elementFromPoint(clientX, clientY);
+    if (hit) return hit;
+  }
+  return fallbackTarget || null;
+}
+
+/**
+ * Execute a completed docked drag-and-drop between Inventory slots and
+ * Outfitting module bays.
+ */
+function finishStationDrag(drag, dropTarget) {
+  if (!drag || !dropTarget || typeof dropTarget.closest !== "function") {
+    return { ok: false, message: "" };
+  }
+  if (drag.kind === "inv") {
+    const bayBtn = dropTarget.closest("button.mod-bay[data-fit-group][data-fit-bay]");
+    if (bayBtn) {
+      return fitting.fitModuleFrom(
+        drag.where,
+        drag.slot,
+        bayBtn.dataset.fitGroup,
+        Number(bayBtn.dataset.fitBay),
+        drag.id
+      );
+    }
+    const modCard = dropTarget.closest("section.mod[data-group]");
+    if (modCard && modCard.dataset.group) {
+      const group = modCard.dataset.group;
+      const bays = state.profile.loadout?.[state.profile.ship]?.[group];
+      const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+      const targetBay = emptyIdx >= 0 ? emptyIdx : 0;
+      return fitting.fitModuleFrom(drag.where, drag.slot, group, targetBay, drag.id);
+    }
+    const slotBtn = dropTarget.closest("button[data-a='invSlot']");
+    if (slotBtn) {
+      const toWhere = slotBtn.dataset.where;
+      const toSlot = Number(slotBtn.dataset.slot);
+      if (!toWhere || !Number.isInteger(toSlot) || (toWhere === drag.where && toSlot === drag.slot)) {
+        return { ok: false, message: "" };
+      }
+      const picked = inv.pickupSlot(drag.where, drag.slot);
+      if (!picked) return { ok: false, message: "" };
+      const placed = inv.placeHeldStack(picked, toWhere, toSlot);
+      if (placed.held) inv.returnHeldStack(placed.held);
+      return { ok: Boolean(placed.ok), message: placed.message || "" };
+    }
+    const invCol = dropTarget.closest(".inv-col[data-inv-where]");
+    if (invCol && invCol.dataset.invWhere && invCol.dataset.invWhere !== drag.where) {
+      return inv.shiftMoveSlot(drag.where, drag.slot, invCol.dataset.invWhere);
+    }
+    return { ok: false, message: "" };
+  }
+
+  if (drag.kind === "bay") {
+    const slotBtn = dropTarget.closest("button[data-a='invSlot']");
+    if (slotBtn && slotBtn.dataset.where) {
+      return fitting.unequipTo(drag.group, drag.bay, slotBtn.dataset.where, Number(slotBtn.dataset.slot));
+    }
+    const invCol = dropTarget.closest(".inv-col[data-inv-where]");
+    if (invCol && invCol.dataset.invWhere) {
+      return fitting.unequipTo(drag.group, drag.bay, invCol.dataset.invWhere, -1);
+    }
+    const bayBtn = dropTarget.closest("button.mod-bay[data-fit-group][data-fit-bay]");
+    if (bayBtn) {
+      const toGroup = bayBtn.dataset.fitGroup;
+      const toBay = Number(bayBtn.dataset.fitBay);
+      if (toGroup === drag.group && toBay === drag.bay) return { ok: false, message: "" };
+      if (toGroup !== drag.group) {
+        const m = MODULES[drag.id];
+        return {
+          ok: false,
+          message: m ? `${m.n} only fits in its own module group.` : "That module does not fit there.",
+        };
+      }
+      return fitting.swapFittedBays(drag.group, drag.bay, toBay);
+    }
+  }
+  return { ok: false, message: "" };
+}
+
+function onPanelPointerDown(e) {
+  if (state.ui.intro || starting || hasHeldStack()) return;
+  if ((e.button ?? 0) !== 0 || e.shiftKey) return;
+  const tile = e.target?.closest?.("button.inv-item[data-a='invSlot']");
+  if (tile && !tile.disabled && tile.dataset.id) {
+    activeDrag = {
+      kind: "inv",
+      where: tile.dataset.where || inv.STATION,
+      slot: Number(tile.dataset.slot),
+      id: tile.dataset.id,
+      n: Math.max(1, Number(tile.dataset.count) || 1),
+      modGroup: tile.dataset.modGroup || null,
+      slotSize: measureSlotSquare(tile),
+      startX: e.clientX ?? 0,
+      startY: e.clientY ?? 0,
+      started: false,
+      sourceEl: tile,
+    };
+    return;
+  }
+  const bay = e.target?.closest?.("button.mod-bay.fitted[data-fit-group][data-fit-bay]");
+  if (bay && !bay.disabled && bay.dataset.module) {
+    activeDrag = {
+      kind: "bay",
+      group: bay.dataset.fitGroup,
+      bay: Number(bay.dataset.fitBay),
+      id: bay.dataset.module,
+      n: 1,
+      startX: e.clientX ?? 0,
+      startY: e.clientY ?? 0,
+      started: false,
+      sourceEl: bay,
+    };
+  }
+}
+
+function onDocPointerMove(e) {
+  if (!activeDrag) return;
+  const x = e.clientX ?? 0;
+  const y = e.clientY ?? 0;
+  if (!activeDrag.started) {
+    if (Math.hypot(x - activeDrag.startX, y - activeDrag.startY) < 5) return;
+    activeDrag.started = true;
+    closePanelPopovers();
+    applyDragHighlights(activeDrag);
+  }
+  e.preventDefault?.();
+  showDragGhost(activeDrag.id, activeDrag.n, x, y, activeDrag.slotSize);
+  updateDragHover(activeDrag, x, y, e.target);
+}
+
+function onDocPointerUp(e) {
+  if (!activeDrag) return;
+  const drag = activeDrag;
+  activeDrag = null;
+  if (!drag.started) return;
+  clearDragHighlights();
+  clearHeldGhost();
+  suppressClickUntil = Date.now() + 80;
+  if (e?.type === "pointercancel") return;
+  const dropTarget = resolvePointTarget(e?.clientX, e?.clientY, e?.target);
+  const res = finishStationDrag(drag, dropTarget);
+  if (res?.message) toast(res.message);
+  if (res?.ok) {
+    inventoryChanged();
+    uiSound("click");
+    save();
+    render();
+  }
+}
+
+function installDragListeners() {
+  if (typeof document === "undefined" || typeof document.addEventListener !== "function") {
+    return;
+  }
+  if (dragDoc === document) return;
+  dragDoc = document;
+  document.addEventListener("pointermove", onDocPointerMove);
+  document.addEventListener("pointerup", onDocPointerUp);
+  document.addEventListener("pointercancel", onDocPointerUp);
+}
+
 function onDblClick(e) {
+  if (e.target.closest("button")) return;
   const hangarRow = e.target.closest("[data-hangar-ship]");
   if (!hangarRow || !hangarRow.dataset.hangarShip) return;
   const shipId = hangarRow.dataset.hangarShip;
@@ -1054,9 +1525,40 @@ function onDblClick(e) {
 }
 
 async function onClick(e) {
+  if (suppressClickUntil > 0) {
+    const blocked = Date.now() <= suppressClickUntil;
+    suppressClickUntil = 0;
+    if (blocked) return;
+  }
   const btn = e.target.closest("button[data-a]");
   if (!btn) {
-    if (e.target.closest(".inv-sell-popover") || e.target.closest(".inv-take-popover") || e.target.closest(".inv-discard-popover")) return;
+    if (
+      e.target.closest(".inv-sell-popover") ||
+      e.target.closest(".inv-take-popover") ||
+      e.target.closest(".inv-discard-popover") ||
+      e.target.closest(".mod-info-popover")
+    ) return;
+    const modCard = hasHeldStack() ? e.target.closest("section.mod[data-group]") : null;
+    if (modCard && modCard.dataset.group) {
+      closePanelPopovers();
+      const group = modCard.dataset.group;
+      const bays = state.profile.loadout?.[state.profile.ship]?.[group];
+      const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+      const res = placeHeldOnOutfittingBay({
+        group,
+        bay: emptyIdx >= 0 ? emptyIdx : 0,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
+      if (res.message) toast(res.message);
+      if (res.changed) {
+        inventoryChanged();
+        uiSound("click");
+        save();
+      }
+      render();
+      return;
+    }
     closePanelPopovers();
     return;
   }
@@ -1089,16 +1591,129 @@ async function onClick(e) {
     confirmShopBuy(btn);
     return;
   }
-  if (name === "shopBuyCancel" || name === "shipInfoClose" || name === "shipSellCancel") {
+  if (name === "shopBuyCancel" || name === "shipInfoClose" || name === "modInfoClose" || name === "shipSellCancel") {
     closePanelPopovers();
+    return;
+  }
+  if (name === "modInfo") {
+    const modId = btn.dataset.b;
+    const ctx = btn.closest(".inv-context");
+    const host = hostPanelFor(btn);
+    const anchor = ctx
+      ? { left: Number(ctx.dataset.anchorLeft || 0), top: Number(ctx.dataset.anchorTop || 0), width: 0 }
+      : null;
+    closePanelPopovers();
+    if (openModuleInfoPopover({ host, moduleId: modId, anchor, clientX: e.clientX, clientY: e.clientY })) {
+      uiSound();
+    }
+    return;
+  }
+  if (name === "home") {
+    closePanelPopovers();
+    const alreadyHome = homeStationPlace(state.profile) === state.place;
+    const msg = setHomeStation();
+    if (alreadyHome && state.profile.homeStation === state.place) {
+      const stName = panel?.querySelector?.(".station-head h1")?.textContent || "This station";
+      toast(`${stName} is your home station. You recover here after death.`);
+      uiSound("click");
+    } else {
+      if (msg) toast(msg);
+      uiSound("confirm");
+    }
+    save();
+    render();
+    return;
+  }
+  if (name === "slot") {
+    closePanelPopovers();
+    const [g, i] = String(btn.dataset.b || "").split(":");
+    const res = clickOutfittingBay({
+      group: g,
+      bay: Number(i),
+      shiftKey: Boolean(e.shiftKey),
+      clientX: e.clientX,
+      clientY: e.clientY,
+    });
+    if (res.message) toast(res.message);
+    if (res.changed) {
+      if (!res.picked) inventoryChanged();
+      uiSound("click");
+      save();
+      render();
+    }
     return;
   }
   if (name === "hangarInfo") {
     const ctx = btn.closest(".inv-context");
+    const host = hostPanelFor(btn);
     const localPos = ctx
       ? { left: Number(ctx.dataset.anchorLeft || 0), top: Number(ctx.dataset.anchorTop || 0) }
       : null;
-    openShipDetails(btn.dataset.b, 0, 0, localPos);
+    openShipDetails(btn.dataset.b, 0, 0, localPos, host);
+    return;
+  }
+  if (name === "assetSetDest") {
+    closePanelPopovers();
+    const res = setAssetStationDestination(btn.dataset.b);
+    if (res.message) toast(res.message);
+    uiSound(res.ok ? "confirm" : "click");
+    render();
+    return;
+  }
+  if (name === "assetClearDest") {
+    closePanelPopovers();
+    clearAssetStationDestination();
+    uiSound("click");
+    render();
+    return;
+  }
+  if (name === "assetSearchToggle") {
+    closePanelPopovers();
+    state.ui.assetsSearchOpen = !state.ui.assetsSearchOpen;
+    if (!state.ui.assetsSearchOpen) state.ui.assetsQuery = "";
+    uiSound("click");
+    render();
+    if (state.ui.assetsSearchOpen) panel?.querySelector?.("[data-asset-search]")?.focus?.();
+    return;
+  }
+  if (name === "assetSearchClear") {
+    state.ui.assetsQuery = "";
+    uiSound("click");
+    const input = panel?.querySelector?.("[data-asset-search]");
+    if (input) {
+      input.value = "";
+      refreshDockedAssetResults();
+      input.focus?.();
+    } else {
+      render();
+    }
+    return;
+  }
+  if (name === "stackAll") {
+    closePanelPopovers();
+    ACTIONS.stackAll(btn.dataset.where || btn.dataset.b || inv.STATION);
+    uiSound("click");
+    save();
+    render();
+    return;
+  }
+  if (name === "invEquip") {
+    const itemId = btn.dataset.b;
+    const where = btn.dataset.where || inv.STATION;
+    const slotIdx = Number(btn.dataset.slot);
+    closePanelPopovers();
+    const res = fitting.equipModuleFromInventory(
+      where,
+      Number.isInteger(slotIdx) ? slotIdx : -1,
+      itemId
+    );
+    if (res.message) toast(res.message);
+    uiSound(res.ok ? "confirm" : "click");
+    if (res.ok) {
+      inventoryChanged();
+      save();
+    }
+    render();
     return;
   }
   if (name === "hangarFly") {
@@ -1130,6 +1745,7 @@ async function onClick(e) {
     const where = btn.dataset.where;
     const ship = viewedShip();
     const otherWhere = where === inv.STATION ? ship : inv.STATION;
+    const slotSize = btn.classList?.contains?.("inv-item") ? measureSlotSquare(btn) : undefined;
     const res = clickInventorySlot({
       where,
       slot: Number(btn.dataset.slot),
@@ -1137,6 +1753,7 @@ async function onClick(e) {
       shiftKey: Boolean(e.shiftKey),
       clientX: e.clientX,
       clientY: e.clientY,
+      slotSize,
     });
     if (res.message) toast(res.message);
     if (res.changed) {
@@ -1181,6 +1798,10 @@ async function onClick(e) {
   save();
   if (name !== "go") {
     if (!state.player || state.player.docked) render();
-    else panel.hidden = true;   // the action put the pilot back out in space
+    else {
+      // The action put the pilot back out in space: hide both station panels.
+      panel.hidden = true;
+      hideLeftPanelElement(leftPanel);
+    }
   }
 }

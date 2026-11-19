@@ -172,7 +172,7 @@ test("fix 2: docking always shows the station menu, never the start screen again
   m.dock(P);
   assert.equal(P.docked, true);
   assert.equal(panel.hidden, false);
-  assert.ok(panel.innerHTML.includes("Contracts"), "the station menu with its tabs");
+  assert.ok(panel.innerHTML.includes("Missions"), "the station menu with its tabs");
   assert.ok(!panel.innerHTML.includes(">Open World</button>"), "not the start screen");
   assert.equal(state.ui.intro, false, "the start screen never comes back");
 });
@@ -185,7 +185,8 @@ test("fix 2: a station save deploys straight into the station menu", () => {
   assert.equal(click("intro"), null);
   assert.equal(P.docked, true);
   assert.equal(panel.hidden, false);
-  assert.ok(panel.innerHTML.includes("Contracts"));
+  assert.ok(panel.innerHTML.includes("Missions"));
+  assert.equal(state.ui.leftPanel, "m", "docking opens the Contract board in the left window");
 });
 
 test("pause exit event returns the panel to the main menu", () => {
@@ -193,7 +194,8 @@ test("pause exit event returns the panel to the main menu", () => {
   assert.equal(state.ui.intro, false);
   m.emit("main-menu", {});
   assert.equal(state.ui.intro, true);
-  assert.equal(state.ui.tab, "m");
+  assert.equal(state.ui.tab, "l");
+  assert.equal(state.ui.leftPanel, "m");
   assert.equal(panel.hidden, false);
   assert.ok(panel.innerHTML.includes('data-a="campaign" disabled>Campaign</button>'));
   assert.ok(panel.innerHTML.includes('data-a="intro">Open World</button>'));

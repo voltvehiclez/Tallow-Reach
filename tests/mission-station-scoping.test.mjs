@@ -26,8 +26,8 @@ import {
 } from "../src/sim/missions.js";
 import { acceptContract, boardAt, describe, rerollBoard } from "../src/sim/contracts.js";
 import { addItem } from "../src/sim/inventory.js";
-import { outpostHtml } from "../src/ui/screens.js";
-import { dialogueHtml, missionLogHtml, setupMissionLog } from "../src/ui/missionlog.js";
+import { leftPanelHtml, outpostHtml } from "../src/ui/screens.js";
+import { dialogueHtml, missionLogHtml, setupMissionLog, storyOffersHtml } from "../src/ui/missionlog.js";
 import { on } from "../src/util/events.js";
 
 const DEPOT = {
@@ -138,8 +138,8 @@ test("an active mission is readable at every station, but only its own station h
     assert.equal(depotLog.includes(homeText), true, "a Meridian job can be watched from Depot");
     assert.equal(depotLog.includes(depotText), true, "and Depot's own job is listed");
     assert.doesNotMatch(depotLog, /another station|filed at/, "the log says nothing about work elsewhere");
-    const depotTab = outpostHtml({ tab: "m" });
-    assert.equal(depotTab.includes(homeText), true, "the Contracts tab shows every active mission too");
+    const depotTab = leftPanelHtml({ tab: "l", leftPanel: "m" });
+    assert.equal(depotTab.includes(homeText), true, "the left Mission log window shows every active mission");
     assert.equal(depotTab.includes(depotText), true);
 
     state.place = "reach";
@@ -178,21 +178,25 @@ test("in the generated galaxy, Galereach offers no story mission to accept", () 
 
     state.place = state.playerPlace = galereach;
     state.worldState.place = galereach;
-    const away = missionLogHtml(state.profile);
+    const away = storyOffersHtml(state.profile);
+    assert.match(away, /<h2>Story missions<\/h2>/, "Story missions heading stays visible");
+    assert.match(away, /No more story missions available\./, "stations without offers say no more are available");
     assert.doesNotMatch(away, /The Border Signal/, "Galereach does not offer Meridian's story mission");
     assert.doesNotMatch(away, /data-a="story"/, "nothing can be accepted as a story mission there");
 
     state.place = "reach";
     state.worldState.place = "reach";
-    const home = missionLogHtml(state.profile);
+    const home = storyOffersHtml(state.profile);
     assert.match(home, /The Border Signal/, "Meridian still offers it");
     assert.match(home, /data-a="story" data-b="story\.border-signal"/, "with the accept button");
 
-    // The owner's follow-up: once taken at Meridian, the mission follows the
-    // pilot. At Galereach the log shows it and its progress, though it can only
-    // be handed in back at Meridian.
+    // Once taken at Meridian, Story missions stays visible with "No more story missions available.",
+    // and the active mission follows the pilot in the Mission log at every station.
     const accepted = acceptMission(BORDER_SIGNAL_MISSION, state.profile, "reach");
     assert.ok(accepted, "the story mission is accepted at Meridian");
+    const homeAfter = storyOffersHtml(state.profile);
+    assert.match(homeAfter, /<h2>Story missions<\/h2>/);
+    assert.match(homeAfter, /No more story missions available\./);
     state.place = state.worldState.place = galereach;
     const carried = missionLogHtml(state.profile);
     assert.match(carried, /The Border Signal/, "the active mission is readable at Galereach");
@@ -211,12 +215,14 @@ test("in the generated galaxy, Galereach offers no story mission to accept", () 
 
 test("a story mission is offered only at the station that gives it out", () => {
   atStation("reach", profile => {
-    const atHome = missionLogHtml(profile);
+    const atHome = storyOffersHtml(profile);
     assert.match(atHome, /The Border Signal/, "Meridian offers the story mission");
     assert.equal(missionOfferStation(BORDER_SIGNAL_MISSION), "reach");
 
     state.place = "depot";
-    const away = missionLogHtml(profile);
+    const away = storyOffersHtml(profile);
+    assert.match(away, /<h2>Story missions<\/h2>/);
+    assert.match(away, /No more story missions available\./);
     assert.equal(away.includes("The Border Signal"), false, "Depot does not offer Meridian's story mission");
     assert.equal(state.profile.missions.length, 0, "…and nothing was accepted by looking");
   });
