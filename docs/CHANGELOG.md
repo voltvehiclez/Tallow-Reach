@@ -46,8 +46,10 @@ Inventory, right-click `Equip` (active ship, even with Outfitting closed), right
 `Unequip` + comprehensive module `Show info` (`moduleInfoData`, `moduleDetailsHtml` —
 outputs, range, speeds, DPS, hull modifiers, MJ usage, magazine, lock/flight stats,
 fitting & prices) across Outfitting, all inventories, Shop, My Assets, flight `I` and
-Rift Cache `R`, removed `"Modules in storage"` slot picker, and placed less-horizontal,
-50%-larger-text `.service-box` cards (no browser tooltips) below modules; added `My
+Rift Cache `R`, removed `"Modules in storage"` slot picker, and placed a compact
+`92px` `Services` box below modules with a 2×4 grid of single-line Outfitting-sized
+(`12px`/`11px`) `.service-box` tiles (no browser tooltips, scrolls cleanly for 9+
+future services, fits small monitors); added `My
 Assets` prefix `Search`, collapsible ship cargo holds included in search, and station
 right-click `Set destination` / `Clear destination`; and made HUD `displayedSpeed` read
 negative `m/s` when reversing. Files: `src/{index.html,styles.css,main.js}`,

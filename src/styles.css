@@ -1449,24 +1449,27 @@ button[data-a="invSlot"].is-drop-over {
   font-variant-numeric: tabular-nums;
 }
 
-/* Ship services for the active ship in Outfitting: sits below the modules in a
-   compact, less-horizontal card with ~50% larger text and room for many services. */
+/* Ship services for the active ship in Outfitting: sits below the modules in
+   its compact exterior box (2 visible rows × 4 single-line boxes = 8 services,
+   scrolling smoothly inside if even more are added later) with typography
+   matching the rest of Outfitting so it stays on screen on small monitors. */
 .outfit-service {
   grid-column: 1 / -1;
-  justify-self: center;
-  width: min(100%, 468px);
-  min-height: 172px;
+  width: 100%;
+  height: 92px;
+  box-sizing: border-box;
   border: 1px solid var(--line);
   background: rgba(20, 27, 32, .55);
-  padding: 10px 12px 11px;
+  padding: 7px 9px 8px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .outfit-service-title {
   flex: 0 0 auto;
-  margin-bottom: 7px;
-  font-size: 12px;
-  line-height: 1.15;
+  margin-bottom: 5px;
+  font-size: 10px;
+  line-height: 1.1;
   letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--dim);
@@ -1475,41 +1478,47 @@ button[data-a="invSlot"].is-drop-over {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(134px, 1fr));
-  gap: 7px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 27px;
+  gap: 5px;
   align-content: start;
+  overflow-y: auto;
 }
 .service-box {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 5px;
+  height: 27px;
   min-width: 0;
-  padding: 7px 9px;
+  box-sizing: border-box;
+  padding: 0 7px;
   border: 1px solid var(--line);
   background: rgba(8, 12, 15, .62);
-  font-size: 15px;
+  font-size: 12px;
   line-height: 1.2;
 }
 .service-label {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink);
-  font-size: 15px;
-  line-height: 1.18;
-  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.2;
 }
 .service-label small {
   display: inline;
-  margin-left: 3px;
+  margin-left: 2px;
   color: var(--dim);
-  font-size: 13px;
+  font-size: 10.5px;
 }
 .service-box button {
   flex: 0 0 auto;
-  padding: 3px 9px;
-  font-size: 13.5px;
-  line-height: 1.2;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
@@ -2096,9 +2105,13 @@ button[data-a="invSlot"].is-drop-over {
   }
   .outfit-service {
     grid-column: 1;
-    justify-self: center;
-    width: min(100%, 468px);
+    width: 100%;
     order: 1;
+  }
+}
+@media (max-width: 720px) {
+  .service-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 820px) {

@@ -868,9 +868,16 @@ test("Controls condensation, minimalist top-right home icon, uncropped item text
     "held inventory item ghost stays 1:1 square matching inventory slots");
   assert.match(css, /\.outfit-view\s*\{[\s\S]*?min-height:\s*clamp\(336px,\s*50vh,\s*460px\)/,
     "3D ship preview expanded vertically into removed description space");
-  assert.match(css, /\.outfit-service\s*\{[\s\S]*?width:\s*min\(100%,\s*468px\)[\s\S]*?min-height:\s*172px/,
-    "Services box is less horizontal and slightly enlarged for future services");
-  assert.match(css, /\.service-label\s*\{[\s\S]*?font-size:\s*15px/, "Service text is 50% larger (15px vs 10px)");
+  assert.match(css, /\.outfit-service\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1;\s*width:\s*100%;\s*height:\s*92px/,
+    "Services keeps compact exterior bounding box height that fits small monitors");
+  assert.match(css, /\.service-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);\s*grid-auto-rows:\s*27px/,
+    "Services grid lays out 2 rows x 4 single-line boxes (8 slots, scrollable for more)");
+  assert.match(css, /\.service-box\s*\{[\s\S]*?flex-direction:\s*row;\s*align-items:\s*center;\s*justify-content:\s*space-between/,
+    "Each service box fits label and action on 1 single line");
+  assert.match(css, /\.service-label\s*\{[\s\S]*?font-size:\s*12px/,
+    "Service label matches Outfitting .bay-val 12px text size");
+  assert.match(css, /\.service-box button\s*\{[\s\S]*?font-size:\s*11px/,
+    "Service button matches Outfitting 11px text size");
   assert.match(css, /\.inv-item-name\s*\{[\s\S]*?font-size:\s*9\.5px/, "inventory item text scaled down so names never clip");
   assert.match(css, /\.inv-item-meta\s*\{[\s\S]*?font-size:\s*8\.5px/, "inventory volume meta scaled down cleanly");
 });
