@@ -161,7 +161,7 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
 
 test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or Inventory) with duplicate hulls, berth cap, Sell and v23 save", () => {
   const { P, remoteStation } = freshDocked(10000);
-  assert.equal(SAVE_VERSION, 24);
+  assert.equal(SAVE_VERSION, 25);
 
   // Separate Hangar tab is removed (ship list lives inside Inventory); Outfitting has no ship list.
   assert.equal(TABS.some(([k, n]) => k === "h" || n === "Hangar"), false, "Hangar tab is merged into Inventory");
@@ -286,7 +286,7 @@ test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or In
   // Save/load round-trip preserves duplicate ship ids, per-ship holds/hp/loadouts and station locations.
   const encoded = encodeSave(currentSave());
   const decoded = decodeSave(encoded);
-  assert.equal(decoded.v, 24);
+  assert.equal(decoded.v, 25);
   assert.deepEqual(decoded.profile.ships, ["wasp", "wasp#2", "prospector", "prospector#2", "bulwark"]);
   assert.equal(decoded.profile.shipPlaces.wasp, DEFAULT_PLACE);
   assert.equal(decoded.profile.shipPlaces["wasp#2"], DEFAULT_PLACE);
@@ -306,7 +306,7 @@ test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or In
   v22Raw.world.place = remoteStation.id;
   v22Raw.world.resume = null;
   const migrated = sanitizeSave(v22Raw);
-  assert.equal(migrated.v, 24);
+  assert.equal(migrated.v, 25);
   assert.equal(migrated.profile.shipPlaces.wasp, remoteStation.id);
   assert.equal(migrated.profile.shipPlaces.prospector, remoteStation.id);
 

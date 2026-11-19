@@ -51,9 +51,8 @@ sizes** — some compact, some vast.
 - [ ] **Warp into a simple wormhole pocket** (the spawned one in the system, if you find one): it
       shows the **dynamic sky like any sibling pocket** — sun/black hole/dots of the system it
       spawned in.
-- [ ] **Enter the wormhole** (press R beside the grey sphere): inside the site the dynamic layer is
-      **gone** — the far side keeps its own dark-grey panorama, as before.
-- [ ] Same for a **rift** anywhere: inside, the rift sky is unchanged; the light is the old default.
+- [ ] Press **R** beside the grey sphere. Inside, the HUD says **Uncharted Space** above the site name. Look around: its own central body (usually a double-sized black hole) sits over the site's sky, and lights scenery from that direction. No charted sibling pockets appear.
+- [ ] Repeat inside a **rift**; its regular star/black-hole odds and sizes are unchanged. Save and reload there: the body and its light direction should not change. Leave and check that the regular system name and sky return.
 
 ## 6. Heights
 

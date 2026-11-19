@@ -38,14 +38,14 @@ function legacyEncode(rawObj) {
   return "TR1:" + btoa(bin);
 }
 
-test("9a: SAVE_VERSION is 20 and profile/world halves stay strictly separate", () => {
-  assert.equal(SAVE_VERSION, 24);
+test("9a: SAVE_VERSION is 25 and profile/world halves stay strictly separate", () => {
+  assert.equal(SAVE_VERSION, 25);
   const s = newSave();
   assert.deepEqual(Object.keys(s).sort(), ["profile", "v", "world"]);
   for (const forbidden of ["base", "store", "board", "galaxy", "sector", "place", "resume", "wp", "cargo", "modules"]) {
     assert.equal(forbidden in s.profile, false, `profile must not carry ${forbidden}`);
   }
-  assert.deepEqual(Object.keys(s.world).sort(), ["base", "board", "boardTimers", "boards", "destination", "galaxy", "instances", "missionState", "place", "placeMemory", "resume", "stationSlots", "stationStores", "store", "v", "wormholes"]);
+  assert.deepEqual(Object.keys(s.world).sort(), ["base", "board", "boardTimers", "boards", "connections", "destination", "galaxy", "instances", "missionState", "place", "placeMemory", "resume", "stationSlots", "stationStores", "store", "v", "wormholes"]);
   assert.deepEqual(s.world.galaxy, { seed: GALAXY.seed, knowledge: { meridian: { discovered: true, visited: true } } });
   assert.equal(s.world.place, "reach");
   assert.deepEqual(s.world.board, []);
@@ -73,9 +73,9 @@ test("9a: sanitizeWorld walks BASE_MODULES instead of naming base modules by han
 
 test("9a: real v12 save migrates cleanly to v20 profile + world", () => {
   const migrated = sanitizeSave(V12_SAVE);
-  assert.equal(migrated.v, 24);
+  assert.equal(migrated.v, 25);
 
-  assert.equal(migrated.profile.v, 24);
+  assert.equal(migrated.profile.v, 25);
   assert.equal(migrated.profile.cr, 4850);
   assert.deepEqual(migrated.profile.ships, ["wasp", "prospector"]);
   assert.equal(migrated.profile.ship, "prospector");
@@ -91,7 +91,7 @@ test("9a: real v12 save migrates cleanly to v20 profile + world", () => {
   assert.equal("base" in migrated.profile, false);
   assert.equal("store" in migrated.profile, false);
 
-  assert.equal(migrated.world.v, 24);
+  assert.equal(migrated.world.v, 25);
   assert.deepEqual(migrated.world.base, { store: 3, hangar: 2, refinery: 2 });
   assert.deepEqual(migrated.world.store, V12_SAVE.store);
   assert.deepEqual(migrated.world.board, []);
@@ -101,7 +101,7 @@ test("9a: real v12 save migrates cleanly to v20 profile + world", () => {
 
 test("9a: real v11 save and old TR1 export codes (v11 and v12) decode into v20 saves", () => {
   const fromV11 = decodeSave(legacyEncode(V11_SAVE));
-  assert.equal(fromV11.v, 24);
+  assert.equal(fromV11.v, 25);
   assert.deepEqual(fromV11.profile.holds.wasp, { ferrite: 5, core: 1, thruster_basic: 1 });
   assert.deepEqual(fromV11.world.store, { ferrite: 12, salv: 3, beam_basic: 1, cannon_basic: 2 });
   assert.deepEqual(fromV11.world.base, { store: 1, hangar: 1, refinery: 0 });
@@ -129,7 +129,7 @@ test("9a: localStorage keys tr1 and tr_s1..tr_s3 are preserved and load old v12 
     mem.set("tr_s1", JSON.stringify(V12_SAVE));
 
     const auto = loadAutosave();
-    assert.equal(auto.v, 24);
+    assert.equal(auto.v, 25);
     assert.equal(auto.profile.cr, 4850);
     assert.deepEqual(auto.world.base, { store: 3, hangar: 2, refinery: 2 });
 
@@ -175,7 +175,7 @@ test("9c: portableProfile and mergeProfile are pure and isolate world state from
   // Merge guest profile back into the player's own save; their own station/world stays intact.
   const merged = mergeProfile(hostSave, guest);
   assert.deepEqual(hostSave, hostSnapshot, "mergeProfile must not mutate input save");
-  assert.equal(merged.v, 24);
+  assert.equal(merged.v, 25);
   assert.equal(merged.profile.cr, 7200);
   assert.equal(merged.profile.kills, 22);
   assert.equal(merged.profile.msl, 2);

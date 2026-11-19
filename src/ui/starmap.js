@@ -490,6 +490,7 @@ export function setupStarmap() {
   on("warp-start", ({ player } = {}) => { if (!player || player === localPlayer()) closeStarmap(); });
   on("docked", ({ player } = {}) => { if (!player || player === localPlayer()) closeStarmap(); });
   on("died", () => closeStarmap());
+  on("wormhole-link-renewed", () => { if (state.ui.starmap) render(); });
   on("place-changed", ({ from, to, player } = {}) => {
     if (player && player !== localPlayer()) return;
     const before = state.galaxy?.pocketsById?.[from]?.parent;
@@ -538,13 +539,14 @@ export function openStarmap() {
   const systems = visibleSystems(state.galaxy, knowledge());
   const playerSystem = state.galaxy.pocketsById?.[from]?.parent || placeAt(from).parent;
   const selected = systems.find(s => s.id === playerSystem)?.id || systems[0]?.id || null;
+  const offChart = state.galaxy.systemsById[playerSystem]?.uncharted;
   const saved = state.ui.starmapMemory;
   const visible = id => systems.some(s => s.id === id);
   const changedSystem = saved && saved.playerSystem !== playerSystem;
   const rememberedSelected = saved?.mode === "system" && changedSystem ? selected : saved?.selected;
   state.ui.starmap = {
-    selected: visible(rememberedSelected) ? rememberedSelected : selected,
-    mode: saved?.mode === "system" && visible(rememberedSelected || selected) ? "system" : "galaxy",
+    selected: offChart ? playerSystem : visible(rememberedSelected) ? rememberedSelected : selected,
+    mode: offChart ? "system" : saved?.mode === "system" && visible(rememberedSelected || selected) ? "system" : "galaxy",
     zoom: saved?.zoom ?? 1, pan: saved?.pan ? [...saved.pan] : [0, 0],
     systemZoom: changedSystem ? 1 : (saved?.systemZoom ?? 1),
     systemPan: !changedSystem && saved?.systemPan ? [...saved.systemPan] : [0, 0],
@@ -875,6 +877,14 @@ function onClickNow(e) {
   if (action === "close") { uiSound("click"); closeStarmap(); }
   else if (action === "zoom-in") zoomMap(1);
   else if (action === "zoom-out") zoomMap(-1);
+  else if (action === "toggle-space") {
+    const here = state.galaxy.pocketsById[localPlayer()?.place || state.place]?.parent;
+    if (!state.galaxy.systemsById[here]?.uncharted) return;
+    const leaving = view.mode === 'system' && view.selected === here;
+    cancelTransition();
+    Object.assign(view,{mode:leaving?'galaxy':'system',selected:leaving?visibleSystems(state.galaxy,knowledge())[0]?.id:here,
+      menu:null,systemZoom:1,systemPan:[0,0],zoom:1,pan:[0,0]}); render();
+  }
   else if (action === "back") exitSystem();
   else if (action === "reset") {
     if (view.mode === "system") { view.systemZoom = 1; view.systemPan = [0, 0]; }
@@ -1104,7 +1114,7 @@ function render() {
   const world = chartGalaxy(state.galaxy);
   const know = knowledge();
   const systems = visibleSystems(world, know);
-  if (!systems.some(s => s.id === view.selected)) {
+  if (!(view.mode === "system" && view.selected === view.playerSystem && world.systemsById[view.selected]?.uncharted) && !systems.some(s => s.id === view.selected)) {
     view.selected = systems[0]?.id || null;
     if (view.mode === "system") view.mode = "galaxy";
   }
@@ -1134,14 +1144,15 @@ function render() {
   const rootRect = root.getBoundingClientRect?.() || { left: 0, top: 0, width: 800, height: 600 };
   const menu = view.menu ? (view.menu.systemId ? systemMenuMarkup(world, view, from, rootRect) : pocketMenuMarkup(world, view, from, rootRect)) : "";
   const routeDetails = routeMarkup(world, view, route, from);
+  const spaceSwitch = world.systemsById[here.parent]?.uncharted ? `<button type="button" data-action="toggle-space">${view.mode==='system' && view.selected===here.parent ? 'View regular space' : 'Return to '+esc(here.parent)}</button>` : '';
   const tools = view.mode === "system"
     ? `<div class="sm-tools"><strong>${esc(selected?.n || "")}</strong>
-        <div><button type="button" data-action="back">Back to galaxy</button>
+        <div>${spaceSwitch || '<button type="button" data-action="back">Back to galaxy</button>'}
           <button type="button" data-action="zoom-out" aria-label="Zoom out">−</button>
           <button type="button" data-action="zoom-in" aria-label="Zoom in">+</button>
           <button type="button" data-action="reset">Fit</button></div></div>`
     : `<div class="sm-tools">
-        <label>Inspect <select id="sm-system">${systems.map(s =>
+        ${spaceSwitch}<label>Inspect <select id="sm-system">${systems.map(s =>
           `<option value="${esc(s.id)}"${s.id === view.selected ? " selected" : ""}>${esc(s.n)}</option>`).join("")}</select></label>
         <div><button type="button" data-action="zoom-out" aria-label="Zoom out">−</button>
           <button type="button" data-action="zoom-in" aria-label="Zoom in">+</button>

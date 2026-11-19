@@ -4,10 +4,11 @@
 // The resolved web lives in state.galaxy (session only), never in the save.
 
 import { GALAXY } from "../data/galaxy.js";
-import { DEFAULT_PLACE, setPlaceCatalog } from "../data/places.js";
+import { DEFAULT_PLACE, setPlaceCatalog, registerWormholePlace } from "../data/places.js";
 import { state, clearWormholes } from "../state/state.js";
 import { sanitizeSave } from "../state/profile.js";
 import { generateGalaxy, recordSystemVisit } from "./galaxy.js";
+import { installUncharted } from "./uncharted.js";
 import { registerWormholePlaces } from "./wormholes.js";
 
 /** Resolve a raw save's seed, install its catalog, sanitize and recover safely.
@@ -17,6 +18,7 @@ export function prepareGalaxySave(raw) {
   const rawWorld = raw?.profile && typeof raw.profile === "object" ? raw.world : raw;
   const seed = Number.isFinite(rawWorld?.galaxy?.seed) ? rawWorld.galaxy.seed >>> 0 : GALAXY.seed;
   const galaxy = generateGalaxy(seed);
+  installUncharted(galaxy, rawWorld);
   const previousGalaxy = state.galaxy;
   const previousRecovery = state.galaxyRecovery;
   const requested = typeof rawWorld?.place === "string" ? rawWorld.place
@@ -57,6 +59,7 @@ export function prepareGalaxySave(raw) {
     // world replaces whatever the old one registered.
     clearWormholes();
     registerWormholePlaces(rawWorld, galaxy);
+    for (const p of Object.values(galaxy.pockets)) if (p.connection) registerWormholePlace(p);
     save = sanitizeSave(input);
   } catch (error) {
     setPlaceCatalog(previousGalaxy);

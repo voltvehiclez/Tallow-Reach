@@ -14,7 +14,7 @@ import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
-import { isInstanceTemplate, instanceTemplate, instanceIdFor, wormholeIdFor, WORMHOLE_SPAWN } from "../data/instances.js";
+import { isInstanceTemplate, instanceTemplate, instanceIdFor, wormholeIdFor, cleanConnections, WORMHOLE_SPAWN } from "../data/instances.js";
 
 const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
 
@@ -87,7 +87,7 @@ function worldWithStationStores(fields, stationStores) {
 //   24 adds profile.holdSlots and world.stationSlots: optional per-container slot
 //      layouts (`Array<[itemId, count] | null>`) preserving split stacks and custom
 //      slot positions while always summing to the authoritative stock maps.
-export const SAVE_VERSION = 24;
+export const SAVE_VERSION = 25;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -250,6 +250,7 @@ export function newWorld() {
     destination: null, // local session destination, saved with this world
     resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
     instances: [],     // temporary runs the pilot is inside (rifts); see cleanInstanceRuns
+    connections: cleanConnections(null),
     wormholes: [],     // simple wormhole pockets in normal space; see cleanWormholes
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
     missionState: {},  // story-script state keyed by place id
@@ -1034,6 +1035,7 @@ export function sanitizeWorld(raw) {
     resume: cleanResume(raw.resume),
     instances,
     wormholes,
+    connections: cleanConnections(raw.connections),
     placeMemory: cleanPlaceMemory(raw.placeMemory),
     missionState: cleanMissionState(raw.missionState),
     stationSlots,

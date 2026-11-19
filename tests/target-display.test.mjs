@@ -10,7 +10,7 @@ test('Target square visibility excludes behind-camera, offscreen and clipped tar
     assert.equal(targetOnScreen(depth, p), false);
   }
   const hud = readFileSync('src/ui/hud.js', 'utf8');
-  assert.match(hud, /const visible = mark\(pos, lockName\(lock\)/);
+  assert.match(hud, /const visible = mark\(pos, lockedBeltName \?\? lockName\(lock\)/);
   assert.match(hud, /if \(visible\) mark\(pos, null/);
 });
 test('Both health rows have right-side percentages and safe clamped fills', () => {

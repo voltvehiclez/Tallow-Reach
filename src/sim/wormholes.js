@@ -28,6 +28,7 @@
 //
 // Nothing here imports `core/`, `render/` or `ui/` (`tests/layers.test.mjs`).
 
+import { restoreConnectionDoors, tickConnections } from "./uncharted.js";
 import { V, Q } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { random } from "../util/rng.js";
@@ -433,6 +434,7 @@ export function restoreWormholes() {
   for (const record of state.wormholes.values()) {
     if (record && !record.doomed) ensureWormholeDoor(record);
   }
+  restoreConnectionDoors();
   restoredWorld = state.worldState;
   return state.wormholes.size;
 }
@@ -450,6 +452,7 @@ export function restoreWormholes() {
  * dying, docking — is caught here within a tick: nobody is in it any more, so the pocket goes.
  */
 export function updateWormholes(dt) {
+  tickConnections(dt);
   if (!(dt > 0) || !state.wormholes.size) return;
   for (const record of [...state.wormholes.values()]) {
     if (!record) continue;
