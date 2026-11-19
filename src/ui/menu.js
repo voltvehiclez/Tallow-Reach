@@ -23,7 +23,7 @@ import * as contracts from "../sim/contracts.js";
 import * as inv from "../sim/inventory.js";
 import { canSell, canDiscard, itemName } from "../data/items.js";
 import { storyMission } from "../data/missions/index.js";
-import { introHtml, outpostHtml, shipDetailsHtml, shopBuyHtml, viewedShip } from "./screens.js";
+import { introHtml, outpostHtml, shipDetailsHtml, shipSellConfirmHtml, shopBuyHtml, viewedShip } from "./screens.js";
 import { mountOutfitting } from "./outfitting.js";
 import { closeStarmap } from "./starmap.js";
 import { openDiscardPopover } from "./discard.js";
@@ -58,7 +58,7 @@ export function setupMenu(options = {}) {
   });
   on("died", text => {
     showNotice(text);
-    state.ui.tab = "o";
+    state.ui.tab = "h";
     render();
   });
   on("main-menu", () => {
@@ -536,7 +536,7 @@ function openInventoryDiscard(button) {
 }
 
 const POPOVER_SELECTOR =
-  ".inv-context, .inv-sell-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover";
+  ".inv-context, .inv-sell-popover, .inv-discard-popover, .shop-buy-popover, .ship-info-popover, .ship-sell-popover";
 
 /** Close any open docked context menu or popover; returns true if anything closed. */
 export function closePanelPopovers() {
@@ -641,12 +641,12 @@ function confirmShopBuy(node) {
   render();
 }
 
-/** Open the right-click Ship details card for a ship in the Shop or Outfitting. */
-function openShipDetails(shipType, clientX, clientY) {
+/** Open the right-click Ship details card for a ship in the Shop, Outfitting, or Hangar. */
+function openShipDetails(shipType, clientX, clientY, localPos = null) {
   const html = shipDetailsHtml(shipType);
   if (!html) return false;
   const stats = eco.shipBaseStats(shipType);
-  const rect = panel.getBoundingClientRect();
+  const rect = localPos ? null : panel.getBoundingClientRect();
   closePanelPopovers();
 
   const popover = document.createElement("div");
@@ -656,8 +656,8 @@ function openShipDetails(shipType, clientX, clientY) {
   popover.dataset.shipType = stats.type;
   popover.innerHTML = html;
 
-  const x = clientX - rect.left + (panel.scrollLeft || 0) + 6;
-  const y = clientY - rect.top + (panel.scrollTop || 0) + 6;
+  const x = localPos ? localPos.left : clientX - rect.left + (panel.scrollLeft || 0) + 6;
+  const y = localPos ? localPos.top : clientY - rect.top + (panel.scrollTop || 0) + 6;
   placePanelPopover(popover, x, y, 256, 195);
 
   popover.addEventListener("keydown", event => {
@@ -673,9 +673,124 @@ function openShipDetails(shipType, clientX, clientY) {
   return true;
 }
 
+/** Open the Hangar stored-ship right-click menu: Show info, Fly ship, Sell. */
+function openHangarShipContext(row, clientX, clientY) {
+  const shipId = row.dataset.hangarShip;
+  if (!shipId) return false;
+  closePanelPopovers();
+
+  const menu = document.createElement("div");
+  menu.className = "inv-context hangar-context";
+  menu.setAttribute("role", "menu");
+
+  const info = document.createElement("button");
+  info.type = "button";
+  info.dataset.a = "hangarInfo";
+  info.dataset.b = shipId;
+  info.setAttribute("role", "menuitem");
+  info.textContent = "Show info";
+  menu.append(info);
+
+  const fly = document.createElement("button");
+  fly.type = "button";
+  fly.dataset.a = "hangarFly";
+  fly.dataset.b = shipId;
+  fly.setAttribute("role", "menuitem");
+  fly.textContent = "Fly ship";
+  if (shipId === state.profile.ship) {
+    fly.disabled = true;
+    fly.title = "Already flying this ship.";
+  }
+  menu.append(fly);
+
+  const sellCheck = eco.canSellShip(shipId);
+  const sell = document.createElement("button");
+  sell.type = "button";
+  sell.dataset.a = "hangarSellOpen";
+  sell.dataset.b = shipId;
+  sell.setAttribute("role", "menuitem");
+  sell.textContent = "Sell";
+  if (!sellCheck.ok) {
+    sell.disabled = true;
+    sell.title = sellCheck.reason;
+  } else {
+    sell.title = `Sell ${sellCheck.label} for ${sellCheck.price} cr.`;
+  }
+  menu.append(sell);
+
+  const rect = panel.getBoundingClientRect();
+  const scrollLeft = panel.scrollLeft || 0, scrollTop = panel.scrollTop || 0;
+  const x = Math.min(scrollLeft + (panel.clientWidth || 0) - 136, Math.max(scrollLeft, clientX - rect.left + scrollLeft));
+  const y = Math.min(scrollTop + (panel.clientHeight || 0) - 104, Math.max(scrollTop, clientY - rect.top + scrollTop));
+  menu.dataset.anchorLeft = String(x);
+  menu.dataset.anchorTop = String(y);
+  menu.dataset.anchorWidth = "0";
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  panel.append(menu);
+  return true;
+}
+
+/** Open the confirmation popover before permanently selling a stored ship. */
+function openHangarShipSell(button) {
+  const shipId = button.dataset.b;
+  const check = eco.canSellShip(shipId);
+  if (!check.ok) {
+    closePanelPopovers();
+    if (check.reason) toast(check.reason);
+    return;
+  }
+  const anchor = popoverAnchorFor(panel, button);
+  closePanelPopovers();
+
+  const popover = document.createElement("div");
+  popover.className = "inv-sell-popover ship-sell-popover";
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-label", `Sell ${check.label}`);
+  popover.dataset.shipId = shipId;
+  popover.innerHTML = shipSellConfirmHtml(check);
+  placePanelPopover(popover, anchor.left, anchor.top, 248, 145);
+
+  popover.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      event.preventDefault();
+      popover.remove();
+    } else if (event.key === "Enter") {
+      event.stopPropagation();
+      event.preventDefault();
+      confirmHangarShipSell(popover);
+    }
+  });
+
+  panel.append(popover);
+  popover.querySelector('button[data-a="shipSellConfirm"]')?.focus?.();
+}
+
+function confirmHangarShipSell(target) {
+  const popover = target.classList?.contains("ship-sell-popover")
+    ? target
+    : target.closest(".ship-sell-popover");
+  if (!popover) return;
+  const shipId = popover.dataset.shipId;
+  closePanelPopovers();
+  const text = eco.sellShip(shipId);
+  if (text) toast(text);
+  inventoryChanged();
+  uiSound("confirm");
+  save();
+  render();
+}
+
 function onInventoryContextMenu(e) {
   const tile = e.target.closest("button.inv-item[data-kind]");
   if (!tile) {
+    const hangarRow = e.target.closest("[data-hangar-ship]");
+    if (hangarRow && hangarRow.dataset.hangarShip) {
+      e.preventDefault();
+      openHangarShipContext(hangarRow, e.clientX, e.clientY);
+      return;
+    }
     const shipEl = e.target.closest("[data-ship-type]");
     if (shipEl && shipEl.dataset.shipType) {
       e.preventDefault();
@@ -772,8 +887,33 @@ async function onClick(e) {
     confirmShopBuy(btn);
     return;
   }
-  if (name === "shopBuyCancel" || name === "shipInfoClose") {
+  if (name === "shopBuyCancel" || name === "shipInfoClose" || name === "shipSellCancel") {
     closePanelPopovers();
+    return;
+  }
+  if (name === "hangarInfo") {
+    const ctx = btn.closest(".inv-context");
+    const localPos = ctx
+      ? { left: Number(ctx.dataset.anchorLeft || 0), top: Number(ctx.dataset.anchorTop || 0) }
+      : null;
+    openShipDetails(btn.dataset.b, 0, 0, localPos);
+    return;
+  }
+  if (name === "hangarFly") {
+    closePanelPopovers();
+    ACTIONS.sel(btn.dataset.b);
+    uiSound("click");
+    save();
+    render();
+    return;
+  }
+  if (name === "hangarSellOpen") {
+    openHangarShipSell(btn);
+    uiSound();
+    return;
+  }
+  if (name === "shipSellConfirm") {
+    confirmHangarShipSell(btn);
     return;
   }
   if (name === "shopGroup") {

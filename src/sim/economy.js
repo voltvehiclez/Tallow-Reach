@@ -6,11 +6,11 @@
 
 import { state, profileOf } from "../state/state.js";
 import { DEFAULT_PLACE, stationKeyAt } from "../data/places.js";
-import { SHIPS, isShipType, nextShipId, shipDef, shipName, shipTypeOf } from "../data/ships.js";
-import { canSell, isItem, isModule, itemName, itemValue, itemVol } from "../data/items.js";
+import { SHIPS, isShipType, nextShipId, shipDef, shipLabel, shipName, shipSellValue, shipTypeOf } from "../data/ships.js";
+import { canSell, isItem, isModule, itemName, itemStack, itemValue, itemVol } from "../data/items.js";
 import { BASE_MODULES, REFINERY_BONUS_PER_LEVEL } from "../data/station.js";
 import { MISSILE } from "../data/weapons.js";
-import { MODULES } from "../data/modules.js";
+import { MODULES, STOCK_FIT } from "../data/modules.js";
 import {
   SHOP_GROUPS, isShop, isShipRow, shopDef, shopGroupFor, shopModuleSubgroups, shopRow, shopRowKind,
 } from "../data/shops.js";
@@ -18,8 +18,8 @@ import { ownedCount } from "./fitting.js";
 import { setShip } from "./player.js";
 import { addShipRecords, ensureShipRecords, shipStation, shipsAtStation } from "../state/profile.js";
 import {
-  STATION, buyItem as buyInto, capacityOf, countOf, hasRoomFor, holdOf, loadOf, moveItem, spaceFor,
-  stockOf, takeItem, unitsOf, valueOf,
+  STATION, addItem, buyItem as buyInto, capacityOf, countOf, freeOf, hasRoomFor, holdOf, loadOf, moveItem,
+  spaceFor, stockOf, takeItem, unitsOf, valueOf,
 } from "./inventory.js";
 export { valueOf, shipStation, shipsAtStation };   // screens ask for local-station ships and stock values
 import { refillPower } from "./power.js";
@@ -208,8 +208,115 @@ export function buyShip(
   }
   const label = SHIPS[type].n;
   return n > 1
-    ? `${n} ${label} stored in Outfitting at this station.`
-    : `${label} stored in Outfitting at this station.`;
+    ? `${n} ${label} stored in Hangar at this station.`
+    : `${label} stored in Hangar at this station.`;
+}
+
+/**
+ * Cargo and non-stock fitted modules on ship `id` that must move into station
+ * storage when the hull is sold, so cargo, mission objects and bought upgrades
+ * are never lost with a sale while factory stock stays with the sold hull.
+ */
+function shipUnpackMap(id, profile) {
+  const out = {};
+  const hold = profile?.holds?.[id];
+  if (hold && typeof hold === "object") {
+    for (const [item, count] of Object.entries(hold)) {
+      if (isItem(item) && count > 0) out[item] = (out[item] || 0) + count;
+    }
+  }
+  const fit = profile?.loadout?.[id];
+  if (fit && typeof fit === "object") {
+    for (const [group, slots] of Object.entries(fit)) {
+      if (!Array.isArray(slots)) continue;
+      const stockAllowance = {};
+      for (const s of STOCK_FIT[group] || []) {
+        if (s) stockAllowance[s] = (stockAllowance[s] || 0) + 1;
+      }
+      for (const mod of slots) {
+        if (!mod || !isItem(mod)) continue;
+        if (stockAllowance[mod] > 0) {
+          stockAllowance[mod]--;
+          continue;
+        }
+        out[mod] = (out[mod] || 0) + 1;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether ship `id` may be sold right now at this station. Refuses selling the
+ * active ship (the pilot must fly another ship first, and can never sell their
+ * only ship here) or selling when station storage lacks space for its cargo and
+ * non-stock fitted upgrades.
+ */
+export function canSellShip(id, P = state.player, profile = profileOf(P), world = state.worldState) {
+  if (!profile?.ships?.includes(id) || !shipDef(id)) {
+    return { ok: false, reason: "You do not own that ship.", price: 0, unpackVol: 0, label: shipName(id) };
+  }
+  const at = P && P !== state.player && P.place ? P.place : activeStationPlace(world);
+  const local = localShips(profile, world, at);
+  const label = shipLabel(id, local);
+  const price = shipSellValue(id);
+  if (!local.includes(id)) {
+    return { ok: false, reason: "That ship is stored at another station.", price, unpackVol: 0, label };
+  }
+  if (id === profile.ship) {
+    const reason = local.length <= 1
+      ? "Cannot sell your only ship at this station."
+      : "Fly another ship first before selling this one.";
+    return { ok: false, reason, price, unpackVol: 0, label };
+  }
+  const unpack = shipUnpackMap(id, profile);
+  let unpackVol = 0;
+  for (const [item, count] of Object.entries(unpack)) {
+    unpackVol += count * (itemVol(item) || 0);
+    if (countOf(STATION, item, profile, world) + count > itemStack(item)) {
+      return {
+        ok: false,
+        reason: `Station storage cannot stack any more ${itemName(item)} from ${label}.`,
+        price,
+        unpackVol,
+        label,
+      };
+    }
+  }
+  if (unpackVol > freeOf(STATION, profile, world)) {
+    return {
+      ok: false,
+      reason: `Need ${unpackVol} m³ free in station storage for ${label}'s cargo and fitted modules.`,
+      price,
+      unpackVol,
+      label,
+    };
+  }
+  return { ok: true, reason: "", price, unpackVol, unpack, label };
+}
+
+/**
+ * Sell a stored ship at the current station: returns its cargo and non-stock
+ * fitted modules to station storage, removes its fleet records and credits the
+ * hull's resale value.
+ */
+export function sellShip(id, P = state.player, profile = profileOf(P), world = state.worldState) {
+  assertEconomyPilot(P, profile);
+  const check = canSellShip(id, P, profile, world);
+  if (!check.ok) return check.reason;
+  for (const [item, count] of Object.entries(check.unpack || {})) {
+    addItem(STATION, item, count, profile, world);
+  }
+  profile.ships = profile.ships.filter(other => other !== id);
+  if (profile.holds) delete profile.holds[id];
+  if (profile.hp) delete profile.hp[id];
+  if (profile.loadout) delete profile.loadout[id];
+  if (profile.shipPlaces) delete profile.shipPlaces[id];
+  profile.cr += check.price;
+  if (profile === state.profile && state.ui.invShip === id) state.ui.invShip = null;
+  return check.unpackVol > 0
+    ? `Sold ${check.label} for ${check.price} cr. Cargo and fitted modules moved to station storage.`
+    : `Sold ${check.label} for ${check.price} cr.`;
 }
 
 export function selectShip(id, P = state.player, profile = profileOf(P), world = state.worldState) {

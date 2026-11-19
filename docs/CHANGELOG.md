@@ -20,27 +20,32 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-18: Roadmap slice 2 — compact Shop, ships in Outfitting, Ship details/bonuses and unblurred cargo overlays
+## 2026-11-18: Roadmap slice 2 — compact Shop, Hangar stored-ship list & context menu, Ship details/bonuses and unblurred cargo overlays
 
-Slice 1 playtest passed. Rebuilt the Shop tab into a compact single-line collapsible tree
-(`SHOP_GROUPS`: `Ships`, `Modules` with 1-line subgroups matching every `MODULE_GROUPS`
-group, `Consumables`, `Ores`, `Loot`) with a right-side `Buy` button opening a bounded
-`Buy amount` popover (`shopBuyHtml` / `shopMaxBuy`); `Ores` and `Loot` show none in stock
-at Meridian today and populate automatically for future station shops. Removed the Hangar
-tab: ships are sold in Shop and stored per station in Outfitting (`profile.shipPlaces` in
-`SAVE_VERSION = 23`, migrating v1–v22 saves cleanly), never in Inventory, supporting
-multiple copies of the same hull (`wasp#2`, `prospector#2`) across stations while keeping
-each station's `world.base.hangar + 1` berth cap and lending a local Wasp on death without
+Slice 1 playtest passed; includes owner's Slice 2 follow-up. Rebuilt the Shop tab into a
+compact single-line collapsible tree (`SHOP_GROUPS`: `Ships`, `Modules` with 1-line
+subgroups matching every `MODULE_GROUPS` group, `Consumables`, `Ores`, `Loot`) with a
+right-side `Buy` button opening a bounded `Buy amount` popover (`shopBuyHtml` /
+`shopMaxBuy`); `Ores` and `Loot` show none in stock at Meridian today and populate
+automatically for future station shops. Ships are bought in Shop (never in Inventory) and
+stored per station in the restored **Hangar** tab's compact one-line `.hangar-ships` list
+(removed from Outfitting): left-click never auto-equips; right-click offers `Show info`,
+`Fly ship`, and `Sell` (`canSellShip` / `sellShip` at 60% resale via `shipSellValue`,
+moving cargo and non-stock fitted upgrades into station storage and refusing when active
+or short on storage space). Supports duplicate hulls (`wasp#2`, `prospector#2`) across
+stations via `profile.shipPlaces` in `SAVE_VERSION = 23` (clean v1–v22 migration), keeps
+each station's `world.base.hangar + 1` berth cap, and lends a local Wasp on death without
 moving remote ships. Updated hull bonuses (Wasp none, Prospector `2×` mining speed with
-Wasp Hull HP, Bulwark `1.5×` damage on all weapons, Test Ship unchanged) and added right-
-click `Ship details` (`shipBaseStats` / `shipDetailsHtml`) on ships in Shop and Outfitting
-showing unfitted base Hull HP, cargo space and ship bonuses. Removed background blur from
-flight inventory (`#cargo`), rift cache (`#cache`) and shared `.cargo-overlay` for all
-future cargo transfers. Files: `src/data/{ships,outfitting,mounts,shops}.js`,
-`src/state/{profile,state}.js`, `src/sim/{hull,inventory,fitting,combat,weapons,missile,pilot,session,economy}.js`,
-`src/render/{models,shipviewer,views}.js`, `src/ui/{hud,outfitting,cargo,cache,screens,menu}.js`,
-`src/main.js`, `src/styles.css`, `tests/slice2-shop-ships.test.mjs`. Build regenerated;
-owner playtest pending before Slice 3.
+Wasp Hull HP, Bulwark `1.5×` damage on all weapons, Test Ship unchanged) with right-click
+`Ship details` (`shipBaseStats` / `shipDetailsHtml`) in Shop, Outfitting and Hangar.
+Removed background blur from flight inventory (`#cargo`), rift cache (`#cache`) and
+shared `.cargo-overlay` for all future cargo transfers. Files:
+`src/data/{ships,outfitting,mounts,shops}.js`, `src/state/{profile,state}.js`,
+`src/sim/{hull,inventory,fitting,combat,weapons,missile,pilot,session,economy}.js`,
+`src/render/{models,shipviewer,views}.js`,
+`src/ui/{hud,notice,outfitting,cargo,cache,screens,menu}.js`, `src/main.js`,
+`src/styles.css`, `tests/slice2-shop-ships.test.mjs`. Build regenerated; owner playtest
+pending before Slice 3.
 
 ## 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers
 

@@ -21,10 +21,11 @@ import { encodeSave, decodeSave } from "../src/state/storage.js";
 import { state, applySave, currentSave, placeWorld, resetPlaces } from "../src/state/state.js";
 import { generateGalaxy } from "../src/sim/galaxy.js";
 import {
-  buyItem, buyShip, freeBerths, hangarCap, localShips, selectShip, shipBaseStats,
+  buyItem, buyShip, canSellShip, freeBerths, hangarCap, localShips, selectShip, sellShip, shipBaseStats,
   shopCatalogue, shopMaxBuy,
 } from "../src/sim/economy.js";
 import { STATION, countOf, itemsAt, addItem } from "../src/sim/inventory.js";
+import { itemVol } from "../src/data/items.js";
 import { fitModule, unequip } from "../src/sim/fitting.js";
 import { createPlayer } from "../src/sim/player.js";
 import { configurePlayer, dock, die, setHomeStation } from "../src/sim/session.js";
@@ -139,21 +140,25 @@ test("#2: compact shop groups Ships, nested Modules subgroups, Consumables, Ores
   assert.equal(state.profile.cr, 4960);
 });
 
-test("#3: Hangar tab removed; ships bought in Shop stay in station Outfitting with duplicate hulls, berth cap and v23 save", () => {
+test("#3: ships bought in Shop stay in station Hangar (not Outfitting list or Inventory) with duplicate hulls, berth cap, Sell and v23 save", () => {
   const { P, remoteStation } = freshDocked(10000);
   assert.equal(SAVE_VERSION, 23);
 
-  // Hangar tab is removed from station navigation.
-  assert.equal(TABS.some(([k, n]) => k === "h" || /hangar/i.test(n)), false, "no Hangar tab");
+  // Hangar tab is present in station navigation, and Outfitting no longer lists stored ships.
+  assert.equal(TABS.some(([k, n]) => k === "h" && n === "Hangar"), true, "Hangar tab is in station menu");
 
   // Default hangar level 1 -> cap 2 berths (1 used by starter Wasp -> 1 free berth).
   assert.equal(hangarCap(state.worldState), 2);
   assert.equal(freeBerths(state.profile, state.worldState), 1);
   assert.equal(shopMaxBuy("meridian", "wasp", state.profile, state.worldState, "ship"), 1);
 
-  // Buy a second Wasp through the Shop -> stored in Outfitting as wasp#2, NOT in Inventory!
+  // Cannot sell your only ship at this station.
+  assert.equal(canSellShip("wasp", P, state.profile, state.worldState).ok, false);
+  assert.match(sellShip("wasp", P, state.profile, state.worldState), /only ship/i);
+
+  // Buy a second Wasp through the Shop -> stored in Hangar as wasp#2, NOT in Inventory!
   const msg1 = buyItem("meridian", "wasp", 1, P, state.profile, state.worldState, "ship");
-  assert.match(msg1, /Outfitting/);
+  assert.match(msg1, /Hangar/);
   assert.deepEqual(state.profile.ships, ["wasp", "wasp#2"]);
   assert.equal(itemsAt(STATION).length, 0, "bought ship never enters station Inventory items");
   assert.equal(shipLabel("wasp", state.profile.ships), "Wasp #1");
@@ -171,9 +176,41 @@ test("#3: Hangar tab removed; ships bought in Shop stay in station Outfitting wi
   state.worldState.base.hangar = 4; // cap 5 -> 3 free berths
   assert.equal(shopMaxBuy("meridian", "prospector", state.profile, state.worldState, "ship"), 3);
   const msg2 = buyItem("meridian", "prospector", 2, P, state.profile, state.worldState, "ship");
-  assert.match(msg2, /2 Prospector stored in Outfitting/);
+  assert.match(msg2, /2 Prospector stored in Hangar/);
   assert.deepEqual(state.profile.ships, ["wasp", "wasp#2", "prospector", "prospector#2"]);
   assert.equal(itemsAt(STATION).length, 0, "still zero items in Inventory");
+
+  // Selling a stored ship with cargo and a non-stock fitted upgrade moves both into station storage,
+  // drops factory stock with the hull, refunds 60% (360 cr), and refuses if station storage is full.
+  state.profile.cr = 10000;
+  buyItem("meridian", "bulwark", 1, P, state.profile, state.worldState, "ship");
+  addItem("bulwark", "ferrite", 4, state.profile, state.worldState);
+  state.profile.loadout.bulwark.primary[1] = "beam_basic"; // non-stock 900 cr upgrade (4 m³)
+  const preCr = state.profile.cr; // 9400
+  // Fill station storage so only 4 m³ remains and 8 m³ (4 Ferrite + 4 m³ beam) cannot fit -> sell refuses cleanly!
+  state.worldState.base.store = 0; // 80 m³ cap
+  addItem(STATION, "cobalt", 76, state.profile, state.worldState);
+  assert.equal(canSellShip("bulwark", P, state.profile, state.worldState).ok, false);
+  assert.match(sellShip("bulwark", P, state.profile, state.worldState), /free in station storage/i);
+  assert.equal(state.profile.ships.includes("bulwark"), true, "Bulwark kept when station storage is full");
+  // Clear station storage -> sell succeeds, pays 360 cr, and saves ferrite + beam_basic (no stock clutter).
+  state.worldState.base.store = 1;
+  delete state.worldState.store.cobalt;
+  const checkBulwark = canSellShip("bulwark", P, state.profile, state.worldState);
+  assert.equal(checkBulwark.ok, true);
+  assert.equal(checkBulwark.price, 360);
+  assert.equal(checkBulwark.unpackVol, 4 + itemVol("beam_basic"));
+  assert.match(sellShip("bulwark", P, state.profile, state.worldState), /Sold Bulwark for 360 cr/);
+  assert.equal(state.profile.cr, preCr + 360);
+  assert.equal(state.profile.ships.includes("bulwark"), false);
+  assert.equal(state.profile.holds.bulwark, undefined);
+  assert.equal(state.profile.loadout.bulwark, undefined);
+  assert.equal(state.profile.shipPlaces.bulwark, undefined);
+  assert.equal(countOf(STATION, "ferrite"), 4, "cargo returned to station storage");
+  assert.equal(countOf(STATION, "beam_basic"), 1, "non-stock fitted beam returned to station storage");
+  assert.equal(countOf(STATION, "cannon_basic"), 0, "factory stock modules are not duplicated");
+  delete state.worldState.store.ferrite;
+  delete state.worldState.store.beam_basic;
 
   // Each duplicate ship keeps its own hold, damage and loadout.
   addItem("prospector", "ferrite", 12, state.profile, state.worldState);
@@ -189,8 +226,9 @@ test("#3: Hangar tab removed; ships bought in Shop stay in station Outfitting wi
   assert.deepEqual(localShips(state.profile, state.worldState, remoteStation.id), ["prospector#2"]);
   assert.deepEqual(localShips(state.profile, state.worldState, DEFAULT_PLACE), ["wasp", "wasp#2", "prospector"]);
 
-  // Cannot switch to a ship parked back at Meridian while docked at the remote station.
+  // Cannot switch to or sell a ship parked back at Meridian while docked at the remote station.
   assert.match(selectShip("wasp", P, state.profile, state.worldState), /another station/i);
+  assert.match(sellShip("wasp", P, state.profile, state.worldState), /another station/i);
   assert.equal(viewedShip(), "prospector#2", "Inventory ship hold scopes to local station");
 
   // Buy a Bulwark at the remote station -> parks at remoteStation, not Meridian.
@@ -198,13 +236,23 @@ test("#3: Hangar tab removed; ships bought in Shop stay in station Outfitting wi
   assert.deepEqual(localShips(state.profile, state.worldState, remoteStation.id), ["prospector#2", "bulwark"]);
   assert.deepEqual(localShips(state.profile, state.worldState, DEFAULT_PLACE), ["wasp", "wasp#2", "prospector"]);
 
-  // Outfitting at remote station shows only the 2 ships parked there.
+  // Hangar tab at remote station renders the compact stored-ship list with NO click-to-equip button,
+  // and NO ship purchase rows; Outfitting has no stored-ship list.
+  state.ui.tab = "h";
+  const hHtml = outpostHtml(state.ui);
+  assert.match(hHtml, /class="hangar-ships"/, "Hangar uses the compact stored-ship list");
+  assert.match(hHtml, /data-hangar-ship="prospector#2"/);
+  assert.match(hHtml, /data-hangar-ship="bulwark"/);
+  assert.doesNotMatch(hHtml, /data-hangar-ship="wasp"/, "Meridian ships are not in remote Hangar");
+  assert.doesNotMatch(hHtml, /data-a="sel"/, "clicking a Hangar row does not auto-equip it");
+  assert.doesNotMatch(hHtml, /data-a="buy"/, "ships are bought in Shop, not Hangar");
+
   state.ui.tab = "o";
   const outfitHtml = outpostHtml(state.ui);
   assert.match(outfitHtml, /1 of 2 in the hangar/);
-  assert.match(outfitHtml, /data-ship-type="prospector"/);
-  assert.match(outfitHtml, /data-ship-type="bulwark"/);
-  assert.doesNotMatch(outfitHtml, /data-ship-type="wasp"/);
+  assert.doesNotMatch(outfitHtml, /hangar-ships|outfit-ships/, "stored-ship list removed from Outfitting");
+  assert.match(outfitHtml, /data-ship-type="prospector"/, "active ship stays inspectable in Outfitting");
+  assert.doesNotMatch(outfitHtml, /data-ship-type="bulwark"/, "stored ship list is not rendered in Outfitting");
 
   // While flying in space, shipsAtStation(..., { docked: false }) excludes only the flown ship.
   assert.deepEqual(
@@ -491,10 +539,78 @@ test("menu wiring: clicking Buy opens Buy-amount popup and right-clicking a ship
     };
     await panel.handlers.click[0]({ target: confirmBtn, shiftKey: false });
     assert.deepEqual(state.profile.ships, ["wasp", "prospector", "prospector#2"]);
-    assert.equal(itemsAt(STATION).length, 0, "ships went to Outfitting, not Inventory");
+    assert.equal(itemsAt(STATION).length, 0, "ships went to Hangar, not Inventory");
     assert.equal(state.profile.cr, 8800);
 
-    // 2. Right-click a ship in Shop or Outfitting -> opens Ship details popup with base stats & bonuses.
+    // 2. Hangar row: left-click does NOT auto-equip; right-click opens Show info / Fly ship / Sell.
+    const hangarRow = makeEl("li");
+    hangarRow.dataset = { hangarShip: "prospector", shipType: "prospector" };
+    hangarRow.closest = sel => (sel === "[data-hangar-ship]" ? hangarRow : null);
+    await panel.handlers.click[0]({ target: hangarRow, shiftKey: false });
+    assert.equal(state.profile.ship, "wasp", "left-clicking a stored ship in Hangar does not equip it");
+
+    let ctxPrevented = false;
+    panel.handlers.contextmenu[0]({
+      target: hangarRow,
+      clientX: 220,
+      clientY: 140,
+      preventDefault() { ctxPrevented = true; },
+    });
+    assert.equal(ctxPrevented, true);
+    const ctxMenu = panel.children.find(c => c.classList.contains("hangar-context"));
+    assert.ok(ctxMenu, "right-clicking a stored ship opens the Hangar context menu");
+    assert.deepEqual(
+      ctxMenu.children.map(b => b.textContent),
+      ["Show info", "Fly ship", "Sell"]
+    );
+    assert.deepEqual(
+      ctxMenu.children.map(b => b.disabled),
+      [false, false, false],
+      "all three actions enabled on a stored ship"
+    );
+
+    // 2a. Show info opens Ship details for Prospector.
+    const [infoBtn, flyBtn] = ctxMenu.children;
+    infoBtn.closest = sel => (sel === "button[data-a]" ? infoBtn : sel === ".inv-context" ? ctxMenu : null);
+    await panel.handlers.click[0]({ target: infoBtn, shiftKey: false });
+    const hInfo = panel.children.find(c => c.classList.contains("ship-info-popover"));
+    assert.ok(hInfo, "Show info opens Ship details");
+    assert.match(hInfo.innerHTML, /Prospector/);
+    assert.match(hInfo.innerHTML, /2× mining speed/);
+
+    // 2b. Fly ship equips Prospector; right-clicking it now disables Fly ship and Sell.
+    flyBtn.closest = sel => (sel === "button[data-a]" ? flyBtn : null);
+    await panel.handlers.click[0]({ target: flyBtn, shiftKey: false });
+    assert.equal(state.profile.ship, "prospector", "Fly ship equips the chosen ship");
+
+    panel.handlers.contextmenu[0]({ target: hangarRow, clientX: 220, clientY: 140, preventDefault() {} });
+    const activeMenu = panel.children.find(c => c.classList.contains("hangar-context"));
+    assert.deepEqual(
+      activeMenu.children.map(b => b.disabled),
+      [false, true, true],
+      "active ship keeps Show info enabled and disables Fly ship and Sell"
+    );
+
+    // 2c. Right-click prospector#2 -> Sell -> confirm -> refunds 360 cr and removes ship from Hangar.
+    const spareRow = makeEl("li");
+    spareRow.dataset = { hangarShip: "prospector#2", shipType: "prospector" };
+    spareRow.closest = sel => (sel === "[data-hangar-ship]" ? spareRow : null);
+    panel.handlers.contextmenu[0]({ target: spareRow, clientX: 220, clientY: 160, preventDefault() {} });
+    const spareMenu = panel.children.find(c => c.classList.contains("hangar-context"));
+    const sellBtn = spareMenu.children[2];
+    sellBtn.closest = sel => (sel === "button[data-a]" ? sellBtn : sel === ".inv-context" ? spareMenu : null);
+    await panel.handlers.click[0]({ target: sellBtn, shiftKey: false });
+    const sellPop = panel.children.find(c => c.classList.contains("ship-sell-popover"));
+    assert.ok(sellPop, "clicking Sell opens ship sell confirmation");
+    assert.match(sellPop.innerHTML, /360 cr/);
+    const sellConfirm = makeEl("button");
+    sellConfirm.dataset = { a: "shipSellConfirm" };
+    sellConfirm.closest = sel => (sel === "button[data-a]" ? sellConfirm : sel === ".ship-sell-popover" ? sellPop : null);
+    await panel.handlers.click[0]({ target: sellConfirm, shiftKey: false });
+    assert.deepEqual(state.profile.ships, ["wasp", "prospector"]);
+    assert.equal(state.profile.cr, 9160);
+
+    // 3. Right-click a ship in Shop or Outfitting -> opens Ship details popup directly.
     const shipRow = makeEl("li");
     shipRow.dataset = { shipType: "bulwark" };
     shipRow.closest = sel => (sel === "[data-ship-type]" ? shipRow : null);
@@ -507,13 +623,13 @@ test("menu wiring: clicking Buy opens Buy-amount popup and right-clicking a ship
     });
     assert.equal(prevented, true);
     const infoPop = panel.children.find(c => c.classList.contains("ship-info-popover"));
-    assert.ok(infoPop, "right-clicking a ship opens the Ship details popup");
+    assert.ok(infoPop, "right-clicking a ship in Shop/Outfitting opens the Ship details popup");
     assert.match(infoPop.innerHTML, /Bulwark/);
     assert.match(infoPop.innerHTML, /10 HP/);
     assert.match(infoPop.innerHTML, /30 m³/);
     assert.match(infoPop.innerHTML, /1\.5× damage \(all weapons\)/);
 
-    // 3. closePanelPopovers() (used by Escape and outside click) closes it cleanly.
+    // 4. closePanelPopovers() (used by Escape and outside click) closes it cleanly.
     assert.equal(closePanelPopovers(), true);
     assert.equal(panel.children.length, 0);
     assert.equal(closePanelPopovers(), false);

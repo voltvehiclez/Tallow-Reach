@@ -17,7 +17,7 @@ import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { state } from "../state/state.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import {
-  holdLoad, storedUnits, storageCap, repairCost, localShips, shipBaseStats, shopCatalogue,
+  holdLoad, storedUnits, storageCap, repairCost, hangarCap, localShips, shipBaseStats, shopCatalogue,
 } from "../sim/economy.js";
 import {
   describe,
@@ -49,6 +49,7 @@ const esc = text => String(text ?? "")
 export const TABS = [
   ["m", "Contracts"],
   ["l", "Mission log"],
+  ["h", "Hangar"],
   ["o", "Outfitting"],
   ["i", "Inventory"],
   ["p", "Shop"],
@@ -61,6 +62,7 @@ export const TABS = [
 const SCREENS = {
   m: contractsHtml,
   l: missionLogHtml,
+  h: hangarHtml,
   o: outfittingHtml,
   i: inventoryHtml,
   p: shopHtml,
@@ -348,7 +350,7 @@ export function shipDetailsHtml(shipId) {
 export function shopBuyHtml(row, maxBuy, amount = 1) {
   const safeMax = Math.max(1, Math.floor(+maxBuy) || 1);
   const qty = Math.min(safeMax, Math.max(1, Math.floor(+amount) || 1));
-  const dest = row.kind === "ship" ? " &middot; Outfitting" : "";
+  const dest = row.kind === "ship" ? " &middot; Hangar" : "";
   return (
     `<div class="inv-sell-head"><strong>Buy ${esc(row.n)}</strong>` +
     `<div class="inv-sell-actions"><button type="button" data-a="shopBuyConfirm">Buy</button><button type="button" data-a="shopBuyCancel">Cancel</button></div></div>` +
@@ -358,13 +360,62 @@ export function shopBuyHtml(row, maxBuy, amount = 1) {
   );
 }
 
+/** Pure confirmation popup body for selling a stored ship from the Hangar. */
+export function shipSellConfirmHtml(check) {
+  const unpackNote = check.unpackVol > 0
+    ? ` Cargo and fitted upgrades (${check.unpackVol} m³) will move to station storage.`
+    : "";
+  return (
+    `<div class="inv-sell-head"><strong>Sell ${esc(check.label)} for ${check.price} cr?</strong>` +
+    `<div class="inv-sell-actions"><button type="button" data-a="shipSellConfirm">Sell</button><button type="button" data-a="shipSellCancel">Cancel</button></div></div>` +
+    `<p class="inv-discard-note">This permanently sells the ship.${esc(unpackNote)}</p>`
+  );
+}
+
+/**
+ * Station Hangar tab: compact stored-ship list for this station. Left-clicking a
+ * row does not auto-equip; right-clicking opens Show info, Fly ship, or Sell.
+ */
+export function hangarHtml() {
+  const S = state.profile;
+  const owned = localShips(S, state.worldState);
+  const cap = hangarCap(state.worldState);
+  if (!owned.length) {
+    return (
+      `<h2>Hangar</h2>` +
+      `<div class="sub">No ships stored at this station (0 of ${cap} berths). Buy a ship in the Shop to store it here.</div>`
+    );
+  }
+  const rows = owned
+    .map(id => {
+      const active = id === S.ship;
+      const hpPct = Math.round((S.hp[id] ?? 1) * 100);
+      const t = shipTypeOf(id);
+      const label = shipLabel(id, owned);
+      return (
+        `<li class="hangar-ship-row${active ? " selected" : ""}" data-hangar-ship="${esc(id)}" data-ship-type="${t}" ` +
+        `${active ? 'aria-current="true" ' : ""}` +
+        `title="${esc(label)} — ${active ? "active ship" : "stored ship"}. Right-click for options.">` +
+        `<span class="hangar-ship-name">${esc(label)}</span>` +
+        `<small>${active ? "Active" : "Stored"}${hpPct < 100 ? ` &middot; ${hpPct}%` : ""}</small>` +
+        `</li>`
+      );
+    })
+    .join("");
+  return (
+    `<h2>Hangar</h2>` +
+    `<div class="sub">${owned.length} of ${cap} berths used at this station. Right-click a ship for Show info, Fly ship, or Sell.</div>` +
+    `<ul class="hangar-ships" aria-label="Ships stored at this station">${rows}</ul>`
+  );
+}
+
 function outfittingHtml() {
   const S = state.profile;
   const owned = localShips(S, state.worldState);
   if (!owned.length || !shipDef(S.ship)) {
     return (
       `<h2>Outfitting</h2>` +
-      `<div class="sub">No ship is stored at this station. Buy a ship in the Shop to keep and fit it here.</div>`
+      `<div class="sub">No ship is stored at this station. Buy a ship in the Shop to store it in the Hangar.</div>`
     );
   }
   const ship = shipDef(S.ship);
@@ -374,26 +425,6 @@ function outfittingHtml() {
   const many = owned.length > 1 ? "" : "disabled";
   const left = leftRail(MODULE_GROUPS),
     right = MODULE_GROUPS.slice(left.length);
-
-  // Compact one-line list of ships stored in this station's hangar (click to board,
-  // right-click any row — or the switcher/3D view — for Ship details).
-  const shipRows = owned
-    .map(id => {
-      const active = id === S.ship;
-      const hpPct = Math.round((S.hp[id] ?? 1) * 100);
-      const t = shipTypeOf(id);
-      return (
-        `<li class="${active ? "selected" : ""}" data-ship-type="${t}" data-ship-id="${esc(id)}">` +
-        `<button type="button" data-a="sel" data-b="${esc(id)}" ${active ? 'aria-current="true"' : ""} ` +
-        `title="${esc(shipLabel(id, owned))} — ${active ? "active ship" : "click to switch"}. Right-click for ship details.">` +
-        `<span class="outfit-ship-name">${esc(shipLabel(id, owned))}</span>` +
-        `<small>${active ? "Active" : "Stored"}${hpPct < 100 ? ` &middot; ${hpPct}%` : ""}</small>` +
-        `</button></li>`
-      );
-    })
-    .join("");
-  const fleetBox =
-    `<ul class="outfit-ships" aria-label="Ships at this station">${shipRows}</ul>`;
 
   // Services for the hull in the viewer (the selected ship): paid repair of its
   // plating and paid restock of its missiles.
@@ -420,7 +451,7 @@ function outfittingHtml() {
 
   return (
     `<h2>Outfitting</h2>` +
-    `<div class="sub">Ships bought in the Shop are stored here at this station. Right-click a ship to inspect its base stats and bonuses.</div>` +
+    `<div class="sub">Fit modules from station storage and paint your ship. Right-click the ship for details.</div>` +
     `<div class="outfit">` +
     `<div class="outfit-rail">${left.map(groupHtml).join("")}</div>` +
     `<div class="outfit-mid">` +
@@ -429,7 +460,6 @@ function outfittingHtml() {
     `<div class="ship-switch-mid"><div class="ship-switch-name">${esc(label)}</div><div class="ship-switch-count">${idx + 1} of ${owned.length} in the hangar</div></div>` +
     `<button class="ship-arrow" data-a="shipNext" ${many} aria-label="Next ship">&#8250;</button>` +
     `</div>` +
-    fleetBox +
     `<div class="outfit-view">` +
     // ui/outfitting.js mounts the 3D ship into #shipview after this HTML is drawn.
     `<div class="outfit-stage" id="shipview" data-ship-type="${shipType}" data-ship-id="${esc(S.ship)}">` +
@@ -477,7 +507,7 @@ function shopItemsHtml(shopId, items, depth = 1) {
       if (!s.room) notes.push(s.kind === "ship" ? "hangar full" : "no space");
       else if (s.owned) notes.push(s.kind === "ship" ? `${s.owned} here` : `own ${s.owned}`);
       const tip = s.kind === "ship"
-        ? `${s.n}: ${s.d} Stored in Outfitting. Right-click for ship details.`
+        ? `${s.n}: ${s.d} Stored in Hangar. Right-click for ship details.`
         : `${s.n}: ${s.d} Takes ${s.vol} m³.`;
       const buyReason = soldOut
         ? "Sold out."

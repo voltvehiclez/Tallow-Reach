@@ -18,6 +18,7 @@ const ROUTINE = [
   /^Story mission accepted\.$/,
   /^Paid \d+ cr\.$/,
   /^Sold \d+ .+ for \d+ cr\.$/,
+  /^Sold .+ for \d+ cr\.$/,
   /^Moved \d+ .+ to .+\.$/,
   /^Fitted .+\.$/,
   /^.+ moved to storage\.$/,

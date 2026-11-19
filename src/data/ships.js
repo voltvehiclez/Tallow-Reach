@@ -135,6 +135,16 @@ export function nextShipId(type, ships = []) {
   return `${type}#${n}`;
 }
 
+/** Fraction of a hull's price paid back when sold in the Hangar (matches spare-part resale). */
+export const SHIP_RESALE = 0.6;
+
+/** Credits paid when selling `id` in the Hangar (60% of hull price, never below 1 cr). */
+export function shipSellValue(id) {
+  const s = shipDef(id);
+  if (!s || !(s.price > 0)) return 0;
+  return Math.max(1, Math.floor(s.price * SHIP_RESALE));
+}
+
 /** Format a stat multiplier cleanly (`1.5×`, `2×`, `100×`). */
 const fmtMul = v => `${Number.isInteger(v) ? v : +v.toFixed(2)}\u00d7`;
 
