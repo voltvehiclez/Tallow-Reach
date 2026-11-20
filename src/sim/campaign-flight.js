@@ -76,15 +76,28 @@ function tickChase(mission, step, player) {
   const actor = storyActors(mission, player.place || state.place).find(e => e.def === step.follow);
   if (!actor) return;
   const gap = player.pos.distanceTo(actor.pos);
-  // The chase is the one stretch where the bonus has a live number, so the HUD
-  // can show the distance against the authored limit while the run is happening.
-  state.ui.followDistance = Math.round(gap);
-  emit("mission-near", { actor: step.follow || step.target, metres: gap, player, profile: state.profile });
   const course = actor.course;
   if (!course) return;
+  const running = course.mode === "run";
+  // Before the run starts he waits at the fixed start for the pilot to come to
+  // him: a pilot who drifted during the lesson is never asked to catch a ship
+  // already travelling at speed.
+  const gathering = course.mode === "return" || course.mode === "wait";
+  state.ui.chaseRun = {
+    mission: mission.id,
+    gathering,
+    gap: Math.round(gap),
+    gather: Number(step.gather) || 0,
+    maxGap: Number(step.maxGap) || 1000,
+  };
+  // The bonus is a rule of the run: it is not decided while he is still waiting.
+  if (running) {
+    state.ui.followDistance = Math.round(gap);
+    emit("mission-near", { actor: step.follow || step.target, metres: gap, player, profile: state.profile });
+  }
   // Too far behind while he is running: not a failure — he turns for the fixed
   // start, the line is said and the objective is flown again.
-  if (course.mode === "run" && gap > Number(step.maxGap || 1000)) {
+  if (running && gap > Number(step.maxGap || 1000)) {
     course.mode = "return";
     emit("mission-reset", {
       mission: mission.id, step: step.id, line: step.resetLine || "", player, profile: state.profile,
@@ -108,6 +121,8 @@ function applyActorRoles(mission, step, player) {
       if (!actor.course || actor.course.id !== step.course || actor.course.phase !== phase) {
         actor.course = startCourseAtBeginning(step.course, phase);
       }
+      // How close the pilot must be to the waiting ship before the course runs.
+      if (Number(step.gather) > 0) actor.course.gather = Number(step.gather);
     }
   }
 }
@@ -156,6 +171,7 @@ on("mission-tick", ({ dt, player } = {}) => {
     return;
   }
   if (step.kind !== "control") clearHold();
+  if (step.kind !== "chase") state.ui.chaseRun = null;
   if (step.kind !== "chase" && step.kind !== "kill" && step.kind !== "parallel") state.ui.followDistance = null;
   const place = player.place || state.place;
   ensureStoryActors(mission, player, place);
@@ -183,4 +199,5 @@ on("campaign-act-started", () => {
   actorCheckAt = 0;
   clearHold();
   state.ui.followDistance = null;
+  state.ui.chaseRun = null;
 });

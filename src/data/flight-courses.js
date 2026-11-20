@@ -33,7 +33,9 @@ export const FLIGHT_COURSES = {
       heading: 20,
       start: [400, 240, 3200],
       legs: [
-        { length: 900, speed: 165, turn: 0, climb: 0 },
+        // A slow first leg: enough time to spool up from the form-up before the
+        // chase gets fast.
+        { length: 900, speed: 95, turn: 0, climb: 0 },
         { length: 900, speed: 175, turn: 18, climb: 2 },
         { length: 900, speed: 185, turn: -14, climb: -2 },
         { length: 1000, speed: 190, turn: 10, climb: 3, boost: true },

@@ -110,13 +110,6 @@ export function setupHud() {
     boost: $("b3"),
     boostVal: $("boost-val"),
     route: $("hud-route"),
-    campaignTracker: $("campaign-tracker"),
-    campaignTitle: $("campaign-tracker-title"),
-    campaignObjective: $("campaign-tracker-objective"),
-    campaignHold: $("campaign-hold"),
-    campaignHoldFill: $("campaign-hold-fill"),
-    campaignHoldPct: $("campaign-hold-pct"),
-    campaignHoldLabel: $("campaign-hold-label"),
     shieldVal: $("sh-val"),
     hullVal: $("hull-val"),
     topRight: $("tr"),
@@ -271,16 +264,8 @@ const escHud = value => String(value ?? "").replace(/[&<>\"']/g, c => ({
   "'": "&#39;",
 }[c]));
 
-/**
- * Campaign acts are shown in the top-left tracker instead of this list: an act has
- * one live objective, and the same sentence in two corners would only compete with
- * itself. The open world keeps the full list.
- */
-function missionsHtml(allMissions) {
-  const missions = allMissions.filter(mission => !isCampaignMissionId(mission.id));
-  if (!missions.length) {
-    return allMissions.length ? "" : `<span style="color:var(--amber)">No active missions</span>`;
-  }
+function missionsHtml(missions) {
+  if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
   return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
     const progress = mission.type === "hunt" ? missionProgress(mission) : null;
     // A recovery contract counts its own crates: "2 out of 3 crates recovered"
@@ -291,8 +276,10 @@ function missionsHtml(allMissions) {
     const kind = mission.kind === "contract" ? "contract" : "story";
     return `<div class="hud-mission hud-mission-${kind}"><strong>${escHud(missionDescription(mission))}:</strong>` +
       `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
-        progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""
-      }${recovered ? `<small>${recovered}</small>` : ""}</div>`;
+        campaignDetailHtml(mission)
+      }${progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""}${
+        recovered ? `<small>${recovered}</small>` : ""
+      }</div>`;
   }).join("")}</div>`;
 }
 
@@ -302,49 +289,37 @@ const clockText = seconds => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-let trackerCache = "";
-
-/** The act's objective, plus the live hold bar while a control lesson is running. */
-function updateCampaignTracker(mission) {
-  const root = el.campaignTracker;
-  if (!root) return;
-  if (!mission || state.ui.intro) {
-    root.hidden = true;
-    el.campaignHold.hidden = true;
-    trackerCache = "";
-    return;
-  }
-  root.hidden = false;
-  const objective = missionNextText(mission);
-  const key = `${mission.id}|${mission.step}|${objective}`;
-  if (trackerCache !== key) {
-    trackerCache = key;
-    if (el.campaignTitle) el.campaignTitle.textContent = missionDescription(mission) || "Campaign";
-    if (el.campaignObjective) el.campaignObjective.textContent = objective;
-  }
-  const hold = state.ui.controlHold;
-  const live = hold && hold.mission === mission.id;
-  el.campaignHold.hidden = !live;
-  if (live) {
-    const percent = Math.round(Math.max(0, Math.min(1, hold.fraction || 0)) * 100);
-    el.campaignHoldFill.style.width = `${percent}%`;
-    el.campaignHoldPct.textContent = `${percent}%`;
-    el.campaignHoldLabel.textContent = hold.label || "";
-  }
+/** A hold bar as a percentage: a full bar is one learned control. */
+function holdBarHtml(hold) {
+  const percent = Math.round(Math.max(0, Math.min(1, hold.fraction || 0)) * 100);
+  return `<small class="hud-hold"><span class="hold-track"><i style="width:${percent}%"></i></span>` +
+    `<b>${percent}%</b> ${escHud(hold.label || "")}</small>`;
 }
 
-/**
- * The optional bonus while it is still winnable. During the chase the sim reports
- * the live distance, so the chip reads as a number the pilot can act on, not a
- * rule they have to remember.
- */
-function bonusChipHtml(mission) {
-  if (!mission) return "";
-  const status = missionBonusStatus(mission, state.ui.followDistance);
-  if (!status) return "";
-  const distance = status.metres == null ? "" : ` · ${status.metres} m`;
-  return `<div class="hud-bonus${status.over ? " is-over" : ""}" aria-label="Bonus objective">` +
-    `<strong>Bonus</strong> ${escHud(status.objective)}${escHud(distance)}</div>`;
+/** The run's rule, and the still-live bonus, directly under the objective. */
+function chaseLinesHtml(run, mission) {
+  const gapLimit = Number(run.maxGap) > 0 ? Number(run.maxGap) : 1000;
+  const rule = run.gathering
+    ? `Close to within ${Math.round(Number(run.gather) || 300)} m of Dane to start the run.`
+    : `Stay within ${gapLimit % 1000 === 0 ? `${gapLimit / 1000} km` : `${gapLimit} m`} of Dane for the whole course to pass.`;
+  // While he waits for the form-up there is no distance to judge.
+  const bonus = missionBonusStatus(mission, run.gathering ? null : run.gap);
+  const bonusLine = bonus
+    ? `<small class="hud-bonus${bonus.over ? " is-over" : ""}">Bonus: within ${bonus.limit} m` +
+      `${bonus.metres == null || run.gathering ? "" : ` · now ${bonus.metres} m`}</small>`
+    : "";
+  return `<small class="hud-chase">${escHud(rule)}</small>${bonusLine}`;
+}
+
+/** Extra lines an act adds under its objective (a lesson hold, the run's rule). */
+function campaignDetailHtml(mission) {
+  if (!mission || !isCampaignMissionId(mission.id)) return "";
+  let extra = "";
+  const hold = state.ui.controlHold;
+  if (hold && hold.mission === mission.id) extra += holdBarHtml(hold);
+  const run = state.ui.chaseRun;
+  if (run && run.mission === mission.id) extra += chaseLinesHtml(run, mission);
+  return extra;
 }
 
 /**
@@ -413,13 +388,8 @@ export function updateHud(dt) {
   const location = locationText(state.place);
   el.systemName.textContent = location.system;
   el.pocketName.textContent = location.pocket;
-  const campaignMission = state.mode === "campaign"
-    ? missions.find(mission => isCampaignMissionId(mission.id)) || null
-    : null;
-  updateCampaignTracker(campaignMission);
   el.topRight.innerHTML =
     instanceHtml(instanceAt(state.place)) +
-    bonusChipHtml(campaignMission) +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     missionsHtml(missions);
 

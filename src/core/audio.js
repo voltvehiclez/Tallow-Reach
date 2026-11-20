@@ -121,8 +121,11 @@ export function initAudio() {
   hum.start();
 
   // Low drone and the docked ambience (chord pad with a slow LFO).
+  // Silent until the flight loop asks for it. The title screen never runs
+  // `updateAudio()`, so a non-zero level here would hum under the main menu (and
+  // under the campaign screen, which is where a pilot sits and notices it).
   droneGain = ctx.createGain();
-  droneGain.gain.value = 0.08;
+  droneGain.gain.value = 0;
   droneGain.connect(master);
   [55, 55.6, 82.4].forEach(f => {
     const o = ctx.createOscillator();

@@ -378,6 +378,7 @@ export const state = {
     campaignChapter: null, // chapter id opened on the campaign screen (null = chapter boxes)
     controlHold: null, // the live control-lesson hold, published by sim/campaign-flight.js
     followDistance: null, // metres to the story ship while a chase reports it
+    chaseRun: null, // the live run: { mission, gathering, gap, gather, maxGap }
     navigation: false, // the in-flight N pocket-object list; false while closed
     starmap: null,     // active chart; null while closed
     cargo: null,       // the in-flight ship inventory; null while closed

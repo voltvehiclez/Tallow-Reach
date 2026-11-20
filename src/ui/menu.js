@@ -1867,8 +1867,14 @@ async function onClick(e) {
   uiSound(name === "go" ? "go" : ["buy", "up", "done", "sellh", "sells", "wb", "wr", "rp"].includes(name) ? "confirm" : "click");
   save();
   if (name !== "go") {
-    if (!state.player || state.player.docked) render();
-    else {
+    if (state.ui.intro) {
+      // A title screen (the main menu or the campaign chapter boxes) owns the
+      // panel even when the pilot is still out in space behind it: the campaign
+      // screen's Back drew the title and this used to hide it a moment later.
+      render();
+    } else if (!state.player || state.player.docked) {
+      render();
+    } else {
       // The action put the pilot back out in space: hide both station panels.
       panel.hidden = true;
       hideLeftPanelElement(leftPanel);

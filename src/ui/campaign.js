@@ -57,17 +57,30 @@ function chapterRows(profile) {
   });
 }
 
-function chapterBox(row) {
+function chapterBox(row, index) {
   const { chapter } = row;
+  // A chapter that is not written yet shows no name of its own: a blurred
+  // placeholder with a number, so the shape of the campaign is visible without
+  // advertising stories that do not exist.
+  if (!row.open) {
+    const status = row.playable ? "Locked" : `Chapter ${index + 1}`;
+    return (
+      `<button type="button" class="campaign-box campaign-chapter-box is-locked is-planned" ` +
+      `data-a="campaignChapter" data-b="${esc(chapter.id)}" aria-label="${esc(status)} — coming soon">` +
+      `<span class="campaign-box-kicker">${esc(status)}</span>` +
+      `<strong class="campaign-box-title">Coming soon</strong>` +
+      `<span class="campaign-box-note is-redacted">This chapter is not written yet. The story continues here in a later act.</span>` +
+      `<span class="campaign-box-meta">Locked</span>` +
+      `</button>`
+    );
+  }
   const { kicker, title } = splitName(chapter.n);
-  const status = row.active ? "In progress" : !row.open ? "Locked · coming later" : row.done === row.playable ? "Completed" : "Open";
-  const counts = row.open
-    ? `${row.done} of ${row.playable} act${row.playable === 1 ? "" : "s"} complete`
-    : `${chapter.acts.length} act${chapter.acts.length === 1 ? "" : "s"} planned`;
+  const status = row.active ? "In progress" : row.done === row.playable ? "Completed" : "Open";
+  const counts = `${row.done} of ${row.playable} act${row.playable === 1 ? "" : "s"} complete`;
   return (
-    `<button type="button" class="campaign-box campaign-chapter-box${row.open ? "" : " is-locked"}${row.active ? " is-active" : ""}" ` +
+    `<button type="button" class="campaign-box campaign-chapter-box${row.active ? " is-active" : ""}" ` +
     `data-a="campaignChapter" data-b="${esc(chapter.id)}" aria-label="${esc(chapter.n)}">` +
-    `<span class="campaign-box-kicker">${esc(kicker || "Chapter")}</span>` +
+    `<span class="campaign-box-kicker">${esc(kicker || `Chapter ${index + 1}`)}</span>` +
     `<strong class="campaign-box-title">${esc(title)}</strong>` +
     `<span class="campaign-box-note">${esc(chapter.d || "")}</span>` +
     `<span class="campaign-box-meta">${esc(counts)} · ${esc(status)}</span>` +
@@ -96,15 +109,14 @@ function actBox(row) {
   );
 }
 
-function plannedBox(act) {
-  const { kicker, title } = splitName(act.n);
+function plannedBox(act, index) {
   return (
-    `<button type="button" class="campaign-box campaign-act-box is-locked" disabled aria-label="${esc(act.n)}">` +
-    `<span class="campaign-box-kicker">${esc(kicker || "Act")}</span>` +
-    `<strong class="campaign-box-title">${esc(title)}</strong>` +
-    `<span class="campaign-box-note">${esc(act.d || "")}</span>` +
-    `<span class="campaign-box-meta">Planned · not written yet</span>` +
-    `<span class="campaign-box-action">Locked</span>` +
+    `<button type="button" class="campaign-box campaign-act-box is-locked is-planned" disabled ` +
+    `aria-label="Act ${index + 1} — coming soon">` +
+    `<span class="campaign-box-kicker">Act ${index + 1}</span>` +
+    `<strong class="campaign-box-title">Coming soon</strong>` +
+    `<span class="campaign-box-note is-redacted">This act is not written yet. Its story will open here.</span>` +
+    `<span class="campaign-box-meta">Locked</span>` +
     `</button>`
   );
 }
@@ -120,27 +132,32 @@ export function campaignMenuHtml(profile = state.profile, ui = state.ui) {
     return (
       `<h2>Chapters</h2>` +
       `<p class="campaign-lead">Choose a chapter. Its acts open here.</p>` +
-      `<div class="campaign-boxes">${rows.map(chapterBox).join("")}</div>`
+      `<div class="campaign-boxes">${rows.map((row, index) => chapterBox(row, index)).join("")}</div>`
     );
   }
   const picked = rows.find(row => row.chapter.id === openId) || null;
   if (!picked) {
     return (
       `<h2>Chapters</h2>` +
-      `<div class="campaign-boxes">${rows.map(chapterBox).join("")}</div>`
+      `<div class="campaign-boxes">${rows.map((row, index) => chapterBox(row, index)).join("")}</div>`
     );
   }
   const { chapter } = picked;
+  const heading = picked.open ? chapter.n : `Chapter ${rows.indexOf(picked) + 1}`;
+  const blurb = picked.open ? (chapter.d || "") : "This chapter is not written yet.";
   const acts = picked.acts.map(actBox);
-  const planned = chapter.acts.filter(act => !act.mission).map(plannedBox);
+  const planned = chapter.acts
+    .map((act, index) => ({ act, index }))
+    .filter(entry => !entry.act.mission)
+    .map((entry, order) => plannedBox(entry.act, picked.acts.length + order));
   const progress = picked.open
     ? `${picked.done} of ${picked.playable} act${picked.playable === 1 ? "" : "s"} complete`
     : "Locked";
   return (
     `<div class="campaign-chapter-head">` +
     `<button type="button" class="campaign-back" data-a="campaignChapters">← All chapters</button>` +
-    `<h2>${esc(chapter.n)}</h2>` +
-    `<p class="campaign-lead">${esc(chapter.d || "")} <span class="campaign-progress">${esc(progress)}</span></p>` +
+    `<h2>${esc(heading)}</h2>` +
+    `<p class="campaign-lead">${esc(blurb)} <span class="campaign-progress">${esc(progress)}</span></p>` +
     `</div>` +
     `<div class="campaign-boxes campaign-act-boxes">${acts.join("")}${planned.join("")}</div>`
   );

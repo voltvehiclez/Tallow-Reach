@@ -16,11 +16,12 @@ setPlaceCatalog(catalog);
 
 const { CAMPAIGN_MISSIONS } = await import("../src/data/campaign/index.js");
 const { acceptMission, advanceMission, missionDialogue, missionBonusStatus } = await import("../src/sim/missions.js");
-const { friendlyShot } = await import("../src/sim/combat.js");
+const { BULLET_COLOURS } = await import("../src/data/weapons.js");
 const { spawnEnemy, updateEnemies } = await import("../src/sim/ai.js");
 const { state, placeWorld } = await import("../src/state/state.js");
 const { emit, on } = await import("../src/util/events.js");
-const { buildCourse } = await import("../src/sim/flight-course.js");
+const { buildCourse, startCourseAtBeginning } = await import("../src/sim/flight-course.js");
+const { FLIGHT_COURSES } = await import("../src/data/flight-courses.js");
 // Registers the campaign's mission-tick beats (the hold timer and the chase).
 await import("../src/sim/campaign-flight.js");
 
@@ -49,7 +50,7 @@ const talk = (mission, P) => {
   }
 };
 
-test("fix 1: a wingman's rounds are the pilot's colour, and still harmless", async () => {
+test("fix 1: a wingman's rounds are the basic-cannon colour, and still harmless", async () => {
   const { P } = await campaignWorld();
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;
@@ -58,20 +59,21 @@ test("fix 1: a wingman's rounds are the pilot's colour, and still harmless", asy
   const raider = spawnEnemy("raider", V(0, 0, 3150), CAMPAIGN_HOME_POCKET, "test");
   for (let i = 0; i < 160; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
 
-  const shots = state.world.bullets.filter(shot => shot.own || shot.ally);
+  const shots = state.world.bullets.filter(shot => shot.own || shot.colour != null);
   assert.ok(shots.length > 0, "Dane fires at the hostile");
-  const ally = shots.find(shot => shot.ally === true);
-  assert.ok(ally, "his rounds are flagged as friendly fire");
-  assert.equal(ally.own, false, "but they are not the pilot's own shot");
-  assert.equal(ally.dmg, 0, "his guns still do no damage");
-  assert.equal(friendlyShot(ally), true, "the renderer draws them in the pilot's orange");
-  assert.equal(friendlyShot({ own: true }), true);
-  assert.equal(friendlyShot({}), false, "everything else stays hostile red");
-  assert.equal(raider.hp, raider.mx, "the friendly round never hurt anyone");
+  const cannon = shots.find(shot => shot.colour === BULLET_COLOURS.cannon);
+  assert.ok(cannon, "his rounds carry the basic-cannon colour");
+  assert.equal(cannon.own, false, "but they are not the pilot's own shot");
+  assert.equal(cannon.dmg, 0, "his guns still do no damage");
+  const hostile = state.world.bullets.find(shot => !shot.own && shot.colour == null);
+  assert.ok(hostile, "a hostile round has no module colour of its own: it stays red");
+  assert.equal(BULLET_COLOURS.cannon, 0xffc870, "the basic cannon is orange");
+  assert.equal(raider.hp, raider.mx, "the round never hurt anyone");
 
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;
   state.world.bullets.length = 0;
+  void korr;
 });
 
 test("fix 2/3: W then Ctrl, a one-second hold, and a percentage bar that fills to 100", async () => {
@@ -151,7 +153,55 @@ test("fix 5: ferrite clusters dress the 10 km course and stay clear of the flown
   }
 });
 
-test("fix 6: the strangers introduce themselves; nobody calls them raiders", async () => {
+test("fix 6: the run waits for the pilot to form up, and the rule is 1 km / 500 m", async () => {
+  const { P, mission } = await campaignWorld();
+  const chase = mission.steps.find(step => step.id === "chase");
+  assert.equal(chase.gather, 300, "the run waits until the pilot is 300 m from Dane");
+  assert.equal(chase.maxGap, 1000, "1 km is the pass mark for the whole course");
+
+  // The first leg is a slow one, so the chase can be joined from a standing start.
+  const courseDef = FLIGHT_COURSES["m01-range"].chase;
+  assert.equal(courseDef.legs[0].speed, 95, "a warm-up leg before the chase gets fast");
+  assert.ok(courseDef.legs.some(leg => leg.speed > 150 && leg.boost), "and it still gets fast");
+
+  // The call that starts it tells the pilot to come to him.
+  const intro = mission.steps.find(step => step.id === "chase-intro");
+  assert.match(intro.lines.join(" "), /come to my wing/i);
+  assert.match(intro.lines.join(" "), /300 m/i);
+
+  // Put the act on the chase step with Dane waiting at the course start.
+  placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
+  state.world.enemies.length = 0;
+  mission.step = mission.steps.findIndex(step => step.id === "chase");
+  const start = startCourseAtBeginning("m01-range", "chase");
+  const korr = spawnEnemy("captain_korr", start.start.clone(), CAMPAIGN_HOME_POCKET,
+    "mission:campaign.m01-first-sortie", { role: "lead", course: "m01-range", phase: "chase" });
+  korr.course.gather = chase.gather;
+  P.controls = { thrust: 0 };
+  P.pos.copy(start.start).add(V(0, 0, 600));           // still far away
+  updateEnemies(0.05, CAMPAIGN_HOME_POCKET);            // he arrives and waits
+
+  let near = 0;
+  on("mission-near", () => { near += 1; });
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.equal(state.ui.chaseRun.gathering, true, "the run has not started");
+  assert.equal(state.ui.chaseRun.gather, 300);
+  assert.equal(near, 0, "and the 500 m bonus is not judged while he is still waiting");
+  assert.equal(korr.course.mode, "wait", "he holds at the fixed start");
+
+  // Close the distance: the course starts and the rule takes over.
+  P.pos.copy(start.start).add(V(0, 0, 200));
+  updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  assert.equal(korr.course.mode, "run", "within 300 m, the run begins");
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.equal(state.ui.chaseRun.gathering, false);
+  assert.ok(near > 0, "and the bonus is judged from then on");
+
+  placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
+  state.world.enemies.length = 0;
+});
+
+test("fix 6b: the strangers introduce themselves; nobody calls them raiders", async () => {
   const m01 = CAMPAIGN_MISSIONS[0];
   const spoken = m01.steps.flatMap(step => [
     step.objective || "",
@@ -200,20 +250,23 @@ test("fix 7/8: the campaign screen is chapter boxes that open into acts, and lea
     assert.ok((chapters.match(/data-a="campaignChapter"/g) || []).length >= 4, "several large chapter boxes");
     assert.doesNotMatch(chapters, /data-a="campaignAct"/, "and no acts until a chapter is opened");
     assert.match(chapters, /Chapter 1/, "chapter 1 is on the screen");
-    assert.match(chapters, /Kestrel Line/, "future chapters are visible, locked");
-    assert.match(chapters, /is-locked/, "the future ones are drawn locked");
+    assert.match(chapters, /Coming soon/, "future chapters are visible, locked");
+    assert.doesNotMatch(chapters, /Kestrel Line/, "without advertising a story that is not written");
+    assert.match(chapters, /is-planned/, "and their placeholders are drawn redacted");
 
     // Opening chapter 1 reveals its acts, playable first and planned after.
     const acts = campaignMenuHtml(profile, { campaignChapter: "chapter-1" });
     assert.match(acts, /data-a="campaignAct" data-b="act-1"/, "Act 1 can be started");
     assert.match(acts, /data-a="campaignChapters"/, "and the way back to the chapters");
-    assert.ok((acts.match(/Planned · not written yet/g) || []).length >= 5, "the rest of the chapter is marked out");
+    assert.ok((acts.match(/Coming soon/g) || []).length >= 5, "the rest of the chapter is marked out");
+    assert.doesNotMatch(acts, /Ferrite Run/, "with no placeholder name");
     assert.ok((acts.match(/campaign-box is-locked|campaign-act-box is-locked/g) || []).length >= 5);
 
     // Opening a future chapter shows its acts, all locked.
     const future = campaignMenuHtml(profile, { campaignChapter: "chapter-2" });
     assert.doesNotMatch(future, /data-a="campaignAct"/, "no act of a locked chapter can be started");
-    assert.match(future, /Planned · not written yet/);
+    assert.doesNotMatch(future, /Freight|Toll|Kestrel/, "and its planned names stay hidden");
+    assert.match(future, /Coming soon/);
 
     const side = campaignScreenHtml(profile);
     assert.match(side, /data-a="campaignBack"/, "the right panel still has a way back to the title");

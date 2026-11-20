@@ -101,7 +101,9 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
     } else {
       c.mode = "wait";
       // Wait at the beginning until the pilot is close enough to follow.
-      const pilotNear = target ? target.pos.distanceTo(c.start) < T.courseGather : false;
+      // The step may tighten the gather distance (a close form-up before a run).
+      const gather = Number(c.gather) > 0 ? Number(c.gather) : T.courseGather;
+      const pilotNear = target ? target.pos.distanceTo(c.start) < gather : false;
       if (pilotNear) {
         c.mode = "run"; c.index = 0; c.travelled = 0; c.done = false;
       } else if (d > 25) {

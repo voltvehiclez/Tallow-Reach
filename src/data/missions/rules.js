@@ -34,8 +34,11 @@ export const MISSION_CONTROLS = {
   "strafe-right": { axis: "strafe", sign: 1, label: "D — strafe right" },
   "lift-up": { axis: "lift", sign: 1, label: "Space — rise" },
   "lift-down": { axis: "lift", sign: -1, label: "C — drop" },
-  "roll-left": { axis: "roll", sign: -1, label: "Q — roll left" },
-  "roll-right": { axis: "roll", sign: 1, label: "E — roll right" },
+  // Q is roll +1 and E is roll -1 in the input record (state/controls.js), so a
+  // lesson that asks for "roll left" must read the positive value: this pair was
+  // the wrong way round and Q completed E's objective.
+  "roll-left": { axis: "roll", sign: 1, label: "Q — roll left" },
+  "roll-right": { axis: "roll", sign: -1, label: "E — roll right" },
   "boost": { flag: "boost", label: "Shift — boost" },
   // Ctrl is the brake: it bleeds the throttle off and holds the Wasp still.
   // Taught second, right after W, so a new pilot can always stop the ship.
