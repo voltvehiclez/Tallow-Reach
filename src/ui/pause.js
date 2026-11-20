@@ -12,6 +12,7 @@ import { emit } from "../util/events.js";
 import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
 import { resetStationPanels } from "./left-panel.js";
+import { activeCampaignMission } from "../sim/campaign.js";
 
 let overlay, soundBtn, soundLabel;
 
@@ -29,6 +30,9 @@ export function setupPause() {
     showSoundState();
   };
   overlay.querySelector("#pz-resume").onclick = () => setPause(false);
+  // The act lifecycle belongs to the campaign screens; the pause card only says
+  // the pilot wants a clean restart.
+  overlay.querySelector("#pz-restart-act")?.addEventListener("click", () => emit("pause-restart-act", {}));
   overlay.querySelector("#pz-main-menu").onclick = exitToMainMenu;
   showSoundState();
 }
@@ -54,6 +58,8 @@ export function setPause(v) {
   state.paused = v;
   if (v) emit("freecam", false);
   overlay.hidden = !v;
+  const restart = overlay.querySelector("#pz-restart-act");
+  if (restart) restart.hidden = !(state.mode === "campaign" && activeCampaignMission());
   // A trigger held when the game is paused must not fire on resume.
   keys.fire = keys.sec = 0;
   syncControls();

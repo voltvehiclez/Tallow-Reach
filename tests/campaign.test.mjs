@@ -11,7 +11,7 @@ import {
   newSave,
   ensureShipRecords,
   grantFixedShip,
-  syncSharedPilot,
+  separateCampaignPilot,
 } from "../src/state/profile.js";
 import { generateGalaxy } from "../src/sim/galaxy.js";
 import { setPlaceCatalog } from "../src/data/places.js";
@@ -42,20 +42,26 @@ test("campaign mission data is separate and clean under the shared linter", () =
   assert.equal(campaignMission("story.border-signal"), null);
 });
 
-test("the shared pilot keeps fleet and credits while each mode keeps its own world overlay", () => {
+test("each mode has its own pilot: the open-world fleet and credits never enter the campaign", () => {
   const open = newSave();
   const campaign = newCampaignSave();
   open.profile.cr = 4321;
-  open.profile.ships.push("prospector");
-  ensureShipRecords(open.profile, "prospector", "reach");
-  open.profile.holds.prospector = { salv: 4 };
-  open.profile.ship = "prospector";
-  syncSharedPilot(campaign.profile, open.profile);
-  assert.equal(campaign.profile.cr, 4321);
-  assert.deepEqual(campaign.profile.ships, ["wasp", "prospector"]);
-  assert.equal(campaign.profile.holds.prospector.salv, 4);
-  assert.equal(campaign.profile.ship, "wasp", "campaign keeps its own current hull");
+  open.profile.ships.push("testship");
+  ensureShipRecords(open.profile, "testship", "reach");
+  open.profile.holds.testship = { salv: 4 };
+  open.profile.ship = "testship";
+  // The two halves are independent records; wrapping an open save into the
+  // envelope must not copy that pilot into the fresh campaign.
+  assert.equal(campaign.profile.cr, 600);
+  assert.deepEqual(campaign.profile.ships, ["wasp"]);
+  assert.equal(campaign.profile.holds.wasp && Object.keys(campaign.profile.holds.wasp).length, 0);
+  assert.equal(campaign.profile.ship, "wasp");
   assert.equal(campaign.profile.homeStation, CAMPAIGN_HOME_POCKET);
+  // A v26 campaign half is rebuilt as a fresh campaign pilot, keeping completions.
+  const migrated = separateCampaignPilot({ cr: 4321, ships: ["wasp", "testship"], campaign: { completed: ["campaign.m01-first-sortie"] } });
+  assert.equal(migrated.cr, 600);
+  assert.deepEqual(migrated.ships, ["wasp"]);
+  assert.deepEqual(migrated.campaign.completed, ["campaign.m01-first-sortie"]);
 });
 
 test("a fixed story ship is granted to the pilot and selected for that mode", () => {
@@ -99,7 +105,7 @@ test("switching modes swaps worlds, keeps the shared pilot, and preserves campai
   assert.equal(state.mode, "campaign");
   assert.equal(state.place, CAMPAIGN_HOME_POCKET);
   assert.equal(state.worldState.place, CAMPAIGN_HOME_POCKET);
-  assert.equal(state.profile.cr, 4321, "the same pilot brought their credits across");
+  assert.equal(state.profile.cr, 600, "the campaign has its own pilot and its own credits");
   const P = configurePlayer(createPlayer(), state.profile);
   P.docked = true;
   P.place = CAMPAIGN_HOME_POCKET;
@@ -131,7 +137,7 @@ test("M01 can be played from acceptance to the reward hand-in through mission ev
   const { prepareGalaxySave, switchGameMode } = await import("../src/sim/galaxy-session.js");
   const { createPlayer } = await import("../src/sim/player.js");
   const { configurePlayer } = await import("../src/sim/session.js");
-  const { acceptMission, advanceMission, completeMission, missionDialogue, missionObjectivesDone, activeMissions } = await import("../src/sim/missions.js");
+  const { acceptMission, advanceMission, completeMission, missionDialogue, missionObjectivesDone, missionOptionalRows, activeMissions } = await import("../src/sim/missions.js");
 
   resetPlaces();
   state.players.length = 0;
@@ -146,33 +152,56 @@ test("M01 can be played from acceptance to the reward hand-in through mission ev
   const mission = acceptMission(CAMPAIGN_MISSIONS[0], state.profile, CAMPAIGN_HOME_POCKET);
   assert.equal(mission.id, "campaign.m01-first-sortie");
   assert.equal(P.ship, "wasp");
+  assert.equal(mission.optional.length, 1, "the act carries its optional bonus objective");
 
   const tick = dt => advanceMission(mission, "mission-tick", { dt, player: P }, state.profile);
-  const kill = def => {
-    P.place = CAMPAIGN_HOME_POCKET;
-    state.place = CAMPAIGN_HOME_POCKET;
-    advanceMission(mission, "enemy-killed", { def, faction: "school", player: P, place: CAMPAIGN_HOME_POCKET }, state.profile);
-  };
+  const kill = def => advanceMission(mission, "enemy-killed", {
+    def, faction: "school", player: P, place: CAMPAIGN_HOME_POCKET,
+  }, state.profile);
   const talk = () => {
     for (let guard = 0; guard < 12 && missionDialogue(mission); guard += 1) {
       advanceMission(mission, "dialogue-next", { player: P }, state.profile);
     }
   };
+  const learn = (id, control) => {
+    assert.equal(mission.steps[mission.step].id, id, `the lesson is on ${id}`);
+    assert.equal(advanceMission(mission, "mission-control", { step: id, control, player: P }, state.profile), true);
+  };
 
-  talk();                         // graduation briefing
-  P.docked = false;               // launch and join Korr
+  talk();                         // graduation briefing (station)
+  P.docked = false;               // launch and form up on Korr
   tick(0);
-  talk();                         // Korr's flight briefing
-  tick(5);                        // first pass
+
+  // The control lesson: Korr calls each control, the pilot performs it.
+  const lesson = [
+    ["brief-throttle", "learn-throttle", "throttle-forward"],
+    [null, "learn-throttle-back", "throttle-back"],
+    ["brief-steer", "learn-steer", "steer"],
+    ["brief-strafe", "learn-strafe-left", "strafe-left"],
+    [null, "learn-strafe-right", "strafe-right"],
+    ["brief-lift", "learn-rise", "lift-up"],
+    [null, "learn-drop", "lift-down"],
+    ["brief-roll", "learn-roll-left", "roll-left"],
+    [null, "learn-roll-right", "roll-right"],
+    ["brief-boost", "learn-boost", "boost"],
+  ];
+  for (const [brief, id, control] of lesson) {
+    if (brief) talk();
+    learn(id, control);
+  }
+  // Staying with him through the lesson earns the bonus.
+  assert.deepEqual(missionOptionalRows(mission).map(row => [row.id, row.done]), [["stay-with-korr", true]]);
+
+  talk();                         // chase orders
+  assert.equal(mission.steps[mission.step].id, "chase");
+  advanceMission(mission, "mission-chase-complete", { step: "chase", player: P }, state.profile);
+
+  talk();                         // gunnery orders
+  tick(0);                        // drones spawn
   kill("practice_drone");
   kill("practice_drone");
-  talk();                         // solo orders
-  tick(0);                        // solo drones are cleared to spawn
-  kill("practice_drone");
-  kill("practice_drone");
-  tick(5);                        // solo course
   talk();                         // ambush warning
-  tick(0);                        // pirate wave is cleared to spawn
+  tick(0);                        // raiders spawn
   kill("raider");
   kill("raider");
   talk();                         // final report
@@ -181,7 +210,7 @@ test("M01 can be played from acceptance to the reward hand-in through mission ev
   P.docked = true;
   state.place = CAMPAIGN_HOME_POCKET;
   const paid = completeMission(mission.id, state.profile, P);
-  assert.equal(paid, "Paid 50 cr.");
+  assert.equal(paid, "Paid 150 cr.", "the optional bonus is paid with the reward");
   assert.deepEqual(state.profile.campaign.completed, [mission.id]);
   assert.equal(activeMissions(state.profile).length, 0);
 });
@@ -201,22 +230,42 @@ test("reloading mid-sortie re-arms the wave deficit instead of stranding the pil
   const P = configurePlayer(createPlayer(), state.profile);
   P.place = CAMPAIGN_HOME_POCKET; state.place = CAMPAIGN_HOME_POCKET;
 
-  let mission = acceptMission(CAMPAIGN_MISSIONS[0], state.profile, CAMPAIGN_HOME_POCKET);
+  const mission = acceptMission(CAMPAIGN_MISSIONS[0], state.profile, CAMPAIGN_HOME_POCKET);
   const live = () => state.profile.missions.find(x => x.id === mission.id);
-  // `state.player` is the local pilot before and after the reload, so drive it directly.
   const talk = () => { const m = live(); for (let i = 0; i < 12 && missionDialogue(m); i++) advanceMission(m, "dialogue-next", { player: state.player }, state.profile); };
   const tick = dt => { const m = live(); return advanceMission(m, "mission-tick", { dt, player: state.player }, state.profile); };
   const drones = () => state.world.enemies.filter(e => e.def === "practice_drone");
+  const learn = (id, control) => {
+    const m = live();
+    advanceMission(m, "mission-control", { step: id, control, player: state.player }, state.profile);
+  };
 
   talk();                      // graduation briefing
   P.docked = false;            // launch; joining the range runs the launch-order script
   tick(0);
-  talk();                      // flight briefing
-  tick(5);                     // first pass
+  talk();                      // throttle orders
+  learn("learn-throttle", "throttle-forward");
+  learn("learn-throttle-back", "throttle-back");
+  talk();                      // steering
+  learn("learn-steer", "steer");
+  talk();                      // strafe
+  learn("learn-strafe-left", "strafe-left");
+  learn("learn-strafe-right", "strafe-right");
+  talk();                      // lift
+  learn("learn-rise", "lift-up");
+  learn("learn-drop", "lift-down");
+  talk();                      // roll
+  learn("learn-roll-left", "roll-left");
+  learn("learn-roll-right", "roll-right");
+  talk();                      // boost
+  learn("learn-boost", "boost");
+  talk();                      // chase orders
+  advanceMission(live(), "mission-chase-complete", { step: "chase", player: state.player }, state.profile);
+  talk();                      // gunnery orders
   tick(0);                     // clears the drone spawn step
   assert.equal(drones().length, 2, "two practice drones are standing off the range");
-  hitHostile(drones()[0], 999, drones()[0].pos, P);
-  assert.equal(live().counters["gunnery-drones"], 1);
+  hitHostile(drones()[0], 999, drones()[0].pos, state.player);
+  assert.equal(live().counters["drone-drill"], 1);
 
   // Quit with one drone left alive, then boot the save the way a browser reload does.
   const raw = JSON.parse(JSON.stringify(currentRootSave()));
@@ -227,23 +276,19 @@ test("reloading mid-sortie re-arms the wave deficit instead of stranding the pil
   const P2 = configurePlayer(createPlayer(), state.profile);
   resumeFromSave(P2);          // re-enters the pocket; re-arm fires on undock
 
-  assert.equal(live().steps[live().step].id, "gunnery-drones");
-  assert.equal(live().counters["gunnery-drones"], 1, "the kill progress survives the reload");
+  assert.equal(live().steps[live().step].id, "drone-drill");
+  assert.equal(live().counters["drone-drill"], 1, "the kill progress survives the reload");
   assert.equal(drones().length, 1, "the missing drone is re-armed, and the living one is not duplicated");
   hitHostile(drones()[0], 999, drones()[0].pos, P2);
-  assert.equal(live().counters["gunnery-drones"], 2, "the objective can be finished after the reload");
+  assert.equal(live().counters["drone-drill"], 2, "the objective can be finished after the reload");
 
   // Finish the rest of the sortie and confirm the mission still pays out.
-  talk();                      // solo orders
-  tick(0);                     // clears the solo-drone spawn step
-  for (const drone of [...drones()]) hitHostile(drone, 999, drone.pos, P2);
-  tick(5);                     // solo course
   talk();                      // ambush warning
   tick(0);                     // clears the pirate spawn step
   for (const raider of [...state.world.enemies.filter(e => e.def === "raider")]) hitHostile(raider, 999, raider.pos, P2);
   talk();                      // final report
   const { completeMission } = await import("../src/sim/missions.js");
   P2.docked = true; state.place = CAMPAIGN_HOME_POCKET; P2.place = CAMPAIGN_HOME_POCKET;
-  assert.equal(completeMission(live().id, state.profile, P2), "Paid 50 cr.");
+  assert.equal(completeMission(live().id, state.profile, P2), "Paid 150 cr.");
   assert.deepEqual(state.profile.campaign.completed, [mission.id]);
 });

@@ -675,6 +675,11 @@ test("every enemy def is complete, and adding one is a data entry", () => {
     }
     assert.ok(d.n.length > 0 && d.pl.length > 0, `${id}: it needs a name and a plural name`);
     for (const f of numbers) {
+      // An ally's guns are for show: a friendly def may declare exactly 0 damage.
+      if (f === "dmg" && d.friendly === true) {
+        assert.equal(d.dmg, 0, `${id}: a friendly hull must do no damage`);
+        continue;
+      }
       assert.ok(isNum(d[f]) && d[f] > 0, `${id}: ${f} must be a positive number`);
     }
     for (const [f, parts] of [["fireGap", 2], ["spawnDist", 2]]) {

@@ -24,6 +24,8 @@ import { canSell, canDiscard, isModule, itemName } from "../data/items.js";
 import { MODULES } from "../data/modules.js";
 import { storyMission } from "../data/missions/index.js";
 import { campaignMission, campaignAvailable, isCampaignMissionId } from "../sim/campaign.js";
+import { startCampaignAct } from "../sim/campaign-act.js";
+import { campaignScreenHtml, campaignMenuBack } from "./campaign.js";
 import {
   assetsResultsHtml,
   introHtml,
@@ -138,6 +140,14 @@ export function setupMenu(options = {}) {
     state.ui.fit = null;
     render();
   });
+  on("campaign-act-entered", () => {
+    state.ui.intro = false;
+    state.ui.campaign = false;
+    resetStationPanels(state.ui);
+    initAudio();
+    render();
+    emit("mission-ui-refresh", {});
+  });
   on("main-menu", () => {
     cancelHeldStack();
     state.ui.intro = true;
@@ -193,7 +203,9 @@ export function renderLeft() {
 
 export function render() {
   panel.hidden = false;
-  panel.innerHTML = state.ui.intro ? introHtml() : outpostHtml(state.ui);
+  panel.innerHTML = state.ui.intro
+    ? state.ui.campaign ? campaignScreenHtml(state.profile) : introHtml()
+    : outpostHtml(state.ui);
   renderLeft();
 }
 
@@ -248,8 +260,30 @@ const ACTIONS = {
   intro() {
     enterGameMode("open");
   },
+  // The campaign opens on its own chapter screen, not straight into the world:
+  // an act is chosen there and starts as a scene, never accepted like a job.
   campaign() {
-    enterGameMode("campaign");
+    state.ui.campaign = true;
+    state.ui.intro = true;
+    render();
+  },
+  campaignBack() {
+    campaignMenuBack();
+  },
+  campaignAct(id) {
+    const result = startCampaignAct(id);
+    if (!result.ok) {
+      toast(result.message || "That campaign act cannot start.");
+      return;
+    }
+    state.ui.intro = false;
+    state.ui.campaign = false;
+    resetStationPanels(state.ui);
+    initAudio();
+    emit("mission-ui-refresh", {});
+    const notice = recoveryNotice();
+    if (notice) showNotice(notice);
+    render();
   },
   tab(name) {
     cancelHeldStack();
@@ -1577,7 +1611,7 @@ async function onClick(e) {
   }
   if (btn.disabled) return;
   const name = btn.dataset.a;
-  if ((name === "intro" || name === "campaign") && beforeStart) {
+  if ((name === "intro" || name === "campaign" || name === "campaignAct") && beforeStart) {
     if (starting) return;
     starting = true;
     btn.disabled = true;

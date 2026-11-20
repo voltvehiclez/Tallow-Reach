@@ -15,11 +15,12 @@ import { ENEMIES } from "../enemies.js";
 import { isShipId } from "../ships.js";
 import { isPocket, placeDef } from "../places.js";
 import { MISSION_KINDS, MISSION_STEP_KINDS } from "./index.js";
-import { MISSION_RULES } from "./rules.js";
+import { MISSION_RULES, MISSION_CONTROLS } from "./rules.js";
+import { FLIGHT_COURSES } from "../flight-courses.js";
 
 const END = MISSION_RULES.endTarget;
 const TARGET_KEYS = ["next", "goto", "then", "else", "ifTrue", "ifFalse"];
-const OBJECTIVE_CHILD_KINDS = ["kill", "mine", "collect", "reach", "reach-sector", "survive", "wait"];
+const OBJECTIVE_CHILD_KINDS = ["kill", "mine", "collect", "reach", "reach-sector", "survive", "wait", "control"];
 
 const actionsOf = step =>
   Array.isArray(step.actions) ? step.actions : Array.isArray(step.action) ? step.action : step.action ? [step.action] : [];
@@ -119,6 +120,28 @@ export function lintMission(def) {
     }
     if (step.item && !isItem(step.item)) error(step, `item "${step.item}" is not in the catalogue`);
     if (step.enemy && !ENEMIES[step.enemy]) error(step, `enemy "${step.enemy}" does not exist`);
+    if (step.kind === "control") {
+      if (!MISSION_CONTROLS[step.control]) error(step, `control "${step.control}" is not one of ${Object.keys(MISSION_CONTROLS).join(", ")}`);
+      if (!(Number(step.hold) > 0)) error(step, "a control step needs `hold` in seconds, above 0");
+    }
+    if (step.actor !== undefined && !ENEMIES[step.actor]) error(step, `actor "${step.actor}" does not exist`);
+    if (step.course !== undefined && !FLIGHT_COURSES[step.course]) error(step, `course "${step.course}" is not in data/flight-courses.js`);
+    if (step.coursePhase !== undefined && !FLIGHT_COURSES[step.course]?.[step.coursePhase]) {
+      error(step, `coursePhase "${step.coursePhase}" is not a phase of "${step.course}"`);
+    }
+    if (step.kind === "chase") {
+      if (!step.follow || !ENEMIES[step.follow]) error(step, "a chase needs `follow`, the enemy it follows");
+      if (!(Number(step.distance) > 0)) error(step, "a chase needs `distance`, the length of the course in metres");
+      if (!(Number(step.maxGap) > 0)) error(step, "a chase needs `maxGap`, the distance at which the contact resets the lesson");
+      if (typeof step.resetLine !== "string" || !step.resetLine.trim()) {
+        error(step, "a chase needs `resetLine`: what the contact says when the pilot falls behind");
+      }
+      if (step.course !== undefined && !FLIGHT_COURSES[step.course]) error(step, `\`course\` "${step.course}" is not in data/flight-courses.js`);
+      if (!step.actor || !ENEMIES[step.actor]) error(step, "a chase needs `actor`, the ship it follows (an enemy id)");
+    }
+    if (step.checkpoint === true && index === def.steps.length - 1) {
+      warn(step, "a checkpoint on the last step has nothing to resume");
+    }
     if (step.kind === "parallel") {
       const childIds = new Set();
       if (!Array.isArray(step.steps) || !step.steps.length) error(step, "a parallel step needs child steps");
@@ -155,6 +178,35 @@ export function lintMission(def) {
       }
     }
   });
+
+  // --- optional objectives (bonus only, never a requirement) -------------------
+  if (def.optional !== undefined) {
+    if (!Array.isArray(def.optional)) error(null, "`optional` must be a list of bonus objectives");
+    else {
+      const optionalIds = new Set();
+      for (const opt of def.optional) {
+        const where = opt?.id ? `optional "${opt.id}"` : "an optional objective";
+        if (!opt || typeof opt !== "object") { error(null, `${where} is not an object`); continue; }
+        if (typeof opt.id !== "string" || !opt.id) error(null, `${where} needs an id`);
+        else if (optionalIds.has(opt.id)) error(null, `duplicate optional objective id "${opt.id}"`);
+        else optionalIds.add(opt.id);
+        if (typeof opt.objective !== "string" || !opt.objective.trim()) error(null, `${where} needs an objective sentence`);
+        if (!(Number.isFinite(+opt.bonus) && +opt.bonus >= 1)) error(null, `${where} needs a bonus of at least 1 credit`);
+        if (opt.kind !== "stay-within") error(null, `${where} has unknown kind "${opt.kind}" (known: stay-within)`);
+        if (opt.kind === "stay-within") {
+          if (!(Number(opt.metres) > 0)) error(null, `${where} needs metres, above 0`);
+          if (opt.actor !== undefined && !ENEMIES[opt.actor]) error(null, `${where}: actor "${opt.actor}" is not an enemy`);
+        }
+        if (opt.during !== undefined) {
+          const windows = Array.isArray(opt.during) ? opt.during : [opt.during];
+          const groups = new Set(def.steps.map(step => step.group).filter(Boolean));
+          for (const window of windows) {
+            if (!ids.has(window) && !groups.has(window)) error(null, `${where}: during "${window}" is neither a step nor a step group`);
+          }
+        }
+      }
+    }
+  }
 
   // --- flow: reachability and no dead ends -----------------------------------
   const edges = index => {

@@ -83,7 +83,7 @@ export function sequence(steps) {
  * objectives collect or mine an item is not accomplished until the station
  * hand-in consumes it, and the linter requires this sentence for such missions.
  */
-export const mission = ({ id, title, steps, credits = 0, fails, handIn, replayCredits = undefined, offeredAt, origin, fixedShip }) => ({
+export const mission = ({ id, title, steps, credits = 0, fails, handIn, optional, replayCredits = undefined, offeredAt, origin, fixedShip }) => ({
   id,
   title,
   kind: "story",
@@ -93,6 +93,7 @@ export const mission = ({ id, title, steps, credits = 0, fails, handIn, replayCr
   ...(Number.isFinite(+replayCredits) && +replayCredits >= 0 ? { replayRewards: { credits: Math.floor(+replayCredits) } } : {}),
   fails: fails || {},
   ...(handIn ? { handIn } : {}),
+  ...(optional ? { optional } : {}),
   ...(offeredAt ? { offeredAt } : {}),
   ...(origin ? { origin } : {}),
   ...(fixedShip ? { fixedShip } : {}),

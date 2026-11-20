@@ -20,7 +20,39 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-19: Campaign tutorial waves re-arm after a pocket reload
+## 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
+
+The campaign is now a campaign: the title's Campaign screen lists chapters → acts, clicking an act starts it
+(fresh act world, campaign-only pilot), finishing it shows a MISSION ACCOMPLISHED card and returns to the menu,
+and a failed critical objective stops the world on a MISSION FAILED card with "Start from the beginning" (and
+"Start from last checkpoint" where a step sets `checkpoint: true`; First Sortie has none).
+
+Act boundaries: warping out needs `allowTravel` ("You do not have permission to leave this pocket."), docking is
+refused while a destroy objective is live, undocking is blocked while a station dialogue is unfinished, and a
+dock no longer clears the act. Dialogue advances itself on a text-scaled clock (`1.5 s + 1 s per 12 characters`);
+station Continue is still clickable, space lines have no button.
+
+Framework (data-driven, opt-in): `optional` bonus objectives (`stay-within`, `missionBonus`, saved
+`optionalProgress`), `control` steps (hold a control for `hold` seconds; `MISSION_CONTROLS`), `chase` steps
+(follow a ship along a `FLIGHT_COURSES` course; `maxGap` behind says `resetLine` and resets only that objective —
+never the act), natural resets (`mission-reset`), and story actors (`actor` + `actorRole` lead/observe/guard).
+
+Dane Korr: Wasp hull colour with the blue boost glow, selectable with F, fires at raiders for 0 damage, flies his
+own course (no longer anchored to the player), and is re-created from his authored `spawn-ship` if he vanishes.
+
+First Sortie: station briefing → launch → ten controls learned by doing them (W, S, mouse, A, D, Space, C, Q, E,
+Shift) → ten-kilometre chase → drone pass with Dane watching → raider ambush with Dane covering you, plus a
+350 m optional bonus through the lesson and a believable ambush line.
+
+Files: `src/data/campaign/` (`chapters.js`, `m01.js`), `src/data/flight-courses.js`, `src/data/missions/rules.js`,
+`src/data/missions/validate.js`, `src/sim/campaign.js`, `campaign-act.js`, `campaign-flight.js`, `flight-course.js`,
+`missions.js`, `ai.js`, `enemy-flight.js`, `targeting.js`, `session.js`, `sectors.js`, `src/ui/campaign.js`,
+`missionlog.js`, `screens.js`, `menu.js`, `src/state/profile.js`, `src/state/state.js`, `src/render/views.js`,
+`src/data/enemies.js`, `src/data/enemy-ai.js`, `src/data/shops.js`, `src/styles.css`, tests.
+Save **v27** (per-mode pilot; the campaign no longer shares the open world's ships or credits). Docs:
+[architecture/campaign-acts.md](architecture/campaign-acts.md). Rebuild the game and run `npm test`.
+
+2026-11-19: Campaign tutorial waves re-arm after a pocket reload
 
 A quit made mid-sortie could strand the pilot behind an unfinishable kill objective: enemy waves are runtime
 objects and a save never carries them, so the interrupted spawn step would not fire again on reload. Spawn script
@@ -87,47 +119,9 @@ Five named off-chart systems with seeded cores, warpable pockets and paired 20-m
 
 Rift and simple-wormhole interiors show Uncharted Space above the pocket name. The 14d plan records that a replacement exit connects to a fresh wormhole in a random regular-space location. Named wormhole systems are planned as S0001 etc.; isolated instances now gain a visible seeded core and matching lighting using normal star/black-hole odds. No save change.
 
-## 2026-11-18: Station UI rework, reusable left window, Inventory ship list and My Assets destination
-
-Merged PR #43 (Slices 1–3, save v24) to `main`, then implemented the 11-item station UI
-and inventory polish batch: fixed the lingering empty `#inv-held-ghost` box when placing
-held items (`clearHeldGhost` removes the node and `.inv-held-ghost[hidden]` overrides
-`display: flex`; L28) and removed the redundant `"Holding … Put back"` bar across all
-inventories; stopped dimming inventory tiles when the destination hold is full; removed
-the Inventory intro paragraph and merged the compact stored-ship list into Inventory
-above Station and ship holds with a small `Fly` button to the right of `Active`/`Stored`
-(removing the `Hangar` nav tab and Outfitting's ship-switcher arrow box); added a
-reusable `#station-left` window (`src/ui/left-panel.js`, fixed container, dimensions,
-positioning and animations) shared by mutually exclusive toggleable `Outfitting` (scaled
-3-column layout with no top subtitle and a taller `#shipview`) and `Shop` plus
-`Missions` (right accepts `Story missions` — keeping its heading with `"No more story
-missions available."` when none remain — and `Contract board`; left opens the
-in-progress `Mission log` whose `Details` toggle enlarges the same card inline without
-duplicating text; `Contracts` button removed) beside a fixed-width `#panel` with an
-always-clickable minimalist top-right home-station icon button and game-themed `.home-tip`
-hover card, plus a condensed controls-only main-menu `Controls` grid; kept the cursor
-`#inv-held-ghost` 1:1 square matching inventory slots, scaled `.inv-item` text so names
-fit uncropped, and fixed ship-hold `Stack all` compacting items to top-left; added
-Inventory-style single-click pick/place/swap and drag-and-drop between Outfitting and
-Inventory, right-click `Equip` (active ship, even with Outfitting closed), right-click
-`Unequip` + comprehensive module `Show info` (`moduleInfoData`, `moduleDetailsHtml` —
-outputs, range, speeds, DPS, hull modifiers, MJ usage, magazine, lock/flight stats,
-fitting & prices) across Outfitting, all inventories, Shop, My Assets, flight `I` and
-Rift Cache `R`, removed `"Modules in storage"` slot picker, and placed a compact
-`68px` full-width `Services` card below modules (no browser tooltips, 2 rows × 4
-single-line `.service-box` tiles with tight `0 2px 0 5px` padding and `11px`/`10px`
-text stepping cleanly to wider 3/2-column boxes on narrower windows so full service
-names never truncate, scrolling vertically for 9+ future services; PR #44 + follow-up);
-added `My Assets` prefix `Search`, collapsible ship cargo holds included in search, and station
-right-click `Set destination` / `Clear destination`; and made HUD `displayedSpeed` read
-negative `m/s` when reversing. Files: `src/{index.html,styles.css,main.js}`,
-`src/core/input.js`, `src/state/state.js`, `src/sim/{economy,fitting,flight-instruments,inventory,places,player}.js`,
-`src/ui/{left-panel,screens,menu,outfitting,missionlog,inventory-ui,cargo,cache,pause,README}.js/.md`,
-`tests/{station-ui-batch,part2-ui}.test.mjs`. Save **v24** unchanged;
-`game/tallow-reach.html` rebuilt; owner playtest pending.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-18: Station UI rework, reusable left window, Inventory ship list and My Assets destination
 - 2026-11-18: Roadmap slice 3 — My Assets, Minecraft-style inventory slots, Mining beams subgroup and 0 MJ power fix
 - 2026-11-18: Roadmap slice 2 — compact Shop, Hangar stored-ship list & context menu, Ship details/bonuses and unblurred cargo overlays
 - 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers

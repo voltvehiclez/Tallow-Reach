@@ -4,7 +4,7 @@
 
 import { itemName } from "../data/items.js";
 import { STORY_MISSIONS, TEST_MISSIONS } from "../data/missions/index.js";
-import { campaignRows } from "../sim/campaign.js";
+import { campaignAct, campaignRows, activeCampaignMission, isCampaignMissionId } from "../sim/campaign.js";
 import { state, currentSave, saveCurrentGame } from "../state/state.js";
 import { uiSound } from "../core/audio.js";
 import { emit, on } from "../util/events.js";
@@ -22,11 +22,13 @@ import {
   missionKindWord,
   missionNextText,
   missionObjectivesDone,
+  missionOptionalRows,
   missionProgress,
   missionRecoveryText,
   nextMissionDialogue,
 } from "../sim/missions.js";
 import { setPause } from "./pause.js";
+import { dialogueReadSeconds } from "../data/missions/rules.js";
 
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;",
@@ -45,6 +47,8 @@ export function dialogueHtml(mission, { blocked = false, stationName = "" } = {}
   const dialogue = missionDialogue(mission);
   if (!dialogue) return "";
   const locked = blocked && dialogue.requiresDock;
+  // A station line can be clicked past; a line said in space cannot, because a
+  // mission may depend on how long it takes. Choices are always the pilot's.
   const choices = locked
     ? `<p class="dialogue-locked">${stationName
         ? `Return to ${esc(stationName)} to continue talking.`
@@ -53,7 +57,9 @@ export function dialogueHtml(mission, { blocked = false, stationName = "" } = {}
       ? dialogue.choices.map(choice =>
           `<button class="dialogue-choice" data-dialogue-choice="${esc(choice.id)}">${esc(choice.text || choice.id)}</button>`
         ).join("")
-      : `<button class="dialogue-next" data-dialogue-next="true">${dialogue.lineIndex + 1 < dialogue.lines.length ? "Continue" : "Close"}</button>`;
+      : dialogue.requiresDock
+        ? `<button class="dialogue-next" data-dialogue-next="true">${dialogue.lineIndex + 1 < dialogue.lines.length ? "Continue" : "Close"}</button>`
+        : `<p class="dialogue-auto" data-dialogue-auto="true">${dialogue.lineIndex + 1 < dialogue.lines.length ? "…" : ""}</p>`;
   const portrait = dialogue.portrait || "Portrait";
   return (
     `<div class="dialogue-shell">` +
@@ -125,6 +131,21 @@ function missionExtraHtml(mission, { station, nextText, preview }) {
     );
   }
 
+  // Optional objectives: a bonus, never a requirement. The card says plainly
+  // whether it is still live, won or thrown away.
+  const optional = missionOptionalRows(mission);
+  if (optional.length) {
+    blocks.push(
+      `<ul class="mission-log-list mission-log-optional">` +
+      optional.map(row => {
+        const mark = row.failed ? "Optional failed" : row.done ? "Optional earned" : "Optional";
+        const credits = row.bonus > 0 ? ` · +${row.bonus} cr` : "";
+        return `<li><span>${mark}:</span> ${esc(row.objective)}${esc(credits)}</li>`;
+      }).join("") +
+      `</ul>`
+    );
+  }
+
   // Concise reward, threat and hand-in metadata not already shown above.
   const meta = [];
   const credits = Math.max(0, Math.floor(+mission.rewards?.credits || +mission.r || 0));
@@ -170,8 +191,11 @@ function missionStatus(mission, profile) {
         : objectivesDone
           ? "Awaiting cargo"
           : "Active";
+  // A campaign act is not a job: it cannot be accepted, abandoned or handed in
+  // by hand. It ends on its last objective and the campaign screen takes over.
+  const campaign = state.mode === "campaign" && isCampaignMissionId(mission.id);
   // A not-yet-ready mission always offers Abandon, so no state is a dead end.
-  const action = ready
+  const action = campaign ? "" : ready
     ? `<button data-a="done" data-b="${esc(mission.id)}">${requirement ? "Hand in cargo" : "Collect reward"}</button>`
     : cargoReady
       ? `<button data-a="done" data-b="${esc(mission.id)}" disabled>${requirement ? "Hand in" : "Collect"} at ${esc(station)}</button>` +
@@ -242,25 +266,15 @@ export function missionLogHtml(profileOrUi = state.profile) {
  * been accepted, showing "No more story missions available." when none remain.
  */
 function campaignOffersHtml(profile) {
-  const activeIds = new Set(activeMissions(profile).map(mission => mission.id));
-  const rows = campaignRows(profile);
-  const stationRows = rows.filter(({ mission }) => missionOfferStation(mission) === state.place && !activeIds.has(mission.id));
-  const completedCount = rows.filter(row => row.complete).length;
-  let html = `<h2>Campaign missions</h2>`;
-  if (!stationRows.length) {
-    html += completedCount === rows.length && rows.length
-      ? `<p>No new campaign missions are available yet. More sorties are being written.</p>`
-      : `<p>No campaign missions are available at this station right now.</p>`;
-    return html;
+  const active = activeCampaignMission(profile);
+  const act = active ? campaignAct(active.id) : null;
+  let html = `<h2>Campaign</h2>`;
+  if (active) {
+    html += `<div class="row"><div><strong>${esc(active.title)}</strong><small>${esc(act?.chapterName || "Campaign")} · ${esc(act?.n || "Act")} in progress</small></div></div>`;
+    html += `<p>This act runs until it is finished. There is nothing to accept and nothing to abandon.</p>`;
+  } else {
+    html += `<p>No campaign act is running. Choose an act from the campaign menu.</p>`;
   }
-  html += stationRows.map(({ mission, complete, available }) => {
-    if (!available) {
-      return `<div class="row"><div><strong>Locked sortie</strong><small>Finish the previous campaign mission.</small></div><button disabled>Locked</button></div>`;
-    }
-    const action = complete ? "Replay" : "Begin";
-    const status = complete ? "Completed · Replayable" : "Next campaign mission";
-    return `<div class="row"><div>${esc(mission.title)}<small>${esc(status)} · hand in at ${esc(missionHandInStationName(mission))}</small></div><button data-a="story" data-b="${esc(mission.id)}">${action}</button></div>`;
-  }).join("");
   return html;
 }
 
@@ -325,6 +339,43 @@ export function renderDialogue() {
   const blocked = dialogue.requiresDock && (away || (!!state.player && !state.player.docked));
   root.innerHTML = dialogueHtml(mission, { blocked, stationName: away ? dialogue.stationName : "" });
   root.hidden = false;
+}
+
+// ---- the reading clock -----------------------------------------------------------
+// Every line moves on by itself once it has been up long enough to read. A station
+// line can also be clicked; a line said in space waits its full time, so a mission
+// may depend on it. Choices are never taken for the pilot.
+let readClock = { key: "", elapsed: 0 };
+
+export function resetDialogueClock() {
+  readClock = { key: "", elapsed: 0 };
+}
+
+/** Advance the open dialogue by one line when its reading time has passed.
+ *  Returns true when a line moved. Call once per rendered frame. */
+export function updateDialogueClock(dt) {
+  if (!root || root.hidden) return false;
+  if (state.ui.intro) return false;
+  // The dialogue's own pause stops the world, not the conversation.
+  if (state.paused && !missionPause) return false;
+  const mission = dialogueMission();
+  const dialogue = mission && missionDialogue(mission);
+  if (!mission || !dialogue) return false;
+  if (dialogue.waitingForChoice) return false;
+  const away = !!dialogue.station && dialogue.station !== state.place;
+  const blocked = dialogue.requiresDock && (away || (!!state.player && !state.player.docked));
+  if (blocked) return false;
+  const key = `${mission.id}:${mission.step}:${dialogue.lineIndex}:${dialogue.line}`;
+  if (key !== readClock.key) readClock = { key, elapsed: 0 };
+  readClock.elapsed += Math.max(0, Number(dt) || 0);
+  if (readClock.elapsed < dialogueReadSeconds(dialogue.line)) return false;
+  resetDialogueClock();
+  const changed = nextMissionDialogue(mission.id);
+  if (!changed) return false;
+  saveCurrentGame();
+  renderDialogue();
+  emit("mission-ui-refresh", {});
+  return true;
 }
 
 function onDialogueClick(event) {
@@ -393,7 +444,30 @@ export function setupMissionLog() {
   alertRoot.addEventListener("click", hideFailureNotice);
   document.body.appendChild(alertRoot);
   on("mission-failed", showFailureNotice);
-  on("main-menu", hideFailureNotice);
+  // A natural reset is not a failure: the contact says the line, the act goes on
+  // and the pilot repeats that one objective.
+  // Losing a bonus is news too, but it is not a failure and it never stops the act.
+  on("mission-optional-failed", ({ optional } = {}) => {
+    if (!alertRoot || !optional) return;
+    alertRoot.innerHTML = `<strong>Optional objective failed</strong><span>${esc(optional.objective || "")}</span><em>Click to dismiss</em>`;
+    alertRoot.hidden = false;
+    clearTimeout(alertTimer);
+    alertTimer = setTimeout(hideFailureNotice, 8 * 1000);
+  });
+  on("mission-step-reset", ({ mission, step, line, player } = {}) => {
+    if (player && state.player && player !== state.player) return;
+    if (!alertRoot) return;
+    const text = line || step?.resetLine || "";
+    if (!text) return;
+    alertRoot.innerHTML = `<strong>${esc(step?.speaker || mission?.title || "Mission")}</strong><span>${esc(text)}</span><em>Click to dismiss</em>`;
+    alertRoot.hidden = false;
+    clearTimeout(alertTimer);
+    alertTimer = setTimeout(hideFailureNotice, 12 * 1000);
+  });
+  on("main-menu", () => {
+    hideFailureNotice();
+    resetDialogueClock();
+  });
 
   root = document.createElement("section");
   root.id = "dialogue-panel";

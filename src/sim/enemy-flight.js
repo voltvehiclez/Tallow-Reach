@@ -2,6 +2,8 @@
 import { V, fwdQ } from '../util/math.js';
 import { makeRng } from '../util/rng.js';
 import { enemyAI, AI_FLIGHT as T } from '../data/enemy-ai.js';
+import { enemyDef } from '../data/enemies.js';
+import { courseRemaining } from './flight-course.js';
 import { enemyFwd, enemyHullRadius, turnEnemy } from './enemy.js';
 import { placeCollidersOf, sweepColliders } from './colliders.js';
 
@@ -69,6 +71,123 @@ export function flyEscort(e, def, toTarget, dist, dt, context) {
   turnEnemy(e, look, Math.min(1, dt * def.turn));
   e.v.lerp(desired, 1 - Math.exp(-dt * 3.2));
   e.pos.addScaledVector(e.v, dt);
+}
+
+
+/**
+ * Story ships: a friendly contact that follows authored story beats. `e.role`
+ * comes from mission data (lead / observe / guard); the movement itself is the
+ * ordinary NPC telegraphing, not a follow-the-player trick.
+ */
+export function flyStory(e, def, toTarget, dist, dt, context) {
+  if (e.role === "observe") return flyObserve(e, def, toTarget, dist, dt, context);
+  if (e.role === "guard") return flyGuard(e, def, toTarget, dist, dt, context);
+  return flyCourse(e, def, toTarget, dist, dt, context);
+}
+
+/** Fly an authored course: to its start, wait for the pilot, then the legs. */
+export function flyCourse(e, def, toTarget, dist, dt, context) {
+  const { world, target } = context;
+  const c = e.course;
+  if (!c) return flyEscort(e, def, toTarget, dist, dt, context);
+  let desired = V(), look = null;
+  e.boosting = false;
+
+  if (c.mode === "return" || c.mode === "wait") {
+    const toStart = c.start.clone().sub(e.pos), d = toStart.length();
+    if (d > T.courseArrive) {
+      desired.copy(toStart).normalize().multiplyScalar(Math.min(def.spdFar, d * 1.1));
+      look = c.start;
+    } else {
+      c.mode = "wait";
+      // Wait at the beginning until the pilot is close enough to follow.
+      const pilotNear = target ? target.pos.distanceTo(c.start) < T.courseGather : false;
+      if (pilotNear) {
+        c.mode = "run"; c.index = 0; c.travelled = 0; c.done = false;
+      } else if (d > 25) {
+        desired.copy(toStart).normalize().multiplyScalar(Math.min(35, d));
+      }
+    }
+  }
+
+  if (c.mode === "run") {
+    const point = c.points[c.index];
+    if (!point) {
+      c.mode = "done"; c.done = true;
+    } else {
+      const toPoint = point.pos.clone().sub(e.pos), d = toPoint.length();
+      e.boosting = point.boost === true;
+      desired.copy(toPoint).normalize().multiplyScalar(point.speed);
+      look = point.pos;
+      if (d < T.courseWaypoint) {
+        c.travelled += point.length;
+        c.index++;
+        if (c.index >= c.points.length) { c.mode = "done"; c.done = true; }
+      }
+    }
+  }
+
+  if (c.mode === "done") {
+    // Lazy circle at the finish: visible, catchable, still flying like a ship.
+    const b = e.brain; b.phase += dt * 0.25;
+    const anchor = c.points.length
+      ? c.points[c.points.length - 1].pos.clone().add(V(Math.cos(b.phase) * 220, 20, Math.sin(b.phase) * 220))
+      : c.start.clone();
+    const toAnchor = anchor.clone().sub(e.pos), d = toAnchor.length();
+    if (d > 30) desired.copy(toAnchor).normalize().multiplyScalar(Math.min(def.spdNear, d * 1.1));
+    look = anchor;
+  }
+
+  c.remaining = courseRemaining(c);
+  desired.add(flightAvoidance(e, world, desired, context.players || (target ? [target] : []))).clampLength(0, def.spdFar);
+  if (desired.lengthSq() > 1) turnEnemy(e, look || e.pos.clone().add(desired), Math.min(1, dt * def.turn));
+  e.v.lerp(desired, 1 - Math.exp(-dt * 3.4));
+  e.pos.addScaledVector(e.v, dt);
+}
+
+/** Watch a drill from a safe distance, always facing the pilot. */
+export function flyObserve(e, def, toTarget, dist, dt, context) {
+  const { world, target, players } = context;
+  const b = e.brain;
+  b.phase += dt * T.observeOrbitRate;
+  const pilot = target;
+  const anchor = pilot.pos.clone().add(V(Math.cos(b.phase) * T.observeRadius, 55 + Math.sin(b.phase * 0.6) * 20, Math.sin(b.phase) * T.observeRadius));
+  const toAnchor = anchor.clone().sub(e.pos), d = toAnchor.length();
+  const desired = d > 25 ? toAnchor.normalize().multiplyScalar(Math.min(def.spdNear, d * 1.2)) : pilot.v.clone().multiplyScalar(0.9);
+  desired.add(flightAvoidance(e, world, desired, players)).clampLength(0, def.spdFar);
+  const look = d > 90 && desired.lengthSq() > 1 ? e.pos.clone().add(desired) : pilot.pos;
+  turnEnemy(e, look, Math.min(1, dt * def.turn));
+  e.v.lerp(desired, 1 - Math.exp(-dt * 3));
+  e.pos.addScaledVector(e.v, dt);
+}
+
+/** Fight the act's other hostiles. Damage comes from the def (a story ally's is 0). */
+export function flyGuard(e, def, toTarget, dist, dt, context) {
+  const { world, target, players } = context;
+  let foe = null, best = Infinity;
+  for (const other of otherHostiles(e, world)) {
+    const d = e.pos.distanceToSquared(other.pos);
+    if (d < best) { best = d; foe = other; }
+  }
+  let aim;
+  if (foe) {
+    // Lead the target by its own speed; a raider weaving still gets shot at.
+    aim = foe.pos.clone().addScaledVector(foe.v, 0.6);
+  } else {
+    const pilot = target;
+    const behind = pilot.vel?.clone?.() || pilot.v?.clone?.() || V();
+    aim = pilot.pos.clone().addScaledVector(behind.normalize(), -200).add(V(0, 30, 0));
+  }
+  const toAim = aim.clone().sub(e.pos), d = toAim.length();
+  let desired = d > (foe ? T.guardStandoff : 90) ? toAim.normalize().multiplyScalar(def.spdFar * 0.8) : (foe ? foe.v.clone().multiplyScalar(0.8) : V());
+  desired.add(flightAvoidance(e, world, desired, players)).clampLength(0, def.spdFar);
+  turnEnemy(e, d > 40 ? aim : e.pos.clone().add(desired), Math.min(1, dt * def.turn));
+  e.v.lerp(desired, 1 - Math.exp(-dt * 3));
+  e.pos.addScaledVector(e.v, dt);
+}
+
+function otherHostiles(e, world) {
+  return (world.enemies || []).filter(other => other && other !== e && other.hp > 0 && enemyDef(other.def).friendly !== true);
 }
 
 export function flyFighter(e, def, toTarget, dist, dt, context) {

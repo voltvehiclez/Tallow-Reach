@@ -18,6 +18,9 @@ export const MISSION_STEP_KINDS = [
   "wait",
   "flags",
   "parallel",
+  // Campaign flight-lesson vocabulary (step 15 follow-up):
+  "control",   // do a named control for `hold` seconds
+  "chase",     // follow a named ship along its course, within `maxGap`
 ];
 
 export const CONTRACT_OBJECTIVE_KINDS = {

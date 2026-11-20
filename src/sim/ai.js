@@ -5,7 +5,8 @@
 // branch. Hunt contracts still take priority over the ambient encounter and use
 // the same desired-count/enemy rules as before.
 
-import { createBrain, flyFighter, flyEscort, clearFriendlyLane } from "./enemy-flight.js";
+import { createBrain, flyFighter, flyEscort, flyStory, clearFriendlyLane } from "./enemy-flight.js";
+import { startCourseAtBeginning } from "./flight-course.js";
 import { AI_FLIGHT } from "../data/enemy-ai.js";
 import { V, Q, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
@@ -24,7 +25,7 @@ import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
 
 // Keep the reusable behaviour id for authored content; personality is data-driven.
-export const AI_BEHAVIOURS = { chase: flyFighter, escort: flyEscort };
+export const AI_BEHAVIOURS = { chase: flyFighter, escort: flyEscort, story: flyStory };
 
 let nextId = 1;
 
@@ -62,6 +63,12 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null, opt
     o: random() < 0.5 ? 1 : -1,
     brain: createBrain(Math.floor(random() * 0xffffffff)),
   };
+  if (options.role) e.role = options.role;
+  if (options.course) {
+    const course = startCourseAtBeginning(options.course, options.phase || "lesson");
+    if (course) e.course = course;
+  }
+  e.boosting = false;
   placeWorld(placeId).enemies.push(e);
   emit("enemy-spawned", { id: e.id, def: e.def, place: placeId, encounter, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z } });
   return e;
@@ -80,6 +87,18 @@ export function nearestPlayer(pos, players = state.players, placeId = null) {
 }
 
 const encounterIdFromFeature = id => String(id || "").replace(/-\d+$/, "");
+
+/** Nearest live ship a story ally may shoot at (never another friendly). */
+function nearestHostile(e, enemies) {
+  let best = null, bestDist = Infinity;
+  for (const other of enemies) {
+    if (!other || other === e || other.hp <= 0) continue;
+    if (enemyDef(other.def).friendly === true) continue;
+    const d = e.pos.distanceToSquared(other.pos);
+    if (d < bestDist) { bestDist = d; best = other; }
+  }
+  return best;
+}
 
 /** Per-frame update for hostiles, plus the data-defined encounter spawner. */
 export function updateEnemies(dt, placeId = state.place) {
@@ -105,7 +124,23 @@ export function updateEnemies(dt, placeId = state.place) {
     }
 
     e.fire -= dt;
-    if (dist < def.fireRange && enemyFwd(e).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0 && clearFriendlyLane(e, pp, E) && !sweepColliders(placeCollidersOf(placeId), W.asteroids, e.pos, pp)) {
+    // A story ally fires only at the act's other hostiles, and its def decides the
+    // damage (zero for Dane). Nothing about this touches the pilot.
+    if (def.engages === "hostiles") {
+      const foe = nearestHostile(e, E);
+      if (foe && e.fire <= 0) {
+        const toFoe = foe.pos.clone().sub(e.pos), range = toFoe.length();
+        if (range < def.fireRange && enemyFwd(e).dot(toFoe.clone().normalize()) > 0.94 && clearFriendlyLane(e, foe.pos, E)) {
+          e.fire = R(def.fireGap[0], def.fireGap[1]);
+          const spread = AI_FLIGHT.aimSpread;
+          const dir = toFoe.normalize().add(V(R(-spread, spread), R(-spread, spread), R(-spread, spread))).normalize();
+          const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
+          shot.place = placeId;
+          shot.missionId = String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null;
+          if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });
+        }
+      }
+    } else if (dist < def.fireRange && enemyFwd(e).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0 && clearFriendlyLane(e, pp, E) && !sweepColliders(placeCollidersOf(placeId), W.asteroids, e.pos, pp)) {
       e.fire = R(def.fireGap[0], def.fireGap[1]);
       // Angular spread, not a centimetre offset that becomes perfect aim at range.
       const spread = AI_FLIGHT.aimSpread;
@@ -322,6 +357,8 @@ on("mission-script", ({ action, player, place, mission } = {}) => {
     : null;
   const options = {
     loot: action.loot === false ? null : action.loot,
+    ...(action.role ? { role: action.role } : {}),
+    ...(action.course ? { course: action.course, phase: action.phase || "lesson" } : {}),
     ...(dropOnDefeat ? { dropOnDefeat } : {}),
   };
   if (action.loot === undefined) delete options.loot;

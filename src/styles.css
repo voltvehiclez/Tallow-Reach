@@ -2479,3 +2479,26 @@ body.navigation-open canvas { cursor: default; }
 #pocket-objects [data-pocket-sort][aria-pressed="true"] { border-color: #fff; color: #fff; }
 @media (max-height: 820px) { #hud > #pocket-objects { bottom: 24px; } }
 #weapon-lead { width: 12px; height: 12px; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }
+
+/* Campaign chapter screen and the cards that end an act. */
+.campaign-chapters { display: grid; gap: 14px; margin-top: 12px; }
+.campaign-chapter { border: 1px solid rgba(170,170,170,.28); padding: 10px 12px; }
+.campaign-chapter h2 { margin: 0 0 4px; }
+.campaign-chapter-note { margin: 0 0 6px; color: #bbb; }
+.campaign-progress { margin: 0 0 8px; color: var(--dim); font-size: 12px; }
+.campaign-chapter .row { align-items: center; }
+.campaign-act.is-locked small { opacity: .7; }
+.campaign-act.is-active { box-shadow: inset 0 0 0 1px var(--ice); }
+.campaign-act-meta { display: block; color: #9fc7d8; }
+#campaign-end { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(6,10,14,.82); }
+#campaign-end[hidden] { display: none; }
+.campaign-end-card { min-width: 320px; max-width: 560px; padding: 26px 30px; text-align: center; background: #111a20; border: 1px solid #3d5a6a; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.campaign-end-card h1 { margin: 6px 0 10px; letter-spacing: .06em; font-size: 30px; }
+.campaign-end-card.is-accomplished h1 { color: #9fe8c8; }
+.campaign-end-card.is-failed h1 { color: #ff8a80; }
+.campaign-end-kicker { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--dim); }
+.campaign-end-title { margin: 0 0 10px; font-size: 16px; }
+.campaign-end-line { margin: 0 0 6px; }
+.campaign-end-detail { margin: 0 0 16px; color: #bbb; font-size: 13px; }
+.campaign-end-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.campaign-end-actions button { padding: 8px 18px; }

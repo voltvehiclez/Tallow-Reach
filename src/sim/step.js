@@ -23,7 +23,7 @@ import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 export function isSimulationPaused() {
   // Only the pause card and the title screen stop the clock. The starmap and the
   // flight inventory are read-only overlays: the world keeps running behind them.
-  return !!(state.paused || state.ui.intro);
+  return !!(state.paused || state.ui.intro || state.ui.campaignEnd);
 }
 
 /** One simulation tick. Caller does not step while paused. */

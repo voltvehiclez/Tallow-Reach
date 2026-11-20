@@ -95,7 +95,12 @@ function worldWithStationStores(fields, stationStores) {
 //      the shared browser slot. The campaign gets its own generated galaxy, place,
 //      station stores and missions; the open world carries over unchanged. v25 and
 //      older saves become the open-world half and receive a fresh campaign half.
-export const SAVE_VERSION = 26;
+//   27 gives each mode its own pilot. Until v26 the halves shared fleet, credits,
+//      cargo and fit; v26 kept doing so. Now the campaign starts from its own
+//      600 cr and one Wasp, and nothing earned in one mode reaches the other.
+//      A v26 save's campaign half is migrated to a fresh campaign pilot; the
+//      acts it had finished are kept.
+export const SAVE_VERSION = 27;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -236,62 +241,18 @@ export function grantFixedShip(profile, id, placeId = null) {
   return true;
 }
 
-/** Profile keys shared by both modes of one browser save. World-scoped state
- * (current ship, ship locations, home, missions, flags and mode completion)
- * deliberately stays out so each world keeps its own places and progress. */
-export const PILOT_SHARED_KEYS = Object.freeze([
-  "cr", "holds", "holdSlots", "ships", "hp", "loadout", "msl", "pw", "sw", "kills",
-]);
-
-const clonePilotValue = value => JSON.parse(JSON.stringify(value));
-
 /**
- * Copy the shared pilot forward into `target` without taking target's world
- * overlay (current ship, shipPlaces/homeStation, missions/flags/campaign/done).
- * Both profiles describe one pilot; `target` keeps its own world assignment.
+ * A fresh campaign pilot for a save written before v27, when the two modes still
+ * shared one pilot. What the pilot finished is kept; the open world's ships,
+ * credits, cargo and fit are not, because the campaign is its own game.
  */
-export function syncSharedPilot(target, source) {
-  if (!target || !source || typeof target !== "object" || typeof source !== "object") return target;
-  const ships = [...new Set((Array.isArray(source.ships) ? source.ships : []).filter(isShipId))];
-  if (!ships.length) ships.push(DEFAULT_SHIP);
-  target.cr = Math.max(0, Math.floor(+source.cr || 0));
-  target.msl = Math.max(0, Math.floor(+source.msl || 0));
-  target.pw = ["1", "2", "3", "4", "5"].includes(String(source.pw)) ? String(source.pw) : "1";
-  target.sw = ["1", "2", "3", "4", "5"].includes(String(source.sw)) ? String(source.sw) : "1";
-  target.kills = Math.max(0, Math.floor(+source.kills || 0));
-  target.ships = ships;
-
-  const copyMap = (key, valid) => {
-    const table = source?.[key] && typeof source[key] === "object" && !Array.isArray(source[key]) ? source[key] : {};
-    const out = {};
-    for (const id of ships) {
-      if (table[id] !== undefined) out[id] = clonePilotValue(table[id]);
-      else if (key === "holds") out[id] = newHold();
-      else if (key === "hp") out[id] = 1;
-      else if (key === "loadout") out[id] = stockFor(id);
-      else if (key === "holdSlots") continue;
-    }
-    target[key] = out;
-  };
-  copyMap("holds", true);
-  copyMap("hp", true);
-  copyMap("loadout", true);
-
-  const sourceSlots = source?.holdSlots && typeof source.holdSlots === "object" && !Array.isArray(source.holdSlots) ? source.holdSlots : {};
-  const slots = {};
-  for (const id of ships) if (Array.isArray(sourceSlots[id])) slots[id] = clonePilotValue(sourceSlots[id]);
-  target.holdSlots = slots;
-
-  // A mode's current ship is its own overlay. If that hull left the shared
-  // fleet, choose one the campaign/open world can still fly.
-  const fallback = ships.includes(source.ship) ? source.ship : ships[0];
-  if (!ships.includes(target.ship)) target.ship = fallback;
-  const rawPlaces = target.shipPlaces && typeof target.shipPlaces === "object" && !Array.isArray(target.shipPlaces) ? target.shipPlaces : {};
-  const home = typeof target.homeStation === "string" && target.homeStation ? target.homeStation : DEFAULT_PLACE;
-  const places = {};
-  for (const id of ships) places[id] = typeof rawPlaces[id] === "string" && rawPlaces[id] ? rawPlaces[id] : home;
-  target.shipPlaces = places;
-  return target;
+export function separateCampaignPilot(profile) {
+  const fresh = newProfile(CAMPAIGN_HOME_POCKET);
+  const completed = Array.isArray(profile?.campaign?.completed)
+    ? [...new Set(profile.campaign.completed.filter(id => typeof id === "string" && id.trim()))]
+    : [];
+  fresh.campaign = { completed };
+  return fresh;
 }
 
 /** Fresh portable character profile (travels with a pilot across worlds). */
@@ -453,7 +414,7 @@ function cleanMissionStep(raw, index) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !isMissionStepKind(raw.kind)) return null;
   const id = typeof raw.id === "string" && raw.id ? raw.id : `step-${index + 1}`;
   const step = { id, kind: raw.kind };
-  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "missionItem", "owned", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds"]) {
+  for (const key of ["item", "enemy", "faction", "place", "sector", "target", "trigger", "speaker", "portrait", "log", "objective", "pause", "requiresDock", "requiresFlying", "requiresPlace", "allowCombat", "missionItem", "owned", "next", "goto", "then", "else", "ifTrue", "ifFalse", "timer", "seconds", "checkpoint", "resetLine", "allowTravel", "optional", "control", "hold", "course", "distance", "maxGap", "actor", "actorRole", "coursePhase", "follow", "bonus", "within", "group"]) {
     if (raw[key] !== undefined) step[key] = raw[key];
   }
   if (raw.lines !== undefined) {
@@ -474,9 +435,17 @@ function cleanMissionStep(raw, index) {
   return step;
 }
 
+function cloneMissionData(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (e) {
+    return [];
+  }
+}
+
 function restoreAuthoredStepMetadata(step, saved, authored) {
   if (!step || !authored) return;
-  for (const key of ["requiresDock", "requiresFlying", "requiresPlace", "place"]) {
+  for (const key of ["requiresDock", "requiresFlying", "requiresPlace", "place", "checkpoint", "resetLine", "allowTravel", "optional", "control", "hold", "course", "distance", "maxGap", "actor", "actorRole", "coursePhase", "follow", "bonus", "within", "group"]) {
     if (saved?.[key] === undefined && authored?.[key] !== undefined) step[key] = authored[key];
   }
   for (const child of step.steps || []) {
@@ -506,7 +475,7 @@ function cleanMission(raw) {
   // dialogue-to-spawn shortcut. Do this even when the step count happens to
   // match: authored order is not save state. Counters remain keyed by stable
   // ids below.
-  if (definition?.id === "story.border-signal") {
+  if (definition?.id === "story.border-signal" || (definition && CAMPAIGN_MISSIONS.some(mission => mission.id === definition.id))) {
     steps = definition.steps.map(cleanMissionStep).filter(Boolean);
     currentStep = savedComplete ? steps.length : Math.max(0, steps.findIndex(step => step.id === savedStepId));
   }
@@ -572,9 +541,23 @@ function cleanMission(raw) {
     current,
     counters,
   };
-  for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "timeout", "elapsed", "failed", "failure", "failureMessage"]) {
+  for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "timeout", "elapsed", "failed", "failure", "failureMessage", "checkpoint", "allowTravel"]) {
     if (raw[key] !== undefined && !(borderDefinition && key === "timeout")) mission[key] = raw[key];
   }
+  // Optional objectives are authored data; their progress is save state. An act
+  // whose data now lists a new bonus gains it on load, and a bonus already thrown
+  // away stays thrown away.
+  const authoredOptional = definition?.optional;
+  if (Array.isArray(authoredOptional) && authoredOptional.length) mission.optional = cloneMissionData(authoredOptional);
+  else if (Array.isArray(raw.optional) && raw.optional.length) mission.optional = cloneMissionData(raw.optional);
+  const optionalProgress = {};
+  if (raw.optionalProgress && typeof raw.optionalProgress === "object" && !Array.isArray(raw.optionalProgress)) {
+    for (const [id, value] of Object.entries(raw.optionalProgress)) {
+      if (!id || typeof id !== "string" || !value || typeof value !== "object") continue;
+      optionalProgress[id] = { done: value.done === true, failed: value.failed === true };
+    }
+  }
+  if (Object.keys(optionalProgress).length) mission.optionalProgress = optionalProgress;
   // `handIn` is part of the mission: the sentence shown while the cargo is owed
   // and, for a mission handed in somewhere specific, the station that takes it.
   // Additive field (v19): an older record without it resolves the station from
