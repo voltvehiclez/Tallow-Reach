@@ -35,15 +35,28 @@ import { buildPlayerShip, ROCK_SHAPES } from "./models.js";
 import { instantiateModel, modelTemplate, engNodes } from "./gltf.js";
 import { colliderFromObject } from "./collideModel.js";
 import { setRockSoup } from "../sim/colliders.js";
-import { friendlyShot } from "../sim/combat.js";
+import { BULLET_COLOURS } from "../data/weapons.js";
 
 /* ------------------------------------------------------------------------- */
 /* Entity view registry                                                       */
 /* ------------------------------------------------------------------------- */
 
 const bulletGeo = new THREE.BoxGeometry(0.3, 0.3, 5);
-const playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xffc870 });
-const enemyBulletMat = new THREE.MeshBasicMaterial({ color: 0xff4a35 });
+const playerBulletMat = new THREE.MeshBasicMaterial({ color: BULLET_COLOURS.cannon });
+const enemyBulletMat = new THREE.MeshBasicMaterial({ color: BULLET_COLOURS.hostile });
+const bulletMats = new Map();
+/** Rounds are drawn in their weapon module's colour; a shot without one keeps the
+ *  old rule (the pilot's white-hot orange, everyone else's red). */
+function bulletMaterial(shot) {
+  const colour = shot?.colour;
+  if (colour == null) return shot?.own ? playerBulletMat : enemyBulletMat;
+  let material = bulletMats.get(colour);
+  if (!material) {
+    material = new THREE.MeshBasicMaterial({ color: colour });
+    bulletMats.set(colour, material);
+  }
+  return material;
+}
 
 const missileGeo = new THREE.BoxGeometry(0.5, 0.5, 3);
 const missileMat = new THREE.MeshStandardMaterial({
@@ -359,10 +372,7 @@ registerEntityView("bullet", {
   build: e => {
     const gltf = instantiateModel("bullet");
     if (gltf) return initialPose(e, gltf);
-    // The pilot's rounds and a wingman's rounds both read as "ours" (the same
-    // warm orange); only hostile fire is red.
-    const material = friendlyShot(e) ? playerBulletMat : enemyBulletMat;
-    return initialPose(e, new THREE.Mesh(bulletGeo, material));
+    return initialPose(e, new THREE.Mesh(bulletGeo, bulletMaterial(e)));
   },
   update: updatePose, remove: noCleanup,
 });

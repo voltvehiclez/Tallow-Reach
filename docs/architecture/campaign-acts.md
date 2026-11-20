@@ -11,10 +11,15 @@ open-world story or contract behaves; every field below is opt-in.
 - `data/campaign/chapters.js`: `CAMPAIGN_CHAPTERS` (chapters, each a list of acts)
   and the flat `CAMPAIGN_ACTS`. An act names one mission id; an act without one is
   `planned` and only ever drawn as a locked box.
-- The campaign screen is the title's **big left window**: one large box per
-  chapter (`campaignMenuHtml`), locked future chapters included. Clicking a
-  chapter opens its act boxes; `← All chapters` goes back. The right panel holds
-  the header and Back, so the screen opens on chapters only. There is no offer,
+- The campaign screen is the title's **big left window**: one box per chapter in a
+  fixed three-column grid (`campaignMenuHtml`), locked future chapters included.
+  Clicking a chapter opens its act boxes; `← All chapters` goes back. The right
+  panel holds the header and Back, so the screen opens on chapters only.
+- Unwritten content is redacted, not named: a planned chapter or act draws
+  "Coming soon" over a blurred placeholder, and opening a locked chapter says
+  "This chapter is not written yet." The authored names stay in the data for the
+  day the act is written, but the screen never advertises a story that does not
+  exist. There is no offer,
   no Accept and no Abandon: clicking an act starts it (`sim/campaign-act.js`
   `startCampaignAct`), clicking a running act resumes it, and finishing it shows
   the MISSION ACCOMPLISHED card before returning to the screen.
@@ -56,13 +61,16 @@ optional: [
 
 - `bonus` is added to the mission reward only when the optional is done
   (`missionBonus`); it can never fail an act.
+- A run's bonus is judged only while the course is actually running: the pilot
+  is not punished for being far away during the form-up (see `gather` below).
 - `during` is a step id or a `group` shared by several steps. A 500 m limit and a
   1 km reset are different numbers on purpose: the bonus can be lost while the
   objective is simply redone.
-- While the window is open and winnable, `missionBonusStatus(mission, metres)` is
-  what the HUD shows: the top-right `Bonus` chip with the live distance, red once
-  it is over the limit. `sim/campaign-flight.js` publishes that distance as
-  `state.ui.followDistance` on every chase tick.
+- While the window is open and winnable, `missionBonusStatus(mission, metres)` feeds
+  the HUD line under the objective (`Bonus: within 500 m · now 312 m`, red once it
+  is over). `sim/campaign-flight.js` publishes the run as `state.ui.chaseRun`
+  (`gathering`, `gap`, `gather`, `maxGap`) and the distance as
+  `state.ui.followDistance` on every running chase tick.
 - Progress lives in `optionalProgress` on the saved mission (`{ done, failed }`),
   so a bonus already thrown away stays gone across a reload.
 
@@ -74,7 +82,8 @@ optional: [
   pilot's control record (`controlHeld`), never a key code, and emits
   `mission-control` when the hold is long enough. The live hold is published as
   `state.ui.controlHold` (`fraction`, `percent`, the control's `label`), and the
-  top-left tracker draws it as a bar: a full bar is 100% and a learned control.
+  HUD draws it as a percentage bar under the act's objective (top right, with
+  every other active mission): a full bar is 100% and a learned control.
   First Sortie teaches W, then Ctrl (the brake), then S, mouse, strafe, lift,
   roll and boost — a new pilot can always stop the ship before anything that can
   drift them off the range.
@@ -83,6 +92,13 @@ optional: [
   that course finishes the objective and `maxGap` is the reset distance. Courses
   are absolute points in the pocket, so "back to the beginning" is always the
   same point in space.
+- `gather` (metres) makes the course wait: the story ship flies to the fixed
+  start and holds there until the pilot is that close, so a pilot who drifted
+  during the lesson is never asked to catch a ship already at speed. The HUD
+  says "Close to within 300 m of Dane to start the run." until it starts, then
+  "Stay within 1 km of Dane for the whole course to pass." The first chase leg is
+  deliberately slow (95 m/s) so the run can be joined from a standing start. A
+  reset returns him to the start and the same form-up applies again.
 
 ## Scenery along a course
 
@@ -106,9 +122,10 @@ points, not generated.
   `guard` (fight the act's other hostiles).
 - A friendly def may set `lockable: true` (selectable with F), `foe: false`
   (Wasp scheme and blue engine glow) and `engages: "hostiles"` with `dmg: 0`,
-  so it fires at the act's hostiles and damages nothing. Those rounds carry
-  `ally: true`, and `friendlyShot()` (`sim/combat.js`) draws them in the pilot's
-  orange: only hostile fire is red.
+  so it fires at the act's hostiles and damages nothing. A round is drawn in the
+  colour of the module that fired it (`BULLET_COLOURS` in `data/weapons.js`, set on
+  the shot by `sim/ai.js`): his basic cannons are orange, like the pilot's, and
+  only hostile repeaters are red. There is no separate "friendly" colour rule.
 - `spawn-ship` actions with `respawn: true, story: true` are re-armed by
   `sim/campaign-flight.js` whenever the ship is missing (reload, re-entry, a
   bug), and `rearmWaves` still only tops up kill objectives.

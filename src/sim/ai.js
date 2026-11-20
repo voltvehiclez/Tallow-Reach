@@ -7,6 +7,7 @@
 
 import { createBrain, flyFighter, flyEscort, flyStory, clearFriendlyLane } from "./enemy-flight.js";
 import { startCourseAtBeginning } from "./flight-course.js";
+import { BULLET_COLOURS } from "../data/weapons.js";
 import { AI_FLIGHT } from "../data/enemy-ai.js";
 import { V, Q, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
@@ -135,10 +136,9 @@ export function updateEnemies(dt, placeId = state.place) {
           const spread = AI_FLIGHT.aimSpread;
           const dir = toFoe.normalize().add(V(R(-spread, spread), R(-spread, spread), R(-spread, spread))).normalize();
           const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
-          // Not the pilot's shot, but not a hostile's either: the renderer draws a
-          // friendly round in the pilot's own colour so a wingman's fire is never
-          // mistaken for incoming.
-          shot.ally = true;
+          // His guns are the same basic cannons the pilot flies with, so his rounds
+          // are the same orange. The renderer draws a shot in its module's colour.
+          shot.colour = BULLET_COLOURS.cannon;
           shot.place = placeId;
           shot.missionId = String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null;
           if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });

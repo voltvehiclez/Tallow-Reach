@@ -23,3 +23,12 @@ export const MISSILE_HUD = { canvas: 260, startRadius: 106, endRadius: 34 };
 
 // Shared by projectile expiry and the ballistic lead instrument.
 export const BULLET_LIFETIME = 2.4;
+
+// A round is drawn in the colour of the module that fired it. Basic cannons are
+// orange, whoever is behind them: the pilot's cannons, or a wingman flying the
+// same hull. Hostile repeaters are red. `sim/ai.js` stamps `colour` on a shot
+// that is not the pilot's own; the renderer only reads it.
+export const BULLET_COLOURS = Object.freeze({
+  cannon: 0xffc870,
+  hostile: 0xff4a35,
+});

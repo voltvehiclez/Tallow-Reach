@@ -183,7 +183,8 @@ test("the control vocabulary reads the pilot's controls, not a key name", () => 
   assert.equal(controlHeld(controls, "strafe-left"), true);
   assert.equal(controlHeld(controls, "strafe-right"), false);
   assert.equal(controlHeld(controls, "steer"), true);
-  assert.equal(controlHeld(controls, "roll-right"), true);
+  assert.equal(controlHeld(controls, "roll-left"), true, "Q (roll +1) is roll left, not roll right");
+  assert.equal(controlHeld(controls, "roll-right"), false);
   assert.equal(controlHeld(controls, "lift-up"), false);
   assert.equal(controlHeld(controls, "boost"), true);
   assert.equal(controlHeld({}, "boost"), false);

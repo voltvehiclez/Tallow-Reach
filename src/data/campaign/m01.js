@@ -217,8 +217,8 @@ export const M01_FIRST_SORTIE = mission({
       place,
       objective: "Hear Captain Dane Korr's course orders.",
       lines: [
-        "That is every control you own. Now the run: ten kilometres, and I will not be gentle.",
-        "If you fall behind, I start again. You do not get to fail this one — you get to repeat it.",
+        "That is every control you own. Now come to my wing — close, within 300 m — and we will start the run.",
+        "Ten kilometres, and I will not be gentle. If you fall behind I start again; you do not get to fail this one, you get to repeat it.",
       ],
     }),
     {
@@ -231,6 +231,10 @@ export const M01_FIRST_SORTIE = mission({
       actorRole: "lead",
       course: "m01-range",
       coursePhase: "chase",
+      // The run only starts once the pilot is back on his wing: after the control
+      // lesson a pilot may be a kilometre away, and chasing a ship already at speed
+      // is not a lesson, it is a punishment.
+      gather: 300,
       distance: 10000,
       maxGap: 1000,
       objective: "Stay with Captain Dane Korr through the ten-kilometre run.",
