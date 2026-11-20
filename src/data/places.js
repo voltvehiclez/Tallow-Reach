@@ -185,6 +185,13 @@ export const PLACE_DEFS = {
   // Korr Flight School: a compact training range with a station and ferrite rocks.
   // This place definition is shared by the campaign catalog only; open-world PLACES
   // does not register a pocket that uses it.
+  //
+  // The ten-kilometre chase course (data/flight-courses.js, `m01-range`) runs out
+  // through the range, so the ferrite field is dressed with clusters along both
+  // sides of that course. Every cluster centre sits about a kilometre off the
+  // flown line and no rock reaches much closer than 400 m to it: the run reads as
+  // a canyon of rock without putting a boulder in the leader's lap. The clusters
+  // are placed from the course itself, so moving the course means moving them.
   auric_flight_school: {
     features: [
       {
@@ -198,6 +205,59 @@ export const PLACE_DEFS = {
         focus: [700, 100, -600], pos: [0, -20, 750], radius: 1500, height: 180,
         count: 34, ore: "ferrite", respawnSec: 420, stable: true,
         rock: { rMin: 16, rMax: 58, giantChance: 0, giantMin: 120, giantMax: 200, orePerR: 1.35 },
+      },
+      // Course-side ferrite. Scenery first: a scatter field per cluster, sized so
+      // the rocks read at speed and never crowd the flown line. `coreRadius` equal
+      // to `radius` opts the cluster out of the pocket-wide diffuse-wing scaling
+      // (data/scenery.js), so the authored radius, count and clearance are what
+      // the sim actually places.
+      {
+        kind: "asteroidField", id: "chase-rocks-1", n: "Ferrite drift",
+        focus: [1186, 240, 2435], pos: [1186, 240, 2435], radius: 480, coreRadius: 480, height: 320,
+        count: 20, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 12, rMax: 60, giantChance: 0.04, giantMin: 110, giantMax: 165, orePerR: 1.3 },
+      },
+      {
+        kind: "asteroidField", id: "chase-rocks-2", n: "Ferrite drift",
+        focus: [-1504, 256, 1616], pos: [-1504, 256, 1616], radius: 420, coreRadius: 420, height: 300,
+        count: 16, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 10, rMax: 48, giantChance: 0, giantMin: 110, giantMax: 150, orePerR: 1.3 },
+      },
+      {
+        kind: "asteroidField", id: "chase-rocks-3", n: "Ferrite drift",
+        focus: [-444, 269, -667], pos: [-444, 269, -667], radius: 540, coreRadius: 540, height: 380,
+        count: 24, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 14, rMax: 72, giantChance: 0.05, giantMin: 120, giantMax: 185, orePerR: 1.3 },
+      },
+      {
+        kind: "asteroidField", id: "chase-rocks-4", n: "Ferrite drift",
+        focus: [-3039, 263, -1914], pos: [-3039, 263, -1914], radius: 480, coreRadius: 480, height: 340,
+        count: 18, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 12, rMax: 55, giantChance: 0.03, giantMin: 110, giantMax: 160, orePerR: 1.3 },
+      },
+      {
+        kind: "asteroidField", id: "chase-rocks-5", n: "Ferrite drift",
+        focus: [-2016, 264, -4142], pos: [-2016, 264, -4142], radius: 420, coreRadius: 420, height: 300,
+        count: 16, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 10, rMax: 50, giantChance: 0.04, giantMin: 110, giantMax: 150, orePerR: 1.3 },
+      },
+      {
+        kind: "asteroidField", id: "chase-rocks-6", n: "Ferrite drift",
+        focus: [-4549, 257, -4716], pos: [-4549, 257, -4716], radius: 540, coreRadius: 540, height: 380,
+        count: 22, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 14, rMax: 68, giantChance: 0.05, giantMin: 120, giantMax: 190, orePerR: 1.3 },
+      },
+      {
+        kind: "asteroidField", id: "chase-rocks-7", n: "Ferrite drift",
+        focus: [-3100, 300, -6300], pos: [-3100, 300, -6300], radius: 520, coreRadius: 520, height: 360,
+        count: 18, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 12, rMax: 60, giantChance: 0.05, giantMin: 120, giantMax: 180, orePerR: 1.3 },
+      },
+      {
+        kind: "asteroidField", id: "chase-rocks-8", n: "Ferrite drift",
+        focus: [1200, 320, 3450], pos: [1200, 320, 3450], radius: 380, coreRadius: 380, height: 260,
+        count: 12, ore: "ferrite", respawnSec: 900, stable: true,
+        rock: { rMin: 10, rMax: 42, giantChance: 0, giantMin: 110, giantMax: 150, orePerR: 1.3 },
       },
     ],
   },

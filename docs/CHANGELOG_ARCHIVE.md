@@ -5,6 +5,10 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-19: Uncharted Space HUD label and 14d exit decision
+
+Rift and simple-wormhole interiors show Uncharted Space above the pocket name. The 14d plan records that a replacement exit connects to a fresh wormhole in a random regular-space location. Named wormhole systems are planned as S0001 etc.; isolated instances now gain a visible seeded core and matching lighting using normal star/black-hole odds. No save change.
+
 ## 2026-11-18: Station UI rework, reusable left window, Inventory ship list and My Assets destination
 
 Merged PR #43 (Slices 1–3, save v24) to `main`, then implemented the 11-item station UI

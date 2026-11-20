@@ -139,8 +139,9 @@ Every failure (death, `left-sector`, `timeout`, `lost-item`) always carries a me
 - Spawns anchored on a map feature (`feature`) can appear next to the pilot; the linter warns on them.
 - A mission timeout fails silently unless the player can see the clock; the linter warns on it.
 - Escort and protect-a-ship objectives are not supported yet. Do not fake them; extend the framework first.
-- **Campaign acts** add `control`/`chase` steps, optional bonus objectives, checkpoints and story actors. They only apply to
-  campaign data; see [architecture/campaign-acts.md](architecture/campaign-acts.md).
+- **Campaign acts** add `control`/`chase` steps, optional bonuses, checkpoints and story actors: a control holds for `hold`
+  seconds (default **1**, drawn as a HUD percentage bar) and a `stay-within` bonus shows a live distance chip. Campaign data
+  only; see [architecture/campaign-acts.md](architecture/campaign-acts.md).
 - Station storage is per station and there is no way to move cargo between stations yet. A mission handed in at station B
   counts only B's storage and the ship's hold, so goods left at station A do not count; the mission waits and says how many
   are still owed. Add a transfer feature rather than making a mission pay from another station's stock.

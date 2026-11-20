@@ -186,6 +186,13 @@ export function restoreMissionDrops(placeId = state.place) {
  * Spawn a bullet. Player bullets inherit the ship's velocity. Returns the new
  * record; its mesh is the view's business (step 7b).
  */
+/**
+ * Does this round belong to the pilot's side? The pilot's own shots say `own`;
+ * a wingman's shots say `ally` (src/sim/ai.js). The renderer draws both in the
+ * pilot's colour, so friendly fire is never mistaken for incoming.
+ */
+export const friendlyShot = shot => Boolean(shot && (shot.own === true || shot.ally === true));
+
 export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place, missionId = null) {
   // `p` may be a plain `{ x, y, z }` (the tests pass one) or a maths vector.
   const at = V(p.x, p.y, p.z);

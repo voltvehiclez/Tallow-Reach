@@ -175,7 +175,8 @@ test("M01 can be played from acceptance to the reward hand-in through mission ev
   // The control lesson: Korr calls each control, the pilot performs it.
   const lesson = [
     ["brief-throttle", "learn-throttle", "throttle-forward"],
-    [null, "learn-throttle-back", "throttle-back"],
+    ["brief-brake", "learn-brake", "brake"],
+    ["brief-reverse", "learn-throttle-back", "throttle-back"],
     ["brief-steer", "learn-steer", "steer"],
     ["brief-strafe", "learn-strafe-left", "strafe-left"],
     [null, "learn-strafe-right", "strafe-right"],
@@ -189,12 +190,14 @@ test("M01 can be played from acceptance to the reward hand-in through mission ev
     if (brief) talk();
     learn(id, control);
   }
-  // Staying with him through the lesson earns the bonus.
-  assert.deepEqual(missionOptionalRows(mission).map(row => [row.id, row.done]), [["stay-with-korr", true]]);
+  // The bonus is still open during the lesson; the run decides it.
+  assert.deepEqual(missionOptionalRows(mission).map(row => [row.id, row.done]), [["stay-with-korr", false]]);
 
   talk();                         // chase orders
   assert.equal(mission.steps[mission.step].id, "chase");
   advanceMission(mission, "mission-chase-complete", { step: "chase", player: P }, state.profile);
+  // Staying with him through the ten-kilometre run earns the bonus.
+  assert.deepEqual(missionOptionalRows(mission).map(row => [row.id, row.done]), [["stay-with-korr", true]]);
 
   talk();                         // gunnery orders
   tick(0);                        // drones spawn
@@ -245,6 +248,9 @@ test("reloading mid-sortie re-arms the wave deficit instead of stranding the pil
   tick(0);
   talk();                      // throttle orders
   learn("learn-throttle", "throttle-forward");
+  talk();                      // brake orders
+  learn("learn-brake", "brake");
+  talk();                      // reverse orders
   learn("learn-throttle-back", "throttle-back");
   talk();                      // steering
   learn("learn-steer", "steer");

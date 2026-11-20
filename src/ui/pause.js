@@ -41,6 +41,9 @@ export function setupPause() {
 function exitToMainMenu() {
   saveCurrentGame();
   state.ui.intro = true;
+  // The title, not the campaign screen: the pilot asked for the main menu.
+  state.ui.campaign = false;
+  state.ui.campaignChapter = null;
   resetStationPanels(state.ui);
   hideNotice();
   setPause(false);

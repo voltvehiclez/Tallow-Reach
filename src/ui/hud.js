@@ -18,7 +18,8 @@ import { camera } from "../render/scene.js";
 import { interpolatedPos, interpolatedVelocity, renderPlayerPose } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
-import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
+import { activeMissions, missionBonusStatus, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
+import { isCampaignMissionId } from "../sim/campaign.js";
 import { pruneLock, lockPosition, lockName, targetHealth, isPocketRowLocked } from "../sim/targeting.js";
 import { fieldMarkerPosition } from "../sim/asteroids.js";
 import { stationAt } from "../sim/places.js";
@@ -109,6 +110,13 @@ export function setupHud() {
     boost: $("b3"),
     boostVal: $("boost-val"),
     route: $("hud-route"),
+    campaignTracker: $("campaign-tracker"),
+    campaignTitle: $("campaign-tracker-title"),
+    campaignObjective: $("campaign-tracker-objective"),
+    campaignHold: $("campaign-hold"),
+    campaignHoldFill: $("campaign-hold-fill"),
+    campaignHoldPct: $("campaign-hold-pct"),
+    campaignHoldLabel: $("campaign-hold-label"),
     shieldVal: $("sh-val"),
     hullVal: $("hull-val"),
     topRight: $("tr"),
@@ -263,8 +271,16 @@ const escHud = value => String(value ?? "").replace(/[&<>\"']/g, c => ({
   "'": "&#39;",
 }[c]));
 
-function missionsHtml(missions) {
-  if (!missions.length) return `<span style="color:var(--amber)">No active missions</span>`;
+/**
+ * Campaign acts are shown in the top-left tracker instead of this list: an act has
+ * one live objective, and the same sentence in two corners would only compete with
+ * itself. The open world keeps the full list.
+ */
+function missionsHtml(allMissions) {
+  const missions = allMissions.filter(mission => !isCampaignMissionId(mission.id));
+  if (!missions.length) {
+    return allMissions.length ? "" : `<span style="color:var(--amber)">No active missions</span>`;
+  }
   return `<div class="hud-missions" aria-label="Active missions">${missions.map(mission => {
     const progress = mission.type === "hunt" ? missionProgress(mission) : null;
     // A recovery contract counts its own crates: "2 out of 3 crates recovered"
@@ -285,6 +301,51 @@ const clockText = seconds => {
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
+
+let trackerCache = "";
+
+/** The act's objective, plus the live hold bar while a control lesson is running. */
+function updateCampaignTracker(mission) {
+  const root = el.campaignTracker;
+  if (!root) return;
+  if (!mission || state.ui.intro) {
+    root.hidden = true;
+    el.campaignHold.hidden = true;
+    trackerCache = "";
+    return;
+  }
+  root.hidden = false;
+  const objective = missionNextText(mission);
+  const key = `${mission.id}|${mission.step}|${objective}`;
+  if (trackerCache !== key) {
+    trackerCache = key;
+    if (el.campaignTitle) el.campaignTitle.textContent = missionDescription(mission) || "Campaign";
+    if (el.campaignObjective) el.campaignObjective.textContent = objective;
+  }
+  const hold = state.ui.controlHold;
+  const live = hold && hold.mission === mission.id;
+  el.campaignHold.hidden = !live;
+  if (live) {
+    const percent = Math.round(Math.max(0, Math.min(1, hold.fraction || 0)) * 100);
+    el.campaignHoldFill.style.width = `${percent}%`;
+    el.campaignHoldPct.textContent = `${percent}%`;
+    el.campaignHoldLabel.textContent = hold.label || "";
+  }
+}
+
+/**
+ * The optional bonus while it is still winnable. During the chase the sim reports
+ * the live distance, so the chip reads as a number the pilot can act on, not a
+ * rule they have to remember.
+ */
+function bonusChipHtml(mission) {
+  if (!mission) return "";
+  const status = missionBonusStatus(mission, state.ui.followDistance);
+  if (!status) return "";
+  const distance = status.metres == null ? "" : ` · ${status.metres} m`;
+  return `<div class="hud-bonus${status.over ? " is-over" : ""}" aria-label="Bonus objective">` +
+    `<strong>Bonus</strong> ${escHud(status.objective)}${escHud(distance)}</div>`;
+}
 
 /**
  * The instance block (step 14): what this run asks for, how long it has left, and whether the way
@@ -352,8 +413,13 @@ export function updateHud(dt) {
   const location = locationText(state.place);
   el.systemName.textContent = location.system;
   el.pocketName.textContent = location.pocket;
+  const campaignMission = state.mode === "campaign"
+    ? missions.find(mission => isCampaignMissionId(mission.id)) || null
+    : null;
+  updateCampaignTracker(campaignMission);
   el.topRight.innerHTML =
     instanceHtml(instanceAt(state.place)) +
+    bonusChipHtml(campaignMission) +
     `${S.cr} cr<br>Hold ${holdLoad()}/${d.cargo} m³<br>` +
     missionsHtml(missions);
 

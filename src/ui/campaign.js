@@ -1,7 +1,8 @@
-// The campaign's own screens: the chapter/act list on the title screen, and the
-// full-screen cards that end an act. An act is not a job, so nothing here accepts,
-// abandons or hands anything in: the act starts, the act ends, and the campaign
-// menu is where the pilot belongs between acts.
+// The campaign's own screens: the chapter boxes on the title screen's left window,
+// the header in its right panel, and the full-screen cards that end an act. An act
+// is not a job, so nothing here accepts, abandons or hands anything in: the act
+// starts, the act ends, and the campaign menu is where the pilot belongs between
+// acts.
 
 import { state, saveCurrentGame } from "../state/state.js";
 import { CAMPAIGN_CHAPTERS } from "../data/campaign/index.js";
@@ -26,48 +27,135 @@ function actStatus(row) {
   return "Locked";
 }
 
-function actButton(row) {
-  if (row.locked) return `<button disabled>Locked</button>`;
-  const label = row.active ? "Resume" : row.complete ? "Replay" : "Begin";
-  return `<button data-a="campaignAct" data-b="${esc(row.act.id)}">${label}</button>`;
+function actActionLabel(row) {
+  return row.active ? "Resume" : row.complete ? "Replay" : "Begin";
 }
 
-/** Pure HTML for the campaign screen shown on the title. */
+/* ---- chapter boxes -------------------------------------------------------- */
+// The campaign screen is a set of large boxes on the left-hand window, not a
+// list of headings: one box per chapter, and a chapter opens into its acts.
+// Future chapters and acts are drawn locked, so the shape of the campaign is
+// visible before it is written.
+
+/** "Chapter 1: Auric Reach" reads as kicker "Chapter 1", title "Auric Reach". */
+function splitName(name = "") {
+  const at = String(name).indexOf(": ");
+  return at < 0
+    ? { kicker: "", title: String(name) }
+    : { kicker: String(name).slice(0, at), title: String(name).slice(at + 2) };
+}
+
+function chapterRows(profile) {
+  const rows = campaignRows(profile);
+  return CAMPAIGN_CHAPTERS.map(chapter => {
+    const acts = rows.filter(row => row.act.chapterId === chapter.id);
+    const playable = acts.length;
+    const done = acts.filter(row => row.complete).length;
+    const open = !chapter.planned && playable > 0;
+    const active = acts.some(row => row.active);
+    return { chapter, acts, playable, done, open, active };
+  });
+}
+
+function chapterBox(row) {
+  const { chapter } = row;
+  const { kicker, title } = splitName(chapter.n);
+  const status = row.active ? "In progress" : !row.open ? "Locked · coming later" : row.done === row.playable ? "Completed" : "Open";
+  const counts = row.open
+    ? `${row.done} of ${row.playable} act${row.playable === 1 ? "" : "s"} complete`
+    : `${chapter.acts.length} act${chapter.acts.length === 1 ? "" : "s"} planned`;
+  return (
+    `<button type="button" class="campaign-box campaign-chapter-box${row.open ? "" : " is-locked"}${row.active ? " is-active" : ""}" ` +
+    `data-a="campaignChapter" data-b="${esc(chapter.id)}" aria-label="${esc(chapter.n)}">` +
+    `<span class="campaign-box-kicker">${esc(kicker || "Chapter")}</span>` +
+    `<strong class="campaign-box-title">${esc(title)}</strong>` +
+    `<span class="campaign-box-note">${esc(chapter.d || "")}</span>` +
+    `<span class="campaign-box-meta">${esc(counts)} · ${esc(status)}</span>` +
+    `</button>`
+  );
+}
+
+function actBox(row) {
+  const { kicker, title } = splitName(row.act.n);
+  const meta = [actStatus(row), row.mission?.rewards?.credits ? `${Math.max(0, Math.floor(+row.mission.rewards.credits))} cr` : ""]
+    .filter(Boolean).join(" · ");
+  const body =
+    `<span class="campaign-box-kicker">${esc(kicker || "Act")}</span>` +
+    `<strong class="campaign-box-title">${esc(title)}</strong>` +
+    `<span class="campaign-box-note">${esc(row.act.d || "")}</span>` +
+    `<span class="campaign-box-meta">${esc(meta)}</span>`;
+  if (row.locked) {
+    return `<button type="button" class="campaign-box campaign-act-box is-locked" disabled aria-label="${esc(row.act.n)}">${body}<span class="campaign-box-action">Locked</span></button>`;
+  }
+  return (
+    `<button type="button" class="campaign-box campaign-act-box${row.active ? " is-active" : ""}" ` +
+    `data-a="campaignAct" data-b="${esc(row.act.id)}" aria-label="${esc(row.act.n)}">` +
+    body +
+    `<span class="campaign-box-action">${actActionLabel(row)}</span>` +
+    `</button>`
+  );
+}
+
+function plannedBox(act) {
+  const { kicker, title } = splitName(act.n);
+  return (
+    `<button type="button" class="campaign-box campaign-act-box is-locked" disabled aria-label="${esc(act.n)}">` +
+    `<span class="campaign-box-kicker">${esc(kicker || "Act")}</span>` +
+    `<strong class="campaign-box-title">${esc(title)}</strong>` +
+    `<span class="campaign-box-note">${esc(act.d || "")}</span>` +
+    `<span class="campaign-box-meta">Planned · not written yet</span>` +
+    `<span class="campaign-box-action">Locked</span>` +
+    `</button>`
+  );
+}
+
+/**
+ * The big left-hand window: chapter boxes, or one chapter's act boxes once a
+ * chapter is chosen. Pure HTML, so the campaign screen can be tested without a DOM.
+ */
+export function campaignMenuHtml(profile = state.profile, ui = state.ui) {
+  const rows = chapterRows(profile);
+  const openId = ui?.campaignChapter || null;
+  if (!openId) {
+    return (
+      `<h2>Chapters</h2>` +
+      `<p class="campaign-lead">Choose a chapter. Its acts open here.</p>` +
+      `<div class="campaign-boxes">${rows.map(chapterBox).join("")}</div>`
+    );
+  }
+  const picked = rows.find(row => row.chapter.id === openId) || null;
+  if (!picked) {
+    return (
+      `<h2>Chapters</h2>` +
+      `<div class="campaign-boxes">${rows.map(chapterBox).join("")}</div>`
+    );
+  }
+  const { chapter } = picked;
+  const acts = picked.acts.map(actBox);
+  const planned = chapter.acts.filter(act => !act.mission).map(plannedBox);
+  const progress = picked.open
+    ? `${picked.done} of ${picked.playable} act${picked.playable === 1 ? "" : "s"} complete`
+    : "Locked";
+  return (
+    `<div class="campaign-chapter-head">` +
+    `<button type="button" class="campaign-back" data-a="campaignChapters">← All chapters</button>` +
+    `<h2>${esc(chapter.n)}</h2>` +
+    `<p class="campaign-lead">${esc(chapter.d || "")} <span class="campaign-progress">${esc(progress)}</span></p>` +
+    `</div>` +
+    `<div class="campaign-boxes campaign-act-boxes">${acts.join("")}${planned.join("")}</div>`
+  );
+}
+
+/** The narrow right-hand panel on the title: the campaign's own header. */
 export function campaignScreenHtml(profile = state.profile) {
   const rows = campaignRows(profile);
-  const byId = new Map(rows.map(row => [row.act.chapterId, []]));
-  for (const row of rows) {
-    if (!byId.has(row.act.chapterId)) byId.set(row.act.chapterId, []);
-    byId.get(row.act.chapterId).push(row);
-  }
-  const chapters = CAMPAIGN_CHAPTERS.map(chapter => {
-    const acts = byId.get(chapter.id) || [];
-    const done = acts.filter(row => row.complete).length;
-    const body = acts.length
-      ? acts.map(row => {
-          const meta = [actStatus(row), row.mission?.rewards?.credits ? `${Math.max(0, Math.floor(+row.mission.rewards.credits))} cr` : ""]
-            .filter(Boolean).join(" · ");
-          return (
-            `<div class="row campaign-act${row.locked ? " is-locked" : ""}${row.active ? " is-active" : ""}">` +
-            `<div><strong>${esc(row.act.n)}</strong><small>${esc(row.act.d || "")}</small><small class="campaign-act-meta">${esc(meta)}</small></div>` +
-            actButton(row) +
-            `</div>`
-          );
-        }).join("")
-      : `<p>More acts are being written.</p>`;
-    return (
-      `<section class="campaign-chapter">` +
-      `<h2>${esc(chapter.n)}</h2>` +
-      `<p class="campaign-chapter-note">${esc(chapter.d || "")}</p>` +
-      `<p class="campaign-progress">${done} of ${acts.length} act${acts.length === 1 ? "" : "s"} complete</p>` +
-      body +
-      `</section>`
-    );
-  }).join("");
+  const done = rows.filter(row => row.complete).length;
+  const open = chapterRows(profile).filter(row => row.open).length;
   return (
     `<h1>Campaign</h1>` +
     `<div class="sub">Pick up the story where you left it. An act starts when you choose it and ends back here.</div>` +
-    `<div class="campaign-chapters">${chapters}</div>` +
+    `<p class="campaign-progress">${done} of ${rows.length} act${rows.length === 1 ? "" : "s"} complete · ${open} chapter${open === 1 ? "" : "s"} open</p>` +
+    `<p class="campaign-side-note">Chapters are on the left. A chapter opens into its acts; future acts are already marked, so you can see where the story is going.</p>` +
     `<div class="main-menu-actions"><button class="go" data-a="campaignBack">Back</button></div>`
   );
 }
@@ -114,12 +202,19 @@ export function showCampaignMenu({ save = true } = {}) {
   if (save && !state.ui.intro) saveCurrentGame();
   state.ui.intro = true;
   state.ui.campaign = true;
+  // The screen opens on the chapter boxes, never inside a chapter the pilot last
+  // looked at (that decision belonged to the previous visit).
+  state.ui.campaignChapter = null;
   emit("main-menu", {});
 }
 
 /** Shown by the campaign screen's action when a completed act is finished. */
 export function campaignMenuBack() {
+  // Nothing of the act's screen belongs to the title: drop the card if it is still
+  // up and open on the chapter boxes next time.
+  hideEnd();
   state.ui.campaign = false;
+  state.ui.campaignChapter = null;
   state.ui.intro = true;
   emit("main-menu", {});
 }
@@ -148,6 +243,12 @@ export function setupCampaign() {
     showCampaignMenu();
   });
   document.body.appendChild(endRoot);
+
+  // Leaving the act by any other route — the pause card's Exit to main menu, a
+  // mode switch, a load — must take the end card with it. It is a fixed overlay
+  // that covers the whole screen, so a card left behind reads as a blank menu
+  // with no UI at all (the Act 1 completion report).
+  on("main-menu", () => hideEnd());
 
   on("campaign-act-completed", ({ mission, reward } = {}) => {
     if (state.mode !== "campaign") return;
