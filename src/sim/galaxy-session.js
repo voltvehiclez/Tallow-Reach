@@ -7,7 +7,7 @@ import { GALAXY } from "../data/galaxy.js";
 import { CAMPAIGN_GALAXY, CAMPAIGN_GALAXY_SEED, CAMPAIGN_HOME_POCKET } from "../data/campaign/galaxy.js";
 import { DEFAULT_PLACE, setPlaceCatalog, registerWormholePlace } from "../data/places.js";
 import { state, clearWormholes, isDualModeSave, currentRootSave, applySave } from "../state/state.js";
-import { sanitizeSave, newModeSave, syncSharedPilot, SAVE_VERSION } from "../state/profile.js";
+import { sanitizeSave, newModeSave, separateCampaignPilot, SAVE_VERSION } from "../state/profile.js";
 import { generateGalaxy, recordSystemVisit } from "./galaxy.js";
 import { installUncharted } from "./uncharted.js";
 import { registerWormholePlaces } from "./wormholes.js";
@@ -97,11 +97,16 @@ export function prepareGalaxySave(raw) {
   // created lazily on the next dual-mode save/reset, keeping this entry point
   // compatible with callers that expect one active nested save.
   if (!isDualModeSave(raw)) return prepareModeSave(raw, "open");
+  // v27 ends pilot sharing: an act has its own pilot, fleet and credits. A v26
+  // save was written while the two halves shared one pilot, so its campaign side
+  // is rebuilt as a fresh campaign pilot. What the pilot *finished* is kept.
+  if ((Number.isFinite(raw.v) ? raw.v : 0) < 27 && raw.campaign && typeof raw.campaign === "object") {
+    raw = { ...raw, campaign: { ...raw.campaign, profile: separateCampaignPilot(raw.campaign.profile) }, v: SAVE_VERSION };
+  }
   const clean = { v: SAVE_VERSION, mode: raw.mode === "campaign" ? "campaign" : "open", open: null, campaign: null };
   const active = clean.mode, inactive = active === "open" ? "campaign" : "open";
   clean[inactive] = prepareModeSave(raw[inactive] && typeof raw[inactive] === "object" ? raw[inactive] : newModeSave(inactive), inactive);
   clean[active] = prepareModeSave(raw[active] && typeof raw[active] === "object" ? raw[active] : newModeSave(active), active);
-  syncSharedPilot(clean[inactive].profile, clean[active].profile);
   return clean;
 }
 

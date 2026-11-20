@@ -1,4 +1,4 @@
-import { sanitizeSave, newCampaignSave, syncSharedPilot, SAVE_VERSION } from "./profile.js";
+import { sanitizeSave, newCampaignSave, SAVE_VERSION } from "./profile.js";
 
 const AUTOSAVE_KEY = "tr1";
 
@@ -15,8 +15,9 @@ function cleanRootSave(raw) {
  * storage layer with a pre-v26 record. */
 function rootFromNestedSave(save) {
   const open = sanitizeSave(save);
+  // The campaign is its own pilot and world; wrapping an open-world save must
+  // never copy that pilot into it.
   const campaign = newCampaignSave();
-  syncSharedPilot(campaign.profile, open.profile);
   return { v: SAVE_VERSION, mode: "open", open, campaign };
 }
 const saveForDisk = save => isRootSave(save) ? cleanRootSave(save) : rootFromNestedSave(save);

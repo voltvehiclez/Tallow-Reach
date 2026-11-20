@@ -8,6 +8,7 @@
 // place instead of being a `!docked` condition copied into every key handler.
 
 import { state, localPlayer } from "../state/state.js";
+import { activeCampaignMission } from "../sim/campaign.js";
 
 /** Can the pause overlay open? Everywhere in the open world, docked or flying. */
 export const canPause = (ui = state.ui) => !ui.intro;
@@ -27,12 +28,17 @@ export function canOpenStarmap(P = localPlayer(), ui = state.ui, galaxy = state.
  * at the top and the bottom of the card with the settings between them.
  */
 export function pauseOverlayHtml() {
+  // A campaign act's escape hatch: back to the top of the act, clean. It stays in
+  // the markup and pause.js hides it, because the overlay is built before any act
+  // is running.
+  const act = state.mode === "campaign" ? activeCampaignMission() : null;
   return (
     `<div>` +
     `<h1>Paused</h1>` +
     `<p>P or Esc to resume</p>` +
     `<button id="pz-resume">Resume</button>` +
     `<button class="sw" id="pz-sound" role="switch"><i></i><span></span></button>` +
+    `<button id="pz-restart-act"${act ? "" : " hidden"}>Restart act</button>` +
     `<button id="pz-main-menu">Exit to main menu</button>` +
     `</div>`
   );

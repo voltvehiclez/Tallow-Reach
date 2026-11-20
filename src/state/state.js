@@ -3,7 +3,7 @@
 // packed together as `{ v, profile, world }` (see profile.js). Everything else
 // is rebuilt on load.
 
-import { newProfile, newWorld, newSave, newCampaignSave, newModeSave, syncSharedPilot, SAVE_VERSION } from "./profile.js";
+import { newProfile, newWorld, newSave, newCampaignSave, newModeSave, SAVE_VERSION } from "./profile.js";
 import { saveAutosave } from "./storage.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
@@ -223,7 +223,8 @@ export function currentRootSave() {
   modes[other] = modes[other] && typeof modes[other] === "object" ? modes[other] : freshModeSave(other);
   modes[mode] = cloneModeSave(modes[mode]);
   modes[other] = cloneModeSave(modes[other]);
-  syncSharedPilot(modes[other].profile, modes[mode].profile);
+  // Each mode owns its pilot. The open world's fleet, credits and cargo do not
+  // travel into a campaign act, and an act's rewards do not leak back.
   state.savedModes = { open: modes.open, campaign: modes.campaign };
   return { v: SAVE_VERSION, mode, open: modes.open, campaign: modes.campaign };
 }
@@ -246,7 +247,6 @@ export function resetCurrentModeSave() {
   const root = currentRootSave();
   const fresh = freshModeSave(mode);
   fresh.profile.v = SAVE_VERSION;
-  syncSharedPilot(fresh.profile, root[mode].profile);
   root[mode] = fresh;
   root.mode = mode;
   return root;
@@ -281,9 +281,8 @@ export function applySave(save) {
   if (isDualModeSave(save)) {
     const mode = save.mode === "campaign" ? "campaign" : "open";
     const other = mode === "open" ? "campaign" : "open";
-    // The active half is authoritative for the shared pilot; the inactive half keeps its own world.
+    // The two halves are independent saves: each keeps its own pilot and world.
     save = { ...save, open: cloneModeSave(save.open), campaign: cloneModeSave(save.campaign) };
-    syncSharedPilot(save[other].profile, save[mode].profile);
     state.mode = mode;
     state.savedModes = { open: save.open, campaign: save.campaign };
     return installNestedSave(save[mode]);
@@ -374,6 +373,8 @@ export const state = {
 
   ui: {
     intro: true,
+    campaign: false,   // the campaign chapter screen on the title (session only)
+    campaignEnd: null, // "accomplished" | "failed" while an act's end card stops the world
     navigation: false, // the in-flight N pocket-object list; false while closed
     starmap: null,     // active chart; null while closed
     cargo: null,       // the in-flight ship inventory; null while closed

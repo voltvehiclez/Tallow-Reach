@@ -26,7 +26,9 @@ import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
-import { setupMissionLog } from "./ui/missionlog.js";
+import { setupMissionLog, updateDialogueClock } from "./ui/missionlog.js";
+import { setupCampaign } from "./ui/campaign.js";
+import "./sim/campaign-flight.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
 import { setupCargo, openCargo, closeCargo, dismissCargoLayer, isCargoOpen, canOpenCargo } from "./ui/cargo.js";
 import { setupCache, closeCache, dismissCacheLayer, isCacheOpen } from "./ui/cache.js";
@@ -101,6 +103,7 @@ installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, 
 setupWarpFlash();
 setupPause();
 setupMissionLog();
+setupCampaign();
 setupStarmap();
 setupCargo();
 setupCache();
@@ -261,6 +264,10 @@ const simClock = createSimClock(undefined, {
 function drawFrame(now) {
   const dt = Math.min(MAX_FRAME_DT, (now - last) / 1000);
   last = now;
+
+  // Dialogue lines read themselves out on their own clock, even while the
+  // dialogue's own pause holds the world still.
+  updateDialogueClock(dt);
 
   // The title screen has its own cinematic scene (the station turning with its
   // planet behind it), so it never shows the last game view; nothing simulates

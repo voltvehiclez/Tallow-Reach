@@ -62,7 +62,11 @@ test("every shop row is complete, and names a real item or ship", () => {
   for (const [id, shop] of Object.entries(SHOPS)) {
     assert.equal(typeof shop.n, "string", `${id}: n (the heading)`);
     assert.equal(typeof shop.d, "string", `${id}: d (the line under it)`);
-    assert.ok(Array.isArray(shop.stock) && shop.stock.length > 0, `${id}: stock must list rows`);
+    assert.ok(Array.isArray(shop.stock), `${id}: stock must be a list of rows`);
+    // A shop may be deliberately empty (Korr Flight School); every other shop
+    // must actually sell something.
+    if (id === "school") assert.equal(shop.stock.length, 0, "the flight school sells nothing");
+    else assert.ok(shop.stock.length > 0, `${id}: stock must list rows`);
     for (const row of shop.stock) {
       const where = `${id} / ${row.id}`;
       if (shopRowKind(row) === "ship") {
@@ -242,7 +246,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 26, "Step 13 mission progress is now part of the save");
+  assert.equal(p.v, 27, "Step 13 mission progress is now part of the save");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {

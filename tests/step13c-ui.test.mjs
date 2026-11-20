@@ -32,7 +32,8 @@ test("13c: the dialogue panel renders a portrait slot, speaker, data text and ch
   const beacon = storyMission();
   beacon.step = 9;
   const inField = dialogueHtml(beacon, { blocked: true });
-  assert.match(inField, /data-dialogue-next/, "an in-field beacon dialogue remains actionable while flying");
+  assert.doesNotMatch(inField, /data-dialogue-next/, "a line said in space is not clicked past: it runs on its reading clock");
+  assert.match(inField, /data-dialogue-auto/, "and it says the line is running itself");
   assert.doesNotMatch(inField, /Redock to continue talking\./, "only station-contact dialogue is dock-gated");
   assert.equal(missionDialogue(mission).pause, false, "dialogue does not pause unless mission data asks it to");
 

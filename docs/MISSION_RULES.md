@@ -1,6 +1,6 @@
 # MISSION RULES: read before writing or changing any mission, dialogue or trigger
 
-*Last checked: 2026-11-19.*
+*Last checked: 2026-11-20.*
 
 Missions are a story the player is living in. Every beat must pass one test:
 
@@ -85,8 +85,7 @@ silently moving it to Meridian — a typo must fail loudly, not turn one station
 
 **Station conversations happen at their station.** A dialogue step that needs docking (`requiresDock: true`) is a
 counter conversation, so it is played only while docked at the station that gives the mission out
-(`missionAtItsStation`): docked elsewhere the card is read-only and says "Return to Meridian Station to continue
-talking.", and the runner refuses the click. In-field dialogue (`requiresDock: false`, such as the beacon hand-off)
+(`missionAtItsStation`): docked elsewhere the card is read-only and the runner refuses the click. In-field dialogue (`requiresDock: false`, such as the beacon hand-off)
 stays playable wherever the pilot is.
 
 **Death and missions.** Death is punishment enough: the ship and its hold are already lost. So **dying does not fail a
@@ -94,13 +93,10 @@ mission by default.** A mission fails on death in only two cases, and both show 
 notice in the HUD (and on the docked screen) saying why:
 1. **The mission asks for it.** Its data declares `fails: { on: ["player-dead"], action: "abandon", message: "..." }`
    (for example the Ambush run test mission). Do this only when failing on death is part of the story.
-2. **A mission-only item was aboard.** An item of category `mission` (a parcel, a beacon) cannot be found again once the hold
-   is lost, so the framework fails the mission itself, with the message "Your ship was destroyed and the X it carried was
-   lost." This includes a mission whose objectives are finished but whose hand-in has not happened: the beacon is gone, so
-   the mission can never be accomplished. Authors declare nothing for this. A mission item that is still in a crate in
-   space, or in the station, is not lost and the mission carries on. Ordinary goods (ore, salvage) can be mined again, so
-   those missions also carry on — as does a mission-only item that exists nowhere else (the runner fails it as
-   "lost-item" instead of leaving it waiting forever).
+2. **A mission-only item was aboard** (`cat: "mission"`): it cannot be found again once the hold is lost, so the framework
+   fails the mission itself ("Your ship was destroyed and the X it carried was lost."). This covers a finished mission whose
+   hand-in has not happened. An item still in a crate or at the station is not lost, and ordinary goods can be mined again,
+   so those missions carry on; an item that exists nowhere else fails as "lost-item" instead of waiting forever.
 
 Every failure (death, `left-sector`, `timeout`, `lost-item`) always carries a message. Only the pilot abandoning a mission shows no notice.
 
@@ -143,6 +139,8 @@ Every failure (death, `left-sector`, `timeout`, `lost-item`) always carries a me
 - Spawns anchored on a map feature (`feature`) can appear next to the pilot; the linter warns on them.
 - A mission timeout fails silently unless the player can see the clock; the linter warns on it.
 - Escort and protect-a-ship objectives are not supported yet. Do not fake them; extend the framework first.
+- **Campaign acts** add `control`/`chase` steps, optional bonus objectives, checkpoints and story actors. They only apply to
+  campaign data; see [architecture/campaign-acts.md](architecture/campaign-acts.md).
 - Station storage is per station and there is no way to move cargo between stations yet. A mission handed in at station B
   counts only B's storage and the ship's hold, so goods left at station A do not count; the mission waits and says how many
   are still owed. Add a transfer feature rather than making a mission pay from another station's stock.

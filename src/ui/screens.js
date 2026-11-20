@@ -31,6 +31,7 @@ import {
   boardRefreshRemaining,
   formatBoardCooldown,
 } from "../sim/contracts.js";
+import { launchBlockedReason } from "../sim/missions.js";
 import { DEFAULT_PLACE } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { stationAt } from "../sim/places.js";
@@ -129,7 +130,9 @@ export function outpostHtml(ui = state.ui) {
       ? "Click to set as your home station and recover here after death."
       : "Cannot set a home station here.";
   const homeAria = `${homeHead}: ${homeBody}`;
-  const homeBtn =
+  // The campaign is not the pilot's home: there is no choosing a home station
+  // while an act is running, so the control is simply absent there.
+  const homeBtn = state.mode === "campaign" ? "" :
     `<div class="home-ctl${isHome ? " is-home" : ""}${!canHome ? " is-unavailable" : ""}">` +
     `<button type="button" class="home-icon-btn${isHome ? " is-home" : ""}${!canHome ? " is-unavailable" : ""}" ` +
     `data-a="home" aria-pressed="${isHome}" aria-label="${esc(homeAria)}">` +
@@ -145,7 +148,10 @@ export function outpostHtml(ui = state.ui) {
 
   const local = localShips(S, state.worldState);
   const own = local.includes(S.ship);
-  h += `<button class="go" data-a="go" ${own ? "" : "disabled"}>${own ? "Launch" : "Buy a ship in the Shop to launch"}</button>`;
+  // A station conversation is not skippable: no Launch until it is finished.
+  const talk = launchBlockedReason(S, state.place);
+  const canLaunch = own && !talk;
+  h += `<button class="go" data-a="go" ${canLaunch ? "" : "disabled"}>${talk ? "Finish the conversation first" : own ? "Launch" : "Buy a ship in the Shop to launch"}</button>`;
   return h;
 }
 
@@ -587,7 +593,7 @@ export function shopHtml(ui = state.ui) {
 
   return (
     `<h2>${esc(def.n)}</h2><div class="sub">${esc(def.d)}</div>` +
-    `<ul class="shop-tree" aria-label="Shop catalogue">${tree}</ul>`
+    (tree ? `<ul class="shop-tree" aria-label="Shop catalogue">${tree}</ul>` : `<p>The shelves are empty.</p>`)
   );
 }
 

@@ -5,6 +5,7 @@
 import { WARP, WARP_SWITCH_AT, WARP_TIME, warpFlashAt } from "../data/sectors.js";
 import { PLACES, PLACE_LINKS, placeAt, nextPocket } from "../data/places.js";
 import { travelQuote } from "./travel.js";
+import { campaignTravelRefusal } from "./campaign.js";
 import { emit } from "../util/events.js";
 import { state, localPlayer, profileOf, msg, say, currentSave, saveCurrentGame } from "../state/state.js";
 import { clearWorldObjects } from "./world.js";
@@ -20,6 +21,14 @@ export const isWarping = (player = localPlayer()) => !!(player && player.warp);
 export function startWarp(player = localPlayer(), to = null) {
   const P = player;
   if (!P || P.warp || P.docked || P.dead) return false;
+  // A campaign act owns the pocket it plays in: no jump key, no map warp and no
+  // route can take the pilot out unless the act itself allows it.
+  const refusal = campaignTravelRefusal(profileOf(P));
+  if (refusal) {
+    if (P === localPlayer()) msg(refusal, 4);
+    emit("travel-denied", { player: P, reason: refusal });
+    return false;
+  }
   const from = P.place || state.place;
   to = to || nextPocket(from);
   // Direct legacy callers (old tests/tools) have no resolved session galaxy.

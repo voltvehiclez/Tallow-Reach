@@ -189,6 +189,20 @@ export function missionOfferStation(definition, fallback = DEFAULT_PLACE) {
  * Archivist's briefing while docked at Galereach would be a conversation in two
  * places at once. Missions that name no station are never held back.
  */
+/** Why the pilot may not undock from this station yet, or "" when they may.
+ * A station conversation belongs to the counter that gives the mission out, so
+ * the ship stays on the pad until the last line is answered. */
+export function launchBlockedReason(profile = state.profile, placeId = state.place) {
+  for (const mission of missionsOf(profile)) {
+    if (isMissionFailed(mission)) continue;
+    const step = missionStep(mission);
+    if (!step || step.kind !== "dialogue" || step.requiresDock !== true) continue;
+    if (missionOfferStation(mission) !== placeId) continue;
+    return `Finish your conversation with ${step.speaker || "the mission contact"} before launching.`;
+  }
+  return "";
+}
+
 export function missionAtItsStation(mission, placeId = state.place) {
   const station = missionOfferStation(mission);
   return !station || !placeId || station === placeId;
@@ -492,13 +506,131 @@ function markObjectivesDone(mission, payload = {}) {
   return true;
 }
 
+// ---- optional objectives ---------------------------------------------------
+// An optional objective pays bonus credits and can never fail the act. Its
+// authored numbers live on the mission (`optional: [...]`); its progress lives
+// on the saved mission record (`optionalProgress`), so a reload keeps a bonus
+// already thrown away.
+
+function optionalProgress(mission) {
+  if (!mission.optionalProgress || typeof mission.optionalProgress !== "object" || Array.isArray(mission.optionalProgress)) {
+    mission.optionalProgress = {};
+  }
+  return mission.optionalProgress;
+}
+
+export function missionOptionals(mission) {
+  return Array.isArray(mission?.optional) ? mission.optional.filter(opt => opt && typeof opt.id === "string") : [];
+}
+
+/** Optional objectives as the Mission log shows them. */
+export function missionOptionalRows(mission) {
+  const progress = optionalProgress(mission);
+  return missionOptionals(mission).map(opt => {
+    const stateRec = progress[opt.id] || {};
+    return {
+      id: opt.id,
+      objective: opt.objective || "",
+      bonus: Math.max(0, Math.floor(+opt.bonus || 0)),
+      done: stateRec.done === true,
+      failed: stateRec.failed === true,
+    };
+  });
+}
+
+/** The bonus credits this mission earned with its optional objectives. */
+export function missionBonus(mission) {
+  return missionOptionalRows(mission).reduce((sum, row) => sum + (row.done && !row.failed ? row.bonus : 0), 0);
+}
+
+/** Is this optional's window open on the given step? No `during` means "the
+ *  whole mission"; the current step may also name it (`optional: "id"`). */
+function optionalCovers(opt, step) {
+  if (!opt.during) return true;
+  if (opt.during === step?.id || opt.during === step?.group) return true;
+  return Array.isArray(step?.optional) ? step.optional.includes(opt.id) : step?.optional === opt.id;
+}
+
+function settleOptionals(mission, leaving = null) {
+  let changed = false;
+  const progress = optionalProgress(mission);
+  for (const opt of missionOptionals(mission)) {
+    // Leaving a step closes only the optionals scoped to it (by id or by shared
+    // `group`); the end of the act closes only the ones with no window at all.
+    if (leaving === null ? !!opt.during : (opt.during !== leaving.id && opt.during !== leaving.group)) continue;
+    const stateRec = progress[opt.id] || (progress[opt.id] = {});
+    if (stateRec.failed || stateRec.done) continue;
+    stateRec.done = true;
+    changed = true;
+  }
+  return changed;
+}
+
+/** A distance report from the sim (metres to the optional's actor) decides a
+ *  stay-within bonus for the whole act. Once thrown away it stays thrown away. */
+function noteOptionalDistance(mission, payload = {}) {
+  if (!Number.isFinite(Number(payload.metres))) return false;
+  const metres = Number(payload.metres);
+  const step = missionStep(mission);
+  const progress = optionalProgress(mission);
+  let changed = false;
+  for (const opt of missionOptionals(mission)) {
+    if (opt.kind !== "stay-within") continue;
+    if (opt.actor && payload.actor && opt.actor !== payload.actor) continue;
+    if (!optionalCovers(opt, step)) continue;
+    const stateRec = progress[opt.id];
+    if (stateRec?.done || stateRec?.failed) continue;
+    if (metres > Number(opt.metres || 0)) {
+      progress[opt.id] = { failed: true };
+      changed = true;
+      emit("mission-optional-failed", { mission, optional: opt, metres, player: payload.player });
+    }
+  }
+  return changed;
+}
+
+// ---- checkpoints ----------------------------------------------------------
+// A step marked `checkpoint: true` is where "start from last checkpoint" puts a
+// pilot back after a failed act. The id is saved on the mission record; the act
+// itself is restarted clean and then fast-forwarded to that step.
+
+/** Put a freshly created act at a saved checkpoint step. */
+export function resumeMissionAtCheckpoint(mission, stepId, profile = state.profile) {
+  if (!mission || typeof stepId !== "string") return false;
+  const index = mission.steps.findIndex(step => step?.id === stepId);
+  if (index < 0) return false;
+  mission.step = index;
+  mission.current = index;
+  mission.checkpoint = stepId;
+  mission.completed = false;
+  mission.failed = false;
+  delete mission.failure;
+  delete mission.failureMessage;
+  mission.p = 0;
+  for (const step of mission.steps) {
+    if (step.kind === "parallel") {
+      for (const child of step.steps || []) mission.counters[`${step.id}.${child.id}`] = 0;
+    } else mission.counters[step.id] = 0;
+  }
+  activateAutomatic(mission, profile, { profile, player: state.player });
+  return true;
+}
+
 function moveToStep(mission, target, payload = {}) {
   const index = target;
   if (!Number.isInteger(index) || index < 0 || index > mission.steps.length) return false;
+  const leaving = mission.steps[mission.step];
+  if (leaving?.id) settleOptionals(mission, leaving);
   mission.step = index;
   mission.current = index;
   mission.p = 0;
-  if (index >= mission.steps.length) markObjectivesDone(mission, payload);
+  if (index < mission.steps.length && mission.steps[index]?.checkpoint === true) {
+    mission.checkpoint = mission.steps[index].id;
+  }
+  if (index >= mission.steps.length) {
+    settleOptionals(mission, null);
+    markObjectivesDone(mission, payload);
+  }
   return true;
 }
 
@@ -770,6 +902,12 @@ function objectiveMatches(step, event, payload = {}, mission = null) {
   if (step.kind === "kill") {
     return (!step.enemy || step.enemy === payload.def) && (!step.faction || step.faction === payload.faction);
   }
+  if (step.kind === "control") {
+    return event === "mission-control" && payload.step === step.id && (!payload.control || payload.control === step.control);
+  }
+  if (step.kind === "chase") {
+    return event === "mission-chase-complete" && payload.step === step.id;
+  }
   if (step.kind === "mine") return !step.item || step.item === payload.item;
   if (step.kind === "collect") {
     // `owned` crates belong to one recovery contract: the mission spawns its own
@@ -874,6 +1012,24 @@ export function advanceMission(mission, event, payload = {}, profile = profileFo
     return prepared;
   }
   const step = missionStep(mission);
+  // A natural reset (a chase the pilot fell too far behind on) clears this
+  // objective's progress and says the authored line; it never fails the act.
+  if (event === "mission-reset") {
+    const targetId = payload.step ? String(payload.step) : step.id;
+    if (targetId !== step.id) return false;
+    mission.counters[step.id] = 0;
+    mission.p = 0;
+    emit("mission-step-reset", {
+      mission, step, line: step.resetLine || payload.line || "", player: payload.player,
+    });
+    emitProgress(mission, event, payload);
+    return true;
+  }
+  if (event === "mission-near") {
+    const noted = noteOptionalDistance(mission, payload);
+    if (noted) emitProgress(mission, event, payload);
+    return noted;
+  }
   if (step.kind === "dialogue") {
     const changed = advanceDialogue(mission, step, event, payload, profile);
     if (changed) emitProgress(mission, event, payload);
@@ -1362,7 +1518,8 @@ export function completeMission(indexOrId, profile = state.profile, player = pro
   if (!atMissionHandInStation(mission)) return `Hand this in at ${missionHandInStationName(mission)}.`;
   const deliveryError = consumeDelivery(mission, profile);
   if (deliveryError) return deliveryError;
-  const reward = Math.max(0, Math.floor(+mission.rewards?.credits || +mission.r || 0));
+  const base = Math.max(0, Math.floor(+mission.rewards?.credits || +mission.r || 0));
+  const reward = base + missionBonus(mission);
   profile.cr += reward;
   profile.done = Math.max(0, Math.floor(+profile.done || 0)) + 1;
   const list = missionsOf(profile);
@@ -1393,6 +1550,9 @@ on("place-entered", payload => advanceMissions("place-entered", payload));
 on("delivered", payload => advanceMissions("delivered", payload));
 on("mission-trigger", payload => advanceMissions("mission-trigger", payload));
 on("mission-tick", payload => advanceMissions("mission-tick", payload));
+on("mission-near", payload => advanceMissions("mission-near", payload));
+on("mission-control", payload => advanceMissions("mission-control", payload));
+on("mission-chase-complete", payload => advanceMissions("mission-chase-complete", payload));
 // Arrival enters the new pocket while the warp animation is still active;
 // retry world-changing steps once the pilot is actually out of warp.
 on("warp-end", payload => advanceMissions("warp-end", payload));
@@ -1421,7 +1581,7 @@ function killObjectivesIn(mission) {
     .map(child => ({ step: child, key: parallelKey(step, child), place: child.place || child.sector || step.place || step.sector }));
 }
 
-function authoredRespawnActions(mission) {
+export function missionRespawnActions(mission) {
   const out = [];
   for (let index = 0; index <= Math.min(mission.step, mission.steps.length - 1); index++) {
     for (const action of scriptActions(mission.steps[index])) {
@@ -1441,7 +1601,7 @@ function rearmWaves(place, player, profile) {
     if (isMissionFailed(mission)) continue;
     const kills = killObjectivesIn(mission);
     if (!kills.length) continue;
-    for (const action of authoredRespawnActions(mission)) {
+    for (const action of missionRespawnActions(mission)) {
       const enemy = action.enemy || action.ship;
       if (!enemy) continue;
       const target = kills.find(kill => kill.step.enemy === enemy && (!kill.place || kill.place === place));

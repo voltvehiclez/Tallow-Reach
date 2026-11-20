@@ -151,6 +151,7 @@ Read the one that matches the work. Each holds that area's conventions and known
 | [architecture/ship-systems.md](architecture/ship-systems.md) | Ship systems: drive, shield, hull, guns, mining beam, missiles, fitting |
 | [architecture/simulation-and-rendering.md](architecture/simulation-and-rendering.md) | Simulation and rendering: the tick, dt, input, sound, views |
 | [architecture/ui-and-screens.md](architecture/ui-and-screens.md) | UI and screens: outpost actions, screens, mission screens |
+| [architecture/campaign-acts.md](architecture/campaign-acts.md) | Campaign acts: structure, failure/checkpoints, natural resets, optional bonuses, control/chase steps, story actors |
 | [architecture/mission-principles.md](architecture/mission-principles.md) | How the eight architecture principles apply to the mission framework, and the limits of validation |
 | [architecture/world-and-map.md](architecture/world-and-map.md) | World and map: places, the starmap, travel, place memory, where you log out |
 | [architecture/feature-notes.md](architecture/feature-notes.md) | Detailed notes on features built in steps 10 to 13 (galaxy, starmap, place templates, missions), moved out of HANDOFF |

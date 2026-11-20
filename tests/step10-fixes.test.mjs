@@ -139,11 +139,12 @@ test("fix 3: Import applies a good code, and a bad code leaves the game alone", 
   assert.equal(m.shownNotice(), "That code is not a valid save.", "a refusal is still shown, in the fixed notice");
 });
 
-test("fix 3: Reset refreshes this mode's world and resumes docked, keeping shared pilot assets", () => {
+test("fix 3: Reset refreshes this mode's world, pilot and docked spot", () => {
   const P = boot("hollow", false);
   state.profile.cr = 42;
   assert.equal(click("rs2"), null);
-  assert.equal(state.profile.cr, 42, "the shared pilot keeps its credits");
+  // v27: each mode owns its pilot, so a reset is a fresh pilot for this mode.
+  assert.equal(state.profile.cr, 600, "a reset starts this mode's pilot fresh");
   assert.equal(state.place, "reach");
   assert.equal(state.worldState.place, "reach");
   assert.equal(P.docked, true);

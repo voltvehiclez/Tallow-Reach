@@ -21,7 +21,8 @@ import { refreshHull } from "./hull.js";
 import { spawnCrate, nextMissionCrateSlot } from "./combat.js";
 import { boom } from "./effects.js";
 import { ensureBoard } from "./contracts.js";
-import { activeMissions, missionProgress, missionObjectivesDone } from "./missions.js";
+import { activeMissions, missionProgress, missionObjectivesDone, launchBlockedReason } from "./missions.js";
+import { campaignDockRefusal, activeCampaignMission } from "./campaign.js";
 import { cancelWarp } from "./sectors.js";
 import { facePlayer } from "./pilot.js";
 import { restoreInstances, populateInstances } from "./instances.js";
@@ -98,6 +99,14 @@ function ensureSalvageCrates(placeId, profile) {
 export function launch(P = state.player, profile = profileOf(P)) {
   assertSessionPilot(P, profile, "launch");
   const local = P === state.player;
+  // A station conversation is not skippable: undocking mid-briefing would leave
+  // the story's next beat waiting behind a counter the pilot flew away from.
+  const blocked = launchBlockedReason(profile, P.place || state.place);
+  if (blocked) {
+    if (local) msg(blocked, 4);
+    emit("launch-denied", { player: P, message: blocked });
+    return false;
+  }
   P.docked = false;
   P.ship = profile.ship;
   P.weapon = profile.pw;
@@ -156,7 +165,9 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
 
   const placeId = P.place || state.place;
   const anyOtherActive = state.players.some(p => p && p !== P && !p.docked && !p.dead && (p.place || state.place) === placeId);
-  if (!anyOtherActive) clearTransient(placeId);
+  // A campaign act keeps its scene: docking puts the pilot at the counter but
+  // does not wipe the ships, shots or positions the act put in the pocket.
+  if (!anyOtherActive && !activeCampaignMission(profile)) clearTransient(placeId);
 
   P.flight.missileLock = { target: null, t: 0, locked: false };
   P.flight.lock = null;
@@ -253,6 +264,13 @@ export function resumeFromSave(P = state.player, profile = profileOf(P)) {
 export function tryDock(P = state.player, profile = profileOf(P), world = state.worldState) {
   assertSessionPilot(P, profile, "tryDock");
   if (!P || P.docked || P.dead) return false;
+  // Docking cannot be used to sit out a fight the act is still asking for.
+  const refusal = campaignDockRefusal(profile);
+  if (refusal) {
+    if (P === state.player) msg(refusal, 4);
+    emit("docking-denied", { player: P, reason: refusal });
+    return false;
+  }
   const station = stationAt(P.place || state.place);
   if (!station) return false;   // no station in this pocket
   const at = V(...station.pos);

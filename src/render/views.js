@@ -339,9 +339,19 @@ registerEntityView("enemy", {
       gltf.eng = engNodes(gltf);
       return initialPose(e, gltf);
     }
-    return initialPose(e, mkShip(def.col, def.scale, true));
+    return initialPose(e, mkShip(def.col, def.scale, def.foe !== false));
   },
-  update: updatePose, remove: noCleanup,
+  update: (e, m) => {
+    updatePose(e, m);
+    // A friendly story hull carries the Wasp's blue engine glow, and it grows
+    // when the ship boosts.
+    if (m.eng && enemyDef(e.def).friendly === true) {
+      const def = enemyDef(e.def);
+      const speed = e.v ? e.v.length() : 0;
+      const glow = 0.5 + Math.min(1.8, speed / Math.max(1, def.spdFar)) * 1.2 + (e.boosting ? 2.4 : 0);
+      for (const eng of m.eng) eng.scale.z = (eng.userData.engZ0 ?? 1) * glow;
+    }
+  }, remove: noCleanup,
 });
 registerEntityView("bullet", {
   list: () => state.world.bullets,

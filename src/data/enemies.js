@@ -59,33 +59,38 @@ export const ENEMIES = {
     loot: "raider",
   },
 
-  // Captain Dane Korr's command hull. This is a friendly story actor, not a
-  // hostile: it holds station ahead of the cadet, cannot be killed and never fires.
+  // Captain Dane Korr's Wasp. A friendly story actor: it flies the course the
+  // mission gives it, can be selected with F like any hull, cannot be killed or
+  // harmed, and joins an ambush with its basic cannons at zero damage (it is the
+  // pilot's fight, not his).
   captain_korr: {
     n: "Captain Dane Korr",
     pl: "captains",
     hp: 9999,
-    col: 0x53677b,
-    scale: 1.15,
+    col: 0x59636b,          // the regular Wasp hull colour
+    scale: 1,
     f: "school",
-    ai: "escort",
+    ai: "story",            // lead the course / observe the drill / guard the pilot
     aiProfile: "captain",
-    turn: 1.6,
-    spdFar: 145,
-    spdNear: 65,
+    turn: 1.9,
+    spdFar: 210,
+    spdNear: 85,
     spdOrbit: 18,
     circleAt: 140,
-    fireRange: 1,
-    lostRange: 9000,
-    hearRange: 1,
-    fireDelay: 9999,
-    fireGap: [9998, 9999],
-    dmg: 0.1,
-    bspd: 1,
-    spawnDist: [600, 700],
+    fireRange: 900,
+    lostRange: 12000,
+    hearRange: 1400,
+    fireDelay: 0.6,
+    fireGap: [1.1, 2.2],
+    dmg: 0,                 // his basic cannons do no damage
+    bspd: 420,
+    spawnDist: [600, 760],
     loot: "raider",
     friendly: true,
     invulnerable: true,
+    foe: false,             // not a pirate: Wasp scheme, blue engine glow
+    lockable: true,         // F selects him like any other ship
+    engages: "hostiles",    // fire only at the act's raiders
     markerTone: "i",
   },
 

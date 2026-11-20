@@ -25,4 +25,7 @@ export const AI_FLIGHT = {
   probeInterval: 0.2, probeSide: 18, initialDecisionSpread: 3,
   reverseChance: 0.35, dodgeStrafe: 1.4, aimSpread: 0.025,
   playerMargin: 28, rockEnvelope: 1.4,
+  // Story ships (a course to lead, a drill to watch, an ambush to join).
+  courseArrive: 90, courseGather: 420, courseWaypoint: 75,
+  observeOrbitRate: 0.32, observeRadius: 260, guardStandoff: 180,
 };

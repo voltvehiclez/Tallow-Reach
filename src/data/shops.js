@@ -98,6 +98,13 @@ export function shopGroupFor(row) {
 }
 
 export const SHOPS = {
+  // Korr Flight School's stores. Deliberately empty: an act owns its challenge,
+  // so the pilot cannot buy their way through the flight school.
+  school: {
+    n: "Korr Flight School stores",
+    d: "The school does not sell to cadets on a live exercise. Fly what you were given.",
+    stock: [],
+  },
   meridian: {
     n: "Shop",
     d:
@@ -205,7 +212,10 @@ export const SHOPS = {
 export const SHOP_IDS = Object.keys(SHOPS);
 
 /** What `shopDef()` returns for an id that is not in SHOPS. */
-export const DEFAULT_SHOP = SHOP_IDS[0];
+// The shop an unknown id falls back to. Named, not "whichever is first": a shop
+// with nothing on its shelves (Korr Flight School) must never become everyone's
+// fallback just because it was written above the others.
+export const DEFAULT_SHOP = "meridian";
 
 export const isShop = id => Object.prototype.hasOwnProperty.call(SHOPS, id);
 

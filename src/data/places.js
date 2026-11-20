@@ -190,7 +190,7 @@ export const PLACE_DEFS = {
       {
         kind: "station", id: "korr-flight-school", n: "Korr Flight School",
         model: "original-meridian", pos: [0, 0, 0], dockRange: 300, dockSpeed: 70,
-        launch: { pos: [0, 0, 260], face: "field" }, shop: "meridian",
+        launch: { pos: [0, 0, 260], face: "field" }, shop: "school",
       },
       {
         kind: "asteroidField", id: "training-field", n: "Training range",
