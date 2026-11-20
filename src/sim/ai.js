@@ -135,6 +135,10 @@ export function updateEnemies(dt, placeId = state.place) {
           const spread = AI_FLIGHT.aimSpread;
           const dir = toFoe.normalize().add(V(R(-spread, spread), R(-spread, spread), R(-spread, spread))).normalize();
           const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
+          // Not the pilot's shot, but not a hostile's either: the renderer draws a
+          // friendly round in the pilot's own colour so a wingman's fire is never
+          // mistaken for incoming.
+          shot.ally = true;
           shot.place = placeId;
           shot.missionId = String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null;
           if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });

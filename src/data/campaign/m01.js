@@ -1,17 +1,19 @@
 // Campaign mission 01: the cadet's first flight.
 //
 // The act is a lesson in a straight line. Captain Dane Korr leads, the cadet
-// follows and the controls are learned by doing them: the throttle, the mouse,
-// strafe, lift, roll and finally boost. Then he runs a ten-kilometre course that
-// the cadet has to keep up with, watches a drone pass, and joins the ambush.
+// follows and the controls are learned by doing them: the throttle, the brake,
+// reverse, the mouse, strafe, lift, roll and finally boost. Each hold is one
+// second, so the lesson is learned by flying it, not by waiting on a timer.
+// Then he runs a ten-kilometre course through the ferrite field that the cadet
+// has to keep up with, watches a drone pass, and joins the ambush.
 //
 // Failing to keep up is never a mission failure: the cadet is told, Korr flies
 // back to the fixed start of the course and that same objective is flown again.
 // Losing the Wasp is a real failure (the failed screen offers the beginning;
 // this act has no checkpoints).
 //
-// The optional objective pays a bonus for staying close through the lesson. It
-// can be lost, but it can never fail the act.
+// The optional objective pays a bonus for staying close through the ten-kilometre
+// run. It can be lost, but it can never fail the act.
 
 import { briefing, mission, radio } from "../missions/templates.js";
 import { CAMPAIGN_HOME_POCKET } from "./galaxy.js";
@@ -30,13 +32,14 @@ const follow = {
 
 const RESET_LINE = "That is not passable. We will do it again — follow me back to the start.";
 
-/** One control to learn: hold it for about three seconds and it counts. */
+/** One control to learn: hold it for a second and it counts. The HUD draws the
+ *  hold as a percentage bar, so one second is a full bar. */
 const learn = (id, control, objective) => ({
   id,
   kind: "control",
   place,
   control,
-  hold: 3,
+  hold: 1,
   group: "lesson",
   maxGap: 1100,
   resetLine: RESET_LINE,
@@ -57,17 +60,18 @@ export const M01_FIRST_SORTIE = mission({
     action: "keep",
     message: "Your Wasp was destroyed. The sortie is over.",
   },
-  // Bonus only: staying close through the lesson. Losing it costs credits and
-  // nothing else.
+  // Bonus only: staying close through the ten-kilometre run. Five hundred metres
+  // is the authored pass mark; the run's own 1 km reset is a separate, harder
+  // rule. Losing the bonus costs credits and nothing else.
   optional: [
     {
       id: "stay-with-korr",
       kind: "stay-within",
       actor: "captain_korr",
-      metres: 350,
-      during: "lesson",
+      metres: 500,
+      during: "chase",
       bonus: 100,
-      objective: "Keep within 350 m of Captain Dane Korr through the control lesson.",
+      objective: "Stay within 500 m of Captain Dane Korr through the ten-kilometre run.",
     },
   ],
   steps: [
@@ -113,11 +117,35 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "First, the throttle. W eases it forward, S pulls it back. Hold one until the Wasp answers you.",
-        "And keep me in sight. I am not going to fly circles waiting for you.",
+        "First, the throttle. W eases it forward. One second of it is all this lesson asks.",
+        "Then Ctrl — the brake. Learn that one before anything else. A pilot who cannot stop is not flying, they are falling with style.",
       ],
     }),
     learn("learn-throttle", "throttle-forward", "Throttle forward with W."),
+    radio({
+      id: "brief-brake",
+      speaker: captain,
+      portrait,
+      place,
+      group: "lesson",
+      objective: "Listen to Captain Dane Korr.",
+      lines: [
+        "Now stop. Hold Ctrl and the throttle bleeds off until the Wasp is sitting still.",
+        "Whatever happens out here, that key always works. Use it the moment you are unsure.",
+      ],
+    }),
+    learn("learn-brake", "brake", "Brake to a stop with Ctrl."),
+    radio({
+      id: "brief-reverse",
+      speaker: captain,
+      portrait,
+      place,
+      group: "lesson",
+      objective: "Listen to Captain Dane Korr.",
+      lines: [
+        "S is reverse: it pulls the throttle back past zero. Short taps — you are not trying to fly backwards across the range.",
+      ],
+    }),
     learn("learn-throttle-back", "throttle-back", "Pull the throttle back with S."),
     radio({
       id: "brief-steer",
@@ -248,6 +276,9 @@ export const M01_FIRST_SORTIE = mission({
       actorRole: "observe",
       objective: "Shoot down both practice drones.",
     },
+    // Neither Dane nor the cadet knows who these two are. Dane sees only that
+    // they are not school drones; the strangers introduce themselves, and the
+    // act never names them. The word "raider" does not belong in this scene.
     radio({
       id: "ambush-warning",
       speaker: captain,
@@ -256,8 +287,19 @@ export const M01_FIRST_SORTIE = mission({
       objective: "Answer Captain Dane Korr.",
       lines: [
         "Hold on. Those are not school drones.",
-        "Two raiders, inbound hot with guns live. This is not a drill — defend yourself!",
-        "I will keep them busy. You finish them.",
+        "Two ships, guns live, inbound hot. I do not recognise the hulls — and nobody flies this range without a school transponder.",
+        "I will keep one busy. You take the other. Do not let them split us.",
+      ],
+    }),
+    radio({
+      id: "ambush-taunt",
+      speaker: "Unmarked pilot",
+      portrait: "unmarked-pilot",
+      place,
+      objective: "Hear the strangers out.",
+      lines: [
+        "Korr's newest cadet. We bought the school's whole flight schedule, so spare us the brave face.",
+        "Cut your engines and hand over the Wasp. Refuse, and we will take it out of the debris.",
       ],
     }),
     {
@@ -265,7 +307,7 @@ export const M01_FIRST_SORTIE = mission({
       kind: "script",
       place,
       requiresFlying: true,
-      objective: "Defeat both raiders.",
+      objective: "Defeat both attackers.",
       action: {
         kind: "spawn-wave",
         place,
@@ -283,7 +325,7 @@ export const M01_FIRST_SORTIE = mission({
       count: 2,
       actor: "captain_korr",
       actorRole: "guard",
-      objective: "Defeat both raiders.",
+      objective: "Defeat both attackers.",
     },
     radio({
       id: "sortie-complete",
@@ -293,6 +335,7 @@ export const M01_FIRST_SORTIE = mission({
       objective: "Hear Captain Dane Korr's final report.",
       lines: [
         "Both down. I saw the whole pass.",
+        "I still do not know who they were. School business, out here, with guns hot — we will find out. Not today.",
         "That is your first sortie, cadet. Get back to the school and collect your pay — and try to make the landing look deliberate.",
       ],
     }),

@@ -35,6 +35,7 @@ import { buildPlayerShip, ROCK_SHAPES } from "./models.js";
 import { instantiateModel, modelTemplate, engNodes } from "./gltf.js";
 import { colliderFromObject } from "./collideModel.js";
 import { setRockSoup } from "../sim/colliders.js";
+import { friendlyShot } from "../sim/combat.js";
 
 /* ------------------------------------------------------------------------- */
 /* Entity view registry                                                       */
@@ -358,7 +359,10 @@ registerEntityView("bullet", {
   build: e => {
     const gltf = instantiateModel("bullet");
     if (gltf) return initialPose(e, gltf);
-    return initialPose(e, new THREE.Mesh(bulletGeo, e.own ? playerBulletMat : enemyBulletMat));
+    // The pilot's rounds and a wingman's rounds both read as "ours" (the same
+    // warm orange); only hostile fire is red.
+    const material = friendlyShot(e) ? playerBulletMat : enemyBulletMat;
+    return initialPose(e, new THREE.Mesh(bulletGeo, material));
   },
   update: updatePose, remove: noCleanup,
 });

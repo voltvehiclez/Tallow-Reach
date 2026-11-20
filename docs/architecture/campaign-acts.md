@@ -9,11 +9,19 @@ open-world story or contract behaves; every field below is opt-in.
 ## Structure
 
 - `data/campaign/chapters.js`: `CAMPAIGN_CHAPTERS` (chapters, each a list of acts)
-  and the flat `CAMPAIGN_ACTS`. An act names one mission id.
-- The campaign screen lists chapters → acts. There is no offer, no Accept and no
-  Abandon: clicking an act starts it (`sim/campaign-act.js` `startCampaignAct`),
-  clicking a running act resumes it, and finishing it shows the MISSION
-  ACCOMPLISHED card before returning to the screen.
+  and the flat `CAMPAIGN_ACTS`. An act names one mission id; an act without one is
+  `planned` and only ever drawn as a locked box.
+- The campaign screen is the title's **big left window**: one large box per
+  chapter (`campaignMenuHtml`), locked future chapters included. Clicking a
+  chapter opens its act boxes; `← All chapters` goes back. The right panel holds
+  the header and Back, so the screen opens on chapters only. There is no offer,
+  no Accept and no Abandon: clicking an act starts it (`sim/campaign-act.js`
+  `startCampaignAct`), clicking a running act resumes it, and finishing it shows
+  the MISSION ACCOMPLISHED card before returning to the screen.
+- Planned boxes are scenery for the menu, never order: `CAMPAIGN_ACTS` filters to
+  acts with a `mission`, so a planned box cannot be started, saved or counted.
+- The end card is a full-screen overlay. Any return to the title (`main-menu`)
+  hides it — a card left behind reads as a blank menu with no UI.
 - An act's world is thrown away when it starts, except for the campaign pilot's
   own credits, fleet and fit. The two modes never share a pilot (save v27).
 
@@ -41,30 +49,55 @@ returns to the fixed start of its course and the same objective is flown again.
 ```js
 optional: [
   { id: "stay-with-korr", kind: "stay-within", actor: "captain_korr",
-    metres: 350, during: "lesson", bonus: 100,
-    objective: "Keep within 350 m of Captain Dane Korr through the control lesson." },
+    metres: 500, during: "chase", bonus: 100,
+    objective: "Stay within 500 m of Captain Dane Korr through the ten-kilometre run." },
 ]
 ```
 
 - `bonus` is added to the mission reward only when the optional is done
   (`missionBonus`); it can never fail an act.
-- `during` is a step id or a `group` shared by several steps. A 350 m limit and a
+- `during` is a step id or a `group` shared by several steps. A 500 m limit and a
   1 km reset are different numbers on purpose: the bonus can be lost while the
   objective is simply redone.
+- While the window is open and winnable, `missionBonusStatus(mission, metres)` is
+  what the HUD shows: the top-right `Bonus` chip with the live distance, red once
+  it is over the limit. `sim/campaign-flight.js` publishes that distance as
+  `state.ui.followDistance` on every chase tick.
 - Progress lives in `optionalProgress` on the saved mission (`{ done, failed }`),
   so a bonus already thrown away stays gone across a reload.
 
 ## Control lessons and chases
 
 - `control` step: `control` names an id from `MISSION_CONTROLS`
-  (`data/missions/rules.js`), `hold` is the seconds the pilot must keep it. The
-  sim reads the pilot's control record (`controlHeld`), never a key code, and
-  emits `mission-control` when the hold is long enough.
+  (`data/missions/rules.js`), `hold` is the seconds the pilot must keep it
+  (default one second; every First Sortie lesson authors `1`). The sim reads the
+  pilot's control record (`controlHeld`), never a key code, and emits
+  `mission-control` when the hold is long enough. The live hold is published as
+  `state.ui.controlHold` (`fraction`, `percent`, the control's `label`), and the
+  top-left tracker draws it as a bar: a full bar is 100% and a learned control.
+  First Sortie teaches W, then Ctrl (the brake), then S, mouse, strafe, lift,
+  roll and boost — a new pilot can always stop the ship before anything that can
+  drift them off the range.
 - `chase` step: `follow` names the story ship, `course`/`coursePhase` name a
   `FLIGHT_COURSES` entry (`data/flight-courses.js`), `distance` is how far along
   that course finishes the objective and `maxGap` is the reset distance. Courses
   are absolute points in the pocket, so "back to the beginning" is always the
   same point in space.
+
+## Scenery along a course
+
+The school pocket dresses the ten-kilometre run with eight `chase-rocks-*`
+`asteroidField` scatter clusters (`data/places.js`), 146 ferrite rocks in varied
+sizes with a few giants. Two rules keep the run readable and Dane safe:
+
+- each cluster sits about a kilometre off the flown line, and its radius leaves at
+  least 300 m of clear air to any course segment (`tests/campaign-fixes.test.mjs`);
+- `coreRadius` equal to `radius` opts a cluster out of the pocket-wide
+  diffuse-wing scaling in `data/scenery.js`, so the authored radius, count and
+  clearance are exactly what the sim places.
+
+Moving the course means moving the clusters: they are authored from the course
+points, not generated.
 
 ## Story actors
 
@@ -73,7 +106,9 @@ optional: [
   `guard` (fight the act's other hostiles).
 - A friendly def may set `lockable: true` (selectable with F), `foe: false`
   (Wasp scheme and blue engine glow) and `engages: "hostiles"` with `dmg: 0`,
-  so it fires at raiders and damages nothing.
+  so it fires at the act's hostiles and damages nothing. Those rounds carry
+  `ally: true`, and `friendlyShot()` (`sim/combat.js`) draws them in the pilot's
+  orange: only hostile fire is red.
 - `spawn-ship` actions with `respawn: true, story: true` are re-armed by
   `sim/campaign-flight.js` whenever the ship is missing (reload, re-entry, a
   bug), and `rearmWaves` still only tops up kill objectives.

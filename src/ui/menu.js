@@ -25,7 +25,7 @@ import { MODULES } from "../data/modules.js";
 import { storyMission } from "../data/missions/index.js";
 import { campaignMission, campaignAvailable, isCampaignMissionId } from "../sim/campaign.js";
 import { startCampaignAct } from "../sim/campaign-act.js";
-import { campaignScreenHtml, campaignMenuBack } from "./campaign.js";
+import { campaignScreenHtml, campaignMenuBack, campaignMenuHtml } from "./campaign.js";
 import {
   assetsResultsHtml,
   introHtml,
@@ -189,9 +189,23 @@ export function openStationTab(name) {
   return true;
 }
 
-/** Update only the shared `#station-left` window (Outfitting, Shop or Contracts). */
+/** The campaign screen's boxes occupy the big left window while the title is up. */
+function renderCampaignLeft() {
+  if (!leftPanel) return;
+  leftPanel.hidden = false;
+  if (leftPanel.dataset) leftPanel.dataset.view = "campaign";
+  leftPanel.setAttribute?.("aria-label", "Campaign chapters");
+  leftPanel.innerHTML = `<div class="station-left-body campaign-menu">${campaignMenuHtml(state.profile, state.ui)}</div>`;
+  leftPanel.scrollTop = 0;
+}
+
+/** Update only the shared `#station-left` window (Outfitting, Shop, Contracts or campaign boxes). */
 export function renderLeft() {
   if (!leftPanel) return;
+  if (state.ui.intro && state.ui.campaign) {
+    renderCampaignLeft();
+    return;
+  }
   if (state.ui.intro || !panel || panel.hidden) {
     hideLeftPanelElement(leftPanel);
     return;
@@ -269,6 +283,15 @@ const ACTIONS = {
   },
   campaignBack() {
     campaignMenuBack();
+  },
+  // One chapter box opens into its acts; the act boxes start the act.
+  campaignChapter(id) {
+    state.ui.campaignChapter = id || null;
+    render();
+  },
+  campaignChapters() {
+    state.ui.campaignChapter = null;
+    render();
   },
   campaignAct(id) {
     const result = startCampaignAct(id);

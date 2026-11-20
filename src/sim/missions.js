@@ -538,6 +538,34 @@ export function missionOptionalRows(mission) {
   });
 }
 
+/**
+ * The live bonus objective a HUD can show: the first optional that is still
+ * winnable and whose window is open on the current step. `metres` is whatever the
+ * sim last reported (a chase publishes it every tick); it is null when the act has
+ * not reported a distance yet. Returns null when there is nothing to show.
+ */
+export function missionBonusStatus(mission, metres = null) {
+  const step = missionStep(mission);
+  const progress = optionalProgress(mission);
+  for (const opt of missionOptionals(mission)) {
+    if (opt.kind !== "stay-within") continue;
+    if (!optionalCovers(opt, step)) continue;
+    const stateRec = progress[opt.id] || {};
+    if (stateRec.done || stateRec.failed) continue;
+    const limit = Math.max(0, Math.round(Number(opt.metres) || 0));
+    const live = Number.isFinite(Number(metres)) ? Math.max(0, Math.round(Number(metres))) : null;
+    return {
+      id: opt.id,
+      objective: opt.objective || "",
+      bonus: Math.max(0, Math.floor(+opt.bonus || 0)),
+      limit,
+      metres: live,
+      over: live !== null && limit > 0 && live > limit,
+    };
+  }
+  return null;
+}
+
 /** The bonus credits this mission earned with its optional objectives. */
 export function missionBonus(mission) {
   return missionOptionalRows(mission).reduce((sum, row) => sum + (row.done && !row.failed ? row.bonus : 0), 0);

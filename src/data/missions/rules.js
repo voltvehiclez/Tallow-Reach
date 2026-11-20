@@ -37,6 +37,9 @@ export const MISSION_CONTROLS = {
   "roll-left": { axis: "roll", sign: -1, label: "Q — roll left" },
   "roll-right": { axis: "roll", sign: 1, label: "E — roll right" },
   "boost": { flag: "boost", label: "Shift — boost" },
+  // Ctrl is the brake: it bleeds the throttle off and holds the Wasp still.
+  // Taught second, right after W, so a new pilot can always stop the ship.
+  "brake": { flag: "brake", label: "Ctrl — brake to a stop" },
   "stop": { flag: "stop", label: "X — stop" },
 };
 

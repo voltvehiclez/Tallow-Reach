@@ -15,7 +15,7 @@ import { on, emit } from "../util/events.js";
 import { state, placeWorld } from "../state/state.js";
 import { isPocket } from "../data/places.js";
 import { enemyDef } from "../data/enemies.js";
-import { controlHeld } from "../data/missions/rules.js";
+import { controlHeld, MISSION_CONTROLS } from "../data/missions/rules.js";
 import { activeCampaignMission } from "./campaign.js";
 import { missionRespawnActions } from "./missions.js";
 import { startCourseAtBeginning } from "./flight-course.js";
@@ -31,19 +31,44 @@ const currentStep = mission => mission?.steps?.[mission.step] || null;
 // throwing the whole attempt away.
 let hold = { key: "", seconds: 0 };
 
+/** The authored hold, in seconds. One second is the campaign's teaching unit:
+ *  the HUD bar fills over that second and a full bar is a learned control. */
+const holdSeconds = step => Math.max(0.1, Number(step.hold) || 1);
+
+/** Publish the live hold so the HUD can draw the bar under the objective. The
+ *  UI owns no timer of its own: this is the same number that finishes the step. */
+function publishHold(mission, step, seconds) {
+  const total = holdSeconds(step);
+  state.ui.controlHold = {
+    mission: mission.id,
+    step: step.id,
+    control: step.control,
+    label: MISSION_CONTROLS[step.control]?.label || step.control,
+    fraction: Math.max(0, Math.min(1, seconds / total)),
+    percent: Math.min(100, Math.floor((seconds / total) * 100)),
+  };
+}
+
+function clearHold() {
+  state.ui.controlHold = null;
+}
+
 function tickControl(mission, step, player, dt) {
   const key = `${mission.id}:${step.id}`;
   if (hold.key !== key) hold = { key, seconds: 0 };
   if (controlHeld(player.controls || state.controls, step.control)) {
     hold.seconds += Math.max(0, Number(dt) || 0);
-    if (hold.seconds >= Math.max(0.1, Number(step.hold) || 3)) {
+    if (hold.seconds >= holdSeconds(step)) {
       const control = step.control;
       hold = { key: "", seconds: 0 };
+      clearHold();
       emit("mission-control", { mission: mission.id, step: step.id, control, player, profile: state.profile });
+      return;
     }
   } else {
     hold.seconds = Math.max(0, hold.seconds - Math.max(0, Number(dt) || 0) * 2);
   }
+  publishHold(mission, step, hold.seconds);
 }
 
 // ---- chase -----------------------------------------------------------------
@@ -51,7 +76,10 @@ function tickChase(mission, step, player) {
   const actor = storyActors(mission, player.place || state.place).find(e => e.def === step.follow);
   if (!actor) return;
   const gap = player.pos.distanceTo(actor.pos);
-  emit("mission-near", { actor: step.target, metres: gap, player, profile: state.profile });
+  // The chase is the one stretch where the bonus has a live number, so the HUD
+  // can show the distance against the authored limit while the run is happening.
+  state.ui.followDistance = Math.round(gap);
+  emit("mission-near", { actor: step.follow || step.target, metres: gap, player, profile: state.profile });
   const course = actor.course;
   if (!course) return;
   // Too far behind while he is running: not a failure — he turns for the fixed
@@ -117,9 +145,18 @@ function ensureStoryActors(mission, player, place) {
 on("mission-tick", ({ dt, player } = {}) => {
   if (!player || player.dead || player.warp) return;
   const mission = activeCampaignMission(state.profile);
-  if (!mission || mission.failed) return;
+  if (!mission || mission.failed) {
+    clearHold();
+    state.ui.followDistance = null;
+    return;
+  }
   const step = currentStep(mission);
-  if (!step) return;
+  if (!step) {
+    clearHold();
+    return;
+  }
+  if (step.kind !== "control") clearHold();
+  if (step.kind !== "chase" && step.kind !== "kill" && step.kind !== "parallel") state.ui.followDistance = null;
   const place = player.place || state.place;
   ensureStoryActors(mission, player, place);
   if (player.docked) return;
@@ -131,9 +168,19 @@ on("mission-tick", ({ dt, player } = {}) => {
     const actor = step.actor
       ? storyActors(mission, place).find(e => e.def === step.actor)
       : null;
-    if (actor) emit("mission-near", { actor: actor.def, metres: player.pos.distanceTo(actor.pos), player, profile: state.profile });
+    if (actor) {
+      const gap = player.pos.distanceTo(actor.pos);
+      state.ui.followDistance = Math.round(gap);
+      emit("mission-near", { actor: actor.def, metres: gap, player, profile: state.profile });
+    }
   }
 });
 
 // A fresh act must not inherit a half-finished hold.
-on("campaign-act-started", () => { hold = { key: "", seconds: 0 }; actorSpawnedAt.clear(); actorCheckAt = 0; });
+on("campaign-act-started", () => {
+  hold = { key: "", seconds: 0 };
+  actorSpawnedAt.clear();
+  actorCheckAt = 0;
+  clearHold();
+  state.ui.followDistance = null;
+});

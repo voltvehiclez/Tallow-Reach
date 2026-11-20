@@ -158,15 +158,20 @@ test("optional objectives pay a bonus, can be lost without failing the act", asy
     [["stay-with-korr", 100, false, false]]);
   assert.equal(missionBonus(mission), 0);
 
-  // A distance report closes the window: inside 350 m it is earned at the end of
-  // the lesson step, outside it is thrown away for good.
-  mission.step = mission.steps.findIndex(step => step.id === "learn-throttle");
+  // The bonus covers the ten-kilometre run, not the lesson: five hundred metres
+  // is the pass mark, and the run's own 1 km reset stays a separate rule.
+  assert.equal(mission.optional[0].metres, 500);
+  assert.equal(mission.optional[0].during, "chase");
+
+  // A distance report closes the window: outside 500 m it is thrown away for
+  // good, and the act itself carries on.
+  mission.step = mission.steps.findIndex(step => step.id === "chase");
   advanceMission(mission, "mission-near", { actor: "captain_korr", metres: 900, player: P }, P.profile);
   assert.equal(mission.optionalProgress["stay-with-korr"].failed, true);
   assert.equal(missionBonus(mission), 0);
 
   const fresh = instantiateStoryMission(CAMPAIGN_MISSIONS[0]);
-  fresh.step = fresh.steps.findIndex(step => step.id === "learn-throttle");
+  fresh.step = fresh.steps.findIndex(step => step.id === "chase");
   advanceMission(fresh, "mission-near", { actor: "captain_korr", metres: 120, player: P }, P.profile);
   assert.equal(fresh.optionalProgress["stay-with-korr"] === undefined, true, "staying close decides nothing until the window closes");
 });
@@ -182,17 +187,23 @@ test("the control vocabulary reads the pilot's controls, not a key name", () => 
   assert.equal(controlHeld(controls, "lift-up"), false);
   assert.equal(controlHeld(controls, "boost"), true);
   assert.equal(controlHeld({}, "boost"), false);
-  for (const id of ["throttle-forward", "throttle-back", "steer", "strafe-left", "strafe-right",
+  for (const id of ["throttle-forward", "brake", "throttle-back", "steer", "strafe-left", "strafe-right",
     "lift-up", "lift-down", "roll-left", "roll-right", "boost"]) {
     assert.ok(MISSION_CONTROLS[id], `${id} is part of the lesson vocabulary`);
   }
+  assert.equal(controlHeld({ brake: true }, "brake"), true, "Ctrl is read from the brake flag");
+  assert.equal(controlHeld({ brake: false }, "brake"), false);
 });
 
 test("First Sortie teaches every control, chases a fixed course and has no checkpoint", async () => {
   const m01 = CAMPAIGN_MISSIONS[0];
   const controls = m01.steps.filter(step => step.kind === "control").map(step => step.control);
-  assert.deepEqual(controls, ["throttle-forward", "throttle-back", "steer", "strafe-left", "strafe-right",
+  // Throttle and then the brake: a new pilot can always stop the ship before
+  // anything that can drift them off the range.
+  assert.deepEqual(controls, ["throttle-forward", "brake", "throttle-back", "steer", "strafe-left", "strafe-right",
     "lift-up", "lift-down", "roll-left", "roll-right", "boost"]);
+  assert.ok(m01.steps.filter(step => step.kind === "control").every(step => step.hold === 1),
+    "every control lesson is a one-second hold: one full bar");
   assert.ok(m01.steps.every(step => step.checkpoint !== true), "First Sortie has no checkpoints");
   assert.ok(!m01.allowTravel && m01.steps.every(step => !step.allowTravel), "the act never grants a jump");
 
@@ -205,8 +216,8 @@ test("First Sortie teaches every control, chases a fixed course and has no check
   assert.ok(length >= chase.distance, "the authored course is at least the ten kilometres the act asks for");
 
   const optional = m01.optional[0];
-  assert.equal(optional.metres, 350);
-  assert.equal(optional.during, "lesson", "the bonus covers the control lesson only");
+  assert.equal(optional.metres, 500);
+  assert.equal(optional.during, "chase", "the bonus covers the ten-kilometre run");
 
   // Dane's hull is story furniture with rules of its own.
   assert.equal(ENEMIES.captain_korr.friendly, true);

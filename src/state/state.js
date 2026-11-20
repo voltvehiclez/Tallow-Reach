@@ -375,6 +375,9 @@ export const state = {
     intro: true,
     campaign: false,   // the campaign chapter screen on the title (session only)
     campaignEnd: null, // "accomplished" | "failed" while an act's end card stops the world
+    campaignChapter: null, // chapter id opened on the campaign screen (null = chapter boxes)
+    controlHold: null, // the live control-lesson hold, published by sim/campaign-flight.js
+    followDistance: null, // metres to the story ship while a chase reports it
     navigation: false, // the in-flight N pocket-object list; false while closed
     starmap: null,     // active chart; null while closed
     cargo: null,       // the in-flight ship inventory; null while closed

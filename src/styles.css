@@ -124,6 +124,46 @@ body.no-reticle canvas {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* Campaign objective tracker (top left): the act's one live objective, the hold
+   bar of the control lesson, and the bonus chip's live distance in the top-right
+   block. A full hold bar is a learned control. */
+#campaign-tracker {
+  display: grid;
+  gap: 4px;
+  width: 285px;
+  max-width: 46vw;
+  margin-top: 12px;
+  color: var(--ink);
+  font-size: 13px;
+}
+#campaign-tracker[hidden] { display: none; }
+#campaign-tracker > strong {
+  color: var(--amber);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+#campaign-tracker-objective { color: #dfe9ee; line-height: 1.35; }
+#campaign-hold {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+#campaign-hold[hidden] { display: none; }
+#campaign-hold .hold-track {
+  height: 6px;
+  background: rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.3);
+  overflow: hidden;
+}
+#campaign-hold .hold-track i { display: block; width: 0; height: 100%; background: var(--amber); transition: width .05s linear; }
+#campaign-hold-pct { color: var(--amber); font-size: 12px; font-variant-numeric: tabular-nums; }
+#campaign-hold-label { color: var(--dim); font-size: 11px; }
+#tr .hud-bonus { margin-top: 6px; color: #9fe8c8; font-size: 12px; line-height: 1.35; }
+#tr .hud-bonus strong { color: #9fe8c8; letter-spacing: .1em; text-transform: uppercase; font-size: 10.5px; }
+#tr .hud-bonus.is-over, #tr .hud-bonus.is-over strong { color: #ff8a80; }
 #bc {
   left: calc(50% + 28px);
   bottom: calc(var(--weapon-bottom) - 6px - 24px);
@@ -2480,16 +2520,35 @@ body.navigation-open canvas { cursor: default; }
 @media (max-height: 820px) { #hud > #pocket-objects { bottom: 24px; } }
 #weapon-lead { width: 12px; height: 12px; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }
 
-/* Campaign chapter screen and the cards that end an act. */
-.campaign-chapters { display: grid; gap: 14px; margin-top: 12px; }
-.campaign-chapter { border: 1px solid rgba(170,170,170,.28); padding: 10px 12px; }
-.campaign-chapter h2 { margin: 0 0 4px; }
-.campaign-chapter-note { margin: 0 0 6px; color: #bbb; }
-.campaign-progress { margin: 0 0 8px; color: var(--dim); font-size: 12px; }
-.campaign-chapter .row { align-items: center; }
-.campaign-act.is-locked small { opacity: .7; }
-.campaign-act.is-active { box-shadow: inset 0 0 0 1px var(--ice); }
-.campaign-act-meta { display: block; color: #9fc7d8; }
+/* Campaign screen: chapter boxes in the big left window, the act boxes a chapter
+   opens into, and the cards that end an act. Boxes are deliberately large: one
+   glance should tell a pilot where the story is and what is still locked. */
+.campaign-menu h2 { margin: 0 0 4px; font-size: 19px; }
+.campaign-lead { margin: 0 0 14px; color: #bbb; font-size: 13px; }
+.campaign-progress { color: var(--dim); font-size: 12px; }
+.campaign-side-note { color: var(--dim); font-size: 12.5px; line-height: 1.4; }
+.campaign-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.campaign-act-boxes { grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); }
+.campaign-box { display: grid; gap: 4px; align-content: start; min-height: 148px; padding: 14px 16px; text-align: left; color: var(--ink); cursor: pointer; border: 1px solid rgba(170,170,170,.32); background: linear-gradient(160deg, rgba(30,42,50,.92), rgba(13,19,25,.94)); }
+.campaign-box:hover:not(:disabled), .campaign-box:focus-visible {
+  border-color: var(--amber);
+  background: linear-gradient(160deg, rgba(48,62,72,.96), rgba(20,28,34,.96));
+  color: var(--ink);
+  outline: none;
+}
+.campaign-box:hover:not(:disabled) .campaign-box-action { border-color: var(--amber); color: var(--amber); }
+.campaign-box:disabled .campaign-box-title { color: #cfd6da; }
+.campaign-box:disabled { cursor: default; opacity: .5; }
+.campaign-box.is-locked { background: linear-gradient(160deg, rgba(24,29,34,.9), rgba(11,14,18,.94)); }
+.campaign-box.is-active { border-color: var(--ice); box-shadow: inset 0 0 0 1px var(--ice); }
+.campaign-box-kicker { font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--dim); }
+.campaign-box-title { font-size: 17px; line-height: 1.2; }
+.campaign-box-note { color: #b7c4cc; font-size: 12.5px; line-height: 1.35; }
+.campaign-box-meta { margin-top: auto; color: #9fc7d8; font-size: 11.5px; }
+.campaign-box-action { justify-self: start; margin-top: 6px; padding: 3px 10px; border: 1px solid var(--line); font-size: 12px; }
+.campaign-chapter-head { display: grid; gap: 2px; margin-bottom: 12px; }
+.campaign-back { justify-self: start; padding: 0 0 4px; border: 0; background: none; color: var(--ice); font-size: 12.5px; cursor: pointer; }
+.campaign-back:hover { color: #fff; background: none; border: 0; }
 #campaign-end { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(6,10,14,.82); }
 #campaign-end[hidden] { display: none; }
 .campaign-end-card { min-width: 320px; max-width: 560px; padding: 26px 30px; text-align: center; background: #111a20; border: 1px solid #3d5a6a; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
