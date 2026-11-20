@@ -7,8 +7,7 @@
 
 import { keys, syncControls } from "../core/input.js";
 import { setAudioSuspended, isMuted, toggleMute } from "../core/audio.js";
-import { state, currentSave } from "../state/state.js";
-import { saveAutosave } from "../state/storage.js";
+import { state, currentSave, saveCurrentGame } from "../state/state.js";
 import { emit } from "../util/events.js";
 import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
@@ -36,7 +35,7 @@ export function setupPause() {
 
 /** Save the current resume point, then return to the title menu without losing progress. */
 function exitToMainMenu() {
-  saveAutosave(currentSave());
+  saveCurrentGame();
   state.ui.intro = true;
   resetStationPanels(state.ui);
   hideNotice();

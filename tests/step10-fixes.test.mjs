@@ -91,8 +91,9 @@ test("fix 3: Load slot restores the save and redraws the panel in the same click
   const P = boot("reach", false);
   P.docked = true;
   assert.equal(state.profile.cr, 600);
+  assert.equal(state.savedModes, null);
   assert.equal(click("sv", "1"), null, "saving a slot must not throw");
-  assert.equal(JSON.parse(mem.get("tr_s1")).profile.cr, 600);
+  assert.equal(JSON.parse(mem.get("tr_s1")).open.profile.cr, 600);
 
   state.profile.cr = 594;                 // as if modules had been bought
   m.render();
@@ -102,7 +103,7 @@ test("fix 3: Load slot restores the save and redraws the panel in the same click
   assert.equal(state.profile.cr, 600, "credits come back");
   assert.ok(panel.innerHTML.includes("600 cr"), "and the panel shows them without another click");
   assert.equal(m.shownNotice(), "", "a routine \"Loaded slot 1\" says nothing: the panel already shows the save");
-  assert.equal(JSON.parse(mem.get("tr_s1")).profile.cr, 600, "the slot itself is untouched");
+  assert.equal(JSON.parse(mem.get("tr_s1")).open.profile.cr, 600, "the slot itself is untouched");
 });
 
 test("fix 3: a slot holding an away save puts the pilot back out in space", () => {
@@ -138,13 +139,15 @@ test("fix 3: Import applies a good code, and a bad code leaves the game alone", 
   assert.equal(m.shownNotice(), "That code is not a valid save.", "a refusal is still shown, in the fixed notice");
 });
 
-test("fix 3: Reset progress works and leaves the pilot docked at the home station", () => {
+test("fix 3: Reset refreshes this mode's world and resumes docked, keeping shared pilot assets", () => {
   const P = boot("hollow", false);
   state.profile.cr = 42;
   assert.equal(click("rs2"), null);
-  assert.equal(state.profile.cr, 600);
+  assert.equal(state.profile.cr, 42, "the shared pilot keeps its credits");
   assert.equal(state.place, "reach");
+  assert.equal(state.worldState.place, "reach");
   assert.equal(P.docked, true);
+  assert.equal(state.worldState.resume, null);
   assert.equal(panel.hidden, false);
 });
 
@@ -154,8 +157,8 @@ test("fix 2: docking always shows the station menu, never the start screen again
   m.resumeFromSave(P);
   assert.equal(P.docked, false);
   assert.equal(panel.hidden, false, "the start screen owns the panel while it is up");
-  assert.ok(panel.innerHTML.includes('data-a="campaign" disabled>Campaign</button>'),
-    "Campaign is shown but disabled");
+  assert.ok(panel.innerHTML.includes('data-a="campaign">Campaign</button>'),
+    "Campaign is shown and enabled");
   assert.ok(panel.innerHTML.includes('data-a="intro">Open World</button>'),
     "Open World keeps the existing intro action");
   assert.ok(panel.innerHTML.indexOf(">Campaign</button>") < panel.innerHTML.indexOf(">Open World</button>"),
@@ -180,7 +183,7 @@ test("fix 2: docking always shows the station menu, never the start screen again
 test("fix 2: a station save deploys straight into the station menu", () => {
   const P = boot("reach", true);
   m.resumeFromSave(P);
-  assert.ok(panel.innerHTML.includes('data-a="campaign" disabled>Campaign</button>'));
+  assert.ok(panel.innerHTML.includes('data-a="campaign">Campaign</button>'));
   assert.ok(panel.innerHTML.includes('data-a="intro">Open World</button>'));
   assert.equal(click("intro"), null);
   assert.equal(P.docked, true);
@@ -197,7 +200,7 @@ test("pause exit event returns the panel to the main menu", () => {
   assert.equal(state.ui.tab, "l");
   assert.equal(state.ui.leftPanel, "m");
   assert.equal(panel.hidden, false);
-  assert.ok(panel.innerHTML.includes('data-a="campaign" disabled>Campaign</button>'));
+  assert.ok(panel.innerHTML.includes('data-a="campaign">Campaign</button>'));
   assert.ok(panel.innerHTML.includes('data-a="intro">Open World</button>'));
 });
 

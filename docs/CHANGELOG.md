@@ -20,6 +20,45 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-19: Campaign tutorial waves re-arm after a pocket reload
+
+A quit made mid-sortie could strand the pilot behind an unfinishable kill objective: enemy waves are runtime
+objects and a save never carries them, so the interrupted spawn step would not fire again on reload. Spawn script
+actions may now opt in with `respawn: true`; on pocket entry and on undock the runner compares the kill objective
+still owed (current step, counters as saved, parallel-aware) with the `mission:<id>`-tagged enemies still alive in
+the pocket and emits only the deficit — living members keep their health and are never duplicated, nothing happens
+while docked, dead, warping or loading, and a full wave never re-spawns. All three practice-drone/raider waves in
+`src/data/campaign/m01.js` are tagged. `sanitizeSave` now keeps the `respawn` action key so the flag survives a
+save round trip (no `SAVE_VERSION` change; it stays **26**). New test boots a mid-M01 campaign save through
+`currentRootSave()` → `prepareGalaxySave` → `resumeFromSave`, re-arms the missing drone, finishes the objective and
+the mission, and asserts exactly one completion is recorded. Files: `src/sim/missions.js`, `src/state/profile.js`,
+`src/data/campaign/m01.js`, `tests/campaign.test.mjs`, `testing/TESTING-15-CAMPAIGN.md`,
+`docs/{MISSION_RULES,recipes/11-story-and-scripted-missions}.md`. `game/tallow-reach.html` rebuilt;
+`npm test` **782 pass / 0 fail**. ROADMAP step 15 still unticked (owner playtest pending).
+
+## 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial
+
+The campaign is now its own saved mode and its own fixed-seed seven-system galaxy (seed `240515`,
+Auric Reach at its heart, pockets like `auric_flight_school`), sharing the browser pilot's fleet,
+credits, cargo and loadout but none of the open world's place, missions, flags or progress. Save
+**v26** stores a `{v, mode, open, campaign}` envelope; legacy nested saves migrate on read and
+write back as roots, and `prepareGalaxySave`/`applySave`/`resetCurrentModeSave` keep the inactive
+half in sync. `data/campaign/` holds the galaxy, `m01-first-sortie` (Dane Korr, fixed Wasp grant,
+tutorial flight school ending in a pirate ambush) and the `index.js` order; accepting a campaign
+story mission grants and selects its fixed hull (after the already-active check, so a duplicate
+accept cannot re-select it), completion notes `profile.campaign.completed` and emits
+`campaign-mission-completed` before the reward. The campaign menu and offer flow are wired; the
+finish transition is deliberately **nothing yet** (no free-agent flip, no unlock, no reward); replay
+rewards stay framework-only. Practice drones are no longer `friendly` (they are shootable targets);
+Captain Korr stays `friendly`+`invulnerable`. Export/import codes carry the record they are given
+(the game exports the dual-mode root), while browser autosave/slots normalise to the root; slot
+summaries show the active mode. Storage migration tests and `tests/campaign.test.mjs` cover the
+envelope, mode switching, shared pilot, fixed-ship grant and a full M01 play-through.
+**Not ticked in ROADMAP: owner playtest pending.** Files: `src/state/{profile,state,storage}.js`,
+`src/sim/{campaign,galaxy-session,missions,ai,weapons,missile,targeting}.js`, `src/data/{enemies,campaign/*}.js`,
+`src/ui/{menu,screens,missionlog}.js`, `tests/campaign.test.mjs`, migration-test updates.
+`game/tallow-reach.html` rebuilt; `npm test` **781 pass / 0 fail**.
+
 ## 2026-11-19: One HUD label per nearby belt group
 
 Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
@@ -87,63 +126,10 @@ negative `m/s` when reversing. Files: `src/{index.html,styles.css,main.js}`,
 `tests/{station-ui-batch,part2-ui}.test.mjs`. Save **v24** unchanged;
 `game/tallow-reach.html` rebuilt; owner playtest pending.
 
-## 2026-11-18: Roadmap slice 3 — My Assets, Minecraft-style inventory slots, Mining beams subgroup and 0 MJ power fix
-
-Slice 2 playtest passed. Fixed the `0 MJ` power bug across every MJ consumer (`hasPower`
-now requires `p.stored > 0` with no bare-powerplant fallback; unequipped or emptied power
-cells disable thrusters, strafe, lift, turning, boost, shields, cannons and mining beam
-while reporting `Using 0 of Y MJ/s`; L31). Added a dedicated collapsible `Mining beams`
-sub-category under `Shop → Modules → Primary weapons` alongside `Cannons` and `Missiles`.
-Implemented Slice 3: added the `My Assets` sub-tab (`listPlayerAssets`, `assetsHtml`) in
-both docked Station Inventory and in-flight Ship Inventory (`I`), listing every station
-where the pilot has stored items or hangar ships and expanding compact N-menu-style
-1-line rows on click; and upgraded all inventory UIs (docked Station & Ship hold,
-in-flight `I` Ship hold, and in-flight `R` Rift Cache) to Minecraft-style slot
-manipulation (`ui/inventory-ui.js`, `slotsAt`, `pickupSlot`, `placeHeldStack`,
-`takeFromSlot`, `shiftMoveSlot`, `stackAll`, `returnHeldStack`) — left-click picks up a
-stack to place, merge or swap into any slot, right-click while holding places 1 item,
-right-click on a stack offers `Take amount` (plus slot-aware `Sell`/`Discard` and `Use`),
-Shift+left-click moves the whole stack across open inventories, `Stack all` consolidates
-split stacks and empty gaps on every inventory header, and Esc/close/save restores any
-held stack without item loss. Bumped `SAVE_VERSION = 24` (`profile.holdSlots`,
-`world.stationSlots`) with clean migration from v1–v23. Files:
-`src/data/shops.js`, `src/state/{profile,state}.js`,
-`src/sim/{power,player,shield,weapons,inventory,economy,session,instances}.js`,
-`src/ui/{inventory-ui,screens,menu,cargo,cache}.js`, `src/{main.js,styles.css}`,
-`tests/{slice3-assets-inventory-power,slice2-shop-ships,content,shield,inventory,inventory-discard,ui-cargo,ui-cache}.test.mjs`.
-Rebuild generated; owner Slice 3 playtest pending.
-
-## 2026-11-18: Roadmap slice 2 — compact Shop, Hangar stored-ship list & context menu, Ship details/bonuses and unblurred cargo overlays
-
-Slice 1 playtest passed; includes owner's Slice 2 follow-ups. Rebuilt the Shop tab into a
-compact single-line collapsible tree (`SHOP_GROUPS`: `Ships`, `Modules` with 1-line
-subgroups matching every `MODULE_GROUPS` group plus `Cannons` and `Missiles` sub-groups
-under `Primary weapons`, `Consumables`, `Ores`, `Loot`) with a right-side `Buy` button
-opening a bounded `Buy amount` popover (`shopBuyHtml` / `shopMaxBuy`) anchored so the
-popup's right-aligned `Buy` button lands directly over the cursor (`placePopoverButtonOverCursor`,
-flipping at the bottom edge); `Ores`, `Loot` and primary `Missiles` show none in stock
-at Meridian today and populate automatically for future items/weapons. Ships are bought in
-Shop (never in Inventory) and stored per station in the restored **Hangar** tab's compact
-one-line `.hangar-ships` list (removed from Outfitting): single left-click never auto-
-equips, double-click flies the ship, and right-click offers `Show info`, `Fly ship`, and
-`Sell` (`canSellShip` / `sellShip` at 60% resale via `shipSellValue`, moving cargo and
-non-stock fitted upgrades into station storage and refusing when active or short on
-storage space). Supports duplicate hulls (`wasp#2`, `prospector#2`) across stations via `profile.shipPlaces` in `SAVE_VERSION = 23` (clean v1–v22 migration), keeps
-each station's `world.base.hangar + 1` berth cap, and lends a local Wasp on death without
-moving remote ships. Updated hull bonuses (Wasp none, Prospector `2×` mining speed with
-Wasp Hull HP, Bulwark `1.5×` damage on all weapons, Test Ship unchanged) with right-click
-`Ship details` (`shipBaseStats` / `shipDetailsHtml`) in Shop, Outfitting and Hangar.
-Removed background blur from flight inventory (`#cargo`), rift cache (`#cache`) and
-shared `.cargo-overlay` for all future cargo transfers. Files:
-`src/data/{ships,outfitting,mounts,shops}.js`, `src/state/{profile,state}.js`,
-`src/sim/{hull,inventory,fitting,combat,weapons,missile,pilot,session,economy}.js`,
-`src/render/{models,shipviewer,views}.js`,
-`src/ui/{hud,notice,outfitting,cargo,cache,screens,menu}.js`, `src/main.js`,
-`src/styles.css`, `tests/slice2-shop-ships.test.mjs`. Build regenerated; owner playtest
-pending before Slice 3.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-18: Roadmap slice 3 — My Assets, Minecraft-style inventory slots, Mining beams subgroup and 0 MJ power fix
+- 2026-11-18: Roadmap slice 2 — compact Shop, Hangar stored-ship list & context menu, Ship details/bonuses and unblurred cargo overlays
 - 2026-11-18: Roadmap slice 1 — true moving-collider speed, live Mission log item counts and 10-minute per-station contract timers
 - 2026-11-18: Nebula fill 0.175, unified label/lock colours and N-tab lock-square icons
 - 2026-11-18: Ore asteroids use natural shaded surface colours with no self-glow

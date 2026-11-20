@@ -14,6 +14,8 @@ import { MODULES, STOCK_FIT } from "../data/modules.js";
 import { layoutFor } from "../data/outfitting.js";
 import { PLACES, DEFAULT_PLACE, isPocket, isSystem, PLACE_EXTENT, stationKeyAt } from "../data/places.js";
 import { GALAXY } from "../data/galaxy.js";
+import { CAMPAIGN_HOME_POCKET, campaignGalaxyRecord } from "../data/campaign/galaxy.js";
+import { CAMPAIGN_MISSIONS } from "../data/campaign/index.js";
 import { isInstanceTemplate, instanceTemplate, instanceIdFor, wormholeIdFor, cleanConnections, WORMHOLE_SPAWN } from "../data/instances.js";
 
 const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
@@ -87,7 +89,13 @@ function worldWithStationStores(fields, stationStores) {
 //   24 adds profile.holdSlots and world.stationSlots: optional per-container slot
 //      layouts (`Array<[itemId, count] | null>`) preserving split stacks and custom
 //      slot positions while always summing to the authoritative stock maps.
-export const SAVE_VERSION = 25;
+//   25 saves the off-chart wormhole connection clocks and adds the 30 persistent
+//      wormhole systems to a world.
+//   26 wraps a save in two independent mode records (`open` and `campaign`) under
+//      the shared browser slot. The campaign gets its own generated galaxy, place,
+//      station stores and missions; the open world carries over unchanged. v25 and
+//      older saves become the open-world half and receive a fresh campaign half.
+export const SAVE_VERSION = 26;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -214,16 +222,96 @@ function attachMissionCompat(profile) {
   return profile;
 }
 
+/** Grant the story-assigned hull to this pilot and make it the active ship. */
+export function grantFixedShip(profile, id, placeId = null) {
+  if (!profile || !isShipId(id)) return false;
+  if (!Array.isArray(profile.ships)) profile.ships = [];
+  if (!profile.ships.includes(id)) profile.ships.push(id);
+  ensureShipRecords(profile, id, placeId);
+  profile.ship = id;
+  if (typeof placeId === "string" && placeId) {
+    profile.shipPlaces = profile.shipPlaces && typeof profile.shipPlaces === "object" && !Array.isArray(profile.shipPlaces) ? profile.shipPlaces : {};
+    profile.shipPlaces[id] = placeId;
+  }
+  return true;
+}
+
+/** Profile keys shared by both modes of one browser save. World-scoped state
+ * (current ship, ship locations, home, missions, flags and mode completion)
+ * deliberately stays out so each world keeps its own places and progress. */
+export const PILOT_SHARED_KEYS = Object.freeze([
+  "cr", "holds", "holdSlots", "ships", "hp", "loadout", "msl", "pw", "sw", "kills",
+]);
+
+const clonePilotValue = value => JSON.parse(JSON.stringify(value));
+
+/**
+ * Copy the shared pilot forward into `target` without taking target's world
+ * overlay (current ship, shipPlaces/homeStation, missions/flags/campaign/done).
+ * Both profiles describe one pilot; `target` keeps its own world assignment.
+ */
+export function syncSharedPilot(target, source) {
+  if (!target || !source || typeof target !== "object" || typeof source !== "object") return target;
+  const ships = [...new Set((Array.isArray(source.ships) ? source.ships : []).filter(isShipId))];
+  if (!ships.length) ships.push(DEFAULT_SHIP);
+  target.cr = Math.max(0, Math.floor(+source.cr || 0));
+  target.msl = Math.max(0, Math.floor(+source.msl || 0));
+  target.pw = ["1", "2", "3", "4", "5"].includes(String(source.pw)) ? String(source.pw) : "1";
+  target.sw = ["1", "2", "3", "4", "5"].includes(String(source.sw)) ? String(source.sw) : "1";
+  target.kills = Math.max(0, Math.floor(+source.kills || 0));
+  target.ships = ships;
+
+  const copyMap = (key, valid) => {
+    const table = source?.[key] && typeof source[key] === "object" && !Array.isArray(source[key]) ? source[key] : {};
+    const out = {};
+    for (const id of ships) {
+      if (table[id] !== undefined) out[id] = clonePilotValue(table[id]);
+      else if (key === "holds") out[id] = newHold();
+      else if (key === "hp") out[id] = 1;
+      else if (key === "loadout") out[id] = stockFor(id);
+      else if (key === "holdSlots") continue;
+    }
+    target[key] = out;
+  };
+  copyMap("holds", true);
+  copyMap("hp", true);
+  copyMap("loadout", true);
+
+  const sourceSlots = source?.holdSlots && typeof source.holdSlots === "object" && !Array.isArray(source.holdSlots) ? source.holdSlots : {};
+  const slots = {};
+  for (const id of ships) if (Array.isArray(sourceSlots[id])) slots[id] = clonePilotValue(sourceSlots[id]);
+  target.holdSlots = slots;
+
+  // A mode's current ship is its own overlay. If that hull left the shared
+  // fleet, choose one the campaign/open world can still fly.
+  const fallback = ships.includes(source.ship) ? source.ship : ships[0];
+  if (!ships.includes(target.ship)) target.ship = fallback;
+  const rawPlaces = target.shipPlaces && typeof target.shipPlaces === "object" && !Array.isArray(target.shipPlaces) ? target.shipPlaces : {};
+  const home = typeof target.homeStation === "string" && target.homeStation ? target.homeStation : DEFAULT_PLACE;
+  const places = {};
+  for (const id of ships) places[id] = typeof rawPlaces[id] === "string" && rawPlaces[id] ? rawPlaces[id] : home;
+  target.shipPlaces = places;
+  return target;
+}
+
 /** Fresh portable character profile (travels with a pilot across worlds). */
-export function newProfile() {
+/** A compact remembered-campaign record: which authored campaign missions the
+ * pilot has accomplished. Replays stay modest; the ordered list lives in data. */
+const cleanCampaignProgress = raw => ({
+  completed: [...new Set((Array.isArray(raw?.completed) ? raw.completed : [])
+    .filter(id => typeof id === "string" && id.trim() && id.length <= 160))],
+});
+
+export function newProfile(homePocket = DEFAULT_PLACE) {
   return attachMissionCompat({
-    homeStation: DEFAULT_PLACE, // optional backward-compatible v21 field
+    homeStation: homePocket, // optional backward-compatible v21 field
+    campaign: { completed: [] }, // completed authored campaign mission ids; replays stay separate
     v: SAVE_VERSION,
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
     holdSlots: {},                          // per ship: optional `[itemId, count] | null` slot layout
     ships: [DEFAULT_SHIP],
-    shipPlaces: { [DEFAULT_SHIP]: DEFAULT_PLACE }, // per ship: station pocket id where it sits
+    shipPlaces: { [DEFAULT_SHIP]: homePocket }, // per ship: station pocket id where it sits
     ship: DEFAULT_SHIP,
     missions: [],       // active mission records; several may run at once
     flags: {},          // remembered story facts (used by later mission slices)
@@ -237,16 +325,21 @@ export function newProfile() {
   });
 }
 
-/** Fresh hosted world record (station levels and storage, contract board, galaxy and current pocket). */
-export function newWorld() {
+/** Fresh hosted world record (station levels and storage, contract board, galaxy and current pocket).
+ * Pass `homePocket` to make a mode-specific starting station; the default remains Meridian. */
+export function newWorld({ homePocket = DEFAULT_PLACE, seed = GALAXY.seed, galaxy = null, naturalWormholes = true } = {}) {
+  const homeStationKey = stationKeyAt(homePocket) || `${homePocket}:station`;
+  const homeSystem = PLACES[homePocket]?.parent || PLACES[DEFAULT_PLACE].parent;
+  const galaxyRecord = galaxy || newGalaxyRecord(seed);
   return worldWithStationStores({
     v: SAVE_VERSION,
+    naturalWormholes,
     base: { ...BASE_DEFAULT },
     board: [],       // the home station's contract offers (kept as the old field)
     boards: {},      // other stations' offers: place id -> compact offers
     boardTimers: {}, // station place id -> remaining unpaused refresh cooldown seconds (0 = ready)
-    galaxy: newGalaxyRecord(),
-    place: DEFAULT_PLACE,
+    galaxy: galaxyRecord,
+    place: homePocket,
     destination: null, // local session destination, saved with this world
     resume: null,      // null = docked; { pos, quat, sh, en } = flying at that spot
     instances: [],     // temporary runs the pilot is inside (rifts); see cleanInstanceRuns
@@ -255,7 +348,7 @@ export function newWorld() {
     placeMemory: {},   // place id -> { rocks: { id: seconds }, encounters: { id: seconds } }
     missionState: {},  // story-script state keyed by place id
     stationSlots: {},  // station key -> optional `[itemId, count] | null` slot layout
-  }, { [HOME_STATION_KEY]: newStock() });
+  }, { [homeStationKey]: newStock() });
 }
 
 /** Compact map knowledge. No positions, pockets, links or generated content. */
@@ -286,6 +379,19 @@ export function newSave() {
     world: newWorld(),
   };
 }
+
+/** Fresh campaign half. It is a full ordinary save with campaign geography and
+ * no open-world standing wormhole population; its progress stays in this half. */
+export function newCampaignSave() {
+  return {
+    v: SAVE_VERSION,
+    profile: newProfile(CAMPAIGN_HOME_POCKET),
+    world: newWorld({ homePocket: CAMPAIGN_HOME_POCKET, seed: campaignGalaxyRecord().seed, galaxy: campaignGalaxyRecord(), naturalWormholes: false }),
+  };
+}
+
+/** A fresh save for one mode in the root envelope. */
+export const newModeSave = mode => mode === "campaign" ? newCampaignSave() : newSave();
 
 /** Validate one compact contract offer in `world.board`. */
 function cleanContract(raw) {
@@ -326,7 +432,7 @@ function cleanScriptAction(raw) {
   if (typeof raw === "string") return raw;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const action = {};
-  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to", "loot"]) {
+  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to", "loot", "respawn"]) {
     if (raw[key] !== undefined) action[key] = raw[key];
   }
   if (raw.dropOnDefeat && typeof raw.dropOnDefeat === "object" && !Array.isArray(raw.dropOnDefeat)) {
@@ -389,7 +495,7 @@ function cleanMission(raw) {
   if (!isMissionKind(raw.kind) || !Array.isArray(raw.steps)) return null;
   let steps = raw.steps.map(cleanMissionStep).filter(Boolean);
   if (!steps.length) return null;
-  const definition = STORY_MISSIONS.find(item => item.id === raw.id);
+  const definition = CAMPAIGN_MISSIONS.find(item => item.id === raw.id) || STORY_MISSIONS.find(item => item.id === raw.id);
   const rawStep = Math.max(0, Math.floor(+raw.step || +raw.current || 0));
   const savedStepId = rawStep < steps.length ? steps[rawStep]?.id : null;
   const savedComplete = raw.completed === true || rawStep >= steps.length;
@@ -448,6 +554,7 @@ function cleanMission(raw) {
   const rewards = raw.rewards && typeof raw.rewards === "object" ? {
     credits: Math.max(0, Math.floor(+raw.rewards.credits || 0)),
   } : { credits: Math.max(0, Math.floor(+raw.r || 0)) };
+  const fixedShip = isShipId(raw.fixedShip) ? raw.fixedShip : null;
   const borderDefinition = definition?.id === "story.border-signal" ? definition : null;
   const authoredFails = borderDefinition?.fails
     ? { ...borderDefinition.fails, on: Array.isArray(borderDefinition.fails.on) ? [...borderDefinition.fails.on] : borderDefinition.fails.on }
@@ -459,6 +566,7 @@ function cleanMission(raw) {
     requires: Array.isArray(raw.requires) ? raw.requires.filter(id => typeof id === "string") : [],
     steps,
     rewards,
+    ...(fixedShip ? { fixedShip } : {}),
     fails: authoredFails || (raw.fails && typeof raw.fails === "object" ? { ...raw.fails } : {}),
     step: current,
     current,
@@ -561,6 +669,7 @@ export function sanitizeProfile(raw) {
 
   return attachMissionCompat({
     homeStation,
+    campaign: cleanCampaignProgress(raw.campaign),
     v: SAVE_VERSION,
     cr,
     holds,
@@ -1025,6 +1134,7 @@ export function sanitizeWorld(raw) {
 
   return worldWithStationStores({
     v: SAVE_VERSION,
+    naturalWormholes: raw.naturalWormholes === false ? false : true,
     base,
     board,
     boards,
@@ -1035,7 +1145,7 @@ export function sanitizeWorld(raw) {
     resume: cleanResume(raw.resume),
     instances,
     wormholes,
-    connections: cleanConnections(raw.connections),
+    connections: raw.naturalWormholes === false ? [] : cleanConnections(raw.connections),
     placeMemory: cleanPlaceMemory(raw.placeMemory),
     missionState: cleanMissionState(raw.missionState),
     stationSlots,

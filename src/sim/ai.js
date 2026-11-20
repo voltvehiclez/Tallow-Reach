@@ -5,7 +5,7 @@
 // branch. Hunt contracts still take priority over the ambient encounter and use
 // the same desired-count/enemy rules as before.
 
-import { createBrain, flyFighter, clearFriendlyLane } from "./enemy-flight.js";
+import { createBrain, flyFighter, flyEscort, clearFriendlyLane } from "./enemy-flight.js";
 import { AI_FLIGHT } from "../data/enemy-ai.js";
 import { V, Q, R } from "../util/math.js";
 import { emit, on } from "../util/events.js";
@@ -24,7 +24,7 @@ import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
 
 // Keep the reusable behaviour id for authored content; personality is data-driven.
-export const AI_BEHAVIOURS = { chase: flyFighter };
+export const AI_BEHAVIOURS = { chase: flyFighter, escort: flyEscort };
 
 let nextId = 1;
 
@@ -50,6 +50,8 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null, opt
     n: def.n,
     f: def.f,
     loot: hasLootOverride ? options.loot : def.loot,
+    friendly: def.friendly === true,
+    invulnerable: def.invulnerable === true,
     dropOnDefeat: options?.dropOnDefeat || null,
     hp,
     mx: hp,

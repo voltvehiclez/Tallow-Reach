@@ -7,6 +7,8 @@ const standard = {
 export const ENEMY_AI = {
   standard,
   raider: { ...standard },
+  captain: { ...standard, range: 0.45, strafe: 0.2, attackChance: 0, dodgeChance: 0, vertical: 0.08, decision: [6, 8] },
+  drone: { ...standard, range: 0.55, strafe: 0.5, attackChance: 0, dodgeChance: 0.1, vertical: 0.2, decision: [5, 7] },
   smuggler: { ...standard, range: 1.15, strafe: 1.1, attackChance: 0.3 },
   freighter: { ...standard, range: 1.3, strafe: 0.4, vertical: 0.12, attackChance: 0.1, dodgeChance: 0.05, decision: [4, 6] },
   hiveguardian: { ...standard, range: 0.8, attackChance: 0.72, decision: [1.8, 3.2], breakTime: [0.8, 1.4], dodgeChance: 0.35 },

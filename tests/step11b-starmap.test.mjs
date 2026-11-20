@@ -69,7 +69,7 @@ function oldV15() {
 }
 
 test("11B: new saves are v20 and store only seed plus compact system knowledge", () => {
-  assert.equal(SAVE_VERSION, 25);
+  assert.equal(SAVE_VERSION, 26);
   const s = newSave();
   assert.deepEqual(Object.keys(s.world.galaxy).sort(), ["knowledge", "seed"]);
   assert.equal(s.world.galaxy.seed, GALAXY.seed);
@@ -82,7 +82,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
   const old = oldV15();
   const before = JSON.parse(JSON.stringify(old));
   const s = prepareGalaxySave(old);
-  assert.equal(s.v, 25);
+  assert.equal(s.v, 26);
   assert.equal(s.world.place, "hollow");
   assert.deepEqual(s.world.resume, before.world.resume);
   assert.equal(s.profile.cr, 4850);
@@ -95,7 +95,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
 test("11B: v13 and v12 fixtures still migrate through the world-aware loader", () => {
   for (const raw of [V13, V12]) {
     const s = prepareGalaxySave(raw);
-    assert.equal(s.v, 25);
+    assert.equal(s.v, 26);
     assert.equal(s.profile.cr, raw.profile?.cr ?? raw.cr);
     assert.deepEqual(s.profile.holds, raw.profile?.holds ?? raw.holds);
     assert.ok(state.galaxy.pocketsById[s.world.place]);
@@ -198,12 +198,12 @@ test("11B: autosave, slots and TR1 codes keep their keys/prefix and use the same
     assert.equal(saveAutosave(save), true);
     assert.equal(writeSlot(2, save), true);
     assert.ok(mem.has("tr1") && mem.has("tr_s2"));
-    assert.equal(loadAutosave(prepareGalaxySave).world.galaxy.seed, 77);
-    assert.equal(prepareGalaxySave(readSlot(2)).world.galaxy.seed, 77);
+    assert.equal(loadAutosave(prepareGalaxySave).open.world.galaxy.seed, 77);
+    assert.equal(prepareGalaxySave(readSlot(2)).open.world.galaxy.seed, 77);
     const code = encodeSave(save);
     assert.ok(code.startsWith("TR1:"));
     assert.equal(decodeSave(code, prepareGalaxySave).world.galaxy.seed, 77);
-    assert.equal(JSON.parse(mem.get("tr1")).v, 25);
+    assert.equal(JSON.parse(mem.get("tr1")).v, 26);
   } finally {
     if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
   }
@@ -956,13 +956,13 @@ test("route destinations autosave immediately, survive relog and clear on arriva
     const click = data => mapRoot.handlers.click({ target: { closest: () => ({ dataset: data, disabled: false }) } });
     const context = id => mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-system]") ? { dataset: { system: id } } : null }, clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
     ui.openStarmap(); context(target.id); click({ action: "set-destination" });
-    assert.equal(JSON.parse(mem.get("tr1")).world.destination, target.id, "setting saves immediately while map is open");
+    assert.equal(JSON.parse(mem.get("tr1")).open.world.destination, target.id, "setting saves immediately while map is open");
     ui.closeStarmap();
     ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
     assert.equal(ui.state.ui.destination, target.id, "system target restored after relog");
     assert.ok(ui.openStarmap()); assert.match(mapRoot.innerHTML, /Route to/);
     click({ action: "clear-destination" });
-    assert.equal(JSON.parse(mem.get("tr1")).world.destination, null, "clearing saves immediately");
+    assert.equal(JSON.parse(mem.get("tr1")).open.world.destination, null, "clearing saves immediately");
     ui.closeStarmap(); ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
     assert.equal(ui.state.ui.destination, null);
     ui.openStarmap();
@@ -970,12 +970,12 @@ test("route destinations autosave immediately, survive relog and clear on arriva
     mapRoot.handlers.contextmenu({ target: { closest: sel => sel.includes("[data-pocket]") ? { dataset: { pocket: "hollow" } } : null },
       clientX: 100, clientY: 100, preventDefault() {}, stopPropagation() {} });
     click({ action: "set-pocket-destination" });
-    assert.deepEqual(JSON.parse(mem.get("tr1")).world.destination, { pocketId: "hollow" });
+    assert.deepEqual(JSON.parse(mem.get("tr1")).open.world.destination, { pocketId: "hollow" });
     ui.closeStarmap(); ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
     assert.deepEqual(ui.state.ui.destination, { pocketId: "hollow" }, "exact pocket target restored");
     assert.equal(ui.jumpRoute(P), true); ui.updateWarp(WARP_TIME + 1, P);
     assert.equal(ui.state.ui.destination, null);
-    assert.equal(JSON.parse(mem.get("tr1")).world.destination, null, "arrival persists the cleared target");
+    assert.equal(JSON.parse(mem.get("tr1")).open.world.destination, null, "arrival persists the cleared target");
     ui.applySave(ui.prepareGalaxySave(JSON.parse(mem.get("tr1"))));
     assert.equal(ui.state.ui.destination, null, "arrival does not resurrect after reload");
   } finally {
@@ -996,7 +996,7 @@ test("v17 to v20: destination migration, validation, slot and export round trips
     assert.deepEqual(decodeSave(encodeSave(save), prepareGalaxySave).world.destination, destination);
     const mem = new Map(), previous = globalThis.localStorage;
     globalThis.localStorage = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
-    try { assert.equal(writeSlot(1, save), true); assert.deepEqual(prepareGalaxySave(readSlot(1)).world.destination, destination); }
+    try { assert.equal(writeSlot(1, save), true); assert.deepEqual(prepareGalaxySave(readSlot(1)).open.world.destination, destination); }
     finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
   }
   for (const invalid of ["missing", "hollow", { pocketId: "meridian" }, { pocketId: "missing" }, [], 42]) {
@@ -1042,15 +1042,15 @@ test("11B: composition root wires map/travel/pause and every save replacement pr
   assert.match(main, /const playing = .*!isStarmapOpen\(\)/);
   assert.match(menu, /prepareGalaxySave\(raw\)/);
   assert.match(menu, /decodeSave\(text, prepareGalaxySave\)/);
-  assert.match(menu, /prepareGalaxySave\(newSave\(\)\)/);
+  assert.match(menu, /prepareGalaxySave\(resetCurrentModeSave\(\)\)/);
 });
 
 test("11B: the pre-11B v15 fixture resumes flying with its character and cargo intact", () => {
   fresh();
   const save = prepareGalaxySave(V15);
   assert.equal(V15.v, 15);
-  assert.equal(save.v, 25);
-  assert.equal(save.profile.v, 25);
+  assert.equal(save.v, 26);
+  assert.equal(save.profile.v, 26);
   assert.equal(save.profile.missions.length, 1);
   assert.deepEqual(save.profile.mission, V15.profile.mission, "the singular compatibility view keeps the old contract");
   assert.deepEqual(save.profile.flags, {});

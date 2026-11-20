@@ -979,8 +979,8 @@ test("the boot path a browser takes comes back inside the run, with no pocket-re
     const loaded = loadAutosave(prepareGalaxySave);
     assert.ok(loaded, "the autosave loads");
     assert.equal(state.galaxyRecovery, null, "a run is a place, not a pocket that went missing");
-    assert.equal(loaded.world.place, record.id, "and the save still names the run");
-    assert.ok(loaded.world.resume, "with the pilot's own spot inside it");
+    assert.equal(loaded.open.world.place, record.id, "and the save still names the run");
+    assert.ok(loaded.open.world.resume, "with the pilot's own spot inside it");
 
     applySave(loaded);
     resumeFromSave();

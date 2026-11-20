@@ -5,7 +5,7 @@ code**: give complete files (or exact find-and-replace edits) with full paths, a
 run and what to click. Different AI assistants work in separate chats and none remembers earlier ones.
 **The docs are the memory.** Do not read every doc: read this file, then only what your task needs.
 
-*Last checked: 2026-11-18. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
+*Last checked: 2026-11-19. This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
 
 ## Start here (every chat)
 
@@ -32,10 +32,11 @@ run and what to click. Different AI assistants work in separate chats and none r
 
 ## Where the game is now
 
-- Save version: **v25**.
+- Save version: **v26**.
 - **Which steps are done, built or next: the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step status is kept (this file, REFACTOR_PLAN and the README do
-  not repeat it); tick steps there. A step that is "built" but not ticked is waiting for the owner's playtest.
-- **Ask the owner at the start:** "Did the playtests marked pending in ROADMAP pass?" (tick them there if so). If they report a bug, fix it first.
+  not repeat it); tick steps there.
+- **Ask the owner at the start:** "Did the pending playtests in ROADMAP pass?" Tick them there if so; if they report a bug, fix it first.
+- **Step 15 campaign (built, playtest pending; v26):** separate mode, fixed galaxy (240515), dual-mode envelope, shared pilot; `data/campaign/` (M01: Korr, fixed Wasp; waves re-arm); finish = nothing yet. Don't tick ROADMAP until playtest passes.
 - **Playtests passed (2026-11-18):** Roadmap Slices 1–3 merged to `main` (PR #43, save **v24**: moving-collider speed, live mission counts, 10-min contract timers, compact Shop + `Mining beams` + cursor Buy popup, per-station ships & Sell, ship bonuses, `My Assets`, Minecraft-style slots, and `0 MJ` power fix).
 - **Station UI, direct fitting & reverse-speed (PR #44 merged to `main`; Services polish pending, save v24):** compact controls-only `Controls`; square `#inv-held-ghost` with clean drop removal (L28), uncropped `.inv-item` text, no held banner/dimming, and ship-hold `Stack all` top-left compaction; clickable top-right Home icon with `.home-tip` hover card; Hangar ships + `Fly` in Inventory; shared `#station-left` (`ui/left-panel.js`) for `Outfitting` (no subtitle, taller `#shipview`), `Shop`, and `Missions` (right accepts `Story missions` + `Contract board`; left `Mission log` expands inline on `Details` with no duplication); click-pick/swap, drag-drop, right-click `Equip`/`Unequip`, and module `Show info` everywhere; compact `68px` full-width `Services` below modules (no browser tooltips, 2×4 single-line boxes stepping to 3/2 on narrow panes, scrollable for 9+ services); `My Assets` prefix `Search`, ship cargo, and `Set destination`; signed reverse `m/s`.
 - **Previous batches (PRs #37, #39, #42):** NPC flight AI (`data/enemy-ai.js`), surface F picking, compact mission log, stationary outfitting preview, home recovery, framed Shield/Hull + Power/Boost, ten-slot hotbar, paid-ignition throttle, cannon lead, true speed, unified marker colours and `N` pocket list.
@@ -43,7 +44,7 @@ run and what to click. Different AI assistants work in separate chats and none r
 - **Stock camera (2026-11-16):** `BASE_HFOV = 85` (`data/camera.js`), vertical FOV derived from aspect (`verticalFovForAspect`, ≈54.54° on 16:9), chase distances `CAMERA` 14.9 / 23.1 / 14.3, rejected edge-compression lens removed.
 - **System space (2026-11-16, playtest passed):** every pocket of a system now has a derived **3D AU position** (`systemSpatialLayout` in `sim/galaxy.js`): map `x` → AU `x`, map `y` → AU `z`, plus a tiny seeded AU height per pocket (authored `mapHeight` wins). Systems are measured in AUs (1 AU = 150M km) with a seeded per-system scale multiplier; a system's border is its farthest pocket, so it grows itself. The map stays 2D; saves unchanged (nothing stored). Every ordinary pocket — and a spawned wormhole pocket — wears the **system sky layer** (`render/systemsky.js`): the star/black hole as a real 3D sphere (drawn size = its set AU size ÷ your distance — closer pocket = bigger sun) and sibling pockets as barely-visible dots. The one `DirectionalLight` re-aims per pocket from the visible body (black hole dimmer + orange); instances keep their own skies. Guide: [../testing/TESTING-SYSTEM-SKY.md](../testing/TESTING-SYSTEM-SKY.md). Prepares warp-space later.
 - **Models & collision (2026-11-14; playtested 2026-11-16):** drop-in `.glb` per drawn thing (built-in fallback kept); ships/enemies/weapons collide with the drawn mesh (`sweepColliders`); big moving parts are live colliders (Meridian's arms). **Everything solid hurts** (`damage` defaults 1; `collideDmg: 0` opts out). Save **v21**. See [GLB_MODELS.md](GLB_MODELS.md), LESSONS L25/L27.
-- **Test Ship (playtested); bug rounds 1+2 (playtested); 14c wormholes (playtested, ticked); cube-map skies (playtested):** all confirmed 2026-11-16. 14c recap: pockets spawn in ordinary systems, "Simple Wormhole" on the map, 75 standing / ≤3 per system, 20-minute clock, **Stable wormhole** out, save **v21** (`world.wormholes`); step 15 is **v22**. Test Ship recap: 1-cr Hangar `testship`, 1000 Hull HP, 10× damage, `heavyfighter-compressed.glb` inlined. Sky recap: every sky is a generated CUBE MAP (2048 px faces, `STARFIELD.enabled = false`); the owner's panoramas are kept, not drawn; `render/cubemap.js` holds the face correction. Next: **14d**, then step 15 (v22); campaign = step 15, see [architecture/feature-notes.md](architecture/feature-notes.md).
+- **Test Ship (playtested); bug rounds 1+2 (playtested); 14c wormholes (playtested, ticked); cube-map skies (playtested):** all confirmed 2026-11-16. 14c recap: pockets spawn in ordinary systems, "Simple Wormhole" on the map, 75 standing / ≤3 per system, 20-minute clock, **Stable wormhole** out, save **v21**; step 15 is **v26**. Test Ship recap: 1-cr Hangar `testship`, 1000 Hull HP, 10× damage, `heavyfighter-compressed.glb` inlined. Sky recap: every sky is a generated CUBE MAP (2048 px faces, `STARFIELD.enabled = false`); the owner's panoramas are kept, not drawn; `render/cubemap.js` holds the face correction. 14d passed; step 15 (v26) built, playtest pending; campaign, see [architecture/feature-notes.md](architecture/feature-notes.md).
 
 ## The owner's ground rules (do not break these)
 

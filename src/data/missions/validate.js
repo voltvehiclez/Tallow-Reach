@@ -12,6 +12,7 @@
 
 import { isItem } from "../items.js";
 import { ENEMIES } from "../enemies.js";
+import { isShipId } from "../ships.js";
 import { isPocket, placeDef } from "../places.js";
 import { MISSION_KINDS, MISSION_STEP_KINDS } from "./index.js";
 import { MISSION_RULES } from "./rules.js";
@@ -41,6 +42,7 @@ export function lintMission(def) {
   if (!def || typeof def !== "object") return [{ level: "error", step: "(mission)", message: "mission is not an object" }];
   if (typeof def.id !== "string" || !def.id) error(null, "mission needs an id");
   if (typeof def.title !== "string" || !def.title) error(null, "mission needs a title");
+  if (def.fixedShip !== undefined && !isShipId(def.fixedShip)) error(null, `fixedShip "${def.fixedShip}" is not a ship`);
   if (!MISSION_KINDS.includes(def.kind)) error(null, `kind "${def.kind}" is not one of ${MISSION_KINDS.join(", ")}`);
   if (!Array.isArray(def.steps) || !def.steps.length) {
     error(null, "mission needs at least one step");

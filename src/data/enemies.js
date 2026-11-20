@@ -59,6 +59,63 @@ export const ENEMIES = {
     loot: "raider",
   },
 
+  // Captain Dane Korr's command hull. This is a friendly story actor, not a
+  // hostile: it holds station ahead of the cadet, cannot be killed and never fires.
+  captain_korr: {
+    n: "Captain Dane Korr",
+    pl: "captains",
+    hp: 9999,
+    col: 0x53677b,
+    scale: 1.15,
+    f: "school",
+    ai: "escort",
+    aiProfile: "captain",
+    turn: 1.6,
+    spdFar: 145,
+    spdNear: 65,
+    spdOrbit: 18,
+    circleAt: 140,
+    fireRange: 1,
+    lostRange: 9000,
+    hearRange: 1,
+    fireDelay: 9999,
+    fireGap: [9998, 9999],
+    dmg: 0.1,
+    bspd: 1,
+    spawnDist: [600, 700],
+    loot: "raider",
+    friendly: true,
+    invulnerable: true,
+    markerTone: "i",
+  },
+
+  // The school's unarmed target drone. It closes slowly for the gunnery drill,
+  // cannot damage the cadet's Wasp and is expected to be shot down.
+  practice_drone: {
+    n: "Practice Drone",
+    pl: "practice drones",
+    hp: 6,
+    col: 0x3c6c76,
+    scale: 0.75,
+    f: "school",
+    ai: "chase",
+    aiProfile: "drone",
+    turn: 0.9,
+    spdFar: 80,
+    spdNear: 18,
+    spdOrbit: 25,
+    circleAt: 180,
+    fireRange: 1,
+    lostRange: 9000,
+    hearRange: 1,
+    fireDelay: 9999,
+    fireGap: [9998, 9999],
+    dmg: 0.1,
+    bspd: 1,
+    spawnDist: [600, 750],
+    loot: "practice",
+  },
+
   // A smuggler's escort in a smuggling site (step 14c): a gun for hire working the smugglers'
   // route. Its own hostile — not a raider — so a hunt contract for the map's pirates is never paid
   // by a fight the contract never asked for, the same rule the rift guardians follow.

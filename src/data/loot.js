@@ -32,6 +32,15 @@ export const LOOT_TABLES = {
     ],
   },
 
+  // Flight-school practice drones leave a small salvage token for the
+  // tutorial's later gunnery drills.
+  practice: {
+    kind: "drops",
+    entries: [
+      { i: "salv", c: [1, 1], w: 1, j: 12 },
+    ],
+  },
+
   // What a rift's guardian leaves behind (step 14). It is not a pirate wreck with a cargo hold:
   // it is the pocket's own metal, so the rare ore the canister inside pays in also comes off the
   // wreck. The salvage and the core chance are the raider's, so giving the rift its own hostile

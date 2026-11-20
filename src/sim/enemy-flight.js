@@ -1,5 +1,5 @@
 // Independent, bounded flight decisions. No target-velocity lead or weapon stat buffs.
-import { V } from '../util/math.js';
+import { V, fwdQ } from '../util/math.js';
 import { makeRng } from '../util/rng.js';
 import { enemyAI, AI_FLIGHT as T } from '../data/enemy-ai.js';
 import { enemyFwd, enemyHullRadius, turnEnemy } from './enemy.js';
@@ -53,6 +53,22 @@ export function flightAvoidance(e, world, desired, players = []) {
     dodgeSphere(rock.pos, V(), r + radius + T.rockMargin, T.avoidSpeed);
   }
   return avoid;
+}
+
+/** A story escort: hold station ahead of the pilot without firing or hurting them. */
+export function flyEscort(e, def, toTarget, dist, dt, context) {
+  const { target, world } = context;
+  const ahead = target?.quat ? fwdQ(target.quat) : V(0, 0, 1);
+  const anchor = target.pos.clone().addScaledVector(ahead, 170).add(V(0, 18, 0));
+  const toAnchor = anchor.clone().sub(e.pos), distance = toAnchor.length();
+  const desired = distance > 35
+    ? toAnchor.normalize().multiplyScalar(Math.min(def.spdFar, distance * 1.25))
+    : target.v?.clone?.() || V();
+  desired.add(flightAvoidance(e, world, desired, context.players || [target])).clampLength(0, def.spdFar);
+  const look = desired.lengthSq() > 1 ? e.pos.clone().add(desired) : anchor;
+  turnEnemy(e, look, Math.min(1, dt * def.turn));
+  e.v.lerp(desired, 1 - Math.exp(-dt * 3.2));
+  e.pos.addScaledVector(e.v, dt);
 }
 
 export function flyFighter(e, def, toTarget, dist, dt, context) {

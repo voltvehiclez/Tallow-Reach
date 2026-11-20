@@ -353,7 +353,7 @@ test("per-station 10-minute unpaused contract refresh timer removes only accepte
   const ctx = newPilot();
   try {
     setPlaceCatalog({ systems: [], pockets: { ...PLACES, depot: DEPOT } });
-    assert.equal(SAVE_VERSION, 25);
+    assert.equal(SAVE_VERSION, 26);
     assert.equal(CONTRACT_REFRESH_SECONDS, 600);
 
     applySave(newSave());
@@ -448,7 +448,7 @@ test("per-station 10-minute unpaused contract refresh timer removes only accepte
         boardTimers: undefined,
       },
     });
-    assert.equal(legacy.v, 25);
+    assert.equal(legacy.v, 26);
     assert.equal(legacy.world.board.length, 1);
     assert.equal(boardRefreshRemaining("reach", legacy.world), 0);
 

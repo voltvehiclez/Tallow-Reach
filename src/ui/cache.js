@@ -12,8 +12,7 @@
 // leave cargo behind. It is a modal surface like the starmap and the flight inventory card: flight
 // input is released while it is open, but the run keeps running, clock and all.
 
-import { state, localPlayer, currentSave } from "../state/state.js";
-import { saveAutosave } from "../state/storage.js";
+import { state, localPlayer, currentSave, saveCurrentGame } from "../state/state.js";
 import { on, emit } from "../util/events.js";
 import { cacheHtml } from "./screens.js";
 import { CACHE, countOf, discardItem, slotAt } from "../sim/inventory.js";
@@ -62,7 +61,7 @@ function renderCache() {
 
 function saveQuietly() {
   try {
-    saveAutosave(currentSave());
+    saveCurrentGame();
   } catch {
     // An autosave that cannot be written must not eat the move itself.
   }
@@ -284,7 +283,7 @@ function useConsumable(entry) {
   // The hold changed, so anything waiting on cargo gets its retry, and the run is saved.
   emit("mission-inventory-changed", { profile: state.profile, player: state.player });
   try {
-    saveAutosave(currentSave());
+    saveCurrentGame();
   } catch {
     // An autosave that cannot be written must not eat the use itself.
   }

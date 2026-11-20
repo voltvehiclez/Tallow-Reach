@@ -545,7 +545,7 @@ function drawMarkers() {
 
   W.enemies.forEach(e => {
     if (lock && lock.o === e) return;
-    mark(interpolatedPos(e), "Hostile", markerStyle("Hostile", e), 70, -36, null, lock ? "dim" : "");
+    mark(interpolatedPos(e), e.friendly ? e.n : "Hostile", markerStyle(e.friendly ? "Ship" : "Hostile", e), 70, -36, null, lock ? "dim" : "");
   });
 
   if (lock) {

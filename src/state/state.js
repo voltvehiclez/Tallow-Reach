@@ -3,7 +3,8 @@
 // packed together as `{ v, profile, world }` (see profile.js). Everything else
 // is rebuilt on load.
 
-import { newProfile, newWorld, SAVE_VERSION } from "./profile.js";
+import { newProfile, newWorld, newSave, newCampaignSave, newModeSave, syncSharedPilot, SAVE_VERSION } from "./profile.js";
+import { saveAutosave } from "./storage.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
 import { DEFAULT_PLACE, clearInstancePlaces, clearWormholePlaces } from "../data/places.js";
@@ -187,10 +188,13 @@ function withHeldStackRestored(profile, world, held) {
  * path — autosave, slot and export code — records where the pilot actually is,
  * including inside a rift (and never drops a stack held on the cursor).
  */
-export function currentSave() {
+export const isDualModeSave = save => !!(save && typeof save === "object" && save.open && save.campaign);
+
+function captureActiveModeSave() {
   captureResume();
   captureInstances();
-  captureWormholes();
+  if (state.mode !== "campaign") captureWormholes();
+  else state.worldState.wormholes = [];
   state.worldState.destination = state.ui.destination;
   const { profile, world } = withHeldStackRestored(state.profile, state.worldState, state.ui.invHeld);
   return {
@@ -200,8 +204,60 @@ export function currentSave() {
   };
 }
 
-/** Install a validated `{ v, profile, world }` save into runtime state. */
-export function applySave(save) {
+export function currentSave() {
+  return captureActiveModeSave();
+}
+
+const cloneModeSave = save => JSON.parse(JSON.stringify(save));
+
+/** Snapshot both mode records. The active half is captured exactly as
+ * `currentSave()` captures it; before either half leaves this function, the
+ * inactive mode is synced to the active pilot. The two modes keep their own
+ * world overlay (ship choice/locations, home, missions and flags), while the
+ * fleet, cargo and hull records stay one pilot. */
+export function currentRootSave() {
+  const mode = state.mode === "campaign" ? "campaign" : "open";
+  const other = mode === "open" ? "campaign" : "open";
+  const modes = state.savedModes && typeof state.savedModes === "object" ? { ...state.savedModes } : {};
+  modes[mode] = captureActiveModeSave();
+  modes[other] = modes[other] && typeof modes[other] === "object" ? modes[other] : freshModeSave(other);
+  modes[mode] = cloneModeSave(modes[mode]);
+  modes[other] = cloneModeSave(modes[other]);
+  syncSharedPilot(modes[other].profile, modes[mode].profile);
+  state.savedModes = { open: modes.open, campaign: modes.campaign };
+  return { v: SAVE_VERSION, mode, open: modes.open, campaign: modes.campaign };
+}
+
+/** Produce a fresh dual-mode save for boot/reset. */
+export function newRootSave() {
+  const open = newSave();
+  const campaign = newCampaignSave();
+  return { v: SAVE_VERSION, mode: "open", open, campaign };
+}
+
+/** A fresh nested save for one half of the envelope. Exposed for root-aware preparation. */
+export const freshModeSave = newModeSave;
+
+/** Replace only the active mode's world and mode-scoped progress. The fleet,
+ * credits, holds and loadout still belong to this one browser's pilot, so a
+ * reset does not erase what the other mode and the pilot own. */
+export function resetCurrentModeSave() {
+  const mode = state.mode === "campaign" ? "campaign" : "open";
+  const root = currentRootSave();
+  const fresh = freshModeSave(mode);
+  fresh.profile.v = SAVE_VERSION;
+  syncSharedPilot(fresh.profile, root[mode].profile);
+  root[mode] = fresh;
+  root.mode = mode;
+  return root;
+}
+
+/** Persist both mode halves in the active browser slot. */
+export function saveCurrentGame() {
+  return saveAutosave(currentRootSave());
+}
+
+function installNestedSave(save) {
   state.ui.invHeld = null;
   state.profile = save.profile;
   state.worldState = save.world;
@@ -220,10 +276,32 @@ export function applySave(save) {
   return save;
 }
 
+/** Install a validated nested mode save, or the selected half of a dual-mode root save. */
+export function applySave(save) {
+  if (isDualModeSave(save)) {
+    const mode = save.mode === "campaign" ? "campaign" : "open";
+    const other = mode === "open" ? "campaign" : "open";
+    // The active half is authoritative for the shared pilot; the inactive half keeps its own world.
+    save = { ...save, open: cloneModeSave(save.open), campaign: cloneModeSave(save.campaign) };
+    syncSharedPilot(save[other].profile, save[mode].profile);
+    state.mode = mode;
+    state.savedModes = { open: save.open, campaign: save.campaign };
+    return installNestedSave(save[mode]);
+  }
+  if (!state.savedModes || typeof state.savedModes !== "object") {
+    state.savedModes = state.mode === "campaign" ? { campaign: save } : { open: save };
+  } else {
+    state.savedModes = { ...state.savedModes, [state.mode]: save };
+  }
+  return installNestedSave(save);
+}
+
 export const state = {
   profile: newProfile(),
   worldState: newWorld(),
   galaxy: null,         // resolved geography (session only; never saved)
+  mode: "open",          // which independent progress half is active: "open" or "campaign"
+  savedModes: null,      // the prepared inactive half of the dual-mode browser save
   galaxyRecovery: null, // { from, to } when a removed pocket required safe recovery
   multiplayer: false,   // step 16 sets true for a hosted session; map must not pause a host
   players: [],         // player records, including their own controls

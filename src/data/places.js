@@ -182,7 +182,25 @@ export const PLACE_DEFS = {
       },
     ],
   },
-  // Empty space. Nothing out here yet; the owner will add content later.
+  // Korr Flight School: a compact training range with a station and ferrite rocks.
+  // This place definition is shared by the campaign catalog only; open-world PLACES
+  // does not register a pocket that uses it.
+  auric_flight_school: {
+    features: [
+      {
+        kind: "station", id: "korr-flight-school", n: "Korr Flight School",
+        model: "original-meridian", pos: [0, 0, 0], dockRange: 300, dockSpeed: 70,
+        launch: { pos: [0, 0, 260], face: "field" }, shop: "meridian",
+      },
+      {
+        kind: "asteroidField", id: "training-field", n: "Training range",
+        layout: "arc", arc: { inner: 950, width: 420, gap: Math.PI * 0.85, angle: Math.PI / 2 },
+        focus: [700, 100, -600], pos: [0, -20, 750], radius: 1500, height: 180,
+        count: 34, ore: "ferrite", respawnSec: 420, stable: true,
+        rock: { rMin: 16, rMax: 58, giantChance: 0, giantMin: 120, giantMax: 200, orePerR: 1.35 },
+      },
+    ],
+  },
   empty: { features: [] },
 };
 

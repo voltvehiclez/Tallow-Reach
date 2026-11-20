@@ -88,6 +88,7 @@ export function updateMissileFlight(dt, placeId = state.place) {
 
     let end = s.l <= 0;
     for (const e of W.enemies) {
+      if (e.friendly) continue;
       if (enemyPos(e).distanceTo(s.pos) < 12) {
         hitHostile(e, s.dmg, enemyPos(e), s.owner, placeId);
         end = true;
