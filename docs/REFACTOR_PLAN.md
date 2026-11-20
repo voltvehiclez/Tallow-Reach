@@ -218,15 +218,31 @@ step 15 becomes **v22** (owner, 2026-11-14).
 
 ## Step 15: Campaign scaffolding
 **Goal.** The campaign can be *written*, one data file per mission.
-**Ask the owner first:** open question 8.
-**Do.** `data/campaign/` with `index.js` (the order) and `m01.js` as a worked example (and an
-`m02.js` stub); game mode `campaign` versus `free agent` in the profile; a new game starts in the
-campaign; scripted sectors use the step 10 loader; a mission-select screen; replay of completed
-missions in any order for a modest reward; finishing all missions flips the player to free agent and
-releases the open world; a simple brief/dialogue panel for text.
-**Done when.** A test completes a stub campaign and checks the transition and the replay rewards.
-Adding a mission is one new file and one line in `index.js`.
-**Save.** **Version 22**, migration from 21 (14b took v20 for a saved run, 14c takes v21 for saved wormhole pockets).
+**Question 8 — answered by the owner (2026-11-19):** the story gives the pilot a **fixed ship per
+campaign mission**. The first mission is a tutorial: the cadet graduates into a starter **Wasp**,
+guided by **Captain Dane Korr**, a rugged veteran who teaches the basics; a solo short course and
+practice drones, then a pirate ambush, and defeating the ambush completes M01.
+**Owner decisions (2026-11-19, binding):** campaign and open world are **completely separate
+modes** — own saves, own progress, **shared pilot** (fleet, credits, cargo, loadout), and no
+physical connection between the worlds (play either order whenever). The campaign galaxy is a
+fixed-seed, ~6–8 system world (built: **7 systems, seed `240515`**). Campaign completion
+transition/reward is **"nothing yet"** — no free-agent flip, no unlock, no completion reward;
+replay of completed missions stays framework-only, nothing wired.
+**Do (as built).** `data/campaign/` with `galaxy.js` (the fixed seed and home pocket), `m01.js`
+(`campaign.m01-first-sortie`, worked example) and `index.js` (the order); `campaign` versus
+`open` mode in the profile with a dual-mode `{v, mode, open, campaign}` envelope; shared-pilot
+sync between the halves; a Campaign button and offer flow in the menu/mission log; fixed-ship
+grant and selection on accepting a campaign story mission; a campaign completion hook
+(`campaign-mission-completed`) before the reward; scripted sectors use the step 10/13 Mission
+framework unchanged; a simple brief/dialogue panel via the existing mission log UI. Not done
+(deliberately): `m02.js` stub (no agreed content yet), a separate mission-select screen,
+finish-all-missions transition, replay rewards.
+**Done when.** A test can complete the tutorial and check the agreed v26 transition/replay
+behaviour — `tests/campaign.test.mjs` plays M01 from acceptance to hand-in, checks the shared
+pilot, the fixed Wasp grant, campaign progress on completion and save round-trips.
+**Save.** **Version 26**, migration from older saves on read (14b took v20, 14c took v21, 14d
+took v25; the envelope itself is the v26 change). Adding a mission is one new file and one line in
+`index.js`.
 
 > **Milestone D reached.** Write the campaign.
 

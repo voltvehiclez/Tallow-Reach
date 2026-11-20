@@ -341,7 +341,7 @@ test("Slice 3 #7: Minecraft-style slots — pick/place/sort, right-click place-1
   // 8. Save snapshot while holding a stack never loses the held cargo, and Escape/cancel puts it right back.
   const midDragSave = decodeSave(encodeSave(currentSave()), prepareGalaxySave);
   assert.equal(midDragSave.v, SAVE_VERSION);
-  assert.equal(SAVE_VERSION, 25);
+  assert.equal(SAVE_VERSION, 26);
   assert.equal(midDragSave.world.store.salv, 25, "save captured held stack safely");
   assert.equal(cancelHeldStack(), true, "Escape returns held stack to origin");
   assert.equal(countOf(STATION, "salv"), 25);

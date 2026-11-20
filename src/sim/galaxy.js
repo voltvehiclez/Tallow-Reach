@@ -60,7 +60,7 @@ export function generateGalaxy(seed = GALAXY.seed, tuning = GALAXY, overrides = 
   addGeneratedPlanets(world, config, seed >>> 0);
   finalizeArrivals(world);
   index(world);
-  const errors = validateGalaxy(world);
+  const errors = validateGalaxy(world, config.homePocket || DEFAULT_PLACE);
   if (errors.length) throw new Error(`Invalid galaxy:\n- ${errors.join("\n- ")}`);
   return world;
 }
@@ -166,8 +166,14 @@ export function organicWeb(seed, tuning, rng) {
   const links = {};
 
   // Hand-authored systems keep their ids and pockets. Meridian is fixed at the
-  // origin; any other authored system may supply pos in its record/override.
-  const authored = Object.values(PLACES).filter(p => p.kind === "system");
+  // origin by default; campaign mode supplies its own authored catalog through
+  // `tuning.authored`, so it generates its own map from the same machinery.
+  const authoredCatalog = tuning.authored && typeof tuning.authored === "object"
+    ? tuning.authored
+    : { systems: Object.values(PLACES).filter(p => p.kind === "system"), pockets: PLACES, links: PLACE_LINKS };
+  const authored = (Array.isArray(authoredCatalog.systems) ? authoredCatalog.systems : Object.values(authoredCatalog.systems || PLACES)).map(clone);
+  const authoredPockets = authoredCatalog.pockets || PLACES;
+  const authoredLinks = authoredCatalog.links || PLACE_LINKS;
   for (const system of authored) {
     systems.push({ ...clone(system), pos: clone(system.pos || [0, 0]) });
   }
@@ -190,14 +196,14 @@ export function organicWeb(seed, tuning, rng) {
   }
 
   for (const system of systems) {
-    for (const place of Object.values(PLACES)) {
+    for (const place of Object.values(authoredPockets)) {
       if (place.kind === "pocket" && place.parent === system.id) pockets[place.id] = clone(place);
     }
     if (system.id === tuning.homeSystem) continue;
     const hub = `${system.id}-hub`;
     pockets[hub] = emptyPocket(hub, system.id, `${system.n} Expanse`, "Empty space. Nothing out here yet.");
   }
-  for (const link of Object.values(PLACE_LINKS)) links[link.id] = clone(link);
+  for (const link of Object.values(authoredLinks)) links[link.id] = clone(link);
 
   // V1 is retained for identifying legacy saved gate pockets during migration.
   // V2 connects from inner to outer radii, favouring a target depth so the
@@ -263,13 +269,17 @@ export function sparseOrganicWeb(seed, tuning, rng) {
   return organicWeb(seed, tuning, rng);
 }
 
+
+/** The authored home pocket for a system; generated satellites orbit the habitat, not an unrelated placeholder. */
+const homePocketFor = (systemId, tuning) => systemId === tuning.homeSystem ? (tuning.homePocket || DEFAULT_PLACE) : `${systemId}-hub`;
+
 function connectSystems(a, b, pockets, links, systemLinks, degree, tuning) {
   const gateA = `${a.id}-gate-${b.id}`;
   const gateB = `${b.id}-gate-${a.id}`;
   pockets[gateA] = emptyPocket(gateA, a.id, `Gate to ${b.n}`, `The ${b.n} gate pocket. Empty space beyond the gate.`, "gate");
   pockets[gateB] = emptyPocket(gateB, b.id, `Gate to ${a.n}`, `The ${a.n} gate pocket. Empty space beyond the gate.`, "gate");
-  const hubA = a.id === tuning.homeSystem ? DEFAULT_PLACE : `${a.id}-hub`;
-  const hubB = b.id === tuning.homeSystem ? DEFAULT_PLACE : `${b.id}-hub`;
+  const hubA = homePocketFor(a.id, tuning);
+  const hubB = homePocketFor(b.id, tuning);
   addLink(links, `${gateA}-inner`, "internal", hubA, gateA, tuning);
   addLink(links, `${gateB}-inner`, "internal", hubB, gateB, tuning);
   addLink(links, `${gateA}__${gateB}`, "gate", gateA, gateB, tuning);
@@ -469,7 +479,7 @@ function addGeneratedBelts(world, tuning, seed) {
         enter: { kind: "warp", pos: [0, 0, 300] },
         leave: { kind: "warp" },
       };
-      const hub = system.id === tuning.homeSystem ? DEFAULT_PLACE : `${system.id}-hub`;
+      const hub = homePocketFor(system.id, tuning);
       addLink(world.links, `${id}-inner`, "internal", hub, id, tuning);
     }
   }
@@ -524,7 +534,7 @@ function addGeneratedPlanets(world, tuning, seed) {
         enter: { kind: "warp", pos: [0, 0, 300] },
         leave: { kind: "warp" },
       };
-      const hub = system.id === tuning.homeSystem ? DEFAULT_PLACE : `${system.id}-hub`;
+      const hub = homePocketFor(system.id, tuning);
       addLink(world.links, `${id}-inner`, "internal", hub, id, tuning);
     }
   }
@@ -562,7 +572,7 @@ function addDetachedStationPockets(world, tuning) {
       "station",
       gate.template,
     );
-    const hub = gate.parent === tuning.homeSystem ? DEFAULT_PLACE : `${gate.parent}-hub`;
+    const hub = homePocketFor(gate.parent, tuning);
     addLink(world.links, `${stationId}-inner`, "internal", hub, stationId, tuning);
   }
 }
@@ -772,7 +782,7 @@ function index(world) {
 }
 
 /** Plain-language validation errors; generation throws rather than shipping a broken web. */
-export function validateGalaxy(world) {
+export function validateGalaxy(world, startPocket = DEFAULT_PLACE) {
   const errors = [];
   const systems = new Set(world.systems.map(s => s.id));
   if (systems.size !== world.systems.length) errors.push("system ids must be unique");
@@ -832,7 +842,8 @@ export function validateGalaxy(world) {
   }
   // Every pocket must be reachable through enabled links or free intra-system
   // warp. A route-only system cannot hide a disconnected pocket behind free warp.
-  if (world.pockets[DEFAULT_PLACE]) {
+  const homePocket = startPocket;
+  if (world.pockets[homePocket]) {
     const adjacency = new Map();
     const add = (a, b) => {
       if (!adjacency.has(a)) adjacency.set(a, []);
@@ -853,16 +864,16 @@ export function validateGalaxy(world) {
       const ids = bySystem.get(system.id) || [];
       for (const a of ids) for (const b of ids) if (a !== b) add(a, b);
     }
-    const seen = new Set([DEFAULT_PLACE]);
-    const queue = [DEFAULT_PLACE];
+    const seen = new Set([homePocket]);
+    const queue = [homePocket];
     while (queue.length) {
       const id = queue.shift();
       for (const next of adjacency.get(id) || []) {
         if (!seen.has(next)) { seen.add(next); queue.push(next); }
       }
     }
-    for (const id of Object.keys(world.pockets)) if (!seen.has(id)) errors.push(`pocket ${id} is unreachable from ${DEFAULT_PLACE}`);
-  } else errors.push(`starting pocket ${DEFAULT_PLACE} is missing`);
+    for (const id of Object.keys(world.pockets)) if (!seen.has(id)) errors.push(`pocket ${id} is unreachable from ${homePocket}`);
+  } else errors.push(`starting pocket ${homePocket} is missing`);
   return errors;
 }
 

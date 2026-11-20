@@ -6,8 +6,7 @@
 // nowhere out here to move cargo to. It is a modal surface like the starmap —
 // flight input is released while it is open, but the world keeps running.
 
-import { state, localPlayer, currentSave } from "../state/state.js";
-import { saveAutosave } from "../state/storage.js";
+import { state, localPlayer, currentSave, saveCurrentGame } from "../state/state.js";
 import { on, emit } from "../util/events.js";
 import { assetsResultsHtml, cargoHtml, shipDetailsHtml } from "./screens.js";
 import { discardItem, countOf, slotAt } from "../sim/inventory.js";
@@ -55,7 +54,7 @@ function renderCargo() {
 
 function saveQuietly() {
   try {
-    saveAutosave(currentSave());
+    saveCurrentGame();
   } catch {
     // An autosave that cannot be written must not interrupt inventory actions.
   }
@@ -329,7 +328,7 @@ function useConsumable(entry) {
   // The hold changed, so anything waiting on cargo gets its retry, and the run is saved.
   emit("mission-inventory-changed", { profile: state.profile, player: state.player });
   try {
-    saveAutosave(currentSave());
+    saveCurrentGame();
   } catch {
     // An autosave that cannot be written must not eat the use itself.
   }

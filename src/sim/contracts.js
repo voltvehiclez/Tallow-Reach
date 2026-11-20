@@ -88,6 +88,14 @@ export function formatBoardCooldown(seconds) {
  * other station uses `world.boards[placeId]`.
  */
 export function boardAt(placeId = state.place, world = state.worldState) {
+  // Campaign mode has its own mission list and no open-world contract board.
+  // Keep the data shape intact, but never populate or offer contracts there.
+  if (world === state.worldState && state.mode === "campaign") {
+    if (!Array.isArray(world.board)) world.board = [];
+    if (!world.boards || typeof world.boards !== "object" || Array.isArray(world.boards)) world.boards = {};
+    if (!Array.isArray(world.boards[placeId])) world.boards[placeId] = [];
+    return world.boards[placeId];
+  }
   const timers = timersOf(world);
   if (placeId === DEFAULT_PLACE) {
     if (!Array.isArray(world.board)) world.board = [];

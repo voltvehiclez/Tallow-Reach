@@ -100,7 +100,7 @@ export function introHtml() {
     `<div><dt>P / Esc</dt><dd>Pause</dd></div>` +
     `</dl>` +
     `<div class="main-menu-actions">` +
-    `<button class="go" data-a="campaign" disabled>Campaign</button>` +
+    `<button class="go" data-a="campaign">Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +
     `</div>`
   );
@@ -179,9 +179,10 @@ export function contractsHtml() {
   );
 }
 
-/** Right-hand Missions tab: accept story missions and contracts offered here. */
+/** Right-hand Missions tab: campaign passes or, in the open world, story missions and contracts. */
 export function missionsHtml(profileOrUi = state.profile) {
-  return storyOffersHtml(profileOrUi) + contractsHtml();
+  const offers = storyOffersHtml(profileOrUi);
+  return state.mode === "campaign" ? offers : offers + contractsHtml();
 }
 
 // The bays fitted to the ship being flown, group id -> module ids per bay.
@@ -912,11 +913,17 @@ export function cacheHtml(profile = state.profile) {
   );
 }
 
+const isDualModeSaveLike = raw => !!(raw && typeof raw === "object" && raw.open && raw.campaign);
+
 function slotSummary(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const p = raw.profile && typeof raw.profile === "object" ? raw.profile : raw;
-  if (!Array.isArray(p.ships)) return null;
-  return `${Math.max(0, Math.floor(+p.cr || 0))} cr, ${p.ships.length} ships, ${Math.max(0, Math.floor(+p.done || 0))} contracts`;
+  // v26 browser slots hold a {v, mode, open, campaign} envelope: show the active half.
+  const half = raw.profile && typeof raw.profile === "object" ? raw
+    : (raw.mode === "campaign" ? raw.campaign : raw.open) || raw.open || raw.campaign;
+  const p = half && typeof half === "object" && half.profile && typeof half.profile === "object" ? half.profile : null;
+  if (!p || !Array.isArray(p.ships)) return null;
+  const mode = isDualModeSaveLike(raw) ? (raw.mode === "campaign" ? "Campaign" : "Open world") : null;
+  return `${mode ? mode + " — " : ""}${Math.max(0, Math.floor(+p.cr || 0))} cr, ${p.ships.length} ships, ${Math.max(0, Math.floor(+p.done || 0))} contracts`;
 }
 
 function savesHtml(ui) {

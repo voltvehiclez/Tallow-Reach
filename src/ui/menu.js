@@ -5,12 +5,11 @@ import { homeStationPlace, setHomeStation } from "../sim/session.js";
 import { on, emit } from "../util/events.js";
 import { notify, showNotice, hideNotice, setupNotices } from "./notice.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
-import { state, currentSave, applySave, resetPlaces } from "../state/state.js";
-import { saveAutosave, readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
-import { newSave } from "../state/profile.js";
+import { state, currentSave, currentRootSave, applySave, resetPlaces, saveCurrentGame, resetCurrentModeSave } from "../state/state.js";
+import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
-import { prepareGalaxySave } from "../sim/galaxy-session.js";
+import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -24,6 +23,7 @@ import * as inv from "../sim/inventory.js";
 import { canSell, canDiscard, isModule, itemName } from "../data/items.js";
 import { MODULES } from "../data/modules.js";
 import { storyMission } from "../data/missions/index.js";
+import { campaignMission, campaignAvailable, isCampaignMissionId } from "../sim/campaign.js";
 import {
   assetsResultsHtml,
   introHtml,
@@ -198,7 +198,7 @@ export function render() {
 }
 
 function save() {
-  saveAutosave(currentSave());
+  saveCurrentGame();
 }
 
 /**
@@ -229,20 +229,27 @@ function loadedMessage(text) {
   return notice ? `${text} ${notice}` : text;
 }
 
+function enterGameMode(mode) {
+  const switched = switchGameMode(mode);
+  if (switched) afterSaveChange();
+  state.ui.intro = false;
+  resetStationPanels(state.ui);
+  initAudio();
+  if (!switched) resumeFromSave();
+  emit("mission-ui-refresh", {});
+  const notice = recoveryNotice();
+  if (notice) showNotice(notice);
+}
+
 const ACTIONS = {
   home: () => toast(setHomeStation()),
-  // "Open World": leave the start screen and deploy the pilot where the save put
-  // them — docked at a station, or flying at that pocket's arrival point. The
-  // existing `intro` action is deliberately kept as the Open World button's
-  // implementation.
+  // Both story modes share the pilot's browser save. "Open World" keeps the
+  // existing free-galaxy action; "Campaign" installs its independent galaxy and progress.
   intro() {
-    state.ui.intro = false;
-    resetStationPanels(state.ui);
-    initAudio();
-    resumeFromSave();
-    emit("mission-ui-refresh", {});
-    const notice = recoveryNotice();
-    if (notice) showNotice(notice);
+    enterGameMode("open");
+  },
+  campaign() {
+    enterGameMode("campaign");
   },
   tab(name) {
     cancelHeldStack();
@@ -294,9 +301,14 @@ const ACTIONS = {
     toast(contracts.completeContract(i));
   },
   story(id) {
-    const definition = storyMission(id);
-    if (!definition) {
-      toast("That story mission is not available.");
+    const campaignMode = state.mode === "campaign";
+    const definition = campaignMode ? campaignMission(id) : storyMission(id);
+    if (!definition || (campaignMode !== isCampaignMissionId(id))) {
+      toast("That mission is not available in this mode.");
+      return;
+    }
+    if (campaignMode && !campaignAvailable(definition, state.profile)) {
+      toast("Finish the previous campaign mission first.");
       return;
     }
     // Story missions belong to the station that gives them out; the log only
@@ -306,10 +318,11 @@ const ACTIONS = {
       return;
     }
     if (contracts.activeMissions().some(mission => mission.id === definition.id)) {
-      toast("That story mission is already active.");
+      toast("That mission is already active.");
       return;
     }
-    toast(contracts.acceptMission(definition) ? "Story mission accepted." : "Could not start that story mission.");
+    const accepted = contracts.acceptMission(definition);
+    toast(accepted ? (campaignMode ? "Campaign mission accepted." : "Story mission accepted.") : "Could not start that mission.");
   },
 
   // Stored ships (inside Inventory)
@@ -436,7 +449,7 @@ const ACTIONS = {
 
   // Saves
   sv(i) {
-    toast(writeSlot(+i, currentSave()) ? "Saved to slot " + i : "Could not save in this browser.");
+    toast(writeSlot(+i, currentRootSave()) ? "Saved to slot " + i : "Could not save in this browser.");
   },
   ld(i) {
     const raw = readSlot(+i);
@@ -464,13 +477,13 @@ const ACTIONS = {
     state.ui.confirmReset = false;
   },
   rs2() {
-    applySave(prepareGalaxySave(newSave()));
+    applySave(prepareGalaxySave(resetCurrentModeSave()));
     afterSaveChange();
     state.ui.confirmReset = false;
     toast(loadedMessage("Progress reset."));
   },
   xp() {
-    state.ui.xcode = encodeSave(currentSave());
+    state.ui.xcode = encodeSave(currentRootSave());
     try {
       navigator.clipboard.writeText(state.ui.xcode).catch(() => {});
     } catch (e) {
@@ -1564,7 +1577,7 @@ async function onClick(e) {
   }
   if (btn.disabled) return;
   const name = btn.dataset.a;
-  if (name === "intro" && beforeStart) {
+  if ((name === "intro" || name === "campaign") && beforeStart) {
     if (starting) return;
     starting = true;
     btn.disabled = true;

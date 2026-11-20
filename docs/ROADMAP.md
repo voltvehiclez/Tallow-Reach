@@ -72,18 +72,17 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 11 | System map, pocket chooser and starmap (100+ systems, save v17) | C | [x] **2026-11-10: 11A/11B owner playtest passed.** |
 | 12 | Encounters, place templates, place memory (save v18) | C | [x] **2026-11-13: owner playtest passed** (`testing/passed/TESTING-12-PLACES.md`). |
 | 13 | Mission framework; contracts rebuilt on it (save v19) | D | [x] **2026-11-13: owner playtested the mission framework and it passed (13a contracts, 13b story runtime, 13c screens, 13d rules and linter).** Guides are in `testing/passed/`. |
-| 14 | Instanced places and wormholes (rifts) | D | [ ] |
+| 14 | Instanced places and wormholes (rifts) | D | [x] **2026-11-19: 14d owner playtest passed.** |
 | 14a | The Basic rift: item, spawn in space, enter, locked loot cache, lifetime, exit rules (save v19) | D | [x] **Built 2026-11-14 with the owner's six playtest items; the playtest's three bugs in it (raiders as guardians, a paneled sky, an unreadable crash) and the second round (trade canister, 20-minute clock, starless sky) all shipped, the owner confirmed the round works, and their last two notes — lines in the sky, a ship that flew during a trade — shipped the same day** (`testing/TESTING-14-RIFTS.md`). |
 | 14b | A run survives a quit: an instance in progress is saved and restored exactly (save v20) | D | [x] **Built 2026-11-14; the playtest's fourth bug — quitting mid-rift "recovered" the pilot out of the run — fixed and owner-confirmed (`prepareGalaxySave` treats a saved run's place as a place); a half-traded canister saves exactly as it stands** (`testing/TESTING-14-RIFTS.md`). |
 | 14c | Simple wormholes: a pocket that spawns itself inside an existing system, its 20-minute entry clock, collapse on expiry, the Stable wormhole way out, re-enterable until it expires (save v21) | D | [x] **2026-11-16: owner playtest passed** (`testing/TESTING-14C-WORMHOLES.md`). 75 standing, never more than 3 per system, staggered on a fresh universe, 20 minutes from spawn, `collapse` only, the way out always a **Stable wormhole**. |
-| 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space | D | [ ] Built; awaiting owner playtest |
-| 15 | Campaign scaffolding (save v22) | D | [ ] |
+| 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space (save v25) | D | [x] **2026-11-19: owner playtest passed.** |
+| 15 | Campaign scaffolding (save v26) | D | [ ] **Built 2026-11-19; playtest pending.** Dual-mode envelope, shared pilot, fixed seven-system campaign (`240515`); finish = nothing yet |
 | 16 | Multiplayer (plan written when reached) | | [ ] |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table. **Changed
-2026-11-14:** the owner decided a run inside a rift must survive a quit, so an instance in progress is saved; that is
-slice **14b** and it takes **v20**, moving step 15 to **v21**. **Changed again 2026-11-14 (round four):** a spawned
-wormhole pocket is saved too, with its remaining time, so slice **14c** takes **v21** and step 15 moves to **v22**.
+2026-11-14:** a rift run must survive a quit, so **14b** took **v20**. **2026-11-14 (round four):** spawned wormhole
+pockets are saved too, so **14c** took **v21**. **2026-11-19:** **14d** took **v25**; **15** takes **v26** (dual-mode envelope).
 
 ## Content you can add now (after Milestone A: data only)
 

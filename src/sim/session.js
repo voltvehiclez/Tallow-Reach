@@ -8,9 +8,8 @@ import { emit, on } from "../util/events.js";
 import { DEFAULT_SHIP, nextShipId, shipName } from "../data/ships.js";
 import { DEFAULT_PLACE, isPocket, isInstancePlace, isWormholePlace } from "../data/places.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
-import { state, msg, profileOf, currentSave, placeWorld } from "../state/state.js";
+import { state, msg, profileOf, currentSave, placeWorld, saveCurrentGame } from "../state/state.js";
 import { addShipRecords, ensureShipRecords } from "../state/profile.js";
-import { saveAutosave } from "../state/storage.js";
 import { clearTransient } from "./world.js";
 import { stationAt, fieldAt, launchFace, enterPlace, arrivalPos } from "./places.js";
 import { setShip } from "./player.js";
@@ -40,7 +39,7 @@ export function setHomeStation(P = state.player, profile = profileOf(P)) {
   const id = P?.place || state.place;
   if (!P?.docked || !canSetHomeStation(id)) return "Dock at a permanent station to set your home.";
   profile.homeStation = id;
-  if (P === state.player) saveAutosave(currentSave());
+  if (P === state.player) saveCurrentGame();
   return `Home station set to ${stationAt(id).n}. You will recover here after death.`;
 }
 
@@ -172,7 +171,7 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   }
   // The board the pilot walks up to is this station's own (home keeps `board`).
   ensureBoard(world, dockedAt);
-  if (local) saveAutosave(currentSave());
+  if (local) saveCurrentGame();
   emit("docked", { player: P });
 }
 
@@ -188,7 +187,7 @@ export function resumeFromSave(P = state.player, profile = profileOf(P)) {
   // because entering a place clears that place's objects. Simple wormhole pockets (slice 14c) are
   // rebuilt the same way: someone may be standing in one.
   restoreInstances();
-  restoreWormholes();
+  if (state.mode !== "campaign") restoreWormholes();
   const placeId = state.worldState.place || DEFAULT_PLACE;
   enterPlace(placeId, P);
   emit("place-entered", { id: placeId, player: P });   // refresh scenery/views even when the id did not change

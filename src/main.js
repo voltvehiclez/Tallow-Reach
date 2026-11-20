@@ -5,9 +5,8 @@ import { pickLockSurface } from "./render/target-picking.js";
 
 import { renderer, scene, camera, stars, showPlace, stepScenery, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer, applySave, currentSave } from "./state/state.js";
-import { newSave } from "./state/profile.js";
-import { loadAutosave, saveAutosave } from "./state/storage.js";
+import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame } from "./state/state.js";
+import { loadAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { shipDef } from "./data/ships.js";
 import { verticalFovForAspect } from "./data/camera.js";
@@ -60,12 +59,12 @@ import {
 installCrashNotice();
 
 document.body.prepend(renderer.domElement);
-applySave(loadAutosave(prepareGalaxySave) || prepareGalaxySave(newSave()));
+applySave(loadAutosave(prepareGalaxySave) || prepareGalaxySave(newRootSave()));
 // A save can be from inside a rift (slice 14b): its run has to be a place again before anything
 // loads that place. A save can also be standing in a simple wormhole pocket (slice 14c): the pocket
 // has to be a place before its scenery is built. `resumeFromSave()` below puts the pilot back in it.
 restoreInstances();
-restoreWormholes();
+if (state.mode !== "campaign") restoreWormholes();
 createPlayer();
 setShip(state.profile.ship);
 loadPlace(state.place);
@@ -90,7 +89,7 @@ resumeFromSave();   // prepares the ship; the start screen still owns the panel
 // and closing the tab. `pagehide` and the hidden-tab event are the ones browsers
 // actually deliver on close; the timer bounds what a crash can lose.
 const saveResumePoint = () => {
-  if (!state.ui.intro) saveAutosave(currentSave());
+  if (!state.ui.intro) saveCurrentGame();
 };
 addEventListener("pagehide", saveResumePoint);
 document.addEventListener("visibilitychange", () => {

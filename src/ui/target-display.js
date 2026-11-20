@@ -67,6 +67,8 @@ export function markerStyle(kind, object = null) {
   let tone = '';
   if (typeof object?.markerTone === 'string' && (object.markerTone === '' || SAFE_TONE.test(object.markerTone))) {
     tone = object.markerTone;
+  } else if (object?.friendly === true) {
+    tone = 'i';
   } else if (object?.hostile === true || (SHOT_KINDS.has(kind) && object?.own === false)) {
     tone = 'h';
   } else {

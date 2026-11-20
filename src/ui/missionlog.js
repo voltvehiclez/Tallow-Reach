@@ -4,8 +4,8 @@
 
 import { itemName } from "../data/items.js";
 import { STORY_MISSIONS, TEST_MISSIONS } from "../data/missions/index.js";
-import { state, currentSave } from "../state/state.js";
-import { saveAutosave } from "../state/storage.js";
+import { campaignRows } from "../sim/campaign.js";
+import { state, currentSave, saveCurrentGame } from "../state/state.js";
 import { uiSound } from "../core/audio.js";
 import { emit, on } from "../util/events.js";
 import {
@@ -228,7 +228,8 @@ export function missionLogHtml(profileOrUi = state.profile) {
   // Galereach. Only the *offers* are station-bound (each names the station that
   // gives it out), and only the station that takes the hand-in pays.
   const active = activeMissions(profile);
-  let html = `<h2>Mission log</h2><div class="sub">Active missions, contracts and current objectives.</div>`;
+  const sub = state.mode === "campaign" ? "Campaign sorties and current objectives." : "Active missions, contracts and current objectives.";
+  let html = `<h2>Mission log</h2><div class="sub">${esc(sub)}</div>`;
   html += active.length
     ? active.map(mission => missionStatus(mission, profile)).join("")
     : `<p>No active missions here.</p>`;
@@ -240,9 +241,33 @@ export function missionLogHtml(profileOrUi = state.profile) {
  * `Story missions` heading visible even after every offer at this station has
  * been accepted, showing "No more story missions available." when none remain.
  */
+function campaignOffersHtml(profile) {
+  const activeIds = new Set(activeMissions(profile).map(mission => mission.id));
+  const rows = campaignRows(profile);
+  const stationRows = rows.filter(({ mission }) => missionOfferStation(mission) === state.place && !activeIds.has(mission.id));
+  const completedCount = rows.filter(row => row.complete).length;
+  let html = `<h2>Campaign missions</h2>`;
+  if (!stationRows.length) {
+    html += completedCount === rows.length && rows.length
+      ? `<p>No new campaign missions are available yet. More sorties are being written.</p>`
+      : `<p>No campaign missions are available at this station right now.</p>`;
+    return html;
+  }
+  html += stationRows.map(({ mission, complete, available }) => {
+    if (!available) {
+      return `<div class="row"><div><strong>Locked sortie</strong><small>Finish the previous campaign mission.</small></div><button disabled>Locked</button></div>`;
+    }
+    const action = complete ? "Replay" : "Begin";
+    const status = complete ? "Completed · Replayable" : "Next campaign mission";
+    return `<div class="row"><div>${esc(mission.title)}<small>${esc(status)} · hand in at ${esc(missionHandInStationName(mission))}</small></div><button data-a="story" data-b="${esc(mission.id)}">${action}</button></div>`;
+  }).join("");
+  return html;
+}
+
 export function storyOffersHtml(profileOrUi = state.profile) {
   const profile = Array.isArray(profileOrUi?.missions) ? profileOrUi : state.profile;
   const activeIds = new Set(activeMissions(profile).map(mission => mission.id));
+  if (state.mode === "campaign") return campaignOffersHtml(profile);
   const storyOffers = STORY_MISSIONS.filter(mission =>
     !activeIds.has(mission.id) && missionOfferStation(mission) === state.place);
   // The framework test missions are for the owner and for AI chats checking the
@@ -322,7 +347,7 @@ function onDialogueClick(event) {
   event.preventDefault();
   event.stopPropagation();
   uiSound(button.dataset.dialogueChoice ? "confirm" : "click");
-  saveAutosave(currentSave());
+  saveCurrentGame();
   renderDialogue();
 }
 

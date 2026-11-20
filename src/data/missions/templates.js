@@ -24,12 +24,12 @@ import { MISSION_RULES } from "./rules.js";
 const base = (id, kind, fields) => ({ id, kind, ...fields });
 
 /** Face to face at a station: needs the pilot docked, for this line only. */
-export const briefing = ({ id, speaker, portrait, lines, objective, choices, next }) =>
-  base(id, "dialogue", { requiresDock: true, speaker, portrait, lines, objective, ...(choices ? { choices } : {}), ...(next ? { next } : {}) });
+export const briefing = ({ id, speaker, portrait, lines, objective, choices, next, place }) =>
+  base(id, "dialogue", { requiresDock: true, speaker, portrait, lines, objective, ...(place ? { place } : {}), ...(choices ? { choices } : {}), ...(next ? { next } : {}) });
 
 /** A radio message: works in flight, never needs a dock. */
-export const radio = ({ id, speaker, portrait, lines, objective, choices, next }) =>
-  base(id, "dialogue", { requiresDock: false, speaker, portrait, lines, objective, ...(choices ? { choices } : {}), ...(next ? { next } : {}) });
+export const radio = ({ id, speaker, portrait, lines, objective, choices, next, place }) =>
+  base(id, "dialogue", { requiresDock: false, speaker, portrait, lines, objective, ...(place ? { place } : {}), ...(choices ? { choices } : {}), ...(next ? { next } : {}) });
 
 export const travelTo = ({ id, place, objective, next }) =>
   base(id, "reach-sector", { place, objective, ...(next ? { next } : {}) });
@@ -83,13 +83,17 @@ export function sequence(steps) {
  * objectives collect or mine an item is not accomplished until the station
  * hand-in consumes it, and the linter requires this sentence for such missions.
  */
-export const mission = ({ id, title, steps, credits = 0, fails, handIn }) => ({
+export const mission = ({ id, title, steps, credits = 0, fails, handIn, replayCredits = undefined, offeredAt, origin, fixedShip }) => ({
   id,
   title,
   kind: "story",
   requires: [],
   steps: sequence(steps),
   rewards: { credits },
+  ...(Number.isFinite(+replayCredits) && +replayCredits >= 0 ? { replayRewards: { credits: Math.floor(+replayCredits) } } : {}),
   fails: fails || {},
   ...(handIn ? { handIn } : {}),
+  ...(offeredAt ? { offeredAt } : {}),
+  ...(origin ? { origin } : {}),
+  ...(fixedShip ? { fixedShip } : {}),
 });

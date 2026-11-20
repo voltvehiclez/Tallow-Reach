@@ -19,7 +19,12 @@ never imports simulation or rendering code. Active records live in `profile.miss
 `kill`, `mine`, `collect`, `reach`, `deliver` and `survive`, plus story `dialogue`, `script`, `wait`,
 `flags` and `parallel` steps. Dialogue choices can set remembered `profile.flags` and jump to a named
 step; scripts can request a wave/ship, set saved per-place state, give/take an item, play a sound or
-warp a pilot. A `spawn-wave`/`spawn-ship` action may also define `dropOnDefeat: { item, count, scatter }`;
+warp a pilot. A `spawn-wave`/`spawn-ship` action may also define `respawn: true`: the wave then re-arms itself to the number the
+current kill objective still needs whenever the pilot enters the pocket or undocks (living members keep their health and
+are never duplicated — only the deficit is spawned, tagged with the same `mission:<id>` encounter). Use it for waves tied to a
+kill objective that a pilot must be able to finish after quitting mid-fight; it is the framework's answer to rule 7. It does
+nothing while the pilot is docked, dead, warping or loading, and never duplicates a wave that is already standing.
+A `spawn-wave`/`spawn-ship` action may also define `dropOnDefeat: { item, count, scatter }`;
 the authored drop is a physical mission crate, while ordinary enemy loot remains additive. Persistent
 mission crates are saved in the world half with their place, item and position, restored on pocket load,
 and collected only from a successful non-docked pickup. Item-bearing `collect`, `deliver` and `mine`

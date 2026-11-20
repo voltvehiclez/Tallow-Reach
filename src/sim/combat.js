@@ -16,6 +16,7 @@ import { emit, on } from "../util/events.js";
 import { itemName } from "../data/items.js";
 import { placeAt } from "../data/places.js";
 import { shipDef } from "../data/ships.js";
+import { enemyDef } from "../data/enemies.js";
 import { state, msg, say, localPlayer, profileOf, placeWorld } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
@@ -207,6 +208,11 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = 
 
 /** Apply damage to a hostile and handle its death. */
 export function hitHostile(e, dmg, at, byPlayer = undefined, placeId = e.place || state.place) {
+  if (e?.invulnerable || enemyDef(e?.def).invulnerable) {
+    e.hp = e.mx;
+    boom(at, 1, 0x9fd9ff, placeId);
+    return;
+  }
   e.hp -= dmg;
   boom(at, 2, 0xffd080, placeId);
   if (e.hp <= 0) killHostile(e, byPlayer, placeId);

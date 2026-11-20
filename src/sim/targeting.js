@@ -57,7 +57,7 @@ export function toggleLock(P = state.player, surfaceHit = undefined) {
       best = { k, o };
     }
   };
-  for (const e of W.enemies) test("e", e, enemyPos(e), 8);
+  for (const e of W.enemies) { if (!e.friendly) test("e", e, enemyPos(e), 8); }
   for (const a of W.asteroids) test("a", a, a.pos, a.r);
   for (const c of W.crates) test("c", c, c.pos, 4);
   // Step 14: a rift door, the way out of a run and its prize canister are objects in the world like

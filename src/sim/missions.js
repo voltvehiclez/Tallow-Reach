@@ -5,10 +5,12 @@
 import { on, emit } from "../util/events.js";
 import { CONTRACT_MISSION_TEMPLATES, missionFromContract, describeMission } from "../data/missions/contracts.js";
 import { storyMission } from "../data/missions/index.js";
+import { campaignMission, isCampaignMissionId, noteCampaignCompletion } from "./campaign.js";
+import { grantFixedShip } from "../state/profile.js";
 import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
 import { placeAt, placeDef, isPocket, DEFAULT_PLACE } from "../data/places.js";
-import { state, profileOf } from "../state/state.js";
+import { state, profileOf, placeWorld } from "../state/state.js";
 import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stationStock, stockOf, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos, stationAt } from "./places.js";
 
@@ -32,6 +34,9 @@ function missionsOf(profile = state.profile) {
 function profileFor(payload = {}, fallback = state.profile) {
   return payload.profile || profileOf(payload.player) || fallback;
 }
+
+/** Authored definition for this mission in the current content list. */
+const authoredMission = id => isCampaignMissionId(id) ? campaignMission(id) : storyMission(id);
 
 export const activeMissions = (profile = state.profile) => missionsOf(profile);
 
@@ -214,7 +219,7 @@ function handInObjective(mission) {
   if (typeof mission?.handIn?.objective === "string" && mission.handIn.objective) return mission.handIn.objective;
   const definition = mission?.kind === "contract"
     ? CONTRACT_MISSION_TEMPLATES[mission?.type]
-    : storyMission(mission?.id);
+    : authoredMission(mission?.id);
   return typeof definition?.handIn?.objective === "string" ? definition.handIn.objective : "";
 }
 
@@ -1059,7 +1064,11 @@ export function acceptMission(offer, profile = state.profile, at = state.place) 
   // A story mission can only be active once. The Mission log hides an active
   // offer, but the rule belongs here: a second copy (a double click, a retry, a
   // network message) would run the same script twice and double every spawn.
+  // Reject first so a duplicate accept never grants or selects the fixed hull.
   if (offer?.kind === "story" && missionsOf(profile).some(active => active.id === offer.id)) return undefined;
+  // A story mission can assign the hull the fiction says the pilot is flying.
+  // The grant belongs to the shared pilot; this mode's selection is pointed at it.
+  if (offer?.fixedShip && !grantFixedShip(profile, offer.fixedShip, at)) return undefined;
   // Every mission is handed in at one station: its data may name it, otherwise it
   // is the station that gave the mission out (this one, unless the pilot is not
   // at a station, in which case the home station). Stamped on the record so it
@@ -1358,6 +1367,8 @@ export function completeMission(indexOrId, profile = state.profile, player = pro
   profile.done = Math.max(0, Math.floor(+profile.done || 0)) + 1;
   const list = missionsOf(profile);
   list.splice(list.indexOf(mission), 1);
+  const campaignCompletion = noteCampaignCompletion(mission, profile);
+  if (campaignCompletion) emit("campaign-mission-completed", { mission, player: profile === state.profile ? state.player : undefined });
   emit("mission-rewarded", { mission, reward, player: profile === state.profile ? state.player : undefined });
   return `Paid ${reward} cr.`;
 }
@@ -1392,6 +1403,73 @@ on("mission-inventory-changed", payload => advanceMissions("inventory-changed", 
 on("docked", payload => advanceMissions("docked", payload));
 on("mission-dialogue-next", payload => advanceMissions("dialogue-next", payload));
 on("mission-dialogue-choice", payload => advanceMissions("dialogue-choice", payload));
+
+// Rule 7 of the mission rules: quit and reload must resume, never strand the pilot
+// behind an objective whose world was wiped (enemies are runtime objects; a save
+// never carries them). An authored spawn opts in with `respawn: true`; when the
+// pilot enters the pocket (or undocks) with a kill objective still waiting and
+// not enough members of that wave alive, the runner tops the wave back up.
+// Only the deficit is spawned, tagged with the same mission encounter, so a
+// full wave is never doubled and the objective stays the same fight.
+function killObjectivesIn(mission) {
+  const step = missionStep(mission);
+  if (!step) return [];
+  if (step.kind === "kill") return [{ step, key: step.id, place: step.place || step.sector }];
+  if (step.kind !== "parallel") return [];
+  return (step.steps || [])
+    .filter(child => child?.kind === "kill")
+    .map(child => ({ step: child, key: parallelKey(step, child), place: child.place || child.sector || step.place || step.sector }));
+}
+
+function authoredRespawnActions(mission) {
+  const out = [];
+  for (let index = 0; index <= Math.min(mission.step, mission.steps.length - 1); index++) {
+    for (const action of scriptActions(mission.steps[index])) {
+      const kind = scriptKind(action);
+      if ((kind === "spawn-wave" || kind === "spawn-ship") && action?.respawn === true) {
+        out.push({ ...action, kind });
+      }
+    }
+  }
+  return out;
+}
+
+function rearmWaves(place, player, profile) {
+  if (!player || player.docked || player.dead || player.warp || state.loading || player.loading) return;
+  if (!place || !isPocket(place)) return;
+  for (const mission of [...missionsOf(profile)]) {
+    if (isMissionFailed(mission)) continue;
+    const kills = killObjectivesIn(mission);
+    if (!kills.length) continue;
+    for (const action of authoredRespawnActions(mission)) {
+      const enemy = action.enemy || action.ship;
+      if (!enemy) continue;
+      const target = kills.find(kill => kill.step.enemy === enemy && (!kill.place || kill.place === place));
+      if (!target) continue;
+      const remaining = stepCount(target.step) - counterValue(mission, target.key);
+      if (remaining <= 0) continue;
+      const alive = placeWorld(place).enemies
+        .filter(e => e.def === enemy && e.encounter === `mission:${mission.id}`).length;
+      const deficit = remaining - alive;
+      if (deficit <= 0) continue;
+      emit("mission-script", {
+        mission,
+        action: { ...action, kind: action.kind, enemy, count: deficit, place },
+        place, player, profile,
+      });
+    }
+  }
+}
+
+on("place-entered", ({ id, player } = {}) => {
+  if (player !== state.player) return;
+  rearmWaves(id || state.place, player, profileFor({ player }));
+});
+on("launched", ({ player } = {}) => {
+  if (player !== state.player) return;
+  rearmWaves(state.place, player, profileFor({ player }));
+});
+
 // Death is punishment enough, so a destroyed ship does NOT fail a mission by default.
 // A mission fails on death only when
 //   1. its data says so on purpose (`fails: { on: ["player-dead"], ... }`), or

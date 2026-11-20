@@ -295,9 +295,9 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     let best = null,
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!local || !state.freeCam.on) {
-      const selected = F.lock?.k === "e" && W.enemies.includes(F.lock.o) && F.lock.o.hp > 0 ? F.lock.o : null;
+      const selected = F.lock?.k === "e" && W.enemies.includes(F.lock.o) && F.lock.o.hp > 0 && !F.lock.o.friendly ? F.lock.o : null;
       for (const e of W.enemies) {
-        if (e.hp <= 0) continue;
+        if (e.hp <= 0 || e.friendly) continue;
         const q = enemyPos(e).clone().sub(pp),
           d = q.length();
         if (d > MISSILE.range) continue;

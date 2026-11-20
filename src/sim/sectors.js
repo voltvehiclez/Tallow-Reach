@@ -6,8 +6,7 @@ import { WARP, WARP_SWITCH_AT, WARP_TIME, warpFlashAt } from "../data/sectors.js
 import { PLACES, PLACE_LINKS, placeAt, nextPocket } from "../data/places.js";
 import { travelQuote } from "./travel.js";
 import { emit } from "../util/events.js";
-import { state, localPlayer, profileOf, msg, say, currentSave } from "../state/state.js";
-import { saveAutosave } from "../state/storage.js";
+import { state, localPlayer, profileOf, msg, say, currentSave, saveCurrentGame } from "../state/state.js";
 import { clearWorldObjects } from "./world.js";
 import { enterPlace, arrivalPos } from "./places.js";
 import { facePlayer } from "./pilot.js";
@@ -111,7 +110,7 @@ function arrive(P, from, to) {
   if (P === localPlayer()) {
     emit("sfx", { name: "warp-burst" });
     msg(`Warp: ${placeAt(from).n} to ${dest.n}. ${dest.d}`, 4);
-    saveAutosave(currentSave());   // a successful arrival is the next resume point
+    saveCurrentGame();   // a successful arrival is the next resume point
   }
   emit("place-changed", { from, to, player: P });
 }

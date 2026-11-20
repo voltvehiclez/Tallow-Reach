@@ -1,6 +1,6 @@
 # MISSION RULES: read before writing or changing any mission, dialogue or trigger
 
-*Last checked: 2026-11-18.*
+*Last checked: 2026-11-19.*
 
 Missions are a story the player is living in. Every beat must pass one test:
 
@@ -36,7 +36,7 @@ invariant tests below — enforce these rules, so a new mission is checked the m
 | 4 | Each beat declares the situation it needs, individually: `requiresDock: true` (face to face) or `false` (radio). One beat needing a dock never blocks the rest. | Linter (mandatory `requiresDock` on dialogue; a script needs exactly one of `requiresDock` / `requiresFlying`) |
 | 5 | The player is never stuck and never silently punished. There is always a way forward and the objective says what it is. Failure comes only from a clear cause, with a message. | Linter (objective on every step, no dead ends or loops, `fails.message`); invariant tests (never stuck, never failed or abandoned unless a declared rule fired) |
 | 6 | The mission adapts to the player's resources: a full hold makes a step wait, never skip, fail or abandon. | Invariant test fills the hold at every step; `blockedScriptText` and the "Dock at a station and make room" hint |
-| 7 | Everything can be interrupted and resumes: undock, warp, die, quit, reload; replaying starts clean. | Invariant tests: wander, save and load, die at every step then replay |
+| 7 | Everything can be interrupted and resumes: undock, warp, die, quit, reload; replaying starts clean. `respawn: true` re-arms a wave to the objective owed. | Invariant tests: wander, save and load, die at every step then replay |
 | 8 | Think of the odd cases before building (see the checklist). | Your plan |
 | 9 | **Objectives done is not mission accomplished.** A mission that collects or mines an item is accomplished only when the station hand-in consumes it and pays; until then the guidance names what is still owed and never says complete, accomplished or finished. | Runner (`missionObjectivesDone` vs `completeMission`); linter rejects completion words in `objective`/`handIn.objective`; invariant test |
 | 10 | A mission says what it is: a **contract** says "Contract complete" / "Contract failed", a story mission says "Mission ...". | Runner (`missionKindWord`); linter rejects "mission" in contract guidance |
