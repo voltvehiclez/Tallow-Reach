@@ -137,3 +137,37 @@ export const KEY = {
   PREVIOUS_SUFFIX: ":prev",
   TEMP_SUFFIX: ":tmp",
 };
+
+/**
+ * The app id the signalling broker knows this game by (Trystero joins a room name
+ * derived from it). Changing it cuts every existing connection and every link
+ * already sent, so treat it as permanent: it is the closest thing this game has to
+ * a fixed address with a broker we do not run.
+ */
+export const ROOM_NAMESPACE = "tallowreach.p2p";
+
+/**
+ * Where the connection lives. `transport.js` is the only file that may import the
+ * network library (the owner's one-dependency allowance, 2026-11-21), and it joins
+ * this many relays. `relayUrls` empty means "Trystero's own default list": the free
+ * public relays, which are who makes a one-link join work with no server of ours.
+ * If the defaults die, put two or three working `wss://` relays here and nothing
+ * else in the game changes.
+ */
+export const RELAYS = {
+  relayUrls: [],
+};
+
+/**
+ * Chat (slice 3). Short lines, recent history only: chat is for "over here" and
+ * "dock with me", not for a conversation log, and nothing of it is ever saved.
+ *
+ *   recentLines   how many lines the panel keeps on screen
+ *   lineLifeSec   how long a line stays after it was said (0 = it never fades)
+ *   typingRateSec heartbeat while somebody is typing, so "… is typing" can lapse
+ */
+export const CHAT = {
+  recentLines: 8,
+  lineLifeSec: 45,
+  typingRateSec: 4,
+};

@@ -308,7 +308,7 @@ export const state = {
   savedModes: null,      // the prepared inactive half of the dual-mode browser save
   galaxyRecovery: null, // { from, to } when a removed pocket required safe recovery
   away: null,           // v29: the marker while this pilot is visiting another world, else null
-  multiplayer: false,   // step 16 sets true for a hosted session; map must not pause a host
+  multiplayer: false,   // step 16: true while this browser hosts/visits a world, so the card does not pause it
   players: [],         // player records, including their own controls
   localPlayerIndex: 0,  // which player this screen and its input follow
   // Local-player compatibility alias for the local UI and single-player callers.

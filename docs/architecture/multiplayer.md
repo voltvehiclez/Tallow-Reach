@@ -127,6 +127,36 @@ Chat (**Enter**) and the list of connected players arrive in the same slice, so 
 before anything of the player's crosses it. A hosted world **never pauses**, and the pause card
 carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a pause.
 
+### What slice 3 built (2026-11-21)
+
+| File | The one job |
+|---|---|
+| `net/transport.js` | the wrapper: `createChannel` → `join/send/broadcast/leave/peers/state`; `trystero` is named here and nowhere else; every failure becomes `lost` + a sentence |
+| `net/session.js` | one session: `hostWorld`, `joinWorld`, the paste codes, the handshake through `custody.handshake`, the guest list, the recent chat, `mp-state` on the bus |
+| `net/protocol.js` | seven message kinds, each cleaned and length-capped on the way out **and** in |
+| `net/paste.js` | the broker-free fallback: a `TRJOIN:` offer code and an answer code, browser WebRTC only |
+| `net/join-link.js` | `?join=<worldId>#<token>`, and reading one out of a pasted sentence |
+| `net/settings.js` | the username (`tr_mp`), capped and cleaned; a number is refused rather than shown |
+| `net/boot.js` | a `?join=` link in the address bar: asks first, used once, speaks through `mp-notice` |
+| `ui/multiplayer.js` | the pause panel and the chat box; no connection state of its own |
+
+Three decisions worth keeping:
+
+- **The secret after the `#`.** A fragment is never sent to a server and never appears in a referrer,
+  so a host's token cannot be logged by whoever hosts the page, and the query needs no double
+  escaping. `?join=` stays in the query because it has to reach the game.
+- **A first hello is admitted by the link; a returning guest must prove the token.** Slice 3 has no
+  join flow yet, so `session.js` has `firstHelloCheck` (build, world, a real name) for a first
+  contact, and falls through to `custody.handshake` — token included — the moment a record exists.
+  That branch is in **one** place, with the comment, so slice 4 does not have to guess.
+- **A hosted world never pauses.** `sim/step.js` reads `state.multiplayer` (set by `ui/pause.js` on
+  the way in and out of the card). The guests are still flying; stopping the clock for one player's
+  settings screen would be a bug that looks like lag.
+
+**What a session is not allowed to do yet:** it moves no pilot and draws no remote ship. That is
+deliberate — the suitcase is slice 4, so this slice cannot lose a ship, and the owner can test it
+without risking a save.
+
 ## Slices
 
 1. **Custody** — `net/custody.js`, `net/station-inventory.js`, `net/world-places.js`,
@@ -135,10 +165,10 @@ carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a
    `guestId`/`worldId`, the temp-key-then-swap write that keeps the previous version, and the
    `away:<worldId>` storage key. **Built 2026-11-21.**
 3. **The connection** — `net/transport.js` (Trystero for the one-link join, paste codes as the
-   fallback), Pause > Open Multiplayer, chat and the player list. **Next slice**, now that the
-   library is settled.
-4. **Join** — the handshake, "Bring my pilot", two-second snapshots, reconnects by `compare`, "Go
-   home" from the suitcase with the host offline.
+   fallback), Pause > Open Multiplayer, chat and the player list. **Built 2026-11-21.**
+4. **Join** — "Bring my pilot" (`checkOut`/`relocate` through the handshake slice 3 already
+   answers), two-second snapshots, reconnects by `compare`, "Go home" from the suitcase with the
+   host offline. **Next slice.**
 5. **Crashes and reconnects** — the choice screen, "Your pilot is safe" with *Wait* and *Go home*,
    final snapshots on tab close, one session per `guestId`.
 6. **Trading** — *View docked players*, a trade of items, a ship at that station, or credits, a first
@@ -147,10 +177,13 @@ carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a
 
 ## Known gaps (until their slice lands)
 
-- Nothing writes a marker yet: `save.away` and `world.guests` exist and are validated (slice 2),
-  but only the join flow (slice 4) sets one, so in play `away` is always `null`.
+- Nothing writes an `away` marker yet: `save.away` and `world.guests` exist and are validated (slice
+  2), and slice 3 writes a guest record when a guest is admitted, but the pilot itself does not
+  travel until slice 4 — so in play `away` is always `null` and the suitcase is empty.
 - A pilot that is away is **frozen in words only**: `state.away` is set and `currentSave()` keeps it,
   but the screen that refuses to fly it (and offers *Rejoin* / *Bring pilot home*) is slice 4.
 - The screen still draws and follows only the local pilot (`render/views.js`), and `core/input.js`
-  fills only the local pilot's controls: a remote ship is simulated but not yet drawn (slice 4).
-- Non-local death recovery, and the no-pause rule in the pause card, belong to slices 3 and 5.
+  fills only the local pilot's controls: a connected guest is a name in the list, not a ship on
+  screen (slice 4). This is the largest visible gap.
+- The player list is names (and `docked` once slice 4 sets it), not positions or ships.
+- Non-local death recovery belongs to slice 5. The no-pause rule is **built** (slice 3).

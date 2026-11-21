@@ -1,0 +1,267 @@
+// The paste-code fallback (refactor step 16, slice 3): the join that needs no broker.
+//
+// A free relay can be down, a network can refuse it, or a player can simply prefer not
+// to talk to one. Then the two browsers still have to exchange a handful of strings, and
+// the only channel they are certain to share is the one they are already using to talk
+// to each other. So:
+//
+//   1. The host presses **No broker? Paste codes**: the game makes an offer and shows it
+//      as one code.
+//   2. The guest pastes it under **Join Multiplayer World > paste codes**, and gets an
+//      answer code back.
+//   3. The guest sends that code to the host however they like; the host pastes it, and
+//      the two browsers connect directly.
+//
+// **Why this file is separate from `transport.js`.** This path uses the browser's own
+// `RTCPeerConnection` and nothing else — no library, no relay, no account — so it works
+// even if the library fails to load. That is the whole point of a fallback, and it is
+// also why the owner's rule ("one library, behind a wrapper") is not bent by it: the
+// codes path is a browser API, not a dependency.
+//
+// **Honesty about what it costs.** A full ICE offer with trickle candidates is long
+// (thousands of characters, a wall of text to send through a chat app). So: no trickle.
+// The offer waits for gathering to finish and carries every candidate inline, which
+// makes one paste instead of many. That takes a second or two per code and produces
+// something a player can genuinely copy — and it is what the two-paste flow needs.
+//
+// **This file has no UI and no game state.** It is the connection primitive; slice 4
+// puts the pilot through it, and `net/multiplayer.js` owns the screens' state.
+
+/** The prefix that marks a code as this game's, so a stray paste is refused in words. */
+const CODE_PREFIX = "TRJOIN:";
+
+/** How long a code may sit in a chat before it is stale (`data/multiplayer.js` NET.offerSec). */
+export const CODE_VERSION = 1;
+
+const isBrowser = () => typeof globalThis.RTCPeerConnection === "function";
+
+/**
+ * A connection over copy-pasted codes.
+ *
+ *   const link = createPasteLink({ onState, onData });
+ *   const code = await link.offer();      // host: show this
+ *   await link.accept(code);              // guest: paste the host's code, returns the answer
+ *   await link.complete(answerCode);      // host: paste the guest's answer
+ *
+ * The result is the same small vocabulary the channel has: `send(value)`, `state()`,
+ * `leave()`. One connection, not a room: a paste-code join is two browsers by definition.
+ */
+export function createPasteLink({ onState, onData } = {}) {
+  let connection = null;
+  let current = { state: "idle", reason: "" };
+  let channel = null;
+  let pendingAnswer = null;
+
+  const setState = (state, reason = "") => {
+    if (current.state === state && current.reason === reason) return;
+    current = { state, reason };
+    try {
+      onState?.(current);
+    } catch (e) { /* ignore */ }
+  };
+
+  const openConnection = () => {
+    if (!isBrowser()) throw new Error("This browser cannot make a direct connection.");
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    pc.onconnectionstatechange = () => {
+      const next = pc.connectionState;
+      if (next === "connected") setState("connected");
+      else if (next === "failed" || next === "disconnected" || next === "closed") {
+        setState("lost", "The direct connection closed. Make a new code.");
+      }
+    };
+    // ICE candidates are gathered into the code itself, so none arrive after it is sent.
+    // Accepting one here would be harmless; ignoring them keeps the code small.
+    pc.onicecandidate = () => {};
+    pc.ondatachannel = event => attach(event.channel);
+    return pc;
+  };
+
+  function attach(dc) {
+    channel = dc;
+    dc.onmessage = event => {
+      let value = null;
+      try {
+        value = JSON.parse(String(event.data));
+      } catch (e) {
+        return; // a peer that sends nonsense is ignored, not trusted
+      }
+      if (!value || typeof value !== "object") return;
+      try {
+        onData?.(value);
+      } catch (e) { /* ignore */ }
+    };
+    dc.onopen = () => setState("connected");
+    dc.onclose = () => setState("lost", "The direct connection closed. Make a new code.");
+  }
+
+  /** Wait until ICE gathering is over, or give up after a few seconds with what we have. */
+  const gathered = pc => new Promise(resolve => {
+    if (pc.iceGatheringState === "complete") return resolve();
+    const done = () => {
+      if (pc.iceGatheringState === "complete") {
+        pc.removeEventListener("icegatheringstatechange", done);
+        resolve();
+      }
+    };
+    pc.addEventListener("icegatheringstatechange", done);
+    // A network that never finishes gathering still deserves a usable code.
+    setTimeout(() => {
+      pc.removeEventListener("icegatheringstatechange", done);
+      resolve();
+    }, 4000);
+  });
+
+  /** Host: make the offer code to show. */
+  async function offer() {
+    setState("working", "Making a code…");
+    try {
+      connection = openConnection();
+      const dc = connection.createDataChannel("reach", { ordered: true });
+      attach(dc);
+      const description = await connection.createOffer();
+      await connection.setLocalDescription(description);
+      await gathered(connection);
+      const code = pack("offer", connection.localDescription);
+      setState("waiting", "Send this code to the other pilot, then paste their answer.");
+      return code;
+    } catch (error) {
+      setState("lost", `Could not make a code: ${error.message || error}`);
+      return "";
+    }
+  }
+
+  /** Guest: take the host's offer and return the answer code to send back. */
+  async function accept(code) {
+    setState("working", "Reading the code…");
+    const parsed = unpack(code);
+    if (!parsed || parsed.kind !== "offer") {
+      setState("lost", "That is not a host's join code. Ask them to copy the whole code.");
+      return "";
+    }
+    try {
+      connection = openConnection();
+      connectHandlers();
+      await connection.setRemoteDescription(parsed.description);
+      const description = await connection.createAnswer();
+      await connection.setLocalDescription(description);
+      await gathered(connection);
+      const answer = pack("answer", connection.localDescription);
+      setState("waiting", "Send this answer back to the host.");
+      return answer;
+    } catch (error) {
+      setState("lost", `Could not read that code: ${error.message || error}`);
+      return "";
+    }
+  }
+
+  /** Host: take the guest's answer and finish the connection. */
+  async function complete(code) {
+    const parsed = unpack(code);
+    if (!parsed || parsed.kind !== "answer") {
+      setState("lost", "That is not the guest's answer code.");
+      return false;
+    }
+    if (!connection) {
+      setState("lost", "Make a fresh code first: this connection has been waiting too long.");
+      return false;
+    }
+    try {
+      await connection.setRemoteDescription(parsed.description);
+      setState("working", "Connecting directly…");
+      return true;
+    } catch (error) {
+      setState("lost", `Could not finish with that answer: ${error.message || error}`);
+      return false;
+    }
+  }
+
+  function connectHandlers() {
+    // The guest gets the data channel the host created; `ondatachannel` is set in
+    // `openConnection` already, this is only here so a future symmetric flow works.
+  }
+
+  function send(value) {
+    if (!channel || channel.readyState !== "open") return false;
+    try {
+      channel.send(JSON.stringify(value));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function leave() {
+    try {
+      channel?.close?.();
+      connection?.close?.();
+    } catch (e) { /* ignore */ }
+    channel = null;
+    connection = null;
+    setState("closed");
+  }
+
+  return {
+    offer,
+    accept,
+    complete,
+    send,
+    leave,
+    state: () => ({ ...current }),
+    /** True once the two browsers are talking with no broker involved. */
+    live: () => !!channel && channel.readyState === "open",
+  };
+}
+
+/**
+ * The STUN servers a direct connection may need to find itself. These are public,
+ * free and carry no game data: they only answer "what is my address". Without one, a
+ * connection between two home networks usually fails; with one, it usually works.
+ */
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
+
+/* ------------------------------------------------------------------------- */
+/* The code itself: a small, printable, copy-paste-safe envelope              */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * A code is `TRJOIN:` + base64 of `{ v, kind, description }`.
+ *
+ * Base64 of JSON, not a hand-rolled format: an SDP description is already text, and the
+ * browser's own `btoa`/`atob` handle it. Whitespace is stripped on the way in, because a
+ * chat app will wrap a long code over several lines and nobody will notice.
+ */
+export function pack(kind, description) {
+  const body = JSON.stringify({ v: CODE_VERSION, kind, description: { type: description.type, sdp: description.sdp } });
+  const bytes = new TextEncoder().encode(body);
+  let binary = "";
+  bytes.forEach(byte => (binary += String.fromCharCode(byte)));
+  return CODE_PREFIX + btoa(binary);
+}
+
+/** Read a code back. Returns `{ kind, description }`, or null if it is not one. */
+export function unpack(code) {
+  const text = String(code || "").replace(/\s+/g, "");
+  if (!text.startsWith(CODE_PREFIX)) return null;
+  try {
+    const binary = atob(text.slice(CODE_PREFIX.length));
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    const value = JSON.parse(new TextDecoder().decode(bytes));
+    if (value?.v !== CODE_VERSION) return null;
+    if (value.kind !== "offer" && value.kind !== "answer") return null;
+    const description = value.description;
+    if (!description || typeof description.sdp !== "string" || !description.sdp) return null;
+    return { kind: value.kind, description: { type: description.type, sdp: description.sdp } };
+  } catch (e) {
+    return null;
+  }
+}
+
+/** A rough sense of how much text a player will have to send, for the copy button. */
+export const codeLength = code => String(code || "").length;
+
+/** Is this string shaped like one of this game's codes at all? */
+export const looksLikeCode = code => String(code || "").replace(/\s+/g, "").startsWith(CODE_PREFIX);

@@ -41,7 +41,8 @@ main.js                 boot + frame loop
 ui/                     HUD, outpost menus, pause overlay       (reads state, calls sim actions)
 render/                 three.js scene, models, camera          (reads state, never changes game rules)
 sim/                    gameplay rules: flight, combat, economy, contracts, lifecycle
-net/                    multiplayer (step 16): the suitcase, the save fields it lives in, station room, world station indexes
+net/                    multiplayer (step 16): the suitcase, the save fields it lives in, station room,
+                        world station indexes, and the connection (transport/session/protocol/paste)
 state/                  runtime state, persistent profile, save storage
 data/                   static tuning: ships, items, weapons, station, contract templates
 core/                   audio synth, keyboard/mouse input
@@ -96,6 +97,8 @@ about each other, use the event bus instead.
 | Change what gets saved               | `state/profile.js` (`newProfile` / `newWorld`, `sanitizeProfile` / `sanitizeWorld`, bump `SAVE_VERSION`, add a migration in `sanitizeSave`) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
 | Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
+| Change how two browsers connect, or what a message on the wire holds | `net/transport.js` (the wrapper: the only file that names the library), `net/protocol.js` (the message kinds and their caps), `net/session.js` (who is admitted, the guest list, the chat). `RELAYS`/`ROOM_NAMESPACE`/`CHAT` are in `data/multiplayer.js`; see [architecture/multiplayer.md](architecture/multiplayer.md) |
+| Change the join link, or what a guest has to paste | `net/join-link.js` (`?join=<worldId>#<token>`, the secret after the `#`) and `net/paste.js` (the `TRJOIN:` codes used when no relay answers) |
 | Change what a pilot may carry into someone else's world | `data/multiplayer.js` (`TRAVEL_FIELDS`, `HOME_FIELDS`); packed and unpacked by `net/custody.js`; see [architecture/multiplayer.md](architecture/multiplayer.md) |
 | Change what the `away` marker or a host's guest record holds | `data/multiplayer.js` (`AWAY_FIELDS`, `GUEST_FIELDS`), validated by `cleanAway`/`cleanGuests` in `state/profile.js`, changed through `net/multiplayer.js` |
 | Change how a save is written to the browser | `state/storage.js` (`writeThrough`: scratch key, swap, previous version kept; `away:<worldId>` for the suitcase) |

@@ -116,6 +116,9 @@ export const BINDINGS = {
   KeyI: "cargo",
   KeyP: "pause",
   Escape: "pause",
+  // Step 16 slice 3: chat. Enter is only a game key when no text field has the cursor;
+  // the guard at the top of the keydown handler already lets a field keep it.
+  Enter: "chat",
 };
 
 export function installInput() {

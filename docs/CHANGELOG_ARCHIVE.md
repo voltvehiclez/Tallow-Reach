@@ -979,6 +979,32 @@ GLB drops; playtest not done yet (owner 2026-11-16 build).
 
 ---
 
+## 2026-11-21: Yaw is the slow axis, roll the fast one — per-ship axis tuning
+
+At the owner's request, to promote crossing flight paths: every ship (player
+and NPC, through the shared model) now turns with **yaw at 40%** of its old
+rate (`FLIGHT.yawFactor` 1.6 → 0.64; mouse side-to-side is the slowest axis),
+**pitch unchanged** (1.2), and **roll at 250%** (`FLIGHT.rollFactor` 1.5 →
+3.75, Q/E). Thrust, strafe, lift and reverse untouched. NPCs command yaw and
+pitch through `npc-pilot.js`, so their steering obeys the same rates; their
+pilot still commands no roll (banking is a separate later tweak).
+
+The axes are now tweakable per ship: flight stats gain `yaw`, `pitch`, `roll`
+(multipliers on one axis each) and `turnAll` (one multiplier on all three —
+`turnAll: 2` turns twice as fast on every axis), defaulting to 1 in
+`FLIGHT.defaultStats`. An NPC type sets them in its `flight` block in
+`data/enemies.js` (all eight types now spell the fields out at 1); a flyable
+hull sets an optional `flight` block in `SHIPS` (`data/ships.js`), which
+`player.js` passes to the model and `flightStatsForShip` copies. Test (i) in
+`tests/flight-model.test.mjs` pins the ratios and both override levels; the
+render-interpolation smoothness floor and the campaign-fixes raider aim
+window were retimed for the slower yaw. Both 8b fixtures were re-recorded and
+diffed (LESSONS L17): only steering and enemy-flight downstream differ.
+
+Files: `src/sim/flight-model.js`, `src/sim/player.js`, `src/data/ships.js`,
+`src/data/enemies.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-16: The edge-compression lens is removed
 
 Owner: "oh remove the lense thing i wont use it in the future" — after saying the current view looks good. The experiment is deleted, not merely disabled: `src/render/remap.js`, `src/render/remapmath.js` and `tests/remap.test.mjs` are gone; `main.js` renders the flight/pause paths with `renderer.render(scene, camera)` directly; `render/camera.js` widens FOV on boost/warp unconditionally again; the HUD lock ring and marker project through the stock projection only; the `src/render/README.md` lens rows are gone. The current look is the stock horizontal-85° + aspect-derived vertical camera. **Save version unchanged (v21)**; rebuild needed (`npm run build`, then `npm test`). ROADMAP stays unticked until a formal playtest tick.

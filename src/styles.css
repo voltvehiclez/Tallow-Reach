@@ -2576,3 +2576,87 @@ body.navigation-open canvas { cursor: default; }
 .campaign-end-detail { margin: 0 0 16px; color: #bbb; font-size: 13px; }
 .campaign-end-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .campaign-end-actions button { padding: 8px 18px; }
+
+/* ---- Multiplayer (step 16 slice 3, built in src/ui/multiplayer.js) ----
+   Two surfaces: the setup panel inside the pause card, and the chat box bottom left
+   while playing. The chat box is deliberately quiet: it sits under the glass, never
+   over a menu, and only its input takes the keyboard. */
+#mp-panel {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(560px, 86vw);
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+#mp-panel .mp-name {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  color: var(--dim);
+  font-size: 13px;
+}
+#mp-panel input, #mp-panel textarea {
+  width: 100%;
+  font: 13px/1.35 ui-monospace, monospace;
+  color: var(--ink);
+  background: #0d1215;
+  border: 1px solid var(--line);
+  padding: 7px 9px;
+}
+#mp-panel textarea { resize: vertical; word-break: break-all; }
+#mp-panel input:focus, #mp-panel textarea:focus { outline: 1px solid var(--ice); }
+#mp-body { display: grid; gap: 12px; width: 100%; }
+.mp-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.mp-row button { flex: 1 1 160px; }
+.mp-state { margin: 0; color: var(--ice); }
+.mp-hint { margin: 0; color: var(--dim); font-size: 13px; }
+.mp-error { margin: 0; color: #d98b7a; font-size: 13px; }
+.mp-list { margin: 0; padding-left: 18px; color: var(--ink); }
+.mp-list small { color: var(--dim); }
+
+#mp-chat {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 30;
+  width: min(420px, 42vw);
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(7, 9, 11, .62);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  text-shadow: 0 1px 2px #000;
+}
+#mp-chat[hidden] { display: none; }
+#mp-chat-who {
+  color: var(--amber);
+  font-size: 12px;
+  letter-spacing: .04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#mp-chat-lines {
+  max-height: 132px;
+  overflow: hidden;
+  display: grid;
+  gap: 2px;
+}
+#mp-chat-lines p { margin: 0; transition: opacity .6s; }
+#mp-chat-lines b { color: var(--ice); font-weight: 600; }
+#mp-chat-input {
+  width: 100%;
+  font: 13px/1.3 ui-monospace, monospace;
+  color: var(--ink);
+  background: #0d1215;
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+}
+#mp-chat-input:focus { outline: 1px solid var(--ice); }
+#mp-chat-input[hidden] { display: none; }
+body.mp-chat-open #mp-chat { background: rgba(7, 9, 11, .86); }

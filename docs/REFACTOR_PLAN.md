@@ -250,13 +250,15 @@ took v25; the envelope itself is the v26 change). Adding a mission is one new fi
 
 # Step 16: Multiplayer (host-run co-op)
 
-**Status:** planned 2026-11-21 with the owner; slices are built one per chat. **Multiplayer is open
+**Status:** planned 2026-11-21 with the owner; slices are built one per chat. Slices **1–3 built**
+(2026-11-21); slice 4 (the pilot travels) is next. **Multiplayer is open
 world only** — the campaign stays single player (owner, 2026-11-21).
 
 **The owner's decision on dependencies (2026-11-21):** WebRTC is approved for the connection, kept
-behind **one thin wrapper file** (`src/net/transport.js`). No other dependency is added; the
-signalling is a copy-paste **offer code** between the two players, so no server of ours is needed.
-The wrapper never leaks out of `src/net/`: `sim/` and `ui/` talk to the connection through events.
+behind **one thin wrapper file** (`src/net/transport.js`). No other dependency is added. The owner
+then chose **Trystero `0.27.0`** (MIT, pinned) for a **one-link** join, with the copy-paste offer
+codes kept as the fallback for a network that will not reach a relay — see "The library decision"
+below. The wrapper never leaks out of `src/net/`: `sim/` and `ui/` talk to it through events.
 
 ## What it is
 
