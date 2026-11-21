@@ -41,12 +41,13 @@ export const FLIGHT = {
   // Axis rates, as multipliers on a ship's turn number. The owner set these
   // (2026-11-21) to promote crossing flight paths: yaw (mouse side-to-side)
   // is the SLOWEST axis at 40% of its old 1.6, pitch (mouse up/down) is
-  // unchanged at 1.2, and roll (Q/E) is 250% of its old 1.5. A ship or NPC
+  // unchanged at 1.2, and roll (Q/E) is 250% of its old 1.5 — since cut by a
+  // further 25% (3.75 -> 2.8125) after the owner found the fast roll sickening. A ship or NPC
   // type can still bend any axis for itself — see the yaw/pitch/roll/turnAll
   // fields in defaultStats below.
   yawFactor: 0.64,
   pitchFactor: 1.2,
-  rollFactor: 3.75,
+  rollFactor: 2.8125,
   deadzone: 0.1,
   throttleRate: 0.5,   // thr per second while a throttle key is held
   brakeRate: 0.9,      // thr per second the brake bleeds off

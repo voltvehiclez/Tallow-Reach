@@ -5,6 +5,29 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial
+
+The campaign is now its own saved mode and its own fixed-seed seven-system galaxy (seed `240515`,
+Auric Reach at its heart, pockets like `auric_flight_school`), sharing the browser pilot's fleet,
+credits, cargo and loadout but none of the open world's place, missions, flags or progress. Save
+**v26** stores a `{v, mode, open, campaign}` envelope; legacy nested saves migrate on read and
+write back as roots, and `prepareGalaxySave`/`applySave`/`resetCurrentModeSave` keep the inactive
+half in sync. `data/campaign/` holds the galaxy, `m01-first-sortie` (Dane Korr, fixed Wasp grant,
+tutorial flight academy ending in a pirate ambush) and the `index.js` order; accepting a campaign
+story mission grants and selects its fixed hull (after the already-active check, so a duplicate
+accept cannot re-select it), completion notes `profile.campaign.completed` and emits
+`campaign-mission-completed` before the reward. The campaign menu and offer flow are wired; the
+finish transition is deliberately **nothing yet** (no free-agent flip, no unlock, no reward); replay
+rewards stay framework-only. Practice drones are no longer `friendly` (they are shootable targets);
+Captain Korr stays `friendly`+`invulnerable`. Export/import codes carry the record they are given
+(the game exports the dual-mode root), while browser autosave/slots normalise to the root; slot
+summaries show the active mode. Storage migration tests and `tests/campaign.test.mjs` cover the
+envelope, mode switching, shared pilot, fixed-ship grant and a full M01 play-through.
+**Not ticked in ROADMAP: owner playtest pending.** Files: `src/state/{profile,state,storage}.js`,
+`src/sim/{campaign,galaxy-session,missions,ai,weapons,missile,targeting}.js`, `src/data/{enemies,campaign/*}.js`,
+`src/ui/{menu,screens,missionlog}.js`, `tests/campaign.test.mjs`, migration-test updates.
+`game/tallow-reach.html` rebuilt; `npm test` **781 pass / 0 fail**.
+
 ## 2026-11-19: One HUD label per nearby belt group
 
 Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
