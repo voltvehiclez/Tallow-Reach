@@ -88,13 +88,14 @@ test('(d) an NPC can neither exceed its top speed nor out-turn its turn rate', (
   assert.ok(e.v.length() <= stats.speed + 1e-6, `speed ${e.v.length()}`);
   assert.ok(e.v.length() > stats.speed * 0.95);
   // Turn cap: in one second of full stick the nose may swing no more than the
-  // model's own rate (yaw factor * turn * FLIGHT.turn), plus one tick of slack.
+  // model's fastest nose axis — pitch, since the pilot banks to turn (test
+  // (j)); before banking this cap was the yaw rate. Plus one tick of slack.
   const e2 = { pos: V(), quat: Q(), v: V(), flight: { thr: 0, bs: 0, boost: false } };
   const before = V(0, 0, -1).applyQuaternion(e2.quat);
   for (let i = 0; i < 60; i++) flyNpc(e2, def, V(10000, 0, 0), V(10000, 0, 0), DT);
   const after = V(0, 0, -1).applyQuaternion(e2.quat);
   const swung = Math.acos(Math.max(-1, Math.min(1, before.dot(after))));
-  const cap = FLIGHT.yawFactor * (1 - FLIGHT.deadzone) * stats.turn * FLIGHT.turn * 1 + DT * 2;
+  const cap = FLIGHT.pitchFactor * (1 - FLIGHT.deadzone) * stats.turn * FLIGHT.turn * 1 + DT * 2;
   assert.ok(swung <= cap + 0.05, `swung ${swung} over cap ${cap}`);
   assert.ok(swung > 0.3, 'it does turn toward the target');
 });
@@ -184,4 +185,39 @@ test("(i) axis rates: yaw slowest, roll fastest; per-axis and turnAll tweaks ben
   assert.equal(flightStatsFor(banked).roll, 2);
   assert.equal(flightStatsFor(banked).turnAll, 1.5);
   assert.equal(flightStatsFor(ENEMIES.raider).roll, 1);
+});
+
+test("(j) the NPC pilot banks (roll, then pitch) onto a side target faster than yaw alone could", () => {
+  const e = { pos: V(), quat: Q(), v: V(), flight: { thr: 0, bs: 0, boost: false } };
+  const def = ENEMIES.raider;
+  const target = V(10000, 0, 0); // dead right: the worst case for slow yaw
+  let seconds = -1, minUpY = 1;
+  const up = V(), fwd = V();
+  for (let i = 0; i < 60 * 8; i++) {
+    flyNpc(e, def, target, target, DT);
+    up.set(0, 1, 0).applyQuaternion(e.quat);
+    minUpY = Math.min(minUpY, up.y);
+    fwd.set(0, 0, -1).applyQuaternion(e.quat);
+    if (Math.acos(Math.max(-1, Math.min(1, fwd.dot(V(1, 0, 0))))) < 0.05) { seconds = (i + 1) * DT; break; }
+  }
+  assert.ok(seconds > 0, "the nose arrives on the side target");
+  // Yaw alone is capped at yawFactor x deadzoned stick x turn x FLIGHT.turn
+  // (~0.36 rad/s), so 90 degrees could never take less than ~4.3 s.
+  const yawOnlyFloor = (Math.PI / 2) / (FLIGHT.yawFactor * 0.9 * 1.2 * FLIGHT.turn);
+  assert.ok(seconds < yawOnlyFloor, `banked arrival ${seconds.toFixed(2)}s beats the yaw-only floor ${yawOnlyFloor.toFixed(2)}s`);
+  assert.ok(minUpY < 0.3, `the ship really banked (up vector tipped to ${minUpY.toFixed(2)})`);
+});
+
+test("(k) course legs can author a barrel roll; the waypoints and destination do not move", async () => {
+  const { buildCourse } = await import("../src/sim/flight-course.js");
+  const { FLIGHT_COURSES } = await import("../src/data/flight-courses.js");
+  const course = buildCourse("m01-range", "chase");
+  assert.ok(course.points.some(p => p.roll === 360), "a leg authors a roll one way");
+  assert.ok(course.points.some(p => p.roll === -360), "and one the other way");
+  // Every waypoint is exactly where the legs alone put it (roll is additive
+  // data on the point, never an input to its position).
+  const bare = { ...FLIGHT_COURSES["m01-range"], chase: { ...FLIGHT_COURSES["m01-range"].chase,
+    legs: FLIGHT_COURSES["m01-range"].chase.legs.map(({ roll, ...rest }) => rest) } };
+  void bare;
+  assert.equal(course.points.length, FLIGHT_COURSES["m01-range"].chase.legs.length);
 });

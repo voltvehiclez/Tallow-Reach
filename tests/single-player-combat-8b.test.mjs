@@ -30,6 +30,8 @@
 // Re-recorded again 2026-11-21 for the axis rates (yaw 40%, roll 250%): only
 // enemies, their shots, missiles and shield state differ — the player's own
 // pose is unchanged, as that scenario barely steers.
+// Re-recorded a third time the same day for bank-to-turn NPC steering: again
+// only enemies, shots, missile lock and shields differ; player pose unchanged.
 // The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
 // still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";

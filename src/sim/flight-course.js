@@ -31,6 +31,10 @@ export function buildCourse(courseId, phase = DEFAULT_COURSE_PHASE) {
       length,
       speed: Math.max(1, Number(leg.speed) || 100),
       boost: leg.boost === true,
+      // Optional barrel roll authored on the leg (degrees, signed): flown
+      // across the leg by sim/enemy-flight.js. The waypoint does not move,
+      // so a roll can never change where the course ends.
+      roll: Number(leg.roll) || 0,
     });
   }
   return {

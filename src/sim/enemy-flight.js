@@ -2,7 +2,8 @@
 import { V, fwdQ } from '../util/math.js';
 import { makeRng } from '../util/rng.js';
 import { enemyAI, AI_FLIGHT as T } from '../data/enemy-ai.js';
-import { enemyDef } from '../data/enemies.js';
+import { enemyDef, flightStatsFor } from '../data/enemies.js';
+import { FLIGHT } from '../data/ships.js';
 import { courseRemaining } from './flight-course.js';
 import { enemyFwd, enemyHullRadius } from './enemy.js';
 import { flyNpc } from './npc-pilot.js';
@@ -120,6 +121,7 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
     }
   }
 
+  let courseRollStick = 0;
   if (c.mode === "run") {
     const point = c.points[c.index];
     if (!point) {
@@ -129,6 +131,18 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
       e.boosting = point.boost === true;
       desired.copy(toPoint).normalize().multiplyScalar(point.speed);
       look = point.pos;
+      // An authored barrel roll on this leg: hand the pilot a roll stick
+      // sized to spend the leg's remaining degrees at this ship's own roll
+      // rate. New leg, new allowance; the waypoint itself never moves.
+      if (c.rollIndex !== c.index) { c.rollIndex = c.index; c.rollLeftDeg = point.roll || 0; }
+      if (c.rollLeftDeg) {
+        const st = flightStatsFor(def);
+        const rate = FLIGHT.rollFactor * st.roll * st.turn * FLIGHT.turn * st.turnAll; // rad/s at full stick
+        const wantRad = c.rollLeftDeg * (Math.PI / 180);
+        courseRollStick = Math.max(-1, Math.min(1, wantRad / Math.max(1e-6, rate * dt)));
+        c.rollLeftDeg -= courseRollStick * rate * dt * (180 / Math.PI);
+        if (Math.abs(c.rollLeftDeg) < 0.5) c.rollLeftDeg = 0;
+      }
       if (d < T.courseWaypoint) {
         c.travelled += point.length;
         c.index++;
@@ -151,7 +165,7 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
   c.remaining = courseRemaining(c);
   desired.add(flightAvoidance(e, world, desired, context.players || (target ? [target] : []))).clampLength(0, def.spdFar);
   const courseBoost = c.mode === "run" && e.boosting === true;
-  flyNpc(e, def, desired, look || e.pos.clone().add(desired), dt, { boost: courseBoost });
+  flyNpc(e, def, desired, look || e.pos.clone().add(desired), dt, { boost: courseBoost, rollStick: courseRollStick });
 }
 
 /** Watch a drill from a safe distance, always facing the pilot. During an

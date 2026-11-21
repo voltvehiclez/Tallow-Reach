@@ -29,6 +29,11 @@ export const AI_FLIGHT = {
   // angle to the aim point, and the point (as a fraction of top speed) where a
   // faster want lights the boost instead of just pinning the throttle.
   pilotGain: 2.2, pilotBoostAt: 0.98,
+  // Banking (sim/npc-pilot.js): when the aim point is more than this many
+  // radians off the nose, the pilot rolls the target into its pitch plane
+  // and pitches onto it (roll and pitch are far faster than yaw) instead of
+  // yawing across; inside it, yaw/pitch fine-aim as before.
+  pilotBankAbove: 0.3,
   // Story ships (a course to lead, a drill to watch, an ambush to join).
   courseArrive: 90, courseGather: 420, courseWaypoint: 75,
   observeOrbitRate: 0.32, observeRadius: 260, guardStandoff: 180,

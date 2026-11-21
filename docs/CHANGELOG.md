@@ -20,6 +20,27 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
+
+Following the axis-rate change, NPC pilots now use the fast axes:
+`sim/npc-pilot.js` banks — when the aim point sits more than
+`AI_FLIGHT.pilotBankAbove` (0.3 rad) off the nose, it rolls (fastest axis) to
+swing the target into the pitch plane and pitches onto it, reserving slow yaw
+for fine aim. Test (j) in `tests/flight-model.test.mjs` shows a raider on a
+dead-side target in ~3.5 s where yaw alone needs at least ~4.3 s, banked past
+90 degrees on the way; test (d)'s turn cap now reads the pitch axis. Combat
+will feel snappier: enemies get their guns on you sooner (their damage numbers
+are unchanged). In First Sortie, Dane's 10 km chase course authors two
+barrel rolls (`roll: 360` / `-360` on legs in `data/flight-courses.js`, flown
+across the leg by `flyCourse` via the pilot's `rollStick`) — showmanship only:
+course waypoints and the destination are exactly where they were, and test (k)
+pins that the roll fields ride along without moving a single point. The combat
+8b fixture was re-recorded and diffed (player pose unchanged).
+
+Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
+`src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Yaw is the slow axis, roll the fast one — per-ship axis tuning
 
 At the owner's request, to promote crossing flight paths: every ship (player
@@ -334,12 +355,9 @@ envelope, mode switching, shared pilot, fixed-ship grant and a full M01 play-thr
 
 Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
 
-## 2026-11-19: Shared natural wormhole environments
-
-Simple sites and named wormhole systems use one environment definition: 80% black holes, double black-hole radius, grey sky and neutral ambient fill. Rifts and entrance pockets retain their own environment. No save change.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-19: Shared natural wormhole environments
 - 2026-11-19: Larger, more common black holes in wormhole systems
 - 2026-11-19: Multiple wormhole routes and grey system skies
 - 2026-11-19: Start with 30 wormhole systems

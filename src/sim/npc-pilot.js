@@ -38,7 +38,7 @@ export function flyNpc(e, def, desired, look, dt, options = {}) {
   _up.set(0, 1, 0).applyQuaternion(e.quat);
 
   // Steering: where is the look point in the ship's own frame? Forward is -Z.
-  let yaw = 0, pitch = 0;
+  let yaw = 0, pitch = 0, rollStick = 0;
   const aim = look || (desired && desired.lengthSq() > 1 ? _want.copy(desired).add(e.pos) : null);
   if (aim) {
     _local.copy(aim).sub(e.pos);
@@ -51,8 +51,19 @@ export function flyNpc(e, def, desired, look, dt, options = {}) {
       // positive yaw stick swings the nose toward the ship's right, and a
       // positive pitch stick pushes it down. So a target up and to the right
       // asks for +yaw and -pitch, each proportional to its angle off the nose.
-      yaw = clamp(Math.atan2(lx, lz) * gain, -1, 1);
-      pitch = clamp(-Math.atan2(ly, lz) * gain, -1, 1);
+      const offNose = Math.acos(clamp(lz, -1, 1));
+      if (offNose > AI_FLIGHT.pilotBankAbove) {
+        // Bank-to-turn: yaw is the slowest axis by design, so for a big
+        // swing the pilot rolls (fastest axis) until the target sits in its
+        // pitch plane, then pitches onto it. The roll stick is proportional
+        // to the target's angle around the nose from straight-up; the pitch
+        // stick takes the whole off-nose angle in that plane.
+        rollStick = clamp(-Math.atan2(lx, ly) * gain, -1, 1);
+        pitch = clamp(-Math.atan2(Math.hypot(lx, ly), lz) * gain, -1, 1);
+      } else {
+        yaw = clamp(Math.atan2(lx, lz) * gain, -1, 1);
+        pitch = clamp(-Math.atan2(ly, lz) * gain, -1, 1);
+      }
     }
   }
 
@@ -62,7 +73,9 @@ export function flyNpc(e, def, desired, look, dt, options = {}) {
     ? !!options.boost
     : forwardWant > stats.speed * AI_FLIGHT.pilotBoostAt;
   const input = {
-    yaw, pitch, roll: 0,
+    // options.rollStick is an extra authored roll (a course leg's barrel
+    // roll); banking above adds its own, and the model clamps the sum.
+    yaw, pitch, roll: clamp(rollStick + (+options.rollStick || 0), -1, 1),
     throttleTarget: stats.speed > 0 ? clamp(forwardWant / stats.speed, -1, 1) : 0,
     strafe: stats.speed > 0 && stats.strafe > 0 ? clamp(_want.dot(_right) / (stats.speed * stats.strafe), -1, 1) : 0,
     lift: stats.speed > 0 && stats.lift > 0 ? clamp(_want.dot(_up) / (stats.speed * stats.lift), -1, 1) : 0,
