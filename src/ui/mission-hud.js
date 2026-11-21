@@ -10,7 +10,6 @@ import {
   missionHandInStation,
   missionObjectivesDone,
   missionOfferStation,
-  missionOptionals,
   missionReadyForHandIn,
   missionStep,
 } from "../sim/missions.js";
@@ -99,17 +98,9 @@ export function activeObjectiveSteps(mission) {
       return done < Math.max(1, Number(child.count) || 1);
     });
   }
-  if (step.kind === "dialogue") {
-    const out = [step];
-    for (let i = (Number(mission.step) || 0) + 1; i < (mission.steps?.length || 0); i++) {
-      const next = mission.steps[i];
-      if (!next) break;
-      if (next.kind === "dialogue") continue;
-      if (next.kind === "kill") out.push(next);
-      break;
-    }
-    return out;
-  }
+  // A glow means "this needs you now". A dialogue step therefore never looks
+  // ahead to the wave it spawned: the drones it is *talking about* light up
+  // only when the step that orders the kill is the current step.
   return [step];
 }
 
@@ -154,6 +145,7 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
       for (const step of steps) {
         if (step.requiresDock === true && (step.place || missionOfferStation(mission)) === place) return color;
         if (step.kind === "deliver" && (step.target === "station" || step.target === place || step.place === place)) return color;
+        if (step.kind === "dock" && step.place === place) return color;
         if (step.kind === "script") {
           const actions = Array.isArray(step.actions) ? step.actions : step.action ? [step.action] : [];
           if (actions.some(a => a?.kind === "give-item" || a?.kind === "take-item") && (!step.place || step.place === place)) {
@@ -167,15 +159,13 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
     if (isShip) {
       const friendly = object.friendly === true || enemyDef(object.def)?.friendly === true;
       if (friendly) {
+        // A friendly story ship glows only when the live objective is to fly
+        // with it (a chase). During control lessons, briefings, drone drills
+        // and the ambush it is company, not a target: no glow.
         for (const step of steps) {
-          if ((step.follow === object.def || step.actor === object.def) && (!step.place || step.place === place)) {
-            return color;
-          }
-        }
-        const cur = missionStep(mission);
-        for (const opt of missionOptionals(mission)) {
-          if (opt?.kind === "stay-within" && opt.actor === object.def &&
-              (!opt.during || cur?.id === opt.during || cur?.group === opt.during)) {
+          if (step.kind === "chase" &&
+              (step.follow === object.def || step.actor === object.def) &&
+              (!step.place || step.place === place)) {
             return color;
           }
         }

@@ -28,10 +28,34 @@
 // thrusters are much weaker than the main drive.
 
 export const FLIGHT = {
-  turn: 0.7,     // multiplier on every ship's turn rate (0.7 = 30% slower than the raw stat)
+  // Turn-rate multiplier on every ship at once (player and NPC alike, through
+  // the shared flight model in sim/flight-model.js). 0.525 since the owner
+  // asked for turns that take a third longer (0.7 * 0.75).
+  turn: 0.525,
   strafe: 0.6,   // sideways (A/D) speed, as a fraction of forward speed
   lift: 0.6,     // up and down (Space/C) speed, as a fraction of forward speed
   reverse: 0.6,  // backing up (S below zero throttle), as a fraction of forward speed
+  // The shared flight model's own constants (they were literals in the old
+  // player-only model): stick axis factors, deadzone, throttle/brake rates and
+  // the boost spool. Numbers only; the maths lives in sim/flight-model.js.
+  yawFactor: 1.6,
+  pitchFactor: 1.2,
+  rollFactor: 1.5,
+  deadzone: 0.1,
+  throttleRate: 0.5,   // thr per second while a throttle key is held
+  brakeRate: 0.9,      // thr per second the brake bleeds off
+  boostRampSec: 0.4,   // seconds of spool before the boost lights
+  boostFallRate: 5,    // boost ramp shed per second when not wanted
+  // Default flight stats for any ship that does not say otherwise. These are
+  // the stock Wasp's numbers, copied (basic thrusters: 150 m/s, turn 1.2;
+  // fractions above; ease 0.9, boost ease 2.4, boost adds its own speed again).
+  // An NPC type overrides any of them in its own `flight` block in
+  // data/enemies.js; nothing here is read live into an NPC, so retuning the
+  // Wasp later never retunes an NPC by accident.
+  defaultStats: {
+    speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6,
+    ease: 0.9, boostEase: 2.4, boostSpeed: 150,
+  },
 };
 
 export const SHIPS = {

@@ -257,7 +257,10 @@ test("fix 6: the run waits for the pilot to form up, and the rule is 1 km / 500 
   assert.equal(korr.course.mode, "reset-brake", "he slows down first instead of whipping a 180");
   assert.equal(state.ui.resetDialogue, null, "he has not spoken until he slows");
 
-  for (let i = 0; i < 40 && korr.course.mode === "reset-brake"; i++) {
+  // Braking now eases at the shared model's rate (the old NPC-only lerp was
+  // 3.4/s; a Wasp-stat ship sheds 160 m/s at ease 0.9), so he needs a few
+  // seconds to slow — the phase order, not the duration, is what matters.
+  for (let i = 0; i < 160 && korr.course.mode === "reset-brake"; i++) {
     updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
   }
   assert.equal(korr.course.mode, "reset-talk", "once slowed, he enters the dialogue phase");
@@ -290,7 +293,7 @@ test("fix 6b: ambushers warp in as Dane warns you, prowl during the talk, and go
     const step = m01.steps.find(s => s.id === id);
     assert.equal(step.lines.length, 1, `${id} is a single concise line`);
   }
-  assert.match(m01.steps.find(s => s.id === "brief-steer").lines[0], /Wasp is quicker than anything you flew at the school/);
+  assert.match(m01.steps.find(s => s.id === "brief-steer").lines[0], /Wasp is quicker than anything you flew at the academy/);
 
   const taunt = m01.steps.find(step => step.id === "ambush-taunt");
   assert.ok(taunt, "the strangers get a line of their own");
@@ -300,7 +303,7 @@ test("fix 6b: ambushers warp in as Dane warns you, prowl during the talk, and go
 
   // The warning Dane does say stays honest: unknown hulls, guns live.
   const warning = m01.steps.find(step => step.id === "ambush-warning");
-  assert.match(warning.lines.join(" "), /not school drones/i);
+  assert.match(warning.lines.join(" "), /not academy drones/i);
   assert.match(warning.lines.join(" "), /do not recognise/i);
   // Order: ships warp in first, then warning, then taunt, then the fight.
   const order = m01.steps.map(step => step.id);

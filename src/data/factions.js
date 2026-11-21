@@ -15,7 +15,7 @@ export const FACTIONS = {
   // pilot can hail, trade with or be blamed for offending — and a contract that asks for pirates
   // must not be paid by a rift's guardians (owner bug report 2026-11-14).
   school: {
-    n: "Flight School",
+    n: "Flight Academy",
     d: "Captain Dane Korr's instructors and training hulls.",
   },
   rift: {

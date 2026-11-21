@@ -69,6 +69,24 @@ export function planetTexture(planet) {
       ctx.beginPath(); ctx.arc(0, 0, ry, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
+  } else if (planet?.classId === "earth") {
+    // Greenish-grey continents on a slate sea, with pale cloud swirls.
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, shadeToHex(dark, 1.05));
+    grad.addColorStop(0.5, shadeToHex(base, 0.55));
+    grad.addColorStop(1, shadeToHex(dark, 0.9));
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+    drawMottle(ctx, rng, w, h, "rgba(125,139,116,0.55)", 30);
+    drawMottle(ctx, rng, w, h, "rgba(70,84,74,0.4)", 22);
+    for (let i = 0; i < 26; i++) {
+      ctx.strokeStyle = `rgba(235,242,238,${0.05 + rng() * 0.1})`;
+      ctx.lineWidth = 2 + rng() * 7;
+      ctx.beginPath();
+      const y = rng() * h;
+      ctx.moveTo(0, y);
+      for (let x = 0; x <= w; x += 22) ctx.lineTo(x, y + Math.sin(x * 0.018 + i) * (6 + rng() * 20));
+      ctx.stroke();
+    }
   } else if (planet?.classId === "ice") {
     const grad = ctx.createLinearGradient(0, 0, w, h);
     grad.addColorStop(0, shadeToHex(base, 1.15));

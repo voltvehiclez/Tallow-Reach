@@ -22,12 +22,12 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
    returns to the chapter boxes.
 4. Click **Chapter 1**: six act boxes in one grid — *Act 1: First Sortie* (**Begin**) and five **Coming
    soon** acts, all blurred and unnamed. Only the first is playable.
-5. Click **Act 1**. You start **docked at Korr Flight School** in **Auric Reach**, in a stock Wasp with
+5. Click **Act 1**. You start **docked at Korr Flight Academy** in **Auric Reach**, in a stock Wasp with
    **600 cr** — not with the open world's fleet or credits, even if you have millions there.
 6. The right **Missions** tab lists only campaign progress (no offers, no contract board). The left
    **Mission log** shows First Sortie and its objective.
 7. Try the **Home** button in the station screens: it is not clickable in the campaign.
-8. Open the **Shop**. Korr Flight School has **no stock** during the sortie (it says so; nothing is for sale).
+8. Open the **Shop**. Korr Flight Academy has **no stock** during the sortie (it says so; nothing is for sale).
 9. Try **Launch** while the graduation briefing is still being read: it is disabled with
    *Finish the conversation first*. Finish the dialogue (or let it time out line by line) and Launch works.
 
@@ -101,8 +101,9 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
 
 ## 4. The accomplished card, the failure card and the way out
 
-31. When the last objective completes, the simulation stops and a big **MISSION ACCOMPLISHED** card appears
-    with what was paid (50 cr, plus the 100 cr bonus if you kept within 500 m). **Return to campaign menu**
+31. After Dane's final report the objective is **Dock at Korr Flight Academy**: fly back and dock (**G**).
+    Only then — not when the last attacker dies — the simulation stops and a big **MISSION ACCOMPLISHED**
+    card appears with what was paid (50 cr, plus the 100 cr bonus if you kept within 500 m). **Return to campaign menu**
     takes you back to the chapter boxes; the act is marked complete and offers **Replay**.
 32. **Blank-menu check (the Act 1 bug):** finish the act, then leave the act by the *other* route: press
     **Esc** → **Exit to main menu** (or return to the campaign screen and press **Back**). The title screen
@@ -120,7 +121,7 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
 35. In flight, press **M** and try to warp out of the pocket: you are refused with
     *You do not have permission to leave this pocket.* The campaign never lets you wander off unless an act
     says so.
-36. During the lesson or the run, dock at Korr Flight School (**G**). Docking is **allowed** (no destroy
+36. During the lesson or the run, dock at Korr Flight Academy (**G**). Docking is **allowed** (no destroy
     objective is live), and it **does not reset** the act: Dane stays where he was, the lesson keeps its
     progress, and undocking puts you back in the same objective.
 37. During the drone pass or the ambush, try to dock: you are refused with
@@ -138,8 +139,9 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
 41. In the campaign, open **Inventory**: only the campaign's Wasp is yours there, with an empty hold.
 42. Export the campaign save to a **TR1:** code and re-import it. You return to the campaign with its
     completions intact.
-43. **Reset** in the campaign restarts only the campaign half: a fresh 600 cr pilot at Korr Flight School with
-    completion cleared. The open world is untouched.
+43. **Reset** (Saves tab) wipes **both** modes — the button says "Wipe credits, ships, base and contracts",
+    and it now does exactly that: a fresh 600 cr pilot in whichever mode you pressed it from, and the other
+    mode is fresh too when you next enter it.
 44. An old save (v26 or earlier) opens in the **Open World**; the **Campaign** button starts a fresh campaign
     beside it, keeping any campaign completions it already recorded.
 
@@ -147,7 +149,7 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
 
 45. In First Sortie, the two drone waves glow **amber** on the HUD: the drone labels carry a glowing
     border and their rows in the **N** list glow too. The same is true of the raiders once they turn hostile,
-    and of **Korr Flight School** when the sortie is ready to hand in.
+    and of **Korr Flight Academy** when the sortie is ready to hand in.
 46. Check the same in the open world: accept a **contract** (or a story mission) and confirm the objectives
     glow in that mission's own colour — **ice blue** for a contract, **amber** for a story mission. A hunt
     target glows when it spawns; a salvage or delivery crate glows even when it is far away (**outside the old
@@ -164,3 +166,29 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     [../docs/FIRST-SORTIE-DIALOGUE.md](../docs/FIRST-SORTIE-DIALOGUE.md). Read it before playtesting and
     note any wording you want changed against the step it names; the strings themselves live in
     `src/data/campaign/m01.js`. Nothing else in the act should say anything the document does not list.
+
+## 9. Round 5: flight model, navigation, small batch (2026-11-21)
+
+49. **Turning feels a third slower** — every ship, yours and theirs (`FLIGHT.turn` 0.7 → 0.525). Dogfights
+    and the course run should feel lazier to turn; top speeds are unchanged.
+50. **NPCs fly like ships now:** drones, raiders and Dane accelerate, brake and boost with the same maths
+    you do (stock-Wasp numbers). Dane takes seconds to brake at the ambush standoff instead of stopping
+    dead; on the fast course legs he boosts past 150 m/s. Nothing should teleport, snap-turn or slide
+    sideways without strafing.
+51. Fly the whole First Sortie end to end: the final objective after Dane's report is **Dock at Korr
+    Flight Academy** — the card appears only when you dock there, and the academy (not Dane) is what
+    glows for that step. Dane glows only while you are meant to form up on him.
+52. **N panel:** header reads Pocket objects – Filters – Close · N; Distance sort is at the far right.
+    The seven preset boxes: tick some filters, click a ＋ box to save them; click the preset to re-apply;
+    edit filters with a preset selected and it updates itself; right-click a preset for Rename/Reset.
+    Reload the page — presets survive (they are in the save now).
+53. With a kind filtered **off** in the N panel, its floating labels disappear too (the object is still
+    F-selectable when you look at it, and an F-lock always shows its label). Rocks never show labels.
+    Asteroid-belt labels should read as fewer, bigger fields on the First Sortie chart. Marker labels no
+    longer jitter as the distance ticks between 900 m and 1000 m.
+54. **Outfitting:** drag a module and drop it anywhere in the left Outfitting box (not on a bay) — it
+    fits the left-most empty bay of its group. Dropping on a specific bay still picks that bay.
+55. The main-menu backdrop planet is now an Earth-like world (greenish-grey continents). Generated
+    planets elsewhere may have changed class — that is expected, nothing is saved per-planet.
+56. **Reset** in Saves now wipes both modes for real: press it in either mode and both the campaign and
+    the open world start fresh (600 cr, one Wasp).

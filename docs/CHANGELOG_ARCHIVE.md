@@ -5,6 +5,10 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-19: Multiple wormhole routes and grey system skies
+
+Off-chart systems support up to four live paired doors, balancing S-to-S routes with regular-space exits. All S-system pockets now use the grey wormhole cube and neutral ambient fill. Existing v25 clocks and original endpoints are preserved; extra routes derive from the saved seed and generation.
+
 ## 2026-11-19: Start with 30 wormhole systems
 
 Raised `WORMHOLE_SYSTEMS.count` from 5 to 30. Existing v25 saves keep their first five connections; the additional systems start on load. Simple wormhole population unchanged.

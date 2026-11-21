@@ -236,21 +236,18 @@ export function newRootSave() {
   return { v: SAVE_VERSION, mode: "open", open, campaign };
 }
 
-/** A fresh nested save for one half of the envelope. Exposed for root-aware preparation. */
-export const freshModeSave = newModeSave;
-
-/** Replace only the active mode's world and mode-scoped progress. The fleet,
- * credits, holds and loadout still belong to this one browser's pilot, so a
- * reset does not erase what the other mode and the pilot own. */
-export function resetCurrentModeSave() {
-  const mode = state.mode === "campaign" ? "campaign" : "open";
-  const root = currentRootSave();
-  const fresh = freshModeSave(mode);
-  fresh.profile.v = SAVE_VERSION;
-  root[mode] = fresh;
-  root.mode = mode;
+/** A full reset: BOTH modes wiped (the Saves tab's promise is "Wipe credits,
+ * ships, base and contracts"), staying in the mode the pilot pressed Reset
+ * from. The old per-mode wipe left the other mode's pilot — credits, ships,
+ * the lot — alive, which read as "reset does not reset". */
+export function resetAllSave() {
+  const root = newRootSave();
+  root.mode = state.mode === "campaign" ? "campaign" : "open";
   return root;
 }
+
+/** A fresh nested save for one half of the envelope. Exposed for root-aware preparation. */
+export const freshModeSave = newModeSave;
 
 /** Persist both mode halves in the active browser slot. */
 export function saveCurrentGame() {

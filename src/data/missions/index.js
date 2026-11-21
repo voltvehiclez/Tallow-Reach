@@ -11,6 +11,7 @@ export const MISSION_STEP_KINDS = [
   "collect",
   "reach",
   "reach-sector",
+  "dock",      // dock at the step's `place` (the `docked` event settles it)
   "deliver",
   "survive",
   "dialogue",

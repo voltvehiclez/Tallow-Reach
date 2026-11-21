@@ -5,7 +5,7 @@ import { homeStationPlace, setHomeStation } from "../sim/session.js";
 import { on, emit } from "../util/events.js";
 import { notify, showNotice, hideNotice, setupNotices } from "./notice.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
-import { state, currentSave, currentRootSave, applySave, resetPlaces, saveCurrentGame, resetCurrentModeSave } from "../state/state.js";
+import { state, currentSave, currentRootSave, applySave, resetPlaces, saveCurrentGame, resetAllSave } from "../state/state.js";
 import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
@@ -545,7 +545,7 @@ const ACTIONS = {
     state.ui.confirmReset = false;
   },
   rs2() {
-    applySave(prepareGalaxySave(resetCurrentModeSave()));
+    applySave(prepareGalaxySave(resetAllSave()));
     afterSaveChange();
     state.ui.confirmReset = false;
     toast(loadedMessage("Progress reset."));
@@ -1462,6 +1462,14 @@ function finishStationDrag(drag, dropTarget) {
       const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
       const targetBay = emptyIdx >= 0 ? emptyIdx : 0;
       return fitting.fitModuleFrom(drag.where, drag.slot, group, targetBay, drag.id);
+    }
+    // Dropping a module anywhere else in the left Outfitting box fits it into
+    // the left-most bay of its own group (a specific bay still wins, above).
+    const leftBox = dropTarget.closest("#station-left");
+    if (leftBox && drag.modGroup) {
+      const bays = state.profile.loadout?.[state.profile.ship]?.[drag.modGroup];
+      const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+      return fitting.fitModuleFrom(drag.where, drag.slot, drag.modGroup, emptyIdx >= 0 ? emptyIdx : 0, drag.id);
     }
     const slotBtn = dropTarget.closest("button[data-a='invSlot']");
     if (slotBtn) {

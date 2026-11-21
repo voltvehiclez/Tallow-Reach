@@ -4,7 +4,7 @@ Reads `state`, calls sim actions. No game rules here.
 
 | File | What it does |
 |---|---|
-| `pocket-list.js` | Pocket type labels, safe browser-local checkbox preferences, filtering, reversible sorting and pure selectable-row HTML (`pocketRowsHtml`). |
+| `pocket-list.js` | Pocket type labels, safe browser-local checkbox preferences, filtering, reversible sorting and pure selectable-row HTML (`pocketRowsHtml`), plus the seven saved filter presets (`cleanFilterPresets`, `presetSlotsHtml`, `presetMenuHtml`; stored on the profile, save v28). The same filters govern the floating HUD labels in `hud.js`. |
 | `location-display.js` | Plain current system/pocket text; named off-chart systems use their S-number; instances use Uncharted Space, not a false system. |
 | `weapon-slots.js` | Pure ten-slot hotbar markup: primary 1–5, secondary 6–0, family icons, fitted markers, ammo and independent selected banks. |
 | `vitals.js` | Pure clamped vertical HUD meter fill calculation. |

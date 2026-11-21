@@ -47,3 +47,38 @@ export function pocketRowsHtml(rows, isSelected = () => false, objectiveFor = nu
     return `<li${cls}${rowStyle}><button type="button"${cls} data-pocket-row="${index}" aria-pressed="${selected}" title="${escRow(row.name)} (${type})"><span class="pocket-label"><i class="${iconCls}"${iconStyle} aria-hidden="true"></i><span class="pocket-name">${escRow(row.name)} <small>(${type})</small></span></span><span>${(row.distance / 1000).toFixed(2)} km</span></button></li>`;
   }).join('');
 }
+
+export const FILTER_PRESET_COUNT = 7;
+/** The saved shape of the filter presets (profile.pocketFilterPresets, save
+ * v28): seven slots, each empty (null) or { name, filters }. Anything that is
+ * not that becomes empty slots, so an old or damaged save still loads. */
+export function cleanFilterPresets(raw) {
+  const out = Array.from({ length: FILTER_PRESET_COUNT }, () => null);
+  if (!Array.isArray(raw)) return out;
+  for (let i = 0; i < FILTER_PRESET_COUNT; i++) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== 'object' || typeof entry.filters !== 'object' || !entry.filters) continue;
+    out[i] = {
+      name: String(entry.name || `Filter ${i + 1}`).slice(0, 40) || `Filter ${i + 1}`,
+      filters: Object.fromEntries(POCKET_FILTERS.map(k => [k, typeof entry.filters[k] === 'boolean' ? entry.filters[k] : true])),
+    };
+  }
+  return out;
+}
+/** The preset bar's HTML: an empty slot is a box with a plus; a filled slot
+ * shows its name; the selected preset is outlined. */
+export function presetSlotsHtml(presets, activeIndex = -1) {
+  const clean = cleanFilterPresets(presets);
+  return clean.map((preset, i) => preset
+    ? `<button type="button" class="pocket-preset${i === activeIndex ? ' active' : ''}" data-pocket-preset="${i}" title="${escRow(preset.name)} (right-click: rename or reset)">${escRow(preset.name)}</button>`
+    : `<button type="button" class="pocket-preset empty" data-pocket-preset="${i}" title="Save the current filters here">+</button>`).join('');
+}
+/** The right-click menu for one filled preset: rename it, or reset it back to
+ * an empty plus box. */
+export function presetMenuHtml(preset, index) {
+  if (!preset) return '';
+  return `<div class="pocket-preset-menu" data-preset-menu="${index}">` +
+    `<label>Rename <input type="text" data-preset-name value="${escRow(preset.name)}" maxlength="40"></label>` +
+    `<button type="button" data-preset-rename="${index}">Rename filter preset</button>` +
+    `<button type="button" data-preset-reset="${index}">Reset filter preset</button></div>`;
+}

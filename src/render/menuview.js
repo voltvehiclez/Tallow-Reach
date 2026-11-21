@@ -42,7 +42,7 @@ const spins = [];
 // The menu keeps its own procedural planet backdrop: the home pocket is pure space
 // now (planets are warpable pockets), so the title builds a fixed class world here
 // instead of reading one from place data.
-const MENU_PLANET = makePlanet("menu-backdrop", "Meridian", "b", "meridian", 0x5eed);
+const MENU_PLANET = { ...makePlanet("menu-backdrop", "Meridian", "b", "meridian", 0x5eed), classId: "earth", col: 0x7d8b74, dark: 0x39443a, atmoCol: 0xa9c9bb };
 const MENU_PLANET_DIST = 2500;
 const MENU_PLANET_RADIUS = 760;
 const menuPlanetPos = MENU_PLANET.approach.map(n => n * MENU_PLANET_DIST);

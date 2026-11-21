@@ -17,24 +17,8 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ## Missions
 
-<!-- L1–L8 were moved verbatim to [archive/LESSONS_1-5.md](archive/LESSONS_1-5.md) to keep
+<!-- L1–L10 were moved verbatim to [archive/LESSONS_1-5.md](archive/LESSONS_1-5.md) to keep
      this file under its size limit. -->
-
-### L9. A step kind that nothing could ever complete
-- **Seen:** the `deliver` step kind existed, but nothing in the game emitted "delivered", so a mission using it
-  could never finish.
-- **Rule:** every step kind and trigger needs a real event source and a test before missions may use it. Until
-  then the linter rejects it.
-- **Enforced by:** the linter (`deliver` is an error); `tests/mission-lint.test.mjs`.
-
-### L10. Death failed missions it should not have, or left a mission stuck without its item
-- **Seen:** the owner wanted death to be punishment enough: a mission was failing on death for no good reason, and a mission
-  whose parcel or beacon was lost with the ship had to fail clearly instead of waiting forever.
-- **Rule:** dying does not fail a mission unless its data says so (`fails.on` has `player-dead`) or the ship was carrying a
-  mission-only item (category `mission`) the mission needs, which is lost for good. Either way the failure carries a message
-  and the HUD shows "Mission failed: <mission>" with the reason. Ordinary goods carry on. `player-dead` carries `lost`, the
-  hold at that moment, so no listener depends on whether the cargo was already cleared.
-- **Enforced by:** `tests/mission-death.test.mjs`; the die-at-every-step invariant in `tests/mission-invariants.test.mjs`.
 
 ### L11. Confusing or spoiling player-facing text
 - **Seen:** `Progress 0/2` counted dialogue lines, not mission progress; an objective revealed an ambush before it
@@ -337,6 +321,12 @@ and reading the shield bar — not at the plumbing that carries it.
 - **Seen (owner, 2026-11-18):** Mission log item progress ignored pre-stored goods, stayed full after selling/discarding ore, and checked `state.place`'s store instead of the mission's hand-in station.
 - **Rule:** item-requiring missions report live inventory counts (`missionItemRequirements`), scoping hand-ins to `missionHandInStation` plus the active ship hold and script `take-item` steps to their target container.
 - **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (mine, deliver, recovery, cargo hand-over, story collect, parallel items and cross-station reads).
+
+### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
+- **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."
+- **Cause:** Reset wiped only the *current* mode's half of the dual-mode save, while its words promise "Wipe credits, ships, base and contracts" — the other mode's pilot survived intact.
+- **Rule:** a control's words are its contract: Reset wipes **both** halves (`resetAllSave` in `state/state.js`, staying in the mode pressed from); label any per-mode wipe as one.
+- **Enforced by:** `tests/reset-save.test.mjs` (both halves dirtied; after a campaign reset both read 600 cr, one Wasp).
 
 ### L31. Direct-from-plant fallback and pre-check `setDraw` let a `0 MJ` ship fly and show phantom MJ/s
 

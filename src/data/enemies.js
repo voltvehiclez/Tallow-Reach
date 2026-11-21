@@ -57,6 +57,7 @@ export const ENEMIES = {
     bspd: 520,
     spawnDist: [800, 1000],
     loot: "raider",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
   },
 
   // Captain Dane Korr's Wasp. A friendly story actor: it flies the course the
@@ -86,6 +87,7 @@ export const ENEMIES = {
     bspd: 420,
     spawnDist: [600, 760],
     loot: "raider",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
     friendly: true,
     invulnerable: true,
     foe: false,             // not a pirate: Wasp scheme, blue engine glow
@@ -119,6 +121,7 @@ export const ENEMIES = {
     bspd: 1,
     spawnDist: [600, 750],
     loot: "practice",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
   },
 
   // A smuggler's escort in a smuggling site (step 14c): a gun for hire working the smugglers'
@@ -148,6 +151,7 @@ export const ENEMIES = {
     bspd: 510,
     spawnDist: [700, 1100],    // spawned by the site's wave, never by a wanderer
     loot: "smuggler",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
   },
 
   // A smuggler's escort: raiders fly with them, so the escort can stay a raider. This is the
@@ -177,6 +181,7 @@ export const ENEMIES = {
     bspd: 500,
     spawnDist: [400, 600],     // spawned by the site's wave, never by a wanderer
     loot: "freighter",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
   },
 
   // The hostile that holds a hive-type wormhole site (step 14c): the same shape of fight as a
@@ -206,6 +211,7 @@ export const ENEMIES = {
     bspd: 580,
     spawnDist: [800, 1200],
     loot: "hiveguardian",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
   },
 
   // The hostiles that hold a rift shut (step 14). They used to *be* raiders, so the target lock
@@ -237,6 +243,7 @@ export const ENEMIES = {
     bspd: 560,
     spawnDist: [800, 1100],
     loot: "riftguardian",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
   },
 
   // The deeper collapse's guardian: the same shape of fight, heavier — 10 Hull HP and 1 damage
@@ -264,11 +271,59 @@ export const ENEMIES = {
     bspd: 600,
     spawnDist: [900, 1300],
     loot: "deepguardian",
+    flight: { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 },
   },
 };
 
+import { FLIGHT, SHIPS } from "./ships.js";
+import { MODULES, STOCK_FIT } from "./modules.js";
+
 /** What the spawner falls back to when nothing else says otherwise. */
 export const DEFAULT_ENEMY = "raider";
+
+/**
+ * The flight stats a player hull flies with on its stock fit, worked out once
+ * from data (its stock thrusters' speed/turn plus the FLIGHT fractions and
+ * easing the shared model uses). Pure data in, numbers out — this copies a
+ * hull's stats; it never links an NPC to the hull afterwards.
+ */
+export function flightStatsForShip(shipId) {
+  const hull = SHIPS[shipId];
+  if (!hull) return { ...FLIGHT.defaultStats };
+  const fit = STOCK_FIT || {};
+  let thruster = null;
+  for (const group of Object.values(fit)) {
+    for (const id of Array.isArray(group) ? group : [group]) {
+      const m = MODULES[id];
+      if (m && m.spd && (!thruster || m.spd > thruster.spd)) thruster = m;
+    }
+  }
+  if (!thruster) return { ...FLIGHT.defaultStats };
+  return {
+    speed: thruster.spd, turn: thruster.turn,
+    strafe: FLIGHT.strafe, lift: FLIGHT.lift, reverse: FLIGHT.reverse,
+    ease: 0.9, boostEase: 2.4, boostSpeed: thruster.spd,
+  };
+}
+
+/**
+ * One NPC type's flight stats for the shared model (sim/flight-model.js).
+ * The type's own `flight` block wins field by field; anything it leaves out
+ * falls back to FLIGHT.defaultStats in data/ships.js. `flight.fromShip` copies
+ * that hull's stock stats once, here, as a starting point — the resolved
+ * numbers are plain numbers, and changing the hull later changes nothing.
+ * To tune ONE enemy type, edit only its `flight` block above.
+ */
+export function flightStatsFor(defOrId) {
+  const def = typeof defOrId === "string" ? enemyDef(defOrId) : (defOrId || {});
+  const flight = def.flight || {};
+  const base = flight.fromShip ? flightStatsForShip(flight.fromShip) : { ...FLIGHT.defaultStats };
+  const out = { ...base };
+  for (const key of Object.keys(FLIGHT.defaultStats)) {
+    if (Number.isFinite(+flight[key])) out[key] = +flight[key];
+  }
+  return out;
+}
 
 /** The def for `id`, falling back to the default enemy (an unknown id never crashes a spawn). */
 export const enemyDef = id => ENEMIES[id] || ENEMIES[DEFAULT_ENEMY];

@@ -182,7 +182,7 @@ export const PLACE_DEFS = {
       },
     ],
   },
-  // Korr Flight School: a compact training range with a station and ferrite rocks.
+  // Korr Flight Academy: a compact training range with a station and ferrite rocks.
   // This place definition is shared by the campaign catalog only; open-world PLACES
   // does not register a pocket that uses it.
   //
@@ -195,7 +195,7 @@ export const PLACE_DEFS = {
   auric_flight_school: {
     features: [
       {
-        kind: "station", id: "korr-flight-school", n: "Korr Flight School",
+        kind: "station", id: "korr-flight-school", n: "Korr Flight Academy",
         model: "original-meridian", pos: [0, 0, 0], dockRange: 300, dockSpeed: 70,
         launch: { pos: [0, 0, 260], face: "field" }, shop: "school",
       },

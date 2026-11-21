@@ -14,6 +14,7 @@ import { state, msg, localPlayer, profileOf, createPlayerRuntime } from "../stat
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
 import { refreshHull } from "./hull.js";
+import { stepFlight } from "./flight-model.js";
 
 
 /**
@@ -21,13 +22,6 @@ import { refreshHull } from "./hull.js";
  * before it repeats while the player keeps a control held.
  */
 const NO_DRIVE_WARN = 2.5;
-
-// Scratch rotations for the turn, so a frame allocates nothing. The order is the
-// turn code's own: a local turn about Y, then X, then Z — exactly what the
-// model's `rotateY`, `rotateX` and `rotateZ` did (each multiplies the same
-// axis-angle quaternion onto the end, which is what `quaternion.multiply` does).
-const _qx = Q(), _qy = Q(), _qz = Q();
-const XAXIS = V(1, 0, 0), YAXIS = V(0, 1, 0), ZAXIS = V(0, 0, 1);
 
 /**
  * Is the pilot asking the ship to move, strafe, lift, roll or turn? Read from the
@@ -145,14 +139,12 @@ export function flight(dt, P = state.player, runtime = null) {
         roll: c.roll,
       };
 
-  const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
   // Speed and turn come from the fitted thrusters, not from the hull. Thrusters
   // require both a fitted drive and stored MJ in the power cells: at 0 MJ the
   // engines stay cold and register 0 MJ/s draw.
   const drv = r.drive;
   const powered = hasDrive(drv);         // no thruster fitted: a dead ship
   const driveEnergy = powered && (!drv.draw || hasPower(drv.draw, r.power));
-  const turn = (driveEnergy ? drv.turn : 0) * FLIGHT.turn;   // FLIGHT.turn tunes every ship at once
 
   // A dead or empty-tank ship cannot answer the controls, so warn the moment the
   // player asks it to move. The warning repeats while a control is still held,
@@ -164,32 +156,6 @@ export function flight(dt, P = state.player, runtime = null) {
   } else if (!W && !driveEnergy && P.noDriveT === 0 && tryingToMove(c, stick)) {
     if (P === state.player) msg("No stored power", NO_DRIVE_WARN);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
-  }
-  // The ship turns on its own record; the view copies the rotation onto the model.
-  P.quat
-    .multiply(_qy.setFromAxisAngle(YAXIS, -dz(stick.x * ease) * 1.6 * turn * dt))
-    .multiply(_qx.setFromAxisAngle(XAXIS, -dz(stick.y * ease) * 1.2 * turn * dt))
-    .multiply(_qz.setFromAxisAngle(ZAXIS, stick.roll * ease * 1.5 * turn * dt));
-
-  if (W) {
-    // Throttle released, like pressing X: the drag model bleeds the speed off.
-    P.thr = 0;
-  } else if (!powered) {
-    // No thrusters: the throttle does nothing and the engines stay cold.
-    P.thr = 0;
-  } else if (!driveEnergy) {
-    // 0 MJ in the tank: cannot push throttle on (only cut it with X/brake); engines produce 0 thrust and 0 draw.
-    if (c.stop) P.thr = 0;
-    if (c.brake) {
-      P.thr = P.thr > 0 ? Math.max(0, P.thr - dt * 0.9) : P.thr < 0 ? Math.min(0, P.thr + dt * 0.9) : 0;
-    }
-  } else {
-    if (c.thrust > 0) P.thr = Math.min(1, P.thr + dt * 0.5);
-    if (c.thrust < 0) P.thr = Math.max(-1, P.thr - dt * 0.5);
-    if (c.stop) P.thr = 0;
-    if (c.brake) {
-      P.thr = P.thr > 0 ? Math.max(0, P.thr - dt * 0.9) : P.thr < 0 ? Math.min(0, P.thr + dt * 0.9) : 0;
-    }
   }
 
   const boostKey = c.boost;
@@ -203,8 +169,6 @@ export function flight(dt, P = state.player, runtime = null) {
   const supply = driveEnergy && (wantDrive <= 0 || hasPower(otherDriveDraw + wantDrive, r.power));
   // Keep recorded draw strictly tied to paid thruster operation (throttle/boost,
   // or lateral thrusters when off centre).
-  const paidDrive = supply ? (P.thr !== 0 || P.boost ? driveDraw(drv, P.thr, P.boost) : 0) : 0;
-  setDraw("drive", paidDrive, r.power);
 
   // The boost: lighting it is the hungry moment. It costs one big slug of stored
   // energy (20 MJ on the basic thrusters) once the spool-up has finished and the
@@ -213,42 +177,44 @@ export function flight(dt, P = state.player, runtime = null) {
   const wantBoost = powered && !W && boostKey && P.en > drv.bmax * 0.05;
   const canBoost = wantBoost && supply && r.power.stored >= (drv.ignite || 0);
 
-  const wasBoosting = P.boost;
-  P.bs = canBoost ? Math.min(1, P.bs + dt / 0.4) : Math.max(0, P.bs - dt * 5);
-  P.boost = P.bs >= 1;
-  if (P.boost && !wasBoosting) {
-    P.shake = 1;
-    emit("sfx", { name: "boost" });
-    // The ignition: one flat gulp out of the cells, not a trickle.
-    r.power.stored = Math.max(0, r.power.stored - (drv.ignite || 0));
-    // Full throttle is earned only by ignition, never a tap during spool-up.
-    P.thr = 1;
-  }
-  // The tank fills by itself whenever the boost is not burning. Both rates come
-  // from the fitted thrusters, so a bigger tank or a thirstier boost is a change in
-  // data/modules.js and nothing else.
-  P.en = clamp(P.en + (canBoost ? -drv.buse : drv.bfill) * dt, 0, P.enMax);
-
   // With no power left there is nothing to push with.
   const spd = supply ? drv.spd : 0;
 
-  const f = fwdQ(P.quat);
-  const right = V(1, 0, 0).applyQuaternion(P.quat);
-  const up = V(0, 1, 0).applyQuaternion(P.quat);
-  // Strafe and lift are ignored while warping, so the ship only bleeds speed.
-  const strafe = W ? 0 : c.strafe;
-  const lift = W ? 0 : c.lift;
+  // The movement itself is THE shared model (sim/flight-model.js) — the same
+  // maths every NPC flies with. This function only decides what the pilot is
+  // allowed to ask for (warp coast, a dead drive, an empty tank) and pays the
+  // boost's costs; turning, throttle, easing and boost push happen in there.
+  stepFlight(P, {
+    speed: spd,
+    turn: driveEnergy ? drv.turn : 0,
+    boostSpeed: spd,
+  }, {
+    yaw: stick.x, pitch: stick.y, roll: stick.roll,
+    thrust: (!W && powered && driveEnergy) ? c.thrust : 0,
+    stop: !!W || !powered || !!c.stop,
+    brake: !!c.brake && (W || powered),
+    strafe: W ? 0 : c.strafe,
+    lift: W ? 0 : c.lift,
+    boost: wantBoost,
+    boostAllowed: canBoost,
+    onBoostIgnite: () => {
+      P.shake = 1;
+      emit("sfx", { name: "boost" });
+      // The ignition: one flat gulp out of the cells, not a trickle.
+      r.power.stored = Math.max(0, r.power.stored - (drv.ignite || 0));
+    },
+  }, dt);
 
-  // Only the main drive reaches full speed; reversing is a fraction of it.
-  const throttle = P.thr >= 0 ? P.thr : P.thr * FLIGHT.reverse;
-  const target = f
-    // Boost is an additional forward-only push, even if the pilot has moved
-    // throttle into reverse. The ordinary throttle contribution is unchanged.
-    .multiplyScalar(throttle * spd + (P.boost ? spd : 0))
-    .addScaledVector(right, strafe * spd * FLIGHT.strafe)
-    .addScaledVector(up, lift * spd * FLIGHT.lift);
-  P.v.lerp(target, 1 - Math.exp(-dt * (P.boost ? 2.4 : 0.9)));
-  P.pos.addScaledVector(P.v, dt);
+  // Recorded after the shared model has run, so the draw reads the throttle
+  // and boost this tick actually used (the old inline model updated both
+  // before this line too).
+  const paidDrive = supply ? (P.thr !== 0 || P.boost ? driveDraw(drv, P.thr, P.boost) : 0) : 0;
+  setDraw("drive", paidDrive, r.power);
+
+  // The tank fills by itself whenever the boost is not burning. Both rates come
+  // from the fitted thrusters, so a bigger tank or a thirstier boost is a change
+  // in data/modules.js and nothing else.
+  P.en = clamp(P.en + (canBoost ? -drv.buse : drv.bfill) * dt, 0, P.enMax);
 
   // Collision matches what is drawn (docs/GLB_MODELS.md): every rock is its own
   // lumpy triangle soup scaled/rotated onto the rock, and every scenery model — the
