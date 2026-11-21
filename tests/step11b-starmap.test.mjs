@@ -23,6 +23,8 @@ import {
   galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, pocketLabelLayout, exitChoice,
 } from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
+import { acceptMission } from "../src/sim/missions.js";
+import { BORDER_SIGNAL_MISSION } from "../src/data/missions/story.js";
 
 const V13 = JSON.parse(readFileSync(new URL("./saves/v13-real.json", import.meta.url), "utf8"));
 const V12 = JSON.parse(readFileSync(new URL("./saves/v12-real.json", import.meta.url), "utf8"));
@@ -69,7 +71,7 @@ function oldV15() {
 }
 
 test("11B: new saves are v20 and store only seed plus compact system knowledge", () => {
-  assert.equal(SAVE_VERSION, 27);
+  assert.equal(SAVE_VERSION, 28);
   const s = newSave();
   assert.deepEqual(Object.keys(s.world.galaxy).sort(), ["knowledge", "seed"]);
   assert.equal(s.world.galaxy.seed, GALAXY.seed);
@@ -82,7 +84,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
   const old = oldV15();
   const before = JSON.parse(JSON.stringify(old));
   const s = prepareGalaxySave(old);
-  assert.equal(s.v, 27);
+  assert.equal(s.v, 28);
   assert.equal(s.world.place, "hollow");
   assert.deepEqual(s.world.resume, before.world.resume);
   assert.equal(s.profile.cr, 4850);
@@ -95,7 +97,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
 test("11B: v13 and v12 fixtures still migrate through the world-aware loader", () => {
   for (const raw of [V13, V12]) {
     const s = prepareGalaxySave(raw);
-    assert.equal(s.v, 27);
+    assert.equal(s.v, 28);
     assert.equal(s.profile.cr, raw.profile?.cr ?? raw.cr);
     assert.deepEqual(s.profile.holds, raw.profile?.holds ?? raw.holds);
     assert.ok(state.galaxy.pocketsById[s.world.place]);
@@ -203,7 +205,7 @@ test("11B: autosave, slots and TR1 codes keep their keys/prefix and use the same
     const code = encodeSave(save);
     assert.ok(code.startsWith("TR1:"));
     assert.equal(decodeSave(code, prepareGalaxySave).world.galaxy.seed, 77);
-    assert.equal(JSON.parse(mem.get("tr1")).v, 27);
+    assert.equal(JSON.parse(mem.get("tr1")).v, 28);
   } finally {
     if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
   }
@@ -439,6 +441,32 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   assert.equal(prevented, true);
   assert.equal(ui.state.ui.starmap.selected, "sys-002");
   ui.closeStarmap();
+});
+
+test("11B: a mission's warp destination glows on both charts, and only while you are away", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null; ui.state.ui.starmapMemory = null;
+  // The headless starmap has its own state instance: plant the accepted
+  // mission record (plain data) into its profile directly.
+  const mission = acceptMission(BORDER_SIGNAL_MISSION, ui.newSave().profile, "reach");
+  mission.step = mission.steps.findIndex(step => step.id === "travel");
+  ui.state.profile.missions = [mission];
+  assert.equal(ui.openStarmap(), true);
+  // Galaxy chart: meridian system ringed (Border Signal is a story mission: amber).
+  assert.match(mapRoot.innerHTML, /class="sm-node[^"]* objective" style="--objective-color:var\(--amber\)"\s+data-system="meridian"/);
+  assert.equal((mapRoot.innerHTML.match(/class="sm-node[^"]* objective"/g) || []).length, 1, "one destination system glows");
+  assert.doesNotMatch(mapRoot.innerHTML, /sm-objective-ring/, "the glow is the dot's own, no extra ring circle");
+  // Pocket chart: Kestrel Hollow ringed.
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.match(mapRoot.innerHTML, /class="sm-node sm-pocket-node[^"]* objective"[^>]*data-pocket="hollow"/);
+  assert.equal((mapRoot.innerHTML.match(/class="sm-node[^"]* objective"/g) || []).length, 1, "one destination pocket glows");
+  // Arrive, and the glow is gone; it would return on warping away again.
+  P.place = "hollow"; ui.closeStarmap();
+  assert.equal(ui.openStarmap(), true);
+  assert.doesNotMatch(mapRoot.innerHTML, /class="sm-node[^"]* objective"/);
+  ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
 });
 
 test("11B: visited knowledge remains saved without a light-blue system presentation", () => {
@@ -1042,15 +1070,15 @@ test("11B: composition root wires map/travel/pause and every save replacement pr
   assert.match(main, /const playing = .*!isStarmapOpen\(\)/);
   assert.match(menu, /prepareGalaxySave\(raw\)/);
   assert.match(menu, /decodeSave\(text, prepareGalaxySave\)/);
-  assert.match(menu, /prepareGalaxySave\(resetCurrentModeSave\(\)\)/);
+  assert.match(menu, /prepareGalaxySave\(resetAllSave\(\)\)/);
 });
 
 test("11B: the pre-11B v15 fixture resumes flying with its character and cargo intact", () => {
   fresh();
   const save = prepareGalaxySave(V15);
   assert.equal(V15.v, 15);
-  assert.equal(save.v, 27);
-  assert.equal(save.profile.v, 27);
+  assert.equal(save.v, 28);
+  assert.equal(save.profile.v, 28);
   assert.equal(save.profile.missions.length, 1);
   assert.deepEqual(save.profile.mission, V15.profile.mission, "the singular compatibility view keeps the old contract");
   assert.deepEqual(save.profile.flags, {});

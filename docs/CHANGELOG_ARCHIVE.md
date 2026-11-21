@@ -5,6 +5,133 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
+
+Eight fixes from the owner's first playthrough of the campaign build.
+
+- **Dane's guns are orange.** Wingman rounds carry `ally: true` (set in `sim/ai.js`) and
+  `friendlyShot()` (`sim/combat.js`) decides the colour, so only hostile fire is red. His
+  damage is still zero.
+- **Control lessons are one second, with a bar.** `learn()` in `m01.js` holds for `1`
+  (`control` steps default to one second now). `sim/campaign-flight.js` publishes the live
+  hold as `state.ui.controlHold` (fraction + percent), and the HUD draws it as a percentage
+  bar under the act's objective in the top-left tracker; a full bar is a learned control.
+- **Order: W then Ctrl (brake).** `MISSION_CONTROLS.brake` (`flag: "brake"`) is taught
+  second, with two short lines ("a pilot who cannot stop is not flying"), then S, mouse,
+  strafe, lift, roll, boost.
+- **The bonus is a 500 m run bonus.** The optional `stay-with-korr` now reads
+  `metres: 500`, `during: "chase"`, and shows as a live chip in the top-right HUD
+  (`missionBonusStatus` in `sim/missions.js` + `state.ui.followDistance`). Over 500 m turns
+  it red; the run's own 1 km reset is unchanged and separate.
+- **Ferrite scenery along the course.** Eight `chase-rocks-*` scatter fields line the
+  `m01-range` chase (146 rocks, sizes 10–72 m, some giants). `coreRadius` equal to `radius`
+  opts them out of the pocket's diffuse-wing scaling, and each cluster sits ~950 m off the
+  flown line (≥ 300 m of clear air), so the run reads as a canyon without putting rock in
+  Dane's lap.
+- **The ambush strangers reveal themselves.** Dane only says the hulls are not school drones
+  and that he does not recognise them; a new `ambush-taunt` line from "Unmarked pilot" makes
+  the threat, and no objective or line says "raider" any more ("Defeat both attackers.").
+- **Blank menu after Act 1 fixed.** The end card is a full-screen overlay; leaving the act
+  by any route other than its own button (pause → Exit to main menu) now hides it on
+  `main-menu`, and the pause exit clears the campaign screen flags.
+- **Chapter boxes instead of headings.** The campaign screen moved to the big left window:
+  one large box per chapter (locked future chapters included), a chapter opens into its act
+  boxes, and planned acts render locked ("Planned · not written yet"). `chapters.js` gained
+  chapters 2–4 and five planned acts in chapter 1; only acts with a `mission` enter
+  `CAMPAIGN_ACTS`, so planned boxes can never be started or saved.
+
+Files: `src/data/campaign/{chapters,m01}.js`, `src/data/places.js`, `src/data/missions/rules.js`,
+`src/sim/{ai,combat,campaign-flight,missions}.js`, `src/render/views.js`, `src/ui/{campaign,menu,hud,pause}.js`,
+`src/state/state.js`, `src/styles.css`, `src/index.html`, `tests/campaign-fixes.test.mjs`, campaign tests.
+No save change (stays **27**). Rebuild `game/tallow-reach.html` and run `npm test` (**799 pass / 0 fail**).
+
+## 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
+
+The campaign is now a campaign: the title's Campaign screen lists chapters → acts, clicking an act starts it
+(fresh act world, campaign-only pilot), finishing it shows a MISSION ACCOMPLISHED card and returns to the menu,
+and a failed critical objective stops the world on a MISSION FAILED card with "Start from the beginning" (and
+"Start from last checkpoint" where a step sets `checkpoint: true`; First Sortie has none).
+
+Act boundaries: warping out needs `allowTravel` ("You do not have permission to leave this pocket."), docking is
+refused while a destroy objective is live, undocking is blocked while a station dialogue is unfinished, and a
+dock no longer clears the act. Dialogue advances itself on a text-scaled clock (`1.5 s + 1 s per 12 characters`);
+station Continue is still clickable, space lines have no button.
+
+Framework (data-driven, opt-in): `optional` bonus objectives (`stay-within`, `missionBonus`, saved
+`optionalProgress`), `control` steps (hold a control for `hold` seconds; `MISSION_CONTROLS`), `chase` steps
+(follow a ship along a `FLIGHT_COURSES` course; `maxGap` behind says `resetLine` and resets only that objective —
+never the act), natural resets (`mission-reset`), and story actors (`actor` + `actorRole` lead/observe/guard).
+
+Dane Korr: Wasp hull colour with the blue boost glow, selectable with F, fires at raiders for 0 damage, flies his
+own course (no longer anchored to the player), and is re-created from his authored `spawn-ship` if he vanishes.
+
+First Sortie: station briefing → launch → ten controls learned by doing them (W, S, mouse, A, D, Space, C, Q, E,
+Shift) → ten-kilometre chase → drone pass with Dane watching → raider ambush with Dane covering you, plus a
+350 m optional bonus through the lesson and a believable ambush line.
+
+Files: `src/data/campaign/` (`chapters.js`, `m01.js`), `src/data/flight-courses.js`, `src/data/missions/rules.js`,
+`src/data/missions/validate.js`, `src/sim/campaign.js`, `campaign-act.js`, `campaign-flight.js`, `flight-course.js`,
+`missions.js`, `ai.js`, `enemy-flight.js`, `targeting.js`, `session.js`, `sectors.js`, `src/ui/campaign.js`,
+`missionlog.js`, `screens.js`, `menu.js`, `src/state/profile.js`, `src/state/state.js`, `src/render/views.js`,
+`src/data/enemies.js`, `src/data/enemy-ai.js`, `src/data/shops.js`, `src/styles.css`, tests.
+Save **v27** (per-mode pilot; the campaign no longer shares the open world's ships or credits). Docs:
+[architecture/campaign-acts.md](architecture/campaign-acts.md). Rebuild the game and run `npm test`.
+
+2026-11-19: Campaign tutorial waves re-arm after a pocket reload
+
+A quit made mid-sortie could strand the pilot behind an unfinishable kill objective: enemy waves are runtime
+objects and a save never carries them, so the interrupted spawn step would not fire again on reload. Spawn script
+actions may now opt in with `respawn: true`; on pocket entry and on undock the runner compares the kill objective
+still owed (current step, counters as saved, parallel-aware) with the `mission:<id>`-tagged enemies still alive in
+the pocket and emits only the deficit — living members keep their health and are never duplicated, nothing happens
+while docked, dead, warping or loading, and a full wave never re-spawns. All three practice-drone/raider waves in
+`src/data/campaign/m01.js` are tagged. `sanitizeSave` now keeps the `respawn` action key so the flag survives a
+save round trip (no `SAVE_VERSION` change; it stays **26**). New test boots a mid-M01 campaign save through
+`currentRootSave()` → `prepareGalaxySave` → `resumeFromSave`, re-arms the missing drone, finishes the objective and
+the mission, and asserts exactly one completion is recorded. Files: `src/sim/missions.js`, `src/state/profile.js`,
+`src/data/campaign/m01.js`, `tests/campaign.test.mjs`, `testing/TESTING-15-CAMPAIGN.md`,
+`docs/{MISSION_RULES,recipes/11-story-and-scripted-missions}.md`. `game/tallow-reach.html` rebuilt;
+`npm test` **782 pass / 0 fail**. ROADMAP step 15 still unticked (owner playtest pending).
+
+## 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial
+
+The campaign is now its own saved mode and its own fixed-seed seven-system galaxy (seed `240515`,
+Auric Reach at its heart, pockets like `auric_flight_school`), sharing the browser pilot's fleet,
+credits, cargo and loadout but none of the open world's place, missions, flags or progress. Save
+**v26** stores a `{v, mode, open, campaign}` envelope; legacy nested saves migrate on read and
+write back as roots, and `prepareGalaxySave`/`applySave`/`resetCurrentModeSave` keep the inactive
+half in sync. `data/campaign/` holds the galaxy, `m01-first-sortie` (Dane Korr, fixed Wasp grant,
+tutorial flight academy ending in a pirate ambush) and the `index.js` order; accepting a campaign
+story mission grants and selects its fixed hull (after the already-active check, so a duplicate
+accept cannot re-select it), completion notes `profile.campaign.completed` and emits
+`campaign-mission-completed` before the reward. The campaign menu and offer flow are wired; the
+finish transition is deliberately **nothing yet** (no free-agent flip, no unlock, no reward); replay
+rewards stay framework-only. Practice drones are no longer `friendly` (they are shootable targets);
+Captain Korr stays `friendly`+`invulnerable`. Export/import codes carry the record they are given
+(the game exports the dual-mode root), while browser autosave/slots normalise to the root; slot
+summaries show the active mode. Storage migration tests and `tests/campaign.test.mjs` cover the
+envelope, mode switching, shared pilot, fixed-ship grant and a full M01 play-through.
+**Not ticked in ROADMAP: owner playtest pending.** Files: `src/state/{profile,state,storage}.js`,
+`src/sim/{campaign,galaxy-session,missions,ai,weapons,missile,targeting}.js`, `src/data/{enemies,campaign/*}.js`,
+`src/ui/{menu,screens,missionlog}.js`, `tests/campaign.test.mjs`, migration-test updates.
+`game/tallow-reach.html` rebuilt; `npm test` **781 pass / 0 fail**.
+
+## 2026-11-19: One HUD label per nearby belt group
+
+Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
+
+## 2026-11-19: Shared natural wormhole environments
+
+Simple sites and named wormhole systems use one environment definition: 80% black holes, double black-hole radius, grey sky and neutral ambient fill. Rifts and entrance pockets retain their own environment. No save change.
+
+## 2026-11-19: Larger, more common black holes in wormhole systems
+
+S-systems roll 80% black holes and render them at twice the usual physical radius. Regular systems, rifts and simple wormholes keep their existing cores. Derived from the world seed; no save migration.
+
+## 2026-11-19: Multiple wormhole routes and grey system skies
+
+Off-chart systems support up to four live paired doors, balancing S-to-S routes with regular-space exits. All S-system pockets now use the grey wormhole cube and neutral ambient fill. Existing v25 clocks and original endpoints are preserved; extra routes derive from the saved seed and generation.
+
 ## 2026-11-19: Start with 30 wormhole systems
 
 Raised `WORMHOLE_SYSTEMS.count` from 5 to 30. Existing v25 saves keep their first five connections; the additional systems start on load. Simple wormhole population unchanged.

@@ -99,7 +99,10 @@ test("240 Hz render interpolation eliminates 60 Hz sawtooth jumps when moving si
     const dxWorld = hullWorldX[i] - hullWorldX[i - 1];
     const dxPx = noseScreenX[i] - noseScreenX[i - 1];
     assert.ok(dxWorld > 0.01, `world X advances on every 240 Hz frame (step ${i}: ${dxWorld})`);
-    assert.ok(dxPx > 0.2 && dxPx < 1.0, `screen nose X glides smoothly without sawtooth jump (step ${i}: ${dxPx}px)`);
+    // Lower bound 0.05 (was 0.2): the owner set yaw to 40% of its old rate
+    // (2026-11-21), so the nose legitimately sweeps fewer pixels per frame;
+    // the property under test is smoothness — no frozen or sawtooth frames.
+    assert.ok(dxPx > 0.05 && dxPx < 1.0, `screen nose X glides smoothly without sawtooth jump (step ${i}: ${dxPx}px)`);
   }
 
   // Verify a teleport with P.snap snaps immediately instead of smearing across space.

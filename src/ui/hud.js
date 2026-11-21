@@ -1,4 +1,4 @@
-import { POCKET_FILTERS, pocketRowsHtml, readPocketFilters, savePocketFilters, sortedPocketRows } from './pocket-list.js';
+import { POCKET_FILTERS, pocketRowsHtml, pocketType, readPocketFilters, savePocketFilters, sortedPocketRows, cleanFilterPresets, presetSlotsHtml, presetMenuHtml } from './pocket-list.js';
 import { playerMount } from '../sim/pilot.js';
 import { pocketObjects, interceptPoint, displayedSpeed } from '../sim/flight-instruments.js';
 import { primarySlotIndex } from '../sim/weapons.js';
@@ -12,11 +12,12 @@ import { beltLabelGroups, targetOnScreen, targetHealthMarkup, markerStyle, lockM
 import { fmtDist } from "../util/math.js";
 import { on, emit } from "../util/events.js";
 import { shipDef } from "../data/ships.js";
+import { itemName } from "../data/items.js";
 import { featuresOf, featureById } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
 import { interpolatedPos, interpolatedVelocity, renderPlayerPose } from "../render/views.js";
-import { state, say, instanceAt } from "../state/state.js";
+import { state, say, instanceAt, saveCurrentGame } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
 import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
 import { campaignDetailHtml, missionWaypoints, objectObjectiveColor } from "./mission-hud.js";
@@ -44,10 +45,28 @@ let routeCache = null;
 let weaponSlotsCache = null;
 let navigationTimer = 0, navigationRows = [], navigationSort = 'distance', navigationDirection = 1;
 let navigationFilters;
+let activePreset = -1;   // index into profile.pocketFilterPresets, or -1
+let presetMenuIndex = -1;
 const preferenceStorage = {
   getItem: key => globalThis.localStorage.getItem(key),
   setItem: (key,value) => globalThis.localStorage.setItem(key,value),
 };
+const filterPresets = () => cleanFilterPresets(state.profile?.pocketFilterPresets);
+function renderPresets() {
+  const bar = $("pocket-filter-presets");
+  if (bar) bar.innerHTML = presetSlotsHtml(filterPresets(), activePreset);
+  const slot = $("pocket-preset-menu-slot");
+  if (slot) slot.innerHTML = presetMenuIndex >= 0 ? presetMenuHtml(filterPresets()[presetMenuIndex], presetMenuIndex) : "";
+}
+function persistPresets() {
+  renderPresets();
+  try { saveCurrentGame(); } catch { /* a preset survives in the profile until the next save */ }
+}
+function applyFiltersToPanel() {
+  for (const input of el.navigation?.querySelectorAll?.("[data-pocket-filter]") || []) {
+    input.checked = navigationFilters[input.dataset.pocketFilter] !== false;
+  }
+}
 function setNavigation(open) {
   const next = Boolean(open);
   state.ui.navigation = next;
@@ -158,6 +177,7 @@ export function setupHud() {
   navigationDirection = 1;
   navigationFilters = readPocketFilters(preferenceStorage);
   $("pocket-filters").innerHTML = POCKET_FILTERS.map(type=>`<label><input type="checkbox" data-pocket-filter="${type}" ${navigationFilters[type]?'checked':''}>${type}</label>`).join('');
+  renderPresets();
   on("navigation-toggle", open => setNavigation(typeof open === "boolean" ? open : !state.ui.navigation));
   on("place-entered", () => {
     beltPlace = null;
@@ -171,9 +191,67 @@ export function setupHud() {
     if (!type) return;
     navigationFilters[type] = e.target.checked;
     savePocketFilters(preferenceStorage, navigationFilters);
+    // Editing filters with a preset selected edits the preset itself.
+    if (activePreset >= 0 && state.profile) {
+      const presets = filterPresets();
+      if (presets[activePreset]) {
+        presets[activePreset] = { ...presets[activePreset], filters: { ...navigationFilters } };
+        state.profile.pocketFilterPresets = presets;
+        persistPresets();
+      }
+    }
     navigationTimer = 0;
   });
+  el.navigation.addEventListener("contextmenu", e => {
+    const presetButton = e.target.closest?.("[data-pocket-preset]");
+    if (!presetButton) return;
+    e.preventDefault();
+    const index = Number(presetButton.dataset.pocketPreset);
+    if (!filterPresets()[index]) return;   // an empty plus box has no menu
+    presetMenuIndex = presetMenuIndex === index ? -1 : index;
+    renderPresets();
+  });
   el.navigation.addEventListener("click", e => {
+    const rename = e.target.closest?.("[data-preset-rename]");
+    const resetPreset = e.target.closest?.("[data-preset-reset]");
+    if (rename || resetPreset) {
+      const index = Number((rename || resetPreset).dataset.presetRename ?? (rename || resetPreset).dataset.presetReset);
+      const presets = filterPresets();
+      if (state.profile && presets[index]) {
+        if (rename) {
+          const input = el.navigation.querySelector("[data-preset-name]");
+          presets[index] = { ...presets[index], name: String(input?.value || presets[index].name).slice(0, 40) || presets[index].name };
+        } else {
+          presets[index] = null;
+          if (activePreset === index) activePreset = -1;
+        }
+        state.profile.pocketFilterPresets = presets;
+      }
+      presetMenuIndex = -1;
+      persistPresets();
+      navigationTimer = 0;
+      return;
+    }
+    const presetButton = e.target.closest?.("[data-pocket-preset]");
+    if (presetButton) {
+      const index = Number(presetButton.dataset.pocketPreset);
+      const presets = filterPresets();
+      if (!presets[index]) {
+        // An empty plus box takes the current filters.
+        presets[index] = { name: `Filter ${index + 1}`, filters: { ...navigationFilters } };
+        if (state.profile) state.profile.pocketFilterPresets = presets;
+        activePreset = index;
+      } else {
+        activePreset = index;
+        navigationFilters = { ...presets[index].filters };
+        savePocketFilters(preferenceStorage, navigationFilters);
+        applyFiltersToPanel();
+      }
+      presetMenuIndex = -1;
+      persistPresets();
+      navigationTimer = 0;
+      return;
+    }
     if (e.target.closest?.('#close-pocket-objects')) {
       e.preventDefault?.();
       setNavigation(false);
@@ -518,9 +596,16 @@ function mark(p, text, style, ox, oy, health = null, extraCls = "", objectiveCol
   const objStyle = objectiveColor ? `;--objective-color:${objectiveColor}` : "";
   el_.style.cssText = `display:block;left:${x}px;top:${y}px${color}${objStyle}`;
   el_.className = markerClasses("mk", tone, extraCls, objectiveColor ? "obj" : "");
-  const label = text === null ? "" : text + " " + fmtDist(state.player.pos.distanceTo(p));
-  if (health) el_.innerHTML = `${targetHealthMarkup(health)}<span>${escHud(label)}</span>`;
-  else el_.textContent = label;
+  // Name and distance are separate spans and the distance sits in a
+  // fixed-width tabular slot, so a label cannot resize (and shake) when the
+  // range ticks from 1000 m to 900 m and back.
+  if (text === null) {
+    el_.textContent = "";
+  } else {
+    const dist = fmtDist(state.player.pos.distanceTo(p));
+    const spans = `<span class="mk-name">${escHud(text)}</span> <span class="mk-dist">${escHud(dist)}</span>`;
+    el_.innerHTML = health ? `${targetHealthMarkup(health)}${spans}` : spans;
+  }
   return visible;
 }
 
@@ -536,10 +621,14 @@ function drawMarkers() {
   // read the same active mission list instead of walking the profile per label.
   const objCtx = { place: state.place, profile: state.profile, world: W, worldState: state.worldState, missions: activeMissions(state.profile) };
 
+  // The N panel's filters govern the floating labels too: a filtered-out kind
+  // draws no label, but the object is still there to be looked at and F-locked
+  // (a lock always draws its label). Rocks are never labelled, as before.
+  const labelOn = kind => navigationFilters?.[pocketType(kind)] !== false;
   for (const f of featuresOf(state.place, "station")) {
     const locked = lock && lock.k === "s" && lock.o?.place === state.place && lock.o?.feature === f.id;
     const objColor = objectObjectiveColor(f, "station", objCtx);
-    if (!locked) mark(V(...f.pos), f.n, markerStyle("station", f), 0, 0, null, "", objColor);
+    if (!locked && labelOn("station")) mark(V(...f.pos), f.n, markerStyle("station", f), 0, 0, null, "", objColor);
   }
   if (beltPlace !== state.place) {
     beltGroups = beltLabelGroups(featuresOf(state.place, "asteroidField"));
@@ -554,7 +643,7 @@ function drawMarkers() {
     if (fieldLock && members.some(f => f.id === fieldLock.id)) {
       lockedBeltName = main.n;
       lockedBeltGroup = group;
-    } else {
+    } else if (labelOn("asteroidField")) {
       const objColor = objectObjectiveColor(group, "asteroidField", objCtx);
       mark(V(...fieldMarkerPosition(main)), main.n, markerStyle("asteroidField", main), 0, 0, null, "", objColor);
     }
@@ -562,9 +651,10 @@ function drawMarkers() {
 
   W.enemies.forEach(e => {
     if (lock && lock.o === e) return;
+    if (!labelOn("Ship")) return;
     const kind = e.friendly ? "Ship" : "Hostile";
     const objColor = objectObjectiveColor(e, kind, objCtx);
-    mark(interpolatedPos(e), e.friendly ? e.n : "Hostile", markerStyle(kind, e), 70, -36, null, lock && !objColor ? "dim" : "", objColor);
+    mark(interpolatedPos(e), e.role === "prowl" ? "Unmarked" : e.friendly ? e.n : "Hostile", markerStyle(kind, e), 70, -36, null, lock && !objColor ? "dim" : "", objColor);
   });
 
   if (lock) {
@@ -588,22 +678,27 @@ function drawMarkers() {
 
   W.crates.forEach(c => {
     if (c === (lock && lock.o)) return;
+    if (!labelOn("Cargo")) return;
     const objColor = objectObjectiveColor(c, "Cargo", objCtx);
     if (objColor || P.pos.distanceTo(c.pos) < 900) {
-      mark(interpolatedPos(c), "Crate", markerStyle("Cargo", c), 0, 0, null, "", objColor);
+      // A mission item is labelled by its own name (Beacon, parcel…) and
+      // carries the mission's objective glow via objColor; ordinary loot
+      // stays a plain "Crate".
+      const label = c.persistent && c.missionId ? itemName(c.item) : "Crate";
+      mark(interpolatedPos(c), label, markerStyle("Cargo", c), 0, 0, null, "", objColor);
     }
   });
 
   // Step 14: the doors, the way out and the prize canister are always labelled — a run is a place
   // with nothing else in it to judge distance by, and losing the way out is losing the ship.
   for (const r of W.rifts || []) {
-    if (r !== (lock && lock.o)) mark(interpolatedPos(r), r.dest || r.n || "Rift", markerStyle("Rift", r));
+    if (r !== (lock && lock.o) && labelOn("Rift")) mark(interpolatedPos(r), r.dest || r.n || "Rift", markerStyle("Rift", r));
   }
   for (const g of W.gates || []) {
-    if (g !== (lock && lock.o)) mark(interpolatedPos(g), g.locked ? `${g.n} (sealed)` : `${g.n} (open)`, markerStyle("Gate", g));
+    if (g !== (lock && lock.o) && labelOn("Gate")) mark(interpolatedPos(g), g.locked ? `${g.n} (sealed)` : `${g.n} (open)`, markerStyle("Gate", g));
   }
   for (const k of W.caches || []) {
-    if (k !== (lock && lock.o)) mark(interpolatedPos(k), k.locked ? `${k.n} (locked)` : `${k.n} (open)`, markerStyle("Cache", k));
+    if (k !== (lock && lock.o) && labelOn("Cache")) mark(interpolatedPos(k), k.locked ? `${k.n} (locked)` : `${k.n} (open)`, markerStyle("Cache", k));
   }
 
   for (const wp of missionWaypoints(objCtx)) {

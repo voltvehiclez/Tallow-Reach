@@ -27,8 +27,9 @@ const { spawnEnemy, updateEnemies } = await import("../src/sim/ai.js");
 const { emit, on } = await import("../src/util/events.js");
 const { V } = await import("../src/util/math.js");
 const { pocketRowsHtml } = await import("../src/ui/pocket-list.js");
-const { missionTitleColor, activeObjectiveSteps, objectObjectiveColor, missionWaypoints } =
+const { missionTitleColor, activeObjectiveSteps, objectObjectiveColor, missionWaypoints, missionTravelTargets } =
   await import("../src/ui/mission-hud.js");
+const { BORDER_SIGNAL_MISSION } = await import("../src/data/missions/story.js");
 // Registers the campaign's mission-tick beats (hold timer, chase, missile top-up).
 await import("../src/sim/campaign-flight.js");
 
@@ -182,13 +183,17 @@ test("mission markers read the mission's own colour and every kind of objective"
   assert.equal(objectObjectiveColor({ type: "ice", ore: 3 }, "Asteroid", { missions: [mine], place }), "");
 });
 
-test("a briefing looks ahead to the kill step it just spawned", () => {
+test("a briefing does not look ahead to the kill step it just spawned (glow means: needed now)", () => {
   const mission = { id: "x", kind: "story", step: 1, counters: {}, steps: [
     { id: "spawn", kind: "script" },
     { id: "brief", kind: "dialogue", lines: ["one"] },
     { id: "drill", kind: "kill", enemy: "practice_drone", count: 2 },
   ] };
-  assert.deepEqual(activeObjectiveSteps(mission).map(step => step.id), ["brief", "drill"]);
+  assert.deepEqual(activeObjectiveSteps(mission).map(step => step.id), ["brief"],
+    "while Dane is talking, the drones he spawned are not yet the objective");
+  const fighting = { ...mission, step: 2 };
+  assert.deepEqual(activeObjectiveSteps(fighting).map(step => step.id), ["drill"],
+    "they light up when the kill step itself is current");
   const done = { ...mission, step: 3 };
   assert.deepEqual(activeObjectiveSteps(done), [], "a finished mission has no objective");
 });
@@ -198,11 +203,7 @@ test("waypoints point at a destination, an authored point, a course start or a s
   const travelMission = { id: "story.travel", kind: "story", step: 0, counters: {},
     steps: [{ id: "go", kind: "reach-sector", place: "sys-001-hub" }] };
   const travel = missionWaypoints({ missions: [travelMission], place });
-  assert.equal(travel.length, 1);
-  assert.equal(travel[0].id, "story.travel:go:travel");
-  assert.match(travel[0].label, /^Waypoint: /);
-  assert.deepEqual(travel[0].pos, [0, 120, 1000], "a destination pocket is flown to its arrival point");
-  assert.equal(travel[0].color, "var(--amber)");
+  assert.deepEqual(travel, [], "another pocket's destination gets NO in-space waypoint (it is thousands of km away; the starmap rings it instead)");
 
   const here = { id: "story.here", kind: "story", step: 0, counters: {},
     steps: [{ id: "wp", kind: "reach", waypoint: [10, 20, 30], waypointLabel: "Beacon" }] };
@@ -270,4 +271,58 @@ test("an imported mission record cannot inject style with its title colour", asy
     () => false, () => "red;x:y");
   assert.doesNotMatch(html, /red;x:y/, "and never reaches the row markup");
   assert.doesNotMatch(html, /class="objective"/);
+});
+
+test("First Sortie ends on a dock objective: docking at the academy completes it, docking elsewhere does not", async () => {
+  const { P, mission } = await campaignWorld();
+  const dockStep = mission.steps[mission.steps.length - 1];
+  assert.equal(dockStep.kind, "dock");
+  assert.equal(dockStep.place, CAMPAIGN_HOME_POCKET);
+  assert.match(dockStep.objective, /Dock at Korr Flight Academy/);
+  assert.ok(!mission.steps.some(step => (step.lines || []).some(line => /keep one busy/i.test(line))),
+    "Dane's removed line stays removed");
+  mission.step = mission.steps.length - 1;
+  P.place = "reach"; P.docked = true;
+  const { advanceMission } = await import("../src/sim/missions.js");
+  advanceMission(mission, "docked", { player: P }, P.profile);
+  assert.equal(mission.step, mission.steps.length - 1, "docking at another pocket does not settle it");
+  P.place = CAMPAIGN_HOME_POCKET;
+  advanceMission(mission, "docked", { player: P }, P.profile);
+  assert.ok(mission.completed || mission.step >= mission.steps.length, "docking at the academy finishes the act's last objective");
+});
+
+test("a friendly story ship glows only while the live objective is to fly with it", () => {
+  const place = CAMPAIGN_HOME_POCKET;
+  const dane = { def: "captain_korr", hp: 9999, friendly: true };
+  const base = { id: "campaign.m01-first-sortie", kind: "story", counters: {} };
+  const lesson = { ...base, step: 0, steps: [{ id: "l", kind: "control", control: "throttle", actor: "captain_korr", place }] };
+  assert.equal(objectObjectiveColor(dane, "Ship", { missions: [lesson], place }), "",
+    "no glow during the control lessons: Dane is not the objective");
+  const drill = { ...base, step: 0, steps: [{ id: "d", kind: "dialogue", actor: "captain_korr", actorRole: "observe", place }] };
+  assert.equal(objectObjectiveColor(dane, "Ship", { missions: [drill], place }), "",
+    "no glow while he observes the drone drill or the ambush");
+  const chase = { ...base, step: 0, steps: [{ id: "c", kind: "chase", follow: "captain_korr", actor: "captain_korr", place }] };
+  assert.equal(objectObjectiveColor(dane, "Ship", { missions: [chase], place }), "var(--amber)",
+    "he glows on the run, when forming up on him IS the objective");
+  const dock = { ...base, step: 0, steps: [{ id: "dock", kind: "dock", place }] };
+  assert.equal(objectObjectiveColor({ kind: "station" }, "station", { missions: [dock], place }), "var(--amber)",
+    "the academy glows for the final dock objective");
+});
+
+test("travel targets: the starmap rings the system and pocket a mission wants, only while you are away", async () => {
+  // This file's catalog is the campaign galaxy; Border Signal lives in the open world.
+  const { GALAXY } = await import("../src/data/galaxy.js");
+  setPlaceCatalog(generateGalaxy(GALAXY.seed, GALAXY, { places: {}, links: {}, removedPlaces: [], removedLinks: [] }));
+  const profile = newProfile();
+  const mission = acceptMission(BORDER_SIGNAL_MISSION, profile, "reach");
+  mission.step = mission.steps.findIndex(s => s.id === "travel");
+  const away = missionTravelTargets({ missions: [mission], profile, place: "reach" });
+  assert.deepEqual(away, [{
+    place: "hollow", system: "meridian",
+    color: missionTitleColor(mission), missionId: mission.id,
+  }], "Kestrel Hollow, in the meridian system, in the mission's colour");
+  assert.deepEqual(missionTravelTargets({ missions: [mission], profile, place: "hollow" }), [],
+    "arriving puts the glow out");
+  assert.equal(missionTravelTargets({ missions: [mission], profile, place: "reach" }).length, 1,
+    "and warping away again brings it back");
 });

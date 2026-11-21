@@ -118,6 +118,9 @@ export function lintMission(def) {
     if (step.kind === "reach-sector" || step.kind === "reach") {
       if (!placeOf(step)) error(step, `a ${step.kind} step needs a \`place\``);
     }
+    if (step.kind === "dock") {
+      if (!placeOf(step)) error(step, "a dock step needs a `place`: the station pocket the pilot must dock at");
+    }
     if (step.item && !isItem(step.item)) error(step, `item "${step.item}" is not in the catalogue`);
     if (step.enemy && !ENEMIES[step.enemy]) error(step, `enemy "${step.enemy}" does not exist`);
     if (step.kind === "control") {

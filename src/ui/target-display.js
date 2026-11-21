@@ -64,6 +64,8 @@ export const MARKER_TONE_BY_KIND = Object.freeze({
 const SHOT_KINDS = new Set(['Projectile', 'bullet', 'Missile', 'missile']);
 
 export function markerStyle(kind, object = null) {
+  // A prowling ship is incognito: neutral grey, whatever it really is.
+  if (object?.role === 'prowl') return { tone: 'u', color: '' };
   let tone = '';
   if (typeof object?.markerTone === 'string' && (object.markerTone === '' || SAFE_TONE.test(object.markerTone))) {
     tone = object.markerTone;

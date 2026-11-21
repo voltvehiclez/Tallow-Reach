@@ -2,9 +2,11 @@
 import { V, fwdQ } from '../util/math.js';
 import { makeRng } from '../util/rng.js';
 import { enemyAI, AI_FLIGHT as T } from '../data/enemy-ai.js';
-import { enemyDef } from '../data/enemies.js';
+import { enemyDef, flightStatsFor } from '../data/enemies.js';
+import { FLIGHT } from '../data/ships.js';
 import { courseRemaining } from './flight-course.js';
-import { enemyFwd, enemyHullRadius, turnEnemy } from './enemy.js';
+import { enemyFwd, enemyHullRadius } from './enemy.js';
+import { flyNpc } from './npc-pilot.js';
 import { placeCollidersOf, sweepColliders } from './colliders.js';
 
 // Serializable per-pilot RNG state; does not consume combat's stream each tick.
@@ -68,9 +70,7 @@ export function flyEscort(e, def, toTarget, dist, dt, context) {
     : target.v?.clone?.() || V();
   desired.add(flightAvoidance(e, world, desired, context.players || [target])).clampLength(0, def.spdFar);
   const look = desired.lengthSq() > 1 ? e.pos.clone().add(desired) : anchor;
-  turnEnemy(e, look, Math.min(1, dt * def.turn));
-  e.v.lerp(desired, 1 - Math.exp(-dt * 3.2));
-  e.pos.addScaledVector(e.v, dt);
+  flyNpc(e, def, desired, look, dt);
 }
 
 
@@ -121,6 +121,7 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
     }
   }
 
+  let courseRollStick = 0;
   if (c.mode === "run") {
     const point = c.points[c.index];
     if (!point) {
@@ -130,6 +131,18 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
       e.boosting = point.boost === true;
       desired.copy(toPoint).normalize().multiplyScalar(point.speed);
       look = point.pos;
+      // An authored barrel roll on this leg: hand the pilot a roll stick
+      // sized to spend the leg's remaining degrees at this ship's own roll
+      // rate. New leg, new allowance; the waypoint itself never moves.
+      if (c.rollIndex !== c.index) { c.rollIndex = c.index; c.rollLeftDeg = point.roll || 0; }
+      if (c.rollLeftDeg) {
+        const st = flightStatsFor(def);
+        const rate = FLIGHT.rollFactor * st.roll * st.turn * FLIGHT.turn * st.turnAll; // rad/s at full stick
+        const wantRad = c.rollLeftDeg * (Math.PI / 180);
+        courseRollStick = Math.max(-1, Math.min(1, wantRad / Math.max(1e-6, rate * dt)));
+        c.rollLeftDeg -= courseRollStick * rate * dt * (180 / Math.PI);
+        if (Math.abs(c.rollLeftDeg) < 0.5) c.rollLeftDeg = 0;
+      }
       if (d < T.courseWaypoint) {
         c.travelled += point.length;
         c.index++;
@@ -151,9 +164,8 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
 
   c.remaining = courseRemaining(c);
   desired.add(flightAvoidance(e, world, desired, context.players || (target ? [target] : []))).clampLength(0, def.spdFar);
-  if (desired.lengthSq() > 1) turnEnemy(e, look || e.pos.clone().add(desired), Math.min(1, dt * def.turn));
-  e.v.lerp(desired, 1 - Math.exp(-dt * 3.4));
-  e.pos.addScaledVector(e.v, dt);
+  const courseBoost = c.mode === "run" && e.boosting === true;
+  flyNpc(e, def, desired, look || e.pos.clone().add(desired), dt, { boost: courseBoost, rollStick: courseRollStick });
 }
 
 /** Watch a drill from a safe distance, always facing the pilot. During an
@@ -167,10 +179,8 @@ export function flyObserve(e, def, toTarget, dist, dt, context) {
     const center = V();
     for (const p of prowlers) center.add(p.pos);
     center.multiplyScalar(1 / prowlers.length);
-    turnEnemy(e, center, Math.min(1, dt * def.turn * 1.4));
-    e.v.lerp(V(0, 0, 0), 1 - Math.exp(-dt * 4.2));
+    flyNpc(e, def, V(0, 0, 0), center, dt);
     if (e.v.length() < 4) e.v.set(0, 0, 0);
-    e.pos.addScaledVector(e.v, dt);
     return;
   }
   const b = e.brain;
@@ -181,9 +191,7 @@ export function flyObserve(e, def, toTarget, dist, dt, context) {
   const desired = d > 25 ? toAnchor.normalize().multiplyScalar(Math.min(def.spdNear, d * 1.2)) : pilot.v.clone().multiplyScalar(0.9);
   desired.add(flightAvoidance(e, world, desired, players)).clampLength(0, def.spdFar);
   const look = d > 90 && desired.lengthSq() > 1 ? e.pos.clone().add(desired) : pilot.pos;
-  turnEnemy(e, look, Math.min(1, dt * def.turn));
-  e.v.lerp(desired, 1 - Math.exp(-dt * 3));
-  e.pos.addScaledVector(e.v, dt);
+  flyNpc(e, def, desired, look, dt);
 }
 
 /**
@@ -228,10 +236,8 @@ export function flyProwl(e, def, toTarget, dist, dt, context) {
     desired.clampLength(0, maxSpd);
   }
   const look = d > 110 && desired.lengthSq() > 4 ? e.pos.clone().add(desired) : focus;
-  turnEnemy(e, look, Math.min(1, dt * def.turn * 1.6));
-  e.v.lerp(desired, 1 - Math.exp(-dt * (e.warpIn > 0 ? 6 : 4.2)));
+  flyNpc(e, def, desired, look, dt, { boost: e.warpIn > 0 && d > 180 });
   if (d <= 18 && e.v.length() < 6) e.v.set(0, 0, 0);
-  e.pos.addScaledVector(e.v, dt);
 }
 
 /** Fight the act's other hostiles. Damage comes from the def (a story ally's is 0). */
@@ -254,9 +260,7 @@ export function flyGuard(e, def, toTarget, dist, dt, context) {
   const toAim = aim.clone().sub(e.pos), d = toAim.length();
   let desired = d > (foe ? T.guardStandoff : 90) ? toAim.normalize().multiplyScalar(def.spdFar * 0.8) : (foe ? foe.v.clone().multiplyScalar(0.8) : V());
   desired.add(flightAvoidance(e, world, desired, players)).clampLength(0, def.spdFar);
-  turnEnemy(e, d > 40 ? aim : e.pos.clone().add(desired), Math.min(1, dt * def.turn));
-  e.v.lerp(desired, 1 - Math.exp(-dt * 3));
-  e.pos.addScaledVector(e.v, dt);
+  flyNpc(e, def, desired, d > 40 ? aim : e.pos.clone().add(desired), dt);
 }
 
 function otherHostiles(e, world) {
@@ -319,9 +323,7 @@ export function flyFighter(e, def, toTarget, dist, dt, context) {
   desired.add(avoid).clampLength(0, def.spdFar * T.maxSpeedFactor);
   const look = avoid.lengthSq() > T.separationSpeed ** 2
     ? e.pos.clone().add(desired) : target.pos;
-  turnEnemy(e, look, Math.min(1, dt * def.turn));
-  e.v.lerp(desired, 1 - Math.exp(-dt * T.response));
-  e.pos.addScaledVector(e.v, dt);
+  flyNpc(e, def, desired, look, dt);
 }
 
 /** Do not fire through another hostile's hull, even though friendly damage is disabled. */

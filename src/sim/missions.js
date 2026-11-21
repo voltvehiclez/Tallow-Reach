@@ -354,6 +354,8 @@ export function missionNextText(mission, profile = state.profile) {
     case "reach":
     case "reach-sector":
       return `Reach ${placeName}.`;
+    case "dock":
+      return `Dock at ${placeName}.`;
     case "deliver":
       return `Deliver ${left} ${itemName(step.item)}${target ? ` to ${placeName}` : ""}.`;
     case "survive":
@@ -980,6 +982,13 @@ function objectiveMatches(step, event, payload = {}, mission = null) {
   if (step.kind === "reach" || step.kind === "reach-sector") {
     const target = step.place || step.sector || step.target;
     return !target || target === payload.id || target === payload.place || target === payload.player?.place;
+  }
+  if (step.kind === "dock") {
+    // Docking is a world act, not a button: the `docked` event settles it,
+    // and only at the step's own station pocket.
+    if (event !== "docked") return false;
+    const target = step.place || step.target;
+    return !target || target === payload.player?.place || target === payload.place;
   }
   if (step.kind === "deliver") {
     const target = step.target || step.place;

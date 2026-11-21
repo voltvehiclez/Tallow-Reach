@@ -51,7 +51,10 @@ test("two players fly and shoot independently while an enemy turns towards the n
   assert.ok(local.power.use.drive > 0);
   assert.equal(other.power.use.drive, 0);
   local.controls.fire = false; other.controls.fire = true;
-  for (let i = 0; i < 30; i++) stepSim(dt);
+  // NPCs now turn at their own (Wasp-like) turn rate through the shared flight
+  // model instead of slerping at the old NPC-only rate, so facing the nearer
+  // pilot takes a couple of seconds of sim, not half of one.
+  for (let i = 0; i < 150; i++) stepSim(dt);
   assert.ok(state.world.bullets.filter(b => b.owner === other).length > 2);
   assert.ok(enemyFwd(enemy).dot(other.pos.clone().sub(enemy.pos).normalize()) > 0.99,
     "enemy faces the closer pilot, not the local pilot");

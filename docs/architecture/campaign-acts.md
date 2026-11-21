@@ -30,6 +30,16 @@ open-world story or contract behaves; every field below is opt-in.
 - An act's world is thrown away when it starts, except for the campaign pilot's
   own credits, fleet and fit. The two modes never share a pilot (save v27).
 
+## Ending on a dock
+
+First Sortie ends with a `dock` step: Dane's report is a radio call in space, and
+the act is accomplished only when the pilot actually docks at Korr Flight Academy
+(`dock-at-academy`). Docking anywhere else settles nothing. The academy glows
+for that objective; a friendly story ship (Dane) glows **only** while a `chase`
+step makes forming up on him the objective — never during control lessons,
+briefings or drills, and a wave's targets light up only when the kill step
+itself is current, not while a briefing is talking about them.
+
 ## Failure and checkpoints
 
 - A failed critical objective shows the MISSION FAILED card and stops the

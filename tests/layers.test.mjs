@@ -382,7 +382,9 @@ test("a rock is plain data, and so is the player's own ship", () => {
   const player = simCode("player.js");
   assert.match(player, /pos: V\(0, 0, 0\)/, "the ship starts at a plain position");
   assert.match(player, /quat: Q\(\)/, "and with a plain rotation");
-  assert.match(player, /P\.pos\.addScaledVector/, "and the flight model moves that position");
+  assert.match(player, /stepFlight\(P,/, "and the shared flight model moves that position");
+  const flightModel = simCode("flight-model.js");
+  assert.match(flightModel, /ship\.pos\.addScaledVector\(ship\.v, dt\)/, "the shared model is the one place that moves a ship");
 });
 
 test("the sim announces every entity, and render/views.js builds one mesh per entity", () => {

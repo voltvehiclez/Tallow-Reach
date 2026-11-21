@@ -751,6 +751,18 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
     assert.equal(fittedAt("primary", 1), "cannon_basic");
     assert.equal(state.ui.invHeld, null);
 
+    // 5) Click-pick the cannon back up, then click the BARE Outfitting panel
+    // (the ship-viewer area: not a bay, not a group card) -> it still fits,
+    // into the left-most empty bay of its group, like an inventory slot.
+    await clickAction(left, "slot", "primary:1");
+    assert.equal(state.ui.invHeld?.id, "cannon_basic");
+    assert.equal(fittedAt("primary", 1), null);
+    const barePanel = makeSurface("div");
+    barePanel.closest = sel => (sel === "#station-left" ? left : null);
+    await left.handlers.click[0]({ target: barePanel, shiftKey: false, clientX: 300, clientY: 200 });
+    assert.equal(fittedAt("primary", 1), "cannon_basic", "clicking anywhere on the Outfitting panel places the held module");
+    assert.equal(state.ui.invHeld, null);
+
     // Right-clicking an equipped module in Outfitting NEVER throws ReferenceError
     // and presents both "Unequip" and "Show info"!
     const rcBay = makeSurface("button");
@@ -1023,4 +1035,23 @@ test("HUD ship velocity in m/s is negative when reversing, 0 at rest, and positi
   for (let i = 0; i < 240; i++) flight(SIM_DT, p);
   const fwd = displayedSpeed(p);
   assert.ok(fwd > 140, `forward flight reports positive speed (${fwd} m/s)`);
+});
+
+test("dropping a module anywhere on the big left Outfitting panel fits its left-most bay", async () => {
+  freshDocked();
+  const { finishStationDrag } = await import("../src/ui/menu.js");
+  addItem(STATION, "missile_basic", 1);
+  const slot = slotsAt(STATION).findIndex(s => s?.id === "missile_basic");
+  assert.ok(slot >= 0, "the missile pod is in the station inventory");
+  // A drop target that is inside #station-left but NOT on any bay, card or slot.
+  const anywhereOnPanel = {
+    closest(sel) {
+      if (sel === "#station-left") return { id: "station-left" };
+      return null;
+    },
+  };
+  const drag = { kind: "inv", where: STATION, slot, id: "missile_basic", modGroup: null };
+  const res = finishStationDrag(drag, anywhereOnPanel);
+  assert.equal(res.ok, true, `panel-wide drop fits (${res.message || "no message"})`);
+  assert.equal(state.profile.loadout.wasp.secondary[0], "missile_basic", "fitted into the left-most secondary bay");
 });

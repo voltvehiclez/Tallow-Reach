@@ -80,11 +80,11 @@ export const M01_FIRST_SORTIE = mission({
       speaker: captain,
       portrait,
       place,
-      objective: "Hear Captain Dane Korr's briefing at Korr Flight School.",
+      objective: "Hear Captain Dane Korr's briefing at Korr Flight Academy.",
       lines: [
-        "So the school finally let you off the leash. A Wasp, a full tank, and a captain who would rather be flying than talking.",
+        "So the academy finally let you off the leash. A Wasp, a full tank, and a captain who would rather be flying than talking.",
         "No ceremony. Launch, form up on my wing and do what I say. Fly well and you will be home before the range lights cool.",
-        "One more thing — the school shop is shut until your certificate is signed. Nothing on those shelves is for sale today. Say your goodbyes and get to your ship.",
+        "One more thing — the academy shop is shut until your certificate is signed. Nothing on those shelves is for sale today. Say your goodbyes and get to your ship.",
       ],
     }),
     {
@@ -153,7 +153,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "The mouse steers. Small movements — the Wasp is quicker than anything you flew at the school.",
+        "The mouse steers. Small movements — the Wasp is quicker than anything you flew at the academy.",
       ],
     }),
     learn("learn-steer", "steer", "Steer with the mouse."),
@@ -353,9 +353,8 @@ export const M01_FIRST_SORTIE = mission({
       actorRole: "observe",
       objective: "Answer Captain Dane Korr.",
       lines: [
-        "Hold on. Those are not school drones.",
-        "Two ships, guns live, inbound hot. I do not recognise the hulls — and nobody flies this range without a school transponder.",
-        "I will keep one busy. You take the other. Do not let them split us.",
+        "Hold on. Those are not academy drones.",
+        "Two ships, guns live, inbound hot. I do not recognise the hulls — and nobody flies this range without an academy transponder.",
       ],
     }),
     radio({
@@ -368,7 +367,7 @@ export const M01_FIRST_SORTIE = mission({
       actorRole: "observe",
       objective: "Hear the strangers out.",
       lines: [
-        "Korr's newest cadet. We bought the school's whole flight schedule, so spare us the brave face.",
+        "Korr's newest cadet. We bought the academy's whole flight schedule, so spare us the brave face.",
         "Cut your engines and hand over the Wasp. Refuse, and we will take it out of the debris.",
       ],
     }),
@@ -390,9 +389,15 @@ export const M01_FIRST_SORTIE = mission({
       objective: "Hear Captain Dane Korr's final report.",
       lines: [
         "Both down. I saw the whole pass.",
-        "I still do not know who they were. School business, out here, with guns hot — we will find out. Not today.",
-        "That is your first sortie, cadet. Get back to the school and collect your pay — and try to make the landing look deliberate.",
+        "I still do not know who they were. Academy business, out here, with guns hot — we will find out. Not today.",
+        "That is your first sortie, cadet. Get back to the academy, dock, and collect your pay — and try to make the landing look deliberate.",
       ],
     }),
+    {
+      id: "dock-at-academy",
+      kind: "dock",
+      place,
+      objective: "Dock at Korr Flight Academy.",
+    },
   ],
 });

@@ -17,14 +17,14 @@ Under the objective in the top-right HUD, a control lesson also draws its hold b
 
 ---
 
-## 1. Graduation briefing — at Korr Flight School (docked)
+## 1. Graduation briefing — at Korr Flight Academy (docked)
 
 Step `graduation`, `kind: dialogue`, `requiresDock: true`. Objective shown under the act:
-*Hear Captain Dane Korr's briefing at Korr Flight School.*
+*Hear Captain Dane Korr's briefing at Korr Flight Academy.*
 
-1. "So the school finally let you off the leash. A Wasp, a full tank, and a captain who would rather be flying than talking."
+1. "So the academy finally let you off the leash. A Wasp, a full tank, and a captain who would rather be flying than talking."
 2. "No ceremony. Launch, form up on my wing and do what I say. Fly well and you will be home before the range lights cool."
-3. "One more thing — the school shop is shut until your certificate is signed. Nothing on those shelves is for sale today. Say your goodbyes and get to your ship."
+3. "One more thing — the academy shop is shut until your certificate is signed. Nothing on those shelves is for sale today. Say your goodbyes and get to your ship."
 
 ## 2. Launch — no dialogue
 
@@ -53,7 +53,7 @@ Step `learn-brake`: *Brake to a stop with Ctrl.* — bar `Ctrl — brake to a st
 Step `learn-throttle-back`: *Pull the throttle back with S.* — bar `S — throttle back`.
 
 **Steering** — step `brief-steer`
-- "The mouse steers. Small movements — the Wasp is quicker than anything you flew at the school."
+- "The mouse steers. Small movements — the Wasp is quicker than anything you flew at the academy."
 
 Step `learn-steer`: *Steer with the mouse.* — bar `Mouse — steer`.
 
@@ -133,7 +133,7 @@ radio `missile-brief`:
 3. "Destroy this wave with your secondary weapon."
 
 Step `missile-drill` — objective *Destroy both practice drones with your secondary weapon.*
-The campaign starter Wasp leaves the school with its `missile_basic` rack fitted and full,
+The campaign starter Wasp leaves the academy with its `missile_basic` rack fitted and full,
 and `sim/campaign-flight.js` tops the rack back up (`MODULES.missile_basic.ammo`) if the
 pilot empties it with nothing still in flight during `missile-brief` / `missile-drill`.
 
@@ -147,13 +147,12 @@ out of warp at 650–800 m and begin circling around Dane and the pilot without 
 
 Step `ambush-warning`, radio from Dane (while the two ships prowl around both hulls; Dane's
 `actorRole` is `"observe"`, so he holds his fire):
-1. "Hold on. Those are not school drones."
-2. "Two ships, guns live, inbound hot. I do not recognise the hulls — and nobody flies this range without a school transponder."
-3. "I will keep one busy. You take the other. Do not let them split us."
+1. "Hold on. Those are not academy drones."
+2. "Two ships, guns live, inbound hot. I do not recognise the hulls — and nobody flies this range without an academy transponder."
 
 Step `ambush-taunt`, radio from the **Unmarked pilot** (the two ships keep circling; Dane
 still holds his fire unless the pilot shoots first):
-1. "Korr's newest cadet. We bought the school's whole flight schedule, so spare us the brave face."
+1. "Korr's newest cadet. We bought the academy's whole flight schedule, so spare us the brave face."
 2. "Cut your engines and hand over the Wasp. Refuse, and we will take it out of the debris."
 
 Step `defeat-ambush` — objective *Defeat both attackers.* Once the threat finishes (or
@@ -168,8 +167,12 @@ The word "raider" never appears on screen; nobody in the scene knows who they ar
 
 Step `sortie-complete`, radio:
 1. "Both down. I saw the whole pass."
-2. "I still do not know who they were. School business, out here, with guns hot — we will find out. Not today."
-3. "That is your first sortie, cadet. Get back to the school and collect your pay — and try to make the landing look deliberate."
+2. "I still do not know who they were. Academy business, out here, with guns hot — we will find out. Not today."
+3. "That is your first sortie, cadet. Get back to the academy, dock, and collect your pay — and try to make the landing look deliberate."
+
+Step `dock-at-academy` — objective *Dock at Korr Flight Academy.* Dane's report is
+in space; docking at the academy is the last objective, and the accomplished card
+shows when the dock completes.
 
 Then the act-complete card: title **First Sortie**, line *Paid 50 cr.*, detail
 *"The campaign continues from the chapter menu."*

@@ -47,6 +47,19 @@ export const PLANET_CLASSES = {
     rockRadius: [16, 58],
     ore: "ice_rock",
   },
+  earth: {
+    n: "Earth-like world",
+    radiusM: [140_000, 300_000],
+    col: 0x7d8b74,             // greenish grey: vegetated land under thin cloud
+    dark: 0x39443a,
+    atmoCol: 0xa9c9bb,
+    atmoOpacity: 0.2,
+    emissive: 0x000000,
+    spin: [0.0012, 0.004],
+    rockCount: [8, 24],
+    rockRadius: [16, 72],
+    ore: "rocky_rock",
+  },
   volcanic: {
     n: "Volcanic world",
     radiusM: [110_000, 240_000],

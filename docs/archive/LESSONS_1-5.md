@@ -1,4 +1,4 @@
-# Lessons archive: L1–L6
+# Lessons archive: L1–L10
 
 Moved out of [docs/LESSONS.md](../LESSONS.md) verbatim to keep it under its size limit.
 Read them only when a task touches mission spawn counts, a full hold, dialogue departure, item integrity, or dialogue buttons.
@@ -68,3 +68,20 @@ Read them only when a task touches mission spawn counts, a full hold, dialogue d
 - **Rule:** any new step field must be added to that list. A save and load must keep every authored field.
 - **Enforced by:** the save-and-load-at-every-step invariant, which compares every authored field of every step
   after a round trip through `sanitizeSave`.
+
+### L9. A step kind that nothing could ever complete
+- **Seen:** the `deliver` step kind existed, but nothing in the game emitted "delivered", so a mission using it
+  could never finish.
+- **Rule:** every step kind and trigger needs a real event source and a test before missions may use it. Until
+  then the linter rejects it.
+- **Enforced by:** the linter (`deliver` is an error); `tests/mission-lint.test.mjs`.
+
+### L10. Death failed missions it should not have, or left a mission stuck without its item
+- **Seen:** the owner wanted death to be punishment enough: a mission was failing on death for no good reason, and a mission
+  whose parcel or beacon was lost with the ship had to fail clearly instead of waiting forever.
+- **Rule:** dying does not fail a mission unless its data says so (`fails.on` has `player-dead`) or the ship was carrying a
+  mission-only item (category `mission`) the mission needs, which is lost for good. Either way the failure carries a message
+  and the HUD shows "Mission failed: <mission>" with the reason. Ordinary goods carry on. `player-dead` carries `lost`, the
+  hold at that moment, so no listener depends on whether the cargo was already cleared.
+- **Enforced by:** `tests/mission-death.test.mjs`; the die-at-every-step invariant in `tests/mission-invariants.test.mjs`.
+

@@ -62,3 +62,27 @@ test('Label, lock box and N-tab icon colours share one markerStyle source of tru
   // Unsafe CSS strings are ignored rather than injected.
   assert.deepEqual(markerStyle('relay', { markerTone: 'bad class', markerColor: 'red;position:fixed' }), { tone: '', color: '' });
 });
+
+test('A prowling ship is incognito: grey "Unmarked" until it drops the role', async () => {
+  // Floating label/lock tone: neutral grey while prowling, hostile red after.
+  assert.deepEqual(markerStyle('Hostile', { role: 'prowl', hostile: true }), { tone: 'u', color: '' });
+  assert.deepEqual(markerStyle('Hostile', { role: null, hostile: true }), { tone: 'h', color: '' });
+  const { lockName } = await import('../src/sim/targeting.js');
+  const ship = { n: 'Newbie Raider', role: 'prowl' };
+  assert.equal(lockName({ k: 'e', o: ship }), 'Unmarked');
+  ship.role = null; // aggression reveals the true identity
+  assert.equal(lockName({ k: 'e', o: ship }), 'Newbie Raider');
+  const hud = readFileSync('src/ui/hud.js', 'utf8');
+  assert.match(hud, /e\.role === "prowl" \? "Unmarked"/);
+  const css = readFileSync('src/styles.css', 'utf8');
+  assert.match(css, /\.mk\.u, \.pocket-icon\.u \{\s*--marker-color: #a7adb2;/);
+});
+
+test('A mission-item crate is named by its item, ordinary loot stays "crate"', async () => {
+  const { lockName } = await import('../src/sim/targeting.js');
+  assert.equal(lockName({ k: 'c', o: { item: 'beacon', persistent: true, missionId: 'story.border-signal' } }), 'Beacon');
+  assert.equal(lockName({ k: 'c', o: { item: 'salv' } }), 'crate');
+  assert.equal(lockName({ k: 'c', o: { item: 'core' } }), 'reactor core');
+  const hud = readFileSync('src/ui/hud.js', 'utf8');
+  assert.match(hud, /c\.persistent && c\.missionId \? itemName\(c\.item\) : "Crate"/);
+});

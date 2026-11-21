@@ -288,6 +288,9 @@ body.no-reticle canvas {
 .mk.i, .pocket-icon.i {
   --marker-color: var(--ice);
 }
+.mk.u, .pocket-icon.u {
+  --marker-color: #a7adb2;
+}
 .mk {
   position: fixed;
   display: none;
@@ -2362,6 +2365,10 @@ textarea {
 .sm-node .sm-hit { fill: transparent; stroke: none; pointer-events: all; }
 .sm-node .sm-dot { fill: #40515b; stroke: #71858f; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .sm-node.current .sm-dot { fill: #40515b; stroke: #71858f; }
+/* A mission wants you there: same glow as the ship UI's objective markers —
+   the dot keeps its own colour, wrapped in the mission colour's glow. */
+.sm-node.objective .sm-dot { stroke: var(--objective-color, var(--amber)); stroke-width: 1.5; filter: drop-shadow(0 0 6px var(--objective-color, var(--amber))) drop-shadow(0 0 2px var(--objective-color, var(--amber))); }
+.sm-node.objective text { fill: var(--objective-color, var(--amber)); }
 .sm-pocket-node .sm-dot { fill: #5a7a86; stroke: var(--ice); }
 .sm-pocket-node.current .sm-dot { fill: #5a7a86; stroke: var(--ice); }
 
@@ -2491,11 +2498,18 @@ textarea {
 #hud[hidden], #panel[hidden], #station-left[hidden], #bm[hidden], #hud > #pocket-objects[hidden], #pocket-objects[hidden], #weapon-lead[hidden] { display: none; }
 body.navigation-open #tr { visibility: hidden; }
 body.navigation-open canvas { cursor: default; }
-#pocket-objects header { padding: 4px 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #444; font-size: 13px; }
+#pocket-objects header { padding: 4px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #444; font-size: 13px; }
+#pocket-objects header #close-pocket-objects { margin-left: auto; }
+#pocket-filters-details { position: relative; font-size: 12px; }
+#pocket-filters-details summary { cursor: pointer; }
+#pocket-filter-presets { display: flex; gap: 4px; padding: 4px 6px; border-bottom: 1px solid rgba(170,170,170,.18); }
+#pocket-filter-presets .pocket-preset { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pocket-filter-presets .pocket-preset.active { border-color: #fff; color: #fff; }
+#pocket-preset-menu-slot .pocket-preset-menu { display: flex; gap: 6px; align-items: center; padding: 4px 6px; border-bottom: 1px solid rgba(170,170,170,.18); font-size: 11px; }
+#pocket-preset-menu-slot .pocket-preset-menu input { flex: 1; min-width: 0; }
 #pocket-objects button { margin: 0; padding: 2px 6px; font-size: 11px; }
 .pocket-tools { display: flex; gap: 4px; padding: 3px 6px; align-items: center; border-bottom: 1px solid rgba(170,170,170,.18); }
-.pocket-tools details { margin-left: auto; font-size: 12px; }
-.pocket-tools summary { cursor: pointer; }
+.pocket-tools .pocket-sort-distance { margin-left: auto; }
 #pocket-filters { position: absolute; right: 6px; z-index: 1; background: rgba(24,24,24,.92); border: 1px solid #666; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
 #pocket-filters label { display: flex; align-items: center; gap: 4px; }
 #pocket-object-rows { list-style: none; margin: 0; padding: 2px 6px; flex: 1; min-height: 0; overflow-y: auto; }
@@ -2518,6 +2532,7 @@ body.navigation-open canvas { cursor: default; }
 #pocket-objects [data-pocket-sort][aria-pressed="true"] { border-color: #fff; color: #fff; }
 @media (max-height: 820px) { #hud > #pocket-objects { bottom: 24px; } }
 #weapon-lead { width: 12px; height: 12px; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }
+.mk .mk-dist { display: inline-block; min-width: 7ch; font-variant-numeric: tabular-nums; text-align: left; }
 
 /* Campaign screen: chapter boxes in the big left window, the act boxes a chapter
    opens into, and the cards that end an act. Boxes are deliberately large: one

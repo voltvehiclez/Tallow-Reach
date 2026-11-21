@@ -182,6 +182,9 @@ export function act(ctx, mission) {
     case "reach-sector":
       fly(step.place);
       return "reach";
+    case "dock":
+      moveTo(ctx, step.place, { dock: true });
+      return "dock";
     case "script":
       if (step.requiresDock) moveTo(ctx, step.place, { dock: true });
       else fly(step.place);

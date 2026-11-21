@@ -100,7 +100,10 @@ function worldWithStationStores(fields, stationStores) {
 //      600 cr and one Wasp, and nothing earned in one mode reaches the other.
 //      A v26 save's campaign half is migrated to a fresh campaign pilot; the
 //      acts it had finished are kept.
-export const SAVE_VERSION = 27;
+//   28 adds the pilot's seven pocket-object filter presets
+//      (profile.pocketFilterPresets). Purely additive: an older save loads
+//      with seven empty preset slots.
+export const SAVE_VERSION = 28;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -272,6 +275,25 @@ export function newCampaignProfile() {
 /** Fresh portable character profile (travels with a pilot across worlds). */
 /** A compact remembered-campaign record: which authored campaign missions the
  * pilot has accomplished. Replays stay modest; the ordered list lives in data. */
+/** The pilot's saved pocket-object filter presets: seven slots, each empty
+ * or { name, filters }. Data-owned copy of the shape ui/pocket-list.js cleans
+ * to (state may not import ui); unknown filter keys are dropped, missing ones
+ * default on. */
+export function cleanPocketFilterPresets(raw) {
+  const FILTERS = ["Ship", "Station", "Asteroid", "Asteroid field", "Planet", "Cargo", "Rift", "Gate", "Cache", "Projectile", "Missile", "Scenery", "Other"];
+  const out = Array.from({ length: 7 }, () => null);
+  if (!Array.isArray(raw)) return out;
+  for (let i = 0; i < 7; i++) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== "object" || !entry.filters || typeof entry.filters !== "object") continue;
+    out[i] = {
+      name: String(entry.name || `Filter ${i + 1}`).slice(0, 40) || `Filter ${i + 1}`,
+      filters: Object.fromEntries(FILTERS.map(k => [k, typeof entry.filters[k] === "boolean" ? entry.filters[k] : true])),
+    };
+  }
+  return out;
+}
+
 const cleanCampaignProgress = raw => ({
   completed: [...new Set((Array.isArray(raw?.completed) ? raw.completed : [])
     .filter(id => typeof id === "string" && id.trim() && id.length <= 160))],
@@ -281,6 +303,7 @@ export function newProfile(homePocket = DEFAULT_PLACE) {
   return attachMissionCompat({
     homeStation: homePocket, // optional backward-compatible v21 field
     campaign: { completed: [] }, // completed authored campaign mission ids; replays stay separate
+    pocketFilterPresets: cleanPocketFilterPresets(null), // seven saved N-panel filter presets (v28)
     v: SAVE_VERSION,
     cr: 600,
     holds: { [DEFAULT_SHIP]: newHold() },   // per ship: { itemId: count } in its hold
@@ -667,6 +690,7 @@ export function sanitizeProfile(raw) {
   return attachMissionCompat({
     homeStation,
     campaign: cleanCampaignProgress(raw.campaign),
+    pocketFilterPresets: cleanPocketFilterPresets(raw.pocketFilterPresets),
     v: SAVE_VERSION,
     cr,
     holds,

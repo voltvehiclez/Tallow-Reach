@@ -10,14 +10,13 @@ import {
   missionHandInStation,
   missionObjectivesDone,
   missionOfferStation,
-  missionOptionals,
   missionReadyForHandIn,
   missionStep,
 } from "../sim/missions.js";
 import { isCampaignMissionId } from "../sim/campaign.js";
 import { enemyDef } from "../data/enemies.js";
 import { courseDef } from "../data/flight-courses.js";
-import { featureById, isPocket, placeAt } from "../data/places.js";
+import { featureById, isPocket, placeAt, systemOf } from "../data/places.js";
 import { state } from "../state/state.js";
 
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -99,17 +98,9 @@ export function activeObjectiveSteps(mission) {
       return done < Math.max(1, Number(child.count) || 1);
     });
   }
-  if (step.kind === "dialogue") {
-    const out = [step];
-    for (let i = (Number(mission.step) || 0) + 1; i < (mission.steps?.length || 0); i++) {
-      const next = mission.steps[i];
-      if (!next) break;
-      if (next.kind === "dialogue") continue;
-      if (next.kind === "kill") out.push(next);
-      break;
-    }
-    return out;
-  }
+  // A glow means "this needs you now". A dialogue step therefore never looks
+  // ahead to the wave it spawned: the drones it is *talking about* light up
+  // only when the step that orders the kill is the current step.
   return [step];
 }
 
@@ -154,6 +145,7 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
       for (const step of steps) {
         if (step.requiresDock === true && (step.place || missionOfferStation(mission)) === place) return color;
         if (step.kind === "deliver" && (step.target === "station" || step.target === place || step.place === place)) return color;
+        if (step.kind === "dock" && step.place === place) return color;
         if (step.kind === "script") {
           const actions = Array.isArray(step.actions) ? step.actions : step.action ? [step.action] : [];
           if (actions.some(a => a?.kind === "give-item" || a?.kind === "take-item") && (!step.place || step.place === place)) {
@@ -167,15 +159,13 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
     if (isShip) {
       const friendly = object.friendly === true || enemyDef(object.def)?.friendly === true;
       if (friendly) {
+        // A friendly story ship glows only when the live objective is to fly
+        // with it (a chase). During control lessons, briefings, drone drills
+        // and the ambush it is company, not a target: no glow.
         for (const step of steps) {
-          if ((step.follow === object.def || step.actor === object.def) && (!step.place || step.place === place)) {
-            return color;
-          }
-        }
-        const cur = missionStep(mission);
-        for (const opt of missionOptionals(mission)) {
-          if (opt?.kind === "stay-within" && opt.actor === object.def &&
-              (!opt.during || cur?.id === opt.during || cur?.group === opt.during)) {
+          if (step.kind === "chase" &&
+              (step.follow === object.def || step.actor === object.def) &&
+              (!step.place || step.place === place)) {
             return color;
           }
         }
@@ -236,6 +226,42 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
 }
 
 /**
+ * The pockets (and their systems) active missions currently want the pilot
+ * to warp to: one entry per destination pocket, in the mission's own colour.
+ * A destination drops off the moment the pilot is there, and returns if they
+ * warp away again — this is recomputed from the live mission state, exactly
+ * like the in-space Waypoint labels. The starmap rings these on both charts.
+ */
+export function missionTravelTargets(options = {}) {
+  const profile = options.profile || state.profile;
+  const place = options.place || state.place;
+  const worldState = options.worldState || state.worldState;
+  const missions = orderedActiveMissions(options.missions, profile);
+  const out = [];
+  const seen = new Set();
+  const push = (placeId, color, missionId) => {
+    if (!placeId || placeId === place || !isPocket(placeId) || seen.has(placeId)) return;
+    seen.add(placeId);
+    out.push({ place: placeId, system: systemOf(placeId), color, missionId });
+  };
+  for (const mission of missions) {
+    const color = missionTitleColor(mission);
+    const done = missionObjectivesDone(mission);
+    const readyHandIn = missionReadyForHandIn(mission, profile, worldState);
+    if (done || readyHandIn) {
+      push(missionHandInStation(mission), color, mission.id);
+      continue;
+    }
+    for (const step of activeObjectiveSteps(mission)) {
+      const stepPlace = step.place || step.sector ||
+        (step.kind === "reach" || step.kind === "reach-sector" ? step.target : null);
+      push(stepPlace, color, mission.id);
+    }
+  }
+  return out;
+}
+
+/**
  * Spatial waypoints (`{ id, label, pos: [x, y, z], color, missionId }`) for
  * active missions that require flying to a point or destination in space.
  */
@@ -262,23 +288,18 @@ export function missionWaypoints(options = {}) {
     const readyHandIn = missionReadyForHandIn(mission, profile, worldState);
     const steps = activeObjectiveSteps(mission);
 
-    if (done || readyHandIn) {
-      const handInPlace = missionHandInStation(mission);
-      if (handInPlace && handInPlace !== place && isPocket(handInPlace)) {
-        const destName = placeAt(handInPlace)?.n || handInPlace;
-        pushWaypoint(`${mission.id}:handin`, `Waypoint: ${destName}`, [0, 120, 1000], color, mission.id);
-      }
-      continue;
-    }
+    // A destination in ANOTHER pocket gets no waypoint here: a marker planted
+    // at a fixed local point would claim the station is a few kilometres away
+    // inside a pocket it is not in. Cross-pocket destinations belong to the
+    // starmap, which rings them (missionTravelTargets). Only points in THIS
+    // pocket — an authored waypoint, a step position, a course start, a
+    // signal — are marked in the ship UI.
+    if (done || readyHandIn) continue;
 
     for (const step of steps) {
       const stepPlace = step.place || step.sector ||
         (step.kind === "reach" || step.kind === "reach-sector" ? step.target : null);
-      if (stepPlace && stepPlace !== place && isPocket(stepPlace)) {
-        const destName = placeAt(stepPlace)?.n || stepPlace;
-        pushWaypoint(`${mission.id}:${step.id}:travel`, `Waypoint: ${destName}`, [0, 120, 1000], color, mission.id);
-        continue;
-      }
+      if (stepPlace && stepPlace !== place && isPocket(stepPlace)) continue;
 
       if (Array.isArray(step.waypoint) && step.waypoint.length === 3) {
         pushWaypoint(`${mission.id}:${step.id}:wp`, step.waypointLabel || "Waypoint", step.waypoint, color, mission.id);

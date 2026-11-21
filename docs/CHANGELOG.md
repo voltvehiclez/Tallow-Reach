@@ -20,6 +20,182 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
+
+- **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
+  owner's call — the **ease in/out ramp stays**, and was the part that helped.
+- **Outfitting click-place:** pick-up-then-click (the inventory-slot style of
+  placing, as opposed to drag-and-drop) only honoured clicks inside a module
+  group card; clicking the big panel's viewer/header areas silently did
+  nothing. A held module now fits its left-most empty bay when clicked
+  anywhere on the Outfitting panel, matching the drag path. Step 5 of the
+  station UI flow test clicks the bare panel and fits.
+
+Files: `src/data/ships.js`, `src/ui/menu.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
+## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
+
+- **Roll ease in/out:** the shared model ramps the roll stick
+  (`FLIGHT.rollRampRate` 4/s, ~0.25 s to full rate, same bleed-off on release)
+  for the player, banking NPCs and Dane's barrel rolls alike — no more
+  snap-on/snap-off rotation. Golden test replica and combat fixture updated.
+- **No fake local waypoints:** `missionWaypoints` no longer plants a marker
+  1 km away inside your current pocket for a station in another pocket
+  (Border Signal's "Meridian Station, 5 km" inside Kestrel Hollow).
+  Cross-pocket destinations live on the starmap rings only; in-pocket
+  waypoints (courses, signals, authored points) are unchanged.
+- **Starmap glow simplified:** destination nodes no longer draw an extra ring
+  circle — the dot keeps its own colour and wears the mission-colour glow,
+  exactly like the ship UI / N-menu objective markers.
+- **Mission items are findable:** a mission crate is labelled by its item
+  name (**Beacon**, not "Crate") in the floating label and the target lock,
+  with the mission's objective glow it already computed. (The beacon crate
+  itself was verified present and amber at the wreck; it was indistinguishable
+  in the loot pile, not missing.)
+- **Outfitting:** dropping a module anywhere on the big left panel now fits
+  its left-most bay reliably — the group is read from the module's own data
+  (not the tile dataset), the handler honours where the drag was hovering if
+  the release hit-test lands on an overlay, and `finishStationDrag` is
+  exported and covered by a real fitting test.
+
+Files: `src/sim/flight-model.js`, `src/data/ships.js`, `src/sim/npc-pilot.js`,
+`src/ui/{mission-hud,starmap,hud,menu}.js`, `src/sim/targeting.js`,
+`src/styles.css`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
+## 2026-11-21: Roll cut by 25% (sickening at full speed)
+
+`FLIGHT.rollFactor` 3.75 → 2.8125 globally (player and NPC alike), after the
+owner found the 250% roll nauseating. Yaw and pitch unchanged. Recorded
+fixtures and the axis-ratio test updated; no save change.
+
+## 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
+
+- **Warp-to glow:** `missionTravelTargets` (`ui/mission-hud.js`) lists the
+  pockets active missions currently want the pilot in (same rule as the
+  in-space Waypoint labels, hand-in included), and the starmap rings them in
+  the mission's own colour — the destination **system** on the galaxy chart
+  (including the current system: Meridian Station → Kestrel Hollow rings
+  Meridian) and the destination **pocket** on the system chart. Arriving puts
+  it out; warping away brings it back, since it is recomputed from live
+  mission state at every render.
+- **Face-off identity:** a ship on `prowl` (First Sortie's ambushers during
+  the parley) now presents as **Unmarked** with a neutral grey reticle
+  (`.mk.u`) everywhere its name or marker is drawn — floating label, target
+  lock (`lockName`), marker tone (`markerStyle`). The moment the role drops
+  (dialogue ends or anyone shoots), the same ship is its true self again:
+  "Newbie Raider", hostile red. Display only; no AI or save change.
+
+Files: `src/ui/{mission-hud,starmap,hud,target-display}.js`,
+`src/sim/targeting.js`, `src/styles.css`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
+## 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
+
+Following the axis-rate change, NPC pilots now use the fast axes:
+`sim/npc-pilot.js` banks — when the aim point sits more than
+`AI_FLIGHT.pilotBankAbove` (0.3 rad) off the nose, it rolls (fastest axis) to
+swing the target into the pitch plane and pitches onto it, reserving slow yaw
+for fine aim. Test (j) in `tests/flight-model.test.mjs` shows a raider on a
+dead-side target in ~3.5 s where yaw alone needs at least ~4.3 s, banked past
+90 degrees on the way; test (d)'s turn cap now reads the pitch axis. Combat
+will feel snappier: enemies get their guns on you sooner (their damage numbers
+are unchanged). In First Sortie, Dane's 10 km chase course authors two
+barrel rolls (`roll: 360` / `-360` on legs in `data/flight-courses.js`, flown
+across the leg by `flyCourse` via the pilot's `rollStick`) — showmanship only:
+course waypoints and the destination are exactly where they were, and test (k)
+pins that the roll fields ride along without moving a single point. The combat
+8b fixture was re-recorded and diffed (player pose unchanged).
+
+Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
+`src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
+## 2026-11-21: Yaw is the slow axis, roll the fast one — per-ship axis tuning
+
+At the owner's request, to promote crossing flight paths: every ship (player
+and NPC, through the shared model) now turns with **yaw at 40%** of its old
+rate (`FLIGHT.yawFactor` 1.6 → 0.64; mouse side-to-side is the slowest axis),
+**pitch unchanged** (1.2), and **roll at 250%** (`FLIGHT.rollFactor` 1.5 →
+3.75, Q/E). Thrust, strafe, lift and reverse untouched. NPCs command yaw and
+pitch through `npc-pilot.js`, so their steering obeys the same rates; their
+pilot still commands no roll (banking is a separate later tweak).
+
+The axes are now tweakable per ship: flight stats gain `yaw`, `pitch`, `roll`
+(multipliers on one axis each) and `turnAll` (one multiplier on all three —
+`turnAll: 2` turns twice as fast on every axis), defaulting to 1 in
+`FLIGHT.defaultStats`. An NPC type sets them in its `flight` block in
+`data/enemies.js` (all eight types now spell the fields out at 1); a flyable
+hull sets an optional `flight` block in `SHIPS` (`data/ships.js`), which
+`player.js` passes to the model and `flightStatsForShip` copies. Test (i) in
+`tests/flight-model.test.mjs` pins the ratios and both override levels; the
+render-interpolation smoothness floor and the campaign-fixes raider aim
+window were retimed for the slower yaw. Both 8b fixtures were re-recorded and
+diffed (LESSONS L17): only steering and enemy-flight downstream differ.
+
+Files: `src/sim/flight-model.js`, `src/sim/player.js`, `src/data/ships.js`,
+`src/data/enemies.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
+## 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
+
+The batch the owner asked for after playtest round 4 of step 15, in slices.
+
+- **Every ship flies the same flight model.** New `src/sim/flight-model.js` (`stepFlight`) holds the
+  player's exact maths — local Y/X/Z quaternion turns with the stick deadzone, `FLIGHT` fractions,
+  throttle/brake rates, velocity easing 0.9 (2.4 boosting) and boost adding its own speed again.
+  `sim/player.js` keeps power, boost fuel/ignition, warnings and collision around it and is
+  byte-identical against a golden copy of the old maths (`tests/flight-model.test.mjs` (a), plus the
+  8b fixtures: the player's own pose never moved). New `src/sim/npc-pilot.js` turns the AI's desired
+  velocity + aim point into the same stick/throttle/strafe/lift/boost (proportional, clamped), and
+  `sim/enemy-flight.js` (fighter, escort, course, observe, prowl, guard) no longer moves `pos`/`quat`/`v`
+  or calls `turnEnemy` for movement. The AI decisions are unchanged; `spdFar`/`spdNear`/`spdOrbit` remain
+  "how fast it wants to go", capped by its flight stats. NPC drives are unlimited today; `boostAllowed`
+  is the one hook a later power system needs.
+- **NPC stats are their own numbers.** Every type in `src/data/enemies.js` carries its own copied
+  `flight` block at the stock Wasp's values (speed 150, turn 1.2, strafe/lift/reverse 0.6, ease 0.9,
+  boostEase 2.4, boostSpeed 150 — from `thruster_basic` + `FLIGHT`), with `FLIGHT.defaultStats` as the
+  fallback and `flight.fromShip` as a one-time copy with per-field overrides. Tune ONE type by editing
+  only its `flight` block. The old per-type movement numbers they replace: raider turn 1.4 / 125 / 25 / 45,
+  captain_korr 1.9 / 210 / 85 / 18, practice_drone 0.9 / 80 / 18 / 25, smuggler 1.5 / 120 / 24 / 44,
+  freighter 0.9 / 55 / 16 / 18, hiveguardian 1.9 / 145 / 38 / 58, riftguardian 1.8 / 140 / 34 / 55,
+  deepguardian 2 / 155 / 40 / 62 (turn / spdFar / spdNear / spdOrbit). Expect fights to fly differently:
+  everything now accelerates, brakes and turns like a Wasp — Dane brakes over seconds (reset-brake test
+  widened for exactly that) and boosts past 150 m/s on the fast course legs.
+- **All ships turn a third longer:** `FLIGHT.turn` 0.7 → 0.525 (one data number; player and NPC alike).
+- **First Sortie:** Flight School is now **Korr Flight Academy** everywhere (ids unchanged, saves safe);
+  Dane's "I will keep one busy…" line is gone; the act ends on a new **`dock` objective**
+  (`dock-at-academy`) — his report is a radio call in space, the card shows when the pilot docks there.
+  Framework first: a generic `dock` step kind (settled only by the `docked` event at its own pocket,
+  linter-required `place`, mission-driver support). **Objective glow means "needed now":** briefing
+  dialogue no longer lights the wave it spawned, and Dane glows only on the chase step — not during
+  control lessons, drills or the ambush.
+- **Reset actually resets.** It wiped only the current mode's half; it now wipes both modes
+  (`resetAllSave`, staying in the mode pressed from). New LESSONS L32 and `tests/reset-save.test.mjs`.
+- **Navigation:** the N panel header is Pocket objects – Filters – Close · N, the Distance sort sits at
+  the far right over the distances, and seven **filter preset** boxes live between them (empty = ＋ saves
+  the current filters, selecting a preset while editing filters updates it, right-click renames or resets
+  it). Presets are saved with the save (**v28**, additive, old saves load empty). The N filters now also
+  govern floating HUD labels (an F-lock still draws its label; rocks still never label). Belt label
+  grouping is more generous (`BELT_LABEL_GAP_METRES` 1000 → 3000, chaining; no asteroid moved), and
+  marker labels split name/distance into spans with a fixed-width tabular distance, so a label no longer
+  resizes and shakes as the range ticks over.
+- **Outfitting:** dropping a module anywhere in the left Outfitting box fits its left-most bay of the
+  right group (a specific bay still wins).
+- **Earth-like planet:** new `earth` class (greenish-grey) in `data/planets.js` with its own procedural
+  map; it is in the generator pool — existing generated planets may re-roll their class — and the
+  main-menu backdrop world is one.
+- The two 8b fixture recordings were re-recorded and diffed (LESSONS L17): the combat run's player pose
+  is unchanged; only enemy flight and its downstream differ.
+
+Files: `src/sim/{flight-model,npc-pilot,player,enemy-flight,missions}.js`, `src/data/{ships,enemies,
+enemy-ai,scenery,planets,missions/index,missions/validate,campaign/m01,campaign/galaxy,factions,places,shops}.js`,
+`src/ui/{hud,pocket-list,mission-hud,menu}.js`, `src/render/{planetmaps,menuview}.js`, `src/state/{profile,state}.js`,
+`src/{index.html,styles.css}`, tests (new `tests/{flight-model,reset-save,filter-presets}.test.mjs`),
+docs. Save **v28** (additive: `profile.pocketFilterPresets`; old saves load with seven empty slots).
+Rebuild `game/tallow-reach.html`; `npm test` — see the delivery note for the count.
+
 ## 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere
 
 The owner's fourth pass over the campaign build, plus universal mission markers.
@@ -135,135 +311,15 @@ Files: `src/data/{weapons,places}.js`, `src/data/campaign/m01.js`, `src/data/fli
 `src/core/audio.js`, `src/ui/{campaign,menu,hud}.js`, `src/state/state.js`, `src/index.html`, `src/styles.css`,
 tests, docs. No save change (stays **27**). Rebuild `game/tallow-reach.html`; `npm test` **800 pass / 0 fail**.
 
-## 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
-
-Eight fixes from the owner's first playthrough of the campaign build.
-
-- **Dane's guns are orange.** Wingman rounds carry `ally: true` (set in `sim/ai.js`) and
-  `friendlyShot()` (`sim/combat.js`) decides the colour, so only hostile fire is red. His
-  damage is still zero.
-- **Control lessons are one second, with a bar.** `learn()` in `m01.js` holds for `1`
-  (`control` steps default to one second now). `sim/campaign-flight.js` publishes the live
-  hold as `state.ui.controlHold` (fraction + percent), and the HUD draws it as a percentage
-  bar under the act's objective in the top-left tracker; a full bar is a learned control.
-- **Order: W then Ctrl (brake).** `MISSION_CONTROLS.brake` (`flag: "brake"`) is taught
-  second, with two short lines ("a pilot who cannot stop is not flying"), then S, mouse,
-  strafe, lift, roll, boost.
-- **The bonus is a 500 m run bonus.** The optional `stay-with-korr` now reads
-  `metres: 500`, `during: "chase"`, and shows as a live chip in the top-right HUD
-  (`missionBonusStatus` in `sim/missions.js` + `state.ui.followDistance`). Over 500 m turns
-  it red; the run's own 1 km reset is unchanged and separate.
-- **Ferrite scenery along the course.** Eight `chase-rocks-*` scatter fields line the
-  `m01-range` chase (146 rocks, sizes 10–72 m, some giants). `coreRadius` equal to `radius`
-  opts them out of the pocket's diffuse-wing scaling, and each cluster sits ~950 m off the
-  flown line (≥ 300 m of clear air), so the run reads as a canyon without putting rock in
-  Dane's lap.
-- **The ambush strangers reveal themselves.** Dane only says the hulls are not school drones
-  and that he does not recognise them; a new `ambush-taunt` line from "Unmarked pilot" makes
-  the threat, and no objective or line says "raider" any more ("Defeat both attackers.").
-- **Blank menu after Act 1 fixed.** The end card is a full-screen overlay; leaving the act
-  by any route other than its own button (pause → Exit to main menu) now hides it on
-  `main-menu`, and the pause exit clears the campaign screen flags.
-- **Chapter boxes instead of headings.** The campaign screen moved to the big left window:
-  one large box per chapter (locked future chapters included), a chapter opens into its act
-  boxes, and planned acts render locked ("Planned · not written yet"). `chapters.js` gained
-  chapters 2–4 and five planned acts in chapter 1; only acts with a `mission` enter
-  `CAMPAIGN_ACTS`, so planned boxes can never be started or saved.
-
-Files: `src/data/campaign/{chapters,m01}.js`, `src/data/places.js`, `src/data/missions/rules.js`,
-`src/sim/{ai,combat,campaign-flight,missions}.js`, `src/render/views.js`, `src/ui/{campaign,menu,hud,pause}.js`,
-`src/state/state.js`, `src/styles.css`, `src/index.html`, `tests/campaign-fixes.test.mjs`, campaign tests.
-No save change (stays **27**). Rebuild `game/tallow-reach.html` and run `npm test` (**799 pass / 0 fail**).
-
-## 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
-
-The campaign is now a campaign: the title's Campaign screen lists chapters → acts, clicking an act starts it
-(fresh act world, campaign-only pilot), finishing it shows a MISSION ACCOMPLISHED card and returns to the menu,
-and a failed critical objective stops the world on a MISSION FAILED card with "Start from the beginning" (and
-"Start from last checkpoint" where a step sets `checkpoint: true`; First Sortie has none).
-
-Act boundaries: warping out needs `allowTravel` ("You do not have permission to leave this pocket."), docking is
-refused while a destroy objective is live, undocking is blocked while a station dialogue is unfinished, and a
-dock no longer clears the act. Dialogue advances itself on a text-scaled clock (`1.5 s + 1 s per 12 characters`);
-station Continue is still clickable, space lines have no button.
-
-Framework (data-driven, opt-in): `optional` bonus objectives (`stay-within`, `missionBonus`, saved
-`optionalProgress`), `control` steps (hold a control for `hold` seconds; `MISSION_CONTROLS`), `chase` steps
-(follow a ship along a `FLIGHT_COURSES` course; `maxGap` behind says `resetLine` and resets only that objective —
-never the act), natural resets (`mission-reset`), and story actors (`actor` + `actorRole` lead/observe/guard).
-
-Dane Korr: Wasp hull colour with the blue boost glow, selectable with F, fires at raiders for 0 damage, flies his
-own course (no longer anchored to the player), and is re-created from his authored `spawn-ship` if he vanishes.
-
-First Sortie: station briefing → launch → ten controls learned by doing them (W, S, mouse, A, D, Space, C, Q, E,
-Shift) → ten-kilometre chase → drone pass with Dane watching → raider ambush with Dane covering you, plus a
-350 m optional bonus through the lesson and a believable ambush line.
-
-Files: `src/data/campaign/` (`chapters.js`, `m01.js`), `src/data/flight-courses.js`, `src/data/missions/rules.js`,
-`src/data/missions/validate.js`, `src/sim/campaign.js`, `campaign-act.js`, `campaign-flight.js`, `flight-course.js`,
-`missions.js`, `ai.js`, `enemy-flight.js`, `targeting.js`, `session.js`, `sectors.js`, `src/ui/campaign.js`,
-`missionlog.js`, `screens.js`, `menu.js`, `src/state/profile.js`, `src/state/state.js`, `src/render/views.js`,
-`src/data/enemies.js`, `src/data/enemy-ai.js`, `src/data/shops.js`, `src/styles.css`, tests.
-Save **v27** (per-mode pilot; the campaign no longer shares the open world's ships or credits). Docs:
-[architecture/campaign-acts.md](architecture/campaign-acts.md). Rebuild the game and run `npm test`.
-
-2026-11-19: Campaign tutorial waves re-arm after a pocket reload
-
-A quit made mid-sortie could strand the pilot behind an unfinishable kill objective: enemy waves are runtime
-objects and a save never carries them, so the interrupted spawn step would not fire again on reload. Spawn script
-actions may now opt in with `respawn: true`; on pocket entry and on undock the runner compares the kill objective
-still owed (current step, counters as saved, parallel-aware) with the `mission:<id>`-tagged enemies still alive in
-the pocket and emits only the deficit — living members keep their health and are never duplicated, nothing happens
-while docked, dead, warping or loading, and a full wave never re-spawns. All three practice-drone/raider waves in
-`src/data/campaign/m01.js` are tagged. `sanitizeSave` now keeps the `respawn` action key so the flag survives a
-save round trip (no `SAVE_VERSION` change; it stays **26**). New test boots a mid-M01 campaign save through
-`currentRootSave()` → `prepareGalaxySave` → `resumeFromSave`, re-arms the missing drone, finishes the objective and
-the mission, and asserts exactly one completion is recorded. Files: `src/sim/missions.js`, `src/state/profile.js`,
-`src/data/campaign/m01.js`, `tests/campaign.test.mjs`, `testing/TESTING-15-CAMPAIGN.md`,
-`docs/{MISSION_RULES,recipes/11-story-and-scripted-missions}.md`. `game/tallow-reach.html` rebuilt;
-`npm test` **782 pass / 0 fail**. ROADMAP step 15 still unticked (owner playtest pending).
-
-## 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial
-
-The campaign is now its own saved mode and its own fixed-seed seven-system galaxy (seed `240515`,
-Auric Reach at its heart, pockets like `auric_flight_school`), sharing the browser pilot's fleet,
-credits, cargo and loadout but none of the open world's place, missions, flags or progress. Save
-**v26** stores a `{v, mode, open, campaign}` envelope; legacy nested saves migrate on read and
-write back as roots, and `prepareGalaxySave`/`applySave`/`resetCurrentModeSave` keep the inactive
-half in sync. `data/campaign/` holds the galaxy, `m01-first-sortie` (Dane Korr, fixed Wasp grant,
-tutorial flight school ending in a pirate ambush) and the `index.js` order; accepting a campaign
-story mission grants and selects its fixed hull (after the already-active check, so a duplicate
-accept cannot re-select it), completion notes `profile.campaign.completed` and emits
-`campaign-mission-completed` before the reward. The campaign menu and offer flow are wired; the
-finish transition is deliberately **nothing yet** (no free-agent flip, no unlock, no reward); replay
-rewards stay framework-only. Practice drones are no longer `friendly` (they are shootable targets);
-Captain Korr stays `friendly`+`invulnerable`. Export/import codes carry the record they are given
-(the game exports the dual-mode root), while browser autosave/slots normalise to the root; slot
-summaries show the active mode. Storage migration tests and `tests/campaign.test.mjs` cover the
-envelope, mode switching, shared pilot, fixed-ship grant and a full M01 play-through.
-**Not ticked in ROADMAP: owner playtest pending.** Files: `src/state/{profile,state,storage}.js`,
-`src/sim/{campaign,galaxy-session,missions,ai,weapons,missile,targeting}.js`, `src/data/{enemies,campaign/*}.js`,
-`src/ui/{menu,screens,missionlog}.js`, `tests/campaign.test.mjs`, migration-test updates.
-`game/tallow-reach.html` rebuilt; `npm test` **781 pass / 0 fail**.
-
-## 2026-11-19: One HUD label per nearby belt group
-
-Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
-
-## 2026-11-19: Shared natural wormhole environments
-
-Simple sites and named wormhole systems use one environment definition: 80% black holes, double black-hole radius, grey sky and neutral ambient fill. Rifts and entrance pockets retain their own environment. No save change.
-
-## 2026-11-19: Larger, more common black holes in wormhole systems
-
-S-systems roll 80% black holes and render them at twice the usual physical radius. Regular systems, rifts and simple wormholes keep their existing cores. Derived from the world seed; no save migration.
-
-## 2026-11-19: Multiple wormhole routes and grey system skies
-
-Off-chart systems support up to four live paired doors, balancing S-to-S routes with regular-space exits. All S-system pockets now use the grey wormhole cube and neutral ambient fill. Existing v25 clocks and original endpoints are preserved; extra routes derive from the saved seed and generation.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
+- 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
+- 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial
+- 2026-11-19: One HUD label per nearby belt group
+- 2026-11-19: Shared natural wormhole environments
+- 2026-11-19: Larger, more common black holes in wormhole systems
+- 2026-11-19: Multiple wormhole routes and grey system skies
 - 2026-11-19: Start with 30 wormhole systems
 - 2026-11-19: Step 14d — persistent wormhole systems
 - 2026-11-19: Uncharted Space HUD label and 14d exit decision

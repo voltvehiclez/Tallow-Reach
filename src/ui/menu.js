@@ -5,7 +5,7 @@ import { homeStationPlace, setHomeStation } from "../sim/session.js";
 import { on, emit } from "../util/events.js";
 import { notify, showNotice, hideNotice, setupNotices } from "./notice.js";
 import { initAudio, uiSound, hoverSound } from "../core/audio.js";
-import { state, currentSave, currentRootSave, applySave, resetPlaces, saveCurrentGame, resetCurrentModeSave } from "../state/state.js";
+import { state, currentSave, currentRootSave, applySave, resetPlaces, saveCurrentGame, resetAllSave } from "../state/state.js";
 import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
@@ -545,7 +545,7 @@ const ACTIONS = {
     state.ui.confirmReset = false;
   },
   rs2() {
-    applySave(prepareGalaxySave(resetCurrentModeSave()));
+    applySave(prepareGalaxySave(resetAllSave()));
     afterSaveChange();
     state.ui.confirmReset = false;
     toast(loadedMessage("Progress reset."));
@@ -1440,7 +1440,7 @@ function resolvePointTarget(clientX, clientY, fallbackTarget) {
  * Execute a completed docked drag-and-drop between Inventory slots and
  * Outfitting module bays.
  */
-function finishStationDrag(drag, dropTarget) {
+export function finishStationDrag(drag, dropTarget) {
   if (!drag || !dropTarget || typeof dropTarget.closest !== "function") {
     return { ok: false, message: "" };
   }
@@ -1462,6 +1462,17 @@ function finishStationDrag(drag, dropTarget) {
       const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
       const targetBay = emptyIdx >= 0 ? emptyIdx : 0;
       return fitting.fitModuleFrom(drag.where, drag.slot, group, targetBay, drag.id);
+    }
+    // Dropping a module anywhere else in the left Outfitting box fits it into
+    // the left-most bay of its own group (a specific bay still wins, above).
+    // The group comes from the module's own data, not the tile's dataset, so
+    // any drag source works.
+    const ownGroup = MODULES[drag.id]?.g || drag.modGroup;
+    const leftBox = dropTarget.closest("#station-left");
+    if (leftBox && ownGroup) {
+      const bays = state.profile.loadout?.[state.profile.ship]?.[ownGroup];
+      const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+      return fitting.fitModuleFrom(drag.where, drag.slot, ownGroup, emptyIdx >= 0 ? emptyIdx : 0, drag.id);
     }
     const slotBtn = dropTarget.closest("button[data-a='invSlot']");
     if (slotBtn) {
@@ -1557,6 +1568,7 @@ function onDocPointerMove(e) {
     applyDragHighlights(activeDrag);
   }
   e.preventDefault?.();
+  activeDrag.lastTarget = e.target || activeDrag.lastTarget || null;
   showDragGhost(activeDrag.id, activeDrag.n, x, y, activeDrag.slotSize);
   updateDragHover(activeDrag, x, y, e.target);
 }
@@ -1571,7 +1583,12 @@ function onDocPointerUp(e) {
   suppressClickUntil = Date.now() + 80;
   if (e?.type === "pointercancel") return;
   const dropTarget = resolvePointTarget(e?.clientX, e?.clientY, e?.target);
-  const res = finishStationDrag(drag, dropTarget);
+  let res = finishStationDrag(drag, dropTarget);
+  if (!res?.ok && drag.lastTarget && drag.lastTarget !== dropTarget) {
+    // The release-point hit-test can land on an overlay or the panel edge;
+    // honour where the drag was actually hovering instead of dropping it.
+    res = finishStationDrag(drag, drag.lastTarget);
+  }
   if (res?.message) toast(res.message);
   if (res?.ok) {
     inventoryChanged();
@@ -1619,6 +1636,35 @@ async function onClick(e) {
       e.target.closest(".inv-discard-popover") ||
       e.target.closest(".mod-info-popover")
     ) return;
+    // Clicking anywhere else on the big Outfitting panel with a module in
+    // hand places it too — pick-up-then-click works like an inventory slot,
+    // not only on the group cards (ship viewer and headers included). The
+    // drag path already treats the whole panel this way.
+    if (
+      hasHeldStack() && state.ui.leftPanel === "o" &&
+      e.target.closest("#station-left") && !e.target.closest("section.mod[data-group]")
+    ) {
+      const group = MODULES[state.ui.invHeld?.id]?.g;
+      if (group) {
+        closePanelPopovers();
+        const bays = state.profile.loadout?.[state.profile.ship]?.[group];
+        const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+        const res = placeHeldOnOutfittingBay({
+          group,
+          bay: emptyIdx >= 0 ? emptyIdx : 0,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        });
+        if (res.message) toast(res.message);
+        if (res.changed) {
+          inventoryChanged();
+          uiSound("click");
+          save();
+        }
+        render();
+        return;
+      }
+    }
     const modCard = hasHeldStack() ? e.target.closest("section.mod[data-group]") : null;
     if (modCard && modCard.dataset.group) {
       closePanelPopovers();

@@ -73,7 +73,9 @@ test("fix 1: Dane fires only on guard, and his rounds are the basic-cannon orang
   assert.equal(cannon.dmg, 0, "his guns still do no damage");
   // A hostile round carries no module colour of its own and stays red.
   const raider = spawnEnemy("raider", V(200, 0, 3600), CAMPAIGN_HOME_POCKET, "test");
-  for (let i = 0; i < 80; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  // 240 ticks (was 80): yaw is 40% of its old rate since 2026-11-21, so the
+  // raider needs longer to swing its nose onto the pilot before it fires.
+  for (let i = 0; i < 240; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
   assert.ok(state.world.bullets.some(shot => !shot.own && shot.colour == null), "hostile fire has no colour field");
   assert.equal(BULLET_COLOURS.cannon, 0xffc870, "the basic cannon is orange");
   assert.equal(raider.hp, raider.mx, "and nobody was hurt by the friendly round");
@@ -257,7 +259,10 @@ test("fix 6: the run waits for the pilot to form up, and the rule is 1 km / 500 
   assert.equal(korr.course.mode, "reset-brake", "he slows down first instead of whipping a 180");
   assert.equal(state.ui.resetDialogue, null, "he has not spoken until he slows");
 
-  for (let i = 0; i < 40 && korr.course.mode === "reset-brake"; i++) {
+  // Braking now eases at the shared model's rate (the old NPC-only lerp was
+  // 3.4/s; a Wasp-stat ship sheds 160 m/s at ease 0.9), so he needs a few
+  // seconds to slow — the phase order, not the duration, is what matters.
+  for (let i = 0; i < 160 && korr.course.mode === "reset-brake"; i++) {
     updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
   }
   assert.equal(korr.course.mode, "reset-talk", "once slowed, he enters the dialogue phase");
@@ -290,7 +295,7 @@ test("fix 6b: ambushers warp in as Dane warns you, prowl during the talk, and go
     const step = m01.steps.find(s => s.id === id);
     assert.equal(step.lines.length, 1, `${id} is a single concise line`);
   }
-  assert.match(m01.steps.find(s => s.id === "brief-steer").lines[0], /Wasp is quicker than anything you flew at the school/);
+  assert.match(m01.steps.find(s => s.id === "brief-steer").lines[0], /Wasp is quicker than anything you flew at the academy/);
 
   const taunt = m01.steps.find(step => step.id === "ambush-taunt");
   assert.ok(taunt, "the strangers get a line of their own");
@@ -300,7 +305,7 @@ test("fix 6b: ambushers warp in as Dane warns you, prowl during the talk, and go
 
   // The warning Dane does say stays honest: unknown hulls, guns live.
   const warning = m01.steps.find(step => step.id === "ambush-warning");
-  assert.match(warning.lines.join(" "), /not school drones/i);
+  assert.match(warning.lines.join(" "), /not academy drones/i);
   assert.match(warning.lines.join(" "), /do not recognise/i);
   // Order: ships warp in first, then warning, then taunt, then the fight.
   const order = m01.steps.map(step => step.id);

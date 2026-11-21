@@ -143,6 +143,9 @@ function makeHudDom() {
       get innerHTML() { return this._html; },
       set innerHTML(html) {
         this._html = String(html);
+        // A real browser derives textContent from the parsed markup (the HUD
+        // marker labels are name/distance spans since the label-shake fix).
+        this.textContent = this._html.replace(/<[^>]+>/g, '');
         this.children = [];
         if (this.id === 'pocket-object-rows') {
           const itemRe = /<li([^>]*)><button([^>]*)>([\s\S]*?)<\/button><\/li>/g;

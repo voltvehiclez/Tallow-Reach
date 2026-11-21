@@ -9,7 +9,9 @@
 //
 //   start    [x, y, z] in pocket space where the phase begins
 //   heading  degrees around Y from the ship's forward axis
-//   legs     length (m), speed (m/s), optional turn/climb in degrees, boost
+//   legs     length (m), speed (m/s), optional turn/climb in degrees, boost,
+//            and an optional roll (degrees of barrel roll flown across the
+//            leg — showmanship only; the waypoints never move)
 //
 // `phase: "lesson"` is the default when a spawn names only the course.
 
@@ -39,11 +41,11 @@ export const FLIGHT_COURSES = {
         { length: 900, speed: 175, turn: 18, climb: 2 },
         { length: 900, speed: 185, turn: -14, climb: -2 },
         { length: 1000, speed: 190, turn: 10, climb: 3, boost: true },
-        { length: 900, speed: 175, turn: -22, climb: -3 },
+        { length: 900, speed: 175, turn: -22, climb: -3, roll: 360 },
         { length: 900, speed: 180, turn: 12, climb: 0 },
         { length: 1000, speed: 195, turn: -8, climb: 2, boost: true },
         { length: 900, speed: 180, turn: 20, climb: -2 },
-        { length: 900, speed: 185, turn: -16, climb: 2 },
+        { length: 900, speed: 185, turn: -16, climb: 2, roll: -360 },
         { length: 900, speed: 190, turn: 6, climb: -3, boost: true },
         { length: 900, speed: 180, turn: 14, climb: 3 },
         { length: 900, speed: 185, turn: -10, climb: -2 },

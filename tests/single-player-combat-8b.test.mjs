@@ -21,6 +21,22 @@
 // Density follow-up: restored the original home-field position and launch quaternions.
 // Re-recorded for individual fighter AI: enemy paths, projectile timing, missile locks
 // and damage taken change. Mining, missile launch, recovery and final profile remain checked.
+// Re-recorded for the shared flight model (every ship flies the player's maths;
+// NPCs get Wasp stats) plus the owner's "turning takes a third longer". Diffed
+// against the previous recording per LESSONS L17: the player's own pos/quat/v
+// are identical in all 31 snapshots; only enemies, their shots, and the shield,
+// hull, missile-lock and profile state downstream of enemy flight differ —
+// exactly the behaviour that was meant to change, nothing else.
+// Re-recorded again 2026-11-21 for the axis rates (yaw 40%, roll 250%): only
+// enemies, their shots, missiles and shield state differ — the player's own
+// pose is unchanged, as that scenario barely steers.
+// Re-recorded a third time the same day for bank-to-turn NPC steering: again
+// only enemies, shots, missile lock and shields differ; player pose unchanged.
+// Re-recorded a fourth time for the 25% global roll cut: same envelope again.
+// Re-recorded a fifth time for roll ease-in/out (the ramp reaches into NPC
+// banking too): same envelope again.
+// Re-recorded a sixth time when the roll rate went back to 3.75 with the
+// easing kept (owner's call): same envelope again.
 // The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
 // still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";

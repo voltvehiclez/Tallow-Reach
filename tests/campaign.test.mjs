@@ -213,6 +213,11 @@ test("M01 can be played from acceptance to the reward hand-in through mission ev
   kill("raider");
   talk();                         // final report
 
+  // The last objective is the dock itself: docking at the academy settles it.
+  assert.equal(mission.steps[mission.step].id, "dock-at-academy");
+  assert.equal(missionObjectivesDone(mission), false, "not done until the pilot actually docks");
+  P.place = CAMPAIGN_HOME_POCKET;
+  advanceMission(mission, "docked", { player: P }, state.profile);
   assert.equal(missionObjectivesDone(mission), true);
   P.docked = true;
   state.place = CAMPAIGN_HOME_POCKET;
@@ -304,6 +309,7 @@ test("reloading mid-sortie re-arms the wave deficit instead of stranding the pil
   talk();                      // final report
   const { completeMission } = await import("../src/sim/missions.js");
   P2.docked = true; state.place = CAMPAIGN_HOME_POCKET; P2.place = CAMPAIGN_HOME_POCKET;
+  advanceMission(live(), "docked", { player: P2 }, state.profile);   // the final dock objective
   assert.equal(completeMission(live().id, state.profile, P2), "Paid 150 cr.");
   assert.deepEqual(state.profile.campaign.completed, [mission.id]);
 });
