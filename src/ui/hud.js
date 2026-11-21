@@ -18,8 +18,8 @@ import { camera } from "../render/scene.js";
 import { interpolatedPos, interpolatedVelocity, renderPlayerPose } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
-import { activeMissions, missionBonusStatus, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
-import { isCampaignMissionId } from "../sim/campaign.js";
+import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
+import { campaignDetailHtml } from "./mission-hud.js";
 import { pruneLock, lockPosition, lockName, targetHealth, isPocketRowLocked } from "../sim/targeting.js";
 import { fieldMarkerPosition } from "../sim/asteroids.js";
 import { stationAt } from "../sim/places.js";
@@ -276,7 +276,7 @@ function missionsHtml(missions) {
     const kind = mission.kind === "contract" ? "contract" : "story";
     return `<div class="hud-mission hud-mission-${kind}"><strong>${escHud(missionDescription(mission))}:</strong>` +
       `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
-        campaignDetailHtml(mission)
+        campaignDetailHtml(mission, { hold: state.ui.controlHold, run: state.ui.chaseRun })
       }${progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""}${
         recovered ? `<small>${recovered}</small>` : ""
       }</div>`;
@@ -288,39 +288,6 @@ const clockText = seconds => {
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
-
-/** A hold bar as a percentage: a full bar is one learned control. */
-function holdBarHtml(hold) {
-  const percent = Math.round(Math.max(0, Math.min(1, hold.fraction || 0)) * 100);
-  return `<small class="hud-hold"><span class="hold-track"><i style="width:${percent}%"></i></span>` +
-    `<b>${percent}%</b> ${escHud(hold.label || "")}</small>`;
-}
-
-/** The run's rule, and the still-live bonus, directly under the objective. */
-function chaseLinesHtml(run, mission) {
-  const gapLimit = Number(run.maxGap) > 0 ? Number(run.maxGap) : 1000;
-  const rule = run.gathering
-    ? `Close to within ${Math.round(Number(run.gather) || 300)} m of Dane to start the run.`
-    : `Stay within ${gapLimit % 1000 === 0 ? `${gapLimit / 1000} km` : `${gapLimit} m`} of Dane for the whole course to pass.`;
-  // While he waits for the form-up there is no distance to judge.
-  const bonus = missionBonusStatus(mission, run.gathering ? null : run.gap);
-  const bonusLine = bonus
-    ? `<small class="hud-bonus${bonus.over ? " is-over" : ""}">Bonus: within ${bonus.limit} m` +
-      `${bonus.metres == null || run.gathering ? "" : ` · now ${bonus.metres} m`}</small>`
-    : "";
-  return `<small class="hud-chase">${escHud(rule)}</small>${bonusLine}`;
-}
-
-/** Extra lines an act adds under its objective (a lesson hold, the run's rule). */
-function campaignDetailHtml(mission) {
-  if (!mission || !isCampaignMissionId(mission.id)) return "";
-  let extra = "";
-  const hold = state.ui.controlHold;
-  if (hold && hold.mission === mission.id) extra += holdBarHtml(hold);
-  const run = state.ui.chaseRun;
-  if (run && run.mission === mission.id) extra += chaseLinesHtml(run, mission);
-  return extra;
-}
 
 /**
  * The instance block (step 14): what this run asks for, how long it has left, and whether the way

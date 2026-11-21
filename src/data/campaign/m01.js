@@ -58,7 +58,7 @@ export const M01_FIRST_SORTIE = mission({
   fails: {
     on: ["player-dead"],
     action: "keep",
-    message: "Your Wasp was destroyed. The sortie is over.",
+    message: "Your Wasp was destroyed.",
   },
   // Bonus only: staying close through the ten-kilometre run. Five hundred metres
   // is the authored pass mark; the run's own 1 km reset is a separate, harder

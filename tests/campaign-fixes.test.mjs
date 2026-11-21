@@ -50,30 +50,74 @@ const talk = (mission, P) => {
   }
 };
 
-test("fix 1: a wingman's rounds are the basic-cannon colour, and still harmless", async () => {
+test("fix 1: Dane fires only on guard, and his rounds are the basic-cannon orange", async () => {
   const { P } = await campaignWorld();
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;
+  state.world.bullets.length = 0;
   P.pos.set(0, 0, 3800);
-  const korr = spawnEnemy("captain_korr", V(0, 0, 3000), CAMPAIGN_HOME_POCKET, "mission:campaign.m01-first-sortie", { role: "guard" });
-  const raider = spawnEnemy("raider", V(0, 0, 3150), CAMPAIGN_HOME_POCKET, "test");
+  const korr = spawnEnemy("captain_korr", V(0, 0, 3000), CAMPAIGN_HOME_POCKET,
+    "mission:campaign.m01-first-sortie", { role: "observe" });
+  const drone = spawnEnemy("practice_drone", V(0, 0, 3150), CAMPAIGN_HOME_POCKET, "test");
   for (let i = 0; i < 160; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  assert.equal(state.world.bullets.filter(shot => shot.colour != null).length, 0,
+    "the drone pass is the pilot's test: Dane holds his fire while observing");
+  assert.equal(drone.hp, drone.mx);
 
-  const shots = state.world.bullets.filter(shot => shot.own || shot.colour != null);
-  assert.ok(shots.length > 0, "Dane fires at the hostile");
-  const cannon = shots.find(shot => shot.colour === BULLET_COLOURS.cannon);
+  // On guard (the ambush) he fights, and his cannons are the pilot's cannons.
+  korr.role = "guard";
+  for (let i = 0; i < 160; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  const cannon = state.world.bullets.find(shot => shot.colour === BULLET_COLOURS.cannon);
   assert.ok(cannon, "his rounds carry the basic-cannon colour");
   assert.equal(cannon.own, false, "but they are not the pilot's own shot");
   assert.equal(cannon.dmg, 0, "his guns still do no damage");
-  const hostile = state.world.bullets.find(shot => !shot.own && shot.colour == null);
-  assert.ok(hostile, "a hostile round has no module colour of its own: it stays red");
+  // A hostile round carries no module colour of its own and stays red.
+  const raider = spawnEnemy("raider", V(200, 0, 3600), CAMPAIGN_HOME_POCKET, "test");
+  for (let i = 0; i < 80; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  assert.ok(state.world.bullets.some(shot => !shot.own && shot.colour == null), "hostile fire has no colour field");
   assert.equal(BULLET_COLOURS.cannon, 0xffc870, "the basic cannon is orange");
-  assert.equal(raider.hp, raider.mx, "the round never hurt anyone");
+  assert.equal(raider.hp, raider.mx, "and nobody was hurt by the friendly round");
 
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;
   state.world.bullets.length = 0;
-  void korr;
+  void drone;
+});
+
+test("the hold bar and the run rule live under the top-right objective", async () => {
+  const { holdBarHtml, chaseLinesHtml, campaignDetailHtml } = await import("../src/ui/mission-hud.js");
+  const { CAMPAIGN_MISSIONS: MISSIONS } = await import("../src/data/campaign/index.js");
+  const mission = { ...MISSIONS[0], step: MISSIONS[0].steps.findIndex(step => step.id === "chase") };
+
+  const bar = holdBarHtml({ fraction: 0.42, percent: 42, label: "W — throttle forward" });
+  assert.match(bar, /class="hud-hold"/);
+  assert.match(bar, /width:42%/, "the bar is a percentage of the hold");
+  assert.match(bar, /<b>42%<\/b>/);
+  assert.match(bar, /W — throttle forward/);
+  assert.match(holdBarHtml({ fraction: 1 }), /width:100%/, "a full bar is 100%");
+
+  const running = chaseLinesHtml({ gathering: false, gap: 312, gather: 300, maxGap: 1000 }, mission);
+  assert.match(running, /Stay within 1 km of Dane for the whole course to pass\./);
+  assert.match(running, /Bonus: within 500 m/);
+  assert.match(running, /now 312 m/);
+  assert.doesNotMatch(running, /is-over/);
+
+  const over = chaseLinesHtml({ gathering: false, gap: 620, gather: 300, maxGap: 1000 }, mission);
+  assert.match(over, /is-over/, "past 500 m the bonus line turns red");
+
+  const waiting = chaseLinesHtml({ gathering: true, gap: 900, gather: 300, maxGap: 1000 }, mission);
+  assert.match(waiting, /Close to within 300 m of Dane to start the run\./);
+  assert.doesNotMatch(waiting, /now 900 m/, "the run's rule does not judge the form-up");
+  assert.doesNotMatch(waiting, /is-over/);
+
+  assert.equal(campaignDetailHtml({ id: "open-world.contract" }, { hold: { mission: "x" } }), "",
+    "an open-world mission gets no campaign detail");
+  const both = campaignDetailHtml(mission, {
+    hold: { mission: mission.id, fraction: 0.5, label: "Ctrl — brake to a stop" },
+    run: { mission: mission.id, gathering: false, gap: 200, gather: 300, maxGap: 1000 },
+  });
+  assert.match(both, /hud-hold/);
+  assert.match(both, /hud-chase/);
 });
 
 test("fix 2/3: W then Ctrl, a one-second hold, and a percentage bar that fills to 100", async () => {

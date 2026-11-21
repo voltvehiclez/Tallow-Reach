@@ -125,9 +125,10 @@ export function updateEnemies(dt, placeId = state.place) {
     }
 
     e.fire -= dt;
-    // A story ally fires only at the act's other hostiles, and its def decides the
-    // damage (zero for Dane). Nothing about this touches the pilot.
-    if (def.engages === "hostiles") {
+    // A story ally fires only when the act has put him on guard — the ambush, not
+    // the drone pass (that is the pilot's test). His def decides the damage (zero
+    // for Dane). Nothing about this touches the pilot.
+    if (def.engages === "hostiles" && e.role === "guard") {
       const foe = nearestHostile(e, E);
       if (foe && e.fire <= 0) {
         const toFoe = foe.pos.clone().sub(e.pos), range = toFoe.length();
@@ -135,12 +136,12 @@ export function updateEnemies(dt, placeId = state.place) {
           e.fire = R(def.fireGap[0], def.fireGap[1]);
           const spread = AI_FLIGHT.aimSpread;
           const dir = toFoe.normalize().add(V(R(-spread, spread), R(-spread, spread), R(-spread, spread))).normalize();
-          const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
           // His guns are the same basic cannons the pilot flies with, so his rounds
-          // are the same orange. The renderer draws a shot in its module's colour.
-          shot.colour = BULLET_COLOURS.cannon;
-          shot.place = placeId;
-          shot.missionId = String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null;
+          // are the same orange. The colour has to be on the record *before* it
+          // enters the world: `entity-spawned` builds the mesh straight away.
+          const shot = fire(e.pos, dir, def.bspd, false, def.dmg, undefined, placeId,
+            String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null,
+            { colour: BULLET_COLOURS.cannon });
           if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });
         }
       }

@@ -186,7 +186,7 @@ export function restoreMissionDrops(placeId = state.place) {
  * Spawn a bullet. Player bullets inherit the ship's velocity. Returns the new
  * record; its mesh is the view's business (step 7b).
  */
-export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place, missionId = null) {
+export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place, missionId = null, extra = null) {
   // `p` may be a plain `{ x, y, z }` (the tests pass one) or a maths vector.
   const at = V(p.x, p.y, p.z);
   const quat = Q();
@@ -203,6 +203,9 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = 
     dmg,
     l: BULLET_LIFETIME,
   };
+  // Fields the firing module owns (a wingman's cannon colour). They must be set
+  // before `addEntity`: the renderer builds the round's mesh on `entity-spawned`.
+  if (extra && typeof extra === "object") Object.assign(e, extra);
   return addEntity(placeWorld(placeId).bullets, e);
 }
 

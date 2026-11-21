@@ -44,8 +44,12 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
 14. Learn the controls, one call at a time. Each lesson is a **one-second hold** and each finishes the
     moment the bar reaches **100%**: **W** throttle forward, then **Ctrl** — *brake to a stop* — then **S**,
     **mouse** steer, **A**, **D**, **Space**, **C**, **Q**, **E**, **Shift** boost.
-15. On a control step a **small percentage bar** appears directly under the objective. Hold the key: it
-    fills smoothly, reads 50% halfway and **100%** when the hold counts. Let go early and the bar drains.
+15. On a control step a **small bar** appears directly under the objective, on its own line: the control's
+    name (`W — throttle forward`, `Ctrl — brake to a stop`, `Q — roll left`) above a **full-width track**
+    with the percentage at its right-hand end. Hold the key: the track fills smoothly from the left, reads
+    **50%** halfway and **100%** when the hold counts. Let go early and it drains. If you see the name but no
+    bar (or a bar with no width), the objective's generic `#tr .hud-mission small` rule has won again —
+    see `docs/architecture/campaign-acts.md`, "Control lessons and chases".
 16. **Q and E:** Q must complete *Roll left with Q* and E *Roll right with E*. (They were swapped in the
     previous build: Q completed the roll-right objective.)
 17. The brake (Ctrl) is taught **second**, on purpose: a new pilot can always stop the Wasp before
@@ -73,7 +77,8 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     the act and is separate from the 500 m bonus.
 25. Finish the course and he calls the gunnery pass. Two **Practice Drones** appear; he **observes from a
     distance** (he circles you, he does not fly ahead of you any more).
-26. Shoot both drones down (**LMB**, pick them up with **F**).
+26. Shoot both drones down (**LMB**, pick them up with **F**). **Dane does not fire** at the drones: the
+    gunnery pass is your test, and his guns stay cold until the ambush.
 27. He spots contacts and says only that they are *not school drones* and that he does not recognise the
     hulls — he never calls them raiders, and neither does the objective text.
 28. **The strangers introduce themselves**: *"Korr's newest cadet… Cut your engines and hand over the Wasp."*
@@ -91,7 +96,7 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     must show **Campaign** and **Open World** with its controls list — never an empty dark screen. The end
     card must not be left covering the menu.
 32. Play the act again from a failed state: start First Sortie, then get yourself **destroyed** in flight.
-    A **MISSION FAILED** card stops the world and says *Your Wasp was destroyed. The sortie is over.*
+    A **MISSION FAILED** card stops the world and says *Your Wasp was destroyed.*
     It offers **Start from the beginning** and, because First Sortie deliberately has **no checkpoints**,
     no checkpoint button. **Start from the beginning** restarts the act from the station briefing.
 33. (Checkpoint framework, for a future act: a step marked `checkpoint: true` adds a **Start from last
@@ -124,3 +129,12 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     completion cleared. The open world is untouched.
 43. An old save (v26 or earlier) opens in the **Open World**; the **Campaign** button starts a fresh campaign
     beside it, keeping any campaign completions it already recorded.
+
+## 7. The words
+
+44. Every line First Sortie says — the graduation briefing, each control call with its objective and hold
+    label, the run's orders and both reset lines, the gunnery pass, the ambush (Dane's and the strangers'),
+    the final report, the failure sentence and the card buttons — is collected in
+    [../docs/FIRST-SORTIE-DIALOGUE.md](../docs/FIRST-SORTIE-DIALOGUE.md). Read it before playtesting and
+    note any wording you want changed against the step it names; the strings themselves live in
+    `src/data/campaign/m01.js`. Nothing else in the act should say anything the document does not list.

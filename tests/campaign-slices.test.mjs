@@ -120,7 +120,7 @@ test("a failed act stops, says why, and its checkpoints can be resumed", async (
   const { P, mission } = await campaignWorld({ docked: false });
   assert.equal(failMission(mission, "player-dead", P.profile, { player: P }), true);
   assert.equal(isMissionFailed(mission), true);
-  assert.equal(mission.failureMessage, "Your Wasp was destroyed. The sortie is over.");
+  assert.equal(mission.failureMessage, "Your Wasp was destroyed.");
   assert.equal(missionObjectivesDone(mission), false);
   assert.equal(mission.checkpoint, undefined, "First Sortie has no checkpoints");
 

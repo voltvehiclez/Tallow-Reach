@@ -20,6 +20,34 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
+
+The owner's third pass over the campaign build. Five items.
+
+- **Dane does not shoot the training drones.** It is the pilot's test. `sim/ai.js` now requires
+  `def.engages === "hostiles"` **and** `e.role === "guard"` before a story ship fires, and the ambush
+  step is the only one that names him `guard` — the gunnery pass puts him on `observe`, so his guns
+  stay cold until the fight that matters.
+- **His rounds were still red for a real reason.** `fire()` → `addEntity` emits `entity-spawned`
+  synchronously, and the bullet mesh is built from that record, so assigning `shot.colour` after
+  `fire()` returned changed nothing. `sim/combat.js` `fire()` takes a trailing `extra` object and
+  assigns it *before* `addEntity`; `sim/ai.js` passes `{ colour: BULLET_COLOURS.cannon }` (orange).
+  No new colour abstraction.
+- **"The sortie is over" is gone.** `m01.fails.message` is now just "Your Wasp was destroyed."; both
+  the MISSION FAILED card and the small alert popup read that one string.
+- **The hold bar works again.** The objective's generic sub-line rule (`#tr .hud-mission small`:
+  `display: block; white-space: nowrap`) out-rank the old bar's selectors, so the grid never applied
+  and the track had no width. The bar's markup moved to a pure, testable `ui/mission-hud.js`
+  (`holdBarHtml`, `chaseLinesHtml`, `campaignDetailHtml`) with selectors that win, a grid layout
+  (label over track+percent) and an explicit `width: 100%` track. `tests/campaign-fixes.test.mjs`
+  now asserts the percentage, the 1 km / 500 m lines and the gathering rule.
+- **All First Sortie dialogue in one document:** `docs/FIRST-SORTIE-DIALOGUE.md` — briefing, every
+  control call and its objective/hold label, the run's orders and both reset lines, the gunnery pass,
+  the ambush, the final report, the failure sentence and the card buttons, with the file to edit for
+  each.
+
+Tests 801/801, build 3231 KB. Nothing merged: the owner tests the zip first.
+
 ## 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
 
 The owner's second pass over the campaign build. Eight corrections.
