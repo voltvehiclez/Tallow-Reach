@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-21 (slice 1).* The plan and its six slices are step 16 of
+*Last checked: 2026-11-21 (slice 2).* The plan and its six slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works, as it is built.
 
 ## The idea
@@ -26,8 +26,9 @@ home save ──checkOut──▶ bundle ──▶ host's world.guests[guestId] 
 ```
 
 - `save.away = { worldId, hostName, guestId, token, epoch, rev, suitcase }` while the pilot is away
-  (v29, slice 2). The **home pilot is frozen**: it cannot be flown at home.
-- Each pilot has a random `guestId`; each host world has a random `worldId`.
+  (v29, built). The **home pilot is frozen**: it cannot be flown at home.
+- Each pilot has a random `guestId`; each host world has a random `worldId` (`world.worldId`,
+  minted the first time the world is hosted and kept from then on, because a join code names it).
 - **Higher `(epoch, rev)` wins; copies are never merged.** A guest's "Go home" raises `epoch`; the host
   raises `rev` on every change. `compare(a, b)` decides, and the choice screen shows both
   `summary()` lines so the player picks.
@@ -54,6 +55,39 @@ moves to Meridian, and `bundle.shipsAt` remembers where it was.
 unknown stacks in the bundle's lockers, and single unknown ids re-inserted after the save sanitizer
 has run (it would otherwise drop them). Custody asserts that every stack that left comes back once.
 
+## Where the save keeps it (slice 2, save v29)
+
+| In the save | What |
+| --- | --- |
+| `save.away` (beside `profile` and `world`) | the marker: which world, which host, the secret token, `(epoch, rev)` and the suitcase |
+| `world.worldId` | this world's id, `null` until it is first hosted |
+| `world.guests[guestId]` | `{ name, tokenHash, epoch, rev, bundle, lastSeen }` — the host's copy of a visitor |
+| browser key `away:<worldId>` | the suitcase on its own, so two tabs cannot overwrite each other |
+
+**The marker is not inside the profile.** Where a pilot *is* is a fact about the pilot and the
+save, not about the character (nothing in `profile.js`'s field lists), so it sits beside the two
+halves and `checkIn` clears it. `state.away` mirrors it at runtime, `currentSave()` writes it, and
+`installNestedSave` reads it, so a save made while visiting still says so after a reload.
+
+**Every older save loads at home.** v28-and-older saves have no marker, no `worldId` and no
+guests, and `sanitizeSave` gives them `away: null` / `worldId: null` / `guests: {}`. That is the
+whole migration: nothing is converted, nothing is guessed.
+
+**A suitcase is not sanitized like a profile.** `cleanSuitcase` checks the shape and drops wrong
+types, but never second-guesses a content id, because while a pilot is away the suitcase is the
+only copy of its cargo. A damaged suitcase is dropped and the marker stays — the host still has
+the pilot, so the pilot can still come home.
+
+**A host's record never carries the guest's secret.** Only `hashToken(token, guestId)` is stored
+(`custody.guestRecord` strips the token from the bundle it saves), so a host's save is not a way to
+take somebody's pilot. Deleting a record is always safe: the guest's suitcase has a copy.
+
+**Writes are swapped in.** `state/storage.js` writes to `key:tmp`, swaps it in, then keeps what was
+there under `key:prev` (one generation, `NET.keepPrevious`). A browser stopped mid-write leaves the
+old save or the new one, never half of either, and `loadAutosave` falls back to `:prev` if the live
+record will not parse. Slots are swapped in too but keep no history. Storage keys and `TR1:` did not
+change.
+
 ## Stations are world-scoped facts (LESSONS L19, generalised)
 
 Generated pocket ids are **not unique across galaxy seeds**: `sys-002-hub` is an unrelated pocket in
@@ -79,9 +113,9 @@ A hosted world **never pauses** (pause is single player only), and the pause car
 
 1. **Custody** — `net/custody.js`, `net/station-inventory.js`, `net/world-places.js`,
    `data/multiplayer.js`, `tests/multiplayer-custody.test.mjs`. No networking. **Built 2026-11-21.**
-2. **Save v29** — `profile.away`, `world.guests`, the migration (old saves load with `away: null`),
+2. **Save v29** — `save.away`, `world.guests`, the migration (old saves load with `away: null`),
    `guestId`/`worldId`, the temp-key-then-swap write that keeps the previous version, and the
-   `away:<worldId>` storage key.
+   `away:<worldId>` storage key. **Built 2026-11-21.**
 3. **The connection** — `net/transport.js`, the offer/answer flow, Pause > Open Multiplayer, chat and
    the player list.
 4. **Join** — the handshake, "Bring my pilot", two-second snapshots, reconnects by `compare`, "Go
@@ -94,7 +128,10 @@ A hosted world **never pauses** (pause is single player only), and the pause car
 
 ## Known gaps (until their slice lands)
 
-- No `away` field or `world.guests` in a save yet (slice 2): custody is proved on plain objects.
+- Nothing writes a marker yet: `save.away` and `world.guests` exist and are validated (slice 2),
+  but only the join flow (slice 4) sets one, so in play `away` is always `null`.
+- A pilot that is away is **frozen in words only**: `state.away` is set and `currentSave()` keeps it,
+  but the screen that refuses to fly it (and offers *Rejoin* / *Bring pilot home*) is slice 4.
 - The screen still draws and follows only the local pilot (`render/views.js`), and `core/input.js`
   fills only the local pilot's controls: a remote ship is simulated but not yet drawn (slice 4).
 - Non-local death recovery, and the no-pause rule in the pause card, belong to slices 3 and 5.

@@ -1,4 +1,5 @@
-// Custody: the pilot's suitcase (refactor step 16, slice 1).
+// Custody: the pilot's suitcase (refactor step 16, slice 1; the save fields it
+// writes are slice 2's — see `net/multiplayer.js`).
 //
 // A pilot lives in exactly one world at a time. Flying into somebody else's world
 // they carry a **bundle** — the suitcase — and the host is the only writer of the
@@ -40,7 +41,7 @@
 //
 // **Bundle shape** (every entry is data, so a host can store it):
 //
-//   { v, worldId, hostName, guestId, token, name, epoch, rev,
+//   { v, worldId, hostName, guestId, token, name, epoch, rev, homeStation,
 //     profile,                             the TRAVEL_FIELDS half, cleaned
 //     lockers: [{ item, count, station, origin, unknown }],
 //     unknown: { holds: [{ ship, item, count }], modules: [...], ships: [...] },
@@ -53,11 +54,11 @@
 // merges the unknown content back by hand, and `totals()` in the tests proves every
 // stack that left comes back exactly once.
 
-import { sanitizeProfile, sanitizeSave, SAVE_VERSION } from "../state/profile.js";
+import { sanitizeProfile, sanitizeSave, cleanAway, SAVE_VERSION } from "../state/profile.js";
 import { isItem, isModule, itemVol, newStock } from "../data/items.js";
 import { isShipId } from "../data/ships.js";
 import { MODULES } from "../data/modules.js";
-import { ARRIVAL_STATION_KEY, TRAVEL_FIELDS, HOME_FIELDS, NET } from "../data/multiplayer.js";
+import { ARRIVAL_STATION_KEY, TRAVEL_FIELDS, HOME_FIELDS, NET, KEY } from "../data/multiplayer.js";
 import { inventoryOf, stockVolume, guardOverfull } from "./station-inventory.js";
 import { stationIn } from "./world-places.js";
 import { stationKeyAt, isPocket } from "../data/places.js";
@@ -249,14 +250,21 @@ export function awayRecord({ worldId, hostName, guestId, token, epoch = 0, rev =
 /**
  * A host's record of one visiting pilot, as `world.guests[guestId]` keeps it. The
  * host stores the bundle and a hash of the guest's secret — never the secret.
+ *
+ * The bundle is stored WITHOUT its token: the host has no use for the guest's
+ * secret (it has the hash), and a host's save should never become a way to take
+ * somebody's pilot. `world.guests` is written by the host, read by the host, and
+ * never travels.
  */
 export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0 } = {}) {
+  const kept = isPlainObject(bundle) ? clone(bundle) : null;
+  if (kept) delete kept.token;
   return {
     name: String(name || "").slice(0, NET.nameMax),
     tokenHash: hashToken(token, idText(guestId) || ""),
     epoch: whole(epoch),
     rev: whole(rev),
-    bundle: bundle || null,
+    bundle: kept,
     lastSeen: whole(lastSeen),
   };
 }
@@ -326,10 +334,15 @@ export function checkOut(save, options = {}) {
     if (isPlainObject(world.stationStores)) {
       for (const station of Object.keys(world.stationStores)) world.stationStores[station] = newStock();
     }
-    world.storageOverfull = {};
+    // An emptied world has no over-full station any more. Only cleared when it was
+    // there: `storageOverfull` is a runtime flag the save does not carry, and adding
+    // it here would make the returned save a shape the sanitizer disagrees with.
+    if (isPlainObject(world.storageOverfull)) world.storageOverfull = {};
   }
 
-  const token = String(options.token || makeToken());
+  // A pilot who is already away keeps the secret it proved once: the host it is
+  // returning to knows that hash, and a fresh token would look like a stranger.
+  const token = String(options.token || save.away?.token || makeToken());
   const guestId = idText(options.guestId) || idText(save.away?.guestId) || "";
   const bundle = {
     v: SAVE_VERSION,
@@ -338,6 +351,10 @@ export function checkOut(save, options = {}) {
     guestId,
     token,
     name: String(options.name || "").slice(0, NET.nameMax),
+    // Where this pilot calls home (a pocket id). Slice 4 needs it to put the pilot
+    // back at its own station on the way home; it is the one home fact that has to
+    // travel, because the home save is not with the pilot while it is away.
+    homeStation: idText(profile.homeStation) || null,
     epoch: whole(options.epoch ?? save.away?.epoch),
     rev: whole(options.rev ?? 0),
     profile: travelling,

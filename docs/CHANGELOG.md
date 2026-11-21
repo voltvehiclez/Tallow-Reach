@@ -20,6 +20,51 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
+
+The save now knows where a pilot **is**. Slice 1 proved the rules of travel on plain objects;
+this slice puts them in the save, with a migration that every older save walks through by doing
+nothing at all.
+
+- **`SAVE_VERSION` 28 → 29** (`src/state/profile.js`). Two additive fields, both optional forever:
+  - `save.away` — `{ worldId, hostName, guestId, token, epoch, rev, suitcase }` beside `profile`
+    and `world`, or `null` at home. **Not** inside the profile: where a pilot is is neither a fact
+    about the character nor about the world it stands in. `cleanAway` validates it; a marker with
+    no world id or no guest id is not a marker (nothing could be found again from it).
+  - `world.worldId` (`null` until the world is first hosted) and `world.guests` — `guestId ->
+    { name, tokenHash, epoch, rev, bundle, lastSeen }`, read back by `cleanGuests`. A record with
+    no token hash is dropped (there is nothing to prove against), and a damaged entry never fails
+    the save, because the guest's suitcase has the copy.
+  - **Migration:** every v28-and-older save loads with `away: null` and `guests: {}`. A v13 and a
+    v12 fixture are in `tests/multiplayer-save.test.mjs` to prove it.
+  - **A suitcase is not sanitized like a profile.** `cleanSuitcase` checks the shape and drops
+    wrong *types*, but never second-guesses a content id: while a pilot is away, its suitcase is
+    the **only** copy of its cargo, so an id this build does not know is carried, not deleted.
+- **`src/net/multiplayer.js`** (new): the operations that change those fields, so no caller has to
+  know their shape — `worldIdFor` (mint once, keep), `adoptHostWorld`, `leaveHostWorld`, `syncAway`,
+  `guestOf`/`putGuest`/`dropGuest`/`guestList`/`seenGuest`/`guestIsHere`/`guestCount`/`canTakeGuest`,
+  `isAway`/`awayLine`/`suitcaseKey`. A host's record is built by `custody.guestRecord`, which now
+  **strips the guest's token** from the bundle it stores: a host's save must never become a way to
+  take somebody's pilot.
+- **`src/state/storage.js`**: writes go through a scratch key and are swapped in
+  (`writeThrough`), the replaced version is kept for one generation (`tr1:prev`,
+  `NET.keepPrevious`), and `loadAutosave` falls back to it when the live record will not read. Slots
+  are swapped in too but keep no history (the player asked for that save). New
+  `writeAway`/`readAway`/`clearAway`/`awayWorlds` for the per-world suitcase key `away:<worldId>`
+  (`KEY` in `data/multiplayer.js`), so two tabs visiting two worlds cannot overwrite each other.
+  **Storage keys and `TR1:` did not change.**
+- **`src/state/state.js`**: the runtime keeps `state.away`, `currentSave()` writes it, and
+  `installNestedSave` reads it, so a save made while visiting still says so after a reload. A
+  dual-mode autosave carries each half's own marker (a campaign pilot is never marked).
+- **`src/net/custody.js`**: `checkOut` reuses the token an away pilot already proved (a fresh one
+  would look like a stranger to the host it is returning to) and the bundle now carries
+  `homeStation`, which slice 4 needs to put the pilot back at its own station on the way home.
+
+Tests: `tests/multiplayer-save.test.mjs` (26). Suite 881 pass / 0 fail. **No networking yet**
+(slice 3), and nothing a player can click changes: a pilot gets a marker only when the join flow
+(slice 4) sets it, so the game plays exactly as v28. Guide for the owner:
+`../testing/TESTING-16-SAVE29.md`.
+
 ## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
 
 The plan the owner gave for multiplayer (host-run co-op, WebRTC, one suite per world) is written
@@ -271,52 +316,9 @@ Files: `src/{data/campaign/m01.js,sim/{ai,campaign-act,campaign-flight,enemy-fli
 ui/{hud,menu,mission-hud,pocket-list},styles.css`, tests, docs. No save change (stays **27**). Rebuild
 `game/tallow-reach.html`; `npm test` **814 pass / 0 fail**.
 
-## 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
-
-The owner's third pass over the campaign build, plus four follow-up polish items.
-
-- **Dane does not shoot the training drones, and the ambushers warp in to circle first.** `sim/ai.js`
-  requires `def.engages === "hostiles"` **and** `e.role === "guard"` before a story ship fires. In First
-  Sortie, `spawn-ambush` now runs as `ambush-warning` starts (`warpIn: true, role: "prowl"`): the two
-  attackers streak in out of warp and circle around Dane and the pilot (`flyProwl` in `sim/enemy-flight.js`)
-  without firing while Dane stays on `observe` and holds his fire. When `ambush-taunt` finishes and
-  `defeat-ambush` begins, Dane switches to `guard` and opens fire, and the attackers switch out of `prowl`
-  into their aggressive AI (`flyFighter`). Shooting either attacker mid-dialogue (`hitHostile`) breaks the
-  parley early and turns the wave aggressive at once.
-- **Live distance counter stays after the 500 m bonus is lost, and a failed run slows before returning.**
-  `ui/mission-hud.js` `chaseLinesHtml` now keeps `Distance to Dane: now NNN m` under the 1 km rule even after
-  the 500 m bonus fails. When the pilot falls more than 1 km behind during the run, Dane no longer whips a
-  sudden 180: he brakes to a stop along his heading (`reset-brake` in `sim/enemy-flight.js`), says *"You need
-  to keep closer to pass. Let's do it again — follow me back to the start."* (`reset-talk` in
-  `sim/campaign-flight.js`, rendered on `#dialogue-panel`), and only turns back to the start once the line finishes.
-- **Shorter control prompts.** Each control call in `m01.js` is now one concise line so the pilot spends
-  the lesson flying instead of waiting on radio lines; the steering line keeps *"the Wasp is quicker than
-  anything you flew at the school."*
-- **Weapon slots are keyboard-only (`1`–`5`, `6`–`0`) and top-middle alerts dismiss with R.** Turning down
-  with the mouse in flight no longer clicks `#weapon-slots` (`pointer-events: none`, click listener removed
-  from `ui/hud.js`), and `#mission-alert` says *Press R to dismiss* and closes on `KeyR`.
-- **His rounds were still red for a real reason.** `fire()` → `addEntity` emits `entity-spawned`
-  synchronously, and the bullet mesh is built from that record, so assigning `shot.colour` after
-  `fire()` returned changed nothing. `sim/combat.js` `fire()` takes a trailing `extra` object and
-  assigns it *before* `addEntity`; `sim/ai.js` passes `{ colour: BULLET_COLOURS.cannon }` (orange).
-  No new colour abstraction.
-- **"The sortie is over" is gone.** `m01.fails.message` is now just "Your Wasp was destroyed."; both
-  the MISSION FAILED card and the small alert popup read that one string.
-- **The hold bar works again.** The objective's generic sub-line rule (`#tr .hud-mission small`:
-  `display: block; white-space: nowrap`) out-rank the old bar's selectors, so the grid never applied
-  and the track had no width. The bar's markup moved to a pure, testable `ui/mission-hud.js`
-  (`holdBarHtml`, `chaseLinesHtml`, `campaignDetailHtml`) with selectors that win, a grid layout
-  (label over track+percent) and an explicit `width: 100%` track. `tests/campaign-fixes.test.mjs`
-  now asserts the percentage, the 1 km / 500 m lines and the gathering rule.
-- **All First Sortie dialogue in one document:** `docs/FIRST-SORTIE-DIALOGUE.md` — briefing, every
-  control call and its objective/hold label, the run's orders and both reset lines, the gunnery pass,
-  the ambush, the final report, the failure sentence and the card buttons, with the file to edit for
-  each.
-
-Tests 801/801, build 3232 KB. Nothing merged: the owner tests the zip first.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
 - 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
 - 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
 - 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie

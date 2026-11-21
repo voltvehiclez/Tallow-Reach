@@ -1,5 +1,49 @@
 # Changelog archive
 
+## 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
+
+The owner's third pass over the campaign build, plus four follow-up polish items.
+
+- **Dane does not shoot the training drones, and the ambushers warp in to circle first.** `sim/ai.js`
+  requires `def.engages === "hostiles"` **and** `e.role === "guard"` before a story ship fires. In First
+  Sortie, `spawn-ambush` now runs as `ambush-warning` starts (`warpIn: true, role: "prowl"`): the two
+  attackers streak in out of warp and circle around Dane and the pilot (`flyProwl` in `sim/enemy-flight.js`)
+  without firing while Dane stays on `observe` and holds his fire. When `ambush-taunt` finishes and
+  `defeat-ambush` begins, Dane switches to `guard` and opens fire, and the attackers switch out of `prowl`
+  into their aggressive AI (`flyFighter`). Shooting either attacker mid-dialogue (`hitHostile`) breaks the
+  parley early and turns the wave aggressive at once.
+- **Live distance counter stays after the 500 m bonus is lost, and a failed run slows before returning.**
+  `ui/mission-hud.js` `chaseLinesHtml` now keeps `Distance to Dane: now NNN m` under the 1 km rule even after
+  the 500 m bonus fails. When the pilot falls more than 1 km behind during the run, Dane no longer whips a
+  sudden 180: he brakes to a stop along his heading (`reset-brake` in `sim/enemy-flight.js`), says *"You need
+  to keep closer to pass. Let's do it again — follow me back to the start."* (`reset-talk` in
+  `sim/campaign-flight.js`, rendered on `#dialogue-panel`), and only turns back to the start once the line finishes.
+- **Shorter control prompts.** Each control call in `m01.js` is now one concise line so the pilot spends
+  the lesson flying instead of waiting on radio lines; the steering line keeps *"the Wasp is quicker than
+  anything you flew at the school."*
+- **Weapon slots are keyboard-only (`1`–`5`, `6`–`0`) and top-middle alerts dismiss with R.** Turning down
+  with the mouse in flight no longer clicks `#weapon-slots` (`pointer-events: none`, click listener removed
+  from `ui/hud.js`), and `#mission-alert` says *Press R to dismiss* and closes on `KeyR`.
+- **His rounds were still red for a real reason.** `fire()` → `addEntity` emits `entity-spawned`
+  synchronously, and the bullet mesh is built from that record, so assigning `shot.colour` after
+  `fire()` returned changed nothing. `sim/combat.js` `fire()` takes a trailing `extra` object and
+  assigns it *before* `addEntity`; `sim/ai.js` passes `{ colour: BULLET_COLOURS.cannon }` (orange).
+  No new colour abstraction.
+- **"The sortie is over" is gone.** `m01.fails.message` is now just "Your Wasp was destroyed."; both
+  the MISSION FAILED card and the small alert popup read that one string.
+- **The hold bar works again.** The objective's generic sub-line rule (`#tr .hud-mission small`:
+  `display: block; white-space: nowrap`) out-rank the old bar's selectors, so the grid never applied
+  and the track had no width. The bar's markup moved to a pure, testable `ui/mission-hud.js`
+  (`holdBarHtml`, `chaseLinesHtml`, `campaignDetailHtml`) with selectors that win, a grid layout
+  (label over track+percent) and an explicit `width: 100%` track. `tests/campaign-fixes.test.mjs`
+  now asserts the percentage, the 1 km / 500 m lines and the gathering rule.
+- **All First Sortie dialogue in one document:** `docs/FIRST-SORTIE-DIALOGUE.md` — briefing, every
+  control call and its objective/hold label, the run's orders and both reset lines, the gunnery pass,
+  the ambush, the final report, the failure sentence and the card buttons, with the file to edit for
+  each.
+
+Tests 801/801, build 3232 KB. Nothing merged: the owner tests the zip first.
+
 Older entries moved here from [CHANGELOG.md](CHANGELOG.md), word for word, newest first.
 You do not need to read this file for every task. `CHANGELOG.md` has a one-line index of everything
 in here: open this file only when the index shows an entry that matters to what you are changing

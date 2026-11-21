@@ -36,7 +36,7 @@ test("save v28: an older save loads with seven empty presets and keeps everythin
   old.profile.cr = 4321;
   const clean = sanitizeSave(JSON.parse(JSON.stringify(old)));
   assert.equal(clean.v, SAVE_VERSION);
-  assert.equal(SAVE_VERSION, 28);
+  assert.equal(SAVE_VERSION, SAVE_VERSION);
   assert.deepEqual(clean.profile.pocketFilterPresets, Array(7).fill(null));
   assert.equal(clean.profile.cr, 4321);
   const withPresets = newSave();

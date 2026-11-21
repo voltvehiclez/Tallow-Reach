@@ -78,7 +78,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 14c | Simple wormholes: a pocket that spawns itself inside an existing system, its 20-minute entry clock, collapse on expiry, the Stable wormhole way out, re-enterable until it expires (save v21) | D | [x] **2026-11-16: owner playtest passed** (`testing/TESTING-14C-WORMHOLES.md`). 75 standing, never more than 3 per system, staggered on a fresh universe, 20 minutes from spawn, `collapse` only, the way out always a **Stable wormhole**. |
 | 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space (save v25) | D | [x] **2026-11-19: owner playtest passed.** |
 | 15 | Campaign scaffolding (save v26) | D | [x] **Built 2026-11-19; rounds 1–5 applied; playtest approved 2026-11-21.** Dual-mode envelope, shared pilot, fixed seven-system campaign (`240515`); finish = nothing yet |
-| 16 | Multiplayer (host-run co-op, WebRTC; six slices in step 16) | | [ ] **plan written with the owner 2026-11-21; slice 1 (custody, no networking) built** |
+| 16 | Multiplayer (host-run co-op, WebRTC; six slices in step 16) | | [ ] **plan written with the owner 2026-11-21; slices 1 (custody) and 2 (save v29) built** |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table and the
 "Version history" comment in `state/profile.js`. **Step 16 slice 1 changes no save; slice 2 makes it v29.**

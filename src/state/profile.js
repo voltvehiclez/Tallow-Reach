@@ -17,6 +17,7 @@ import { GALAXY } from "../data/galaxy.js";
 import { CAMPAIGN_HOME_POCKET, campaignGalaxyRecord } from "../data/campaign/galaxy.js";
 import { CAMPAIGN_MISSIONS } from "../data/campaign/index.js";
 import { isInstanceTemplate, instanceTemplate, instanceIdFor, wormholeIdFor, cleanConnections, WORMHOLE_SPAWN } from "../data/instances.js";
+import { AWAY_FIELDS, GUEST_FIELDS, NET } from "../data/multiplayer.js";
 
 const HOME_STATION_KEY = stationKeyAt(DEFAULT_PLACE) || `${DEFAULT_PLACE}:station`;
 
@@ -103,7 +104,13 @@ function worldWithStationStores(fields, stationStores) {
 //   28 adds the pilot's seven pocket-object filter presets
 //      (profile.pocketFilterPresets). Purely additive: an older save loads
 //      with seven empty preset slots.
-export const SAVE_VERSION = 28;
+//   29 adds multiplayer (step 16, slice 2): the optional `away` marker on a pilot
+//      (`save.away`, null whenever the pilot is at home — see AWAY_FIELDS in
+//      data/multiplayer.js) and the host side, `world.guests` (guestId -> the host's
+//      copy of that visiting pilot — see GUEST_FIELDS). Both are purely additive:
+//      any older save loads with `away: null` and `guests: {}`, and a save that has
+//      them loads in an older build, which simply carries them untouched.
+export const SAVE_VERSION = 29;
 
 // A saved contract with a type not listed here is dropped on load, so this
 // follows the contract definitions instead of keeping its own copy.
@@ -332,6 +339,8 @@ export function newWorld({ homePocket = DEFAULT_PLACE, seed = GALAXY.seed, galax
   return worldWithStationStores({
     v: SAVE_VERSION,
     naturalWormholes,
+    worldId: null,   // v29: this world's own random id, minted when it is first hosted
+    guests: {},      // v29: guestId -> this host's copy of that visiting pilot
     base: { ...BASE_DEFAULT },
     board: [],       // the home station's contract offers (kept as the old field)
     boards: {},      // other stations' offers: place id -> compact offers
@@ -375,6 +384,9 @@ export function newSave() {
     v: SAVE_VERSION,
     profile: newProfile(),
     world: newWorld(),
+    // v29: null means "at home". A pilot who has never visited anybody has no
+    // marker, and neither an old save nor a brand-new one needs one.
+    away: null,
   };
 }
 
@@ -385,6 +397,9 @@ export function newCampaignSave() {
     v: SAVE_VERSION,
     profile: newCampaignProfile(),
     world: newWorld({ homePocket: CAMPAIGN_HOME_POCKET, seed: campaignGalaxyRecord().seed, galaxy: campaignGalaxyRecord(), naturalWormholes: false }),
+    // Multiplayer is open world only (owner, 2026-11-21): a campaign pilot never
+    // travels, so its marker is always null and its world is never hosted.
+    away: null,
   };
 }
 
@@ -1156,6 +1171,11 @@ export function sanitizeWorld(raw) {
   return worldWithStationStores({
     v: SAVE_VERSION,
     naturalWormholes: raw.naturalWormholes === false ? false : true,
+    // v29 multiplayer: this world's id (null until it is hosted) and the host's
+    // copies of visiting pilots. An older save has neither, and loads with a world
+    // that has never been hosted and has no guests.
+    worldId: typeof raw.worldId === "string" && raw.worldId.trim() ? raw.worldId.trim().slice(0, 160) : null,
+    guests: cleanGuests(raw.guests),
     base,
     board,
     boards,
@@ -1171,6 +1191,96 @@ export function sanitizeWorld(raw) {
     missionState: cleanMissionState(raw.missionState),
     stationSlots,
   }, stationStores);
+}
+
+/**
+ * Validate a suitcase (save v29): a visiting pilot's bundle, which a home save
+ * keeps inside `away` and a host keeps inside `world.guests[guestId]`.
+ *
+ * Deliberately NOT run through `sanitizeProfile`. The sanitizer drops a module or
+ * item id this build does not recognise, and while a pilot is away its suitcase is
+ * the only copy — losing that content would be worse than carrying it. So the shape
+ * is checked and anything of the wrong *type* is dropped, but a content id is never
+ * second-guessed here. `net/custody.js` does the careful work when it unpacks.
+ *
+ * A damaged suitcase is dropped rather than allowed to fail the whole save: the
+ * marker still says where the pilot is, and the host still holds the copy.
+ */
+function cleanSuitcase(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const suitcase = JSON.parse(JSON.stringify(raw));
+  if (!suitcase.profile || typeof suitcase.profile !== "object" || Array.isArray(suitcase.profile)) return null;
+  if (!Array.isArray(suitcase.lockers)) suitcase.lockers = [];
+  if (!suitcase.unknown || typeof suitcase.unknown !== "object" || Array.isArray(suitcase.unknown)) {
+    suitcase.unknown = { holds: [], modules: [], ships: [] };
+  }
+  if (!suitcase.shipsAt || typeof suitcase.shipsAt !== "object" || Array.isArray(suitcase.shipsAt)) suitcase.shipsAt = {};
+  return suitcase;
+}
+
+/** A whole number that a save may hold, floored at zero. */
+const count = value => Math.max(0, Math.floor(Number(value) || 0));
+
+/**
+ * The `away` marker (save v29): `{ worldId, hostName, guestId, token, epoch, rev,
+ * suitcase }`, or null when the pilot is at home. `null` is the normal case and what
+ * every older save loads with.
+ *
+ * `token` is the guest's secret for that one host, and it lives in the guest's own
+ * save because the guest is the one who has to prove it again; a host only ever
+ * stores `hashToken(token, guestId)`. A copy without a world id or a guest id cannot
+ * name a world to go back to, so it is not a marker at all.
+ */
+export function cleanAway(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const worldId = typeof raw.worldId === "string" ? raw.worldId.trim().slice(0, 160) : "";
+  const guestId = typeof raw.guestId === "string" ? raw.guestId.trim().slice(0, 160) : "";
+  if (!worldId || !guestId) return null;
+  const away = {
+    worldId,
+    hostName: typeof raw.hostName === "string" ? raw.hostName.trim().slice(0, 80) : "",
+    guestId,
+    token: typeof raw.token === "string" ? raw.token.slice(0, 160) : "",
+    epoch: count(raw.epoch),
+    rev: count(raw.rev),
+    suitcase: cleanSuitcase(raw.suitcase),
+  };
+  // Written in the documented field order (AWAY_FIELDS), and only those fields.
+  const ordered = {};
+  for (const field of AWAY_FIELDS) ordered[field] = away[field];
+  return ordered;
+}
+
+/**
+ * A host's guest list (save v29): `world.guests[guestId] = { name, tokenHash, epoch,
+ * rev, bundle, lastSeen }`. Deleting one is always safe — the guest's suitcase has a
+ * copy — so a damaged entry is dropped rather than failing the save.
+ *
+ * A record with no token hash cannot be the record of anybody (there is nothing to
+ * prove against), so it is dropped. There is no count limit here: `NET.maxGuests`
+ * limits a live hosted session (slice 4), not what a save may have recorded.
+ */
+function cleanGuests(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [id, value] of Object.entries(raw)) {
+    const guestId = typeof id === "string" ? id.trim().slice(0, 160) : "";
+    if (!guestId || !value || typeof value !== "object" || Array.isArray(value)) continue;
+    const tokenHash = typeof value.tokenHash === "string" ? value.tokenHash.trim().slice(0, 64) : "";
+    if (!tokenHash) continue;
+    const record = {
+      name: typeof value.name === "string" ? value.name.trim().slice(0, NET.nameMax) : "",
+      tokenHash,
+      epoch: count(value.epoch),
+      rev: count(value.rev),
+      bundle: cleanSuitcase(value.bundle),
+      lastSeen: count(value.lastSeen),
+    };
+    const ordered = {};
+    for (const field of GUEST_FIELDS) ordered[field] = record[field];
+    out[guestId] = ordered;
+  }
+  return out;
 }
 
 /** True when `placeId` is a persistent open-world pocket with a dockable station. */
@@ -1218,17 +1328,21 @@ export function sanitizeSave(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("not a Tallow Reach save");
   }
+  // v29: `away` sits beside `profile` and `world`, on the save, not inside either
+  // half — it describes where the *pilot* is, and a pilot and a world are two
+  // different things. Every save from v28 and older has no such field, and loads
+  // with `away: null`, which means "at home".
   if (raw.profile && typeof raw.profile === "object") {
     const profile = sanitizeProfile(raw.profile);
     const world = sanitizeWorld(raw.world && typeof raw.world === "object" ? raw.world : {});
     reconcileShipPlaces(profile, world, raw.profile);
-    return { v: SAVE_VERSION, profile, world };
+    return { v: SAVE_VERSION, profile, world, away: cleanAway(raw.away) };
   }
   if (Array.isArray(raw.ships)) {
     const profile = sanitizeProfile(raw);
     const world = sanitizeWorld(raw);
     reconcileShipPlaces(profile, world, raw);
-    return { v: SAVE_VERSION, profile, world };
+    return { v: SAVE_VERSION, profile, world, away: cleanAway(raw.away) };
   }
   throw new Error("not a Tallow Reach save");
 }
@@ -1256,6 +1370,9 @@ export function mergeProfile(save, profile) {
     v: SAVE_VERSION,
     profile: cleanProfile,
     world: cleanWorld,
+    // The marker describes where the pilot is, not what the profile contains, so it
+    // belongs to the save and survives a merge. Clearing it is `checkIn`'s job.
+    away: cleanAway(cleanSave.away),
   };
 }
 

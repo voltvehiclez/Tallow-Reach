@@ -310,10 +310,12 @@ anything of theirs crosses it.
 
 1. **Custody, no networking.** `src/net/custody.js` plus its data list
    (`data/multiplayer.js`) and tests: `checkOut`, `checkIn`, `relocate`, `compare`. Proves the rules
-   of travel on plain objects before a byte moves.
-2. **Save v29.** `away` on the profile, `world.guests`, the migration (old saves load with
-   `away: null`), `guestId`/`worldId`, the temp-key-then-swap write with the previous version kept,
-   and the `away:<worldId>` key.
+   of travel on plain objects before a byte moves. **Built 2026-11-21.**
+2. **Save v29.** `save.away` (beside the profile, `null` at home), `world.guests`, the migration
+   (old saves load with `away: null`), `guestId`/`worldId`, the temp-key-then-swap write with the
+   previous version kept, and the `away:<worldId>` key. **Built 2026-11-21:** `src/net/multiplayer.js` owns the field
+   changes, `cleanAway`/`cleanGuests` in `state/profile.js` validate them, and `state/storage.js`
+   does the swap-and-keep-the-previous write.
 3. **The connection, a link, chat and the player list.** `src/net/transport.js` (the only file that
    may name a connection library) and the offer/answer flow. Pause > **Open Multiplayer** with the
    on/off switch and the join-link row; **Enter** opens chat with the connected-player list; the

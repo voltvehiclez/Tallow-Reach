@@ -58,6 +58,20 @@ export const HOME_FIELDS = [
   "pocketFilterPresets",  // the seven N-panel filter presets (save v28), a screen preference
 ];
 
+/**
+ * The `away` marker's fields (save v29, slice 2), in the order they are written.
+ * `suitcase` is the pilot as the host last wrote it — the copy "Go home" opens.
+ * `token` is the guest's secret for that one host; it lives here because this is
+ * the guest's own save, and a host only ever stores `hashToken(token, guestId)`.
+ */
+export const AWAY_FIELDS = ["worldId", "hostName", "guestId", "token", "epoch", "rev", "suitcase"];
+
+/**
+ * One record in `world.guests` (save v29, slice 2): the host's copy of a visiting
+ * pilot. Deleting the entry is always safe, because the guest keeps a suitcase.
+ */
+export const GUEST_FIELDS = ["name", "tokenHash", "epoch", "rev", "bundle", "lastSeen"];
+
 /** Pseudo-field name used for the lockers, which live in a save's `world`, not its profile. */
 export const LOCKERS_FIELD = "lockers";
 
@@ -91,6 +105,7 @@ export const ARRIVAL_STATION_KEY =
  *   chatLineMax   (slice 3) longest chat message the host will pass on
  *   tokenBytes    (slice 1) size of the secret that names one guest to one host
  *   revStepMs     (slice 4) floor between two `rev` raises, so a busy second is one snapshot
+ *   keepPrevious  (slice 2) how many older versions of a save to keep under `:prev`
  */
 export const NET = {
   snapshotSec: 2,
@@ -102,4 +117,23 @@ export const NET = {
   chatLineMax: 240,
   tokenBytes: 24,
   revStepMs: 250,
+  keepPrevious: 1,
+};
+
+/**
+ * The browser storage keys multiplayer owns (slice 2). Keys and the `tr1`/`tr_s1`
+ * family in `state/storage.js` must never change, or a save is lost.
+ *
+ *   awayKey(worldId)   the suitcase on its own, under `away:<worldId>`, so two
+ *                      browser tabs visiting two different worlds cannot overwrite
+ *                      each other's copy of their pilot.
+ *   PREVIOUS_SUFFIX    the previous version of any key, kept for one generation
+ *                      (`tr1:prev`): a save is written to a temporary key and then
+ *                      swapped in, so a crash mid-write leaves the old save intact.
+ *   TEMP_SUFFIX        the scratch key a write goes through on its way in.
+ */
+export const KEY = {
+  awayKey: worldId => `away:${String(worldId || "").trim()}`,
+  PREVIOUS_SUFFIX: ":prev",
+  TEMP_SUFFIX: ":tmp",
 };
