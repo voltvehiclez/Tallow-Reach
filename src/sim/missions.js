@@ -884,6 +884,24 @@ function rememberMissionPickup(mission, event, payload = {}) {
   return true;
 }
 
+/** Remember a mission-tagged kill when the pilot opens fire on a prowling wave
+ *  before its dialogue finishes and its `kill` step becomes current. */
+function rememberMissionKill(mission, event, payload = {}) {
+  if (event !== "enemy-killed" || payload.encounter !== `mission:${mission.id}`) return false;
+  ensureCounters(mission);
+  const current = missionStep(mission);
+  if (current?.kind === "kill" && objectiveMatches(current, event, payload, mission)) return false;
+  if (current?.kind === "parallel" && (current.steps || []).some(child => child?.kind === "kill" && objectiveMatches(child, event, payload, mission))) return false;
+  const index = mission.steps.findIndex((step, i) => i > mission.step && step?.kind === "kill" && objectiveMatches(step, event, payload, mission));
+  if (index < 0) return false;
+  const step = mission.steps[index];
+  const before = counterValue(mission, step.id);
+  const after = Math.min(stepCount(step), before + 1);
+  if (after === before) return false;
+  mission.counters[step.id] = after;
+  return true;
+}
+
 /** Run zero-length story steps immediately after a mission starts or advances. */
 function activateAutomatic(mission, profile, payload = {}) {
   let changed = false;
@@ -901,6 +919,15 @@ function activateAutomatic(mission, profile, payload = {}) {
       changed = true;
       moveToStep(mission, nextStepIndex(mission, step), payload);
       continue;
+    }
+    if (step.kind === "kill") {
+      const done = counterValue(mission, step.id);
+      if (done >= stepCount(step)) {
+        changed = true;
+        moveToStep(mission, nextStepIndex(mission, step), payload);
+        continue;
+      }
+      if (done > 0) mission.p = Math.floor(done);
     }
     if (step.kind === "script") {
       if (!executeScriptStep(step, mission, profile, payload)) break;
@@ -1029,7 +1056,8 @@ function advanceParallel(mission, step, event, payload, profile = profileFor(pay
 export function advanceMission(mission, event, payload = {}, profile = profileFor(payload)) {
   if (!mission || isMissionFailed(mission) || !missionStep(mission)) return false;
   const rememberedPickup = rememberMissionPickup(mission, event, payload);
-  if (missionObjectivesDone(mission)) return rememberedPickup;
+  const rememberedKill = rememberMissionKill(mission, event, payload);
+  if (missionObjectivesDone(mission)) return rememberedPickup || rememberedKill;
   // Mission-spawned trigger events are scoped to the mission that emitted them;
   // otherwise a wave-clear from one story could wake every waiting story.
   if (event === "mission-trigger" && payload.mission && payload.mission !== mission.id) return false;
@@ -1068,7 +1096,7 @@ export function advanceMission(mission, event, payload = {}, profile = profileFo
     if (changed) emitProgress(mission, event, payload);
     return changed;
   }
-  if (!objectiveMatches(step, event, payload, mission)) return false;
+  if (!objectiveMatches(step, event, payload, mission)) return rememberedPickup || rememberedKill;
 
   const before = counterValue(mission, step.id);
   const amount = step.kind === "survive" || (step.kind === "wait" && event === "mission-tick")

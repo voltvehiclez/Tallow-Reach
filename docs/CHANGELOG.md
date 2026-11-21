@@ -22,12 +22,22 @@ the next person must know (save version, rebuild needed, known issues).
 
 ## 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
 
-The owner's third pass over the campaign build. Five items.
+The owner's third pass over the campaign build, plus four follow-up polish items.
 
-- **Dane does not shoot the training drones.** It is the pilot's test. `sim/ai.js` now requires
-  `def.engages === "hostiles"` **and** `e.role === "guard"` before a story ship fires, and the ambush
-  step is the only one that names him `guard` — the gunnery pass puts him on `observe`, so his guns
-  stay cold until the fight that matters.
+- **Dane does not shoot the training drones, and the ambushers warp in to circle first.** `sim/ai.js`
+  requires `def.engages === "hostiles"` **and** `e.role === "guard"` before a story ship fires. In First
+  Sortie, `spawn-ambush` now runs as `ambush-warning` starts (`warpIn: true, role: "prowl"`): the two
+  attackers streak in out of warp and circle around Dane and the pilot (`flyProwl` in `sim/enemy-flight.js`)
+  without firing while Dane stays on `observe` and holds his fire. When `ambush-taunt` finishes and
+  `defeat-ambush` begins, Dane switches to `guard` and opens fire, and the attackers switch out of `prowl`
+  into their aggressive AI (`flyFighter`). Shooting either attacker mid-dialogue (`hitHostile`) breaks the
+  parley early and turns the wave aggressive at once.
+- **Shorter control prompts.** Each control call in `m01.js` is now one concise line so the pilot spends
+  the lesson flying instead of waiting on radio lines; the steering line keeps *"the Wasp is quicker than
+  anything you flew at the school."*
+- **Weapon slots are keyboard-only (`1`–`5`, `6`–`0`) and top-middle alerts dismiss with R.** Turning down
+  with the mouse in flight no longer clicks `#weapon-slots` (`pointer-events: none`, click listener removed
+  from `ui/hud.js`), and `#mission-alert` says *Press R to dismiss* and closes on `KeyR`.
 - **His rounds were still red for a real reason.** `fire()` → `addEntity` emits `entity-spawned`
   synchronously, and the bullet mesh is built from that record, so assigning `shot.colour` after
   `fire()` returned changed nothing. `sim/combat.js` `fire()` takes a trailing `extra` object and
@@ -46,7 +56,7 @@ The owner's third pass over the campaign build. Five items.
   the ambush, the final report, the failure sentence and the card buttons, with the file to edit for
   each.
 
-Tests 801/801, build 3231 KB. Nothing merged: the owner tests the zip first.
+Tests 801/801, build 3232 KB. Nothing merged: the owner tests the zip first.
 
 ## 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
 

@@ -26,7 +26,7 @@ import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
-import { setupMissionLog, updateDialogueClock } from "./ui/missionlog.js";
+import { setupMissionLog, updateDialogueClock, isFailureNoticeOpen, dismissFailureNotice } from "./ui/missionlog.js";
 import { setupCampaign } from "./ui/campaign.js";
 import "./sim/campaign-flight.js";
 import { setupStarmap, openStarmap, closeStarmap, isStarmapOpen } from "./ui/starmap.js";
@@ -173,6 +173,7 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       // canister the same press opens the trade (ui/cache.js), and pressing it again puts it away:
       // the pilot's hands are on the cargo, so R stays the canister's key until they are done.
       if (repeat) break;
+      if (isFailureNoticeOpen()) { dismissFailureNotice(); break; }
       if (isCacheOpen()) closeCache();
       else if (playing && !state.warp) riftAction(localPlayer());
       break;

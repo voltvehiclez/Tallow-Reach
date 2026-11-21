@@ -416,7 +416,17 @@ export function failureNoticeHtml({ mission, title, reason, message } = {}) {
   const name = title || mission?.title || "Mission";
   const why = message || mission?.failureMessage || "It can no longer be completed.";
   // A contract says "Contract failed"; only story work calls itself a mission.
-  return `<strong>${esc(missionKindWord(mission))} failed: ${esc(name)}</strong><span>${esc(why)}</span><em>Click to dismiss</em>`;
+  return `<strong>${esc(missionKindWord(mission))} failed: ${esc(name)}</strong><span>${esc(why)}</span><em>Press R to dismiss</em>`;
+}
+
+export function isFailureNoticeOpen() {
+  return Boolean(alertRoot && !alertRoot.hidden);
+}
+
+export function dismissFailureNotice() {
+  const open = isFailureNoticeOpen();
+  hideFailureNotice();
+  return open;
 }
 
 function hideFailureNotice() {
@@ -441,15 +451,17 @@ export function setupMissionLog() {
   alertRoot.id = "mission-alert";
   alertRoot.hidden = true;
   alertRoot.setAttribute("role", "alert");
-  alertRoot.addEventListener("click", hideFailureNotice);
   document.body.appendChild(alertRoot);
   on("mission-failed", showFailureNotice);
+  on("action", ({ name, repeat, key } = {}) => {
+    if (!repeat && (name === "rift" || key === "KeyR") && isFailureNoticeOpen()) hideFailureNotice();
+  });
   // A natural reset is not a failure: the contact says the line, the act goes on
   // and the pilot repeats that one objective.
   // Losing a bonus is news too, but it is not a failure and it never stops the act.
   on("mission-optional-failed", ({ optional } = {}) => {
     if (!alertRoot || !optional) return;
-    alertRoot.innerHTML = `<strong>Optional objective failed</strong><span>${esc(optional.objective || "")}</span><em>Click to dismiss</em>`;
+    alertRoot.innerHTML = `<strong>Optional objective failed</strong><span>${esc(optional.objective || "")}</span><em>Press R to dismiss</em>`;
     alertRoot.hidden = false;
     clearTimeout(alertTimer);
     alertTimer = setTimeout(hideFailureNotice, 8 * 1000);
@@ -459,7 +471,7 @@ export function setupMissionLog() {
     if (!alertRoot) return;
     const text = line || step?.resetLine || "";
     if (!text) return;
-    alertRoot.innerHTML = `<strong>${esc(step?.speaker || mission?.title || "Mission")}</strong><span>${esc(text)}</span><em>Click to dismiss</em>`;
+    alertRoot.innerHTML = `<strong>${esc(step?.speaker || mission?.title || "Mission")}</strong><span>${esc(text)}</span><em>Press R to dismiss</em>`;
     alertRoot.hidden = false;
     clearTimeout(alertTimer);
     alertTimer = setTimeout(hideFailureNotice, 12 * 1000);

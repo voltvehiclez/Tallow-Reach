@@ -111,8 +111,8 @@ function tickChase(mission, step, player) {
 
 // ---- actor roles -----------------------------------------------------------
 function applyActorRoles(mission, step, player) {
-  if (!step || (!step.actor && !step.actorRole && !step.course)) return;
-  const place = player.place || state.place;
+  if (!step || (!step.actor && !step.actorRole && !step.course && step.kind !== "kill")) return;
+  const place = player?.place || state.place;
   for (const actor of storyActors(mission, place)) {
     if (step.actor && step.actor !== actor.def) continue;
     if (step.actorRole && actor.role !== step.actorRole) actor.role = step.actorRole;
@@ -123,6 +123,16 @@ function applyActorRoles(mission, step, player) {
       }
       // How close the pilot must be to the waiting ship before the course runs.
       if (Number(step.gather) > 0) actor.course.gather = Number(step.gather);
+    }
+  }
+  // Once a kill step begins, any wave that was prowling during the dialogue
+  // goes into aggressive AI and attacks.
+  if (step.kind === "kill") {
+    const tag = `mission:${mission.id}`;
+    for (const enemy of placeWorld(place).enemies) {
+      if (!enemy || enemy.encounter !== tag || enemyDef(enemy.def).friendly === true) continue;
+      if (step.enemy && enemy.def !== step.enemy) continue;
+      if (enemy.role === "prowl") enemy.role = null;
     }
   }
 }
@@ -200,4 +210,12 @@ on("campaign-act-started", () => {
   clearHold();
   state.ui.followDistance = null;
   state.ui.chaseRun = null;
+});
+
+on("mission-progress", ({ mission, player } = {}) => {
+  const active = mission && activeCampaignMission(state.profile)?.id === mission.id ? mission : null;
+  if (!active || active.failed) return;
+  const P = player || state.player;
+  if (!P || P.docked || P.dead) return;
+  applyActorRoles(active, currentStep(active), P);
 });

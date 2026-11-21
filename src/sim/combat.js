@@ -216,6 +216,13 @@ export function hitHostile(e, dmg, at, byPlayer = undefined, placeId = e.place |
     boom(at, 1, 0x9fd9ff, placeId);
     return;
   }
+  // Shooting a prowling ambusher mid-dialogue breaks the parley at once: the
+  // whole wave drops its prowl role and attacks under its ordinary AI.
+  if (byPlayer !== null && e?.role === "prowl") {
+    for (const other of placeWorld(placeId).enemies) {
+      if (other && other.encounter === e.encounter && other.role === "prowl") other.role = null;
+    }
+  }
   e.hp -= dmg;
   boom(at, 2, 0xffd080, placeId);
   if (e.hp <= 0) killHostile(e, byPlayer, placeId);

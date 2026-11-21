@@ -163,6 +163,49 @@ export function flyObserve(e, def, toTarget, dist, dt, context) {
   e.pos.addScaledVector(e.v, dt);
 }
 
+/**
+ * Prowl around the pilot and any nearby wingman during an ambush parley: streak
+ * in out of warp and circle both hulls without opening fire until the threat is
+ * finished (or the pilot shoots first).
+ */
+export function flyProwl(e, def, toTarget, dist, dt, context) {
+  const { world, target, players } = context;
+  const b = e.brain;
+  const hand = e.o || b.hand || 1;
+  b.phase += dt * 0.65 * hand;
+  const ally = (world.enemies || []).find(
+    other => other && other !== e && other.hp > 0 && enemyDef(other.def).friendly === true,
+  );
+  const center = ally && ally.pos.distanceTo(target.pos) < 900
+    ? target.pos.clone().add(ally.pos).multiplyScalar(0.5)
+    : target.pos.clone();
+  const orbitRadius = 240;
+  const anchor = center.clone().add(V(
+    Math.cos(b.phase) * orbitRadius,
+    24 + Math.sin(b.phase * 0.7) * 28,
+    Math.sin(b.phase) * orbitRadius,
+  ));
+  const toAnchor = anchor.clone().sub(e.pos), d = toAnchor.length();
+  if (e.warpIn > 0) {
+    e.warpIn = Math.max(0, e.warpIn - dt);
+    e.boosting = e.warpIn > 0;
+  } else {
+    e.boosting = false;
+  }
+  const maxSpd = e.warpIn > 0 ? 420 : def.spdFar;
+  const cruise = e.warpIn > 0
+    ? Math.min(420, Math.max(def.spdFar, d * 1.4))
+    : Math.min(def.spdFar, Math.max(def.spdNear * 1.15, d * 1.1));
+  const desired = d > 15
+    ? toAnchor.normalize().multiplyScalar(cruise)
+    : V(-Math.sin(b.phase) * hand, 0, Math.cos(b.phase) * hand).multiplyScalar(def.spdNear * 1.15);
+  desired.add(flightAvoidance(e, world, desired, players)).clampLength(0, maxSpd);
+  const look = desired.lengthSq() > 1 ? e.pos.clone().add(desired) : center;
+  turnEnemy(e, look, Math.min(1, dt * def.turn * 1.4));
+  e.v.lerp(desired, 1 - Math.exp(-dt * (e.warpIn > 0 ? 6 : 3.4)));
+  e.pos.addScaledVector(e.v, dt);
+}
+
 /** Fight the act's other hostiles. Damage comes from the def (a story ally's is 0). */
 export function flyGuard(e, def, toTarget, dist, dt, context) {
   const { world, target, players } = context;

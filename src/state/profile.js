@@ -393,7 +393,7 @@ function cleanScriptAction(raw) {
   if (typeof raw === "string") return raw;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const action = {};
-  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to", "loot", "respawn"]) {
+  for (const key of ["kind", "action", "type", "place", "sector", "feature", "anchor", "enemy", "ship", "item", "target", "sound", "name", "key", "value", "count", "to", "loot", "respawn", "story", "role", "course", "phase", "warpIn"]) {
     if (raw[key] !== undefined) action[key] = raw[key];
   }
   if (raw.dropOnDefeat && typeof raw.dropOnDefeat === "object" && !Array.isArray(raw.dropOnDefeat)) {

@@ -38,47 +38,45 @@ Dane Korr.*, followed by a `control` step the pilot completes by holding the con
 one second. The hold bar is labelled from `src/data/missions/rules.js`.
 
 **Throttle** — step `brief-throttle`
-- "First, the throttle. W eases it forward. One second of it is all this lesson asks."
-- "Then Ctrl — the brake. Learn that one before anything else. A pilot who cannot stop is not flying, they are falling with style."
+- "First, the throttle — W pushes you forward."
 
 Step `learn-throttle`: *Throttle forward with W.* — bar `W — throttle forward`.
 
 **Brake** — step `brief-brake`
-- "Now stop. Hold Ctrl and the throttle bleeds off until the Wasp is sitting still."
-- "Whatever happens out here, that key always works. Use it the moment you are unsure."
+- "Now hold Ctrl to brake to a stop."
 
 Step `learn-brake`: *Brake to a stop with Ctrl.* — bar `Ctrl — brake to a stop`.
 
 **Reverse** — step `brief-reverse`
-- "S is reverse: it pulls the throttle back past zero. Short taps — you are not trying to fly backwards across the range."
+- "S pulls the throttle into reverse."
 
 Step `learn-throttle-back`: *Pull the throttle back with S.* — bar `S — throttle back`.
 
 **Steering** — step `brief-steer`
-- "Now the nose. The mouse steers. Small movements — the Wasp is quicker than anything you flew at the school."
+- "The mouse steers. Small movements — the Wasp is quicker than anything you flew at the school."
 
 Step `learn-steer`: *Steer with the mouse.* — bar `Mouse — steer`.
 
 **Strafe** — step `brief-strafe`
-- "A strafes left, D strafes right. Slide sideways without turning the nose."
+- "A strafes left, D strafes right."
 
 Steps `learn-strafe-left` (*Strafe left with A.*, bar `A — strafe left`) and
 `learn-strafe-right` (*Strafe right with D.*, bar `D — strafe right`).
 
 **Lift** — step `brief-lift`
-- "Space lifts you, C drops you. Do not fight the drift — correct it."
+- "Space lifts you, C drops you."
 
 Steps `learn-rise` (*Rise with Space.*, bar `Space — rise`) and `learn-drop`
 (*Drop with C.*, bar `C — drop`).
 
 **Roll** — step `brief-roll`
-- "Q rolls left, E rolls right. Roll when the nose needs to go somewhere the mouse cannot reach."
+- "Q rolls left, E rolls right."
 
 Steps `learn-roll-left` (*Roll left with Q.*, bar `Q — roll left`) and
 `learn-roll-right` (*Roll right with E.*, bar `E — roll right`).
 
 **Boost** — step `brief-boost`
-- "Last one. Shift is boost. It burns your power, and it is the only way you will stay with me."
+- "Last one — Shift is boost. You will need it to stay with me."
 
 Step `learn-boost`: *Boost with Shift.* — bar `Shift — boost`.
 
@@ -123,21 +121,27 @@ Two `practice_drone` targets, 600–750 m out, restored if a reload wipes them. 
 does this alone:** Dane is on `actorRole: "observe"` and his guns stay cold. He only opens
 fire in the ambush.
 
-## 6. The ambush — Dane fights, the strangers talk
+## 6. The ambush — warp in, prowl, then fight
 
-Step `ambush-warning`, radio from Dane:
+Step `spawn-ambush` runs first: two `raider` hulls (`warpIn: true, role: "prowl"`) streak in
+out of warp at 650–800 m and begin circling around Dane and the pilot without opening fire.
+
+Step `ambush-warning`, radio from Dane (while the two ships prowl around both hulls; Dane's
+`actorRole` is `"observe"`, so he holds his fire):
 1. "Hold on. Those are not school drones."
 2. "Two ships, guns live, inbound hot. I do not recognise the hulls — and nobody flies this range without a school transponder."
 3. "I will keep one busy. You take the other. Do not let them split us."
 
-Step `ambush-taunt`, radio from the **Unmarked pilot**:
+Step `ambush-taunt`, radio from the **Unmarked pilot** (the two ships keep circling; Dane
+still holds his fire unless the pilot shoots first):
 1. "Korr's newest cadet. We bought the school's whole flight schedule, so spare us the brave face."
 2. "Cut your engines and hand over the Wasp. Refuse, and we will take it out of the debris."
 
-Steps `spawn-ambush` / `defeat-ambush` — objective *Defeat both attackers.* Two `raider`
-hulls, 700–900 m out, replaced if they are lost. Dane is on `actorRole: "guard"`: this is
-the only point in the act where he fires, and his rounds are the pilot's own basic-cannon
-orange (they do no damage — he is a story actor, not a kill credit).
+Step `defeat-ambush` — objective *Defeat both attackers.* Once the threat finishes (or
+immediately if the pilot shoots one of them mid-dialogue), both ships drop `prowl` and switch
+into their aggressive AI behaviour (`flyFighter`) and attack. On `defeat-ambush` Dane switches
+to `actorRole: "guard"` and opens fire with basic-cannon orange rounds (0 damage — he is a
+story actor, not a kill credit).
 
 The word "raider" never appears on screen; nobody in the scene knows who they are.
 
@@ -160,11 +164,11 @@ also the small alert popup, which reads the same string):
 
 The card's detail line: *"This act has no checkpoints yet, so it restarts from the top."*
 Buttons: **Start from the beginning**, **Return to campaign menu**.
-The alert popup (top of the screen, auto-dismisses) reads **Mission failed: First Sortie**
-followed by the same sentence and *Click to dismiss*.
+The alert popup (top of the screen, auto-dismisses or closes on **R**) reads **Mission failed:
+First Sortie** followed by the same sentence and *Press R to dismiss*.
 
 Losing the bonus is not a failure; it shows an **Optional objective failed** notice with the
-objective text and *Click to dismiss*.
+objective text and *Press R to dismiss*.
 
 ---
 

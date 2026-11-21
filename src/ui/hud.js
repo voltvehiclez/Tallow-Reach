@@ -148,13 +148,9 @@ export function setupHud() {
     markers.push(d);
   }
 
-  // Clicking the route must not fire weapons.
+  // Clicking the route must not fire weapons; weapon slots are keyboard-only (1–5, 6–0)
+  // so turning down with the mouse never clicks a slot.
   el.route?.addEventListener("mousedown", e => e.stopPropagation());
-  el.weaponSlots?.addEventListener("mousedown", e => e.stopPropagation());
-  el.weaponSlots?.addEventListener("click", e => {
-    const button = e.target.closest("button[data-weapon-action]");
-    if (button) emit("action", { name: button.dataset.weaponAction, repeat: false });
-  });
 
 
   navigationRows = [];

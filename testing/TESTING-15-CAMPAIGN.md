@@ -79,12 +79,16 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     distance** (he circles you, he does not fly ahead of you any more).
 26. Shoot both drones down (**LMB**, pick them up with **F**). **Dane does not fire** at the drones: the
     gunnery pass is your test, and his guns stay cold until the ambush.
-27. He spots contacts and says only that they are *not school drones* and that he does not recognise the
-    hulls — he never calls them raiders, and neither does the objective text.
+27. As the second drone goes down, **two unmarked ships warp in** and begin **flying in a circle around Dane
+    and your ship** without shooting. Dane spots them and says only that they are *not school drones* and that
+    he does not recognise the hulls — he never calls them raiders, and neither does the objective text.
 28. **The strangers introduce themselves**: *"Korr's newest cadet… Cut your engines and hand over the Wasp."*
-    Two unmarked ships appear and shoot back — nothing in the scene tells you who they are.
-29. Dane **fires at them too**. His rounds are **orange, the same colour as your basic cannons** (not red),
-    and still do **0 damage** — you have to finish them. Destroy both attackers.
+    While they talk, they keep circling you and Dane, and **neither they nor Dane shoot** — unless you open
+    fire on them mid-dialogue, in which case they **pre-emptively switch into aggressive AI** and attack at
+    once.
+29. Once their threat finishes, both attackers **switch into aggressive AI** and attack, and Dane **opens fire
+    at them too**. His rounds are **orange, the same colour as your basic cannons** (not red), and still do
+    **0 damage** — you have to finish them. Destroy both attackers.
 
 ## 4. The accomplished card, the failure card and the way out
 

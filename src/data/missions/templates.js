@@ -24,12 +24,12 @@ import { MISSION_RULES } from "./rules.js";
 const base = (id, kind, fields) => ({ id, kind, ...fields });
 
 /** Face to face at a station: needs the pilot docked, for this line only. */
-export const briefing = ({ id, speaker, portrait, lines, objective, choices, next, place }) =>
-  base(id, "dialogue", { requiresDock: true, speaker, portrait, lines, objective, ...(place ? { place } : {}), ...(choices ? { choices } : {}), ...(next ? { next } : {}) });
+export const briefing = ({ id, speaker, portrait, lines, objective, choices, next, place, ...rest }) =>
+  base(id, "dialogue", { requiresDock: true, speaker, portrait, lines, objective, ...(place ? { place } : {}), ...(choices ? { choices } : {}), ...(next ? { next } : {}), ...rest });
 
 /** A radio message: works in flight, never needs a dock. */
-export const radio = ({ id, speaker, portrait, lines, objective, choices, next, place }) =>
-  base(id, "dialogue", { requiresDock: false, speaker, portrait, lines, objective, ...(place ? { place } : {}), ...(choices ? { choices } : {}), ...(next ? { next } : {}) });
+export const radio = ({ id, speaker, portrait, lines, objective, choices, next, place, ...rest }) =>
+  base(id, "dialogue", { requiresDock: false, speaker, portrait, lines, objective, ...(place ? { place } : {}), ...(choices ? { choices } : {}), ...(next ? { next } : {}), ...rest });
 
 export const travelTo = ({ id, place, objective, next }) =>
   base(id, "reach-sector", { place, objective, ...(next ? { next } : {}) });

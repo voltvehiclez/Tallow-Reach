@@ -245,7 +245,7 @@ test("fix 6: the run waits for the pilot to form up, and the rule is 1 km / 500 
   state.world.enemies.length = 0;
 });
 
-test("fix 6b: the strangers introduce themselves; nobody calls them raiders", async () => {
+test("fix 6b: ambushers warp in as Dane warns you, prowl during the talk, and go aggressive after (or when shot)", async () => {
   const m01 = CAMPAIGN_MISSIONS[0];
   const spoken = m01.steps.flatMap(step => [
     step.objective || "",
@@ -253,6 +253,14 @@ test("fix 6b: the strangers introduce themselves; nobody calls them raiders", as
     step.line || "",
   ]).join(" ");
   assert.doesNotMatch(spoken, /raider/i, "no line, and no objective, names them");
+
+  // Concise control prompts, keeping the school Wasp line.
+  const controlBriefs = ["brief-throttle", "brief-brake", "brief-reverse", "brief-steer", "brief-strafe", "brief-lift", "brief-roll", "brief-boost"];
+  for (const id of controlBriefs) {
+    const step = m01.steps.find(s => s.id === id);
+    assert.equal(step.lines.length, 1, `${id} is a single concise line`);
+  }
+  assert.match(m01.steps.find(s => s.id === "brief-steer").lines[0], /Wasp is quicker than anything you flew at the school/);
 
   const taunt = m01.steps.find(step => step.id === "ambush-taunt");
   assert.ok(taunt, "the strangers get a line of their own");
@@ -264,11 +272,69 @@ test("fix 6b: the strangers introduce themselves; nobody calls them raiders", as
   const warning = m01.steps.find(step => step.id === "ambush-warning");
   assert.match(warning.lines.join(" "), /not school drones/i);
   assert.match(warning.lines.join(" "), /do not recognise/i);
-  // Order: warning, taunt, then the ships appear.
+  // Order: ships warp in first, then warning, then taunt, then the fight.
   const order = m01.steps.map(step => step.id);
+  assert.ok(order.indexOf("spawn-ambush") < order.indexOf("ambush-warning"));
   assert.ok(order.indexOf("ambush-warning") < order.indexOf("ambush-taunt"));
-  assert.ok(order.indexOf("ambush-taunt") < order.indexOf("spawn-ambush"));
+  assert.ok(order.indexOf("ambush-taunt") < order.indexOf("defeat-ambush"));
   assert.equal(m01.steps.find(step => step.id === "defeat-ambush").objective, "Defeat both attackers.");
+
+  // Live simulation check: ambushers warp in on prowl, circle Dane & pilot without
+  // shooting while threatening, and go aggressive when the threat ends (or if shot early).
+  await import("../src/sim/campaign-flight.js");
+  const { P, mission } = await campaignWorld();
+  const world = placeWorld(CAMPAIGN_HOME_POCKET);
+  world.enemies.length = 0;
+  world.bullets.length = 0;
+
+  const korr = spawnEnemy("captain_korr", V(120, 0, -140), CAMPAIGN_HOME_POCKET, `mission:${mission.id}`, { role: "observe" });
+  mission.step = mission.steps.findIndex(step => step.id === "spawn-ambush");
+  advanceMission(mission, "mission-tick", { dt: 0.05, player: P }, P.profile);
+  assert.equal(mission.steps[mission.step].id, "ambush-warning", "spawn-ambush runs and opens ambush-warning");
+
+  const raiders = world.enemies.filter(e => e.def === "raider");
+  assert.equal(raiders.length, 2, "two ambushers warp in as the warning begins");
+  assert.ok(raiders.every(r => r.role === "prowl" && r.warpIn > 0), "both arrive in prowl mode out of warp");
+
+  // Step through several seconds of flight during the warning and taunt: they circle
+  // around Dane and the pilot, and neither they nor Dane fire a shot.
+  for (let i = 0; i < 40; i++) {
+    emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+    updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  }
+  assert.equal(korr.role, "observe", "Dane holds fire during the warning");
+  assert.equal(world.bullets.length, 0, "no shots fired by Dane or the prowling ambushers during dialogue");
+
+  // Advance through ambush-warning into ambush-taunt: still prowling, still no shots.
+  while (mission.steps[mission.step].id === "ambush-warning") {
+    advanceMission(mission, "dialogue-next", { player: P }, P.profile);
+  }
+  assert.equal(mission.steps[mission.step].id, "ambush-taunt");
+  for (let i = 0; i < 20; i++) {
+    emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+    updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  }
+  assert.equal(korr.role, "observe", "Dane still holds fire while they threaten");
+  assert.equal(world.bullets.length, 0, "still no shots while they threaten");
+
+  // Pre-emptive provocation: if the pilot shoots one mid-dialogue, both immediately
+  // drop prowl and go into aggressive AI.
+  const { hitHostile } = await import("../src/sim/combat.js");
+  hitHostile(raiders[0], 1, raiders[0].pos, P, CAMPAIGN_HOME_POCKET);
+  assert.ok(raiders.every(r => r.role === null), "shooting one mid-dialogue turns the whole wave aggressive");
+
+  // Reset to prowl to also verify the normal transition at the end of ambush-taunt.
+  for (const r of raiders) r.role = "prowl";
+  while (mission.steps[mission.step].id === "ambush-taunt") {
+    advanceMission(mission, "dialogue-next", { player: P }, P.profile);
+  }
+  assert.equal(mission.steps[mission.step].id, "defeat-ambush");
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.equal(korr.role, "guard", "Dane switches to guard and opens fire once the threat ends");
+  assert.ok(raiders.every(r => r.role === null), "ambushers switch to aggressive AI once the threat ends");
+
+  world.enemies.length = 0;
+  world.bullets.length = 0;
 });
 
 test("fix 7/8: the campaign screen is chapter boxes that open into acts, and leaving it cannot blank the menu", async () => {
@@ -326,6 +392,16 @@ test("fix 7/8: the campaign screen is chapter boxes that open into acts, and lea
     assert.equal(card.hidden, true, "leaving to the main menu takes it with it");
     assert.equal(card.innerHTML, "");
     assert.equal(state.ui.campaignEnd, null);
+
+    // Top-middle mission alerts say "Press R to dismiss" and close on R.
+    const { setupMissionLog, isFailureNoticeOpen } = await import("../src/ui/missionlog.js");
+    setupMissionLog();
+    const alert = globalThis.document.body.children.find(el => el.id === "mission-alert");
+    emit("mission-failed", { mission: { title: "First Sortie", kind: "story" }, message: "Your Wasp was destroyed." });
+    assert.equal(isFailureNoticeOpen(), true);
+    assert.match(alert.innerHTML, /Press R to dismiss/);
+    emit("action", { name: "rift", repeat: false, key: "KeyR" });
+    assert.equal(isFailureNoticeOpen(), false);
   } finally {
     globalThis.document = prevDoc;
   }

@@ -266,13 +266,13 @@ test("the dialogue clock advances a line said in space once its reading time pas
     const { state, P, mission } = await campaignWorld({ docked: false });
     state.ui.intro = false;
     state.paused = false;
-    mission.step = mission.steps.findIndex(step => step.id === "brief-throttle");
+    mission.step = mission.steps.findIndex(step => step.id === "chase-intro");
     renderDialogue();
     const line = missionDialogue(mission).line;
-    const before = Number(mission.counters["brief-throttle"]) || 0;
+    const before = Number(mission.counters["chase-intro"]) || 0;
     assert.equal(updateDialogueClock(0.2), false, "a line is never cut off early");
     assert.equal(updateDialogueClock(dialogueReadSeconds(line) + 0.1), true, "it advances on its own clock");
-    assert.equal(Number(mission.counters["brief-throttle"]), before + 1);
+    assert.equal(Number(mission.counters["chase-intro"]), before + 1);
     P.docked = false;
   } finally {
     globalThis.document = prevDoc;
