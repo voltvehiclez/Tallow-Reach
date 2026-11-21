@@ -1,8 +1,13 @@
-# Testing step 16 slice 3: the connection (one link, chat, the player list)
+# Testing step 16 slice 3: the connection (host, join, chat, the player list)
 
 This is the slice where two browsers can **open a world, join it, and talk**. Nothing a pilot owns
 crosses the wire yet: no ship, no credits, no cargo. That is on purpose — it means a bug here can
 fail to connect, and cannot cost you anything.
+
+**Rewritten 2026-11-21 after the first playtest.** What changed for you: there is now **one
+multiplayer screen** with three blocks (your name, host your world, join a friend's world), it is
+reachable from the **title screen** as well as from the pause card, and it will not let you turn
+multiplayer on without a username.
 
 You need **two windows** on one machine, or two machines. A phone on the same wifi works as the
 second window (a hotspot or mobile data usually works too).
@@ -11,70 +16,88 @@ second window (a hotspot or mobile data usually works too).
 
 1. Run `npm run build`, then `npm test`. Both must pass. Then open the built
    `game/tallow-reach.html` (or the dev server, `node serve.mjs`).
-2. In **both** windows: **Open World** from the title screen, so you are in the open world (not a
-   campaign act — multiplayer is open world only).
+2. Both windows: **Open World** from the title screen (multiplayer is open world only — the campaign
+   is single player).
 
-## Part 1 — the switch and the name (one window)
+## Part 1 — the screen and the username (one window)
 
-1. Press **P** (or **Escape**) to open the pause card.
-2. Find **Open Multiplayer** at the bottom of the card. It should read **Off**.
-3. Type a username, then click the switch. It reads **On**, and a **Join link** appears.
-4. Click **Copy link**. It should say **Copied**.
-   - If the browser asks for clipboard permission, allow it. If it refuses, the button says
-     *Select it, then copy* and the text is selected for you.
-5. Close the card (**Resume**). The world should go back to running.
+1. On the title screen, before clicking Open World: press **Join Multiplayer World**.
+   The multiplayer screen opens. It should show **Your name**, **Host your world** and
+   **Join a friend's world**.
+2. Leave the name empty and try to turn **Open Multiplayer** on. It must **not** turn on: the switch
+   is greyed out, and if you click where it is, it says *"Type a username first…"*. **This is the
+   bug that is fixed** — no username, no world, no silent nothing.
+3. Type a username (say `Ada`). The switch becomes usable.
+4. Click the switch. It reads **On**, and under it a **Join link** appears with a **Copy link**
+   button. Click **Copy link**; it should say *Copied.* (If the browser refuses the clipboard, the
+   text is selected for you and the screen says so.)
+5. Press **Close**, then **Open World**, and press **P**. The pause card now has **Open Multiplayer**
+   with a one-line state under it (*"Hosting — waiting for your friend."*). Pressing it opens the same
+   screen. Press **Resume**.
 
 ## Part 2 — host, then join (two windows)
 
-1. **Window A** (the host): pause, make sure **Open Multiplayer: On** and the link is copied.
-2. **Window B** (the guest): pause, type a **different** username, turn the switch **On**, paste the
-   link into **Paste the host's link or code**, and press **Join**.
-3. Watch the line under the panel in both windows. Within a few seconds it should say it is
-   connecting, then connected.
+1. **Window A** (the host): **Join Multiplayer World** (title) or Pause > **Open Multiplayer**, a
+   username, **Open Multiplayer: On**, then **Copy link**.
+2. **Window B** (the guest): **Join Multiplayer World** on the title, type a **different** username,
+   and paste the link into **Paste the link your friend sent**. Press **Join**.
+   - The guest does **not** turn the host switch on. Joining and hosting are separate blocks now.
+   - A full URL, or just `?join=w-…#…`, both work. A stray sentence around the link is fine.
+3. Window B joins the open world on its own (it asks nothing), and the panel's status line under the
+   cards should read **Connected**.
 
 **What "working" looks like**
 
-- **Window A** gets a chat line: **"<name> joined."** and the guest's name appears in the panel's list.
-- **Window B** gets **"Joined <host>'s world."**
-- Both panels show the same list of players.
+- **Window A**: the chat line **"Bo joined."** and the guest's name in **Who is here**.
+- **Window B**: **"Joined Ada's world."**
+- Both windows say **Connected**.
 
 **If it does not connect**
 
-- Give it ~20 seconds. The free relays are public and occasionally slow; the line under the panel
-  says what it is waiting for.
-- Try the fallback: in **Window A**, click **No broker? Paste codes**. An **offer code** appears;
-  copy it into **Window B**'s paste box and press **Use a paste code**. Window B then shows an
-  **answer code**: copy that back into **Window A**'s "Paste their answer code" and press
-  **Connect**.
+- Give it ~20 seconds. The free relays are public and occasionally slow; the status line names what
+  it is waiting for.
+- Then try the fallback, which now really is a fallback:
+  1. **Window A**: under the link, press **No broker? Paste codes**. An **offer code** appears and
+     **stays on screen**. Press **Copy offer code** and send it to Window B.
+  2. **Window B**: paste that code into the **same** paste box (it takes `TRJOIN:` codes too) and
+     press **Join**. An **answer code** appears; press **Copy answer code** and send it back.
+  3. **Window A**: paste the answer into **Their answer code** and press **Connect**.
+  - The **Connect** button only exists once an offer has been made, so the old *"Make a fresh offer
+    first"* message should be impossible to reach.
 
 ## Part 3 — chat
 
-1. In either window, press **Enter**. A chat box should open at the **bottom left**, with the players
-   listed above it.
-2. Type a message and press **Enter**. It appears in both windows, under the sender's name.
-3. **The important one:** while the box is open, type `wasdqaex` — the ship must **not** move, fire
-   or change speed. Letters go into the message.
-4. Press **Escape**. The box closes, and the normal keys work again (try W — the ship accelerates).
-5. Open the box again, press **Escape**, and confirm the pause card did **not** open.
+1. In either window, press **Enter**. A chat box opens at the **bottom left**, with the players listed
+   above it.
+2. Type a message and press **Enter**. It appears in both windows, under the sender's name, and the
+   box clears.
+3. **If nobody is connected** and you press Enter, the line stays in the box and a red sentence says
+   **"Not sent — no other pilot is connected yet."** That sentence is the fix for *"the text just sits
+   there"*: it should never be silent again.
+4. **The important one:** while the box is open, type `wasdqaex` — the ship must **not** move, fire or
+   change speed. Letters go into the message.
+5. Press **Escape**. The box closes and the normal keys work again (try W — the ship accelerates).
+6. Open the box again, press **Escape**, and confirm the pause card did **not** open.
+7. While the multiplayer screen is open, flight keys must not reach the ship either.
 
-## Part 4 — a hosted world never pauses
+## Part 4 — a hosted world, and the pause card
 
-1. With both windows connected, **Window A** presses **P**. The pause card opens — but the world
-   behind it keeps running (watch a station's lights, or the clock: the world does not freeze).
-2. Press **P** again to close the card. Nothing should jump or skip in an odd way.
-3. In **Window B**, do the same. The world keeps running there too.
-4. Stop hosting (turn **Open Multiplayer: Off**, or press **Leave** in the guest window). Pause
-   behaves as before: **P** freezes the world again.
+1. With both windows connected, **Window A** presses **P**. The card opens with **Open Multiplayer**
+   showing the hosted state. **Resume** returns you to the flight.
+2. Stop hosting (**Open Multiplayer** → switch **Off**). The line says **"Your world is closed."** and
+   the link disappears. Chat then says **"Not sent…"** if you try to speak.
+3. **Window B** presses **Leave** on the same screen. Its chat box goes away.
 
-## Part 5 — leaving, and the two things to try to break
+## Part 5 — things to try to break
 
-- Close **Window B**'s tab. Window A's panel should list the guest as gone (or stop showing it) and
-  the chat should still work with nobody there (it will refuse to send — that is correct).
-- Open the host's link in a **third** window **by pasting it into the address bar** of the built
-  page. The game should ask "Join a multiplayer world with this link?" — **Cancel** must do nothing
-  at all, and the link should not be offered again after a reload.
-- While a campaign act is loaded, paste a join link: the game should say multiplayer is open world
-  only.
+- Open the host's link in a **third** window **by pasting it into the address bar** of the built page.
+  The game asks "Join a multiplayer world with this link?" — **Cancel** must do nothing at all, and
+  the link must not be offered again after a reload.
+- Paste a join link with **no username set yet**: the game says the link is waiting; press **Join
+  Multiplayer World** and the link should already be in the paste box.
+- With a campaign act running, try a join link: the game says multiplayer is open world only.
+- Try to host while your pilot is visiting somebody (`away`): it is refused with a sentence, and the
+  switch goes back to **Off**.
 
 ## What is deliberately still missing (do not report as a bug)
 
@@ -82,11 +105,11 @@ second window (a hotspot or mobile data usually works too).
 - **No pilot travelling.** Credits, cargo and ships stay home; nothing is taken or given.
 - **No trading, no "View docked players".**
 - **A reload loses the connection.** Rejoining is slice 5.
-- **Names are for show.** Two players with the same name are not confused with each other by the
-  game (they are separate connections), but the `*`/`**` suffixes arrive with slice 4.
+- **Names are for show.** Two players with the same name are separate connections; the `*`/`**`
+  suffixes arrive with slice 4.
 
 ## If something goes wrong, what to send back
 
-The line under the Open Multiplayer panel is the useful thing: it names the state
-(`finding`, `connected`, `lost`) and, when it failed, why. Copy that sentence, plus which of the
-steps above stopped working.
+The line under the panel is the useful thing: it names the state (`finding`, `connected`, `lost`) and,
+when it failed, why. Copy that sentence, plus which of the steps above stopped working, and whether
+the link path or the code path was the one you tried.

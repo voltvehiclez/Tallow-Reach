@@ -21,8 +21,9 @@ const player = (over = {}) => ({ docked: false, dead: false, warp: null, place: 
 test("pause card: Resume is the first control and Exit to main menu the last", () => {
   const html = pauseOverlayHtml();
   const order = [...html.matchAll(/id="(pz-[a-z-]+)"/g)].map(m => m[1]);
-  assert.deepEqual(order, ["pz-resume", "pz-sound", "pz-restart-act", "pz-main-menu"],
-    "the card reads Resume, then the sound switch, then the campaign-only Restart act, then Exit to main menu");
+  assert.deepEqual(order, ["pz-resume", "pz-sound", "pz-restart-act", "pz-mp", "pz-mp-state", "pz-main-menu"],
+    "the card reads Resume, the sound switch, the campaign-only Restart act, then Open Multiplayer "
+    + "with its one-line state, then Exit to main menu");
   assert.match(html, /<button id="pz-restart-act" hidden>/, "Restart act stays hidden outside a running campaign act");
   assert.ok(html.indexOf("Resume") < html.indexOf("Exit to main menu"), "Resume is above Exit to main menu");
   assert.match(html, /P or Esc to resume/, "the hint stays with the title");

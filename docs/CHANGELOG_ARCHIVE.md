@@ -1,5 +1,48 @@
 # Changelog archive
 
+## 2026-11-21: Step 16 slice 3 — the connection: one link, the wrapper, chat and the player list
+
+Multiplayer can open a world, hand out a link and talk. **It still moves no pilot** — the suitcase
+is slice 4 — so this slice is honest to try: it can fail to connect, and it cannot cost anybody a
+ship.
+
+- **One dependency, one file.** `trystero@0.27.0` (MIT, pinned exactly) is imported lazily by
+  `src/net/transport.js` and by nowhere else; the layers test enforces it. Single-file build:
+  **3,256 → 3,508 KB**. `RELAYS.relayUrls` in `data/multiplayer.js` overrides the free relays.
+- **`src/net/transport.js`** — `createChannel({role, worldId, onState, onData, onPeer})` with
+  `join/send/broadcast/leave/peers/state/room`; states `idle · finding · connected · lost · closed`,
+  every failure a printable sentence and nothing thrown. A room is `tallowreach.p2p:<worldId>`.
+- **`src/net/session.js`** — one session per browser: `hostWorld` (mints the world id once, returns
+  the link), `joinWorld`, the paste-code fallback, the handshake through `custody.handshake`, the
+  guest list, the recent chat, and `mp-state` on the event bus. A host's token lives in a WeakMap
+  with its session; the save keeps only the hash (`putGuest`, slice 2).
+- **`src/net/join-link.js`** — `?join=<worldId>#<token>`: the secret after the `#`, so no server and
+  no referrer sees it. Reads a link out of a whole pasted sentence; refuses half a link with a
+  sentence naming the missing part. `src/net/boot.js` takes a `?join=` link at boot after asking
+  (a stray link costs one Cancel), and speaks through `mp-notice` rather than importing `ui/`.
+- **`src/net/paste.js`** — the broker-free fallback: one non-trickling `RTCPeerConnection` offer as a
+  `TRJOIN:` code and one answer back. The browser's own WebRTC, no library, so it works when the
+  relays do not.
+- **`src/net/protocol.js`** — seven kinds (`hello`, `welcome`, `refuse`, `chat`, `presence`, `ping`,
+  `pong`), each cleaned to its own fields and limits on the way out **and** in.
+- **UI** — Pause > **Open Multiplayer**: the switch, the username, the join link with Copy, and a box
+  to paste a link or a code. **Chat bottom left**: `Enter` opens, `Enter` sends, `Escape` closes; it is
+  an `<input>`, so `core/input.js` already keeps typing out of the flight controls. It shows the
+  connected players, and old lines fade.
+- **A hosted world never pauses.** `sim/step.js` now reads `state.multiplayer` (set by `ui/pause.js`),
+  so the card is a settings panel while hosting. The campaign still pauses, and multiplayer stays
+  **open world only**.
+- Tests: `tests/multiplayer-connection.test.mjs` (14) and `tests/multiplayer-session.test.mjs` (13 —
+  two real sessions on an in-memory wire: the handshake, a wrong secret, chat attribution and caps, a
+  clean stop). Suite **909/909**. Two bugs they found: a pasted sentence's trailing words became the
+  secret, and a numeric `name` in storage became the name `"42"`.
+- Documented in `src/net/README.md`, `src/ui/README.md`, `docs/ARCHITECTURE.md` and
+  `docs/architecture/multiplayer.md`.
+
+**Next: slice 4** — "Bring my pilot": `checkOut`/`relocate` through the join, the guest docked in the
+host's world, snapshot sync, "Go home". **Known limits:** no remote ship is drawn yet
+(`render/views.js` draws the local pilot only), and the player list is names only.
+
 ## 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
 
 The batch the owner asked for after playtest round 4 of step 15, in slices.

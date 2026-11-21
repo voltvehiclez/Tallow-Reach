@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-18.*
+*Last checked: 2026-11-21.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -148,6 +148,24 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ---
 
+### L33. A control that only exists in the state it creates, and a switch drawn from a wish
+
+- **Seen (owner, step 16 slice 3):** "There is no option to paste a link", "no way to get a link to
+  copy", "it says *Make a fresh offer first*" — and a chat box that kept the typed line and said nothing.
+- **Cause:** the guest's paste box was drawn only for a guest session, which only that box could make,
+  so joining had no entrance; the host switch was drawn from the stored setting, so it read On while
+  `hostWorld` had refused; that refusal went into an element the state never rendered; and the offer
+  code was wiped by the redraw after making it. Every one is a reader and a writer that never met
+  (L19) inside one screen.
+- **Rule:** every control must work in the state it is drawn in, a control's words describe the live
+  object and not the wish (L32), a refusal goes to an element that is always on screen, a value the
+  player must copy lives in the model rather than the DOM, and a one-shot message is latched only
+  once it has actually left.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` (no name ⇒ no switch and no Join; a failed host
+  snaps Off with its sentence on screen; the offer survives a redraw; Connect exists only with an
+  offer; chat says why a line was not sent) and `tests/multiplayer-paste-join.test.mjs` (the hello
+  over the code wire arrives once and is admitted).
+
 ## Template (copy for a new entry)
 
 ```
@@ -204,13 +222,6 @@ the absence of this week's instance of it.
   `showPlace`'s own starfield expression (writer and reader cannot drift apart, as in L19) and pins the master switch;
   "nothing is in the skybox folder or the url map without being in data/skyboxes.js" plus the per-id budget check make a
   second copy of a picture a visible 140 KB, and the report's file size is quoted in the CHANGELOG entry.
-
-### L23. Imported models need an explicit coordinate and size contract
-
-An owner-supplied fighter faced +X and used small exporter units; loading successfully did not make it
-a flight-ready model. Keep optional visual yaw and target length in hull data, rotate before measuring,
-then scale and centre the bounds in a wrapper. Do not change gameplay `sc` to fix asset units. Test
-forward direction, centred bounds, and size relative to the baseline hull before asking for a playtest.
 
 ### L24. A cube map has two independent ways to be wrong: the seams and the faces' own frames
 

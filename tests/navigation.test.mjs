@@ -71,7 +71,12 @@ function makeElement(tag = "div") {
         resume.id = "pz-resume";
         const mainMenu = makeElement("button");
         mainMenu.id = "pz-main-menu";
-        group.append(sound, resume, mainMenu);
+        // Step 16 slice 3: the card's one multiplayer control and its state line.
+        const multiplayer = makeElement("button");
+        multiplayer.id = "pz-mp";
+        const multiplayerState = makeElement("p");
+        multiplayerState.id = "pz-mp-state";
+        group.append(sound, resume, multiplayer, multiplayerState, mainMenu);
         el.appendChild(group);
       }
     },
@@ -79,9 +84,12 @@ function makeElement(tag = "div") {
   return el;
 }
 
+const bodyElement = makeElement("body");
 globalThis.document = {
-  body: makeElement("body"),
+  body: bodyElement,
   createElement: tag => makeElement(tag),
+  // `ui/multiplayer.js` asks the document for the pause card's summary line by id.
+  getElementById: id => bodyElement.querySelector(`#${id}`),
 };
 const storage = new Map();
 globalThis.localStorage = {

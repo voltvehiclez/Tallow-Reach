@@ -2,6 +2,8 @@
 
 Moved out of [docs/LESSONS.md](../LESSONS.md) verbatim to keep it under its size limit.
 Read them only when a task touches mission spawn counts, a full hold, dialogue departure, item integrity, or dialogue buttons.
+(L30's file also carries **L23, imported models**, moved here word for word on 2026-11-21 to make room
+for L33; it is the same rule as [GLB_MODELS.md](../GLB_MODELS.md).)
 
 ### L1. Starting a mission again spawned more ships each time
 - **Seen:** accepting and abandoning a mission repeatedly made more and more NPCs appear.
@@ -85,3 +87,9 @@ Read them only when a task touches mission spawn counts, a full hold, dialogue d
   hold at that moment, so no listener depends on whether the cargo was already cleared.
 - **Enforced by:** `tests/mission-death.test.mjs`; the die-at-every-step invariant in `tests/mission-invariants.test.mjs`.
 
+### L23. Imported models need an explicit coordinate and size contract
+
+An owner-supplied fighter faced +X and used small exporter units; loading successfully did not make it
+a flight-ready model. Keep optional visual yaw and target length in hull data, rotate before measuring,
+then scale and centre the bounds in a wrapper. Do not change gameplay `sc` to fix asset units. Test
+forward direction, centred bounds, and size relative to the baseline hull before asking for a playtest.

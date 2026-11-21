@@ -46,8 +46,17 @@
   field and **ORE** or **MOD** otherwise (`screens.js` `invRow`), and **Use** runs that item's declared
   action (`sim/consumables.js` `useItem`): it spends exactly one unit and only when the action worked,
   shows the returned sentence as a notice, closes the card on success and redraws it on a refusal.
+- **The multiplayer screen is one modal surface** (`ui/multiplayer.js`, `#mp-screen`): your name,
+  *host your world* and *join a friend's world*, opened by the title menu's **Join Multiplayer World**
+  and by the pause card's **Open Multiplayer**. It is a modal surface for input (`state.ui.multiplayer`
+  in `core/input.js`'s `modalSurface()`), its card scrolls, and every control is a `data-mp` action
+  handled by one listener on a root that is never replaced. No username, no switch; the switch is
+  drawn from the session, not from the stored setting, so it cannot claim a world is open when it is
+  not. Nothing is drawn into an element that the current state does not render: `#mp-msg` is always in
+  the card.
 - **The pause card's order is fixed** (`pauseOverlayHtml()`): Resume is the first control and
-  Exit to main menu the last, with the sound switch between them. Exiting saves the resume
+  Exit to main menu the last, with the sound switch between them, the campaign-only Restart act after
+  that, and Open Multiplayer (with a one-line state) just above Exit. Exiting saves the resume
   point, returns to the title screen and fades every looping sound to silence
   (`core/audio.js` `fadeToSilence`, on the `main-menu` event), because the simulation stops
   behind the title and would otherwise keep the engine droning.

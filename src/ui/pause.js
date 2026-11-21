@@ -13,7 +13,7 @@ import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
 import { resetStationPanels } from "./left-panel.js";
 import { activeCampaignMission } from "../sim/campaign.js";
-import { refreshMultiplayerPanel, chatAway } from "./multiplayer.js";
+import { refreshMultiplayerCard, openMultiplayer, chatAway } from "./multiplayer.js";
 import { isOn } from "../net/session.js";
 
 let overlay, soundBtn, soundLabel;
@@ -36,7 +36,11 @@ export function setupPause() {
   // the pilot wants a clean restart.
   overlay.querySelector("#pz-restart-act")?.addEventListener("click", () => emit("pause-restart-act", {}));
   overlay.querySelector("#pz-main-menu").onclick = exitToMainMenu;
+  // Multiplayer is a screen of its own now (title menu and pause card both open it).
+  const mpButton = overlay.querySelector("#pz-mp");
+  if (mpButton) mpButton.onclick = () => openMultiplayer();
   showSoundState();
+  refreshMultiplayerCard();
 }
 
 /** Save the current resume point, then return to the title menu without losing progress. */
@@ -67,7 +71,7 @@ export function setPause(v) {
   // running (sim/step.js reads `state.multiplayer`); chat gets out of the way either way.
   state.multiplayer = !v && isOn();
   if (v) chatAway();
-  else refreshMultiplayerPanel();
+  else refreshMultiplayerCard();
   overlay.hidden = !v;
   const restart = overlay.querySelector("#pz-restart-act");
   if (restart) restart.hidden = !(state.mode === "campaign" && activeCampaignMission());
@@ -76,5 +80,5 @@ export function setPause(v) {
   syncControls();
   setAudioSuspended(v);
   if (v) showSoundState();
-  if (v) refreshMultiplayerPanel();
+  if (v) refreshMultiplayerCard();
 }

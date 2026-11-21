@@ -6,12 +6,10 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-*Last checked: 2026-11-16.*
+*Last checked: 2026-11-21.*
 
-**Current position (rewritten 2026-11-14):** the table below is the status. Steps 12 and 13 are ticked after the owner's
-playtests, and on 2026-11-14 the owner also confirmed the mission follow-ups built on 2026-11-13 (station-scoped offers,
-the docked-panel redraw, delivery wording, recovery contracts and their own crates) plus
-`testing/passed/TESTING-DEATH-AND-MISSIONS.md`. Saves are version **21**.
+**Current position (rewritten 2026-11-21):** the table below is the status. Saves are version **29**; step 15 and
+14c are ticked, and step 16 (multiplayer) is in progress — slices 1–3 built, slice 4 next.
 **Slices 14a and 14b are built, playtested and ticked: the owner's four playtest bugs are fixed and confirmed, their "works well" round's two notes — odd lines in the painted sky, and a ship that still flew while a loot card was open — shipped 2026-11-14**
 ([../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)): the Basic rift is on Meridian's shelf; using it
 opens a **shimmering dark-orange anomaly** in clear space; **R** goes in and out; **F** locks the door, the way out and
@@ -78,7 +76,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 14c | Simple wormholes: a pocket that spawns itself inside an existing system, its 20-minute entry clock, collapse on expiry, the Stable wormhole way out, re-enterable until it expires (save v21) | D | [x] **2026-11-16: owner playtest passed** (`testing/TESTING-14C-WORMHOLES.md`). 75 standing, never more than 3 per system, staggered on a fresh universe, 20 minutes from spawn, `collapse` only, the way out always a **Stable wormhole**. |
 | 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space (save v25) | D | [x] **2026-11-19: owner playtest passed.** |
 | 15 | Campaign scaffolding (save v26) | D | [x] **Built 2026-11-19; rounds 1–5 applied; playtest approved 2026-11-21.** Dual-mode envelope, shared pilot, fixed seven-system campaign (`240515`); finish = nothing yet |
-| 16 | Multiplayer (host-run co-op, WebRTC; six slices in step 16) | | [ ] **plan written with the owner 2026-11-21; slices 1–3 built (Trystero, the one-link join, chat); slice 4 next** |
+| 16 | Multiplayer (host-run co-op, WebRTC; six slices in step 16) | | [ ] **plan 2026-11-21; slices 1–3 built (Trystero, the one-link join, chat); slice 3 reworked after the owner's first playtest (one multiplayer screen, the join path, the hello, the code fallback), re-play pending; slice 4 next** |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table and the
 "Version history" comment in `state/profile.js`. **Step 16 slice 1 changes no save; slice 2 makes it v29.**

@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-21 (slice 2).* The plan and its six slices are step 16 of
+*Last checked: 2026-11-21 (slice 3, reworked after the owner's playtest).* The plan and its six slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works, as it is built.
 
 ## The idea
@@ -99,8 +99,17 @@ somebody else's world cannot move the ground under the running game.
 
 ## The connection (slice 3)
 
-**The owner's design:** the guest joins by pasting **one link**. Pause > **Open Multiplayer** shows
-a join link; **Join Multiplayer World** takes it. That is the normal path.
+**The owner's design:** the guest joins by pasting **one link**. **Join Multiplayer World** (on the
+title) and Pause > **Open Multiplayer** open the same screen; the host's link is there to copy and the
+guest's paste box is there to take it. That is the normal path.
+
+**One screen, three blocks.** `#mp-screen` (`ui/multiplayer.js`) is *your name*, *host your world*
+(switch → link + Copy → the paste codes) and *join a friend's world* (one box for a link **or** a
+`TRJOIN:` code). It is one surface on purpose: the first playtest had the join box rendered only for
+a session that was already a guest, so the only entrance was behind itself; and its two front doors
+must not drift apart. The screen is a modal surface (`state.ui.multiplayer`) with the card scrolling,
+so a short window can never hide the link. **No username, no switch** — the switch is disabled, and
+the action refuses too.
 
 A browser cannot accept a connection on its own, so two browsers have to be introduced by something.
 The owner's rules allow exactly one small networking library for this, behind `src/net/transport.js`;
@@ -123,6 +132,18 @@ Either way the handshake afterwards is the same, and it is already written and t
 (`net/custody.js` `handshake`): game version, `worldId` and the guest's secret, each refusal with a
 sentence the guest can act on. A guest who is turned away learns why.
 
+**The hello is per peer and retried.** `join()` returns as soon as the room is open, which is before
+the other pilot has been introduced, so the guest's first hello has nobody to go to. It used to latch
+"greeted" anyway and never retry: the host never admitted the guest, never listed it and never checked
+its token, while chat — one broadcast per line — worked, so the guest's screen said *connected* and the
+host's list stayed empty. Now `sayHello(peerId)` latches only on a send that left, and it is re-sent
+when the channel reports a peer (`onPeer`) and over the paste wire when its channel opens.
+
+**A code names the world.** `TRJOIN:` codes carry the host's `worldId` (`CODE_VERSION` 2; version 1 is
+still read). A guest joining by code has no link to carry it, and without it the host's own handshake
+would refuse the guest it had just invited. `session.codesAcceptFrom(offer)` builds the guest session
+from the code, so the fallback works when the link is exactly what did not work.
+
 Chat (**Enter**) and the list of connected players arrive in the same slice, so the pipe is proved
 before anything of the player's crosses it. A hosted world **never pauses**, and the pause card
 carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a pause.
@@ -131,14 +152,14 @@ carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a
 
 | File | The one job |
 |---|---|
-| `net/transport.js` | the wrapper: `createChannel` → `join/send/broadcast/leave/peers/state`; `trystero` is named here and nowhere else; every failure becomes `lost` + a sentence |
+| `net/transport.js` | the wrapper: `createChannel` → `join/send/broadcast/leave/peers/state`; `trystero` is named here and nowhere else (lazily, through a loader a test can replace); every failure becomes `lost` + a sentence |
 | `net/session.js` | one session: `hostWorld`, `joinWorld`, the paste codes, the handshake through `custody.handshake`, the guest list, the recent chat, `mp-state` on the bus |
 | `net/protocol.js` | seven message kinds, each cleaned and length-capped on the way out **and** in |
 | `net/paste.js` | the broker-free fallback: a `TRJOIN:` offer code and an answer code, browser WebRTC only |
 | `net/join-link.js` | `?join=<worldId>#<token>`, and reading one out of a pasted sentence |
 | `net/settings.js` | the username (`tr_mp`), capped and cleaned; a number is refused rather than shown |
 | `net/boot.js` | a `?join=` link in the address bar: asks first, used once, speaks through `mp-notice` |
-| `ui/multiplayer.js` | the pause panel and the chat box; no connection state of its own |
+| `ui/multiplayer.js` | the multiplayer screen (name, host, join, codes) and the chat box; every control is a `data-mp` action, and no connection state of its own |
 
 Three decisions worth keeping:
 
@@ -152,6 +173,14 @@ Three decisions worth keeping:
 - **A hosted world never pauses.** `sim/step.js` reads `state.multiplayer` (set by `ui/pause.js` on
   the way in and out of the card). The guests are still flying; stopping the clock for one player's
   settings screen would be a bug that looks like lag.
+- **The screen is drawn from a model, and its refusals from a sentence.** `screenModel()` turns the
+  session snapshot and the screen's own view state into everything the player sees; `act(name)` does
+  what a button does and returns whether it worked. Both are callable with no DOM, which is how
+  `tests/multiplayer-ui.test.mjs` drives the real buttons. The switch is drawn from the **session**
+  (`hosting`), never from the stored setting: a switch that says On for a world that is not open is a
+  lie (LESSONS L32), so a failed host snaps it back to Off with the reason in `#mp-msg` — an element
+  that is always in the card. The offer code lives in the screen's model, so a redraw cannot delete
+  the code the player was told to send.
 
 **What a session is not allowed to do yet:** it moves no pilot and draws no remote ship. That is
 deliberate — the suitcase is slice 4, so this slice cannot lose a ship, and the owner can test it
@@ -186,4 +215,7 @@ without risking a save.
   fills only the local pilot's controls: a connected guest is a name in the list, not a ship on
   screen (slice 4). This is the largest visible gap.
 - The player list is names (and `docked` once slice 4 sets it), not positions or ships.
+- Nothing yet draws the remote pilot, so two connected players still fly their own worlds and see each
+  other only in the list and in chat. A hosted world's pause card does not pause the world's *guests*,
+  but the host's own clock follows `state.pause` as it always has.
 - Non-local death recovery belongs to slice 5. The no-pause rule is **built** (slice 3).

@@ -77,8 +77,15 @@ function makeWire() {
   return { factory, made };
 }
 
-/** Two sessions, wired to each other, each with its own save (and its own view of it). */
-async function twoSessions({ hostName = "Ada", guestName = "Bo" } = {}) {
+/**
+ * Two sessions, wired to each other, each with its own save (and its own view of it).
+ *
+ * `connect` is normally true: the two browsers meet, which now makes the guest say hello
+ * on its own (see `sayHello` in `net/session.js`), exactly as it does in the game. The
+ * tests that inspect the *host's* answer to one specific hello turn it off, so the guest
+ * cannot send a good one first and colour the reading.
+ */
+async function twoSessions({ hostName = "Ada", guestName = "Bo", connect = true } = {}) {
   const wire = makeWire();
   session.setChannelFactory(wire.factory);
   const hostSave = makeSave();
@@ -96,8 +103,10 @@ async function twoSessions({ hostName = "Ada", guestName = "Bo" } = {}) {
   // Join the pair: everything either sends now arrives on the other side.
   hostChannel.deliver = (peerId, value) => guestChannel.reach(value, peerId);
   guestChannel.deliver = (peerId, value) => hostChannel.reach(value, peerId);
-  hostChannel.connect("guest-peer");
-  guestChannel.connect("host-peer");
+  if (connect) {
+    hostChannel.connect("guest-peer");
+    guestChannel.connect("host-peer");
+  }
 
   return { host, guest, hostChannel, guestChannel, hostSave, guestKit, wire };
 }
@@ -132,7 +141,7 @@ test("a first hello is checked for the build, the world and a name — and admit
 });
 
 test("a hello from a different build is refused with what to do about it", async () => {
-  const { host, hostChannel } = await twoSessions();
+  const { host, hostChannel } = await twoSessions({ connect: false });
   hostChannel.outbound.length = 0;
   hostChannel.reach(helloFrom(host, { v: SAVE_VERSION - 1 }));
 
@@ -144,7 +153,7 @@ test("a hello from a different build is refused with what to do about it", async
 });
 
 test("a hello for a different world is refused, and a nameless one too", async () => {
-  const { host, hostChannel } = await twoSessions();
+  const { host, hostChannel } = await twoSessions({ connect: false });
   hostChannel.outbound.length = 0;
   hostChannel.reach(helloFrom(host, { worldId: "w-2" }));
   assert.equal(hostChannel.outbound.find(m => m.value.t === "refuse")?.value.reason, "world");
