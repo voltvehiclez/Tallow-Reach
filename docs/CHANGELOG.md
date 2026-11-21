@@ -32,6 +32,12 @@ The owner's third pass over the campaign build, plus four follow-up polish items
   `defeat-ambush` begins, Dane switches to `guard` and opens fire, and the attackers switch out of `prowl`
   into their aggressive AI (`flyFighter`). Shooting either attacker mid-dialogue (`hitHostile`) breaks the
   parley early and turns the wave aggressive at once.
+- **Live distance counter stays after the 500 m bonus is lost, and a failed run slows before returning.**
+  `ui/mission-hud.js` `chaseLinesHtml` now keeps `Distance to Dane: now NNN m` under the 1 km rule even after
+  the 500 m bonus fails. When the pilot falls more than 1 km behind during the run, Dane no longer whips a
+  sudden 180: he brakes to a stop along his heading (`reset-brake` in `sim/enemy-flight.js`), says *"You need
+  to keep closer to pass. Let's do it again — follow me back to the start."* (`reset-talk` in
+  `sim/campaign-flight.js`, rendered on `#dialogue-panel`), and only turns back to the start once the line finishes.
 - **Shorter control prompts.** Each control call in `m01.js` is now one concise line so the pilot spends
   the lesson flying instead of waiting on radio lines; the steering line keeps *"the Wasp is quicker than
   anything you flew at the school."*

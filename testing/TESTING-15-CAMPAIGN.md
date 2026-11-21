@@ -68,13 +68,15 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     giants) along both sides of the line. They are scenery with real collision — do not fly into them.
 22. Watch Dane: he **steers around the clusters** and never clips a rock. The flown line itself stays clear
     (about 400 m of open air to the nearest rock).
-23. **Bonus line under the objective** while the run is live: *Bonus: within 500 m · now 312 m*, with your
-    **live distance in metres**. Under 500 m it reads light green; over it, red. Pass 500 m once and the
-    bonus is lost for good (**+100 cr** gone); the run itself continues. The bonus is **not** judged during
-    the form-up, so being far away before the run starts costs nothing.
-24. Fall more than about **1 km** behind and Dane says *"You are too slow. Follow me back to the start and
-    we will run it again."*: he returns to the **fixed start point** and the run is redone. This never fails
-    the act and is separate from the 500 m bonus.
+23. **Bonus / distance line under the objective** while the run is live: *Bonus: within 500 m · now 312 m*,
+    with your **live distance in metres**. Pass 500 m once and the bonus is lost (**+100 cr** gone), but the
+    **live distance counter stays on screen** (*Distance to Dane: now NNN m*) so you can still judge the
+    1 km pass mark. The bonus is **not** judged during the form-up, so being far away before the run starts
+    costs nothing.
+24. Fall more than about **1 km** behind and Dane **slows to a stop** (instead of pulling a sudden 180),
+    says *"You need to keep closer to pass. Let's do it again — follow me back to the start."*, and once he
+    finishes speaking he turns and returns to the **fixed start point** so the run can be redone. This never
+    fails the act and is separate from the 500 m bonus.
 25. Finish the course and he calls the gunnery pass. Two **Practice Drones** appear; he **observes from a
     distance** (he circles you, he does not fly ahead of you any more).
 26. Shoot both drones down (**LMB**, pick them up with **F**). **Dane does not fire** at the drones: the

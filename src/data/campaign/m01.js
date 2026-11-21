@@ -30,7 +30,7 @@ const follow = {
   course: "m01-range",
 };
 
-const RESET_LINE = "That is not passable. We will do it again — follow me back to the start.";
+const RESET_LINE = "You need to keep closer to pass. Let's do it again — follow me back to the start.";
 
 /** One control to learn: hold it for a second and it counts. The HUD draws the
  *  hold as a percentage bar, so one second is a full bar. */
@@ -235,8 +235,10 @@ export const M01_FIRST_SORTIE = mission({
       gather: 300,
       distance: 10000,
       maxGap: 1000,
+      speaker: captain,
+      portrait,
       objective: "Stay with Captain Dane Korr through the ten-kilometre run.",
-      resetLine: "You are too slow. Follow me back to the start and we will run it again.",
+      resetLine: "You need to keep closer to pass. Let's do it again — follow me back to the start.",
     },
     radio({
       id: "drone-brief",

@@ -164,6 +164,14 @@ test("fix 4: the bonus is a live 500 m readout during the run, and 1 km still re
   advanceMission(mission, "mission-near", { actor: "captain_korr", metres: 520, player: P }, P.profile);
   assert.equal(mission.optionalProgress["stay-with-korr"].failed, true);
   assert.equal(missionBonusStatus(mission, 300), null, "a lost bonus is not shown again");
+
+  // Even after the bonus is lost, the live distance counter stays on the HUD
+  // because the pilot still needs to stay within 1 km of Dane to pass.
+  const { chaseLinesHtml } = await import("../src/ui/mission-hud.js");
+  const afterBonusLost = chaseLinesHtml({ gathering: false, gap: 680, gather: 300, maxGap: 1000 }, mission);
+  assert.match(afterBonusLost, /Stay within 1 km of Dane for the whole course to pass\./);
+  assert.match(afterBonusLost, /now 680 m/, "the live distance counter stays visible after the bonus is failed");
+  assert.doesNotMatch(afterBonusLost, /Bonus:/, "without claiming the bonus is still live");
 });
 
 test("fix 5: ferrite clusters dress the 10 km course and stay clear of the flown line", () => {
@@ -240,6 +248,28 @@ test("fix 6: the run waits for the pilot to form up, and the rule is 1 km / 500 
   emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
   assert.equal(state.ui.chaseRun.gathering, false);
   assert.ok(near > 0, "and the bonus is judged from then on");
+
+  // Fall more than 1 km behind: Dane does not pull an instant 180. He slows to a
+  // stop, says his reset line, and only then returns to the start.
+  korr.v.set(0, 0, 160);
+  P.pos.copy(korr.pos).add(V(0, 0, -1200));
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.equal(korr.course.mode, "reset-brake", "he slows down first instead of whipping a 180");
+  assert.equal(state.ui.resetDialogue, null, "he has not spoken until he slows");
+
+  for (let i = 0; i < 40 && korr.course.mode === "reset-brake"; i++) {
+    updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  }
+  assert.equal(korr.course.mode, "reset-talk", "once slowed, he enters the dialogue phase");
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.ok(state.ui.resetDialogue, "his reset dialogue is now live");
+  assert.match(state.ui.resetDialogue.line, /keep closer to pass/i);
+  assert.equal(korr.course.mode, "reset-talk", "he stays put while speaking");
+
+  // Advance past his reading time: now he turns and returns to the start.
+  emit("mission-tick", { dt: 10, player: P, profile: P.profile });
+  assert.equal(korr.course.mode, "return", "after finishing his line he returns to the start");
+  assert.equal(state.ui.resetDialogue, null);
 
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;

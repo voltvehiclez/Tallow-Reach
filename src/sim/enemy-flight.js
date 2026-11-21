@@ -93,7 +93,16 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
   let desired = V(), look = null;
   e.boosting = false;
 
-  if (c.mode === "return" || c.mode === "wait") {
+  if (c.mode === "reset-brake") {
+    // Slow to a stop along the current heading before saying the reset line and
+    // turning back, instead of whipping a sudden 180 at full speed.
+    desired.set(0, 0, 0);
+    look = e.v.lengthSq() > 4 ? e.pos.clone().add(e.v) : null;
+    if (e.v.length() <= 14) c.mode = "reset-talk";
+  } else if (c.mode === "reset-talk") {
+    desired.set(0, 0, 0);
+    look = target ? target.pos : null;
+  } else if (c.mode === "return" || c.mode === "wait") {
     const toStart = c.start.clone().sub(e.pos), d = toStart.length();
     if (d > T.courseArrive) {
       desired.copy(toStart).normalize().multiplyScalar(Math.min(def.spdFar, d * 1.1));

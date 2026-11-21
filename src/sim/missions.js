@@ -1609,6 +1609,7 @@ on("mission-tick", payload => advanceMissions("mission-tick", payload));
 on("mission-near", payload => advanceMissions("mission-near", payload));
 on("mission-control", payload => advanceMissions("mission-control", payload));
 on("mission-chase-complete", payload => advanceMissions("mission-chase-complete", payload));
+on("mission-reset", payload => advanceMissions("mission-reset", payload));
 // Arrival enters the new pocket while the warp animation is still active;
 // retry world-changing steps once the pilot is actually out of warp.
 on("warp-end", payload => advanceMissions("warp-end", payload));

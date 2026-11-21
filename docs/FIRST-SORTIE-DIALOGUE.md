@@ -85,7 +85,7 @@ Step `learn-boost`: *Boost with Shift.* — bar `Shift — boost`.
 Every lesson step carries `maxGap: 1100`. Drift further than 1.1 km from Dane and he says
 the lesson reset line, flies back to the start of the leg, and the same objective repeats:
 
-> "That is not passable. We will do it again — follow me back to the start."
+> "You need to keep closer to pass. Let's do it again — follow me back to the start."
 
 (`RESET_LINE` at the top of `m01.js`, shared by all the `learn(...)` steps.)
 
@@ -102,13 +102,16 @@ whole course to pass."*
 
 Optional objective (100 cr bonus), shown under the objective while the run is live:
 *Stay within 500 m of Captain Dane Korr through the ten-kilometre run.*
-HUD bonus line: *Bonus: within 500 m · now NNN m* (turns red past 500 m).
+HUD bonus line: *Bonus: within 500 m · now NNN m* (turns red past 500 m). If the 500 m
+bonus is failed, the live distance counter stays on the HUD as *Distance to Dane: now NNN m*
+so the pilot can still track the 1 km pass mark.
 
-**Falling more than 1 km behind** is not a failure — Dane says:
+**Falling more than 1 km behind** is not a mission failure — Dane first slows to a stop,
+then says:
 
-> "You are too slow. Follow me back to the start and we will run it again."
+> "You need to keep closer to pass. Let's do it again — follow me back to the start."
 
-and the run restarts from the fixed start of `m01-range`.
+and once the line finishes, he turns and flies back to the fixed start of `m01-range`.
 
 ## 5. The gunnery pass — Dane watches, and does not shoot
 

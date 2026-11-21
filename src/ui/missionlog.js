@@ -322,6 +322,22 @@ export function renderDialogue() {
   const dialogue = mission && missionDialogue(mission);
   if (!mission || !dialogue) {
     releaseMissionPause();
+    const reset = !state.ui.intro ? state.ui.resetDialogue : null;
+    if (reset && reset.line && root) {
+      const portrait = reset.portrait || "Portrait";
+      root.innerHTML =
+        `<div class="dialogue-shell">` +
+        `<div class="dialogue-portrait" data-portrait="${esc(portrait)}" aria-label="Portrait slot">${esc(portrait)}</div>` +
+        `<div class="dialogue-body">` +
+        `<div class="dialogue-meta"><span>${esc(reset.title || "Mission")}</span><span>1 / 1</span></div>` +
+        `<h2>${esc(reset.speaker || "Mission contact")}</h2>` +
+        `<p class="dialogue-text">${esc(reset.line)}</p>` +
+        `<div class="dialogue-actions"><p class="dialogue-auto" data-dialogue-auto="true"></p></div>` +
+        `</div>` +
+        `</div>`;
+      root.hidden = false;
+      return;
+    }
     if (root) {
       root.hidden = true;
       root.innerHTML = "";
@@ -468,6 +484,7 @@ export function setupMissionLog() {
   });
   on("mission-step-reset", ({ mission, step, line, player } = {}) => {
     if (player && state.player && player !== state.player) return;
+    renderDialogue();
     if (!alertRoot) return;
     const text = line || step?.resetLine || "";
     if (!text) return;
@@ -477,6 +494,7 @@ export function setupMissionLog() {
     alertTimer = setTimeout(hideFailureNotice, 12 * 1000);
   });
   on("main-menu", () => {
+    state.ui.resetDialogue = null;
     hideFailureNotice();
     resetDialogueClock();
   });
