@@ -24,6 +24,8 @@ import { restoreWormholes } from "./sim/wormholes.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
+import { setupMultiplayer, openChat, chatAway, isChatOpen } from "./ui/multiplayer.js";
+import { installJoinLink } from "./net/boot.js";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog, updateDialogueClock, isFailureNoticeOpen, dismissFailureNotice } from "./ui/missionlog.js";
@@ -102,6 +104,7 @@ setupWarpStreaks();
 installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, rocks, the ship
 setupWarpFlash();
 setupPause();
+setupMultiplayer();
 setupMissionLog();
 setupCampaign();
 setupStarmap();
@@ -202,6 +205,13 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       // costs and requirements, then runs the existing warp animation on success.
       if (!state.ui.intro && !state.paused && !localPlayer().docked) startWarp(localPlayer(), nameTo);
       break;
+    case "chat":
+      // Step 16 slice 3: Enter opens the chat box, and only while multiplayer is on and
+      // the player is actually flying or docked in a world (not on the title screen).
+      if (repeat || state.ui.intro) break;
+      if (isChatOpen()) break;
+      openChat();
+      break;
     case "pause":
       if (isStarmapOpen()) {
         closeStarmap();
@@ -230,7 +240,11 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
         if (pauseKey) setPause(true);
       } else if (!pauseKey && closePanelPopovers({ returnHeld: true, dismissLeft: true })) {
         // Esc dismisses docked popovers/held stacks first, then a toggleable left window.
-      } else if (canPause()) setPause(!state.paused);
+      } else if (canPause()) {
+    // Opening the pause card puts the chat box away: both cannot own the keyboard.
+    chatAway();
+    setPause(!state.paused);
+  }
       break;
   }
 });
@@ -341,6 +355,11 @@ function frame(now) {
     }
   }
 }
+
+// Step 16 slice 3: a `?join=` link in the address bar is a join gesture on its own.
+// Installed last so every screen it needs already exists; it asks the player before it
+// touches anything (see net/boot.js).
+installJoinLink();
 
 // Draw the title first. Model decoding starts only after the browser has had
 // a paint opportunity; Open World waits for the same background-load promise.

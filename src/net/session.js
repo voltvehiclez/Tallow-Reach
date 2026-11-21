@@ -1,0 +1,558 @@
+// One multiplayer session (refactor step 16, slice 3): which side this browser is on,
+// who is connected, what has been said.
+//
+// This is the layer a screen talks to. It owns no DOM: it holds the current channel (or
+// paste link), answers the handshake, keeps the guest list and the chat history, and says
+// what changed on the event bus so the pause card, the chat box and the HUD can each draw
+// their own part without knowing about each other.
+//
+//   hostWorld({ save, name })            open this world to guests; returns { ok, worldId, link }
+//   joinWorld({ link, name })            join somebody's world from a join link
+//   codesOffer() / codesAccept(c) / codesFinish(c)   the paste-code fallback
+//   say(text)                            send a chat line
+//   stop()                               leave or close, whichever is running
+//   snapshot()                           what a screen draws
+//
+// **The handshake is slice 1's, not new work.** A guest says hello with its build, the
+// world id and its secret; the host checks all three with `custody.handshake`, which
+// already has a sentence for each refusal, and records the guest with `putGuest`, which
+// stores a hash of the secret and never the secret itself. Slice 3 adds no second,
+// weaker check — a known guest must prove its token even while the rest is still being
+// built, because that is the one check a wrong implementation would quietly lose.
+//
+// **What a session does not do yet.** It moves no pilot. The suitcase is slice 4, so a
+// bug here cannot cost anybody a ship; what it can do is fail to connect, and every
+// failure is a sentence rather than an exception.
+//
+// **Event bus.** `mp-state` fires whenever anything a screen shows has changed, with a
+// snapshot attached. `mp-chat-arrived` fires for a line from somebody else. `mp-notice`
+// is how `net/` asks for a sentence to be shown: `net/` may not import `ui/` (the layers
+// test enforces it, and the reason is real — a connection must not need a DOM).
+
+import { emit } from "../util/events.js";
+import { state, currentRootSave } from "../state/state.js";
+import { SAVE_VERSION, sanitizeSave } from "../state/profile.js";
+import { createChannel, stateLine } from "./transport.js";
+import { createPasteLink } from "./paste.js";
+import { readMessage, cleanMessage, isChatLine } from "./protocol.js";
+import { handshake } from "./custody.js";
+import {
+  worldIdFor, putGuest, dropGuest, guestList, seenGuest, isAway,
+} from "./multiplayer.js";
+import { makeToken } from "./custody.js";
+import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
+import { readSettings, writeSettings, cleanName } from "./settings.js";
+import { NET, CHAT } from "../data/multiplayer.js";
+
+/* ------------------------------------------------------------------------- */
+/* How the session reaches the save                                           */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The session's handles on the game: read the live save, and write the guest list back
+ * into it. Injected rather than imported so a test can drive a session with two plain
+ * objects, and so `net/` keeps its one direction of knowledge (downwards).
+ *
+ * The defaults read and write `state`, which is what the running game does.
+ */
+const saveKit = {
+  /** The live mode save: profile, world and the away marker for the pilot at the controls. */
+  read: () => {
+    const root = currentRootSave();
+    return sanitizeSave(state.mode === "campaign" ? root.campaign : root.open);
+  },
+  /**
+   * Write a mode save back. Only the fields multiplayer owns are taken: the guest list
+   * and the world id. Writing a whole save here would fight the game's own capture code,
+   * and the host has no business changing anything else about its world.
+   */
+  write: next => {
+    if (!next || typeof next !== "object") return;
+    if (next.world && typeof next.world === "object") {
+      if (next.world.guests && typeof next.world.guests === "object") state.worldState.guests = next.world.guests;
+      if (typeof next.world.worldId === "string") state.worldState.worldId = next.world.worldId;
+    }
+  },
+};
+
+/** Replace the save handles (tests, and any host that keeps its save elsewhere). */
+export function setSaveKit(kit) {
+  saveKit.read = kit.read || saveKit.read;
+  saveKit.write = kit.write || saveKit.write;
+}
+
+/** The live save, as the session sees it (a fresh snapshot every call). */
+export const liveSave = () => saveKit.read();
+
+/**
+ * How a session makes its wire. `transport.createChannel` in the game; a test swaps in a
+ * pair of channels that hand messages to each other, which is the only way to exercise
+ * two sessions (real handshake, real protocol) without a browser and without a relay.
+ */
+let makeChannel = createChannel;
+export function setChannelFactory(factory) {
+  makeChannel = typeof factory === "function" ? factory : createChannel;
+}
+export const channelFactory = () => makeChannel;
+
+/* ------------------------------------------------------------------------- */
+/* The session in use                                                         */
+/* ------------------------------------------------------------------------- */
+
+let active = null;
+
+export const current = () => active;
+export const isOn = () => !!active && active.on;
+
+/** What a screen draws, without touching the session. */
+export const snapshot = () => (active ? active.snapshot() : emptySnapshot());
+
+function emptySnapshot() {
+  return {
+    on: false,
+    role: null,
+    state: "idle",
+    line: "Multiplayer is off.",
+    worldId: null,
+    name: readSettings().name,
+    peers: [],
+    guests: [],
+    chat: [],
+    codes: null,
+  };
+}
+
+/* ------------------------------------------------------------------------- */
+/* Opening and joining                                                        */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Open this world to guests. Gives the world an id the first time (a link names it), and
+ * returns that id with the link to hand out, so the pause card can show both at once.
+ *
+ * Hosting needs: a name, the open world (the campaign is single player), and a pilot that
+ * is at home (a visiting pilot cannot host the world it is visiting).
+ */
+export async function hostWorld({ save = liveSave(), name = readSettings().name } = {}) {
+  const who = cleanName(name);
+  if (!who) return { ok: false, message: "Set a username first." };
+  if (state.mode === "campaign") return { ok: false, message: "The campaign is single player." };
+  if (isAway(save)) return { ok: false, message: "Your pilot is visiting another world. Bring it home before hosting." };
+  if (active) stop();
+
+  // The world gets an id once: a second host on the same save finds the same id, so an
+  // already-sent link keeps working.
+  const hosted = worldIdFor(save);
+  const worldId = hosted.world.worldId;
+  const token = makeToken(NET.tokenBytes);
+  saveKit.write(hosted);
+
+  const link = makeJoinLink(worldId, token);
+  const session = createSession({ role: "host", worldId, name: who, token, save: saveKit });
+  tokens.set(session, token);
+  active = session;
+  await session.start();
+  return { ok: true, worldId, link, url: makeJoinUrl(worldId, token, pageBase()) };
+}
+
+/** Join somebody's world from a join link (a whole pasted URL works too). */
+export async function joinWorld({ link, name = readSettings().name } = {}) {
+  const found = readJoinLink(link);
+  if (!found.ok) return found;
+  const who = cleanName(name);
+  if (!who) return { ok: false, message: "Set a username first." };
+  if (state.mode === "campaign") return { ok: false, message: "The campaign is single player. Joining works from the open world." };
+  if (isAway(liveSave())) return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
+  if (active) stop();
+
+  const session = createSession({ role: "guest", worldId: found.worldId, name: who, token: found.token, save: saveKit });
+  active = session;
+  await session.start();
+  return { ok: true, worldId: found.worldId };
+}
+
+/* ------------------------------------------------------------------------- */
+/* A session                                                                  */
+/* ------------------------------------------------------------------------- */
+
+function createSession({ role, worldId, name, token, save = saveKit }) {
+  const chat = [];
+  const guests = [];        // who the host says is here
+  const peerNames = new Map(); // peerId -> display name, so presence survives a welcome
+  let channel = null;
+  let paste = null;
+  let codes = null;
+  let on = true;
+  let greeted = false;      // has this guest said hello?
+
+  const ownGuestId = () => `guest-${token.slice(0, 8)}`;
+
+  function snapshot() {
+    const status = channel ? channel.state() : paste ? paste.state() : { state: "idle", reason: "" };
+    return {
+      on,
+      role,
+      state: status.state,
+      line: stateLine(status),
+      worldId,
+      name,
+      peers: channel ? channel.peers() : [],
+      guests: guests.slice(),
+      chat: chat.slice(),
+      codes: codes ? { ...codes } : null,
+    };
+  }
+
+  function publish() {
+    try {
+      emit("mp-state", snapshot());
+    } catch (e) {
+      /* a broken screen must not break a session */
+    }
+  }
+
+  function noteLine(from, text, own = false) {
+    const at = Date.now();
+    chat.push({ from, text, at, own });
+    while (chat.length > CHAT.recentLines) chat.shift();
+    publish();
+    if (!own) {
+      try {
+        emit("mp-chat-arrived", { from, text, at });
+      } catch (e) { /* ignore */ }
+    }
+  }
+
+  /** Take one message. Never throws: a bad message is dropped, not echoed. */
+  function receive(raw, peerId = null) {
+    const message = readMessage(raw);
+    if (!message) return;
+    if (isChatLine(message)) {
+      noteLine(message.from || "Other pilot", message.text);
+      return;
+    }
+    switch (message.t) {
+      case "hello": return onHello(message, peerId);
+      case "welcome": return onWelcome(message);
+      case "refuse": return onRefuse(message);
+      case "presence": return onPresence(message);
+      case "ping": return send({ t: "pong", at: Date.now() }, peerId);
+      default: return undefined;
+    }
+  }
+
+  /** Host side of the handshake: version, world and secret, in slice 1's words. */
+  function onHello(message, peerId) {
+    if (role !== "host") return;
+    const current = save.read();
+    const record = current?.world?.guests?.[message.guestId] || null;
+
+    // `custody.handshake` refuses an unknown guest (its first test). Slice 3 has no join
+    // flow yet, so a first hello carries no record and is admitted on the strength of the
+    // link it arrived with — that is the slice-4 decision, made here in ONE place, with a
+    // comment, rather than by quietly weakening the check for known guests.
+    const checked = record
+      ? handshake({
+        token: message.token,
+        guestId: message.guestId,
+        record,
+        version: message.v,
+        worldVersion: SAVE_VERSION,
+        worldId: message.worldId,
+        expectedWorldId: worldId,
+      })
+      : firstHelloCheck(message);
+
+    if (!checked.ok) {
+      send({ t: "refuse", reason: checked.reason, message: checked.message }, peerId);
+      noteLine("Tallow Reach", `${message.name || "A pilot"} could not join: ${checked.message}`);
+      return;
+    }
+
+    const recorded = putGuest(current, message.guestId, {
+      name: message.name || "Guest",
+      token: message.token,
+      epoch: 0,
+      rev: 0,
+      bundle: null,
+      lastSeen: Date.now(),
+    });
+    save.write(recorded);
+
+    upsertGuest({ guestId: message.guestId, name: message.name || "Guest", docked: false });
+    if (peerId) peerNames.set(peerId, message.name || "Guest");
+    send(cleanMessage("welcome", {
+      v: SAVE_VERSION,
+      worldId,
+      you: message.guestId,
+      name,
+      guests: guests.map(g => ({ guestId: g.guestId, name: g.name, docked: g.docked })),
+    }), peerId);
+    noteLine("Tallow Reach", `${message.name || "A pilot"} joined.`);
+    publishPresence();
+  }
+
+  /**
+   * The three checks a first hello gets when there is no record yet: the same build, the
+   * same world, and a name that is really a name. The secret is checked by `handshake`
+   * from the second visit onwards; a first visit's secret is what creates the record.
+   */
+  function firstHelloCheck(message) {
+    if (message.v !== SAVE_VERSION) {
+      return { ok: false, reason: "version", message: "That pilot is running a different version of Tallow Reach. Both players need the same build — rebuild, then send a fresh link." };
+    }
+    if (message.worldId !== worldId) {
+      return { ok: false, reason: "world", message: "That link is for a different world. Ask the host to make a new one." };
+    }
+    if (!message.guestId || !message.name) {
+      return { ok: false, reason: "shape", message: "That pilot did not say who it is. Ask them to join again." };
+    }
+    return { ok: true };
+  }
+
+  /** Guest side: the host accepted us and said who else is here. */
+  function onWelcome(message) {
+    if (role !== "guest") return;
+    guests.length = 0;
+    for (const entry of message.guests || []) upsertGuest(entry);
+    noteLine("Tallow Reach", `Joined ${message.name || "the host"}'s world.`);
+  }
+
+  function onRefuse(message) {
+    noteLine("Tallow Reach", message.message || "The host could not let you in.");
+  }
+
+  function onPresence(message) {
+    if (role !== "guest") return;
+    guests.length = 0;
+    for (const entry of message.guests || []) upsertGuest(entry);
+    publish();
+  }
+
+  function upsertGuest(entry) {
+    if (!entry?.guestId) return;
+    const at = guests.findIndex(g => g.guestId === entry.guestId);
+    if (at >= 0) guests[at] = { ...guests[at], ...entry };
+    else guests.push({ guestId: entry.guestId, name: entry.name || "Guest", docked: !!entry.docked });
+  }
+
+  /** Send one clean message: over the paste link if that is what is open, else the channel. */
+  function send(message, peerId = null) {
+    const clean = typeof message?.t === "string" ? cleanMessage(message.t, message) : null;
+    if (!clean) return false;
+    if (paste && paste.live()) return paste.send(clean);
+    if (!channel) return false;
+    return peerId ? channel.send(peerId, clean) : channel.broadcast(clean) > 0;
+  }
+
+  /** Say a chat line as this browser's display name. */
+  function say(text) {
+    const line = cleanMessage("chat", { text, from: name, at: Date.now() });
+    if (!line) return false;
+    const sent = send(line);
+    if (sent) noteLine(name, line.text, true);
+    return sent;
+  }
+
+  /** Host: tell every guest who is here, which is the list they draw. */
+  function publishPresence() {
+    if (role !== "host") return;
+    send({ t: "presence", guests: guests.map(g => ({ guestId: g.guestId, name: g.name, docked: g.docked })) });
+  }
+
+  /** The guest's hello. Sent once the channel is up, and again on a reconnect (slice 5). */
+  function sayHello() {
+    if (role !== "guest" || greeted) return;
+    greeted = true;
+    send({ t: "hello", v: SAVE_VERSION, worldId, guestId: ownGuestId(), name, token });
+  }
+
+  async function start() {
+    channel = makeChannel({
+      role,
+      worldId,
+      onState: status => {
+        publish();
+        if (status.state === "connected") sayHello();
+      },
+      onData: ({ peerId, ...message }) => receive(message, peerId),
+      onPeer: () => {
+        if (role === "host") publishPresence();
+        publish();
+      },
+    });
+    publish();
+    await channel.join();
+    sayHello();
+    publish();
+    return true;
+  }
+
+  /* The paste-code fallback: the same session, a different wire. */
+
+  async function startCodes() {
+    if (role !== "host") return null;
+    paste = createPasteLink({ onState: () => publish(), onData: message => receive(message, null) });
+    const offer = await paste.offer();
+    codes = { offer, answer: null };
+    publish();
+    return codes;
+  }
+
+  async function finishCodes(answer) {
+    if (!paste) return { ok: false, message: "Make a fresh offer first." };
+    const done = await paste.complete(answer);
+    publish();
+    if (!done) return { ok: false, message: paste.state().reason || "That code was not accepted." };
+    codes = { ...(codes || { offer: "" }), answer };
+    return { ok: true };
+  }
+
+  async function acceptCodes(offer) {
+    if (role !== "guest") return { ok: false, message: "Only the guest accepts a code." };
+    paste = createPasteLink({ onState: () => publish(), onData: message => receive(message, null) });
+    const answer = await paste.accept(offer);
+    publish();
+    if (!answer) return { ok: false, message: paste.state().reason || "That code was not accepted." };
+    codes = { offer: null, answer };
+    return { ok: true, answer };
+  }
+
+  function stop() {
+    on = false;
+    try {
+      channel?.leave();
+      paste?.leave();
+    } catch (e) { /* ignore */ }
+    channel = null;
+    paste = null;
+    codes = null;
+    guests.length = 0;
+    if (active === session) active = null;
+    publish();
+  }
+
+  const session = {
+    get on() { return on; },
+    get role() { return role; },
+    get name() { return name; },
+    get worldId() { return worldId; },
+    start,
+    stop,
+    say,
+    sayHello,
+    snapshot,
+    publish,
+    receive,
+    startCodes,
+    finishCodes,
+    acceptCodes,
+    channel: () => channel,
+    paste: () => paste,
+    /**
+     * Test-only hook: pretend a message arrived from a peer. In the game, the channel's
+     * `onData` calls `receive`; a test has no channel, so it calls this instead.
+     */
+    reachFrom: (message, peerId = "peer") => receive(message, peerId),
+  };
+  return session;
+}
+
+/* ------------------------------------------------------------------------- */
+/* What a screen calls                                                        */
+/* ------------------------------------------------------------------------- */
+
+/** Send a chat line. False when nobody is listening, or the line is empty. */
+export const say = text => (active ? active.say(text) : false);
+
+/** Stop whatever is running. */
+export function stop() {
+  if (!active) return false;
+  active.stop();
+  active = null;
+  return true;
+}
+
+export const codesOffer = () => (active ? active.startCodes() : Promise.resolve(null));
+export const codesFinish = answer =>
+  (active ? active.finishCodes(answer) : Promise.resolve({ ok: false, message: "Multiplayer is off." }));
+export const codesAccept = offer =>
+  (active ? active.acceptCodes(offer) : Promise.resolve({ ok: false, message: "Multiplayer is off." }));
+
+/** The link for the current host, or null when this browser is not hosting. */
+export function currentLink() {
+  if (!active || active.role !== "host") return null;
+  const token = tokens.get(active) || "";
+  return {
+    worldId: active.worldId,
+    link: makeJoinLink(active.worldId, token),
+    url: makeJoinUrl(active.worldId, token, pageBase()),
+  };
+}
+
+/**
+ * A host's token lives with its session, not in the settings: it is made when the world is
+ * opened and forgotten when the session stops. A WeakMap keeps it out of a snapshot, so no
+ * screen can print the secret except through the link that needs it.
+ */
+const tokens = new WeakMap();
+
+/** Remember the username. */
+export function setUsername(text) {
+  const name = cleanName(text);
+  if (!name) return { ok: false, message: "Type a name first." };
+  writeSettings({ name });
+  active?.publish();
+  return { ok: true, name };
+}
+
+/** Turn open multiplayer on or off (the pause card's switch). Off stops any session. */
+export function setEnabled(value) {
+  const wanted = value === true;
+  writeSettings({ enabled: wanted });
+  if (!wanted) stop();
+  return wanted;
+}
+
+export const enabled = () => readSettings().enabled;
+
+/** Host: the guests this world is holding, newest seen first. */
+export const heldGuests = save => guestList(save || liveSave());
+
+/** Host: note that a guest was seen just now (the heartbeat, slice 5). */
+export function touchGuest(guestId, at = Date.now()) {
+  const next = seenGuest(saveKit.read(), guestId, at);
+  saveKit.write(next);
+}
+
+/** Host: forget a guest's record. Used when a join is refused for good, never on a hunch. */
+export function forgetGuest(guestId) {
+  saveKit.write(dropGuest(saveKit.read(), guestId));
+}
+
+/** Exposed for tests: the cold snapshot shape, and the session factory for a fake wire. */
+export { emptySnapshot };
+/**
+ * Test-only: build one side of a pair without going through `hostWorld`/`joinWorld`
+ * (which need a real game). Positional on purpose, so a test reads as two lines.
+ */
+export const createChannelForTest = (role, worldId, name, token, save) =>
+  createSession({ role, worldId, name, token, save });
+
+/**
+ * Test-only: join two sessions with a wire that copies messages across, so the real
+ * protocol can be exercised without a browser. It lives beside the session because it
+ * needs the private `channel` handle; nothing in the game calls it.
+ */
+export function pairForTest(host, guest, { hostChannel = host.channel(), guestChannel = guest.channel() } = {}) {
+  if (!hostChannel || !guestChannel) return false;
+  // Each channel gets a `reach` that hands the message to the other SESSION, which is
+  // what a relay does for real. `deliver` is the fixture's hook for the outward half.
+  hostChannel.reach = message => guest.reachFrom?.(message, "guest-peer");
+  guestChannel.reach = message => host.reachFrom?.(message, "host-peer");
+  hostChannel.deliver = (peerId, value) => guestChannel.onData?.({ ...value, peerId });
+  guestChannel.deliver = (peerId, value) => hostChannel.onData?.({ ...value, peerId });
+  hostChannel.peerId = "guest-peer";
+  guestChannel.peerId = "host-peer";
+  return true;
+}

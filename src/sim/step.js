@@ -23,6 +23,10 @@ import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 export function isSimulationPaused() {
   // Only the pause card and the title screen stop the clock. The starmap and the
   // flight inventory are read-only overlays: the world keeps running behind them.
+  // Step 16: while this browser is hosting or visiting a multiplayer world the card is
+  // a settings panel, not a freeze — the guests' world must not stop because the host
+  // is reading it. `state.multiplayer` is set by the multiplayer session.
+  if (state.multiplayer) return !!(state.ui.intro || state.ui.campaignEnd);
   return !!(state.paused || state.ui.intro || state.ui.campaignEnd);
 }
 

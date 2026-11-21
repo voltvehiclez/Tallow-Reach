@@ -13,6 +13,8 @@ import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
 import { resetStationPanels } from "./left-panel.js";
 import { activeCampaignMission } from "../sim/campaign.js";
+import { refreshMultiplayerPanel, chatAway } from "./multiplayer.js";
+import { isOn } from "../net/session.js";
 
 let overlay, soundBtn, soundLabel;
 
@@ -60,6 +62,12 @@ function showSoundState() {
 export function setPause(v) {
   state.paused = v;
   if (v) emit("freecam", false);
+  // Step 16: opening multiplayer is a settings card, not a freeze. While this browser is
+  // hosting or visiting a world, the pause key opens the card but the world keeps
+  // running (sim/step.js reads `state.multiplayer`); chat gets out of the way either way.
+  state.multiplayer = !v && isOn();
+  if (v) chatAway();
+  else refreshMultiplayerPanel();
   overlay.hidden = !v;
   const restart = overlay.querySelector("#pz-restart-act");
   if (restart) restart.hidden = !(state.mode === "campaign" && activeCampaignMission());
@@ -68,4 +76,5 @@ export function setPause(v) {
   syncControls();
   setAudioSuspended(v);
   if (v) showSoundState();
+  if (v) refreshMultiplayerPanel();
 }
