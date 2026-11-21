@@ -20,6 +20,20 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
+
+- **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
+  owner's call — the **ease in/out ramp stays**, and was the part that helped.
+- **Outfitting click-place:** pick-up-then-click (the inventory-slot style of
+  placing, as opposed to drag-and-drop) only honoured clicks inside a module
+  group card; clicking the big panel's viewer/header areas silently did
+  nothing. A held module now fits its left-most empty bay when clicked
+  anywhere on the Outfitting panel, matching the drag path. Step 5 of the
+  station UI flow test clicks the bare panel and fits.
+
+Files: `src/data/ships.js`, `src/ui/menu.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
 
 - **Roll ease in/out:** the shared model ramps the roll stick
@@ -297,48 +311,9 @@ Files: `src/data/{weapons,places}.js`, `src/data/campaign/m01.js`, `src/data/fli
 `src/core/audio.js`, `src/ui/{campaign,menu,hud}.js`, `src/state/state.js`, `src/index.html`, `src/styles.css`,
 tests, docs. No save change (stays **27**). Rebuild `game/tallow-reach.html`; `npm test` **800 pass / 0 fail**.
 
-## 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
-
-Eight fixes from the owner's first playthrough of the campaign build.
-
-- **Dane's guns are orange.** Wingman rounds carry `ally: true` (set in `sim/ai.js`) and
-  `friendlyShot()` (`sim/combat.js`) decides the colour, so only hostile fire is red. His
-  damage is still zero.
-- **Control lessons are one second, with a bar.** `learn()` in `m01.js` holds for `1`
-  (`control` steps default to one second now). `sim/campaign-flight.js` publishes the live
-  hold as `state.ui.controlHold` (fraction + percent), and the HUD draws it as a percentage
-  bar under the act's objective in the top-left tracker; a full bar is a learned control.
-- **Order: W then Ctrl (brake).** `MISSION_CONTROLS.brake` (`flag: "brake"`) is taught
-  second, with two short lines ("a pilot who cannot stop is not flying"), then S, mouse,
-  strafe, lift, roll, boost.
-- **The bonus is a 500 m run bonus.** The optional `stay-with-korr` now reads
-  `metres: 500`, `during: "chase"`, and shows as a live chip in the top-right HUD
-  (`missionBonusStatus` in `sim/missions.js` + `state.ui.followDistance`). Over 500 m turns
-  it red; the run's own 1 km reset is unchanged and separate.
-- **Ferrite scenery along the course.** Eight `chase-rocks-*` scatter fields line the
-  `m01-range` chase (146 rocks, sizes 10–72 m, some giants). `coreRadius` equal to `radius`
-  opts them out of the pocket's diffuse-wing scaling, and each cluster sits ~950 m off the
-  flown line (≥ 300 m of clear air), so the run reads as a canyon without putting rock in
-  Dane's lap.
-- **The ambush strangers reveal themselves.** Dane only says the hulls are not school drones
-  and that he does not recognise them; a new `ambush-taunt` line from "Unmarked pilot" makes
-  the threat, and no objective or line says "raider" any more ("Defeat both attackers.").
-- **Blank menu after Act 1 fixed.** The end card is a full-screen overlay; leaving the act
-  by any route other than its own button (pause → Exit to main menu) now hides it on
-  `main-menu`, and the pause exit clears the campaign screen flags.
-- **Chapter boxes instead of headings.** The campaign screen moved to the big left window:
-  one large box per chapter (locked future chapters included), a chapter opens into its act
-  boxes, and planned acts render locked ("Planned · not written yet"). `chapters.js` gained
-  chapters 2–4 and five planned acts in chapter 1; only acts with a `mission` enter
-  `CAMPAIGN_ACTS`, so planned boxes can never be started or saved.
-
-Files: `src/data/campaign/{chapters,m01}.js`, `src/data/places.js`, `src/data/missions/rules.js`,
-`src/sim/{ai,combat,campaign-flight,missions}.js`, `src/render/views.js`, `src/ui/{campaign,menu,hud,pause}.js`,
-`src/state/state.js`, `src/styles.css`, `src/index.html`, `tests/campaign-fixes.test.mjs`, campaign tests.
-No save change (stays **27**). Rebuild `game/tallow-reach.html` and run `npm test` (**799 pass / 0 fail**).
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
 - 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
 - 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial
 - 2026-11-19: One HUD label per nearby belt group

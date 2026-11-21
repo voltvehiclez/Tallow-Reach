@@ -751,6 +751,18 @@ test("End-to-end setupMenu: left Shop Buy cursor popup, live Fly sync into Outfi
     assert.equal(fittedAt("primary", 1), "cannon_basic");
     assert.equal(state.ui.invHeld, null);
 
+    // 5) Click-pick the cannon back up, then click the BARE Outfitting panel
+    // (the ship-viewer area: not a bay, not a group card) -> it still fits,
+    // into the left-most empty bay of its group, like an inventory slot.
+    await clickAction(left, "slot", "primary:1");
+    assert.equal(state.ui.invHeld?.id, "cannon_basic");
+    assert.equal(fittedAt("primary", 1), null);
+    const barePanel = makeSurface("div");
+    barePanel.closest = sel => (sel === "#station-left" ? left : null);
+    await left.handlers.click[0]({ target: barePanel, shiftKey: false, clientX: 300, clientY: 200 });
+    assert.equal(fittedAt("primary", 1), "cannon_basic", "clicking anywhere on the Outfitting panel places the held module");
+    assert.equal(state.ui.invHeld, null);
+
     // Right-clicking an equipped module in Outfitting NEVER throws ReferenceError
     // and presents both "Unequip" and "Show info"!
     const rcBay = makeSurface("button");

@@ -35,6 +35,8 @@
 // Re-recorded a fourth time for the 25% global roll cut: same envelope again.
 // Re-recorded a fifth time for roll ease-in/out (the ramp reaches into NPC
 // banking too): same envelope again.
+// Re-recorded a sixth time when the roll rate went back to 3.75 with the
+// easing kept (owner's call): same envelope again.
 // The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
 // still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";

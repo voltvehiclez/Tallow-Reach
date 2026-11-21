@@ -1636,6 +1636,35 @@ async function onClick(e) {
       e.target.closest(".inv-discard-popover") ||
       e.target.closest(".mod-info-popover")
     ) return;
+    // Clicking anywhere else on the big Outfitting panel with a module in
+    // hand places it too — pick-up-then-click works like an inventory slot,
+    // not only on the group cards (ship viewer and headers included). The
+    // drag path already treats the whole panel this way.
+    if (
+      hasHeldStack() && state.ui.leftPanel === "o" &&
+      e.target.closest("#station-left") && !e.target.closest("section.mod[data-group]")
+    ) {
+      const group = MODULES[state.ui.invHeld?.id]?.g;
+      if (group) {
+        closePanelPopovers();
+        const bays = state.profile.loadout?.[state.profile.ship]?.[group];
+        const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+        const res = placeHeldOnOutfittingBay({
+          group,
+          bay: emptyIdx >= 0 ? emptyIdx : 0,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        });
+        if (res.message) toast(res.message);
+        if (res.changed) {
+          inventoryChanged();
+          uiSound("click");
+          save();
+        }
+        render();
+        return;
+      }
+    }
     const modCard = hasHeldStack() ? e.target.closest("section.mod[data-group]") : null;
     if (modCard && modCard.dataset.group) {
       closePanelPopovers();

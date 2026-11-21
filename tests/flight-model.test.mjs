@@ -25,11 +25,10 @@ function oldPlayerStep(s, stats, input, dt) {
   const rollStep = FLIGHT.rollRampRate * dt;
   s.rr = s.rr < wantRoll ? Math.min(wantRoll, s.rr + rollStep) : Math.max(wantRoll, s.rr - rollStep);
   // Axis factors as the owner set them 2026-11-21: yaw 40% of its old 1.6,
-  // pitch unchanged, roll 250% of its old 1.5, then cut 25% (3.75 -> 2.8125)
-  // after the owner found fast rolling sickening.
+  // pitch unchanged, roll 250% of its old 1.5 (kept at 3.75 once easing landed).
   const qy = Q().setFromAxisAngle(V(0, 1, 0), -dz(input.yaw || 0) * 0.64 * turn * dt);
   const qx = Q().setFromAxisAngle(V(1, 0, 0), -dz(input.pitch || 0) * 1.2 * turn * dt);
-  const qz = Q().setFromAxisAngle(V(0, 0, 1), s.rr * 2.8125 * turn * dt);
+  const qz = Q().setFromAxisAngle(V(0, 0, 1), s.rr * 3.75 * turn * dt);
   s.quat.multiply(qy).multiply(qx).multiply(qz);
   if (input.thrust > 0) s.thr = Math.min(1, s.thr + dt * 0.5);
   if (input.thrust < 0) s.thr = Math.max(-1, s.thr - dt * 0.5);
@@ -173,13 +172,14 @@ test("(i) axis rates: yaw slowest, roll fastest; per-axis and turnAll tweaks ben
   };
   const yaw = swing({ yaw: 1 });
   const pitch = swing({ pitch: 1 });
-  // Roll eases in over ~0.25 s, so measure its rate between ticks 30 and 90
-  // (steady state), scaled back up to a per-second angle.
-  const roll = swing({ roll: 1 }, {}, V(0, 1, 0), 90) - swing({ roll: 1 }, {}, V(0, 1, 0), 30); // roll spins the up vector, not the nose
-  // The owner's ratios (2026-11-21): yaw 0.64, pitch 1.2, roll 2.8125. Yaw and
+  // Roll eases in over ~0.25 s, so measure its rate between ticks 30 and 75
+  // (steady state; a longer window would pass 180 degrees and fold the
+  // angle measure), scaled back up to a per-second angle.
+  const roll = (swing({ roll: 1 }, {}, V(0, 1, 0), 75) - swing({ roll: 1 }, {}, V(0, 1, 0), 30)) * (60 / 45); // roll spins the up vector, not the nose
+  // The owner's ratios (2026-11-21): yaw 0.64, pitch 1.2, roll 3.75. Yaw and
   // pitch pass the stick deadzone (x0.9 at full stick); roll never did.
   assert.ok(Math.abs(yaw / pitch - 0.64 / 1.2) < 0.02, `yaw/pitch ${yaw / pitch}`);
-  assert.ok(Math.abs(roll / pitch - 2.8125 / (1.2 * 0.9)) < 0.02, `roll/pitch ${roll / pitch}`);
+  assert.ok(Math.abs(roll / pitch - 3.75 / (1.2 * 0.9)) < 0.02, `roll/pitch ${roll / pitch}`);
   // One axis at a time: yaw: 2 doubles yaw and leaves pitch alone.
   assert.ok(Math.abs(swing({ yaw: 1 }, { yaw: 2 }) / yaw - 2) < 0.02);
   assert.ok(Math.abs(swing({ pitch: 1 }, { yaw: 2 }) / pitch - 1) < 0.02);
