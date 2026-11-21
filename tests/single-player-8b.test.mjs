@@ -2,6 +2,8 @@
 // Re-recorded for the shared flight model plus the owner's "turning takes a
 // third longer" (FLIGHT.turn 0.7 -> 0.525): diffed per LESSONS L17, only the
 // player's pos/quat/v and the bullets downstream of steering differ.
+// Re-recorded again 2026-11-21 for the axis rates (yaw 40%, roll 250%): only
+// pos/quat/v and bullets differ from the previous recording.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

@@ -6,7 +6,10 @@
 //
 // A ship record needs: pos, quat, v, thr (-1..1), bs (boost ramp 0..1), boost.
 // The stats object is:
-//   { speed, turn, strafe, lift, reverse, ease, boostEase, boostSpeed }
+//   { speed, turn, strafe, lift, reverse, ease, boostEase, boostSpeed,
+//     yaw, pitch, roll, turnAll }
+// yaw/pitch/roll are per-axis multipliers (1 = default) and turnAll multiplies
+// all three axes together; thrust and strafing ignore them.
 // speed/turn are the raw drive numbers; the shared FLIGHT table in
 // data/ships.js scales turning and supplies the axis factors, exactly as the
 // player model always has. boostSpeed is the EXTRA forward speed a burning
@@ -54,11 +57,11 @@ export function stepFlight(ship, stats, input = {}, dt = 0) {
 
   // Turn on the ship's own axes — yaw, then pitch, then roll, each a local
   // rotation multiplied onto the end, exactly the player's old order.
-  const turn = s.turn * FLIGHT.turn;
+  const turn = s.turn * FLIGHT.turn * s.turnAll;
   ship.quat
-    .multiply(_qy.setFromAxisAngle(YAXIS, -deadzone(clamp(+input.yaw || 0, -1, 1)) * FLIGHT.yawFactor * turn * dt))
-    .multiply(_qx.setFromAxisAngle(XAXIS, -deadzone(clamp(+input.pitch || 0, -1, 1)) * FLIGHT.pitchFactor * turn * dt))
-    .multiply(_qz.setFromAxisAngle(ZAXIS, clamp(+input.roll || 0, -1, 1) * FLIGHT.rollFactor * turn * dt));
+    .multiply(_qy.setFromAxisAngle(YAXIS, -deadzone(clamp(+input.yaw || 0, -1, 1)) * FLIGHT.yawFactor * s.yaw * turn * dt))
+    .multiply(_qx.setFromAxisAngle(XAXIS, -deadzone(clamp(+input.pitch || 0, -1, 1)) * FLIGHT.pitchFactor * s.pitch * turn * dt))
+    .multiply(_qz.setFromAxisAngle(ZAXIS, clamp(+input.roll || 0, -1, 1) * FLIGHT.rollFactor * s.roll * turn * dt));
 
   // Throttle. A pilot with keys walks thr up and down; a pilot with a target
   // (the NPC adapter) steers thr toward it at the same rate, so both are

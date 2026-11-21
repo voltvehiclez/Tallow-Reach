@@ -73,7 +73,9 @@ test("fix 1: Dane fires only on guard, and his rounds are the basic-cannon orang
   assert.equal(cannon.dmg, 0, "his guns still do no damage");
   // A hostile round carries no module colour of its own and stays red.
   const raider = spawnEnemy("raider", V(200, 0, 3600), CAMPAIGN_HOME_POCKET, "test");
-  for (let i = 0; i < 80; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  // 240 ticks (was 80): yaw is 40% of its old rate since 2026-11-21, so the
+  // raider needs longer to swing its nose onto the pilot before it fires.
+  for (let i = 0; i < 240; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
   assert.ok(state.world.bullets.some(shot => !shot.own && shot.colour == null), "hostile fire has no colour field");
   assert.equal(BULLET_COLOURS.cannon, 0xffc870, "the basic cannon is orange");
   assert.equal(raider.hp, raider.mx, "and nobody was hurt by the friendly round");

@@ -4,7 +4,7 @@ import { flightSpeed } from './flight-instruments.js';
 import { V, Q, fwdQ, clamp } from "../util/math.js";
 import { emit } from "../util/events.js";
 import { neutralControls } from "../state/controls.js";
-import { FLIGHT } from "../data/ships.js";
+import { FLIGHT, shipDef } from "../data/ships.js";
 import { warpSteerEase } from "../data/sectors.js";
 import { collideRockAt, collideSphereAt, placeCollidersOf, SHIP_RADIUS, reflectVelocity } from "./colliders.js";
 import { enemyHullRadius } from "./enemy.js";
@@ -184,10 +184,15 @@ export function flight(dt, P = state.player, runtime = null) {
   // maths every NPC flies with. This function only decides what the pilot is
   // allowed to ask for (warp coast, a dead drive, an empty tank) and pays the
   // boost's costs; turning, throttle, easing and boost push happen in there.
+  const hullFlight = (shipDef(P.ship) || {}).flight || {};
   stepFlight(P, {
     speed: spd,
     turn: driveEnergy ? drv.turn : 0,
     boostSpeed: spd,
+    // This hull's own turning tweaks (yaw/pitch/roll/turnAll multipliers in
+    // its SHIPS entry); absent fields fall back to 1 in the model.
+    yaw: hullFlight.yaw, pitch: hullFlight.pitch,
+    roll: hullFlight.roll, turnAll: hullFlight.turnAll,
   }, {
     yaw: stick.x, pitch: stick.y, roll: stick.roll,
     thrust: (!W && powered && driveEnergy) ? c.thrust : 0,

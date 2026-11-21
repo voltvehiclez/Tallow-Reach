@@ -20,6 +20,32 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Yaw is the slow axis, roll the fast one — per-ship axis tuning
+
+At the owner's request, to promote crossing flight paths: every ship (player
+and NPC, through the shared model) now turns with **yaw at 40%** of its old
+rate (`FLIGHT.yawFactor` 1.6 → 0.64; mouse side-to-side is the slowest axis),
+**pitch unchanged** (1.2), and **roll at 250%** (`FLIGHT.rollFactor` 1.5 →
+3.75, Q/E). Thrust, strafe, lift and reverse untouched. NPCs command yaw and
+pitch through `npc-pilot.js`, so their steering obeys the same rates; their
+pilot still commands no roll (banking is a separate later tweak).
+
+The axes are now tweakable per ship: flight stats gain `yaw`, `pitch`, `roll`
+(multipliers on one axis each) and `turnAll` (one multiplier on all three —
+`turnAll: 2` turns twice as fast on every axis), defaulting to 1 in
+`FLIGHT.defaultStats`. An NPC type sets them in its `flight` block in
+`data/enemies.js` (all eight types now spell the fields out at 1); a flyable
+hull sets an optional `flight` block in `SHIPS` (`data/ships.js`), which
+`player.js` passes to the model and `flightStatsForShip` copies. Test (i) in
+`tests/flight-model.test.mjs` pins the ratios and both override levels; the
+render-interpolation smoothness floor and the campaign-fixes raider aim
+window were retimed for the slower yaw. Both 8b fixtures were re-recorded and
+diffed (LESSONS L17): only steering and enemy-flight downstream differ.
+
+Files: `src/sim/flight-model.js`, `src/sim/player.js`, `src/data/ships.js`,
+`src/data/enemies.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
 
 The batch the owner asked for after playtest round 4 of step 15, in slices.
@@ -312,12 +338,9 @@ Nearby asteroid fields now share the first field’s floating label, including c
 
 Simple sites and named wormhole systems use one environment definition: 80% black holes, double black-hole radius, grey sky and neutral ambient fill. Rifts and entrance pockets retain their own environment. No save change.
 
-## 2026-11-19: Larger, more common black holes in wormhole systems
-
-S-systems roll 80% black holes and render them at twice the usual physical radius. Regular systems, rifts and simple wormholes keep their existing cores. Derived from the world seed; no save migration.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-19: Larger, more common black holes in wormhole systems
 - 2026-11-19: Multiple wormhole routes and grey system skies
 - 2026-11-19: Start with 30 wormhole systems
 - 2026-11-19: Step 14d — persistent wormhole systems

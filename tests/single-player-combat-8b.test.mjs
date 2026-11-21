@@ -27,6 +27,9 @@
 // are identical in all 31 snapshots; only enemies, their shots, and the shield,
 // hull, missile-lock and profile state downstream of enemy flight differ —
 // exactly the behaviour that was meant to change, nothing else.
+// Re-recorded again 2026-11-21 for the axis rates (yaw 40%, roll 250%): only
+// enemies, their shots, missiles and shield state differ — the player's own
+// pose is unchanged, as that scenario barely steers.
 // The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
 // still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";

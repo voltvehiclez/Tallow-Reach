@@ -18,9 +18,11 @@ const ship = () => ({ pos: V(0, 0, 0), quat: Q(), v: V(0, 0, 0), thr: 0, bs: 0, 
 function oldPlayerStep(s, stats, input, dt) {
   const dz = v => (Math.abs(v) < 0.1 ? 0 : v - Math.sign(v) * 0.1);
   const turn = stats.turn * FLIGHT.turn;
-  const qy = Q().setFromAxisAngle(V(0, 1, 0), -dz(input.yaw || 0) * 1.6 * turn * dt);
+  // Axis factors as the owner set them 2026-11-21: yaw 40% of its old 1.6,
+  // pitch unchanged, roll 250% of its old 1.5.
+  const qy = Q().setFromAxisAngle(V(0, 1, 0), -dz(input.yaw || 0) * 0.64 * turn * dt);
   const qx = Q().setFromAxisAngle(V(1, 0, 0), -dz(input.pitch || 0) * 1.2 * turn * dt);
-  const qz = Q().setFromAxisAngle(V(0, 0, 1), (input.roll || 0) * 1.5 * turn * dt);
+  const qz = Q().setFromAxisAngle(V(0, 0, 1), (input.roll || 0) * 3.75 * turn * dt);
   s.quat.multiply(qy).multiply(qx).multiply(qz);
   if (input.thrust > 0) s.thr = Math.min(1, s.thr + dt * 0.5);
   if (input.thrust < 0) s.thr = Math.max(-1, s.thr - dt * 0.5);
@@ -65,7 +67,7 @@ test('(a) the shared model reproduces the old player model exactly', () => {
 
 test('(b) every existing NPC type starts with the stock Wasp flight numbers', () => {
   const wasp = flightStatsForShip('wasp');
-  assert.deepEqual(wasp, { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150 });
+  assert.deepEqual(wasp, { speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6, ease: 0.9, boostEase: 2.4, boostSpeed: 150, yaw: 1, pitch: 1, roll: 1, turnAll: 1 });
   for (const [id, def] of Object.entries(ENEMIES)) {
     assert.deepEqual(flightStatsFor(def), wasp, id);
     assert.deepEqual(def.flight, wasp, `${id} carries its own copied block`);
@@ -150,4 +152,36 @@ test('(h) a story ship flies its authored course on the shared model', () => {
   }
   assert.ok(ran, 'the course started once the pilot formed up');
   assert.ok(e.course.done, 'Dane reaches the end of the authored course');
+});
+
+test("(i) axis rates: yaw slowest, roll fastest; per-axis and turnAll tweaks bend only turning", () => {
+  // One second of full stick on one axis; returns the angle swung, in radians.
+  const swing = (input, stats = {}, vec = V(0, 0, -1), ticks = 60) => {
+    const ship = { pos: V(), quat: Q(), v: V(), thr: 0, bs: 0, boost: false };
+    const before = vec.clone().applyQuaternion(ship.quat);
+    for (let i = 0; i < ticks; i++) stepFlight(ship, { speed: 150, turn: 1.2, ...stats }, input, DT);
+    const after = vec.clone().applyQuaternion(ship.quat);
+    return Math.acos(Math.max(-1, Math.min(1, before.dot(after))));
+  };
+  const yaw = swing({ yaw: 1 });
+  const pitch = swing({ pitch: 1 });
+  const roll = swing({ roll: 1 }, {}, V(0, 1, 0)); // roll spins the up vector, not the nose
+  // The owner's ratios (2026-11-21): yaw 0.64, pitch 1.2, roll 3.75. Yaw and
+  // pitch pass the stick deadzone (x0.9 at full stick); roll never did.
+  assert.ok(Math.abs(yaw / pitch - 0.64 / 1.2) < 0.02, `yaw/pitch ${yaw / pitch}`);
+  assert.ok(Math.abs(roll / pitch - 3.75 / (1.2 * 0.9)) < 0.02, `roll/pitch ${roll / pitch}`);
+  // One axis at a time: yaw: 2 doubles yaw and leaves pitch alone.
+  assert.ok(Math.abs(swing({ yaw: 1 }, { yaw: 2 }) / yaw - 2) < 0.02);
+  assert.ok(Math.abs(swing({ pitch: 1 }, { yaw: 2 }) / pitch - 1) < 0.02);
+  // turnAll: 2 doubles every axis at once.
+  assert.ok(Math.abs(swing({ yaw: 1 }, { turnAll: 2 }) / yaw - 2) < 0.02);
+  assert.ok(Math.abs(swing({ pitch: 1 }, { turnAll: 2 }) / pitch - 2) < 0.02);
+  // (20 ticks: at turnAll 2 a full second of roll passes 180 degrees and the
+  // angle measure folds back on itself.)
+  assert.ok(Math.abs(swing({ roll: 1 }, { turnAll: 2 }, V(0, 1, 0), 20) / swing({ roll: 1 }, {}, V(0, 1, 0), 20) - 2) < 0.02);
+  // An NPC type bends its own axes in its flight block, nobody else's.
+  const banked = { ...ENEMIES.raider, flight: { ...ENEMIES.raider.flight, roll: 2, turnAll: 1.5 } };
+  assert.equal(flightStatsFor(banked).roll, 2);
+  assert.equal(flightStatsFor(banked).turnAll, 1.5);
+  assert.equal(flightStatsFor(ENEMIES.raider).roll, 1);
 });

@@ -38,9 +38,15 @@ export const FLIGHT = {
   // The shared flight model's own constants (they were literals in the old
   // player-only model): stick axis factors, deadzone, throttle/brake rates and
   // the boost spool. Numbers only; the maths lives in sim/flight-model.js.
-  yawFactor: 1.6,
+  // Axis rates, as multipliers on a ship's turn number. The owner set these
+  // (2026-11-21) to promote crossing flight paths: yaw (mouse side-to-side)
+  // is the SLOWEST axis at 40% of its old 1.6, pitch (mouse up/down) is
+  // unchanged at 1.2, and roll (Q/E) is 250% of its old 1.5. A ship or NPC
+  // type can still bend any axis for itself — see the yaw/pitch/roll/turnAll
+  // fields in defaultStats below.
+  yawFactor: 0.64,
   pitchFactor: 1.2,
-  rollFactor: 1.5,
+  rollFactor: 3.75,
   deadzone: 0.1,
   throttleRate: 0.5,   // thr per second while a throttle key is held
   brakeRate: 0.9,      // thr per second the brake bleeds off
@@ -55,6 +61,13 @@ export const FLIGHT = {
   defaultStats: {
     speed: 150, turn: 1.2, strafe: 0.6, lift: 0.6, reverse: 0.6,
     ease: 0.9, boostEase: 2.4, boostSpeed: 150,
+    // Per-ship turning tweaks, all multipliers on the rates above (1 = the
+    // shared default feel). yaw/pitch/roll bend ONE axis; turnAll bends all
+    // three together (turnAll: 2 = "turns twice as fast as a Wasp" on every
+    // axis). A flyable hull sets these in its own optional `flight` block in
+    // SHIPS below; an NPC type sets them in its `flight` block in
+    // data/enemies.js. Thrust and strafing are NOT touched by any of these.
+    yaw: 1, pitch: 1, roll: 1, turnAll: 1,
   },
 };
 

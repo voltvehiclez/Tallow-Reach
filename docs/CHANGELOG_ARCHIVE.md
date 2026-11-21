@@ -5,6 +5,10 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-19: Larger, more common black holes in wormhole systems
+
+S-systems roll 80% black holes and render them at twice the usual physical radius. Regular systems, rifts and simple wormholes keep their existing cores. Derived from the world seed; no save migration.
+
 ## 2026-11-19: Multiple wormhole routes and grey system skies
 
 Off-chart systems support up to four live paired doors, balancing S-to-S routes with regular-space exits. All S-system pockets now use the grey wormhole cube and neutral ambient fill. Existing v25 clocks and original endpoints are preserved; extra routes derive from the saved seed and generation.
