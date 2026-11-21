@@ -203,11 +203,7 @@ test("waypoints point at a destination, an authored point, a course start or a s
   const travelMission = { id: "story.travel", kind: "story", step: 0, counters: {},
     steps: [{ id: "go", kind: "reach-sector", place: "sys-001-hub" }] };
   const travel = missionWaypoints({ missions: [travelMission], place });
-  assert.equal(travel.length, 1);
-  assert.equal(travel[0].id, "story.travel:go:travel");
-  assert.match(travel[0].label, /^Waypoint: /);
-  assert.deepEqual(travel[0].pos, [0, 120, 1000], "a destination pocket is flown to its arrival point");
-  assert.equal(travel[0].color, "var(--amber)");
+  assert.deepEqual(travel, [], "another pocket's destination gets NO in-space waypoint (it is thousands of km away; the starmap rings it instead)");
 
   const here = { id: "story.here", kind: "story", step: 0, counters: {},
     steps: [{ id: "wp", kind: "reach", waypoint: [10, 20, 30], waypointLabel: "Beacon" }] };

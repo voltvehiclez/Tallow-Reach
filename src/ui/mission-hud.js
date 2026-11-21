@@ -288,23 +288,18 @@ export function missionWaypoints(options = {}) {
     const readyHandIn = missionReadyForHandIn(mission, profile, worldState);
     const steps = activeObjectiveSteps(mission);
 
-    if (done || readyHandIn) {
-      const handInPlace = missionHandInStation(mission);
-      if (handInPlace && handInPlace !== place && isPocket(handInPlace)) {
-        const destName = placeAt(handInPlace)?.n || handInPlace;
-        pushWaypoint(`${mission.id}:handin`, `Waypoint: ${destName}`, [0, 120, 1000], color, mission.id);
-      }
-      continue;
-    }
+    // A destination in ANOTHER pocket gets no waypoint here: a marker planted
+    // at a fixed local point would claim the station is a few kilometres away
+    // inside a pocket it is not in. Cross-pocket destinations belong to the
+    // starmap, which rings them (missionTravelTargets). Only points in THIS
+    // pocket — an authored waypoint, a step position, a course start, a
+    // signal — are marked in the ship UI.
+    if (done || readyHandIn) continue;
 
     for (const step of steps) {
       const stepPlace = step.place || step.sector ||
         (step.kind === "reach" || step.kind === "reach-sector" ? step.target : null);
-      if (stepPlace && stepPlace !== place && isPocket(stepPlace)) {
-        const destName = placeAt(stepPlace)?.n || stepPlace;
-        pushWaypoint(`${mission.id}:${step.id}:travel`, `Waypoint: ${destName}`, [0, 120, 1000], color, mission.id);
-        continue;
-      }
+      if (stepPlace && stepPlace !== place && isPocket(stepPlace)) continue;
 
       if (Array.isArray(step.waypoint) && step.waypoint.length === 3) {
         pushWaypoint(`${mission.id}:${step.id}:wp`, step.waypointLabel || "Waypoint", step.waypoint, color, mission.id);

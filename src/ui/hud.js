@@ -12,6 +12,7 @@ import { beltLabelGroups, targetOnScreen, targetHealthMarkup, markerStyle, lockM
 import { fmtDist } from "../util/math.js";
 import { on, emit } from "../util/events.js";
 import { shipDef } from "../data/ships.js";
+import { itemName } from "../data/items.js";
 import { featuresOf, featureById } from "../data/places.js";
 import { term } from "../data/terms.js";
 import { camera } from "../render/scene.js";
@@ -680,7 +681,11 @@ function drawMarkers() {
     if (!labelOn("Cargo")) return;
     const objColor = objectObjectiveColor(c, "Cargo", objCtx);
     if (objColor || P.pos.distanceTo(c.pos) < 900) {
-      mark(interpolatedPos(c), "Crate", markerStyle("Cargo", c), 0, 0, null, "", objColor);
+      // A mission item is labelled by its own name (Beacon, parcel…) and
+      // carries the mission's objective glow via objColor; ordinary loot
+      // stays a plain "Crate".
+      const label = c.persistent && c.missionId ? itemName(c.item) : "Crate";
+      mark(interpolatedPos(c), label, markerStyle("Cargo", c), 0, 0, null, "", objColor);
     }
   });
 

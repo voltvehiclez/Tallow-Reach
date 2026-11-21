@@ -20,6 +20,36 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
+
+- **Roll ease in/out:** the shared model ramps the roll stick
+  (`FLIGHT.rollRampRate` 4/s, ~0.25 s to full rate, same bleed-off on release)
+  for the player, banking NPCs and Dane's barrel rolls alike — no more
+  snap-on/snap-off rotation. Golden test replica and combat fixture updated.
+- **No fake local waypoints:** `missionWaypoints` no longer plants a marker
+  1 km away inside your current pocket for a station in another pocket
+  (Border Signal's "Meridian Station, 5 km" inside Kestrel Hollow).
+  Cross-pocket destinations live on the starmap rings only; in-pocket
+  waypoints (courses, signals, authored points) are unchanged.
+- **Starmap glow simplified:** destination nodes no longer draw an extra ring
+  circle — the dot keeps its own colour and wears the mission-colour glow,
+  exactly like the ship UI / N-menu objective markers.
+- **Mission items are findable:** a mission crate is labelled by its item
+  name (**Beacon**, not "Crate") in the floating label and the target lock,
+  with the mission's objective glow it already computed. (The beacon crate
+  itself was verified present and amber at the wreck; it was indistinguishable
+  in the loot pile, not missing.)
+- **Outfitting:** dropping a module anywhere on the big left panel now fits
+  its left-most bay reliably — the group is read from the module's own data
+  (not the tile dataset), the handler honours where the drag was hovering if
+  the release hit-test lands on an overlay, and `finishStationDrag` is
+  exported and covered by a real fitting test.
+
+Files: `src/sim/flight-model.js`, `src/data/ships.js`, `src/sim/npc-pilot.js`,
+`src/ui/{mission-hud,starmap,hud,menu}.js`, `src/sim/targeting.js`,
+`src/styles.css`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Roll cut by 25% (sickening at full speed)
 
 `FLIGHT.rollFactor` 3.75 → 2.8125 globally (player and NPC alike), after the
@@ -307,56 +337,9 @@ Files: `src/data/campaign/{chapters,m01}.js`, `src/data/places.js`, `src/data/mi
 `src/state/state.js`, `src/styles.css`, `src/index.html`, `tests/campaign-fixes.test.mjs`, campaign tests.
 No save change (stays **27**). Rebuild `game/tallow-reach.html` and run `npm test` (**799 pass / 0 fail**).
 
-## 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
-
-The campaign is now a campaign: the title's Campaign screen lists chapters → acts, clicking an act starts it
-(fresh act world, campaign-only pilot), finishing it shows a MISSION ACCOMPLISHED card and returns to the menu,
-and a failed critical objective stops the world on a MISSION FAILED card with "Start from the beginning" (and
-"Start from last checkpoint" where a step sets `checkpoint: true`; First Sortie has none).
-
-Act boundaries: warping out needs `allowTravel` ("You do not have permission to leave this pocket."), docking is
-refused while a destroy objective is live, undocking is blocked while a station dialogue is unfinished, and a
-dock no longer clears the act. Dialogue advances itself on a text-scaled clock (`1.5 s + 1 s per 12 characters`);
-station Continue is still clickable, space lines have no button.
-
-Framework (data-driven, opt-in): `optional` bonus objectives (`stay-within`, `missionBonus`, saved
-`optionalProgress`), `control` steps (hold a control for `hold` seconds; `MISSION_CONTROLS`), `chase` steps
-(follow a ship along a `FLIGHT_COURSES` course; `maxGap` behind says `resetLine` and resets only that objective —
-never the act), natural resets (`mission-reset`), and story actors (`actor` + `actorRole` lead/observe/guard).
-
-Dane Korr: Wasp hull colour with the blue boost glow, selectable with F, fires at raiders for 0 damage, flies his
-own course (no longer anchored to the player), and is re-created from his authored `spawn-ship` if he vanishes.
-
-First Sortie: station briefing → launch → ten controls learned by doing them (W, S, mouse, A, D, Space, C, Q, E,
-Shift) → ten-kilometre chase → drone pass with Dane watching → raider ambush with Dane covering you, plus a
-350 m optional bonus through the lesson and a believable ambush line.
-
-Files: `src/data/campaign/` (`chapters.js`, `m01.js`), `src/data/flight-courses.js`, `src/data/missions/rules.js`,
-`src/data/missions/validate.js`, `src/sim/campaign.js`, `campaign-act.js`, `campaign-flight.js`, `flight-course.js`,
-`missions.js`, `ai.js`, `enemy-flight.js`, `targeting.js`, `session.js`, `sectors.js`, `src/ui/campaign.js`,
-`missionlog.js`, `screens.js`, `menu.js`, `src/state/profile.js`, `src/state/state.js`, `src/render/views.js`,
-`src/data/enemies.js`, `src/data/enemy-ai.js`, `src/data/shops.js`, `src/styles.css`, tests.
-Save **v27** (per-mode pilot; the campaign no longer shares the open world's ships or credits). Docs:
-[architecture/campaign-acts.md](architecture/campaign-acts.md). Rebuild the game and run `npm test`.
-
-2026-11-19: Campaign tutorial waves re-arm after a pocket reload
-
-A quit made mid-sortie could strand the pilot behind an unfinishable kill objective: enemy waves are runtime
-objects and a save never carries them, so the interrupted spawn step would not fire again on reload. Spawn script
-actions may now opt in with `respawn: true`; on pocket entry and on undock the runner compares the kill objective
-still owed (current step, counters as saved, parallel-aware) with the `mission:<id>`-tagged enemies still alive in
-the pocket and emits only the deficit — living members keep their health and are never duplicated, nothing happens
-while docked, dead, warping or loading, and a full wave never re-spawns. All three practice-drone/raider waves in
-`src/data/campaign/m01.js` are tagged. `sanitizeSave` now keeps the `respawn` action key so the flag survives a
-save round trip (no `SAVE_VERSION` change; it stays **26**). New test boots a mid-M01 campaign save through
-`currentRootSave()` → `prepareGalaxySave` → `resumeFromSave`, re-arms the missing drone, finishes the objective and
-the mission, and asserts exactly one completion is recorded. Files: `src/sim/missions.js`, `src/state/profile.js`,
-`src/data/campaign/m01.js`, `tests/campaign.test.mjs`, `testing/TESTING-15-CAMPAIGN.md`,
-`docs/{MISSION_RULES,recipes/11-story-and-scripted-missions}.md`. `game/tallow-reach.html` rebuilt;
-`npm test` **782 pass / 0 fail**. ROADMAP step 15 still unticked (owner playtest pending).
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
 - 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial
 - 2026-11-19: One HUD label per nearby belt group
 - 2026-11-19: Shared natural wormhole environments

@@ -1024,3 +1024,22 @@ test("HUD ship velocity in m/s is negative when reversing, 0 at rest, and positi
   const fwd = displayedSpeed(p);
   assert.ok(fwd > 140, `forward flight reports positive speed (${fwd} m/s)`);
 });
+
+test("dropping a module anywhere on the big left Outfitting panel fits its left-most bay", async () => {
+  freshDocked();
+  const { finishStationDrag } = await import("../src/ui/menu.js");
+  addItem(STATION, "missile_basic", 1);
+  const slot = slotsAt(STATION).findIndex(s => s?.id === "missile_basic");
+  assert.ok(slot >= 0, "the missile pod is in the station inventory");
+  // A drop target that is inside #station-left but NOT on any bay, card or slot.
+  const anywhereOnPanel = {
+    closest(sel) {
+      if (sel === "#station-left") return { id: "station-left" };
+      return null;
+    },
+  };
+  const drag = { kind: "inv", where: STATION, slot, id: "missile_basic", modGroup: null };
+  const res = finishStationDrag(drag, anywhereOnPanel);
+  assert.equal(res.ok, true, `panel-wide drop fits (${res.message || "no message"})`);
+  assert.equal(state.profile.loadout.wasp.secondary[0], "missile_basic", "fitted into the left-most secondary bay");
+});

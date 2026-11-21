@@ -77,3 +77,12 @@ test('A prowling ship is incognito: grey "Unmarked" until it drops the role', as
   const css = readFileSync('src/styles.css', 'utf8');
   assert.match(css, /\.mk\.u, \.pocket-icon\.u \{\s*--marker-color: #a7adb2;/);
 });
+
+test('A mission-item crate is named by its item, ordinary loot stays "crate"', async () => {
+  const { lockName } = await import('../src/sim/targeting.js');
+  assert.equal(lockName({ k: 'c', o: { item: 'beacon', persistent: true, missionId: 'story.border-signal' } }), 'Beacon');
+  assert.equal(lockName({ k: 'c', o: { item: 'salv' } }), 'crate');
+  assert.equal(lockName({ k: 'c', o: { item: 'core' } }), 'reactor core');
+  const hud = readFileSync('src/ui/hud.js', 'utf8');
+  assert.match(hud, /c\.persistent && c\.missionId \? itemName\(c\.item\) : "Crate"/);
+});

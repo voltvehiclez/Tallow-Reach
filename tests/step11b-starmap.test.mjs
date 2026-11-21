@@ -455,16 +455,17 @@ test("11B: a mission's warp destination glows on both charts, and only while you
   assert.equal(ui.openStarmap(), true);
   // Galaxy chart: meridian system ringed (Border Signal is a story mission: amber).
   assert.match(mapRoot.innerHTML, /class="sm-node[^"]* objective" style="--objective-color:var\(--amber\)"\s+data-system="meridian"/);
-  assert.equal((mapRoot.innerHTML.match(/sm-objective-ring/g) || []).length, 1, "one destination system, one ring");
+  assert.equal((mapRoot.innerHTML.match(/class="sm-node[^"]* objective"/g) || []).length, 1, "one destination system glows");
+  assert.doesNotMatch(mapRoot.innerHTML, /sm-objective-ring/, "the glow is the dot's own, no extra ring circle");
   // Pocket chart: Kestrel Hollow ringed.
   mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
   assert.equal(ui.state.ui.starmap.mode, "system");
   assert.match(mapRoot.innerHTML, /class="sm-node sm-pocket-node[^"]* objective"[^>]*data-pocket="hollow"/);
-  assert.equal((mapRoot.innerHTML.match(/sm-objective-ring/g) || []).length, 1, "one destination pocket, one ring");
+  assert.equal((mapRoot.innerHTML.match(/class="sm-node[^"]* objective"/g) || []).length, 1, "one destination pocket glows");
   // Arrive, and the glow is gone; it would return on warping away again.
   P.place = "hollow"; ui.closeStarmap();
   assert.equal(ui.openStarmap(), true);
-  assert.doesNotMatch(mapRoot.innerHTML, /sm-objective-ring/);
+  assert.doesNotMatch(mapRoot.innerHTML, /class="sm-node[^"]* objective"/);
   ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
 });
 

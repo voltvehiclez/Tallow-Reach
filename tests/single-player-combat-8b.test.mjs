@@ -33,6 +33,8 @@
 // Re-recorded a third time the same day for bank-to-turn NPC steering: again
 // only enemies, shots, missile lock and shields differ; player pose unchanged.
 // Re-recorded a fourth time for the 25% global roll cut: same envelope again.
+// Re-recorded a fifth time for roll ease-in/out (the ramp reaches into NPC
+// banking too): same envelope again.
 // The checks at the bottom of this test (mined ore, a missile launched, died and docked) all
 // still hold, which is what says the scenario is still doing what it was written to do.
 import { test } from "node:test";

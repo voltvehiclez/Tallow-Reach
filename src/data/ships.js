@@ -52,6 +52,9 @@ export const FLIGHT = {
   throttleRate: 0.5,   // thr per second while a throttle key is held
   brakeRate: 0.9,      // thr per second the brake bleeds off
   boostRampSec: 0.4,   // seconds of spool before the boost lights
+  rollRampRate: 4,     // roll stick per second: Q/E (and NPC banking) eases in
+                       // and out over ~0.25 s instead of snapping to full rate
+                       // — the owner found instant rolls sickening
   boostFallRate: 5,    // boost ramp shed per second when not wanted
   // Default flight stats for any ship that does not say otherwise. These are
   // the stock Wasp's numbers, copied (basic thrusters: 150 m/s, turn 1.2;

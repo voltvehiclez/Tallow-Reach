@@ -1002,7 +1002,6 @@ function galaxyMarkup(world, view, know, here, unit, route = null, objectiveSyst
       <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
-      ${objectiveColor ? `<circle class="sm-objective-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
       ${marker}
       ${chosen && !current ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
       ${label ? `<text x="${labelX}" y="${labelY}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}${hereLabel}</text>` : ""}
@@ -1084,7 +1083,6 @@ function systemMarkup(world, view, know, here, unit, route = null, objectivePock
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
       ${labelLink}
       ${dot}
-      ${objectiveColor ? `<circle class="sm-objective-ring" cx="${x}" cy="${y}" r="${radius + 5 * unit}"/>` : ""}
       ${marker}
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}${hereLabel}</text>
     </g>`;

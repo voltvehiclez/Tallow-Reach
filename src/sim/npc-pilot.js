@@ -31,7 +31,7 @@ const _fwd = V(), _right = V(), _up = V(), _local = V(), _want = V();
  * speed is more than the drive alone gives.
  */
 export function flyNpc(e, def, desired, look, dt, options = {}) {
-  if (!e.flight || typeof e.flight !== "object") e.flight = { thr: 0, bs: 0, boost: false };
+  if (!e.flight || typeof e.flight !== "object") e.flight = { thr: 0, bs: 0, boost: false, rr: 0 };
   const stats = flightStatsFor(def);
   _fwd.set(0, 0, -1).applyQuaternion(e.quat);
   _right.set(1, 0, 0).applyQuaternion(e.quat);
@@ -84,9 +84,9 @@ export function flyNpc(e, def, desired, look, dt, options = {}) {
   };
   // The model's ship record is the enemy record itself (pos/quat/v live there);
   // the throttle/boost state rides on e.flight so nothing saved changes shape.
-  const ship = { pos: e.pos, quat: e.quat, v: e.v, thr: e.flight.thr, bs: e.flight.bs, boost: e.flight.boost };
+  const ship = { pos: e.pos, quat: e.quat, v: e.v, thr: e.flight.thr, bs: e.flight.bs, boost: e.flight.boost, rr: e.flight.rr };
   stepFlight(ship, stats, input, dt);
-  e.flight.thr = ship.thr; e.flight.bs = ship.bs; e.flight.boost = ship.boost;
+  e.flight.thr = ship.thr; e.flight.bs = ship.bs; e.flight.boost = ship.boost; e.flight.rr = ship.rr;
   e.boosting = ship.boost;
   return e;
 }

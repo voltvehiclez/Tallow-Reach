@@ -55,13 +55,21 @@ export function stepFlight(ship, stats, input = {}, dt = 0) {
   ship.thr = clamp(+ship.thr || 0, -1, 1);
   ship.bs = clamp(+ship.bs || 0, 0, 1);
 
+  // Roll eases in and out (ship.rr is the ramped roll stick, like the boost
+  // spool below): a held roll key reaches full rate over ~0.25 s and bleeds
+  // off when released, instead of snapping — far gentler to watch/fly.
+  ship.rr = clamp(+ship.rr || 0, -1, 1);
+  const wantRoll = clamp(+input.roll || 0, -1, 1);
+  const rollStep = FLIGHT.rollRampRate * dt;
+  ship.rr = ship.rr < wantRoll ? Math.min(wantRoll, ship.rr + rollStep) : Math.max(wantRoll, ship.rr - rollStep);
+
   // Turn on the ship's own axes — yaw, then pitch, then roll, each a local
   // rotation multiplied onto the end, exactly the player's old order.
   const turn = s.turn * FLIGHT.turn * s.turnAll;
   ship.quat
     .multiply(_qy.setFromAxisAngle(YAXIS, -deadzone(clamp(+input.yaw || 0, -1, 1)) * FLIGHT.yawFactor * s.yaw * turn * dt))
     .multiply(_qx.setFromAxisAngle(XAXIS, -deadzone(clamp(+input.pitch || 0, -1, 1)) * FLIGHT.pitchFactor * s.pitch * turn * dt))
-    .multiply(_qz.setFromAxisAngle(ZAXIS, clamp(+input.roll || 0, -1, 1) * FLIGHT.rollFactor * s.roll * turn * dt));
+    .multiply(_qz.setFromAxisAngle(ZAXIS, ship.rr * FLIGHT.rollFactor * s.roll * turn * dt));
 
   // Throttle. A pilot with keys walks thr up and down; a pilot with a target
   // (the NPC adapter) steers thr toward it at the same rate, so both are

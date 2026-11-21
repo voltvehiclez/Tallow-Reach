@@ -93,7 +93,7 @@ export function lockName(lock) {
   if (lock.k === "n") return lock.o.name;
   if (lock.k === "e") return lock.o.role === "prowl" ? "Unmarked" : lock.o.n || "hostile";
   if (lock.k === "a") return itemName(lock.o.type) + " rock, " + Math.ceil(lock.o.ore) + " left";
-  if (lock.k === "c") return lock.o.item === "core" ? "reactor core" : "crate";
+  if (lock.k === "c") return lock.o.item === "core" ? "reactor core" : lock.o.persistent && lock.o.missionId ? itemName(lock.o.item) : "crate";
   if (lock.k === "r") return lock.o.dest || lock.o.n || "Rift";
   if (lock.k === "g") return lock.o.locked ? `${lock.o.n} (sealed)` : `${lock.o.n} (open)`;
   if (lock.k === "k") return lock.o.locked ? `${lock.o.n} (locked)` : `${lock.o.n} (open)`;
