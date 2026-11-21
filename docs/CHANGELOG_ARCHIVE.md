@@ -5,6 +5,38 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
+
+The owner's second pass over the campaign build. Eight corrections.
+
+- **Dane's fire is just cannon fire.** No "ally colour": a round is drawn in the colour of the module that
+  fired it. `BULLET_COLOURS.cannon` (`data/weapons.js`, orange) is stamped on his shots in `sim/ai.js`, and the
+  renderer colours a bullet by that field (else the pilot's own orange, else hostile red). Damage is still 0.
+- **The title is quiet.** The low drone was created at gain 0.08 and nothing lowers it on a screen that never
+  runs `updateAudio()`, so it hummed under the campaign menu; it now starts at 0 and only the flight loop raises it.
+- **Smaller chapter boxes, redacted future content.** `.campaign-boxes` is a fixed three-column grid (~1/3
+  smaller: three chapters fit where two did). Unwritten chapters and acts show no names at all: a blurred
+  placeholder reads "Coming soon" with a number, and opening a locked chapter says "This chapter is not
+  written yet."
+- **Objectives are back in the top right**, in the same block as contracts and story missions; the top-left
+  campaign tracker is gone. Under a campaign objective the HUD adds: the control hold bar (percentage) while a
+  lesson runs, the run's rule ("Stay within 1 km of Dane for the whole course to pass."), and the still-live
+  bonus ("Bonus: within 500 m · now 312 m").
+- **Q and E were swapped** in the roll lesson: `MISSION_CONTROLS` read `roll-left` as negative while `KeyQ`
+  produces +1, so Q completed E's objective. The signs now match the input record.
+- **The run waits for a form-up.** The chase step is `gather: 300`: Dane flies to the fixed start, waits, and
+  only starts the ten-kilometre course when the pilot is within 300 m (the course's own gate, now per step).
+  His call says "come to my wing — close, within 300 m", the first leg is a slow 95 m/s warm-up, and the
+  500 m bonus is not judged while he is waiting (no `mission-near` until the course runs).
+- **Clicking Back on the campaign screen no longer blanks the title.** The action had already drawn the title,
+  and the panel click handler's tail then hid `#panel` because the pilot was still in space; a title screen now
+  keeps the panel regardless of where the pilot is.
+
+Files: `src/data/{weapons,places}.js`, `src/data/campaign/m01.js`, `src/data/flight-courses.js`,
+`src/data/missions/rules.js`, `src/sim/{ai,combat,enemy-flight,campaign-flight}.js`, `src/render/views.js`,
+`src/core/audio.js`, `src/ui/{campaign,menu,hud}.js`, `src/state/state.js`, `src/index.html`, `src/styles.css`,
+tests, docs. No save change (stays **27**). Rebuild `game/tallow-reach.html`; `npm test` **800 pass / 0 fail**.
+
 ## 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
 
 Eight fixes from the owner's first playthrough of the campaign build.

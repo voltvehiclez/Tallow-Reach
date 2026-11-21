@@ -41,6 +41,7 @@ main.js                 boot + frame loop
 ui/                     HUD, outpost menus, pause overlay       (reads state, calls sim actions)
 render/                 three.js scene, models, camera          (reads state, never changes game rules)
 sim/                    gameplay rules: flight, combat, economy, contracts, lifecycle
+net/                    multiplayer (step 16): the suitcase, station room, world station indexes
 state/                  runtime state, persistent profile, save storage
 data/                   static tuning: ships, items, weapons, station, contract templates
 core/                   audio synth, keyboard/mouse input
@@ -95,6 +96,7 @@ about each other, use the event bus instead.
 | Change what gets saved               | `state/profile.js` (`newProfile` / `newWorld`, `sanitizeProfile` / `sanitizeWorld`, bump `SAVE_VERSION`, add a migration in `sanitizeSave`) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
 | Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
+| Change what a pilot may carry into someone else's world | `data/multiplayer.js` (`TRAVEL_FIELDS`, `HOME_FIELDS`); packed and unpacked by `net/custody.js`; see [architecture/multiplayer.md](architecture/multiplayer.md) |
 | Add tests                            | `tests/` (`*.test.mjs`, run by `npm test`)     |
 
 ## File map
@@ -154,6 +156,7 @@ Read the one that matches the work. Each holds that area's conventions and known
 | [architecture/campaign-acts.md](architecture/campaign-acts.md) | Campaign acts: structure, failure/checkpoints, natural resets, optional bonuses, control/chase steps, story actors |
 | [architecture/mission-principles.md](architecture/mission-principles.md) | How the eight architecture principles apply to the mission framework, and the limits of validation |
 | [architecture/world-and-map.md](architecture/world-and-map.md) | World and map: places, the starmap, travel, place memory, where you log out |
+| [architecture/multiplayer.md](architecture/multiplayer.md) | Multiplayer (step 16): the suitcase, what travels, what stays home, station keys across worlds, the connection and the six slices |
 | [architecture/feature-notes.md](architecture/feature-notes.md) | Detailed notes on features built in steps 10 to 13 (galaxy, starmap, place templates, missions), moved out of HANDOFF |
 | [MISSION_RULES.md](MISSION_RULES.md) | How missions must behave, the linter and the invariant tests |
 

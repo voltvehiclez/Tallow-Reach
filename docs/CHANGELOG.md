@@ -20,6 +20,42 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
+
+The plan the owner gave for multiplayer (host-run co-op, WebRTC, one suite per world) is written
+into step 16 of `docs/REFACTOR_PLAN.md` with its **six slices**. This is slice 1: the rules of
+travel, proved on plain objects before a byte moves.
+
+- **`src/data/multiplayer.js`**: `TRAVEL_FIELDS` is the owner's list (credits, ships, fits, holds,
+  hull damage, missiles, selected weapon bays, and the station lockers, which are packed from the
+  world half of a save), `HOME_FIELDS` is what stays home (missions, flags, stats, campaign, and the
+  home-station and filter-preset preferences), `ARRIVAL_STATION`/`ARRIVAL_STATION_KEY` (Meridian,
+  read from `data/places.js`) and `NET` (timings and limits, each with the slice that reads it).
+- **`src/net/custody.js`**: `checkOut` packs a pilot into a bundle and writes the `away` marker,
+  emptying the stations it packs; `checkIn` applies a bundle to a **new** save, clears `away`, and
+  copies the home half back from the home save *after* sanitizing, so nothing leaks into missions,
+  flags or stats; `relocate` sends anything whose station a world lacks to Meridian and puts it back
+  the moment that station exists again (never refusing, never deleting; an over-full station is
+  flagged and only refuses new deposits); `compare` orders two copies by `(epoch, rev)` and never
+  merges. Plus `hashToken`/`tokenCheck` (a host stores a hash, never the secret), `handshake` with a
+  sentence per refusal (version, world, token), `summary` ("600 cr · 1 ship · 0 m³"), `uniqueName`
+  (the host's name wins, joiners wear `*`, `**`), `guestRecord`, `hostProfile`, `mergeLockers`,
+  `totals`.
+- **`src/net/station-inventory.js`**: room at a station, defined once — m³ from `data/station.js`,
+  `world.storageOverfull` for an over-full station. Slice 6's trade asks the same questions.
+- **`src/net/world-places.js`**: where a station is **in somebody else's world**. Generated pocket
+  ids are not unique across galaxy seeds, so a station key is resolved with the world it belongs to
+  (`generateGalaxy(seed)`, pure, plus that world's saved wormhole pockets) and never by touching the
+  live catalog.
+- **Unknown content is kept**: a newer build's item, module or hull id is carried untouched, whole
+  unknown stacks in the bundle and single unknown ids re-inserted after the save sanitizer (which
+  would otherwise drop them).
+
+Files: `src/data/multiplayer.js`, `src/net/{custody,station-inventory,world-places,README}.js`,
+`tests/multiplayer-custody.test.mjs`, `docs/{REFACTOR_PLAN,ARCHITECTURE,CHANGELOG}.md`,
+`docs/architecture/multiplayer.md`. **No save change yet** (stays **28**; slice 2 makes it 29).
+Tests **852 pass / 0 fail**. Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
 
 - **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
@@ -279,40 +315,9 @@ The owner's third pass over the campaign build, plus four follow-up polish items
 
 Tests 801/801, build 3232 KB. Nothing merged: the owner tests the zip first.
 
-## 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
-
-The owner's second pass over the campaign build. Eight corrections.
-
-- **Dane's fire is just cannon fire.** No "ally colour": a round is drawn in the colour of the module that
-  fired it. `BULLET_COLOURS.cannon` (`data/weapons.js`, orange) is stamped on his shots in `sim/ai.js`, and the
-  renderer colours a bullet by that field (else the pilot's own orange, else hostile red). Damage is still 0.
-- **The title is quiet.** The low drone was created at gain 0.08 and nothing lowers it on a screen that never
-  runs `updateAudio()`, so it hummed under the campaign menu; it now starts at 0 and only the flight loop raises it.
-- **Smaller chapter boxes, redacted future content.** `.campaign-boxes` is a fixed three-column grid (~1/3
-  smaller: three chapters fit where two did). Unwritten chapters and acts show no names at all: a blurred
-  placeholder reads "Coming soon" with a number, and opening a locked chapter says "This chapter is not
-  written yet."
-- **Objectives are back in the top right**, in the same block as contracts and story missions; the top-left
-  campaign tracker is gone. Under a campaign objective the HUD adds: the control hold bar (percentage) while a
-  lesson runs, the run's rule ("Stay within 1 km of Dane for the whole course to pass."), and the still-live
-  bonus ("Bonus: within 500 m · now 312 m").
-- **Q and E were swapped** in the roll lesson: `MISSION_CONTROLS` read `roll-left` as negative while `KeyQ`
-  produces +1, so Q completed E's objective. The signs now match the input record.
-- **The run waits for a form-up.** The chase step is `gather: 300`: Dane flies to the fixed start, waits, and
-  only starts the ten-kilometre course when the pilot is within 300 m (the course's own gate, now per step).
-  His call says "come to my wing — close, within 300 m", the first leg is a slow 95 m/s warm-up, and the
-  500 m bonus is not judged while he is waiting (no `mission-near` until the course runs).
-- **Clicking Back on the campaign screen no longer blanks the title.** The action had already drawn the title,
-  and the panel click handler's tail then hid `#panel` because the pilot was still in space; a title screen now
-  keeps the panel regardless of where the pilot is.
-
-Files: `src/data/{weapons,places}.js`, `src/data/campaign/m01.js`, `src/data/flight-courses.js`,
-`src/data/missions/rules.js`, `src/sim/{ai,combat,enemy-flight,campaign-flight}.js`, `src/render/views.js`,
-`src/core/audio.js`, `src/ui/{campaign,menu,hud}.js`, `src/state/state.js`, `src/index.html`, `src/styles.css`,
-tests, docs. No save change (stays **27**). Rebuild `game/tallow-reach.html`; `npm test` **800 pass / 0 fail**.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
 - 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
 - 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
 - 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial

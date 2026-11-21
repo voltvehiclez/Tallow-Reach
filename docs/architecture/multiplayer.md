@@ -1,0 +1,100 @@
+# Multiplayer: host-run co-op (step 16)
+
+*Last checked: 2026-11-21 (slice 1).* The plan and its six slices are step 16 of
+[../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works, as it is built.
+
+## The idea
+
+One **host** runs their own open world, and one **guest** joins it through a WebRTC link. The host's
+browser is the only writer of the truth: the guest sends what it is asking its ship to do, and draws
+what the host sends back. Two players to start; nothing assumes exactly one.
+
+**Open world only.** The campaign stays single player (owner, 2026-11-21): a campaign act's fixed
+ships and scripted beats have no meaning in somebody else's galaxy.
+
+**Guard rails against accidents, not cheating** (vision pillar 5): a crash, a double join, an old
+backup, a link pasted into the wrong chat. Nothing tries to stop a determined player.
+
+## A pilot lives in exactly one world
+
+The pilot's copy lives in exactly one place at a time, and its travels are the **suitcase**:
+
+```
+home save ──checkOut──▶ bundle ──▶ host's world.guests[guestId] ──▶ the guest flies here
+     ▲                     (the suitcase the guest also keeps)              │
+     └──────checkIn──────── bundle ◀── the host writes `rev` and sends ─────┘
+```
+
+- `save.away = { worldId, hostName, guestId, token, epoch, rev, suitcase }` while the pilot is away
+  (v29, slice 2). The **home pilot is frozen**: it cannot be flown at home.
+- Each pilot has a random `guestId`; each host world has a random `worldId`.
+- **Higher `(epoch, rev)` wins; copies are never merged.** A guest's "Go home" raises `epoch`; the host
+  raises `rev` on every change. `compare(a, b)` decides, and the choice screen shows both
+  `summary()` lines so the player picks.
+
+## What travels (`src/data/multiplayer.js`)
+
+| Travels | Stays home |
+| --- | --- |
+| credits, the fleet and each hull's fit, hold, slot layout, remembered damage and station; missiles; the selected weapon bays | missions, story flags, contracts completed, kills, campaign progress |
+| **station lockers** (`world.stationStores`), each stack remembering the station it came from | the hosted world itself: station levels, built stations, the contract board, the galaxy, world changes |
+
+**Items are moved, never copied.** `checkOut` empties the stations it packs; a stock that cannot
+legally sit at the destination is written into the bundle instead of the host's world. Home missions,
+flags and stats are copied back from the home save *after* the merged half is sanitized, so nothing
+can leak into them.
+
+**Nothing is deleted for lack of room.** `relocate` sends a stack whose station a world lacks to
+Meridian Station and keeps its `origin`, so it goes back the moment that station exists again. An
+over-full station is flagged (`world.storageOverfull[key]`, `net/station-inventory.js`) and only
+refuses *new* deposits. Hulls are treated the same way: a hull parked at a station this world lacks
+moves to Meridian, and `bundle.shipsAt` remembers where it was.
+
+**Unknown content is kept.** A newer build's item, module or hull id is carried untouched — whole
+unknown stacks in the bundle's lockers, and single unknown ids re-inserted after the save sanitizer
+has run (it would otherwise drop them). Custody asserts that every stack that left comes back once.
+
+## Stations are world-scoped facts (LESSONS L19, generalised)
+
+Generated pocket ids are **not unique across galaxy seeds**: `sys-002-hub` is an unrelated pocket in
+another galaxy, and a station key built from it names a station that does not exist there. So a
+station key is always resolved with the world it belongs to: `net/world-places.js` indexes a world
+from its own seed (`generateGalaxy(seed)`, pure) plus its saved wormhole pockets, and `custody.js`
+asks that index. Building an index never touches `data/places.js`'s live catalog, so inspecting
+somebody else's world cannot move the ground under the running game.
+
+## The connection (slice 3)
+
+Browsers cannot accept a connection on their own, so the handshake is a **copy-paste WebRTC offer
+code**, with no server of ours: the host presses *Create link*; the guest pastes the host's code and
+gets an answer code back; the guest sends the answer to the host by any means, and they are
+connected. The one library allowance is a small connection library behind `src/net/transport.js`;
+nothing else in the game names it. Chat (**Enter**) and the list of connected players arrive in the
+same slice, so the pipe is proved before anything of the player's crosses it.
+
+A hosted world **never pauses** (pause is single player only), and the pause card carries
+**Open Multiplayer** (on/off, the join-link row) instead of a pause.
+
+## Slices
+
+1. **Custody** — `net/custody.js`, `net/station-inventory.js`, `net/world-places.js`,
+   `data/multiplayer.js`, `tests/multiplayer-custody.test.mjs`. No networking. **Built 2026-11-21.**
+2. **Save v29** — `profile.away`, `world.guests`, the migration (old saves load with `away: null`),
+   `guestId`/`worldId`, the temp-key-then-swap write that keeps the previous version, and the
+   `away:<worldId>` storage key.
+3. **The connection** — `net/transport.js`, the offer/answer flow, Pause > Open Multiplayer, chat and
+   the player list.
+4. **Join** — the handshake, "Bring my pilot", two-second snapshots, reconnects by `compare`, "Go
+   home" from the suitcase with the host offline.
+5. **Crashes and reconnects** — the choice screen, "Your pilot is safe" with *Wait* and *Go home*,
+   final snapshots on tab close, one session per `guestId`.
+6. **Trading** — *View docked players*, a trade of items, a ship at that station, or credits, a first
+   confirm that locks both sides and a second that commits; the host checks m³ in both station holds
+   first and moves nothing if either side lacks room.
+
+## Known gaps (until their slice lands)
+
+- No `away` field or `world.guests` in a save yet (slice 2): custody is proved on plain objects.
+- The screen still draws and follows only the local pilot (`render/views.js`), and `core/input.js`
+  fills only the local pilot's controls: a remote ship is simulated but not yet drawn (slice 4).
+- Non-local death recovery, and the no-pause rule in the pause card, belong to slices 3 and 5.
