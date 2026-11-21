@@ -15,7 +15,8 @@ import { on, emit } from "../util/events.js";
 import { state, placeWorld } from "../state/state.js";
 import { isPocket } from "../data/places.js";
 import { enemyDef } from "../data/enemies.js";
-import { controlHeld, MISSION_CONTROLS } from "../data/missions/rules.js";
+import { MODULES } from "../data/modules.js";
+import { controlHeld, MISSION_CONTROLS, dialogueReadSeconds } from "../data/missions/rules.js";
 import { activeCampaignMission } from "./campaign.js";
 import { missionRespawnActions } from "./missions.js";
 import { startCourseAtBeginning } from "./flight-course.js";
@@ -72,17 +73,47 @@ function tickControl(mission, step, player, dt) {
 }
 
 // ---- chase -----------------------------------------------------------------
-function tickChase(mission, step, player) {
+function tickChase(mission, step, player, dt = 0) {
   const actor = storyActors(mission, player.place || state.place).find(e => e.def === step.follow);
   if (!actor) return;
   const gap = player.pos.distanceTo(actor.pos);
   const course = actor.course;
   if (!course) return;
+  // Too far behind while he is running: not a failure — he slows to a stop,
+  // says the reset line, and only then turns for the fixed start.
+  if (course.mode === "run" && gap > Number(step.maxGap || 1000)) {
+    course.mode = "reset-brake";
+    course.talkStarted = false;
+  }
+  if (course.mode === "reset-talk") {
+    if (!course.talkStarted) {
+      course.talkStarted = true;
+      const line = step.resetLine || "";
+      course.talkLeft = dialogueReadSeconds(line);
+      state.ui.resetDialogue = {
+        mission: mission.id,
+        title: mission.title,
+        speaker: step.speaker || "Captain Dane Korr",
+        portrait: step.portrait || "captain-dane-korr",
+        line,
+      };
+      emit("mission-reset", {
+        mission: mission.id, step: step.id, line, player, profile: state.profile,
+      });
+    } else {
+      course.talkLeft = Math.max(0, (course.talkLeft || 0) - Math.max(0, Number(dt) || 0));
+      if (course.talkLeft <= 0) {
+        course.talkStarted = false;
+        state.ui.resetDialogue = null;
+        course.mode = "return";
+        emit("mission-ui-refresh", {});
+      }
+    }
+  }
   const running = course.mode === "run";
-  // Before the run starts he waits at the fixed start for the pilot to come to
-  // him: a pilot who drifted during the lesson is never asked to catch a ship
-  // already travelling at speed.
-  const gathering = course.mode === "return" || course.mode === "wait";
+  // Before the run starts (or while resetting back to the start) he waits for
+  // the pilot to form up at the fixed start.
+  const gathering = course.mode !== "run";
   state.ui.chaseRun = {
     mission: mission.id,
     gathering,
@@ -95,24 +126,17 @@ function tickChase(mission, step, player) {
     state.ui.followDistance = Math.round(gap);
     emit("mission-near", { actor: step.follow || step.target, metres: gap, player, profile: state.profile });
   }
-  // Too far behind while he is running: not a failure — he turns for the fixed
-  // start, the line is said and the objective is flown again.
-  if (running && gap > Number(step.maxGap || 1000)) {
-    course.mode = "return";
-    emit("mission-reset", {
-      mission: mission.id, step: step.id, line: step.resetLine || "", player, profile: state.profile,
-    });
-  }
   const distance = Number(step.distance) || course.total;
   if (course.mode === "done" || course.travelled >= distance - 1) {
+    state.ui.resetDialogue = null;
     emit("mission-chase-complete", { mission: mission.id, step: step.id, player, profile: state.profile });
   }
 }
 
 // ---- actor roles -----------------------------------------------------------
 function applyActorRoles(mission, step, player) {
-  if (!step || (!step.actor && !step.actorRole && !step.course)) return;
-  const place = player.place || state.place;
+  if (!step || (!step.actor && !step.actorRole && !step.course && step.kind !== "kill")) return;
+  const place = player?.place || state.place;
   for (const actor of storyActors(mission, place)) {
     if (step.actor && step.actor !== actor.def) continue;
     if (step.actorRole && actor.role !== step.actorRole) actor.role = step.actorRole;
@@ -123,6 +147,16 @@ function applyActorRoles(mission, step, player) {
       }
       // How close the pilot must be to the waiting ship before the course runs.
       if (Number(step.gather) > 0) actor.course.gather = Number(step.gather);
+    }
+  }
+  // Once a kill step begins, any wave that was prowling during the dialogue
+  // goes into aggressive AI and attacks.
+  if (step.kind === "kill") {
+    const tag = `mission:${mission.id}`;
+    for (const enemy of placeWorld(place).enemies) {
+      if (!enemy || enemy.encounter !== tag || enemyDef(enemy.def).friendly === true) continue;
+      if (step.enemy && enemy.def !== step.enemy) continue;
+      if (enemy.role === "prowl") enemy.role = null;
     }
   }
 }
@@ -171,14 +205,23 @@ on("mission-tick", ({ dt, player } = {}) => {
     return;
   }
   if (step.kind !== "control") clearHold();
-  if (step.kind !== "chase") state.ui.chaseRun = null;
+  if (step.kind !== "chase") {
+    state.ui.chaseRun = null;
+    state.ui.resetDialogue = null;
+  }
   if (step.kind !== "chase" && step.kind !== "kill" && step.kind !== "parallel") state.ui.followDistance = null;
   const place = player.place || state.place;
   ensureStoryActors(mission, player, place);
   if (player.docked) return;
   applyActorRoles(mission, step, player);
+  if ((step.id === "missile-brief" || step.id === "missile-drill") &&
+      (state.profile?.msl || 0) <= 0 &&
+      placeWorld(place).missiles.length === 0) {
+    state.profile.msl = MODULES.missile_basic.ammo;
+    player.missileStock = state.profile.msl;
+  }
   if (step.kind === "control") tickControl(mission, step, player, dt);
-  else if (step.kind === "chase") tickChase(mission, step, player);
+  else if (step.kind === "chase") tickChase(mission, step, player, dt);
   else if (step.kind === "kill" || step.kind === "parallel") {
     // Keep the optional distance bonus honest during drills and ambushes too.
     const actor = step.actor
@@ -200,4 +243,13 @@ on("campaign-act-started", () => {
   clearHold();
   state.ui.followDistance = null;
   state.ui.chaseRun = null;
+  state.ui.resetDialogue = null;
+});
+
+on("mission-progress", ({ mission, player } = {}) => {
+  const active = mission && activeCampaignMission(state.profile)?.id === mission.id ? mission : null;
+  if (!active || active.failed) return;
+  const P = player || state.player;
+  if (!P || P.docked || P.dead) return;
+  applyActorRoles(active, currentStep(active), P);
 });

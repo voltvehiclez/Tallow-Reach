@@ -30,7 +30,7 @@ const follow = {
   course: "m01-range",
 };
 
-const RESET_LINE = "That is not passable. We will do it again — follow me back to the start.";
+const RESET_LINE = "You need to keep closer to pass. Let's do it again — follow me back to the start.";
 
 /** One control to learn: hold it for a second and it counts. The HUD draws the
  *  hold as a percentage bar, so one second is a full bar. */
@@ -58,7 +58,7 @@ export const M01_FIRST_SORTIE = mission({
   fails: {
     on: ["player-dead"],
     action: "keep",
-    message: "Your Wasp was destroyed. The sortie is over.",
+    message: "Your Wasp was destroyed.",
   },
   // Bonus only: staying close through the ten-kilometre run. Five hundred metres
   // is the authored pass mark; the run's own 1 km reset is a separate, harder
@@ -117,8 +117,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "First, the throttle. W eases it forward. One second of it is all this lesson asks.",
-        "Then Ctrl — the brake. Learn that one before anything else. A pilot who cannot stop is not flying, they are falling with style.",
+        "First, the throttle — W pushes you forward.",
       ],
     }),
     learn("learn-throttle", "throttle-forward", "Throttle forward with W."),
@@ -130,8 +129,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "Now stop. Hold Ctrl and the throttle bleeds off until the Wasp is sitting still.",
-        "Whatever happens out here, that key always works. Use it the moment you are unsure.",
+        "Now hold Ctrl to brake to a stop.",
       ],
     }),
     learn("learn-brake", "brake", "Brake to a stop with Ctrl."),
@@ -143,7 +141,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "S is reverse: it pulls the throttle back past zero. Short taps — you are not trying to fly backwards across the range.",
+        "S pulls the throttle into reverse.",
       ],
     }),
     learn("learn-throttle-back", "throttle-back", "Pull the throttle back with S."),
@@ -155,7 +153,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "Now the nose. The mouse steers. Small movements — the Wasp is quicker than anything you flew at the school.",
+        "The mouse steers. Small movements — the Wasp is quicker than anything you flew at the school.",
       ],
     }),
     learn("learn-steer", "steer", "Steer with the mouse."),
@@ -167,7 +165,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "A strafes left, D strafes right. Slide sideways without turning the nose.",
+        "A strafes left, D strafes right.",
       ],
     }),
     learn("learn-strafe-left", "strafe-left", "Strafe left with A."),
@@ -180,7 +178,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "Space lifts you, C drops you. Do not fight the drift — correct it.",
+        "Space lifts you, C drops you.",
       ],
     }),
     learn("learn-rise", "lift-up", "Rise with Space."),
@@ -193,7 +191,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "Q rolls left, E rolls right. Roll when the nose needs to go somewhere the mouse cannot reach.",
+        "Q rolls left, E rolls right.",
       ],
     }),
     learn("learn-roll-left", "roll-left", "Roll left with Q."),
@@ -206,7 +204,7 @@ export const M01_FIRST_SORTIE = mission({
       group: "lesson",
       objective: "Listen to Captain Dane Korr.",
       lines: [
-        "Last one. Shift is boost. It burns your power, and it is the only way you will stay with me.",
+        "Last one — Shift is boost. You will need it to stay with me.",
       ],
     }),
     learn("learn-boost", "boost", "Boost with Shift."),
@@ -237,28 +235,17 @@ export const M01_FIRST_SORTIE = mission({
       gather: 300,
       distance: 10000,
       maxGap: 1000,
-      objective: "Stay with Captain Dane Korr through the ten-kilometre run.",
-      resetLine: "You are too slow. Follow me back to the start and we will run it again.",
-    },
-    radio({
-      id: "drone-brief",
       speaker: captain,
       portrait,
-      place,
-      actor: "captain_korr",
-      actorRole: "observe",
-      objective: "Hear Captain Dane Korr's gunnery orders.",
-      lines: [
-        "Not bad. Now the gunnery pass: two drones in front of you.",
-        "I will watch from clear air. Put them down.",
-      ],
-    }),
+      objective: "Stay with Captain Dane Korr through the ten-kilometre run.",
+      resetLine: "You need to keep closer to pass. Let's do it again — follow me back to the start.",
+    },
     {
       id: "spawn-drones",
       kind: "script",
       place,
       requiresFlying: true,
-      objective: "Shoot down both practice drones.",
+      objective: "Destroy both practice drones with your primary weapon.",
       action: {
         kind: "spawn-wave",
         place,
@@ -270,6 +257,21 @@ export const M01_FIRST_SORTIE = mission({
         respawn: true,
       },
     },
+    radio({
+      id: "drone-brief",
+      speaker: captain,
+      portrait,
+      place,
+      allowCombat: true,
+      actor: "captain_korr",
+      actorRole: "observe",
+      objective: "Hear Captain Dane Korr's primary weapon orders.",
+      lines: [
+        "Not bad. Now the gunnery pass: two practice drones are out in front of you.",
+        "Keys 1 to 5 select your primary weapon bays. Your basic cannons are in slot 1 — aim at the lead pip and hold Left Click to fire.",
+        "I will watch from clear air. Destroy both drones with your primary weapon.",
+      ],
+    }),
     {
       id: "drone-drill",
       kind: "kill",
@@ -278,16 +280,77 @@ export const M01_FIRST_SORTIE = mission({
       count: 2,
       actor: "captain_korr",
       actorRole: "observe",
-      objective: "Shoot down both practice drones.",
+      objective: "Destroy both practice drones with your primary weapon.",
     },
-    // Neither Dane nor the cadet knows who these two are. Dane sees only that
-    // they are not school drones; the strangers introduce themselves, and the
-    // act never names them. The word "raider" does not belong in this scene.
+    {
+      id: "spawn-missile-drones",
+      kind: "script",
+      place,
+      requiresFlying: true,
+      objective: "Destroy both practice drones with your secondary weapon.",
+      action: {
+        kind: "spawn-wave",
+        place,
+        enemy: "practice_drone",
+        count: 2,
+        spawnDist: [600, 750],
+        respawn: true,
+      },
+    },
+    radio({
+      id: "missile-brief",
+      speaker: captain,
+      portrait,
+      place,
+      allowCombat: true,
+      actor: "captain_korr",
+      actorRole: "observe",
+      objective: "Hear Captain Dane Korr's secondary weapon orders.",
+      lines: [
+        "Good shooting. Second wave is on the range — now for your secondary weapons.",
+        "Keys 6 to 0 select your secondary bays, where your basic missiles are fitted. Hold a target inside the aiming ring until the lock tone sounds, then press Right Click to launch.",
+        "Destroy this wave with your secondary weapon.",
+      ],
+    }),
+    {
+      id: "missile-drill",
+      kind: "kill",
+      place,
+      enemy: "practice_drone",
+      count: 2,
+      actor: "captain_korr",
+      actorRole: "observe",
+      objective: "Destroy both practice drones with your secondary weapon.",
+    },
+    // Neither Dane nor the cadet knows who these two are. They warp in as Dane
+    // spots them and circle both ships while they make their demand; Dane holds
+    // his fire until the threat is finished, and opening fire early provokes them
+    // into attacking at once.
+    {
+      id: "spawn-ambush",
+      kind: "script",
+      place,
+      requiresFlying: true,
+      objective: "Answer Captain Dane Korr.",
+      action: {
+        kind: "spawn-wave",
+        place,
+        enemy: "raider",
+        count: 2,
+        spawnDist: [650, 800],
+        role: "prowl",
+        warpIn: true,
+        respawn: true,
+      },
+    },
     radio({
       id: "ambush-warning",
       speaker: captain,
       portrait,
       place,
+      allowCombat: true,
+      actor: "captain_korr",
+      actorRole: "observe",
       objective: "Answer Captain Dane Korr.",
       lines: [
         "Hold on. Those are not school drones.",
@@ -300,27 +363,15 @@ export const M01_FIRST_SORTIE = mission({
       speaker: "Unmarked pilot",
       portrait: "unmarked-pilot",
       place,
+      allowCombat: true,
+      actor: "captain_korr",
+      actorRole: "observe",
       objective: "Hear the strangers out.",
       lines: [
         "Korr's newest cadet. We bought the school's whole flight schedule, so spare us the brave face.",
         "Cut your engines and hand over the Wasp. Refuse, and we will take it out of the debris.",
       ],
     }),
-    {
-      id: "spawn-ambush",
-      kind: "script",
-      place,
-      requiresFlying: true,
-      objective: "Defeat both attackers.",
-      action: {
-        kind: "spawn-wave",
-        place,
-        enemy: "raider",
-        count: 2,
-        spawnDist: [700, 900],
-        respawn: true,
-      },
-    },
     {
       id: "defeat-ambush",
       kind: "kill",

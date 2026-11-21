@@ -7,6 +7,7 @@ import { CONTRACT_MISSION_TEMPLATES, missionFromContract, describeMission } from
 import { storyMission } from "../data/missions/index.js";
 import { campaignMission, isCampaignMissionId, noteCampaignCompletion } from "./campaign.js";
 import { grantFixedShip } from "../state/profile.js";
+import { refreshGuns } from "./guns.js";
 import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
 import { placeAt, placeDef, isPocket, DEFAULT_PLACE } from "../data/places.js";
@@ -884,6 +885,24 @@ function rememberMissionPickup(mission, event, payload = {}) {
   return true;
 }
 
+/** Remember a mission-tagged kill when the pilot opens fire on a prowling wave
+ *  before its dialogue finishes and its `kill` step becomes current. */
+function rememberMissionKill(mission, event, payload = {}) {
+  if (event !== "enemy-killed" || payload.encounter !== `mission:${mission.id}`) return false;
+  ensureCounters(mission);
+  const current = missionStep(mission);
+  if (current?.kind === "kill" && objectiveMatches(current, event, payload, mission)) return false;
+  if (current?.kind === "parallel" && (current.steps || []).some(child => child?.kind === "kill" && objectiveMatches(child, event, payload, mission))) return false;
+  const index = mission.steps.findIndex((step, i) => i > mission.step && step?.kind === "kill" && objectiveMatches(step, event, payload, mission));
+  if (index < 0) return false;
+  const step = mission.steps[index];
+  const before = counterValue(mission, step.id);
+  const after = Math.min(stepCount(step), before + 1);
+  if (after === before) return false;
+  mission.counters[step.id] = after;
+  return true;
+}
+
 /** Run zero-length story steps immediately after a mission starts or advances. */
 function activateAutomatic(mission, profile, payload = {}) {
   let changed = false;
@@ -901,6 +920,15 @@ function activateAutomatic(mission, profile, payload = {}) {
       changed = true;
       moveToStep(mission, nextStepIndex(mission, step), payload);
       continue;
+    }
+    if (step.kind === "kill") {
+      const done = counterValue(mission, step.id);
+      if (done >= stepCount(step)) {
+        changed = true;
+        moveToStep(mission, nextStepIndex(mission, step), payload);
+        continue;
+      }
+      if (done > 0) mission.p = Math.floor(done);
     }
     if (step.kind === "script") {
       if (!executeScriptStep(step, mission, profile, payload)) break;
@@ -1029,7 +1057,8 @@ function advanceParallel(mission, step, event, payload, profile = profileFor(pay
 export function advanceMission(mission, event, payload = {}, profile = profileFor(payload)) {
   if (!mission || isMissionFailed(mission) || !missionStep(mission)) return false;
   const rememberedPickup = rememberMissionPickup(mission, event, payload);
-  if (missionObjectivesDone(mission)) return rememberedPickup;
+  const rememberedKill = rememberMissionKill(mission, event, payload);
+  if (missionObjectivesDone(mission)) return rememberedPickup || rememberedKill;
   // Mission-spawned trigger events are scoped to the mission that emitted them;
   // otherwise a wave-clear from one story could wake every waiting story.
   if (event === "mission-trigger" && payload.mission && payload.mission !== mission.id) return false;
@@ -1068,7 +1097,7 @@ export function advanceMission(mission, event, payload = {}, profile = profileFo
     if (changed) emitProgress(mission, event, payload);
     return changed;
   }
-  if (!objectiveMatches(step, event, payload, mission)) return false;
+  if (!objectiveMatches(step, event, payload, mission)) return rememberedPickup || rememberedKill;
 
   const before = counterValue(mission, step.id);
   const amount = step.kind === "survive" || (step.kind === "wait" && event === "mission-tick")
@@ -1252,7 +1281,11 @@ export function acceptMission(offer, profile = state.profile, at = state.place) 
   if (offer?.kind === "story" && missionsOf(profile).some(active => active.id === offer.id)) return undefined;
   // A story mission can assign the hull the fiction says the pilot is flying.
   // The grant belongs to the shared pilot; this mode's selection is pointed at it.
-  if (offer?.fixedShip && !grantFixedShip(profile, offer.fixedShip, at)) return undefined;
+  if (offer?.fixedShip && !grantFixedShip(profile, offer.fixedShip, at, { campaign: isCampaignMissionId(offer?.id) })) return undefined;
+  if (offer?.fixedShip && profile === state.profile && state.player) {
+    state.player.missileStock = profile.msl;
+    refreshGuns(state.player, profile);
+  }
   // Every mission is handed in at one station: its data may name it, otherwise it
   // is the station that gave the mission out (this one, unless the pilot is not
   // at a station, in which case the home station). Stamped on the record so it
@@ -1581,6 +1614,7 @@ on("mission-tick", payload => advanceMissions("mission-tick", payload));
 on("mission-near", payload => advanceMissions("mission-near", payload));
 on("mission-control", payload => advanceMissions("mission-control", payload));
 on("mission-chase-complete", payload => advanceMissions("mission-chase-complete", payload));
+on("mission-reset", payload => advanceMissions("mission-reset", payload));
 // Arrival enters the new pocket while the warp animation is still active;
 // retry world-changing steps once the pilot is actually out of warp.
 on("warp-end", payload => advanceMissions("warp-end", payload));
@@ -1603,6 +1637,16 @@ function killObjectivesIn(mission) {
   const step = missionStep(mission);
   if (!step) return [];
   if (step.kind === "kill") return [{ step, key: step.id, place: step.place || step.sector }];
+  if (step.kind === "dialogue") {
+    for (let i = mission.step + 1; i < (mission.steps?.length || 0); i++) {
+      const next = mission.steps[i];
+      if (!next) break;
+      if (next.kind === "dialogue") continue;
+      if (next.kind === "kill") return [{ step: next, key: next.id, place: next.place || next.sector }];
+      break;
+    }
+    return [];
+  }
   if (step.kind !== "parallel") return [];
   return (step.steps || [])
     .filter(child => child?.kind === "kill")

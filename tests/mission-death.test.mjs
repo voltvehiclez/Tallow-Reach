@@ -98,6 +98,8 @@ test("the mission failed notice names the mission and the reason; abandoning sho
   const html = failureNoticeHtml({ title: "Parcel run", reason: "player-dead", message: "Your ship was destroyed and the Parcel it carried was lost." });
   assert.match(html, /Mission failed: Parcel run/);
   assert.match(html, /Your ship was destroyed and the Parcel it carried was lost\./);
+  assert.match(html, /Press R to dismiss/);
+  assert.doesNotMatch(html, /Click to dismiss/);
   assert.equal(failureNoticeHtml({ title: "Parcel run", reason: "abandon", message: "x" }), "");
   assert.match(failureNoticeHtml({ title: "<b>x</b>", reason: "timeout", message: "<i>" }), /&lt;b&gt;x&lt;\/b&gt;/, "text is escaped");
 });

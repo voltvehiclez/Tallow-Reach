@@ -50,30 +50,74 @@ const talk = (mission, P) => {
   }
 };
 
-test("fix 1: a wingman's rounds are the basic-cannon colour, and still harmless", async () => {
+test("fix 1: Dane fires only on guard, and his rounds are the basic-cannon orange", async () => {
   const { P } = await campaignWorld();
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;
+  state.world.bullets.length = 0;
   P.pos.set(0, 0, 3800);
-  const korr = spawnEnemy("captain_korr", V(0, 0, 3000), CAMPAIGN_HOME_POCKET, "mission:campaign.m01-first-sortie", { role: "guard" });
-  const raider = spawnEnemy("raider", V(0, 0, 3150), CAMPAIGN_HOME_POCKET, "test");
+  const korr = spawnEnemy("captain_korr", V(0, 0, 3000), CAMPAIGN_HOME_POCKET,
+    "mission:campaign.m01-first-sortie", { role: "observe" });
+  const drone = spawnEnemy("practice_drone", V(0, 0, 3150), CAMPAIGN_HOME_POCKET, "test");
   for (let i = 0; i < 160; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  assert.equal(state.world.bullets.filter(shot => shot.colour != null).length, 0,
+    "the drone pass is the pilot's test: Dane holds his fire while observing");
+  assert.equal(drone.hp, drone.mx);
 
-  const shots = state.world.bullets.filter(shot => shot.own || shot.colour != null);
-  assert.ok(shots.length > 0, "Dane fires at the hostile");
-  const cannon = shots.find(shot => shot.colour === BULLET_COLOURS.cannon);
+  // On guard (the ambush) he fights, and his cannons are the pilot's cannons.
+  korr.role = "guard";
+  for (let i = 0; i < 160; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  const cannon = state.world.bullets.find(shot => shot.colour === BULLET_COLOURS.cannon);
   assert.ok(cannon, "his rounds carry the basic-cannon colour");
   assert.equal(cannon.own, false, "but they are not the pilot's own shot");
   assert.equal(cannon.dmg, 0, "his guns still do no damage");
-  const hostile = state.world.bullets.find(shot => !shot.own && shot.colour == null);
-  assert.ok(hostile, "a hostile round has no module colour of its own: it stays red");
+  // A hostile round carries no module colour of its own and stays red.
+  const raider = spawnEnemy("raider", V(200, 0, 3600), CAMPAIGN_HOME_POCKET, "test");
+  for (let i = 0; i < 80; i += 1) updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  assert.ok(state.world.bullets.some(shot => !shot.own && shot.colour == null), "hostile fire has no colour field");
   assert.equal(BULLET_COLOURS.cannon, 0xffc870, "the basic cannon is orange");
-  assert.equal(raider.hp, raider.mx, "the round never hurt anyone");
+  assert.equal(raider.hp, raider.mx, "and nobody was hurt by the friendly round");
 
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;
   state.world.bullets.length = 0;
-  void korr;
+  void drone;
+});
+
+test("the hold bar and the run rule live under the top-right objective", async () => {
+  const { holdBarHtml, chaseLinesHtml, campaignDetailHtml } = await import("../src/ui/mission-hud.js");
+  const { CAMPAIGN_MISSIONS: MISSIONS } = await import("../src/data/campaign/index.js");
+  const mission = { ...MISSIONS[0], step: MISSIONS[0].steps.findIndex(step => step.id === "chase") };
+
+  const bar = holdBarHtml({ fraction: 0.42, percent: 42, label: "W — throttle forward" });
+  assert.match(bar, /class="hud-hold"/);
+  assert.match(bar, /width:42%/, "the bar is a percentage of the hold");
+  assert.match(bar, /<b>42%<\/b>/);
+  assert.match(bar, /W — throttle forward/);
+  assert.match(holdBarHtml({ fraction: 1 }), /width:100%/, "a full bar is 100%");
+
+  const running = chaseLinesHtml({ gathering: false, gap: 312, gather: 300, maxGap: 1000 }, mission);
+  assert.match(running, /Stay within 1 km of Dane for the whole course to pass\./);
+  assert.match(running, /Bonus: within 500 m/);
+  assert.match(running, /now 312 m/);
+  assert.doesNotMatch(running, /is-over/);
+
+  const over = chaseLinesHtml({ gathering: false, gap: 620, gather: 300, maxGap: 1000 }, mission);
+  assert.match(over, /is-over/, "past 500 m the bonus line turns red");
+
+  const waiting = chaseLinesHtml({ gathering: true, gap: 900, gather: 300, maxGap: 1000 }, mission);
+  assert.match(waiting, /Close to within 300 m of Dane to start the run\./);
+  assert.doesNotMatch(waiting, /now 900 m/, "the run's rule does not judge the form-up");
+  assert.doesNotMatch(waiting, /is-over/);
+
+  assert.equal(campaignDetailHtml({ id: "open-world.contract" }, { hold: { mission: "x" } }), "",
+    "an open-world mission gets no campaign detail");
+  const both = campaignDetailHtml(mission, {
+    hold: { mission: mission.id, fraction: 0.5, label: "Ctrl — brake to a stop" },
+    run: { mission: mission.id, gathering: false, gap: 200, gather: 300, maxGap: 1000 },
+  });
+  assert.match(both, /hud-hold/);
+  assert.match(both, /hud-chase/);
 });
 
 test("fix 2/3: W then Ctrl, a one-second hold, and a percentage bar that fills to 100", async () => {
@@ -120,6 +164,14 @@ test("fix 4: the bonus is a live 500 m readout during the run, and 1 km still re
   advanceMission(mission, "mission-near", { actor: "captain_korr", metres: 520, player: P }, P.profile);
   assert.equal(mission.optionalProgress["stay-with-korr"].failed, true);
   assert.equal(missionBonusStatus(mission, 300), null, "a lost bonus is not shown again");
+
+  // Even after the bonus is lost, the live distance counter stays on the HUD
+  // because the pilot still needs to stay within 1 km of Dane to pass.
+  const { chaseLinesHtml } = await import("../src/ui/mission-hud.js");
+  const afterBonusLost = chaseLinesHtml({ gathering: false, gap: 680, gather: 300, maxGap: 1000 }, mission);
+  assert.match(afterBonusLost, /Stay within 1 km of Dane for the whole course to pass\./);
+  assert.match(afterBonusLost, /now 680 m/, "the live distance counter stays visible after the bonus is failed");
+  assert.doesNotMatch(afterBonusLost, /Bonus:/, "without claiming the bonus is still live");
 });
 
 test("fix 5: ferrite clusters dress the 10 km course and stay clear of the flown line", () => {
@@ -197,11 +249,33 @@ test("fix 6: the run waits for the pilot to form up, and the rule is 1 km / 500 
   assert.equal(state.ui.chaseRun.gathering, false);
   assert.ok(near > 0, "and the bonus is judged from then on");
 
+  // Fall more than 1 km behind: Dane does not pull an instant 180. He slows to a
+  // stop, says his reset line, and only then returns to the start.
+  korr.v.set(0, 0, 160);
+  P.pos.copy(korr.pos).add(V(0, 0, -1200));
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.equal(korr.course.mode, "reset-brake", "he slows down first instead of whipping a 180");
+  assert.equal(state.ui.resetDialogue, null, "he has not spoken until he slows");
+
+  for (let i = 0; i < 40 && korr.course.mode === "reset-brake"; i++) {
+    updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  }
+  assert.equal(korr.course.mode, "reset-talk", "once slowed, he enters the dialogue phase");
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.ok(state.ui.resetDialogue, "his reset dialogue is now live");
+  assert.match(state.ui.resetDialogue.line, /keep closer to pass/i);
+  assert.equal(korr.course.mode, "reset-talk", "he stays put while speaking");
+
+  // Advance past his reading time: now he turns and returns to the start.
+  emit("mission-tick", { dt: 10, player: P, profile: P.profile });
+  assert.equal(korr.course.mode, "return", "after finishing his line he returns to the start");
+  assert.equal(state.ui.resetDialogue, null);
+
   placeWorld(CAMPAIGN_HOME_POCKET).enemies.length = 0;
   state.world.enemies.length = 0;
 });
 
-test("fix 6b: the strangers introduce themselves; nobody calls them raiders", async () => {
+test("fix 6b: ambushers warp in as Dane warns you, prowl during the talk, and go aggressive after (or when shot)", async () => {
   const m01 = CAMPAIGN_MISSIONS[0];
   const spoken = m01.steps.flatMap(step => [
     step.objective || "",
@@ -209,6 +283,14 @@ test("fix 6b: the strangers introduce themselves; nobody calls them raiders", as
     step.line || "",
   ]).join(" ");
   assert.doesNotMatch(spoken, /raider/i, "no line, and no objective, names them");
+
+  // Concise control prompts, keeping the school Wasp line.
+  const controlBriefs = ["brief-throttle", "brief-brake", "brief-reverse", "brief-steer", "brief-strafe", "brief-lift", "brief-roll", "brief-boost"];
+  for (const id of controlBriefs) {
+    const step = m01.steps.find(s => s.id === id);
+    assert.equal(step.lines.length, 1, `${id} is a single concise line`);
+  }
+  assert.match(m01.steps.find(s => s.id === "brief-steer").lines[0], /Wasp is quicker than anything you flew at the school/);
 
   const taunt = m01.steps.find(step => step.id === "ambush-taunt");
   assert.ok(taunt, "the strangers get a line of their own");
@@ -220,11 +302,69 @@ test("fix 6b: the strangers introduce themselves; nobody calls them raiders", as
   const warning = m01.steps.find(step => step.id === "ambush-warning");
   assert.match(warning.lines.join(" "), /not school drones/i);
   assert.match(warning.lines.join(" "), /do not recognise/i);
-  // Order: warning, taunt, then the ships appear.
+  // Order: ships warp in first, then warning, then taunt, then the fight.
   const order = m01.steps.map(step => step.id);
+  assert.ok(order.indexOf("spawn-ambush") < order.indexOf("ambush-warning"));
   assert.ok(order.indexOf("ambush-warning") < order.indexOf("ambush-taunt"));
-  assert.ok(order.indexOf("ambush-taunt") < order.indexOf("spawn-ambush"));
+  assert.ok(order.indexOf("ambush-taunt") < order.indexOf("defeat-ambush"));
   assert.equal(m01.steps.find(step => step.id === "defeat-ambush").objective, "Defeat both attackers.");
+
+  // Live simulation check: ambushers warp in on prowl, circle Dane & pilot without
+  // shooting while threatening, and go aggressive when the threat ends (or if shot early).
+  await import("../src/sim/campaign-flight.js");
+  const { P, mission } = await campaignWorld();
+  const world = placeWorld(CAMPAIGN_HOME_POCKET);
+  world.enemies.length = 0;
+  world.bullets.length = 0;
+
+  const korr = spawnEnemy("captain_korr", V(120, 0, -140), CAMPAIGN_HOME_POCKET, `mission:${mission.id}`, { role: "observe" });
+  mission.step = mission.steps.findIndex(step => step.id === "spawn-ambush");
+  advanceMission(mission, "mission-tick", { dt: 0.05, player: P }, P.profile);
+  assert.equal(mission.steps[mission.step].id, "ambush-warning", "spawn-ambush runs and opens ambush-warning");
+
+  const raiders = world.enemies.filter(e => e.def === "raider");
+  assert.equal(raiders.length, 2, "two ambushers warp in as the warning begins");
+  assert.ok(raiders.every(r => r.role === "prowl" && r.warpIn > 0), "both arrive in prowl mode out of warp");
+
+  // Step through several seconds of flight during the warning and taunt: they circle
+  // around Dane and the pilot, and neither they nor Dane fire a shot.
+  for (let i = 0; i < 40; i++) {
+    emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+    updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  }
+  assert.equal(korr.role, "observe", "Dane holds fire during the warning");
+  assert.equal(world.bullets.length, 0, "no shots fired by Dane or the prowling ambushers during dialogue");
+
+  // Advance through ambush-warning into ambush-taunt: still prowling, still no shots.
+  while (mission.steps[mission.step].id === "ambush-warning") {
+    advanceMission(mission, "dialogue-next", { player: P }, P.profile);
+  }
+  assert.equal(mission.steps[mission.step].id, "ambush-taunt");
+  for (let i = 0; i < 20; i++) {
+    emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+    updateEnemies(0.05, CAMPAIGN_HOME_POCKET);
+  }
+  assert.equal(korr.role, "observe", "Dane still holds fire while they threaten");
+  assert.equal(world.bullets.length, 0, "still no shots while they threaten");
+
+  // Pre-emptive provocation: if the pilot shoots one mid-dialogue, both immediately
+  // drop prowl and go into aggressive AI.
+  const { hitHostile } = await import("../src/sim/combat.js");
+  hitHostile(raiders[0], 1, raiders[0].pos, P, CAMPAIGN_HOME_POCKET);
+  assert.ok(raiders.every(r => r.role === null), "shooting one mid-dialogue turns the whole wave aggressive");
+
+  // Reset to prowl to also verify the normal transition at the end of ambush-taunt.
+  for (const r of raiders) r.role = "prowl";
+  while (mission.steps[mission.step].id === "ambush-taunt") {
+    advanceMission(mission, "dialogue-next", { player: P }, P.profile);
+  }
+  assert.equal(mission.steps[mission.step].id, "defeat-ambush");
+  emit("mission-tick", { dt: 0.05, player: P, profile: P.profile });
+  assert.equal(korr.role, "guard", "Dane switches to guard and opens fire once the threat ends");
+  assert.ok(raiders.every(r => r.role === null), "ambushers switch to aggressive AI once the threat ends");
+
+  world.enemies.length = 0;
+  world.bullets.length = 0;
 });
 
 test("fix 7/8: the campaign screen is chapter boxes that open into acts, and leaving it cannot blank the menu", async () => {
@@ -282,6 +422,16 @@ test("fix 7/8: the campaign screen is chapter boxes that open into acts, and lea
     assert.equal(card.hidden, true, "leaving to the main menu takes it with it");
     assert.equal(card.innerHTML, "");
     assert.equal(state.ui.campaignEnd, null);
+
+    // Top-middle mission alerts say "Press R to dismiss" and close on R.
+    const { setupMissionLog, isFailureNoticeOpen } = await import("../src/ui/missionlog.js");
+    setupMissionLog();
+    const alert = globalThis.document.body.children.find(el => el.id === "mission-alert");
+    emit("mission-failed", { mission: { title: "First Sortie", kind: "story" }, message: "Your Wasp was destroyed." });
+    assert.equal(isFailureNoticeOpen(), true);
+    assert.match(alert.innerHTML, /Press R to dismiss/);
+    emit("action", { name: "rift", repeat: false, key: "KeyR" });
+    assert.equal(isFailureNoticeOpen(), false);
   } finally {
     globalThis.document = prevDoc;
   }

@@ -57,7 +57,7 @@ test('Strip has ten numbered boxes, shared family icons and no redundant top-rig
  assert.equal(weaponFamily({...MODULES.missile_basic,n:'Future missile'}),'missile');
  assert.equal((html.match(/aria-pressed="true"/g)||[]).length,2);
  const hud=readFileSync('src/ui/hud.js','utf8');assert.doesNotMatch(hud,/\$\{primary\}/);
- assert.match(hud,/weaponSlots\?\.addEventListener\("mousedown", e => e.stopPropagation\(\)\)/);
+ assert.doesNotMatch(hud,/weaponSlots\?\.addEventListener\("click"/);
 });
 
 test('Compact strip fits between unchanged meter pairs at desktop and narrower widths',()=>{

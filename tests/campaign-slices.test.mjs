@@ -120,7 +120,7 @@ test("a failed act stops, says why, and its checkpoints can be resumed", async (
   const { P, mission } = await campaignWorld({ docked: false });
   assert.equal(failMission(mission, "player-dead", P.profile, { player: P }), true);
   assert.equal(isMissionFailed(mission), true);
-  assert.equal(mission.failureMessage, "Your Wasp was destroyed. The sortie is over.");
+  assert.equal(mission.failureMessage, "Your Wasp was destroyed.");
   assert.equal(missionObjectivesDone(mission), false);
   assert.equal(mission.checkpoint, undefined, "First Sortie has no checkpoints");
 
@@ -266,13 +266,13 @@ test("the dialogue clock advances a line said in space once its reading time pas
     const { state, P, mission } = await campaignWorld({ docked: false });
     state.ui.intro = false;
     state.paused = false;
-    mission.step = mission.steps.findIndex(step => step.id === "brief-throttle");
+    mission.step = mission.steps.findIndex(step => step.id === "chase-intro");
     renderDialogue();
     const line = missionDialogue(mission).line;
-    const before = Number(mission.counters["brief-throttle"]) || 0;
+    const before = Number(mission.counters["chase-intro"]) || 0;
     assert.equal(updateDialogueClock(0.2), false, "a line is never cut off early");
     assert.equal(updateDialogueClock(dialogueReadSeconds(line) + 0.1), true, "it advances on its own clock");
-    assert.equal(Number(mission.counters["brief-throttle"]), before + 1);
+    assert.equal(Number(mission.counters["chase-intro"]), before + 1);
     P.docked = false;
   } finally {
     globalThis.document = prevDoc;

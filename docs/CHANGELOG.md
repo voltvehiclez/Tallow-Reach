@@ -20,6 +20,89 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere
+
+The owner's fourth pass over the campaign build, plus universal mission markers.
+
+- **Resuming an act from the title no longer loses the flight HUD.** Leaving an act with Esc → *Exit to main
+  menu* left `state.ui.intro` / `state.ui.campaign` set, so `resumeFromSave` fired `launched` at a HUD that
+  refused to unhide. `sim/campaign-act.js` `startCampaignAct` and `ui/menu.js` `enterGameMode` now clear both
+  flags *before* the save is applied, a mode switch resets places and syncs `state.place`, and the resume emits
+  `campaign-act-entered`, which drops the cached weapon-slot markup and re-syncs the reticle. The campaign screen
+  only opens the station panel when the pilot really is docked.
+- **The starter Wasp leaves the school with Basic Missiles fitted and full.** `state/profile.js`
+  `newCampaignProfile()` (used by `newCampaignSave` and `separateCampaignPilot`), and `grantFixedShip(..., {
+  campaign: true })` for an act that assigns the hull, fit `missile_basic` in secondary slot 1 and stock
+  `MODULES.missile_basic.cap` missiles; `acceptMission` refreshes the live ship's guns and missile stock.
+- **The gunnery pass is two waves.** `data/campaign/m01.js`: `spawn-drones` → `drone-brief` → `drone-drill`
+  (primary weapons, keys 1–5 + LMB) then `spawn-missile-drones` → `missile-brief` → `missile-drill`
+  (secondary weapons, lock tone + right click). `sim/missions.js` `killObjectivesIn` now looks past a
+  `dialogue` step to the `kill` step that follows it, so a wave spawned before its briefing is still re-armed
+  on reload. `sim/campaign-flight.js` tops the missile rack back up if the pilot empties it with nothing in
+  flight during the missile steps.
+- **The ambush is a standoff, not a carousel.** `sim/enemy-flight.js` `flyProwl` gives both raiders one shared
+  approach corridor (`sim/ai.js` seeds `prowlDir`), brakes them to a halt side-by-side ~150 m from Dane and
+  `flyObserve` brakes Dane to a halt facing them, so both sides stare at each other through the dialogue.
+- **Universal mission objective markers.** `ui/mission-hud.js` adds `missionTitleColor` (amber for acts and
+  story missions, ice for contracts, `titleColor`/`color` override), `activeObjectiveSteps`,
+  `objectObjectiveColor(object, kind, ctx)` and `missionWaypoints(ctx)`. `ui/hud.js` glows the matching floating
+  marker (`.mk.obj`) for every active objective target — hand-in/offered stations, friendly actors to follow,
+  hostile kill/wave-clear targets including wave-clear encounters, crates owed or persistent mission drops,
+  asteroid fields and rocks to mine — even beyond the old 900 m crate radius, and draws mission waypoints
+  (`.mk.waypoint`) for a destination pocket, an authored `waypoint`/`pos`, a chase course start, or a
+  reach/survive/wait signal. `ui/pocket-list.js` `pocketRowsHtml(rows, isSelected, objectiveFor)` marks the same
+  rows in the `N` list (`li.objective`, `.pocket-icon.obj`) with the mission's colour. The marker pool rose from
+  18 to 28 so waypoints cannot push the ordinary labels out.
+- Act 1's dialogue doc and playtest guide record the two-wave pass; the guide's step numbers continue.
+
+Files: `src/{data/campaign/m01.js,sim/{ai,campaign-act,campaign-flight,enemy-flight,missions},state/profile.js,
+ui/{hud,menu,mission-hud,pocket-list},styles.css`, tests, docs. No save change (stays **27**). Rebuild
+`game/tallow-reach.html`; `npm test` **814 pass / 0 fail**.
+
+## 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
+
+The owner's third pass over the campaign build, plus four follow-up polish items.
+
+- **Dane does not shoot the training drones, and the ambushers warp in to circle first.** `sim/ai.js`
+  requires `def.engages === "hostiles"` **and** `e.role === "guard"` before a story ship fires. In First
+  Sortie, `spawn-ambush` now runs as `ambush-warning` starts (`warpIn: true, role: "prowl"`): the two
+  attackers streak in out of warp and circle around Dane and the pilot (`flyProwl` in `sim/enemy-flight.js`)
+  without firing while Dane stays on `observe` and holds his fire. When `ambush-taunt` finishes and
+  `defeat-ambush` begins, Dane switches to `guard` and opens fire, and the attackers switch out of `prowl`
+  into their aggressive AI (`flyFighter`). Shooting either attacker mid-dialogue (`hitHostile`) breaks the
+  parley early and turns the wave aggressive at once.
+- **Live distance counter stays after the 500 m bonus is lost, and a failed run slows before returning.**
+  `ui/mission-hud.js` `chaseLinesHtml` now keeps `Distance to Dane: now NNN m` under the 1 km rule even after
+  the 500 m bonus fails. When the pilot falls more than 1 km behind during the run, Dane no longer whips a
+  sudden 180: he brakes to a stop along his heading (`reset-brake` in `sim/enemy-flight.js`), says *"You need
+  to keep closer to pass. Let's do it again — follow me back to the start."* (`reset-talk` in
+  `sim/campaign-flight.js`, rendered on `#dialogue-panel`), and only turns back to the start once the line finishes.
+- **Shorter control prompts.** Each control call in `m01.js` is now one concise line so the pilot spends
+  the lesson flying instead of waiting on radio lines; the steering line keeps *"the Wasp is quicker than
+  anything you flew at the school."*
+- **Weapon slots are keyboard-only (`1`–`5`, `6`–`0`) and top-middle alerts dismiss with R.** Turning down
+  with the mouse in flight no longer clicks `#weapon-slots` (`pointer-events: none`, click listener removed
+  from `ui/hud.js`), and `#mission-alert` says *Press R to dismiss* and closes on `KeyR`.
+- **His rounds were still red for a real reason.** `fire()` → `addEntity` emits `entity-spawned`
+  synchronously, and the bullet mesh is built from that record, so assigning `shot.colour` after
+  `fire()` returned changed nothing. `sim/combat.js` `fire()` takes a trailing `extra` object and
+  assigns it *before* `addEntity`; `sim/ai.js` passes `{ colour: BULLET_COLOURS.cannon }` (orange).
+  No new colour abstraction.
+- **"The sortie is over" is gone.** `m01.fails.message` is now just "Your Wasp was destroyed."; both
+  the MISSION FAILED card and the small alert popup read that one string.
+- **The hold bar works again.** The objective's generic sub-line rule (`#tr .hud-mission small`:
+  `display: block; white-space: nowrap`) out-rank the old bar's selectors, so the grid never applied
+  and the track had no width. The bar's markup moved to a pure, testable `ui/mission-hud.js`
+  (`holdBarHtml`, `chaseLinesHtml`, `campaignDetailHtml`) with selectors that win, a grid layout
+  (label over track+percent) and an explicit `width: 100%` track. `tests/campaign-fixes.test.mjs`
+  now asserts the percentage, the 1 km / 500 m lines and the gathering rule.
+- **All First Sortie dialogue in one document:** `docs/FIRST-SORTIE-DIALOGUE.md` — briefing, every
+  control call and its objective/hold label, the run's orders and both reset lines, the gunnery pass,
+  the ambush, the final report, the failure sentence and the card buttons, with the file to edit for
+  each.
+
+Tests 801/801, build 3232 KB. Nothing merged: the owner tests the zip first.
+
 ## 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
 
 The owner's second pass over the campaign build. Eight corrections.
@@ -179,12 +262,9 @@ S-systems roll 80% black holes and render them at twice the usual physical radiu
 
 Off-chart systems support up to four live paired doors, balancing S-to-S routes with regular-space exits. All S-system pockets now use the grey wormhole cube and neutral ambient fill. Existing v25 clocks and original endpoints are preserved; extra routes derive from the saved seed and generation.
 
-## 2026-11-19: Start with 30 wormhole systems
-
-Raised `WORMHOLE_SYSTEMS.count` from 5 to 30. Existing v25 saves keep their first five connections; the additional systems start on load. Simple wormhole population unchanged.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-19: Start with 30 wormhole systems
 - 2026-11-19: Step 14d — persistent wormhole systems
 - 2026-11-19: Uncharted Space HUD label and 14d exit decision
 - 2026-11-18: Station UI rework, reusable left window, Inventory ship list and My Assets destination

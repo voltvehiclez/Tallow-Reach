@@ -24,15 +24,26 @@ export function sortedPocketRows(rows, filters, sort = 'distance', direction = 1
 const escRow = value => String(value ?? '').replace(/[&<>"']/g, c => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
-export function pocketRowsHtml(rows, isSelected = () => false) {
+// Objective colours reach an inline style, so only a plain colour value passes.
+const SAFE_COLOR = /^(#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla)\([0-9.,%\s/]+\)|var\(--[a-z0-9-]+\))$/;
+const safeColor = value => (typeof value === 'string' && SAFE_COLOR.test(value.trim()) ? value.trim() : '');
+export function pocketRowsHtml(rows, isSelected = () => false, objectiveFor = null) {
   if (!rows.length) return '<li class="pocket-empty">No matching objects.</li>';
   return rows.map((row, index) => {
     const selected = Boolean(isSelected(row, index));
+    const objColor = safeColor(typeof objectiveFor === 'function' ? objectiveFor(row, index) : '') ||
+      safeColor(row.objectiveColor);
     const type = pocketType(row.kind);
-    const cls = selected ? ' class="selected"' : '';
+    const rowCls = markerClasses(selected ? 'selected' : '', objColor ? 'objective' : '');
+    const cls = rowCls ? ` class="${rowCls}"` : '';
+    const rowStyle = objColor ? ` style="--objective-color:${escRow(objColor)}"` : '';
     const { tone, color } = markerStyle(row.kind, row.object);
-    const iconCls = markerClasses('pocket-icon', tone);
-    const iconStyle = color ? ` style="--marker-color:${escRow(color)}"` : '';
-    return `<li${cls}><button type="button"${cls} data-pocket-row="${index}" aria-pressed="${selected}" title="${escRow(row.name)} (${type})"><span class="pocket-label"><i class="${iconCls}"${iconStyle} aria-hidden="true"></i><span class="pocket-name">${escRow(row.name)} <small>(${type})</small></span></span><span>${(row.distance / 1000).toFixed(2)} km</span></button></li>`;
+    const iconCls = markerClasses('pocket-icon', tone, objColor ? 'obj' : '');
+    const styleParts = [
+      color ? `--marker-color:${escRow(color)}` : '',
+      objColor ? `--objective-color:${escRow(objColor)}` : '',
+    ].filter(Boolean).join(';');
+    const iconStyle = styleParts ? ` style="${styleParts}"` : '';
+    return `<li${cls}${rowStyle}><button type="button"${cls} data-pocket-row="${index}" aria-pressed="${selected}" title="${escRow(row.name)} (${type})"><span class="pocket-label"><i class="${iconCls}"${iconStyle} aria-hidden="true"></i><span class="pocket-name">${escRow(row.name)} <small>(${type})</small></span></span><span>${(row.distance / 1000).toFixed(2)} km</span></button></li>`;
   }).join('');
 }

@@ -186,7 +186,7 @@ export function restoreMissionDrops(placeId = state.place) {
  * Spawn a bullet. Player bullets inherit the ship's velocity. Returns the new
  * record; its mesh is the view's business (step 7b).
  */
-export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place, missionId = null) {
+export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = player?.place || state.place, missionId = null, extra = null) {
   // `p` may be a plain `{ x, y, z }` (the tests pass one) or a maths vector.
   const at = V(p.x, p.y, p.z);
   const quat = Q();
@@ -203,6 +203,9 @@ export function fire(p, dir, speed, own, dmg, player = localPlayer(), placeId = 
     dmg,
     l: BULLET_LIFETIME,
   };
+  // Fields the firing module owns (a wingman's cannon colour). They must be set
+  // before `addEntity`: the renderer builds the round's mesh on `entity-spawned`.
+  if (extra && typeof extra === "object") Object.assign(e, extra);
   return addEntity(placeWorld(placeId).bullets, e);
 }
 
@@ -212,6 +215,13 @@ export function hitHostile(e, dmg, at, byPlayer = undefined, placeId = e.place |
     e.hp = e.mx;
     boom(at, 1, 0x9fd9ff, placeId);
     return;
+  }
+  // Shooting a prowling ambusher mid-dialogue breaks the parley at once: the
+  // whole wave drops its prowl role and attacks under its ordinary AI.
+  if (byPlayer !== null && e?.role === "prowl") {
+    for (const other of placeWorld(placeId).enemies) {
+      if (other && other.encounter === e.encounter && other.role === "prowl") other.role = null;
+    }
   }
   e.hp -= dmg;
   boom(at, 2, 0xffd080, placeId);

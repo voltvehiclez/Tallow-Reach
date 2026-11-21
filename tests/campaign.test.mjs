@@ -200,7 +200,11 @@ test("M01 can be played from acceptance to the reward hand-in through mission ev
   assert.deepEqual(missionOptionalRows(mission).map(row => [row.id, row.done]), [["stay-with-korr", true]]);
 
   talk();                         // gunnery orders
-  tick(0);                        // drones spawn
+  tick(0);                        // first wave spawns for the primary weapon drill
+  kill("practice_drone");
+  kill("practice_drone");
+  tick(0);                        // second wave spawns for the secondary weapon drill
+  talk();                         // missile orders
   kill("practice_drone");
   kill("practice_drone");
   talk();                         // ambush warning
@@ -289,6 +293,11 @@ test("reloading mid-sortie re-arms the wave deficit instead of stranding the pil
   assert.equal(live().counters["drone-drill"], 2, "the objective can be finished after the reload");
 
   // Finish the rest of the sortie and confirm the mission still pays out.
+  tick(0);                     // second wave spawns for the missile drill
+  talk();                      // missile orders
+  assert.equal(drones().length, 2, "a fresh pair of drones carries the missile drill");
+  for (const drone of [...drones()]) hitHostile(drone, 999, drone.pos, P2);
+  assert.equal(live().counters["missile-drill"], 2, "the missile drill counts both kills");
   talk();                      // ambush warning
   tick(0);                     // clears the pirate spawn step
   for (const raider of [...state.world.enemies.filter(e => e.def === "raider")]) hitHostile(raider, 999, raider.pos, P2);

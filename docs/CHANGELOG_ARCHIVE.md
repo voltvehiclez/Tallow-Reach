@@ -5,6 +5,10 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-19: Start with 30 wormhole systems
+
+Raised `WORMHOLE_SYSTEMS.count` from 5 to 30. Existing v25 saves keep their first five connections; the additional systems start on load. Simple wormhole population unchanged.
+
 ## 2026-11-19: Step 14d — persistent wormhole systems
 
 Five named off-chart systems with seeded cores, warpable pockets and paired 20-minute connections. M switches between the local and regular charts; renewal creates two fresh endpoints without stranding the pilot. Save v25 migrates older worlds. Playtest pending: `testing/TESTING-14D.md`.

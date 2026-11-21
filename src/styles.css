@@ -126,25 +126,31 @@ body.no-reticle canvas {
 }
 /* Campaign detail under the top-right objective: the control-lesson hold bar and
    the run's own rule (stay within 1 km; bonus within 500 m). */
-#tr .hud-hold {
+#tr .hud-mission small.hud-hold {
   display: grid;
-  grid-template-columns: 60px auto 1fr;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "label label" "track pct";
   align-items: center;
-  gap: 6px;
+  gap: 3px 6px;
   color: var(--amber);
+  white-space: normal;
   font-variant-numeric: tabular-nums;
 }
-#tr .hud-hold .hold-track {
+#tr small.hud-hold .hold-label { grid-area: label; }
+#tr small.hud-hold .hold-track {
+  grid-area: track;
+  display: block;
+  width: 100%;
   height: 5px;
   background: rgba(255,255,255,.16);
   border: 1px solid rgba(255,255,255,.3);
   overflow: hidden;
 }
-#tr .hud-hold .hold-track i { display: block; width: 0; height: 100%; background: var(--amber); }
-#tr .hud-hold b { color: var(--amber); font-weight: 600; }
-#tr .hud-chase { color: #dfe9ee; }
-#tr .hud-bonus { color: #9fe8c8; }
-#tr .hud-bonus.is-over { color: #ff8a80; }
+#tr small.hud-hold .hold-track i { display: block; width: 0; height: 100%; background: var(--amber); }
+#tr small.hud-hold b { grid-area: pct; min-width: 34px; color: var(--amber); font-weight: 600; text-align: right; }
+#tr .hud-mission small.hud-chase { color: #dfe9ee; white-space: normal; }
+#tr .hud-mission small.hud-bonus { color: #9fe8c8; white-space: normal; }
+#tr .hud-mission small.hud-bonus.is-over { color: #ff8a80; }
 #bc {
   left: calc(50% + 28px);
   bottom: calc(var(--weapon-bottom) - 6px - 24px);
@@ -307,6 +313,17 @@ body.no-reticle canvas {
   height: 36px;
   padding: 0;
   background: none;
+}
+.mk.obj {
+  border-color: var(--objective-color, var(--amber));
+  box-shadow: 0 0 10px 1px var(--objective-color, var(--amber)), inset 0 0 6px color-mix(in srgb, var(--objective-color, var(--amber)) 35%, transparent);
+  text-shadow: 0 0 6px var(--objective-color, var(--amber));
+  opacity: 1;
+}
+.mk.waypoint {
+  --marker-color: var(--objective-color, var(--amber));
+  color: var(--objective-color, var(--amber));
+  border-color: var(--objective-color, var(--amber));
 }
 
 #flash {
@@ -652,8 +669,7 @@ body.no-reticle canvas {
   border: 1px solid #d9534f;
   box-shadow: 0 8px 24px rgba(0,0,0,.5);
   color: #f3d9d6;
-  cursor: pointer;
-  pointer-events: auto;
+  pointer-events: none;
 }
 #mission-alert[hidden] { display: none; }
 #mission-alert strong { color: #ff8a80; letter-spacing: .04em; }
@@ -2448,14 +2464,14 @@ textarea {
 .nav-pocket-icon .nav-planet-ring { fill: none; }
 .nav-pocket-icon .nav-current-ring { fill: none; stroke: var(--amber); stroke-width: 1; stroke-dasharray: 1 3; stroke-linecap: round; }
 
-/* Weapon bays match outfitting order; selected primary and secondary stay independent. */
-#hud > #weapon-slots { left: calc(50% + 28px); bottom: var(--weapon-bottom); transform: translateX(-50%); width: min(480px, calc(100vw - 220px)); --weapon-size: min(44px, calc((100vw - 260px) / 10)); display: flex; gap: 16px; pointer-events: auto; }
+/* Weapon bays match outfitting order; selected primary and secondary stay independent (keyboard-only). */
+#hud > #weapon-slots { left: calc(50% + 28px); bottom: var(--weapon-bottom); transform: translateX(-50%); width: min(480px, calc(100vw - 220px)); --weapon-size: min(44px, calc((100vw - 260px) / 10)); display: flex; gap: 16px; pointer-events: none; }
 .weapon-bank { flex: 1; min-width: 0; color: #c4c4c4; }
 #weapon-slots::after { content: ""; position: absolute; left: 50%; bottom: 0; height: var(--weapon-size); border-left: 1px solid #555; pointer-events: none; }
 .weapon-bank-label { color: #fff; font-size: 9px; line-height: 11px; margin-bottom: 1px; letter-spacing: 0; padding: 0; }
 .weapon-bank.secondary .weapon-bank-label { text-align: right; }
 .weapon-bank-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
-.weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--weapon-size); width: 100%; min-width: 0; margin: 0; padding: 3px 1px; background: var(--hud-surface); border: 1px solid #444; border-radius: 0; color: inherit; cursor: pointer; }
+.weapon-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--weapon-size); width: 100%; min-width: 0; margin: 0; padding: 3px 1px; background: var(--hud-surface); border: 1px solid #444; border-radius: 0; color: inherit; pointer-events: none; }
 .weapon-slot.selected { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; background: var(--hud-surface-selected); color: #fff; }
 .weapon-slot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .weapon-slot:not(.fitted) svg { color: #808080; }
@@ -2494,6 +2510,8 @@ body.navigation-open canvas { cursor: default; }
 #pocket-object-rows li.selected > button small { color: #bbb; }
 #pocket-object-rows button > .pocket-label { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; }
 #pocket-object-rows .pocket-icon { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; box-sizing: border-box; border: 1px solid var(--marker-color); background: none; }
+#pocket-object-rows .pocket-icon.obj { border-color: var(--objective-color, var(--amber)); box-shadow: 0 0 6px 1px var(--objective-color, var(--amber)); }
+#pocket-object-rows li.objective > button { color: var(--objective-color, var(--amber)); text-shadow: 0 0 6px var(--objective-color, var(--amber)); box-shadow: inset 0 0 8px color-mix(in srgb, var(--objective-color, var(--amber)) 32%, transparent), inset 0 0 0 1px var(--objective-color, var(--amber)); }
 #pocket-object-rows .pocket-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #pocket-object-rows button > span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 #pocket-object-rows small { display: inline; color: #888; font-size: inherit; }

@@ -145,7 +145,12 @@ export function setupMenu(options = {}) {
     state.ui.campaign = false;
     resetStationPanels(state.ui);
     initAudio();
-    render();
+    if (!state.player || state.player.docked) {
+      render();
+    } else {
+      panel.hidden = true;
+      hideLeftPanelElement(leftPanel);
+    }
     emit("mission-ui-refresh", {});
   });
   on("main-menu", () => {
@@ -256,9 +261,10 @@ function loadedMessage(text) {
 }
 
 function enterGameMode(mode) {
+  state.ui.intro = false;
+  state.ui.campaign = false;
   const switched = switchGameMode(mode);
   if (switched) afterSaveChange();
-  state.ui.intro = false;
   resetStationPanels(state.ui);
   initAudio();
   if (!switched) resumeFromSave();
@@ -306,7 +312,12 @@ const ACTIONS = {
     emit("mission-ui-refresh", {});
     const notice = recoveryNotice();
     if (notice) showNotice(notice);
-    render();
+    if (!state.player || state.player.docked) {
+      render();
+    } else {
+      panel.hidden = true;
+      hideLeftPanelElement(leftPanel);
+    }
   },
   tab(name) {
     cancelHeldStack();

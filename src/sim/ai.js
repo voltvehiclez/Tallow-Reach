@@ -5,7 +5,7 @@
 // branch. Hunt contracts still take priority over the ambient encounter and use
 // the same desired-count/enemy rules as before.
 
-import { createBrain, flyFighter, flyEscort, flyStory, clearFriendlyLane } from "./enemy-flight.js";
+import { createBrain, flyFighter, flyEscort, flyStory, flyProwl, clearFriendlyLane } from "./enemy-flight.js";
 import { startCourseAtBeginning } from "./flight-course.js";
 import { BULLET_COLOURS } from "../data/weapons.js";
 import { AI_FLIGHT } from "../data/enemy-ai.js";
@@ -20,7 +20,8 @@ import { missionForObjective, remainingObjective } from "./missions.js";
 import { state, placeWorld, instanceAt } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
 import { clearMissionDrops, fire, removeMissionDrop } from "./combat.js";
-import { enemyFwd, dropEnemy, enemyHullRadius } from "./enemy.js";
+import { boom } from "./effects.js";
+import { enemyFwd, dropEnemy, enemyHullRadius, turnEnemy } from "./enemy.js";
 import { collideRockAt, collideSphereAt, placeCollidersOf, reflectVelocity, sweepColliders } from "./colliders.js";
 import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
@@ -69,7 +70,18 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null, opt
     const course = startCourseAtBeginning(options.course, options.phase || "lesson");
     if (course) e.course = course;
   }
-  e.boosting = false;
+  e.boosting = Boolean(options.warpIn);
+  if (options.warpIn) {
+    e.warpIn = 0.9;
+    const toward = options.toward || V(0, 0, 0);
+    const dir = V(toward.x, toward.y, toward.z).sub(e.pos);
+    if (dir.lengthSq() > 1) {
+      dir.normalize();
+      turnEnemy(e, V(toward.x, toward.y, toward.z), 1);
+      e.v.copy(dir).multiplyScalar(420);
+    }
+    boom(e.pos, 10, 0x9fd9ff, placeId);
+  }
   placeWorld(placeId).enemies.push(e);
   emit("enemy-spawned", { id: e.id, def: e.def, place: placeId, encounter, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z } });
   return e;
@@ -117,7 +129,8 @@ export function updateEnemies(dt, placeId = state.place) {
       dist = toPlayer.length();
     if (!e.brain) e.brain = createBrain(e.id);
 
-    (AI_BEHAVIOURS[def.ai] || AI_BEHAVIOURS.chase)(e, def, toPlayer, dist, dt, { world: W, target, players: state.players });
+    const fly = e.role === "prowl" ? flyProwl : (AI_BEHAVIOURS[def.ai] || AI_BEHAVIOURS.chase);
+    fly(e, def, toPlayer, dist, dt, { world: W, target, players: state.players });
 
     if (dist > def.lostRange) {
       dropEnemy(e);
@@ -125,26 +138,35 @@ export function updateEnemies(dt, placeId = state.place) {
     }
 
     e.fire -= dt;
-    // A story ally fires only at the act's other hostiles, and its def decides the
-    // damage (zero for Dane). Nothing about this touches the pilot.
+    // A prowling ship is still talking: it circles and holds fire until the
+    // dialogue finishes or the pilot shoots first.
+    if (e.role === "prowl") {
+      e.fire = Math.max(e.fire, 0.35);
+      continue;
+    }
+    // A story ally fires only when the act has put him on guard — the ambush, not
+    // the drone pass (that is the pilot's test). His def decides the damage (zero
+    // for Dane). Nothing about this touches the pilot.
     if (def.engages === "hostiles") {
-      const foe = nearestHostile(e, E);
-      if (foe && e.fire <= 0) {
-        const toFoe = foe.pos.clone().sub(e.pos), range = toFoe.length();
-        if (range < def.fireRange && enemyFwd(e).dot(toFoe.clone().normalize()) > 0.94 && clearFriendlyLane(e, foe.pos, E)) {
-          e.fire = R(def.fireGap[0], def.fireGap[1]);
-          const spread = AI_FLIGHT.aimSpread;
-          const dir = toFoe.normalize().add(V(R(-spread, spread), R(-spread, spread), R(-spread, spread))).normalize();
-          const shot = fire(e.pos, dir, def.bspd, false, def.dmg);
-          // His guns are the same basic cannons the pilot flies with, so his rounds
-          // are the same orange. The renderer draws a shot in its module's colour.
-          shot.colour = BULLET_COLOURS.cannon;
-          shot.place = placeId;
-          shot.missionId = String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null;
-          if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });
+      if (e.role === "guard") {
+        const foe = nearestHostile(e, E);
+        if (foe && e.fire <= 0) {
+          const toFoe = foe.pos.clone().sub(e.pos), range = toFoe.length();
+          if (range < def.fireRange && enemyFwd(e).dot(toFoe.clone().normalize()) > 0.94 && clearFriendlyLane(e, foe.pos, E)) {
+            e.fire = R(def.fireGap[0], def.fireGap[1]);
+            const spread = AI_FLIGHT.aimSpread;
+            const dir = toFoe.normalize().add(V(R(-spread, spread), R(-spread, spread), R(-spread, spread))).normalize();
+            // His guns are the same basic cannons the pilot flies with, so his rounds
+            // are the same orange. The colour has to be on the record *before* it
+            // enters the world: `entity-spawned` builds the mesh straight away.
+            const shot = fire(e.pos, dir, def.bspd, false, def.dmg, undefined, placeId,
+              String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null,
+              { colour: BULLET_COLOURS.cannon });
+            if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });
+          }
         }
       }
-    } else if (dist < def.fireRange && enemyFwd(e).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0 && clearFriendlyLane(e, pp, E) && !sweepColliders(placeCollidersOf(placeId), W.asteroids, e.pos, pp)) {
+    } else if (!def.friendly && dist < def.fireRange && enemyFwd(e).dot(toPlayer.clone().normalize()) > 0.95 && e.fire <= 0 && clearFriendlyLane(e, pp, E) && !sweepColliders(placeCollidersOf(placeId), W.asteroids, e.pos, pp)) {
       e.fire = R(def.fireGap[0], def.fireGap[1]);
       // Angular spread, not a centimetre offset that becomes perfect aim at range.
       const spread = AI_FLIGHT.aimSpread;
@@ -362,19 +384,34 @@ on("mission-script", ({ action, player, place, mission } = {}) => {
   const options = {
     loot: action.loot === false ? null : action.loot,
     ...(action.role ? { role: action.role } : {}),
+    ...(action.warpIn ? { warpIn: true, toward: origin } : {}),
     ...(action.course ? { course: action.course, phase: action.phase || "lesson" } : {}),
     ...(dropOnDefeat ? { dropOnDefeat } : {}),
   };
   if (action.loot === undefined) delete options.loot;
+  if (action.warpIn && placeId === state.place) emit("sfx", { name: "warp-burst" });
+  const prowlDir = action.role === "prowl"
+    ? V(R(-1, 1), R(-0.15, 0.15), R(-1, 1)).normalize()
+    : null;
+  const prowlSide = prowlDir ? V(-prowlDir.z, 0, prowlDir.x).normalize() : null;
   for (let i = 0; i < requested; i++) {
     const distance = R(range[0], range[1]);
-    const pos = origin.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(distance));
+    const hand = i % 2 === 0 ? 1 : -1;
+    const dir = prowlDir
+      ? prowlDir.clone().addScaledVector(prowlSide, hand * 0.08).normalize()
+      : V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize();
+    const pos = origin.clone().add(dir.multiplyScalar(distance));
     // The authored courier is the first member of the wave; its mission drop
     // is a single physical crate, while the remaining patrol ships are ordinary
     // hostiles unless their action supplies another drop plan.
-    spawnEnemy(enemy, pos, placeId, `mission:${mission?.id || "story"}`, {
+    const ship = spawnEnemy(enemy, pos, placeId, `mission:${mission?.id || "story"}`, {
       ...options,
       ...(dropOnDefeat && i > 0 ? { dropOnDefeat: null } : {}),
     });
+    if (action.role === "prowl") {
+      ship.o = hand;
+      if (prowlDir) ship.prowlDir = prowlDir.clone();
+      if (requested > 1) ship.brain.phase = (i / requested) * Math.PI * 2;
+    }
   }
 });

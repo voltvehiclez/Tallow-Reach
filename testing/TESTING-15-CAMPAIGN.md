@@ -44,8 +44,12 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
 14. Learn the controls, one call at a time. Each lesson is a **one-second hold** and each finishes the
     moment the bar reaches **100%**: **W** throttle forward, then **Ctrl** — *brake to a stop* — then **S**,
     **mouse** steer, **A**, **D**, **Space**, **C**, **Q**, **E**, **Shift** boost.
-15. On a control step a **small percentage bar** appears directly under the objective. Hold the key: it
-    fills smoothly, reads 50% halfway and **100%** when the hold counts. Let go early and the bar drains.
+15. On a control step a **small bar** appears directly under the objective, on its own line: the control's
+    name (`W — throttle forward`, `Ctrl — brake to a stop`, `Q — roll left`) above a **full-width track**
+    with the percentage at its right-hand end. Hold the key: the track fills smoothly from the left, reads
+    **50%** halfway and **100%** when the hold counts. Let go early and it drains. If you see the name but no
+    bar (or a bar with no width), the objective's generic `#tr .hud-mission small` rule has won again —
+    see `docs/architecture/campaign-acts.md`, "Control lessons and chases".
 16. **Q and E:** Q must complete *Roll left with Q* and E *Roll right with E*. (They were swapped in the
     previous build: Q completed the roll-right objective.)
 17. The brake (Ctrl) is taught **second**, on purpose: a new pilot can always stop the Wasp before
@@ -64,63 +68,99 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     giants) along both sides of the line. They are scenery with real collision — do not fly into them.
 22. Watch Dane: he **steers around the clusters** and never clips a rock. The flown line itself stays clear
     (about 400 m of open air to the nearest rock).
-23. **Bonus line under the objective** while the run is live: *Bonus: within 500 m · now 312 m*, with your
-    **live distance in metres**. Under 500 m it reads light green; over it, red. Pass 500 m once and the
-    bonus is lost for good (**+100 cr** gone); the run itself continues. The bonus is **not** judged during
-    the form-up, so being far away before the run starts costs nothing.
-24. Fall more than about **1 km** behind and Dane says *"You are too slow. Follow me back to the start and
-    we will run it again."*: he returns to the **fixed start point** and the run is redone. This never fails
-    the act and is separate from the 500 m bonus.
-25. Finish the course and he calls the gunnery pass. Two **Practice Drones** appear; he **observes from a
-    distance** (he circles you, he does not fly ahead of you any more).
-26. Shoot both drones down (**LMB**, pick them up with **F**).
-27. He spots contacts and says only that they are *not school drones* and that he does not recognise the
-    hulls — he never calls them raiders, and neither does the objective text.
-28. **The strangers introduce themselves**: *"Korr's newest cadet… Cut your engines and hand over the Wasp."*
-    Two unmarked ships appear and shoot back — nothing in the scene tells you who they are.
-29. Dane **fires at them too**. His rounds are **orange, the same colour as your basic cannons** (not red),
-    and still do **0 damage** — you have to finish them. Destroy both attackers.
+23. **Bonus / distance line under the objective** while the run is live: *Bonus: within 500 m · now 312 m*,
+    with your **live distance in metres**. Pass 500 m once and the bonus is lost (**+100 cr** gone), but the
+    **live distance counter stays on screen** (*Distance to Dane: now NNN m*) so you can still judge the
+    1 km pass mark. The bonus is **not** judged during the form-up, so being far away before the run starts
+    costs nothing.
+24. Fall more than about **1 km** behind and Dane **slows to a stop** (instead of pulling a sudden 180),
+    says *"You need to keep closer to pass. Let's do it again — follow me back to the start."*, and once he
+    finishes speaking he turns and returns to the **fixed start point** so the run can be redone. This never
+    fails the act and is separate from the 500 m bonus.
+25. Finish the course and he calls the gunnery pass. It comes in **two waves**. The first pair of
+    **Practice Drones** appears; he **observes from a distance** (he circles you, he does not fly ahead of
+    you any more). The objective reads *Destroy both practice drones with your primary weapon.*
+26. Shoot both drones down with the **primary bank** (**1**–**5** select a bay, **LMB** fires; pick wrecks
+    up with **F**). **Dane does not fire** at the drones: the gunnery pass is your test, and his guns stay
+    cold until the ambush.
+27. A **second pair** of drones then appears for the **secondary bank**: he explains that **6**–**0** select
+    your secondary bays, that the starter Wasp carries **basic missiles** there, and that you hold a target
+    inside the aiming ring until the lock tone sounds and then **Right Click** to launch. The objective
+    reads *Destroy both practice drones with your secondary weapon.* Kill both with missiles. (If you empty
+    the rack with nothing still in flight, the act tops the missiles back up so the drill cannot stall.)
+28. As the second wave goes down, **two unmarked ships warp in** and begin **flying in a circle around Dane
+    and your ship** without shooting. Dane spots them and says only that they are *not school drones* and that
+    he does not recognise the hulls — he never calls them raiders, and neither does the objective text.
+29. **The strangers introduce themselves**: *"Korr's newest cadet… Cut your engines and hand over the Wasp."*
+    While they talk, they keep circling you and Dane, and **neither they nor Dane shoot** — unless you open
+    fire on them mid-dialogue, in which case they **pre-emptively switch into aggressive AI** and attack at
+    once.
+30. Once their threat finishes, both attackers **switch into aggressive AI** and attack, and Dane **opens fire
+    at them too**. His rounds are **orange, the same colour as your basic cannons** (not red), and still do
+    **0 damage** — you have to finish them. Destroy both attackers.
 
 ## 4. The accomplished card, the failure card and the way out
 
-30. When the last objective completes, the simulation stops and a big **MISSION ACCOMPLISHED** card appears
+31. When the last objective completes, the simulation stops and a big **MISSION ACCOMPLISHED** card appears
     with what was paid (50 cr, plus the 100 cr bonus if you kept within 500 m). **Return to campaign menu**
     takes you back to the chapter boxes; the act is marked complete and offers **Replay**.
-31. **Blank-menu check (the Act 1 bug):** finish the act, then leave the act by the *other* route: press
+32. **Blank-menu check (the Act 1 bug):** finish the act, then leave the act by the *other* route: press
     **Esc** → **Exit to main menu** (or return to the campaign screen and press **Back**). The title screen
     must show **Campaign** and **Open World** with its controls list — never an empty dark screen. The end
     card must not be left covering the menu.
-32. Play the act again from a failed state: start First Sortie, then get yourself **destroyed** in flight.
-    A **MISSION FAILED** card stops the world and says *Your Wasp was destroyed. The sortie is over.*
+33. Play the act again from a failed state: start First Sortie, then get yourself **destroyed** in flight.
+    A **MISSION FAILED** card stops the world and says *Your Wasp was destroyed.*
     It offers **Start from the beginning** and, because First Sortie deliberately has **no checkpoints**,
     no checkpoint button. **Start from the beginning** restarts the act from the station briefing.
-33. (Checkpoint framework, for a future act: a step marked `checkpoint: true` adds a **Start from last
+34. (Checkpoint framework, for a future act: a step marked `checkpoint: true` adds a **Start from last
     checkpoint** button that puts you back on that step with its progress cleared.)
 
 ## 5. Boundaries, docking and reloads
 
-34. In flight, press **M** and try to warp out of the pocket: you are refused with
+35. In flight, press **M** and try to warp out of the pocket: you are refused with
     *You do not have permission to leave this pocket.* The campaign never lets you wander off unless an act
     says so.
-35. During the lesson or the run, dock at Korr Flight School (**G**). Docking is **allowed** (no destroy
+36. During the lesson or the run, dock at Korr Flight School (**G**). Docking is **allowed** (no destroy
     objective is live), and it **does not reset** the act: Dane stays where he was, the lesson keeps its
     progress, and undocking puts you back in the same objective.
-36. During the drone pass or the ambush, try to dock: you are refused with
+37. During the drone pass or the ambush, try to dock: you are refused with
     *You cannot dock while the act's enemies are still out there.*
-37. Quit to the main menu mid-act and press **Campaign**: the screen opens on the chapter boxes; open
+38. Quit to the main menu mid-act and press **Campaign**: the screen opens on the chapter boxes; open
     Chapter 1 and the act offers **Resume** and picks up where you left off. Dane is re-created from the
     act's own `spawn-ship` script if he had vanished, and the unmet drone/attacker waves are re-armed
     (never duplicated).
-38. **Restart act** lives in the pause menu (**Esc**) while an act is running; it starts the act clean.
+39. **Restart act** lives in the pause menu (**Esc**) while an act is running; it starts the act clean.
 
 ## 6. Two pilots, one save
 
-39. Finish or leave back to the menu, switch to **Open World**: your fleet, credits and cargo are exactly
+40. Finish or leave back to the menu, switch to **Open World**: your fleet, credits and cargo are exactly
     as they were — the campaign pilot is a separate record.
-40. In the campaign, open **Inventory**: only the campaign's Wasp is yours there, with an empty hold.
-41. Export the campaign save to a **TR1:** code and re-import it. You return to the campaign with its
+41. In the campaign, open **Inventory**: only the campaign's Wasp is yours there, with an empty hold.
+42. Export the campaign save to a **TR1:** code and re-import it. You return to the campaign with its
     completions intact.
-42. **Reset** in the campaign restarts only the campaign half: a fresh 600 cr pilot at Korr Flight School with
+43. **Reset** in the campaign restarts only the campaign half: a fresh 600 cr pilot at Korr Flight School with
     completion cleared. The open world is untouched.
-43. An old save (v26 or earlier) opens in the **Open World**; the **Campaign** button starts a fresh campaign
+44. An old save (v26 or earlier) opens in the **Open World**; the **Campaign** button starts a fresh campaign
     beside it, keeping any campaign completions it already recorded.
+
+## 7. Objective markers and highlights
+
+45. In First Sortie, the two drone waves glow **amber** on the HUD: the drone labels carry a glowing
+    border and their rows in the **N** list glow too. The same is true of the raiders once they turn hostile,
+    and of **Korr Flight School** when the sortie is ready to hand in.
+46. Check the same in the open world: accept a **contract** (or a story mission) and confirm the objectives
+    glow in that mission's own colour — **ice blue** for a contract, **amber** for a story mission. A hunt
+    target glows when it spawns; a salvage or delivery crate glows even when it is far away (**outside the old
+    900 m crate range**); a mining contract glows its field or its rocks. Stations that take the hand-in glow
+    when it is time to fly back.
+47. A mission that needs you somewhere else shows a **Waypoint** label on the HUD edge in the mission's
+    colour. On the ten-kilometre run, **Course start** marks where Dane is waiting until you form up.
+
+## 8. The words
+
+48. Every line First Sortie says — the graduation briefing, each control call with its objective and hold
+    label, the run's orders and both reset lines, the gunnery pass, the ambush (Dane's and the strangers'),
+    the final report, the failure sentence and the card buttons — is collected in
+    [../docs/FIRST-SORTIE-DIALOGUE.md](../docs/FIRST-SORTIE-DIALOGUE.md). Read it before playtesting and
+    note any wording you want changed against the step it names; the strings themselves live in
+    `src/data/campaign/m01.js`. Nothing else in the act should say anything the document does not list.

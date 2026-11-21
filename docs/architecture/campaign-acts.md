@@ -81,9 +81,15 @@ optional: [
   (default one second; every First Sortie lesson authors `1`). The sim reads the
   pilot's control record (`controlHeld`), never a key code, and emits
   `mission-control` when the hold is long enough. The live hold is published as
-  `state.ui.controlHold` (`fraction`, `percent`, the control's `label`), and the
-  HUD draws it as a percentage bar under the act's objective (top right, with
-  every other active mission): a full bar is 100% and a learned control.
+  `state.ui.controlHold` (`fraction`, `percent`, the control's `label`), and
+  `ui/mission-hud.js` `holdBarHtml` draws it as a percentage bar under the act's
+  objective (top right, with every other active mission): a full bar is 100% and
+  a learned control. That markup needs its own selectors
+  (`#tr .hud-mission small.hud-hold`, which out-rank `#tr .hud-mission small`) —
+  the generic `display: block; white-space: nowrap` rule for objective sub-lines
+  silently beat the old bar and left an empty track behind, which is why the bar
+  looked broken after the objective moved to the top right. Keep the bar's CSS a
+  grid so the track can take the remaining width.
   First Sortie teaches W, then Ctrl (the brake), then S, mouse, strafe, lift,
   roll and boost — a new pilot can always stop the ship before anything that can
   drift them off the range.
@@ -98,7 +104,9 @@ optional: [
   says "Close to within 300 m of Dane to start the run." until it starts, then
   "Stay within 1 km of Dane for the whole course to pass." The first chase leg is
   deliberately slow (95 m/s) so the run can be joined from a standing start. A
-  reset returns him to the start and the same form-up applies again.
+  reset returns him to the start and the same form-up applies again. All of these
+  lines, and every other word First Sortie says, are collected in
+  [../FIRST-SORTIE-DIALOGUE.md](../FIRST-SORTIE-DIALOGUE.md).
 
 ## Scenery along a course
 
@@ -121,11 +129,19 @@ points, not generated.
   `lead` (fly the course), `observe` (circle the pilot at a distance) or
   `guard` (fight the act's other hostiles).
 - A friendly def may set `lockable: true` (selectable with F), `foe: false`
-  (Wasp scheme and blue engine glow) and `engages: "hostiles"` with `dmg: 0`,
-  so it fires at the act's hostiles and damages nothing. A round is drawn in the
-  colour of the module that fired it (`BULLET_COLOURS` in `data/weapons.js`, set on
-  the shot by `sim/ai.js`): his basic cannons are orange, like the pilot's, and
-  only hostile repeaters are red. There is no separate "friendly" colour rule.
+  (Wasp scheme and blue engine glow) and `engages: "hostiles"` with `dmg: 0`.
+  `sim/ai.js` fires only when the actor is **`role: "guard"`** as well as
+  `engages: "hostiles"`, so a story ship on `observe` (First Sortie's gunnery
+  pass) watches and never touches the pilot's targets; he opens fire in the
+  ambush, where the step names him `guard`.
+- A round is drawn in the colour of the module that fired it (`BULLET_COLOURS` in
+  `data/weapons.js`): his basic cannons are orange, like the pilot's, and only
+  hostile repeaters are red. There is no separate "friendly" colour rule.
+- The colour has to be on the record **before the mesh is built**: `addEntity`
+  emits `entity-spawned` synchronously, so `sim/combat.js` `fire()` takes a
+  trailing `extra` object and assigns it before `addEntity`. Setting a field on
+  the shot after `fire()` returns is too late — that was the bug that made his
+  rounds red.
 - `spawn-ship` actions with `respawn: true, story: true` are re-armed by
   `sim/campaign-flight.js` whenever the ship is missing (reload, re-entry, a
   bug), and `rearmWaves` still only tops up kill objectives.

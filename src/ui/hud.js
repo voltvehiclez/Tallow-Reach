@@ -18,8 +18,8 @@ import { camera } from "../render/scene.js";
 import { interpolatedPos, interpolatedVelocity, renderPlayerPose } from "../render/views.js";
 import { state, say, instanceAt } from "../state/state.js";
 import { holdLoad } from "../sim/economy.js";
-import { activeMissions, missionBonusStatus, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
-import { isCampaignMissionId } from "../sim/campaign.js";
+import { activeMissions, missionDescription, missionNextText, missionProgress, missionRecoveryText } from "../sim/missions.js";
+import { campaignDetailHtml, missionWaypoints, objectObjectiveColor } from "./mission-hud.js";
 import { pruneLock, lockPosition, lockName, targetHealth, isPocketRowLocked } from "../sim/targeting.js";
 import { fieldMarkerPosition } from "../sim/asteroids.js";
 import { stationAt } from "../sim/places.js";
@@ -31,7 +31,7 @@ import { localPlayer, profileOf } from "../state/state.js";
 import { routeDisplay, flightRouteRows, escapeRouteText } from "./route-display.js";
 
 const $ = id => document.getElementById(id);
-const MARKER_POOL = 18;
+const MARKER_POOL = 28;
 const MARKER_MARGIN_X = 75;   // keep labels this far from the screen edge
 const MARKER_MARGIN_Y = 30;
 
@@ -148,13 +148,9 @@ export function setupHud() {
     markers.push(d);
   }
 
-  // Clicking the route must not fire weapons.
+  // Clicking the route must not fire weapons; weapon slots are keyboard-only (1–5, 6–0)
+  // so turning down with the mouse never clicks a slot.
   el.route?.addEventListener("mousedown", e => e.stopPropagation());
-  el.weaponSlots?.addEventListener("mousedown", e => e.stopPropagation());
-  el.weaponSlots?.addEventListener("click", e => {
-    const button = e.target.closest("button[data-weapon-action]");
-    if (button) emit("action", { name: button.dataset.weaponAction, repeat: false });
-  });
 
 
   navigationRows = [];
@@ -226,11 +222,17 @@ export function setupHud() {
   on("launched", ({ player } = {}) => {
     if (state.ui.intro) return;
     if (player && player !== state.player) return;
+    weaponSlotsCache = null;
     setReticle(true);
+  });
+  on("campaign-act-entered", () => {
+    weaponSlotsCache = null;
+    setReticle(Boolean(state.player && !state.player.docked));
   });
   on("main-menu", () => {
     setReticle(false);
     routeCache = null;
+    weaponSlotsCache = null;
   });
 
   // The title screen boots with the HUD hidden (index.html), so sync the pointer
@@ -276,7 +278,7 @@ function missionsHtml(missions) {
     const kind = mission.kind === "contract" ? "contract" : "story";
     return `<div class="hud-mission hud-mission-${kind}"><strong>${escHud(missionDescription(mission))}:</strong>` +
       `<span class="hud-mission-objective">${escHud(missionNextText(mission))}</span>${
-        campaignDetailHtml(mission)
+        campaignDetailHtml(mission, { hold: state.ui.controlHold, run: state.ui.chaseRun })
       }${progress ? `<small>${progress.done} of ${progress.total} defeated</small>` : ""}${
         recovered ? `<small>${recovered}</small>` : ""
       }</div>`;
@@ -288,39 +290,6 @@ const clockText = seconds => {
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
-
-/** A hold bar as a percentage: a full bar is one learned control. */
-function holdBarHtml(hold) {
-  const percent = Math.round(Math.max(0, Math.min(1, hold.fraction || 0)) * 100);
-  return `<small class="hud-hold"><span class="hold-track"><i style="width:${percent}%"></i></span>` +
-    `<b>${percent}%</b> ${escHud(hold.label || "")}</small>`;
-}
-
-/** The run's rule, and the still-live bonus, directly under the objective. */
-function chaseLinesHtml(run, mission) {
-  const gapLimit = Number(run.maxGap) > 0 ? Number(run.maxGap) : 1000;
-  const rule = run.gathering
-    ? `Close to within ${Math.round(Number(run.gather) || 300)} m of Dane to start the run.`
-    : `Stay within ${gapLimit % 1000 === 0 ? `${gapLimit / 1000} km` : `${gapLimit} m`} of Dane for the whole course to pass.`;
-  // While he waits for the form-up there is no distance to judge.
-  const bonus = missionBonusStatus(mission, run.gathering ? null : run.gap);
-  const bonusLine = bonus
-    ? `<small class="hud-bonus${bonus.over ? " is-over" : ""}">Bonus: within ${bonus.limit} m` +
-      `${bonus.metres == null || run.gathering ? "" : ` · now ${bonus.metres} m`}</small>`
-    : "";
-  return `<small class="hud-chase">${escHud(rule)}</small>${bonusLine}`;
-}
-
-/** Extra lines an act adds under its objective (a lesson hold, the run's rule). */
-function campaignDetailHtml(mission) {
-  if (!mission || !isCampaignMissionId(mission.id)) return "";
-  let extra = "";
-  const hold = state.ui.controlHold;
-  if (hold && hold.mission === mission.id) extra += holdBarHtml(hold);
-  const run = state.ui.chaseRun;
-  if (run && run.mission === mission.id) extra += chaseLinesHtml(run, mission);
-  return extra;
-}
 
 /**
  * The instance block (step 14): what this run asks for, how long it has left, and whether the way
@@ -513,7 +482,7 @@ function drawLockRing(ML, radius) {
  * Place a label on screen for a world point. Off-screen points are pinned
  * to the screen edge in their direction.
  */
-function mark(p, text, style, ox, oy, health = null, extraCls = "") {
+function mark(p, text, style, ox, oy, health = null, extraCls = "", objectiveColor = "") {
   if (markerCount >= MARKER_POOL) return;
   camera.updateMatrixWorld();
   const el_ = markers[markerCount++];
@@ -546,8 +515,9 @@ function mark(p, text, style, ox, oy, health = null, extraCls = "") {
 
   const tone = typeof style === "string" ? style : style?.tone || "";
   const color = typeof style === "object" && style?.color ? `;--marker-color:${style.color}` : "";
-  el_.style.cssText = `display:block;left:${x}px;top:${y}px${color}`;
-  el_.className = markerClasses("mk", tone, extraCls);
+  const objStyle = objectiveColor ? `;--objective-color:${objectiveColor}` : "";
+  el_.style.cssText = `display:block;left:${x}px;top:${y}px${color}${objStyle}`;
+  el_.className = markerClasses("mk", tone, extraCls, objectiveColor ? "obj" : "");
   const label = text === null ? "" : text + " " + fmtDist(state.player.pos.distanceTo(p));
   if (health) el_.innerHTML = `${targetHealthMarkup(health)}<span>${escHud(label)}</span>`;
   else el_.textContent = label;
@@ -562,10 +532,14 @@ function drawMarkers() {
 
   pruneLock();
   const lock = F.lock;
+  // One objective snapshot for the whole frame: markers, locks and waypoints all
+  // read the same active mission list instead of walking the profile per label.
+  const objCtx = { place: state.place, profile: state.profile, world: W, worldState: state.worldState, missions: activeMissions(state.profile) };
 
   for (const f of featuresOf(state.place, "station")) {
     const locked = lock && lock.k === "s" && lock.o?.place === state.place && lock.o?.feature === f.id;
-    if (!locked) mark(V(...f.pos), f.n, markerStyle("station", f));
+    const objColor = objectObjectiveColor(f, "station", objCtx);
+    if (!locked) mark(V(...f.pos), f.n, markerStyle("station", f), 0, 0, null, "", objColor);
   }
   if (beltPlace !== state.place) {
     beltGroups = beltLabelGroups(featuresOf(state.place, "asteroidField"));
@@ -574,27 +548,49 @@ function drawMarkers() {
   const fieldLock = lock?.k === "n" && lock.o?.place === state.place && lock.o.source?.kind === "asteroidField"
     ? lock.o.source : null;
   let lockedBeltName;
-  for (const {main, members} of beltGroups) {
-    if (fieldLock && members.some(f => f.id === fieldLock.id)) lockedBeltName = main.n;
-    else mark(V(...fieldMarkerPosition(main)), main.n, markerStyle("asteroidField", main));
+  let lockedBeltGroup = null;
+  for (const group of beltGroups) {
+    const { main, members } = group;
+    if (fieldLock && members.some(f => f.id === fieldLock.id)) {
+      lockedBeltName = main.n;
+      lockedBeltGroup = group;
+    } else {
+      const objColor = objectObjectiveColor(group, "asteroidField", objCtx);
+      mark(V(...fieldMarkerPosition(main)), main.n, markerStyle("asteroidField", main), 0, 0, null, "", objColor);
+    }
   }
 
   W.enemies.forEach(e => {
     if (lock && lock.o === e) return;
-    mark(interpolatedPos(e), e.friendly ? e.n : "Hostile", markerStyle(e.friendly ? "Ship" : "Hostile", e), 70, -36, null, lock ? "dim" : "");
+    const kind = e.friendly ? "Ship" : "Hostile";
+    const objColor = objectObjectiveColor(e, kind, objCtx);
+    mark(interpolatedPos(e), e.friendly ? e.n : "Hostile", markerStyle(kind, e), 70, -36, null, lock && !objColor ? "dim" : "", objColor);
   });
 
   if (lock) {
     const hostile = lock.k === "e";
     const style = lockMarkerStyle(lock, o => featureById(o?.place, o?.feature));
+    const lockObj = lock.k === "s"
+      ? featureById(lock.o?.place, lock.o?.feature)
+      : lockedBeltGroup || (lock.k === "n" ? lock.o?.source : lock.o);
+    const lockKind = lock.k === "s"
+      ? "station"
+      : lockedBeltGroup
+        ? "asteroidField"
+        : lock.k === "n"
+          ? (lock.o?.rowKind || lock.o?.source?.kind || "")
+          : lock.k;
+    const objColor = objectObjectiveColor(lockObj, lockKind, objCtx);
     const pos = lock.o && lock.o.pos ? interpolatedPos(lock.o) : lockPosition(lock);
-    const visible = mark(pos, lockedBeltName ?? lockName(lock), style, 70, -36, hostile ? targetHealth(lock.o) : null, "lock");
-    if (visible) mark(pos, null, style, 0, 0, null, "lk");
+    const visible = mark(pos, lockedBeltName ?? lockName(lock), style, 70, -36, hostile ? targetHealth(lock.o) : null, "lock", objColor);
+    if (visible) mark(pos, null, style, 0, 0, null, "lk", objColor);
   }
 
   W.crates.forEach(c => {
-    if (c !== (lock && lock.o) && P.pos.distanceTo(c.pos) < 900) {
-      mark(interpolatedPos(c), "Crate", markerStyle("Cargo", c));
+    if (c === (lock && lock.o)) return;
+    const objColor = objectObjectiveColor(c, "Cargo", objCtx);
+    if (objColor || P.pos.distanceTo(c.pos) < 900) {
+      mark(interpolatedPos(c), "Crate", markerStyle("Cargo", c), 0, 0, null, "", objColor);
     }
   });
 
@@ -610,6 +606,10 @@ function drawMarkers() {
     if (k !== (lock && lock.o)) mark(interpolatedPos(k), k.locked ? `${k.n} (locked)` : `${k.n} (open)`, markerStyle("Cache", k));
   }
 
+  for (const wp of missionWaypoints(objCtx)) {
+    mark(V(...wp.pos), wp.label, { tone: "", color: wp.color }, 0, 0, null, "waypoint", wp.color);
+  }
+
   for (let i = markerCount; i < MARKER_POOL; i++) markers[i].style.display = "none";
 }
 
@@ -622,8 +622,13 @@ function updateInstruments(dt, P, F) {
       const focused = document.activeElement && el.navigationRows.contains?.(document.activeElement);
       if (!el.navigationRows.dataset?.hover && !focused) {
         const place = P.place || state.place;
+        const objCtx = { place, profile: state.profile, world: state.world, worldState: state.worldState, missions: activeMissions(state.profile) };
         navigationRows = sortedPocketRows(pocketObjects(P), navigationFilters, navigationSort, navigationDirection);
-        el.navigationRows.innerHTML = pocketRowsHtml(navigationRows, row => isPocketRowLocked(row, F.lock, place));
+        el.navigationRows.innerHTML = pocketRowsHtml(
+          navigationRows,
+          row => isPocketRowLocked(row, F.lock, place),
+          row => objectObjectiveColor(row.object, row.kind, objCtx),
+        );
       } else {
         syncNavigationSelection(P);
       }
