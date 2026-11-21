@@ -15,6 +15,7 @@ import { on, emit } from "../util/events.js";
 import { state, placeWorld } from "../state/state.js";
 import { isPocket } from "../data/places.js";
 import { enemyDef } from "../data/enemies.js";
+import { MODULES } from "../data/modules.js";
 import { controlHeld, MISSION_CONTROLS, dialogueReadSeconds } from "../data/missions/rules.js";
 import { activeCampaignMission } from "./campaign.js";
 import { missionRespawnActions } from "./missions.js";
@@ -213,6 +214,12 @@ on("mission-tick", ({ dt, player } = {}) => {
   ensureStoryActors(mission, player, place);
   if (player.docked) return;
   applyActorRoles(mission, step, player);
+  if ((step.id === "missile-brief" || step.id === "missile-drill") &&
+      (state.profile?.msl || 0) <= 0 &&
+      placeWorld(place).missiles.length === 0) {
+    state.profile.msl = MODULES.missile_basic.ammo;
+    player.missileStock = state.profile.msl;
+  }
   if (step.kind === "control") tickControl(mission, step, player, dt);
   else if (step.kind === "chase") tickChase(mission, step, player, dt);
   else if (step.kind === "kill" || step.kind === "parallel") {

@@ -44,7 +44,16 @@ export function startCampaignAct(actIdOrMission, { restart = false, checkpoint =
   const place = campaignActPlace(definition);
   if (!place) return { ok: false, mode: null, message: "That campaign act has no starting place." };
 
-  if (state.mode !== "campaign") switchGameMode("campaign");
+  if (state.mode !== "campaign") {
+    switchGameMode("campaign");
+    resetPlaces();
+    state.place = state.worldState.place;
+  }
+
+  // Leaving the title screen before `resumeFromSave` runs ensures that an
+  // in-flight resume's `launched` event unhides the flight HUD and reticle.
+  state.ui.intro = false;
+  state.ui.campaign = false;
 
   const running = activeCampaignMission();
   if (running && running.id === definition.id && !restart && !isMissionFailed(running)) {
@@ -52,6 +61,7 @@ export function startCampaignAct(actIdOrMission, { restart = false, checkpoint =
     const P = state.player;
     if (P) resumeFromSave(P);
     saveCurrentGame();
+    emit("campaign-act-entered", { act, mission: running, mode: "resume" });
     return { ok: true, mode: "resume", message: "" };
   }
 

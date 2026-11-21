@@ -7,6 +7,7 @@ import { CONTRACT_MISSION_TEMPLATES, missionFromContract, describeMission } from
 import { storyMission } from "../data/missions/index.js";
 import { campaignMission, isCampaignMissionId, noteCampaignCompletion } from "./campaign.js";
 import { grantFixedShip } from "../state/profile.js";
+import { refreshGuns } from "./guns.js";
 import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
 import { placeAt, placeDef, isPocket, DEFAULT_PLACE } from "../data/places.js";
@@ -1280,7 +1281,11 @@ export function acceptMission(offer, profile = state.profile, at = state.place) 
   if (offer?.kind === "story" && missionsOf(profile).some(active => active.id === offer.id)) return undefined;
   // A story mission can assign the hull the fiction says the pilot is flying.
   // The grant belongs to the shared pilot; this mode's selection is pointed at it.
-  if (offer?.fixedShip && !grantFixedShip(profile, offer.fixedShip, at)) return undefined;
+  if (offer?.fixedShip && !grantFixedShip(profile, offer.fixedShip, at, { campaign: isCampaignMissionId(offer?.id) })) return undefined;
+  if (offer?.fixedShip && profile === state.profile && state.player) {
+    state.player.missileStock = profile.msl;
+    refreshGuns(state.player, profile);
+  }
   // Every mission is handed in at one station: its data may name it, otherwise it
   // is the station that gave the mission out (this one, unless the pilot is not
   // at a station, in which case the home station). Stamped on the record so it
@@ -1632,6 +1637,16 @@ function killObjectivesIn(mission) {
   const step = missionStep(mission);
   if (!step) return [];
   if (step.kind === "kill") return [{ step, key: step.id, place: step.place || step.sector }];
+  if (step.kind === "dialogue") {
+    for (let i = mission.step + 1; i < (mission.steps?.length || 0); i++) {
+      const next = mission.steps[i];
+      if (!next) break;
+      if (next.kind === "dialogue") continue;
+      if (next.kind === "kill") return [{ step: next, key: next.id, place: next.place || next.sector }];
+      break;
+    }
+    return [];
+  }
   if (step.kind !== "parallel") return [];
   return (step.steps || [])
     .filter(child => child?.kind === "kill")

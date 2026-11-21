@@ -228,11 +228,15 @@ function attachMissionCompat(profile) {
 }
 
 /** Grant the story-assigned hull to this pilot and make it the active ship. */
-export function grantFixedShip(profile, id, placeId = null) {
+export function grantFixedShip(profile, id, placeId = null, { campaign = false } = {}) {
   if (!profile || !isShipId(id)) return false;
   if (!Array.isArray(profile.ships)) profile.ships = [];
   if (!profile.ships.includes(id)) profile.ships.push(id);
   ensureShipRecords(profile, id, placeId);
+  if (campaign && Array.isArray(profile.loadout?.[id]?.secondary)) {
+    if (!profile.loadout[id].secondary[0]) profile.loadout[id].secondary[0] = "missile_basic";
+    profile.msl = Math.max(Number(profile.msl) || 0, MODULES.missile_basic.cap);
+  }
   profile.ship = id;
   if (typeof placeId === "string" && placeId) {
     profile.shipPlaces = profile.shipPlaces && typeof profile.shipPlaces === "object" && !Array.isArray(profile.shipPlaces) ? profile.shipPlaces : {};
@@ -247,12 +251,22 @@ export function grantFixedShip(profile, id, placeId = null) {
  * credits, cargo and fit are not, because the campaign is its own game.
  */
 export function separateCampaignPilot(profile) {
-  const fresh = newProfile(CAMPAIGN_HOME_POCKET);
+  const fresh = newCampaignProfile();
   const completed = Array.isArray(profile?.campaign?.completed)
     ? [...new Set(profile.campaign.completed.filter(id => typeof id === "string" && id.trim()))]
     : [];
   fresh.campaign = { completed };
   return fresh;
+}
+
+/** Fresh campaign pilot: starts in the school Wasp with Basic Missiles pre-fitted. */
+export function newCampaignProfile() {
+  const profile = newProfile(CAMPAIGN_HOME_POCKET);
+  if (Array.isArray(profile.loadout?.[DEFAULT_SHIP]?.secondary)) {
+    profile.loadout[DEFAULT_SHIP].secondary[0] = "missile_basic";
+  }
+  profile.msl = MODULES.missile_basic.cap;
+  return profile;
 }
 
 /** Fresh portable character profile (travels with a pilot across worlds). */
@@ -346,7 +360,7 @@ export function newSave() {
 export function newCampaignSave() {
   return {
     v: SAVE_VERSION,
-    profile: newProfile(CAMPAIGN_HOME_POCKET),
+    profile: newCampaignProfile(),
     world: newWorld({ homePocket: CAMPAIGN_HOME_POCKET, seed: campaignGalaxyRecord().seed, galaxy: campaignGalaxyRecord(), naturalWormholes: false }),
   };
 }

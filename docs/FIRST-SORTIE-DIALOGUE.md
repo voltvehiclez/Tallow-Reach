@@ -113,16 +113,32 @@ then says:
 
 and once the line finishes, he turns and flies back to the fixed start of `m01-range`.
 
-## 5. The gunnery pass — Dane watches, and does not shoot
+## 5. The gunnery pass — two waves, one per weapon bank
 
-Step `drone-brief`, radio:
-1. "Not bad. Now the gunnery pass: two drones in front of you."
-2. "I will watch from clear air. Put them down."
+The pass is split in two so the pilot learns the primary bank and then the secondary bank
+with a live target for each.
 
-Steps `spawn-drones` / `drone-drill` — objective *Shoot down both practice drones.*
-Two `practice_drone` targets, 600–750 m out, restored if a reload wipes them. **The pilot
-does this alone:** Dane is on `actorRole: "observe"` and his guns stay cold. He only opens
-fire in the ambush.
+**Wave 1 — primary weapons.** Step `spawn-drones` runs first (two `practice_drone`
+targets, 600–750 m out, restored if a reload wipes them), then radio `drone-brief`:
+1. "Not bad. Now the gunnery pass: two practice drones are out in front of you."
+2. "Keys 1 to 5 select your primary weapon bays. Your basic cannons are in slot 1 — aim at the lead pip and hold Left Click to fire."
+3. "I will watch from clear air. Destroy both drones with your primary weapon."
+
+Step `drone-drill` — objective *Destroy both practice drones with your primary weapon.*
+
+**Wave 2 — secondary weapons.** Step `spawn-missile-drones` puts a fresh pair out, then
+radio `missile-brief`:
+1. "Good shooting. Second wave is on the range — now for your secondary weapons."
+2. "Keys 6 to 0 select your secondary bays, where your basic missiles are fitted. Hold a target inside the aiming ring until the lock tone sounds, then press Right Click to launch."
+3. "Destroy this wave with your secondary weapon."
+
+Step `missile-drill` — objective *Destroy both practice drones with your secondary weapon.*
+The campaign starter Wasp leaves the school with its `missile_basic` rack fitted and full,
+and `sim/campaign-flight.js` tops the rack back up (`MODULES.missile_basic.ammo`) if the
+pilot empties it with nothing still in flight during `missile-brief` / `missile-drill`.
+
+**The pilot does this alone:** Dane is on `actorRole: "observe"` for both waves and his guns
+stay cold. He only opens fire in the ambush.
 
 ## 6. The ambush — warp in, prowl, then fight
 

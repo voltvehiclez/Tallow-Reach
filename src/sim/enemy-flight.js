@@ -156,9 +156,23 @@ export function flyCourse(e, def, toTarget, dist, dt, context) {
   e.pos.addScaledVector(e.v, dt);
 }
 
-/** Watch a drill from a safe distance, always facing the pilot. */
+/** Watch a drill from a safe distance, always facing the pilot. During an
+ *  ambush standoff (`prowl`), brake to a halt and face the incoming ships. */
 export function flyObserve(e, def, toTarget, dist, dt, context) {
   const { world, target, players } = context;
+  const prowlers = (world.enemies || []).filter(
+    other => other && other !== e && other.hp > 0 && other.role === "prowl",
+  );
+  if (prowlers.length > 0) {
+    const center = V();
+    for (const p of prowlers) center.add(p.pos);
+    center.multiplyScalar(1 / prowlers.length);
+    turnEnemy(e, center, Math.min(1, dt * def.turn * 1.4));
+    e.v.lerp(V(0, 0, 0), 1 - Math.exp(-dt * 4.2));
+    if (e.v.length() < 4) e.v.set(0, 0, 0);
+    e.pos.addScaledVector(e.v, dt);
+    return;
+  }
   const b = e.brain;
   b.phase += dt * T.observeOrbitRate;
   const pilot = target;
@@ -173,45 +187,50 @@ export function flyObserve(e, def, toTarget, dist, dt, context) {
 }
 
 /**
- * Prowl around the pilot and any nearby wingman during an ambush parley: streak
- * in out of warp and circle both hulls without opening fire until the threat is
- * finished (or the pilot shoots first).
+ * Ambush parley standoff: streak in out of warp, close distance to Dane and the
+ * pilot, then brake to a halt side-by-side and stare at Dane while messages are
+ * exchanged, without opening fire until the dialogue ends (or shot first).
  */
 export function flyProwl(e, def, toTarget, dist, dt, context) {
   const { world, target, players } = context;
   const b = e.brain;
   const hand = e.o || b.hand || 1;
-  b.phase += dt * 0.65 * hand;
   const ally = (world.enemies || []).find(
     other => other && other !== e && other.hp > 0 && enemyDef(other.def).friendly === true,
   );
-  const center = ally && ally.pos.distanceTo(target.pos) < 900
-    ? target.pos.clone().add(ally.pos).multiplyScalar(0.5)
-    : target.pos.clone();
-  const orbitRadius = 240;
-  const anchor = center.clone().add(V(
-    Math.cos(b.phase) * orbitRadius,
-    24 + Math.sin(b.phase * 0.7) * 28,
-    Math.sin(b.phase) * orbitRadius,
-  ));
+  const focus = ally && ally.pos.distanceTo(target.pos) < 1200 ? ally.pos : target.pos;
+  if (!e.prowlDir) {
+    const fromFocus = e.pos.clone().sub(focus);
+    fromFocus.y *= 0.25;
+    e.prowlDir = fromFocus.lengthSq() > 1 ? fromFocus.normalize() : V(0, 0, 1);
+  }
+  const side = V(-e.prowlDir.z, 0, e.prowlDir.x);
+  const standoffDist = 150;
+  const anchor = focus.clone()
+    .addScaledVector(e.prowlDir, standoffDist)
+    .addScaledVector(side, hand * 28)
+    .add(V(0, 8 * hand, 0));
   const toAnchor = anchor.clone().sub(e.pos), d = toAnchor.length();
   if (e.warpIn > 0) {
     e.warpIn = Math.max(0, e.warpIn - dt);
-    e.boosting = e.warpIn > 0;
+    e.boosting = e.warpIn > 0 && d > 180;
   } else {
     e.boosting = false;
   }
-  const maxSpd = e.warpIn > 0 ? 420 : def.spdFar;
-  const cruise = e.warpIn > 0
-    ? Math.min(420, Math.max(def.spdFar, d * 1.4))
-    : Math.min(def.spdFar, Math.max(def.spdNear * 1.15, d * 1.1));
-  const desired = d > 15
-    ? toAnchor.normalize().multiplyScalar(cruise)
-    : V(-Math.sin(b.phase) * hand, 0, Math.cos(b.phase) * hand).multiplyScalar(def.spdNear * 1.15);
-  desired.add(flightAvoidance(e, world, desired, players)).clampLength(0, maxSpd);
-  const look = desired.lengthSq() > 1 ? e.pos.clone().add(desired) : center;
-  turnEnemy(e, look, Math.min(1, dt * def.turn * 1.4));
-  e.v.lerp(desired, 1 - Math.exp(-dt * (e.warpIn > 0 ? 6 : 3.4)));
+  const maxSpd = e.warpIn > 0 && d > 180 ? 420 : def.spdFar;
+  const desired = V();
+  if (d > 18) {
+    const cruise = e.warpIn > 0 && d > 180
+      ? Math.min(420, Math.max(def.spdFar, d * 1.35))
+      : Math.min(def.spdFar, d * 1.15);
+    desired.copy(toAnchor).normalize().multiplyScalar(cruise);
+    if (d > 70) desired.add(flightAvoidance(e, world, desired, players));
+    desired.clampLength(0, maxSpd);
+  }
+  const look = d > 110 && desired.lengthSq() > 4 ? e.pos.clone().add(desired) : focus;
+  turnEnemy(e, look, Math.min(1, dt * def.turn * 1.6));
+  e.v.lerp(desired, 1 - Math.exp(-dt * (e.warpIn > 0 ? 6 : 4.2)));
+  if (d <= 18 && e.v.length() < 6) e.v.set(0, 0, 0);
   e.pos.addScaledVector(e.v, dt);
 }
 

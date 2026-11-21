@@ -390,9 +390,17 @@ on("mission-script", ({ action, player, place, mission } = {}) => {
   };
   if (action.loot === undefined) delete options.loot;
   if (action.warpIn && placeId === state.place) emit("sfx", { name: "warp-burst" });
+  const prowlDir = action.role === "prowl"
+    ? V(R(-1, 1), R(-0.15, 0.15), R(-1, 1)).normalize()
+    : null;
+  const prowlSide = prowlDir ? V(-prowlDir.z, 0, prowlDir.x).normalize() : null;
   for (let i = 0; i < requested; i++) {
     const distance = R(range[0], range[1]);
-    const pos = origin.clone().add(V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize().multiplyScalar(distance));
+    const hand = i % 2 === 0 ? 1 : -1;
+    const dir = prowlDir
+      ? prowlDir.clone().addScaledVector(prowlSide, hand * 0.08).normalize()
+      : V(R(-1, 1), R(-0.3, 0.3), R(-1, 1)).normalize();
+    const pos = origin.clone().add(dir.multiplyScalar(distance));
     // The authored courier is the first member of the wave; its mission drop
     // is a single physical crate, while the remaining patrol ships are ordinary
     // hostiles unless their action supplies another drop plan.
@@ -400,9 +408,10 @@ on("mission-script", ({ action, player, place, mission } = {}) => {
       ...options,
       ...(dropOnDefeat && i > 0 ? { dropOnDefeat: null } : {}),
     });
-    if (action.role === "prowl" && requested > 1) {
-      ship.o = i % 2 === 0 ? 1 : -1;
-      ship.brain.phase = (i / requested) * Math.PI * 2;
+    if (action.role === "prowl") {
+      ship.o = hand;
+      if (prowlDir) ship.prowlDir = prowlDir.clone();
+      if (requested > 1) ship.brain.phase = (i / requested) * Math.PI * 2;
     }
   }
 });
