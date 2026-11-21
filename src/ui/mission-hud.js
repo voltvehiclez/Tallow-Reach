@@ -16,7 +16,7 @@ import {
 import { isCampaignMissionId } from "../sim/campaign.js";
 import { enemyDef } from "../data/enemies.js";
 import { courseDef } from "../data/flight-courses.js";
-import { featureById, isPocket, placeAt } from "../data/places.js";
+import { featureById, isPocket, placeAt, systemOf } from "../data/places.js";
 import { state } from "../state/state.js";
 
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -223,6 +223,42 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
     }
   }
   return "";
+}
+
+/**
+ * The pockets (and their systems) active missions currently want the pilot
+ * to warp to: one entry per destination pocket, in the mission's own colour.
+ * A destination drops off the moment the pilot is there, and returns if they
+ * warp away again — this is recomputed from the live mission state, exactly
+ * like the in-space Waypoint labels. The starmap rings these on both charts.
+ */
+export function missionTravelTargets(options = {}) {
+  const profile = options.profile || state.profile;
+  const place = options.place || state.place;
+  const worldState = options.worldState || state.worldState;
+  const missions = orderedActiveMissions(options.missions, profile);
+  const out = [];
+  const seen = new Set();
+  const push = (placeId, color, missionId) => {
+    if (!placeId || placeId === place || !isPocket(placeId) || seen.has(placeId)) return;
+    seen.add(placeId);
+    out.push({ place: placeId, system: systemOf(placeId), color, missionId });
+  };
+  for (const mission of missions) {
+    const color = missionTitleColor(mission);
+    const done = missionObjectivesDone(mission);
+    const readyHandIn = missionReadyForHandIn(mission, profile, worldState);
+    if (done || readyHandIn) {
+      push(missionHandInStation(mission), color, mission.id);
+      continue;
+    }
+    for (const step of activeObjectiveSteps(mission)) {
+      const stepPlace = step.place || step.sector ||
+        (step.kind === "reach" || step.kind === "reach-sector" ? step.target : null);
+      push(stepPlace, color, mission.id);
+    }
+  }
+  return out;
 }
 
 /**

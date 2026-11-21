@@ -192,3 +192,11 @@ Before you start: play `TESTING-BASELINE.md`, load an **old** save (a v26 or ear
     planets elsewhere may have changed class — that is expected, nothing is saved per-planet.
 56. **Reset** in Saves now wipes both modes for real: press it in either mode and both the campaign and
     the open world start fresh (600 cr, one Wasp).
+
+57. **Starmap objective glow:** with Border Signal accepted and the briefing done, open the big starmap —
+    the Meridian system is ringed in the mission colour; zoom into Meridian and Kestrel Hollow is ringed.
+    Warp to Kestrel Hollow: both rings are gone. Warp out again: they return. The same should hold for a
+    contract's destination pocket/system (ice blue) and for the First Sortie hand-in back at the academy.
+58. **Ambush face-off:** during the ambush parley the two strangers' labels and target locks read
+    **Unmarked** in neutral grey. When the talk ends (or you shoot first) they become **Newbie Raider**
+    in red and open fire as before.

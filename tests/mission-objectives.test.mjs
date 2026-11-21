@@ -27,8 +27,9 @@ const { spawnEnemy, updateEnemies } = await import("../src/sim/ai.js");
 const { emit, on } = await import("../src/util/events.js");
 const { V } = await import("../src/util/math.js");
 const { pocketRowsHtml } = await import("../src/ui/pocket-list.js");
-const { missionTitleColor, activeObjectiveSteps, objectObjectiveColor, missionWaypoints } =
+const { missionTitleColor, activeObjectiveSteps, objectObjectiveColor, missionWaypoints, missionTravelTargets } =
   await import("../src/ui/mission-hud.js");
+const { BORDER_SIGNAL_MISSION } = await import("../src/data/missions/story.js");
 // Registers the campaign's mission-tick beats (hold timer, chase, missile top-up).
 await import("../src/sim/campaign-flight.js");
 
@@ -310,4 +311,22 @@ test("a friendly story ship glows only while the live objective is to fly with i
   const dock = { ...base, step: 0, steps: [{ id: "dock", kind: "dock", place }] };
   assert.equal(objectObjectiveColor({ kind: "station" }, "station", { missions: [dock], place }), "var(--amber)",
     "the academy glows for the final dock objective");
+});
+
+test("travel targets: the starmap rings the system and pocket a mission wants, only while you are away", async () => {
+  // This file's catalog is the campaign galaxy; Border Signal lives in the open world.
+  const { GALAXY } = await import("../src/data/galaxy.js");
+  setPlaceCatalog(generateGalaxy(GALAXY.seed, GALAXY, { places: {}, links: {}, removedPlaces: [], removedLinks: [] }));
+  const profile = newProfile();
+  const mission = acceptMission(BORDER_SIGNAL_MISSION, profile, "reach");
+  mission.step = mission.steps.findIndex(s => s.id === "travel");
+  const away = missionTravelTargets({ missions: [mission], profile, place: "reach" });
+  assert.deepEqual(away, [{
+    place: "hollow", system: "meridian",
+    color: missionTitleColor(mission), missionId: mission.id,
+  }], "Kestrel Hollow, in the meridian system, in the mission's colour");
+  assert.deepEqual(missionTravelTargets({ missions: [mission], profile, place: "hollow" }), [],
+    "arriving puts the glow out");
+  assert.equal(missionTravelTargets({ missions: [mission], profile, place: "reach" }).length, 1,
+    "and warping away again brings it back");
 });

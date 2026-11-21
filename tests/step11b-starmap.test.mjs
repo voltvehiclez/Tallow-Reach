@@ -23,6 +23,8 @@ import {
   galaxyPanSpeed, panDelta, galaxyPanDelta, pocketLabelPosition, pocketLabelLayout, exitChoice,
 } from "../src/ui/starmap.js";
 import { loadHeadless } from "./headless.mjs";
+import { acceptMission } from "../src/sim/missions.js";
+import { BORDER_SIGNAL_MISSION } from "../src/data/missions/story.js";
 
 const V13 = JSON.parse(readFileSync(new URL("./saves/v13-real.json", import.meta.url), "utf8"));
 const V12 = JSON.parse(readFileSync(new URL("./saves/v12-real.json", import.meta.url), "utf8"));
@@ -439,6 +441,31 @@ test("11B: real map opens, inspects systems, zooms into a pocket map and right-c
   assert.equal(prevented, true);
   assert.equal(ui.state.ui.starmap.selected, "sys-002");
   ui.closeStarmap();
+});
+
+test("11B: a mission's warp destination glows on both charts, and only while you are away", () => {
+  const save = ui.prepareGalaxySave(ui.newSave()); ui.applySave(save);
+  const P = ui.configurePlayer(ui.createPlayer(), save.profile);
+  P.docked = false; P.place = "reach"; ui.state.ui.intro = false; ui.state.paused = false; ui.state.ui.starmap = null; ui.state.ui.starmapMemory = null;
+  // The headless starmap has its own state instance: plant the accepted
+  // mission record (plain data) into its profile directly.
+  const mission = acceptMission(BORDER_SIGNAL_MISSION, ui.newSave().profile, "reach");
+  mission.step = mission.steps.findIndex(step => step.id === "travel");
+  ui.state.profile.missions = [mission];
+  assert.equal(ui.openStarmap(), true);
+  // Galaxy chart: meridian system ringed (Border Signal is a story mission: amber).
+  assert.match(mapRoot.innerHTML, /class="sm-node[^"]* objective" style="--objective-color:var\(--amber\)"\s+data-system="meridian"/);
+  assert.equal((mapRoot.innerHTML.match(/sm-objective-ring/g) || []).length, 1, "one destination system, one ring");
+  // Pocket chart: Kestrel Hollow ringed.
+  mapRoot.handlers.dblclick({ target: { closest: () => ({ dataset: { system: "meridian" } }) }, preventDefault() {} });
+  assert.equal(ui.state.ui.starmap.mode, "system");
+  assert.match(mapRoot.innerHTML, /class="sm-node sm-pocket-node[^"]* objective"[^>]*data-pocket="hollow"/);
+  assert.equal((mapRoot.innerHTML.match(/sm-objective-ring/g) || []).length, 1, "one destination pocket, one ring");
+  // Arrive, and the glow is gone; it would return on warping away again.
+  P.place = "hollow"; ui.closeStarmap();
+  assert.equal(ui.openStarmap(), true);
+  assert.doesNotMatch(mapRoot.innerHTML, /sm-objective-ring/);
+  ui.closeStarmap(); ui.applySave(save); ui.state.ui.starmapMemory = null;
 });
 
 test("11B: visited knowledge remains saved without a light-blue system presentation", () => {

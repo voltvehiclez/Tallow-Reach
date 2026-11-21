@@ -17,6 +17,7 @@ import { emit, on } from "../util/events.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
 import { canOpenStarmap } from "./overlays.js";
+import { missionTravelTargets } from "./mission-hud.js";
 
 let root = null;
 let drag = null;
@@ -948,7 +949,7 @@ function onClickNow(e) {
   }
 }
 
-function galaxyMarkup(world, view, know, here, unit, route = null) {
+function galaxyMarkup(world, view, know, here, unit, route = null, objectiveSystems = new Map()) {
   const systems = visibleSystems(world, know);
   const paths = new Map(), masks = [];
   const clearance = (Math.max(GALAXY.map.homeRadius, GALAXY.map.nodeRadius) + 4) * unit;
@@ -989,15 +990,19 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
     const radius = GALAXY.map.nodeRadius * iconScale * unit;
     const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
     const marker = routeMarkerMarkup(s.pos[0], -s.pos[1], radius, current, unit);
+    // Even the current system rings: the mission's pocket may be another
+    // pocket of this same system (Meridian Station -> Kestrel Hollow).
+    const objectiveColor = objectiveSystems.get(s.id) || "";
     const label = chosen || current || view.labels;
     const labelX = s.pos[0] + radius + 5 * unit;
     const labelY = -s.pos[1] + 3 * unit;
     const hereLabel = current ? `<tspan class="sm-here-label" x="${labelX}" dy="${12 * unit}">(You are here)</tspan>` : "";
-    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${roleClass}"
-      data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}">
+    return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${roleClass}${objectiveColor ? " objective" : ""}"${objectiveColor ? ` style="--objective-color:${esc(objectiveColor)}"` : ""}
+      data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}${objectiveColor ? ", mission objective" : ""}">
       <title>${esc(s.n)}</title>
       <circle class="sm-hit" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 8 * unit}"/>
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
+      ${objectiveColor ? `<circle class="sm-objective-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
       ${marker}
       ${chosen && !current ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
       ${label ? `<text x="${labelX}" y="${labelY}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}${hereLabel}</text>` : ""}
@@ -1006,7 +1011,7 @@ function galaxyMarkup(world, view, know, here, unit, route = null) {
   return `<defs>${masks.join("")}</defs>` + lines + routeLines + nodes;
 }
 
-function systemMarkup(world, view, know, here, unit, route = null) {
+function systemMarkup(world, view, know, here, unit, route = null, objectivePockets = new Map()) {
   const chart = pocketConnections(world, view.selected, know);
   const system = chart.system;
   if (!system) return "";
@@ -1056,6 +1061,7 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const radius = pocketRadius;
     const roleClass = role ? ` route-${role.destination ? "destination" : role.start ? "start" : "intermediate"}` : "";
     const marker = routeMarkerMarkup(x, y, radius, current, unit);
+    const objectiveColor = !current ? objectivePockets.get(node.id) || "" : "";
     const { x: lx, y: ly, anchor } = label;
     const labelLink = label.moved
       ? `<line class="sm-label-link" x1="${x}" y1="${y}" x2="${lx}" y2="${ly}"/>`
@@ -1073,11 +1079,12 @@ function systemMarkup(world, view, know, here, unit, route = null) {
     const kindLabel = station ? ", station pocket" : nodeRole === "planet" ? ", planet" : nodeRole === "belt" ? ", asteroid belt" : "";
     const peerAttr = node.peerSystemId ? ` data-peer-system="${esc(node.peerSystemId)}"` : "";
     const hereLabel = current ? `<tspan class="sm-here-label" x="${lx}" dy="${12 * unit}">(You are here)</tspan>` : "";
-    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : nodeRole ? ` sm-${nodeRole}-node` : ""}${current ? " current" : ""}${roleClass}" data-pocket="${esc(node.id)}"${peerAttr}
-      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${kindLabel}${current ? ", current pocket" : ""}">
+    return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : nodeRole ? ` sm-${nodeRole}-node` : ""}${current ? " current" : ""}${roleClass}${objectiveColor ? " objective" : ""}" data-pocket="${esc(node.id)}"${peerAttr}${objectiveColor ? ` style="--objective-color:${esc(objectiveColor)}"` : ""}
+      role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${kindLabel}${current ? ", current pocket" : ""}${objectiveColor ? ", mission objective" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
       ${labelLink}
       ${dot}
+      ${objectiveColor ? `<circle class="sm-objective-ring" cx="${x}" cy="${y}" r="${radius + 5 * unit}"/>` : ""}
       ${marker}
       <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}${hereLabel}</text>
     </g>`;
@@ -1130,8 +1137,13 @@ function render() {
   const showGalaxy = view.mode === "galaxy" || !!transition;
   const showSystem = view.mode === "system" || !!transition;
   const route = state.ui.destination ? findDestinationRoute(world, from, state.ui.destination, travelContext()) : null;
-  const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route) : "";
-  const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit, route) : "";
+  const objectiveSystems = new Map(), objectivePockets = new Map();
+  for (const target of missionTravelTargets({ place: from })) {
+    objectivePockets.set(target.place, target.color);
+    if (target.system) objectiveSystems.set(target.system, target.color);
+  }
+  const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route, objectiveSystems) : "";
+  const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit, route, objectivePockets) : "";
   const galaxyOpacity = transition ? (transition.toMode === "system" ? 1 - eased : eased) : 1;
   const systemOpacity = transition ? (transition.toMode === "system" ? eased : 1 - eased) : 1;
   const chart = transition

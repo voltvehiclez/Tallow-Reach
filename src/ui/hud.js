@@ -653,7 +653,7 @@ function drawMarkers() {
     if (!labelOn("Ship")) return;
     const kind = e.friendly ? "Ship" : "Hostile";
     const objColor = objectObjectiveColor(e, kind, objCtx);
-    mark(interpolatedPos(e), e.friendly ? e.n : "Hostile", markerStyle(kind, e), 70, -36, null, lock && !objColor ? "dim" : "", objColor);
+    mark(interpolatedPos(e), e.role === "prowl" ? "Unmarked" : e.friendly ? e.n : "Hostile", markerStyle(kind, e), 70, -36, null, lock && !objColor ? "dim" : "", objColor);
   });
 
   if (lock) {

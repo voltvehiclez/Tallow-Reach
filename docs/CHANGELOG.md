@@ -20,6 +20,27 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
+
+- **Warp-to glow:** `missionTravelTargets` (`ui/mission-hud.js`) lists the
+  pockets active missions currently want the pilot in (same rule as the
+  in-space Waypoint labels, hand-in included), and the starmap rings them in
+  the mission's own colour — the destination **system** on the galaxy chart
+  (including the current system: Meridian Station → Kestrel Hollow rings
+  Meridian) and the destination **pocket** on the system chart. Arriving puts
+  it out; warping away brings it back, since it is recomputed from live
+  mission state at every render.
+- **Face-off identity:** a ship on `prowl` (First Sortie's ambushers during
+  the parley) now presents as **Unmarked** with a neutral grey reticle
+  (`.mk.u`) everywhere its name or marker is drawn — floating label, target
+  lock (`lockName`), marker tone (`markerStyle`). The moment the role drops
+  (dialogue ends or anyone shoots), the same ship is its true self again:
+  "Newbie Raider", hostile red. Display only; no AI or save change.
+
+Files: `src/ui/{mission-hud,starmap,hud,target-display}.js`,
+`src/sim/targeting.js`, `src/styles.css`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
 
 Following the axis-rate change, NPC pilots now use the fast axes:
@@ -351,12 +372,9 @@ envelope, mode switching, shared pilot, fixed-ship grant and a full M01 play-thr
 `src/ui/{menu,screens,missionlog}.js`, `tests/campaign.test.mjs`, migration-test updates.
 `game/tallow-reach.html` rebuilt; `npm test` **781 pass / 0 fail**.
 
-## 2026-11-19: One HUD label per nearby belt group
-
-Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-19: One HUD label per nearby belt group
 - 2026-11-19: Shared natural wormhole environments
 - 2026-11-19: Larger, more common black holes in wormhole systems
 - 2026-11-19: Multiple wormhole routes and grey system skies

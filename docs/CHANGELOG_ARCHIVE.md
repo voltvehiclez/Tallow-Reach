@@ -5,6 +5,10 @@ You do not need to read this file for every task. `CHANGELOG.md` has a one-line 
 in here: open this file only when the index shows an entry that matters to what you are changing
 (why a rule exists, how a save version was migrated, what a past fix was).
 
+## 2026-11-19: One HUD label per nearby belt group
+
+Nearby asteroid fields now share the first field’s floating label, including chained outer sections. Distant fields keep separate markers. No changes to scenery, targeting, counts or saves.
+
 ## 2026-11-19: Shared natural wormhole environments
 
 Simple sites and named wormhole systems use one environment definition: 80% black holes, double black-hole radius, grey sky and neutral ambient fill. Rifts and entrance pockets retain their own environment. No save change.
