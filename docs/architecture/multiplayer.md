@@ -99,15 +99,32 @@ somebody else's world cannot move the ground under the running game.
 
 ## The connection (slice 3)
 
-Browsers cannot accept a connection on their own, so the handshake is a **copy-paste WebRTC offer
-code**, with no server of ours: the host presses *Create link*; the guest pastes the host's code and
-gets an answer code back; the guest sends the answer to the host by any means, and they are
-connected. The one library allowance is a small connection library behind `src/net/transport.js`;
-nothing else in the game names it. Chat (**Enter**) and the list of connected players arrive in the
-same slice, so the pipe is proved before anything of the player's crosses it.
+**The owner's design:** the guest joins by pasting **one link**. Pause > **Open Multiplayer** shows
+a join link; **Join Multiplayer World** takes it. That is the normal path.
 
-A hosted world **never pauses** (pause is single player only), and the pause card carries
-**Open Multiplayer** (on/off, the join-link row) instead of a pause.
+A browser cannot accept a connection on its own, so two browsers have to be introduced by something.
+The owner's rules allow exactly one small networking library for this, behind `src/net/transport.js`;
+nothing else in the game may name it. The library question is asked with its numbers in
+[../REFACTOR_PLAN.md](../REFACTOR_PLAN.md) ("The library decision"); it is **not decided yet**, so
+slice 3 has not started.
+
+The shape the wrapper is written to, whichever library answers:
+
+- **With a broker** (Trystero is the recommendation): the link is `?join=<worldId>#<token>`. The
+  secret is after the `#`, which browsers never send to a server and never write to a log. Both
+  browsers join a room named from the world id, the broker introduces them, and the game's traffic
+  is peer-to-peer and encrypted by WebRTC itself.
+- **Without one** (the fallback, and also buildable with no library at all): the host makes an
+  **offer code**, the guest pastes it and gets an **answer code**, the guest sends that back and the
+  host pastes it. One paste more, and the path that has to work when the broker does not.
+
+Either way the handshake afterwards is the same, and it is already written and tested
+(`net/custody.js` `handshake`): game version, `worldId` and the guest's secret, each refusal with a
+sentence the guest can act on. A guest who is turned away learns why.
+
+Chat (**Enter**) and the list of connected players arrive in the same slice, so the pipe is proved
+before anything of the player's crosses it. A hosted world **never pauses**, and the pause card
+carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a pause.
 
 ## Slices
 
@@ -116,8 +133,9 @@ A hosted world **never pauses** (pause is single player only), and the pause car
 2. **Save v29** — `save.away`, `world.guests`, the migration (old saves load with `away: null`),
    `guestId`/`worldId`, the temp-key-then-swap write that keeps the previous version, and the
    `away:<worldId>` storage key. **Built 2026-11-21.**
-3. **The connection** — `net/transport.js`, the offer/answer flow, Pause > Open Multiplayer, chat and
-   the player list.
+3. **The connection** — `net/transport.js`, the one-link join (with paste codes as the fallback),
+   Pause > Open Multiplayer, chat and the player list. **Not started: waiting on the owner's answer
+   to the library question** (see step 16 in `docs/REFACTOR_PLAN.md`).
 4. **Join** — the handshake, "Bring my pilot", two-second snapshots, reconnects by `compare`, "Go
    home" from the suitcase with the host offline.
 5. **Crashes and reconnects** — the choice screen, "Your pilot is safe" with *Wait* and *Go home*,

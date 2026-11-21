@@ -292,19 +292,76 @@ function that decides, and the choice screen shows both summaries (`credits`, `s
 
 ## The transport, in plain language
 
-Browsers cannot accept a connection on their own, so a **WebRTC offer code** is the handshake:
+**Owner's design (2026-11-21, binding for slice 3):** the guest joins by pasting **one link**. The
+host opens Pause > **Open Multiplayer** and gets a join link; the guest pastes it under **Join
+Multiplayer World** and is in. No second paste, no answer code in the normal case.
 
-1. The host presses **Create link**: the game makes an offer and shows it as one long code (and the
-   link tag `?join=<code>`).
-2. The guest pastes the host's code under **Join Multiplayer World**, and gets an **answer code**
-   back.
-3. The guest sends that answer to the host by any means (chat, e-mail); the host pastes it under
-   Pause > Multiplayer, and the two browsers connect directly.
+Browsers cannot accept a connection on their own, so the two browsers have to find each other
+through something. That makes one small dependency unavoidable, which is exactly the allowance the
+owner's rules make for "one small networking library for the connection, hidden behind a thin
+wrapper file" (`src/net/transport.js` only: nothing else in the game may name it).
 
-The answer step is what makes it work with **no server of ours**. It is one paste more than a link
-someone can simply click, and that is the honest trade-off for a self-contained build. The first
-slice (3) ships this plus chat and the player list, so the owner can prove the pipe works before
-anything of theirs crosses it.
+**Recommended: Trystero** (`trystero@0.27.0`, MIT), the Nostr build. See "The library decision"
+below for the numbers and the alternatives. Copy-paste offer/answer codes stay as the **fallback**
+for when the broker is unreachable: the wrapper offers both, and the pause card says which one it
+is using.
+
+How a join works with a broker, in the owner's one-link shape:
+
+1. The host presses **Open Multiplayer > Create link**. The wrapper joins a room whose name is a
+   hash of the world's id, and the link is `?join=<worldId>#<token>` — the secret rides after the
+   `#`, which browsers never send to a server and never log.
+2. The guest opens that link (or pastes it under **Join Multiplayer World**). The wrapper joins the
+   same room, the broker introduces the two browsers, and they connect directly.
+3. The handshake (slice 5's job, already written in `custody.js`) checks version, world id and
+   token. A guest who is turned away learns why in one sentence.
+4. The broker only ever carries the introduction. The game's traffic is peer to peer and encrypted
+   by WebRTC itself, and nothing about a pilot is written to the broker.
+
+The fallback keeps the old two-paste flow for a broker that is down: the host makes an **offer
+code**, the guest pastes it and gets an **answer code**, the guest sends that back and the host
+pastes it. It is one paste more, and it is the honest trade-off for a self-contained build.
+
+## The library decision (asking the owner — slice 3 does not start until it is answered)
+
+The owner's rule is "no new npm dependencies except one small networking library, behind a thin
+wrapper; ask first". Here is the question with the facts it should be answered on. **Measured
+2026-11-21** against this project's own build, not from a blog post.
+
+| | **Trystero** 0.27.0 (Nostr build) | **PeerJS** 1.5.5 |
+| --- | --- | --- |
+| Licence | MIT | MIT |
+| npm packages added | **4** (`trystero`, `@trystero-p2p/nostr`, `@trystero-p2p/core`, `@noble/secp256k1`) — no wrapping of other libs | 6 (`peerjs`, `webrtc-adapter`, `@msgpack/msgpack`, `peerjs-js-binarypack`, `eventemitter3`) |
+| Added to the single-file build (minified, esbuild, the game's own bundler) | **+151 KB** | **+86 KB** |
+| Install size | 906 KB | 4.2 MB |
+| Broker | **free public relays, no account, no keys** (Nostr relays, ten defaults, overridable list) | **PeerJS's public cloud** is free but has no uptime promise, and the project itself says to run your own server for anything real |
+| Guest experience | **one link** — the owner's design | needs a peer id the guest types or a link carrying it; the host still needs a public server for signalling |
+| Works from `file://`? | no signalling without a socket, but no server of ours either way | same |
+| Risk if the free service disappears | edit one list of relay URLs in `src/net/transport.js` | point at a different public PeerJS server, or none exists |
+
+**Why Trystero is the recommendation:**
+
+1. **It matches the owner's design without a server of ours.** PeerJS's public cloud is the
+   equivalent free service, but it is a single point run on goodwill with no promise; Nostr relays
+   are many, and the wrapper can carry its own list.
+2. **It is a wrapper around a protocol, not a re-packaging of other libraries.** Its build brings
+   only its own code and one small secp256k1 implementation, so what we audit is what ships.
+   PeerJS pulls in `webrtc-adapter`, msgpack and binarypack, which the game does not otherwise use.
+3. **One link is its natural shape** (join a room by name), where PeerJS's is a peer id plus a
+   server. The owner's flow is simpler with it.
+
+**The honest cost:** +151 KB, i.e. the build goes from 3,256 KB to about **3,407 KB** — roughly
+4.6% bigger, in a single HTML file. PeerJS would be +86 KB (about 2.6%) but needs a single free
+server with no promise, and does not give the one-link flow for free.
+
+**Before it goes in**, one experiment decides half of it: does a connection through the free relays
+actually work from the owner's machine and a friend's? The wrapper is written so that this is a
+five-minute test on two browsers, and the answer decides whether the broker path or the paste-code
+fallback is the default.
+
+**The owner's answer is recorded here when given.** Until then, slice 3 does not add the dependency:
+the fallback (paste codes) needs no library at all and can be built first, which is also the honest
+order — the paste path is the one that must work when the broker does not.
 
 ## Slices (one per chat, each ends with `npm run build` and `npm test`)
 

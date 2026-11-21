@@ -1,5 +1,44 @@
 # Changelog archive
 
+## 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere
+
+The owner's fourth pass over the campaign build, plus universal mission markers.
+
+- **Resuming an act from the title no longer loses the flight HUD.** Leaving an act with Esc → *Exit to main
+  menu* left `state.ui.intro` / `state.ui.campaign` set, so `resumeFromSave` fired `launched` at a HUD that
+  refused to unhide. `sim/campaign-act.js` `startCampaignAct` and `ui/menu.js` `enterGameMode` now clear both
+  flags *before* the save is applied, a mode switch resets places and syncs `state.place`, and the resume emits
+  `campaign-act-entered`, which drops the cached weapon-slot markup and re-syncs the reticle. The campaign screen
+  only opens the station panel when the pilot really is docked.
+- **The starter Wasp leaves the school with Basic Missiles fitted and full.** `state/profile.js`
+  `newCampaignProfile()` (used by `newCampaignSave` and `separateCampaignPilot`), and `grantFixedShip(..., {
+  campaign: true })` for an act that assigns the hull, fit `missile_basic` in secondary slot 1 and stock
+  `MODULES.missile_basic.cap` missiles; `acceptMission` refreshes the live ship's guns and missile stock.
+- **The gunnery pass is two waves.** `data/campaign/m01.js`: `spawn-drones` → `drone-brief` → `drone-drill`
+  (primary weapons, keys 1–5 + LMB) then `spawn-missile-drones` → `missile-brief` → `missile-drill`
+  (secondary weapons, lock tone + right click). `sim/missions.js` `killObjectivesIn` now looks past a
+  `dialogue` step to the `kill` step that follows it, so a wave spawned before its briefing is still re-armed
+  on reload. `sim/campaign-flight.js` tops the missile rack back up if the pilot empties it with nothing in
+  flight during the missile steps.
+- **The ambush is a standoff, not a carousel.** `sim/enemy-flight.js` `flyProwl` gives both raiders one shared
+  approach corridor (`sim/ai.js` seeds `prowlDir`), brakes them to a halt side-by-side ~150 m from Dane and
+  `flyObserve` brakes Dane to a halt facing them, so both sides stare at each other through the dialogue.
+- **Universal mission objective markers.** `ui/mission-hud.js` adds `missionTitleColor` (amber for acts and
+  story missions, ice for contracts, `titleColor`/`color` override), `activeObjectiveSteps`,
+  `objectObjectiveColor(object, kind, ctx)` and `missionWaypoints(ctx)`. `ui/hud.js` glows the matching floating
+  marker (`.mk.obj`) for every active objective target — hand-in/offered stations, friendly actors to follow,
+  hostile kill/wave-clear targets including wave-clear encounters, crates owed or persistent mission drops,
+  asteroid fields and rocks to mine — even beyond the old 900 m crate radius, and draws mission waypoints
+  (`.mk.waypoint`) for a destination pocket, an authored `waypoint`/`pos`, a chase course start, or a
+  reach/survive/wait signal. `ui/pocket-list.js` `pocketRowsHtml(rows, isSelected, objectiveFor)` marks the same
+  rows in the `N` list (`li.objective`, `.pocket-icon.obj`) with the mission's colour. The marker pool rose from
+  18 to 28 so waypoints cannot push the ordinary labels out.
+- Act 1's dialogue doc and playtest guide record the two-wave pass; the guide's step numbers continue.
+
+Files: `src/{data/campaign/m01.js,sim/{ai,campaign-act,campaign-flight,enemy-flight,missions},state/profile.js,
+ui/{hud,menu,mission-hud,pocket-list},styles.css`, tests, docs. No save change (stays **27**). Rebuild
+`game/tallow-reach.html`; `npm test` **814 pass / 0 fail**.
+
 ## 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
 
 The owner's third pass over the campaign build, plus four follow-up polish items.
