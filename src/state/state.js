@@ -3,7 +3,7 @@
 // packed together as `{ v, profile, world }` (see profile.js). Everything else
 // is rebuilt on load.
 
-import { newProfile, newWorld, newSave, newCampaignSave, newModeSave, SAVE_VERSION } from "./profile.js";
+import { newProfile, newWorld, newSave, newCampaignSave, newModeSave, SAVE_VERSION, cleanAway } from "./profile.js";
 import { saveAutosave } from "./storage.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
@@ -201,6 +201,10 @@ function captureActiveModeSave() {
     v: SAVE_VERSION,
     profile,
     world,
+    // v29: where this pilot is. It is a fact about the pilot and the save, so it is
+    // copied here rather than read from a runtime flag: a save made while the pilot
+    // is visiting somebody must still say so when it is loaded again.
+    away: cleanAway(state.away),
   };
 }
 
@@ -258,6 +262,10 @@ function installNestedSave(save) {
   state.ui.invHeld = null;
   state.profile = save.profile;
   state.worldState = save.world;
+  // A pilot with a marker is visiting another world: its home copy is frozen until
+  // it comes back through the suitcase (net/multiplayer.js). Every save older than
+  // v29 has no marker and loads as "at home".
+  state.away = cleanAway(save.away);
   // Chart presentation belongs to this runtime session, not a loaded save.
   state.ui.starmapMemory = null;
   state.ui.destination = save.world.destination || null;
@@ -299,6 +307,7 @@ export const state = {
   mode: "open",          // which independent progress half is active: "open" or "campaign"
   savedModes: null,      // the prepared inactive half of the dual-mode browser save
   galaxyRecovery: null, // { from, to } when a removed pocket required safe recovery
+  away: null,           // v29: the marker while this pilot is visiting another world, else null
   multiplayer: false,   // step 16 sets true for a hosted session; map must not pause a host
   players: [],         // player records, including their own controls
   localPlayerIndex: 0,  // which player this screen and its input follow

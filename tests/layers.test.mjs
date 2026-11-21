@@ -199,6 +199,21 @@ test("the mesh that draws a hostile is owned by render/views.js", () => {
   }
 });
 
+test("net/ never reaches up into ui/, render/ or core/ (step 16)", () => {
+  // Multiplayer sits below all three, like sim/: it is rules and plain data, and the
+  // screens learn about it through events and through `state.players` (see
+  // src/net/README.md). A connection library is the one allowance, and it is not a
+  // project import, so it cannot appear here in the first place.
+  const offenders = [];
+  for (const file of filesIn(path.join(srcDir, "net"))) {
+    const src = readFileSync(path.join(srcDir, "net", file), "utf8");
+    for (const m of src.matchAll(/from\s*["'](?:\.[^"']*\/)?(\.\.\/)+(ui|render|core)\/([^"']+)["']/g)) {
+      offenders.push(`net/${file} -> ${m[2]}/${m[3]}`);
+    }
+  }
+  assert.deepEqual(offenders, [], "src/net/ may import state/, data/, util/ and sim/, never the layers above it");
+});
+
 test("the allow-lists only name sim files that really import that layer", () => {
   // A stale entry silently widens the hole for a future change, so the lists are
   // checked too: every name on them must be doing the import it is excused for.

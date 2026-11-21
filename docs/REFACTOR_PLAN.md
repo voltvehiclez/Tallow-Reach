@@ -19,7 +19,7 @@ per chat.
 | **C. World-ready** | 10 to 12 | Sectors are data, a generated 100+ sector starmap, encounters and sector memory. The open world can scale. |
 | **D. Story-ready** | 13 to 15 | A mission framework, wormhole instances and the campaign scaffolding. |
 
-Multiplayer itself is **step 16**, planned when you get there (outline at the bottom).
+Multiplayer itself is **step 16**, planned with the owner on 2026-11-21 (the plan and its six slices are at the bottom).
 
 ---
 
@@ -248,18 +248,153 @@ took v25; the envelope itself is the v26 change). Adding a mission is one new fi
 
 ---
 
-# Step 16: Multiplayer (planned when you get there)
+# Step 16: Multiplayer (host-run co-op)
 
-Do not start until steps 6 to 9 are done. The first chat for this step should **write its own plan**
-into this file before any code. Expected shape:
-1. **Pick the transport** and decide whether to relax the no-dependency rule (browser WebRTC
-   needs a small signalling service). Build a tiny spike: two browser tabs exchanging a message.
-2. **Host streams snapshots** of nearby entities to one guest; guest draws them.
-3. **Guest controls:** the guest's `controls` drive their ship on the host.
-4. **Join link:** host copies a URL; opening it joins.
-5. **Guest profile in and out** using `portableProfile`/`mergeProfile` from step 9.
-6. **Trading** between two players.
-7. **Polish:** more than two players, disconnects, no-pause rule, latency smoothing.
+**Status:** planned 2026-11-21 with the owner; slices are built one per chat. **Multiplayer is open
+world only** — the campaign stays single player (owner, 2026-11-21).
+
+**The owner's decision on dependencies (2026-11-21):** WebRTC is approved for the connection, kept
+behind **one thin wrapper file** (`src/net/transport.js`). No other dependency is added; the
+signalling is a copy-paste **offer code** between the two players, so no server of ours is needed.
+The wrapper never leaks out of `src/net/`: `sim/` and `ui/` talk to the connection through events.
+
+## What it is
+
+Two players at most to start (the shape allows more): **one host** runs the world, and **one guest**
+joins it through a link. The host's browser is the only writer of the truth; the guest sends what it
+is asking its ship to do and draws what the host sends back.
+
+- The host's ship stays in the host's own save, live, as today.
+- The guest brings **its own pilot** (credits, ships, fits, holds, hull damage, missiles, selected
+  weapons, station lockers) in a **suitcase**, and takes it home again through it.
+- **Items are moved, never copied.** World-owned things never travel: station levels, built
+  stations, the contract board, the galaxy, world changes. Missions, flags and stats stay in the
+  home save; the host's world never runs a guest's missions.
+- A pilot **lives in exactly one world at a time**: while `save.away` is set, the home pilot is
+  frozen (it cannot be flown at home), and the one copy lives in the host's world and in the
+  suitcase.
+- Guard rails against accidents (a crash, a double join, an old backup), **not** against cheating
+  (the vision's pillar 5).
+
+## The shape, from the owner's plan
+
+`save.away = { worldId, hostName, guestId, token, epoch, rev, suitcase }`, or `null`.
+
+| Where | What it holds |
+| --- | --- |
+| home save, `away` | the marker: whose world the pilot is in, the secret token for that host, the ordering `epoch`/`rev`, and the suitcase (the pilot as the host last wrote it) |
+| host save, `world.guests[guestId]` | `{ name, tokenHash, epoch, rev, bundle, lastSeen }` — the host's copy of each visiting pilot |
+| its own key, `away:<worldId>` | the suitcase on its own, so two tabs never overwrite each other |
+
+Ordering is always **`(epoch, rev)`**, higher wins, **never merged**. A guest's "Go home" raises
+`epoch`; the host raises `rev` on every change to a visiting pilot. `compare(a, b)` is the one
+function that decides, and the choice screen shows both summaries (`credits`, `ship count`).
+
+## The transport, in plain language
+
+**Owner's design (2026-11-21, binding for slice 3):** the guest joins by pasting **one link**. The
+host opens Pause > **Open Multiplayer** and gets a join link; the guest pastes it under **Join
+Multiplayer World** and is in. No second paste, no answer code in the normal case.
+
+Browsers cannot accept a connection on their own, so the two browsers have to find each other
+through something. That makes one small dependency unavoidable, which is exactly the allowance the
+owner's rules make for "one small networking library for the connection, hidden behind a thin
+wrapper file" (`src/net/transport.js` only: nothing else in the game may name it).
+
+**Decided: Trystero** (`trystero@0.27.0`, MIT, the Nostr build) — the owner chose it on
+2026-11-21. See "The library decision" below for the numbers it was chosen on. Copy-paste
+offer/answer codes stay as the **fallback** for when the broker is unreachable: the wrapper offers
+both, and the pause card says which one it is using.
+
+How a join works with a broker, in the owner's one-link shape:
+
+1. The host presses **Open Multiplayer > Create link**. The wrapper joins a room whose name is a
+   hash of the world's id, and the link is `?join=<worldId>#<token>` — the secret rides after the
+   `#`, which browsers never send to a server and never log.
+2. The guest opens that link (or pastes it under **Join Multiplayer World**). The wrapper joins the
+   same room, the broker introduces the two browsers, and they connect directly.
+3. The handshake (slice 5's job, already written in `custody.js`) checks version, world id and
+   token. A guest who is turned away learns why in one sentence.
+4. The broker only ever carries the introduction. The game's traffic is peer to peer and encrypted
+   by WebRTC itself, and nothing about a pilot is written to the broker.
+
+The fallback keeps the old two-paste flow for a broker that is down: the host makes an **offer
+code**, the guest pastes it and gets an **answer code**, the guest sends that back and the host
+pastes it. It is one paste more, and it is the honest trade-off for a self-contained build.
+
+## The library decision (settled 2026-11-21: Trystero)
+
+The owner's rule is "no new npm dependencies except one small networking library, behind a thin
+wrapper; ask first". Here is the question with the facts it should be answered on. **Measured
+2026-11-21** against this project's own build, not from a blog post.
+
+| | **Trystero** 0.27.0 (Nostr build) | **PeerJS** 1.5.5 |
+| --- | --- | --- |
+| Licence | MIT | MIT |
+| npm packages added | **4** (`trystero`, `@trystero-p2p/nostr`, `@trystero-p2p/core`, `@noble/secp256k1`) — no wrapping of other libs | 6 (`peerjs`, `webrtc-adapter`, `@msgpack/msgpack`, `peerjs-js-binarypack`, `eventemitter3`) |
+| Added to the single-file build (minified, esbuild, the game's own bundler) | **+151 KB** | **+86 KB** |
+| Install size | 906 KB | 4.2 MB |
+| Broker | **free public relays, no account, no keys** (Nostr relays, ten defaults, overridable list) | **PeerJS's public cloud** is free but has no uptime promise, and the project itself says to run your own server for anything real |
+| Guest experience | **one link** — the owner's design | needs a peer id the guest types or a link carrying it; the host still needs a public server for signalling |
+| Works from `file://`? | no signalling without a socket, but no server of ours either way | same |
+| Risk if the free service disappears | edit one list of relay URLs in `src/net/transport.js` | point at a different public PeerJS server, or none exists |
+
+**Why:** it needs no server of ours and no account; its build is its own code plus one small
+secp256k1, so what we audit is what ships; and joining a room by name is the one-link shape the
+owner asked for.
+
+**The honest cost:** +151 KB, i.e. the build goes from 3,256 KB to about **3,407 KB** — roughly
+4.6% bigger, in a single HTML file. PeerJS would be +86 KB (about 2.6%) but needs a single free
+server with no promise, and does not give the one-link flow for free.
+
+**First test on two browsers decides which path is the default** (a free relay can be slow or down
+on any evening); the paste-code fallback exists for that.
+
+**The owner chose Trystero on 2026-11-21.** So slice 3 adds `trystero` as the project's one
+dependency allowance — **pinned to `0.27.0`**, the exact version measured above, and upgraded only
+deliberately (a floating `^` would let a relay or API change arrive unannounced) — imported by
+**`src/net/transport.js` and nothing else**; the paste-code path
+needs no library and is built as well, because it is the one that must work when the broker does
+not. Two things the owner should expect from the first test: the build grows by about 151 KB
+(3,256 → ~3,407 KB), and a free relay can be slow or down on any given evening — the fallback
+exists for exactly that, and the pause card says which path is in use.
+
+## Slices (one per chat, each ends with `npm run build` and `npm test`)
+
+1. **Custody, no networking.** `src/net/custody.js` plus its data list
+   (`data/multiplayer.js`) and tests: `checkOut`, `checkIn`, `relocate`, `compare`. Proves the rules
+   of travel on plain objects before a byte moves. **Built 2026-11-21.**
+2. **Save v29.** `save.away` (beside the profile, `null` at home), `world.guests`, the migration
+   (old saves load with `away: null`), `guestId`/`worldId`, the temp-key-then-swap write with the
+   previous version kept, and the `away:<worldId>` key. **Built 2026-11-21:** `src/net/multiplayer.js` owns the field
+   changes, `cleanAway`/`cleanGuests` in `state/profile.js` validate them, and `state/storage.js`
+   does the swap-and-keep-the-previous write.
+3. **The connection, a link, chat and the player list.** `src/net/transport.js` (the only file that
+   may name a connection library) and the offer/answer flow. Pause > **Open Multiplayer** with the
+   on/off switch and the join-link row; **Enter** opens chat with the connected-player list; the
+   world does not pause while multiplayer is on.
+4. **Join, "Bring my pilot", sync, "Go home".** The version/`worldId`/token handshake with a clear
+   refusal for a version mismatch; the guest arrives docked at its active ship's station (flight
+   positions never travel); the host raises `rev` and snapshots about two seconds later; reconnects
+   take the higher `(epoch, rev)`; "Go home" works from the suitcase with the host offline.
+5. **Crashes and reconnects.** `compare` and the choice screen when two copies disagree; "Your
+   pilot is safe" with **Wait** and **Go home** when the host drops; final guest snapshots on tab
+   close; a host loading an older save loses to a newer suitcase; one session per `guestId`, a
+   newer connection kicks the older.
+6. **Trading.** **View docked players** in the station, right-click a name > **Trade**: items, a
+   ship at that station, or credits, a first confirm that locks both sides and a second that
+   commits. The host checks both station holds' m³ first; if either side lacks room, nothing moves.
+
+## Rules each slice must keep
+
+- Content is data: the **list of fields that travel** is `data/multiplayer.js`, and the timings
+  (snapshot interval, `lastSeen` window) are there too.
+- Saves stay backward-compatible; `SAVE_VERSION` goes up only where its slice says so, with a
+  migration and an old-save test.
+- Systems talk through the event bus. Nothing in `sim/` or `ui/` imports `net/transport.js`;
+  `render/` and `ui/` learn about remote pilots from events and from `state.players`, which already
+  holds every pilot.
+- A hosted world never pauses (pause is single player only), and the campaign is never hosted.
 
 ---
 

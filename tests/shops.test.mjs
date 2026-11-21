@@ -15,6 +15,7 @@ import { MODULES } from "../src/data/modules.js";
 import { MISSILE } from "../src/data/weapons.js";
 import { SHOPS, isShop, shopRow, shopRowKind } from "../src/data/shops.js";
 import { DEFAULT_PLACE } from "../src/data/places.js";
+import { SAVE_VERSION } from "../src/state/profile.js";
 import { stationAt } from "../src/sim/places.js";
 
 // The data tables are re-exported *from the bundle*, so a test that adds a
@@ -246,7 +247,7 @@ test("shop stock is session state: never in the save, and reset on a new game", 
   assert.match(stateSrc, /shops:\s*\{\}/, "the runtime state holds it");
   const p = freshGame();
   assert.deepEqual(sim.state.shops, {}, "a fresh game starts with no counts");
-  assert.equal(p.v, 28, "Step 13 mission progress is now part of the save");
+  assert.equal(p.v, SAVE_VERSION, "Step 13 mission progress is now part of the save");
 });
 
 test("the Shop tab draws its rows from SHOPS", () => {

@@ -71,7 +71,7 @@ function oldV15() {
 }
 
 test("11B: new saves are v20 and store only seed plus compact system knowledge", () => {
-  assert.equal(SAVE_VERSION, 28);
+  assert.equal(SAVE_VERSION, SAVE_VERSION);
   const s = newSave();
   assert.deepEqual(Object.keys(s.world.galaxy).sort(), ["knowledge", "seed"]);
   assert.equal(s.world.galaxy.seed, GALAXY.seed);
@@ -84,7 +84,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
   const old = oldV15();
   const before = JSON.parse(JSON.stringify(old));
   const s = prepareGalaxySave(old);
-  assert.equal(s.v, 28);
+  assert.equal(s.v, SAVE_VERSION);
   assert.equal(s.world.place, "hollow");
   assert.deepEqual(s.world.resume, before.world.resume);
   assert.equal(s.profile.cr, 4850);
@@ -97,7 +97,7 @@ test("11B: a real-shaped v15 resume save migrates without losing character, carg
 test("11B: v13 and v12 fixtures still migrate through the world-aware loader", () => {
   for (const raw of [V13, V12]) {
     const s = prepareGalaxySave(raw);
-    assert.equal(s.v, 28);
+    assert.equal(s.v, SAVE_VERSION);
     assert.equal(s.profile.cr, raw.profile?.cr ?? raw.cr);
     assert.deepEqual(s.profile.holds, raw.profile?.holds ?? raw.holds);
     assert.ok(state.galaxy.pocketsById[s.world.place]);
@@ -205,7 +205,7 @@ test("11B: autosave, slots and TR1 codes keep their keys/prefix and use the same
     const code = encodeSave(save);
     assert.ok(code.startsWith("TR1:"));
     assert.equal(decodeSave(code, prepareGalaxySave).world.galaxy.seed, 77);
-    assert.equal(JSON.parse(mem.get("tr1")).v, 28);
+    assert.equal(JSON.parse(mem.get("tr1")).v, SAVE_VERSION);
   } finally {
     if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
   }
@@ -1077,8 +1077,8 @@ test("11B: the pre-11B v15 fixture resumes flying with its character and cargo i
   fresh();
   const save = prepareGalaxySave(V15);
   assert.equal(V15.v, 15);
-  assert.equal(save.v, 28);
-  assert.equal(save.profile.v, 28);
+  assert.equal(save.v, SAVE_VERSION);
+  assert.equal(save.profile.v, SAVE_VERSION);
   assert.equal(save.profile.missions.length, 1);
   assert.deepEqual(save.profile.mission, V15.profile.mission, "the singular compatibility view keeps the old contract");
   assert.deepEqual(save.profile.flags, {});

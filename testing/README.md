@@ -10,11 +10,13 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 ## Current guides
 
+- [16 slice 2: save v29](TESTING-16-SAVE29.md)
 - [15: campaign scaffolding](TESTING-15-CAMPAIGN.md)
 - [14d: wormhole systems](TESTING-14D.md)
 
 | Guide | Covers |
 | --- | --- |
+| [TESTING-16-SAVE29.md](TESTING-16-SAVE29.md) | Step 16 slice 2: the save is v29; an existing save opens unchanged, a play session is unchanged, autosave/slot/export-import still work, the campaign is untouched, and an old save still loads (nothing to look for yet — the join flow is slice 4). |
 | [TESTING-NPC-AI.md](TESTING-NPC-AI.md) | Individual flight, Guardian aggression, obstacle avoidance, difficulty and crowded-belt performance. |
 | [TESTING-TARGETING.md](TESTING-TARGETING.md) | Feature batch Part 1 (items 4–7): F switching, NPC bars, missile progress and priority. |
 | [TESTING-BASELINE.md](TESTING-BASELINE.md) | The whole game; play it after every step. |

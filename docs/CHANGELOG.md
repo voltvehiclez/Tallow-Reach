@@ -20,6 +20,123 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
+
+The owner picked the one library the rules allow: **Trystero** (`trystero@0.27.0`, MIT, Nostr
+build) for the one-link join, with the paste-code flow kept as the fallback. **Docs only; the
+dependency is not added yet** — slice 3 is the change that adds it.
+
+- `docs/REFACTOR_PLAN.md` step 16: the question section is now the record of the answer, with the
+  measured numbers kept (4 packages, +151 KB to the single-file build, free relays, no account).
+  The one rule it pins down: **`trystero` is imported by `src/net/transport.js` and by nothing
+  else**, and the paste-code path is built alongside it because a free relay can be slow or down.
+- `docs/architecture/multiplayer.md`: the connection section names the choice; slice 3 is the next
+  slice rather than a blocked one. ROADMAP and HANDOFF updated the same way.
+
+Next: **slice 3** — `src/net/transport.js`, the one-link join and the paste-code fallback, the
+handshake wired to `custody.js`, Pause > Open Multiplayer, chat on Enter, the connected-player list.
+
+## 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
+
+The owner asked for the guest to join by pasting **one link** (Pause > Open Multiplayer shows it,
+**Join Multiplayer World** takes it), using a free public signalling broker through one small
+library, with the paste-code flow kept as a fallback. **No code changed in this entry:** the
+owner's own rule is to ask before adding a dependency, so the question is written down with
+measured numbers and step 3 has not started.
+
+- **`docs/REFACTOR_PLAN.md`**, step 16: new "The transport, in plain language" (the one-link flow,
+  where the secret sits, what the broker sees) and "**The library decision (asking the owner)**" —
+  Trystero 0.27.0 recommended over PeerJS 1.5.5, with the figures measured against this project's
+  own esbuild single-file build: **+151 KB vs +86 KB**, 4 packages vs 6, free relays with no
+  account vs a single free cloud with no uptime promise. Both MIT.
+- **`docs/architecture/multiplayer.md`**: the connection section now describes the one-link shape
+  and the fallback, and slice 3 is marked **not started, waiting on the owner's answer**.
+- The fallback (paste codes) needs **no library at all**, which is why it is safe to build first:
+  it is the path that has to work when the broker is down.
+
+Next: the owner answers which library (or "paste codes only"), then slice 3 builds the wrapper.
+
+## 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
+
+The save now knows where a pilot **is**. Slice 1 proved the rules of travel on plain objects;
+this slice puts them in the save, with a migration that every older save walks through by doing
+nothing at all.
+
+- **`SAVE_VERSION` 28 → 29** (`src/state/profile.js`). Two additive fields, both optional forever:
+  - `save.away` — `{ worldId, hostName, guestId, token, epoch, rev, suitcase }` beside `profile`
+    and `world`, or `null` at home. **Not** inside the profile: where a pilot is is neither a fact
+    about the character nor about the world it stands in. `cleanAway` validates it; a marker with
+    no world id or no guest id is not a marker (nothing could be found again from it).
+  - `world.worldId` (`null` until the world is first hosted) and `world.guests` — `guestId ->
+    { name, tokenHash, epoch, rev, bundle, lastSeen }`, read back by `cleanGuests`. A record with
+    no token hash is dropped (there is nothing to prove against), and a damaged entry never fails
+    the save, because the guest's suitcase has the copy.
+  - **Migration:** every v28-and-older save loads with `away: null` and `guests: {}`. A v13 and a
+    v12 fixture are in `tests/multiplayer-save.test.mjs` to prove it.
+  - **A suitcase is not sanitized like a profile.** `cleanSuitcase` checks the shape and drops
+    wrong *types*, but never second-guesses a content id: while a pilot is away, its suitcase is
+    the **only** copy of its cargo, so an id this build does not know is carried, not deleted.
+- **`src/net/multiplayer.js`** (new): the operations that change those fields, so no caller has to
+  know their shape — `worldIdFor` (mint once, keep), `adoptHostWorld`, `leaveHostWorld`, `syncAway`,
+  `guestOf`/`putGuest`/`dropGuest`/`guestList`/`seenGuest`/`guestIsHere`/`guestCount`/`canTakeGuest`,
+  `isAway`/`awayLine`/`suitcaseKey`. A host's record is built by `custody.guestRecord`, which now
+  **strips the guest's token** from the bundle it stores: a host's save must never become a way to
+  take somebody's pilot.
+- **`src/state/storage.js`**: writes go through a scratch key and are swapped in
+  (`writeThrough`), the replaced version is kept for one generation (`tr1:prev`,
+  `NET.keepPrevious`), and `loadAutosave` falls back to it when the live record will not read. Slots
+  are swapped in too but keep no history (the player asked for that save). New
+  `writeAway`/`readAway`/`clearAway`/`awayWorlds` for the per-world suitcase key `away:<worldId>`
+  (`KEY` in `data/multiplayer.js`), so two tabs visiting two worlds cannot overwrite each other.
+  **Storage keys and `TR1:` did not change.**
+- **`src/state/state.js`**: the runtime keeps `state.away`, `currentSave()` writes it, and
+  `installNestedSave` reads it, so a save made while visiting still says so after a reload. A
+  dual-mode autosave carries each half's own marker (a campaign pilot is never marked).
+- **`src/net/custody.js`**: `checkOut` reuses the token an away pilot already proved (a fresh one
+  would look like a stranger to the host it is returning to) and the bundle now carries
+  `homeStation`, which slice 4 needs to put the pilot back at its own station on the way home.
+
+Tests: `tests/multiplayer-save.test.mjs` (26). Suite 881 pass / 0 fail. **No networking yet**
+(slice 3), and nothing a player can click changes: a pilot gets a marker only when the join flow
+(slice 4) sets it, so the game plays exactly as v28. Guide for the owner:
+`../testing/TESTING-16-SAVE29.md`.
+
+## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
+
+The plan the owner gave for multiplayer (host-run co-op, WebRTC, one suite per world) is written
+into step 16 of `docs/REFACTOR_PLAN.md` with its **six slices**. This is slice 1: the rules of
+travel, proved on plain objects before a byte moves.
+
+- **`src/data/multiplayer.js`**: `TRAVEL_FIELDS` is the owner's list (credits, ships, fits, holds,
+  hull damage, missiles, selected weapon bays, and the station lockers, which are packed from the
+  world half of a save), `HOME_FIELDS` is what stays home (missions, flags, stats, campaign, and the
+  home-station and filter-preset preferences), `ARRIVAL_STATION`/`ARRIVAL_STATION_KEY` (Meridian,
+  read from `data/places.js`) and `NET` (timings and limits, each with the slice that reads it).
+- **`src/net/custody.js`**: `checkOut` packs a pilot into a bundle and writes the `away` marker,
+  emptying the stations it packs; `checkIn` applies a bundle to a **new** save, clears `away`, and
+  copies the home half back from the home save *after* sanitizing, so nothing leaks into missions,
+  flags or stats; `relocate` sends anything whose station a world lacks to Meridian and puts it back
+  the moment that station exists again (never refusing, never deleting; an over-full station is
+  flagged and only refuses new deposits); `compare` orders two copies by `(epoch, rev)` and never
+  merges. Plus `hashToken`/`tokenCheck` (a host stores a hash, never the secret), `handshake` with a
+  sentence per refusal (version, world, token), `summary` ("600 cr · 1 ship · 0 m³"), `uniqueName`
+  (the host's name wins, joiners wear `*`, `**`), `guestRecord`, `hostProfile`, `mergeLockers`,
+  `totals`.
+- **`src/net/station-inventory.js`**: room at a station, defined once — m³ from `data/station.js`,
+  `world.storageOverfull` for an over-full station. Slice 6's trade asks the same questions.
+- **`src/net/world-places.js`**: where a station is **in somebody else's world**. Generated pocket
+  ids are not unique across galaxy seeds, so a station key is resolved with the world it belongs to
+  (`generateGalaxy(seed)`, pure, plus that world's saved wormhole pockets) and never by touching the
+  live catalog.
+- **Unknown content is kept**: a newer build's item, module or hull id is carried untouched, whole
+  unknown stacks in the bundle and single unknown ids re-inserted after the save sanitizer (which
+  would otherwise drop them).
+
+Files: `src/data/multiplayer.js`, `src/net/{custody,station-inventory,world-places,README}.js`,
+`tests/multiplayer-custody.test.mjs`, `docs/{REFACTOR_PLAN,ARCHITECTURE,CHANGELOG}.md`,
+`docs/architecture/multiplayer.md`. **No save change yet** (stays **28**; slice 2 makes it 29).
+Tests **852 pass / 0 fail**. Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
 
 - **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
@@ -138,181 +255,12 @@ Files: `src/sim/flight-model.js`, `src/sim/player.js`, `src/data/ships.js`,
 `src/data/enemies.js`, tests, docs. No save change.
 Rebuild `game/tallow-reach.html`; `npm test`.
 
-## 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
-
-The batch the owner asked for after playtest round 4 of step 15, in slices.
-
-- **Every ship flies the same flight model.** New `src/sim/flight-model.js` (`stepFlight`) holds the
-  player's exact maths — local Y/X/Z quaternion turns with the stick deadzone, `FLIGHT` fractions,
-  throttle/brake rates, velocity easing 0.9 (2.4 boosting) and boost adding its own speed again.
-  `sim/player.js` keeps power, boost fuel/ignition, warnings and collision around it and is
-  byte-identical against a golden copy of the old maths (`tests/flight-model.test.mjs` (a), plus the
-  8b fixtures: the player's own pose never moved). New `src/sim/npc-pilot.js` turns the AI's desired
-  velocity + aim point into the same stick/throttle/strafe/lift/boost (proportional, clamped), and
-  `sim/enemy-flight.js` (fighter, escort, course, observe, prowl, guard) no longer moves `pos`/`quat`/`v`
-  or calls `turnEnemy` for movement. The AI decisions are unchanged; `spdFar`/`spdNear`/`spdOrbit` remain
-  "how fast it wants to go", capped by its flight stats. NPC drives are unlimited today; `boostAllowed`
-  is the one hook a later power system needs.
-- **NPC stats are their own numbers.** Every type in `src/data/enemies.js` carries its own copied
-  `flight` block at the stock Wasp's values (speed 150, turn 1.2, strafe/lift/reverse 0.6, ease 0.9,
-  boostEase 2.4, boostSpeed 150 — from `thruster_basic` + `FLIGHT`), with `FLIGHT.defaultStats` as the
-  fallback and `flight.fromShip` as a one-time copy with per-field overrides. Tune ONE type by editing
-  only its `flight` block. The old per-type movement numbers they replace: raider turn 1.4 / 125 / 25 / 45,
-  captain_korr 1.9 / 210 / 85 / 18, practice_drone 0.9 / 80 / 18 / 25, smuggler 1.5 / 120 / 24 / 44,
-  freighter 0.9 / 55 / 16 / 18, hiveguardian 1.9 / 145 / 38 / 58, riftguardian 1.8 / 140 / 34 / 55,
-  deepguardian 2 / 155 / 40 / 62 (turn / spdFar / spdNear / spdOrbit). Expect fights to fly differently:
-  everything now accelerates, brakes and turns like a Wasp — Dane brakes over seconds (reset-brake test
-  widened for exactly that) and boosts past 150 m/s on the fast course legs.
-- **All ships turn a third longer:** `FLIGHT.turn` 0.7 → 0.525 (one data number; player and NPC alike).
-- **First Sortie:** Flight School is now **Korr Flight Academy** everywhere (ids unchanged, saves safe);
-  Dane's "I will keep one busy…" line is gone; the act ends on a new **`dock` objective**
-  (`dock-at-academy`) — his report is a radio call in space, the card shows when the pilot docks there.
-  Framework first: a generic `dock` step kind (settled only by the `docked` event at its own pocket,
-  linter-required `place`, mission-driver support). **Objective glow means "needed now":** briefing
-  dialogue no longer lights the wave it spawned, and Dane glows only on the chase step — not during
-  control lessons, drills or the ambush.
-- **Reset actually resets.** It wiped only the current mode's half; it now wipes both modes
-  (`resetAllSave`, staying in the mode pressed from). New LESSONS L32 and `tests/reset-save.test.mjs`.
-- **Navigation:** the N panel header is Pocket objects – Filters – Close · N, the Distance sort sits at
-  the far right over the distances, and seven **filter preset** boxes live between them (empty = ＋ saves
-  the current filters, selecting a preset while editing filters updates it, right-click renames or resets
-  it). Presets are saved with the save (**v28**, additive, old saves load empty). The N filters now also
-  govern floating HUD labels (an F-lock still draws its label; rocks still never label). Belt label
-  grouping is more generous (`BELT_LABEL_GAP_METRES` 1000 → 3000, chaining; no asteroid moved), and
-  marker labels split name/distance into spans with a fixed-width tabular distance, so a label no longer
-  resizes and shakes as the range ticks over.
-- **Outfitting:** dropping a module anywhere in the left Outfitting box fits its left-most bay of the
-  right group (a specific bay still wins).
-- **Earth-like planet:** new `earth` class (greenish-grey) in `data/planets.js` with its own procedural
-  map; it is in the generator pool — existing generated planets may re-roll their class — and the
-  main-menu backdrop world is one.
-- The two 8b fixture recordings were re-recorded and diffed (LESSONS L17): the combat run's player pose
-  is unchanged; only enemy flight and its downstream differ.
-
-Files: `src/sim/{flight-model,npc-pilot,player,enemy-flight,missions}.js`, `src/data/{ships,enemies,
-enemy-ai,scenery,planets,missions/index,missions/validate,campaign/m01,campaign/galaxy,factions,places,shops}.js`,
-`src/ui/{hud,pocket-list,mission-hud,menu}.js`, `src/render/{planetmaps,menuview}.js`, `src/state/{profile,state}.js`,
-`src/{index.html,styles.css}`, tests (new `tests/{flight-model,reset-save,filter-presets}.test.mjs`),
-docs. Save **v28** (additive: `profile.pocketFilterPresets`; old saves load with seven empty slots).
-Rebuild `game/tallow-reach.html`; `npm test` — see the delivery note for the count.
-
-## 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere
-
-The owner's fourth pass over the campaign build, plus universal mission markers.
-
-- **Resuming an act from the title no longer loses the flight HUD.** Leaving an act with Esc → *Exit to main
-  menu* left `state.ui.intro` / `state.ui.campaign` set, so `resumeFromSave` fired `launched` at a HUD that
-  refused to unhide. `sim/campaign-act.js` `startCampaignAct` and `ui/menu.js` `enterGameMode` now clear both
-  flags *before* the save is applied, a mode switch resets places and syncs `state.place`, and the resume emits
-  `campaign-act-entered`, which drops the cached weapon-slot markup and re-syncs the reticle. The campaign screen
-  only opens the station panel when the pilot really is docked.
-- **The starter Wasp leaves the school with Basic Missiles fitted and full.** `state/profile.js`
-  `newCampaignProfile()` (used by `newCampaignSave` and `separateCampaignPilot`), and `grantFixedShip(..., {
-  campaign: true })` for an act that assigns the hull, fit `missile_basic` in secondary slot 1 and stock
-  `MODULES.missile_basic.cap` missiles; `acceptMission` refreshes the live ship's guns and missile stock.
-- **The gunnery pass is two waves.** `data/campaign/m01.js`: `spawn-drones` → `drone-brief` → `drone-drill`
-  (primary weapons, keys 1–5 + LMB) then `spawn-missile-drones` → `missile-brief` → `missile-drill`
-  (secondary weapons, lock tone + right click). `sim/missions.js` `killObjectivesIn` now looks past a
-  `dialogue` step to the `kill` step that follows it, so a wave spawned before its briefing is still re-armed
-  on reload. `sim/campaign-flight.js` tops the missile rack back up if the pilot empties it with nothing in
-  flight during the missile steps.
-- **The ambush is a standoff, not a carousel.** `sim/enemy-flight.js` `flyProwl` gives both raiders one shared
-  approach corridor (`sim/ai.js` seeds `prowlDir`), brakes them to a halt side-by-side ~150 m from Dane and
-  `flyObserve` brakes Dane to a halt facing them, so both sides stare at each other through the dialogue.
-- **Universal mission objective markers.** `ui/mission-hud.js` adds `missionTitleColor` (amber for acts and
-  story missions, ice for contracts, `titleColor`/`color` override), `activeObjectiveSteps`,
-  `objectObjectiveColor(object, kind, ctx)` and `missionWaypoints(ctx)`. `ui/hud.js` glows the matching floating
-  marker (`.mk.obj`) for every active objective target — hand-in/offered stations, friendly actors to follow,
-  hostile kill/wave-clear targets including wave-clear encounters, crates owed or persistent mission drops,
-  asteroid fields and rocks to mine — even beyond the old 900 m crate radius, and draws mission waypoints
-  (`.mk.waypoint`) for a destination pocket, an authored `waypoint`/`pos`, a chase course start, or a
-  reach/survive/wait signal. `ui/pocket-list.js` `pocketRowsHtml(rows, isSelected, objectiveFor)` marks the same
-  rows in the `N` list (`li.objective`, `.pocket-icon.obj`) with the mission's colour. The marker pool rose from
-  18 to 28 so waypoints cannot push the ordinary labels out.
-- Act 1's dialogue doc and playtest guide record the two-wave pass; the guide's step numbers continue.
-
-Files: `src/{data/campaign/m01.js,sim/{ai,campaign-act,campaign-flight,enemy-flight,missions},state/profile.js,
-ui/{hud,menu,mission-hud,pocket-list},styles.css`, tests, docs. No save change (stays **27**). Rebuild
-`game/tallow-reach.html`; `npm test` **814 pass / 0 fail**.
-
-## 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
-
-The owner's third pass over the campaign build, plus four follow-up polish items.
-
-- **Dane does not shoot the training drones, and the ambushers warp in to circle first.** `sim/ai.js`
-  requires `def.engages === "hostiles"` **and** `e.role === "guard"` before a story ship fires. In First
-  Sortie, `spawn-ambush` now runs as `ambush-warning` starts (`warpIn: true, role: "prowl"`): the two
-  attackers streak in out of warp and circle around Dane and the pilot (`flyProwl` in `sim/enemy-flight.js`)
-  without firing while Dane stays on `observe` and holds his fire. When `ambush-taunt` finishes and
-  `defeat-ambush` begins, Dane switches to `guard` and opens fire, and the attackers switch out of `prowl`
-  into their aggressive AI (`flyFighter`). Shooting either attacker mid-dialogue (`hitHostile`) breaks the
-  parley early and turns the wave aggressive at once.
-- **Live distance counter stays after the 500 m bonus is lost, and a failed run slows before returning.**
-  `ui/mission-hud.js` `chaseLinesHtml` now keeps `Distance to Dane: now NNN m` under the 1 km rule even after
-  the 500 m bonus fails. When the pilot falls more than 1 km behind during the run, Dane no longer whips a
-  sudden 180: he brakes to a stop along his heading (`reset-brake` in `sim/enemy-flight.js`), says *"You need
-  to keep closer to pass. Let's do it again — follow me back to the start."* (`reset-talk` in
-  `sim/campaign-flight.js`, rendered on `#dialogue-panel`), and only turns back to the start once the line finishes.
-- **Shorter control prompts.** Each control call in `m01.js` is now one concise line so the pilot spends
-  the lesson flying instead of waiting on radio lines; the steering line keeps *"the Wasp is quicker than
-  anything you flew at the school."*
-- **Weapon slots are keyboard-only (`1`–`5`, `6`–`0`) and top-middle alerts dismiss with R.** Turning down
-  with the mouse in flight no longer clicks `#weapon-slots` (`pointer-events: none`, click listener removed
-  from `ui/hud.js`), and `#mission-alert` says *Press R to dismiss* and closes on `KeyR`.
-- **His rounds were still red for a real reason.** `fire()` → `addEntity` emits `entity-spawned`
-  synchronously, and the bullet mesh is built from that record, so assigning `shot.colour` after
-  `fire()` returned changed nothing. `sim/combat.js` `fire()` takes a trailing `extra` object and
-  assigns it *before* `addEntity`; `sim/ai.js` passes `{ colour: BULLET_COLOURS.cannon }` (orange).
-  No new colour abstraction.
-- **"The sortie is over" is gone.** `m01.fails.message` is now just "Your Wasp was destroyed."; both
-  the MISSION FAILED card and the small alert popup read that one string.
-- **The hold bar works again.** The objective's generic sub-line rule (`#tr .hud-mission small`:
-  `display: block; white-space: nowrap`) out-rank the old bar's selectors, so the grid never applied
-  and the track had no width. The bar's markup moved to a pure, testable `ui/mission-hud.js`
-  (`holdBarHtml`, `chaseLinesHtml`, `campaignDetailHtml`) with selectors that win, a grid layout
-  (label over track+percent) and an explicit `width: 100%` track. `tests/campaign-fixes.test.mjs`
-  now asserts the percentage, the 1 km / 500 m lines and the gathering rule.
-- **All First Sortie dialogue in one document:** `docs/FIRST-SORTIE-DIALOGUE.md` — briefing, every
-  control call and its objective/hold label, the run's orders and both reset lines, the gunnery pass,
-  the ambush, the final report, the failure sentence and the card buttons, with the file to edit for
-  each.
-
-Tests 801/801, build 3232 KB. Nothing merged: the owner tests the zip first.
-
-## 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
-
-The owner's second pass over the campaign build. Eight corrections.
-
-- **Dane's fire is just cannon fire.** No "ally colour": a round is drawn in the colour of the module that
-  fired it. `BULLET_COLOURS.cannon` (`data/weapons.js`, orange) is stamped on his shots in `sim/ai.js`, and the
-  renderer colours a bullet by that field (else the pilot's own orange, else hostile red). Damage is still 0.
-- **The title is quiet.** The low drone was created at gain 0.08 and nothing lowers it on a screen that never
-  runs `updateAudio()`, so it hummed under the campaign menu; it now starts at 0 and only the flight loop raises it.
-- **Smaller chapter boxes, redacted future content.** `.campaign-boxes` is a fixed three-column grid (~1/3
-  smaller: three chapters fit where two did). Unwritten chapters and acts show no names at all: a blurred
-  placeholder reads "Coming soon" with a number, and opening a locked chapter says "This chapter is not
-  written yet."
-- **Objectives are back in the top right**, in the same block as contracts and story missions; the top-left
-  campaign tracker is gone. Under a campaign objective the HUD adds: the control hold bar (percentage) while a
-  lesson runs, the run's rule ("Stay within 1 km of Dane for the whole course to pass."), and the still-live
-  bonus ("Bonus: within 500 m · now 312 m").
-- **Q and E were swapped** in the roll lesson: `MISSION_CONTROLS` read `roll-left` as negative while `KeyQ`
-  produces +1, so Q completed E's objective. The signs now match the input record.
-- **The run waits for a form-up.** The chase step is `gather: 300`: Dane flies to the fixed start, waits, and
-  only starts the ten-kilometre course when the pilot is within 300 m (the course's own gate, now per step).
-  His call says "come to my wing — close, within 300 m", the first leg is a slow 95 m/s warm-up, and the
-  500 m bonus is not judged while he is waiting (no `mission-near` until the course runs).
-- **Clicking Back on the campaign screen no longer blanks the title.** The action had already drawn the title,
-  and the panel click handler's tail then hid `#panel` because the pilot was still in space; a title screen now
-  keeps the panel regardless of where the pilot is.
-
-Files: `src/data/{weapons,places}.js`, `src/data/campaign/m01.js`, `src/data/flight-courses.js`,
-`src/data/missions/rules.js`, `src/sim/{ai,combat,enemy-flight,campaign-flight}.js`, `src/render/views.js`,
-`src/core/audio.js`, `src/ui/{campaign,menu,hud}.js`, `src/state/state.js`, `src/index.html`, `src/styles.css`,
-tests, docs. No save change (stays **27**). Rebuild `game/tallow-reach.html`; `npm test` **800 pass / 0 fail**.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
+- 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere
+- 2026-11-20: Playtest round 3: Dane's guns, the hold bar, the dialogue in one doc
+- 2026-11-20: Playtest round 2: objectives back top-right, run form-up, quieter menu
 - 2026-11-20: Playtest fixes: friendly fire, one-second lessons, chapter boxes, ambush reveal
 - 2026-11-20: Campaign slices: acts, boundaries, dialogue pacing, failure/bonus framework, Dane, First Sortie
 - 2026-11-19: Step 15 — campaign scaffolding, dual-mode saves and the Dane Korr tutorial

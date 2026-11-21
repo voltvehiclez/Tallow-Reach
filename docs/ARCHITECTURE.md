@@ -41,6 +41,7 @@ main.js                 boot + frame loop
 ui/                     HUD, outpost menus, pause overlay       (reads state, calls sim actions)
 render/                 three.js scene, models, camera          (reads state, never changes game rules)
 sim/                    gameplay rules: flight, combat, economy, contracts, lifecycle
+net/                    multiplayer (step 16): the suitcase, the save fields it lives in, station room, world station indexes
 state/                  runtime state, persistent profile, save storage
 data/                   static tuning: ships, items, weapons, station, contract templates
 core/                   audio synth, keyboard/mouse input
@@ -95,6 +96,9 @@ about each other, use the event bus instead.
 | Change what gets saved               | `state/profile.js` (`newProfile` / `newWorld`, `sanitizeProfile` / `sanitizeWorld`, bump `SAVE_VERSION`, add a migration in `sanitizeSave`) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
 | Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
+| Change what a pilot may carry into someone else's world | `data/multiplayer.js` (`TRAVEL_FIELDS`, `HOME_FIELDS`); packed and unpacked by `net/custody.js`; see [architecture/multiplayer.md](architecture/multiplayer.md) |
+| Change what the `away` marker or a host's guest record holds | `data/multiplayer.js` (`AWAY_FIELDS`, `GUEST_FIELDS`), validated by `cleanAway`/`cleanGuests` in `state/profile.js`, changed through `net/multiplayer.js` |
+| Change how a save is written to the browser | `state/storage.js` (`writeThrough`: scratch key, swap, previous version kept; `away:<worldId>` for the suitcase) |
 | Add tests                            | `tests/` (`*.test.mjs`, run by `npm test`)     |
 
 ## File map
@@ -154,6 +158,7 @@ Read the one that matches the work. Each holds that area's conventions and known
 | [architecture/campaign-acts.md](architecture/campaign-acts.md) | Campaign acts: structure, failure/checkpoints, natural resets, optional bonuses, control/chase steps, story actors |
 | [architecture/mission-principles.md](architecture/mission-principles.md) | How the eight architecture principles apply to the mission framework, and the limits of validation |
 | [architecture/world-and-map.md](architecture/world-and-map.md) | World and map: places, the starmap, travel, place memory, where you log out |
+| [architecture/multiplayer.md](architecture/multiplayer.md) | Multiplayer (step 16): the suitcase, what travels, what stays home, station keys across worlds, the connection and the six slices |
 | [architecture/feature-notes.md](architecture/feature-notes.md) | Detailed notes on features built in steps 10 to 13 (galaxy, starmap, place templates, missions), moved out of HANDOFF |
 | [MISSION_RULES.md](MISSION_RULES.md) | How missions must behave, the linter and the invariant tests |
 
@@ -190,7 +195,7 @@ If you add an event, add it to the list at the top of `util/events.js` in the sa
 
 ## Save compatibility
 
-Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. `sanitizeSave` emits current `{ v: 19, profile, world }` objects, migrating v18 saves (including active `profile.mission` and worlds without `stationStores`), v17 saves (missing `placeMemory` defaults to `{}`), v16 saves, v15 saves (`galaxy:null` becomes the default seed plus home knowledge), v14 saves (no `resume`, so they keep the old dock-or-arrival behaviour), v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves. Boot, slot load and import call `prepareGalaxySave` first: it installs the saved seed's catalog, validates pocket/knowledge ids against it, and recovers a removed/unknown pocket to the home station with `resume:null` while preserving the whole profile. A failed prepare restores the previous catalog. `profile.missions` stores data mission definitions plus step/counter progress; `profile.flags` stores simple remembered values for later story choices. `world.stationStores` is world state, not portable profile state; its keys are stable `${placeId}:${featureId}` values and its stocks are cleaned through `sanitizeWorld`. `world.placeMemory` stores only positive, finite remaining simulation seconds under each place's `rocks` and `encounters` buckets; it is world state, not portable profile state.
+Storage keys (`tr1` for the autosave, `tr_s1`..`tr_s3` for slots) and the `TR1:` code prefix are unchanged from the prototype, so existing saves load. Since v29 a save is written through a scratch key and swapped in, with the version it replaced kept under `:prev` (one generation); `loadAutosave` falls back to that version if the live record will not read, so a half-written save cannot cost a pilot. Multiplayer's suitcase gets its own per-world key, `away:<worldId>`, which is not the save. `save.away` is the marker beside `profile` and `world` — `null` at home, which is what every v28-and-older save loads with — and `world.guests`/`world.worldId` are the host side, both additive; see `net/multiplayer.js` and [architecture/multiplayer.md](architecture/multiplayer.md). `sanitizeSave` emits current `{ v: 19, profile, world }` objects, migrating v18 saves (including active `profile.mission` and worlds without `stationStores`), v17 saves (missing `placeMemory` defaults to `{}`), v16 saves, v15 saves (`galaxy:null` becomes the default seed plus home knowledge), v14 saves (no `resume`, so they keep the old dock-or-arrival behaviour), v13 split saves (`world.sector` migrates to `world.place`) and flat v1..v12 saves. Boot, slot load and import call `prepareGalaxySave` first: it installs the saved seed's catalog, validates pocket/knowledge ids against it, and recovers a removed/unknown pocket to the home station with `resume:null` while preserving the whole profile. A failed prepare restores the previous catalog. `profile.missions` stores data mission definitions plus step/counter progress; `profile.flags` stores simple remembered values for later story choices. `world.stationStores` is world state, not portable profile state; its keys are stable `${placeId}:${featureId}` values and its stocks are cleaned through `sanitizeWorld`. `world.placeMemory` stores only positive, finite remaining simulation seconds under each place's `rocks` and `encounters` buckets; it is world state, not portable profile state.
 
 When you change what is saved:
 
