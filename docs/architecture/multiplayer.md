@@ -104,9 +104,10 @@ a join link; **Join Multiplayer World** takes it. That is the normal path.
 
 A browser cannot accept a connection on its own, so two browsers have to be introduced by something.
 The owner's rules allow exactly one small networking library for this, behind `src/net/transport.js`;
-nothing else in the game may name it. The library question is asked with its numbers in
-[../REFACTOR_PLAN.md](../REFACTOR_PLAN.md) ("The library decision"); it is **not decided yet**, so
-slice 3 has not started.
+nothing else in the game may name it. **The owner chose Trystero** (`trystero@0.27.0`, MIT, Nostr
+build) on 2026-11-21 — the numbers it was chosen on are in [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)
+("The library decision"). It is imported by `transport.js` and by nothing else, and the paste-code
+path is built beside it for when a free relay is slow or down.
 
 The shape the wrapper is written to, whichever library answers:
 
@@ -133,9 +134,9 @@ carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a
 2. **Save v29** — `save.away`, `world.guests`, the migration (old saves load with `away: null`),
    `guestId`/`worldId`, the temp-key-then-swap write that keeps the previous version, and the
    `away:<worldId>` storage key. **Built 2026-11-21.**
-3. **The connection** — `net/transport.js`, the one-link join (with paste codes as the fallback),
-   Pause > Open Multiplayer, chat and the player list. **Not started: waiting on the owner's answer
-   to the library question** (see step 16 in `docs/REFACTOR_PLAN.md`).
+3. **The connection** — `net/transport.js` (Trystero for the one-link join, paste codes as the
+   fallback), Pause > Open Multiplayer, chat and the player list. **Next slice**, now that the
+   library is settled.
 4. **Join** — the handshake, "Bring my pilot", two-second snapshots, reconnects by `compare`, "Go
    home" from the suitcase with the host offline.
 5. **Crashes and reconnects** — the choice screen, "Your pilot is safe" with *Wait* and *Go home*,

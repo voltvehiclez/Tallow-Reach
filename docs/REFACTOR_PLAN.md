@@ -301,10 +301,10 @@ through something. That makes one small dependency unavoidable, which is exactly
 owner's rules make for "one small networking library for the connection, hidden behind a thin
 wrapper file" (`src/net/transport.js` only: nothing else in the game may name it).
 
-**Recommended: Trystero** (`trystero@0.27.0`, MIT), the Nostr build. See "The library decision"
-below for the numbers and the alternatives. Copy-paste offer/answer codes stay as the **fallback**
-for when the broker is unreachable: the wrapper offers both, and the pause card says which one it
-is using.
+**Decided: Trystero** (`trystero@0.27.0`, MIT, the Nostr build) — the owner chose it on
+2026-11-21. See "The library decision" below for the numbers it was chosen on. Copy-paste
+offer/answer codes stay as the **fallback** for when the broker is unreachable: the wrapper offers
+both, and the pause card says which one it is using.
 
 How a join works with a broker, in the owner's one-link shape:
 
@@ -322,7 +322,7 @@ The fallback keeps the old two-paste flow for a broker that is down: the host ma
 code**, the guest pastes it and gets an **answer code**, the guest sends that back and the host
 pastes it. It is one paste more, and it is the honest trade-off for a self-contained build.
 
-## The library decision (asking the owner — slice 3 does not start until it is answered)
+## The library decision (settled 2026-11-21: Trystero)
 
 The owner's rule is "no new npm dependencies except one small networking library, behind a thin
 wrapper; ask first". Here is the question with the facts it should be answered on. **Measured
@@ -339,29 +339,25 @@ wrapper; ask first". Here is the question with the facts it should be answered o
 | Works from `file://`? | no signalling without a socket, but no server of ours either way | same |
 | Risk if the free service disappears | edit one list of relay URLs in `src/net/transport.js` | point at a different public PeerJS server, or none exists |
 
-**Why Trystero is the recommendation:**
-
-1. **It matches the owner's design without a server of ours.** PeerJS's public cloud is the
-   equivalent free service, but it is a single point run on goodwill with no promise; Nostr relays
-   are many, and the wrapper can carry its own list.
-2. **It is a wrapper around a protocol, not a re-packaging of other libraries.** Its build brings
-   only its own code and one small secp256k1 implementation, so what we audit is what ships.
-   PeerJS pulls in `webrtc-adapter`, msgpack and binarypack, which the game does not otherwise use.
-3. **One link is its natural shape** (join a room by name), where PeerJS's is a peer id plus a
-   server. The owner's flow is simpler with it.
+**Why:** it needs no server of ours and no account; its build is its own code plus one small
+secp256k1, so what we audit is what ships; and joining a room by name is the one-link shape the
+owner asked for.
 
 **The honest cost:** +151 KB, i.e. the build goes from 3,256 KB to about **3,407 KB** — roughly
 4.6% bigger, in a single HTML file. PeerJS would be +86 KB (about 2.6%) but needs a single free
 server with no promise, and does not give the one-link flow for free.
 
-**Before it goes in**, one experiment decides half of it: does a connection through the free relays
-actually work from the owner's machine and a friend's? The wrapper is written so that this is a
-five-minute test on two browsers, and the answer decides whether the broker path or the paste-code
-fallback is the default.
+**First test on two browsers decides which path is the default** (a free relay can be slow or down
+on any evening); the paste-code fallback exists for that.
 
-**The owner's answer is recorded here when given.** Until then, slice 3 does not add the dependency:
-the fallback (paste codes) needs no library at all and can be built first, which is also the honest
-order — the paste path is the one that must work when the broker does not.
+**The owner chose Trystero on 2026-11-21.** So slice 3 adds `trystero` as the project's one
+dependency allowance — **pinned to `0.27.0`**, the exact version measured above, and upgraded only
+deliberately (a floating `^` would let a relay or API change arrive unannounced) — imported by
+**`src/net/transport.js` and nothing else**; the paste-code path
+needs no library and is built as well, because it is the one that must work when the broker does
+not. Two things the owner should expect from the first test: the build grows by about 151 KB
+(3,256 → ~3,407 KB), and a free relay can be slow or down on any given evening — the fallback
+exists for exactly that, and the pause card says which path is in use.
 
 ## Slices (one per chat, each ends with `npm run build` and `npm test`)
 

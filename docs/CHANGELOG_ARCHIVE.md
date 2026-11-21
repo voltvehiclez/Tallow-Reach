@@ -1,5 +1,63 @@
 # Changelog archive
 
+## 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
+
+The batch the owner asked for after playtest round 4 of step 15, in slices.
+
+- **Every ship flies the same flight model.** New `src/sim/flight-model.js` (`stepFlight`) holds the
+  player's exact maths — local Y/X/Z quaternion turns with the stick deadzone, `FLIGHT` fractions,
+  throttle/brake rates, velocity easing 0.9 (2.4 boosting) and boost adding its own speed again.
+  `sim/player.js` keeps power, boost fuel/ignition, warnings and collision around it and is
+  byte-identical against a golden copy of the old maths (`tests/flight-model.test.mjs` (a), plus the
+  8b fixtures: the player's own pose never moved). New `src/sim/npc-pilot.js` turns the AI's desired
+  velocity + aim point into the same stick/throttle/strafe/lift/boost (proportional, clamped), and
+  `sim/enemy-flight.js` (fighter, escort, course, observe, prowl, guard) no longer moves `pos`/`quat`/`v`
+  or calls `turnEnemy` for movement. The AI decisions are unchanged; `spdFar`/`spdNear`/`spdOrbit` remain
+  "how fast it wants to go", capped by its flight stats. NPC drives are unlimited today; `boostAllowed`
+  is the one hook a later power system needs.
+- **NPC stats are their own numbers.** Every type in `src/data/enemies.js` carries its own copied
+  `flight` block at the stock Wasp's values (speed 150, turn 1.2, strafe/lift/reverse 0.6, ease 0.9,
+  boostEase 2.4, boostSpeed 150 — from `thruster_basic` + `FLIGHT`), with `FLIGHT.defaultStats` as the
+  fallback and `flight.fromShip` as a one-time copy with per-field overrides. Tune ONE type by editing
+  only its `flight` block. The old per-type movement numbers they replace: raider turn 1.4 / 125 / 25 / 45,
+  captain_korr 1.9 / 210 / 85 / 18, practice_drone 0.9 / 80 / 18 / 25, smuggler 1.5 / 120 / 24 / 44,
+  freighter 0.9 / 55 / 16 / 18, hiveguardian 1.9 / 145 / 38 / 58, riftguardian 1.8 / 140 / 34 / 55,
+  deepguardian 2 / 155 / 40 / 62 (turn / spdFar / spdNear / spdOrbit). Expect fights to fly differently:
+  everything now accelerates, brakes and turns like a Wasp — Dane brakes over seconds (reset-brake test
+  widened for exactly that) and boosts past 150 m/s on the fast course legs.
+- **All ships turn a third longer:** `FLIGHT.turn` 0.7 → 0.525 (one data number; player and NPC alike).
+- **First Sortie:** Flight School is now **Korr Flight Academy** everywhere (ids unchanged, saves safe);
+  Dane's "I will keep one busy…" line is gone; the act ends on a new **`dock` objective**
+  (`dock-at-academy`) — his report is a radio call in space, the card shows when the pilot docks there.
+  Framework first: a generic `dock` step kind (settled only by the `docked` event at its own pocket,
+  linter-required `place`, mission-driver support). **Objective glow means "needed now":** briefing
+  dialogue no longer lights the wave it spawned, and Dane glows only on the chase step — not during
+  control lessons, drills or the ambush.
+- **Reset actually resets.** It wiped only the current mode's half; it now wipes both modes
+  (`resetAllSave`, staying in the mode pressed from). New LESSONS L32 and `tests/reset-save.test.mjs`.
+- **Navigation:** the N panel header is Pocket objects – Filters – Close · N, the Distance sort sits at
+  the far right over the distances, and seven **filter preset** boxes live between them (empty = ＋ saves
+  the current filters, selecting a preset while editing filters updates it, right-click renames or resets
+  it). Presets are saved with the save (**v28**, additive, old saves load empty). The N filters now also
+  govern floating HUD labels (an F-lock still draws its label; rocks still never label). Belt label
+  grouping is more generous (`BELT_LABEL_GAP_METRES` 1000 → 3000, chaining; no asteroid moved), and
+  marker labels split name/distance into spans with a fixed-width tabular distance, so a label no longer
+  resizes and shakes as the range ticks over.
+- **Outfitting:** dropping a module anywhere in the left Outfitting box fits its left-most bay of the
+  right group (a specific bay still wins).
+- **Earth-like planet:** new `earth` class (greenish-grey) in `data/planets.js` with its own procedural
+  map; it is in the generator pool — existing generated planets may re-roll their class — and the
+  main-menu backdrop world is one.
+- The two 8b fixture recordings were re-recorded and diffed (LESSONS L17): the combat run's player pose
+  is unchanged; only enemy flight and its downstream differ.
+
+Files: `src/sim/{flight-model,npc-pilot,player,enemy-flight,missions}.js`, `src/data/{ships,enemies,
+enemy-ai,scenery,planets,missions/index,missions/validate,campaign/m01,campaign/galaxy,factions,places,shops}.js`,
+`src/ui/{hud,pocket-list,mission-hud,menu}.js`, `src/render/{planetmaps,menuview}.js`, `src/state/{profile,state}.js`,
+`src/{index.html,styles.css}`, tests (new `tests/{flight-model,reset-save,filter-presets}.test.mjs`),
+docs. Save **v28** (additive: `profile.pocketFilterPresets`; old saves load with seven empty slots).
+Rebuild `game/tallow-reach.html`; `npm test` — see the delivery note for the count.
+
 ## 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere
 
 The owner's fourth pass over the campaign build, plus universal mission markers.
