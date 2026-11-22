@@ -501,6 +501,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     channel = makeChannel({
       role,
       worldId,
+      useTurn: true,
       onState: status => {
         publish();
         if (status.state === "connected") greetEveryone();
