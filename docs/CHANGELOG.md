@@ -20,6 +20,12 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Multiplayer UI & session fixes (connection gate, progress bar, host/guest leave)
+
+- **Connection gate & progress UI (`src/net/session.js`, `src/ui/multiplayer.js`):** `joinWorld()` now waits for the host's `welcome` handshake (`waitForWelcome`) before entering the open world, so a guest never spawns unconnected or needs to press Reconnect in Pause → Multiplayer. While connecting, the UI displays a live percentage progress bar and status label (`Joining relays…` → `Looking for host…` → `Found host, connecting…` → `Handshaking with host…` → `Connected!`).
+- **Host leaving kicks guests (`src/net/session.js`, `src/ui/multiplayer.js`):** when the host leaves, connected guests are stopped, returned to the main menu (`mp-host-left`), and shown `"The host closed the game."`.
+- **Leaving updates player list (`src/net/session.js`):** when a guest leaves, the host removes them from `guests` and broadcasts updated presence.
+
 ## 2026-11-22: The game carries its own relay — one-link join works across networks
 
 **The owner's report first, because it settles the whole slice:** *"i have successfully sent a message
@@ -328,14 +334,9 @@ globally — no test may open a real WebSocket.
 show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
 (0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
 
-## 2026-11-21: Roll cut by 25% (sickening at full speed)
-
-`FLIGHT.rollFactor` 3.75 → 2.8125 globally (player and NPC alike), after the
-owner found the 250% roll nauseating. Yaw and pitch unchanged. Recorded
-fixtures and the axis-ratio test updated; no save change.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Roll cut by 25% (sickening at full speed)
 - 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
 - 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
 - 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops

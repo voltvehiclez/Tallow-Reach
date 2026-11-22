@@ -117,7 +117,7 @@ installInput();
 syncControls();   // the control record starts in sync with the (unpressed) keys
 installCameraControls(state.freeCam, {
   canStart: () =>
-    !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen() && !isCacheOpen(),
+    !localPlayer().docked && !state.paused && !isStarmapOpen() && !isCargoOpen() && !isCacheOpen() && !isChatOpen(),
   getScale: () => shipCameraScale(state.profile.ship),
 });
 
@@ -151,7 +151,7 @@ on("navigation-select", object => {
 on("action", ({ name, repeat, to: nameTo, key }) => {
   const pauseKey = key !== "Escape";
   const playing = !state.ui.intro && !localPlayer().docked && !state.paused && !isStarmapOpen() &&
-    !isCargoOpen() && !isCacheOpen();
+    !isCargoOpen() && !isCacheOpen() && !isChatOpen();
   switch (name) {
     case "navigation":
       if (playing && !repeat) emit("navigation-toggle");
@@ -355,6 +355,13 @@ function drawFrame(now) {
 function frame(now) {
   requestAnimationFrame(frame);
   try {
+    if (state.paused || isChatOpen()) {
+      const c = localPlayer()?.controls;
+      if (c) {
+        c.pitch = 0; c.yaw = 0; c.roll = 0;
+        c.throttle = 0; c.boost = false; c.fire = false; c.secondary = false;
+      }
+    }
     drawFrame(now);
   } catch (err) {
     reportCrash("frame", err);

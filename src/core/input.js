@@ -47,7 +47,7 @@ export const pointer = { x: 0, y: 0 };
  * running behind the overlay, but the ship does not answer the stick (owner 2026-11-14: opening a
  * loot inventory must leave the ship still, not flying itself while the pilot reads).
  */
-const modalSurface = () => !!(state.ui.starmap || state.ui.cargo || state.ui.cache || state.ui.multiplayer);
+const modalSurface = () => !!(state.ui.starmap || state.ui.cargo || state.ui.cache || state.ui.multiplayer || state.ui.chat);
 
 /**
  * Rebuild the local player's controls from what is held right now. Called after every key or
@@ -164,7 +164,7 @@ export function installInput() {
   addEventListener("blur", clearControls);
 
   addEventListener("mousemove", e => {
-    if (state.ui.navigation) { pointer.x = pointer.y = 0; syncControls(); return; }
+    if (state.ui.navigation || state.paused || modalSurface()) { pointer.x = pointer.y = 0; syncControls(); return; }
     pointer.x = (e.clientX / innerWidth - 0.5) * 2;
     pointer.y = (e.clientY / innerHeight - 0.5) * 2;
     syncControls();

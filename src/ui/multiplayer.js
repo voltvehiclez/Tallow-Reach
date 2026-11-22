@@ -152,6 +152,7 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     codeValue: v.fields.code || "",
     message: v.message || "",
     messageKind: v.messageKind || "hint",
+    connectProgress: snap.connectProgress || null,
     busy: !!v.busy,
     mounted: !!root,
   };
@@ -186,6 +187,8 @@ let chatFadeTimer = 0;
 // cannot take the cursor, so asking the cursor first made the field stay hidden forever
 // and the box untypable — the guest's half of the 2026-11-21 report.
 let chatOpen = false;
+let chatPinned = false;
+let chatExpanded = false;
 let drawnHtml = "";     // what is currently in the card, so a no-op redraw does nothing
 
 /** Is the chat box open (and therefore catching keystrokes)? */
@@ -227,6 +230,15 @@ export function setupMultiplayer() {
   on("mp-notice", text => {
     setMessage(text, "hint");
     showNotice(text);
+  });
+  // The host closed the game: kick the guest back to the title screen with a clear reason.
+  on("mp-host-left", ({ reason } = {}) => {
+    panelView.offer = "";
+    panelView.answer = "";
+    panelView.fields.code = "";
+    panelView.fields.join = "";
+    emit("main-menu", {});
+    emit("mp-notice", reason || "The host closed the game.");
   });
   // A `?join=` link found at boot (see net/boot.js). The session does the joining; this
   // file shows the result. The link is rebuilt from its two halves because that is the
@@ -334,20 +346,21 @@ export function screenHtml(model) {
 
 function messageHtml(model) {
   // Always present, so a refusal is never drawn into an element that is not on screen.
+  const prog = panelView.busy && model.connectProgress ? model.connectProgress : null;
+  const bar = prog
+    ? `<div class="mp-progress" role="progressbar" aria-valuenow="${prog.pct}" aria-valuemin="0" aria-valuemax="100">` +
+      `<div class="mp-progress-bar" style="width:${prog.pct}%"></div></div>` +
+      `<p class="mp-hint">${escapeHtml(prog.label)} (${prog.pct}%)</p>`
+    : "";
   return `<p id="mp-msg" class="mp-msg is-${escapeAttr(model.messageKind)}"${model.message ? "" : " hidden"}>` +
-    `${escapeHtml(model.message)}</p>`;
+    `${escapeHtml(model.message)}</p>${bar}`;
 }
 
 function nameHtml(model) {
   return (
     `<section class="mp-block">` +
     `<h2>Your name</h2>` +
-    `<label class="mp-label">Username` +
-    `<input class="mp-input" id="mp-name" data-mp-field="name" maxlength="${NET.nameMax}" ` +
-    `value="${escapeAttr(model.nameValue)}" placeholder="Your name" autocomplete="off" spellcheck="false"></label>` +
-    `<p class="mp-hint" id="mp-name-hint">${model.nameSet
-      ? "Your friends see this name."
-      : "Set a username first: hosting and joining are both off until you do."}</p>` +
+    `<p class="mp-hint">Playing as <b>${escapeHtml(model.nameValue || "Pilot")}</b>.</p>` +
     `</section>`
   );
 }
@@ -476,7 +489,7 @@ function listHtml(model) {
   const rows = chatWhoRows({ name: model.name, hostName: model.hostName, guests: model.guests });
   const docked = new Map(model.guests.map(g => [g.name, !!g.docked]));
   return (
-    `<section class="mp-block"><h2>Current players</h2>` +
+    `<section class="mp-block"><h2>Players</h2>` +
     `<ul class="mp-list">${rows
       .map(name => `<li>${escapeHtml(name)}${docked.get(name) ? " <small>docked</small>" : ""}</li>`)
       .join("")}</ul>` +
@@ -798,7 +811,8 @@ async function joinFromBox() {
     return false;
   }
   clearPendingJoin();
-  panelView.fields.join = "";
+  writeSettings({ ...readSettings(), lastJoin: text });
+  panelView.fields.join = text;
   setMessage("Joined. Press Enter to chat.", "ok");
   afterJoined();
   draw();
@@ -1192,12 +1206,28 @@ function buildChat() {
     `<p id="mp-chat-note" hidden></p>` +
     `<input id="mp-chat-input" maxlength="${NET.chatLineMax}" placeholder="Say something…  (Enter sends, Esc closes)" autocomplete="off">` +
     `</div>` +
-    `<aside id="mp-chat-who" aria-label="Who is here"></aside>`;
+    `<aside id="mp-chat-who" aria-label="Who is here"></aside>` +
+    `<button type="button" id="mp-chat-pin" title="Keep chat visible">Pin</button>` +
+    `<button type="button" id="mp-chat-expand" title="Show full player names">Expand</button>`;
   document.body.appendChild(chatBox);
   chatInput = chatBox.querySelector("#mp-chat-input");
   chatList = chatBox.querySelector("#mp-chat-lines");
   chatWho = chatBox.querySelector("#mp-chat-who");
   chatNote = chatBox.querySelector("#mp-chat-note");
+  const pinBtn = chatBox.querySelector("#mp-chat-pin");
+  pinBtn?.addEventListener("mousedown", e => e.preventDefault());
+  pinBtn?.addEventListener("click", () => {
+    chatPinned = !chatPinned;
+    pinBtn.classList.toggle("is-pinned", chatPinned);
+    drawChat();
+  });
+  const expandBtn = chatBox.querySelector("#mp-chat-expand");
+  expandBtn?.addEventListener("mousedown", e => e.preventDefault());
+  expandBtn?.addEventListener("click", () => {
+    chatExpanded = !chatExpanded;
+    expandBtn.classList.toggle("is-expanded", chatExpanded);
+    document.body.classList.toggle("mp-chat-expanded", chatExpanded);
+  });
 
   chatInput.addEventListener("keydown", event => {
     // The box owns Enter and Escape while it is open. Stop here so the game's own
@@ -1309,7 +1339,7 @@ export function chatWhoRows(snap) {
 export function chatWhoHtml(snap) {
   const rows = chatWhoRows(snap);
   // The column says what it is: these are the pilots connected right now.
-  return `<h2>Current players</h2><ul>` +
+  return `<h2>Players</h2><ul>` +
     rows.map(name => `<li>${escapeHtml(name)}</li>`).join("") +
     `</ul>`;
 }
@@ -1326,6 +1356,7 @@ export function openChat() {
   if (!chatBox) return false;
   if (!api.snapshot().on) return false;
   chatOpen = true;
+  state.ui.chat = true;
   chatBox.hidden = false;
   // Visible *before* the focus call: a `[hidden]` field cannot take the cursor, so asking
   // for it first is a silent no-op (the guest's box opened with no way to type).
@@ -1341,10 +1372,12 @@ export function openChat() {
 export function closeChat() {
   if (!chatBox) return;
   chatOpen = false;
-  chatBox.hidden = true;
+  state.ui.chat = false;
   document.body.classList.remove("mp-chat-open");
   chatInput?.blur?.();
   if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
+  if (chatPinned) drawChat();
+  else chatBox.hidden = true;
 }
 
 export const toggleChat = () => (isChatOpen() ? closeChat() : openChat());
@@ -1352,6 +1385,13 @@ export const toggleChat = () => (isChatOpen() ? closeChat() : openChat());
 function drawChat() {
   if (!chatBox) return;
   const snap = api.snapshot();
+  if (!snap.on) {
+    chatBox.hidden = true;
+    chatOpen = false;
+    chatPinned = false;
+    document.body.classList.remove("mp-chat-open");
+    return;
+  }
   // The box is only there when multiplayer is on, and only while playing: on the title
   // screen and on a station panel it would sit over a menu that already has the screen.
   const shown = chatVisibility({
@@ -1360,12 +1400,20 @@ function drawChat() {
     panel: sessionIsPanelOpen(),
     open: chatOpen,
   });
-  if (!shown.box) { chatBox.hidden = true; chatOpen = false; return; }
+  if (!shown.box && !chatPinned) {
+    chatBox.hidden = true;
+    chatOpen = false;
+    document.body.classList.remove("mp-chat-open");
+    return;
+  }
   chatBox.hidden = false;
+  document.body.classList.toggle("mp-chat-open", chatOpen);
   if (chatWho) chatWho.innerHTML = chatWhoHtml(snap);
   const lines = chatLog(snap);
   chatList.innerHTML = lines.length
-    ? lines.map(line => `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")
+    ? lines.map(line => line.from === "Tallow Reach"
+        ? `<p class="mp-chat-system">${escapeHtml(line.text)}</p>`
+        : `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")
     : `<p class="mp-hint">Press Enter to chat.</p>`;
   chatList.scrollTop = chatList.scrollHeight;
   if (chatInput) chatInput.hidden = !shown.input;
