@@ -42,9 +42,13 @@ broker-free fallback), `join-link.js` (the one link a guest needs), `settings.js
   in a state and a printable sentence; nothing in this folder throws at the player.
 - **A hosted world never pauses** (`sim/step.js` reads `state.multiplayer`), because the guests are
   still flying in it. That is why the pause card is a settings panel while multiplayer is on.
-- **The guest's hello is per peer and retried** (`sayHello`, `greetEveryone`, `onPeer`). It is sent
-  only once a message actually leaves, because `join()` returns before the other pilot is known; a
-  latched hello that never left is why a host's list could stay empty while chat worked.
+- **The guest's hello is per peer and repeated until a welcome arrives** (`sayHello`,
+  `greetEveryone`, `startHelloRetry`, `NET.helloRetrySec` / `helloWaitSec`). "Sent" is not "heard": a
+  data channel can open seconds after the room reports the peer, and a message into an unopened
+  channel vanishes silently. The reply is the only latch, and after `helloWaitSec` the guest is told
+  which of the two failures it is having.
+- **`snapshot().hostName`** is the host's name, learnt from `welcome`; the guest's player list cannot
+  be built without it (`guests` only ever holds guests).
 - **A duplicate name gets a star** (owner's rule): `uniqueName(wanted, taken)` gives the joining guest
   the first free variant (`Acey`, `Acey*`, `Acey**`), counted against the host and every guest but its
   own row, and the host sends it back as `welcome.youName`. Names are labels; the link's secret is the

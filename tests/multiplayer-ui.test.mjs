@@ -32,6 +32,7 @@ import * as session from "../src/net/session.js";
 import { setLibraryLoader } from "../src/net/transport.js";
 import { SAVE_VERSION, newProfile, newWorld } from "../src/state/profile.js";
 import { state } from "../src/state/state.js";
+import { NET } from "../src/data/multiplayer.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const read = rel => readFileSync(path.join(root, rel), "utf8");
@@ -344,9 +345,10 @@ test("a join from the title puts the pilot in the open world", () => {
  * room and introduces whoever arrives later. Everything above it — `net/transport.js`,
  * `net/session.js`, the protocol, the handshake — is the real code.
  */
-function fakeRelay() {
+function fakeRelay({ dropFirst = "" } = {}) {
   const rooms = new Map();
   let next = 1;
+  let dropped = false;
   return {
     joinRoom(config, roomId) {
       const member = { id: `peer-${next++}`, actions: new Map(), peerJoin: [], peerLeave: [] };
@@ -361,6 +363,8 @@ function fakeRelay() {
       const room = {
         makeAction: name => ({
           send(data, options = {}) {
+            // One message kind can be dropped once, to prove a retry exists.
+            if (dropFirst && !dropped && data && data.t === dropFirst) { dropped = true; return Promise.resolve(); }
             const targets = options.target ? [options.target] : [...members].map(m => m.id);
             for (const other of members) {
               if (other === member || !targets.includes(other.id)) continue;
@@ -639,4 +643,81 @@ test("a hosted or visited world keeps running while the card is open", () => {
   const pause = read("src/ui/pause.js");
   assert.match(pause, /state\.multiplayer = isOn\(\);/);
   assert.doesNotMatch(pause, /state\.multiplayer = !v && isOn\(\)/);
+});
+
+/* ------------------------------------------------------------------------- */
+/* 9. The owner's third playtest (2026-11-21, on a second machine)            */
+/* ------------------------------------------------------------------------- */
+//
+// Three reports from a laptop joining a PC: the join button swallowed the first click, the
+// guest saw only itself in the player list, and the two machines never actually admitted
+// each other (a hello sent once, into a data channel that was not open yet, latches).
+
+test("the guest's list shows the host: a column with only you in it is a lie", () => {
+  const host = { name: "Ada", hostName: "", guests: [{ guestId: "g1", name: "Bo" }] };
+  const guest = { name: "Bo", hostName: "Ada", guests: [{ guestId: "g1", name: "Bo" }] };
+  assert.deepEqual(ui.chatWhoRows(host), ["Ada", "Bo"], "the host sees itself and its guest");
+  assert.deepEqual(ui.chatWhoRows(guest), ["Bo", "Ada"], "the guest sees itself *and the host*");
+  // The host's own row comes from the session, so the guest has to be told it once.
+  assert.match(ui.chatWhoHtml(guest), /Current players/, "and the column says what it is");
+  assert.equal((ui.chatWhoHtml(guest).match(/<li/g) || []).length, 2);
+});
+
+test("a guest learns the host's name from the welcome, and lists it", async () => {
+  const relay = fakeRelay();
+  setLibraryLoader(async () => relay);
+  session.setChannelFactory(null);
+  const host = session.createChannelForTest("host", "w-hostname", "Ada", "host-token", worldKit("w-hostname"));
+  await host.start();
+  const guest = session.createChannelForTest("guest", "w-hostname", "Bo", "guest-token", worldKit("w-hostname"));
+  await guest.start();
+  await settle();
+  assert.equal(guest.snapshot().hostName, "Ada", "the guest keeps the host's name, not just its message");
+  assert.deepEqual(ui.chatWhoRows(guest.snapshot()), ["Bo", "Ada"], "so its column has two rows, not one");
+  host.stop();
+  guest.stop();
+  setLibraryLoader(null);
+});
+
+test("a hello that was lost is sent again until somebody answers", async () => {
+  // A relay that drops the first hello: the guest's data channel is open a moment after
+  // `join()` returns, so the first attempt goes nowhere. This is the second machine's bug.
+  const relay = fakeRelay({ dropFirst: "hello" });
+  setLibraryLoader(async () => relay);
+  session.setChannelFactory(null);
+  const was = NET.helloRetrySec;
+  NET.helloRetrySec = 0.02;
+  const host = session.createChannelForTest("host", "w-retry", "Ada", "host-token", worldKit("w-retry"));
+  await host.start();
+  const guest = session.createChannelForTest("guest", "w-retry", "Bo", "guest-token", worldKit("w-retry"));
+  await guest.start();
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.deepEqual(host.snapshot().guests.map(g => g.name), ["Bo"], "the retry got the guest admitted");
+  assert.equal(host.snapshot().chat.filter(line => /joined/i.test(line.text)).length, 1,
+    "and the host says it once, not once per retry");
+  assert.equal(guest.snapshot().hostName, "Ada", "the guest got its welcome");
+  NET.helloRetrySec = was;
+  host.stop();
+  guest.stop();
+  setLibraryLoader(null);
+});
+
+test("the name field commits without redrawing — that redraw ate the Join click", () => {
+  const source = read("src/ui/multiplayer.js");
+  const change = source.slice(source.indexOf('root.addEventListener("change"'), source.indexOf("// Escape closes the screen"));
+  assert.doesNotMatch(change, /\bdraw\(\)/, "a form commit must not replace the button under the cursor");
+  assert.match(change, /refreshLiveness\(\)/, "it updates the controls in place instead");
+  // ...and the in-place update carries the message too, or a refusal would go unseen.
+  const liveness = source.slice(source.indexOf("function refreshLiveness"), source.indexOf("function focusField"));
+  assert.match(liveness, /#mp-msg/);
+});
+
+test("the chat box is tall enough to read, and its list is called Current players", () => {
+  const css = read("src/styles.css");
+  const block = css.slice(css.indexOf("#mp-chat-lines {"));
+  const height = Number((block.match(/max-height:\s*(\d+)px/) || [])[1] || 0);
+  assert.ok(height >= 240, `the lines get ~doubled height (saw ${height}px)`);
+  const who = css.slice(css.indexOf("#mp-chat-who {"));
+  assert.ok(Number((who.match(/min-width:\s*(\d+)px/) || [])[1] || 0) >= 104, "the player column has room");
+  assert.match(ui.chatWhoHtml({ name: "Ada", guests: [] }), /Current players/);
 });

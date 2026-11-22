@@ -1,5 +1,55 @@
 # Changelog archive
 
+## 2026-11-21: Playtest 2 of slice 3 — one door each, names with stars, a chat that stays open
+
+The owner's second playtest, in five reports. Two were bugs, one was a rule about the build, and
+two were new rules the slice should always have had.
+
+**What the owner saw.** "I can see who joined in the chat — add a compact player list to the right
+of the chat box." "Make it so you can only join from the main menu, and only open multiplayer from
+the pause menu when in your actual world." "Pausing the game when multiplayer is open still pauses
+the game, both guest and host." "If a guest joins as the same username, rename them with an
+asterisk." "Only the host can chat — the guest can view messages but cannot open the chat to type a
+word. Let me chat even when nobody has joined, so I can scroll up through the history."
+
+- **Pausing still paused.** `ui/pause.js` set `state.multiplayer = !v && isOn()`, so the "a hosted
+  world never pauses" flag went **false** at the one moment it existed for — while the card was
+  open. It is now `isOn()`, for host and guest alike, and the card releases every held control key
+  on the way in, so an online world keeps stepping (and does not fly itself) behind the card.
+- **The guest could not type.** The chat box hid its own `<input>` unless that input already had the
+  cursor, and a `[hidden]` field cannot be given the cursor: the field never came back and the keys
+  went to the ship. The box now owns an explicit open/closed flag (`chatVisibility`), unhides the
+  field before focusing it, and draws its own log.
+- **Chat with nobody there.** A line no one can hear is still shown on this screen (in the box's own
+  40-line log, which is what "scroll up" means) and the note says who can see it; the two refusals
+  ("only you so far" and "could not be reached") are separate sentences.
+- **The player list is a column.** `#mp-chat-who` is now an `<aside>` beside the lines with one
+  15-pixel row per pilot ("Who is here", you first, never twice), so the chat box no longer spends a
+  line on names.
+- **One door each.** The title menu's screen is the **join** block only; the pause card's screen is
+  the **host** block only (`screenModel().surface`, set by `openMultiplayer({ from })`, refused a
+  second time inside `act()`). A guest mid-flight still gets the answer code and Leave from the
+  pause card, because that is the only screen they can reach. Quitting to the title now closes the
+  room: hosting is something you do while flying your own world.
+- **Duplicate names get stars** (owner's rule): the host hands out the first free variant — `Acey`,
+  then `Acey*`, then `Acey**` (`uniqueName` in `net/session.js`) — stores it, lists it and greets the
+  guest with "You are Acey* here — the host already has a Acey." Chat is attributed to the name the
+  host handed out, not the one that was typed. The stars are trimmed off the base so a renamed name
+  still fits `NET.nameMax`. `welcome` carries `youName` for it.
+- **Not built, on purpose:** you cannot see the other pilot's ship. Drawing a remote ship, and
+  moving a pilot between worlds, is **slice 4** — slice 3 deliberately moves nothing a player owns.
+
+**Files:** `src/ui/multiplayer.js`, `src/ui/pause.js`, `src/ui/menu.js`, `src/net/session.js`,
+`src/net/protocol.js`, `src/data/multiplayer.js` (`CHAT.historyLines`), `src/styles.css`.
+
+**Tests: 937, all green** (was 931). Seven new in `tests/multiplayer-ui.test.mjs`: the name rule on
+its own and through the real handshake, `chatVisibility`, a chat line with nobody there, the player
+column, the two doors, and the sim gate with `state.paused` **and** `state.multiplayer` both set.
+`tests/multiplayer-session.test.mjs`'s old assertion that the card sets `!v && isOn()` is replaced by
+the fixed rule.
+
+**Save format unchanged (v29).** Rebuild needed (`npm run build`).
+
 ## 2026-11-21: Step 16 slice 3 repaired — the multiplayer screen, the join path and the hello
 
 The owner's first slice-3 playtest, and everything it turned up. Three reports, five root causes,

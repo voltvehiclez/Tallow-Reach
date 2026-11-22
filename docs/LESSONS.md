@@ -183,6 +183,19 @@ Mission lessons are first because missions are where most bugs have come from. T
   sim gate with `state.paused` and `state.multiplayer` both set) and `tests/multiplayer-session.test.mjs`
   (the old `!v &&` is asserted gone).
 
+### L35. "Sent" is not "heard", and never replace the element under the cursor
+
+- **Seen (owner, playtest 3, second machine):** the guest joined "but I am the only one here", and
+  the first press of **Join** did nothing while the second worked.
+- **Cause:** the hello was latched as done when the send returned, but between two machines the data
+  channel opens seconds after the room says the peer is there, so it went nowhere, unrepeated. And the name field committed on `change`: a click blurs the field first, the commit
+  redrew the card, and the button under the cursor was replaced before mouseup — no click fired.
+- **Rule:** a message is only done when the other side answers — retry until a reply arrives and let
+  the reply be the latch. And a `change`/`blur` handler must update in place: replacing the DOM under
+  the pointer eats the click that caused the blur.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — "a hello that was lost is sent again until
+  somebody answers" and "the name field commits without redrawing" (no `draw()` in the handler).
+
 ## Template (copy for a new entry)
 
 ```

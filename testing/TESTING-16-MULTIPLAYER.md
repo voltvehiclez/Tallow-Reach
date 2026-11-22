@@ -4,7 +4,13 @@ This is the slice where two browsers can **open a world, join it, and talk**. No
 crosses the wire yet: no ship, no credits, no cargo. That is on purpose — it means a bug here can
 fail to connect, and cannot cost you anything.
 
-**Rewritten again after your second playtest (2026-11-21).** What changed for you:
+**Rewritten again after your third playtest (2026-11-21, two machines).** New in this build: the
+guest repeats its hello until the host answers (a connection that takes seconds still works), the
+first Join press no longer needs a second one, and the guest's **Current players** list includes the
+host. If two machines still cannot see each other after ~12 seconds, the game says which failure it
+is — read that sentence.
+
+**Second playtest changes:** What changed for you:
 
 - **Joining is the main menu's job, hosting is the pause card's.** *Join Multiplayer World* on the
   title screen shows only the join box; *Open Multiplayer* in the pause card shows only the host
@@ -53,10 +59,15 @@ second window (a hotspot or mobile data usually works too).
    - A full URL, or just `?join=w-…#…`, both work. A stray sentence around the link is fine.
 3. Window B joins the open world on its own (it asks nothing), and the panel's status line under the
    cards should read **Connected**.
+4. **Two machines:** the same steps, but on the *host's* PC press **Copy link** and carry the text to
+   the laptop by any means (pastebin, email, chat). A guest that has not been admitted within ~12
+   seconds now says so: *"No answer from the host yet…"* means the browsers found each other but
+   messages are not getting through (a strict router); *"Nobody is hosting the world in that link
+   yet"* means the host's switch is off. Both are worth telling me about — include the sentence.
 
 **What "working" looks like**
 
-- **Window A**: the chat line **"Bo joined."** and the guest's name in **Who is here**.
+- **Window A**: the chat line **"Bo joined."** and the guest's name under **Current players**.
 - **Window B**: **"Joined Ada's world."**
 - Both windows say **Connected**.
 
@@ -76,8 +87,9 @@ second window (a hotspot or mobile data usually works too).
 ## Part 3 — chat (both roles, and alone)
 
 1. In **either** window (host **and** guest — the guest could not type before this build), press
-   **Enter**. A chat box opens at the **bottom left**: the lines and the input on the left, a compact
-   **Who is here** column on the right with one small row per pilot (you first, then the guest).
+   **Enter**. A chat box opens at the **bottom left**, about twice as tall as before: the lines and
+   the input on the left, a compact **Current players** column on the right with one small row per
+   pilot — **you first, then the host, then every guest** (both windows must list everybody).
 2. Type a message and press **Enter**. It appears in both windows under the sender's name, and the
    box clears. The guest's line must be attributed to the guest's name.
 3. **With nobody connected** (host, nobody has joined yet): open the box and type. The line appears on

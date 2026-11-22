@@ -2738,7 +2738,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   white-space: nowrap;
 }
 #mp-chat-lines {
-  max-height: 132px;
+  /* Doubled at the owner's request (playtest 3): eight lines of "over here" need room. */
+  max-height: 264px;
+  min-height: 60px;
   overflow-y: auto;
   display: grid;
   gap: 2px;

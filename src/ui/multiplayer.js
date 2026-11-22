@@ -101,6 +101,7 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     stateLine: snap.line || "",
     worldId: snap.worldId || null,
     link: link?.url || "",
+    hostName: snap.hostName || "",
     guests: (snap.guests || []).slice(),
     peers: (snap.peers || []).slice(),
     // The box draws the session's lines and its own log together, oldest first.
@@ -392,11 +393,13 @@ function joinHtml(model) {
 }
 
 function listHtml(model) {
-  if (!model.guests.length) return "";
+  // Everybody connected, host included — the same rule as the chat column (`chatWhoRows`).
+  const rows = chatWhoRows({ name: model.name, hostName: model.hostName, guests: model.guests });
+  const docked = new Map(model.guests.map(g => [g.name, !!g.docked]));
   return (
-    `<section class="mp-block"><h2>Who is here</h2>` +
-    `<ul class="mp-list">${model.guests
-      .map(g => `<li>${escapeHtml(g.name)}${g.docked ? " <small>docked</small>" : ""}</li>`)
+    `<section class="mp-block"><h2>Current players</h2>` +
+    `<ul class="mp-list">${rows
+      .map(name => `<li>${escapeHtml(name)}${docked.get(name) ? " <small>docked</small>" : ""}</li>`)
       .join("")}</ul>` +
     `</section>`
   );
@@ -678,13 +681,18 @@ function buildScreen() {
     if (field.dataset.mpField === "name") refreshLiveness();
   });
   // A name is committed when the player leaves the field, not on every keystroke.
+  //
+  // **In place, never a redraw.** Clicking a button blurs the field first, so committing the
+  // name used to replace `#mp-card-inner` between mousedown and mouseup: the button under the
+  // cursor was destroyed and the click never happened. That is why the first Join press on a
+  // fresh browser did nothing and the second one worked (owner's playtest 3).
   root.addEventListener("change", event => {
     const field = event.target.closest?.("[data-mp-field]");
     if (field?.dataset.mpField !== "name") return;
     const result = api.setUsername(String(field.value || ""));
     if (!result?.ok) setMessage(result?.message || "Type a name first.", "error");
     else panelView.fields.name = result.name;
-    draw();
+    refreshLiveness();
   });
   // Escape closes the screen, and nothing behind it sees the key.
   root.addEventListener("keydown", event => {
@@ -703,6 +711,14 @@ function buildScreen() {
 function refreshLiveness() {
   if (!root) return;
   const model = screenModel();
+  // The message travels with the rest: a refusal raised by the field commit has to be seen,
+  // and this path deliberately does not redraw.
+  const msg = root.querySelector("#mp-msg");
+  if (msg) {
+    msg.textContent = model.message;
+    msg.hidden = !model.message;
+    msg.className = `mp-msg is-${model.messageKind}`;
+  }
   const hostSwitch = root.querySelector(".mp-switch");
   if (hostSwitch && !model.hosting) {
     if (model.canSwitch) hostSwitch.removeAttribute("disabled");
@@ -926,10 +942,16 @@ function noteHistory(line) {
   return line;
 }
 
-/** The pilots in the box's column: you first, then everyone else, never twice. */
+/**
+ * The pilots in the box's column: you first, then the host, then every guest — never twice.
+ *
+ * The host is the row that was missing: the guest list only ever carries *guests*, so a
+ * guest built its column from "me" plus "me, as the host sees me" and saw one row while it
+ * could read the host's chat (owner's playtest 3). `hostName` is learnt from the welcome.
+ */
 export function chatWhoRows(snap) {
   const names = [];
-  for (const name of [snap?.name, ...((snap?.guests || []).map(entry => entry.name))]) {
+  for (const name of [snap?.name, snap?.hostName, ...((snap?.guests || []).map(entry => entry.name))]) {
     const clean = String(name ?? "").trim();
     if (clean && !names.includes(clean)) names.push(clean);
   }
@@ -939,7 +961,8 @@ export function chatWhoRows(snap) {
 /** One small row per pilot. Pure, so a test can count them. */
 export function chatWhoHtml(snap) {
   const rows = chatWhoRows(snap);
-  return `<h2>Who is here</h2><ul>` +
+  // The column says what it is: these are the pilots connected right now.
+  return `<h2>Current players</h2><ul>` +
     rows.map(name => `<li>${escapeHtml(name)}</li>`).join("") +
     `</ul>`;
 }

@@ -55,11 +55,15 @@
   not. Nothing is drawn into an element that the current state does not render: `#mp-msg` is always in
   the card. Each door shows one block: the title menu's screen joins, the pause card's screen hosts
   (`screenModel().surface`).
-- **The chat box is two columns** (`#mp-chat`): the lines and the input on the left, a compact
-  "Who is here" column on the right with one small row per pilot (`#mp-chat-who`). It opens on
+- **The chat box is two columns** (`#mp-chat`): the lines (264 px of them, scrollable) and the input
+  on the left, a compact **Current players** column on the right with one small row per pilot
+  (`#mp-chat-who`) — you, the host, then every guest (`chatWhoRows`). It opens on
   **Enter** while a session is on — including a host with nobody joined yet — closes on **Escape**,
   and is open/closed by its own flag rather than by where the cursor is (focus is impossible while a
   field is `[hidden]`, and the guest's box was untypable because of it).
+- **A field commit never redraws the card.** Clicking a button blurs the field first; a `change`
+  handler that redraws replaces the button between mousedown and mouseup and the click never fires
+  (`refreshLiveness` updates the switch, the Join button, the hints and `#mp-msg` in place).
 - **The pause card's order is fixed** (`pauseOverlayHtml()`): Resume is the first control and
   Exit to main menu the last, with the sound switch between them, the campaign-only Restart act after
   that, and Open Multiplayer (with a one-line state) just above Exit. Exiting saves the resume

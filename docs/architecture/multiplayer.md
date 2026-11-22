@@ -139,6 +139,14 @@ Either way the handshake afterwards is the same, and it is already written and t
 (`net/custody.js` `handshake`): game version, `worldId` and the guest's secret, each refusal with a
 sentence the guest can act on. A guest who is turned away learns why.
 
+**The hello is repeated until it is answered.** A hello "sent" is not a hello heard: the data
+channel opens seconds after the room says the peer is there, and a message into an unopened channel
+is gone without an error. So a guest repeats its hello every `NET.helloRetrySec` until a `welcome`
+arrives — the reply is the latch — and clears its per-peer latch each round. The host logs "joined"
+once per guest, however many hellos arrive, and re-sends the welcome freely. After `NET.helloWaitSec`
+with no answer the guest is told, with a different sentence for "nobody is in the room" than for
+"your friend is there but nothing gets through". The same retry covers the paste-code wire.
+
 **Names are labels; a duplicate gets a star.** The secret in the link is the identity, the name is
 what other people read. `net/session.js`'s `uniqueName(wanted, taken)` hands the joining guest the
 first free variant — `Acey`, `Acey*`, `Acey**` — counted against the host's name and every guest but

@@ -190,6 +190,12 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // it is not always the name that was typed. `name` stays the chosen one — that is what a
   // hello carries, so the host can rename it again the same way on a rejoin.
   let shown = name;
+  // The host's own name, learnt from the welcome. A guest's player list is built from this
+  // plus the guest rows — without it the guest sees a column with only itself in it.
+  let hostName = "";
+  let welcomed = false;     // has the host answered at all?
+  let helloRetry = 0;       // the retry timer (guest only)
+  let helloWait = 0;        // the "nobody answered" timer (guest only)
   let greeted = false;      // has this guest managed to say hello at all?
   const greetedPeers = new Set(); // ...and to which peers (a hello is per connection)
 
@@ -204,6 +210,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       line: stateLine(status),
       worldId,
       name: shown,
+      hostName,
       peers: channel ? channel.peers() : [],
       guests: guests.slice(),
       chat: chat.slice(),
@@ -295,6 +302,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     });
     save.write(recorded);
 
+    const fresh = !guests.some(entry => entry.guestId === message.guestId);
     upsertGuest({ guestId: message.guestId, name: display, docked: false });
     if (peerId) peerNames.set(peerId, display);
     send(cleanMessage("welcome", {
@@ -305,9 +313,13 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       name,
       guests: guests.map(g => ({ guestId: g.guestId, name: g.name, docked: g.docked })),
     }), peerId);
-    noteLine("Tallow Reach", display === message.name
-      ? `${display} joined.`
-      : `${display} joined — ${message.name} was already taken.`);
+    // A repeated hello (the guest retries until it hears back) admits the same guest again;
+    // only the first one is news.
+    if (fresh) {
+      noteLine("Tallow Reach", display === message.name
+        ? `${display} joined.`
+        : `${display} joined — ${message.name} was already taken.`);
+    }
     publishPresence();
   }
 
@@ -332,9 +344,16 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   /** Guest side: the host accepted us and said who else is here. */
   function onWelcome(message) {
     if (role !== "guest") return;
+    if (message.name) hostName = message.name;
     if (message.youName) shown = message.youName;
     guests.length = 0;
     for (const entry of message.guests || []) upsertGuest(entry);
+    // A welcome can arrive more than once (the hello is repeated until it is answered), and
+    // the player must not be told "Joined Ada's world" every two seconds.
+    const first = !welcomed;
+    welcomed = true;
+    if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
+    if (!first) { publish(); return; }
     noteLine("Tallow Reach", `Joined ${message.name || "the host"}'s world.`);
     // A rename is not silent: being listed as somebody else without being told reads as a
     // bug, and the fix is one sentence.
@@ -466,6 +485,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     publish();
     await channel.join();
     greetEveryone();
+    if (role === "guest") startHelloRetry();
     publish();
     return true;
   }
@@ -513,14 +533,58 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       onData: message => receive(message, null),
     });
     const answer = await paste.accept(offer);
+    if (answer) startHelloRetry();
     publish();
     if (!answer) return { ok: false, message: paste.state().reason || "That code was not accepted." };
     codes = { offer: null, answer };
     return { ok: true, answer };
   }
 
+  /**
+   * Keep saying hello until the host answers.
+   *
+   * A hello used to be sent once per peer, and latched as done. On one machine the data
+   * channel is open almost immediately, so that looked fine. Between two machines it can
+   * open seconds later — and a hello sent into it before it opened is gone, which is how a
+   * guest ended up in a world of its own with the host's messages on their way but never
+   * its name in the list (owner's playtest 3). The retry stops the moment a welcome lands,
+   * and after `NET.helloWaitSec` the player is told, rather than left looking joined.
+   */
+  function startHelloRetry() {
+    // Hosts never greet; a guest that is already welcomed has nothing to retry.
+    if (role !== "guest" || welcomed) return;
+    if (helloRetry) clearInterval(helloRetry);
+    helloRetry = setInterval(() => {
+      if (!on || welcomed) { clearInterval(helloRetry); helloRetry = 0; return; }
+      // `greetedPeers` stops a repeat hello to the same peer — but a retry exists because
+      // the first send "succeeded" into a channel that had nobody at the other end, which
+      // is exactly the case that latch cannot tell apart. So it is cleared each round.
+      greetedPeers.clear();
+      greeted = false;
+      greetEveryone();
+    }, NET.helloRetrySec * 1000);
+    if (typeof helloRetry?.unref === "function") helloRetry.unref();
+    if (helloWait) clearTimeout(helloWait);
+    helloWait = setTimeout(() => {
+      if (!on || welcomed) return;
+      // Two different failures, two different sentences: a room with a peer in it that
+      // never answers is a blocked connection; a room with nobody in it is a link pointing
+      // at a world nobody is hosting.
+      const peers = channel ? channel.peers().length : 0;
+      const said = peers
+        ? "No answer from the host yet. The two browsers found each other, but messages are not getting through — try the paste-code path, or put both machines on the same network."
+        : "Nobody is hosting the world in that link yet. The host must press Open Multiplayer (Pause, then Open Multiplayer) and leave it on. Try the paste codes if the link will not work.";
+      try {
+        emit("mp-notice", said);
+      } catch (e) { /* a broken screen must not break a session */ }
+    }, NET.helloWaitSec * 1000);
+    if (typeof helloWait?.unref === "function") helloWait.unref();
+  }
+
   function stop() {
     on = false;
+    if (helloRetry) { clearInterval(helloRetry); helloRetry = 0; }
+    if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
     try {
       channel?.leave();
       paste?.leave();

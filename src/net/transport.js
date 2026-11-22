@@ -118,6 +118,12 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
         if (Array.isArray(RELAYS.relayUrls) && RELAYS.relayUrls.length) {
           config.relayConfig = { urls: RELAYS.relayUrls.slice() };
         }
+        // The owner's escape hatch for two networks that cannot see each other: a TURN
+        // server in `data/multiplayer.js`. Unset, the library's public STUN is enough for
+        // most homes and no setting changes.
+        if (RELAYS.rtcConfig && typeof RELAYS.rtcConfig === "object") {
+          config.rtcConfig = RELAYS.rtcConfig;
+        }
         room = joinRoom(config, roomNameFor(worldId));
 
         // One action carries every message this game sends; `t` says what it is. One

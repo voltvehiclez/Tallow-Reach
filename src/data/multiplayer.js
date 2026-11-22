@@ -116,6 +116,12 @@ export const NET = {
   nameMax: 24,
   chatLineMax: 240,
   tokenBytes: 24,
+  // How often a guest repeats its hello until a welcome comes back. The data channel can open
+  // seconds after the room says the peer is there (two machines, one strict network), and a
+  // hello sent into a channel that is not open yet is simply gone.
+  helloRetrySec: 2,
+  // After this long with no welcome, say so instead of sitting there looking joined.
+  helloWaitSec: 12,
   revStepMs: 250,
   keepPrevious: 1,
 };
@@ -155,7 +161,14 @@ export const ROOM_NAMESPACE = "tallowreach.p2p";
  * else in the game changes.
  */
 export const RELAYS = {
+  // Signalling relays. Empty = the library's free public ones.
   relayUrls: [],
+  // An optional `RTCConfiguration` for the direct connection (a TURN server, when two
+  // machines on different networks cannot reach each other directly: both behind symmetric
+  // NAT, or a network that blocks WebRTC). Shape:
+  //   rtcConfig: { iceServers: [{ urls: "turn:host:3478", username: "...", credential: "..." }] }
+  // Nothing here is a credential for this game — it is the player's own TURN service.
+  rtcConfig: null,
 };
 
 /**
