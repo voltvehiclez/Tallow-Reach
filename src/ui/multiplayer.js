@@ -364,17 +364,6 @@ function nameHtml(model) {
     `</section>`
   );
 }
-    `<section class="mp-block">` +
-    `<h2>Your name</h2>` +
-    `<label class="mp-label">Username` +
-    `<input class="mp-input" id="mp-name" data-mp-field="name" maxlength="${NET.nameMax}" ` +
-    `value="${escapeAttr(model.nameValue)}" placeholder="Your name" autocomplete="off" spellcheck="false"></label>` +
-    `<p class="mp-hint" id="mp-name-hint">${model.nameSet
-      ? "Your friends see this name."
-      : "Set a username first: hosting and joining are both off until you do."}</p>` +
-    `</section>`
-  );
-}
 
 function hostHtml(model) {
   const switchHtml =
