@@ -1,5 +1,41 @@
 # Changelog archive
 
+## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
+
+The plan the owner gave for multiplayer (host-run co-op, WebRTC, one suite per world) is written
+into step 16 of `docs/REFACTOR_PLAN.md` with its **six slices**. This is slice 1: the rules of
+travel, proved on plain objects before a byte moves.
+
+- **`src/data/multiplayer.js`**: `TRAVEL_FIELDS` is the owner's list (credits, ships, fits, holds,
+  hull damage, missiles, selected weapon bays, and the station lockers, which are packed from the
+  world half of a save), `HOME_FIELDS` is what stays home (missions, flags, stats, campaign, and the
+  home-station and filter-preset preferences), `ARRIVAL_STATION`/`ARRIVAL_STATION_KEY` (Meridian,
+  read from `data/places.js`) and `NET` (timings and limits, each with the slice that reads it).
+- **`src/net/custody.js`**: `checkOut` packs a pilot into a bundle and writes the `away` marker,
+  emptying the stations it packs; `checkIn` applies a bundle to a **new** save, clears `away`, and
+  copies the home half back from the home save *after* sanitizing, so nothing leaks into missions,
+  flags or stats; `relocate` sends anything whose station a world lacks to Meridian and puts it back
+  the moment that station exists again (never refusing, never deleting; an over-full station is
+  flagged and only refuses new deposits); `compare` orders two copies by `(epoch, rev)` and never
+  merges. Plus `hashToken`/`tokenCheck` (a host stores a hash, never the secret), `handshake` with a
+  sentence per refusal (version, world, token), `summary` ("600 cr · 1 ship · 0 m³"), `uniqueName`
+  (the host's name wins, joiners wear `*`, `**`), `guestRecord`, `hostProfile`, `mergeLockers`,
+  `totals`.
+- **`src/net/station-inventory.js`**: room at a station, defined once — m³ from `data/station.js`,
+  `world.storageOverfull` for an over-full station. Slice 6's trade asks the same questions.
+- **`src/net/world-places.js`**: where a station is **in somebody else's world**. Generated pocket
+  ids are not unique across galaxy seeds, so a station key is resolved with the world it belongs to
+  (`generateGalaxy(seed)`, pure, plus that world's saved wormhole pockets) and never by touching the
+  live catalog.
+- **Unknown content is kept**: a newer build's item, module or hull id is carried untouched, whole
+  unknown stacks in the bundle and single unknown ids re-inserted after the save sanitizer (which
+  would otherwise drop them).
+
+Files: `src/data/multiplayer.js`, `src/net/{custody,station-inventory,world-places,README}.js`,
+`tests/multiplayer-custody.test.mjs`, `docs/{REFACTOR_PLAN,ARCHITECTURE,CHANGELOG}.md`,
+`docs/architecture/multiplayer.md`. **No save change yet** (stays **28**; slice 2 makes it 29).
+Tests **852 pass / 0 fail**. Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
 
 The save now knows where a pilot **is**. Slice 1 proved the rules of travel on plain objects;

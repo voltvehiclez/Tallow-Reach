@@ -112,6 +112,13 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     diag: snap.diag || null,
     // What the offer/answer code can do: `relay > 0` means it works across networks.
     codePaths: snap.codePaths || null,
+    // The player's own relay server (settings), and whatever is in the boxes right now.
+    relay: settings.relay || null,
+    relayFields: {
+      urls: v.fields.relayUrls ?? settings.relay?.urls ?? "",
+      username: v.fields.relayUser ?? settings.relay?.username ?? "",
+      credential: v.fields.relayPass ?? settings.relay?.credential ?? "",
+    },
     relay: !!snap.relay,
     guests: (snap.guests || []).slice(),
     peers: (snap.peers || []).slice(),
@@ -485,6 +492,8 @@ export function diagFacts(model) {
       : "",
     relay: !!d.useTurn,
     relays: d.relays && (d.relays.total || d.relays.connected) ? d.relays : null,
+    clock: Number(d.clock) || 0,
+    codePaths: model.codePaths || null,
     sent: Number(d.sent) || 0,
     received: Number(d.received) || 0,
     waiting: !!model.hosting && peers.length > 0 && !(model.guests || []).length,
@@ -504,9 +513,11 @@ export function diagReport(model) {
     `Browsers in the room: ${f.inRoom}`,
     `Direct link: ${f.direct || "no other browser is in the room"}`,
     `Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}`,
-    ...(f.relays ? [`Relays reachable: ${f.relays.open} of ${f.relays.total}`] : []),
+    ...(f.relays && f.relays.total > 0 ? [`Relays reachable: ${f.relays.open} of ${f.relays.total}`] : []),
     ...(f.relays && Number.isFinite(f.relays.connected) ? [`Relays connected: ${f.relays.connected}`] : []),
+    ...(f.codePaths ? [`Code paths: ${f.codePaths.host} local, ${f.codePaths.srflx} public, ${f.codePaths.relay} relay`] : []),
     `Messages sent ${f.sent}, received ${f.received}`,
+    ...(f.clock ? [`This machine's clock: ${new Date(f.clock).toISOString()}`] : []),
   ].join("\n");
 }
 
@@ -523,16 +534,20 @@ function diagHtml(model) {
     `<li>Browsers in the room: ${f.inRoom}</li>` +
     `<li>${escapeHtml(link)}</li>` +
     `<li>Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}</li>` +
-    (f.relays ? `<li>Relays reachable: ${f.relays.open} of ${f.relays.total}</li>` : "") +
+    (f.relays && f.relays.total > 0 ? `<li>Relays reachable: ${f.relays.open} of ${f.relays.total}</li>` : "") +
     (f.relays && Number.isFinite(f.relays.connected)
       ? `<li>Relays connected: ${f.relays.connected}</li>`
       : "") +
+    (f.codePaths
+      ? `<li>Code paths: ${f.codePaths.host} local, ${f.codePaths.srflx} public, ${f.codePaths.relay} relay</li>`
+      : "") +
     `<li>Messages sent ${f.sent}, received ${f.received}</li>` +
+    (f.clock ? `<li>This machine's clock: ${escapeHtml(new Date(f.clock).toISOString().replace("T", " ").slice(0, 19))} UTC</li>` : "") +
     `</ul>` +
     (f.waiting
       ? `<p class="mp-hint mp-warn">A browser is in the room but has not identified itself. If this stays for more than a few seconds, the connection between the two machines is being blocked.</p>`
       : "") +
-    (f.relays && f.relays.open === 0
+    (f.relays && f.relays.total > 0 && f.relays.open === 0
       ? `<p class="mp-hint mp-warn">None of the servers that introduce players to each other answered this browser. Your network is blocking them, so the two machines cannot find each other this way. Use the codes instead: “No relay? Copy/paste codes” below.</p>`
       : f.relays && Number.isFinite(f.relays.connected) && f.relays.connected === 0
         ? `<p class="mp-hint mp-warn">The relays answered, but none of them would carry this game's messages, so no other player can find you through them. Use the codes instead: “No relay? Copy/paste codes” below — they need no relay at all.</p>`
@@ -540,12 +555,44 @@ function diagHtml(model) {
     (f.inRoom === 1 && !f.waiting
       ? `<p class="mp-hint">No other browser is in this room. Check that the other player turned Open Multiplayer on, and that both screens show the same World id.</p>`
       : "") +
+    relayServerHtml(model) +
     `<div class="mp-row">` +
     `<button type="button" data-mp="reconnect">Reconnect</button>` +
     `<button type="button" data-mp="copy-diag">Copy details</button>` +
     `</div>` +
     `<p class="mp-hint">If received stays 0 while sent climbs, the two browsers cannot hear each other. Reconnect tries through a relay server.</p>` +
     `</section>`
+  );
+}
+
+/**
+ * The player's own relay server: three fields, a Save and a Test.
+ *
+ * It lives in Connection details because that is the screen a player reaches when co-op does
+ * not work, and because the free public relay servers in `ICE.turn` are a convenience that can
+ * stop working. A provider gives an address, a username and a credential; with those, two
+ * machines on different networks (a phone on 4G) can reach each other. **Test** asks the
+ * servers for a relayed address, which is the only honest answer to "is it them or is it me".
+ */
+function relayServerHtml(model) {
+  const saved = model.relay ? `${escapeHtml(model.relay.urls)}` : "none (the free public servers only)";
+  return (
+    `<h2>Relay server</h2>` +
+    `<p class="mp-hint">Optional. Only needed when two machines on <em>different</em> networks cannot connect — ` +
+    `a phone on 4G and a PC at home. A provider (for example Metered, Twilio or Cloudflare) gives you an address, ` +
+    `a username and a credential.</p>` +
+    `<p class="mp-hint">In use: ${saved}</p>` +
+    `<label class="mp-label">Relay address (turn: or turns:)<input class="mp-input" data-mp-field="relayUrls" ` +
+    `value="${escapeAttr(model.relayFields.urls)}" placeholder="turn:global.relay.metered.ca:80" spellcheck="false"></label>` +
+    `<label class="mp-label">Username<input class="mp-input" data-mp-field="relayUser" ` +
+    `value="${escapeAttr(model.relayFields.username)}" autocomplete="off" spellcheck="false"></label>` +
+    `<label class="mp-label">Credential<input class="mp-input" data-mp-field="relayPass" ` +
+    `value="${escapeAttr(model.relayFields.credential)}" autocomplete="off" spellcheck="false"></label>` +
+    `<div class="mp-row">` +
+    `<button type="button" data-mp="save-relay">Save relay</button>` +
+    `<button type="button" data-mp="test-relay">Test relay servers</button>` +
+    `<button type="button" data-mp="clear-relay">Use the free ones</button>` +
+    `</div>`
   );
 }
 
@@ -576,6 +623,39 @@ export async function act(name, arg = "") {
       }
       return joinFromBox();
     case "leave": return leaveSession();
+    case "save-relay": {
+      const fields = screenModel().relayFields;
+      if (!String(fields.urls || "").trim() || !String(fields.username || "").trim() || !String(fields.credential || "").trim()) {
+        setMessage("A relay server needs all three: its address, a username and a credential.", "error");
+        draw();
+        return false;
+      }
+      api.saveRelay(fields);
+      panelView.fields.relayUrls = undefined;
+      panelView.fields.relayUser = undefined;
+      panelView.fields.relayPass = undefined;
+      setMessage("Relay server saved. Codes made from now on can use it.", "ok");
+      draw();
+      return true;
+    }
+    case "clear-relay": {
+      api.saveRelay(null);
+      panelView.fields.relayUrls = undefined;
+      panelView.fields.relayUser = undefined;
+      panelView.fields.relayPass = undefined;
+      setMessage("Using the free public relay servers again.", "hint");
+      draw();
+      return true;
+    }
+    case "test-relay": {
+      setMessage("Asking the relay servers for an address — this takes a few seconds…", "hint");
+      draw();
+      api.testTurn().then(result => {
+        setMessage(result?.sentence || "The relay servers did not answer.", result?.ok ? "ok" : "error");
+        draw();
+      });
+      return true;
+    }
     case "reconnect": {
       // Re-ask the relays as well: this button is pressed exactly when the answer matters.
       session.checkRelays?.({ force: true });

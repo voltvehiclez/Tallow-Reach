@@ -20,6 +20,46 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 10 of slice 3 — the free relay servers are the suspect, so test them and allow your own
+
+**The owner's block rewrote the theory again:** `Relays connected: 10`. The signalling relays are
+open — ten sockets — and there is still nobody in the room. So "the network blocks the relays" is
+wrong, and the code path's 4G failure is the thing to fix. A code can only cross two different
+networks if it carries a **relay (TURN) candidate**, and the free public TURN servers (Open Relay,
+freestun, AnyFirewall) are exactly the kind of thing that stops working quietly.
+
+- **A relay test, in the game.** `net/turn.js` `checkTurnServers()` opens a connection with
+  `iceTransportPolicy: "relay"` against each configured server: a `typ relay` candidate means the
+  server authenticated us and will forward packets, and nothing means it is down, the login is
+  wrong, or the network blocks it. **Test relay servers** in Connection details prints
+  *"2 of 3 relay servers answered"* or *"None of the 3 … answered from this machine, so co-op cannot
+  cross networks"*. That sentence is a diagnosis, not a mood.
+- **Your own relay server.** `settings.relay` (`tr_mp`) holds an address, a username and a
+  credential, and Connection details has the three fields, **Save relay**, **Test relay servers** and
+  **Use the free ones**. `turnServers()` tries the player's own first; `iceServers()` feeds both the
+  code path and the library path. A provider's free tier (Metered, Twilio, Cloudflare) is a relay
+  that actually works, and now it is a setting rather than a code change.
+- **No more "Relays reachable: 0 of 0".** The probe is only printed when it ran; the library's own
+  socket count is printed whenever the room exists, and it is asked as soon as a session starts.
+- **The details carry the two facts that explain a silent room:** `Code paths: N local, N public,
+  N relay` and **this machine's clock**. A nostr relay filters by time, so two machines whose clocks
+  disagree can sit in one room and never see each other — a failure that looks exactly like a
+  blocked network.
+- **A failed code says which failure it was:** with no relay path, *"this code has no relay path, so
+  it only works between machines on the same network. Press Test relay servers…"*; with one,
+  *"could not find a path to each other, even through a relay server"*.
+
+**Files:** new `src/net/turn.js`; `src/net/settings.js` (`relay`), `src/net/paste.js` (live ICE config,
+failure wording), `src/net/transport.js` (`turnServers`, clock, honest relay rows),
+`src/net/session.js` (`testTurn`, `saveRelay`, probe on start), `src/ui/multiplayer.js` (relay block,
+`Code paths`, clock), `src/data/multiplayer.js` (`BUILD = "2026-11-22f"`).
+
+**Tests: 968, all green** (was 965). Four new: the player's own relay (and the half-filled one being
+refused), the relay test's counting, the details' clock and code paths (and never "0 of 0"), plus the
+settings shape change in the existing tests.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22f`.**
+
 ## 2026-11-22: Playtest 9 of slice 3 — a code that can cross networks (the 4G case)
 
 **The owner's report.** The offer/answer codes connect a laptop and a PC on the same wifi, and
@@ -166,42 +206,6 @@ globally — no test may open a real WebSocket.
 show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
 (0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
 
-## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
-
-The plan the owner gave for multiplayer (host-run co-op, WebRTC, one suite per world) is written
-into step 16 of `docs/REFACTOR_PLAN.md` with its **six slices**. This is slice 1: the rules of
-travel, proved on plain objects before a byte moves.
-
-- **`src/data/multiplayer.js`**: `TRAVEL_FIELDS` is the owner's list (credits, ships, fits, holds,
-  hull damage, missiles, selected weapon bays, and the station lockers, which are packed from the
-  world half of a save), `HOME_FIELDS` is what stays home (missions, flags, stats, campaign, and the
-  home-station and filter-preset preferences), `ARRIVAL_STATION`/`ARRIVAL_STATION_KEY` (Meridian,
-  read from `data/places.js`) and `NET` (timings and limits, each with the slice that reads it).
-- **`src/net/custody.js`**: `checkOut` packs a pilot into a bundle and writes the `away` marker,
-  emptying the stations it packs; `checkIn` applies a bundle to a **new** save, clears `away`, and
-  copies the home half back from the home save *after* sanitizing, so nothing leaks into missions,
-  flags or stats; `relocate` sends anything whose station a world lacks to Meridian and puts it back
-  the moment that station exists again (never refusing, never deleting; an over-full station is
-  flagged and only refuses new deposits); `compare` orders two copies by `(epoch, rev)` and never
-  merges. Plus `hashToken`/`tokenCheck` (a host stores a hash, never the secret), `handshake` with a
-  sentence per refusal (version, world, token), `summary` ("600 cr · 1 ship · 0 m³"), `uniqueName`
-  (the host's name wins, joiners wear `*`, `**`), `guestRecord`, `hostProfile`, `mergeLockers`,
-  `totals`.
-- **`src/net/station-inventory.js`**: room at a station, defined once — m³ from `data/station.js`,
-  `world.storageOverfull` for an over-full station. Slice 6's trade asks the same questions.
-- **`src/net/world-places.js`**: where a station is **in somebody else's world**. Generated pocket
-  ids are not unique across galaxy seeds, so a station key is resolved with the world it belongs to
-  (`generateGalaxy(seed)`, pure, plus that world's saved wormhole pockets) and never by touching the
-  live catalog.
-- **Unknown content is kept**: a newer build's item, module or hull id is carried untouched, whole
-  unknown stacks in the bundle and single unknown ids re-inserted after the save sanitizer (which
-  would otherwise drop them).
-
-Files: `src/data/multiplayer.js`, `src/net/{custody,station-inventory,world-places,README}.js`,
-`tests/multiplayer-custody.test.mjs`, `docs/{REFACTOR_PLAN,ARCHITECTURE,CHANGELOG}.md`,
-`docs/architecture/multiplayer.md`. **No save change yet** (stays **28**; slice 2 makes it 29).
-Tests **852 pass / 0 fail**. Rebuild `game/tallow-reach.html`; `npm test`.
-
 ## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
 
 - **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
@@ -296,6 +300,7 @@ Rebuild `game/tallow-reach.html`; `npm test`.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
 - 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
 - 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
 - 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)

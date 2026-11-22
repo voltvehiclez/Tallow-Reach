@@ -42,6 +42,7 @@
 //   onMessage receives (data, { peerId, ... }).
 
 import { ROOM_NAMESPACE, RELAYS, ICE } from "../data/multiplayer.js";
+import { turnServers } from "./turn.js";
 
 const isObject = value => !!value && typeof value === "object" && !Array.isArray(value);
 
@@ -187,9 +188,8 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
         }
         // The relay is additive: the library keeps its public STUN and adds these, so a
         // working direct path still wins and only a blocked one has to go through the server.
-        if (relay && Array.isArray(ICE.turn) && ICE.turn.length) {
-          config.turnConfig = ICE.turn.map(entry => ({ ...entry }));
-        }
+        const turn = relay ? turnServers() : [];
+        if (turn.length) config.turnConfig = turn.map(entry => ({ ...entry, urls: [...entry.urls] }));
         room = joinRoom(config, roomNameFor(worldId));
 
         // One action carries every message this game sends; `t` says what it is. One
@@ -293,6 +293,18 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
     return join();
   }
 
+  /**
+   * The relay facts for the screen: the probe's answer when it has one, the library's socket
+   * count always, and **nothing at all** when neither exists — printing "0 of 0" told the owner
+   * a story about relays that had never been asked (playtest 9).
+   */
+  function measuredRelays() {
+    const connected = openSockets();
+    if (relays) return { ...relays, connected };
+    if (connected === null) return null;
+    return { total: 0, open: 0, connected, checkedAt: 0 };
+  }
+
   /** How many of the library's own relay sockets are open right now (null = not joined yet). */
   function openSockets() {
     if (!socketList || !room) return null;
@@ -348,9 +360,11 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
       sent,
       received,
       peers,
-      relays: relays
-        ? { ...relays, connected: openSockets() }
-        : openSockets() === null ? null : { total: 0, open: 0, connected: openSockets(), checkedAt: 0 },
+      relays: measuredRelays(),
+      // This machine's clock, in the report. A nostr relay filters by time, so two machines
+      // whose clocks disagree by minutes can sit in the same room and never see each other —
+      // a failure that looks exactly like a blocked network and is fixed by setting the clock.
+      clock: Date.now(),
     };
   }
 

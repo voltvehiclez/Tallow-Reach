@@ -42,6 +42,7 @@ import {
 import { makeToken } from "./custody.js";
 import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
 import { readSettings, writeSettings, cleanName } from "./settings.js";
+import { checkTurnServers, turnSummary } from "./turn.js";
 import { NET, CHAT } from "../data/multiplayer.js";
 
 /* ------------------------------------------------------------------------- */
@@ -512,6 +513,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (role === "host") armHostWait();
     armStallTimer();
     startKeepalive();
+    // Ask the relays once the room exists, so Connection details is never blank about them.
+    checkRelays();
     publish();
     return true;
   }
@@ -828,6 +831,25 @@ export const reconnect = () => (active ? active.reconnect() : false);
 
 /** Ask the signalling relays whether they answer from this browser. */
 export const checkRelays = options => (active ? active.checkRelays(options) : Promise.resolve(null));
+
+/**
+ * Test the relay (TURN) servers this browser would use, free ones included.
+ *
+ * This is the only honest way to answer "why does 4G fail": a relayed ICE candidate means the
+ * server authenticated us and will forward packets; none means the servers are down, the login
+ * is wrong, or the network blocks them — and that is a relay problem, not a game one.
+ */
+export const testTurn = servers => checkTurnServers(servers).then(result => ({ ...result, sentence: turnSummary(result) }));
+
+/**
+ * Remember the player's own relay server (or forget it with `null`), then republish so the
+ * screen redraws. Stored with the name and the switches: it is a property of this browser.
+ */
+export function saveRelay(relay) {
+  const record = writeSettings({ ...readSettings(), relay: relay || null });
+  if (active) active.publish?.();
+  return record.relay;
+}
 
 /** Stop whatever is running. */
 export function stop() {

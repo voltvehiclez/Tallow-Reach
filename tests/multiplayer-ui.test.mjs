@@ -1041,3 +1041,67 @@ test("the session publishes what the code can do, in words", () => {
   assert.match(src, /no relay path — only local addresses/, "and says the opposite when there is not");
   assert.match(src, /codePaths: paste/, "the snapshot carries the counts to the screen");
 });
+
+/* ------------------------------------------------------------------------- */
+/* 14. Playtest 9: a relay server of your own, and a clock in the report      */
+/* ------------------------------------------------------------------------- */
+
+test("a player's own relay server wins over the free ones, and a half entry is refused", async () => {
+  const turn = await import("../src/net/turn.js");
+  assert.equal(turn.ownRelay({ relay: null }), null);
+  assert.equal(turn.ownRelay({ relay: { urls: "turn:a.example:80", username: "u", credential: "" } }), null,
+    "a relay with no credential answers 401 and looks like a network fault");
+  const own = turn.ownRelay({ relay: { urls: "turn:relay.example:443?transport=tcp, turns:tls.example:443", username: "u", credential: "c" } });
+  assert.deepEqual(own.urls, ["turn:relay.example:443?transport=tcp", "turns:tls.example:443"]);
+
+  const servers = turn.turnServers({ relay: { urls: "turn:relay.example:443", username: "u", credential: "c" } });
+  assert.equal(servers[0].username, "u", "the player's own server is tried first");
+  assert.ok(servers.length > 1, "with the free ones behind it");
+
+  // Something that is not a relay is not silently used as one.
+  assert.equal(turn.ownRelay({ relay: { urls: "https://example.com", username: "u", credential: "c" } }), null);
+});
+
+test("the relay test counts the servers that actually hand out a relayed address", async () => {
+  const turn = await import("../src/net/turn.js");
+  const previous = globalThis.RTCPeerConnection;
+  globalThis.RTCPeerConnection = class {
+    constructor(config) { if (config.iceTransportPolicy !== "relay") throw new Error("must ask for relay only"); }
+    createDataChannel() {}
+    async createOffer() { return { type: "offer", sdp: "x" }; }
+    async setLocalDescription() {
+      this.onicecandidate?.({ candidate: { candidate: "candidate:1 1 udp 1 1.2.3.4 1 typ relay" } });
+      this.onicegatheringstatechange?.();
+    }
+    close() {}
+    get iceGatheringState() { return "complete"; }
+  };
+  try {
+    const result = await turn.checkTurnServers([{ urls: ["turn:one"], username: "u", credential: "c" }], { timeoutMs: 1000 });
+    assert.equal(result.total, 1);
+    assert.equal(result.ok, 1, "a relayed candidate means the server answered");
+    assert.match(turn.turnSummary(result), /1 of 1 relay servers answered/);
+
+    const dead = await turn.checkTurnServers([], { timeoutMs: 1000 });
+    assert.match(turn.turnSummary(dead), /No relay servers are configured/);
+  } finally {
+    globalThis.RTCPeerConnection = previous;
+  }
+});
+
+test("Connection details carries the clock and the code's paths, and never says 0 of 0", () => {
+  const base = { ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1" };
+  const diag = {
+    signalling: "finding", line: "Waiting…", useTurn: false, sent: 0, received: 0, peers: [],
+    relays: { total: 0, open: 0, connected: 10, checkedAt: 0 },
+    clock: Date.UTC(2026, 10, 22, 10, 30, 0),
+  };
+  const model = ui.screenModel({ snap: { ...base, diag, codePaths: { host: 2, srflx: 1, prflx: 0, relay: 0 } } });
+  const html = ui.screenHtml(model);
+  const report = ui.diagReport(model);
+  assert.doesNotMatch(html, /Relays reachable: 0 of 0/, "an unmeasured probe is not printed");
+  assert.match(html, /Relays connected: 10/);
+  assert.match(report, /Code paths: 2 local, 1 public, 0 relay/, "the report says what the code can reach");
+  assert.match(report, /This machine's clock: 2026-11-22T10:30:00\.000Z/);
+  assert.match(html, /This machine's clock: 2026-11-22 10:30:00 UTC/);
+});

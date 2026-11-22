@@ -29,6 +29,7 @@
 
 /** The prefix that marks a code as this game's, so a stray paste is refused in words. */
 import { ICE } from "../data/multiplayer.js";
+import { iceServers } from "./turn.js";
 
 const CODE_PREFIX = "TRJOIN:";
 
@@ -73,7 +74,9 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
 
   const openConnection = () => {
     if (!isBrowser()) throw new Error("This browser cannot make a direct connection.");
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    // Read at connection time, not import time: a player may have just added their own
+    // relay server, and a code has to be made with it without reloading the game.
+    const pc = new RTCPeerConnection({ iceServers: iceServers() });
     pc.onconnectionstatechange = () => {
       const next = pc.connectionState;
       // "The peers can reach each other" is not yet "there is a channel to send on". The
@@ -82,7 +85,11 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
       // re-sent it.
       if (next === "connected") setState(channel?.readyState === "open" ? "connected" : "working", "Opening a direct channel…");
       else if (next === "failed" || next === "disconnected" || next === "closed") {
-        setState("lost", "The direct connection closed. Make a new code.");
+        // Which failure it was, in the words the player needs: with no relay path in the code
+        // the two machines can only ever meet on one network, and saying "closed" hides that.
+        setState("lost", paths.relay > 0
+          ? "The two networks could not find a path to each other, even through a relay server. Make a new code and try again."
+          : "The two networks could not find a path to each other: this code has no relay path, so it only works between machines on the same network. Press Test relay servers in Connection details.");
       }
     };
     // ICE candidates are gathered into the code itself, so none arrive after it is sent.
