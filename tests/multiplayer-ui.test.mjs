@@ -29,7 +29,8 @@ import * as ui from "../src/ui/multiplayer.js";
 import { uniqueName } from "../src/net/session.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import * as session from "../src/net/session.js";
-import { setLibraryLoader } from "../src/net/transport.js";
+import { setLibraryLoader, setRelayProbe, createChannel } from "../src/net/transport.js";
+import { RELAYS } from "../src/data/multiplayer.js";
 import { SAVE_VERSION, newProfile, newWorld } from "../src/state/profile.js";
 import { state } from "../src/state/state.js";
 import { NET } from "../src/data/multiplayer.js";
@@ -87,6 +88,10 @@ const withName = (name = "Ada") => { ui.panelState().fields.name = name; };
 const html = () => ui.screenHtml(ui.screenModel());
 
 test.beforeEach(() => ui.resetPanel());
+
+// No test may open a real WebSocket to a signalling relay. The relay-health test puts its own
+// stub back; section 11 is the only place that wants one.
+test.before(() => setRelayProbe(null));
 
 /* ------------------------------------------------------------------------- */
 /* 1. No username, no switch                                                 */
@@ -468,6 +473,7 @@ test("two browsers meet, the guest says hello once, and both can talk", async ()
 test("two browsers in different worlds never meet", async () => {
   const relay = fakeRelay();
   setLibraryLoader(async () => relay);
+  setRelayProbe(null);
   session.setChannelFactory(null);
 
   const host = session.createChannelForTest("host", "w-one", "Ada", "host-token", worldKit("w-one"));
@@ -835,4 +841,58 @@ test("a hello that never arrives ends with a relay attempt on both ends", async 
   host.stop();
   guest.stop();
   setLibraryLoader(null);
+});
+
+/* ------------------------------------------------------------------------- */
+/* 11. Playtest 5's answer: the relays that introduce the two browsers        */
+/* ------------------------------------------------------------------------- */
+//
+// The owner's report was decisive and had nothing to do with WebRTC: same build, same world id,
+// both "finding", one browser in each room, zero messages sent. The introduction never happened.
+// The library picks five of thirty public relays, seeded by the app id — and this game's five
+// were obscure. They are now pinned, and the screen says whether they are reachable.
+
+test("the signalling relays are pinned to known-good servers, not the library's shuffle", () => {
+  assert.ok(RELAYS.relayUrls.length >= 5, "at least the five the library would use");
+  for (const url of RELAYS.relayUrls) assert.match(url, /^wss:\/\/[a-z0-9.-]+$/, `${url} is a websocket relay`);
+  assert.ok(RELAYS.relayUrls.includes("wss://nos.lol"), "and they are the long-running public ones");
+  const transport = read("src/net/transport.js");
+  assert.match(transport, /relayConfig = \{ urls: RELAYS\.relayUrls\.slice\(\) \}/, "the transport passes them");
+});
+
+test("relay health is measured and reported", async () => {
+  const checks = [];
+  setRelayProbe(async urls => {
+    checks.push(urls);
+    return { total: urls.length, open: urls.length - 1, checkedAt: Date.now() };
+  });
+  const channel = createChannel({ role: "host", worldId: "w-probe" });
+  const status = await channel.checkRelays();
+  // The library uses five relays (its `redundancy`), so those are the five we ask about.
+  assert.deepEqual(checks[0], RELAYS.relayUrls.slice(0, 5), "it asks about exactly the relays in use");
+  assert.equal(status.open, 4);
+  assert.equal(channel.diagnostics().relays.open, 4, "and the diagnostics carry it");
+  setRelayProbe(null);
+});
+
+test("the details block says how many relays answered, in words", () => {
+  const base = { ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1" };
+  const diag = { signalling: "finding", line: "Waiting…", useTurn: false, sent: 0, received: 0, peers: [] };
+  const dead = ui.screenHtml(ui.screenModel({ snap: { ...base, diag: { ...diag, relays: { total: 5, open: 0, checkedAt: 1 } } } }));
+  assert.match(dead, /Relays reachable: 0 of 5/);
+  assert.match(dead, /network is blocking them/);
+  const fine = ui.screenHtml(ui.screenModel({ snap: { ...base, diag: { ...diag, relays: { total: 5, open: 4, checkedAt: 1 } } } }));
+  assert.match(fine, /Relays reachable: 4 of 5/);
+  assert.doesNotMatch(fine, /network is blocking them/);
+  const report = ui.diagReport(ui.screenModel({ snap: { ...base, diag: { ...diag, relays: { total: 5, open: 2, checkedAt: 1 } } } }));
+  assert.match(report, /Relays reachable: 2 of 5/);
+});
+
+test("Escape closes the multiplayer screen before it toggles the pause card", () => {
+  const main = read("src/main.js");
+  const pause = main.slice(main.indexOf('case "pause":'), main.indexOf('case "pause":') + 900);
+  assert.match(pause, /isMultiplayerScreenOpen\(\)/, "the pause key asks whether the screen is open");
+  assert.match(pause, /closeMultiplayer\(\)/, "and closes it first");
+  assert.ok(pause.indexOf("isMultiplayerScreenOpen()") < pause.indexOf("setPause("),
+    "before it does anything else with the pause state");
 });

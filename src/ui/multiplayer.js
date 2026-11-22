@@ -335,8 +335,8 @@ function linkHtml(model) {
 function codesHtml(model) {
   if (!model.offer) {
     return (
-      `<p class="mp-hint">No broker, or your friend cannot join by link? Make a code instead.</p>` +
-      `<div class="mp-row"><button type="button" data-mp="offer">No broker? Paste codes</button></div>`
+      `<p class="mp-hint">No relay, or your friend cannot join by link? Make a code instead — a code goes through this chat window, not through any server.</p>` +
+      `<div class="mp-row"><button type="button" data-mp="offer">No relay? Copy/paste codes</button></div>`
     );
   }
   return (
@@ -438,6 +438,7 @@ export function diagFacts(model) {
       ? `${first.connection || "unknown"}${first.ice ? ` (${first.ice})` : ""}`
       : "",
     relay: !!d.useTurn,
+    relays: d.relays && d.relays.total ? d.relays : null,
     sent: Number(d.sent) || 0,
     received: Number(d.received) || 0,
     waiting: !!model.hosting && peers.length > 0 && !(model.guests || []).length,
@@ -457,6 +458,7 @@ export function diagReport(model) {
     `Browsers in the room: ${f.inRoom}`,
     `Direct link: ${f.direct || "no other browser is in the room"}`,
     `Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}`,
+    ...(f.relays ? [`Relays reachable: ${f.relays.open} of ${f.relays.total}`] : []),
     `Messages sent ${f.sent}, received ${f.received}`,
   ].join("\n");
 }
@@ -474,10 +476,14 @@ function diagHtml(model) {
     `<li>Browsers in the room: ${f.inRoom}</li>` +
     `<li>${escapeHtml(link)}</li>` +
     `<li>Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}</li>` +
+    (f.relays ? `<li>Relays reachable: ${f.relays.open} of ${f.relays.total}</li>` : "") +
     `<li>Messages sent ${f.sent}, received ${f.received}</li>` +
     `</ul>` +
     (f.waiting
       ? `<p class="mp-hint mp-warn">A browser is in the room but has not identified itself. If this stays for more than a few seconds, the connection between the two machines is being blocked.</p>`
+      : "") +
+    (f.relays && f.relays.open === 0
+      ? `<p class="mp-hint mp-warn">None of the servers that introduce players to each other answered this browser. Your network is blocking them, so the two machines cannot find each other this way. Use the codes instead: “No relay? Copy/paste codes” below.</p>`
       : "") +
     (f.inRoom === 1 && !f.waiting
       ? `<p class="mp-hint">No other browser is in this room. Check that the other player turned Open Multiplayer on, and that both screens show the same World id.</p>`
@@ -518,7 +524,11 @@ export async function act(name, arg = "") {
       }
       return joinFromBox();
     case "leave": return leaveSession();
-    case "reconnect": return retryConnection();
+    case "reconnect": {
+      // Re-ask the relays as well: this button is pressed exactly when the answer matters.
+      session.checkRelays?.({ force: true });
+      return retryConnection();
+    }
     case "offer": return makeOffer();
     case "finish": return finishOffer();
     case "reset-offer":
@@ -679,7 +689,7 @@ async function makeOffer() {
 async function finishOffer() {
   const code = String(panelView.fields.code || "").trim();
   if (!panelView.offer) {
-    setMessage("Make an offer first: press “No broker? Paste codes”.", "error");
+    setMessage("Make an offer first: press “No relay? Copy/paste codes”.", "error");
     draw();
     return false;
   }
@@ -919,6 +929,9 @@ export function openMultiplayer({ focus = "", from = "" } = {}) {
   chatOpen = false;
   drawnHtml = "";               // force a fresh draw after being away
   draw();
+  // Ask the signalling relays how they are, so Connection details can say it. Fire-and-forget:
+  // the answer redraws the screen when it arrives and nothing waits on it.
+  session.checkRelays?.({ force: true });
   const model = screenModel();
   const where = focus || (!model.nameSet ? "name" : waiting ? "join" : "");
   if (where) focusField(where === "join" ? "join" : where);

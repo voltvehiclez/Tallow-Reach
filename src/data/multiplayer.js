@@ -112,7 +112,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-22b";
+export const BUILD = "2026-11-22c";
 
 export const NET = {
   snapshotSec: 2,
@@ -168,8 +168,22 @@ export const ROOM_NAMESPACE = "tallowreach.p2p";
  * else in the game changes.
  */
 export const RELAYS = {
-  // Signalling relays. Empty = the library's free public ones.
-  relayUrls: [],
+  // Signalling relays: the servers that introduce two browsers to each other.
+  //
+  // **Pinned on purpose (playtest 5).** Left empty, the library shuffles its own list of 30
+  // public relays — seeded by the app id, so every player gets the same *five* — and this game's
+  // five included several obscure ones (chaima.info, circum.space, dwadziesciajeden.pl). Two
+  // machines then sat in rooms with one browser each and never met: the introduction had nowhere
+  // to happen. These are the long-running public relays; the first `redundancy` (5) are used.
+  // If a player's network blocks all of them, the copy/paste code path needs no relay at all.
+  relayUrls: [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.nostr.band",
+    "wss://relay.primal.net",
+    "wss://nostr.mom",
+    "wss://nostr-pub.wellorder.net",
+  ],
   // An optional `RTCConfiguration` for the direct connection, if a player has their own ICE
   // servers. Shape:
   //   rtcConfig: { iceServers: [{ urls: "stun:host:3478" }, { urls: "turn:host:3478",

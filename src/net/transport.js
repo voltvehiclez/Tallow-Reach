@@ -58,6 +58,50 @@ export function setLibraryLoader(loader) {
   loadLibrary = typeof loader === "function" ? loader : () => import("trystero");
 }
 
+/**
+ * How we ask "are the signalling relays reachable from this browser?".
+ *
+ * The relays are the only part of the connection that has nothing to do with the two players'
+ * networks: they are public WebSocket servers that introduce browsers to each other. If a
+ * player's network blocks them, both players sit in rooms of one and never meet — which is
+ * exactly what playtest 5 reported, and it is invisible from the room state alone. So we open
+ * a WebSocket to each relay in use and count the ones that answer.
+ *
+ * A test replaces this with a stub (or null for "do not probe"): no test may touch the network.
+ */
+async function probeWithSockets(urls) {
+  if (typeof WebSocket !== "function") return { total: urls.length, open: 0, checkedAt: Date.now() };
+  const results = await Promise.all(urls.map(url => new Promise(resolve => {
+    let socket = null;
+    let settled = false;
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      try { socket?.close(); } catch (e) { /* already gone */ }
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), 4000);
+    if (typeof timer?.unref === "function") timer.unref();
+    try {
+      socket = new WebSocket(url);
+      socket.onopen = () => { clearTimeout(timer); finish(true); };
+      socket.onerror = () => { clearTimeout(timer); finish(false); };
+      socket.onclose = () => { clearTimeout(timer); finish(false); };
+    } catch (e) {
+      clearTimeout(timer);
+      finish(false);
+    }
+  })));
+  return { total: urls.length, open: results.filter(Boolean).length, checkedAt: Date.now() };
+}
+
+let relayProbe = probeWithSockets;
+
+/** Test-only: `setRelayProbe(null)` turns probing off, a function replaces it. */
+export function setRelayProbe(probe) {
+  relayProbe = typeof probe === "function" ? probe : probe === null ? null : probeWithSockets;
+}
+
 /** The room a world's browsers meet in. Deterministic: one world is one room. */
 export const roomNameFor = worldId => `${ROOM_NAMESPACE}:${String(worldId || "").trim()}`;
 
@@ -78,6 +122,9 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
   // "messages that nobody is reading": what actually left and what actually arrived.
   let sent = 0;
   let received = 0;
+  // The last relay-health answer, refreshed by `checkRelays()` (the screen asks once when it
+  // opens and again on Reconnect).
+  let relays = null;
 
   const setState = (state, reason = "") => {
     if (current.state === state && current.reason === reason) return;
@@ -238,6 +285,25 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
     return join();
   }
 
+  /** Ask the signalling relays whether they answer from this browser (cached for 20s). */
+  async function checkRelays({ force = false } = {}) {
+    if (!relayProbe) return relays;
+    if (!force && relays && Date.now() - relays.checkedAt < 20_000) return relays;
+    const urls = Array.isArray(RELAYS.relayUrls) && RELAYS.relayUrls.length
+      ? RELAYS.relayUrls.slice(0, 5)
+      : [];
+    if (!urls.length) return relays;
+    try {
+      relays = await relayProbe(urls);
+    } catch (e) {
+      relays = { total: urls.length, open: 0, checkedAt: Date.now() };
+    }
+    try {
+      onState?.(current);
+    } catch (e) { /* a broken screen must not break a connection */ }
+    return relays;
+  }
+
   /** What the screen can say about the connection, in plain facts. */
   function diagnostics() {
     const peers = [];
@@ -263,6 +329,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
       sent,
       received,
       peers,
+      relays,
     };
   }
 
@@ -275,6 +342,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
     leave,
     restart,
     diagnostics,
+    checkRelays,
     peers: peerIds,
     state: () => ({ ...current }),
     room: () => roomNameFor(worldId),

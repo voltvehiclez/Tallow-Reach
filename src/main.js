@@ -24,7 +24,10 @@ import { restoreWormholes } from "./sim/wormholes.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
-import { setupMultiplayer, openChat, chatAway, isChatOpen } from "./ui/multiplayer.js";
+import {
+  setupMultiplayer, openChat, chatAway, isChatOpen,
+  isMultiplayerScreenOpen, closeMultiplayer,
+} from "./ui/multiplayer.js";
 import { installJoinLink } from "./net/boot.js";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
@@ -213,6 +216,13 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       openChat();
       break;
     case "pause":
+      // The multiplayer screen sits on top of whatever opened it, so it gets Esc first: one
+      // press puts it away and leaves the pause card (or the title) underneath. Playtest 5:
+      // Esc in that screen used to fall through to the pause chain and do nothing at all.
+      if (isMultiplayerScreenOpen()) {
+        closeMultiplayer();
+        break;
+      }
       if (isStarmapOpen()) {
         closeStarmap();
         if (name === "pause" && pauseKey) {

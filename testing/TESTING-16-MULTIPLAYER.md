@@ -4,14 +4,23 @@ This is the slice where two browsers can **open a world, join it, and talk**. No
 crosses the wire yet: no ship, no credits, no cargo. That is on purpose — it means a bug here can
 fail to connect, and cannot cost you anything.
 
-**Rewritten again after your fifth playtest (2026-11-21).** Your clue — *"Nobody is hosting the world
-in that link yet"* — means the room had **no other browser in it**, so this is not the network path
-and not the relay: the two machines were never in the same room. The screen now shows why:
+**Rewritten after your sixth playtest (2026-11-22) — this one found the bug.** Your two copied
+blocks showed the *same build*, the *same world id*, and **one browser in each room with zero
+messages sent**. That is not the network path: the two browsers were never **introduced**, and the
+servers that do the introducing are chosen by the library — it shuffles thirty public signalling
+relays with the app id and takes five, and this game's five included three dead ones. The game now
+names its relays and measures them.
 
-- **Build: `2026-11-22b`** on both machines (if they differ, they are different files),
-- **World id** on both (they must match),
-- **Browsers in the room** (1 = nobody else is there; 2 = you found each other),
-- **Messages sent / received**.
+New in this build:
+
+- **Build: `2026-11-22c`** on both machines (if they differ, they are different files).
+- **Relays reachable: N of 5** in Connection details. Five of five is what you want. **0 of 5** means
+  this network blocks every server that could introduce you — tell me, and use the codes (below);
+  there is nothing to retry.
+- **Esc closes the multiplayer screen** (your small bug): one press puts the screen away and leaves
+  the pause card underneath, exactly like its **Close** button.
+- The code button is now called **No relay? Copy/paste codes**, and the "nobody else is in that room"
+  sentence points at it. That path needs **no relay at all**: two codes go through a chat window.
 
 Press **Copy details** on each machine and send me both blocks — that is the whole diagnosis.
 
@@ -70,6 +79,12 @@ second window (a hotspot or mobile data usually works too).
    seconds. Your ship must not drift, fire or turn, and the world behind the card must **keep
    running** (watch a station's lights, or a ship moving). Press **Resume**.
 
+## Part 1b — Esc closes the screen (30 seconds)
+
+1. Open the multiplayer screen from the pause card. Press **Esc** once: the screen closes and the
+   pause card is still there. Press **Esc** again: the game unpauses.
+2. Open it from the title screen (**Join Multiplayer World**). Press **Esc** once: the title is back.
+
 ## Part 2 — host, then join (two windows)
 
 1. **Window A** (the host): **Open World**, then **P** > **Open Multiplayer**, a username,
@@ -104,7 +119,7 @@ second window (a hotspot or mobile data usually works too).
 - Give it ~20 seconds. The free relays are public and occasionally slow; the status line names what
   it is waiting for.
 - Then try the fallback, which now really is a fallback:
-  1. **Window A**: under the link, press **No broker? Paste codes**. An **offer code** appears and
+  1. **Window A**: under the link, press **No relay? Copy/paste codes**. An **offer code** appears and
      **stays on screen**. Press **Copy offer code** and send it to Window B.
   2. **Window B**: paste that code into the **same** paste box (it takes `TRJOIN:` codes too) and
      press **Join**. An **answer code** appears; press **Copy answer code** and send it back.
@@ -169,6 +184,18 @@ second window (a hotspot or mobile data usually works too).
 - **A reload loses the connection.** Rejoining is slice 5.
 - **Names are for show.** Two players with the same name are separate connections; the `*`/`**`
   suffixes arrive with slice 4.
+
+## If the two machines still do not meet: the code path
+
+It needs no relay, so it works even on a network that blocks all five:
+
+1. **Host machine:** Pause > Open Multiplayer > **No relay? Copy/paste codes**. An **offer code**
+   appears; press **Copy**.
+2. Send that code to the other player any way you like (a chat window, email).
+3. **Guest machine:** **Join Multiplayer World** on the title screen, paste the code into the box,
+   **Finish**.
+4. A **reply code** appears; send it back, the host pastes it, and the two are introduced directly.
+   The chat and the player list work exactly as before.
 
 ## If something goes wrong, what to send back
 

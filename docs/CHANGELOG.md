@@ -20,6 +20,53 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 6 of slice 3 — the *five random relays* were the problem, and Esc
+
+**The owner's two copied blocks settled it.** Both machines: Build `2026-11-22b`, World id
+`w-o8fHGjrzXzyrGxSE`, Signalling `finding`, **Browsers in the room: 1**, **sent 0 / received 0**.
+Same build, same room id, nobody in either room. That is not the network path and not the
+handshake — the two browsers were never *introduced* to each other, so no ICE, no TURN and no
+`hello` could matter. (TURN only helps once a peer exists.)
+
+**Why the introduction failed.** The library picks its signalling relays like this:
+`shuffle(30 public relays, seed = appId).slice(0, 5)`. The seed makes it the same five on every
+machine, which is why this looked impossible — but it also means *this game got five particular
+relays*, and for `appId = tallowreach.p2p` they were
+`relay.primal.net`, `nostr.chaima.info`, `nostr-pub.wellorder.net`, `nostrelay.circum.space`,
+`relay.dwadziesciajeden.pl` — three of them obscure or dead. Both players were subscribing to the
+same dead rooms.
+
+- **`RELAYS.relayUrls` is no longer empty.** It names the long-running public relays
+  (`relay.damus.io`, `nos.lol`, `relay.nostr.band`, `relay.primal.net`, `nostr.mom`,
+  `nostr-pub.wellorder.net`); the transport already passed them as `relayConfig.urls`, so the
+  library uses those instead of its shuffle.
+- **Relay health on the screen.** `transport.checkRelays()` opens a WebSocket to each relay in use
+  and returns `{ total, open }`; the session republishes it and Connection details shows
+  **Relays reachable: N of 5**. **0 of 5** means the player's network blocks the servers that do
+  the introduction, which no amount of Reconnect can fix — and the block now says so in words and
+  points at the code path. It is asked when the screen opens and again on **Reconnect** (cached 20 s).
+- **The code path is named the same way everywhere.** The button is now **No relay? Copy/paste
+  codes**, and the "nobody else is in that room yet" sentence points at it. That path needs no
+  relay at all: two codes go through a chat window.
+- **Esc closes the multiplayer screen** (owner's small bug). `src/main.js`'s pause key now asks
+  `isMultiplayerScreenOpen()` **first** and calls `closeMultiplayer()`; one press puts the screen
+  away and leaves the pause card (or the title) underneath, exactly like its Close button.
+
+**Files:** `src/data/multiplayer.js` (`relayUrls`, `BUILD = "2026-11-22c"`), `src/net/transport.js`
+(probe + `setRelayProbe`, `checkRelays` in diagnostics), `src/net/session.js` (pass-through, the
+sentence), `src/ui/multiplayer.js` (relay row, blocking warning, button label, Esc-facing helpers
+already exported), `src/main.js` (Esc), `src/net/paste.js` + `testing/TESTING-16-MULTIPLAYER.md`
+(wording).
+
+**Tests: 953, all green** (was 949). Four new: the pinned relays and that the transport passes them;
+relay health is measured and lands in the diagnostics; the details block says "N of 5" in words and
+warns only at 0; Esc closes the screen before the pause chain. The file also stubs the probe off
+globally — no test may open a real WebSocket.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22c`** — both machines must
+show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
+(0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
+
 ## 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
 
 The owner picked the one library the rules allow: **Trystero** (`trystero@0.27.0`, MIT, Nostr
@@ -229,43 +276,9 @@ Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
 `src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
 Rebuild `game/tallow-reach.html`; `npm test`.
 
-## 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
-
-**The owner's clue that narrowed everything:** the guest was told *"Nobody is hosting the world in
-that link yet"*, which that sentence only says when **the room has no other browser in it**. So the
-two machines were never in the same room — this is not the network path, not the handshake, and not
-the relay. Something is wrong before the first message.
-
-- **Connection details now answers it in one look** (`diagFacts`/`diagReport`): **Build** (two
-  machines showing different strings are not running the same file), **World id** (both must match),
-  signalling state and its sentence, **Browsers in the room** (this browser included), the direct
-  link's own state, relay on/off, and **sent vs received**.
-  - 1 browser in the room on both machines → they are in *different rooms*: a different world id, or
-    one of them is not hosting. Check the two World ids.
-  - 2 in the room, sent climbing, received 0 → the room is right and the path is not (the relay
-    handles that).
-  - Different **Build** strings → the machines are running different files.
-- **Copy details** puts all of it on the clipboard as one block, so a player who does not read code
-  can send it back.
-- **The host's half is named too:** "A browser is in the room but has not identified itself" when a
-  peer is there and nobody was admitted; "No other browser is in this room" when there is nobody.
-- **A room that dies quietly is reopened.** A backgrounded tab, a slept laptop or a dropped relay
-  leaves the transport in `lost` and it never recovers by itself; the session's watchdog
-  (`startKeepalive`) reopens it at most once every ten seconds, with the relay setting it was using.
-- **The "nobody there" sentence** now names the two World ids to compare instead of guessing at the
-  host's switch.
-
-**Files:** `src/data/multiplayer.js` (`BUILD`), `src/net/session.js` (watchdog, sentence),
-`src/ui/multiplayer.js` (`diagFacts`, `diagReport`, the block, `copy-diag`), `src/styles.css`.
-
-**Tests: 949, all green** (was 946). Four new: the room count and build in the block, the paste-ready
-report (both roles), the host's two warnings, and the watchdog's rule.
-
-**Save format unchanged (v29).** Rebuild needed (`npm run build`). **Build id: `2026-11-22b`** — both
-machines must show it.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
 - 2026-11-21: Playtest 4 of slice 3 — the path between two machines, and a relay for when it fails
 - 2026-11-21: Playtest 3 of slice 3 — a hello that is answered, a click that is not eaten
 - 2026-11-21: Playtest 2 of slice 3 — one door each, names with stars, a chat that stays open

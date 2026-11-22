@@ -199,6 +199,27 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/multiplayer-ui.test.mjs` — the lost-hello retry, the no-redraw commit, the
   relay escalation, the Connection details block.
 
+### L36. A default list that is shuffled by a seed is still a *guess* about the outside world
+
+- **Seen (owner, playtest 5):** both machines reported the same build and the same world id, both
+  `finding`, and **one browser in the room with zero messages sent** — for a whole evening, through
+  three rounds of Reconnect.
+- **Cause:** the transport had no relay list of its own, so the library shuffled its thirty public
+  signalling relays with the app id as the seed and took five. The seed guarantees the *same five*
+  on both machines (which is why the report looked contradictory: nothing differed), but it also
+  guarantees nothing about those five being alive — this game's five included three obscure or dead
+  servers. Both players subscribed to the same silence, so the introduction never happened and
+  every later layer (ICE, TURN, the handshake, the retry) was being debugged for a problem three
+  layers below it.
+- **Rule:** never let a dependency *choose* which outside server you depend on — name it, and if the
+  choice is a default list, treat "which entry" as part of your configuration. When a feature
+  depends on reachability of something outside both machines, **measure that reachability and show
+  it**: `Relays reachable: N of 5`, 0 meaning "no retry will ever help". And before blaming the
+  path, read the counters — `sent 0 / received 0 / 1 in the room` means no peer, which means no
+  path to blame.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` section 11 — the pinned list and the transport
+  passing it, the probe landing in the diagnostics, the "N of 5" row and its warning at 0.
+
 ## Template (copy for a new entry)
 
 ```

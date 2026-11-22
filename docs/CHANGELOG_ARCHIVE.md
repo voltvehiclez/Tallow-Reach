@@ -1,5 +1,40 @@
 # Changelog archive
 
+## 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
+
+**The owner's clue that narrowed everything:** the guest was told *"Nobody is hosting the world in
+that link yet"*, which that sentence only says when **the room has no other browser in it**. So the
+two machines were never in the same room — this is not the network path, not the handshake, and not
+the relay. Something is wrong before the first message.
+
+- **Connection details now answers it in one look** (`diagFacts`/`diagReport`): **Build** (two
+  machines showing different strings are not running the same file), **World id** (both must match),
+  signalling state and its sentence, **Browsers in the room** (this browser included), the direct
+  link's own state, relay on/off, and **sent vs received**.
+  - 1 browser in the room on both machines → they are in *different rooms*: a different world id, or
+    one of them is not hosting. Check the two World ids.
+  - 2 in the room, sent climbing, received 0 → the room is right and the path is not (the relay
+    handles that).
+  - Different **Build** strings → the machines are running different files.
+- **Copy details** puts all of it on the clipboard as one block, so a player who does not read code
+  can send it back.
+- **The host's half is named too:** "A browser is in the room but has not identified itself" when a
+  peer is there and nobody was admitted; "No other browser is in this room" when there is nobody.
+- **A room that dies quietly is reopened.** A backgrounded tab, a slept laptop or a dropped relay
+  leaves the transport in `lost` and it never recovers by itself; the session's watchdog
+  (`startKeepalive`) reopens it at most once every ten seconds, with the relay setting it was using.
+- **The "nobody there" sentence** now names the two World ids to compare instead of guessing at the
+  host's switch.
+
+**Files:** `src/data/multiplayer.js` (`BUILD`), `src/net/session.js` (watchdog, sentence),
+`src/ui/multiplayer.js` (`diagFacts`, `diagReport`, the block, `copy-diag`), `src/styles.css`.
+
+**Tests: 949, all green** (was 946). Four new: the room count and build in the block, the paste-ready
+report (both roles), the host's two warnings, and the watchdog's rule.
+
+**Save format unchanged (v29).** Rebuild needed (`npm run build`). **Build id: `2026-11-22b`** — both
+machines must show it.
+
 ## 2026-11-21: Playtest 4 of slice 3 — the path between two machines, and a relay for when it fails
 
 **What the owner saw.** The laptop takes the host's link (a `file://` page on the PC), joins, and

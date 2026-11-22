@@ -5,7 +5,7 @@
 // the only channel they are certain to share is the one they are already using to talk
 // to each other. So:
 //
-//   1. The host presses **No broker? Paste codes**: the game makes an offer and shows it
+//   1. The host presses **No relay? Copy/paste codes**: the game makes an offer and shows it
 //      as one code.
 //   2. The guest pastes it under **Join Multiplayer World > paste codes**, and gets an
 //      answer code back.

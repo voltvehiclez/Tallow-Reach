@@ -585,7 +585,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       if (peers && !relayTried) return escalateToRelay();
       const said = peers
         ? "Still no answer from the host. The two browsers found each other, but messages are not getting through even through the relay — try the paste-code path."
-        : "Nobody else is in that room yet. Both screens must show the same World id — Pause > Open Multiplayer > Connection details on each machine — and the host's switch must read On. If both show the same id and 1 browser in the room, the signalling relay is not reaching one of you: try again in a minute.";
+        : "Nobody else is in that room yet. Both screens must show the same World id and the host's switch must read On (Pause > Open Multiplayer > Connection details). If both show 1 browser in the room, the relay that introduces you is not working: use the codes instead — the host presses “No relay? Copy/paste codes”, and you paste the code it gives into the box on the main menu.";
       try {
         emit("mp-notice", said);
       } catch (e) { /* a broken screen must not break a session */ }
@@ -674,6 +674,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     return true;
   }
 
+  /** Ask the signalling relays how they are, so the screen can say it. */
+  async function checkRelays(options) {
+    if (!channel || typeof channel.checkRelays !== "function") return null;
+    const status = await channel.checkRelays(options);
+    publish();
+    return status;
+  }
+
   /** The screen's "Reconnect" button: another attempt, through the relay this time. */
   async function reconnect() {
     if (!channel) return false;
@@ -709,6 +717,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     acceptCodes,
     reconnect,
     escalateToRelay,
+    checkRelays,
     channel: () => channel,
     paste: () => paste,
     /**
@@ -757,6 +766,9 @@ export const say = text => (active ? active.say(text) : false);
 
 /** Another attempt, through a relay. The screen's "Reconnect" button. */
 export const reconnect = () => (active ? active.reconnect() : false);
+
+/** Ask the signalling relays whether they answer from this browser. */
+export const checkRelays = options => (active ? active.checkRelays(options) : Promise.resolve(null));
 
 /** Stop whatever is running. */
 export function stop() {
