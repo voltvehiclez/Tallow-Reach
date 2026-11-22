@@ -47,7 +47,7 @@ const withStorage = fn => {
 
 test("settings: a name is remembered, trimmed and capped, and never in a save", () => {
   withStorage(() => {
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null }, "nothing stored is a clean slate");
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" }, "nothing stored is a clean slate");
     writeSettings({ name: "  Ada   Lovelace " });
     assert.equal(readSettings().name, "Ada Lovelace", "runs of spaces collapse and the ends are trimmed");
     assert.equal(nameIsSet(), true);
