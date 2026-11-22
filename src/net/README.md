@@ -12,6 +12,11 @@ the connection: `transport.js` (the one thin wrapper around the connection libra
 broker-free fallback), `join-link.js` (the one link a guest needs), `settings.js` (the username) and
 `boot.js` (a `?join=` link in the address bar). Slices 1 and 2 are the rules and their save fields.
 
+**Step 17 (planned 2026-11-22): dedicated servers.** The server side of the connection will live here too — a
+headless build of the same project (no `ui/`, `render/` or `core/`) hosting one world for 50+ players via port
+forwarding, with the wrapper still the only file that names a connection library. The plan is step 17 of
+`docs/REFACTOR_PLAN.md`.
+
 | File | What it does |
 |---|---|
 | `custody.js` | **The pilot's suitcase.** `checkOut(save)` packs the open-world pilot into a `bundle` (the `TRAVEL_FIELDS` half of the profile plus the station lockers, each stack carrying its `origin` station) and writes the `away` marker; `checkIn(save, bundle)` puts it back into a *new* save, clearing `away`, merging the home half (missions, flags, stats) from the home save untouched; `relocate(bundle, world, options)` sends anything whose station a world lacks to Meridian and puts it back the moment that station exists again, never refusing or deleting, and flags an over-full station; `compare(a, b)` orders two copies by `(epoch, rev)`. It also holds the small facts a host needs: `hashToken`/`tokenCheck` (the host stores a hash, never the secret), `handshake` (version, world and token, each with a sentence for the refusal), `guestRecord`, `summary(bundle)` ("600 cr · 1 ship · 0 m³"), `uniqueName` (the host's name wins, joiners wear `*`, `**`), `mergeLockers`, `hostProfile` and `totals` (what left vs what arrived, for tests). Plain data in, plain data out: no DOM, no three.js, no save it was handed is mutated. |

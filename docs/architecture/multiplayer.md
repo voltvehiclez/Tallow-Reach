@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-21 (slice 3, reworked after the owner's playtest).* The plan and its six slices are step 16 of
+*Last checked: 2026-11-22 (slice 3 built and proven across networks; step 17 revised, slices 17a–17d).* The plan and its six slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works, as it is built.
 
 ## The idea
@@ -11,6 +11,22 @@ what the host sends back. Two players to start; nothing assumes exactly one.
 
 **Open world only.** The campaign stays single player (owner, 2026-11-21): a campaign act's fixed
 ships and scripted beats have no meaning in somebody else's galaxy.
+
+## Step 17: dedicated servers (planned 2026-11-22, not built)
+
+The owner added **step 17** to the plan: a **dedicated server** hosts a world. It is the same authority as
+step 16's host with no screen — a headless build of the same project (the sim already runs with no browser,
+principle 2) — running the fixed-step loop, holding the world, and streaming snapshots to clients while taking
+their controls. Clients are thin: controls in, snapshots out, in a **star** topology, which is what lets one
+port-forwarded server host a world for a **target of 50 players; the measured number goes in
+`src/data/multiplayer.js`**. Peer-to-peer from step 16 stays the two-friend default and is
+unchanged; the transport wrapper (`src/net/transport.js`, still the only file that names a connection library)
+gains a server role, and the join link gains the server's address. The server-side transport is a WebSocket
+listener on a forwarded port, reached as `host:port` — Minecraft-style port forwarding, the owner's answer
+(2026-11-22); the one open dependency question is the WebSocket-server library 17b needs (Node has no
+built-in WebSocket server). The full plan, the owner's answers and
+its four slices (**17a** headless server, **17b** server transport, **17c** snapshots and controls, **17d**
+scale, public address, auth and server admin) are **step 17 of [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)**.
 
 **Guard rails against accidents, not cheating** (vision pillar 5): a crash, a double join, an old
 backup, a link pasted into the wrong chat. Nothing tries to stop a determined player.

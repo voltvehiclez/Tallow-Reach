@@ -57,13 +57,13 @@ test("settings: a name is remembered, trimmed and capped, and never in a save", 
     assert.equal(nameIsSet(""), false);
     // The switches are separate from the name and keep their values.
     writeSettings({ enabled: true, autoJoin: false });
-    assert.deepEqual(readSettings(), { name: "x".repeat(NET.nameMax), enabled: true, autoJoin: false, relay: null });
+    assert.deepEqual(readSettings(), { name: "x".repeat(NET.nameMax), enabled: true, autoJoin: false, relay: null, lastJoin: "" });
   });
   // No storage at all (private window): a working session, just no memory.
   const previous = globalThis.localStorage;
   delete globalThis.localStorage;
   try {
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null });
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" });
     assert.doesNotThrow(() => writeSettings({ name: "Ada" }));
   } finally {
     globalThis.localStorage = previous;
@@ -73,9 +73,9 @@ test("settings: a name is remembered, trimmed and capped, and never in a save", 
 test("settings: nonsense in storage is ignored rather than fatal", () => {
   withStorage(mem => {
     mem.set("tr_mp", "{not json");
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null });
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" });
     mem.set("tr_mp", JSON.stringify({ name: 42, enabled: "yes" }));
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null }, "wrong types fall back");
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" }, "wrong types fall back");
     // A relay server is remembered with the other settings, and nonsense is dropped.
     mem.set("tr_mp", JSON.stringify({ name: "Ada", relay: { urls: "turn:a.example:443", username: "u", credential: "c" } }));
     assert.deepEqual(readSettings().relay, { urls: "turn:a.example:443", username: "u", credential: "c" });

@@ -20,6 +20,8 @@ per chat.
 | **D. Story-ready** | 13 to 15 | A mission framework, wormhole instances and the campaign scaffolding. |
 
 Multiplayer itself is **step 16**, planned with the owner on 2026-11-21 (the plan and its six slices are at the bottom).
+**Step 17 — dedicated servers — was added at the owner's request on 2026-11-22** (the plan is at the bottom); it
+follows step 16 in the build order.
 
 ---
 
@@ -100,151 +102,12 @@ zip and never have two chats editing the project at once.
 Steps 1 to 11 (Milestones A, B and the first half of C) are finished. Their goal, questions, tasks and results are in
 [archive/REFACTOR_PLAN_STEPS_1-11.md](archive/REFACTOR_PLAN_STEPS_1-11.md); their status is in [ROADMAP.md](ROADMAP.md).
 
-# Milestone C (continued): World-ready
+# Completed steps (12 to 15)
 
-## Step 12: Encounters, place templates and place memory
-**Goal.** The open world's content is data you can pile onto.
-**Do.** `data/encounters.js` and `data/place-templates.js`. Ship at least **three templates** and
-**four encounter kinds** as proof (for example a hostile patrol, a friendly trader using `SHOPS`, a
-derelict with loot, a resource cache). Templates pull encounters by tier. A generic spawner replaces
-the raider special cases in `sim/ai.js` (hunt-contract behaviour stays the same). Places remember
-what you did (mined-out rocks, cleared encounters) with slow simulation-time respawn timers and event overrides (owner decision recorded in VISION.md). Every dockable station also resolves a stable `${placeId}:${featureId}` storage key; trader stations reuse Meridian's `SHOPS` definitions but never share stock.
-**Done when.** Adding an encounter is a data entry; the content test checks every reference; flying
-into a few generated pockets shows different things and station-local inventory survives switching and reload.
-**Save.** **Version 18**, migration from 17 (the destination follow-up used v17); station-local stores are an optional v18 extension so Step 13 remains v19.
-**Status:** see the step table in [ROADMAP.md](ROADMAP.md).
-
-> **Milestone C reached.** The open world can scale to 100+ systems of pocket content.
-
----
-
-# Milestone D: Story-ready
-
-## Step 13: Mission framework (contracts and long story missions, one system)
-**Step 13d hardening (done before step 14):** `docs/MISSION_RULES.md`, the mission linter, templates and
-the invariant tests. Step 15 (the campaign) must be written from the templates and pass the linter.
-**Goal.** One system runs both short open-world contracts and long, scripted, dialogue-heavy campaign
-missions. It must be designed for the long kind from the start; contracts are just the simplest use.
-**Ask the owner first:** "Will the story have choices that change later missions (for example who you
-side with)?" If unsure, answer "maybe": the framework will support remembered flags and simple
-choices in dialogue, and you can ignore them.
-**Do.** Build it in three slices, each playable.
-- **13a, runner and objectives.** `data/missions/` and `sim/missions.js`. A mission is data:
-  `{ id, title, kind: "contract" | "story", requires, steps, rewards, fails }`. A runner advances the
-  current step by listening to events. Objective steps to start: kill (enemy def or faction, count),
-  mine, collect, reach a sector, deliver, survive. **Rebuild today's three contract types on it with
-  identical wording, rewards and behaviour.** Several missions can be active at once.
-- **13b, the steps a story needs.** Add step kinds that contracts never use: **dialogue** (speaker, lines,
-  optional choices), **script** actions (spawn a wave or a ship in a sector feature, set a sector
-  state, give or take an item, play a sound, warp the player), **wait** (for a trigger, a timer or the
-  player entering an area), **flags** (set, test, and branch on remembered facts), and **parallel**
-  (do these objectives in any order). A mission can fail (ship lost, left the sector, timer ran out)
-  and says what happens when it does.
-- **13c, the screens.** A **dialogue panel** (portrait slot, speaker, text, choices; it pauses
-  nothing in the world unless the mission says so) and a **mission log** tab (active missions, current
-  step, what to do next).
-**Data rules.** All story text lives in the mission data, not in code. A mission file never imports
-engine code; it only names things by id (enemies, items, sectors, flags).
-**Done when.**
-- Contracts play exactly as before.
-- A test mission of about ten mixed steps (dialogue with a choice, a spawned wave, a kill objective,
-  a flag check, a reach-sector objective, a reward) is completed in a headless test by firing events,
-  and the choice changes which step comes next.
-- The content test checks every mission: each id it names exists, every step is reachable, and the
-  mission can be completed.
-- A mission survives save and load in the middle of a step; abandoning or dying mid-mission does what
-  the mission's `fails` says.
-**Save.** **Version 19**: `mission` becomes `missions` (progress per active mission: current step,
-counters) plus `flags`, with migration.
-**Status:** see the step table in [ROADMAP.md](ROADMAP.md). Test coverage: `tests/step13b-missions.test.mjs` (13b), `tests/step13c-ui.test.mjs` (13c), `tests/mission-lint.test.mjs` and `tests/mission-invariants.test.mjs` (13d).
-
-The eight architecture principles applied to missions (enforcement, and the limits of what validation can prove) are in
-[architecture/mission-principles.md](architecture/mission-principles.md).
-
-## Step 14: Instanced places and wormholes (rifts)
-**Goal.** Temporary, generated, harder places reached through wormholes. One the player spawns is a **rift**.
-**Ask the owner first:** open question 5 — **answered 2026-11-14** and recorded in [VISION.md](VISION.md)
-("Step 14: rifts, instances and how you may leave one"). Read that decision before building; it overrides the
-"instances are not saved" line this step used to carry.
-**Slices** (owner-chosen 2026-11-14; build one per chat, each playable and testable on its own):
-- **14a — the Basic rift.** `data/instances.js` (templates, spawn clearance, lifetime, difficulty scalar, exit
-  requirements, expiry outcome), `sim/instances.js` (`createInstance(template, seed, tier)`, enter/leave, expiry),
-  `sim/consumables.js` (`useItem` plus a `USE_ACTIONS` registry), the `rift_basic` item and its 10 cr shop row, the
-  rift entity and its view, the **R** binding, the locked loot cache and at least two instance templates.
-  Session-only in this slice: an instance is not saved yet, so quitting inside returns the pilot to the pocket the
-  rift was opened from. **Save stays v19.** (Superseded by 14b, and by the owner's playtest of 14a on 2026-11-14:
-  the door and the way out are one shimmering anomaly, both F-lockable and labelled in the HUD; the prize is a
-  canister opened with **R**; a run has a shattered sky of its own and no planet in it.)
-- **14b — a run survives a quit.** Save the run the local pilot is inside and rebuild it on load. What is saved is
-  only what a rebuild cannot work out: template, seed, tier, remaining lifetime, whether the warning was shown,
-  whether the objective is met, the canister's remaining stock and open flag, the entry spot and the pilot's own
-  spot (`world.instances` plus `world.resume`). Everything else — rocks, wave, prize roll, scenery and sky — comes
-  out of the template and the seed, so a saved run is **rebuilt, never deserialised**. `world.place` may then be an
-  instance id, so the save validator, the galaxy loader and the resume path must learn about instances. The wave
-  comes back at full strength (a save carries the run, not each guardian's damage) and an emptied canister stays
-  empty, so reloading can never farm a prize twice. **Save version 20**, migration from 19, old-save test.
-- **14c — simple wormholes.** A wormhole pocket that **spawns by itself in normal space**: it appears on the map, is
-  warpable like any pocket while it lasts, and holds the wormhole object the pilot enters with **R**. Its 20 minutes
-  run from the moment the pocket **spawns**, not from entry. Running out fires the `collapse` outcome: the wormhole
-  object fades, the pocket stays on the map until the pilot warps off and then despawns. The way out inside is a
-  **Stable wormhole** with no clock of its own, so nobody is ever forced out or killed by it, and leaving after the
-  collapse returns the pilot to that now-empty pocket. The pocket appears as **a new pocket inside an existing system**
-  (owner, 2026-11-14), warpable like its siblings; spawned wormhole pockets **are saved with their remaining time**, so
-  14c takes the save version after the one 14b uses; and a wormhole **may be re-entered until its timer ends**, which
-  makes its objective and locked cache strictly one-time per wormhole. Objectives beyond a fight (mining a special ore,
-  say) are new `OBJECTIVE_KINDS` entries, and the spawn rule (which system, how often, how many alive at once) is data.
-- **14d — wormhole systems (uncharted space).** Entered exactly like a simple wormhole, but the far side is a
-  **system** with a stable S-number name (S0001, S0002, …), used for its pockets and core like regular system names. It is not on the existing starmap: pockets the pilot uses like any other system's, **persistent and
-  saved** like one. Its own wormhole pockets are the dynamic part (the same 20-minute timer), and if one expires while
-  the pilot is inside, a new one spawns so they can still get out. Its replacement connects to a newly spawned wormhole at a random location in regular space, not a fixed return to the original entrance. The starmap opens on the wormhole system's pocket
-  map, with a button to view the normal-space map and the same button to come back.
-**Do.** Entering and leaving are rules in data (`exit.requires`), never code, so the owner can add criteria later. A
-difficulty scalar well above the map's. A lifetime, and a data-declared outcome for running out: a **rift kills** the
-pilot (and dying inside despawns the rift instantly, death rules otherwise unchanged), while a **natural wormhole
-collapses** — only the way in goes, its Stable wormhole way out keeps working, and the pilot leaves whenever they like
-with everything they are carrying. Both outcomes live in one registry, so a future kind can declare another. The reward
-that matters is a physical **canister** that hangs in the run from the start, stays sealed until the objective is
-complete and is then opened by the pilot with **R**, which puts their hold and the canister side by side so clicks
-move cargo between them, one unit or a whole stack, in either direction — so neither expiry, nor quitting, nor death
-can hand it over, and a full hold loses nothing. That is what keeps
-the saved run from being an exploit.
-**Done when.** You can buy and spawn a rift, enter the generated instance, fight, loot, and leave with the loot only
-when the instance's exit rules allow it; the same seed gives the same instance (tested); a quit inside restores the run
-exactly (14b); a wormhole pocket spawns itself in normal space, expires by collapsing its entry, and can always be left
-through the Stable wormhole (14c); a wormhole system is reachable, persistent, has its own dynamic pockets and a map
-button back to normal space (14d).
-**Save.** **Version 20** in slice 14b (a run in progress is saved); v19 and older migrate. 14c takes **v21** and
-step 15 becomes **v22** (owner, 2026-11-14).
-
-## Step 15: Campaign scaffolding
-**Goal.** The campaign can be *written*, one data file per mission.
-**Question 8 — answered by the owner (2026-11-19):** the story gives the pilot a **fixed ship per
-campaign mission**. The first mission is a tutorial: the cadet graduates into a starter **Wasp**,
-guided by **Captain Dane Korr**, a rugged veteran who teaches the basics; a solo short course and
-practice drones, then a pirate ambush, and defeating the ambush completes M01.
-**Owner decisions (2026-11-19, binding):** campaign and open world are **completely separate
-modes** — own saves, own progress, **shared pilot** (fleet, credits, cargo, loadout), and no
-physical connection between the worlds (play either order whenever). The campaign galaxy is a
-fixed-seed, ~6–8 system world (built: **7 systems, seed `240515`**). Campaign completion
-transition/reward is **"nothing yet"** — no free-agent flip, no unlock, no completion reward;
-replay of completed missions stays framework-only, nothing wired.
-**Do (as built).** `data/campaign/` with `galaxy.js` (the fixed seed and home pocket), `m01.js`
-(`campaign.m01-first-sortie`, worked example) and `index.js` (the order); `campaign` versus
-`open` mode in the profile with a dual-mode `{v, mode, open, campaign}` envelope; shared-pilot
-sync between the halves; a Campaign button and offer flow in the menu/mission log; fixed-ship
-grant and selection on accepting a campaign story mission; a campaign completion hook
-(`campaign-mission-completed`) before the reward; scripted sectors use the step 10/13 Mission
-framework unchanged; a simple brief/dialogue panel via the existing mission log UI. Not done
-(deliberately): `m02.js` stub (no agreed content yet), a separate mission-select screen,
-finish-all-missions transition, replay rewards.
-**Done when.** A test can complete the tutorial and check the agreed v26 transition/replay
-behaviour — `tests/campaign.test.mjs` plays M01 from acceptance to hand-in, checks the shared
-pilot, the fixed Wasp grant, campaign progress on completion and save round-trips.
-**Save.** **Version 26**, migration from older saves on read (14b took v20, 14c took v21, 14d
-took v25; the envelope itself is the v26 change). Adding a mission is one new file and one line in
-`index.js`.
-
-> **Milestone D reached.** Write the campaign.
+Steps 12 to 15 — the rest of Milestone C and all of Milestone D — are finished and ticked in
+[ROADMAP.md](ROADMAP.md). Their goal, questions, tasks and results are in
+[archive/REFACTOR_PLAN_STEPS_12-15.md](archive/REFACTOR_PLAN_STEPS_12-15.md); this file keeps only the
+steps still to build (16 and 17).
 
 ---
 
@@ -397,6 +260,110 @@ exists for exactly that, and the pause card says which path is in use.
   `render/` and `ui/` learn about remote pilots from events and from `state.players`, which already
   holds every pilot.
 - A hosted world never pauses (pause is single player only), and the campaign is never hosted.
+
+---
+
+# Step 17: Dedicated servers
+
+**Goal.** A world can be hosted by a **dedicated server** — a machine with no screen that runs the simulation
+and streams it to everyone — so one port-forwarded server can host a single world for a **target of 50
+players; the measured number goes in `src/data/multiplayer.js`**. Today a hosted world needs the host's
+browser to stay open; step 17 makes the world survive without a human host and scale past two players.
+
+**Prerequisites.** Step 16 must be fully done first, including the rules for other players that
+[TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) still lists as step-16 work: **respawn and death for
+non-local players** and **player presentation and input**. A server is a host with no screen, so it inherits
+every rule a browser host already has, and none of them can be missing when the server arrives.
+
+**What it is, in plain language.** Step 16 made one browser the authority (host-run co-op, peer to peer, one
+link to join). A dedicated server is the same authority with no screen: it runs the **pure** sim (principle 2 —
+the sim already runs in unit tests with no browser), holds the world, and every client sends its controls to it
+and draws what it sends back. Two shapes must keep working side by side:
+
+- **Peer to peer (step 16, unchanged):** two friends, one host browser. The default for a small group; nothing
+  about it changes.
+- **Server-run (step 17):** the server is the host. Everyone talks to the server and the server talks to
+  everyone — a **star**, not a mesh — which is what makes a large group possible. The client is thin: controls
+  in, snapshots out, exactly the shape step 16's plan already describes.
+
+**The owner's answers (2026-11-22) — the questions are closed:**
+
+1. **Where the server runs, and how browsers reach it: Minecraft-style port forwarding.** The server is a
+   Node process listening on a TCP port; **anyone can run it** — on their own machine, on a rented server, or
+   on a big host — and players reach it at the host's forwarded address (`host:port`), exactly the way
+   Minecraft works. No domain name and no certificate are needed to start with: the game page opens a plain
+   `ws://` connection to the forwarded port. **The dependency question stays open for approval**: Node has no
+   built-in WebSocket server, so 17b needs either a small WebSocket-server library or a hand-written server —
+   that is the one server-side dependency to approve under the standing rules. **17b is no longer blocked**:
+   the route is picked, and the transport is a WebSocket listener on a forwarded port.
+2. **Who joins: anyone — with an optional, modular auth.** A dedicated server may require auth or stay open.
+   The auth is **modular** so it can be swapped later: the first implementation is **Supabase** (the owner's
+   free plan covers 50,000 monthly users), behind a small auth interface the server uses, so a bigger or
+   premium provider can replace it without touching the game. The step-16 suitcase model is unchanged: a
+   player's stuff still lives in their own save — auth only answers *who is connecting*, and it is optional
+   per server.
+3. **Who may host: anyone.** Anyone who runs the build can start a server. The guard rails (17d admin) stay
+   against accidents, not cheating (vision pillar 5).
+
+**Do.**
+
+- **The server is a build of the same project with no screen:** `sim/` + `state/` + `net/` only — no `ui/`, no
+  `render/`, no `core/input.js` — running the fixed-step loop headless (`sim/step.js` already runs without a
+  browser). The world it runs is an ordinary open-world save, and the suitcase rules of step 16 apply to every
+  client exactly as they do to a guest today.
+- **The transport wrapper gains a server role** in `src/net/transport.js` — still the only file that names a
+  connection library — with the same `createChannel` vocabulary (`join/send/broadcast/leave/peers/state`), the
+  server accepting connections instead of joining a broker room. `net/session.js` runs the same session against
+  either role. **Nothing in `sim/` or `ui/` learns which shape it is talking to**: they speak the event bus and
+  `state.players` either way.
+- **Capacity is measured, not promised.** The target is 50 players; the number that ships is the one a load
+  test measures, and the measured capacity numbers (max players, snapshot rate, the `lastSeen` window) live in
+  `src/data/multiplayer.js` — the same tuning home step 16 uses. The real limits are the server's **upload
+  bandwidth and CPU**, not a constant in code: as a rough illustration, 50 players × 20 updates per second ×
+  a few KB each is tens of megabits per second of upload, which a home connection may not have and a VPS plan
+  may cap.
+- **The join link names a place.** `?join=<worldId>#<token>` gains the server's address: a dedicated server has
+  no broker to introduce browsers, so the address itself is the meeting place. The owner's one-link shape stays
+  intact.
+- **Chat, the player list, presence and the handshake are unchanged** — they already run over the same session
+  vocabulary.
+
+**Slices** (one per chat, each testable on its own; build in this order):
+
+- **17a — the headless server.** A Node entry that boots the sim on the fixed step, loads a world save, runs it
+  with no screen, and answers a health question. Proves principle 2 end to end: the same world state a browser
+  runs, run by a machine. Ships with a **one-command start script** (and a stop), so the owner can start and
+  stop the server without editing code.
+- **17b — the server's transport.** The server side of `transport.js`/`session.js`: clients connect,
+  `custody.handshake` runs unchanged, the server keeps the guest list and chat. One client on a LAN first.
+  **The route is the owner's answer above**: a WebSocket listener on a forwarded port, reached as
+  `host:port` (Minecraft-style) — no domain or certificate to start with.
+- **17c — snapshots and controls.** The server snapshots the world to every client on the step-16 timings and
+  takes each client's controls as its input (principle 7: input is a command). Slice 4's sync rules are reused;
+  a guest already draws what the host sends. **Each client receives only the entities near it (interest
+  filtering)** — sending the whole world to 50 clients is what would kill the server, not the snapshot rate.
+  **Immediately after 17c, the scripted headless load test runs** (a scripted batch of clients against the
+  headless server), and **the capacity numbers are decided from it**: that measured number is what goes into
+  `src/data/multiplayer.js`.
+- **17d — scale, the public address, auth and server admin.** Port forwarding and the public address (the
+  owner's route: Minecraft-style `host:port`), reconnects, the stall/relay diagnostics adapted to the
+  server, the target re-measured against the real address, **the optional auth** (the modular adapter,
+  Supabase first), and **basic server admin**: kick, ban, scheduled autosave, backups and a clean shutdown.
+
+**Done when.** A server started on the owner's machine with the **one-command script**, reached over the
+owner's chosen route, holds the **measured** number of simulated clients in the load test built right after
+17c; a real browser joins that server with one link and flies next to a second browser; the peer-to-peer path
+still works exactly as it does today; the owner can start and stop the server with the script, the short guide
+in `testing/` and the server README, **without editing code**; `npm test` is green.
+
+**Save.** No change unless a field is needed; if one is, bump `SAVE_VERSION` with a migration and an old-save
+test. The world a server runs is a world save — the same shape a host browser runs today.
+
+**Docs to update when this is built:** [VISION.md](VISION.md) (move "dedicated servers, accounts" out of
+"Not planned" — the owner's answers are recorded in this section), [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md)
+(rewrite the multiplayer model for the server shape), and the **dependency rule** in
+[HANDOFF.md](HANDOFF.md) and this file (the scope of the one networking library, and whatever the owner
+approves for the server's transport).
 
 ---
 

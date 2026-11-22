@@ -56,6 +56,7 @@ export function readSettings() {
       enabled: value?.enabled === true,
       autoJoin: value?.autoJoin !== false,
       relay: cleanRelay(value?.relay),
+      lastJoin: typeof value?.lastJoin === "string" ? value.lastJoin : "",
     };
   } catch (e) {
     // No storage, or something wrote nonsense there: multiplayer still works for
@@ -72,6 +73,7 @@ export function writeSettings(patch = {}) {
     enabled: next.enabled === true,
     autoJoin: next.autoJoin !== false,
     relay: cleanRelay(next.relay),
+    lastJoin: typeof next.lastJoin === "string" ? next.lastJoin : "",
   };
   try {
     globalThis.localStorage?.setItem(KEY, JSON.stringify(record));

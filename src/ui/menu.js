@@ -12,7 +12,10 @@ import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
 import { leaveVisit } from "../net/session.js";
 import { readSettings, writeSettings } from "../net/settings.js";
-if (typeof document !== "undefined") {
+// The same guard `installDragListeners` uses below: a headless import (a test) has a
+// `document` stand-in without `addEventListener`, and an import-time throw there takes
+// every test that loads this module with it.
+if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
   document.addEventListener("input", e => {
     if (e.target?.id === "menu-username") writeSettings({ ...readSettings(), name: e.target.value });
   });
@@ -326,9 +329,10 @@ const ACTIONS = {
   // existing free-galaxy action; "Campaign" installs its independent galaxy and progress.
   // **Opening your own world leaves a friend's** (owner, playtest 7): a guest who walks out
   // to the menu and back is a pilot at home, not a visitor.
+  // No username gate here: a name is only needed to present yourself to other players
+  // (the multiplayer action below asks for one). Open World must start with no settings
+  // stored at all — the step-10 fixes and the 11B recovery notices depend on it.
   intro() {
-    const who = (readSettings().name || "").trim();
-    if (who.length < 3) { showNotice("Enter a username (at least 3 characters) first."); return; }
     comeHome();
     enterGameMode("open");
   },

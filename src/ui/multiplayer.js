@@ -44,6 +44,15 @@
 // The screen is opened from the title menu ("Join Multiplayer World") and from the pause
 // card ("Open Multiplayer"). Those are the only two front doors, and both call
 // `openMultiplayer()`.
+//
+// Trimmed 2026-11-22 (owner's request): the screen is a simple box — a "Playing as" row, the
+// one block the door offers, and a "More details" region (world id, offer/answer codes, relay
+// server, connection report) that opens above the Close button. The players list and the
+// "waiting for your friend" row left the card (the chat column says who is here), the hosting
+// hint and the "Your world is open" popup were dropped, the teal status row is gone, and the
+// message popup that says "Send the offer code…" clears itself. The relay boxes open
+// pre-filled with the built-in ExpressTURN. The on/off switch is drawn like the pause card's
+// sound switch (a knob), via the shared `.sw` styles.
 
 import { state } from "../state/state.js";
 import { emit, on } from "../util/events.js";
@@ -54,7 +63,7 @@ import { clearPendingJoin, pendingJoin } from "../net/boot.js";
 import { looksLikeCode } from "../net/paste.js";
 import { makeJoinLink } from "../net/join-link.js";
 import { showNotice } from "./notice.js";
-import { relayFromFields, packRelay, builtinRelayName, builtinRelays } from "../net/turn.js";
+import { relayFromFields, packRelay, builtinRelayName, builtinRelays, builtinRelayFields } from "../net/turn.js";
 
 /* ------------------------------------------------------------------------- */
 /* What the screen is showing                                                 */
@@ -129,11 +138,13 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     // What the offer/answer code can do: `relay > 0` means it works across networks.
     codePaths: snap.codePaths || null,
     // The player's own relay server (settings), and whatever is in the boxes right now.
+    // The boxes open holding the built-in relay (ExpressTURN), so a player never has to find
+    // and retype three values the game already ships with (owner's request, 2026-11-22).
     relay: settings.relay || null,
     relayFields: {
-      urls: v.fields.relayUrls ?? settings.relay?.urls ?? "",
-      username: v.fields.relayUser ?? settings.relay?.username ?? "",
-      credential: v.fields.relayPass ?? settings.relay?.credential ?? "",
+      urls: v.fields.relayUrls ?? settings.relay?.urls ?? relayDefaults.urls,
+      username: v.fields.relayUser ?? settings.relay?.username ?? relayDefaults.username,
+      credential: v.fields.relayPass ?? settings.relay?.credential ?? relayDefaults.credential,
     },
     // The "relay mode" flag (the transport's own), kept apart from `relay` above: that one is
     // the player's saved server, and the two used to share a name — so a saved server read as
@@ -158,10 +169,17 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
   };
 }
 
+/** The built-in relay as the three boxes' starting values (ExpressTURN — see `turn.js`). */
+const relayDefaults = builtinRelayFields();
+
 /** The screen's own state: what was said, what is being pasted, the pending code. */
 const panelView = {
   message: "",
   messageKind: "hint",  // "hint" | "error" | "ok"
+  // Whether the "More details" region is open. The offer codes, the relay server and the
+  // connection details live behind it: the screen is a simple box until a player wants them
+  // (owner's request, 2026-11-22).
+  detailsOpen: false,
   busy: false,
   offer: "",            // the host's offer code, kept here so a redraw cannot lose it
   autoOffer: false,     // the stalled session already offered the code path, once
@@ -188,7 +206,9 @@ let chatFadeTimer = 0;
 // and the box untypable — the guest's half of the 2026-11-21 report.
 let chatOpen = false;
 let chatPinned = false;
-let chatExpanded = false;
+// Auto-dismiss timer for informational message popups (the "Send the offer code…" one):
+// a confirmation the player has read should clear itself, an error must not.
+let msgTimer = 0;
 let drawnHtml = "";     // what is currently in the card, so a no-op redraw does nothing
 
 /** Is the chat box open (and therefore catching keystrokes)? */
@@ -283,12 +303,11 @@ const makeLinkFrom = found =>
 /* The screen's markup (pure)                                                 */
 /* ------------------------------------------------------------------------- */
 
-/** The pause card's row: the button that opens the screen, and what it is doing now. */
+/** The pause card's row: the one button that opens the screen. */
 export function multiplayerCardHtml() {
   return (
     `<section id="mp-card">` +
     `<button type="button" id="pz-mp">Open Multiplayer</button>` +
-    `<p class="mp-hint" id="pz-mp-state"></p>` +
     `</section>`
   );
 }
@@ -303,16 +322,6 @@ export function multiplayerCardHtml() {
  */
 export const multiplayerAvailable = mode => mode !== "campaign";
 
-/** One line for the pause card, so the state is readable without opening the screen. */
-export function multiplayerSummary() {
-  const snap = api.snapshot();
-  if (!snap.on) return "Off. Host your world or join a friend's.";
-  if (snap.role === "host") {
-    return snap.state === "connected" ? "Hosting — a pilot is connected." : "Hosting — waiting for your friend.";
-  }
-  return snap.state === "connected" ? "Connected to a friend's world." : snap.line || "Connecting…";
-}
-
 /**
  * The whole card as HTML. Pure: same model in, same string out, no state touched. Every
  * control is a `data-mp` action, so the one click listener on the screen never goes stale
@@ -322,25 +331,47 @@ export function screenHtml(model) {
   // One door, one block (owner's rule, playtest 2): the main menu is where you join, the
   // pause card is where you host. A guest who still has an answer code to send sees it on
   // the pause card too, because that is the only screen they can reach mid-flight.
+  //
+  // The offer codes, the relay server and the connection report sit behind one "More
+  // details" region on every surface (owner's request, 2026-11-22): the screen is a simple
+  // box — title, who you are, the one thing to do — and everything else opens on demand.
   const body = model.surface === "join"
-    // A guest needs the same diagnosis as a host: the room count, the code's paths, the relay
-    // servers, and the relay fields of its own. The join surface used to have none of it, so a
-    // guest could only ever say "I am alone" (owner, playtest 11).
-    ? joinHtml(model) + diagHtml(model)
+    ? joinHtml(model) + detailsRow() + detailsHtml(model)
     : model.surface === "host"
       ? hostHtml(model) +
         (model.stalled && model.role === "guest" && !model.hosting ? joinHtml(model) : "") +
         (model.visiting || model.answer ? answerAndLeaveHtml(model) : "")
-      : hostHtml(model) + joinHtml(model);
+      : hostHtml(model) + joinHtml(model) + detailsRow() + detailsHtml(model);
   return (
     `<h1 id="mp-title">Multiplayer</h1>` +
-    `<p class="mp-state" id="mp-status">${escapeHtml(model.status)}</p>` +
+    // The teal status row ("Multiplayer is off." / "Hosting. Waiting for your friend to
+    // join…") is gone: the switch, the link box and the chat column say the same thing, and
+    // the row repeated it on every door (owner's request, 2026-11-22).
     messageHtml(model) +
     nameHtml(model) +
     body +
-    listHtml(model) +
-    diagHtml(model) +
     `<div class="mp-row"><button type="button" class="mp-close" data-mp="close">Close</button></div>`
+  );
+}
+
+/** The one button that opens the details region. */
+function detailsRow() {
+  return `<div class="mp-row"><button type="button" data-mp="details">More details</button></div>`;
+}
+
+/**
+ * Everything a player only wants sometimes: the world id, the offer/answer codes, the relay
+ * server and the connection report. Hidden behind "More details" — the screen below it is
+ * the simple box, and the extra UI opens above the Close button when it is pressed. The relay
+ * block is rendered here, not inside `diagHtml`: it is wanted even when there is no session
+ * to report on, and a block should be drawn by exactly one place.
+ */
+function detailsHtml(model) {
+  return (
+    `<section class="mp-block" id="mp-details"${panelView.detailsOpen ? "" : " hidden"}>` +
+    `<div class="mp-row"><button type="button" data-mp="copy-world">Copy world id</button></div>` +
+    codesHtml(model) + relayServerHtml(model) + diagHtml(model) +
+    `</section>`
   );
 }
 
@@ -357,9 +388,10 @@ function messageHtml(model) {
 }
 
 function nameHtml(model) {
+  // One row: who is playing. The name is the pilot's own; "Playing as X" says it (owner's
+  // request, 2026-11-22 — the separate "Your name" row said it twice).
   return (
     `<section class="mp-block">` +
-    `<h2>Your name</h2>` +
     `<p class="mp-hint">Playing as <b>${escapeHtml(model.nameValue || "Pilot")}</b>.</p>` +
     `</section>`
   );
@@ -369,20 +401,29 @@ function hostHtml(model) {
   const switchHtml =
     `<button type="button" class="sw mp-switch" data-mp="host" role="switch" ` +
     `aria-checked="${model.switchOn ? "true" : "false"}"${model.canSwitch || model.hosting ? "" : " disabled"}>` +
-    `<i></i><span>${model.switchOn ? "Open Multiplayer: On" : "Open Multiplayer: Off"}</span></button>`;
+    `<i></i><span>${model.switchOn ? "Multiplayer: On" : "Multiplayer: Off"}</span></button>`;
+  // The hosting hint ("send the link below…") is gone: the link row says "send this to your
+  // friend" and the message popup says it too, so a third copy of the same sentence was noise
+  // (owner's request, 2026-11-22).
   const hint = model.visiting
     ? "You are in a friend's world. Leave it first to host your own."
     : !model.nameSet
       ? "Set a username above, then turn this on."
-      : model.hosting
-        ? "Send the link below to your friend. They paste it under “Join a friend's world”."
-        : "Turns this world into a room and makes a link to send to a friend.";
+      : !model.hosting
+        ? "Turns this world into a room and makes a link to send to a friend."
+        : "";
+  // The details region belongs to this block only on the host surface; on the cold "both"
+  // model screenHtml appends one region after the join block instead, so it is never drawn
+  // twice.
+  const own = model.surface === "host";
   return (
     `<section class="mp-block">` +
     `<h2>Host your world</h2>` +
     switchHtml +
-    `<p class="mp-hint">${escapeHtml(hint)}</p>` +
-    (model.hosting ? linkHtml(model) + codesHtml(model) : "") +
+    (hint ? `<p class="mp-hint">${escapeHtml(hint)}</p>` : "") +
+    // Hosting: the copy buttons carry their own "More details". Not hosting: a plain button.
+    (model.hosting ? linkHtml(model) : own ? detailsRow() : "") +
+    (own ? detailsHtml(model) : "") +
     `</section>`
   );
 }
@@ -393,7 +434,7 @@ function linkHtml(model) {
     `<input class="mp-input" id="mp-link" readonly data-mp-select value="${escapeAttr(model.link)}"></label>` +
     `<div class="mp-row">` +
     `<button type="button" data-mp="copy-link">Copy link</button>` +
-    `<button type="button" data-mp="copy-world">Copy world id</button>` +
+    `<button type="button" data-mp="details">More details</button>` +
     `</div>`
   );
 }
@@ -480,19 +521,6 @@ function joinHtml(model) {
       ? "A link looks like <code>…?join=w-… # …</code>. A <code>TRJOIN:</code> code works in the same box."
       : "Set a username above to join."}</p>` +
     answer +
-    `</section>`
-  );
-}
-
-function listHtml(model) {
-  // Everybody connected, host included — the same rule as the chat column (`chatWhoRows`).
-  const rows = chatWhoRows({ name: model.name, hostName: model.hostName, guests: model.guests });
-  const docked = new Map(model.guests.map(g => [g.name, !!g.docked]));
-  return (
-    `<section class="mp-block"><h2>Players</h2>` +
-    `<ul class="mp-list">${rows
-      .map(name => `<li>${escapeHtml(name)}${docked.get(name) ? " <small>docked</small>" : ""}</li>`)
-      .join("")}</ul>` +
     `</section>`
   );
 }
@@ -590,7 +618,6 @@ function diagHtml(model) {
     (f.inRoom === 1 && !f.waiting
       ? `<p class="mp-hint">No other browser is in this room. Check that the other player turned Open Multiplayer on, and that both screens show the same World id.</p>`
       : "") +
-    relayServerHtml(model) +
     `<div class="mp-row">` +
     `<button type="button" data-mp="reconnect">Reconnect</button>` +
     `<button type="button" data-mp="copy-diag">Copy details</button>` +
@@ -737,6 +764,13 @@ export async function act(name, arg = "") {
       draw();
       return done;
     }
+    case "details":
+      // One region, one toggle: the offer codes, the relay server and the connection report
+      // open above the Close box and close again. A redraw rebuilds the region from
+      // `panelView.detailsOpen`, so the state lives in the model, not the DOM.
+      panelView.detailsOpen = !panelView.detailsOpen;
+      draw();
+      return true;
     case "close":
       closeMultiplayer();
       return true;
@@ -777,7 +811,10 @@ async function toggleHosting() {
     return false;
   }
   api.setEnabled(true);
-  setMessage("Your world is open. Copy the link and send it to your friend.", "ok");
+  // No popup: the link box says "send this to your friend" by itself, so the confirmation
+  // was a second copy of the same sentence (owner's request, 2026-11-22). The busy message
+  // `withBusy` left behind is cleared with it.
+  setMessage("", "hint");
   draw();
   return true;
 }
@@ -887,7 +924,7 @@ async function makeOffer() {
   // Kept in the model, so the redraw below cannot delete the code the player must send.
   panelView.offer = codes.offer;
   panelView.fields.code = "";
-  setMessage("Send the offer code to your friend. Paste their answer below and press Connect.", "ok");
+  setMessage("Send the offer code to your friend. Paste their answer below and press Connect.", "ok", 6);
   draw();
   return true;
 }
@@ -1108,11 +1145,7 @@ function queueRelaySave() {
 /** Put the current model on the screen. A no-op when nothing the player can see changed. */
 function draw() {
   if (!root) return;
-  if (!isMultiplayerScreenOpen()) {
-    // Keep the pause card's one-line summary honest while the screen is closed.
-    refreshMultiplayerCard();
-    return;
-  }
+  if (!isMultiplayerScreenOpen()) return;
   const model = screenModel();
   const html = screenHtml(model);
   const card = root.querySelector("#mp-card-inner");
@@ -1134,14 +1167,6 @@ function draw() {
       }
     }
   }
-  refreshMultiplayerCard();
-}
-
-/** The pause card's summary line (it exists only once the overlay is built). */
-export function refreshMultiplayerCard() {
-  if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
-  const line = document.getElementById("pz-mp-state");
-  if (line) line.textContent = multiplayerSummary();
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1158,6 +1183,13 @@ export function openMultiplayer({ focus = "", from = "" } = {}) {
   // model a test builds. Set before the DOM guard, so the rule holds with no screen built.
   panelView.surface = from === "menu" ? "join" : from === "pause" ? "host" : "both";
   panelView.autoOffer = false;
+  // The relay boxes open holding the relay the game brings (ExpressTURN) unless the player
+  // saved one of their own — seeded into the model, not only into the display, so Save and
+  // the automatic save see a complete three-value entry (owner's request, 2026-11-22).
+  const seed = readSettings().relay || relayDefaults;
+  panelView.fields.relayUrls ??= seed.urls;
+  panelView.fields.relayUser ??= seed.username;
+  panelView.fields.relayPass ??= seed.credential;
   if (!root) return false;
   // A link found at boot, waiting for a name: put it in the join box so the player only
   // has to type a name and press Join.
@@ -1181,6 +1213,7 @@ export function openMultiplayer({ focus = "", from = "" } = {}) {
 
 /** Hide the screen (and hand the keyboard back). */
 export function closeMultiplayer() {
+  if (msgTimer) { clearTimeout(msgTimer); msgTimer = 0; }
   if (!root) return false;
   root.hidden = true;
   state.ui.multiplayer = false;
@@ -1207,8 +1240,7 @@ function buildChat() {
     `<input id="mp-chat-input" maxlength="${NET.chatLineMax}" placeholder="Say something…  (Enter sends, Esc closes)" autocomplete="off">` +
     `</div>` +
     `<aside id="mp-chat-who" aria-label="Who is here"></aside>` +
-    `<button type="button" id="mp-chat-pin" title="Keep chat visible">Pin</button>` +
-    `<button type="button" id="mp-chat-expand" title="Show full player names">Expand</button>`;
+    `<button type="button" id="mp-chat-pin" title="Keep chat visible">Pin</button>`;
   document.body.appendChild(chatBox);
   chatInput = chatBox.querySelector("#mp-chat-input");
   chatList = chatBox.querySelector("#mp-chat-lines");
@@ -1220,13 +1252,6 @@ function buildChat() {
     chatPinned = !chatPinned;
     pinBtn.classList.toggle("is-pinned", chatPinned);
     drawChat();
-  });
-  const expandBtn = chatBox.querySelector("#mp-chat-expand");
-  expandBtn?.addEventListener("mousedown", e => e.preventDefault());
-  expandBtn?.addEventListener("click", () => {
-    chatExpanded = !chatExpanded;
-    expandBtn.classList.toggle("is-expanded", chatExpanded);
-    document.body.classList.toggle("mp-chat-expanded", chatExpanded);
   });
 
   chatInput.addEventListener("keydown", event => {
@@ -1338,7 +1363,9 @@ export function chatWhoRows(snap) {
 /** One small row per pilot. Pure, so a test can count them. */
 export function chatWhoHtml(snap) {
   const rows = chatWhoRows(snap);
-  // The column says what it is: these are the pilots connected right now.
+  // The column says what it is: these are the pilots connected right now. Long names
+  // ellipsize to `name…` (the CSS on `#mp-chat-who li`), so the column never pushes the
+  // lines box around (owner's request, 2026-11-22).
   return `<h2>Players</h2><ul>` +
     rows.map(name => `<li>${escapeHtml(name)}</li>`).join("") +
     `</ul>`;
@@ -1439,9 +1466,22 @@ export function chatAway() {
 /* Small helpers                                                              */
 /* ------------------------------------------------------------------------- */
 
-function setMessage(text, kind = "hint") {
+/**
+ * Say something in the message popup. `dismissAfter` (seconds) clears an informational
+ * confirmation by itself: the blue "Send the offer code…" popup is a sentence the player has
+ * read, not a status that must stay until it is replaced (owner's request, 2026-11-22).
+ * Errors never auto-dismiss — a refusal has to stay readable.
+ */
+function setMessage(text, kind = "hint", dismissAfter = 0) {
   panelView.message = String(text || "");
   panelView.messageKind = kind;
+  if (msgTimer) { clearTimeout(msgTimer); msgTimer = 0; }
+  if (dismissAfter > 0) {
+    msgTimer = setTimeout(() => {
+      msgTimer = 0;
+      if (panelView.message) { panelView.message = ""; draw(); }
+    }, dismissAfter * 1000);
+  }
 }
 
 /** Run an async connection call with the screen saying what it is doing. */
@@ -1483,11 +1523,13 @@ export const panelState = () => panelView;
 
 /** Test-only: put the screen back to a cold start between cases. */
 export function resetPanel() {
+  if (msgTimer) { clearTimeout(msgTimer); msgTimer = 0; }
   panelView.message = "";
   panelView.messageKind = "hint";
   panelView.busy = false;
   panelView.offer = "";
   panelView.answer = "";
+  panelView.detailsOpen = false;
   panelView.fields = { name: null, join: "", code: "" };
   panelView.surface = "both";
   panelView.history = [];

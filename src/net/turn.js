@@ -73,6 +73,22 @@ export function builtinRelayName() {
 }
 
 /**
+ * The built-in relay as the three boxes on the Multiplayer screen (address, username,
+ * credential).
+ *
+ * A relay the player never typed is still the relay the game brings, so the boxes open
+ * already holding it (owner's request, 2026-11-22): the address, username and credential a
+ * provider hands out are three values no player should have to find and retype, and the
+ * built-in one is the one the game already depends on. `relayFromFields` reads the boxes,
+ * so seeding them here is what makes Save and the automatic save see a complete entry.
+ */
+export function builtinRelayFields() {
+  const [first] = builtinRelays();
+  if (!first) return { urls: "", username: "", credential: "" };
+  return { urls: first.urls.join(", "), username: first.username, credential: first.credential };
+}
+
+/**
  * Every relay server this browser should try: the player's own first (it is the one they
  * chose, and the one that will keep working), then the built-in one as a fallback.
  */
