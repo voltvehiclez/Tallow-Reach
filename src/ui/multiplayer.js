@@ -188,6 +188,7 @@ let chatFadeTimer = 0;
 // and the box untypable — the guest's half of the 2026-11-21 report.
 let chatOpen = false;
 let chatPinned = false;
+let chatExpanded = false;
 let drawnHtml = "";     // what is currently in the card, so a no-op redraw does nothing
 
 /** Is the chat box open (and therefore catching keystrokes)? */
@@ -356,6 +357,14 @@ function messageHtml(model) {
 }
 
 function nameHtml(model) {
+  if (!state.ui.intro) {
+    return (
+      `<section class="mp-block">` +
+      `<h2>Your name</h2>` +
+      `<p class="mp-hint">Playing as <b>${escapeHtml(model.nameValue || "Pilot")}</b>.</p>` +
+      `</section>`
+    );
+  }
   return (
     `<section class="mp-block">` +
     `<h2>Your name</h2>` +
@@ -1211,7 +1220,8 @@ function buildChat() {
     `<input id="mp-chat-input" maxlength="${NET.chatLineMax}" placeholder="Say something…  (Enter sends, Esc closes)" autocomplete="off">` +
     `</div>` +
     `<aside id="mp-chat-who" aria-label="Who is here"></aside>` +
-    `<button type="button" id="mp-chat-pin" title="Keep chat visible">Pin</button>`;
+    `<button type="button" id="mp-chat-pin" title="Keep chat visible">Pin</button>` +
+    `<button type="button" id="mp-chat-expand" title="Show full player names">Expand</button>`;
   document.body.appendChild(chatBox);
   chatInput = chatBox.querySelector("#mp-chat-input");
   chatList = chatBox.querySelector("#mp-chat-lines");
@@ -1222,6 +1232,12 @@ function buildChat() {
     chatPinned = !chatPinned;
     pinBtn.classList.toggle("is-pinned", chatPinned);
     drawChat();
+  });
+  const expandBtn = chatBox.querySelector("#mp-chat-expand");
+  expandBtn?.addEventListener("click", () => {
+    chatExpanded = !chatExpanded;
+    expandBtn.classList.toggle("is-expanded", chatExpanded);
+    document.body.classList.toggle("mp-chat-expanded", chatExpanded);
   });
 
   chatInput.addEventListener("keydown", event => {

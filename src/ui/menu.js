@@ -11,6 +11,7 @@ import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
 import { leaveVisit } from "../net/session.js";
+import { readSettings, writeSettings } from "../net/settings.js";
 import { checkIn } from "../net/custody.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
@@ -321,6 +322,8 @@ const ACTIONS = {
   // **Opening your own world leaves a friend's** (owner, playtest 7): a guest who walks out
   // to the menu and back is a pilot at home, not a visitor.
   intro() {
+    const who = (readSettings().name || "").trim();
+    if (who.length < 3) { showNotice("Enter a username (at least 3 characters) first."); return; }
     comeHome();
     enterGameMode("open");
   },
@@ -328,6 +331,8 @@ const ACTIONS = {
   // hosts a world and takes a friend's link or code — a guest never enters their own
   // world first, which is what the first playtest asked for.
   multiplayer() {
+    const who = (readSettings().name || "").trim();
+    if (who.length < 3) { showNotice("Enter a username (at least 3 characters) first."); return; }
     openMultiplayer({ focus: "join", from: "menu" });
   },
   // The campaign opens on its own chapter screen, not straight into the world:
