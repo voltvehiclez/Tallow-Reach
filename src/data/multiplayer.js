@@ -165,9 +165,12 @@ export const RELAYS = {
  *   recentLines   how many lines the panel keeps on screen
  *   lineLifeSec   how long a line stays after it was said (0 = it never fades)
  *   typingRateSec heartbeat while somebody is typing, so "… is typing" can lapse
+ *   historyLines  how many lines the box can be scrolled back through, including the ones
+ *                 only this screen ever saw (a host alone can still read what it typed)
  */
 export const CHAT = {
   recentLines: 8,
   lineLifeSec: 45,
   typingRateSec: 4,
+  historyLines: 40,
 };

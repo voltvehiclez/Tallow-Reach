@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-18.*
+*Last checked: 2026-11-21.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -148,6 +148,41 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ---
 
+### L33. A control that only exists in the state it creates, and a switch drawn from a wish
+
+- **Seen (owner, step 16 slice 3):** "There is no option to paste a link", "no way to get a link to
+  copy", "it says *Make a fresh offer first*" — and a chat box that kept the typed line and said nothing.
+- **Cause:** the guest's paste box was drawn only for a guest session, which only that box could make,
+  so joining had no entrance; the host switch was drawn from the stored setting, so it read On while
+  `hostWorld` had refused; that refusal went into an element the state never rendered; and the offer
+  code was wiped by the redraw after making it. Every one is a reader and a writer that never met
+  (L19) inside one screen.
+- **Rule:** every control must work in the state it is drawn in, a control's words describe the live
+  object and not the wish (L32), a refusal goes to an element that is always on screen, a value the
+  player must copy lives in the model rather than the DOM, and a one-shot message is latched only
+  once it has actually left.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` (no name ⇒ no switch and no Join; a failed host
+  snaps Off with its sentence on screen; the offer survives a redraw; Connect exists only with an
+  offer; chat says why a line was not sent) and `tests/multiplayer-paste-join.test.mjs` (the hello
+  over the code wire arrives once and is admitted).
+
+### L34. A control that cannot take the cursor is a control that does not work
+
+- **Seen (owner, playtest 2 of slice 3):** "only the host can chat — the guest can view the messages
+  but can't open chat to type a word"; and "pausing when multiplayer is open still pauses the game,
+  both guest and host".
+- **Cause:** the chat box hid its own input unless that input already had the cursor, and a `[hidden]`
+  field cannot be given the cursor — so the field never came back and the keys went to the ship. The
+  same file also asked the DOM ("does the input have focus?") the question its own state should have
+  answered. And `state.multiplayer = !v && isOn()` set the "the world keeps running" flag to false at
+  the exact moment the pause card opened, which is the one moment it was there for.
+- **Rule:** whether a thing is open is the model's business, not the DOM's — a `hidden` element cannot
+  be focused, clicked or typed into, so unhide it *before* asking for the cursor; and a flag that means
+  "this is happening" must never be derived from the UI that is asking about it.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` (`chatVisibility`, the order inside `openChat`, and the
+  sim gate with `state.paused` and `state.multiplayer` both set) and `tests/multiplayer-session.test.mjs`
+  (the old `!v &&` is asserted gone).
+
 ## Template (copy for a new entry)
 
 ```
@@ -204,38 +239,6 @@ the absence of this week's instance of it.
   `showPlace`'s own starfield expression (writer and reader cannot drift apart, as in L19) and pins the master switch;
   "nothing is in the skybox folder or the url map without being in data/skyboxes.js" plus the per-id budget check make a
   second copy of a picture a visible 140 KB, and the report's file size is quoted in the CHANGELOG entry.
-
-### L23. Imported models need an explicit coordinate and size contract
-
-An owner-supplied fighter faced +X and used small exporter units; loading successfully did not make it
-a flight-ready model. Keep optional visual yaw and target length in hull data, rotate before measuring,
-then scale and centre the bounds in a wrapper. Do not change gameplay `sc` to fix asset units. Test
-forward direction, centred bounds, and size relative to the baseline hull before asking for a playtest.
-
-### L24. A cube map has two independent ways to be wrong: the seams and the faces' own frames
-
-Making six images agree at their edges and making each image land right way up are different problems, and passing the
-seam check tells you nothing about the second. The generator builds every layer as a function of the **direction** a
-pixel looks in (one sphere, sampled back per face), which makes the 24 edges agree by construction and even makes a
-useless seam metric read low — so `cube_seam_error` measures edge pixels in direction space (`face_dirs`, then sample
-the *neighbouring* face through a 24-entry `CUBE_NEIGHBOURS` table), and the three skies read 0.36–0.66 per 255.
-Separately, the six files follow the OpenGL cube convention (`FACE_AXES`), which the generator's own preview cannot
-verify, because the preview draws the net from the same rules that drew the pixels. `BoxGeometry` groups its faces in
-the same order but frames **+Y and -Y the other way up**, so two faces would have arrived upside down and no file, no
-preview and no seam number would have shown it. The fix is `src/render/cubemap.js` (`CUBE_FACES`, `CUBE_FACE_FLIP`,
-`orientFace`), and the test reads `FACE_AXES` out of the Python, rebuilds `BoxGeometry`'s UV frames with three.js,
-compares a 7×7 grid of texels per face, and asserts each flip **necessary** (unflipped is wrong) and none **redundant**
-(flipping a correct face breaks it). A tautological test that only re-reads the constant would pass forever while the
-sky hung upside down.
-
-- **Rule:** for anything with a coordinate convention (cube faces, cubemaps, UVs, handedness), take the convention from
-  the two files that own it — the producer's source and the consumer's source — and prove them against each other in a
-  test. Do not infer it from a screenshot, a preview sheet, or a dimension that looks plausible.
-- **Also:** a `CubeTexture` is not a drop-in for a `MeshBasicMaterial.map` in three r128; only `background`/`envMap`
-  consult `isCubeTexture`. Six ordinary textures on the six material groups is the same picture with nothing to go wrong.
-- **Enforced by:** `tests/skybox.test.mjs` — "the six faces are drawn the way the generator painted them" and "each flip
-  in the table is necessary and no flip is redundant". It caught the real bug (worst mismatch 1.25 on `py`/`ny`, 0.0000
-  on the other four).
 
 ### L25. A projectile's hit test must read the colliders the world already has, and sweep, not sample
 

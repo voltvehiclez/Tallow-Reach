@@ -77,8 +77,15 @@ function makeWire() {
   return { factory, made };
 }
 
-/** Two sessions, wired to each other, each with its own save (and its own view of it). */
-async function twoSessions({ hostName = "Ada", guestName = "Bo" } = {}) {
+/**
+ * Two sessions, wired to each other, each with its own save (and its own view of it).
+ *
+ * `connect` is normally true: the two browsers meet, which now makes the guest say hello
+ * on its own (see `sayHello` in `net/session.js`), exactly as it does in the game. The
+ * tests that inspect the *host's* answer to one specific hello turn it off, so the guest
+ * cannot send a good one first and colour the reading.
+ */
+async function twoSessions({ hostName = "Ada", guestName = "Bo", connect = true } = {}) {
   const wire = makeWire();
   session.setChannelFactory(wire.factory);
   const hostSave = makeSave();
@@ -96,8 +103,10 @@ async function twoSessions({ hostName = "Ada", guestName = "Bo" } = {}) {
   // Join the pair: everything either sends now arrives on the other side.
   hostChannel.deliver = (peerId, value) => guestChannel.reach(value, peerId);
   guestChannel.deliver = (peerId, value) => hostChannel.reach(value, peerId);
-  hostChannel.connect("guest-peer");
-  guestChannel.connect("host-peer");
+  if (connect) {
+    hostChannel.connect("guest-peer");
+    guestChannel.connect("host-peer");
+  }
 
   return { host, guest, hostChannel, guestChannel, hostSave, guestKit, wire };
 }
@@ -132,7 +141,7 @@ test("a first hello is checked for the build, the world and a name — and admit
 });
 
 test("a hello from a different build is refused with what to do about it", async () => {
-  const { host, hostChannel } = await twoSessions();
+  const { host, hostChannel } = await twoSessions({ connect: false });
   hostChannel.outbound.length = 0;
   hostChannel.reach(helloFrom(host, { v: SAVE_VERSION - 1 }));
 
@@ -144,7 +153,7 @@ test("a hello from a different build is refused with what to do about it", async
 });
 
 test("a hello for a different world is refused, and a nameless one too", async () => {
-  const { host, hostChannel } = await twoSessions();
+  const { host, hostChannel } = await twoSessions({ connect: false });
   hostChannel.outbound.length = 0;
   hostChannel.reach(helloFrom(host, { worldId: "w-2" }));
   assert.equal(hostChannel.outbound.find(m => m.value.t === "refuse")?.value.reason, "world");
@@ -251,7 +260,12 @@ test("the world does not pause while multiplayer is on", () => {
   const step = readFileSync(path.join(root, "src/sim/step.js"), "utf8");
   assert.match(step, /state\.multiplayer/, "the pause gate asks the multiplayer flag");
   const pause = readFileSync(path.join(root, "src/ui/pause.js"), "utf8");
-  assert.match(pause, /state\.multiplayer = !v && isOn\(\)/, "and the card sets it");
+  // Owner's playtest 2: "pausing when multiplayer is open still pauses the game, both
+  // guest and host". The old line was `!v && isOn()`, so opening the card — the one moment
+  // the flag mattered — turned it off. It is now a plain "is a session on"; the behaviour
+  // itself is driven in tests/multiplayer-ui.test.mjs ("keeps running while the card is open").
+  assert.match(pause, /state\.multiplayer = isOn\(\)/, "and the card sets it from the session");
+  assert.doesNotMatch(pause, /state\.multiplayer = !v/, "not from whether the card is open");
 });
 
 test("nothing in net/ imports the layers above it (slice 2's rule still holds)", () => {

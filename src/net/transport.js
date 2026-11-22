@@ -45,6 +45,19 @@ import { ROOM_NAMESPACE, RELAYS } from "../data/multiplayer.js";
 
 const isObject = value => !!value && typeof value === "object" && !Array.isArray(value);
 
+/**
+ * How the library is loaded: `import("trystero")`, lazily, on the first join. A test
+ * replaces this with a small in-memory room pair, which is how the *whole* connection —
+ * join, broadcast, the handshake, chat — is exercised with no browser and no relay.
+ * (An actual WebRTC connection still needs two real browsers; see the test file.)
+ */
+let loadLibrary = () => import("trystero");
+
+/** Test-only. `setLibraryLoader(null)` puts the real lazy import back. */
+export function setLibraryLoader(loader) {
+  loadLibrary = typeof loader === "function" ? loader : () => import("trystero");
+}
+
 /** The room a world's browsers meet in. Deterministic: one world is one room. */
 export const roomNameFor = worldId => `${ROOM_NAMESPACE}:${String(worldId || "").trim()}`;
 
@@ -94,7 +107,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
     starting = (async () => {
       let joinRoom;
       try {
-        ({ joinRoom } = await import("trystero"));
+        ({ joinRoom } = await loadLibrary());
       } catch (error) {
         setState("lost", "The multiplayer library could not be loaded. Rebuild the game, or use paste codes.");
         return null;

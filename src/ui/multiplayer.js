@@ -1,266 +1,840 @@
-// The multiplayer screens (refactor step 16, slice 3): the panel behind the pause card,
-// and the chat box beside the HUD.
+// The multiplayer screen and the chat box (refactor step 16, slice 3).
 //
-// Two surfaces, deliberately different:
+// Reworked 2026-11-21 after the owner's first playtest. Three things were wrong, and all
+// three were the same shape of mistake — a control that only works in a state the screen
+// never lets you reach, or that says something the connection is not doing:
 //
-//   #mp-panel   the pause card's "Open Multiplayer" section: the on/off switch, the
-//               username, the join link to copy, the box to paste somebody's link, and
-//               the paste-code fallback. It is a *settings and setup* surface; it never
-//               needs to be open while flying.
-//   #mp-chat    bottom left, while playing: the recent chat lines and the list of who is
-//               connected, which is the only surface that has to be readable at speed.
+//  1. **The guest could never paste a link.** The panel showed the join box only when a
+//     session already existed as a *guest*, and the only way to get one was the join box.
+//     The switch, which was the only thing on screen, always started a *host* session. So
+//     the join path was a closed loop and the code box at the bottom of the host panel —
+//     the only box there was — answered "Make a fresh offer first".
+//  2. **Hosting without a username said nothing.** The switch flipped to On on the stored
+//     setting, `hostWorld` refused with "Set a username first.", and that sentence was
+//     drawn into `#mp-code-out`, an element that did not exist in that state. The player
+//     saw an On switch and no link, with no way to find out why.
+//  3. **The paste-code offer deleted itself.** Making an offer ended with a full redraw,
+//     so the code the host had just been told to send vanished. The answer box then sat
+//     there offering a Connect button with nothing to connect.
 //
-// **The one rule that matters here.** Chat is opened with Enter and closed with Escape,
-// and *while the box is open, typing must not fly the ship*. That is why the box is a
-// real `<input>`: `core/input.js` already ignores keys aimed at a text field, so the
-// rule is kept by using the platform instead of adding a second copy of it.
+// The rules the rewrite is built on:
 //
-// Everything else obeys the same idea: this file draws and forwards; it holds no
-// connection state. `net/session.js` owns that and tells this file when to redraw.
+//  - **The screen is one surface, and every control on it works in the state it is drawn.**
+//    Hosting and joining are two separate blocks, both visible whenever they can be used;
+//    joining does not need hosting first, and the switch cannot be turned on without a
+//    username (it is `disabled`, and the action refuses too, so the rule holds twice).
+//  - **A control's words are its contract** (LESSONS L32): the switch is drawn from the
+//    *session* (`hosting`), never from the stored wish. If hosting fails, the switch goes
+//    back to Off and the reason is on screen.
+//  - **The offer lives in the model, not in the DOM.** `panelView.offer` holds it, so a
+//    redraw cannot lose it (LESSONS L19: the writer and the reader agree).
+//  - **Nothing is a dead end.** Every refusal is a sentence in `#mp-msg`, which always
+//    exists, and an Enter with nowhere to send says so instead of silently keeping the
+//    typed line.
+//
+// **What this file is not.** It holds no connection state: `net/session.js` owns that and
+// tells this file when to redraw (`mp-state`). `net/` may not import `ui/`, so anything the
+// connection wants *said* arrives on the bus (`mp-notice`).
+//
+// **The one rule that matters in the chat box.** Enter opens it and Escape closes it, and
+// while it is open typing must not fly the ship. That is why it is a real `<input>`:
+// `core/input.js` ignores keys aimed at a text field, so the rule is kept by using the
+// platform instead of a second copy of it.
+//
+// The screen is opened from the title menu ("Join Multiplayer World") and from the pause
+// card ("Open Multiplayer"). Those are the only two front doors, and both call
+// `openMultiplayer()`.
 
 import { state } from "../state/state.js";
 import { emit, on } from "../util/events.js";
 import { readSettings, writeSettings, cleanName } from "../net/settings.js";
-import { snapshot, currentLink } from "../net/session.js";
 import * as session from "../net/session.js";
-import { NET } from "../data/multiplayer.js";
-import { clearPendingJoin } from "../net/boot.js";
+import { NET, CHAT } from "../data/multiplayer.js";
+import { clearPendingJoin, pendingJoin } from "../net/boot.js";
+import { looksLikeCode } from "../net/paste.js";
+import { makeJoinLink } from "../net/join-link.js";
 import { showNotice } from "./notice.js";
 
-let panel = null;   // #mp-panel, inside the pause overlay
-let chatBox = null; // #mp-chat, bottom left
+/* ------------------------------------------------------------------------- */
+/* What the screen is showing                                                 */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Everything the screen decides, as a plain object with no DOM in it, so a test can ask
+ * "what would the player see?" without a browser (LESSONS L19: ask the reader's question).
+ *
+ * `snap` is a `net/session.js` snapshot, `settings` the stored name/switch, and `v` this
+ * module's own view state (the offer, the last message, the fields being typed into).
+ */
+export function screenModel({ snap = api.snapshot(), settings = readSettings(), v = panelView } = {}) {
+  const nameValue = v.fields.name ?? settings.name;
+  const name = cleanName(nameValue);
+  const hosting = snap.on === true && snap.role === "host";
+  const visiting = snap.on === true && snap.role === "guest";
+  const connected = snap.state === "connected";
+  const link = hosting ? api.currentLink() : null;
+  return {
+    nameValue,
+    name,
+    nameSet: !!name,
+    hosting,
+    visiting,
+    connected,
+    role: snap.role || null,
+    state: snap.state || "idle",
+    // The switch's words follow the session (LESSONS L32). Hosting is the only thing the
+    // switch can start, so an On switch always means "this world is open to guests".
+    switchOn: hosting,
+    canSwitch: !!name && !visiting,
+    canHost: !!name && !visiting,
+    // The join block is there whenever nothing of yours is running; the button waits for
+    // a name. Without this split the block drew "you are in a friend's world" to somebody
+    // who had simply not typed a name yet.
+    joinAvailable: !hosting && !visiting,
+    canJoin: !!name && !hosting && !visiting,
+    canCodes: hosting,
+    status: hosting
+      ? connected ? "Hosting — another pilot is connected." : "Hosting. Waiting for your friend to join…"
+      : visiting
+        ? connected ? "Connected to a friend's world." : snap.line
+        : "Multiplayer is off.",
+    stateLine: snap.line || "",
+    worldId: snap.worldId || null,
+    link: link?.url || "",
+    guests: (snap.guests || []).slice(),
+    peers: (snap.peers || []).slice(),
+    // The box draws the session's lines and its own log together, oldest first.
+    chat: chatLog(snap),
+    surface: v.surface || "both",
+    offer: hosting ? v.offer || "" : "",
+    // The answer code is shown whoever is on screen: a guest who joined by code is already
+    // a guest, and that is exactly when they must still be able to read the code to send.
+    answer: v.answer || "",
+    joinValue: v.fields.join || "",
+    codeValue: v.fields.code || "",
+    message: v.message || "",
+    messageKind: v.messageKind || "hint",
+    busy: !!v.busy,
+    mounted: !!root,
+  };
+}
+
+/** The screen's own state: what was said, what is being pasted, the pending code. */
+const panelView = {
+  message: "",
+  messageKind: "hint",  // "hint" | "error" | "ok"
+  busy: false,
+  offer: "",            // the host's offer code, kept here so a redraw cannot lose it
+  answer: "",           // the guest's answer code to send back
+  fields: { name: null, join: "", code: "" },
+  // Which door the screen was opened from. The owner's rule (playtest 2): joining is the
+  // main menu's job, hosting is the pause card's, so each door shows only its own block.
+  surface: "both",      // "join" | "host" | "both" (both is only the cold model)
+  // The chat box's own log: lines that never left the screen (nobody was connected) and
+  // lines from earlier sessions. It is the only reason a host alone can "scroll up".
+  history: [],
+};
+
+let root = null;        // #mp-screen (the whole overlay)
+let chatBox = null;     // #mp-chat, bottom left
 let chatInput = null;
 let chatList = null;
 let chatWho = null;
-let chatTimer = 0;
+let chatNote = null;
+let chatProblem = "";
+let chatFadeTimer = 0;
+// Is the box *open*? Its own flag, not "does the input have the cursor": a hidden input
+// cannot take the cursor, so asking the cursor first made the field stay hidden forever
+// and the box untypable — the guest's half of the 2026-11-21 report.
+let chatOpen = false;
+let drawnHtml = "";     // what is currently in the card, so a no-op redraw does nothing
 
 /** Is the chat box open (and therefore catching keystrokes)? */
-export const isChatOpen = () => !!chatInput && !chatBox.hidden && document.activeElement === chatInput;
+export const isChatOpen = () => !!chatInput && !chatBox.hidden && !!chatOpen && document.activeElement === chatInput;
 
 /**
- * Build both surfaces, wire them to the bus, and draw the first state. Called once from
- * `ui/pause.js` / `main.js` during setup.
+ * What the box should show, with no DOM in it: the box itself while a session is on and
+ * nothing else owns the screen, and the input only while the box is open.
+ *
+ * This is a function because getting it wrong is invisible until somebody types: the box
+ * drew its lines and hid its field, and the keys went to the ship.
+ */
+export function chatVisibility({ on, intro, panel, open }) {
+  const box = !!on && !intro && !panel;
+  return { box, input: box && !!open };
+}
+
+/** Is the multiplayer screen open? (Also mirrored on `state.ui.multiplayer` for input.) */
+export const isMultiplayerScreenOpen = () => !!root && !root.hidden;
+
+/* ------------------------------------------------------------------------- */
+/* Setup                                                                      */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Build the screen and the chat box, wire them to the bus, and draw the first state.
+ * Called once from `main.js` during setup (after `ui/pause.js`, which owns the card's
+ * "Open Multiplayer" button).
  */
 export function setupMultiplayer() {
-  buildPanel();
+  buildScreen();
   buildChat();
-  // The session says when anything changed; this redraws from its snapshot.
-  on("mp-state", () => {
-    drawPanel();
-    drawChat();
-  });
-  // A chat line that arrives is worth a small sound and a nudge, and it must not open the
-  // box: the pilot may be mid-fight, and a panel appearing over the glass is not help.
+  on("mp-state", () => draw());
   on("mp-chat-arrived", () => drawChat());
-  // A `?join=` link found at boot: the session joins it, and the player is told where the
-  // connection ended up. Kept here (not in net/boot.js) so the boot path has no UI of its own.
-  // `net/` has no screen: sentences it wants shown arrive here (see net/boot.js).
-  on("mp-notice", text => showNotice(text));
-  on("mp-join-request", async link => {
-    const result = await session.joinWorld({ link });
-    clearPendingJoin();
-    if (!result.ok) showProblem(result.message || "That link was not accepted.");
-    drawPanel();
+  // A sentence the connection wants shown. `net/` cannot reach the screen itself.
+  on("mp-notice", text => {
+    setMessage(text, "hint");
+    showNotice(text);
   });
-  drawPanel();
+  // A `?join=` link found at boot (see net/boot.js). The session does the joining; this
+  // file shows the result. The link is rebuilt from its two halves because that is the
+  // shape `joinWorld` reads (a link string, or a whole pasted URL).
+  on("mp-join-request", async found => {
+    const link = makeLinkFrom(found);
+    if (!link) { setMessage("That link is incomplete. Ask the host to copy it again.", "error"); return; }
+    panelView.fields.join = link;
+    const result = await api.joinWorld({ link });
+    clearPendingJoin();
+    if (!result?.ok) setMessage(result?.message || "That link was not accepted.", "error");
+    else {
+      setMessage("Joined. Press Enter to chat.", "ok");
+      afterJoined();
+    }
+    draw();
+  });
+  // Leaving the world for the title: the screen and the chat box go with it.
+  on("main-menu", () => {
+    closeMultiplayer();
+    chatAway();
+    // Hosting is something you do while flying your own world (owner's rule): at the title
+    // there is no world to be in, so the room closes instead of staying open behind the menu.
+    if (api.snapshot().on) {
+      api.stop();
+      api.setEnabled(false);
+      panelView.offer = "";
+      panelView.answer = "";
+      panelView.fields.code = "";
+    }
+  });
+  draw();
   drawChat();
 }
 
+const makeLinkFrom = found =>
+  found && typeof found === "object" && found.worldId && found.token
+    ? makeJoinLink(found.worldId, found.token)
+    : typeof found === "string" ? found : "";
+
 /* ------------------------------------------------------------------------- */
-/* The pause panel                                                            */
+/* The screen's markup (pure)                                                 */
 /* ------------------------------------------------------------------------- */
 
-/** The markup inside the pause card. `ui/overlays.js` includes it, so the card stays one file. */
-export function multiplayerPanelHtml() {
-  const settings = readSettings();
+/** The pause card's row: the button that opens the screen, and what it is doing now. */
+export function multiplayerCardHtml() {
   return (
-    `<section id="mp-panel">` +
-    `<button class="sw" id="mp-toggle" role="switch" aria-checked="${settings.enabled ? "true" : "false"}">` +
-    `<i></i><span>${settings.enabled ? "Open Multiplayer: On" : "Open Multiplayer: Off"}</span></button>` +
-    `<label class="mp-name">Username <input id="mp-name" maxlength="${NET.nameMax}" value="${escapeAttr(settings.name)}" placeholder="Your name" autocomplete="off"></label>` +
-    `<div id="mp-body"></div>` +
+    `<section id="mp-card">` +
+    `<button type="button" id="pz-mp">Open Multiplayer</button>` +
+    `<p class="mp-hint" id="pz-mp-state"></p>` +
     `</section>`
   );
 }
 
-function buildPanel() {
-  panel = document.getElementById("mp-panel");
-  if (!panel) return;
+/** One line for the pause card, so the state is readable without opening the screen. */
+export function multiplayerSummary() {
+  const snap = api.snapshot();
+  if (!snap.on) return "Off. Host your world or join a friend's.";
+  if (snap.role === "host") {
+    return snap.state === "connected" ? "Hosting — a pilot is connected." : "Hosting — waiting for your friend.";
+  }
+  return snap.state === "connected" ? "Connected to a friend's world." : snap.line || "Connecting…";
+}
 
-  panel.querySelector("#mp-toggle").onclick = () => {
-    const on = !readSettings().enabled;
-    session.setEnabled(on);
-    const button = panel.querySelector("#mp-toggle");
-    button.setAttribute("aria-checked", on ? "true" : "false");
-    button.querySelector("span").textContent = on ? "Open Multiplayer: On" : "Open Multiplayer: Off";
-    if (on) session.hostWorld().then(result => {
-      if (!result.ok) showProblem(result.message);
-      drawPanel();
-    });
-    else drawPanel();
-  };
+/**
+ * The whole card as HTML. Pure: same model in, same string out, no state touched. Every
+ * control is a `data-mp` action, so the one click listener on the screen never goes stale
+ * when the card is redrawn.
+ */
+export function screenHtml(model) {
+  // One door, one block (owner's rule, playtest 2): the main menu is where you join, the
+  // pause card is where you host. A guest who still has an answer code to send sees it on
+  // the pause card too, because that is the only screen they can reach mid-flight.
+  const body = model.surface === "join"
+    ? joinHtml(model)
+    : model.surface === "host"
+      ? hostHtml(model) + (model.visiting || model.answer ? answerAndLeaveHtml(model) : "")
+      : hostHtml(model) + joinHtml(model);
+  return (
+    `<h1 id="mp-title">Multiplayer</h1>` +
+    `<p class="mp-state" id="mp-status">${escapeHtml(model.status)}</p>` +
+    messageHtml(model) +
+    nameHtml(model) +
+    body +
+    listHtml(model) +
+    `<div class="mp-row"><button type="button" class="mp-close" data-mp="close">Close</button></div>`
+  );
+}
 
-  const name = panel.querySelector("#mp-name");
-  name.onchange = () => {
-    const result = session.setUsername(name.value);
-    if (!result.ok) showProblem(result.message);
-    else name.value = result.name;
-    drawPanel();
-  };
-  // A pasted link or code: one box, because the player has one thing to paste either way.
-  panel.addEventListener("paste", event => {
-    const box = event.target;
-    if (!box || box.tagName !== "INPUT" && box.tagName !== "TEXTAREA") return;
-    if (box.id !== "mp-name" && box.id !== "mp-paste" && box.id !== "mp-code") return;
-    if (box.id === "mp-name") return; // a name is typed, not pasted from a link
+function messageHtml(model) {
+  // Always present, so a refusal is never drawn into an element that is not on screen.
+  return `<p id="mp-msg" class="mp-msg is-${escapeAttr(model.messageKind)}"${model.message ? "" : " hidden"}>` +
+    `${escapeHtml(model.message)}</p>`;
+}
+
+function nameHtml(model) {
+  return (
+    `<section class="mp-block">` +
+    `<h2>Your name</h2>` +
+    `<label class="mp-label">Username` +
+    `<input class="mp-input" id="mp-name" data-mp-field="name" maxlength="${NET.nameMax}" ` +
+    `value="${escapeAttr(model.nameValue)}" placeholder="Your name" autocomplete="off" spellcheck="false"></label>` +
+    `<p class="mp-hint" id="mp-name-hint">${model.nameSet
+      ? "Your friends see this name."
+      : "Set a username first: hosting and joining are both off until you do."}</p>` +
+    `</section>`
+  );
+}
+
+function hostHtml(model) {
+  const switchHtml =
+    `<button type="button" class="sw mp-switch" data-mp="host" role="switch" ` +
+    `aria-checked="${model.switchOn ? "true" : "false"}"${model.canSwitch || model.hosting ? "" : " disabled"}>` +
+    `<i></i><span>${model.switchOn ? "Open Multiplayer: On" : "Open Multiplayer: Off"}</span></button>`;
+  const hint = model.visiting
+    ? "You are in a friend's world. Leave it first to host your own."
+    : !model.nameSet
+      ? "Set a username above, then turn this on."
+      : model.hosting
+        ? "Send the link below to your friend. They paste it under “Join a friend's world”."
+        : "Turns this world into a room and makes a link to send to a friend.";
+  return (
+    `<section class="mp-block">` +
+    `<h2>Host your world</h2>` +
+    switchHtml +
+    `<p class="mp-hint">${escapeHtml(hint)}</p>` +
+    (model.hosting ? linkHtml(model) + codesHtml(model) : "") +
+    `</section>`
+  );
+}
+
+function linkHtml(model) {
+  return (
+    `<label class="mp-label">Join link — send this to your friend` +
+    `<input class="mp-input" id="mp-link" readonly data-mp-select value="${escapeAttr(model.link)}"></label>` +
+    `<div class="mp-row">` +
+    `<button type="button" data-mp="copy-link">Copy link</button>` +
+    `<button type="button" data-mp="copy-world">Copy world id</button>` +
+    `</div>`
+  );
+}
+
+function codesHtml(model) {
+  if (!model.offer) {
+    return (
+      `<p class="mp-hint">No broker, or your friend cannot join by link? Make a code instead.</p>` +
+      `<div class="mp-row"><button type="button" data-mp="offer">No broker? Paste codes</button></div>`
+    );
+  }
+  return (
+    `<label class="mp-label">1. Offer code — send this to your friend` +
+    `<textarea class="mp-code" id="mp-offer" readonly rows="3" data-mp-select>${escapeHtml(model.offer)}</textarea></label>` +
+    `<div class="mp-row"><button type="button" data-mp="copy-offer">Copy offer code</button></div>` +
+    `<label class="mp-label">2. Their answer code — paste it here` +
+    `<textarea class="mp-code" data-mp-field="code" rows="3" placeholder="TRJOIN:…">${escapeHtml(model.codeValue)}</textarea></label>` +
+    `<div class="mp-row"><button type="button" data-mp="finish">Connect</button>` +
+    `<button type="button" data-mp="reset-offer">Start again</button></div>`
+  );
+}
+
+/** The answer code and the way out — the two things a guest needs mid-flight. */
+function answerAndLeaveHtml(model) {
+  return (
+    `<section class="mp-block"><h2>You are in a friend's world</h2>` +
+    answerHtml(model) +
+    `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` +
+    `</section>`
+  );
+}
+
+function answerHtml(model) {
+  return model.answer
+    ? `<label class="mp-label">Answer code — send this back to your friend` +
+      `<textarea class="mp-code" id="mp-answer" readonly rows="3" data-mp-select>${escapeHtml(model.answer)}</textarea></label>` +
+      `<div class="mp-row"><button type="button" data-mp="copy-answer">Copy answer code</button></div>`
+    : "";
+}
+
+function joinHtml(model) {
+  const answer = answerHtml(model);
+  if (!model.joinAvailable) {
+    const why = model.hosting
+      ? "Stop hosting to join a friend's world."
+      : "You are in a friend's world. Press Leave to stop.";
+    return (
+      `<section class="mp-block"><h2>Join a friend's world</h2>` +
+      `<p class="mp-hint">${escapeHtml(why)}</p>` +
+      answer +
+      (model.visiting ? `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` : "") +
+      `</section>`
+    );
+  }
+  return (
+    `<section class="mp-block">` +
+    `<h2>Join a friend's world</h2>` +
+    `<label class="mp-label">Paste the link your friend sent` +
+    `<textarea class="mp-input" id="mp-join" data-mp-field="join" rows="2" placeholder="?join=…" spellcheck="false">${escapeHtml(model.joinValue)}</textarea></label>` +
+    `<div class="mp-row"><button type="button" data-mp="join"${model.canJoin ? "" : " disabled"}>Join</button></div>` +
+    `<p class="mp-hint">${model.nameSet
+      ? "A link looks like <code>…?join=w-… # …</code>. A <code>TRJOIN:</code> code works in the same box."
+      : "Set a username above to join."}</p>` +
+    answer +
+    `</section>`
+  );
+}
+
+function listHtml(model) {
+  if (!model.guests.length) return "";
+  return (
+    `<section class="mp-block"><h2>Who is here</h2>` +
+    `<ul class="mp-list">${model.guests
+      .map(g => `<li>${escapeHtml(g.name)}${g.docked ? " <small>docked</small>" : ""}</li>`)
+      .join("")}</ul>` +
+    `</section>`
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Actions — the buttons' work, callable without a DOM                        */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Do one of the screen's actions. Returns true when the action worked, so the DOM layer
+ * (and a test) can tell. Every refusal is a sentence in the message area, never a throw.
+ */
+export async function act(name, arg = "") {
+  switch (name) {
+    case "host":
+      // The owner's rule (playtest 2): hosting is the pause card's job. The switch is not
+      // drawn on the title's screen at all, so this is the second lock on the same door.
+      if (panelView.surface === "join") {
+        setMessage("Turn multiplayer on from the pause menu (P), once you are in your own world.", "error");
+        draw();
+        return false;
+      }
+      return toggleHosting();
+    case "join":
+      if (panelView.surface === "host") {
+        setMessage("Joining a friend's world is done from the main menu — quit to it and press Join Multiplayer World.", "error");
+        draw();
+        return false;
+      }
+      return joinFromBox();
+    case "leave": return leaveSession();
+    case "offer": return makeOffer();
+    case "finish": return finishOffer();
+    case "reset-offer":
+      panelView.offer = "";
+      panelView.fields.code = "";
+      setMessage("Offer cleared. Make a fresh one when you are ready.", "hint");
+      draw();
+      return true;
+    case "copy-link":
+    case "copy-world":
+    case "copy-offer":
+    case "copy-answer":
+      return copySomething(name, arg);
+    case "close":
+      closeMultiplayer();
+      return true;
+    default:
+      return false;
+  }
+}
+
+async function toggleHosting() {
+  const model = screenModel();
+  if (model.hosting) {
+    api.stop();
+    api.setEnabled(false);
+    panelView.offer = "";
+    panelView.fields.code = "";
+    setMessage("Your world is closed.", "hint");
+    draw();
+    return true;
+  }
+  // The owner's rule, enforced here as well as by the disabled switch: no name, no world.
+  if (!model.nameSet) {
+    setMessage("Type a username first — nobody can join a world with no name on it.", "error");
+    focusField("name");
+    draw();
+    return false;
+  }
+  if (model.visiting) {
+    setMessage("Leave your friend's world before hosting your own.", "error");
+    draw();
+    return false;
+  }
+  const result = await withBusy("Opening your world…", () => api.hostWorld({ name: model.name }));
+  if (!result?.ok) {
+    // The switch does not stay on for a world that is not open (LESSONS L32).
+    api.setEnabled(false);
+    setMessage(result?.message || "Could not open your world.", "error");
+    draw();
+    return false;
+  }
+  api.setEnabled(true);
+  setMessage("Your world is open. Copy the link and send it to your friend.", "ok");
+  draw();
+  return true;
+}
+
+async function joinFromBox() {
+  const model = screenModel();
+  const text = String(panelView.fields.join || "").trim();
+  if (!model.joinAvailable) {
+    setMessage(model.hosting ? "Stop hosting before joining a friend's world." : "You are already in a friend's world.", "error");
+    draw();
+    return false;
+  }
+  if (!model.nameSet) {
+    setMessage("Type a username first — the host needs to know who is joining.", "error");
+    focusField("name");
+    draw();
+    return false;
+  }
+  if (!text) {
+    setMessage("Paste the link your friend sent first.", "error");
+    draw();
+    return false;
+  }
+  // One box, two kinds of thing to paste: a link, or a host's offer code.
+  if (looksLikeCode(text)) return acceptOffer(text);
+
+  const result = await withBusy("Looking for your friend's world…", () => api.joinWorld({ link: text }));
+  if (!result?.ok) {
+    setMessage(result?.message || "That link was not accepted.", "error");
+    draw();
+    return false;
+  }
+  clearPendingJoin();
+  panelView.fields.join = "";
+  setMessage("Joined. Press Enter to chat.", "ok");
+  afterJoined();
+  draw();
+  return true;
+}
+
+/** A guest who just joined: get out of the way so the world (or the menu) is playable. */
+function afterJoined() {
+  if (state.ui.intro) {
+    closeMultiplayer();
+    emit("mp-enter-world", {});
+  }
+}
+
+function leaveSession() {
+  api.stop();
+  api.setEnabled(false);
+  panelView.offer = "";
+  panelView.answer = "";
+  panelView.fields.code = "";
+  panelView.fields.join = "";
+  setMessage("Multiplayer is off.", "hint");
+  draw();
+  return true;
+}
+
+/* --- the paste codes: two steps, and the button only exists for step two --- */
+
+async function makeOffer() {
+  const model = screenModel();
+  if (!model.hosting) {
+    setMessage("Turn Open Multiplayer on first — a code joins somebody to this world.", "error");
+    draw();
+    return false;
+  }
+  const codes = await withBusy("Making a code — this takes a few seconds…", () => api.codesOffer());
+  if (!codes?.offer) {
+    setMessage("Could not make a code. Try again, or send the link instead.", "error");
+    draw();
+    return false;
+  }
+  // Kept in the model, so the redraw below cannot delete the code the player must send.
+  panelView.offer = codes.offer;
+  panelView.fields.code = "";
+  setMessage("Send the offer code to your friend. Paste their answer below and press Connect.", "ok");
+  draw();
+  return true;
+}
+
+async function finishOffer() {
+  const code = String(panelView.fields.code || "").trim();
+  if (!panelView.offer) {
+    setMessage("Make an offer first: press “No broker? Paste codes”.", "error");
+    draw();
+    return false;
+  }
+  if (!code) {
+    setMessage("Paste your friend's answer code first.", "error");
+    focusField("code");
+    draw();
+    return false;
+  }
+  const result = await withBusy("Connecting directly…", () => api.codesFinish(code));
+  if (!result?.ok) setMessage(result?.message || "That code was not accepted.", "error");
+  else setMessage("Connected directly. Press Enter to chat.", "ok");
+  draw();
+  return !!result?.ok;
+}
+
+async function acceptOffer(code) {
+  const model = screenModel();
+  const result = await withBusy("Making your answer code…", () => api.codesAccept(code, { name: model.name }));
+  if (!result?.ok || !result.answer) {
+    setMessage(result?.message || "That code was not accepted.", "error");
+    draw();
+    return false;
+  }
+  panelView.answer = result.answer;
+  setMessage("Send the answer code back to your friend. They paste it and press Connect.", "ok");
+  draw();
+  return true;
+}
+
+/* --- copy buttons ---------------------------------------------------------- */
+
+async function copySomething(name, arg) {
+  const model = screenModel();
+  const text =
+    name === "copy-link" ? model.link
+      : name === "copy-world" ? model.worldId || ""
+        : name === "copy-offer" ? model.offer
+          : name === "copy-answer" ? (panelView.answer || arg)
+            : "";
+  if (!text) {
+    setMessage("There is nothing to copy yet.", "error");
+    draw();
+    return false;
+  }
+  const done = await copyText(text);
+  setMessage(
+    done ? "Copied." : "Your browser would not copy for us. The text is selected — press Ctrl+C (⌘C).",
+    done ? "ok" : "hint",
+  );
+  draw();
+  return done;
+}
+
+/** Copy, or select the matching field so the player can copy it themselves. */
+async function copyText(text) {
+  try {
+    if (globalThis.navigator?.clipboard?.writeText) {
+      await globalThis.navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    /* a browser that refuses the clipboard: fall through and select it instead */
+  }
+  selectFieldWith(text);
+  return false;
+}
+
+function selectFieldWith(text) {
+  for (const field of mountedFields()) {
+    if (field.value === text) { field.select?.(); return true; }
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Drawing                                                                    */
+/* ------------------------------------------------------------------------- */
+
+function buildScreen() {
+  if (typeof document === "undefined") return;
+  root = document.createElement("div");
+  root.id = "mp-screen";
+  root.hidden = true;
+  root.innerHTML = `<div class="mp-card" id="mp-card-inner" role="dialog" aria-modal="true" aria-labelledby="mp-title"></div>`;
+  document.body.appendChild(root);
+  state.ui.multiplayer = false;
+
+  // One listener for every action, on the root that is never replaced: a redraw can
+  // therefore never leave a button wired to nothing.
+  root.addEventListener("click", event => {
+    const selectable = event.target.closest?.("[data-mp-select]");
+    if (selectable?.select) selectable.select();
+    const button = event.target.closest?.("[data-mp]");
+    if (!button || button.disabled) return;
+    event.preventDefault();
+    act(button.dataset.mp);
+  });
+  // Typing goes into the model as it happens, so a redraw mid-paste keeps the text.
+  root.addEventListener("input", event => {
+    const field = event.target.closest?.("[data-mp-field]");
+    if (!field) return;
+    panelView.fields[field.dataset.mpField] = field.value;
+    // Typing a name enables both front doors. That is done in place: a full redraw under
+    // the player's cursor at every keystroke is how a name field becomes unusable.
+    if (field.dataset.mpField === "name") refreshLiveness();
+  });
+  // A name is committed when the player leaves the field, not on every keystroke.
+  root.addEventListener("change", event => {
+    const field = event.target.closest?.("[data-mp-field]");
+    if (field?.dataset.mpField !== "name") return;
+    const result = api.setUsername(String(field.value || ""));
+    if (!result?.ok) setMessage(result?.message || "Type a name first.", "error");
+    else panelView.fields.name = result.name;
+    draw();
+  });
+  // Escape closes the screen, and nothing behind it sees the key.
+  root.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      event.preventDefault();
+      closeMultiplayer();
+    }
   });
 }
 
-/** Draw the part of the panel that depends on the session. */
-function drawPanel() {
-  if (!panel || panel.hidden) return;
-  const body = panel.querySelector("#mp-body");
-  if (!body) return;
-  const snap = snapshot();
-  const settings = readSettings();
+/**
+ * Update the controls that depend on "is there a name yet", without rebuilding the card:
+ * the host switch, the Join button and the line under each. Cheap, and it keeps the caret.
+ */
+function refreshLiveness() {
+  if (!root) return;
+  const model = screenModel();
+  const hostSwitch = root.querySelector(".mp-switch");
+  if (hostSwitch && !model.hosting) {
+    if (model.canSwitch) hostSwitch.removeAttribute("disabled");
+    else hostSwitch.setAttribute("disabled", "");
+  }
+  const joinButton = root.querySelector('[data-mp="join"]');
+  if (joinButton) {
+    if (model.canJoin) joinButton.removeAttribute("disabled");
+    else joinButton.setAttribute("disabled", "");
+  }
+  const underName = root.querySelector("#mp-name-hint");
+  if (underName) {
+    underName.textContent = model.nameSet
+      ? "Your friends see this name."
+      : "Set a username first: hosting and joining are both off until you do.";
+  }
+}
 
-  if (!settings.name) {
-    body.innerHTML = `<p class="mp-hint">Set a username, then turn Open Multiplayer on.</p>`;
+function focusField(field) {
+  if (!root) return;
+  const node = root.querySelector(`[data-mp-field="${field}"]`);
+  node?.focus?.();
+}
+
+function mountedFields() {
+  if (!root) return [];
+  return Array.from(root.querySelectorAll?.("[data-mp-field]") || []);
+}
+
+/** Put the current model on the screen. A no-op when nothing the player can see changed. */
+function draw() {
+  if (!root) return;
+  if (!isMultiplayerScreenOpen()) {
+    // Keep the pause card's one-line summary honest while the screen is closed.
+    refreshMultiplayerCard();
     return;
   }
-
-  if (!snap.on) {
-    body.innerHTML = `<p class="mp-hint">Open Multiplayer is off. Turn it on to host your world or join a friend's.</p>`;
-    return;
+  const model = screenModel();
+  const html = screenHtml(model);
+  const card = root.querySelector("#mp-card-inner");
+  if (!card) return;
+  // A redraw while the player is typing must not throw the cursor away.
+  const active = document.activeElement;
+  const focusKey = active && active.dataset ? active.dataset.mpField || active.id : "";
+  const caret = typeof active?.selectionStart === "number" ? active.selectionStart : null;
+  if (html !== drawnHtml) {
+    card.innerHTML = html;
+    drawnHtml = html;
+    if (focusKey) {
+      const again = root.querySelector(`[data-mp-field="${focusKey}"]`) || root.querySelector(`#${focusKey}`);
+      if (again) {
+        again.focus?.();
+        if (caret != null && typeof again.setSelectionRange === "function") {
+          try { again.setSelectionRange(caret, caret); } catch (e) { /* an input type that has no caret */ }
+        }
+      }
+    }
   }
-
-  if (snap.role === "host") {
-    const links = currentLink();
-    body.innerHTML =
-      `<p class="mp-state">${escapeHtml(snap.line)}</p>` +
-      (links ? `<label class="mp-name">Join link <input id="mp-link" readonly value="${escapeAttr(links.url)}"></label>` +
-        `<div class="mp-row"><button type="button" id="mp-copy">Copy link</button>` +
-        `<button type="button" id="mp-codes">No broker? Paste codes</button></div>` : "") +
-      (snap.guests.length
-        ? `<ul class="mp-list">${snap.guests.map(g => `<li>${escapeHtml(g.name)}${g.docked ? " <small>docked</small>" : ""}</li>`).join("")}</ul>`
-        : `<p class="mp-hint">Nobody has joined yet. Send the link to a friend.</p>`) +
-      `<label class="mp-name">Paste their answer code <input id="mp-code" placeholder="TRJOIN:…" autocomplete="off"></label>` +
-      `<div class="mp-row"><button type="button" id="mp-finish">Connect</button></div>` +
-      `<div id="mp-code-out"></div>`;
-    wireCopy(links);
-    wireCodes(snap);
-    return;
-  }
-
-  // Guest.
-  body.innerHTML =
-    `<p class="mp-state">${escapeHtml(snap.line)}</p>` +
-    (snap.state === "connected"
-      ? `<p class="mp-hint">Connected. Press <b>Enter</b> to chat.</p>${playersHtml(snap)}`
-      : `<label class="mp-name">Paste the host's link or code <input id="mp-paste" placeholder="?join=… or TRJOIN:…" autocomplete="off"></label>` +
-        `<div class="mp-row"><button type="button" id="mp-join">Join</button>` +
-        `<button type="button" id="mp-accept">Use a paste code</button></div>` +
-        `<div id="mp-code-out"></div>`) +
-    `<div class="mp-row"><button type="button" id="mp-stop">Leave</button></div>`;
-  wireGuest(snap);
+  refreshMultiplayerCard();
 }
 
-function playersHtml(snap) {
-  if (!snap.guests.length) return "";
-  return `<ul class="mp-list">${snap.guests.map(g => `<li>${escapeHtml(g.name)}${g.docked ? " <small>docked</small>" : ""}</li>`).join("")}</ul>`;
+/** The pause card's summary line (it exists only once the overlay is built). */
+export function refreshMultiplayerCard() {
+  if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
+  const line = document.getElementById("pz-mp-state");
+  if (line) line.textContent = multiplayerSummary();
 }
 
-function wireCopy(links) {
-  const button = panel.querySelector("#mp-copy");
-  if (!button || !links) return;
-  button.onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(links.url);
-      button.textContent = "Copied";
-    } catch (e) {
-      // A browser that refuses the clipboard: select the text so the player can copy it.
-      const field = panel.querySelector("#mp-link");
-      field?.select?.();
-      button.textContent = "Select it, then copy";
-    }
-    setTimeout(() => { button.textContent = "Copy link"; }, 2000);
-  };
+/* ------------------------------------------------------------------------- */
+/* Opening and closing                                                        */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Show the screen. `focus` names a field to put the cursor in ("join" for a player who
+ * came here from a link, "name" when there is no name yet). Safe to call twice.
+ */
+export function openMultiplayer({ focus = "", from = "" } = {}) {
+  // The door decides the block: the title menu joins, the pause card hosts (owner's rule,
+  // playtest 2). A caller that names no door keeps both blocks, which is only the cold
+  // model a test builds. Set before the DOM guard, so the rule holds with no screen built.
+  panelView.surface = from === "menu" ? "join" : from === "pause" ? "host" : "both";
+  if (!root) return false;
+  // A link found at boot, waiting for a name: put it in the join box so the player only
+  // has to type a name and press Join.
+  const waiting = pendingJoin();
+  if (waiting && !panelView.fields.join) panelView.fields.join = makeLinkFrom(waiting) || "";
+  root.hidden = false;
+  state.ui.multiplayer = true;
+  // The chat box and a menu cannot both own the keyboard.
+  closeChat();
+  chatOpen = false;
+  drawnHtml = "";               // force a fresh draw after being away
+  draw();
+  const model = screenModel();
+  const where = focus || (!model.nameSet ? "name" : waiting ? "join" : "");
+  if (where) focusField(where === "join" ? "join" : where);
+  return true;
 }
 
-function wireCodes(snap) {
-  const make = panel.querySelector("#mp-codes");
-  if (make) make.onclick = async () => {
-    const codes = await session.codesOffer();
-    const out = panel.querySelector("#mp-code-out");
-    if (!codes?.offer) { showProblem("Could not make a code. Try the link instead."); return; }
-    if (out) {
-      out.innerHTML =
-        `<label class="mp-name">Offer code — send this to your friend <textarea id="mp-offer" readonly rows="4">${escapeHtml(codes.offer)}</textarea></label>` +
-        `<p class="mp-hint">They paste it in their game, send you the answer, and you paste it below.</p>`;
-      out.querySelector("#mp-offer").select();
-    }
-    drawPanel();
-  };
-  const finish = panel.querySelector("#mp-finish");
-  if (finish) finish.onclick = async () => {
-    const code = panel.querySelector("#mp-code")?.value || "";
-    const result = await session.codesFinish(code);
-    if (!result.ok) showProblem(result.message || "That code was not accepted.");
-    else drawPanel();
-  };
+/** Hide the screen (and hand the keyboard back). */
+export function closeMultiplayer() {
+  if (!root) return false;
+  root.hidden = true;
+  state.ui.multiplayer = false;
+  if (document.activeElement && root.contains?.(document.activeElement)) document.activeElement.blur?.();
+  return true;
 }
 
-function wireGuest(snap) {
-  const join = panel.querySelector("#mp-join");
-  if (join) join.onclick = async () => {
-    const text = panel.querySelector("#mp-paste")?.value || "";
-    const result = await session.joinWorld({ link: text });
-    if (!result.ok) showProblem(result.message || "That link was not accepted.");
-    drawPanel();
-  };
-  const accept = panel.querySelector("#mp-accept");
-  if (accept) accept.onclick = async () => {
-    const text = panel.querySelector("#mp-paste")?.value || "";
-    const result = await session.codesAccept(text);
-    const out = panel.querySelector("#mp-code-out");
-    if (!result.ok) { showProblem(result.message || "That code was not accepted."); return; }
-    if (out) {
-      out.innerHTML =
-        `<label class="mp-name">Answer code — send this back to the host <textarea id="mp-answer" readonly rows="4">${escapeHtml(result.answer)}</textarea></label>`;
-      out.querySelector("#mp-answer").select();
-    }
-  };
-  const stop = panel.querySelector("#mp-stop");
-  if (stop) stop.onclick = () => { session.stop(); drawPanel(); };
-}
-
-/** Say something the player must read, in the panel, without a modal. */
-function showProblem(message) {
-  const out = panel?.querySelector("#mp-code-out");
-  if (out) out.innerHTML = `<p class="mp-error">${escapeHtml(message || "")}</p>`;
-}
-
-/** `ui/pause.js` calls this whenever the card is shown or hidden. */
-export function refreshMultiplayerPanel() {
-  drawPanel();
-}
+export const toggleMultiplayerScreen = () => (isMultiplayerScreenOpen() ? closeMultiplayer() : openMultiplayer());
 
 /* ------------------------------------------------------------------------- */
 /* The chat box                                                               */
 /* ------------------------------------------------------------------------- */
 
 function buildChat() {
+  if (typeof document === "undefined") return;
   chatBox = document.createElement("div");
   chatBox.id = "mp-chat";
   chatBox.hidden = true;
+  // Two columns: the lines on the left, a compact list of who is here on the right.
   chatBox.innerHTML =
-    `<div id="mp-chat-who"></div>` +
+    `<div id="mp-chat-main">` +
     `<div id="mp-chat-lines"></div>` +
-    `<input id="mp-chat-input" maxlength="${NET.chatLineMax}" placeholder="Say something…  (Enter sends, Esc closes)" autocomplete="off">`;
+    `<p id="mp-chat-note" hidden></p>` +
+    `<input id="mp-chat-input" maxlength="${NET.chatLineMax}" placeholder="Say something…  (Enter sends, Esc closes)" autocomplete="off">` +
+    `</div>` +
+    `<aside id="mp-chat-who" aria-label="Who is here"></aside>`;
   document.body.appendChild(chatBox);
   chatInput = chatBox.querySelector("#mp-chat-input");
   chatList = chatBox.querySelector("#mp-chat-lines");
   chatWho = chatBox.querySelector("#mp-chat-who");
+  chatNote = chatBox.querySelector("#mp-chat-note");
 
   chatInput.addEventListener("keydown", event => {
     // The box owns Enter and Escape while it is open. Stop here so the game's own
@@ -268,9 +842,7 @@ function buildChat() {
     event.stopPropagation();
     if (event.key === "Enter") {
       event.preventDefault();
-      const text = chatInput.value.trim();
-      if (text && session.say(text)) chatInput.value = "";
-      else if (!text) closeChat();
+      sendChatLine();
       return;
     }
     if (event.key === "Escape") {
@@ -286,12 +858,110 @@ function buildChat() {
   });
 }
 
+/**
+ * Send what is in the box. A line that cannot be sent keeps its text (nothing typed is
+ * thrown away) and says why — before this, Enter did nothing visible at all when nobody
+ * was connected, which reads as a broken chat.
+ */
+function sendChatLine() {
+  const text = chatInput.value.trim();
+  if (!text) { closeChat(); return false; }
+  const result = sendChatText(text);
+  // Cleared when it went, and when it only went on this screen: a line already in the list
+  // must not also be left sitting in the field (pressing Enter again would send it twice).
+  if (result.sent || result.echoed) chatInput.value = "";
+  setChatProblem(result.problem);
+  drawChat();
+  return result.sent;
+}
+
+/**
+ * What pressing Enter means, without a DOM in it: send the line, or say why not.
+ *
+ * The line is *kept* when it cannot go (throwing away what somebody typed is worse than a
+ * refusal) and the reason is a sentence, because "nothing happens" reads as a broken chat.
+ */
+export function sendChatText(text) {
+  const line = String(text ?? "").trim();
+  if (!line) return { sent: false, echoed: false, problem: "" };
+  const snap = api.snapshot();
+  if (api.say(line)) return { sent: true, echoed: false, problem: "" };
+  if (!snap.on) return { sent: false, echoed: false, problem: "Multiplayer is off." };
+  // Nobody to hear it: the line still goes on this screen, and the note says who can see
+  // it. A host waiting for the first guest can type, read it back, and keep talking; the
+  // line lives in the box's own log, which is what survives the session.
+  noteHistory({ from: snap.name || readSettings().name || "You", text: line, at: Date.now(), own: true });
+  // Two different sentences, because they are two different problems: nobody there yet,
+  // or somebody there that could not be reached.
+  const problem = snap.state === "connected"
+    ? "Not sent — the other pilot could not be reached."
+    : "Only you are here so far — nobody else will see this.";
+  return { sent: false, echoed: true, problem };
+}
+
+/**
+ * The box's log: the session's recent lines and the ones only ever shown here, oldest
+ * first, without duplicates. `CHAT.historyLines` is what "scroll up" means in practice.
+ */
+function chatLog(snap = api.snapshot()) {
+  const all = [...panelView.history, ...(snap.chat || []).slice()];
+  const seen = new Set();
+  const out = [];
+  for (const line of all) {
+    if (!line || typeof line.text !== "string") continue;
+    const key = `${line.at}|${line.from}|${line.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  out.sort((a, b) => (a.at || 0) - (b.at || 0));
+  return out.slice(-(CHAT.historyLines || 40));
+}
+
+/** Keep one line that only this screen has. */
+function noteHistory(line) {
+  panelView.history.push(line);
+  const cap = CHAT.historyLines || 40;
+  while (panelView.history.length > cap) panelView.history.shift();
+  return line;
+}
+
+/** The pilots in the box's column: you first, then everyone else, never twice. */
+export function chatWhoRows(snap) {
+  const names = [];
+  for (const name of [snap?.name, ...((snap?.guests || []).map(entry => entry.name))]) {
+    const clean = String(name ?? "").trim();
+    if (clean && !names.includes(clean)) names.push(clean);
+  }
+  return names.length ? names : ["Pilot"];
+}
+
+/** One small row per pilot. Pure, so a test can count them. */
+export function chatWhoHtml(snap) {
+  const rows = chatWhoRows(snap);
+  return `<h2>Who is here</h2><ul>` +
+    rows.map(name => `<li>${escapeHtml(name)}</li>`).join("") +
+    `</ul>`;
+}
+
+function setChatProblem(text) {
+  chatProblem = text || "";
+  if (!chatNote) return;
+  chatNote.hidden = !chatProblem;
+  chatNote.textContent = chatProblem;
+}
+
 /** Open the chat box and put the cursor in it. Enter does this while connected. */
 export function openChat() {
   if (!chatBox) return false;
-  if (!snapshot().on) return false;
+  if (!api.snapshot().on) return false;
+  chatOpen = true;
   chatBox.hidden = false;
+  // Visible *before* the focus call: a `[hidden]` field cannot take the cursor, so asking
+  // for it first is a silent no-op (the guest's box opened with no way to type).
+  if (chatInput) chatInput.hidden = false;
   document.body.classList.add("mp-chat-open");
+  setChatProblem("");
   chatInput.focus();
   drawChat();
   return true;
@@ -300,44 +970,45 @@ export function openChat() {
 /** Close the box (Escape, or Enter on an empty line). */
 export function closeChat() {
   if (!chatBox) return;
+  chatOpen = false;
   chatBox.hidden = true;
   document.body.classList.remove("mp-chat-open");
-  chatInput.blur();
-  if (chatTimer) { clearTimeout(chatTimer); chatTimer = 0; }
+  chatInput?.blur?.();
+  if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
 }
 
 export const toggleChat = () => (isChatOpen() ? closeChat() : openChat());
 
 function drawChat() {
   if (!chatBox) return;
-  const snap = snapshot();
+  const snap = api.snapshot();
   // The box is only there when multiplayer is on, and only while playing: on the title
   // screen and on a station panel it would sit over a menu that already has the screen.
-  const wanted = snap.on && !state.ui.intro && !sessionIsPanelOpen();
-  if (!wanted) { chatBox.hidden = true; return; }
-  if (chatBox.hidden && !isChatOpen()) {
-    // Collapsed: show the last few lines and who is here, without an input.
-    chatBox.hidden = false;
-  }
-  chatWho.textContent = whoLine(snap);
-  chatList.innerHTML = snap.chat.length
-    ? snap.chat.map(line => `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")
+  const shown = chatVisibility({
+    on: snap.on,
+    intro: !!state.ui.intro,
+    panel: sessionIsPanelOpen(),
+    open: chatOpen,
+  });
+  if (!shown.box) { chatBox.hidden = true; chatOpen = false; return; }
+  chatBox.hidden = false;
+  if (chatWho) chatWho.innerHTML = chatWhoHtml(snap);
+  const lines = chatLog(snap);
+  chatList.innerHTML = lines.length
+    ? lines.map(line => `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")
     : `<p class="mp-hint">Press Enter to chat.</p>`;
   chatList.scrollTop = chatList.scrollHeight;
+  if (chatInput) chatInput.hidden = !shown.input;
+  setChatProblem(chatProblem);
   // Lines fade: chat is for the moment, and a wall of old lines over the glass is clutter.
-  if (chatTimer) clearTimeout(chatTimer);
-  chatTimer = setTimeout(() => { chatList.querySelectorAll("p").forEach(p => { p.style.opacity = "0.55"; }); }, 20000);
-  if (!isChatOpen()) chatBox.querySelector("#mp-chat-input").hidden = true;
-  else chatBox.querySelector("#mp-chat-input").hidden = false;
+  if (chatFadeTimer) clearTimeout(chatFadeTimer);
+  chatFadeTimer = setTimeout(() => {
+    chatList.querySelectorAll("p").forEach(p => { p.style.opacity = "0.55"; });
+  }, CHAT.lineLifeSec * 1000);
 }
 
 function sessionIsPanelOpen() {
-  return !!(state.ui.starmap || state.ui.cargo || state.ui.cache || state.paused);
-}
-
-function whoLine(snap) {
-  const names = [snap.name, ...snap.guests.filter(g => g.name !== snap.name).map(g => g.name)].filter(Boolean);
-  return names.length ? names.join(" · ") : "Multiplayer";
+  return !!(state.ui.starmap || state.ui.cargo || state.ui.cache || state.paused || state.ui.multiplayer);
 }
 
 /** Called when the game wants the chat box gone (pause, a station panel, the title). */
@@ -350,11 +1021,67 @@ export function chatAway() {
 /* Small helpers                                                              */
 /* ------------------------------------------------------------------------- */
 
+function setMessage(text, kind = "hint") {
+  panelView.message = String(text || "");
+  panelView.messageKind = kind;
+}
+
+/** Run an async connection call with the screen saying what it is doing. */
+async function withBusy(text, run) {
+  panelView.busy = true;
+  setMessage(text, "hint");
+  draw();
+  try {
+    return await run();
+  } catch (error) {
+    return { ok: false, message: error?.message || "Something went wrong." };
+  } finally {
+    panelView.busy = false;
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* The connection, injected so a test can drive this file                     */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Everything this file asks of `net/session.js`. In the game it *is* that module; a test
+ * swaps in plain functions and gets the real markup, the real decisions and the real
+ * sentences with no browser, no relay and no save.
+ */
+let api = session;
+
+export function setMultiplayerApi(next = null) {
+  api = next ? { ...session, ...next } : session;
+  drawnHtml = "";
+  draw();
+  return api;
+}
+
+export const multiplayerApi = () => api;
+
+/** Test-only: the view state (the offer, the message, the half-typed fields). */
+export const panelState = () => panelView;
+
+/** Test-only: put the screen back to a cold start between cases. */
+export function resetPanel() {
+  panelView.message = "";
+  panelView.messageKind = "hint";
+  panelView.busy = false;
+  panelView.offer = "";
+  panelView.answer = "";
+  panelView.fields = { name: null, join: "", code: "" };
+  panelView.surface = "both";
+  panelView.history = [];
+  drawnHtml = "";
+  chatOpen = false;
+  chatProblem = "";
+}
+
 function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
 
 const escapeAttr = escapeHtml;
-
 
 export { cleanName, writeSettings };

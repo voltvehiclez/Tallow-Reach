@@ -229,51 +229,60 @@ Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
 `src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
 Rebuild `game/tallow-reach.html`; `npm test`.
 
-## 2026-11-21: Step 16 slice 3 — the connection: one link, the wrapper, chat and the player list
+## 2026-11-21: Playtest 2 of slice 3 — one door each, names with stars, a chat that stays open
 
-Multiplayer can open a world, hand out a link and talk. **It still moves no pilot** — the suitcase
-is slice 4 — so this slice is honest to try: it can fail to connect, and it cannot cost anybody a
-ship.
+The owner's second playtest, in five reports. Two were bugs, one was a rule about the build, and
+two were new rules the slice should always have had.
 
-- **One dependency, one file.** `trystero@0.27.0` (MIT, pinned exactly) is imported lazily by
-  `src/net/transport.js` and by nowhere else; the layers test enforces it. Single-file build:
-  **3,256 → 3,508 KB**. `RELAYS.relayUrls` in `data/multiplayer.js` overrides the free relays.
-- **`src/net/transport.js`** — `createChannel({role, worldId, onState, onData, onPeer})` with
-  `join/send/broadcast/leave/peers/state/room`; states `idle · finding · connected · lost · closed`,
-  every failure a printable sentence and nothing thrown. A room is `tallowreach.p2p:<worldId>`.
-- **`src/net/session.js`** — one session per browser: `hostWorld` (mints the world id once, returns
-  the link), `joinWorld`, the paste-code fallback, the handshake through `custody.handshake`, the
-  guest list, the recent chat, and `mp-state` on the event bus. A host's token lives in a WeakMap
-  with its session; the save keeps only the hash (`putGuest`, slice 2).
-- **`src/net/join-link.js`** — `?join=<worldId>#<token>`: the secret after the `#`, so no server and
-  no referrer sees it. Reads a link out of a whole pasted sentence; refuses half a link with a
-  sentence naming the missing part. `src/net/boot.js` takes a `?join=` link at boot after asking
-  (a stray link costs one Cancel), and speaks through `mp-notice` rather than importing `ui/`.
-- **`src/net/paste.js`** — the broker-free fallback: one non-trickling `RTCPeerConnection` offer as a
-  `TRJOIN:` code and one answer back. The browser's own WebRTC, no library, so it works when the
-  relays do not.
-- **`src/net/protocol.js`** — seven kinds (`hello`, `welcome`, `refuse`, `chat`, `presence`, `ping`,
-  `pong`), each cleaned to its own fields and limits on the way out **and** in.
-- **UI** — Pause > **Open Multiplayer**: the switch, the username, the join link with Copy, and a box
-  to paste a link or a code. **Chat bottom left**: `Enter` opens, `Enter` sends, `Escape` closes; it is
-  an `<input>`, so `core/input.js` already keeps typing out of the flight controls. It shows the
-  connected players, and old lines fade.
-- **A hosted world never pauses.** `sim/step.js` now reads `state.multiplayer` (set by `ui/pause.js`),
-  so the card is a settings panel while hosting. The campaign still pauses, and multiplayer stays
-  **open world only**.
-- Tests: `tests/multiplayer-connection.test.mjs` (14) and `tests/multiplayer-session.test.mjs` (13 —
-  two real sessions on an in-memory wire: the handshake, a wrong secret, chat attribution and caps, a
-  clean stop). Suite **909/909**. Two bugs they found: a pasted sentence's trailing words became the
-  secret, and a numeric `name` in storage became the name `"42"`.
-- Documented in `src/net/README.md`, `src/ui/README.md`, `docs/ARCHITECTURE.md` and
-  `docs/architecture/multiplayer.md`.
+**What the owner saw.** "I can see who joined in the chat — add a compact player list to the right
+of the chat box." "Make it so you can only join from the main menu, and only open multiplayer from
+the pause menu when in your actual world." "Pausing the game when multiplayer is open still pauses
+the game, both guest and host." "If a guest joins as the same username, rename them with an
+asterisk." "Only the host can chat — the guest can view messages but cannot open the chat to type a
+word. Let me chat even when nobody has joined, so I can scroll up through the history."
 
-**Next: slice 4** — "Bring my pilot": `checkOut`/`relocate` through the join, the guest docked in the
-host's world, snapshot sync, "Go home". **Known limits:** no remote ship is drawn yet
-(`render/views.js` draws the local pilot only), and the player list is names only.
+- **Pausing still paused.** `ui/pause.js` set `state.multiplayer = !v && isOn()`, so the "a hosted
+  world never pauses" flag went **false** at the one moment it existed for — while the card was
+  open. It is now `isOn()`, for host and guest alike, and the card releases every held control key
+  on the way in, so an online world keeps stepping (and does not fly itself) behind the card.
+- **The guest could not type.** The chat box hid its own `<input>` unless that input already had the
+  cursor, and a `[hidden]` field cannot be given the cursor: the field never came back and the keys
+  went to the ship. The box now owns an explicit open/closed flag (`chatVisibility`), unhides the
+  field before focusing it, and draws its own log.
+- **Chat with nobody there.** A line no one can hear is still shown on this screen (in the box's own
+  40-line log, which is what "scroll up" means) and the note says who can see it; the two refusals
+  ("only you so far" and "could not be reached") are separate sentences.
+- **The player list is a column.** `#mp-chat-who` is now an `<aside>` beside the lines with one
+  15-pixel row per pilot ("Who is here", you first, never twice), so the chat box no longer spends a
+  line on names.
+- **One door each.** The title menu's screen is the **join** block only; the pause card's screen is
+  the **host** block only (`screenModel().surface`, set by `openMultiplayer({ from })`, refused a
+  second time inside `act()`). A guest mid-flight still gets the answer code and Leave from the
+  pause card, because that is the only screen they can reach. Quitting to the title now closes the
+  room: hosting is something you do while flying your own world.
+- **Duplicate names get stars** (owner's rule): the host hands out the first free variant — `Acey`,
+  then `Acey*`, then `Acey**` (`uniqueName` in `net/session.js`) — stores it, lists it and greets the
+  guest with "You are Acey* here — the host already has a Acey." Chat is attributed to the name the
+  host handed out, not the one that was typed. The stars are trimmed off the base so a renamed name
+  still fits `NET.nameMax`. `welcome` carries `youName` for it.
+- **Not built, on purpose:** you cannot see the other pilot's ship. Drawing a remote ship, and
+  moving a pilot between worlds, is **slice 4** — slice 3 deliberately moves nothing a player owns.
+
+**Files:** `src/ui/multiplayer.js`, `src/ui/pause.js`, `src/ui/menu.js`, `src/net/session.js`,
+`src/net/protocol.js`, `src/data/multiplayer.js` (`CHAT.historyLines`), `src/styles.css`.
+
+**Tests: 937, all green** (was 931). Seven new in `tests/multiplayer-ui.test.mjs`: the name rule on
+its own and through the real handshake, `chatVisibility`, a chat line with nobody there, the player
+column, the two doors, and the sim gate with `state.paused` **and** `state.multiplayer` both set.
+`tests/multiplayer-session.test.mjs`'s old assertion that the card sets `!v && isOn()` is replaced by
+the fixed rule.
+
+**Save format unchanged (v29).** Rebuild needed (`npm run build`).
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Step 16 slice 3 repaired — the multiplayer screen, the join path and the hello
+- 2026-11-21: Step 16 slice 3 — the connection: one link, the wrapper, chat and the player list
 - 2026-11-21: Yaw is the slow axis, roll the fast one — per-ship axis tuning
 - 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
 - 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere

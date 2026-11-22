@@ -389,6 +389,7 @@ export const state = {
     starmap: null,     // active chart; null while closed
     cargo: null,       // the in-flight ship inventory; null while closed
     cache: null,       // the rift-cache trade (ui/cache.js); null while closed
+    multiplayer: false, // the multiplayer screen (ui/multiplayer.js); a modal while open
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
     tab: "l",          // right station panel: l missions (accept), i inventory, b base, s saves

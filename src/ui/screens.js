@@ -103,6 +103,10 @@ export function introHtml() {
     `<div class="main-menu-actions">` +
     `<button class="go" data-a="campaign">Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +
+    // Step 16 slice 3: the one front door for co-op from the title, worded as the docs and
+    // the playtest guide word it. It opens the multiplayer screen (join by link/code, or
+    // host your own world), so a guest never has to enter their own world first.
+    `<button class="go" data-a="multiplayer">Join Multiplayer World</button>` +
     `</div>`
   );
 }

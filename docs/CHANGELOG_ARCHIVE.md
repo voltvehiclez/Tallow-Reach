@@ -1,5 +1,119 @@
 # Changelog archive
 
+## 2026-11-21: Step 16 slice 3 repaired — the multiplayer screen, the join path and the hello
+
+The owner's first slice-3 playtest, and everything it turned up. Three reports, five root causes,
+all of the same shape: **a control that only works in a state the screen never lets you reach, or
+whose words described something the connection was not doing.**
+
+**What the owner saw.** "There is no button in the main menu to join a world / no option to paste a
+link." "In the pause menu, when you turn multiplayer on, I see no way to get a link to copy." "I
+cannot seem to connect to another client in a browser tab; it says *Make a fresh offer first*."
+"Chat does not send with Enter; the text just sits in the box."
+
+**The causes, in order of how much they cost:**
+
+1. **The join box only existed after you had already joined.** `ui/multiplayer.js` drew the paste
+   box only for a session that was already a guest, and the only way to make one was that box; the
+   switch — the only control actually on screen — always started a *host* session. The playtest
+   guide's own guest steps (turn the switch on, then paste) led to the host panel, whose only box was
+   the answer-code box at the bottom. That box, with no offer behind it, is where **"Make a fresh
+   offer first"** came from.
+2. **The host's hello never left.** `sayHello` set its "greeted" latch *before* sending and sent
+   immediately after `join()`, when the other pilot is not in the room yet. The hello was dropped,
+   never retried, and chat (which broadcasts per line) still worked — so the guest's screen said
+   connected and the host's list stayed empty.
+3. **Hosting without a username said nothing.** The switch was drawn from the stored setting, not
+   from the session: it flipped to On, `hostWorld` refused with "Set a username first.", and that
+   sentence was written into `#mp-code-out` — an element that does not exist in that state.
+4. **The offer code deleted itself.** Making a code ended in a full redraw, so the code the host had
+   just been told to send vanished from the screen.
+5. **The code fallback could not be started by a guest.** Accepting a code needed a guest session,
+   and only a join link made one — so the path built for "the link did not work" needed the link to
+   work first. A code also carried no world id, so the host's own handshake would have refused the
+   guest it invited. (And the code path said "connected" before its data channel opened, so the
+   first hello over it failed too.)
+
+**The fix.**
+
+- **One multiplayer screen** (`#mp-screen`, built in `ui/multiplayer.js`), opened from the title
+  menu's new **Join Multiplayer World** button and from the pause card's **Open Multiplayer** button.
+  It is one surface because two would drift (LESSONS L19): *Your name*, *Host your world* (the
+  switch, the link, Copy, the codes) and *Join a friend's world* (the paste box, always there when
+  nothing of yours is running) are three blocks on one card, and the card scrolls so nothing can be
+  cut off.
+- **No username, no switch.** The switch is `disabled` until a name is typed, the action refuses as
+  well, and the sentence says what to do. The switch is drawn from the **session**, so a failed host
+  snaps it back to Off with the reason in `#mp-msg` — an element that is always in the card.
+- **Every control is a `data-mp` action**, handled by one listener on the screen's root, so a redraw
+  can never leave a button wired to nothing. The offer code lives in the screen's model
+  (`panelView.offer`), not in the DOM, so it survives redraws.
+- **The hello is per peer and retried**: `sayHello(peerId)` only latches once a message actually
+  left, it is re-sent when `onPeer` reports a pilot, and it goes over the paste wire too.
+- **The code fallback works alone**: `codesAcceptFrom` builds the guest session from the code, codes
+  now carry the host's `worldId` (`CODE_VERSION` 1 → 2, version 1 still read), and "connected" on
+  that path means "the data channel is open".
+- **Chat says why**: a line that cannot be sent is kept and the box prints the reason
+  ("Not sent — no other pilot is connected yet."), instead of Enter doing nothing.
+
+**Files:** `src/ui/multiplayer.js` (rewritten), `src/ui/screens.js`, `src/ui/menu.js`,
+`src/ui/overlays.js`, `src/ui/pause.js`, `src/core/input.js`, `src/state/state.js`,
+`src/styles.css`, `src/net/session.js`, `src/net/paste.js`, `src/net/transport.js` (a test-only
+library loader), `src/net/boot.js`.
+
+**Tests: 930, all green** (was 909). New `tests/multiplayer-ui.test.mjs` (18: the model, every
+button, the chat sentences, two sessions over a fake relay with the *real* transport and handshake)
+and `tests/multiplayer-paste-join.test.mjs` (3: a code carry the world id, a guest with no link
+joining by code end to end, a non-code refused). `tests/multiplayer-session.test.mjs` gained a
+`connect` switch so the host's own checks are read without the guest's automatic hello colouring
+them.
+
+**Save format unchanged (v29).** Rebuild needed (`npm run build`). Slice 4 still owns the pilot
+crossing worlds; nothing of a player's travels here.
+
+## 2026-11-21: Step 16 slice 3 — the connection: one link, the wrapper, chat and the player list
+
+Multiplayer can open a world, hand out a link and talk. **It still moves no pilot** — the suitcase
+is slice 4 — so this slice is honest to try: it can fail to connect, and it cannot cost anybody a
+ship.
+
+- **One dependency, one file.** `trystero@0.27.0` (MIT, pinned exactly) is imported lazily by
+  `src/net/transport.js` and by nowhere else; the layers test enforces it. Single-file build:
+  **3,256 → 3,508 KB**. `RELAYS.relayUrls` in `data/multiplayer.js` overrides the free relays.
+- **`src/net/transport.js`** — `createChannel({role, worldId, onState, onData, onPeer})` with
+  `join/send/broadcast/leave/peers/state/room`; states `idle · finding · connected · lost · closed`,
+  every failure a printable sentence and nothing thrown. A room is `tallowreach.p2p:<worldId>`.
+- **`src/net/session.js`** — one session per browser: `hostWorld` (mints the world id once, returns
+  the link), `joinWorld`, the paste-code fallback, the handshake through `custody.handshake`, the
+  guest list, the recent chat, and `mp-state` on the event bus. A host's token lives in a WeakMap
+  with its session; the save keeps only the hash (`putGuest`, slice 2).
+- **`src/net/join-link.js`** — `?join=<worldId>#<token>`: the secret after the `#`, so no server and
+  no referrer sees it. Reads a link out of a whole pasted sentence; refuses half a link with a
+  sentence naming the missing part. `src/net/boot.js` takes a `?join=` link at boot after asking
+  (a stray link costs one Cancel), and speaks through `mp-notice` rather than importing `ui/`.
+- **`src/net/paste.js`** — the broker-free fallback: one non-trickling `RTCPeerConnection` offer as a
+  `TRJOIN:` code and one answer back. The browser's own WebRTC, no library, so it works when the
+  relays do not.
+- **`src/net/protocol.js`** — seven kinds (`hello`, `welcome`, `refuse`, `chat`, `presence`, `ping`,
+  `pong`), each cleaned to its own fields and limits on the way out **and** in.
+- **UI** — Pause > **Open Multiplayer**: the switch, the username, the join link with Copy, and a box
+  to paste a link or a code. **Chat bottom left**: `Enter` opens, `Enter` sends, `Escape` closes; it is
+  an `<input>`, so `core/input.js` already keeps typing out of the flight controls. It shows the
+  connected players, and old lines fade.
+- **A hosted world never pauses.** `sim/step.js` now reads `state.multiplayer` (set by `ui/pause.js`),
+  so the card is a settings panel while hosting. The campaign still pauses, and multiplayer stays
+  **open world only**.
+- Tests: `tests/multiplayer-connection.test.mjs` (14) and `tests/multiplayer-session.test.mjs` (13 —
+  two real sessions on an in-memory wire: the handshake, a wrong secret, chat attribution and caps, a
+  clean stop). Suite **909/909**. Two bugs they found: a pasted sentence's trailing words became the
+  secret, and a numeric `name` in storage became the name `"42"`.
+- Documented in `src/net/README.md`, `src/ui/README.md`, `docs/ARCHITECTURE.md` and
+  `docs/architecture/multiplayer.md`.
+
+**Next: slice 4** — "Bring my pilot": `checkOut`/`relocate` through the join, the guest docked in the
+host's world, snapshot sync, "Go home". **Known limits:** no remote ship is drawn yet
+(`render/views.js` draws the local pilot only), and the player list is names only.
+
 ## 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
 
 The batch the owner asked for after playtest round 4 of step 15, in slices.

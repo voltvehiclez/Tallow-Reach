@@ -26,6 +26,7 @@ import { storyMission } from "../data/missions/index.js";
 import { campaignMission, campaignAvailable, isCampaignMissionId } from "../sim/campaign.js";
 import { startCampaignAct } from "../sim/campaign-act.js";
 import { campaignScreenHtml, campaignMenuBack, campaignMenuHtml } from "./campaign.js";
+import { openMultiplayer, closeMultiplayer } from "./multiplayer.js";
 import {
   assetsResultsHtml,
   introHtml,
@@ -155,10 +156,24 @@ export function setupMenu(options = {}) {
   });
   on("main-menu", () => {
     cancelHeldStack();
+    closeMultiplayer();
     state.ui.intro = true;
     resetStationPanels(state.ui);
     hideNotice();
     render();
+  });
+  // A join that started on the title screen ("Join Multiplayer World") enters the open
+  // world once it worked: being connected to a world you are not looking at is not a join.
+  on("mp-enter-world", () => {
+    if (!state.ui.intro) return;
+    enterGameMode("open");
+    // The same landing as the Open World button: a docked pilot gets the station panel,
+    // a pilot out in space gets the view.
+    if (!state.player || state.player.docked) render();
+    else {
+      panel.hidden = true;
+      hideLeftPanelElement(leftPanel);
+    }
   });
   // A mission changed while a docked screen is open — the last dialogue line
   // closed, a dock-side script finished, a hand-in or an abandon went through.
@@ -279,6 +294,12 @@ const ACTIONS = {
   // existing free-galaxy action; "Campaign" installs its independent galaxy and progress.
   intro() {
     enterGameMode("open");
+  },
+  // Step 16 slice 3: the title menu's way into co-op. One screen, opened here, that both
+  // hosts a world and takes a friend's link or code — a guest never enters their own
+  // world first, which is what the first playtest asked for.
+  multiplayer() {
+    openMultiplayer({ focus: "join", from: "menu" });
   },
   // The campaign opens on its own chapter screen, not straight into the world:
   // an act is chosen there and starts as a scene, never accepted like a job.

@@ -9,7 +9,7 @@
 
 import { state, localPlayer } from "../state/state.js";
 import { activeCampaignMission } from "../sim/campaign.js";
-import { multiplayerPanelHtml } from "./multiplayer.js";
+import { multiplayerCardHtml } from "./multiplayer.js";
 
 /** Can the pause overlay open? Everywhere in the open world, docked or flying. */
 export const canPause = (ui = state.ui) => !ui.intro;
@@ -40,9 +40,10 @@ export function pauseOverlayHtml() {
     `<button id="pz-resume">Resume</button>` +
     `<button class="sw" id="pz-sound" role="switch"><i></i><span></span></button>` +
     `<button id="pz-restart-act"${act ? "" : " hidden"}>Restart act</button>` +
-    // Step 16 slice 3: open multiplayer lives on the pause card, because that is where a
-    // pilot looks for "who am I playing with", and it must not pause the world itself.
-    multiplayerPanelHtml() +
+    // Step 16 slice 3: multiplayer is one button on the pause card (reworked 2026-11-21).
+    // The card is a settings card and the world keeps running behind it, so the button
+    // opens the multiplayer screen rather than growing the card by half a screenful.
+    multiplayerCardHtml() +
     `<button id="pz-main-menu">Exit to main menu</button>` +
     `</div>`
   );

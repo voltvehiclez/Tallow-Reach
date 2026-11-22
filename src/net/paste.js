@@ -30,8 +30,14 @@
 /** The prefix that marks a code as this game's, so a stray paste is refused in words. */
 const CODE_PREFIX = "TRJOIN:";
 
-/** How long a code may sit in a chat before it is stale (`data/multiplayer.js` NET.offerSec). */
-export const CODE_VERSION = 1;
+/**
+ * The code's own version. Bumped to 2 on 2026-11-21 when the envelope gained the host's
+ * `worldId`: a guest joining by code has no link to carry it, and without the world id the
+ * handshake (which checks it in `custody.handshake`) would refuse the very guest the host
+ * just invited. Version 1 codes are still read, with no world id, so nothing in the wild
+ * turns to nonsense.
+ */
+export const CODE_VERSION = 2;
 
 const isBrowser = () => typeof globalThis.RTCPeerConnection === "function";
 
@@ -46,8 +52,9 @@ const isBrowser = () => typeof globalThis.RTCPeerConnection === "function";
  * The result is the same small vocabulary the channel has: `send(value)`, `state()`,
  * `leave()`. One connection, not a room: a paste-code join is two browsers by definition.
  */
-export function createPasteLink({ onState, onData } = {}) {
+export function createPasteLink({ worldId = "", onState, onData } = {}) {
   let connection = null;
+  let roomId = String(worldId || "");
   let current = { state: "idle", reason: "" };
   let channel = null;
   let pendingAnswer = null;
@@ -65,7 +72,11 @@ export function createPasteLink({ onState, onData } = {}) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pc.onconnectionstatechange = () => {
       const next = pc.connectionState;
-      if (next === "connected") setState("connected");
+      // "The peers can reach each other" is not yet "there is a channel to send on". The
+      // channel's own `open` is the truth (see `attach`), and saying connected earlier told
+      // the screen a lie and made the first hello fail — the state is latched, so nothing
+      // re-sent it.
+      if (next === "connected") setState(channel?.readyState === "open" ? "connected" : "working", "Opening a direct channel…");
       else if (next === "failed" || next === "disconnected" || next === "closed") {
         setState("lost", "The direct connection closed. Make a new code.");
       }
@@ -122,7 +133,7 @@ export function createPasteLink({ onState, onData } = {}) {
       const description = await connection.createOffer();
       await connection.setLocalDescription(description);
       await gathered(connection);
-      const code = pack("offer", connection.localDescription);
+      const code = pack("offer", connection.localDescription, roomId);
       setState("waiting", "Send this code to the other pilot, then paste their answer.");
       return code;
     } catch (error) {
@@ -139,6 +150,8 @@ export function createPasteLink({ onState, onData } = {}) {
       setState("lost", "That is not a host's join code. Ask them to copy the whole code.");
       return "";
     }
+    // The code names the world it invites you to; that is what the handshake will check.
+    if (parsed.worldId) roomId = parsed.worldId;
     try {
       connection = openConnection();
       connectHandlers();
@@ -146,7 +159,7 @@ export function createPasteLink({ onState, onData } = {}) {
       const description = await connection.createAnswer();
       await connection.setLocalDescription(description);
       await gathered(connection);
-      const answer = pack("answer", connection.localDescription);
+      const answer = pack("answer", connection.localDescription, roomId);
       setState("waiting", "Send this answer back to the host.");
       return answer;
     } catch (error) {
@@ -234,8 +247,13 @@ const ICE_SERVERS = [
  * browser's own `btoa`/`atob` handle it. Whitespace is stripped on the way in, because a
  * chat app will wrap a long code over several lines and nobody will notice.
  */
-export function pack(kind, description) {
-  const body = JSON.stringify({ v: CODE_VERSION, kind, description: { type: description.type, sdp: description.sdp } });
+export function pack(kind, description, worldId = "") {
+  const body = JSON.stringify({
+    v: CODE_VERSION,
+    kind,
+    worldId: String(worldId || ""),
+    description: { type: description.type, sdp: description.sdp },
+  });
   const bytes = new TextEncoder().encode(body);
   let binary = "";
   bytes.forEach(byte => (binary += String.fromCharCode(byte)));
@@ -250,11 +268,17 @@ export function unpack(code) {
     const binary = atob(text.slice(CODE_PREFIX.length));
     const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
     const value = JSON.parse(new TextDecoder().decode(bytes));
-    if (value?.v !== CODE_VERSION) return null;
+    // Version 1 is still read: it carried no world id, and a guest can still join with it
+    // (the host's own check then decides, which is where that decision belongs).
+    if (value?.v !== CODE_VERSION && value?.v !== 1) return null;
     if (value.kind !== "offer" && value.kind !== "answer") return null;
     const description = value.description;
     if (!description || typeof description.sdp !== "string" || !description.sdp) return null;
-    return { kind: value.kind, description: { type: description.type, sdp: description.sdp } };
+    return {
+      kind: value.kind,
+      worldId: typeof value.worldId === "string" ? value.worldId : "",
+      description: { type: description.type, sdp: description.sdp },
+    };
   } catch (e) {
     return null;
   }
@@ -265,3 +289,10 @@ export const codeLength = code => String(code || "").length;
 
 /** Is this string shaped like one of this game's codes at all? */
 export const looksLikeCode = code => String(code || "").replace(/\s+/g, "").startsWith(CODE_PREFIX);
+
+/**
+ * The world a code invites you to, or "" for a code that does not carry one. A guest needs
+ * this *before* it has a session: the session is built for that world, and the handshake
+ * checks the same id on the other side.
+ */
+export const codeWorldId = code => unpack(code)?.worldId || "";

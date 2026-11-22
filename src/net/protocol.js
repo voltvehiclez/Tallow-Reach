@@ -4,7 +4,9 @@
 // Slice 3 sends only what proving the pipe needs:
 //
 //   hello      { t, v, worldId, guestId, name, token }   host -> guest, right after joining
-//   welcome    { t, v, worldId, you, name, guests[] }     guest -> host, the guest's own name
+//   welcome    { t, v, worldId, you, youName, name, guests[] }
+//                                                        host -> guest: who you are here,
+//                                                        under what name (see `uniqueName`)
 //   refuse     { t, reason, message }                     host -> guest, why it said no
 //   chat       { t, text, from, at }                      either way, one line
 //   presence   { t, guests[{ guestId, name, docked }] }   host -> guests, who is here
@@ -64,6 +66,7 @@ export function cleanMessage(kind, fields = {}) {
         v: Math.max(0, Math.floor(Number(fields.v) || 0)),
         worldId: text(fields.worldId, LIMITS.id),
         you: text(fields.you, LIMITS.id),
+        youName: text(fields.youName, LIMITS.name),
         name: text(fields.name, LIMITS.name),
         guests: cleanGuestList(fields.guests),
       };
