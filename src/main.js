@@ -355,6 +355,13 @@ function drawFrame(now) {
 function frame(now) {
   requestAnimationFrame(frame);
   try {
+    if (state.paused || isChatOpen()) {
+      const c = localPlayer()?.controls;
+      if (c) {
+        c.pitch = 0; c.yaw = 0; c.roll = 0;
+        c.throttle = 0; c.boost = false; c.fire = false; c.secondary = false;
+      }
+    }
     drawFrame(now);
   } catch (err) {
     reportCrash("frame", err);

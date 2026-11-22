@@ -1386,7 +1386,11 @@ function drawChat() {
     panel: sessionIsPanelOpen(),
     open: chatOpen,
   });
-  if (!shown.box) { chatBox.hidden = true; chatOpen = false; return; }
+  if (chatPinned && snap.on) {
+    chatBox.hidden = false;
+    chatInput.hidden = !chatOpen;
+    document.body.classList.toggle("mp-chat-open", chatOpen);
+  }
   chatBox.hidden = false;
   if (chatWho) chatWho.innerHTML = chatWhoHtml(snap);
   const lines = chatLog(snap);
