@@ -357,15 +357,13 @@ function messageHtml(model) {
 }
 
 function nameHtml(model) {
-  if (!state.ui.intro) {
-    return (
-      `<section class="mp-block">` +
-      `<h2>Your name</h2>` +
-      `<p class="mp-hint">Playing as <b>${escapeHtml(model.nameValue || "Pilot")}</b>.</p>` +
-      `</section>`
-    );
-  }
   return (
+    `<section class="mp-block">` +
+    `<h2>Your name</h2>` +
+    `<p class="mp-hint">Playing as <b>${escapeHtml(model.nameValue || "Pilot")}</b>.</p>` +
+    `</section>`
+  );
+}
     `<section class="mp-block">` +
     `<h2>Your name</h2>` +
     `<label class="mp-label">Username` +
@@ -1228,12 +1226,14 @@ function buildChat() {
   chatWho = chatBox.querySelector("#mp-chat-who");
   chatNote = chatBox.querySelector("#mp-chat-note");
   const pinBtn = chatBox.querySelector("#mp-chat-pin");
+  pinBtn?.addEventListener("mousedown", e => e.preventDefault());
   pinBtn?.addEventListener("click", () => {
     chatPinned = !chatPinned;
     pinBtn.classList.toggle("is-pinned", chatPinned);
     drawChat();
   });
   const expandBtn = chatBox.querySelector("#mp-chat-expand");
+  expandBtn?.addEventListener("mousedown", e => e.preventDefault());
   expandBtn?.addEventListener("click", () => {
     chatExpanded = !chatExpanded;
     expandBtn.classList.toggle("is-expanded", chatExpanded);

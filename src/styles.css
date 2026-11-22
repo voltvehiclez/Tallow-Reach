@@ -2712,8 +2712,8 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 }
 #mp-chat-who {
   flex: 0 0 auto;
-  min-width: 32px;
-  max-width: 44px;
+  min-width: 18px;
+  max-width: 24px;
   padding-left: 9px;
   border-left: 1px solid rgba(224, 164, 88, .28);
   color: var(--amber);
@@ -2780,6 +2780,8 @@ body.mp-chat-expanded #mp-chat-who li {
   cursor: pointer;
 }
 #mp-chat-pin.is-pinned, #mp-chat-expand.is-expanded { color: var(--amber); border-color: var(--amber); }
+body:not(.mp-chat-open) #mp-chat-pin,
+body:not(.mp-chat-open) #mp-chat-expand { display: none; }
 #mp-chat-input {
   width: 100%;
   font: 13px/1.3 ui-monospace, monospace;
