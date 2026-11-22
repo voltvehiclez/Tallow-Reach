@@ -20,6 +20,38 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 9 of slice 3 — a code that can cross networks (the 4G case)
+
+**The owner's report.** The offer/answer codes connect a laptop and a PC on the same wifi, and
+fail when the laptop is on **4G**. That is not a bug in the exchange: two machines behind different
+NATs share no address they can both reach, and a mobile carrier never gives one. The only thing
+that saves it is a **relay (TURN) candidate** in the code.
+
+- **Why the code had none.** Gathering was cut off after **4 s**, and relay candidates are the slow
+  ones (they come from a server, and on a phone they arrive over TCP/TLS 443 because UDP is often
+  blocked). `ICE.gatherMs` is now **8 s** and `net/paste.js` waits that long.
+- **More than one TURN family, all with a TCP/443 door.** `ICE.turn` lists the free Open Relay
+  entry, freestun.net and AnyFirewall, each with a `?transport=tcp` or `turns:` variant: port 443 is
+  what a mobile network allows, and a free server can be down.
+- **The code says what it can reach, before it is sent.** `paste.js` counts the candidates it
+  gathered by kind (`paths()`/`hasRelayPath()`) and the screen prints, above the code: *"This code
+  carries a relay path, so it works between different networks (a phone on 4G included)"* or *"no
+  relay path — only local addresses… only works between machines on the same network"*. The session
+  says the same thing once, in the message line, when the code is made (`noteCodePaths`).
+- So a code that cannot cross networks now says so instead of silently failing, and the relay
+  servers it needs are the ones a phone can actually reach.
+
+**Files:** `src/data/multiplayer.js` (`ICE.gatherMs`, `ICE.stun`, three TURN entries,
+`BUILD = "2026-11-22e"`), `src/net/paste.js` (candidate counting, gather window, `paths`),
+`src/net/session.js` (`noteCodePaths`, `snapshot().codePaths`), `src/ui/multiplayer.js`
+(`codePathsHtml` above the offer code).
+
+**Tests: 965, all green** (was 961). Four new: candidate kinds counted from a fake peer connection
+(local-only vs relay), the TURN list's TCP/443/TLS doors and the gather window, the two sentences in
+the codes block, and the session's own note.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22e`.**
+
 ## 2026-11-22: Playtest 8 of slice 3 — the codes connected, and opening your own world now leaves a visit
 
 **The owner's report that changed the picture: the offer/answer codes worked.** So the two
@@ -133,51 +165,6 @@ globally — no test may open a real WebSocket.
 **Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22c`** — both machines must
 show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
 (0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
-
-## 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
-
-The save now knows where a pilot **is**. Slice 1 proved the rules of travel on plain objects;
-this slice puts them in the save, with a migration that every older save walks through by doing
-nothing at all.
-
-- **`SAVE_VERSION` 28 → 29** (`src/state/profile.js`). Two additive fields, both optional forever:
-  - `save.away` — `{ worldId, hostName, guestId, token, epoch, rev, suitcase }` beside `profile`
-    and `world`, or `null` at home. **Not** inside the profile: where a pilot is is neither a fact
-    about the character nor about the world it stands in. `cleanAway` validates it; a marker with
-    no world id or no guest id is not a marker (nothing could be found again from it).
-  - `world.worldId` (`null` until the world is first hosted) and `world.guests` — `guestId ->
-    { name, tokenHash, epoch, rev, bundle, lastSeen }`, read back by `cleanGuests`. A record with
-    no token hash is dropped (there is nothing to prove against), and a damaged entry never fails
-    the save, because the guest's suitcase has the copy.
-  - **Migration:** every v28-and-older save loads with `away: null` and `guests: {}`. A v13 and a
-    v12 fixture are in `tests/multiplayer-save.test.mjs` to prove it.
-  - **A suitcase is not sanitized like a profile.** `cleanSuitcase` checks the shape and drops
-    wrong *types*, but never second-guesses a content id: while a pilot is away, its suitcase is
-    the **only** copy of its cargo, so an id this build does not know is carried, not deleted.
-- **`src/net/multiplayer.js`** (new): the operations that change those fields, so no caller has to
-  know their shape — `worldIdFor` (mint once, keep), `adoptHostWorld`, `leaveHostWorld`, `syncAway`,
-  `guestOf`/`putGuest`/`dropGuest`/`guestList`/`seenGuest`/`guestIsHere`/`guestCount`/`canTakeGuest`,
-  `isAway`/`awayLine`/`suitcaseKey`. A host's record is built by `custody.guestRecord`, which now
-  **strips the guest's token** from the bundle it stores: a host's save must never become a way to
-  take somebody's pilot.
-- **`src/state/storage.js`**: writes go through a scratch key and are swapped in
-  (`writeThrough`), the replaced version is kept for one generation (`tr1:prev`,
-  `NET.keepPrevious`), and `loadAutosave` falls back to it when the live record will not read. Slots
-  are swapped in too but keep no history (the player asked for that save). New
-  `writeAway`/`readAway`/`clearAway`/`awayWorlds` for the per-world suitcase key `away:<worldId>`
-  (`KEY` in `data/multiplayer.js`), so two tabs visiting two worlds cannot overwrite each other.
-  **Storage keys and `TR1:` did not change.**
-- **`src/state/state.js`**: the runtime keeps `state.away`, `currentSave()` writes it, and
-  `installNestedSave` reads it, so a save made while visiting still says so after a reload. A
-  dual-mode autosave carries each half's own marker (a campaign pilot is never marked).
-- **`src/net/custody.js`**: `checkOut` reuses the token an away pilot already proved (a fresh one
-  would look like a stranger to the host it is returning to) and the bundle now carries
-  `homeStation`, which slice 4 needs to put the pilot back at its own station on the way home.
-
-Tests: `tests/multiplayer-save.test.mjs` (26). Suite 881 pass / 0 fail. **No networking yet**
-(slice 3), and nothing a player can click changes: a pilot gets a marker only when the join flow
-(slice 4) sets it, so the game plays exactly as v28. Guide for the owner:
-`../testing/TESTING-16-SAVE29.md`.
 
 ## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
 
@@ -309,6 +296,7 @@ Rebuild `game/tallow-reach.html`; `npm test`.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
 - 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
 - 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
 - 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is

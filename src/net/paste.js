@@ -60,6 +60,8 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
   let current = { state: "idle", reason: "" };
   let channel = null;
   let pendingAnswer = null;
+  // What the last gathered code can use: host/srflx are direct paths, `relay` came from TURN.
+  const paths = { host: 0, srflx: 0, prflx: 0, relay: 0 };
 
   const setState = (state, reason = "") => {
     if (current.state === state && current.reason === reason) return;
@@ -84,8 +86,15 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
       }
     };
     // ICE candidates are gathered into the code itself, so none arrive after it is sent.
-    // Accepting one here would be harmless; ignoring them keeps the code small.
-    pc.onicecandidate = () => {};
+    // They are also **counted by kind**, which is the only way a player can tell "the code
+    // has a relay path" from "the code has nothing but local addresses" — the difference
+    // between a phone on 4G reaching a home PC and not reaching it at all (playtest 8).
+    for (const kind of PATH_KINDS) paths[kind] = 0;
+    pc.onicecandidate = event => {
+      const candidate = String(event?.candidate?.candidate || "");
+      const kind = /\btyp (\w+)/.exec(candidate)?.[1];
+      if (kind && PATH_KINDS.includes(kind)) paths[kind] += 1;
+    };
     pc.ondatachannel = event => attach(event.channel);
     return pc;
   };
@@ -118,11 +127,12 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
       }
     };
     pc.addEventListener("icegatheringstatechange", done);
-    // A network that never finishes gathering still deserves a usable code.
+    // A network that never finishes gathering still deserves a usable code — and the wait
+    // has to be long enough for the *relay* candidates, which is the whole point on 4G.
     setTimeout(() => {
       pc.removeEventListener("icegatheringstatechange", done);
       resolve();
-    }, 4000);
+    }, Math.max(2000, Number(ICE.gatherMs) || 8000));
   });
 
   /** Host: make the offer code to show. */
@@ -225,6 +235,13 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
     state: () => ({ ...current }),
     /** True once the two browsers are talking with no broker involved. */
     live: () => !!channel && channel.readyState === "open",
+    /**
+     * What network paths the last code carried, by kind. `relay > 0` is what makes a code
+     * work between two different networks; `relay: 0` means every path is a local address,
+     * so the two machines must be on the same network. A screen can say which.
+     */
+    paths: () => ({ ...paths }),
+    hasRelayPath: () => paths.relay > 0,
   };
 }
 
@@ -243,10 +260,12 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
  * already been told the easy way failed, so here it is always on.
  */
 const ICE_SERVERS = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
+  ...(Array.isArray(ICE.stun) ? ICE.stun : ["stun:stun.l.google.com:19302"]).map(url => ({ urls: url })),
   ...(Array.isArray(ICE.turn) ? ICE.turn.map(entry => ({ ...entry })) : []),
 ];
+
+/** The kinds of network path a code can carry, most useful last. */
+const PATH_KINDS = ["host", "srflx", "prflx", "relay"];
 
 /* ------------------------------------------------------------------------- */
 /* The code itself: a small, printable, copy-paste-safe envelope              */

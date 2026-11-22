@@ -229,6 +229,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       stalled,
       relay: relayTried,
       codes: codes ? { ...codes } : null,
+      // What the code's own network paths look like. `relay: 0` means the code can only work
+      // between two machines on the same network (playtest 8: a laptop on 4G needs TURN).
+      codePaths: paste && typeof paste.paths === "function" ? paste.paths() : null,
     };
   }
 
@@ -526,6 +529,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       onData: message => receive(message, null),
     });
     const offer = await paste.offer();
+    noteCodePaths();
     codes = { offer, answer: null };
     publish();
     return codes;
@@ -556,6 +560,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       onData: message => receive(message, null),
     });
     const answer = await paste.accept(offer);
+    noteCodePaths();
     if (answer) startHelloRetry();
     publish();
     if (!answer) return { ok: false, message: paste.state().reason || "That code was not accepted." };
@@ -707,6 +712,25 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     else publishPresence();
     publish();
     return true;
+  }
+
+  /**
+   * Say, once, what a freshly made code can actually do.
+   *
+   * The codes worked on the same wifi and failed on 4G (owner, playtest 8). That is a code
+   * with no relay path: two machines behind different NATs have no address they can both
+   * reach, so the only thing that saves it is a TURN candidate. Saying so before the code is
+   * sent is the difference between a puzzle and a diagnosis.
+   */
+  function noteCodePaths() {
+    const paths = paste && typeof paste.paths === "function" ? paste.paths() : null;
+    if (!paths) return;
+    const said = paths.relay > 0
+      ? `This code has a relay path (${paths.relay}), so it works between different networks too.`
+      : "This code has no relay path — only local addresses. It will work between machines on the same network, and fail across networks such as 4G or a friend's house.";
+    try {
+      emit("mp-notice", said);
+    } catch (e) { /* a broken screen must not break a session */ }
   }
 
   /** Ask the signalling relays how they are, so the screen can say it. */

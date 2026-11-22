@@ -219,6 +219,10 @@ Mission lessons are first because missions are where most bugs have come from. T
   path to blame.
 - **Enforced by:** `tests/multiplayer-ui.test.mjs` section 11 — the pinned list and the transport
   passing it, the probe landing in the diagnostics, the "N of 5" row and its warning at 0.
+- **Follow-up (playtest 8):** the same lesson one layer down. The codes worked on one wifi and failed
+  on 4G, because a code is only as good as the **path kinds** it carries, and gathering was cut off
+  before any relay candidate could arrive. A gathered code now reports `paths()` — host, srflx,
+  relay — and the screen says "same network only" *before* the code is sent, not after it fails.
 
 ### L37. A health check that asks a different question than the feature does
 

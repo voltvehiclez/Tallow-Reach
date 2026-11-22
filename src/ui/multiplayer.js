@@ -110,6 +110,8 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     hostName: snap.hostName || "",
     // The transport's facts, when there is a connection to describe.
     diag: snap.diag || null,
+    // What the offer/answer code can do: `relay > 0` means it works across networks.
+    codePaths: snap.codePaths || null,
     relay: !!snap.relay,
     guests: (snap.guests || []).slice(),
     peers: (snap.peers || []).slice(),
@@ -364,6 +366,7 @@ function codesHtml(model) {
     );
   }
   return (
+    codePathsHtml(model) +
     `<label class="mp-label">1. Offer code — send this to your friend` +
     `<textarea class="mp-code" id="mp-offer" readonly rows="3" data-mp-select>${escapeHtml(model.offer)}</textarea></label>` +
     `<div class="mp-row"><button type="button" data-mp="copy-offer">Copy offer code</button></div>` +
@@ -371,6 +374,25 @@ function codesHtml(model) {
     `<textarea class="mp-code" data-mp-field="code" rows="3" placeholder="TRJOIN:…">${escapeHtml(model.codeValue)}</textarea></label>` +
     `<div class="mp-row"><button type="button" data-mp="finish">Connect</button>` +
     `<button type="button" data-mp="reset-offer">Start again</button></div>`
+  );
+}
+
+/**
+ * One line about what the code in front of the player can do.
+ *
+ * A code is a list of network paths. Two machines on the same wifi can use local ones; a
+ * phone on 4G and a PC at home cannot — they need a path through a TURN server. Without this
+ * line, "it worked at home and not on my phone" has no explanation anywhere on screen.
+ */
+function codePathsHtml(model) {
+  const paths = model.codePaths;
+  if (!paths) return "";
+  if (paths.relay > 0) {
+    return `<p class="mp-hint">This code carries a relay path, so it works between different networks (a phone on 4G included).</p>`;
+  }
+  return (
+    `<p class="mp-hint mp-warn">This code has no relay path — only local addresses — so it only works between machines on the same network. ` +
+    `Both machines need to reach a TURN server for it to work across the internet; if this keeps happening, send me the Connection details.</p>`
   );
 }
 

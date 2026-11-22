@@ -23,6 +23,7 @@ import { pack, unpack, codeWorldId, looksLikeCode } from "../src/net/paste.js";
 import * as session from "../src/net/session.js";
 import { SAVE_VERSION, newProfile, newWorld } from "../src/state/profile.js";
 import { state } from "../src/state/state.js";
+import { readFileSync } from "node:fs";
 
 /* ------------------------------------------------------------------------- */
 /* The code itself                                                           */
@@ -95,7 +96,13 @@ class FakePeerConnection {
   }
   async createOffer() { return { type: "offer", sdp: "host-offer" }; }
   async createAnswer() { return { type: "answer", sdp: "guest-answer" }; }
-  async setLocalDescription(description) { this.localDescription = description; }
+  async setLocalDescription(description) {
+    this.localDescription = description;
+    // A real browser hands its gathered candidates to `onicecandidate`; tests say which.
+    for (const candidate of FakePeerConnection.emitCandidates || []) {
+      this.onicecandidate?.({ candidate: { candidate } });
+    }
+  }
   async setRemoteDescription(description) {
     this.remoteDescription = description;
     if (description.type !== "answer") return;
@@ -194,4 +201,56 @@ test("a code that is not one is refused with a sentence, before anything is buil
     globalThis.RTCPeerConnection = previous.rtc;
     state.mode = previous.mode;
   }
+});
+
+/* ------------------------------------------------------------------------- */
+/* What a code can reach: the 4G problem                                     */
+/* ------------------------------------------------------------------------- */
+//
+// The owner's playtest 8: the codes connect on the same wifi and fail on 4G. That is a code
+// with no **relay** path — two machines behind different NATs share no address, so only a
+// TURN candidate can save it. The code says which it has, before it is sent.
+
+import { createPasteLink } from "../src/net/paste.js";
+import { ICE } from "../src/data/multiplayer.js";
+
+test("a code counts the network paths it carries, and says whether one is a relay", async () => {
+  const previous = globalThis.RTCPeerConnection;
+  globalThis.RTCPeerConnection = FakePeerConnection;
+  try {
+    FakePeerConnection.emitCandidates = [
+      "candidate:1 1 udp 2130706431 192.168.1.20 5000 typ host",
+      "candidate:2 1 udp 1694498815 203.0.113.9 6000 typ srflx",
+    ];
+    const local = createPasteLink({ worldId: "w-1" });
+    await local.offer();
+    assert.deepEqual(local.paths(), { host: 1, srflx: 1, prflx: 0, relay: 0 });
+    assert.equal(local.hasRelayPath(), false, "two local addresses and nothing else");
+
+    FakePeerConnection.emitCandidates = [
+      "candidate:1 1 udp 2130706431 192.168.1.20 5000 typ host",
+      "candidate:3 1 udp 16777215 198.51.100.7 1234 typ relay raddr 0.0.0.0 rport 0",
+    ];
+    const wide = createPasteLink({ worldId: "w-1" });
+    await wide.offer();
+    assert.equal(wide.paths().relay, 1);
+    assert.equal(wide.hasRelayPath(), true, "a relay path is what crosses networks");
+  } finally {
+    FakePeerConnection.emitCandidates = [];
+    globalThis.RTCPeerConnection = previous;
+  }
+});
+
+test("the relay servers are reachable from a phone: TCP and TLS on 443, and a real gather window", () => {
+  const urls = ICE.turn.flatMap(entry => entry.urls);
+  assert.ok(urls.some(url => url.includes(":443")), "port 443, where a mobile network allows traffic");
+  assert.ok(urls.some(url => url.includes("transport=tcp")), "and over TCP when UDP is blocked");
+  assert.ok(urls.some(url => url.startsWith("turns:")), "with TLS in front of it");
+  for (const entry of ICE.turn) {
+    assert.ok(entry.username && entry.credential, "every TURN server has a login");
+  }
+  assert.ok(ICE.gatherMs >= 6000,
+    "the wait must be long enough for a relay candidate to arrive, or 4G has no path to use");
+  const paste = readFileSync(new URL("../src/net/paste.js", import.meta.url), "utf8");
+  assert.match(paste, /Math\.max\(2000, Number\(ICE\.gatherMs\) \|\| 8000\)/, "and the code uses it");
 });

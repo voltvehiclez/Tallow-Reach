@@ -152,6 +152,16 @@ welcomed"). `transport.restart({ useTurn })` is a fresh join; the screen's **Rec
 same thing. A room that dies on its own (a backgrounded tab, a slept laptop, a dropped relay) stays
 `lost` for ever, so `session.startKeepalive()` reopens it at most once every ten seconds.
 
+**A code is a list of paths, and only some of them cross a network.** The codes proved that two
+machines can connect without any broker — and then failed the moment one of them was on **4G**
+(playtest 8). Nothing was wrong with the exchange: a laptop on a carrier network and a PC at home
+sit behind different NATs with no address they both reach, so the only path that works is a
+**relay (TURN) candidate**, and a code only gets one if gathering is still running when the server
+answers. Hence `ICE.gatherMs` (8 s, not 4) and three TURN families in `ICE.turn`, each with a TCP or
+TLS 443 door because that is what a phone is allowed to open. `paste.js` counts the candidates by
+kind (`paths()`, `hasRelayPath()`) and the screen says which kind of code the player is holding —
+`relay: 0` means "same network only", before it is sent rather than after it fails.
+
 **Diagnose by facts, not by mood.** `diagFacts()`/`diagReport()` (shown as **Connection details**,
 copyable with one button) print the **build string**, the **world id**, the signalling state and its
 sentence, **how many browsers are in the room**, the direct link's state, relay on/off, and

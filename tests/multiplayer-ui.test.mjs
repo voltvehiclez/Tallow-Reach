@@ -1010,3 +1010,34 @@ test("the title's Open World is where a visit ends, and the pilot comes home", (
   const entered = menu.indexOf('on("mp-enter-world"');
   assert.doesNotMatch(menu.slice(entered, entered + 400), /comeHome/, "a fresh join does not leave");
 });
+
+test("the codes block says whether the code can cross networks", () => {
+  const base = { ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1" };
+  const v = { surface: "both", offer: "TRJOIN:offer", fields: {}, history: [] };
+  const localOnly = ui.screenHtml(ui.screenModel({
+    snap: { ...base, codePaths: { host: 2, srflx: 1, prflx: 0, relay: 0 } },
+    v,
+  }));
+  assert.match(localOnly, /no relay path/i);
+  assert.match(localOnly, /same network/i);
+
+  const wide = ui.screenHtml(ui.screenModel({
+    snap: { ...base, codePaths: { host: 1, srflx: 1, prflx: 0, relay: 2 } },
+    v,
+  }));
+  assert.match(wide, /carries a relay path/i);
+  assert.doesNotMatch(wide, /no relay path/i);
+
+  // Nothing to say before a code exists.
+  const none = ui.screenHtml(ui.screenModel({ snap: base, v: { surface: "both", offer: "", fields: {}, history: [] } }));
+  assert.doesNotMatch(none, /relay path/i);
+});
+
+test("the session publishes what the code can do, in words", () => {
+  const src = read("src/net/session.js");
+  assert.match(src, /function noteCodePaths\(\)/);
+  assert.match(src, /paths\.relay > 0/, "it reads the relay count");
+  assert.match(src, /works between different networks too/, "and says so when there is one");
+  assert.match(src, /no relay path — only local addresses/, "and says the opposite when there is not");
+  assert.match(src, /codePaths: paste/, "the snapshot carries the counts to the screen");
+});

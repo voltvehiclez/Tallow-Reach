@@ -112,7 +112,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-22d";
+export const BUILD = "2026-11-22e";
 
 export const NET = {
   snapshotSec: 2,
@@ -218,15 +218,54 @@ export const RELAYS = {
  * Anyone can put their own server here; nothing is a secret of this game.
  */
 export const ICE = {
-  turn: [{
-    urls: [
-      "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:443",
-      "turns:openrelay.metered.ca:443?transport=tcp",
-    ],
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  }],
+  /**
+   * How long a code waits for every network path before it is sent.
+   *
+   * The slow candidates are the relay ones: they come from a server, and on a mobile network
+   * they arrive over TCP/TLS 443 because UDP is often blocked. Cutting gathering off early
+   * (it was 4 s) is how a code ended up carrying only local paths — so a laptop on 4G could
+   * not reach a PC at home, while the same laptop on the same wifi could (owner, playtest 8).
+   */
+  gatherMs: 8000,
+  /** Public STUN: only answers "what is my address". Free, no account, carries nothing. */
+  stun: [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302",
+  ],
+  /**
+   * TURN servers: the path that exists when the two networks cannot see each other at all
+   * (a mobile carrier, a router with no hairpin NAT). They forward encrypted packets they
+   * cannot read. Several are listed because a free one can be down, and **each entry has a
+   * TCP or TLS 443 variant** — ports 80/443/TCP are what a phone is allowed to use.
+   */
+  turn: [
+    {
+      urls: [
+        "turn:openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:443",
+        "turns:openrelay.metered.ca:443?transport=tcp",
+      ],
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: [
+        "turn:freestun.net:3478",
+        "turn:freestun.net:3478?transport=tcp",
+        "turns:freestun.net:5350",
+      ],
+      username: "free",
+      credential: "free",
+    },
+    {
+      urls: [
+        "turn:turn.anyfirewall.com:443?transport=tcp",
+        "turns:turn.anyfirewall.com:443?transport=tcp",
+      ],
+      username: "webrtc",
+      credential: "webrtc",
+    },
+  ],
 };
 
 /**
