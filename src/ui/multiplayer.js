@@ -1351,6 +1351,7 @@ export function openChat() {
   if (!chatBox) return false;
   if (!api.snapshot().on) return false;
   chatOpen = true;
+  state.ui.chat = true;
   chatBox.hidden = false;
   // Visible *before* the focus call: a `[hidden]` field cannot take the cursor, so asking
   // for it first is a silent no-op (the guest's box opened with no way to type).
@@ -1366,10 +1367,12 @@ export function openChat() {
 export function closeChat() {
   if (!chatBox) return;
   chatOpen = false;
-  chatBox.hidden = true;
+  state.ui.chat = false;
   document.body.classList.remove("mp-chat-open");
   chatInput?.blur?.();
   if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
+  if (chatPinned) drawChat();
+  else chatBox.hidden = true;
 }
 
 export const toggleChat = () => (isChatOpen() ? closeChat() : openChat());
