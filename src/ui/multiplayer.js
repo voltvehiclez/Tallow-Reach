@@ -152,6 +152,7 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     codeValue: v.fields.code || "",
     message: v.message || "",
     messageKind: v.messageKind || "hint",
+    connectProgress: snap.connectProgress || null,
     busy: !!v.busy,
     mounted: !!root,
   };
@@ -227,6 +228,15 @@ export function setupMultiplayer() {
   on("mp-notice", text => {
     setMessage(text, "hint");
     showNotice(text);
+  });
+  // The host closed the game: kick the guest back to the title screen with a clear reason.
+  on("mp-host-left", ({ reason } = {}) => {
+    panelView.offer = "";
+    panelView.answer = "";
+    panelView.fields.code = "";
+    panelView.fields.join = "";
+    emit("main-menu", {});
+    emit("mp-notice", reason || "The host closed the game.");
   });
   // A `?join=` link found at boot (see net/boot.js). The session does the joining; this
   // file shows the result. The link is rebuilt from its two halves because that is the
@@ -334,8 +344,14 @@ export function screenHtml(model) {
 
 function messageHtml(model) {
   // Always present, so a refusal is never drawn into an element that is not on screen.
+  const prog = panelView.busy && model.connectProgress ? model.connectProgress : null;
+  const bar = prog
+    ? `<div class="mp-progress" role="progressbar" aria-valuenow="${prog.pct}" aria-valuemin="0" aria-valuemax="100">` +
+      `<div class="mp-progress-bar" style="width:${prog.pct}%"></div></div>` +
+      `<p class="mp-hint">${escapeHtml(prog.label)} (${prog.pct}%)</p>`
+    : "";
   return `<p id="mp-msg" class="mp-msg is-${escapeAttr(model.messageKind)}"${model.message ? "" : " hidden"}>` +
-    `${escapeHtml(model.message)}</p>`;
+    `${escapeHtml(model.message)}</p>${bar}`;
 }
 
 function nameHtml(model) {

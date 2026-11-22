@@ -169,6 +169,11 @@ export async function joinWorld({ link, name = readSettings().name } = {}) {
   const session = createSession({ role: "guest", worldId: found.worldId, name: who, token: found.token, save: saveKit });
   active = session;
   await session.start();
+  const joined = await session.waitForWelcome();
+  if (!joined.ok) {
+    if (active === session) stop();
+    return joined;
+  }
   return { ok: true, worldId: found.worldId };
 }
 
@@ -194,7 +199,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // The host's own name, learnt from the welcome. A guest's player list is built from this
   // plus the guest rows — without it the guest sees a column with only itself in it.
   let hostName = "";
+  let hostPeerId = null;
   let welcomed = false;     // has the host answered at all?
+  const welcomeWaiters = [];
   // "Nobody has appeared in the room and the wait is over." Not an error: the honest fact
   // that the relay route is not delivering, which is the moment the code path stops being a
   // footnote and becomes the thing on screen (playtest 6).
@@ -224,6 +231,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       peers: channel ? channel.peers() : [],
       guests: guests.slice(),
       chat: chat.slice(),
+      connectProgress: role === "guest" ? guestProgress(status) : null,
       // Facts for the screen's "Connection details": what the transport can see about the
       // link itself, so a failure can be reported instead of guessed at.
       diag: channel && typeof channel.diagnostics === "function" ? channel.diagnostics() : null,
@@ -266,7 +274,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     }
     switch (message.t) {
       case "hello": return onHello(message, peerId);
-      case "welcome": return onWelcome(message);
+      case "welcome": return onWelcome(message, peerId);
       case "refuse": return onRefuse(message);
       case "presence": return onPresence(message);
       case "ping": return send({ t: "pong", at: Date.now() }, peerId);
@@ -323,7 +331,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     clearStallTimer();
     const fresh = !guests.some(entry => entry.guestId === message.guestId);
-    upsertGuest({ guestId: message.guestId, name: display, docked: false });
+    upsertGuest({ guestId: message.guestId, name: display, docked: false, peerId: peerId || null });
     if (peerId) peerNames.set(peerId, display);
     send(cleanMessage("welcome", {
       v: SAVE_VERSION,
@@ -362,8 +370,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
 
   /** Guest side: the host accepted us and said who else is here. */
-  function onWelcome(message) {
+  function onWelcome(message, peerId = null) {
     if (role !== "guest") return;
+    if (peerId) hostPeerId = peerId;
     if (message.name) hostName = message.name;
     if (message.youName) shown = message.youName;
     guests.length = 0;
@@ -372,6 +381,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // the player must not be told "Joined Ada's world" every two seconds.
     const first = !welcomed;
     welcomed = true;
+    resolveWelcome({ ok: true });
     stalled = false;
     clearStallTimer();
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
@@ -499,6 +509,27 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       onPeer: event => {
         // Somebody is in the room: whatever we were worried about, it is not "nobody came".
         if (event?.kind === "join") { stalled = false; clearStallTimer(); }
+        if (event?.kind === "leave" && event.peerId) {
+          if (role === "host") {
+            const left = guests.filter(g => g.peerId === event.peerId);
+            if (left.length) {
+              for (let i = guests.length - 1; i >= 0; i--) {
+                if (guests[i].peerId === event.peerId) guests.splice(i, 1);
+              }
+              for (const g of left) noteLine("Tallow Reach", `${g.name} left.`);
+              publishPresence();
+            }
+            peerNames.delete(event.peerId);
+            greetedPeers.delete(event.peerId);
+          } else if (role === "guest" && welcomed) {
+            const hostGone = hostPeerId ? event.peerId === hostPeerId : (channel && channel.peers().length === 0);
+            if (hostGone) {
+              stop();
+              emit("mp-host-left", { reason: "The host closed the game." });
+              return;
+            }
+          }
+        }
         if (role === "host") { publishPresence(); armHostWait(); }
         // A guest says hello to the pilot that just appeared. This is the retry that
         // makes the handshake happen at all (see `sayHello`).
@@ -635,8 +666,42 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (stallTimer) { clearTimeout(stallTimer); stallTimer = 0; }
   }
 
+  function guestProgress(status) {
+    if (welcomed) return { pct: 100, label: "Connected!" };
+    if (greeted) return { pct: 85, label: "Handshaking with host…" };
+    const hasPeer = (channel && channel.peers().length > 0) || status?.state === "connected";
+    if (hasPeer) return { pct: 70, label: "Found host, connecting…" };
+    if (status?.state === "finding") return { pct: 40, label: "Looking for host…" };
+    return { pct: 15, label: "Joining relays…" };
+  }
+
+  function resolveWelcome(result) {
+    while (welcomeWaiters.length) {
+      const done = welcomeWaiters.shift();
+      done(result);
+    }
+  }
+
+  function waitForWelcome(timeoutMs = 20000) {
+    if (welcomed) return Promise.resolve({ ok: true });
+    if (!on) return Promise.resolve({ ok: false, message: "Connection cancelled." });
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        const idx = welcomeWaiters.indexOf(finish);
+        if (idx >= 0) welcomeWaiters.splice(idx, 1);
+        resolve({ ok: false, message: "Could not reach the host. Check the link or try paste codes." });
+      }, timeoutMs);
+      function finish(result) {
+        clearTimeout(timer);
+        resolve(result);
+      }
+      welcomeWaiters.push(finish);
+    });
+  }
+
   function stop() {
     on = false;
+    resolveWelcome({ ok: false, message: "Connection cancelled." });
     if (keepalive) { clearInterval(keepalive); keepalive = 0; }
     if (helloRetry) { clearInterval(helloRetry); helloRetry = 0; }
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
@@ -777,6 +842,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     startCodes,
     finishCodes,
     acceptCodes,
+    waitForWelcome,
     reconnect,
     escalateToRelay,
     checkRelays,

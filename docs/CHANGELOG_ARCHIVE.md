@@ -1,5 +1,11 @@
 # Changelog archive
 
+## 2026-11-21: Roll cut by 25% (sickening at full speed)
+
+`FLIGHT.rollFactor` 3.75 → 2.8125 globally (player and NPC alike), after the
+owner found the 250% roll nauseating. Yaw and pitch unchanged. Recorded
+fixtures and the axis-ratio test updated; no save change.
+
 ## 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
 
 - **Warp-to glow:** `missionTravelTargets` (`ui/mission-hud.js`) lists the
