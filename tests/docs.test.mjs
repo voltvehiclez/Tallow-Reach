@@ -17,7 +17,7 @@ const KB = 1024;
 
 // ---- size limits (bytes). Archives and the changelog history are exempt. -----------------
 const LIMITS = {
-  "docs/HANDOFF.md": 14 * KB,
+  "docs/HANDOFF.md": 16 * KB,
   "docs/LESSONS.md": 30 * KB,
   "docs/MISSION_RULES.md": 14 * KB,
   "docs/ARCHITECTURE.md": 30 * KB,

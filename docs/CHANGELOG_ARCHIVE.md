@@ -1,3 +1,22 @@
+## 2026-11-22: Playtest 12 of slice 3 — a relay server the player actually has (ExpressTURN)
+
+The owner found a free TURN provider (ExpressTURN) and pasted its block, which exposed two things
+the relay fields could not do with a real provider's text:
+
+- **ExpressTURN prints the address with no `turn:` in front** (`free.expressturn.com:3478`), and the
+  parser refused it. A bare `host:port` is now read as `turn:host:port` — in `cleanUrl` too, so it
+  works in the address box whether or not it came through the paste path.
+- **A provider prints several doors** (UDP 3478, TCP 3478, TLS 5349) and a phone on 4G may only be
+  allowed the TCP or TLS one. Comma-separated addresses are all kept, and the hint says so.
+- A credential ending in `=` (ExpressTURN's do) survives the paste and the `TRTURN:` round trip.
+
+**Files:** `src/net/turn.js` (`cleanUrl`, `parseRelayText`), `src/ui/multiplayer.js` (the hint),
+`src/data/multiplayer.js` (`BUILD = "2026-11-22h"`).
+
+**Tests: 971, all green** (was 970). One new: ExpressTURN's own block, and the three doors of one
+server. **Save format unchanged (v29).** **Build id: `2026-11-22h`.**
+
+
 ## 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
 
 **The owner's two facts end the relay-server question:**
