@@ -2770,14 +2770,34 @@ body.mp-chat-expanded #mp-chat-who li {
 #mp-chat-lines p { margin: 0; transition: opacity .6s; }
 #mp-chat-lines p.mp-chat-system { color: var(--amber); font-style: italic; opacity: .9; }
 #mp-chat-lines b { color: var(--ice); font-weight: 600; }
+.menu-username {
+  width: 100%;
+  box-sizing: border-box;
+  font: 13px/1.3 ui-monospace, monospace;
+  color: var(--ink);
+  background: #0d1215;
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: center;
+}
+.menu-username:focus { outline: 1px solid var(--amber); }
 #mp-chat-pin, #mp-chat-expand {
   align-self: flex-start;
   background: transparent;
   border: 1px solid rgba(224, 164, 88, .35);
   color: var(--dim);
-  font-size: 10px;
-  padding: 2px 6px;
+  font-size: 9px;
+  padding: 1px 4px;
   cursor: pointer;
+}
+body:not(.mp-chat-open) #mp-chat,
+body:not(.mp-chat-open) #mp-chat * {
+  pointer-events: none;
+  cursor: none;
+}
+body:not(.mp-chat-open) #mp-chat-who {
+  min-width: 40px;
+  max-width: 52px;
 }
 #mp-chat-pin.is-pinned, #mp-chat-expand.is-expanded { color: var(--amber); border-color: var(--amber); }
 body:not(.mp-chat-open) #mp-chat-pin,

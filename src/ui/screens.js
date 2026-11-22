@@ -1,4 +1,5 @@
 import { canSetHomeStation, homeStationPlace } from "../sim/session.js";
+import { readSettings } from "../net/settings.js";
 // HTML for each outpost screen. These are pure functions of the game state,
 // so the look of a screen can be changed without touching game logic.
 
@@ -101,6 +102,7 @@ export function introHtml() {
     `<div><dt>P / Esc</dt><dd>Pause</dd></div>` +
     `</dl>` +
     `<div class="main-menu-actions">` +
+    `<input id="menu-username" class="menu-username" maxlength="24" placeholder="Username (min 3 chars)" value="${escapeAttr(readSettings().name || "")}" autocomplete="off" spellcheck="false">` +
     `<button class="go" data-a="campaign">Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +
     // Step 16 slice 3: the one front door for co-op from the title, worded as the docs and

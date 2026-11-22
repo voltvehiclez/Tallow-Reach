@@ -12,6 +12,11 @@ import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
 import { leaveVisit } from "../net/session.js";
 import { readSettings, writeSettings } from "../net/settings.js";
+if (typeof document !== "undefined") {
+  document.addEventListener("input", e => {
+    if (e.target?.id === "menu-username") writeSettings({ ...readSettings(), name: e.target.value });
+  });
+}
 import { checkIn } from "../net/custody.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
