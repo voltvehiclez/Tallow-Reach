@@ -1,3 +1,35 @@
+## 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
+
+**The owner's two facts end the relay-server question:**
+
+- `Relays reachable: 3 of 5`, `Relays connected: 10` — the **signalling** relays are fine, and have
+  been all along. "Your network blocks the relays" was wrong.
+- **Test relay servers** answered *"None of the 3 relay servers answered from this machine, so co-op
+  cannot cross networks"*, and the code says `Code paths: 1 local, 1 public, 0 relay`. So the free
+  public TURN servers (Open Relay, freestun, AnyFirewall) are **dead** — that, and nothing else, is
+  why a laptop on 4G cannot join a PC on ethernet. No amount of code makes a dead server forward a
+  packet; a player needs a relay they control.
+
+- **A guest now has Connection details.** The join surface had no diagnosis block at all, so a guest
+  could only ever say "I am alone" — no build, no room count, no code paths, no relay fields
+  (owner's report). `screenHtml` puts the details (and the relay block) on the join surface.
+- **One paste sets a relay server.** `parseRelayText()` reads whatever a provider prints — the
+  `turn:…` block with `username:`/`credential:` lines, JSON from a dashboard, or a `TRTURN:` line —
+  and fills all three fields; **Copy relay settings** makes that line, so the second machine is one
+  paste instead of six. `Save relay` says to press **Start again**, because a code carries the
+  servers that existed when it was made.
+
+**Files:** `src/ui/multiplayer.js` (join-surface details, relay paste/copy, save message),
+`src/net/turn.js` (`parseRelayText`, `packRelay`), `src/data/multiplayer.js`
+(`BUILD = "2026-11-22g"`).
+
+**Tests: 970, all green** (was 968). Two new: the guest's screen, and the provider block / JSON /
+packed round trip.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.** The next step is not
+code: a free TURN credential (Metered's free tier) entered once on each machine.
+
+
 ## 2026-11-22: Playtest 10 of slice 3 — the free relay servers are the suspect, so test them and allow your own
 
 **The owner's block rewrote the theory again:** `Relays connected: 10`. The signalling relays are

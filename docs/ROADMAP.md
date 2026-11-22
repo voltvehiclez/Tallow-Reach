@@ -9,7 +9,7 @@
 *Last checked: 2026-11-22.*
 
 **Current position (rewritten 2026-11-22):** the table below is the status. Saves are version **29**; step 15 and
-14c are ticked, and step 16 (multiplayer) is in progress — slices 1–3 built, slice 4 next. **Step 17
+14c are ticked, and step 16 (multiplayer) is in progress — slices 1–3 built and playtest-confirmed, slice 4 next; slices 7–8 were agreed on 2026-11-22. **Step 17
 (dedicated servers) was added to the plan on 2026-11-22 and is not built**
 ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)).
 **Slices 14a and 14b are built, playtested and ticked: the owner's four playtest bugs are fixed and confirmed, their "works well" round's two notes — odd lines in the painted sky, and a ship that still flew while a loot card was open — shipped 2026-11-14**
@@ -79,7 +79,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space (save v25) | D | [x] **2026-11-19: owner playtest passed.** |
 | 15 | Campaign scaffolding (save v26) | D | [x] **Built 2026-11-19; rounds 1–5 applied; playtest approved 2026-11-21.** Dual-mode envelope, shared pilot, fixed seven-system campaign (`240515`); finish = nothing yet |
 | 16 | Multiplayer (host-run co-op, WebRTC; eight slices in step 16) | | [ ] **slices 1–3 built and PLAYTEST-CONFIRMED 2026-11-22 (owner: the current build works, one-link join proven across networks from a 4G laptop, no codes). Slice 4 next; slices 7–8 were added 2026-11-22 at the owner's request (one world, two ships visible) — see [REFACTOR_PLAN.md](REFACTOR_PLAN.md)** |
-| 17 | Dedicated servers: a headless server hosts one world for a target of 50 players (measured; the number goes in `src/data/multiplayer.js`) via **Minecraft-style port forwarding** (`host:port`); anyone may host, anyone may join, with **optional modular auth (Supabase first, 50k/month)** | | [ ] **Planned 2026-11-22: written in [REFACTOR_PLAN.md](REFACTOR_PLAN.md), slices 17a–17d; the owner's answers are recorded there. Not built. Step 16 slice 4 is still the next build** |
+| 17 | Dedicated servers: a headless server hosts one world for a target of 50 players (measured; the number goes in `src/data/multiplayer.js`) via **Minecraft-style port forwarding** (`host:port`); anyone may host, anyone may join, with **optional modular auth (Supabase first, 50k/month)** | | [ ] **Planned 2026-11-22: written in [REFACTOR_PLAN.md](REFACTOR_PLAN.md), slices 17a–17d; the owner's answers are recorded there. Not built — step 16 comes first** |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table and the
 "Version history" comment in `state/profile.js`. **Step 16 slice 1 changes no save; slice 2 makes it v29.**

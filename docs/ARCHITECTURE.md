@@ -161,7 +161,7 @@ Read the one that matches the work. Each holds that area's conventions and known
 | [architecture/campaign-acts.md](architecture/campaign-acts.md) | Campaign acts: structure, failure/checkpoints, natural resets, optional bonuses, control/chase steps, story actors |
 | [architecture/mission-principles.md](architecture/mission-principles.md) | How the eight architecture principles apply to the mission framework, and the limits of validation |
 | [architecture/world-and-map.md](architecture/world-and-map.md) | World and map: places, the starmap, travel, place memory, where you log out |
-| [architecture/multiplayer.md](architecture/multiplayer.md) | Multiplayer (step 16): the suitcase, what travels, what stays home, station keys across worlds, the connection and the six slices |
+| [architecture/multiplayer.md](architecture/multiplayer.md) | Multiplayer (step 16): the suitcase, what travels, what stays home, station keys across worlds, the connection and the eight slices |
 | [architecture/feature-notes.md](architecture/feature-notes.md) | Detailed notes on features built in steps 10 to 13 (galaxy, starmap, place templates, missions), moved out of HANDOFF |
 | [MISSION_RULES.md](MISSION_RULES.md) | How missions must behave, the linter and the invariant tests |
 

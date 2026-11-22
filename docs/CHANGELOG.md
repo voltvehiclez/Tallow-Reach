@@ -20,11 +20,33 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Step 16 is eight slices — the owner agreed the plan
+
+**Docs only; no code, no build, no save change.** The owner reviewed the eight slices of step 16 and
+approved them ("that looks good"), so slices 7–8 are no longer a proposal:
+
+- **The plan is eight slices, not six.** Slices 1–6 are unchanged (4 is still the next build);
+  7–8 are the owner's *"one world, two ships visible"*. `REFACTOR_PLAN.md` says **agreed**, and the
+  two places that still said "six slices" (`REFACTOR_PLAN.md`'s summary line,
+  `architecture/multiplayer.md`'s header, and the index row in `ARCHITECTURE.md`) now say eight.
+- **The order is still 4 → 5 → 6 → 7 → 8.** Slices 7–8 come *after* trading, not next: they are
+  the last debt in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) (*death and recovery*, *player
+  presentation and input*), and nothing in them works until the suitcase (slice 4) carries a pilot.
+- **ROADMAP's step-17 cell stops repeating "slice 4 is next"** — that belongs to step 16's cell,
+  which is the one place step status is kept.
+
+**Files:** `docs/REFACTOR_PLAN.md`, `docs/ROADMAP.md`, `docs/architecture/multiplayer.md`,
+`docs/ARCHITECTURE.md`, `docs/HANDOFF.md`.
+
+**No save change (v29), no build change.** Slice 4 is the next build.
+
 ## 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
 
 **Docs only; no code, no build.** The owner played the current build (`2026-11-22j`) and said it
 passed, so slice 3's reworks are confirmed and ROADMAP says so. Then they asked for the thing the
 plan always called the last debt: **"Also draw the guest's ship"** — *one world, two ships visible*.
+*(Slices 7–8 were **proposed** in this entry and agreed by the owner the next day — see the entry
+above.)*
 
 That is bigger than the plan's slice 4, so the plan now says exactly how big. Three decisions are
 recorded, and the next chat should not reopen them:
@@ -257,38 +279,9 @@ the relay fields could not do with a real provider's text:
 **Tests: 971, all green** (was 970). One new: ExpressTURN's own block, and the three doors of one
 server. **Save format unchanged (v29).** **Build id: `2026-11-22h`.**
 
-## 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
-
-**The owner's two facts end the relay-server question:**
-
-- `Relays reachable: 3 of 5`, `Relays connected: 10` — the **signalling** relays are fine, and have
-  been all along. "Your network blocks the relays" was wrong.
-- **Test relay servers** answered *"None of the 3 relay servers answered from this machine, so co-op
-  cannot cross networks"*, and the code says `Code paths: 1 local, 1 public, 0 relay`. So the free
-  public TURN servers (Open Relay, freestun, AnyFirewall) are **dead** — that, and nothing else, is
-  why a laptop on 4G cannot join a PC on ethernet. No amount of code makes a dead server forward a
-  packet; a player needs a relay they control.
-
-- **A guest now has Connection details.** The join surface had no diagnosis block at all, so a guest
-  could only ever say "I am alone" — no build, no room count, no code paths, no relay fields
-  (owner's report). `screenHtml` puts the details (and the relay block) on the join surface.
-- **One paste sets a relay server.** `parseRelayText()` reads whatever a provider prints — the
-  `turn:…` block with `username:`/`credential:` lines, JSON from a dashboard, or a `TRTURN:` line —
-  and fills all three fields; **Copy relay settings** makes that line, so the second machine is one
-  paste instead of six. `Save relay` says to press **Start again**, because a code carries the
-  servers that existed when it was made.
-
-**Files:** `src/ui/multiplayer.js` (join-surface details, relay paste/copy, save message),
-`src/net/turn.js` (`parseRelayText`, `packRelay`), `src/data/multiplayer.js`
-(`BUILD = "2026-11-22g"`).
-
-**Tests: 970, all green** (was 968). Two new: the guest's screen, and the provider block / JSON /
-packed round trip.
-
-**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.** The next step is not
-code: a free TURN credential (Metered's free tier) entered once on each machine.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
 
 - 2026-11-22: Playtest 10 of slice 3 — the free relay servers are the suspect, so test them and allow your own
 

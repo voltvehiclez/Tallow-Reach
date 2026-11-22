@@ -19,7 +19,7 @@ per chat.
 | **C. World-ready** | 10 to 12 | Sectors are data, a generated 100+ sector starmap, encounters and sector memory. The open world can scale. |
 | **D. Story-ready** | 13 to 15 | A mission framework, wormhole instances and the campaign scaffolding. |
 
-Multiplayer itself is **step 16**, planned with the owner on 2026-11-21 (the plan and its six slices are at the bottom).
+Multiplayer itself is **step 16**, planned with the owner on 2026-11-21 (the plan and its eight slices are at the bottom).
 **Step 17 — dedicated servers — was added at the owner's request on 2026-11-22** (the plan is at the bottom); it
 follows step 16 in the build order.
 
@@ -117,10 +117,11 @@ steps still to build (16 and 17).
 (2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; slice 4 (the pilot travels) is next.
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
 
-**Slices 7 and 8 were added on 2026-11-22 at the owner's request** ("Also draw the guest's ship",
-*"one world, two ships visible"*). They are the two halves of the plan's own multiplayer model —
-**the host's simulation and the guest's screen** — and they were split apart because each is a
-feature nobody can test on its own:
+**Slices 7 and 8 were added on 2026-11-22 and AGREED by the owner the same day** ("Also draw the
+guest's ship", *"one world, two ships visible"*; the owner reviewed the eight and said *"that looks
+good"*). They are the two halves of the plan's own multiplayer model — **the host's simulation and
+the guest's screen** — and they were split apart because each is a feature nobody can test on its
+own:
 
 - **Slice 7 makes a second pilot exist in the host's world** (its record, its flight, damage,
   docking and Go home, and a flat **map blip** so the owner can *see* the second pilot is really
