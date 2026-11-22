@@ -320,9 +320,13 @@ Mission lessons are first because missions are where most bugs have come from. T
   the record the game keeps. A guest installing its own whole save goes through its own seam (`saveKit.install`), never the
   host's narrow one; and `captureActiveModeSave` hands an away pilot's record through untouched rather than re-reading the
   runtime. Anything that moves items must be checked at the seam the game actually stores through, not on plain objects.
-- **Enforced by:** `tests/multiplayer-carry.test.mjs` — one test asserts the round trip returns every unit exactly once, and
-  another asserts the *failure mode* (checking in over a save that still holds the stacks doubles them), so the reason
-  `install` exists cannot be deleted as dead code. Also the "saving while away hands the frozen record through untouched" test.
+- **Enforced by:** four tests, chosen so that **undoing any one fix makes one of them fail** — a test that passes whether or
+  not the fix is present is not enforcement. `tests/multiplayer-carry.test.mjs` asserts the round trip returns every unit once,
+  asserts the *failure mode* (checking in over a save that still holds the stacks doubles them), and asserts the frozen world
+  was not re-stamped from the runtime. `tests/multiplayer-bring-pilot.test.mjs` drives the **real session seam** — its guest
+  `write` is modelled as the narrow one it is — so packing must leave the live stations empty and a suitcase from the host must
+  actually reach the save. **Lesson inside the lesson:** the first version of these tests passed with the fix reverted, because
+  the fixture merged whole saves and the assertions read only keys the narrow write happened to carry.
 
 ### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
 - **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."

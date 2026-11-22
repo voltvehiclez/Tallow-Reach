@@ -61,9 +61,14 @@ two seconds after anything changes, and **"Bring pilot home"** puts it back — 
 `src/net/{custody,protocol,session}.js`, **new** `src/sim/multiplayer.js`, `src/util/events.js`,
 `src/state/{state,profile}.js`, `src/main.js`, `src/ui/{screens,menu,multiplayer}.js`,
 `src/sim/README.md`. **New tests:** `multiplayer-carry`, `multiplayer-visitors`,
-`multiplayer-bring-pilot` (27 new).
+`multiplayer-bring-pilot` (28 new).
 
-**Tests: 1003, all green** (was 976). **Save format unchanged (v29).** **Build id: `2026-11-23a`.**
+**A stronger third fix, found while proving the tests bite.** Reverting each fix and re-running showed two of the new tests
+passed anyway — they asserted only what the narrow seam happened to carry. The guest kit in the session test now models the
+real narrow `write`, and every guest-side store (packing *and* taking a newer suitcase from the host) goes through one
+`storePilot` rule. Undoing any of the three fixes now fails a test.
+
+**Tests: 1004, all green** (was 976). **Save format unchanged (v29).** **Build id: `2026-11-23a`.**
 **Not done yet, by design:** the guest's own screen showing the host's world (slice 8), crashes and
 reconnects (slice 5), and drawing a visiting ship on the host's screen — the pilot is real, docked
 and simulated, but `render/views.js` still draws one hull. That is slice 7/8. Playtest guide:

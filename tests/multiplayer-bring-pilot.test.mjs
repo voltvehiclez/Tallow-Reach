@@ -67,7 +67,21 @@ async function pair({ hostName = "Ada", guestName = "Bo" } = {}) {
   const hostSave = { ...pilotSave({ cr: 40, ferrite: 0 }) };
   const guestSave = pilotSave({ cr: 800, ferrite: 10 });
   const hostKit = { read: () => hostSave, write: next => Object.assign(hostSave, next) };
-  const guestKit = { read: () => guestSave, write: next => Object.assign(guestSave, next) };
+  // The guest's seam is the game's: `write` is the host-narrow one (the guest list and the
+  // world id), and `install` replaces the pilot's WHOLE mode save — which is what packing
+  // needs, because `checkOut` empties the home stations.
+  const guestKit = {
+    read: () => guestSave,
+    // Faithful to the game's own seam: `write` is deliberately NARROW — a host may only
+    // touch the guest list and the world id. Modelling it as a full merge would hide the
+    // exact bug that made coming home double every stack (L34).
+    write: next => {
+      if (next.world?.guests) guestSave.world.guests = next.world.guests;
+      if (typeof next.world?.worldId === "string") guestSave.world.worldId = next.world.worldId;
+    },
+    // ...and `install` is the guest's own, which replaces its whole mode save.
+    install: next => Object.assign(guestSave, JSON.parse(JSON.stringify(next))),
+  };
 
   const host = session.createChannelForTest("host", "w-1", hostName, "host-token", hostKit);
   await host.start();
@@ -212,4 +226,34 @@ test("slice 4: a copy that is older than the one the guest holds is ignored", as
   assert.equal(guestSave.away.suitcase.profile.cr, 5000, "nor overwrite the newer credits");
   // The rule that decided is slice 1's ordering pair, not arrival order.
   assert.ok(compare({ epoch: 0, rev: 1 }, { epoch: 0, rev: 5 }) > 0);
+});
+
+test("slice 4: packing through the real session leaves the home stations EMPTY (L34)", async () => {
+  // The session-level version of the doubling bug. `checkOut` empties the station stocks;
+  // if that emptied save never reaches the game (the old code used the host-narrow `write`,
+  // which stores only the guest list and world id), the game keeps the stacks AND the
+  // suitcase carries them — and coming home adds them on top.
+  //
+  // This test is here, not only in `multiplayer-carry`, because that one hands the packed
+  // save straight to `checkIn` and so never exercises the session's seam at all.
+  const { guestSave, guestKit } = await pair();
+  const before = totals(guestSave).get(`station:${STATION} | ferrite`);
+  assert.equal(before, 5, "the pilot starts with 5 in its home station");
+
+  session.bringPilot();
+  assert.equal(
+    totals(guestSave).get(`station:${STATION} | ferrite`),
+    undefined,
+    "the stack LEFT the live save: it is in the suitcase, not in two places at once",
+  );
+
+  // ...and coming home puts it back exactly once.
+  const done = session.bringPilotHome(guestSave);
+  assert.equal(done.ok, true, done.message);
+  guestKit.install(done.save);
+  assert.equal(
+    totals(guestSave).get(`station:${STATION} | ferrite`),
+    5,
+    "home with 5, not 10",
+  );
 });

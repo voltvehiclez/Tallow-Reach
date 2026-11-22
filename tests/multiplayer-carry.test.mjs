@@ -267,11 +267,19 @@ test("slice 4: saving while away hands the frozen record through untouched", asy
     state.ui = { ...(state.ui || {}), invHeld: null, destination: "" };
     const away = { worldId: "w-1", hostName: "Ada", guestId: "g-1", token: "t", epoch: 0, rev: 2, suitcase: null };
     state.away = away;
+    // Something the runtime would stamp if it were read: the resume destination. Capturing
+    // an active mode copies `state.ui.destination` into the world; a frozen pilot must not
+    // be re-read that way.
+    state.ui.destination = "a-place-the-frozen-pilot-never-went";
+    state.worldState.destination = "where-it-actually-left-off";
     const save = currentSave();
     assert.equal(save.away.guestId, "g-1", "the marker survives the save");
     assert.equal(save.away.rev, 2, "with its ordering");
     assert.equal(save.profile, state.profile, "and the frozen profile is handed through by reference, not rebuilt");
     assert.equal(save.world, state.worldState, "likewise the world");
+    // **The assertion that actually catches the guard being removed:** reading the runtime
+    // would overwrite the destination from `state.ui`. A frozen record is not re-read.
+    assert.equal(state.worldState.destination, "where-it-actually-left-off", "the frozen world was not re-stamped from the runtime");
   } finally {
     state.profile = before.profile;
     state.worldState = before.worldState;

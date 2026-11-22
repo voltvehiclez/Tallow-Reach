@@ -269,6 +269,21 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
   const ownGuestId = () => `guest-${token.slice(0, 8)}`;
 
+  /**
+   * Store a change to the GUEST'S OWN pilot.
+   *
+   * Not `save.write`: that seam is deliberately narrow, because a host may only touch the
+   * guest list and the world id. A guest changing its own record — packing (`checkOut`
+   * empties the home stations) or taking a newer suitcase from the host (the away marker
+   * and the copy) — needs the whole mode save installed, or the change never reaches the
+   * game while the wire thinks it did. LESSONS L34.
+   */
+  function storePilot(next) {
+    if (!next || typeof next !== "object") return;
+    if (save.install) save.install(next);
+    else save.write(next);
+  }
+
   function snapshot() {
     const status = channel ? channel.state() : paste ? paste.state() : { state: "idle", reason: "" };
     return {
@@ -517,8 +532,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // The home save keeps the marker, an emptied stations half and the frozen pilot, and
     // the suitcase has the rest. Installing it (not merely `write`ing it) is what stops
     // the cargo existing in two places at once.
-    if (save.install) save.install(packed.save);
-    else save.write(packed.save);
+    storePilot(packed.save);
     emit("mp-away-changed", { away: awayMark });
     return sendCarryMessage(carried);
   }
@@ -575,7 +589,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (awayMark) {
       awayMark = { ...awayMark, epoch: incoming.epoch, rev: incoming.rev, suitcase: carried };
       const stored = syncAway({ ...save.read(), away: awayMark }, carried, incoming);
-      save.write(stored);
+      storePilot(stored);
       awayMark = stored.away || awayMark;
     }
     emit("mp-away-changed", { away: awayMark });
