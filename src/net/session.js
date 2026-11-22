@@ -194,8 +194,12 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // plus the guest rows — without it the guest sees a column with only itself in it.
   let hostName = "";
   let welcomed = false;     // has the host answered at all?
+  let relayTried = false;   // has this session already escalated to a relay server?
+  let keepalive = 0;        // the watchdog that reopens a room that silently died
+  let lastRestart = 0;
   let helloRetry = 0;       // the retry timer (guest only)
   let helloWait = 0;        // the "nobody answered" timer (guest only)
+  let hostWait = 0;         // the "a browser joined but never said hello" timer (host only)
   let greeted = false;      // has this guest managed to say hello at all?
   const greetedPeers = new Set(); // ...and to which peers (a hello is per connection)
 
@@ -214,6 +218,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       peers: channel ? channel.peers() : [],
       guests: guests.slice(),
       chat: chat.slice(),
+      // Facts for the screen's "Connection details": what the transport can see about the
+      // link itself, so a failure can be reported instead of guessed at.
+      diag: channel && typeof channel.diagnostics === "function" ? channel.diagnostics() : null,
+      relay: relayTried,
       codes: codes ? { ...codes } : null,
     };
   }
@@ -302,6 +310,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     });
     save.write(recorded);
 
+    if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     const fresh = !guests.some(entry => entry.guestId === message.guestId);
     upsertGuest({ guestId: message.guestId, name: display, docked: false });
     if (peerId) peerNames.set(peerId, display);
@@ -475,7 +484,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       },
       onData: ({ peerId, ...message }) => receive(message, peerId),
       onPeer: event => {
-        if (role === "host") publishPresence();
+        if (role === "host") { publishPresence(); armHostWait(); }
         // A guest says hello to the pilot that just appeared. This is the retry that
         // makes the handshake happen at all (see `sayHello`).
         if (role === "guest" && event?.kind === "join") sayHello(event.peerId || null);
@@ -486,6 +495,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     await channel.join();
     greetEveryone();
     if (role === "guest") startHelloRetry();
+    if (role === "host") armHostWait();
+    startKeepalive();
     publish();
     return true;
   }
@@ -571,9 +582,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       // never answers is a blocked connection; a room with nobody in it is a link pointing
       // at a world nobody is hosting.
       const peers = channel ? channel.peers().length : 0;
+      if (peers && !relayTried) return escalateToRelay();
       const said = peers
-        ? "No answer from the host yet. The two browsers found each other, but messages are not getting through — try the paste-code path, or put both machines on the same network."
-        : "Nobody is hosting the world in that link yet. The host must press Open Multiplayer (Pause, then Open Multiplayer) and leave it on. Try the paste codes if the link will not work.";
+        ? "Still no answer from the host. The two browsers found each other, but messages are not getting through even through the relay — try the paste-code path."
+        : "Nobody else is in that room yet. Both screens must show the same World id — Pause > Open Multiplayer > Connection details on each machine — and the host's switch must read On. If both show the same id and 1 browser in the room, the signalling relay is not reaching one of you: try again in a minute.";
       try {
         emit("mp-notice", said);
       } catch (e) { /* a broken screen must not break a session */ }
@@ -583,8 +595,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
   function stop() {
     on = false;
+    if (keepalive) { clearInterval(keepalive); keepalive = 0; }
     if (helloRetry) { clearInterval(helloRetry); helloRetry = 0; }
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
+    if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     try {
       channel?.leave();
       paste?.leave();
@@ -595,6 +609,87 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     guests.length = 0;
     if (active === session) active = null;
     publish();
+  }
+
+  /**
+   * A room can die quietly: a backgrounded tab, a laptop that slept, a relay that dropped us.
+   * The transport reports `lost`, and a `lost` room will never recover on its own, so the
+   * session reopens it — at most once every ten seconds, and never while one is starting.
+   */
+  function startKeepalive() {
+    if (keepalive) return;
+    keepalive = setInterval(async () => {
+      if (!on || !channel) return;
+      const status = channel.state();
+      const dead = status.state === "lost" || status.state === "closed";
+      if (!dead) return;
+      if (Date.now() - lastRestart < 10_000) return;
+      lastRestart = Date.now();
+      greetedPeers.clear();
+      greeted = false;
+      welcomed = false;
+      await channel.restart({ useTurn: relayTried });
+      if (role === "guest") greetEveryone(); else publishPresence();
+      publish();
+    }, Math.max(2, NET.heartbeatSec) * 1000);
+    if (typeof keepalive?.unref === "function") keepalive.unref();
+  }
+
+  /**
+   * The host's half of the same failure: a browser is in the room, nobody was admitted.
+   *
+   * A relayed path needs a relay candidate from *each* end, so the host has to escalate too —
+   * it is no good the guest retrying through a relay that the host is not using.
+   */
+  function armHostWait() {
+    if (role !== "host" || hostWait || relayTried) return;
+    hostWait = setTimeout(() => {
+      hostWait = 0;
+      if (!on || !channel || !channel.peers().length) return;
+      if (guests.length) return;             // somebody got in; the pipe works
+      escalateToRelay();
+    }, NET.helloWaitSec * 1000);
+    if (typeof hostWait?.unref === "function") hostWait.unref();
+  }
+
+  /**
+   * The direct attempt found the other browser but nothing got through: join again through a
+   * relay server (both sides do this, because a relayed path needs a relay candidate from
+   * each end). This is the fix for two machines on a home network that will not pass a
+   * packet between them — same machine always works, and that is what hid the problem.
+   */
+  async function escalateToRelay() {
+    if (relayTried || !channel || !channel.peers().length) return false;
+    relayTried = true;
+    try {
+      emit("mp-notice", "The direct connection did not open. Trying a relay server — this can take a few seconds.");
+    } catch (e) { /* a broken screen must not break a session */ }
+    publish();
+    await channel.restart({ useTurn: true });
+    greetedPeers.clear();
+    greeted = false;
+    if (role === "guest") greetEveryone();
+    else publishPresence();
+    publish();
+    return true;
+  }
+
+  /** The screen's "Reconnect" button: another attempt, through the relay this time. */
+  async function reconnect() {
+    if (!channel) return false;
+    relayTried = true;
+    greetedPeers.clear();
+    greeted = false;
+    welcomed = false;
+    const done = await channel.restart({ useTurn: true });
+    if (role === "guest") {
+      greetEveryone();
+      startHelloRetry();
+    } else {
+      publishPresence();
+    }
+    publish();
+    return !!done;
   }
 
   const session = {
@@ -612,6 +707,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     startCodes,
     finishCodes,
     acceptCodes,
+    reconnect,
+    escalateToRelay,
     channel: () => channel,
     paste: () => paste,
     /**
@@ -657,6 +754,9 @@ export function uniqueName(wanted, taken = []) {
 
 /** Send a chat line. False when nobody is listening, or the line is empty. */
 export const say = text => (active ? active.say(text) : false);
+
+/** Another attempt, through a relay. The screen's "Reconnect" button. */
+export const reconnect = () => (active ? active.reconnect() : false);
 
 /** Stop whatever is running. */
 export function stop() {

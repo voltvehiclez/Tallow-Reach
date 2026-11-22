@@ -2613,6 +2613,17 @@ body.navigation-open canvas { cursor: default; }
   letter-spacing: .1em;
   text-transform: uppercase;
 }
+/* Connection details: small facts, monospaced numbers, no drama. */
+#mp-screen .mp-facts {
+  margin: 0;
+  padding: 0 0 0 16px;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: #cbd6df;
+  font-variant-numeric: tabular-nums;
+}
+#mp-screen .mp-facts li { margin: 0; }
 #mp-screen h2 {
   margin: 0;
   font-size: 12px;

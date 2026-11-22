@@ -139,6 +139,29 @@ Either way the handshake afterwards is the same, and it is already written and t
 (`net/custody.js` `handshake`): game version, `worldId` and the guest's secret, each refusal with a
 sentence the guest can act on. A guest who is turned away learns why.
 
+**Two machines need a path; one machine never does.** The signalling relay introduces the two
+browsers and both sides then believe they are connected — but the *data* connection needs a network
+path, and a home network often has none: no hairpin NAT, and the local addresses Chrome hides behind
+`*.local` mDNS names get dropped by a firewall or a multicast-hostile router. Two tabs on one machine
+share a process, so the failure is invisible there (LESSONS L35). The answer is `ICE.turn`
+(`data/multiplayer.js`, the free Open Relay project) handed to the library as `turnConfig`, used
+**only after** `NET.helloWaitSec` of a direct attempt with a browser in the room and no hello
+admitted — and **by both ends**, because a relayed path needs a relay candidate from each side: the
+guest escalates from its hello timer, the host from its own ("a browser is here, nobody was
+welcomed"). `transport.restart({ useTurn })` is a fresh join; the screen's **Reconnect** asks for the
+same thing. A room that dies on its own (a backgrounded tab, a slept laptop, a dropped relay) stays
+`lost` for ever, so `session.startKeepalive()` reopens it at most once every ten seconds.
+
+**Diagnose by facts, not by mood.** `diagFacts()`/`diagReport()` (shown as **Connection details**,
+copyable with one button) print the **build string**, the **world id**, the signalling state and its
+sentence, **how many browsers are in the room**, the direct link's state, relay on/off, and
+**messages sent versus received**. Read in that order they separate the three failures that all look
+like "you are the only one there": different rooms (the world ids differ, or nobody is hosting), a
+right room with no path (2 browsers, sent rising, received 0), and different builds (the two strings
+differ). It exists because the first four playtests of this slice were diagnosed by guessing. The screen's **Connection details** block prints signalling state, the direct link's
+`connectionState`/ICE state, relay on/off and **sent vs received** — sent climbing with received at 0
+is the signature of the whole class.
+
 **The hello is repeated until it is answered.** A hello "sent" is not a hello heard: the data
 channel opens seconds after the room says the peer is there, and a message into an unopened channel
 is gone without an error. So a guest repeats its hello every `NET.helloRetrySec` until a `welcome`

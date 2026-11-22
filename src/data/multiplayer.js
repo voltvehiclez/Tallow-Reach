@@ -107,6 +107,13 @@ export const ARRIVAL_STATION_KEY =
  *   revStepMs     (slice 4) floor between two `rev` raises, so a busy second is one snapshot
  *   keepPrevious  (slice 2) how many older versions of a save to keep under `:prev`
  */
+/**
+ * Which build this page is. Two machines that show different strings are not running the same
+ * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
+ * over (it is shown in the multiplayer screen's connection details).
+ */
+export const BUILD = "2026-11-22b";
+
 export const NET = {
   snapshotSec: 2,
   heartbeatSec: 5,
@@ -163,12 +170,40 @@ export const ROOM_NAMESPACE = "tallowreach.p2p";
 export const RELAYS = {
   // Signalling relays. Empty = the library's free public ones.
   relayUrls: [],
-  // An optional `RTCConfiguration` for the direct connection (a TURN server, when two
-  // machines on different networks cannot reach each other directly: both behind symmetric
-  // NAT, or a network that blocks WebRTC). Shape:
-  //   rtcConfig: { iceServers: [{ urls: "turn:host:3478", username: "...", credential: "..." }] }
-  // Nothing here is a credential for this game — it is the player's own TURN service.
+  // An optional `RTCConfiguration` for the direct connection, if a player has their own ICE
+  // servers. Shape:
+  //   rtcConfig: { iceServers: [{ urls: "stun:host:3478" }, { urls: "turn:host:3478",
+  //   username: "...", credential: "..." }] }
+  // Unset, the library's public STUN is used.
   rtcConfig: null,
+};
+
+/**
+ * The relay used when two machines cannot reach each other directly.
+ *
+ * Two browsers on one machine always connect (they share a process). Two *machines* need a
+ * path across the network, and the common home setup has none: the router will not send a
+ * packet back to itself (no hairpin NAT), so the local-network candidates Chrome hides behind
+ * `*.local` mDNS names are the only ones left — and a firewall or a router that blocks
+ * multicast throws those away. That is the shape of the owner's playtest-4 report: joins on
+ * the host's own PC, "you are the only one there" from the laptop.
+ *
+ * TURN relays the data through a server both sides can reach. It is slower, so it is only
+ * used after a direct attempt has failed (`ICE.escalateSec`); if the free public service
+ * below is ever unavailable, nothing breaks — the direct path is still tried first.
+ *
+ * Anyone can put their own server here; nothing is a secret of this game.
+ */
+export const ICE = {
+  turn: [{
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turns:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  }],
 };
 
 /**

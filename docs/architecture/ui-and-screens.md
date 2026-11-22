@@ -61,6 +61,9 @@
   **Enter** while a session is on — including a host with nobody joined yet — closes on **Escape**,
   and is open/closed by its own flag rather than by where the cursor is (focus is impossible while a
   field is `[hidden]`, and the guest's box was untypable because of it).
+- **"Connection details" is a facts block, not a mood** (`diagHtml`): signalling state, the direct
+  link's own state, relay on/off, and messages sent versus received, with a **Reconnect** button. It
+  is drawn only while a session is on, on either door's surface.
 - **A field commit never redraws the card.** Clicking a button blurs the field first; a `change`
   handler that redraws replaces the button between mousedown and mouseup and the click never fires
   (`refreshLiveness` updates the switch, the Join button, the hints and `#mp-msg` in place).

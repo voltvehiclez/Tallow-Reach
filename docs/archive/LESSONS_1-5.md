@@ -2,8 +2,9 @@
 
 Moved out of [docs/LESSONS.md](../LESSONS.md) verbatim to keep it under its size limit.
 Read them only when a task touches mission spawn counts, a full hold, dialogue departure, item integrity, or dialogue buttons.
-(This file also carries **L23, imported models** and **L24, cube maps**, moved here word for word on
-2026-11-21 to make room for L33 and L34. L23 is the same rule as [GLB_MODELS.md](../GLB_MODELS.md); L24
+(This file also carries **L23, imported models**, **L24, cube maps** and **L25, two skies** (the
+one about a starfield installed twice — not the projectile L25), moved here word for word on
+2026-11-21 to make room for L33, L34 and L35. L23 is the same rule as [GLB_MODELS.md](../GLB_MODELS.md); L24
 is pinned by `tests/skybox.test.mjs` and described in [architecture/world-and-map.md](../architecture/world-and-map.md).)
 
 ### L1. Starting a mission again spawned more ships each time
@@ -119,3 +120,23 @@ sky hung upside down.
 - **Enforced by:** `tests/skybox.test.mjs` — "the six faces are drawn the way the generator painted them" and "each flip
   in the table is necessary and no flip is redundant". It caught the real bug (worst mismatch 1.25 on `py`/`ny`, 0.0000
   on the other four).
+
+### L25. Two skies for one picture: the same image installed twice, and a starfield that was already in the paint
+
+- **Seen (owner, 2026-11-15):** "remove the existing starfield. This is because our previously generated skybox already
+  has some stars baked in it. I might re-add star fields in the future but not now."
+- **Cause:** the sky was one thing and the stars another, because until now no sky *was* a picture — the starfield was
+  the only thing drawing stars. The moment normal space started wearing a generated skybox, two systems were drawing the
+  same stars, and the fix was not to darken one of them: it was to stop drawing a second set. The same shape of mistake
+  sat in the assets: the sky the owner kept had been installed under a working name and again under its real one, so the
+  build inlined the same 140 KB picture twice.
+- **Rule:** a picture that carries a thing must not be drawn under a second copy of that thing — ask *who draws this*
+  before adding a layer. A sky's own look is data on the sky (`starfield`, `shards`), and one switch (`STARFIELD.enabled`)
+  can turn a whole layer off without deleting the geometry, so the owner can ask for it back in one line. And an installed
+  sky is a resource with a name: re-making it under the final name and `remove`-ing the old one is part of installing it
+  (the tool has `remove` for exactly this, because `src/assets/skyboxes/` is the tool's folder and not a place to delete
+  from by hand).
+- **Enforced by:** `tests/skybox.test.mjs` — "normal space wears a generated sky, and the drawn starfield is off" reads
+  `showPlace`'s own starfield expression (writer and reader cannot drift apart, as in L19) and pins the master switch;
+  "nothing is in the skybox folder or the url map without being in data/skyboxes.js" plus the per-id budget check make a
+  second copy of a picture a visible 140 KB, and the report's file size is quoted in the CHANGELOG entry.

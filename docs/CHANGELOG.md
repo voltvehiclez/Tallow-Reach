@@ -229,57 +229,45 @@ Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
 `src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
 Rebuild `game/tallow-reach.html`; `npm test`.
 
-## 2026-11-21: Playtest 3 of slice 3 — a hello that is answered, a click that is not eaten
+## 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
 
-The owner joined from a second machine. It nearly worked, which is the interesting part.
+**The owner's clue that narrowed everything:** the guest was told *"Nobody is hosting the world in
+that link yet"*, which that sentence only says when **the room has no other browser in it**. So the
+two machines were never in the same room — this is not the network path, not the handshake, and not
+the relay. Something is wrong before the first message.
 
-**What the owner saw.** "I can join via 2 browser tabs, but on my separate laptop I cannot join the
-host on my PC properly: it opens an open world with a chat box but says I am the only one there."
-"The first Join click did nothing and showed the hint; the second put me in a world." "As the guest
-I cannot see the host in the player list, only my own name — but I can see the host's messages."
-Plus: taller chat box, and "Who is here" → "Current players".
+- **Connection details now answers it in one look** (`diagFacts`/`diagReport`): **Build** (two
+  machines showing different strings are not running the same file), **World id** (both must match),
+  signalling state and its sentence, **Browsers in the room** (this browser included), the direct
+  link's own state, relay on/off, and **sent vs received**.
+  - 1 browser in the room on both machines → they are in *different rooms*: a different world id, or
+    one of them is not hosting. Check the two World ids.
+  - 2 in the room, sent climbing, received 0 → the room is right and the path is not (the relay
+    handles that).
+  - Different **Build** strings → the machines are running different files.
+- **Copy details** puts all of it on the clipboard as one block, so a player who does not read code
+  can send it back.
+- **The host's half is named too:** "A browser is in the room but has not identified itself" when a
+  peer is there and nobody was admitted; "No other browser is in this room" when there is nobody.
+- **A room that dies quietly is reopened.** A backgrounded tab, a slept laptop or a dropped relay
+  leaves the transport in `lost` and it never recovers by itself; the session's watchdog
+  (`startKeepalive`) reopens it at most once every ten seconds, with the relay setting it was using.
+- **The "nobody there" sentence** now names the two World ids to compare instead of guessing at the
+  host's switch.
 
-**Two bugs, one cause each.**
+**Files:** `src/data/multiplayer.js` (`BUILD`), `src/net/session.js` (watchdog, sentence),
+`src/ui/multiplayer.js` (`diagFacts`, `diagReport`, the block, `copy-diag`), `src/styles.css`.
 
-1. **A hello that was "sent" and never heard.** The guest said hello once per peer and latched it as
-   done when the send call returned. Two tabs on one machine open their data channel almost
-   immediately, so that looked right; two *machines* open it seconds after the room says the peer is
-   there, and a hello sent into a channel that is not open yet is gone — quietly. The guest sat in a
-   world of its own, the host's chat arriving (one broadcast per line) and its name never in the
-   list. Now the guest repeats its hello every `NET.helloRetrySec` (2) until a `welcome` lands, the
-   reply is the latch, each round clears the per-peer latch, and the host logs "joined" once per
-   guest however many hellos arrive. After `NET.helloWaitSec` (12) with no answer the player is told
-   — with a different sentence for "nobody is in the room" than for "your friend is there but
-   nothing is getting through" — instead of sitting there looking connected.
-2. **The first Join click was eaten.** The name field committed on `change`, and clicking a button
-   blurs the field first: the commit redrew `#mp-card-inner` between mousedown and mouseup, so the
-   button under the cursor was replaced and no click event fired. A fresh browser always has a
-   pending name commit, which is why only the laptop showed it. The commit now updates in place
-   (`refreshLiveness`, which also carries `#mp-msg`); nothing in that path replaces the card.
-3. **The guest's player list was missing the host.** `guests` only ever holds guests, so a guest
-   built its column from "me" plus its own row as the host listed it. The session now keeps the
-   host's name from `welcome` (`snapshot().hostName`), and both the chat column and the screen's
-   list are built by `chatWhoRows` — you, the host, then everyone else, never twice.
+**Tests: 949, all green** (was 946). Four new: the room count and build in the block, the paste-ready
+report (both roles), the host's two warnings, and the watchdog's rule.
 
-- **Chat box:** `#mp-chat-lines` max height 132 → **264 px** (the owner asked for double), and the
-  column heading is **Current players** in both the box and the screen.
-- **A TURN knob, not a change of behaviour.** `RELAYS.rtcConfig` in `data/multiplayer.js` (null by
-  default) is passed to the library as its `RTCConfiguration`, for two networks that cannot reach
-  each other directly. Nothing changes unless somebody fills it in.
-- **Not built, on purpose:** still no remote ship. Slice 4.
-
-**Files:** `src/net/session.js`, `src/net/transport.js`, `src/ui/multiplayer.js`,
-`src/styles.css`, `src/data/multiplayer.js` (`helloRetrySec`, `helloWaitSec`, `rtcConfig`).
-
-**Tests: 942, all green** (was 937). Five new in `tests/multiplayer-ui.test.mjs`: the guest's column
-after a welcome, the lost-hello retry (a relay that drops the first hello), the commit-without-redraw
-rule, the doubled height and the "Current players" heading. The fake relay gained a
-`dropFirst` switch for it.
-
-**Save format unchanged (v29).** Rebuild needed (`npm run build`).
+**Save format unchanged (v29).** Rebuild needed (`npm run build`). **Build id: `2026-11-22b`** — both
+machines must show it.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Playtest 4 of slice 3 — the path between two machines, and a relay for when it fails
+- 2026-11-21: Playtest 3 of slice 3 — a hello that is answered, a click that is not eaten
 - 2026-11-21: Playtest 2 of slice 3 — one door each, names with stars, a chat that stays open
 - 2026-11-21: Step 16 slice 3 repaired — the multiplayer screen, the join path and the hello
 - 2026-11-21: Step 16 slice 3 — the connection: one link, the wrapper, chat and the player list

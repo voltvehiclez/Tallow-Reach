@@ -49,7 +49,7 @@ import { state } from "../state/state.js";
 import { emit, on } from "../util/events.js";
 import { readSettings, writeSettings, cleanName } from "../net/settings.js";
 import * as session from "../net/session.js";
-import { NET, CHAT } from "../data/multiplayer.js";
+import { NET, CHAT, BUILD } from "../data/multiplayer.js";
 import { clearPendingJoin, pendingJoin } from "../net/boot.js";
 import { looksLikeCode } from "../net/paste.js";
 import { makeJoinLink } from "../net/join-link.js";
@@ -102,6 +102,9 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     worldId: snap.worldId || null,
     link: link?.url || "",
     hostName: snap.hostName || "",
+    // The transport's facts, when there is a connection to describe.
+    diag: snap.diag || null,
+    relay: !!snap.relay,
     guests: (snap.guests || []).slice(),
     peers: (snap.peers || []).slice(),
     // The box draws the session's lines and its own log together, oldest first.
@@ -271,6 +274,7 @@ export function screenHtml(model) {
     nameHtml(model) +
     body +
     listHtml(model) +
+    diagHtml(model) +
     `<div class="mp-row"><button type="button" class="mp-close" data-mp="close">Close</button></div>`
   );
 }
@@ -405,6 +409,88 @@ function listHtml(model) {
   );
 }
 
+/**
+ * What the connection is actually doing, as facts rather than a mood.
+ *
+ * This exists because "you are the only one there" is not a diagnosis. The two facts that
+ * separate the possible causes are **how many browsers are in the room** and **how many
+ * messages each side has sent and received**, so both are on screen and both are in the
+ * report a player can copy:
+ *
+ *   - one browser in the room, on both machines → they are not in the same room (a different
+ *     world id, or one of them is not hosting) — nothing to do with the network path;
+ *   - two in the room, sent climbing, received 0 → the room is right and the path is not;
+ *   - different Build strings → the two machines are not running the same file.
+ */
+export function diagFacts(model) {
+  const d = model.diag;
+  if (!d) return null;
+  const peers = d.peers || [];
+  const first = peers[0] || null;
+  return {
+    build: BUILD,
+    worldId: model.worldId || "(none)",
+    role: model.role || "none",
+    signalling: d.signalling || "unknown",
+    signallingLine: d.line || "",
+    inRoom: peers.length + 1,          // the room always contains this browser
+    direct: first
+      ? `${first.connection || "unknown"}${first.ice ? ` (${first.ice})` : ""}`
+      : "",
+    relay: !!d.useTurn,
+    sent: Number(d.sent) || 0,
+    received: Number(d.received) || 0,
+    waiting: !!model.hosting && peers.length > 0 && !(model.guests || []).length,
+  };
+}
+
+/** The details as one block of text a player can copy and send to somebody who can help. */
+export function diagReport(model) {
+  const f = diagFacts(model);
+  if (!f) return "Tallow Reach connection report\n(no connection is open)";
+  return [
+    "Tallow Reach connection report",
+    `Build: ${f.build}`,
+    `World id: ${f.worldId}`,
+    `Role: ${f.role}`,
+    `Signalling: ${f.signalling}${f.signallingLine ? ` — ${f.signallingLine}` : ""}`,
+    `Browsers in the room: ${f.inRoom}`,
+    `Direct link: ${f.direct || "no other browser is in the room"}`,
+    `Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}`,
+    `Messages sent ${f.sent}, received ${f.received}`,
+  ].join("\n");
+}
+
+function diagHtml(model) {
+  const f = diagFacts(model);
+  if (!f) return "";
+  const link = f.direct ? `Direct link: ${f.direct}` : "Direct link: no other browser in the room yet";
+  return (
+    `<section class="mp-block mp-diag"><h2>Connection details</h2>` +
+    `<ul class="mp-facts">` +
+    `<li>Build: ${escapeHtml(f.build)}</li>` +
+    `<li>World id: ${escapeHtml(f.worldId)}</li>` +
+    `<li>Signalling: ${escapeHtml(f.signalling)}${f.signallingLine ? ` — ${escapeHtml(f.signallingLine)}` : ""}</li>` +
+    `<li>Browsers in the room: ${f.inRoom}</li>` +
+    `<li>${escapeHtml(link)}</li>` +
+    `<li>Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}</li>` +
+    `<li>Messages sent ${f.sent}, received ${f.received}</li>` +
+    `</ul>` +
+    (f.waiting
+      ? `<p class="mp-hint mp-warn">A browser is in the room but has not identified itself. If this stays for more than a few seconds, the connection between the two machines is being blocked.</p>`
+      : "") +
+    (f.inRoom === 1 && !f.waiting
+      ? `<p class="mp-hint">No other browser is in this room. Check that the other player turned Open Multiplayer on, and that both screens show the same World id.</p>`
+      : "") +
+    `<div class="mp-row">` +
+    `<button type="button" data-mp="reconnect">Reconnect</button>` +
+    `<button type="button" data-mp="copy-diag">Copy details</button>` +
+    `</div>` +
+    `<p class="mp-hint">If received stays 0 while sent climbs, the two browsers cannot hear each other. Reconnect tries through a relay server.</p>` +
+    `</section>`
+  );
+}
+
 /* ------------------------------------------------------------------------- */
 /* Actions — the buttons' work, callable without a DOM                        */
 /* ------------------------------------------------------------------------- */
@@ -432,6 +518,7 @@ export async function act(name, arg = "") {
       }
       return joinFromBox();
     case "leave": return leaveSession();
+    case "reconnect": return retryConnection();
     case "offer": return makeOffer();
     case "finish": return finishOffer();
     case "reset-offer":
@@ -445,6 +532,14 @@ export async function act(name, arg = "") {
     case "copy-offer":
     case "copy-answer":
       return copySomething(name, arg);
+    case "copy-diag": {
+      const report = diagReport(screenModel());
+      const done = await copyText(report);
+      setMessage(done ? "Copied. Send that to whoever is helping." : "Your browser would not copy for us. Select the details above and press Ctrl+C.",
+        done ? "ok" : "hint");
+      draw();
+      return done;
+    }
     case "close":
       closeMultiplayer();
       return true;
@@ -532,6 +627,18 @@ function afterJoined() {
     closeMultiplayer();
     emit("mp-enter-world", {});
   }
+}
+
+async function retryConnection() {
+  if (!api.snapshot().on) {
+    setMessage("Multiplayer is off — there is nothing to reconnect.", "error");
+    draw();
+    return false;
+  }
+  const done = await withBusy("Reconnecting through a relay — this can take a few seconds…", () => api.reconnect());
+  setMessage(done ? "Reconnected. Give it a few seconds for the other pilot to answer." : "Could not reconnect. Try the paste codes.", done ? "ok" : "error");
+  draw();
+  return !!done;
 }
 
 function leaveSession() {

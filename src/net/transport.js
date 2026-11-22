@@ -41,7 +41,7 @@
 //   room.getPeers()                                 -> { [peerId]: PeerInfo }
 //   onMessage receives (data, { peerId, ... }).
 
-import { ROOM_NAMESPACE, RELAYS } from "../data/multiplayer.js";
+import { ROOM_NAMESPACE, RELAYS, ICE } from "../data/multiplayer.js";
 
 const isObject = value => !!value && typeof value === "object" && !Array.isArray(value);
 
@@ -67,11 +67,17 @@ export const roomNameFor = worldId => `${ROOM_NAMESPACE}:${String(worldId || "")
  * `role` is only used in the words of a failure message; the broker treats both sides
  * the same, and a world is only ever one or the other in practice.
  */
-export function createChannel({ role = "host", worldId, onState, onData, onPeer } = {}) {
+export function createChannel({ role = "host", worldId, onState, onData, onPeer, useTurn = false } = {}) {
   let current = { state: "idle", reason: "" };
   let room = null;
   let starting = null;
   const actions = {};
+  // Relay mode: off until a direct attempt has failed (`restart({ useTurn: true })`).
+  let relay = !!useTurn;
+  // The diagnostics the screen shows, and the only honest way to tell "no messages" from
+  // "messages that nobody is reading": what actually left and what actually arrived.
+  let sent = 0;
+  let received = 0;
 
   const setState = (state, reason = "") => {
     if (current.state === state && current.reason === reason) return;
@@ -124,6 +130,11 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
         if (RELAYS.rtcConfig && typeof RELAYS.rtcConfig === "object") {
           config.rtcConfig = RELAYS.rtcConfig;
         }
+        // The relay is additive: the library keeps its public STUN and adds these, so a
+        // working direct path still wins and only a blocked one has to go through the server.
+        if (relay && Array.isArray(ICE.turn) && ICE.turn.length) {
+          config.turnConfig = ICE.turn.map(entry => ({ ...entry }));
+        }
         room = joinRoom(config, roomNameFor(worldId));
 
         // One action carries every message this game sends; `t` says what it is. One
@@ -131,6 +142,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
         actions.wire = room.makeAction("reach");
         actions.wire.onMessage((data, context) => {
           if (!isObject(data)) return;
+          received += 1;
           try {
             onData?.({ ...data, peerId: context?.peerId || null });
           } catch (e) {
@@ -186,6 +198,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
       // The library returns a promise; a failed send is not worth a thrown frame. The
       // caller's protocol has its own heartbeat, so a lost message shows up as silence.
       actions.wire.send(JSON.parse(JSON.stringify(value)), { target: peerId });
+      sent += 1;
       return true;
     } catch (e) {
       return false;
@@ -211,6 +224,48 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
     setState("closed", "");
   }
 
+  /**
+   * Leave and join again, optionally through a relay.
+   *
+   * A second attempt is a genuinely different attempt: fresh ICE gathering, and with
+   * `useTurn` a candidate pair that does not depend on two machines seeing each other on the
+   * local network at all. Nothing else about the session changes — the handshake is re-sent
+   * because the guest is still waiting for a welcome.
+   */
+  async function restart({ useTurn: nextTurn = relay } = {}) {
+    relay = !!nextTurn;
+    leave();
+    return join();
+  }
+
+  /** What the screen can say about the connection, in plain facts. */
+  function diagnostics() {
+    const peers = [];
+    let info = {};
+    try {
+      info = room?.getPeers?.() || {};
+    } catch (e) {
+      info = {};
+    }
+    for (const [id, peer] of Object.entries(info)) {
+      const pc = peer?.connection || null;
+      peers.push({
+        id,
+        connection: pc?.connectionState || "",
+        ice: pc?.iceConnectionState || "",
+        direct: !!peer?.direct,
+      });
+    }
+    return {
+      signalling: current.state,
+      line: current.reason,
+      useTurn: relay,
+      sent,
+      received,
+      peers,
+    };
+  }
+
   return {
     role,
     worldId,
@@ -218,6 +273,8 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
     send,
     broadcast,
     leave,
+    restart,
+    diagnostics,
     peers: peerIds,
     state: () => ({ ...current }),
     room: () => roomNameFor(worldId),

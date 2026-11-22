@@ -47,6 +47,11 @@ broker-free fallback), `join-link.js` (the one link a guest needs), `settings.js
   data channel can open seconds after the room reports the peer, and a message into an unopened
   channel vanishes silently. The reply is the only latch, and after `helloWaitSec` the guest is told
   which of the two failures it is having.
+- **A relay is the second path** (`ICE.turn`, `useTurn`, `channel.restart({ useTurn })`,
+  `session.reconnect`, `escalateToRelay`). The signalling relay introducing two browsers is not a
+  data path; two machines on a home network often have none (no hairpin NAT, mDNS dropped), and two
+  tabs on one machine hide it. Both ends escalate after `NET.helloWaitSec`, because a relayed path
+  needs a relay candidate from each side. `channel.diagnostics()` is what the screen reports.
 - **`snapshot().hostName`** is the host's name, learnt from `welcome`; the guest's player list cannot
   be built without it (`guests` only ever holds guests).
 - **A duplicate name gets a star** (owner's rule): `uniqueName(wanted, taken)` gives the joining guest

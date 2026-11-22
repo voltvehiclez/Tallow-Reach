@@ -4,7 +4,29 @@ This is the slice where two browsers can **open a world, join it, and talk**. No
 crosses the wire yet: no ship, no credits, no cargo. That is on purpose — it means a bug here can
 fail to connect, and cannot cost you anything.
 
-**Rewritten again after your third playtest (2026-11-21, two machines).** New in this build: the
+**Rewritten again after your fifth playtest (2026-11-21).** Your clue — *"Nobody is hosting the world
+in that link yet"* — means the room had **no other browser in it**, so this is not the network path
+and not the relay: the two machines were never in the same room. The screen now shows why:
+
+- **Build: `2026-11-22b`** on both machines (if they differ, they are different files),
+- **World id** on both (they must match),
+- **Browsers in the room** (1 = nobody else is there; 2 = you found each other),
+- **Messages sent / received**.
+
+Press **Copy details** on each machine and send me both blocks — that is the whole diagnosis.
+
+**Fourth playtest changes:** The
+laptop joining a PC over a home network is a *network path* problem, not a game bug: both browsers
+find each other and then cannot send a single packet, which is exactly what two tabs on one machine
+never show. What is new:
+
+- **A relay is tried automatically** after ~12 seconds if a browser is in the room and nothing has
+  got through. Both machines do it. It is slower, and it is the thing that makes a home network work.
+- **Connection details** on the screen: signalling, direct link state, relay on/off, and
+  **messages sent versus received**. That last line is the diagnosis — read it out to me.
+- **Reconnect** on the same screen, to try the relay on demand.
+
+**Third playtest changes:** New in this build: the
 guest repeats its hello until the host answers (a connection that takes seconds still works), the
 first Join press no longer needs a second one, and the guest's **Current players** list includes the
 host. If two machines still cannot see each other after ~12 seconds, the game says which failure it
@@ -60,10 +82,16 @@ second window (a hotspot or mobile data usually works too).
 3. Window B joins the open world on its own (it asks nothing), and the panel's status line under the
    cards should read **Connected**.
 4. **Two machines:** the same steps, but on the *host's* PC press **Copy link** and carry the text to
-   the laptop by any means (pastebin, email, chat). A guest that has not been admitted within ~12
-   seconds now says so: *"No answer from the host yet…"* means the browsers found each other but
-   messages are not getting through (a strict router); *"Nobody is hosting the world in that link
-   yet"* means the host's switch is off. Both are worth telling me about — include the sentence.
+   the laptop by any means (pastebin, email, chat). **Give it 20 seconds**: after ~12 the game
+   notices nothing is getting through and rejoins both ends through a relay, saying *"The direct
+   connection did not open. Trying a relay server…"*. If it connects then, everything below works as
+   normal.
+5. **If it still does not connect**, open **Open Multiplayer** on **both** machines, press **Copy
+   details** and paste both blocks back to me. Read them first: the **World id** lines must match,
+   and **Browsers in the room** must say 2 on both. If either machine says 1, nobody is in the room
+   (host not hosting, or a different world id) and nothing network-related is involved. `Messages sent` climbing while `received` stays 0, with `Direct link:
+   failed`, is the signature of a blocked network. `Signalling: lost` is a different problem (the
+   relay itself). Press **Reconnect** once and read the lines again.
 
 **What "working" looks like**
 

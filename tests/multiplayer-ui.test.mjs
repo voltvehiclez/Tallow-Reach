@@ -345,12 +345,15 @@ test("a join from the title puts the pilot in the open world", () => {
  * room and introduces whoever arrives later. Everything above it — `net/transport.js`,
  * `net/session.js`, the protocol, the handshake — is the real code.
  */
-function fakeRelay({ dropFirst = "" } = {}) {
+function fakeRelay({ dropFirst = "", dropAll = "" } = {}) {
   const rooms = new Map();
+  const joins = [];       // every joinRoom config, so a test can see what a retry used
   let next = 1;
   let dropped = false;
   return {
+    joins,
     joinRoom(config, roomId) {
+      joins.push(config);
       const member = { id: `peer-${next++}`, actions: new Map(), peerJoin: [], peerLeave: [] };
       const members = rooms.get(roomId) || new Set();
       rooms.set(roomId, members);
@@ -364,6 +367,7 @@ function fakeRelay({ dropFirst = "" } = {}) {
         makeAction: name => ({
           send(data, options = {}) {
             // One message kind can be dropped once, to prove a retry exists.
+            if (dropAll && data && data.t === dropAll) return Promise.resolve();
             if (dropFirst && !dropped && data && data.t === dropFirst) { dropped = true; return Promise.resolve(); }
             const targets = options.target ? [options.target] : [...members].map(m => m.id);
             for (const other of members) {
@@ -720,4 +724,115 @@ test("the chat box is tall enough to read, and its list is called Current player
   const who = css.slice(css.indexOf("#mp-chat-who {"));
   assert.ok(Number((who.match(/min-width:\s*(\d+)px/) || [])[1] || 0) >= 104, "the player column has room");
   assert.match(ui.chatWhoHtml({ name: "Ada", guests: [] }), /Current players/);
+});
+
+/* ------------------------------------------------------------------------- */
+/* 10. Playtest 4: two machines that cannot see each other                    */
+/* ------------------------------------------------------------------------- */
+//
+// The owner's laptop joins (the room is found) and is told "you are the only one there". On one
+// machine that never happens, because both tabs share a process: two *machines* need a path
+// across the network, and a home router usually has none (no hairpin NAT, mDNS blocked). The
+// answer is a relay, but only after the direct attempt has failed — and both ends must use it.
+
+test("the screen says what the link is doing, in facts", () => {
+  const snap = {
+    ...COLD, on: true, role: "guest", state: "connected", name: "Bo", hostName: "",
+    diag: { signalling: "connected", line: "Connected.", useTurn: false, sent: 12, received: 0, peers: [{ id: "p1", connection: "connecting", ice: "checking", direct: true }] },
+  };
+  const model = ui.screenModel({ snap });
+  assert.equal(model.diag.sent, 12);
+  assert.equal(model.diag.received, 0);
+  const html = ui.screenHtml(model);
+  assert.match(html, /Connection details/);
+  assert.match(html, /sent 12/);
+  assert.match(html, /received 0/);
+  assert.match(html, /Direct link: connecting \(checking\)/);
+  assert.match(html, /data-mp="reconnect"/, "and there is a way to try again");
+  assert.doesNotMatch(html, /Relay mode: on/, "a direct attempt is still direct");
+  // The two facts that separate "different room" from "same room, no path between us".
+  assert.match(html, /Browsers in the room: 2/, "how many browsers the room has, counting this one");
+  assert.match(html, /World id: /, "and which world it is looking for");
+  assert.match(html, /Build: /, "and which build this page is");
+  assert.match(html, /data-mp="copy-diag"/, "with a way to copy all of it");
+});
+
+test("the connection report is one paste-ready block", () => {
+  const snap = {
+    ...COLD, on: true, role: "guest", state: "connected", name: "Bo", worldId: "w-abc",
+    diag: { signalling: "connected", line: "Connected.", useTurn: true, sent: 4, received: 0, peers: [{ id: "p1", connection: "failed", ice: "failed", direct: true }] },
+  };
+  const model = ui.screenModel({ snap });
+  const report = ui.diagReport(model);
+  for (const needle of ["Tallow Reach connection report", "Build:", "World id: w-abc", "Role: guest", "Signalling: connected", "Browsers in the room: 2", "Messages sent 4, received 0", "Relay mode: on", "Direct link: failed (failed)"]) {
+    assert.ok(report.includes(needle), `the report says "${needle}"`);
+  }
+  // A host's own report must say so, and count itself in the room.
+  const asHost = ui.diagReport(ui.screenModel({ snap: { ...COLD, on: true, role: "host", name: "Ada", diag: { signalling: "finding", sent: 0, received: 0, peers: [], useTurn: false } } }));
+  assert.match(asHost, /Role: host/);
+  assert.match(asHost, /Browsers in the room: 1/);
+  assert.match(asHost, /Direct link: no other browser is in the room/);
+});
+
+test("a session with no diagnostics draws no details block", () => {
+  const model = ui.screenModel({ snap: { ...COLD } });
+  assert.equal(model.diag, null);
+  assert.doesNotMatch(ui.screenHtml(model), /Connection details/);
+});
+
+test("a host with a browser in the room but no hello says so", () => {
+  const snap = {
+    ...COLD, on: true, role: "host", state: "connected", name: "Ada",
+    diag: { signalling: "connected", line: "", useTurn: false, sent: 9, received: 0, peers: [{ id: "p1", connection: "connecting", ice: "checking", direct: true }] },
+  };
+  const html = ui.screenHtml(ui.screenModel({ snap }));
+  assert.match(html, /A browser is in the room but has not identified itself/,
+    "the host's half of the failure names itself");
+});
+
+test("a room that dies quietly is reopened by the session's watchdog", () => {
+  // A backgrounded tab or a slept laptop loses the relay; the room never comes back by itself.
+  const source = read("src/net/session.js");
+  const watch = source.slice(source.indexOf("function startKeepalive"), source.indexOf("function armHostWait"));
+  assert.match(watch, /state === "lost" \|\| status\.state === "closed"/, "it looks for a dead room");
+  assert.match(watch, /channel\.restart\(/, "and reopens it");
+  assert.match(watch, /10_000/, "but not in a loop");
+  assert.match(source, /startKeepalive\(\);/, "and it is started with the channel");
+});
+
+test("Reconnect is an action the screen knows", async () => {
+  const calls = [];
+  const fake = fakeApi({ reconnect: async () => { calls.push("reconnect"); return true; } });
+  fake.setSnap({ ...COLD, on: true, role: "guest", state: "connected", name: "Bo",
+    diag: { signalling: "connected", line: "", useTurn: false, sent: 3, received: 0, peers: [] } });
+  assert.equal(await ui.act("reconnect"), true);
+  assert.deepEqual(calls, ["reconnect"], "the screen asks the session to reconnect");
+  assert.match(ui.panelState().message, /Reconnected/);
+});
+
+test("a hello that never arrives ends with a relay attempt on both ends", async () => {
+  // A relay that accepts the room but never delivers a hello: the handshake cannot happen.
+  const relay = fakeRelay({ dropFirst: "hello", dropAll: "hello" });
+  setLibraryLoader(async () => relay);
+  session.setChannelFactory(null);
+  const was = { retry: NET.helloRetrySec, wait: NET.helloWaitSec };
+  NET.helloRetrySec = 0.02;
+  NET.helloWaitSec = 0.06;
+  const host = session.createChannelForTest("host", "w-relay", "Ada", "host-token", worldKit("w-relay"));
+  await host.start();
+  const guest = session.createChannelForTest("guest", "w-relay", "Bo", "guest-token", worldKit("w-relay"));
+  await guest.start();
+  await new Promise(resolve => setTimeout(resolve, 200));
+
+  assert.equal(guest.snapshot().relay, true, "the guest escalated to the relay");
+  assert.equal(host.snapshot().relay, true, "and so did the host: a relayed path needs both ends");
+  assert.ok(relay.joins.some(config => Array.isArray(config.turnConfig) && config.turnConfig.length),
+    "the second attempt was configured with a relay server");
+  assert.ok(host.snapshot().diag.sent > 0, "the screen has facts to show");
+
+  NET.helloRetrySec = was.retry;
+  NET.helloWaitSec = was.wait;
+  host.stop();
+  guest.stop();
+  setLibraryLoader(null);
 });

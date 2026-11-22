@@ -183,18 +183,21 @@ Mission lessons are first because missions are where most bugs have come from. T
   sim gate with `state.paused` and `state.multiplayer` both set) and `tests/multiplayer-session.test.mjs`
   (the old `!v &&` is asserted gone).
 
-### L35. "Sent" is not "heard", and never replace the element under the cursor
+### L35. "Sent" is not "heard", and one machine is not two
 
-- **Seen (owner, playtest 3, second machine):** the guest joined "but I am the only one here", and
-  the first press of **Join** did nothing while the second worked.
-- **Cause:** the hello was latched as done when the send returned, but between two machines the data
-  channel opens seconds after the room says the peer is there, so it went nowhere, unrepeated. And the name field committed on `change`: a click blurs the field first, the commit
-  redrew the card, and the button under the cursor was replaced before mouseup — no click fired.
-- **Rule:** a message is only done when the other side answers — retry until a reply arrives and let
-  the reply be the latch. And a `change`/`blur` handler must update in place: replacing the DOM under
-  the pointer eats the click that caused the blur.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` — "a hello that was lost is sent again until
-  somebody answers" and "the name field commits without redrawing" (no `draw()` in the handler).
+- **Seen:** playtests 3 and 4, second machine: the guest joined "but I am the only one there" every
+  time, and the first press of **Join** did nothing.
+- **Cause:** (a) the hello was latched as sent when the send returned, and between two machines the
+  channel opens after the room reports the peer, so it went nowhere, unrepeated; (b) the name field
+  committed on `change`, a click blurs the field first, and that redraw replaced the button under the
+  cursor before mouseup; (c) two tabs on one machine always connect — they share a process — so no
+  network path between two *machines* looks like a working connection from inside.
+- **Rule:** a message is done only when the other side answers (the reply is the latch); a
+  `change`/`blur` handler must update in place, because replacing the DOM under the pointer eats the
+  click; and **a same-machine test proves the logic, never the wire** — so put the wire's facts
+  (sent/received, ICE state) on screen, and keep a second path (a relay) to try on both ends.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the lost-hello retry, the no-redraw commit, the
+  relay escalation, the Connection details block.
 
 ## Template (copy for a new entry)
 
@@ -232,26 +235,6 @@ pass of invisible dither grain, because a smooth dark gradient bands into contou
 and those would have been "odd lines" by next round. The test that protects it asserts the recording canvas saw zero
 strokes and no path ever started: when a complaint is about a kind of artifact, pin the absence of the capability, not
 the absence of this week's instance of it.
-
-### L25. Two skies for one picture: the same image installed twice, and a starfield that was already in the paint
-
-- **Seen (owner, 2026-11-15):** "remove the existing starfield. This is because our previously generated skybox already
-  has some stars baked in it. I might re-add star fields in the future but not now."
-- **Cause:** the sky was one thing and the stars another, because until now no sky *was* a picture — the starfield was
-  the only thing drawing stars. The moment normal space started wearing a generated skybox, two systems were drawing the
-  same stars, and the fix was not to darken one of them: it was to stop drawing a second set. The same shape of mistake
-  sat in the assets: the sky the owner kept had been installed under a working name and again under its real one, so the
-  build inlined the same 140 KB picture twice.
-- **Rule:** a picture that carries a thing must not be drawn under a second copy of that thing — ask *who draws this*
-  before adding a layer. A sky's own look is data on the sky (`starfield`, `shards`), and one switch (`STARFIELD.enabled`)
-  can turn a whole layer off without deleting the geometry, so the owner can ask for it back in one line. And an installed
-  sky is a resource with a name: re-making it under the final name and `remove`-ing the old one is part of installing it
-  (the tool has `remove` for exactly this, because `src/assets/skyboxes/` is the tool's folder and not a place to delete
-  from by hand).
-- **Enforced by:** `tests/skybox.test.mjs` — "normal space wears a generated sky, and the drawn starfield is off" reads
-  `showPlace`'s own starfield expression (writer and reader cannot drift apart, as in L19) and pins the master switch;
-  "nothing is in the skybox folder or the url map without being in data/skyboxes.js" plus the per-id budget check make a
-  second copy of a picture a visible 140 KB, and the report's file size is quoted in the CHANGELOG entry.
 
 ### L25. A projectile's hit test must read the colliders the world already has, and sweep, not sample
 

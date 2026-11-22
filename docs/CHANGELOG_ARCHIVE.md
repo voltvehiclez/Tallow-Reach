@@ -1,5 +1,91 @@
 # Changelog archive
 
+## 2026-11-21: Playtest 4 of slice 3 — the path between two machines, and a relay for when it fails
+
+**What the owner saw.** The laptop takes the host's link (a `file://` page on the PC), joins, and
+says "you are the only one there" — every time. Two tabs on one machine were fine all along.
+
+**Why two tabs always worked and two machines never could.** The room is found on both sides, and
+both sides believe they are connected: the signalling relay introduced them. What never happens is
+the *data* connection — the two browsers must find a network path to each other, and a home network
+usually offers none: the router will not send a packet back to itself (no hairpin NAT), so the only
+remaining candidates are the two machines' local addresses, which Chrome hides behind `*.local` mDNS
+names — and a firewall or a router that drops multicast throws those away. Two tabs on one machine
+never notice, because they share a process. Nothing in the handshake, the retry or the protocol was
+ever wrong: there was no wire to send it down.
+
+- **A relay, after the direct attempt fails.** `ICE.turn` in `data/multiplayer.js` (the free Open
+  Relay project, HTTPS/TCP fallbacks included) is passed to the library as `turnConfig` — but only
+  after `NET.helloWaitSec` of a direct attempt: 12 seconds with a browser in the room and no hello
+  admitted. **Both ends escalate**, because a relayed path needs a relay candidate from each side; the
+  host arms its own timer when it sees a peer. The screen says *"The direct connection did not open.
+  Trying a relay server — this can take a few seconds."*
+- **A Reconnect button**, which does the same thing on demand.
+- **Connection details on the screen**, because "you are the only one there" is not a diagnosis:
+  signalling state, the direct link's own `connectionState`/ICE state, relay on/off, and
+  **messages sent vs received**. Sent climbing while received stays 0 is the signature of this whole
+  class of failure, and it is a line a player can read out.
+- The transport grew `restart({ useTurn })` and `diagnostics()`; the session grew `reconnect()`,
+  `escalateToRelay()`, a host-side timer, and `snapshot().diag` / `snapshot().relay`.
+
+**Files:** `src/data/multiplayer.js` (`ICE.turn`), `src/net/transport.js`, `src/net/session.js`,
+`src/ui/multiplayer.js`, `src/styles.css`.
+
+**Tests: 946, all green** (was 942). Four new in `tests/multiplayer-ui.test.mjs`: the details block,
+its absence with no session, the Reconnect action, and the relay escalation driven from **both**
+ends by a relay that drops every hello (the fake relay now records each join's config).
+
+**Save format unchanged (v29).** Rebuild needed (`npm run build`).
+
+## 2026-11-21: Playtest 3 of slice 3 — a hello that is answered, a click that is not eaten
+
+The owner joined from a second machine. It nearly worked, which is the interesting part.
+
+**What the owner saw.** "I can join via 2 browser tabs, but on my separate laptop I cannot join the
+host on my PC properly: it opens an open world with a chat box but says I am the only one there."
+"The first Join click did nothing and showed the hint; the second put me in a world." "As the guest
+I cannot see the host in the player list, only my own name — but I can see the host's messages."
+Plus: taller chat box, and "Who is here" → "Current players".
+
+**Two bugs, one cause each.**
+
+1. **A hello that was "sent" and never heard.** The guest said hello once per peer and latched it as
+   done when the send call returned. Two tabs on one machine open their data channel almost
+   immediately, so that looked right; two *machines* open it seconds after the room says the peer is
+   there, and a hello sent into a channel that is not open yet is gone — quietly. The guest sat in a
+   world of its own, the host's chat arriving (one broadcast per line) and its name never in the
+   list. Now the guest repeats its hello every `NET.helloRetrySec` (2) until a `welcome` lands, the
+   reply is the latch, each round clears the per-peer latch, and the host logs "joined" once per
+   guest however many hellos arrive. After `NET.helloWaitSec` (12) with no answer the player is told
+   — with a different sentence for "nobody is in the room" than for "your friend is there but
+   nothing is getting through" — instead of sitting there looking connected.
+2. **The first Join click was eaten.** The name field committed on `change`, and clicking a button
+   blurs the field first: the commit redrew `#mp-card-inner` between mousedown and mouseup, so the
+   button under the cursor was replaced and no click event fired. A fresh browser always has a
+   pending name commit, which is why only the laptop showed it. The commit now updates in place
+   (`refreshLiveness`, which also carries `#mp-msg`); nothing in that path replaces the card.
+3. **The guest's player list was missing the host.** `guests` only ever holds guests, so a guest
+   built its column from "me" plus its own row as the host listed it. The session now keeps the
+   host's name from `welcome` (`snapshot().hostName`), and both the chat column and the screen's
+   list are built by `chatWhoRows` — you, the host, then everyone else, never twice.
+
+- **Chat box:** `#mp-chat-lines` max height 132 → **264 px** (the owner asked for double), and the
+  column heading is **Current players** in both the box and the screen.
+- **A TURN knob, not a change of behaviour.** `RELAYS.rtcConfig` in `data/multiplayer.js` (null by
+  default) is passed to the library as its `RTCConfiguration`, for two networks that cannot reach
+  each other directly. Nothing changes unless somebody fills it in.
+- **Not built, on purpose:** still no remote ship. Slice 4.
+
+**Files:** `src/net/session.js`, `src/net/transport.js`, `src/ui/multiplayer.js`,
+`src/styles.css`, `src/data/multiplayer.js` (`helloRetrySec`, `helloWaitSec`, `rtcConfig`).
+
+**Tests: 942, all green** (was 937). Five new in `tests/multiplayer-ui.test.mjs`: the guest's column
+after a welcome, the lost-hello retry (a relay that drops the first hello), the commit-without-redraw
+rule, the doubled height and the "Current players" heading. The fake relay gained a
+`dropFirst` switch for it.
+
+**Save format unchanged (v29).** Rebuild needed (`npm run build`).
+
 ## 2026-11-21: Playtest 2 of slice 3 — one door each, names with stars, a chat that stays open
 
 The owner's second playtest, in five reports. Two were bugs, one was a rule about the build, and
