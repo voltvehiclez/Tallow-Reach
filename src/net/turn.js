@@ -121,6 +121,50 @@ function relayCandidatesFor(entry, timeoutMs) {
   });
 }
 
+/**
+ * Read relay credentials out of whatever the provider handed the player.
+ *
+ * Providers print a little block — a `turn:` address, a username, a credential, sometimes as
+ * JSON, sometimes as three lines of text. Retyping three values on two machines is how a
+ * setting stops being used, so one box takes the whole block (and `TRTURN:` codes from the
+ * **Copy relay settings** button, which are the same thing packed).
+ */
+export function parseRelayText(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const packed = /^TRTURN:([A-Za-z0-9+/=\s]+)$/.exec(text);
+  if (packed) {
+    try {
+      const decoded = JSON.parse(atob(packed[1].replace(/\s+/g, "")));
+      return ownRelay({ relay: decoded });
+    } catch (e) {
+      return null;
+    }
+  }
+  const urls = (text.match(/turns?:[a-z0-9.-]+(?::\d+)?(?:\?transport=(?:tcp|udp))?/gi) || [])
+    .map(cleanUrl)
+    .filter(Boolean);
+  const field = name => {
+    // `username: u`, `username=u` and `"username":"u"` are all how a provider prints it.
+    const match = new RegExp(`${name}"?\\s*[:=]\\s*"?([^"',}\\s]+)`, "i").exec(text);
+    return match ? match[1] : "";
+  };
+  const username = field("username") || field("user");
+  const credential = field("credential") || field("password") || field("pass");
+  return ownRelay({ relay: { urls: [...new Set(urls)].join(","), username, credential } });
+}
+
+/** The three values as one line a player can send to their other machine. */
+export function packRelay(relay) {
+  const own = ownRelay({ relay });
+  if (!own) return "";
+  const text = JSON.stringify({ urls: own.urls.join(","), username: own.username, credential: own.credential });
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `TRTURN:${btoa(binary)}`;
+}
+
 /** One sentence a screen can print about a check's result. */
 export function turnSummary(result) {
   if (!result || !result.total) return "No relay servers are configured, so a code can only work on the same network.";

@@ -1105,3 +1105,42 @@ test("Connection details carries the clock and the code's paths, and never says 
   assert.match(report, /This machine's clock: 2026-11-22T10:30:00\.000Z/);
   assert.match(html, /This machine's clock: 2026-11-22 10:30:00 UTC/);
 });
+
+/* ------------------------------------------------------------------------- */
+/* 15. Playtest 11: a guest needs the details too, and one paste sets a relay */
+/* ------------------------------------------------------------------------- */
+
+test("a guest's screen has Connection details and the relay fields", () => {
+  const guest = {
+    ...COLD, on: true, role: "guest", state: "finding", name: "Bo", worldId: "w-1",
+    diag: { signalling: "finding", line: "Waiting…", useTurn: false, sent: 0, received: 0, peers: [] },
+  };
+  const html = ui.screenHtml(ui.screenModel({ snap: guest, v: { surface: "join", fields: {}, history: [] } }));
+  assert.match(html, /Connection details/, "a guest can read the same facts a host can");
+  assert.match(html, /Browsers in the room/);
+  assert.match(html, /data-mp-field="relayUrls"/, "and set a relay server from their own machine");
+  assert.match(html, /data-mp="test-relay"/);
+});
+
+test("a provider's whole block is one paste, and the three values can be sent to another machine", async () => {
+  const turn = await import("../src/net/turn.js");
+  const block = [
+    "turn:global.relay.metered.ca:80?transport=tcp",
+    "username: deadbeef",
+    "credential: cafebabe",
+  ].join("\n");
+  const parsed = turn.parseRelayText(block);
+  assert.deepEqual(parsed.urls, ["turn:global.relay.metered.ca:80?transport=tcp"]);
+  assert.equal(parsed.username, "deadbeef");
+  assert.equal(parsed.credential, "cafebabe");
+
+  // JSON, which is how some dashboards print it, reads too.
+  const json = turn.parseRelayText('{"urls":"turns:relay.example:443","username":"u1","credential":"p1"}');
+  assert.deepEqual(json.urls, ["turns:relay.example:443"]);
+
+  // The packed line round-trips, so one machine's settings reach the other in one paste.
+  const packed = turn.packRelay(parsed);
+  assert.match(packed, /^TRTURN:/);
+  assert.deepEqual(turn.parseRelayText(packed), parsed);
+  assert.equal(turn.parseRelayText("just some words"), null);
+});

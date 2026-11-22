@@ -20,6 +20,37 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
+
+**The owner's two facts end the relay-server question:**
+
+- `Relays reachable: 3 of 5`, `Relays connected: 10` — the **signalling** relays are fine, and have
+  been all along. "Your network blocks the relays" was wrong.
+- **Test relay servers** answered *"None of the 3 relay servers answered from this machine, so co-op
+  cannot cross networks"*, and the code says `Code paths: 1 local, 1 public, 0 relay`. So the free
+  public TURN servers (Open Relay, freestun, AnyFirewall) are **dead** — that, and nothing else, is
+  why a laptop on 4G cannot join a PC on ethernet. No amount of code makes a dead server forward a
+  packet; a player needs a relay they control.
+
+- **A guest now has Connection details.** The join surface had no diagnosis block at all, so a guest
+  could only ever say "I am alone" — no build, no room count, no code paths, no relay fields
+  (owner's report). `screenHtml` puts the details (and the relay block) on the join surface.
+- **One paste sets a relay server.** `parseRelayText()` reads whatever a provider prints — the
+  `turn:…` block with `username:`/`credential:` lines, JSON from a dashboard, or a `TRTURN:` line —
+  and fills all three fields; **Copy relay settings** makes that line, so the second machine is one
+  paste instead of six. `Save relay` says to press **Start again**, because a code carries the
+  servers that existed when it was made.
+
+**Files:** `src/ui/multiplayer.js` (join-surface details, relay paste/copy, save message),
+`src/net/turn.js` (`parseRelayText`, `packRelay`), `src/data/multiplayer.js`
+(`BUILD = "2026-11-22g"`).
+
+**Tests: 970, all green** (was 968). Two new: the guest's screen, and the provider block / JSON /
+packed round trip.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.** The next step is not
+code: a free TURN credential (Metered's free tier) entered once on each machine.
+
 ## 2026-11-22: Playtest 10 of slice 3 — the free relay servers are the suspect, so test them and allow your own
 
 **The owner's block rewrote the theory again:** `Relays connected: 10`. The signalling relays are
@@ -206,20 +237,6 @@ globally — no test may open a real WebSocket.
 show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
 (0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
 
-## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
-
-- **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
-  owner's call — the **ease in/out ramp stays**, and was the part that helped.
-- **Outfitting click-place:** pick-up-then-click (the inventory-slot style of
-  placing, as opposed to drag-and-drop) only honoured clicks inside a module
-  group card; clicking the big panel's viewer/header areas silently did
-  nothing. A held module now fits its left-most empty bay when clicked
-  anywhere on the Outfitting panel, matching the drag path. Step 5 of the
-  station UI flow test clicks the bare panel and fits.
-
-Files: `src/data/ships.js`, `src/ui/menu.js`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
-
 ## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
 
 - **Roll ease in/out:** the shared model ramps the roll stick
@@ -300,6 +317,7 @@ Rebuild `game/tallow-reach.html`; `npm test`.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
 - 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
 - 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
 - 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner

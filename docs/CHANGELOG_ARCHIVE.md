@@ -1,5 +1,19 @@
 # Changelog archive
 
+## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
+
+- **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
+  owner's call — the **ease in/out ramp stays**, and was the part that helped.
+- **Outfitting click-place:** pick-up-then-click (the inventory-slot style of
+  placing, as opposed to drag-and-drop) only honoured clicks inside a module
+  group card; clicking the big panel's viewer/header areas silently did
+  nothing. A held module now fits its left-most empty bay when clicked
+  anywhere on the Outfitting panel, matching the drag path. Step 5 of the
+  station UI flow test clicks the bare panel and fits.
+
+Files: `src/data/ships.js`, `src/ui/menu.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
 
 The plan the owner gave for multiplayer (host-run co-op, WebRTC, one suite per world) is written

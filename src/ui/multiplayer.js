@@ -54,6 +54,7 @@ import { clearPendingJoin, pendingJoin } from "../net/boot.js";
 import { looksLikeCode } from "../net/paste.js";
 import { makeJoinLink } from "../net/join-link.js";
 import { showNotice } from "./notice.js";
+import { parseRelayText, packRelay } from "../net/turn.js";
 
 /* ------------------------------------------------------------------------- */
 /* What the screen is showing                                                 */
@@ -292,7 +293,10 @@ export function screenHtml(model) {
   // pause card is where you host. A guest who still has an answer code to send sees it on
   // the pause card too, because that is the only screen they can reach mid-flight.
   const body = model.surface === "join"
-    ? joinHtml(model)
+    // A guest needs the same diagnosis as a host: the room count, the code's paths, the relay
+    // servers, and the relay fields of its own. The join surface used to have none of it, so a
+    // guest could only ever say "I am alone" (owner, playtest 11).
+    ? joinHtml(model) + diagHtml(model)
     : model.surface === "host"
       ? hostHtml(model) +
         (model.stalled && model.role === "guest" && !model.hosting ? joinHtml(model) : "") +
@@ -582,6 +586,8 @@ function relayServerHtml(model) {
     `a phone on 4G and a PC at home. A provider (for example Metered, Twilio or Cloudflare) gives you an address, ` +
     `a username and a credential.</p>` +
     `<p class="mp-hint">In use: ${saved}</p>` +
+    `<p class="mp-hint">Paste the whole block your provider gave you into the first box (or a <code>TRTURN:</code> ` +
+    `line from another machine) and press Save relay — the username and credential in it are read out for you.</p>` +
     `<label class="mp-label">Relay address (turn: or turns:)<input class="mp-input" data-mp-field="relayUrls" ` +
     `value="${escapeAttr(model.relayFields.urls)}" placeholder="turn:global.relay.metered.ca:80" spellcheck="false"></label>` +
     `<label class="mp-label">Username<input class="mp-input" data-mp-field="relayUser" ` +
@@ -592,6 +598,7 @@ function relayServerHtml(model) {
     `<button type="button" data-mp="save-relay">Save relay</button>` +
     `<button type="button" data-mp="test-relay">Test relay servers</button>` +
     `<button type="button" data-mp="clear-relay">Use the free ones</button>` +
+    (model.relay ? `<button type="button" data-mp="copy-relay">Copy relay settings</button>` : "") +
     `</div>`
   );
 }
@@ -625,16 +632,21 @@ export async function act(name, arg = "") {
     case "leave": return leaveSession();
     case "save-relay": {
       const fields = screenModel().relayFields;
-      if (!String(fields.urls || "").trim() || !String(fields.username || "").trim() || !String(fields.credential || "").trim()) {
+      // One box may hold the provider's whole block, or a TRTURN: line from the other machine.
+      const parsed = parseRelayText(fields.urls);
+      const merged = parsed && (!fields.username || !fields.credential)
+        ? { urls: parsed.urls.join(","), username: parsed.username, credential: parsed.credential }
+        : fields;
+      if (!String(merged.urls || "").trim() || !String(merged.username || "").trim() || !String(merged.credential || "").trim()) {
         setMessage("A relay server needs all three: its address, a username and a credential.", "error");
         draw();
         return false;
       }
-      api.saveRelay(fields);
+      api.saveRelay(merged);
       panelView.fields.relayUrls = undefined;
       panelView.fields.relayUser = undefined;
       panelView.fields.relayPass = undefined;
-      setMessage("Relay server saved. Codes made from now on can use it.", "ok");
+      setMessage("Relay server saved. Press Start again to make a new offer code — a code carries the servers that existed when it was made.", "ok");
       draw();
       return true;
     }
@@ -644,6 +656,14 @@ export async function act(name, arg = "") {
       panelView.fields.relayUser = undefined;
       panelView.fields.relayPass = undefined;
       setMessage("Using the free public relay servers again.", "hint");
+      draw();
+      return true;
+    }
+    case "copy-relay": {
+      const packed = packRelay(screenModel().relay);
+      if (!packed) { setMessage("Save a relay server first.", "error"); draw(); return false; }
+      const done = await copyText(packed);
+      setMessage(done ? "Relay settings copied. Paste them into the same box on the other machine." : "Could not copy. The three fields are on screen.", done ? "ok" : "error");
       draw();
       return true;
     }
