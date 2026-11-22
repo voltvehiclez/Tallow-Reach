@@ -587,7 +587,10 @@ function relayServerHtml(model) {
     `a username and a credential.</p>` +
     `<p class="mp-hint">In use: ${saved}</p>` +
     `<p class="mp-hint">Paste the whole block your provider gave you into the first box (or a <code>TRTURN:</code> ` +
-    `line from another machine) and press Save relay — the username and credential in it are read out for you.</p>` +
+    `line from another machine) and press Save relay — the username and credential in it are read out for you. ` +
+    `An address with no <code>turn:</code> in front is fine. Several addresses work too, separated by commas: ` +
+    `<code>turn:host:3478, turn:host:3478?transport=tcp, turns:host:5349</code> — the TCP and TLS ones are what a ` +
+    `phone on 4G usually needs, because it often blocks UDP.</p>` +
     `<label class="mp-label">Relay address (turn: or turns:)<input class="mp-input" data-mp-field="relayUrls" ` +
     `value="${escapeAttr(model.relayFields.urls)}" placeholder="turn:global.relay.metered.ca:80" spellcheck="false"></label>` +
     `<label class="mp-label">Username<input class="mp-input" data-mp-field="relayUser" ` +

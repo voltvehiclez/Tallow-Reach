@@ -1144,3 +1144,22 @@ test("a provider's whole block is one paste, and the three values can be sent to
   assert.deepEqual(turn.parseRelayText(packed), parsed);
   assert.equal(turn.parseRelayText("just some words"), null);
 });
+
+test("a provider's address without turn: is read as one, and several addresses are all kept", async () => {
+  const turn = await import("../src/net/turn.js");
+  // ExpressTURN's own block: bare host and port, and a credential ending in "=".
+  const express = "**TURN Servers:** free.expressturn.com:3478\n\nusername: 000000002110719494\n\npassword: 33RDBDUZ38C6ScnNLjwkG1PermM=";
+  const parsed = turn.parseRelayText(express);
+  assert.deepEqual(parsed.urls, ["turn:free.expressturn.com:3478"], "the scheme the player never typed is added");
+  assert.equal(parsed.credential, "33RDBDUZ38C6ScnNLjwkG1PermM=", "a trailing = survives");
+
+  const many = turn.ownRelay({ relay: {
+    urls: "free.expressturn.com:3478, turn:free.expressturn.com:3478?transport=tcp, turns:free.expressturn.com:5349",
+    username: "u", credential: "c",
+  } });
+  assert.deepEqual(many.urls, [
+    "turn:free.expressturn.com:3478",
+    "turn:free.expressturn.com:3478?transport=tcp",
+    "turns:free.expressturn.com:5349",
+  ], "the UDP, TCP and TLS doors are all kept — a phone may only be allowed one of them");
+});

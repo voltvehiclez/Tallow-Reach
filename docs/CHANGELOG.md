@@ -20,6 +20,24 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 12 of slice 3 — a relay server the player actually has (ExpressTURN)
+
+The owner found a free TURN provider (ExpressTURN) and pasted its block, which exposed two things
+the relay fields could not do with a real provider's text:
+
+- **ExpressTURN prints the address with no `turn:` in front** (`free.expressturn.com:3478`), and the
+  parser refused it. A bare `host:port` is now read as `turn:host:port` — in `cleanUrl` too, so it
+  works in the address box whether or not it came through the paste path.
+- **A provider prints several doors** (UDP 3478, TCP 3478, TLS 5349) and a phone on 4G may only be
+  allowed the TCP or TLS one. Comma-separated addresses are all kept, and the hint says so.
+- A credential ending in `=` (ExpressTURN's do) survives the paste and the `TRTURN:` round trip.
+
+**Files:** `src/net/turn.js` (`cleanUrl`, `parseRelayText`), `src/ui/multiplayer.js` (the hint),
+`src/data/multiplayer.js` (`BUILD = "2026-11-22h"`).
+
+**Tests: 971, all green** (was 970). One new: ExpressTURN's own block, and the three doors of one
+server. **Save format unchanged (v29).** **Build id: `2026-11-22h`.**
+
 ## 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
 
 **The owner's two facts end the relay-server question:**
@@ -237,36 +255,6 @@ globally — no test may open a real WebSocket.
 show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
 (0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
 
-## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
-
-- **Roll ease in/out:** the shared model ramps the roll stick
-  (`FLIGHT.rollRampRate` 4/s, ~0.25 s to full rate, same bleed-off on release)
-  for the player, banking NPCs and Dane's barrel rolls alike — no more
-  snap-on/snap-off rotation. Golden test replica and combat fixture updated.
-- **No fake local waypoints:** `missionWaypoints` no longer plants a marker
-  1 km away inside your current pocket for a station in another pocket
-  (Border Signal's "Meridian Station, 5 km" inside Kestrel Hollow).
-  Cross-pocket destinations live on the starmap rings only; in-pocket
-  waypoints (courses, signals, authored points) are unchanged.
-- **Starmap glow simplified:** destination nodes no longer draw an extra ring
-  circle — the dot keeps its own colour and wears the mission-colour glow,
-  exactly like the ship UI / N-menu objective markers.
-- **Mission items are findable:** a mission crate is labelled by its item
-  name (**Beacon**, not "Crate") in the floating label and the target lock,
-  with the mission's objective glow it already computed. (The beacon crate
-  itself was verified present and amber at the wreck; it was indistinguishable
-  in the loot pile, not missing.)
-- **Outfitting:** dropping a module anywhere on the big left panel now fits
-  its left-most bay reliably — the group is read from the module's own data
-  (not the tile dataset), the handler honours where the drag was hovering if
-  the release hit-test lands on an overlay, and `finishStationDrag` is
-  exported and covered by a real fitting test.
-
-Files: `src/sim/flight-model.js`, `src/data/ships.js`, `src/sim/npc-pilot.js`,
-`src/ui/{mission-hud,starmap,hud,menu}.js`, `src/sim/targeting.js`,
-`src/styles.css`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
-
 ## 2026-11-21: Roll cut by 25% (sickening at full speed)
 
 `FLIGHT.rollFactor` 3.75 → 2.8125 globally (player and NPC alike), after the
@@ -317,6 +305,7 @@ Rebuild `game/tallow-reach.html`; `npm test`.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
 - 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
 - 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
 - 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys

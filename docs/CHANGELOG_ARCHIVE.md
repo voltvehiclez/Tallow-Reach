@@ -1,5 +1,35 @@
 # Changelog archive
 
+## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
+
+- **Roll ease in/out:** the shared model ramps the roll stick
+  (`FLIGHT.rollRampRate` 4/s, ~0.25 s to full rate, same bleed-off on release)
+  for the player, banking NPCs and Dane's barrel rolls alike — no more
+  snap-on/snap-off rotation. Golden test replica and combat fixture updated.
+- **No fake local waypoints:** `missionWaypoints` no longer plants a marker
+  1 km away inside your current pocket for a station in another pocket
+  (Border Signal's "Meridian Station, 5 km" inside Kestrel Hollow).
+  Cross-pocket destinations live on the starmap rings only; in-pocket
+  waypoints (courses, signals, authored points) are unchanged.
+- **Starmap glow simplified:** destination nodes no longer draw an extra ring
+  circle — the dot keeps its own colour and wears the mission-colour glow,
+  exactly like the ship UI / N-menu objective markers.
+- **Mission items are findable:** a mission crate is labelled by its item
+  name (**Beacon**, not "Crate") in the floating label and the target lock,
+  with the mission's objective glow it already computed. (The beacon crate
+  itself was verified present and amber at the wreck; it was indistinguishable
+  in the loot pile, not missing.)
+- **Outfitting:** dropping a module anywhere on the big left panel now fits
+  its left-most bay reliably — the group is read from the module's own data
+  (not the tile dataset), the handler honours where the drag was hovering if
+  the release hit-test lands on an overlay, and `finishStationDrag` is
+  exported and covered by a real fitting test.
+
+Files: `src/sim/flight-model.js`, `src/data/ships.js`, `src/sim/npc-pilot.js`,
+`src/ui/{mission-hud,starmap,hud,menu}.js`, `src/sim/targeting.js`,
+`src/styles.css`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
 
 - **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the

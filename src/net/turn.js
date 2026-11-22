@@ -21,8 +21,16 @@ import { readSettings } from "./settings.js";
 
 /** One address a player typed, or nothing. Only `turn:`/`turns:` is a relay. */
 const cleanUrl = value => {
-  const text = String(value || "").trim();
-  return /^turns?:[a-z0-9.-]+(:\d+)?(\?transport=(tcp|udp))?$/i.test(text) ? text : "";
+  const text = String(value || "").trim().replace(/^[,;]+|[,;]+$/g, "");
+  if (!text) return "";
+  // Providers print it both ways. ExpressTURN, for instance, gives a bare
+  // `free.expressturn.com:3478` with no scheme, so a host and a port are read as `turn:` —
+  // the player should never have to know that the scheme was missing.
+  const bare = /^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\?transport=(tcp|udp))?$/i.test(text);
+  const withScheme = /^turns?:[a-z0-9-]+(\.[a-z0-9-]+)*(:\d+)?(\?transport=(tcp|udp))?$/i.test(text);
+  if (withScheme) return text;
+  if (bare) return `turn:${text}`;
+  return "";
 };
 
 /**
@@ -141,9 +149,9 @@ export function parseRelayText(value) {
       return null;
     }
   }
-  const urls = (text.match(/turns?:[a-z0-9.-]+(?::\d+)?(?:\?transport=(?:tcp|udp))?/gi) || [])
-    .map(cleanUrl)
-    .filter(Boolean);
+  // A `turn:`/`turns:` address, or a bare `host:port` the way some dashboards print it.
+  const found = text.match(/turns?:[a-z0-9.-]+(?::\d+)?(?:\?transport=(?:tcp|udp))?|[a-z0-9-]+(?:\.[a-z0-9-]+)+:\d{2,5}/gi) || [];
+  const urls = found.map(cleanUrl).filter(Boolean);
   const field = name => {
     // `username: u`, `username=u` and `"username":"u"` are all how a provider prints it.
     const match = new RegExp(`${name}"?\\s*[:=]\\s*"?([^"',}\\s]+)`, "i").exec(text);
