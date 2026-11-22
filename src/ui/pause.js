@@ -13,7 +13,7 @@ import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
 import { resetStationPanels } from "./left-panel.js";
 import { activeCampaignMission } from "../sim/campaign.js";
-import { refreshMultiplayerCard, openMultiplayer, chatAway, multiplayerAvailable } from "./multiplayer.js";
+import { openMultiplayer, chatAway, multiplayerAvailable } from "./multiplayer.js";
 import { isOn } from "../net/session.js";
 
 let overlay, soundBtn, soundLabel;
@@ -40,7 +40,6 @@ export function setupPause() {
   const mpButton = overlay.querySelector("#pz-mp");
   if (mpButton) mpButton.onclick = () => openMultiplayer({ from: "pause" });
   showSoundState();
-  refreshMultiplayerCard();
 }
 
 /** Save the current resume point, then return to the title menu without losing progress. */
@@ -73,7 +72,6 @@ export function setPause(v) {
   // the old `!v &&` made opening the card stop everyone else's world.
   state.multiplayer = isOn();
   if (v) chatAway();
-  else refreshMultiplayerCard();
   overlay.hidden = !v;
   const restart = overlay.querySelector("#pz-restart-act");
   if (restart) restart.hidden = !(state.mode === "campaign" && activeCampaignMission());
@@ -90,5 +88,4 @@ export function setPause(v) {
   syncControls();
   setAudioSuspended(v);
   if (v) showSoundState();
-  if (v) refreshMultiplayerCard();
 }

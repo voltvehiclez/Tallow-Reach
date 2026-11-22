@@ -147,7 +147,9 @@ test("hosting with a name shows the link, and the switch follows the session", a
   const page = html();
   assert.match(page, /id="mp-link"[^>]*value="https:\/\/example\.test\/game\.html\?join=w-1#token"/);
   assert.match(page, /data-mp="copy-link"/, "and a button that copies it");
-  assert.match(ui.panelState().message, /send it to your friend/i);
+  // No confirmation popup: the link box says "send this to your friend" by itself, and the
+  // busy message `withBusy` leaves behind is cleared (owner's request, 2026-11-22).
+  assert.equal(ui.panelState().message, "", "the hosting popup is gone");
 });
 
 test("hosting that fails leaves the switch off and says the reason on screen", async () => {
@@ -317,7 +319,7 @@ test("the title menu has one button that opens this screen", () => {
   assert.match(menu, /openMultiplayer\(\{ focus: "join", from: "menu" \}\)/);
 });
 
-test("the pause card opens the same screen, and shows its state in one line", () => {
+test("the pause card opens the same screen, as one button and no state row", () => {
   const overlays = read("src/ui/overlays.js");
   assert.match(overlays, /multiplayerCardHtml\(\)/);
   const pause = read("src/ui/pause.js");
@@ -327,7 +329,9 @@ test("the pause card opens the same screen, and shows its state in one line", ()
   assert.match(pause, /if \(mpButton\) mpButton\.onclick = \(\) => openMultiplayer\(\{ from: "pause" \}\);/);
   const card = ui.multiplayerCardHtml();
   assert.match(card, /id="pz-mp"/);
-  assert.match(card, /id="pz-mp-state"/);
+  // The "Hosting, waiting for your friend" row is gone: the screen's own status line says
+  // what the connection is doing, so the card is one button (owner's request, 2026-11-22).
+  assert.doesNotMatch(card, /id="pz-mp-state"/);
 });
 
 test("the screen is a modal surface: flight keys do not reach the ship while it is open", () => {
@@ -669,7 +673,7 @@ test("the guest's list shows the host: a column with only you in it is a lie", (
   assert.deepEqual(ui.chatWhoRows(host), ["Ada", "Bo"], "the host sees itself and its guest");
   assert.deepEqual(ui.chatWhoRows(guest), ["Bo", "Ada"], "the guest sees itself *and the host*");
   // The host's own row comes from the session, so the guest has to be told it once.
-  assert.match(ui.chatWhoHtml(guest), /Current players/, "and the column says what it is");
+  assert.match(ui.chatWhoHtml(guest), /Players/, "and the column says what it is");
   assert.equal((ui.chatWhoHtml(guest).match(/<li/g) || []).length, 2);
 });
 
@@ -722,14 +726,15 @@ test("the name field commits without redrawing — that redraw ate the Join clic
   assert.match(liveness, /#mp-msg/);
 });
 
-test("the chat box is tall enough to read, and its list is called Current players", () => {
+test("the chat box is tall enough to read, and its list is called Players", () => {
   const css = read("src/styles.css");
   const block = css.slice(css.indexOf("#mp-chat-lines {"));
   const height = Number((block.match(/max-height:\s*(\d+)px/) || [])[1] || 0);
-  assert.ok(height >= 240, `the lines get ~doubled height (saw ${height}px)`);
+  assert.ok(height >= 480, `the lines are about double the previous height (saw ${height}px)`);
   const who = css.slice(css.indexOf("#mp-chat-who {"));
-  assert.ok(Number((who.match(/min-width:\s*(\d+)px/) || [])[1] || 0) >= 104, "the player column has room");
-  assert.match(ui.chatWhoHtml({ name: "Ada", guests: [] }), /Current players/);
+  const width = Number((who.match(/min-width:\s*(\d+)px/) || [])[1] || 0);
+  assert.ok(width <= 80, `the open column stays compact, so Pin sits next to Players (saw ${width}px)`);
+  assert.match(ui.chatWhoHtml({ name: "Ada", guests: [] }), /Players/);
 });
 
 /* ------------------------------------------------------------------------- */
@@ -1005,7 +1010,7 @@ test("the title's Open World is where a visit ends, and the pilot comes home", (
   assert.match(menu, /function comeHome\(\)/);
   assert.match(menu, /if \(!leaveVisit\(\)\) return false;/, "it only acts on a real visit");
   assert.match(menu, /checkIn\(currentRootSave\(\), away\.suitcase\)/, "the suitcase is unpacked the same way slice 4 will");
-  assert.match(menu, /intro\(\) \{\s*\n\s*comeHome\(\);/, "and it runs before the open world loads");
+  assert.match(menu, /intro\(\) \{[\s\S]*?comeHome\(\);[\s\S]*?enterGameMode\("open"\)/, "and it runs before the open world loads");
   // The join path must not trip over it: entering the world a join just produced is not a leave.
   const entered = menu.indexOf('on("mp-enter-world"');
   assert.doesNotMatch(menu.slice(entered, entered + 400), /comeHome/, "a fresh join does not leave");

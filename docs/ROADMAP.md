@@ -6,10 +6,12 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-*Last checked: 2026-11-21.*
+*Last checked: 2026-11-22.*
 
-**Current position (rewritten 2026-11-21):** the table below is the status. Saves are version **29**; step 15 and
-14c are ticked, and step 16 (multiplayer) is in progress — slices 1–3 built, slice 4 next.
+**Current position (rewritten 2026-11-22):** the table below is the status. Saves are version **29**; step 15 and
+14c are ticked, and step 16 (multiplayer) is in progress — slices 1–3 built, slice 4 next. **Step 17
+(dedicated servers) was added to the plan on 2026-11-22 and is not built**
+([REFACTOR_PLAN.md](REFACTOR_PLAN.md)).
 **Slices 14a and 14b are built, playtested and ticked: the owner's four playtest bugs are fixed and confirmed, their "works well" round's two notes — odd lines in the painted sky, and a ship that still flew while a loot card was open — shipped 2026-11-14**
 ([../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)): the Basic rift is on Meridian's shelf; using it
 opens a **shimmering dark-orange anomaly** in clear space; **R** goes in and out; **F** locks the door, the way out and
@@ -44,7 +46,7 @@ the feature details are in [architecture/feature-notes.md](architecture/feature-
 2. **Open world content** (the bulk of the game), once Milestone C is reached.
 3. **Campaign** (10+ missions), once Milestone D is reached. Per VISION.md it is written *after* the
    open world works.
-4. **Multiplayer** (step 16). Designed for from step 6 on; built last.
+4. **Multiplayer** (step 16) and **dedicated servers** (step 17). Designed for from step 6 on; built last.
 
 ## Step status
 
@@ -77,6 +79,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space (save v25) | D | [x] **2026-11-19: owner playtest passed.** |
 | 15 | Campaign scaffolding (save v26) | D | [x] **Built 2026-11-19; rounds 1–5 applied; playtest approved 2026-11-21.** Dual-mode envelope, shared pilot, fixed seven-system campaign (`240515`); finish = nothing yet |
 | 16 | Multiplayer (host-run co-op, WebRTC; six slices in step 16) | | [ ] **slices 1–3 built; slice 3 reworked three times after playtests (one screen, hello, codes; one door each, names, typing chat; the built-in relay, 2026-11-22). One-link join PROVEN across networks: the owner's 4G laptop joined a hosted link, no codes. Slice 4 next** |
+| 17 | Dedicated servers: a headless server hosts one world for a target of 50 players (measured; the number goes in `src/data/multiplayer.js`) via **Minecraft-style port forwarding** (`host:port`); anyone may host, anyone may join, with **optional modular auth (Supabase first, 50k/month)** | | [ ] **Planned 2026-11-22: written in [REFACTOR_PLAN.md](REFACTOR_PLAN.md), slices 17a–17d; the owner's answers are recorded there. Not built. Step 16 slice 4 is still the next build** |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table and the
 "Version history" comment in `state/profile.js`. **Step 16 slice 1 changes no save; slice 2 makes it v29.**
@@ -136,12 +139,11 @@ are all data now (recipes 2, 4, 16 and 17). They are listed below the step table
 
 ## Log
 
-Older build-detail entries (the two 14a build entries) moved verbatim to `docs/archive/ROADMAP_LOG_2026-11-14.md` on 2026-11-14 to keep this file under its size limit.
+Older build-detail entries moved verbatim to `docs/archive/ROADMAP_LOG_2026-11-14.md` (the two 14a build entries on 2026-11-14, the 2026-11-14 round-three entry on 2026-11-22) to keep this file under its size limit.
 
 - 2026-11-16: **System space built — AU layouts, per-system sizes, and the system sky layer.** Every pocket of a system carries a derived 3D AU position (`systemSpatialLayout`); systems roll a seeded size multiplier and their border is the farthest pocket; heights are a tiny seeded roll (authored `mapHeight` wins); the sky shows the star/black hole (a 3D sphere sized by its AU size ÷ your distance) and sibling pockets as dots; the one directional light re-aims from the visible body. The 2D map and saves are unchanged. Owner playtest passed 2026-11-16; 14c ticked the same day (all pending playtests passed).
 
 
-- 2026-11-14: **Round three: the sky loses its lines, and a loot card freezes the ship.** The owner confirmed round two ("works well") with two notes. **(1)** The painted fractures (`skyCracks`) and filaments (`skyWisps`) read as *odd lines* over an otherwise good sky, so `render/sky.js` strokes nothing any more: its generators are `skyVeils`, `skyClouds`, new `skyCores` (small bright knots — the hearts a nebula piles its light into, so the sky keeps structure with no line in it) and new `skyGrain` (six thousand single pixels under 0.04 alpha: an invisible dither that keeps dark gradients from banding into contour lines); both templates lose their `cracks` palette field, and the sky texture drops mipmaps so no seam can draw a line of its own. **(2)** While a loot surface is open — the rift trade or the I card — the ship hangs still: `core/input.js` funnels chart, card and trade through one `modalSurface()` (the trade had been missing from the hand-written gate, which was the whole bug) and new `holdShip()` in `sim/pilot.js` kills carry and throttle on open, so WASD moves nothing and the mouse turns nothing until it closes. Tests: `tests/sky.test.mjs` 10 (zero strokes, no path started, grain is dither not stars), `tests/ui-cache.test.mjs` 6 (the freeze); `npm test` 557/0. **14a and 14b ticked on the owner's pass; these two notes were the last of it.**
 - 2026-11-14: **Post-playtest revisions: the cache is a trade, every run is 20 minutes, and the sky has no stars.** The owner confirmed the mid-rift logout fix and asked for three more. **(1) The default clock**: `RIFT.defaultLifetimeSec` (1200) in `data/instances.js`; a template that does not declare `lifetimeSec` gets it, so a **Deep rift is 20 minutes too** — what makes it deeper is its wave, its debris and its prize — while a declared `lifetimeSec: 0` still means no clock of its own. **(2) The trade**: `openCache` (the per-press auto-transfer) is replaced by `openCacheTrade`/`tradeCacheItem(dir, id, n)`/`closeCacheTrade`/`cacheTradeRecord` in `sim/instances.js` and a new modal, `src/ui/cache.js`: **R** beside an unlocked canister shows the ship's hold on the left and the canister off to the right, in the station Inventory tab's own tiles — a click moves one, Shift-click moves the whole stack, in either direction; right-click offers Use / Stow all / Discard in the hold and Take all on a canister tile. It works because a canister's stock became an ordinary `{ itemId: count }` map: `sim/inventory.js` grew the `CACHE` container (resolved to the open run's canister, unbounded volume), and the saved shape is unchanged — the stack list is converted at capture and restore, so v20 saves load as they are. An emptied canister drops out of the world and comes back if something is stowed into it; a full hold loses nothing and says so; a sealed canister refuses. R again, Esc and P put the trade away; the run keeps running while it is open. **(3) The sky**: `skyStars` is gone from `render/sky.js` for good; the generators are `skyVeils` (huge faint washes over the sphere), `skyClouds` (the band's light and its dust lanes), `skyWisps` (blurred filaments) and `skyCracks`; both palettes are near-black with two cold lights (`glow` and a new `veil`), the fracture hairline the only warm thing in an ordinary rift and pale violet in a deep one; `render/scene.js` gives the drifting shards cold rock with a breath of nebula light, more of them, near and far. Tests: `tests/step14-instances.test.mjs` 23 (new "a run is 20 minutes unless its template says otherwise"), new `tests/ui-cache.test.mjs` 5, `tests/sky.test.mjs` rewritten to 10 (a no-stars check and luminance/hue guards that pin every sky dark and non-amber); `npm test` 556/0. Every doc that described the old auto-loot is rewritten. **14a and 14b stay unticked: all of it waits for the owner's playtest.**
 - 2026-11-14: **Step 14 owner playtest: four bugs, four fixes.** (1) **Quitting mid-rift no longer
   "recovers" the pilot out of the run**: `prepareGalaxySave` (`sim/galaxy-session.js`) treated any saved

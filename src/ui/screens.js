@@ -102,7 +102,11 @@ export function introHtml() {
     `<div><dt>P / Esc</dt><dd>Pause</dd></div>` +
     `</dl>` +
     `<div class="main-menu-actions">` +
-    `<input id="menu-username" class="menu-username" maxlength="24" placeholder="Username (min 3 chars)" value="${escapeAttr(readSettings().name || "")}" autocomplete="off" spellcheck="false">` +
+    // The label is part of the box, not a row above it: the box reads "Username: Aceface"
+    // (owner's request, 2026-11-22).
+    `<div class="menu-username-box"><span class="menu-username-prefix">Username:</span>` +
+    `<input id="menu-username" class="menu-username" maxlength="24" placeholder="your name" ` +
+    `value="${esc(readSettings().name || "")}" autocomplete="off" spellcheck="false"></div>` +
     `<button class="go" data-a="campaign">Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +
     // Step 16 slice 3: the one front door for co-op from the title, worded as the docs and

@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-21.*
+*Last checked: 2026-11-22.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -241,6 +241,42 @@ Mission lessons are first because missions are where most bugs have come from. T
   diagnosis** — the codes needed no relay at all and were sitting behind a footnote for two rounds.
 - **Enforced by:** `tests/multiplayer-ui.test.mjs` — the `Relays connected` row and its warning, the
   stalled-session screens (host and guest), and the code path's TURN fallback.
+
+### L38. A screen's template calls a helper that does not exist in its own module
+- **Seen (owner, 2026-11-22):** the game would not start; the title screen showed the crash card with
+  `escapeAttr is not defined`.
+- **Cause:** `ui/screens.js`'s `introHtml()` escaped the username field with `escapeAttr`, a name defined
+  nowhere — the module already had `esc`, which escapes the same characters including `"`. A template only
+  runs when its screen renders, so the mistake stayed invisible until the title screen drew at boot.
+- **Rule:** every helper a template uses must be defined in the module that uses it. A screen whose template
+  has never been rendered in a test is a screen nobody has verified: the data being right is not the same as
+  the template running.
+- **Enforced by:** `tests/station-ui-batch.test.mjs` renders `introHtml()` (it failed on this exact line
+  before the fix).
+
+### L39. A gate belongs to the action it was written for
+- **Seen (owner, 2026-11-22):** "Cant start the game" — pressing **Open World** with no username stored did
+  nothing but show *Enter a username (at least 3 characters) first.*
+- **Cause:** the username check that belongs to the **multiplayer** action (a name is how a player presents
+  themselves to others) had been attached to the **Open World** action too, so a single-player start from
+  empty settings was refused.
+- **Rule:** a check is written for one action and lives on that action. An action must do its job from the
+  state the player is actually in when they press it, and the test that clicks it from that state enforces it.
+- **Enforced by:** `tests/step10-fixes.test.mjs` (Open World from a clean state starts the game) and
+  `tests/step11b-starmap.test.mjs` (the intro recovery notice appears).
+
+### L40. An import-time DOM call needs the module's own guard
+- **Seen (owner, 2026-11-22):** two suites (`step10-fixes`, `step11b-starmap`) died at import with
+  `document.addEventListener is not a function`, before any test ran.
+- **Cause:** `ui/menu.js` called `document.addEventListener` at module top level, guarded only by
+  `typeof document !== "undefined"`. A headless test provides a `document` stand-in without `addEventListener`,
+  so the import threw — while the same file already guarded its function-level DOM calls with
+  `typeof document.addEventListener === "function"`.
+- **Rule:** a `ui/` (or `net/`) module must import headlessly: DOM access at import time uses the same
+  `typeof document.addEventListener === "function"` guard the module already uses inside its functions. An
+  import that throws takes every test that loads the module with it.
+- **Enforced by:** `tests/step10-fixes.test.mjs` and `tests/step11b-starmap.test.mjs` load `ui/menu.js`
+  through the headless harness; a regression here fails both suites at import.
 
 ## Template (copy for a new entry)
 

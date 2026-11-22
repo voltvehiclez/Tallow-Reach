@@ -71,12 +71,11 @@ function makeElement(tag = "div") {
         resume.id = "pz-resume";
         const mainMenu = makeElement("button");
         mainMenu.id = "pz-main-menu";
-        // Step 16 slice 3: the card's one multiplayer control and its state line.
+        // Step 16 slice 3: the card's one multiplayer control (the state line it used to
+        // carry was trimmed on 2026-11-22).
         const multiplayer = makeElement("button");
         multiplayer.id = "pz-mp";
-        const multiplayerState = makeElement("p");
-        multiplayerState.id = "pz-mp-state";
-        group.append(sound, resume, multiplayer, multiplayerState, mainMenu);
+        group.append(sound, resume, multiplayer, mainMenu);
         el.appendChild(group);
       }
     },

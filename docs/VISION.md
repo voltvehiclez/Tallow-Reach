@@ -10,12 +10,10 @@
 
 ## In one paragraph
 
-Tallow Reach is a browser 3D space sim (three.js, one built HTML file). You fly ships you outfit
+Tallow Reach is a browser 3D space sim (three.js). You fly ships you outfit
 module by module, mine, fight, trade and loot across a large starmap, with **permanent loss on
 death** (you lose your ship and what it carried), so the same sector is easy early and brutal late.
-It has an **open world**, a **story campaign** that plays first, and **host-run co-op** where
-friends join your world by a link. Content is meant to keep growing for a long time, so the code is
-organised so that most new content is **data, not code**.
+It has an **open world**, a **story campaign**, and **host-run co-op** where friends join by a link. Content keeps growing for a long time, so most new content is **data, not code**.
 
 ## Design pillars
 
@@ -24,7 +22,7 @@ organised so that most new content is **data, not code**.
 2. **Everything is a module.** Ships are hulls with bays; thrusters, shields, guns, power, hull are
    modules. Progress is mostly finding and fitting better parts. (Already true today.)
 3. **Chill by default.** Mining with a friend after work on a laptop should be a valid way to play.
-   Joining must be one link, no accounts, no setup.
+   Joining is one link, no setup.
 4. **Content scales through data.** A new enemy, item, module, ship, sector type, encounter or
    mission should be a new entry in a data file plus, at most, a small piece of new behaviour.
 5. **Don't police players.** No anti-cheat effort. If someone cheats they only spoil their own game.
@@ -82,10 +80,16 @@ organised so that most new content is **data, not code**.
   you leave theirs, so you keep progressing in other people's worlds.
 - **Trading between players** (simple; "nothing crazy").
 - No anti-cheat (pillar 5).
+- **Dedicated servers (step 17, planned 2026-11-22).** Anyone can run a headless server — own
+  machine, rented, or big host — reached the Minecraft way: a **forwarded port** (`host:port`), no
+  domain or certificate to start. Anyone hosts, anyone joins. A server may require **optional,
+  modular auth** (**Supabase** first, free plan, 50k/month), swappable later; auth only answers
+  *who is connecting*, never what a player owns. Plan and slices (17a–17d):
+  [REFACTOR_PLAN.md](REFACTOR_PLAN.md).
 
 ## Not planned
 
-- Anti-cheat, accounts, matchmaking, or dedicated servers.
+- Anti-cheat or matchmaking.
 - A large persistent shared universe (every world is hosted by one player).
 - Mobile support. Desktop browser with keyboard and mouse.
 
@@ -100,7 +104,6 @@ mention) until the owner decides. Record the decision here when made, and delete
 | 7 | **Guests and the host's station.** Can a guest dock at the host's Meridian, shop and repair? | Yes, with the host's prices. A guest's *storage* stays in their own save. |
 | 8 | **Campaign ships.** Do campaign missions use your own ship or a ship the story gives you? | The story gives a fixed ship per mission (keeps missions balanced and replayable). |
 | 9 | **Pausing in co-op.** | Pause only exists in single player; in co-op the game keeps running. |
-| 10 | **Joining technology** (how a link connects two browsers without a server). | Decided at the multiplayer step, not now. See TARGET_ARCHITECTURE.md. It may need to relax the "no new dependencies" rule. |
 
 ## Decisions made
 

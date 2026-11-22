@@ -196,6 +196,17 @@ player }`), so missions, achievements and sound can subscribe without the sim kn
 - The host must keep the tab open and the game running (no pause in co-op).
 - What this needs from the code *today*: principles 2, 3, 4, 6, 7, 8 above. Nothing else.
 
+**Dedicated servers (step 17, planned 2026-11-22).** The owner added step 17: beyond the browser host, a
+**dedicated server** — a headless build of this same project (principle 2: the sim already runs with no screen) —
+runs the world and streams it to clients, so one port-forwarded server can host a world for a **target of 50
+players; the measured number goes in `src/data/multiplayer.js`**. The server is
+the host with no screen: clients send controls and draw snapshots, in a **star** topology rather than a
+peer-to-peer mesh. Peer-to-peer from step 16 stays the default for two friends and is unchanged. The
+server-side transport is a WebSocket listener on a forwarded port, reached as `host:port`
+(Minecraft-style — the owner's answer, 2026-11-22); the one open dependency question is the
+WebSocket-server library 17b needs, since Node has no built-in WebSocket server. See step 17 in
+[REFACTOR_PLAN.md](REFACTOR_PLAN.md).
+
 ## Still local-only after step 8c (assigned by owner step)
 
 8c has no networking and does not make a complete co-op game. The headless simulation can fly
