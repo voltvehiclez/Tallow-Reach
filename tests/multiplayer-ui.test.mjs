@@ -968,3 +968,45 @@ test("the session decides when a room counts as stalled, and it is not an error"
   assert.match(src, /if \(channel\.peers\(\)\.length\) return;/, "and only with nobody in the room");
   assert.match(src, /stalled,/, "the snapshot carries it to the screen");
 });
+
+/* ------------------------------------------------------------------------- */
+/* 13. Playtest 7: opening your own world ends a visit                        */
+/* ------------------------------------------------------------------------- */
+
+test("opening your own world leaves a friend's, and hosting is untouched", async () => {
+  assert.equal(session.shouldLeaveVisit(null), false);
+  assert.equal(session.shouldLeaveVisit({ on: false, role: "guest" }), false, "nothing to leave");
+  assert.equal(session.shouldLeaveVisit({ on: true, role: "host" }), false, "your own world is not a visit");
+  assert.equal(session.shouldLeaveVisit({ on: true, role: "guest" }), true);
+
+  session.setChannelFactory(null);
+  setLibraryLoader(async () => fakeRelay());
+  setRelayProbe(null);
+
+  const guest = session.createChannelForTest("guest", "w-leave", "Bo", "guest-token", worldKit("w-leave"));
+  await guest.start();
+  session.focusForTest(guest);
+  assert.equal(session.snapshot().on, true);
+  assert.equal(session.leaveVisit(), "w-leave", "it says which world was left");
+  assert.equal(session.snapshot().on, false, "and the session is gone");
+  assert.equal(session.isVisiting(), false);
+
+  const host = session.createChannelForTest("host", "w-own", "Ada", "host-token", worldKit("w-own"));
+  await host.start();
+  session.focusForTest(host);
+  assert.equal(session.leaveVisit(), false, "a host going to the menu and back is still hosting");
+  assert.equal(session.snapshot().on, true);
+  host.stop();
+  session.focusForTest(null);
+});
+
+test("the title's Open World is where a visit ends, and the pilot comes home", () => {
+  const menu = read("src/ui/menu.js");
+  assert.match(menu, /function comeHome\(\)/);
+  assert.match(menu, /if \(!leaveVisit\(\)\) return false;/, "it only acts on a real visit");
+  assert.match(menu, /checkIn\(currentRootSave\(\), away\.suitcase\)/, "the suitcase is unpacked the same way slice 4 will");
+  assert.match(menu, /intro\(\) \{\s*\n\s*comeHome\(\);/, "and it runs before the open world loads");
+  // The join path must not trip over it: entering the world a join just produced is not a leave.
+  const entered = menu.indexOf('on("mp-enter-world"');
+  assert.doesNotMatch(menu.slice(entered, entered + 400), /comeHome/, "a fresh join does not leave");
+});

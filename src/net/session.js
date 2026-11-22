@@ -813,6 +813,31 @@ export function stop() {
   return true;
 }
 
+/**
+ * The pilot walks out of a friend's world and back into its own (owner, playtest 7).
+ *
+ * Visiting is a *connection*, not a mode: opening your own world from the main menu must end
+ * the session, not leave a guest hailing a world it is no longer looking at. The host's own
+ * world is different — going to the menu and back is still the same room, so hosting is left
+ * alone. The suitcase half (`state.away`) is handed back by the caller, which owns saves.
+ *
+ * Returns true when something was actually left.
+ */
+export const shouldLeaveVisit = snap => !!snap && snap.on === true && snap.role === "guest";
+
+export function leaveVisit() {
+  if (!shouldLeaveVisit(active ? active.snapshot() : null)) return false;
+  const worldId = active.worldId || null;
+  stop();
+  writeSettings({ ...readSettings(), enabled: false });
+  return worldId || true;
+}
+
+/** Was this browser visiting somebody else's world? (The screen asks before it asks why.) */
+export function isVisiting() {
+  return !!active && active.role === "guest";
+}
+
 export const codesOffer = () => (active ? active.startCodes() : Promise.resolve(null));
 export const codesFinish = answer =>
   (active ? active.finishCodes(answer) : Promise.resolve({ ok: false, message: "Multiplayer is off." }));
@@ -913,6 +938,9 @@ export { emptySnapshot };
  */
 export const createChannelForTest = (role, worldId, name, token, save) =>
   createSession({ role, worldId, name, token, save });
+
+/** Test-only: the session that `stop`/`leaveVisit` act on (the game sets this when it joins). */
+export const focusForTest = channel => { active = channel || null; };
 
 /**
  * Test-only: join two sessions with a wire that copies messages across, so the real

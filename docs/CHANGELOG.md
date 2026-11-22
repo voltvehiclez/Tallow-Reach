@@ -20,6 +20,34 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 8 of slice 3 — the codes connected, and opening your own world now leaves a visit
+
+**The owner's report that changed the picture: the offer/answer codes worked.** So the two
+machines *can* reach each other; the only broken link in the chain is the relay introduction. That
+narrows the one-link work to the rendezvous itself (see the next entry when it lands) and makes the
+code path a proven floor rather than a theory.
+
+- **Opening your own world ends a visit** (owner, playtest 7). Visiting is a *connection*, and it
+  used to survive the trip to the main menu: "Open World" put a guest back into their friend's
+  session, still hailing a world they had walked away from. `session.leaveVisit()` leaves only a
+  **guest** — a host's own world is the same room before and after the menu, so nothing is
+  disconnected for them — and `ui/menu.js` runs it in the title's **Open World** (`comeHome`), before
+  the world loads.
+- **The pilot comes home through the suitcase**, not by having its marker deleted: if the save
+  carries `state.away.suitcase`, `comeHome` runs `custody.checkIn(currentRootSave(), suitcase)` — the
+  same rule slice 4 uses, so this path cannot drift from it. Until slice 4 writes a suitcase the
+  local save is already the latest copy, so the marker is cleared and nothing else changes.
+- The session also records that it is on **`isVisiting()`**, which the screen and the next slice both
+  need.
+
+**Files:** `src/net/session.js` (`shouldLeaveVisit`, `leaveVisit`, `isVisiting`, `focusForTest`),
+`src/ui/menu.js` (`comeHome`, wired into the Open World action).
+
+**Tests: 961, all green** (was 959). Two new: leaving a visit (guest leaves, host does not, the world
+id comes back) and the title wiring, including that a fresh join never counts as leaving.
+
+**Save format unchanged (v29).** Build id still `2026-11-22d`.
+
 ## 2026-11-22: Playtest 7 of slice 3 — the relay route taken off its pedestal, and no multiplayer in the campaign
 
 **What the owner saw.** Playtest 6's blocks: both machines on `2026-11-22c`, the **same** world id,
@@ -105,26 +133,6 @@ globally — no test may open a real WebSocket.
 **Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22c`** — both machines must
 show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
 (0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
-
-## 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
-
-The owner asked for the guest to join by pasting **one link** (Pause > Open Multiplayer shows it,
-**Join Multiplayer World** takes it), using a free public signalling broker through one small
-library, with the paste-code flow kept as a fallback. **No code changed in this entry:** the
-owner's own rule is to ask before adding a dependency, so the question is written down with
-measured numbers and step 3 has not started.
-
-- **`docs/REFACTOR_PLAN.md`**, step 16: new "The transport, in plain language" (the one-link flow,
-  where the secret sits, what the broker sees) and "**The library decision (asking the owner)**" —
-  Trystero 0.27.0 recommended over PeerJS 1.5.5, with the figures measured against this project's
-  own esbuild single-file build: **+151 KB vs +86 KB**, 4 packages vs 6, free relays with no
-  account vs a single free cloud with no uptime promise. Both MIT.
-- **`docs/architecture/multiplayer.md`**: the connection section now describes the one-link shape
-  and the fallback, and slice 3 is marked **not started, waiting on the owner's answer**.
-- The fallback (paste codes) needs **no library at all**, which is why it is safe to build first:
-  it is the path that has to work when the broker is down.
-
-Next: the owner answers which library (or "paste codes only"), then slice 3 builds the wrapper.
 
 ## 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
 
@@ -301,6 +309,7 @@ Rebuild `game/tallow-reach.html`; `npm test`.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
 - 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
 - 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
 - 2026-11-21: Playtest 4 of slice 3 — the path between two machines, and a relay for when it fails

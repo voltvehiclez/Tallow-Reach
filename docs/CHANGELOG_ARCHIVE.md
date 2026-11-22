@@ -1,5 +1,25 @@
 # Changelog archive
 
+## 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
+
+The owner asked for the guest to join by pasting **one link** (Pause > Open Multiplayer shows it,
+**Join Multiplayer World** takes it), using a free public signalling broker through one small
+library, with the paste-code flow kept as a fallback. **No code changed in this entry:** the
+owner's own rule is to ask before adding a dependency, so the question is written down with
+measured numbers and step 3 has not started.
+
+- **`docs/REFACTOR_PLAN.md`**, step 16: new "The transport, in plain language" (the one-link flow,
+  where the secret sits, what the broker sees) and "**The library decision (asking the owner)**" —
+  Trystero 0.27.0 recommended over PeerJS 1.5.5, with the figures measured against this project's
+  own esbuild single-file build: **+151 KB vs +86 KB**, 4 packages vs 6, free relays with no
+  account vs a single free cloud with no uptime promise. Both MIT.
+- **`docs/architecture/multiplayer.md`**: the connection section now describes the one-link shape
+  and the fallback, and slice 3 is marked **not started, waiting on the owner's answer**.
+- The fallback (paste codes) needs **no library at all**, which is why it is safe to build first:
+  it is the path that has to work when the broker is down.
+
+Next: the owner answers which library (or "paste codes only"), then slice 3 builds the wrapper.
+
 ## 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
 
 The owner picked the one library the rules allow: **Trystero** (`trystero@0.27.0`, MIT, Nostr
