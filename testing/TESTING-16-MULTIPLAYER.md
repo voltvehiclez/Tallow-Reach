@@ -4,23 +4,36 @@ This is the slice where two browsers can **open a world, join it, and talk**. No
 crosses the wire yet: no ship, no credits, no cargo. That is on purpose — it means a bug here can
 fail to connect, and cannot cost you anything.
 
-**Rewritten after your sixth playtest (2026-11-22) — this one found the bug.** Your two copied
-blocks showed the *same build*, the *same world id*, and **one browser in each room with zero
-messages sent**. That is not the network path: the two browsers were never **introduced**, and the
-servers that do the introducing are chosen by the library — it shuffles thirty public signalling
-relays with the app id and takes five, and this game's five included three dead ones. The game now
-names its relays and measures them.
+**Rewritten after your seventh playtest (2026-11-22) — the relay route is now the fallback, not
+the plan.** Your blocks showed both machines on the same build and world id, `Relays reachable: 3 of
+5` on each... and still nobody in either room. So the relays are the part that is not working for
+you, and this build stops pretending otherwise.
 
-New in this build:
+New in this build (`2026-11-22d`):
 
-- **Build: `2026-11-22c`** on both machines (if they differ, they are different files).
-- **Relays reachable: N of 5** in Connection details. Five of five is what you want. **0 of 5** means
-  this network blocks every server that could introduce you — tell me, and use the codes (below);
-  there is nothing to retry.
-- **Esc closes the multiplayer screen** (your small bug): one press puts the screen away and leaves
-  the pause card underneath, exactly like its **Close** button.
-- The code button is now called **No relay? Copy/paste codes**, and the "nobody else is in that room"
-  sentence points at it. That path needs **no relay at all**: two codes go through a chat window.
+- **Build: `2026-11-22d`** on both machines (if they differ, they are different files).
+- **`Relays connected: N`** next to `Relays reachable`. A relay can open a connection and still
+  refuse this game's messages; the library then quietly drops it. `reachable 3 of 5, connected 0`
+  is now a sentence on the screen — and if you see it, that is the whole story.
+- **Nothing waits for you any more.** After about 12 seconds in a room with nobody in it, the host's
+  screen says *"Nobody has appeared in your room"* and **makes the offer code by itself**. Copy it,
+  send it in any chat window, and the guest pastes it in the box under **Join a friend's world**.
+  Send the answer code back, the host pastes it and presses **Connect**. No relay is involved at all.
+- **A guest who never got in now gets that box** — before, the screen treated them as already in a
+  friend's world and there was nothing to press.
+- **The code path can use a TURN server** as well as STUN, so it works even on a home router that
+  will not pass a packet between two of its own machines.
+- **No Open Multiplayer in the campaign's pause card** (your request). A session that is already on
+  keeps its row, so it can always be turned off.
+
+**Try it in this order:**
+
+1. Host: Pause > Open Multiplayer > name > switch on. Watch for the stall message (~12 s).
+2. When the offer code appears: **Copy offer code**, send it (Discord, WhatsApp, email, anything).
+3. Guest: **Join Multiplayer World** on the title screen, paste it in the box, **Join**. An **answer
+   code** appears — copy it back to the host.
+4. Host: paste it into *"Their answer code"*, press **Connect**. You should both see
+   `Browsers in the room: 2`.
 
 Press **Copy details** on each machine and send me both blocks — that is the whole diagnosis.
 

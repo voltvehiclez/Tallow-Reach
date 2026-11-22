@@ -1,5 +1,21 @@
 # Changelog archive
 
+## 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
+
+The owner picked the one library the rules allow: **Trystero** (`trystero@0.27.0`, MIT, Nostr
+build) for the one-link join, with the paste-code flow kept as the fallback. **Docs only; the
+dependency is not added yet** — slice 3 is the change that adds it.
+
+- `docs/REFACTOR_PLAN.md` step 16: the question section is now the record of the answer, with the
+  measured numbers kept (4 packages, +151 KB to the single-file build, free relays, no account).
+  The one rule it pins down: **`trystero` is imported by `src/net/transport.js` and by nothing
+  else**, and the paste-code path is built alongside it because a free relay can be slow or down.
+- `docs/architecture/multiplayer.md`: the connection section names the choice; slice 3 is the next
+  slice rather than a blocked one. ROADMAP and HANDOFF updated the same way.
+
+Next: **slice 3** — `src/net/transport.js`, the one-link join and the paste-code fallback, the
+handshake wired to `custody.js`, Pause > Open Multiplayer, chat on Enter, the connected-player list.
+
 ## 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
 
 **The owner's clue that narrowed everything:** the guest was told *"Nobody is hosting the world in

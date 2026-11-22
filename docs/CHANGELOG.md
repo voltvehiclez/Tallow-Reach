@@ -20,6 +20,45 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 7 of slice 3 — the relay route taken off its pedestal, and no multiplayer in the campaign
+
+**What the owner saw.** Playtest 6's blocks: both machines on `2026-11-22c`, the **same** world id,
+**3 of 5 relays reachable** on each, and still one browser in each room with nothing sent. So the
+pinning did not fix it, and the number that matters ("does anything reach the other machine?") is
+not the one we were printing.
+
+- **The library's own view of the relays is now on screen: `Relays connected: N`.** A relay can open
+  a plain WebSocket and still refuse *this game's* events (`blocked:`, `restricted:`,
+  `auth-required:`) — the library retires it on the spot, silently, and then two players have no way
+  to meet even though every relay "answers". `transport.js` reads `getRelaySockets()` from the joined
+  room and reports how many sockets it kept, so **`reachable: 5 of 5, connected: 0`** is now a
+  sentence the screen can say (and does, with the code path offered beside it).
+- **More than one family of relays.** The pinned list keeps the popular relays *and* four of the
+  library's own curated ones: a relay that is alive but will not carry this protocol is worse than a
+  dead one, because it counts as reachable.
+- **The code path stops being a footnote.** When nobody has appeared after `NET.helloWaitSec` the
+  session marks itself **stalled** (`net/session.js`, `armStallTimer`), the host's screen says
+  *"Nobody has appeared in your room… use the codes"*, and **the offer code is made by itself** (once
+  per screen opening, `autoOfferWhenStalled`). A stalled **guest** gets the paste box on the pause
+  card — before, a guest who never got in was treated as "already in a friend's world" and had
+  nothing to do at all.
+- **The code path can use a TURN server.** `net/paste.js` now adds `ICE.turn` beside its public STUN,
+  always: a player who resorted to codes has already been told the easy way failed, and a home
+  router with no hairpin NAT is the usual reason the remaining question (a path) has no answer.
+- **No multiplayer in the campaign's pause card** (owner's request). `multiplayerAvailable(mode)`,
+  applied in `ui/pause.js`; a live session keeps the row so it can still be switched off.
+
+**Files:** `src/data/multiplayer.js` (relay families, `BUILD = "2026-11-22d"`), `src/net/transport.js`
+(library sockets in the diagnostics), `src/net/paste.js` (TURN), `src/net/session.js` (stall timer),
+`src/ui/multiplayer.js` (`Relays connected`, the stall warning, auto-offer, `multiplayerAvailable`),
+`src/ui/pause.js` (the campaign's card).
+
+**Tests: 959, all green** (was 953). Six new: the library's socket count and its warning, the
+campaign's pause card, TURN in the code path, the wider relay list, the stalled host/guest screens,
+and the stall timer's rule.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22d`**.
+
 ## 2026-11-22: Playtest 6 of slice 3 — the *five random relays* were the problem, and Esc
 
 **The owner's two copied blocks settled it.** Both machines: Build `2026-11-22b`, World id
@@ -66,22 +105,6 @@ globally — no test may open a real WebSocket.
 **Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22c`** — both machines must
 show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
 (0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
-
-## 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
-
-The owner picked the one library the rules allow: **Trystero** (`trystero@0.27.0`, MIT, Nostr
-build) for the one-link join, with the paste-code flow kept as the fallback. **Docs only; the
-dependency is not added yet** — slice 3 is the change that adds it.
-
-- `docs/REFACTOR_PLAN.md` step 16: the question section is now the record of the answer, with the
-  measured numbers kept (4 packages, +151 KB to the single-file build, free relays, no account).
-  The one rule it pins down: **`trystero` is imported by `src/net/transport.js` and by nothing
-  else**, and the paste-code path is built alongside it because a free relay can be slow or down.
-- `docs/architecture/multiplayer.md`: the connection section names the choice; slice 3 is the next
-  slice rather than a blocked one. ROADMAP and HANDOFF updated the same way.
-
-Next: **slice 3** — `src/net/transport.js`, the one-link join and the paste-code fallback, the
-handshake wired to `custody.js`, Pause > Open Multiplayer, chat on Enter, the connected-player list.
 
 ## 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
 
@@ -278,6 +301,7 @@ Rebuild `game/tallow-reach.html`; `npm test`.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
 - 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
 - 2026-11-21: Playtest 4 of slice 3 — the path between two machines, and a relay for when it fails
 - 2026-11-21: Playtest 3 of slice 3 — a hello that is answered, a click that is not eaten

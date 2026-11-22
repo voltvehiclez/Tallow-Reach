@@ -28,6 +28,8 @@
 // puts the pilot through it, and `net/multiplayer.js` owns the screens' state.
 
 /** The prefix that marks a code as this game's, so a stray paste is refused in words. */
+import { ICE } from "../data/multiplayer.js";
+
 const CODE_PREFIX = "TRJOIN:";
 
 /**
@@ -227,13 +229,23 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
 }
 
 /**
- * The STUN servers a direct connection may need to find itself. These are public,
- * free and carry no game data: they only answer "what is my address". Without one, a
- * connection between two home networks usually fails; with one, it usually works.
+ * What a direct connection may use to find itself.
+ *
+ * **STUN** answers "what is my address", and without one a connection between two home
+ * networks usually fails. **TURN** (`ICE.turn` in `data/multiplayer.js`) is the fallback for
+ * two networks that will not pass a packet between them: the code path carries the codes
+ * itself, so the only thing that can still be missing is a path, and a home router with no
+ * hairpin NAT is the usual reason there is none. Both are free public services and neither
+ * carries game data — a TURN server forwards encrypted packets it cannot read.
+ *
+ * The library path (`net/transport.js`) keeps its TURN opt-in, because it works for most
+ * players without one and a relayed path is slower. A player who resorted to codes has
+ * already been told the easy way failed, so here it is always on.
  */
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  ...(Array.isArray(ICE.turn) ? ICE.turn.map(entry => ({ ...entry })) : []),
 ];
 
 /* ------------------------------------------------------------------------- */

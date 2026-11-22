@@ -90,7 +90,9 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     // The join block is there whenever nothing of yours is running; the button waits for
     // a name. Without this split the block drew "you are in a friend's world" to somebody
     // who had simply not typed a name yet.
-    joinAvailable: !hosting && !visiting,
+    // A guest who never got through is not "in a friend's world": the paste box is exactly
+    // what they need, and hiding it behind that state left them with nothing to do (playtest 6).
+    joinAvailable: !hosting && (!visiting || (snap.stalled === true && snap.state !== "connected")),
     canJoin: !!name && !hosting && !visiting,
     canCodes: hosting,
     status: hosting
@@ -100,6 +102,10 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
         : "Multiplayer is off.",
     stateLine: snap.line || "",
     worldId: snap.worldId || null,
+    role: snap.role || null,
+    // Nobody has appeared after the wait: the relay route is not delivering, so the screen
+    // stops offering it first and offers the code path instead.
+    stalled: !!snap.stalled,
     link: link?.url || "",
     hostName: snap.hostName || "",
     // The transport's facts, when there is a connection to describe.
@@ -129,6 +135,7 @@ const panelView = {
   messageKind: "hint",  // "hint" | "error" | "ok"
   busy: false,
   offer: "",            // the host's offer code, kept here so a redraw cannot lose it
+  autoOffer: false,     // the stalled session already offered the code path, once
   answer: "",           // the guest's answer code to send back
   fields: { name: null, join: "", code: "" },
   // Which door the screen was opened from. The owner's rule (playtest 2): joining is the
@@ -183,7 +190,10 @@ export const isMultiplayerScreenOpen = () => !!root && !root.hidden;
 export function setupMultiplayer() {
   buildScreen();
   buildChat();
-  on("mp-state", () => draw());
+  on("mp-state", () => {
+    draw();
+    autoOfferWhenStalled();
+  });
   on("mp-chat-arrived", () => drawChat());
   // A sentence the connection wants shown. `net/` cannot reach the screen itself.
   on("mp-notice", text => {
@@ -243,6 +253,16 @@ export function multiplayerCardHtml() {
   );
 }
 
+/**
+ * Whether the pause card offers multiplayer at all.
+ *
+ * **Not in the campaign** (owner, playtest 6): a campaign act is a story with a save of its
+ * own, and offering to host it there invites the question the slice cannot answer yet. A
+ * live session keeps its row whatever the mode, so a player who is already connected can
+ * still see what it is doing and turn it off.
+ */
+export const multiplayerAvailable = mode => mode !== "campaign";
+
 /** One line for the pause card, so the state is readable without opening the screen. */
 export function multiplayerSummary() {
   const snap = api.snapshot();
@@ -265,7 +285,9 @@ export function screenHtml(model) {
   const body = model.surface === "join"
     ? joinHtml(model)
     : model.surface === "host"
-      ? hostHtml(model) + (model.visiting || model.answer ? answerAndLeaveHtml(model) : "")
+      ? hostHtml(model) +
+        (model.stalled && model.role === "guest" && !model.hosting ? joinHtml(model) : "") +
+        (model.visiting || model.answer ? answerAndLeaveHtml(model) : "")
       : hostHtml(model) + joinHtml(model);
   return (
     `<h1 id="mp-title">Multiplayer</h1>` +
@@ -335,7 +357,9 @@ function linkHtml(model) {
 function codesHtml(model) {
   if (!model.offer) {
     return (
-      `<p class="mp-hint">No relay, or your friend cannot join by link? Make a code instead — a code goes through this chat window, not through any server.</p>` +
+      (model.stalled
+        ? `<p class="mp-hint mp-warn">Nobody has appeared in your room. The server route is not reaching your friend, so use the codes: they go through a chat window and need no server at all.</p>`
+        : `<p class="mp-hint">No relay, or your friend cannot join by link? Make a code instead — a code goes through this chat window, not through any server.</p>`) +
       `<div class="mp-row"><button type="button" data-mp="offer">No relay? Copy/paste codes</button></div>`
     );
   }
@@ -438,7 +462,7 @@ export function diagFacts(model) {
       ? `${first.connection || "unknown"}${first.ice ? ` (${first.ice})` : ""}`
       : "",
     relay: !!d.useTurn,
-    relays: d.relays && d.relays.total ? d.relays : null,
+    relays: d.relays && (d.relays.total || d.relays.connected) ? d.relays : null,
     sent: Number(d.sent) || 0,
     received: Number(d.received) || 0,
     waiting: !!model.hosting && peers.length > 0 && !(model.guests || []).length,
@@ -459,6 +483,7 @@ export function diagReport(model) {
     `Direct link: ${f.direct || "no other browser is in the room"}`,
     `Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}`,
     ...(f.relays ? [`Relays reachable: ${f.relays.open} of ${f.relays.total}`] : []),
+    ...(f.relays && Number.isFinite(f.relays.connected) ? [`Relays connected: ${f.relays.connected}`] : []),
     `Messages sent ${f.sent}, received ${f.received}`,
   ].join("\n");
 }
@@ -477,6 +502,9 @@ function diagHtml(model) {
     `<li>${escapeHtml(link)}</li>` +
     `<li>Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}</li>` +
     (f.relays ? `<li>Relays reachable: ${f.relays.open} of ${f.relays.total}</li>` : "") +
+    (f.relays && Number.isFinite(f.relays.connected)
+      ? `<li>Relays connected: ${f.relays.connected}</li>`
+      : "") +
     `<li>Messages sent ${f.sent}, received ${f.received}</li>` +
     `</ul>` +
     (f.waiting
@@ -484,7 +512,9 @@ function diagHtml(model) {
       : "") +
     (f.relays && f.relays.open === 0
       ? `<p class="mp-hint mp-warn">None of the servers that introduce players to each other answered this browser. Your network is blocking them, so the two machines cannot find each other this way. Use the codes instead: “No relay? Copy/paste codes” below.</p>`
-      : "") +
+      : f.relays && Number.isFinite(f.relays.connected) && f.relays.connected === 0
+        ? `<p class="mp-hint mp-warn">The relays answered, but none of them would carry this game's messages, so no other player can find you through them. Use the codes instead: “No relay? Copy/paste codes” below — they need no relay at all.</p>`
+        : "") +
     (f.inRoom === 1 && !f.waiting
       ? `<p class="mp-hint">No other browser is in this room. Check that the other player turned Open Multiplayer on, and that both screens show the same World id.</p>`
       : "") +
@@ -664,6 +694,24 @@ function leaveSession() {
 }
 
 /* --- the paste codes: two steps, and the button only exists for step two --- */
+
+/**
+ * The relay route has failed to produce anybody: make the code, without being asked.
+ *
+ * The owner's playtest 6 ran out of patience with a button called "No relay? Copy/paste
+ * codes" while nobody was in the room — a player reads the state line, not the footnote.
+ * So when the session says it is stalled and the screen is open on the host's block, the
+ * offer appears by itself and the message says what to do with it. Once per screen opening,
+ * so a slow code cannot turn into a loop.
+ */
+function autoOfferWhenStalled() {
+  if (panelView.autoOffer || panelView.offer) return;
+  if (!isMultiplayerScreenOpen()) return;
+  const model = screenModel();
+  if (!model.stalled || !model.hosting || !model.nameSet || model.visiting) return;
+  panelView.autoOffer = true;
+  makeOffer();
+}
 
 async function makeOffer() {
   const model = screenModel();
@@ -917,6 +965,7 @@ export function openMultiplayer({ focus = "", from = "" } = {}) {
   // playtest 2). A caller that names no door keeps both blocks, which is only the cold
   // model a test builds. Set before the DOM guard, so the rule holds with no screen built.
   panelView.surface = from === "menu" ? "join" : from === "pause" ? "host" : "both";
+  panelView.autoOffer = false;
   if (!root) return false;
   // A link found at boot, waiting for a name: put it in the join box so the player only
   // has to type a name and press Join.

@@ -194,6 +194,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // plus the guest rows — without it the guest sees a column with only itself in it.
   let hostName = "";
   let welcomed = false;     // has the host answered at all?
+  // "Nobody has appeared in the room and the wait is over." Not an error: the honest fact
+  // that the relay route is not delivering, which is the moment the code path stops being a
+  // footnote and becomes the thing on screen (playtest 6).
+  let stalled = false;
+  let stallTimer = 0;
   let relayTried = false;   // has this session already escalated to a relay server?
   let keepalive = 0;        // the watchdog that reopens a room that silently died
   let lastRestart = 0;
@@ -221,6 +226,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       // Facts for the screen's "Connection details": what the transport can see about the
       // link itself, so a failure can be reported instead of guessed at.
       diag: channel && typeof channel.diagnostics === "function" ? channel.diagnostics() : null,
+      stalled,
       relay: relayTried,
       codes: codes ? { ...codes } : null,
     };
@@ -311,6 +317,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     save.write(recorded);
 
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
+    clearStallTimer();
     const fresh = !guests.some(entry => entry.guestId === message.guestId);
     upsertGuest({ guestId: message.guestId, name: display, docked: false });
     if (peerId) peerNames.set(peerId, display);
@@ -361,6 +368,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // the player must not be told "Joined Ada's world" every two seconds.
     const first = !welcomed;
     welcomed = true;
+    stalled = false;
+    clearStallTimer();
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
     if (!first) { publish(); return; }
     noteLine("Tallow Reach", `Joined ${message.name || "the host"}'s world.`);
@@ -484,6 +493,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       },
       onData: ({ peerId, ...message }) => receive(message, peerId),
       onPeer: event => {
+        // Somebody is in the room: whatever we were worried about, it is not "nobody came".
+        if (event?.kind === "join") { stalled = false; clearStallTimer(); }
         if (role === "host") { publishPresence(); armHostWait(); }
         // A guest says hello to the pilot that just appeared. This is the retry that
         // makes the handshake happen at all (see `sayHello`).
@@ -496,6 +507,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     greetEveryone();
     if (role === "guest") startHelloRetry();
     if (role === "host") armHostWait();
+    armStallTimer();
     startKeepalive();
     publish();
     return true;
@@ -593,12 +605,35 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (typeof helloWait?.unref === "function") helloWait.unref();
   }
 
+  /**
+   * After `NET.helloWaitSec` with nobody in the room, say so once and let the screen offer
+   * the code path. It is not an error state — a host may simply be waiting — so it never
+   * changes the connection, only what the screen suggests.
+   */
+  function armStallTimer() {
+    clearStallTimer();
+    if (!on) return;
+    stallTimer = setTimeout(() => {
+      stallTimer = 0;
+      if (!on || !channel) return;
+      if (channel.peers().length) return;
+      stalled = true;
+      publish();
+    }, NET.helloWaitSec * 1000);
+    if (typeof stallTimer?.unref === "function") stallTimer.unref();
+  }
+
+  function clearStallTimer() {
+    if (stallTimer) { clearTimeout(stallTimer); stallTimer = 0; }
+  }
+
   function stop() {
     on = false;
     if (keepalive) { clearInterval(keepalive); keepalive = 0; }
     if (helloRetry) { clearInterval(helloRetry); helloRetry = 0; }
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
+    clearStallTimer();
     try {
       channel?.leave();
       paste?.leave();

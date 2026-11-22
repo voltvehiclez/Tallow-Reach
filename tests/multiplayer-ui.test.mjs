@@ -30,7 +30,7 @@ import { uniqueName } from "../src/net/session.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import * as session from "../src/net/session.js";
 import { setLibraryLoader, setRelayProbe, createChannel } from "../src/net/transport.js";
-import { RELAYS } from "../src/data/multiplayer.js";
+import { RELAYS, ICE } from "../src/data/multiplayer.js";
 import { SAVE_VERSION, newProfile, newWorld } from "../src/state/profile.js";
 import { state } from "../src/state/state.js";
 import { NET } from "../src/data/multiplayer.js";
@@ -895,4 +895,76 @@ test("Escape closes the multiplayer screen before it toggles the pause card", ()
   assert.match(pause, /closeMultiplayer\(\)/, "and closes it first");
   assert.ok(pause.indexOf("isMultiplayerScreenOpen()") < pause.indexOf("setPause("),
     "before it does anything else with the pause state");
+});
+
+/* ------------------------------------------------------------------------- */
+/* 12. Playtest 6: the relay's own view, and no multiplayer in the campaign   */
+/* ------------------------------------------------------------------------- */
+
+test("the details say how many relays the library itself kept", () => {
+  const base = { ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1" };
+  const diag = { signalling: "finding", line: "Waiting…", useTurn: false, sent: 0, received: 0, peers: [] };
+  // Three answered a plain socket; the library kept none of them, because they refused its
+  // events. That is a different failure from "your network blocks everything".
+  const model = ui.screenModel({
+    snap: { ...base, diag: { ...diag, relays: { total: 5, open: 3, connected: 0, checkedAt: 1 } } },
+  });
+  const html = ui.screenHtml(model);
+  assert.match(html, /Relays reachable: 3 of 5/);
+  assert.match(html, /Relays connected: 0/);
+  assert.match(html, /none of them would carry this game's messages/i);
+  assert.match(ui.diagReport(model), /Relays connected: 0/);
+
+  const fine = ui.screenHtml(ui.screenModel({
+    snap: { ...base, diag: { ...diag, relays: { total: 5, open: 5, connected: 4, checkedAt: 1 } } },
+  }));
+  assert.match(fine, /Relays connected: 4/);
+  assert.doesNotMatch(fine, /would carry this game's messages/i);
+});
+
+test("the campaign's pause card has no multiplayer row; a live session keeps it", () => {
+  assert.equal(ui.multiplayerAvailable("campaign"), false, "the campaign does not offer it");
+  assert.equal(ui.multiplayerAvailable("open"), true, "free flight does");
+  const pause = read("src/ui/pause.js");
+  assert.match(pause, /mpCard\.hidden = !\(multiplayerAvailable\(state\.mode\) \|\| isOn\(\)\)/,
+    "and the card follows the mode, except while a session is on");
+});
+
+test("the code path can fall back to a TURN server, because it has no relay to fall back to", () => {
+  assert.ok(Array.isArray(ICE.turn) && ICE.turn.length, "a TURN server is configured");
+  const paste = read("src/net/paste.js");
+  assert.match(paste, /\.\.\.\(Array\.isArray\(ICE\.turn\)/, "and the code path uses it");
+  assert.match(paste, /stun:/, "beside STUN, which still wins when a direct path exists");
+});
+
+test("the relay list keeps more than one family of servers", () => {
+  assert.ok(RELAYS.relayUrls.length >= 8,
+    "a relay that opens a socket can still refuse these events, so one family is not enough");
+  assert.equal(new Set(RELAYS.relayUrls).size, RELAYS.relayUrls.length, "and none repeats");
+});
+
+test("a stalled host is told to use the codes, and a stalled guest gets the box to paste one", () => {
+  const stalledHost = { ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1", stalled: true };
+  const hostHtml = ui.screenHtml(ui.screenModel({ snap: stalledHost, view: { surface: "host" } }));
+  assert.match(hostHtml, /Nobody has appeared in your room/);
+  assert.match(hostHtml, /No relay\? Copy\/paste codes/);
+
+  // A guest who never got in is on the pause card, which used to have no paste box at all.
+  const stalledGuest = { ...COLD, on: true, role: "guest", state: "finding", name: "Bea", worldId: "w-1", stalled: true };
+  const guestHtml = ui.screenHtml(ui.screenModel({ snap: stalledGuest, view: { surface: "host" } }));
+  assert.match(guestHtml, /data-mp="join"/, "the guest can paste the host's code from the pause card");
+  assert.match(guestHtml, /Join/i);
+
+  // And nothing of that appears while the room is merely waiting normally.
+  const waiting = ui.screenHtml(ui.screenModel({ snap: { ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1" }, view: { surface: "host" } }));
+  assert.doesNotMatch(waiting, /Nobody has appeared in your room/);
+});
+
+test("the session decides when a room counts as stalled, and it is not an error", () => {
+  const src = read("src/net/session.js");
+  assert.match(src, /function armStallTimer\(\)/, "there is one timer for it");
+  assert.match(src, /stalled = true;\s*\n\s*publish\(\);/, "it publishes the fact");
+  assert.match(src, /NET\.helloWaitSec \* 1000/, "after the same wait as the hello");
+  assert.match(src, /if \(channel\.peers\(\)\.length\) return;/, "and only with nobody in the room");
+  assert.match(src, /stalled,/, "the snapshot carries it to the screen");
 });

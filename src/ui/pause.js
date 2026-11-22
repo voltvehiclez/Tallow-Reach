@@ -13,7 +13,7 @@ import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
 import { resetStationPanels } from "./left-panel.js";
 import { activeCampaignMission } from "../sim/campaign.js";
-import { refreshMultiplayerCard, openMultiplayer, chatAway } from "./multiplayer.js";
+import { refreshMultiplayerCard, openMultiplayer, chatAway, multiplayerAvailable } from "./multiplayer.js";
 import { isOn } from "../net/session.js";
 
 let overlay, soundBtn, soundLabel;
@@ -77,6 +77,11 @@ export function setPause(v) {
   overlay.hidden = !v;
   const restart = overlay.querySelector("#pz-restart-act");
   if (restart) restart.hidden = !(state.mode === "campaign" && activeCampaignMission());
+  // Owner's rule (playtest 6): the campaign's pause card does not offer multiplayer. It is a
+  // story mode with its own save; hosting it is a question this slice cannot answer. A live
+  // session keeps the row, so it can always be turned off from where it was turned on.
+  const mpCard = overlay.querySelector("#mp-card");
+  if (mpCard) mpCard.hidden = !(multiplayerAvailable(state.mode) || isOn());
   // A trigger held when the game is paused must not fire on resume — and while a session is
   // on the sim keeps stepping behind the card, so every held key is released, not just the
   // guns: otherwise the ship would fly itself while the pilot reads the card.

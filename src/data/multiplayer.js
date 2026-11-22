@@ -112,7 +112,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-22c";
+export const BUILD = "2026-11-22d";
 
 export const NET = {
   snapshotSec: 2,
@@ -177,12 +177,21 @@ export const RELAYS = {
   // to happen. These are the long-running public relays; the first `redundancy` (5) are used.
   // If a player's network blocks all of them, the copy/paste code path needs no relay at all.
   relayUrls: [
+    // Popular public relays.
     "wss://relay.damus.io",
     "wss://nos.lol",
     "wss://relay.nostr.band",
     "wss://relay.primal.net",
     "wss://nostr.mom",
     "wss://nostr-pub.wellorder.net",
+    // Then the library's own curated relays. Opening a socket is not enough: a relay that
+    // refuses these events (`blocked:`, `restricted:`, `auth-required:`) is retired by the
+    // library and stops being a way for two players to meet, so the list keeps more than one
+    // family of servers. Ten is a lot of sockets, but a silent room is worse.
+    "wss://bucket.coracle.social",
+    "wss://fanfares.nostr1.com",
+    "wss://nostr-01.yakihonne.com",
+    "wss://nostr.azzamo.net",
   ],
   // An optional `RTCConfiguration` for the direct connection, if a player has their own ICE
   // servers. Shape:

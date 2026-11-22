@@ -125,6 +125,12 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
   // The last relay-health answer, refreshed by `checkRelays()` (the screen asks once when it
   // opens and again on Reconnect).
   let relays = null;
+  // The library's own view of the relays: `getRelaySockets()` gives the sockets it is still
+  // leasing. A relay that opens for a plain WebSocket and then refuses this game's events
+  // (`blocked:`, `restricted:`, `auth-required:`) is retired by the library, so this number
+  // can be lower than the probe's — and zero while the probe says five, which is the
+  // difference between "your network blocks us" and "these relays will not carry this".
+  let socketList = null;
 
   const setState = (state, reason = "") => {
     if (current.state === state && current.reason === reason) return;
@@ -160,7 +166,9 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
     starting = (async () => {
       let joinRoom;
       try {
-        ({ joinRoom } = await loadLibrary());
+        const library = await loadLibrary();
+        ({ joinRoom } = library);
+        socketList = typeof library.getRelaySockets === "function" ? library.getRelaySockets : null;
       } catch (error) {
         setState("lost", "The multiplayer library could not be loaded. Rebuild the game, or use paste codes.");
         return null;
@@ -285,6 +293,17 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
     return join();
   }
 
+  /** How many of the library's own relay sockets are open right now (null = not joined yet). */
+  function openSockets() {
+    if (!socketList || !room) return null;
+    try {
+      const sockets = socketList() || {};
+      return Object.values(sockets).filter(socket => socket && socket.isOpen !== false).length;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /** Ask the signalling relays whether they answer from this browser (cached for 20s). */
   async function checkRelays({ force = false } = {}) {
     if (!relayProbe) return relays;
@@ -329,7 +348,9 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
       sent,
       received,
       peers,
-      relays,
+      relays: relays
+        ? { ...relays, connected: openSockets() }
+        : openSockets() === null ? null : { total: 0, open: 0, connected: openSockets(), checkedAt: 0 },
     };
   }
 

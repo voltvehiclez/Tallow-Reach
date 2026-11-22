@@ -160,6 +160,23 @@ like "you are the only one there": different rooms (the world ids differ, or nob
 right room with no path (2 browsers, sent rising, received 0), and different builds (the two strings
 differ). It exists because the first four playtests of this slice were diagnosed by guessing.
 
+**Reachable is not the same as usable, and the code path is the floor.** Playtest 6 showed
+`Relays reachable: 3 of 5` on both machines and still one browser in each room. A relay can accept a
+plain WebSocket and then refuse the game's own events (`blocked:`, `restricted:`, `auth-required:`) —
+the library **retires** such a relay silently — so the count that matters is the library's own,
+`getRelaySockets()`, printed as **`Relays connected: N`**. The pinned list therefore keeps more than
+one family of servers (popular ones *and* four of the library's curated defaults): a live relay that
+will not carry this protocol is worse than a dead one, because it inflates a number.
+
+Whatever the relays do, **the copy/paste codes work without any of them** — two players exchange two
+codes through a chat window and the browsers connect directly. That is why it is no longer a
+footnote: after `NET.helloWaitSec` with nobody in the room the session marks itself **stalled**
+(`armStallTimer`), the host's screen auto-creates the offer (`autoOfferWhenStalled`, once per screen
+opening), a stalled guest is given the paste box on the pause card instead of being told they are
+already in a friend's world, and `net/paste.js` always offers `ICE.turn` beside its STUN — a player
+who reached for the codes has already learned that the easy route failed, and the only remaining
+question is whether a path exists at all.
+
 **The relays are pinned, and their health is on screen.** This is the one failure that looks
 impossible from inside the game: same build, same world id, both `finding`, **one browser in each
 room and zero messages sent** — the introduction itself never happened, so the path, the relay and
