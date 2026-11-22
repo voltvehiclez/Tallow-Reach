@@ -85,58 +85,11 @@ record a change without deleting a fact first.
   unchanged, so the file cannot grow by sprawl — only by a slightly fuller sentence.
 - Nothing else in the docs changed, and no text was removed to make room.
 
-## 2026-11-22: Step 16 is eight slices — the owner agreed the plan
-
-**Docs only; no code, no build, no save change.** The owner reviewed the eight slices of step 16 and
-approved them ("that looks good"), so slices 7–8 are no longer a proposal:
-
-- **The plan is eight slices, not six.** Slices 1–6 are unchanged (4 is still the next build);
-  7–8 are the owner's *"one world, two ships visible"*. `REFACTOR_PLAN.md` says **agreed**, and the
-  two places that still said "six slices" (`REFACTOR_PLAN.md`'s summary line,
-  `architecture/multiplayer.md`'s header, and the index row in `ARCHITECTURE.md`) now say eight.
-- **The order is still 4 → 5 → 6 → 7 → 8.** Slices 7–8 come *after* trading, not next: they are
-  the last debt in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) (*death and recovery*, *player
-  presentation and input*), and nothing in them works until the suitcase (slice 4) carries a pilot.
-- **ROADMAP's step-17 cell stops repeating "slice 4 is next"** — that belongs to step 16's cell,
-  which is the one place step status is kept.
-
-**Files:** `docs/REFACTOR_PLAN.md`, `docs/ROADMAP.md`, `docs/architecture/multiplayer.md`,
-`docs/ARCHITECTURE.md`, `docs/HANDOFF.md`.
-
-**No save change (v29), no build change.** Slice 4 is the next build.
-
-## 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
-
-**Docs only; no code, no build.** The owner played the current build (`2026-11-22j`) and said it
-passed, so slice 3's reworks are confirmed and ROADMAP says so. Then they asked for the thing the
-plan always called the last debt: **"Also draw the guest's ship"** — *one world, two ships visible*.
-*(Slices 7–8 were **proposed** in this entry and agreed by the owner the next day — see the entry
-above.)*
-
-That is bigger than the plan's slice 4, so the plan now says exactly how big. Three decisions are
-recorded, and the next chat should not reopen them:
-
-- **Slice 4 is unchanged** (the suitcase: bring my pilot, sync, Go home). While a pilot is away its
-  own screen is a **card** — *"Your pilot is in Ada's world"* with **Rejoin** and **Bring pilot
-  home** — not its frozen pilot still flying its own sky, which reads as a bug.
-- **Slice 7 — a second pilot exists in the host's world.** The suitcase becomes a record in
-  `state.players` through `custody.hostProfile` + `configurePlayer` (the host's `sim/step.js`
-  already flies every active record), docked at the guest's own station because flight positions
-  never travel. The returned suitcase is written from the profile the host actually holds. A flat
-  **map marker** shows the other pilot, so it is visibly real before a camera exists for it.
-- **Slice 8 — one world on two screens** (8a snapshots out, 8b controls in, 8c the guest's screen
-  follows the host's pocket). **8b is a numbered change to the input rule**, not a side effect:
-  `state.localInput` is filled by `core/input.js` and read by the session, because `sim/` may not
-  import `core/`. Mirroring the local screen's input into remote players' `controls` is cheaper and
-  wrong — it would make a second pilot that answers to somebody else's stick.
-
-**Files:** `docs/REFACTOR_PLAN.md` (step 16's status and slices 7–8), `docs/ROADMAP.md` (step 16's
-cell: slice 3 confirmed, eight slices), `docs/architecture/multiplayer.md` (what the two slices are
-and why they are separate), `docs/HANDOFF.md` (the snapshot, rewritten to fit its size limit).
-
-**No save change (v29), no build change.** Slice 4 is still the next build.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-22: Step 16 is eight slices — the owner agreed the plan
+
+- 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
 
 - 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
 

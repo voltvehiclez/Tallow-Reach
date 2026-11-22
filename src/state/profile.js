@@ -1275,6 +1275,9 @@ function cleanGuests(raw) {
       rev: count(value.rev),
       bundle: cleanSuitcase(value.bundle),
       lastSeen: count(value.lastSeen),
+      // v29 + playtest 14: additive, so no version bump — an older record simply has no
+      // mark and reads as present, which is exactly the old behaviour.
+      left: value.left === true,
     };
     const ordered = {};
     for (const field of GUEST_FIELDS) ordered[field] = record[field];

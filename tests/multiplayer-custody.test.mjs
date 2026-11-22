@@ -258,7 +258,9 @@ test("a token names one guest to one host, and the host never stores the token",
   const record = guestRecord({ name: "Ada", token, guestId: "g-1", epoch: 2, rev: 5, lastSeen: 10 });
   assert.equal(record.token, undefined, "the record has no token field at all");
   assert.equal(record.tokenHash, hash);
-  assert.deepEqual(Object.keys(record).sort(), ["bundle", "epoch", "lastSeen", "name", "rev", "tokenHash"]);
+  // `left` (playtest 14) is the "has gone home" mark on a record that is holding a pilot's
+  // suitcase. It is still no secret: the list is what a host may store.
+  assert.deepEqual(Object.keys(record).sort(), ["bundle", "epoch", "lastSeen", "left", "name", "rev", "tokenHash"]);
 });
 
 test("the handshake refuses a version mismatch, the wrong world and a wrong token with a readable sentence", () => {

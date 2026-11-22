@@ -10,7 +10,8 @@ import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../stat
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
-import { leaveVisit } from "../net/session.js";
+import { leaveVisit, joinWorld } from "../net/session.js";
+import { makeJoinUrl, pageBase } from "../net/join-link.js";
 import { readSettings, writeSettings } from "../net/settings.js";
 // The same guard `installDragListeners` uses below: a headless import (a test) has a
 // `document` stand-in without `addEventListener`, and an import-time throw there takes
@@ -20,7 +21,7 @@ if (typeof document !== "undefined" && typeof document.addEventListener === "fun
     if (e.target?.id === "menu-username") writeSettings({ ...readSettings(), name: e.target.value });
   });
 }
-import { bringPilotHome } from "../net/session.js";
+import { bringPilotHome, bringPilotHomeAtMenu } from "../net/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -322,25 +323,50 @@ function loadedMessage(text) {
  * rather than opening the suitcase itself, so the two doors cannot drift apart.
  */
 function comeHome() {
-  if (!leaveVisit()) return false;
+  // The session goes first, always: a guest that walks home while still connected leaves a
+  // row in the host's players list and a ship in the host's world (playtest 14). Leaving
+  // the visit is not conditional on there being a suitcase to unpack.
+  leaveVisit();
   const away = state.away;
   if (away) {
-    // Slice 4: one rule for coming home, and it is `net/session.js`'s (it refuses rather
-    // than wiping a pilot whose suitcase will not open). Coming home is the same act
-    // whether it is chosen here or from the "Your pilot is in Ada's world" card.
-    const done = bringPilotHome(currentRootSave());
+    // **From the title there is no open-world save loaded**, so the pilot is unpacked
+    // against the mode save that is stored — which is where the frozen pilot actually is.
+    // This is why "Bring pilot home" on the card did nothing: the old path walked out of
+    // `leaveVisit()` believing it had failed, and never reached the unpacking at all.
+    const done = bringPilotHomeAtMenu({ mode: state.mode === "campaign" ? "campaign" : "open" });
     if (!done.ok) {
       showNotice(done.message);
       return false;
     }
+    // The stored save now holds the returned pilot; load it so the screen and the runtime
+    // agree with the disk before anything else runs.
     applySave(done.save);
   }
   closeMultiplayer();
   saveCurrentGame();
   showNotice(away?.hostName
     ? `Your pilot is home, back from ${away.hostName}'s world.`
-    : "Left your friend's world. Your pilot is back in your own.");
+    : "You have left your friend's world.");
   return true;
+}
+
+/**
+ * Re-attempt the world the pilot is already in, from the title card (playtest 14).
+ *
+ * The join is asynchronous and the screen must not lie about it, so the answer is a
+ * sentence either way. On success the ordinary join path runs (`mp-enter-world` is NOT
+ * emitted for an away pilot — see `afterJoined`), leaving the player on the card with the
+ * connection live, which is what "Rejoin" means: the pilot is still there, go and look.
+ */
+function rejoinStoredWorld(away) {
+  const link = makeJoinUrl(away.worldId, away.token, pageBase());
+  joinWorld({ link })
+    .then(result => {
+      if (!result?.ok) { showNotice(result?.message || "Could not rejoin that world."); return; }
+      showNotice(`Rejoined ${away.hostName ? away.hostName + "'s world" : "your friend's world"}.`);
+      render();
+    })
+    .catch(() => showNotice("Could not rejoin that world. Paste the link instead."));
 }
 
 function enterGameMode(mode) {
@@ -380,7 +406,17 @@ const ACTIONS = {
   // already pasted once. `comehome` is the same act as `intro`'s (a pilot at home is a
   // pilot at home), so it calls that rather than growing a second path.
   rejoin() {
+    // A real attempt, not just a screen (owner, playtest 14: "Rejoin doesnt do anything").
+    // The title has the world's id on the marker, so the link can be rebuilt from it — the
+    // token comes from the settings, where the join that created the marker put it. When
+    // that is not possible the screen still opens, with the box ready, and says why.
+    const away = state.away;
+    if (away?.token) {
+      rejoinStoredWorld(away);
+      return;
+    }
     openMultiplayer({ focus: "join", from: "menu" });
+    showNotice("Paste your friend's link — this browser did not keep the last one.");
   },
   comehome() {
     ACTIONS.intro();

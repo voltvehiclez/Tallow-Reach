@@ -34,6 +34,17 @@ On the **host**, dock (press **G**) and note the **station stock** for one item.
 
 **Look for:** the card disappears, the normal menu returns, and your credits / hold / station lockers are all back — **the same number you wrote down in part 2**. Not double, not short.
 
+## Part 4 — the four things this build fixes (2 minutes)
+
+1. **Close the guest's browser (don't press Leave).** On the host: the name should vanish from the players
+   list, the chat should say *"Bo left."*, and if the guest had brought its pilot, its ship should go.
+2. **Guest: join the same world again** with a fresh link. It should get in — before this build it was
+   refused, because its old record still held the previous token.
+3. **Guest rejoins with the pilot still away.** You should stay on the title card with a message, *not*
+   be dropped into your own world.
+4. **Test Ship** (buy it at Meridian's shop): it should be the new model — centred in the frame, no
+   offset shadow of a camera.
+
 ## Two extras worth 30 seconds
 
 - On the card, press **Open World** *first* without bringing the pilot home. It should refuse and keep you on the card, not put you in a cockpit.

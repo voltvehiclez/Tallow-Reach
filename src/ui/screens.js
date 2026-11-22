@@ -102,6 +102,9 @@ function awayCardHtml(away) {
     `<button class="go" data-a="rejoin">Rejoin</button>` +
     `<button class="go" data-a="comehome">Bring pilot home</button>` +
     `</p>` +
+    `<p class="away-note"><b>Rejoin</b> connects you to that world again so you can see what ` +
+    `your pilot is doing there — your own galaxy stays paused. <b>Bring pilot home</b> ends ` +
+    `the visit and unpacks everything into this one.</p>` +
     `<p class="away-note">Bringing it home works even if your friend is offline: your pilot ` +
     `carries its own copy of everything it has done.</p>` +
     `</div>`

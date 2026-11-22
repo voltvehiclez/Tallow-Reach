@@ -370,7 +370,13 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // flow yet, so a first hello carries no record and is admitted on the strength of the
     // link it arrived with — that is the slice-4 decision, made here in ONE place, with a
     // comment, rather than by quietly weakening the check for known guests.
-    const checked = record
+    // A record the pilot has already LEFT does not hold its current token: it is holding
+    // its suitcase, not an identity. The fresh join link is the proof (the old peer is
+    // gone, the host made a new token), so a marked record is re-admitted and the new
+    // token replaces the old hash — otherwise a pilot that visited once could never come
+    // back, which is exactly what playtest 14 hit.
+    const returning = !!record && record.left === true;
+    const checked = record && !returning
       ? handshake({
         token: message.token,
         guestId: message.guestId,
@@ -399,8 +405,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const recorded = putGuest(current, message.guestId, {
       name: display,
       token: message.token,
-      epoch: 0,
-      rev: 0,
+      // `left: false` re-admits a pilot that had gone home, and keeps its old `epoch`/`rev`
+      // so its suitcase still orders correctly against what the guest holds (playtest 14).
+      left: false,
+      epoch: returning ? record?.epoch : 0,
+      rev: returning ? record?.rev : 0,
       bundle: null,
       lastSeen: Date.now(),
     });
@@ -613,7 +622,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const record = save.read()?.world?.guests?.[guestId] || null;
     // A known guest must prove its token; a first visit is admitted on the link it came
     // with, exactly as the hello is (see `firstHelloCheck`).
-    const checked = record
+    // Same rule as a hello: a record the pilot has LEFT is proof of nothing, and the fresh
+    // link is. (See `onHello`; playtest 14.)
+    const checked = record && record.left !== true
       ? handshake({
         token: message.bundle?.token,
         guestId,
@@ -665,6 +676,42 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     }), peerId);
     noteLine("Tallow Reach", `${message.name || "A pilot"}'s pilot arrived — ${relocated.bundle.summary?.text || "suitcase received"}.`);
     publish();
+  }
+
+  /**
+   * Host side: a guest's connection dropped without a goodbye (playtest 14).
+   *
+   * Three things were left behind, and all three were visible: the guest stayed in the
+   * players list, no line in the chat said it had gone, and its record stayed in
+   * `world.guests` — so the next join was treated as a RETURNING guest and demanded a token
+   * the pilot had already been given a new one of. That last one is what made "Join" from
+   * the main menu do nothing at all for a pilot that had visited before.
+   *
+   * The record is marked `left` rather than deleted: the pilot's suitcase is still in it,
+   * and if the same pilot comes back it must get its own ship and cargo rather than a
+   * fresh one. A marked record is compared on `lastSeen` by the next hello.
+   */
+  function forgetPeer(peerId) {
+    const gone = guests.filter(g => g.peerId === peerId);
+    for (let i = guests.length - 1; i >= 0; i--) {
+      if (guests[i].peerId === peerId) guests.splice(i, 1);
+    }
+    peerNames.delete(peerId);
+    greetedPeers.delete(peerId);
+    if (!gone.length) return;
+
+    // The record, so a returning pilot is not locked out of its own suitcase.
+    let stored = save.read();
+    for (const g of gone) {
+      const record = stored?.world?.guests?.[g.guestId];
+      if (record) stored = putGuest(stored, g.guestId, { ...record, left: true, lastSeen: Date.now() });
+      // The ship leaves the simulation (slice 4's docked visitor).
+      emit("mp-guest-left", { guestId: g.guestId, name: g.name });
+      noteLine("Tallow Reach", `${g.name} left.`);
+    }
+    if (stored) save.write(stored);
+    // Everybody else's list, so a third pilot does not see a ghost either.
+    publishPresence();
   }
 
   /**
@@ -781,9 +828,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
   function upsertGuest(entry) {
     if (!entry?.guestId) return;
+    // A `welcome` and a `presence` list carry no peer id, and spreading one over a known
+    // guest used to WIPE the peer id — so that guest could never be matched to the peer
+    // that left, and stayed in the list for ever (playtest 14).
+    const clean = { ...entry };
+    if (!clean.peerId) delete clean.peerId;
     const at = guests.findIndex(g => g.guestId === entry.guestId);
-    if (at >= 0) guests[at] = { ...guests[at], ...entry };
-    else guests.push({ guestId: entry.guestId, name: entry.name || "Guest", docked: !!entry.docked });
+    if (at >= 0) guests[at] = { ...guests[at], ...clean };
+    else guests.push({ guestId: entry.guestId, name: entry.name || "Guest", docked: !!entry.docked, peerId: entry.peerId || null });
   }
 
   /**
@@ -886,16 +938,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
         if (event?.kind === "join") { stalled = false; clearStallTimer(); }
         if (event?.kind === "leave" && event.peerId) {
           if (role === "host") {
-            const left = guests.filter(g => g.peerId === event.peerId);
-            if (left.length) {
-              for (let i = guests.length - 1; i >= 0; i--) {
-                if (guests[i].peerId === event.peerId) guests.splice(i, 1);
-              }
-              for (const g of left) noteLine("Tallow Reach", `${g.name} left.`);
-              publishPresence();
-            }
-            peerNames.delete(event.peerId);
-            greetedPeers.delete(event.peerId);
+            forgetPeer(event.peerId);
           } else if (role === "guest" && welcomed) {
             const hostGone = hostPeerId ? event.peerId === hostPeerId : (channel && channel.peers().length === 0);
             if (hostGone) {
@@ -1341,6 +1384,45 @@ export function bringPilot() {
     return { ok: false, message: "Join your friend's world first, then bring your pilot." };
   }
   return active.bringPilot();
+}
+
+/**
+ * "Bring my pilot home" from the TITLE screen (playtest 14).
+ *
+ * The card's two buttons used to do nothing, and the reason was one line: from the title
+ * there is no open-world save loaded to unpack into (`currentRootSave()` describes whatever
+ * mode happens to be active), so `bringPilotHome` was handed a save with no profile and
+ * declined — and `ui/menu.js`'s `comeHome` returned false before it restored anything. The
+ * player was then stuck: Rejoin did nothing, a new link was refused with "bring it home
+ * first", and nothing on the card could bring it home.
+ *
+ * So the unpacking happens against the mode save that is *stored*, which is where the
+ * frozen pilot actually lives, and the result is written straight back through the same
+ * `saveKit`. The marker on the live state is cleared here too, because the title screen
+ * reads `state.away` and a card that cannot go away is the bug.
+ */
+export function bringPilotHomeAtMenu({ mode = "open" } = {}) {
+  const root = liveSave();
+  const half = root && typeof root === "object" ? root[mode] : null;
+  if (!half || typeof half !== "object") {
+    return { ok: false, message: "Your pilot's save could not be read, so it cannot come home yet. Do not reset — tell the host." };
+  }
+  if (!half.away) {
+    // Nothing stored to unpack: the live state is all there is. Clear it rather than trap
+    // the player on a card about a pilot that is not away.
+    state.away = null;
+    return { ok: true, save: root, message: "Your pilot is home." };
+  }
+  const done = bringPilotHome(half);
+  if (!done.ok) return done;
+  const next = { ...root, [mode]: done.save };
+  saveKit.write(next);
+  state.away = null;
+  if (active && active.role === "guest") {
+    try { active.stop(); } catch (e) { /* the host may be long gone */ }
+    active = null;
+  }
+  return { ok: true, save: next, message: done.message };
 }
 
 /**

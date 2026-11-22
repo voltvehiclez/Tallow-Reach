@@ -7,7 +7,12 @@ import { SHIPS } from '../src/data/ships.js';
 
 test('owner compressed Test Ship decodes offline with the embedded Draco decoder', async () => {
   const bytes = readFileSync('src/assets/models/ship.testship.glb');
-  assert.equal(createHash('md5').update(bytes).digest('hex'), '983f20487d3b5840033a6d15d77b2896');
+  // Re-recorded 2026-11-22 for the owner's testship-v1.glb (playtest 14). The old model was
+  // 983f2048…, 0.91 x 0.24 x 1 with its base on y=0 and a stray "Page camera" node; this one
+  // is centred on y (-0.097 to 0.139) and carries one mesh node. Diffed old against new
+  // (LESSONS L17): the ONLY changes are the checksum, the bounding box and the node list —
+  // every other assertion below is unchanged and still passes.
+  assert.equal(createHash('md5').update(bytes).digest('hex'), '8338c12ec894bbd1442bc3e58198aa3e');
   assert.equal(bytes.readUInt32LE(0), 0x46546c67);
   const jsonSize = bytes.readUInt32LE(12);
   const json = JSON.parse(bytes.subarray(20, 20 + jsonSize).toString());
@@ -37,8 +42,8 @@ test('owner compressed Test Ship decodes offline with the embedded Draco decoder
       high[axis] = Math.max(high[axis], value);
     }
     // Draco quantization may move vertices slightly, but not change authoring axes or size.
-    const sourceLow = [-0.4541015625, 0, -0.4990234375];
-    const sourceHigh = [0.4541015625, 0.236328125, 0.4990234375];
+    const sourceLow = [-0.38701313734054565, -0.09709753096103668, -0.5003356337547302];
+    const sourceHigh = [0.52118319272995, 0.13922041654586792, 0.5003356337547302];
     for (let axis = 0; axis < 3; axis++) {
       assert.ok(Math.abs(low[axis] - sourceLow[axis]) < 0.001);
       assert.ok(Math.abs(high[axis] - sourceHigh[axis]) < 0.001);

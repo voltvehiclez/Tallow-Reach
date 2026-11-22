@@ -256,7 +256,7 @@ export function awayRecord({ worldId, hostName, guestId, token, epoch = 0, rev =
  * somebody's pilot. `world.guests` is written by the host, read by the host, and
  * never travels.
  */
-export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0 } = {}) {
+export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0, left = false } = {}) {
   const kept = isPlainObject(bundle) ? clone(bundle) : null;
   if (kept) delete kept.token;
   return {
@@ -266,6 +266,9 @@ export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle =
     rev: whole(rev),
     bundle: kept,
     lastSeen: whole(lastSeen),
+    // Playtest 14: a pilot that has gone home. The record stays because it holds the
+    // suitcase; the mark is what lets the next hello re-admit it (see `onHello`).
+    left: left === true,
   };
 }
 

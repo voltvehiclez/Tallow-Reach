@@ -889,10 +889,18 @@ async function joinFromBox() {
 
 /** A guest who just joined: get out of the way so the world (or the menu) is playable. */
 function afterJoined() {
-  if (state.ui.intro) {
-    closeMultiplayer();
-    emit("mp-enter-world", {});
+  if (!state.ui.intro) return;
+  closeMultiplayer();
+  // **Not when the pilot is away** (owner, playtest 14). Entering the world is what flying
+  // your own ship means, and an away pilot is frozen — its cargo is in another galaxy. This
+  // is why the title showed "Bring my pilot" for a moment and then entered the world by
+  // itself: the join worked, `state.away` was set, and nothing here looked at it.
+  if (state.away) {
+    setMessage("Your pilot is still in your friend's world. Bring it home below, then join again.", "hint");
+    draw();
+    return;
   }
+  emit("mp-enter-world", {});
 }
 
 async function retryConnection() {

@@ -148,185 +148,29 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ---
 
-### L33. A control that only exists in the state it creates, and a switch drawn from a wish
+### L33. A partial save handed to the sanitizer without its version comes back empty
+- **Seen:** step 16 slice 4 — a visiting pilot arrived with its ship, fits and credits, and an empty hold. Slice 1's tests missed it: they round-tripped a bundle through `checkIn`, which never builds a *guest's* profile.
+- **Cause:** `custody.hostProfile` sanitized `bundle.profile` as-is. `v` is a HOME field, so a bundle's profile half has none — and `sanitizeProfile` reads a missing version as pre-v12, when holds were `{ cargo, modules }`. `cleanHolds` looked for `holds[id].cargo`, found nothing, returned `{}`. `applyTravellingProfile` had stamped `v` for exactly this since slice 1; `hostProfile` did not.
+- **Rule:** any partial profile handed to `sanitizeProfile`/`sanitizeSave` is stamped with the current `v` first, because every cleaning rule is version-dependent. A bundle carries what a pilot owns, never the save's version: restore it at the boundary.
+- **Enforced by:** the `hostProfile keeps a visitor's cargo` test in `tests/multiplayer-custody.test.mjs` (hold, fleet, fit and `profile.v`).
 
-- **Seen (owner, step 16 slice 3):** "There is no option to paste a link", "no way to get a link to
-  copy", "it says *Make a fresh offer first*" — and a chat box that kept the typed line and said nothing.
-- **Cause:** the guest's paste box was drawn only for a guest session, which only that box could make,
-  so joining had no entrance; the host switch was drawn from the stored setting, so it read On while
-  `hostWorld` had refused; that refusal went into an element the state never rendered; and the offer
-  code was wiped by the redraw after making it. Every one is a reader and a writer that never met
-  (L19) inside one screen.
-- **Rule:** every control must work in the state it is drawn in, a control's words describe the live
-  object and not the wish (L32), a refusal goes to an element that is always on screen, a value the
-  player must copy lives in the model rather than the DOM, and a one-shot message is latched only
-  once it has actually left.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` (no name ⇒ no switch and no Join; a failed host
-  snaps Off with its sentence on screen; the offer survives a redraw; Connect exists only with an
-  offer; chat says why a line was not sent) and `tests/multiplayer-paste-join.test.mjs` (the hello
-  over the code wire arrives once and is admitted).
+### L34. A frozen record the save path does not know about gets stamped over
+- **Seen:** step 16 slice 4 — coming home doubled every station locker (4 ferrite became 8).
+- **Cause:** two halves of one rule. `checkOut` empties the home stations (a stack cannot sit in two galaxies), but the session reaches the game through a deliberately narrow `saveKit.write` that stores only `world.guests` and `world.worldId`. The emptied stations never reached the live save, the suitcase also carried that cargo, and `checkIn` added it on top. And `captureActiveModeSave` would fold the live runtime into a pilot meant to be frozen.
+- **Rule:** when a record is frozen, BOTH halves must respect it — the copy on the wire and the copy the game keeps. A guest installing its own whole save uses its own seam (`saveKit.install`), never the host's narrow one; `captureActiveModeSave` hands an away pilot's record through untouched. Check anything that moves items at the seam the game actually stores through, not on plain objects.
+- **Enforced by:** four tests, chosen so **undoing any one fix fails one of them** — a test that passes with the fix reverted is not enforcement. `multiplayer-carry` (the round trip, the doubling failure mode, the frozen world not re-stamped) and `multiplayer-bring-pilot` (the real session seam: packing leaves the live stations empty, a suitcase from the host actually reaches the save).
 
-### L34. A control that cannot take the cursor is a control that does not work
+### L35. A connection that ends is an event the host must act on
+- **Seen:** owner, playtest 14 — "When my laptop leaves it still says that laptop is logged in in the players list and there is no notification in chat that it left." Its ship stayed too, and the pilot could not get back in.
+- **Cause:** three omissions on one path. The host removed the row but never wrote the record, so `world.guests[id]` kept the OLD token hash and the next hello was a "returning guest" refused for a token it no longer had. No chat line and no `mp-guest-left` were emitted. And `upsertGuest` let a `welcome`/`presence` list (no peer id) overwrite a known peer id with nothing, after which that guest could never be matched to the peer that left.
+- **Rule:** a departed peer is handled in ONE place (`forgetPeer`), and it touches every copy of the fact: the live row, the chat, `mp-guest-left`, presence, and the stored record. A record whose pilot has gone is a suitcase, not an identity — mark it (`left`); a fresh link re-admits it. Never overwrite a known correlation id with a missing one.
+- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (leaving is removed/announced/ship gone; a returning pilot gets in with a new token).
 
-- **Seen (owner, playtest 2 of slice 3):** "only the host can chat — the guest can view the messages
-  but can't open chat to type a word"; and "pausing when multiplayer is open still pauses the game,
-  both guest and host".
-- **Cause:** the chat box hid its own input unless that input already had the cursor, and a `[hidden]`
-  field cannot be given the cursor — so the field never came back and the keys went to the ship. The
-  same file also asked the DOM ("does the input have focus?") the question its own state should have
-  answered. And `state.multiplayer = !v && isOn()` set the "the world keeps running" flag to false at
-  the exact moment the pause card opened, which is the one moment it was there for.
-- **Rule:** whether a thing is open is the model's business, not the DOM's — a `hidden` element cannot
-  be focused, clicked or typed into, so unhide it *before* asking for the cursor; and a flag that means
-  "this is happening" must never be derived from the UI that is asking about it.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` (`chatVisibility`, the order inside `openChat`, and the
-  sim gate with `state.paused` and `state.multiplayer` both set) and `tests/multiplayer-session.test.mjs`
-  (the old `!v &&` is asserted gone).
-
-### L35. "Sent" is not "heard", and one machine is not two
-
-- **Seen:** playtests 3 and 4, second machine: the guest joined "but I am the only one there" every
-  time, and the first press of **Join** did nothing.
-- **Cause:** (a) the hello was latched as sent when the send returned, and between two machines the
-  channel opens after the room reports the peer, so it went nowhere, unrepeated; (b) the name field
-  committed on `change`, a click blurs the field first, and that redraw replaced the button under the
-  cursor before mouseup; (c) two tabs on one machine always connect — they share a process — so no
-  network path between two *machines* looks like a working connection from inside.
-- **Rule:** a message is done only when the other side answers (the reply is the latch); a
-  `change`/`blur` handler must update in place, because replacing the DOM under the pointer eats the
-  click; and **a same-machine test proves the logic, never the wire** — so put the wire's facts
-  (sent/received, ICE state) on screen, and keep a second path (a relay) to try on both ends.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the lost-hello retry, the no-redraw commit, the
-  relay escalation, the Connection details block.
-
-### L36. A default list that is shuffled by a seed is still a *guess* about the outside world
-
-- **Seen (owner, playtest 5):** both machines reported the same build and the same world id, both
-  `finding`, and **one browser in the room with zero messages sent** — for a whole evening, through
-  three rounds of Reconnect.
-- **Cause:** the transport had no relay list of its own, so the library shuffled its thirty public
-  signalling relays with the app id as the seed and took five. The seed guarantees the *same five*
-  on both machines (which is why the report looked contradictory: nothing differed), but it also
-  guarantees nothing about those five being alive — this game's five included three obscure or dead
-  servers. Both players subscribed to the same silence, so the introduction never happened and
-  every later layer (ICE, TURN, the handshake, the retry) was being debugged for a problem three
-  layers below it.
-- **Rule:** never let a dependency *choose* which outside server you depend on — name it, and if the
-  choice is a default list, treat "which entry" as part of your configuration. When a feature
-  depends on reachability of something outside both machines, **measure that reachability and show
-  it**: `Relays reachable: N of 5`, 0 meaning "no retry will ever help". And before blaming the
-  path, read the counters — `sent 0 / received 0 / 1 in the room` means no peer, which means no
-  path to blame.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` section 11 — the pinned list and the transport
-  passing it, the probe landing in the diagnostics, the "N of 5" row and its warning at 0.
-- **Follow-up (playtest 8):** the same lesson one layer down. The codes worked on one wifi and failed
-  on 4G, because a code is only as good as the **path kinds** it carries, and gathering was cut off
-  before any relay candidate could arrive. A gathered code now reports `paths()` — host, srflx,
-  relay — and the screen says "same network only" *before* the code is sent, not after it fails.
-
-### L37. A health check that asks a different question than the feature does
-
-- **Seen (owner, playtests 6 and 7):** the screen said `Relays reachable: 3 of 5` on both machines,
-  which read as "the network is fine", and the two browsers still never met.
-- **Cause:** the check opened a WebSocket and counted a handshake as health. The feature needs
-  something else entirely: a relay that accepts *this game's* events. A relay can open a socket and
-  then answer `blocked:`, `restricted:` or `auth-required:`, and the library quietly retires it — so
-  the number was true, irrelevant, and reassuring, which is the worst kind. Beside it, the report's
-  `Browsers in the room: 1` had already established that no peer existed, which a healthy relay count
-  made look like a contradiction instead of a clue.
-- **Rule:** a health check must exercise **the exact step the feature needs** (here: the library's own
-  socket pool, `getRelaySockets()`, not a lookalike), and must be shown **next to** the outcome it is
-  supposed to explain, so a mismatch is visible instead of plausible. And when a chain has a fallback
-  that shares no dependency with the failing link, **promote the fallback before perfecting the
-  diagnosis** — the codes needed no relay at all and were sitting behind a footnote for two rounds.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the `Relays connected` row and its warning, the
-  stalled-session screens (host and guest), and the code path's TURN fallback.
-
-### L38. A screen's template calls a helper that does not exist in its own module
-- **Seen (owner, 2026-11-22):** the game would not start; the title screen showed the crash card with
-  `escapeAttr is not defined`.
-- **Cause:** `ui/screens.js`'s `introHtml()` escaped the username field with `escapeAttr`, a name defined
-  nowhere — the module already had `esc`, which escapes the same characters including `"`. A template only
-  runs when its screen renders, so the mistake stayed invisible until the title screen drew at boot.
-- **Rule:** every helper a template uses must be defined in the module that uses it. A screen whose template
-  has never been rendered in a test is a screen nobody has verified: the data being right is not the same as
-  the template running.
-- **Enforced by:** `tests/station-ui-batch.test.mjs` renders `introHtml()` (it failed on this exact line
-  before the fix).
-
-### L39. A gate belongs to the action it was written for
-- **Seen (owner, 2026-11-22):** "Cant start the game" — pressing **Open World** with no username stored did
-  nothing but show *Enter a username (at least 3 characters) first.*
-- **Cause:** the username check that belongs to the **multiplayer** action (a name is how a player presents
-  themselves to others) had been attached to the **Open World** action too, so a single-player start from
-  empty settings was refused.
-- **Rule:** a check is written for one action and lives on that action. An action must do its job from the
-  state the player is actually in when they press it, and the test that clicks it from that state enforces it.
-- **Enforced by:** `tests/step10-fixes.test.mjs` (Open World from a clean state starts the game) and
-  `tests/step11b-starmap.test.mjs` (the intro recovery notice appears).
-
-### L40. An import-time DOM call needs the module's own guard
-- **Seen (owner, 2026-11-22):** two suites (`step10-fixes`, `step11b-starmap`) died at import with
-  `document.addEventListener is not a function`, before any test ran.
-- **Cause:** `ui/menu.js` called `document.addEventListener` at module top level, guarded only by
-  `typeof document !== "undefined"`. A headless test provides a `document` stand-in without `addEventListener`,
-  so the import threw — while the same file already guarded its function-level DOM calls with
-  `typeof document.addEventListener === "function"`.
-- **Rule:** a `ui/` (or `net/`) module must import headlessly: DOM access at import time uses the same
-  `typeof document.addEventListener === "function"` guard the module already uses inside its functions. An
-  import that throws takes every test that loads the module with it.
-- **Enforced by:** `tests/step10-fixes.test.mjs` and `tests/step11b-starmap.test.mjs` load `ui/menu.js`
-  through the headless harness; a regression here fails both suites at import.
-
-## Template (copy for a new entry)
-
-```
-### Ln. Short name of the class of bug
-- **Seen:** what the owner saw, in their words.
-- **Cause:** the general cause, not the one line of code.
-- **Rule:** what must always be true.
-- **Enforced by:** the test(s) or linter rule that fail if it breaks. If there is none yet, write
-  "NOT YET: add a test" and add it in the same change.
-```
-
-### L30. Event counters and wrong-station reads misrepresented live mission inventory
-
-- **Seen (owner, 2026-11-18):** Mission log item progress ignored pre-stored goods, stayed full after selling/discarding ore, and checked `state.place`'s store instead of the mission's hand-in station.
-- **Rule:** item-requiring missions report live inventory counts (`missionItemRequirements`), scoping hand-ins to `missionHandInStation` plus the active ship hold and script `take-item` steps to their target container.
-- **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (mine, deliver, recovery, cargo hand-over, story collect, parallel items and cross-station reads).
-
-### L33. A save half was handed to the sanitizer without its version, and every hold came back empty
-- **Seen (step 16 slice 4):** a visiting pilot arrived in a friend's world with its ship, its fits and its credits — and an
-  **empty hold**. Nothing caught it in slice 1, because slice 1's tests round-tripped a bundle through `checkIn`, which never
-  calls the function that builds a *guest's* profile from one.
-- **Cause:** `custody.hostProfile` sanitized `bundle.profile` as-is. `v` is a HOME field (it belongs to the save, not to the
-  pilot), so a bundle's profile half has no `v` — and `sanitizeProfile` reads a missing version as pre-v12, when holds were
-  `{ cargo, modules }` rather than a plain stock. `cleanHolds` therefore looked for `holds[id].cargo`, found nothing, and
-  returned `{}`. `applyTravellingProfile` had stamped `v` for exactly this reason since slice 1; `hostProfile` did not.
-- **Rule:** any partial profile handed to `sanitizeProfile`/`sanitizeSave` is stamped with the current `v` first, because
-  *every* cleaning rule is version-dependent. A bundle carries the fields a pilot owns, never the save's version — so the
-  version is restored at the boundary, not assumed.
-- **Enforced by:** the `hostProfile keeps a visitor's cargo, its fleet and its fits` test in `tests/multiplayer-custody.test.mjs`
-  (it asserts the hold, the fleet, the fit and `profile.v` after `hostProfile`), and `tests/multiplayer-visitors.test.mjs`.
-
-### L34. A frozen record that the save path does not know about gets stamped over by the runtime
-- **Seen (step 16 slice 4):** coming home from a friend's world **doubled every station locker** — 4 ferrite became 8.
-- **Cause:** two halves of one rule. `checkOut` empties the home stations because a stack cannot sit in two galaxies, but the
-  session reaches the game through a deliberately narrow `saveKit.write` (it stores only `world.guests` and `world.worldId`,
-  because that is all a *host* may touch). So the emptied stations never reached the live save, the suitcase also carried that
-  cargo, and `checkIn` added the lockers back on top of the stacks that had never left. Worse, `captureActiveModeSave` would
-  happily fold the live runtime into a pilot that was supposed to be frozen.
-- **Rule:** when a record is frozen, **both** halves of the freeze must be respected — the record that goes to the wire *and*
-  the record the game keeps. A guest installing its own whole save goes through its own seam (`saveKit.install`), never the
-  host's narrow one; and `captureActiveModeSave` hands an away pilot's record through untouched rather than re-reading the
-  runtime. Anything that moves items must be checked at the seam the game actually stores through, not on plain objects.
-- **Enforced by:** four tests, chosen so that **undoing any one fix makes one of them fail** — a test that passes whether or
-  not the fix is present is not enforcement. `tests/multiplayer-carry.test.mjs` asserts the round trip returns every unit once,
-  asserts the *failure mode* (checking in over a save that still holds the stacks doubles them), and asserts the frozen world
-  was not re-stamped from the runtime. `tests/multiplayer-bring-pilot.test.mjs` drives the **real session seam** — its guest
-  `write` is modelled as the narrow one it is — so packing must leave the live stations empty and a suitcase from the host must
-  actually reach the save. **Lesson inside the lesson:** the first version of these tests passed with the fix reverted, because
-  the fixture merged whole saves and the assertions read only keys the narrow write happened to carry.
+### L36. A guard that returns `false` reads as "nothing happened" to every caller
+- **Seen:** owner, playtest 14 — "clicking the bring pilot home doesnt do anything... Im stuck in the menu."
+- **Cause:** `comeHome()` opened with `if (!leaveVisit()) return false;`. From the title there is no session to leave, so it returned before unpacking anything, and the caller showed nothing. The same shape hid the second half: unpacking used the ACTIVE save, which on the title is not the open world's, so even a caller that got that far had no profile to unpack into.
+- **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
+- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
 ### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
 - **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."
