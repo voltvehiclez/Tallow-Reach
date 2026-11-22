@@ -20,6 +20,40 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
+
+Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details
+still said **`In use: none (the free public servers only)`** with `Code paths: 1 local, 1 public,
+0 relay`. The server had never been saved, so the offer carried nothing but local and public
+addresses — nothing to do with ExpressTURN answering or not. Three fixes, in the order they bite:
+
+- **The screen lied about itself.** `screenModel()` had two `relay:` keys: the player's saved
+  server, then the transport's *relay mode* flag, which overwrote it. Every reader of
+  `model.relay` (`In use:`, Copy relay settings) saw a boolean. The flag is now `relayMode`;
+  `relay` is the server, as every caller already assumed.
+- **Typing is saving.** A complete relay entry is saved 600 ms after the last keystroke in any
+  of the three boxes, with *"Relay server saved…"* on screen. The new `relayFromFields()` in
+  `net/turn.js` is the one parser for the boxes (whole pasted block, bare `host:port`, a comma
+  list, a `TRTURN:` line; typed username/credential win over the pasted ones). If an offer code
+  already exists it is **remade** immediately, because a code carries the servers that existed
+  when it was made — "saved" without a new code is still a code with `0 relay` paths.
+- **The guest sees the facts on the codes wire.** A session joined by codes has no data channel,
+  so `snapshot().diag` is null and the laptop's panel drew no Connection details at all.
+  `screenModel()` now builds a synthetic diag from the wire's own state plus the code's paths
+  (`codesOnly`): Signalling, Code paths, clock. "Browsers in the room" and the direct-link rows
+  are suppressed there, since a code carries neither.
+- **The In-use line owns the failure:** a saved relay with `codePaths.relay === 0` adds
+  *"— but the last code had no relay path, so that server did not answer. Press Test relay
+  servers."* A duplicate `role` key in the same object was also removed (build warning).
+
+**Files:** `src/net/turn.js` (`relayFromFields`), `src/ui/multiplayer.js` (`screenModel`,
+`relayServerHtml`, `queueRelaySave`, `save-relay`/`clear-relay`), `tests/multiplayer-ui.test.mjs`
+(3 new), `src/data/multiplayer.js` (`BUILD = "2026-11-22i"`).
+
+**Tests: 974, all green** (was 971). **Save format unchanged (v29).** **Build id: `2026-11-22i`.**
+Still unproven: whether ExpressTURN's free tier relays a packet at all — the next playtest's
+*Test relay servers* line decides that, and the panel now shows it on both machines either way.
+
 ## 2026-11-22: Playtest 12 of slice 3 — a relay server the player actually has (ExpressTURN)
 
 The owner found a free TURN provider (ExpressTURN) and pasted its block, which exposed two things
@@ -282,29 +316,9 @@ Files: `src/ui/{mission-hud,starmap,hud,target-display}.js`,
 `src/sim/targeting.js`, `src/styles.css`, tests, docs. No save change.
 Rebuild `game/tallow-reach.html`; `npm test`.
 
-## 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
-
-Following the axis-rate change, NPC pilots now use the fast axes:
-`sim/npc-pilot.js` banks — when the aim point sits more than
-`AI_FLIGHT.pilotBankAbove` (0.3 rad) off the nose, it rolls (fastest axis) to
-swing the target into the pitch plane and pitches onto it, reserving slow yaw
-for fine aim. Test (j) in `tests/flight-model.test.mjs` shows a raider on a
-dead-side target in ~3.5 s where yaw alone needs at least ~4.3 s, banked past
-90 degrees on the way; test (d)'s turn cap now reads the pitch axis. Combat
-will feel snappier: enemies get their guns on you sooner (their damage numbers
-are unchanged). In First Sortie, Dane's 10 km chase course authors two
-barrel rolls (`roll: 360` / `-360` on legs in `data/flight-courses.js`, flown
-across the leg by `flyCourse` via the pilot's `rollStick`) — showmanship only:
-course waypoints and the destination are exactly where they were, and test (k)
-pins that the roll fields ride along without moving a single point. The combat
-8b fixture was re-recorded and diffed (player pose unchanged).
-
-Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
-`src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
 - 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
 - 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
 - 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)

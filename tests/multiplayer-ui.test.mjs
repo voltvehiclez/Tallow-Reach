@@ -1163,3 +1163,47 @@ test("a provider's address without turn: is read as one, and several addresses a
     "turns:free.expressturn.com:5349",
   ], "the UDP, TCP and TLS doors are all kept — a phone may only be allowed one of them");
 });
+
+test("the three relay boxes become a relay server, or nothing", async () => {
+  const turn = await import("../src/net/turn.js");
+  const express = turn.relayFromFields({
+    urls: "free.expressturn.com:3478",
+    username: "000000002110719494",
+    credential: "33RDBDUZ38C6ScnNLjwkG1PermM=",
+  });
+  assert.deepEqual(express, {
+    urls: ["turn:free.expressturn.com:3478"],
+    username: "000000002110719494",
+    credential: "33RDBDUZ38C6ScnNLjwkG1PermM=",
+  });
+  // The whole block in the first box is enough on its own.
+  const pasted = turn.relayFromFields({ urls: "free.expressturn.com:3478\nusername: u1\npassword: p1", username: "", credential: "" });
+  assert.equal(pasted.username, "u1");
+  // An address with nothing else is not a relay: it would answer 401 and look like a fault.
+  assert.equal(turn.relayFromFields({ urls: "turn:a.example:3478", username: "", credential: "" }), null);
+});
+
+test("a guest on the codes wire gets details, with a code link instead of a room count", () => {
+  const guest = {
+    ...COLD, on: true, role: "guest", state: "waiting", name: "Bo", worldId: "w-1",
+    diag: null, codePaths: { host: 1, srflx: 1, prflx: 0, relay: 2 },
+  };
+  const html = ui.screenHtml(ui.screenModel({ snap: guest, v: { surface: "join", fields: {}, history: [] } }));
+  assert.match(html, /Connection details/);
+  assert.match(html, /Code paths: 1 local, 1 public, 2 relay/);
+  assert.doesNotMatch(html, /Browsers in the room/, "there is no room: the wire is two codes");
+  const report = ui.diagReport(ui.screenModel({ snap: guest, v: { surface: "join", fields: {}, history: [] } }));
+  assert.match(report, /Code paths: 1 local, 1 public, 2 relay/);
+});
+
+test("a saved relay that produced no relay path says so, instead of looking configured", () => {
+  const host = {
+    ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1",
+    codePaths: { host: 1, srflx: 1, prflx: 0, relay: 0 },
+    diag: { signalling: "finding", line: "Waiting…", useTurn: false, sent: 0, received: 0, peers: [] },
+  };
+  const relay = { urls: "turn:free.expressturn.com:3478", username: "u", credential: "c" };
+  const html = ui.screenHtml(ui.screenModel({ snap: host, settings: { name: "Ada", enabled: true, relay } }));
+  assert.match(html, /In use: turn:free\.expressturn\.com:3478/);
+  assert.match(html, /did not answer/i, "it must not read as configured-and-fine");
+});

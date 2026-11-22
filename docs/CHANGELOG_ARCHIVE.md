@@ -1,5 +1,26 @@
 # Changelog archive
 
+## 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
+
+Following the axis-rate change, NPC pilots now use the fast axes:
+`sim/npc-pilot.js` banks — when the aim point sits more than
+`AI_FLIGHT.pilotBankAbove` (0.3 rad) off the nose, it rolls (fastest axis) to
+swing the target into the pitch plane and pitches onto it, reserving slow yaw
+for fine aim. Test (j) in `tests/flight-model.test.mjs` shows a raider on a
+dead-side target in ~3.5 s where yaw alone needs at least ~4.3 s, banked past
+90 degrees on the way; test (d)'s turn cap now reads the pitch axis. Combat
+will feel snappier: enemies get their guns on you sooner (their damage numbers
+are unchanged). In First Sortie, Dane's 10 km chase course authors two
+barrel rolls (`roll: 360` / `-360` on legs in `data/flight-courses.js`, flown
+across the leg by `flyCourse` via the pilot's `rollStick`) — showmanship only:
+course waypoints and the destination are exactly where they were, and test (k)
+pins that the roll fields ride along without moving a single point. The combat
+8b fixture was re-recorded and diffed (player pose unchanged).
+
+Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
+`src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
+Rebuild `game/tallow-reach.html`; `npm test`.
+
 ## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
 
 - **Roll ease in/out:** the shared model ramps the roll stick

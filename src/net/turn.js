@@ -173,6 +173,23 @@ export function packRelay(relay) {
   return `TRTURN:${btoa(binary)}`;
 }
 
+/**
+ * The relay a player is describing with the three boxes, or null.
+ *
+ * One function for the Save button **and** the automatic save, so the two can never disagree
+ * about what counts as a complete entry. The address box may hold the provider's whole block,
+ * a bare `host:port`, several comma-separated addresses, or a `TRTURN:` line from the other
+ * machine; the username and credential boxes win when they hold something.
+ */
+export function relayFromFields(fields = {}) {
+  const parsed = parseRelayText(fields.urls);
+  const typed = { urls: String(fields.urls || "").trim(), username: String(fields.username || "").trim(), credential: String(fields.credential || "").trim() };
+  const merged = parsed && (!typed.username || !typed.credential)
+    ? { urls: parsed.urls.join(","), username: parsed.username, credential: parsed.credential }
+    : typed;
+  return ownRelay({ relay: merged });
+}
+
 /** One sentence a screen can print about a check's result. */
 export function turnSummary(result) {
   if (!result || !result.total) return "No relay servers are configured, so a code can only work on the same network.";

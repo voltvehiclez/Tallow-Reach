@@ -54,7 +54,7 @@ import { clearPendingJoin, pendingJoin } from "../net/boot.js";
 import { looksLikeCode } from "../net/paste.js";
 import { makeJoinLink } from "../net/join-link.js";
 import { showNotice } from "./notice.js";
-import { parseRelayText, packRelay } from "../net/turn.js";
+import { relayFromFields, packRelay } from "../net/turn.js";
 
 /* ------------------------------------------------------------------------- */
 /* What the screen is showing                                                 */
@@ -103,14 +103,29 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
         : "Multiplayer is off.",
     stateLine: snap.line || "",
     worldId: snap.worldId || null,
-    role: snap.role || null,
     // Nobody has appeared after the wait: the relay route is not delivering, so the screen
     // stops offering it first and offers the code path instead.
     stalled: !!snap.stalled,
     link: link?.url || "",
     hostName: snap.hostName || "",
-    // The transport's facts, when there is a connection to describe.
-    diag: snap.diag || null,
+    // The transport's facts, when there is a connection to describe. A session joined by
+    // **codes** has no channel at all, so it used to have no details block either — the guest
+    // could only ever say "I am alone" (owner, playtest 12). Its own wire's state and the
+    // code's paths are the same kind of fact, so they are reported the same way.
+    diag: snap.diag || (snap.on
+      ? {
+        signalling: snap.state || "idle",
+        line: snap.line || "",
+        useTurn: !!snap.relay,
+        peers: [],
+        sent: 0,
+        received: 0,
+        relays: null,
+        clock: Date.now(),
+        codesOnly: true,
+        codePaths: snap.codePaths || null,
+      }
+      : null),
     // What the offer/answer code can do: `relay > 0` means it works across networks.
     codePaths: snap.codePaths || null,
     // The player's own relay server (settings), and whatever is in the boxes right now.
@@ -120,7 +135,10 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
       username: v.fields.relayUser ?? settings.relay?.username ?? "",
       credential: v.fields.relayPass ?? settings.relay?.credential ?? "",
     },
-    relay: !!snap.relay,
+    // The "relay mode" flag (the transport's own), kept apart from `relay` above: that one is
+    // the player's saved server, and the two used to share a name — so a saved server read as
+    // "none" and the whole relay block was a lie (found while fixing playtest 12).
+    relayMode: !!snap.relay,
     guests: (snap.guests || []).slice(),
     peers: (snap.peers || []).slice(),
     // The box draws the session's lines and its own log together, oldest first.
@@ -497,7 +515,8 @@ export function diagFacts(model) {
     relay: !!d.useTurn,
     relays: d.relays && (d.relays.total || d.relays.connected) ? d.relays : null,
     clock: Number(d.clock) || 0,
-    codePaths: model.codePaths || null,
+    codePaths: d.codePaths || model.codePaths || null,
+    codesOnly: !!d.codesOnly,
     sent: Number(d.sent) || 0,
     received: Number(d.received) || 0,
     waiting: !!model.hosting && peers.length > 0 && !(model.guests || []).length,
@@ -514,8 +533,8 @@ export function diagReport(model) {
     `World id: ${f.worldId}`,
     `Role: ${f.role}`,
     `Signalling: ${f.signalling}${f.signallingLine ? ` — ${f.signallingLine}` : ""}`,
-    `Browsers in the room: ${f.inRoom}`,
-    `Direct link: ${f.direct || "no other browser is in the room"}`,
+    ...(f.codesOnly ? [] : [`Browsers in the room: ${f.inRoom}`]),
+    ...(f.codesOnly ? [] : [`Direct link: ${f.direct || "no other browser is in the room"}`]),
     `Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}`,
     ...(f.relays && f.relays.total > 0 ? [`Relays reachable: ${f.relays.open} of ${f.relays.total}`] : []),
     ...(f.relays && Number.isFinite(f.relays.connected) ? [`Relays connected: ${f.relays.connected}`] : []),
@@ -535,8 +554,7 @@ function diagHtml(model) {
     `<li>Build: ${escapeHtml(f.build)}</li>` +
     `<li>World id: ${escapeHtml(f.worldId)}</li>` +
     `<li>Signalling: ${escapeHtml(f.signalling)}${f.signallingLine ? ` — ${escapeHtml(f.signallingLine)}` : ""}</li>` +
-    `<li>Browsers in the room: ${f.inRoom}</li>` +
-    `<li>${escapeHtml(link)}</li>` +
+    (f.codesOnly ? "" : `<li>Browsers in the room: ${f.inRoom}</li><li>${escapeHtml(link)}</li>`) +
     `<li>Relay mode: ${f.relay ? "on (a public relay server)" : "off (direct only)"}</li>` +
     (f.relays && f.relays.total > 0 ? `<li>Relays reachable: ${f.relays.open} of ${f.relays.total}</li>` : "") +
     (f.relays && Number.isFinite(f.relays.connected)
@@ -585,7 +603,9 @@ function relayServerHtml(model) {
     `<p class="mp-hint">Optional. Only needed when two machines on <em>different</em> networks cannot connect — ` +
     `a phone on 4G and a PC at home. A provider (for example Metered, Twilio or Cloudflare) gives you an address, ` +
     `a username and a credential.</p>` +
-    `<p class="mp-hint">In use: ${saved}</p>` +
+    `<p class="mp-hint">In use: ${saved}${model.relay && model.codePaths && model.codePaths.relay === 0
+      ? ` — but the last code had <strong>no relay path</strong>, so that server did not answer. Press Test relay servers.`
+      : ""}</p>` +
     `<p class="mp-hint">Paste the whole block your provider gave you into the first box (or a <code>TRTURN:</code> ` +
     `line from another machine) and press Save relay — the username and credential in it are read out for you. ` +
     `An address with no <code>turn:</code> in front is fine. Several addresses work too, separated by commas: ` +
@@ -634,18 +654,13 @@ export async function act(name, arg = "") {
       return joinFromBox();
     case "leave": return leaveSession();
     case "save-relay": {
-      const fields = screenModel().relayFields;
-      // One box may hold the provider's whole block, or a TRTURN: line from the other machine.
-      const parsed = parseRelayText(fields.urls);
-      const merged = parsed && (!fields.username || !fields.credential)
-        ? { urls: parsed.urls.join(","), username: parsed.username, credential: parsed.credential }
-        : fields;
-      if (!String(merged.urls || "").trim() || !String(merged.username || "").trim() || !String(merged.credential || "").trim()) {
+      const relay = relayFromFields(screenModel().relayFields);
+      if (!relay) {
         setMessage("A relay server needs all three: its address, a username and a credential.", "error");
         draw();
         return false;
       }
-      api.saveRelay(merged);
+      api.saveRelay(relay);
       panelView.fields.relayUrls = undefined;
       panelView.fields.relayUser = undefined;
       panelView.fields.relayPass = undefined;
@@ -966,6 +981,7 @@ function buildScreen() {
     const field = event.target.closest?.("[data-mp-field]");
     if (!field) return;
     panelView.fields[field.dataset.mpField] = field.value;
+    if (String(field.dataset.mpField).startsWith("relay")) queueRelaySave();
     // Typing a name enables both front doors. That is done in place: a full redraw under
     // the player's cursor at every keystroke is how a name field becomes unusable.
     if (field.dataset.mpField === "name") refreshLiveness();
@@ -1036,6 +1052,39 @@ function focusField(field) {
 function mountedFields() {
   if (!root) return [];
   return Array.from(root.querySelectorAll?.("[data-mp-field]") || []);
+}
+
+/**
+ * Save the relay server as it is typed, not only when the button is pressed.
+ *
+ * The owner's playtest 12 typed ExpressTURN's three values, made a code, and the details still
+ * said "In use: none" — the code carried local addresses and 4G had no chance. A setting that
+ * only exists after a deliberate press is a setting that will be missing when it matters, so a
+ * complete entry is saved 600 ms after the last keystroke, and the screen says so.
+ */
+let relaySaveTimer = 0;
+function queueRelaySave() {
+  if (relaySaveTimer) clearTimeout(relaySaveTimer);
+  relaySaveTimer = setTimeout(() => {
+    relaySaveTimer = 0;
+    const relay = relayFromFields(panelView.fields);
+    const saved = readSettings().relay || null;
+    if (!relay) return;
+    const same = saved && saved.urls === relay.urls.join(",") && saved.username === relay.username && saved.credential === relay.credential;
+    if (same) return;
+    api.saveRelay(relay);
+    // A code carries the servers that existed when it was made, so an offer made before the
+    // relay was saved cannot use it. Remaking it here is the difference between "saved" and
+    // "saved, and the code you are holding still cannot cross a network".
+    if (panelView.offer) {
+      setMessage("Relay server saved. Making a new offer code with it…", "hint");
+      draw();
+      makeOffer();
+      return;
+    }
+    setMessage("Relay server saved. Make a new code to use it.", "ok");
+    draw();
+  }, 600);
 }
 
 /** Put the current model on the screen. A no-op when nothing the player can see changed. */
