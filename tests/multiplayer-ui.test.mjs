@@ -1207,3 +1207,28 @@ test("a saved relay that produced no relay path says so, instead of looking conf
   assert.match(html, /In use: turn:free\.expressturn\.com:3478/);
   assert.match(html, /did not answer/i, "it must not read as configured-and-fine");
 });
+
+test("the built-in relay is in use by default, so nothing has to be typed to cross networks", () => {
+  const host = {
+    ...COLD, on: true, role: "host", state: "finding", name: "Ada", worldId: "w-1",
+    codePaths: { host: 2, srflx: 1, prflx: 0, relay: 1 },
+    diag: { signalling: "finding", line: "Waiting…", useTurn: false, sent: 0, received: 0, peers: [] },
+  };
+  // Nothing saved: the game's own relay is what a link or a code carries (owner's 4G link, 2026-11-22).
+  const html = ui.screenHtml(ui.screenModel({ snap: host, settings: { name: "Ada", enabled: true, relay: null } }));
+  assert.match(html, /In use: ExpressTURN \(free tier, built into the game\)/, "it names what is in use");
+  assert.match(html, /nothing to set up/, "and says the player need not do anything");
+  assert.doesNotMatch(html, /In use: none/, "the old dead end is gone");
+
+  // A player's own server replaces the words, because it is the one tried first.
+  const own = { urls: "turn:mine.example:3478", username: "u", credential: "c" };
+  const mine = ui.screenHtml(ui.screenModel({ snap: host, settings: { name: "Ada", enabled: true, relay: own } }));
+  assert.match(mine, /In use: turn:mine\.example:3478/);
+  assert.match(mine, /Copy relay settings/, "and can be handed to the other machine");
+
+  // A code that came out with no relay path now blames the built-in one too, not just a saved one.
+  const bare = { ...host, codePaths: { host: 1, srflx: 1, prflx: 0, relay: 0 } };
+  const said = ui.screenHtml(ui.screenModel({ snap: bare, settings: { name: "Ada", enabled: true, relay: null } }));
+  assert.match(said, /no relay path/i);
+  assert.match(said, /the built-in one did not answer/i);
+});

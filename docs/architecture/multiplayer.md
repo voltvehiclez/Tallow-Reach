@@ -144,7 +144,9 @@ browsers and both sides then believe they are connected — but the *data* conne
 path, and a home network often has none: no hairpin NAT, and the local addresses Chrome hides behind
 `*.local` mDNS names get dropped by a firewall or a multicast-hostile router. Two tabs on one machine
 share a process, so the failure is invisible there (LESSONS L35). The answer is `ICE.turn`
-(`data/multiplayer.js`, the free Open Relay project) handed to the library as `turnConfig`, used
+(`data/multiplayer.js` — the game's own **ExpressTURN free-tier** account since 2026-11-22, after the
+three public relays it used to list were measured dead from the owner's PC) handed to the library as
+`turnConfig`, used
 **only after** `NET.helloWaitSec` of a direct attempt with a browser in the room and no hello
 admitted — and **by both ends**, because a relayed path needs a relay candidate from each side: the
 guest escalates from its hello timer, the host from its own ("a browser is here, nobody was
@@ -157,8 +159,12 @@ machines can connect without any broker — and then failed the moment one of th
 (playtest 8). Nothing was wrong with the exchange: a laptop on a carrier network and a PC at home
 sit behind different NATs with no address they both reach, so the only path that works is a
 **relay (TURN) candidate**, and a code only gets one if gathering is still running when the server
-answers. Hence `ICE.gatherMs` (8 s, not 4) and three TURN families in `ICE.turn`, each with a TCP or
-TLS 443 door because that is what a phone is allowed to open. `paste.js` counts the candidates by
+answers. Hence `ICE.gatherMs` (8 s, not 4) and one TURN server in `ICE.turn` with **two doors** — 3478 over
+UDP and 3478 over TCP — because a phone that blocks UDP can still open the TCP one. (ExpressTURN's
+free plan is those two; the TLS door is a paid plan's, and listing a door that cannot answer is worse
+than a shorter list.)
+Measured: the owner's laptop on 4G joined a hosted link with no codes at all (2026-11-22), the first
+time anything but same-wifi worked. `paste.js` counts the candidates by
 kind (`paths()`, `hasRelayPath()`) and the screen says which kind of code the player is holding —
 `relay: 0` means "same network only", before it is sent rather than after it fails.
 

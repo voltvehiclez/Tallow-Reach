@@ -241,11 +241,27 @@ test("a code counts the network paths it carries, and says whether one is a rela
   }
 });
 
-test("the relay servers are reachable from a phone: TCP and TLS on 443, and a real gather window", () => {
+test("the game carries a working relay, and a player's own still goes first", async () => {
+  const turn = await import("../src/net/turn.js");
+  const builtin = turn.builtinRelays();
+  assert.ok(builtin.length >= 1, "a fresh install has a relay without typing anything");
+  assert.equal(turn.turnServers({ relay: null }).length, builtin.length, "nothing saved, nothing added");
+  for (const server of builtin) {
+    assert.ok(!("name" in server), "our label for an entry is not part of an ICE server");
+  }
+  const own = { relay: { urls: "turn:mine.example:3478", username: "u", credential: "c" } };
+  const both = turn.turnServers(own);
+  assert.equal(both.length, builtin.length + 1, "a player's own server is added");
+  assert.match(both[0].urls[0], /mine\.example/, "and it is tried first");
+  assert.ok(turn.builtinRelayName().length > 0, "the screens can name what is in use");
+  assert.equal(turn.ownRelay({ relay: null }), null, "and the built-in is not mistaken for a player's");
+});
+
+test("the built-in relay has a TCP door, because a phone blocks UDP", () => {
   const urls = ICE.turn.flatMap(entry => entry.urls);
-  assert.ok(urls.some(url => url.includes(":443")), "port 443, where a mobile network allows traffic");
-  assert.ok(urls.some(url => url.includes("transport=tcp")), "and over TCP when UDP is blocked");
-  assert.ok(urls.some(url => url.startsWith("turns:")), "with TLS in front of it");
+  assert.ok(urls.some(url => url.includes("transport=tcp")), "TCP, for a network that drops UDP");
+  assert.ok(urls.some(url => /^turn:[^?]+:3478$/.test(url)), "and plain 3478 beside it, which is fastest when allowed");
+  assert.ok(ICE.turn.length >= 1, "and the game brings at least one, so a fresh install can cross networks");
   for (const entry of ICE.turn) {
     assert.ok(entry.username && entry.credential, "every TURN server has a login");
   }

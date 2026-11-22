@@ -52,14 +52,34 @@ export function ownRelay(settings = readSettings()) {
   return { urls, username, credential };
 }
 
+/** One entry as the browser wants it: a `name` is ours, not part of `RTCIceServer`. */
+const asIceServer = entry => ({
+  urls: [...(Array.isArray(entry.urls) ? entry.urls : [entry.urls])],
+  username: entry.username,
+  credential: entry.credential,
+});
+
+/**
+ * The relay the game itself brings, in the browser's shape. Always at least one entry, so a
+ * fresh install can already cross networks (owner's link over 4G, 2026-11-22).
+ */
+export function builtinRelays() {
+  return (Array.isArray(ICE.turn) ? ICE.turn : []).map(asIceServer);
+}
+
+/** The built-in relay's name, for a screen that has to say what is in use. */
+export function builtinRelayName() {
+  return String(ICE.turnName || "the built-in relay");
+}
+
 /**
  * Every relay server this browser should try: the player's own first (it is the one they
- * chose, and the one that will keep working), then the free public ones as a fallback.
+ * chose, and the one that will keep working), then the built-in one as a fallback.
  */
 export function turnServers(settings = readSettings()) {
   const own = ownRelay(settings);
-  const free = (Array.isArray(ICE.turn) ? ICE.turn : []).map(entry => ({ ...entry, urls: [...entry.urls] }));
-  return own ? [{ ...own, urls: [...own.urls] }, ...free] : free;
+  const builtin = builtinRelays();
+  return own ? [asIceServer(own), ...builtin] : builtin;
 }
 
 /** The whole ICE configuration for a connection: STUN to find an address, TURN to cross a NAT. */

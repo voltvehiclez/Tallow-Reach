@@ -112,7 +112,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-22i";
+export const BUILD = "2026-11-22j";
 
 export const NET = {
   snapshotSec: 2,
@@ -212,17 +212,21 @@ export const RELAYS = {
  * the host's own PC, "you are the only one there" from the laptop.
  *
  * TURN relays the data through a server both sides can reach. It is slower, so it is only
- * used after a direct attempt has failed (`ICE.escalateSec`); if the free public service
- * below is ever unavailable, nothing breaks — the direct path is still tried first.
+ * used after a direct attempt has failed (`ICE.escalateSec`); if the relay below is ever
+ * unavailable, nothing breaks — the direct path is still tried first, and two machines on
+ * one wifi never needed it.
  *
- * Anyone can put their own server here; nothing is a secret of this game.
+ * The relay is the owner's free-tier account, whose login is therefore in this file, which is
+ * public. That is deliberate: a login the player has to obtain is a login they will not
+ * obtain. Nothing else here is a secret — a TURN server forwards encrypted packets it cannot
+ * read, and it holds no game state. A player who brings their own server overrides it.
  */
 export const ICE = {
   /**
    * How long a code waits for every network path before it is sent.
    *
    * The slow candidates are the relay ones: they come from a server, and on a mobile network
-   * they arrive over TCP/TLS 443 because UDP is often blocked. Cutting gathering off early
+   * they arrive over TCP/TLS because UDP is often blocked. Cutting gathering off early
    * (it was 4 s) is how a code ended up carrying only local paths — so a laptop on 4G could
    * not reach a PC at home, while the same laptop on the same wifi could (owner, playtest 8).
    */
@@ -233,39 +237,44 @@ export const ICE = {
     "stun:stun1.l.google.com:19302",
   ],
   /**
-   * TURN servers: the path that exists when the two networks cannot see each other at all
-   * (a mobile carrier, a router with no hairpin NAT). They forward encrypted packets they
-   * cannot read. Several are listed because a free one can be down, and **each entry has a
-   * TCP or TLS 443 variant** — ports 80/443/TCP are what a phone is allowed to use.
+   * The relay server this game brings with it — the owner's own ExpressTURN free-tier account,
+   * measured working on 2026-11-22 (a laptop on 4G joined a link hosted by a PC at home; nothing
+   * else had ever succeeded, because the three public relays listed here before were all dead
+   * from the owner's machine: *"0 of 3 relay servers answered"*, playtest 11).
+   *
+   * **Why it is in the game file and not a setting.** A relay is the difference between "co-op
+   * works" and "co-op only works on one wifi", and every player who was asked to find, sign up
+   * for and type one would not. So a link now crosses networks on a fresh install with nothing
+   * typed. A player's own server (`tr_mp.relay`, three boxes on the Multiplayer screen) is used
+   * **first** — this one is the fallback, not the rule.
+   *
+   * **Two doors, and both are on the free plan**: 3478 over UDP (fastest, and what a phone usually
+   * blocks) and 3478 over TCP (what got the owner's 4G laptop through). ExpressTURN's free plan is
+   * exactly those two — a TLS door on 5349 exists on their paid plans only, so it is *not* listed
+   * here: a door that cannot answer is worse than a shorter list. Add `turns:free.expressturn.com:5349`
+   * to `urls` above if that ever changes. Each entry needs both strings: a TURN server with no login
+   * answers `401` and looks like a network fault.
+   *
+   * **If these stop working** (a free tier has a monthly data cap, and the owner has regenerated
+   * this login before): the fix is one entry here — the spaces below are the only thing to
+   * change, in this file, nowhere else. `npm test` then `npm run build`.
    */
   turn: [
     {
+      name: "ExpressTURN (free tier)",
       urls: [
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443",
-        "turns:openrelay.metered.ca:443?transport=tcp",
+        "turn:free.expressturn.com:3478",
+        "turn:free.expressturn.com:3478?transport=tcp",
       ],
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-    {
-      urls: [
-        "turn:freestun.net:3478",
-        "turn:freestun.net:3478?transport=tcp",
-        "turns:freestun.net:5350",
-      ],
-      username: "free",
-      credential: "free",
-    },
-    {
-      urls: [
-        "turn:turn.anyfirewall.com:443?transport=tcp",
-        "turns:turn.anyfirewall.com:443?transport=tcp",
-      ],
-      username: "webrtc",
-      credential: "webrtc",
+      username: "000000002110719494",
+      credential: "33RDBDUZ38C6ScnNLjwkG1PermM=",
     },
   ],
+  /**
+   * What the screens call `turn[0]` when no server of the player's own is saved. Screens quote
+   * this instead of inventing a name, so the words and the list cannot drift apart.
+   */
+  turnName: "ExpressTURN (free tier, built into the game)",
 };
 
 /**

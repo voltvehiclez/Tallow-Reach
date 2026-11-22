@@ -41,8 +41,9 @@ function cleanRelay(value) {
  *   enabled       whether open multiplayer is on at all (the pause card's switch)
  *   autoJoin      whether a `?join=` link in the address bar is taken automatically
  *   relay         the player's own TURN server, or null — `{ urls, username, credential }`.
- *                 The free public ones are a convenience that can stop working; two networks
- *                 that will not pass a packet between them need one that does (see `net/turn.js`).
+ *                 The game brings its own (ExpressTURN's free tier, `ICE.turn`); this is the
+ *                 player's, tried first, for when the built-in one stops answering or when they
+ *                 have a better one (see `net/turn.js`).
  */
 export function readSettings() {
   const fallback = { name: "", enabled: false, autoJoin: true, relay: null };

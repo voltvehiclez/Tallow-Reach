@@ -54,7 +54,7 @@ import { clearPendingJoin, pendingJoin } from "../net/boot.js";
 import { looksLikeCode } from "../net/paste.js";
 import { makeJoinLink } from "../net/join-link.js";
 import { showNotice } from "./notice.js";
-import { relayFromFields, packRelay } from "../net/turn.js";
+import { relayFromFields, packRelay, builtinRelayName, builtinRelays } from "../net/turn.js";
 
 /* ------------------------------------------------------------------------- */
 /* What the screen is showing                                                 */
@@ -588,23 +588,27 @@ function diagHtml(model) {
 }
 
 /**
- * The player's own relay server: three fields, a Save and a Test.
+ * The relay server: what is in use, and three fields to replace it.
  *
- * It lives in Connection details because that is the screen a player reaches when co-op does
- * not work, and because the free public relay servers in `ICE.turn` are a convenience that can
- * stop working. A provider gives an address, a username and a credential; with those, two
- * machines on different networks (a phone on 4G) can reach each other. **Test** asks the
- * servers for a relayed address, which is the only honest answer to "is it them or is it me".
+ * The game brings its own relay (`ICE.turn` — ExpressTURN's free tier, measured working over
+ * 4G on 2026-11-22), so a fresh install needs nothing here. This block exists for the two
+ * things a built-in server cannot promise: it can stop answering (a free tier has a data cap),
+ * and a player may have a better one. Theirs is used first. **Test** asks the servers for a
+ * relayed address, which is the only honest answer to "is it them or is it me".
  */
 function relayServerHtml(model) {
-  const saved = model.relay ? `${escapeHtml(model.relay.urls)}` : "none (the free public servers only)";
+  const builtin = builtinRelays();
+  const doors = builtin.flatMap(entry => entry.urls).length;
+  const saved = model.relay
+    ? escapeHtml(model.relay.urls)
+    : `${escapeHtml(builtinRelayName())} — nothing to set up` + (doors ? ` (${doors} addresses)` : "");
   return (
     `<h2>Relay server</h2>` +
-    `<p class="mp-hint">Optional. Only needed when two machines on <em>different</em> networks cannot connect — ` +
-    `a phone on 4G and a PC at home. A provider (for example Metered, Twilio or Cloudflare) gives you an address, ` +
-    `a username and a credential.</p>` +
-    `<p class="mp-hint">In use: ${saved}${model.relay && model.codePaths && model.codePaths.relay === 0
-      ? ` — but the last code had <strong>no relay path</strong>, so that server did not answer. Press Test relay servers.`
+    `<p class="mp-hint">The game brings its own relay, so a link or a code already crosses networks — a phone ` +
+    `on 4G and a PC at home included. Fill these in only to use a server of your own (a provider gives an ` +
+    `address, a username and a credential); yours is tried before the built-in one.</p>` +
+    `<p class="mp-hint">In use: ${saved}${model.codePaths && model.codePaths.relay === 0
+      ? ` — but the last code had <strong>no relay path</strong>, so ${model.relay ? "that server" : "the built-in one"} did not answer. Press Test relay servers.`
       : ""}</p>` +
     `<p class="mp-hint">Paste the whole block your provider gave you into the first box (or a <code>TRTURN:</code> ` +
     `line from another machine) and press Save relay — the username and credential in it are read out for you. ` +
@@ -620,7 +624,7 @@ function relayServerHtml(model) {
     `<div class="mp-row">` +
     `<button type="button" data-mp="save-relay">Save relay</button>` +
     `<button type="button" data-mp="test-relay">Test relay servers</button>` +
-    `<button type="button" data-mp="clear-relay">Use the free ones</button>` +
+    `<button type="button" data-mp="clear-relay">Use the built-in relay</button>` +
     (model.relay ? `<button type="button" data-mp="copy-relay">Copy relay settings</button>` : "") +
     `</div>`
   );
@@ -673,7 +677,7 @@ export async function act(name, arg = "") {
       panelView.fields.relayUrls = undefined;
       panelView.fields.relayUser = undefined;
       panelView.fields.relayPass = undefined;
-      setMessage("Using the free public relay servers again.", "hint");
+      setMessage("Using the built-in relay again.", "hint");
       draw();
       return true;
     }

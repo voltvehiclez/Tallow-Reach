@@ -20,6 +20,45 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-22: The game carries its own relay — one-link join works across networks
+
+**The owner's report first, because it settles the whole slice:** *"i have successfully sent a message
+over 4g, and i only used a link."* The one-link join he asked for in playtest 5 works on two different
+networks, with no offer/answer codes. What made it work was one relay server actually being saved
+(playtest 13) — nothing else in the pipeline was broken.
+
+So the relay is no longer something a player has to find:
+
+- **`ICE.turn` is now the game's own ExpressTURN free-tier account** — its two free doors,
+  `turn:` 3478 UDP and `turn:` 3478 `?transport=tcp` — replacing the three public families (Open Relay,
+  freestun, AnyFirewall) that measured **dead** from the owner's PC in playtest 11. A fresh install
+  can cross networks with nothing typed. The TLS door on 5349 is a **paid** plan's, so it is not
+  listed: a door that cannot answer is worse than a shorter list. `ICE.turnName` gives the screens one name to quote
+  ("ExpressTURN (free tier, built into the game)") so the words cannot drift from the list.
+- **A player's own server is still first.** `turnServers()` = theirs, then the built-in;
+  `builtinRelays()`/`builtinRelayName()` export the built-in for screens and tests, and `asIceServer()`
+  keeps our `name` label out of the `RTCIceServer` the browser sees.
+- **The panel says what is in use without being asked**: *"In use: ExpressTURN (free tier, built into
+  the game) — nothing to set up (3 addresses)"*, the three boxes are described as an override, and the
+  button is now **Use the built-in relay**. A code with `0 relay` paths blames *whichever* server was
+  in force — the built-in one too.
+- Same change in the code path: `paste.js` builds its ICE list from `ICE.turn` (label stripped), so the
+  copy/paste codes carry the same relay.
+
+**Files:** `src/data/multiplayer.js` (`ICE.turn`, `ICE.turnName`), `src/net/turn.js`
+(`builtinRelays`, `builtinRelayName`, `asIceServer`), `src/net/paste.js`, `src/ui/multiplayer.js`,
+`src/net/settings.js` + `src/net/README.md` + `docs/architecture/multiplayer.md` (words), tests.
+
+**Tests: 976, all green** (was 974). Two new: the built-in relay has a TCP door and a plain 3478 door and
+always a login; and the panel says the built-in relay is in use, quotes a player's own instead, and
+blames it when a code has no relay path. **Save v29. Build id: `2026-11-22j`.**
+
+**The one risk, stated plainly:** that login is in a public repository, so anyone can use the owner's
+free-tier allowance (ExpressTURN's free plan: 1000 GB a month, TCP and UDP on 3478) and the owner
+could exhaust it by accident. If the built-in relay stops
+answering, the fix is the one entry in `src/data/multiplayer.js` — regenerate in the ExpressTURN
+dashboard, paste the new three strings, `npm test`, `npm run build`. Nothing else knows the address.
+
 ## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
 
 Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details
@@ -295,29 +334,9 @@ show it. New: if the two browsers still do not meet, the Connection details scre
 owner found the 250% roll nauseating. Yaw and pitch unchanged. Recorded
 fixtures and the axis-ratio test updated; no save change.
 
-## 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
-
-- **Warp-to glow:** `missionTravelTargets` (`ui/mission-hud.js`) lists the
-  pockets active missions currently want the pilot in (same rule as the
-  in-space Waypoint labels, hand-in included), and the starmap rings them in
-  the mission's own colour — the destination **system** on the galaxy chart
-  (including the current system: Meridian Station → Kestrel Hollow rings
-  Meridian) and the destination **pocket** on the system chart. Arriving puts
-  it out; warping away brings it back, since it is recomputed from live
-  mission state at every render.
-- **Face-off identity:** a ship on `prowl` (First Sortie's ambushers during
-  the parley) now presents as **Unmarked** with a neutral grey reticle
-  (`.mk.u`) everywhere its name or marker is drawn — floating label, target
-  lock (`lockName`), marker tone (`markerStyle`). The moment the role drops
-  (dialogue ends or anyone shoots), the same ship is its true self again:
-  "Newbie Raider", hostile red. Display only; no AI or save change.
-
-Files: `src/ui/{mission-hud,starmap,hud,target-display}.js`,
-`src/sim/targeting.js`, `src/styles.css`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
 - 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
 - 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
 - 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel

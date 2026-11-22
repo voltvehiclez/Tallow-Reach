@@ -259,8 +259,9 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
  * networks usually fails. **TURN** (`ICE.turn` in `data/multiplayer.js`) is the fallback for
  * two networks that will not pass a packet between them: the code path carries the codes
  * itself, so the only thing that can still be missing is a path, and a home router with no
- * hairpin NAT is the usual reason there is none. Both are free public services and neither
- * carries game data — a TURN server forwards encrypted packets it cannot read.
+ * hairpin NAT is the usual reason there is none. A TURN server forwards encrypted packets it
+ * cannot read, so neither carries game data; the game brings its own (`ICE.turn`), and a
+ * player's own server is used first.
  *
  * The library path (`net/transport.js`) keeps its TURN opt-in, because it works for most
  * players without one and a relayed path is slower. A player who resorted to codes has
@@ -268,7 +269,8 @@ export function createPasteLink({ worldId = "", onState, onData } = {}) {
  */
 const ICE_SERVERS = [
   ...(Array.isArray(ICE.stun) ? ICE.stun : ["stun:stun.l.google.com:19302"]).map(url => ({ urls: url })),
-  ...(Array.isArray(ICE.turn) ? ICE.turn.map(entry => ({ ...entry })) : []),
+  // `name` is the game's own label for an entry, not part of an ICE server.
+  ...(Array.isArray(ICE.turn) ? ICE.turn.map(({ urls, username, credential }) => ({ urls: [...urls], username, credential })) : []),
 ];
 
 /** The kinds of network path a code can carry, most useful last. */
