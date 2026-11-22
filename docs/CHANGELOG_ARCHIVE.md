@@ -1,3 +1,95 @@
+## 2026-11-22: Playtest 12 of slice 3 — a relay server the player actually has (ExpressTURN)
+
+The owner found a free TURN provider (ExpressTURN) and pasted its block, which exposed two things
+the relay fields could not do with a real provider's text:
+
+- **ExpressTURN prints the address with no `turn:` in front** (`free.expressturn.com:3478`), and the
+  parser refused it. A bare `host:port` is now read as `turn:host:port` — in `cleanUrl` too, so it
+  works in the address box whether or not it came through the paste path.
+- **A provider prints several doors** (UDP 3478, TCP 3478, TLS 5349) and a phone on 4G may only be
+  allowed the TCP or TLS one. Comma-separated addresses are all kept, and the hint says so.
+- A credential ending in `=` (ExpressTURN's do) survives the paste and the `TRTURN:` round trip.
+
+**Files:** `src/net/turn.js` (`cleanUrl`, `parseRelayText`), `src/ui/multiplayer.js` (the hint),
+`src/data/multiplayer.js` (`BUILD = "2026-11-22h"`).
+
+**Tests: 971, all green** (was 970). One new: ExpressTURN's own block, and the three doors of one
+server. **Save format unchanged (v29).** **Build id: `2026-11-22h`.**
+
+
+## 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
+
+**The owner's two facts end the relay-server question:**
+
+- `Relays reachable: 3 of 5`, `Relays connected: 10` — the **signalling** relays are fine, and have
+  been all along. "Your network blocks the relays" was wrong.
+- **Test relay servers** answered *"None of the 3 relay servers answered from this machine, so co-op
+  cannot cross networks"*, and the code says `Code paths: 1 local, 1 public, 0 relay`. So the free
+  public TURN servers (Open Relay, freestun, AnyFirewall) are **dead** — that, and nothing else, is
+  why a laptop on 4G cannot join a PC on ethernet. No amount of code makes a dead server forward a
+  packet; a player needs a relay they control.
+
+- **A guest now has Connection details.** The join surface had no diagnosis block at all, so a guest
+  could only ever say "I am alone" — no build, no room count, no code paths, no relay fields
+  (owner's report). `screenHtml` puts the details (and the relay block) on the join surface.
+- **One paste sets a relay server.** `parseRelayText()` reads whatever a provider prints — the
+  `turn:…` block with `username:`/`credential:` lines, JSON from a dashboard, or a `TRTURN:` line —
+  and fills all three fields; **Copy relay settings** makes that line, so the second machine is one
+  paste instead of six. `Save relay` says to press **Start again**, because a code carries the
+  servers that existed when it was made.
+
+**Files:** `src/ui/multiplayer.js` (join-surface details, relay paste/copy, save message),
+`src/net/turn.js` (`parseRelayText`, `packRelay`), `src/data/multiplayer.js`
+(`BUILD = "2026-11-22g"`).
+
+**Tests: 970, all green** (was 968). Two new: the guest's screen, and the provider block / JSON /
+packed round trip.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.** The next step is not
+code: a free TURN credential (Metered's free tier) entered once on each machine.
+
+
+## 2026-11-22: Playtest 10 of slice 3 — the free relay servers are the suspect, so test them and allow your own
+
+**The owner's block rewrote the theory again:** `Relays connected: 10`. The signalling relays are
+open — ten sockets — and there is still nobody in the room. So "the network blocks the relays" is
+wrong, and the code path's 4G failure is the thing to fix. A code can only cross two different
+networks if it carries a **relay (TURN) candidate**, and the free public TURN servers (Open Relay,
+freestun, AnyFirewall) are exactly the kind of thing that stops working quietly.
+
+- **A relay test, in the game.** `net/turn.js` `checkTurnServers()` opens a connection with
+  `iceTransportPolicy: "relay"` against each configured server: a `typ relay` candidate means the
+  server authenticated us and will forward packets, and nothing means it is down, the login is
+  wrong, or the network blocks it. **Test relay servers** in Connection details prints
+  *"2 of 3 relay servers answered"* or *"None of the 3 … answered from this machine, so co-op cannot
+  cross networks"*. That sentence is a diagnosis, not a mood.
+- **Your own relay server.** `settings.relay` (`tr_mp`) holds an address, a username and a
+  credential, and Connection details has the three fields, **Save relay**, **Test relay servers** and
+  **Use the free ones**. `turnServers()` tries the player's own first; `iceServers()` feeds both the
+  code path and the library path. A provider's free tier (Metered, Twilio, Cloudflare) is a relay
+  that actually works, and now it is a setting rather than a code change.
+- **No more "Relays reachable: 0 of 0".** The probe is only printed when it ran; the library's own
+  socket count is printed whenever the room exists, and it is asked as soon as a session starts.
+- **The details carry the two facts that explain a silent room:** `Code paths: N local, N public,
+  N relay` and **this machine's clock**. A nostr relay filters by time, so two machines whose clocks
+  disagree can sit in one room and never see each other — a failure that looks exactly like a
+  blocked network.
+- **A failed code says which failure it was:** with no relay path, *"this code has no relay path, so
+  it only works between machines on the same network. Press Test relay servers…"*; with one,
+  *"could not find a path to each other, even through a relay server"*.
+
+**Files:** new `src/net/turn.js`; `src/net/settings.js` (`relay`), `src/net/paste.js` (live ICE config,
+failure wording), `src/net/transport.js` (`turnServers`, clock, honest relay rows),
+`src/net/session.js` (`testTurn`, `saveRelay`, probe on start), `src/ui/multiplayer.js` (relay block,
+`Code paths`, clock), `src/data/multiplayer.js` (`BUILD = "2026-11-22f"`).
+
+**Tests: 968, all green** (was 965). Four new: the player's own relay (and the half-filled one being
+refused), the relay test's counting, the details' clock and code paths (and never "0 of 0"), plus the
+settings shape change in the existing tests.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22f`.**
+
+
 ## 2026-11-22: Playtest 7 of slice 3 — the relay route taken off its pedestal, and no multiplayer in the campaign
 
 **What the owner saw.** Playtest 6's blocks: both machines on `2026-11-22c`, the **same** world id,

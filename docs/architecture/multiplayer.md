@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-22 (slice 3 built and proven across networks; step 17 revised, slices 17a–17d).* The plan and its six slices are step 16 of
+*Last checked: 2026-11-22 (slice 3 built and playtest-confirmed; slices 7–8 agreed; step 17 revised, slices 17a–17d).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works, as it is built.
 
 ## The idea
@@ -311,6 +311,29 @@ without risking a save.
 6. **Trading** — *View docked players*, a trade of items, a ship at that station, or credits, a first
    confirm that locks both sides and a second that commits; the host checks m³ in both station holds
    first and moves nothing if either side lacks room.
+
+## Slices 7 and 8: the second pilot, then the second screen (planned 2026-11-22)
+
+The owner asked for **"one world, two ships visible"** on 2026-11-22. The plan's own model says what
+that costs — the host's browser is the one authority, and a guest's screen draws what the host sends
+back — and it is the two debts [../TARGET_ARCHITECTURE.md](../TARGET_ARCHITECTURE.md) still lists as
+step-16 work (*death and recovery*, *player presentation and input*). It is split into two slices
+because each half is a feature in its own right and neither can be tested alone:
+
+- **Slice 7 — a second pilot exists.** The suitcase becomes a record in `state.players` through
+  `custody.hostProfile` + `configurePlayer` (the host's `sim/step.js` already flies every active
+  record), docked at the guest's own station because **flight positions never travel**. The host
+  writes the guest's suitcase back from the profile it actually holds, raises `rev` on the
+  `NET.revStepMs` floor and sends it about `NET.snapshotSec` later. The owner sees a **flat map
+  marker** for the other pilot, so "the second pilot is real" is visible before a camera exists.
+- **Slice 8 — one world on two screens.** Snapshots out (`SHIP_FIELDS`), controls in
+  (`state.localInput`, a numbered input-rule change — see [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)),
+  and the guest's screen following the **host's** pocket. Only then are two ships drawn in one sky.
+
+**The guest's own screen in slice 4 is a card, not a world** (owner, 2026-11-22): while its pilot is
+away it shows *"Your pilot is in Ada's world"* with **Rejoin** and **Bring pilot home** — because a
+frozen pilot still being flown in its own sky reads as a bug, and the alternative (drawing the
+host's world) is slice 8, not slice 4.
 
 ## Known gaps (until their slice lands)
 
