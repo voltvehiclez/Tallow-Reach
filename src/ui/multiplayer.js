@@ -1220,7 +1220,6 @@ function buildChat() {
   const pinBtn = chatBox.querySelector("#mp-chat-pin");
   pinBtn?.addEventListener("click", () => {
     chatPinned = !chatPinned;
-    pinBtn.textContent = chatPinned ? "Pinned" : "Pin";
     pinBtn.classList.toggle("is-pinned", chatPinned);
     drawChat();
   });
@@ -1378,6 +1377,13 @@ export const toggleChat = () => (isChatOpen() ? closeChat() : openChat());
 function drawChat() {
   if (!chatBox) return;
   const snap = api.snapshot();
+  if (!snap.on) {
+    chatBox.hidden = true;
+    chatOpen = false;
+    chatPinned = false;
+    document.body.classList.remove("mp-chat-open");
+    return;
+  }
   // The box is only there when multiplayer is on, and only while playing: on the title
   // screen and on a station panel it would sit over a menu that already has the screen.
   const shown = chatVisibility({
@@ -1386,16 +1392,20 @@ function drawChat() {
     panel: sessionIsPanelOpen(),
     open: chatOpen,
   });
-  if (chatPinned && snap.on) {
-    chatBox.hidden = false;
-    chatInput.hidden = !chatOpen;
-    document.body.classList.toggle("mp-chat-open", chatOpen);
+  if (!shown.box && !chatPinned) {
+    chatBox.hidden = true;
+    chatOpen = false;
+    document.body.classList.remove("mp-chat-open");
+    return;
   }
   chatBox.hidden = false;
+  document.body.classList.toggle("mp-chat-open", chatOpen);
   if (chatWho) chatWho.innerHTML = chatWhoHtml(snap);
   const lines = chatLog(snap);
   chatList.innerHTML = lines.length
-    ? lines.map(line => `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")
+    ? lines.map(line => line.from === "Tallow Reach"
+        ? `<p class="mp-chat-system">${escapeHtml(line.text)}</p>`
+        : `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")
     : `<p class="mp-hint">Press Enter to chat.</p>`;
   chatList.scrollTop = chatList.scrollHeight;
   if (chatInput) chatInput.hidden = !shown.input;

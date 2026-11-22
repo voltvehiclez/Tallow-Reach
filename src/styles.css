@@ -2712,8 +2712,8 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 }
 #mp-chat-who {
   flex: 0 0 auto;
-  min-width: 72px;
-  max-width: 96px;
+  min-width: 56px;
+  max-width: 76px;
   padding-left: 9px;
   border-left: 1px solid rgba(224, 164, 88, .28);
   color: var(--amber);

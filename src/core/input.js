@@ -164,7 +164,7 @@ export function installInput() {
   addEventListener("blur", clearControls);
 
   addEventListener("mousemove", e => {
-    if (state.ui.navigation) { pointer.x = pointer.y = 0; syncControls(); return; }
+    if (state.ui.navigation || state.paused || modalSurface()) { pointer.x = pointer.y = 0; syncControls(); return; }
     pointer.x = (e.clientX / innerWidth - 0.5) * 2;
     pointer.y = (e.clientY / innerHeight - 0.5) * 2;
     syncControls();
