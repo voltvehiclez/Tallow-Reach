@@ -150,7 +150,9 @@ test("join link: the address bar and the page base are read without a browser", 
 /* ------------------------------------------------------------------------- */
 
 test("protocol: every kind is cleaned to its own fields, and nothing else survives", () => {
-  assert.deepEqual(KINDS.sort(), ["chat", "hello", "ping", "pong", "presence", "refuse", "welcome"]);
+  // Step 16 slice 4 added the two that carry a PILOT: `carry` (guest -> host) and
+  // `suitcase` (host -> guest, and the newer copy back).
+  assert.deepEqual(KINDS.sort(), ["carry", "chat", "hello", "ping", "pong", "presence", "refuse", "suitcase", "welcome"]);
 
   const hello = cleanMessage("hello", { v: SAVE_VERSION, worldId: "w-1", guestId: "g-1", name: "Ada", token: "tok", admin: true });
   assert.deepEqual(Object.keys(hello), ["t", "v", "worldId", "guestId", "name", "token"], "a hello carries no extra field");

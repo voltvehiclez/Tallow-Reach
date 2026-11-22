@@ -12,11 +12,13 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 - [16 slice 2: save v29](TESTING-16-SAVE29.md)
 - [16 slice 3: the connection](TESTING-16-MULTIPLAYER.md)
+- [16 slice 4: Bring my pilot, sync, Go home](TESTING-16-SLICE4.md)
 - [15: campaign scaffolding](TESTING-15-CAMPAIGN.md)
 - [14d: wormhole systems](TESTING-14D.md)
 
 | Guide | Covers |
 | --- | --- |
+| [TESTING-16-SLICE4.md](TESTING-16-SLICE4.md) | Step 16 slice 4: join a friend's world, press **Bring my pilot** (joining alone does not travel), check nothing is copied, then **Bring pilot home** from the title card with the host's browser closed. Nothing is drawn for a visiting ship yet. |
 | [TESTING-16-MULTIPLAYER.md](TESTING-16-MULTIPLAYER.md) | Step 16 slice 3: turn Open Multiplayer on, copy the join link, join from a second window, chat with Enter (and type without flying the ship), and check a hosted world does not pause. Nothing a pilot owns crosses yet — **no ship is drawn for a guest** and no credits or cargo travel. |
 | [TESTING-16-SAVE29.md](TESTING-16-SAVE29.md) | Step 16 slice 2: the save is v29; an existing save opens unchanged, a play session is unchanged, autosave/slot/export-import still work, the campaign is untouched, and an old save still loads (nothing to look for yet — the join flow is slice 4). |
 | [TESTING-NPC-AI.md](TESTING-NPC-AI.md) | Individual flight, Guardian aggression, obstacle avoidance, difficulty and crowded-belt performance. |

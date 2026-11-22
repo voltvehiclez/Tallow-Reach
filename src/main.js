@@ -29,6 +29,9 @@ import {
   isMultiplayerScreenOpen, closeMultiplayer,
 } from "./ui/multiplayer.js";
 import { installJoinLink } from "./net/boot.js";
+import { arriveGuest, leaveGuest, guestRecordOf, guestPlayers } from "./sim/multiplayer.js";
+import { hostProfile, bundleFromProfile } from "./net/custody.js";
+import { stationsOfWorld } from "./net/world-places.js";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog, updateDialogueClock, isFailureNoticeOpen, dismissFailureNotice } from "./ui/missionlog.js";
@@ -58,6 +61,60 @@ import {
   snapRenderedPlayer,
   renderPlayerPose,
 } from "./render/views.js";
+
+/* ------------------------------------------------------------------------- */
+/* Slice 4: a visiting pilot has a ship in this world                          */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * `net/` cannot touch `state.players` (the layers point one way), so it asks for a record
+ * on the bus and this is the only place that answers.
+ *
+ * The bundle is turned into the HALF of a profile a visitor is allowed to have
+ * (`custody.hostProfile`: the travelled half, with no missions, flags or statistics, so
+ * no story step can fire for a guest), and `sim/multiplayer.js` builds the ship.
+ */
+function installMultiplayerVisitors() {
+  on("mp-guest-arrive", ({ guestId, name, bundle } = {}) => {
+    if (!bundle) return;
+    const profile = hostProfile(bundle);
+    arriveGuest({ guestId, name, profile, place: bundle.homeStation || null });
+  });
+  on("mp-guest-left", ({ guestId } = {}) => {
+    leaveGuest(guestId);
+  });
+  // The host's write-back asks what the visiting pilot is NOW. Answering synchronously
+  // is deliberate: the session needs the live profile in the same call that builds the
+  // suitcase, and an async answer would need a second timer for no gain.
+  on("mp-guest-bundle-request", request => {
+    const P = guestRecordOf(request?.guestId);
+    if (!P?.profile) return;
+    request.profile = P.profile;
+    request.lockers = lockersForGuest(P.profile, P.guestId);
+    request.answered = true;
+  });
+}
+
+/**
+ * The guest's station lockers, read from the host's world.
+ *
+ * A guest's lockers live in the host's `world.stationStores`, keyed by station, with no
+ * record of which owner each stack belongs to — the host's own stock sits in the same
+ * places. So the host does not invent a split: it sends the stacks at the stations the
+ * guest's suitcase already named, which is the set the guest proved it owned on arrival.
+ * Anything the guest gains on top travels in its HOLD (`profile.holds`), which is not
+ * shared with anybody.
+ */
+function lockersForGuest(profile, guestId) {
+  // The guest's own bundle, as this host stored it: `world.guests[guestId].bundle.lockers`
+  // is the set it arrived with (already relocated to stations this world has). Reading
+  // the host's `away` marker here would be the wrong pilot entirely — that is the HOST's
+  // own trip. `guestRecord` stripped the guest's token from this copy, which is fine:
+  // nothing here needs it.
+  const bundle = state.worldState?.guests?.[guestId]?.bundle;
+  const recorded = Array.isArray(bundle?.lockers) ? bundle.lockers : [];
+  return recorded.map(locker => ({ ...locker }));
+}
 
 // --- Boot ------------------------------------------------------------------
 
@@ -108,6 +165,7 @@ installEnemyViews();   // one mesh per entity: hostiles, shots, crates, sparks, 
 setupWarpFlash();
 setupPause();
 setupMultiplayer();
+installMultiplayerVisitors();
 setupMissionLog();
 setupCampaign();
 setupStarmap();

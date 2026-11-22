@@ -90,6 +90,9 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     hosting,
     visiting,
     connected,
+    // Step 16 slice 4: has the pilot actually crossed? The join surface shows
+    // "Bring my pilot" until it has, then says so instead of offering it twice.
+    brought: snap.carrying === true || snap.carriedAcked === true,
     role: snap.role || null,
     state: snap.state || "idle",
     // The switch's words follow the session (LESSONS L32). Hosting is the only thing the
@@ -246,6 +249,16 @@ export function setupMultiplayer() {
     autoOfferWhenStalled();
   });
   on("mp-chat-arrived", () => drawChat());
+  // Step 16 slice 4: the pilot crossed (or came home). The join surface stops offering
+  // "Bring my pilot" and states that it is here, and the title's card is re-read.
+  on("mp-away-changed", ({ away } = {}) => {
+    // `net/` owns the marker on the save; `state.away` is the copy the screen reads. Set
+    // here, at one boundary, rather than each screen reaching into the save. The title
+    // card redraws from its own listener (`ui/menu.js`) — this file must not import the
+    // menu, because the menu imports this one.
+    state.away = away || null;
+    draw();
+  });
   // A sentence the connection wants shown. `net/` cannot reach the screen itself.
   on("mp-notice", text => {
     setMessage(text, "hint");
@@ -507,6 +520,17 @@ function joinHtml(model) {
       `<section class="mp-block"><h2>Join a friend's world</h2>` +
       `<p class="mp-hint">${escapeHtml(why)}</p>` +
       answer +
+      // Step 16 slice 4: the press that puts the PILOT on the wire. Joining only looks
+      // around a friend's world; this is what freezes the pilot at home and sends its
+      // ship, hold, credits and lockers across. Worded as the plan words it.
+      (model.visiting && !model.brought
+        ? `<div class="mp-row"><button type="button" class="go" data-mp="bring">Bring my pilot</button></div>` +
+          `<p class="mp-hint">Your pilot and its cargo travel to this world, and your own galaxy pauses ` +
+          `until it comes home. You can bring it home from the main menu even if your friend is offline.</p>`
+        : "") +
+      (model.visiting && model.brought
+        ? `<p class="mp-hint">Your pilot is here: its ship, hold and credits came with it.</p>`
+        : "") +
       (model.visiting ? `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` : "") +
       `</section>`
     );
@@ -696,6 +720,13 @@ export async function act(name, arg = "") {
         return false;
       }
       return joinFromBox();
+    // Step 16 slice 4: the pilot crosses here, not when the world loads.
+    case "bring": {
+      const done = session.bringPilot();
+      setMessage(done.message, done.ok ? "" : "error");
+      draw();
+      return done.ok;
+    }
     case "leave": return leaveSession();
     case "save-relay": {
       const relay = relayFromFields(screenModel().relayFields);

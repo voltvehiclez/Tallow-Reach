@@ -1,3 +1,193 @@
+## 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
+
+**Docs only; no code, no build.** The owner answered the three step-17 questions, and every doc
+that carried them is updated to the answers:
+
+- **Where the server runs / how browsers reach it:** Minecraft-style **port forwarding** — anyone
+  runs the server (own machine, rented, big host), players reach it at `host:port`, no domain or
+  certificate to start. **17b's blocker is closed**: the transport is a WebSocket listener on a
+  forwarded port. The one dependency still to approve is the WebSocket-server library (Node has no
+  built-in WebSocket server).
+- **Who joins:** anyone. A server may require **optional, modular auth** — **Supabase** first (free
+  plan, 50,000 monthly users), behind a small interface so a future provider can be swapped without
+  touching the game. The suitcase model is unchanged; auth only answers who is connecting.
+- **Who may host:** anyone.
+
+**Files:** `docs/REFACTOR_PLAN.md` (the questions block rewritten as the owner's answers; 17b
+unblocked; 17d gains auth), `docs/ROADMAP.md`, `docs/TARGET_ARCHITECTURE.md`,
+`docs/architecture/multiplayer.md`, `docs/HANDOFF.md`, `docs/VISION.md` ("dedicated servers" and
+"accounts" moved out of "Not planned", the decision recorded in the multiplayer section).
+
+**No save or build change.** Step 16 slice 4 (ships visible in multiplayer) is still the next build.
+
+## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
+
+Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details
+still said **`In use: none (the free public servers only)`** with `Code paths: 1 local, 1 public,
+0 relay`. The server had never been saved, so the offer carried nothing but local and public
+addresses — nothing to do with ExpressTURN answering or not. Three fixes, in the order they bite:
+
+- **The screen lied about itself.** `screenModel()` had two `relay:` keys: the player's saved
+  server, then the transport's *relay mode* flag, which overwrote it. Every reader of
+  `model.relay` (`In use:`, Copy relay settings) saw a boolean. The flag is now `relayMode`;
+  `relay` is the server, as every caller already assumed.
+- **Typing is saving.** A complete relay entry is saved 600 ms after the last keystroke in any
+  of the three boxes, with *"Relay server saved…"* on screen. The new `relayFromFields()` in
+  `net/turn.js` is the one parser for the boxes (whole pasted block, bare `host:port`, a comma
+  list, a `TRTURN:` line; typed username/credential win over the pasted ones). If an offer code
+  already exists it is **remade** immediately, because a code carries the servers that existed
+  when it was made — "saved" without a new code is still a code with `0 relay` paths.
+- **The guest sees the facts on the codes wire.** A session joined by codes has no data channel,
+  so `snapshot().diag` is null and the laptop's panel drew no Connection details at all.
+  `screenModel()` now builds a synthetic diag from the wire's own state plus the code's paths
+  (`codesOnly`): Signalling, Code paths, clock. "Browsers in the room" and the direct-link rows
+  are suppressed there, since a code carries neither.
+- **The In-use line owns the failure:** a saved relay with `codePaths.relay === 0` adds
+  *"— but the last code had no relay path, so that server did not answer. Press Test relay
+  servers."* A duplicate `role` key in the same object was also removed (build warning).
+
+**Files:** `src/net/turn.js` (`relayFromFields`), `src/ui/multiplayer.js` (`screenModel`,
+`relayServerHtml`, `queueRelaySave`, `save-relay`/`clear-relay`), `tests/multiplayer-ui.test.mjs`
+(3 new), `src/data/multiplayer.js` (`BUILD = "2026-11-22i"`).
+
+**Tests: 974, all green** (was 971). **Save format unchanged (v29).** **Build id: `2026-11-22i`.**
+Still unproven: whether ExpressTURN's free tier relays a packet at all — the next playtest's
+*Test relay servers* line decides that, and the panel now shows it on both machines either way.
+
+## 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
+
+**Code change; rebuild needed.** Follow-up trims to the screen from the same day, all at the
+owner's request:
+
+- **The username box is one box**: the "Username:" label moved *inside* it, so it reads
+  `Username: Aceface` instead of a label above a bare field (`src/ui/screens.js`,
+  `src/styles.css`).
+- **Copy world id moved into More details** (it was beside Copy link), and **the
+  "Your world is open. Copy the link and send it to your friend." popup is gone** — the link
+  box says it by itself (`src/ui/multiplayer.js`).
+- **The teal status row is removed from the screen** — "Multiplayer is off." / "Hosting.
+  Waiting for your friend to join…" repeated on both doors (pause and menu) without saying
+  anything the switch and the link box do not (`src/ui/multiplayer.js`, `src/styles.css`).
+- **The chat box**: the typing font now matches the lines above it (no more monospace input),
+  and the **Players column stays compact when the box is open** (about its collapsed width),
+  so the Pin button sits right next to the "Players" heading and the lines get the space
+  (`src/styles.css`).
+
+**Files:** `src/ui/multiplayer.js`, `src/ui/screens.js`, `src/styles.css`; tests updated
+(`tests/multiplayer-ui.test.mjs`).
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.**
+
+## 2026-11-22: The multiplayer screen is trimmed to a simple box
+
+**Code change; rebuild needed.** At the owner's request the multiplayer UI is cut down to what
+a player needs to *do* something, with the rest behind one toggle:
+
+- **The main menu's username box gets a "Username:" label**, and the box is set in the same
+  type as the Campaign / Open World buttons (`src/ui/screens.js`, `src/styles.css`).
+- **The chat window** loses its **Expand** button (names ellipsize to `name…` now, always);
+  the column is renamed **"Current players" → "Players"**; and the lines box is about **double**
+  its previous height (`src/ui/multiplayer.js`, `src/styles.css`).
+- **The pause card's multiplayer row is one button** — the "Hosting, waiting for your friend"
+  state row is gone (the screen's status line says it), the button's neighbour switch reads
+  **"Multiplayer: On/Off"**, and the switch is drawn like the pause card's **sound switch with
+  a knob** (the `.sw` styles are no longer scoped to `#pz`).
+- **One "More details" toggle** (right of Copy link when hosting, below the join box from the
+  menu) reveals the offer/answer codes, the relay server and the connection report above the
+  Close button. The hosting hint row and the **Players list** row are removed — the chat column
+  already says who is here. "Copy world id" stays where it is: it is wired and used.
+- **The relay boxes open pre-filled with the built-in ExpressTURN** (address, username,
+  credential) via a new `builtinRelayFields()` in `src/net/turn.js`, so a player never retypes
+  three values the game ships with.
+- **The "Send the offer code…" message popup clears itself after a few seconds** (errors stay).
+
+**Files:** `src/ui/multiplayer.js`, `src/ui/pause.js`, `src/ui/screens.js`, `src/net/turn.js`,
+`src/styles.css`, `src/ui/README.md`; tests updated (`tests/multiplayer-ui.test.mjs`,
+`tests/ui-overlays.test.mjs`, `tests/navigation.test.mjs`).
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22f`.**
+
+## 2026-11-22: Step 17 revised — slices 17a–17d, and the server's open questions
+
+**Docs only; no code, no build.** The step 17 plan in [REFACTOR_PLAN.md](REFACTOR_PLAN.md) is revised at the
+owner's request, keeping its structure and the peer-to-peer path unchanged:
+
+- **Slice names are letters:** **17a** headless server, **17b** server transport, **17c** snapshots and
+  controls, **17d** scale, public address and server admin — used in every doc that names them. (Step 16's
+  slices still use numbers; not renamed.)
+- **Two new "Ask the owner first" questions:** **how browsers reach the server** (an https page can only open
+  `wss://`, which needs a domain and a certificate; a home IP with a forwarded port does not work from an
+  https page and many home ISPs block port forwarding — the options are a VPS with a TLS reverse proxy, a
+  tunnel service, players opening the game as a local file, or keeping WebRTC on the server; **Node has no
+  built-in WebSocket server**, so the WebSocket route needs a small library or a hand-written server — the
+  dependency question, and a **blocker for 17b**) and **who joins** (the suitcase model is fine for friends
+  and community, not for strangers, who can edit their own saves — strangers would need server-side player
+  records, a login/token system and moderation). Server admin (kick, ban, scheduled autosave, backups, clean
+  shutdown) is added to 17d either way.
+- **Capacity is measured, not promised:** "50+" becomes **target 50; the measured number goes in
+  `src/data/multiplayer.js`**, with the real limits named (server upload bandwidth and CPU; 50 × 20
+  updates/s × a few KB ≈ tens of megabits/s). 17c adds **interest filtering** (each client receives only the
+  entities near it), and the **scripted headless load test moves to right after 17c**, with the capacity
+  numbers decided from it.
+- **Prerequisites:** step 16 fully done first, including the non-local respawn/death and presentation/input
+  rules TARGET_ARCHITECTURE still lists as step-16 work; a **"Docs to update when this is built"** list
+  (VISION.md's "Not planned", TARGET_ARCHITECTURE's multiplayer model, the dependency rule in HANDOFF.md and
+  REFACTOR_PLAN.md).
+- **Usable by a non-coder:** a one-command server start script, a short guide in `testing/` and a server
+  README, all in the slices and "Done when".
+- **Housekeeping:** the Step 17 "Status:" line is removed (step status lives only in ROADMAP.md, which now
+  carries the 17a–17d row).
+
+**Files:** `docs/REFACTOR_PLAN.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`, `docs/TARGET_ARCHITECTURE.md`,
+`docs/architecture/multiplayer.md`, this entry. **No code, no save change (v29).**
+
+## 2026-11-22: The game would not start — a missing template helper, a gate on the wrong action, and the tests that caught them
+
+**The owner's report:** the game would not start and showed the crash card. The eight failing tests were the
+lead, and the fixes are for the whole class (LESSONS L38–L40):
+
+- **The title screen threw at boot** (`src/ui/screens.js`): `introHtml()` escaped the username field with
+  `escapeAttr`, a helper that does not exist anywhere — the module already had `esc`. The crash card showed
+  `escapeAttr is not defined`. Fixed to `esc`.
+- **A username gate blocked single-player starts** (`src/ui/menu.js`): the check that belongs to the
+  **multiplayer** action had been attached to **Open World** too, so pressing it with no username stored did
+  nothing. Removed from `intro()`; the multiplayer action keeps its gate.
+- **An import-time DOM call broke the headless imports** (`src/ui/menu.js`): a top-level
+  `document.addEventListener("input", …)` was guarded only by `typeof document !== "undefined"`, which a
+  headless `document` stand-in satisfies without having `addEventListener` — two suites died at import. Now
+  guarded the same way the file's own `installDragListeners` guards its calls.
+- **`lastJoin` was dropped by the settings read/write paths** (`src/net/settings.js`): the fallback carried it
+  but a stored record did not, so the last join link was lost on the next read. It now round-trips.
+- **The chat column said the wrong words and had no room** (`src/ui/multiplayer.js`, `src/styles.css`): the
+  column is labelled **Current players** (not "Players") and its base width gives the names room (110px,
+  not 18px).
+- **Test fixtures corrected** (`tests/multiplayer-connection.test.mjs`, `tests/multiplayer-ui.test.mjs`): the
+  settings expectations now include `lastJoin` (the record carries it everywhere), and the `comeHome` wiring
+  test pins the contract — `comeHome()` before `enterGameMode("open")` — instead of a formatting regex.
+
+**Files:** `src/ui/screens.js`, `src/ui/menu.js`, `src/net/settings.js`, `src/ui/multiplayer.js`,
+`src/styles.css`, two test files, `docs/LESSONS.md`. **No save change (v29).** `npm test` **976/976**. Rebuild
+needed (`npm run build`); the live preview serves the fixed build.
+
+## 2026-11-22: Refactor step 17 added to the plan — dedicated servers
+
+**Planned, nothing built yet.** At the owner's request, [REFACTOR_PLAN.md](REFACTOR_PLAN.md) gains **step 17:
+dedicated servers**. Step 16 (host-run peer-to-peer co-op) is built through slice 3 and works across networks
+(one-link join proven on 4G); step 17 makes a world survivable without a human host's browser — a **dedicated
+server**, a headless build of the same project (the sim already runs with no screen, principle 2), runs the world
+and streams it to clients, so **one port-forwarded server can hold 50+ players**.
+
+- **What the step records:** the two shapes that must keep working side by side (step 16's peer-to-peer,
+  unchanged; a server-run **star** topology for scale), three open questions for the owner (where the server
+  runs; the server-side transport — the one approved library is a browser WebRTC library, so sockets-vs-WebRTC
+  is the dependency question the rules say to ask, not guess; who may host), four slices (headless server →
+  server transport → snapshots and controls → scale and the public address), and that **step 16 slice 4 is still
+  the next build**.
+- **Files:** docs only — `docs/REFACTOR_PLAN.md` (the step), `docs/ROADMAP.md` (the step 17 row),
+  `docs/TARGET_ARCHITECTURE.md` (the multiplayer model records the server path),
+  `docs/architecture/multiplayer.md` (a planned section), `docs/HANDOFF.md`, `src/net/README.md` (a pointer),
+  this entry. **No code, no save change (v29).**
+
 ## 2026-11-22: Playtest 12 of slice 3 — a relay server the player actually has (ExpressTURN)
 
 The owner found a free TURN provider (ExpressTURN) and pasted its block, which exposed two things

@@ -295,6 +295,35 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** item-requiring missions report live inventory counts (`missionItemRequirements`), scoping hand-ins to `missionHandInStation` plus the active ship hold and script `take-item` steps to their target container.
 - **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (mine, deliver, recovery, cargo hand-over, story collect, parallel items and cross-station reads).
 
+### L33. A save half was handed to the sanitizer without its version, and every hold came back empty
+- **Seen (step 16 slice 4):** a visiting pilot arrived in a friend's world with its ship, its fits and its credits — and an
+  **empty hold**. Nothing caught it in slice 1, because slice 1's tests round-tripped a bundle through `checkIn`, which never
+  calls the function that builds a *guest's* profile from one.
+- **Cause:** `custody.hostProfile` sanitized `bundle.profile` as-is. `v` is a HOME field (it belongs to the save, not to the
+  pilot), so a bundle's profile half has no `v` — and `sanitizeProfile` reads a missing version as pre-v12, when holds were
+  `{ cargo, modules }` rather than a plain stock. `cleanHolds` therefore looked for `holds[id].cargo`, found nothing, and
+  returned `{}`. `applyTravellingProfile` had stamped `v` for exactly this reason since slice 1; `hostProfile` did not.
+- **Rule:** any partial profile handed to `sanitizeProfile`/`sanitizeSave` is stamped with the current `v` first, because
+  *every* cleaning rule is version-dependent. A bundle carries the fields a pilot owns, never the save's version — so the
+  version is restored at the boundary, not assumed.
+- **Enforced by:** the `hostProfile keeps a visitor's cargo, its fleet and its fits` test in `tests/multiplayer-custody.test.mjs`
+  (it asserts the hold, the fleet, the fit and `profile.v` after `hostProfile`), and `tests/multiplayer-visitors.test.mjs`.
+
+### L34. A frozen record that the save path does not know about gets stamped over by the runtime
+- **Seen (step 16 slice 4):** coming home from a friend's world **doubled every station locker** — 4 ferrite became 8.
+- **Cause:** two halves of one rule. `checkOut` empties the home stations because a stack cannot sit in two galaxies, but the
+  session reaches the game through a deliberately narrow `saveKit.write` (it stores only `world.guests` and `world.worldId`,
+  because that is all a *host* may touch). So the emptied stations never reached the live save, the suitcase also carried that
+  cargo, and `checkIn` added the lockers back on top of the stacks that had never left. Worse, `captureActiveModeSave` would
+  happily fold the live runtime into a pilot that was supposed to be frozen.
+- **Rule:** when a record is frozen, **both** halves of the freeze must be respected — the record that goes to the wire *and*
+  the record the game keeps. A guest installing its own whole save goes through its own seam (`saveKit.install`), never the
+  host's narrow one; and `captureActiveModeSave` hands an away pilot's record through untouched rather than re-reading the
+  runtime. Anything that moves items must be checked at the seam the game actually stores through, not on plain objects.
+- **Enforced by:** `tests/multiplayer-carry.test.mjs` — one test asserts the round trip returns every unit exactly once, and
+  another asserts the *failure mode* (checking in over a save that still holds the stacks doubles them), so the reason
+  `install` exists cannot be deleted as dead code. Also the "saving while away hands the frozen record through untouched" test.
+
 ### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
 - **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."
 - **Cause:** Reset wiped only the *current* mode's half of the dual-mode save, while its words promise "Wipe credits, ships, base and contracts" — the other mode's pilot survived intact.

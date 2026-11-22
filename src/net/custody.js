@@ -590,10 +590,81 @@ export function pocketOfStationKey(key) {
  * when the host has to rebuild a guest's pilot record.
  */
 export function hostProfile(bundle) {
-  const base = sanitizeProfile(sanitizeSave({ profile: clone(bundle?.profile) || {}, world: {} }).profile);
+  // **`v` is stamped first, and that is not cosmetic.** A bundle's profile half is
+  // `TRAVEL_FIELDS`, and `v` is a HOME field (it belongs to the save, not the pilot), so
+  // the half has no version of its own. Handed to the sanitizer that way it is read as a
+  // pre-v12 save, whose holds were `{ cargo, modules }` rather than a plain stock — so
+  // `cleanHolds` looked for `holds[id].cargo`, found nothing, and returned an EMPTY hold.
+  // A visitor then arrived with no cargo at all. `applyTravellingProfile` has always
+  // stamped `v` for exactly this reason; this function simply never did.
+  const raw = { ...(clone(bundle?.profile) || {}), v: SAVE_VERSION };
+  const base = sanitizeProfile(sanitizeSave({ v: SAVE_VERSION, profile: raw, world: {} }).profile);
   const fresh = { ...base };
   for (const field of HOME_FIELDS) if (field in fresh) delete fresh[field];
-  return sanitizeProfile({ ...fresh, missions: [], flags: {}, done: 0, kills: 0 });
+  return sanitizeProfile({ ...fresh, v: SAVE_VERSION, missions: [], flags: {}, done: 0, kills: 0 });
+}
+
+/**
+ * How big a bundle is on the wire, in characters of JSON.
+ *
+ * Measured rather than guessed: `JSON.stringify` of the same object the protocol will
+ * send, so a cap in `NET.suitcaseMaxBytes` compares like with like. A bundle that is
+ * too big is refused with a sentence, never truncated — half a pilot is worse than a
+ * pilot who stayed home.
+ */
+export function bundleBytes(bundle) {
+  try {
+    return JSON.stringify(bundle || null).length;
+  } catch (e) {
+    return Infinity;     // unstringifiable is "too big", not "empty"
+  }
+}
+
+/**
+ * The reverse of `checkOut`'s profile half: take a pilot record's LIVE profile and
+ * read it back into a bundle.
+ *
+ * A host does not keep the guest's suitcase frozen — the guest flies, mines, docks and
+ * is shot at in the host's world, and every one of those changes its profile. So when
+ * the host writes the copy back (slice 4) it must write what the pilot *is now*, not
+ * what it was when it arrived. This is the one function that does that, and it reads
+ * `TRAVEL_FIELDS` so "what travels" stays decided in `data/multiplayer.js`.
+ *
+ * Lockers are NOT taken from the profile (they live in a save's world half): the caller
+ * passes them, already located, from the host's station stocks. `previous` supplies the
+ * fields that belong to the journey rather than the character (`homeStation`, `shipsAt`,
+ * the unknown-content record) so a round trip does not lose them.
+ */
+export function bundleFromProfile(profile, { lockers = [], previous = null, name = "", epoch, rev } = {}) {
+  const source = isPlainObject(profile) ? profile : {};
+  const travelling = {};
+  for (const field of TRAVEL_FIELDS) {
+    if (field === "lockers" || !has(source, field)) continue;
+    travelling[field] = clone(source[field]);
+  }
+  const before = isPlainObject(previous) ? previous : {};
+  const bundle = {
+    v: SAVE_VERSION,
+    worldId: idText(before.worldId) || "",
+    hostName: String(before.hostName || "").slice(0, 80),
+    guestId: idText(before.guestId) || "",
+    // The host never holds the guest's secret (see `guestRecord`), so the returned
+    // bundle has none and the guest keeps the one in its own `away` marker.
+    token: "",
+    name: String(name || before.name || "").slice(0, NET.nameMax),
+    homeStation: idText(source.homeStation) || idText(before.homeStation) || null,
+    epoch: whole(epoch ?? before.epoch),
+    rev: whole(rev ?? before.rev),
+    profile: travelling,
+    // The lockers are the HOST's new copy of the guest's station stocks; slice 4 has the
+    // host pass whatever the guest's stacks now are, located where they now sit.
+    lockers: Array.isArray(lockers) ? clone(lockers) : [],
+    unknown: isPlainObject(before.unknown) ? clone(before.unknown) : { holds: [], modules: [], ships: [] },
+    shipsAt: isPlainObject(before.shipsAt) ? clone(before.shipsAt) : {},
+    summary: null,
+  };
+  bundle.summary = summary(bundle);
+  return bundle;
 }
 
 /**

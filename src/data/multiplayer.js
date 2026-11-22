@@ -112,7 +112,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-22j";
+export const BUILD = "2026-11-23a";
 
 export const NET = {
   snapshotSec: 2,
@@ -131,6 +131,15 @@ export const NET = {
   helloWaitSec: 12,
   revStepMs: 250,
   keepPrevious: 1,
+  // Slice 4: the biggest suitcase the wire will carry, in characters of JSON. A pilot's
+  // travelled half is a few KB (a hold of stacks, a fleet, its fits); this cap is a
+  // backstop so a corrupt or hostile bundle cannot be pushed through a data channel,
+  // and so a refusal is a sentence instead of a dropped packet. Raised only with a
+  // measured reason.
+  suitcaseMaxBytes: 262144,
+  // How often the host re-sends a guest its suitcase even when nothing changed, so a
+  // copy lost on a flaky channel is healed without a reconnect. The plan's two seconds.
+  suitcaseRepeatSec: 30,
 };
 
 /**

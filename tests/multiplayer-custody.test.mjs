@@ -413,3 +413,26 @@ test("totals() proves nothing was copied or lost on the way", () => {
   const outNoLockers = new Map([...out].filter(([key]) => !key.startsWith("locker:")));
   for (const [key, value] of outNoLockers) assert.equal(back.get(key), value, `${key} counts the same either side`);
 });
+
+test("hostProfile keeps a visitor's cargo, its fleet and its fits (LESSONS L16/L15)", () => {
+  // Found while building slice 4. `hostProfile` is what makes a visiting pilot a SHIP in
+  // the host's world, and it used to hand the sanitizer a profile with no `v`. A save with
+  // no version is read as pre-v12, whose holds were `{ cargo, modules }`, so every hold came
+  // back EMPTY: a guest would arrive with its ship, its credits and nothing in its hold.
+  //
+  // `applyTravellingProfile` had always stamped `v` for this exact reason (see its comment);
+  // `hostProfile` did not. This reads the result back the way the sim does.
+  const save = { v: SAVE_VERSION, profile: newProfile(), world: newWorld(), away: null };
+  save.profile.cr = 4321;
+  save.profile.holds[save.profile.ship] = { ferrite: 7, lumenite: 2 };
+  const { bundle } = checkOut(save, { worldId: "w", hostName: "Ada", guestId: "g", token: "t", name: "Acey" });
+
+  const profile = hostProfile(bundle);
+  assert.equal(profile.v, SAVE_VERSION, "the visitor's profile is stamped as a current save");
+  assert.deepEqual(profile.holds[profile.ship], { ferrite: 7, lumenite: 2 }, "its hold arrives whole");
+  assert.equal(profile.cr, 4321, "and its credits");
+  assert.ok(profile.loadout?.[profile.ship], "and its fit, so it has a hull and thrusters");
+  // The home half is still stripped: a visitor has no missions of its own.
+  assert.deepEqual(profile.missions, []);
+  assert.deepEqual(profile.flags, {});
+});

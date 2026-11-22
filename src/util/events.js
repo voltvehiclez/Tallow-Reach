@@ -129,6 +129,22 @@
 //                                    a non-mission screen transition changed dialogue visibility
 //   main-menu {}
 //                                    the pause menu returned the local screen to the title menu
+//   mp-state      snapshot          the multiplayer session changed (host/guest, peers, chat)
+//   mp-chat-arrived { from, text, at }  a line from somebody else
+//   mp-notice     text             `net/` asks for a sentence on screen (it may not import ui/)
+//   mp-host-left  { reason }       the host's browser went away
+//   mp-join-request { link }       a ?join= link in the address bar wants a yes/no
+//   mp-enter-world {}              a join from the title worked: enter the open world
+//   mp-guest-arrive { guestId, name, profile, place }
+//                                    slice 4: a guest's suitcase has arrived; sim/multiplayer.js
+//                                    turns it into a docked player record
+//   mp-guest-arrived { player, guestId, name, place }
+//                                    that record now exists and the host's sim flies it
+//   mp-guest-left { guestId, name }  it went home (or was dropped); the record is gone
+//   mp-suitcase   { bundle, rev }   the host's newer copy of this pilot arrived (guest side);
+//                                    the save half stores it with net/multiplayer.js `syncAway`
+//   mp-away-changed { away }        where this pilot is changed: null at home, a marker away
+//                                    (a screen redraw; the title card reads it)
 
 const handlers = new Map();
 
