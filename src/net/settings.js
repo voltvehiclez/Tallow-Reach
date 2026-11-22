@@ -21,14 +21,32 @@ const clean = value =>
   (typeof value === "string" ? value : "").replace(/\s+/g, " ").trim().slice(0, NET.nameMax);
 
 /**
+ * The player's own relay server, as far as storage is concerned: three short strings or
+ * nothing. It is validated properly in `net/turn.js` (a server needs a login to be usable);
+ * this only refuses to *store* nonsense.
+ */
+function cleanRelay(value) {
+  if (!value || typeof value !== "object") return null;
+  const urls = String(value.urls || "").trim().slice(0, 300);
+  const username = String(value.username || "").trim().slice(0, 120);
+  const credential = String(value.credential || "").trim().slice(0, 120);
+  if (!urls && !username && !credential) return null;
+  return { urls, username, credential };
+}
+
+/**
  * What multiplayer remembers between sessions:
  *
  *   name          the display name (blank until the player sets one)
  *   enabled       whether open multiplayer is on at all (the pause card's switch)
  *   autoJoin      whether a `?join=` link in the address bar is taken automatically
+ *   relay         the player's own TURN server, or null — `{ urls, username, credential }`.
+ *                 The game brings its own (ExpressTURN's free tier, `ICE.turn`); this is the
+ *                 player's, tried first, for when the built-in one stops answering or when they
+ *                 have a better one (see `net/turn.js`).
  */
 export function readSettings() {
-  const fallback = { name: "", enabled: false, autoJoin: true };
+  const fallback = { name: "", enabled: false, autoJoin: true, relay: null };
   try {
     const raw = globalThis.localStorage?.getItem(KEY);
     if (!raw) return fallback;
@@ -37,6 +55,7 @@ export function readSettings() {
       name: clean(value?.name),
       enabled: value?.enabled === true,
       autoJoin: value?.autoJoin !== false,
+      relay: cleanRelay(value?.relay),
     };
   } catch (e) {
     // No storage, or something wrote nonsense there: multiplayer still works for
@@ -48,7 +67,12 @@ export function readSettings() {
 /** Merge `patch` into the stored settings and return the whole record. */
 export function writeSettings(patch = {}) {
   const next = { ...readSettings(), ...patch };
-  const record = { name: clean(next.name), enabled: next.enabled === true, autoJoin: next.autoJoin !== false };
+  const record = {
+    name: clean(next.name),
+    enabled: next.enabled === true,
+    autoJoin: next.autoJoin !== false,
+    relay: cleanRelay(next.relay),
+  };
   try {
     globalThis.localStorage?.setItem(KEY, JSON.stringify(record));
   } catch (e) {

@@ -41,9 +41,67 @@
 //   room.getPeers()                                 -> { [peerId]: PeerInfo }
 //   onMessage receives (data, { peerId, ... }).
 
-import { ROOM_NAMESPACE, RELAYS } from "../data/multiplayer.js";
+import { ROOM_NAMESPACE, RELAYS, ICE } from "../data/multiplayer.js";
+import { turnServers } from "./turn.js";
 
 const isObject = value => !!value && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * How the library is loaded: `import("trystero")`, lazily, on the first join. A test
+ * replaces this with a small in-memory room pair, which is how the *whole* connection —
+ * join, broadcast, the handshake, chat — is exercised with no browser and no relay.
+ * (An actual WebRTC connection still needs two real browsers; see the test file.)
+ */
+let loadLibrary = () => import("trystero");
+
+/** Test-only. `setLibraryLoader(null)` puts the real lazy import back. */
+export function setLibraryLoader(loader) {
+  loadLibrary = typeof loader === "function" ? loader : () => import("trystero");
+}
+
+/**
+ * How we ask "are the signalling relays reachable from this browser?".
+ *
+ * The relays are the only part of the connection that has nothing to do with the two players'
+ * networks: they are public WebSocket servers that introduce browsers to each other. If a
+ * player's network blocks them, both players sit in rooms of one and never meet — which is
+ * exactly what playtest 5 reported, and it is invisible from the room state alone. So we open
+ * a WebSocket to each relay in use and count the ones that answer.
+ *
+ * A test replaces this with a stub (or null for "do not probe"): no test may touch the network.
+ */
+async function probeWithSockets(urls) {
+  if (typeof WebSocket !== "function") return { total: urls.length, open: 0, checkedAt: Date.now() };
+  const results = await Promise.all(urls.map(url => new Promise(resolve => {
+    let socket = null;
+    let settled = false;
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      try { socket?.close(); } catch (e) { /* already gone */ }
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), 4000);
+    if (typeof timer?.unref === "function") timer.unref();
+    try {
+      socket = new WebSocket(url);
+      socket.onopen = () => { clearTimeout(timer); finish(true); };
+      socket.onerror = () => { clearTimeout(timer); finish(false); };
+      socket.onclose = () => { clearTimeout(timer); finish(false); };
+    } catch (e) {
+      clearTimeout(timer);
+      finish(false);
+    }
+  })));
+  return { total: urls.length, open: results.filter(Boolean).length, checkedAt: Date.now() };
+}
+
+let relayProbe = probeWithSockets;
+
+/** Test-only: `setRelayProbe(null)` turns probing off, a function replaces it. */
+export function setRelayProbe(probe) {
+  relayProbe = typeof probe === "function" ? probe : probe === null ? null : probeWithSockets;
+}
 
 /** The room a world's browsers meet in. Deterministic: one world is one room. */
 export const roomNameFor = worldId => `${ROOM_NAMESPACE}:${String(worldId || "").trim()}`;
@@ -54,11 +112,26 @@ export const roomNameFor = worldId => `${ROOM_NAMESPACE}:${String(worldId || "")
  * `role` is only used in the words of a failure message; the broker treats both sides
  * the same, and a world is only ever one or the other in practice.
  */
-export function createChannel({ role = "host", worldId, onState, onData, onPeer } = {}) {
+export function createChannel({ role = "host", worldId, onState, onData, onPeer, useTurn = false } = {}) {
   let current = { state: "idle", reason: "" };
   let room = null;
   let starting = null;
   const actions = {};
+  // Relay mode: off until a direct attempt has failed (`restart({ useTurn: true })`).
+  let relay = !!useTurn;
+  // The diagnostics the screen shows, and the only honest way to tell "no messages" from
+  // "messages that nobody is reading": what actually left and what actually arrived.
+  let sent = 0;
+  let received = 0;
+  // The last relay-health answer, refreshed by `checkRelays()` (the screen asks once when it
+  // opens and again on Reconnect).
+  let relays = null;
+  // The library's own view of the relays: `getRelaySockets()` gives the sockets it is still
+  // leasing. A relay that opens for a plain WebSocket and then refuses this game's events
+  // (`blocked:`, `restricted:`, `auth-required:`) is retired by the library, so this number
+  // can be lower than the probe's — and zero while the probe says five, which is the
+  // difference between "your network blocks us" and "these relays will not carry this".
+  let socketList = null;
 
   const setState = (state, reason = "") => {
     if (current.state === state && current.reason === reason) return;
@@ -94,7 +167,9 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
     starting = (async () => {
       let joinRoom;
       try {
-        ({ joinRoom } = await import("trystero"));
+        const library = await loadLibrary();
+        ({ joinRoom } = library);
+        socketList = typeof library.getRelaySockets === "function" ? library.getRelaySockets : null;
       } catch (error) {
         setState("lost", "The multiplayer library could not be loaded. Rebuild the game, or use paste codes.");
         return null;
@@ -105,6 +180,16 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
         if (Array.isArray(RELAYS.relayUrls) && RELAYS.relayUrls.length) {
           config.relayConfig = { urls: RELAYS.relayUrls.slice() };
         }
+        // The owner's escape hatch for two networks that cannot see each other: a TURN
+        // server in `data/multiplayer.js`. Unset, the library's public STUN is enough for
+        // most homes and no setting changes.
+        if (RELAYS.rtcConfig && typeof RELAYS.rtcConfig === "object") {
+          config.rtcConfig = RELAYS.rtcConfig;
+        }
+        // The relay is additive: the library keeps its public STUN and adds these, so a
+        // working direct path still wins and only a blocked one has to go through the server.
+        const turn = relay ? turnServers() : [];
+        if (turn.length) config.turnConfig = turn.map(entry => ({ ...entry, urls: [...entry.urls] }));
         room = joinRoom(config, roomNameFor(worldId));
 
         // One action carries every message this game sends; `t` says what it is. One
@@ -112,6 +197,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
         actions.wire = room.makeAction("reach");
         actions.wire.onMessage((data, context) => {
           if (!isObject(data)) return;
+          received += 1;
           try {
             onData?.({ ...data, peerId: context?.peerId || null });
           } catch (e) {
@@ -167,6 +253,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
       // The library returns a promise; a failed send is not worth a thrown frame. The
       // caller's protocol has its own heartbeat, so a lost message shows up as silence.
       actions.wire.send(JSON.parse(JSON.stringify(value)), { target: peerId });
+      sent += 1;
       return true;
     } catch (e) {
       return false;
@@ -192,6 +279,95 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
     setState("closed", "");
   }
 
+  /**
+   * Leave and join again, optionally through a relay.
+   *
+   * A second attempt is a genuinely different attempt: fresh ICE gathering, and with
+   * `useTurn` a candidate pair that does not depend on two machines seeing each other on the
+   * local network at all. Nothing else about the session changes — the handshake is re-sent
+   * because the guest is still waiting for a welcome.
+   */
+  async function restart({ useTurn: nextTurn = relay } = {}) {
+    relay = !!nextTurn;
+    leave();
+    return join();
+  }
+
+  /**
+   * The relay facts for the screen: the probe's answer when it has one, the library's socket
+   * count always, and **nothing at all** when neither exists — printing "0 of 0" told the owner
+   * a story about relays that had never been asked (playtest 9).
+   */
+  function measuredRelays() {
+    const connected = openSockets();
+    if (relays) return { ...relays, connected };
+    if (connected === null) return null;
+    return { total: 0, open: 0, connected, checkedAt: 0 };
+  }
+
+  /** How many of the library's own relay sockets are open right now (null = not joined yet). */
+  function openSockets() {
+    if (!socketList || !room) return null;
+    try {
+      const sockets = socketList() || {};
+      return Object.values(sockets).filter(socket => socket && socket.isOpen !== false).length;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Ask the signalling relays whether they answer from this browser (cached for 20s). */
+  async function checkRelays({ force = false } = {}) {
+    if (!relayProbe) return relays;
+    if (!force && relays && Date.now() - relays.checkedAt < 20_000) return relays;
+    const urls = Array.isArray(RELAYS.relayUrls) && RELAYS.relayUrls.length
+      ? RELAYS.relayUrls.slice(0, 5)
+      : [];
+    if (!urls.length) return relays;
+    try {
+      relays = await relayProbe(urls);
+    } catch (e) {
+      relays = { total: urls.length, open: 0, checkedAt: Date.now() };
+    }
+    try {
+      onState?.(current);
+    } catch (e) { /* a broken screen must not break a connection */ }
+    return relays;
+  }
+
+  /** What the screen can say about the connection, in plain facts. */
+  function diagnostics() {
+    const peers = [];
+    let info = {};
+    try {
+      info = room?.getPeers?.() || {};
+    } catch (e) {
+      info = {};
+    }
+    for (const [id, peer] of Object.entries(info)) {
+      const pc = peer?.connection || null;
+      peers.push({
+        id,
+        connection: pc?.connectionState || "",
+        ice: pc?.iceConnectionState || "",
+        direct: !!peer?.direct,
+      });
+    }
+    return {
+      signalling: current.state,
+      line: current.reason,
+      useTurn: relay,
+      sent,
+      received,
+      peers,
+      relays: measuredRelays(),
+      // This machine's clock, in the report. A nostr relay filters by time, so two machines
+      // whose clocks disagree by minutes can sit in the same room and never see each other —
+      // a failure that looks exactly like a blocked network and is fixed by setting the clock.
+      clock: Date.now(),
+    };
+  }
+
   return {
     role,
     worldId,
@@ -199,6 +375,9 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer 
     send,
     broadcast,
     leave,
+    restart,
+    diagnostics,
+    checkRelays,
     peers: peerIds,
     state: () => ({ ...current }),
     room: () => roomNameFor(worldId),

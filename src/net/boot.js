@@ -40,7 +40,7 @@ export function installJoinLink({ search, hash, ask } = {}) {
     // There is no name to join under yet: keep the link, and send the pilot to the panel
     // that asks for one. `pendingJoin` is held here until the panel's Join is pressed.
     state.ui.pendingJoin = found;
-    notice("Set a username in Pause > Open Multiplayer, then paste the link there to join.");
+    notice("That link is waiting. Press Join Multiplayer World on the title, set a username, then press Join.");
     return found;
   }
 

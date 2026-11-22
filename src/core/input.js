@@ -47,7 +47,7 @@ export const pointer = { x: 0, y: 0 };
  * running behind the overlay, but the ship does not answer the stick (owner 2026-11-14: opening a
  * loot inventory must leave the ship still, not flying itself while the pilot reads).
  */
-const modalSurface = () => !!(state.ui.starmap || state.ui.cargo || state.ui.cache);
+const modalSurface = () => !!(state.ui.starmap || state.ui.cargo || state.ui.cache || state.ui.multiplayer);
 
 /**
  * Rebuild the local player's controls from what is held right now. Called after every key or

@@ -107,6 +107,13 @@ export const ARRIVAL_STATION_KEY =
  *   revStepMs     (slice 4) floor between two `rev` raises, so a busy second is one snapshot
  *   keepPrevious  (slice 2) how many older versions of a save to keep under `:prev`
  */
+/**
+ * Which build this page is. Two machines that show different strings are not running the same
+ * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
+ * over (it is shown in the multiplayer screen's connection details).
+ */
+export const BUILD = "2026-11-22j";
+
 export const NET = {
   snapshotSec: 2,
   heartbeatSec: 5,
@@ -116,6 +123,12 @@ export const NET = {
   nameMax: 24,
   chatLineMax: 240,
   tokenBytes: 24,
+  // How often a guest repeats its hello until a welcome comes back. The data channel can open
+  // seconds after the room says the peer is there (two machines, one strict network), and a
+  // hello sent into a channel that is not open yet is simply gone.
+  helloRetrySec: 2,
+  // After this long with no welcome, say so instead of sitting there looking joined.
+  helloWaitSec: 12,
   revStepMs: 250,
   keepPrevious: 1,
 };
@@ -155,7 +168,113 @@ export const ROOM_NAMESPACE = "tallowreach.p2p";
  * else in the game changes.
  */
 export const RELAYS = {
-  relayUrls: [],
+  // Signalling relays: the servers that introduce two browsers to each other.
+  //
+  // **Pinned on purpose (playtest 5).** Left empty, the library shuffles its own list of 30
+  // public relays — seeded by the app id, so every player gets the same *five* — and this game's
+  // five included several obscure ones (chaima.info, circum.space, dwadziesciajeden.pl). Two
+  // machines then sat in rooms with one browser each and never met: the introduction had nowhere
+  // to happen. These are the long-running public relays; the first `redundancy` (5) are used.
+  // If a player's network blocks all of them, the copy/paste code path needs no relay at all.
+  relayUrls: [
+    // Popular public relays.
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.nostr.band",
+    "wss://relay.primal.net",
+    "wss://nostr.mom",
+    "wss://nostr-pub.wellorder.net",
+    // Then the library's own curated relays. Opening a socket is not enough: a relay that
+    // refuses these events (`blocked:`, `restricted:`, `auth-required:`) is retired by the
+    // library and stops being a way for two players to meet, so the list keeps more than one
+    // family of servers. Ten is a lot of sockets, but a silent room is worse.
+    "wss://bucket.coracle.social",
+    "wss://fanfares.nostr1.com",
+    "wss://nostr-01.yakihonne.com",
+    "wss://nostr.azzamo.net",
+  ],
+  // An optional `RTCConfiguration` for the direct connection, if a player has their own ICE
+  // servers. Shape:
+  //   rtcConfig: { iceServers: [{ urls: "stun:host:3478" }, { urls: "turn:host:3478",
+  //   username: "...", credential: "..." }] }
+  // Unset, the library's public STUN is used.
+  rtcConfig: null,
+};
+
+/**
+ * The relay used when two machines cannot reach each other directly.
+ *
+ * Two browsers on one machine always connect (they share a process). Two *machines* need a
+ * path across the network, and the common home setup has none: the router will not send a
+ * packet back to itself (no hairpin NAT), so the local-network candidates Chrome hides behind
+ * `*.local` mDNS names are the only ones left — and a firewall or a router that blocks
+ * multicast throws those away. That is the shape of the owner's playtest-4 report: joins on
+ * the host's own PC, "you are the only one there" from the laptop.
+ *
+ * TURN relays the data through a server both sides can reach. It is slower, so it is only
+ * used after a direct attempt has failed (`ICE.escalateSec`); if the relay below is ever
+ * unavailable, nothing breaks — the direct path is still tried first, and two machines on
+ * one wifi never needed it.
+ *
+ * The relay is the owner's free-tier account, whose login is therefore in this file, which is
+ * public. That is deliberate: a login the player has to obtain is a login they will not
+ * obtain. Nothing else here is a secret — a TURN server forwards encrypted packets it cannot
+ * read, and it holds no game state. A player who brings their own server overrides it.
+ */
+export const ICE = {
+  /**
+   * How long a code waits for every network path before it is sent.
+   *
+   * The slow candidates are the relay ones: they come from a server, and on a mobile network
+   * they arrive over TCP/TLS because UDP is often blocked. Cutting gathering off early
+   * (it was 4 s) is how a code ended up carrying only local paths — so a laptop on 4G could
+   * not reach a PC at home, while the same laptop on the same wifi could (owner, playtest 8).
+   */
+  gatherMs: 8000,
+  /** Public STUN: only answers "what is my address". Free, no account, carries nothing. */
+  stun: [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302",
+  ],
+  /**
+   * The relay server this game brings with it — the owner's own ExpressTURN free-tier account,
+   * measured working on 2026-11-22 (a laptop on 4G joined a link hosted by a PC at home; nothing
+   * else had ever succeeded, because the three public relays listed here before were all dead
+   * from the owner's machine: *"0 of 3 relay servers answered"*, playtest 11).
+   *
+   * **Why it is in the game file and not a setting.** A relay is the difference between "co-op
+   * works" and "co-op only works on one wifi", and every player who was asked to find, sign up
+   * for and type one would not. So a link now crosses networks on a fresh install with nothing
+   * typed. A player's own server (`tr_mp.relay`, three boxes on the Multiplayer screen) is used
+   * **first** — this one is the fallback, not the rule.
+   *
+   * **Two doors, and both are on the free plan**: 3478 over UDP (fastest, and what a phone usually
+   * blocks) and 3478 over TCP (what got the owner's 4G laptop through). ExpressTURN's free plan is
+   * exactly those two — a TLS door on 5349 exists on their paid plans only, so it is *not* listed
+   * here: a door that cannot answer is worse than a shorter list. Add `turns:free.expressturn.com:5349`
+   * to `urls` above if that ever changes. Each entry needs both strings: a TURN server with no login
+   * answers `401` and looks like a network fault.
+   *
+   * **If these stop working** (a free tier has a monthly data cap, and the owner has regenerated
+   * this login before): the fix is one entry here — the spaces below are the only thing to
+   * change, in this file, nowhere else. `npm test` then `npm run build`.
+   */
+  turn: [
+    {
+      name: "ExpressTURN (free tier)",
+      urls: [
+        "turn:free.expressturn.com:3478",
+        "turn:free.expressturn.com:3478?transport=tcp",
+      ],
+      username: "000000002110719494",
+      credential: "33RDBDUZ38C6ScnNLjwkG1PermM=",
+    },
+  ],
+  /**
+   * What the screens call `turn[0]` when no server of the player's own is saved. Screens quote
+   * this instead of inventing a name, so the words and the list cannot drift apart.
+   */
+  turnName: "ExpressTURN (free tier, built into the game)",
 };
 
 /**
@@ -165,9 +284,12 @@ export const RELAYS = {
  *   recentLines   how many lines the panel keeps on screen
  *   lineLifeSec   how long a line stays after it was said (0 = it never fades)
  *   typingRateSec heartbeat while somebody is typing, so "… is typing" can lapse
+ *   historyLines  how many lines the box can be scrolled back through, including the ones
+ *                 only this screen ever saw (a host alone can still read what it typed)
  */
 export const CHAT = {
   recentLines: 8,
   lineLifeSec: 45,
   typingRateSec: 4,
+  historyLines: 40,
 };

@@ -5,7 +5,7 @@
 // the only channel they are certain to share is the one they are already using to talk
 // to each other. So:
 //
-//   1. The host presses **No broker? Paste codes**: the game makes an offer and shows it
+//   1. The host presses **No relay? Copy/paste codes**: the game makes an offer and shows it
 //      as one code.
 //   2. The guest pastes it under **Join Multiplayer World > paste codes**, and gets an
 //      answer code back.
@@ -28,10 +28,19 @@
 // puts the pilot through it, and `net/multiplayer.js` owns the screens' state.
 
 /** The prefix that marks a code as this game's, so a stray paste is refused in words. */
+import { ICE } from "../data/multiplayer.js";
+import { iceServers } from "./turn.js";
+
 const CODE_PREFIX = "TRJOIN:";
 
-/** How long a code may sit in a chat before it is stale (`data/multiplayer.js` NET.offerSec). */
-export const CODE_VERSION = 1;
+/**
+ * The code's own version. Bumped to 2 on 2026-11-21 when the envelope gained the host's
+ * `worldId`: a guest joining by code has no link to carry it, and without the world id the
+ * handshake (which checks it in `custody.handshake`) would refuse the very guest the host
+ * just invited. Version 1 codes are still read, with no world id, so nothing in the wild
+ * turns to nonsense.
+ */
+export const CODE_VERSION = 2;
 
 const isBrowser = () => typeof globalThis.RTCPeerConnection === "function";
 
@@ -46,11 +55,14 @@ const isBrowser = () => typeof globalThis.RTCPeerConnection === "function";
  * The result is the same small vocabulary the channel has: `send(value)`, `state()`,
  * `leave()`. One connection, not a room: a paste-code join is two browsers by definition.
  */
-export function createPasteLink({ onState, onData } = {}) {
+export function createPasteLink({ worldId = "", onState, onData } = {}) {
   let connection = null;
+  let roomId = String(worldId || "");
   let current = { state: "idle", reason: "" };
   let channel = null;
   let pendingAnswer = null;
+  // What the last gathered code can use: host/srflx are direct paths, `relay` came from TURN.
+  const paths = { host: 0, srflx: 0, prflx: 0, relay: 0 };
 
   const setState = (state, reason = "") => {
     if (current.state === state && current.reason === reason) return;
@@ -62,17 +74,34 @@ export function createPasteLink({ onState, onData } = {}) {
 
   const openConnection = () => {
     if (!isBrowser()) throw new Error("This browser cannot make a direct connection.");
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    // Read at connection time, not import time: a player may have just added their own
+    // relay server, and a code has to be made with it without reloading the game.
+    const pc = new RTCPeerConnection({ iceServers: iceServers() });
     pc.onconnectionstatechange = () => {
       const next = pc.connectionState;
-      if (next === "connected") setState("connected");
+      // "The peers can reach each other" is not yet "there is a channel to send on". The
+      // channel's own `open` is the truth (see `attach`), and saying connected earlier told
+      // the screen a lie and made the first hello fail — the state is latched, so nothing
+      // re-sent it.
+      if (next === "connected") setState(channel?.readyState === "open" ? "connected" : "working", "Opening a direct channel…");
       else if (next === "failed" || next === "disconnected" || next === "closed") {
-        setState("lost", "The direct connection closed. Make a new code.");
+        // Which failure it was, in the words the player needs: with no relay path in the code
+        // the two machines can only ever meet on one network, and saying "closed" hides that.
+        setState("lost", paths.relay > 0
+          ? "The two networks could not find a path to each other, even through a relay server. Make a new code and try again."
+          : "The two networks could not find a path to each other: this code has no relay path, so it only works between machines on the same network. Press Test relay servers in Connection details.");
       }
     };
     // ICE candidates are gathered into the code itself, so none arrive after it is sent.
-    // Accepting one here would be harmless; ignoring them keeps the code small.
-    pc.onicecandidate = () => {};
+    // They are also **counted by kind**, which is the only way a player can tell "the code
+    // has a relay path" from "the code has nothing but local addresses" — the difference
+    // between a phone on 4G reaching a home PC and not reaching it at all (playtest 8).
+    for (const kind of PATH_KINDS) paths[kind] = 0;
+    pc.onicecandidate = event => {
+      const candidate = String(event?.candidate?.candidate || "");
+      const kind = /\btyp (\w+)/.exec(candidate)?.[1];
+      if (kind && PATH_KINDS.includes(kind)) paths[kind] += 1;
+    };
     pc.ondatachannel = event => attach(event.channel);
     return pc;
   };
@@ -105,11 +134,12 @@ export function createPasteLink({ onState, onData } = {}) {
       }
     };
     pc.addEventListener("icegatheringstatechange", done);
-    // A network that never finishes gathering still deserves a usable code.
+    // A network that never finishes gathering still deserves a usable code — and the wait
+    // has to be long enough for the *relay* candidates, which is the whole point on 4G.
     setTimeout(() => {
       pc.removeEventListener("icegatheringstatechange", done);
       resolve();
-    }, 4000);
+    }, Math.max(2000, Number(ICE.gatherMs) || 8000));
   });
 
   /** Host: make the offer code to show. */
@@ -122,7 +152,7 @@ export function createPasteLink({ onState, onData } = {}) {
       const description = await connection.createOffer();
       await connection.setLocalDescription(description);
       await gathered(connection);
-      const code = pack("offer", connection.localDescription);
+      const code = pack("offer", connection.localDescription, roomId);
       setState("waiting", "Send this code to the other pilot, then paste their answer.");
       return code;
     } catch (error) {
@@ -139,6 +169,8 @@ export function createPasteLink({ onState, onData } = {}) {
       setState("lost", "That is not a host's join code. Ask them to copy the whole code.");
       return "";
     }
+    // The code names the world it invites you to; that is what the handshake will check.
+    if (parsed.worldId) roomId = parsed.worldId;
     try {
       connection = openConnection();
       connectHandlers();
@@ -146,7 +178,7 @@ export function createPasteLink({ onState, onData } = {}) {
       const description = await connection.createAnswer();
       await connection.setLocalDescription(description);
       await gathered(connection);
-      const answer = pack("answer", connection.localDescription);
+      const answer = pack("answer", connection.localDescription, roomId);
       setState("waiting", "Send this answer back to the host.");
       return answer;
     } catch (error) {
@@ -210,18 +242,39 @@ export function createPasteLink({ onState, onData } = {}) {
     state: () => ({ ...current }),
     /** True once the two browsers are talking with no broker involved. */
     live: () => !!channel && channel.readyState === "open",
+    /**
+     * What network paths the last code carried, by kind. `relay > 0` is what makes a code
+     * work between two different networks; `relay: 0` means every path is a local address,
+     * so the two machines must be on the same network. A screen can say which.
+     */
+    paths: () => ({ ...paths }),
+    hasRelayPath: () => paths.relay > 0,
   };
 }
 
 /**
- * The STUN servers a direct connection may need to find itself. These are public,
- * free and carry no game data: they only answer "what is my address". Without one, a
- * connection between two home networks usually fails; with one, it usually works.
+ * What a direct connection may use to find itself.
+ *
+ * **STUN** answers "what is my address", and without one a connection between two home
+ * networks usually fails. **TURN** (`ICE.turn` in `data/multiplayer.js`) is the fallback for
+ * two networks that will not pass a packet between them: the code path carries the codes
+ * itself, so the only thing that can still be missing is a path, and a home router with no
+ * hairpin NAT is the usual reason there is none. A TURN server forwards encrypted packets it
+ * cannot read, so neither carries game data; the game brings its own (`ICE.turn`), and a
+ * player's own server is used first.
+ *
+ * The library path (`net/transport.js`) keeps its TURN opt-in, because it works for most
+ * players without one and a relayed path is slower. A player who resorted to codes has
+ * already been told the easy way failed, so here it is always on.
  */
 const ICE_SERVERS = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
+  ...(Array.isArray(ICE.stun) ? ICE.stun : ["stun:stun.l.google.com:19302"]).map(url => ({ urls: url })),
+  // `name` is the game's own label for an entry, not part of an ICE server.
+  ...(Array.isArray(ICE.turn) ? ICE.turn.map(({ urls, username, credential }) => ({ urls: [...urls], username, credential })) : []),
 ];
+
+/** The kinds of network path a code can carry, most useful last. */
+const PATH_KINDS = ["host", "srflx", "prflx", "relay"];
 
 /* ------------------------------------------------------------------------- */
 /* The code itself: a small, printable, copy-paste-safe envelope              */
@@ -234,8 +287,13 @@ const ICE_SERVERS = [
  * browser's own `btoa`/`atob` handle it. Whitespace is stripped on the way in, because a
  * chat app will wrap a long code over several lines and nobody will notice.
  */
-export function pack(kind, description) {
-  const body = JSON.stringify({ v: CODE_VERSION, kind, description: { type: description.type, sdp: description.sdp } });
+export function pack(kind, description, worldId = "") {
+  const body = JSON.stringify({
+    v: CODE_VERSION,
+    kind,
+    worldId: String(worldId || ""),
+    description: { type: description.type, sdp: description.sdp },
+  });
   const bytes = new TextEncoder().encode(body);
   let binary = "";
   bytes.forEach(byte => (binary += String.fromCharCode(byte)));
@@ -250,11 +308,17 @@ export function unpack(code) {
     const binary = atob(text.slice(CODE_PREFIX.length));
     const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
     const value = JSON.parse(new TextDecoder().decode(bytes));
-    if (value?.v !== CODE_VERSION) return null;
+    // Version 1 is still read: it carried no world id, and a guest can still join with it
+    // (the host's own check then decides, which is where that decision belongs).
+    if (value?.v !== CODE_VERSION && value?.v !== 1) return null;
     if (value.kind !== "offer" && value.kind !== "answer") return null;
     const description = value.description;
     if (!description || typeof description.sdp !== "string" || !description.sdp) return null;
-    return { kind: value.kind, description: { type: description.type, sdp: description.sdp } };
+    return {
+      kind: value.kind,
+      worldId: typeof value.worldId === "string" ? value.worldId : "",
+      description: { type: description.type, sdp: description.sdp },
+    };
   } catch (e) {
     return null;
   }
@@ -265,3 +329,10 @@ export const codeLength = code => String(code || "").length;
 
 /** Is this string shaped like one of this game's codes at all? */
 export const looksLikeCode = code => String(code || "").replace(/\s+/g, "").startsWith(CODE_PREFIX);
+
+/**
+ * The world a code invites you to, or "" for a code that does not carry one. A guest needs
+ * this *before* it has a session: the session is built for that world, and the handshake
+ * checks the same id on the other side.
+ */
+export const codeWorldId = code => unpack(code)?.worldId || "";

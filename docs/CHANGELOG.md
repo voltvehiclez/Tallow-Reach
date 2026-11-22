@@ -20,166 +20,313 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
+## 2026-11-22: The game carries its own relay — one-link join works across networks
 
-The owner picked the one library the rules allow: **Trystero** (`trystero@0.27.0`, MIT, Nostr
-build) for the one-link join, with the paste-code flow kept as the fallback. **Docs only; the
-dependency is not added yet** — slice 3 is the change that adds it.
+**The owner's report first, because it settles the whole slice:** *"i have successfully sent a message
+over 4g, and i only used a link."* The one-link join he asked for in playtest 5 works on two different
+networks, with no offer/answer codes. What made it work was one relay server actually being saved
+(playtest 13) — nothing else in the pipeline was broken.
 
-- `docs/REFACTOR_PLAN.md` step 16: the question section is now the record of the answer, with the
-  measured numbers kept (4 packages, +151 KB to the single-file build, free relays, no account).
-  The one rule it pins down: **`trystero` is imported by `src/net/transport.js` and by nothing
-  else**, and the paste-code path is built alongside it because a free relay can be slow or down.
-- `docs/architecture/multiplayer.md`: the connection section names the choice; slice 3 is the next
-  slice rather than a blocked one. ROADMAP and HANDOFF updated the same way.
+So the relay is no longer something a player has to find:
 
-Next: **slice 3** — `src/net/transport.js`, the one-link join and the paste-code fallback, the
-handshake wired to `custody.js`, Pause > Open Multiplayer, chat on Enter, the connected-player list.
+- **`ICE.turn` is now the game's own ExpressTURN free-tier account** — its two free doors,
+  `turn:` 3478 UDP and `turn:` 3478 `?transport=tcp` — replacing the three public families (Open Relay,
+  freestun, AnyFirewall) that measured **dead** from the owner's PC in playtest 11. A fresh install
+  can cross networks with nothing typed. The TLS door on 5349 is a **paid** plan's, so it is not
+  listed: a door that cannot answer is worse than a shorter list. `ICE.turnName` gives the screens one name to quote
+  ("ExpressTURN (free tier, built into the game)") so the words cannot drift from the list.
+- **A player's own server is still first.** `turnServers()` = theirs, then the built-in;
+  `builtinRelays()`/`builtinRelayName()` export the built-in for screens and tests, and `asIceServer()`
+  keeps our `name` label out of the `RTCIceServer` the browser sees.
+- **The panel says what is in use without being asked**: *"In use: ExpressTURN (free tier, built into
+  the game) — nothing to set up (3 addresses)"*, the three boxes are described as an override, and the
+  button is now **Use the built-in relay**. A code with `0 relay` paths blames *whichever* server was
+  in force — the built-in one too.
+- Same change in the code path: `paste.js` builds its ICE list from `ICE.turn` (label stripped), so the
+  copy/paste codes carry the same relay.
 
-## 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
+**Files:** `src/data/multiplayer.js` (`ICE.turn`, `ICE.turnName`), `src/net/turn.js`
+(`builtinRelays`, `builtinRelayName`, `asIceServer`), `src/net/paste.js`, `src/ui/multiplayer.js`,
+`src/net/settings.js` + `src/net/README.md` + `docs/architecture/multiplayer.md` (words), tests.
 
-The owner asked for the guest to join by pasting **one link** (Pause > Open Multiplayer shows it,
-**Join Multiplayer World** takes it), using a free public signalling broker through one small
-library, with the paste-code flow kept as a fallback. **No code changed in this entry:** the
-owner's own rule is to ask before adding a dependency, so the question is written down with
-measured numbers and step 3 has not started.
+**Tests: 976, all green** (was 974). Two new: the built-in relay has a TCP door and a plain 3478 door and
+always a login; and the panel says the built-in relay is in use, quotes a player's own instead, and
+blames it when a code has no relay path. **Save v29. Build id: `2026-11-22j`.**
 
-- **`docs/REFACTOR_PLAN.md`**, step 16: new "The transport, in plain language" (the one-link flow,
-  where the secret sits, what the broker sees) and "**The library decision (asking the owner)**" —
-  Trystero 0.27.0 recommended over PeerJS 1.5.5, with the figures measured against this project's
-  own esbuild single-file build: **+151 KB vs +86 KB**, 4 packages vs 6, free relays with no
-  account vs a single free cloud with no uptime promise. Both MIT.
-- **`docs/architecture/multiplayer.md`**: the connection section now describes the one-link shape
-  and the fallback, and slice 3 is marked **not started, waiting on the owner's answer**.
-- The fallback (paste codes) needs **no library at all**, which is why it is safe to build first:
-  it is the path that has to work when the broker is down.
+**The one risk, stated plainly:** that login is in a public repository, so anyone can use the owner's
+free-tier allowance (ExpressTURN's free plan: 1000 GB a month, TCP and UDP on 3478) and the owner
+could exhaust it by accident. If the built-in relay stops
+answering, the fix is the one entry in `src/data/multiplayer.js` — regenerate in the ExpressTURN
+dashboard, paste the new three strings, `npm test`, `npm run build`. Nothing else knows the address.
 
-Next: the owner answers which library (or "paste codes only"), then slice 3 builds the wrapper.
+## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
 
-## 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
+Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details
+still said **`In use: none (the free public servers only)`** with `Code paths: 1 local, 1 public,
+0 relay`. The server had never been saved, so the offer carried nothing but local and public
+addresses — nothing to do with ExpressTURN answering or not. Three fixes, in the order they bite:
 
-The save now knows where a pilot **is**. Slice 1 proved the rules of travel on plain objects;
-this slice puts them in the save, with a migration that every older save walks through by doing
-nothing at all.
+- **The screen lied about itself.** `screenModel()` had two `relay:` keys: the player's saved
+  server, then the transport's *relay mode* flag, which overwrote it. Every reader of
+  `model.relay` (`In use:`, Copy relay settings) saw a boolean. The flag is now `relayMode`;
+  `relay` is the server, as every caller already assumed.
+- **Typing is saving.** A complete relay entry is saved 600 ms after the last keystroke in any
+  of the three boxes, with *"Relay server saved…"* on screen. The new `relayFromFields()` in
+  `net/turn.js` is the one parser for the boxes (whole pasted block, bare `host:port`, a comma
+  list, a `TRTURN:` line; typed username/credential win over the pasted ones). If an offer code
+  already exists it is **remade** immediately, because a code carries the servers that existed
+  when it was made — "saved" without a new code is still a code with `0 relay` paths.
+- **The guest sees the facts on the codes wire.** A session joined by codes has no data channel,
+  so `snapshot().diag` is null and the laptop's panel drew no Connection details at all.
+  `screenModel()` now builds a synthetic diag from the wire's own state plus the code's paths
+  (`codesOnly`): Signalling, Code paths, clock. "Browsers in the room" and the direct-link rows
+  are suppressed there, since a code carries neither.
+- **The In-use line owns the failure:** a saved relay with `codePaths.relay === 0` adds
+  *"— but the last code had no relay path, so that server did not answer. Press Test relay
+  servers."* A duplicate `role` key in the same object was also removed (build warning).
 
-- **`SAVE_VERSION` 28 → 29** (`src/state/profile.js`). Two additive fields, both optional forever:
-  - `save.away` — `{ worldId, hostName, guestId, token, epoch, rev, suitcase }` beside `profile`
-    and `world`, or `null` at home. **Not** inside the profile: where a pilot is is neither a fact
-    about the character nor about the world it stands in. `cleanAway` validates it; a marker with
-    no world id or no guest id is not a marker (nothing could be found again from it).
-  - `world.worldId` (`null` until the world is first hosted) and `world.guests` — `guestId ->
-    { name, tokenHash, epoch, rev, bundle, lastSeen }`, read back by `cleanGuests`. A record with
-    no token hash is dropped (there is nothing to prove against), and a damaged entry never fails
-    the save, because the guest's suitcase has the copy.
-  - **Migration:** every v28-and-older save loads with `away: null` and `guests: {}`. A v13 and a
-    v12 fixture are in `tests/multiplayer-save.test.mjs` to prove it.
-  - **A suitcase is not sanitized like a profile.** `cleanSuitcase` checks the shape and drops
-    wrong *types*, but never second-guesses a content id: while a pilot is away, its suitcase is
-    the **only** copy of its cargo, so an id this build does not know is carried, not deleted.
-- **`src/net/multiplayer.js`** (new): the operations that change those fields, so no caller has to
-  know their shape — `worldIdFor` (mint once, keep), `adoptHostWorld`, `leaveHostWorld`, `syncAway`,
-  `guestOf`/`putGuest`/`dropGuest`/`guestList`/`seenGuest`/`guestIsHere`/`guestCount`/`canTakeGuest`,
-  `isAway`/`awayLine`/`suitcaseKey`. A host's record is built by `custody.guestRecord`, which now
-  **strips the guest's token** from the bundle it stores: a host's save must never become a way to
-  take somebody's pilot.
-- **`src/state/storage.js`**: writes go through a scratch key and are swapped in
-  (`writeThrough`), the replaced version is kept for one generation (`tr1:prev`,
-  `NET.keepPrevious`), and `loadAutosave` falls back to it when the live record will not read. Slots
-  are swapped in too but keep no history (the player asked for that save). New
-  `writeAway`/`readAway`/`clearAway`/`awayWorlds` for the per-world suitcase key `away:<worldId>`
-  (`KEY` in `data/multiplayer.js`), so two tabs visiting two worlds cannot overwrite each other.
-  **Storage keys and `TR1:` did not change.**
-- **`src/state/state.js`**: the runtime keeps `state.away`, `currentSave()` writes it, and
-  `installNestedSave` reads it, so a save made while visiting still says so after a reload. A
-  dual-mode autosave carries each half's own marker (a campaign pilot is never marked).
-- **`src/net/custody.js`**: `checkOut` reuses the token an away pilot already proved (a fresh one
-  would look like a stranger to the host it is returning to) and the bundle now carries
-  `homeStation`, which slice 4 needs to put the pilot back at its own station on the way home.
+**Files:** `src/net/turn.js` (`relayFromFields`), `src/ui/multiplayer.js` (`screenModel`,
+`relayServerHtml`, `queueRelaySave`, `save-relay`/`clear-relay`), `tests/multiplayer-ui.test.mjs`
+(3 new), `src/data/multiplayer.js` (`BUILD = "2026-11-22i"`).
 
-Tests: `tests/multiplayer-save.test.mjs` (26). Suite 881 pass / 0 fail. **No networking yet**
-(slice 3), and nothing a player can click changes: a pilot gets a marker only when the join flow
-(slice 4) sets it, so the game plays exactly as v28. Guide for the owner:
-`../testing/TESTING-16-SAVE29.md`.
+**Tests: 974, all green** (was 971). **Save format unchanged (v29).** **Build id: `2026-11-22i`.**
+Still unproven: whether ExpressTURN's free tier relays a packet at all — the next playtest's
+*Test relay servers* line decides that, and the panel now shows it on both machines either way.
 
-## 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
+## 2026-11-22: Playtest 12 of slice 3 — a relay server the player actually has (ExpressTURN)
 
-The plan the owner gave for multiplayer (host-run co-op, WebRTC, one suite per world) is written
-into step 16 of `docs/REFACTOR_PLAN.md` with its **six slices**. This is slice 1: the rules of
-travel, proved on plain objects before a byte moves.
+The owner found a free TURN provider (ExpressTURN) and pasted its block, which exposed two things
+the relay fields could not do with a real provider's text:
 
-- **`src/data/multiplayer.js`**: `TRAVEL_FIELDS` is the owner's list (credits, ships, fits, holds,
-  hull damage, missiles, selected weapon bays, and the station lockers, which are packed from the
-  world half of a save), `HOME_FIELDS` is what stays home (missions, flags, stats, campaign, and the
-  home-station and filter-preset preferences), `ARRIVAL_STATION`/`ARRIVAL_STATION_KEY` (Meridian,
-  read from `data/places.js`) and `NET` (timings and limits, each with the slice that reads it).
-- **`src/net/custody.js`**: `checkOut` packs a pilot into a bundle and writes the `away` marker,
-  emptying the stations it packs; `checkIn` applies a bundle to a **new** save, clears `away`, and
-  copies the home half back from the home save *after* sanitizing, so nothing leaks into missions,
-  flags or stats; `relocate` sends anything whose station a world lacks to Meridian and puts it back
-  the moment that station exists again (never refusing, never deleting; an over-full station is
-  flagged and only refuses new deposits); `compare` orders two copies by `(epoch, rev)` and never
-  merges. Plus `hashToken`/`tokenCheck` (a host stores a hash, never the secret), `handshake` with a
-  sentence per refusal (version, world, token), `summary` ("600 cr · 1 ship · 0 m³"), `uniqueName`
-  (the host's name wins, joiners wear `*`, `**`), `guestRecord`, `hostProfile`, `mergeLockers`,
-  `totals`.
-- **`src/net/station-inventory.js`**: room at a station, defined once — m³ from `data/station.js`,
-  `world.storageOverfull` for an over-full station. Slice 6's trade asks the same questions.
-- **`src/net/world-places.js`**: where a station is **in somebody else's world**. Generated pocket
-  ids are not unique across galaxy seeds, so a station key is resolved with the world it belongs to
-  (`generateGalaxy(seed)`, pure, plus that world's saved wormhole pockets) and never by touching the
-  live catalog.
-- **Unknown content is kept**: a newer build's item, module or hull id is carried untouched, whole
-  unknown stacks in the bundle and single unknown ids re-inserted after the save sanitizer (which
-  would otherwise drop them).
+- **ExpressTURN prints the address with no `turn:` in front** (`free.expressturn.com:3478`), and the
+  parser refused it. A bare `host:port` is now read as `turn:host:port` — in `cleanUrl` too, so it
+  works in the address box whether or not it came through the paste path.
+- **A provider prints several doors** (UDP 3478, TCP 3478, TLS 5349) and a phone on 4G may only be
+  allowed the TCP or TLS one. Comma-separated addresses are all kept, and the hint says so.
+- A credential ending in `=` (ExpressTURN's do) survives the paste and the `TRTURN:` round trip.
 
-Files: `src/data/multiplayer.js`, `src/net/{custody,station-inventory,world-places,README}.js`,
-`tests/multiplayer-custody.test.mjs`, `docs/{REFACTOR_PLAN,ARCHITECTURE,CHANGELOG}.md`,
-`docs/architecture/multiplayer.md`. **No save change yet** (stays **28**; slice 2 makes it 29).
-Tests **852 pass / 0 fail**. Rebuild `game/tallow-reach.html`; `npm test`.
+**Files:** `src/net/turn.js` (`cleanUrl`, `parseRelayText`), `src/ui/multiplayer.js` (the hint),
+`src/data/multiplayer.js` (`BUILD = "2026-11-22h"`).
 
-## 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
+**Tests: 971, all green** (was 970). One new: ExpressTURN's own block, and the three doors of one
+server. **Save format unchanged (v29).** **Build id: `2026-11-22h`.**
 
-- **Roll:** `FLIGHT.rollFactor` back to 3.75 (the pre-cut 250% rate) at the
-  owner's call — the **ease in/out ramp stays**, and was the part that helped.
-- **Outfitting click-place:** pick-up-then-click (the inventory-slot style of
-  placing, as opposed to drag-and-drop) only honoured clicks inside a module
-  group card; clicking the big panel's viewer/header areas silently did
-  nothing. A held module now fits its left-most empty bay when clicked
-  anywhere on the Outfitting panel, matching the drag path. Step 5 of the
-  station UI flow test clicks the bare panel and fits.
+## 2026-11-22: Playtest 11 of slice 3 — the free relay servers are dead, and a guest can finally see why
 
-Files: `src/data/ships.js`, `src/ui/menu.js`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
+**The owner's two facts end the relay-server question:**
 
-## 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
+- `Relays reachable: 3 of 5`, `Relays connected: 10` — the **signalling** relays are fine, and have
+  been all along. "Your network blocks the relays" was wrong.
+- **Test relay servers** answered *"None of the 3 relay servers answered from this machine, so co-op
+  cannot cross networks"*, and the code says `Code paths: 1 local, 1 public, 0 relay`. So the free
+  public TURN servers (Open Relay, freestun, AnyFirewall) are **dead** — that, and nothing else, is
+  why a laptop on 4G cannot join a PC on ethernet. No amount of code makes a dead server forward a
+  packet; a player needs a relay they control.
 
-- **Roll ease in/out:** the shared model ramps the roll stick
-  (`FLIGHT.rollRampRate` 4/s, ~0.25 s to full rate, same bleed-off on release)
-  for the player, banking NPCs and Dane's barrel rolls alike — no more
-  snap-on/snap-off rotation. Golden test replica and combat fixture updated.
-- **No fake local waypoints:** `missionWaypoints` no longer plants a marker
-  1 km away inside your current pocket for a station in another pocket
-  (Border Signal's "Meridian Station, 5 km" inside Kestrel Hollow).
-  Cross-pocket destinations live on the starmap rings only; in-pocket
-  waypoints (courses, signals, authored points) are unchanged.
-- **Starmap glow simplified:** destination nodes no longer draw an extra ring
-  circle — the dot keeps its own colour and wears the mission-colour glow,
-  exactly like the ship UI / N-menu objective markers.
-- **Mission items are findable:** a mission crate is labelled by its item
-  name (**Beacon**, not "Crate") in the floating label and the target lock,
-  with the mission's objective glow it already computed. (The beacon crate
-  itself was verified present and amber at the wreck; it was indistinguishable
-  in the loot pile, not missing.)
-- **Outfitting:** dropping a module anywhere on the big left panel now fits
-  its left-most bay reliably — the group is read from the module's own data
-  (not the tile dataset), the handler honours where the drag was hovering if
-  the release hit-test lands on an overlay, and `finishStationDrag` is
-  exported and covered by a real fitting test.
+- **A guest now has Connection details.** The join surface had no diagnosis block at all, so a guest
+  could only ever say "I am alone" — no build, no room count, no code paths, no relay fields
+  (owner's report). `screenHtml` puts the details (and the relay block) on the join surface.
+- **One paste sets a relay server.** `parseRelayText()` reads whatever a provider prints — the
+  `turn:…` block with `username:`/`credential:` lines, JSON from a dashboard, or a `TRTURN:` line —
+  and fills all three fields; **Copy relay settings** makes that line, so the second machine is one
+  paste instead of six. `Save relay` says to press **Start again**, because a code carries the
+  servers that existed when it was made.
 
-Files: `src/sim/flight-model.js`, `src/data/ships.js`, `src/sim/npc-pilot.js`,
-`src/ui/{mission-hud,starmap,hud,menu}.js`, `src/sim/targeting.js`,
-`src/styles.css`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
+**Files:** `src/ui/multiplayer.js` (join-surface details, relay paste/copy, save message),
+`src/net/turn.js` (`parseRelayText`, `packRelay`), `src/data/multiplayer.js`
+(`BUILD = "2026-11-22g"`).
+
+**Tests: 970, all green** (was 968). Two new: the guest's screen, and the provider block / JSON /
+packed round trip.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.** The next step is not
+code: a free TURN credential (Metered's free tier) entered once on each machine.
+
+## 2026-11-22: Playtest 10 of slice 3 — the free relay servers are the suspect, so test them and allow your own
+
+**The owner's block rewrote the theory again:** `Relays connected: 10`. The signalling relays are
+open — ten sockets — and there is still nobody in the room. So "the network blocks the relays" is
+wrong, and the code path's 4G failure is the thing to fix. A code can only cross two different
+networks if it carries a **relay (TURN) candidate**, and the free public TURN servers (Open Relay,
+freestun, AnyFirewall) are exactly the kind of thing that stops working quietly.
+
+- **A relay test, in the game.** `net/turn.js` `checkTurnServers()` opens a connection with
+  `iceTransportPolicy: "relay"` against each configured server: a `typ relay` candidate means the
+  server authenticated us and will forward packets, and nothing means it is down, the login is
+  wrong, or the network blocks it. **Test relay servers** in Connection details prints
+  *"2 of 3 relay servers answered"* or *"None of the 3 … answered from this machine, so co-op cannot
+  cross networks"*. That sentence is a diagnosis, not a mood.
+- **Your own relay server.** `settings.relay` (`tr_mp`) holds an address, a username and a
+  credential, and Connection details has the three fields, **Save relay**, **Test relay servers** and
+  **Use the free ones**. `turnServers()` tries the player's own first; `iceServers()` feeds both the
+  code path and the library path. A provider's free tier (Metered, Twilio, Cloudflare) is a relay
+  that actually works, and now it is a setting rather than a code change.
+- **No more "Relays reachable: 0 of 0".** The probe is only printed when it ran; the library's own
+  socket count is printed whenever the room exists, and it is asked as soon as a session starts.
+- **The details carry the two facts that explain a silent room:** `Code paths: N local, N public,
+  N relay` and **this machine's clock**. A nostr relay filters by time, so two machines whose clocks
+  disagree can sit in one room and never see each other — a failure that looks exactly like a
+  blocked network.
+- **A failed code says which failure it was:** with no relay path, *"this code has no relay path, so
+  it only works between machines on the same network. Press Test relay servers…"*; with one,
+  *"could not find a path to each other, even through a relay server"*.
+
+**Files:** new `src/net/turn.js`; `src/net/settings.js` (`relay`), `src/net/paste.js` (live ICE config,
+failure wording), `src/net/transport.js` (`turnServers`, clock, honest relay rows),
+`src/net/session.js` (`testTurn`, `saveRelay`, probe on start), `src/ui/multiplayer.js` (relay block,
+`Code paths`, clock), `src/data/multiplayer.js` (`BUILD = "2026-11-22f"`).
+
+**Tests: 968, all green** (was 965). Four new: the player's own relay (and the half-filled one being
+refused), the relay test's counting, the details' clock and code paths (and never "0 of 0"), plus the
+settings shape change in the existing tests.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22f`.**
+
+## 2026-11-22: Playtest 9 of slice 3 — a code that can cross networks (the 4G case)
+
+**The owner's report.** The offer/answer codes connect a laptop and a PC on the same wifi, and
+fail when the laptop is on **4G**. That is not a bug in the exchange: two machines behind different
+NATs share no address they can both reach, and a mobile carrier never gives one. The only thing
+that saves it is a **relay (TURN) candidate** in the code.
+
+- **Why the code had none.** Gathering was cut off after **4 s**, and relay candidates are the slow
+  ones (they come from a server, and on a phone they arrive over TCP/TLS 443 because UDP is often
+  blocked). `ICE.gatherMs` is now **8 s** and `net/paste.js` waits that long.
+- **More than one TURN family, all with a TCP/443 door.** `ICE.turn` lists the free Open Relay
+  entry, freestun.net and AnyFirewall, each with a `?transport=tcp` or `turns:` variant: port 443 is
+  what a mobile network allows, and a free server can be down.
+- **The code says what it can reach, before it is sent.** `paste.js` counts the candidates it
+  gathered by kind (`paths()`/`hasRelayPath()`) and the screen prints, above the code: *"This code
+  carries a relay path, so it works between different networks (a phone on 4G included)"* or *"no
+  relay path — only local addresses… only works between machines on the same network"*. The session
+  says the same thing once, in the message line, when the code is made (`noteCodePaths`).
+- So a code that cannot cross networks now says so instead of silently failing, and the relay
+  servers it needs are the ones a phone can actually reach.
+
+**Files:** `src/data/multiplayer.js` (`ICE.gatherMs`, `ICE.stun`, three TURN entries,
+`BUILD = "2026-11-22e"`), `src/net/paste.js` (candidate counting, gather window, `paths`),
+`src/net/session.js` (`noteCodePaths`, `snapshot().codePaths`), `src/ui/multiplayer.js`
+(`codePathsHtml` above the offer code).
+
+**Tests: 965, all green** (was 961). Four new: candidate kinds counted from a fake peer connection
+(local-only vs relay), the TURN list's TCP/443/TLS doors and the gather window, the two sentences in
+the codes block, and the session's own note.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22e`.**
+
+## 2026-11-22: Playtest 8 of slice 3 — the codes connected, and opening your own world now leaves a visit
+
+**The owner's report that changed the picture: the offer/answer codes worked.** So the two
+machines *can* reach each other; the only broken link in the chain is the relay introduction. That
+narrows the one-link work to the rendezvous itself (see the next entry when it lands) and makes the
+code path a proven floor rather than a theory.
+
+- **Opening your own world ends a visit** (owner, playtest 7). Visiting is a *connection*, and it
+  used to survive the trip to the main menu: "Open World" put a guest back into their friend's
+  session, still hailing a world they had walked away from. `session.leaveVisit()` leaves only a
+  **guest** — a host's own world is the same room before and after the menu, so nothing is
+  disconnected for them — and `ui/menu.js` runs it in the title's **Open World** (`comeHome`), before
+  the world loads.
+- **The pilot comes home through the suitcase**, not by having its marker deleted: if the save
+  carries `state.away.suitcase`, `comeHome` runs `custody.checkIn(currentRootSave(), suitcase)` — the
+  same rule slice 4 uses, so this path cannot drift from it. Until slice 4 writes a suitcase the
+  local save is already the latest copy, so the marker is cleared and nothing else changes.
+- The session also records that it is on **`isVisiting()`**, which the screen and the next slice both
+  need.
+
+**Files:** `src/net/session.js` (`shouldLeaveVisit`, `leaveVisit`, `isVisiting`, `focusForTest`),
+`src/ui/menu.js` (`comeHome`, wired into the Open World action).
+
+**Tests: 961, all green** (was 959). Two new: leaving a visit (guest leaves, host does not, the world
+id comes back) and the title wiring, including that a fresh join never counts as leaving.
+
+**Save format unchanged (v29).** Build id still `2026-11-22d`.
+
+## 2026-11-22: Playtest 7 of slice 3 — the relay route taken off its pedestal, and no multiplayer in the campaign
+
+**What the owner saw.** Playtest 6's blocks: both machines on `2026-11-22c`, the **same** world id,
+**3 of 5 relays reachable** on each, and still one browser in each room with nothing sent. So the
+pinning did not fix it, and the number that matters ("does anything reach the other machine?") is
+not the one we were printing.
+
+- **The library's own view of the relays is now on screen: `Relays connected: N`.** A relay can open
+  a plain WebSocket and still refuse *this game's* events (`blocked:`, `restricted:`,
+  `auth-required:`) — the library retires it on the spot, silently, and then two players have no way
+  to meet even though every relay "answers". `transport.js` reads `getRelaySockets()` from the joined
+  room and reports how many sockets it kept, so **`reachable: 5 of 5, connected: 0`** is now a
+  sentence the screen can say (and does, with the code path offered beside it).
+- **More than one family of relays.** The pinned list keeps the popular relays *and* four of the
+  library's own curated ones: a relay that is alive but will not carry this protocol is worse than a
+  dead one, because it counts as reachable.
+- **The code path stops being a footnote.** When nobody has appeared after `NET.helloWaitSec` the
+  session marks itself **stalled** (`net/session.js`, `armStallTimer`), the host's screen says
+  *"Nobody has appeared in your room… use the codes"*, and **the offer code is made by itself** (once
+  per screen opening, `autoOfferWhenStalled`). A stalled **guest** gets the paste box on the pause
+  card — before, a guest who never got in was treated as "already in a friend's world" and had
+  nothing to do at all.
+- **The code path can use a TURN server.** `net/paste.js` now adds `ICE.turn` beside its public STUN,
+  always: a player who resorted to codes has already been told the easy way failed, and a home
+  router with no hairpin NAT is the usual reason the remaining question (a path) has no answer.
+- **No multiplayer in the campaign's pause card** (owner's request). `multiplayerAvailable(mode)`,
+  applied in `ui/pause.js`; a live session keeps the row so it can still be switched off.
+
+**Files:** `src/data/multiplayer.js` (relay families, `BUILD = "2026-11-22d"`), `src/net/transport.js`
+(library sockets in the diagnostics), `src/net/paste.js` (TURN), `src/net/session.js` (stall timer),
+`src/ui/multiplayer.js` (`Relays connected`, the stall warning, auto-offer, `multiplayerAvailable`),
+`src/ui/pause.js` (the campaign's card).
+
+**Tests: 959, all green** (was 953). Six new: the library's socket count and its warning, the
+campaign's pause card, TURN in the code path, the wider relay list, the stalled host/guest screens,
+and the stall timer's rule.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22d`**.
+
+## 2026-11-22: Playtest 6 of slice 3 — the *five random relays* were the problem, and Esc
+
+**The owner's two copied blocks settled it.** Both machines: Build `2026-11-22b`, World id
+`w-o8fHGjrzXzyrGxSE`, Signalling `finding`, **Browsers in the room: 1**, **sent 0 / received 0**.
+Same build, same room id, nobody in either room. That is not the network path and not the
+handshake — the two browsers were never *introduced* to each other, so no ICE, no TURN and no
+`hello` could matter. (TURN only helps once a peer exists.)
+
+**Why the introduction failed.** The library picks its signalling relays like this:
+`shuffle(30 public relays, seed = appId).slice(0, 5)`. The seed makes it the same five on every
+machine, which is why this looked impossible — but it also means *this game got five particular
+relays*, and for `appId = tallowreach.p2p` they were
+`relay.primal.net`, `nostr.chaima.info`, `nostr-pub.wellorder.net`, `nostrelay.circum.space`,
+`relay.dwadziesciajeden.pl` — three of them obscure or dead. Both players were subscribing to the
+same dead rooms.
+
+- **`RELAYS.relayUrls` is no longer empty.** It names the long-running public relays
+  (`relay.damus.io`, `nos.lol`, `relay.nostr.band`, `relay.primal.net`, `nostr.mom`,
+  `nostr-pub.wellorder.net`); the transport already passed them as `relayConfig.urls`, so the
+  library uses those instead of its shuffle.
+- **Relay health on the screen.** `transport.checkRelays()` opens a WebSocket to each relay in use
+  and returns `{ total, open }`; the session republishes it and Connection details shows
+  **Relays reachable: N of 5**. **0 of 5** means the player's network blocks the servers that do
+  the introduction, which no amount of Reconnect can fix — and the block now says so in words and
+  points at the code path. It is asked when the screen opens and again on **Reconnect** (cached 20 s).
+- **The code path is named the same way everywhere.** The button is now **No relay? Copy/paste
+  codes**, and the "nobody else is in that room yet" sentence points at it. That path needs no
+  relay at all: two codes go through a chat window.
+- **Esc closes the multiplayer screen** (owner's small bug). `src/main.js`'s pause key now asks
+  `isMultiplayerScreenOpen()` **first** and calls `closeMultiplayer()`; one press puts the screen
+  away and leaves the pause card (or the title) underneath, exactly like its Close button.
+
+**Files:** `src/data/multiplayer.js` (`relayUrls`, `BUILD = "2026-11-22c"`), `src/net/transport.js`
+(probe + `setRelayProbe`, `checkRelays` in diagnostics), `src/net/session.js` (pass-through, the
+sentence), `src/ui/multiplayer.js` (relay row, blocking warning, button label, Esc-facing helpers
+already exported), `src/main.js` (Esc), `src/net/paste.js` + `testing/TESTING-16-MULTIPLAYER.md`
+(wording).
+
+**Tests: 953, all green** (was 949). Four new: the pinned relays and that the transport passes them;
+relay health is measured and lands in the diagnostics; the details block says "N of 5" in words and
+warns only at 0; Esc closes the screen before the pause chain. The file also stubs the probe off
+globally — no test may open a real WebSocket.
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22c`** — both machines must
+show it. New: if the two browsers still do not meet, the Connection details screen answers *why*
+(0 of 5 relays vs 5 of 5), and the code path works with no relay at all.
 
 ## 2026-11-21: Roll cut by 25% (sickening at full speed)
 
@@ -187,93 +334,22 @@ Rebuild `game/tallow-reach.html`; `npm test`.
 owner found the 250% roll nauseating. Yaw and pitch unchanged. Recorded
 fixtures and the axis-ratio test updated; no save change.
 
-## 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
-
-- **Warp-to glow:** `missionTravelTargets` (`ui/mission-hud.js`) lists the
-  pockets active missions currently want the pilot in (same rule as the
-  in-space Waypoint labels, hand-in included), and the starmap rings them in
-  the mission's own colour — the destination **system** on the galaxy chart
-  (including the current system: Meridian Station → Kestrel Hollow rings
-  Meridian) and the destination **pocket** on the system chart. Arriving puts
-  it out; warping away brings it back, since it is recomputed from live
-  mission state at every render.
-- **Face-off identity:** a ship on `prowl` (First Sortie's ambushers during
-  the parley) now presents as **Unmarked** with a neutral grey reticle
-  (`.mk.u`) everywhere its name or marker is drawn — floating label, target
-  lock (`lockName`), marker tone (`markerStyle`). The moment the role drops
-  (dialogue ends or anyone shoots), the same ship is its true self again:
-  "Newbie Raider", hostile red. Display only; no AI or save change.
-
-Files: `src/ui/{mission-hud,starmap,hud,target-display}.js`,
-`src/sim/targeting.js`, `src/styles.css`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
-
-## 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
-
-Following the axis-rate change, NPC pilots now use the fast axes:
-`sim/npc-pilot.js` banks — when the aim point sits more than
-`AI_FLIGHT.pilotBankAbove` (0.3 rad) off the nose, it rolls (fastest axis) to
-swing the target into the pitch plane and pitches onto it, reserving slow yaw
-for fine aim. Test (j) in `tests/flight-model.test.mjs` shows a raider on a
-dead-side target in ~3.5 s where yaw alone needs at least ~4.3 s, banked past
-90 degrees on the way; test (d)'s turn cap now reads the pitch axis. Combat
-will feel snappier: enemies get their guns on you sooner (their damage numbers
-are unchanged). In First Sortie, Dane's 10 km chase course authors two
-barrel rolls (`roll: 360` / `-360` on legs in `data/flight-courses.js`, flown
-across the leg by `flyCourse` via the pilot's `rollStick`) — showmanship only:
-course waypoints and the destination are exactly where they were, and test (k)
-pins that the roll fields ride along without moving a single point. The combat
-8b fixture was re-recorded and diffed (player pose unchanged).
-
-Files: `src/sim/{npc-pilot,enemy-flight,flight-course}.js`,
-`src/data/{enemy-ai,flight-courses}.js`, tests, docs. No save change.
-Rebuild `game/tallow-reach.html`; `npm test`.
-
-## 2026-11-21: Step 16 slice 3 — the connection: one link, the wrapper, chat and the player list
-
-Multiplayer can open a world, hand out a link and talk. **It still moves no pilot** — the suitcase
-is slice 4 — so this slice is honest to try: it can fail to connect, and it cannot cost anybody a
-ship.
-
-- **One dependency, one file.** `trystero@0.27.0` (MIT, pinned exactly) is imported lazily by
-  `src/net/transport.js` and by nowhere else; the layers test enforces it. Single-file build:
-  **3,256 → 3,508 KB**. `RELAYS.relayUrls` in `data/multiplayer.js` overrides the free relays.
-- **`src/net/transport.js`** — `createChannel({role, worldId, onState, onData, onPeer})` with
-  `join/send/broadcast/leave/peers/state/room`; states `idle · finding · connected · lost · closed`,
-  every failure a printable sentence and nothing thrown. A room is `tallowreach.p2p:<worldId>`.
-- **`src/net/session.js`** — one session per browser: `hostWorld` (mints the world id once, returns
-  the link), `joinWorld`, the paste-code fallback, the handshake through `custody.handshake`, the
-  guest list, the recent chat, and `mp-state` on the event bus. A host's token lives in a WeakMap
-  with its session; the save keeps only the hash (`putGuest`, slice 2).
-- **`src/net/join-link.js`** — `?join=<worldId>#<token>`: the secret after the `#`, so no server and
-  no referrer sees it. Reads a link out of a whole pasted sentence; refuses half a link with a
-  sentence naming the missing part. `src/net/boot.js` takes a `?join=` link at boot after asking
-  (a stray link costs one Cancel), and speaks through `mp-notice` rather than importing `ui/`.
-- **`src/net/paste.js`** — the broker-free fallback: one non-trickling `RTCPeerConnection` offer as a
-  `TRJOIN:` code and one answer back. The browser's own WebRTC, no library, so it works when the
-  relays do not.
-- **`src/net/protocol.js`** — seven kinds (`hello`, `welcome`, `refuse`, `chat`, `presence`, `ping`,
-  `pong`), each cleaned to its own fields and limits on the way out **and** in.
-- **UI** — Pause > **Open Multiplayer**: the switch, the username, the join link with Copy, and a box
-  to paste a link or a code. **Chat bottom left**: `Enter` opens, `Enter` sends, `Escape` closes; it is
-  an `<input>`, so `core/input.js` already keeps typing out of the flight controls. It shows the
-  connected players, and old lines fade.
-- **A hosted world never pauses.** `sim/step.js` now reads `state.multiplayer` (set by `ui/pause.js`),
-  so the card is a settings panel while hosting. The campaign still pauses, and multiplayer stays
-  **open world only**.
-- Tests: `tests/multiplayer-connection.test.mjs` (14) and `tests/multiplayer-session.test.mjs` (13 —
-  two real sessions on an in-memory wire: the handshake, a wrong secret, chat attribution and caps, a
-  clean stop). Suite **909/909**. Two bugs they found: a pasted sentence's trailing words became the
-  secret, and a numeric `name` in storage became the name `"42"`.
-- Documented in `src/net/README.md`, `src/ui/README.md`, `docs/ARCHITECTURE.md` and
-  `docs/architecture/multiplayer.md`.
-
-**Next: slice 4** — "Bring my pilot": `checkOut`/`relocate` through the join, the guest docked in the
-host's world, snapshot sync, "Go home". **Known limits:** no remote ship is drawn yet
-(`render/views.js` draws the local pilot only), and the player list is names only.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-21: Mission destinations glow on the starmap; ambushers stay "Unmarked" until they attack
+- 2026-11-21: NPCs bank to turn; Dane barrel-rolls the chase course
+- 2026-11-21: Roll easing, cross-pocket waypoints removed, beacon named, panel-wide outfitting drops
+- 2026-11-21: Roll rate restored (easing kept); click-to-place works anywhere on the Outfitting panel
+- 2026-11-21: Step 16 slice 1 — the pilot's suitcase (custody, no networking)
+- 2026-11-21: Step 16 slice 2 — save v29: the `away` marker, `world.guests`, and the two suitcase keys
+- 2026-11-21: Step 16 slice 3 planned — one-link join, and the library question put to the owner
+- 2026-11-21: Step 16 — Trystero chosen for the connection (owner decision)
+- 2026-11-21: Playtest 5 of slice 3 — the report that says which failure it is
+- 2026-11-21: Playtest 4 of slice 3 — the path between two machines, and a relay for when it fails
+- 2026-11-21: Playtest 3 of slice 3 — a hello that is answered, a click that is not eaten
+- 2026-11-21: Playtest 2 of slice 3 — one door each, names with stars, a chat that stays open
+- 2026-11-21: Step 16 slice 3 repaired — the multiplayer screen, the join path and the hello
+- 2026-11-21: Step 16 slice 3 — the connection: one link, the wrapper, chat and the player list
 - 2026-11-21: Yaw is the slow axis, roll the fast one — per-ship axis tuning
 - 2026-11-21: One flight model for every ship, slower turns, First Sortie and navigation polish (save v28)
 - 2026-11-20: Playtest round 4: missiles taught, ambush standoff, objective highlights everywhere

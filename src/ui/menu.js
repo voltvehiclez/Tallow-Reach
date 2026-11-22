@@ -10,6 +10,8 @@ import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../stat
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
+import { leaveVisit } from "../net/session.js";
+import { checkIn } from "../net/custody.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -26,6 +28,7 @@ import { storyMission } from "../data/missions/index.js";
 import { campaignMission, campaignAvailable, isCampaignMissionId } from "../sim/campaign.js";
 import { startCampaignAct } from "../sim/campaign-act.js";
 import { campaignScreenHtml, campaignMenuBack, campaignMenuHtml } from "./campaign.js";
+import { openMultiplayer, closeMultiplayer } from "./multiplayer.js";
 import {
   assetsResultsHtml,
   introHtml,
@@ -155,10 +158,24 @@ export function setupMenu(options = {}) {
   });
   on("main-menu", () => {
     cancelHeldStack();
+    closeMultiplayer();
     state.ui.intro = true;
     resetStationPanels(state.ui);
     hideNotice();
     render();
+  });
+  // A join that started on the title screen ("Join Multiplayer World") enters the open
+  // world once it worked: being connected to a world you are not looking at is not a join.
+  on("mp-enter-world", () => {
+    if (!state.ui.intro) return;
+    enterGameMode("open");
+    // The same landing as the Open World button: a docked pilot gets the station panel,
+    // a pilot out in space gets the view.
+    if (!state.player || state.player.docked) render();
+    else {
+      panel.hidden = true;
+      hideLeftPanelElement(leftPanel);
+    }
   });
   // A mission changed while a docked screen is open — the last dialogue line
   // closed, a dock-side script finished, a hand-in or an abandon went through.
@@ -260,6 +277,30 @@ function loadedMessage(text) {
   return notice ? `${text} ${notice}` : text;
 }
 
+/**
+ * Coming home: opening your own world from the title ends a visit to somebody else's.
+ *
+ * (Owner, playtest 7.) Visiting is a connection, and it used to survive the trip to the main
+ * menu — so "Open World" put a guest back into their friend's session, still looking at a
+ * world they had walked away from. The host's own world is untouched: same room, same menu
+ * round trip, so nothing is disconnected for them.
+ *
+ * The pilot comes home through the suitcase when the save carries one (`state.away` is
+ * written by slice 4); until that slice is wired the local save is already the latest copy,
+ * so the marker is simply cleared. `checkIn` is the same rule slice 4 uses, so this path
+ * cannot drift from it.
+ */
+function comeHome() {
+  if (!leaveVisit()) return false;
+  const away = state.away;
+  if (away && away.suitcase) applySave(checkIn(currentRootSave(), away.suitcase));
+  else if (away) state.away = null;
+  closeMultiplayer();
+  saveCurrentGame();
+  showNotice("Left your friend's world. Your pilot is back in your own.");
+  return true;
+}
+
 function enterGameMode(mode) {
   state.ui.intro = false;
   state.ui.campaign = false;
@@ -277,8 +318,17 @@ const ACTIONS = {
   home: () => toast(setHomeStation()),
   // Both story modes share the pilot's browser save. "Open World" keeps the
   // existing free-galaxy action; "Campaign" installs its independent galaxy and progress.
+  // **Opening your own world leaves a friend's** (owner, playtest 7): a guest who walks out
+  // to the menu and back is a pilot at home, not a visitor.
   intro() {
+    comeHome();
     enterGameMode("open");
+  },
+  // Step 16 slice 3: the title menu's way into co-op. One screen, opened here, that both
+  // hosts a world and takes a friend's link or code — a guest never enters their own
+  // world first, which is what the first playtest asked for.
+  multiplayer() {
+    openMultiplayer({ focus: "join", from: "menu" });
   },
   // The campaign opens on its own chapter screen, not straight into the world:
   // an act is chosen there and starts as a scene, never accepted like a job.

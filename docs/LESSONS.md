@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-18.*
+*Last checked: 2026-11-21.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -148,6 +148,100 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ---
 
+### L33. A control that only exists in the state it creates, and a switch drawn from a wish
+
+- **Seen (owner, step 16 slice 3):** "There is no option to paste a link", "no way to get a link to
+  copy", "it says *Make a fresh offer first*" — and a chat box that kept the typed line and said nothing.
+- **Cause:** the guest's paste box was drawn only for a guest session, which only that box could make,
+  so joining had no entrance; the host switch was drawn from the stored setting, so it read On while
+  `hostWorld` had refused; that refusal went into an element the state never rendered; and the offer
+  code was wiped by the redraw after making it. Every one is a reader and a writer that never met
+  (L19) inside one screen.
+- **Rule:** every control must work in the state it is drawn in, a control's words describe the live
+  object and not the wish (L32), a refusal goes to an element that is always on screen, a value the
+  player must copy lives in the model rather than the DOM, and a one-shot message is latched only
+  once it has actually left.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` (no name ⇒ no switch and no Join; a failed host
+  snaps Off with its sentence on screen; the offer survives a redraw; Connect exists only with an
+  offer; chat says why a line was not sent) and `tests/multiplayer-paste-join.test.mjs` (the hello
+  over the code wire arrives once and is admitted).
+
+### L34. A control that cannot take the cursor is a control that does not work
+
+- **Seen (owner, playtest 2 of slice 3):** "only the host can chat — the guest can view the messages
+  but can't open chat to type a word"; and "pausing when multiplayer is open still pauses the game,
+  both guest and host".
+- **Cause:** the chat box hid its own input unless that input already had the cursor, and a `[hidden]`
+  field cannot be given the cursor — so the field never came back and the keys went to the ship. The
+  same file also asked the DOM ("does the input have focus?") the question its own state should have
+  answered. And `state.multiplayer = !v && isOn()` set the "the world keeps running" flag to false at
+  the exact moment the pause card opened, which is the one moment it was there for.
+- **Rule:** whether a thing is open is the model's business, not the DOM's — a `hidden` element cannot
+  be focused, clicked or typed into, so unhide it *before* asking for the cursor; and a flag that means
+  "this is happening" must never be derived from the UI that is asking about it.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` (`chatVisibility`, the order inside `openChat`, and the
+  sim gate with `state.paused` and `state.multiplayer` both set) and `tests/multiplayer-session.test.mjs`
+  (the old `!v &&` is asserted gone).
+
+### L35. "Sent" is not "heard", and one machine is not two
+
+- **Seen:** playtests 3 and 4, second machine: the guest joined "but I am the only one there" every
+  time, and the first press of **Join** did nothing.
+- **Cause:** (a) the hello was latched as sent when the send returned, and between two machines the
+  channel opens after the room reports the peer, so it went nowhere, unrepeated; (b) the name field
+  committed on `change`, a click blurs the field first, and that redraw replaced the button under the
+  cursor before mouseup; (c) two tabs on one machine always connect — they share a process — so no
+  network path between two *machines* looks like a working connection from inside.
+- **Rule:** a message is done only when the other side answers (the reply is the latch); a
+  `change`/`blur` handler must update in place, because replacing the DOM under the pointer eats the
+  click; and **a same-machine test proves the logic, never the wire** — so put the wire's facts
+  (sent/received, ICE state) on screen, and keep a second path (a relay) to try on both ends.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the lost-hello retry, the no-redraw commit, the
+  relay escalation, the Connection details block.
+
+### L36. A default list that is shuffled by a seed is still a *guess* about the outside world
+
+- **Seen (owner, playtest 5):** both machines reported the same build and the same world id, both
+  `finding`, and **one browser in the room with zero messages sent** — for a whole evening, through
+  three rounds of Reconnect.
+- **Cause:** the transport had no relay list of its own, so the library shuffled its thirty public
+  signalling relays with the app id as the seed and took five. The seed guarantees the *same five*
+  on both machines (which is why the report looked contradictory: nothing differed), but it also
+  guarantees nothing about those five being alive — this game's five included three obscure or dead
+  servers. Both players subscribed to the same silence, so the introduction never happened and
+  every later layer (ICE, TURN, the handshake, the retry) was being debugged for a problem three
+  layers below it.
+- **Rule:** never let a dependency *choose* which outside server you depend on — name it, and if the
+  choice is a default list, treat "which entry" as part of your configuration. When a feature
+  depends on reachability of something outside both machines, **measure that reachability and show
+  it**: `Relays reachable: N of 5`, 0 meaning "no retry will ever help". And before blaming the
+  path, read the counters — `sent 0 / received 0 / 1 in the room` means no peer, which means no
+  path to blame.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` section 11 — the pinned list and the transport
+  passing it, the probe landing in the diagnostics, the "N of 5" row and its warning at 0.
+- **Follow-up (playtest 8):** the same lesson one layer down. The codes worked on one wifi and failed
+  on 4G, because a code is only as good as the **path kinds** it carries, and gathering was cut off
+  before any relay candidate could arrive. A gathered code now reports `paths()` — host, srflx,
+  relay — and the screen says "same network only" *before* the code is sent, not after it fails.
+
+### L37. A health check that asks a different question than the feature does
+
+- **Seen (owner, playtests 6 and 7):** the screen said `Relays reachable: 3 of 5` on both machines,
+  which read as "the network is fine", and the two browsers still never met.
+- **Cause:** the check opened a WebSocket and counted a handshake as health. The feature needs
+  something else entirely: a relay that accepts *this game's* events. A relay can open a socket and
+  then answer `blocked:`, `restricted:` or `auth-required:`, and the library quietly retires it — so
+  the number was true, irrelevant, and reassuring, which is the worst kind. Beside it, the report's
+  `Browsers in the room: 1` had already established that no peer existed, which a healthy relay count
+  made look like a contradiction instead of a clue.
+- **Rule:** a health check must exercise **the exact step the feature needs** (here: the library's own
+  socket pool, `getRelaySockets()`, not a lookalike), and must be shown **next to** the outcome it is
+  supposed to explain, so a mismatch is visible instead of plausible. And when a chain has a fallback
+  that shares no dependency with the failing link, **promote the fallback before perfecting the
+  diagnosis** — the codes needed no relay at all and were sitting behind a footnote for two rounds.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the `Relays connected` row and its warning, the
+  stalled-session screens (host and guest), and the code path's TURN fallback.
+
 ## Template (copy for a new entry)
 
 ```
@@ -158,163 +252,6 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** the test(s) or linter rule that fail if it breaks. If there is none yet, write
   "NOT YET: add a test" and add it in the same change.
 ```
-
-### L21. When a new ask makes old code look like a special case, the shape underneath is usually the cause
-
-The canister's prize began as a list of `{ i, c }` stacks because that was the shape a save could carry, and the same
-shape is why the ordinary inventory rules could not reach it: `sim/inventory.js` speaks stock maps, so `openCache` had
-to hand-carry cargo unit by unit, and every question about the canister — what is in it, is there room, move three of
-these — needed a loop of its own. When the owner asked for a trade (two inventories side by side, clicks moving cargo
-between them), the fix was not a panel bolted onto the old shape: it was making the canister an ordinary stock map
-first, after which the panel was two columns of the grid that already existed and every move was the existing
-`moveItem`. The save kept the list shape by converting at the two edges (`captureInstances`, `restoreInstance`), so no
-save version moved. Before building UI for a container, ask what shape the container is: if the inventory layer cannot
-address it, the panel will end up re-implementing the inventory layer.
-
-### L22. When the owner says "remove the lines", remove the ability to draw lines
-
-The first painted sky carried fractures and filaments because a nebula with nothing but blobs in it looked empty, and
-they were painted the only way a canvas draws a thin bright thing: `beginPath`, `lineTo`, `stroke`, three times over
-for the seam. The owner's verdict on the second round was that the sky was good *except* those lines — and the
-temptation was to repaint them fainter, blurrier, fewer. Fainter lines are still lines: the eye reads a stroke as a
-mark somebody made, which is exactly what "not realistic" means. The fix was structural instead — the painter lost its
-`stroke` helper altogether, so a line in the sky is now impossible rather than discouraged, and the structure the lines
-had been standing in for came back as shapes a real nebula actually has (bright cores where the gas is thick) plus one
-pass of invisible dither grain, because a smooth dark gradient bands into contour lines of its own on an 8-bit screen
-and those would have been "odd lines" by next round. The test that protects it asserts the recording canvas saw zero
-strokes and no path ever started: when a complaint is about a kind of artifact, pin the absence of the capability, not
-the absence of this week's instance of it.
-
-### L25. Two skies for one picture: the same image installed twice, and a starfield that was already in the paint
-
-- **Seen (owner, 2026-11-15):** "remove the existing starfield. This is because our previously generated skybox already
-  has some stars baked in it. I might re-add star fields in the future but not now."
-- **Cause:** the sky was one thing and the stars another, because until now no sky *was* a picture — the starfield was
-  the only thing drawing stars. The moment normal space started wearing a generated skybox, two systems were drawing the
-  same stars, and the fix was not to darken one of them: it was to stop drawing a second set. The same shape of mistake
-  sat in the assets: the sky the owner kept had been installed under a working name and again under its real one, so the
-  build inlined the same 140 KB picture twice.
-- **Rule:** a picture that carries a thing must not be drawn under a second copy of that thing — ask *who draws this*
-  before adding a layer. A sky's own look is data on the sky (`starfield`, `shards`), and one switch (`STARFIELD.enabled`)
-  can turn a whole layer off without deleting the geometry, so the owner can ask for it back in one line. And an installed
-  sky is a resource with a name: re-making it under the final name and `remove`-ing the old one is part of installing it
-  (the tool has `remove` for exactly this, because `src/assets/skyboxes/` is the tool's folder and not a place to delete
-  from by hand).
-- **Enforced by:** `tests/skybox.test.mjs` — "normal space wears a generated sky, and the drawn starfield is off" reads
-  `showPlace`'s own starfield expression (writer and reader cannot drift apart, as in L19) and pins the master switch;
-  "nothing is in the skybox folder or the url map without being in data/skyboxes.js" plus the per-id budget check make a
-  second copy of a picture a visible 140 KB, and the report's file size is quoted in the CHANGELOG entry.
-
-### L23. Imported models need an explicit coordinate and size contract
-
-An owner-supplied fighter faced +X and used small exporter units; loading successfully did not make it
-a flight-ready model. Keep optional visual yaw and target length in hull data, rotate before measuring,
-then scale and centre the bounds in a wrapper. Do not change gameplay `sc` to fix asset units. Test
-forward direction, centred bounds, and size relative to the baseline hull before asking for a playtest.
-
-### L24. A cube map has two independent ways to be wrong: the seams and the faces' own frames
-
-Making six images agree at their edges and making each image land right way up are different problems, and passing the
-seam check tells you nothing about the second. The generator builds every layer as a function of the **direction** a
-pixel looks in (one sphere, sampled back per face), which makes the 24 edges agree by construction and even makes a
-useless seam metric read low — so `cube_seam_error` measures edge pixels in direction space (`face_dirs`, then sample
-the *neighbouring* face through a 24-entry `CUBE_NEIGHBOURS` table), and the three skies read 0.36–0.66 per 255.
-Separately, the six files follow the OpenGL cube convention (`FACE_AXES`), which the generator's own preview cannot
-verify, because the preview draws the net from the same rules that drew the pixels. `BoxGeometry` groups its faces in
-the same order but frames **+Y and -Y the other way up**, so two faces would have arrived upside down and no file, no
-preview and no seam number would have shown it. The fix is `src/render/cubemap.js` (`CUBE_FACES`, `CUBE_FACE_FLIP`,
-`orientFace`), and the test reads `FACE_AXES` out of the Python, rebuilds `BoxGeometry`'s UV frames with three.js,
-compares a 7×7 grid of texels per face, and asserts each flip **necessary** (unflipped is wrong) and none **redundant**
-(flipping a correct face breaks it). A tautological test that only re-reads the constant would pass forever while the
-sky hung upside down.
-
-- **Rule:** for anything with a coordinate convention (cube faces, cubemaps, UVs, handedness), take the convention from
-  the two files that own it — the producer's source and the consumer's source — and prove them against each other in a
-  test. Do not infer it from a screenshot, a preview sheet, or a dimension that looks plausible.
-- **Also:** a `CubeTexture` is not a drop-in for a `MeshBasicMaterial.map` in three r128; only `background`/`envMap`
-  consult `isCubeTexture`. Six ordinary textures on the six material groups is the same picture with nothing to go wrong.
-- **Enforced by:** `tests/skybox.test.mjs` — "the six faces are drawn the way the generator painted them" and "each flip
-  in the table is necessary and no flip is redundant". It caught the real bug (worst mismatch 1.25 on `py`/`ny`, 0.0000
-  on the other four).
-
-### L25. A projectile's hit test must read the colliders the world already has, and sweep, not sample
-
-Shots went through Meridian Station for months because `updateBullets` asked two questions and neither was "is
-there scenery here": it checked hostiles (a sphere) and rocks (a distance-to-centre circle). The colliders existed
-and the player's own ship already collided with them; the projectile path simply never asked. Whenever something new
-must be hit, blocked or stopped, look for the hit test the game **already trusts** and reuse it — here
-`sim/colliders.js`, which `render/` bakes and `player.js` and `ai.js` already read — rather than writing a second,
-cheaper approximation beside it. A second approximation drifts: the old rock test used a bounding circle, so shots
-also died in empty space beside a lumpy rock.
-
-The other half is **sweeping**. A basic cannon bolt covers 15 m in one 60 Hz tick and a missile 8 m, so an end-point
-test tunnels through anything thinner than that: a station spoke, a small rock, the edge of a hull. Test the segment
-between the last tick's position and this one (`segmentColliderHit`), take the nearest hit's fraction `t`, and put the
-projectile at the impact point so the explosion happens where it hit and not past it. The same sweep answers "would
-this wall block the beam" for free.
-
-Two consequences worth keeping:
-- **`noclip` and `collide: false` must stay pass-through for projectiles as well as ships.** They are the owner's
-  opt-out; a weapon that hits decoration makes the opt-out meaningless. Assert it, do not assume it.
-- **Check what the new stop rule does to balance before shipping it.** Rocks now stop enemy fire, so a pilot can take
-  cover — a real gameplay change. Measure it (here: 1 of 24 long lines from the station meets a rock in the Meridian
-  belt) and say so, rather than discovering it in a playtest.
-
-- **Enforced by:** `tests/projectile-collision.test.mjs` — the Meridian Station's real geometry stops a bolt on its hub
-  and its ring, a thin wall between two ticks is caught, the nearest collider wins, a hostile's hull still resolves
-  first, `noclip` scenery does not stop shots, a rock stops a hostile shot aimed at the pilot, and a missile and the
-  mining beam obey the same rule.
-
-### L26. A collider is a snapshot: if the part moves, transform the query, never re-bake the bake
-
-A baked collider is a photograph — right for a still part, wrong at once for a turning one: Meridian's 180 m arms are
-**144 m** from a still hitbox in a minute. Baking several angles is wrong too: fat between samples, N× the triangles. Both conflate *geometry* with *where it is*. Keep them apart: bake the soup **once, in its own space**, store
-the live transform beside it (`mover = { pos, quat, scale }`, refreshed per frame), and carry the **query** in — segment
-for weapons, sphere for hulls. Asteroid soups already worked this way (`segmentRockHit`). Rotate the
-normal back to world space before moving a hull.
-
-**Follow the owner's default:** match the model for anything noticeable; only tiny decoration earns `noclip`, and a
-*workaround* tag is a smell. The arms also exposed a latent bug: `closestPointTriangle`'s face-interior branch was
-guarded by a triple product that is **identically zero**, so interior queries fell back to *vertex A* — wrong normal
-and depth, for every hull. Thin flat geometry probes it.
-
-- **Enforced by:** `tests/moving-colliders.test.mjs` — on the arms at 24 spin phases, clear between them, arms named
-  `spin`.
-
-### L27. A default is a rule you did not write down: a silent `0` made every station harmless
-
-Hitting Meridian Station did nothing for three sessions. The rock path carries `damage: 1` hardcoded, so rocks hurt;
-the scenery path threaded a `damage` factor from data through the bake to a `hit.damage > 0` gate — defaulting to `0`
-at every hop (`colliderFromObject`, `scene.js`'s `f.collideDmg ?? 0`). Zero passed every check, multiplied every
-number, did nothing. A **factor defaulting to zero behind a `> 0` gate** is a feature that is dead rather than wrong,
-and nothing crashes.
-
-**The owner's rule is the right default:** everything solid hurts unless specifically told not to (2026-11-15). So the
-factor defaults to `1` — the rock's own number — and the opt-out is explicit data (`collideDmg: 0`). When a system
-has a knob whose zero means "never", make the *default* the behaviour the game wants, and make disabling it the
-sentence a person has to write on purpose. Then apply the rule everywhere it is meant to hold in one pass: the pilot
-**and** hostiles, which had the same free bounce for the same reason.
-
-The second half is the test that was missing: nothing asserted scenery damage either way, so 633 green tests said
-"fine" about a station that could not hurt anyone. Assert a rule at what the player feels — flying a hull into scenery
-and reading the shield bar — not at the plumbing that carries it.
-
-- **Enforced by:** `tests/collision-damage.test.mjs` (bake defaults, the hull really takes the rock-rate damage,
-  the factor scales it, `collideDmg: 0` opts out, slow contact is free, rock and station cost the same) and
-  `tests/enemy-collision.test.mjs` (scenery damages a hostile, `collideDmg: 0` does not).
-
-### L28. A `[hidden]` toggle fails when a container selector outranks it or a checkbox traps the key
-
-- **Seen (owner, 2026-11-18):** the `N` panel wouldn't close (`#hud > #pocket-objects` outranked `[hidden]` and checkbox `INPUT`s trapped keys), and `#inv-held-ghost` (`display: flex`) lingered as an empty box after dropping an item.
-- **Rule:** every `[hidden]` rule must outrank every `display` rule for that element (and transient cursor ghosts remove on clear); typing guards apply only to text/number/select controls, never checkboxes.
-- **Enforced by:** `tests/pocket-list.test.mjs`, `tests/station-ui-batch.test.mjs`.
-
-### L29. Moving colliders stepped once per render frame gave `0 m/s` on multi-tick frames
-
-- **Seen (owner, 2026-11-18):** being pushed by Meridian Station's turning structure showed `0 m/s` while moving.
-- **Cause:** `updateScenery(dt)` advanced movers once per render frame before `simClock.advance(dt)` — on any 2-tick frame tick 1 took the whole push and tick 2 saw a frozen mover (`0 m/s`), while high-Hz frames jittered; scaled movers also multiplied local distance by `rLoc / radius` instead of `radius / rLoc`.
-- **Rule:** every live collider moves inside the fixed `SIM_DT` step (`stepScenery`), scales local distances back to world metres, and never rounds an active collision push down to `0 m/s`.
-- **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (24–240 Hz sweeps, scaled movers, sub-0.5 m/s push).
 
 ### L30. Event counters and wrong-station reads misrepresented live mission inventory
 
@@ -335,4 +272,4 @@ and reading the shield bar — not at the plumbing that carries it.
 - **Rule:** every system with `draw > 0` requires `p.stored > 0` (`hasPower`) and records `setDraw(..., 0)` whenever unpowered.
 - **Enforced by:** `tests/slice3-assets-inventory-power.test.mjs`, `tests/content.test.mjs`, `tests/shield.test.mjs`.
 
-[More lessons](archive/reticle-and-recovery-lessons.md)
+[More lessons](archive/reticle-and-recovery-lessons.md) — L21–L29, moved to keep this file under its size limit.
