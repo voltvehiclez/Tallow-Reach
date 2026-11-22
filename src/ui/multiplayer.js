@@ -187,6 +187,7 @@ let chatFadeTimer = 0;
 // cannot take the cursor, so asking the cursor first made the field stay hidden forever
 // and the box untypable — the guest's half of the 2026-11-21 report.
 let chatOpen = false;
+let chatPinned = false;
 let drawnHtml = "";     // what is currently in the card, so a no-op redraw does nothing
 
 /** Is the chat box open (and therefore catching keystrokes)? */
@@ -492,7 +493,7 @@ function listHtml(model) {
   const rows = chatWhoRows({ name: model.name, hostName: model.hostName, guests: model.guests });
   const docked = new Map(model.guests.map(g => [g.name, !!g.docked]));
   return (
-    `<section class="mp-block"><h2>Current players</h2>` +
+    `<section class="mp-block"><h2>Players</h2>` +
     `<ul class="mp-list">${rows
       .map(name => `<li>${escapeHtml(name)}${docked.get(name) ? " <small>docked</small>" : ""}</li>`)
       .join("")}</ul>` +
@@ -814,7 +815,8 @@ async function joinFromBox() {
     return false;
   }
   clearPendingJoin();
-  panelView.fields.join = "";
+  writeSettings({ ...readSettings(), lastJoin: text });
+  panelView.fields.join = text;
   setMessage("Joined. Press Enter to chat.", "ok");
   afterJoined();
   draw();
@@ -1208,12 +1210,20 @@ function buildChat() {
     `<p id="mp-chat-note" hidden></p>` +
     `<input id="mp-chat-input" maxlength="${NET.chatLineMax}" placeholder="Say something…  (Enter sends, Esc closes)" autocomplete="off">` +
     `</div>` +
-    `<aside id="mp-chat-who" aria-label="Who is here"></aside>`;
+    `<aside id="mp-chat-who" aria-label="Who is here"></aside>` +
+    `<button type="button" id="mp-chat-pin" title="Keep chat visible">Pin</button>`;
   document.body.appendChild(chatBox);
   chatInput = chatBox.querySelector("#mp-chat-input");
   chatList = chatBox.querySelector("#mp-chat-lines");
   chatWho = chatBox.querySelector("#mp-chat-who");
   chatNote = chatBox.querySelector("#mp-chat-note");
+  const pinBtn = chatBox.querySelector("#mp-chat-pin");
+  pinBtn?.addEventListener("click", () => {
+    chatPinned = !chatPinned;
+    pinBtn.textContent = chatPinned ? "Pinned" : "Pin";
+    pinBtn.classList.toggle("is-pinned", chatPinned);
+    drawChat();
+  });
 
   chatInput.addEventListener("keydown", event => {
     // The box owns Enter and Escape while it is open. Stop here so the game's own
@@ -1325,7 +1335,7 @@ export function chatWhoRows(snap) {
 export function chatWhoHtml(snap) {
   const rows = chatWhoRows(snap);
   // The column says what it is: these are the pilots connected right now.
-  return `<h2>Current players</h2><ul>` +
+  return `<h2>Players</h2><ul>` +
     rows.map(name => `<li>${escapeHtml(name)}</li>`).join("") +
     `</ul>`;
 }

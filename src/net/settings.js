@@ -46,7 +46,7 @@ function cleanRelay(value) {
  *                 have a better one (see `net/turn.js`).
  */
 export function readSettings() {
-  const fallback = { name: "", enabled: false, autoJoin: true, relay: null };
+  const fallback = { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" };
   try {
     const raw = globalThis.localStorage?.getItem(KEY);
     if (!raw) return fallback;
