@@ -20,72 +20,57 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
-## 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
+## 2026-11-23: Where a joining pilot lands, and where it comes home to
 
-The first slice where something of the player's actually travels. **"Bring my pilot"** packs the
-pilot into a suitcase, the host receives it as a real docked ship, writes a newer copy back about
-two seconds after anything changes, and **"Bring pilot home"** puts it back — with the host offline.
+The owner asked how arrival and return choose a place, and what happens when a station exists in one
+world and not the other. Answering it found **two holes** on the return path.
 
-- **Joining is not travelling** (a deliberate decision, not an oversight): the plan quotes
-  ""Bring my pilot"" as an action, so pressing **Join** only looks around a friend's world. A pilot
-  is frozen at home only when the player asks for it.
-- **Two new wire kinds.** `carry` (guest -> host) and `suitcase` (host -> guest, and the newer copy
-  back), both `{ guestId, name, epoch, rev, bundle }`, capped at `NET.suitcaseMaxBytes` = 256 KB of
-  JSON and **refused in words, never truncated**. `epoch`/`rev` travel *beside* the bundle so
-  `compare()` never has to trust the contents. `cleanCarry` validates size and shape but **never
-  strips content ids** (LESSONS L16): cargo the build does not know about still travels.
-- **The host never holds the guest's secret** — only a `tokenHash` — and never trusts the bundle:
-  it goes through `relocate()`, so a locker whose station this galaxy lacks waits at Meridian and
-  remembers where it came from.
-- **The frozen pilot's record is never captured from the runtime.** `captureActiveModeSave` now
-  hands an away pilot's record through untouched, so an autosave or a mode cycle cannot fold live
-  cargo into a record the suitcase already owns.
-- **The title screen becomes a card** while the pilot is away — *"Your pilot is in Ada's world"* +
-  **Rejoin** / **Bring pilot home** — driven by `mp-away-changed`. Open World refuses to start with
-  a frozen pilot rather than flying one.
+- **Arriving** (already right): a guest lands **docked at its own active ship's station** if the host's
+  galaxy has that pocket, otherwise at **Meridian**. Flight positions never travel.
+- **Coming home** (was wrong): a stack bought at a station **only the friend's world has** came home
+  filed under that station's key in a galaxy with no such station — counted, saved and **unreachable for
+  ever**; and a stack that waited at the friend's Meridian came home to Meridian instead of its **own**
+  station, even though its `origin` was still recorded. `checkIn` now asks the home world's station index,
+  prefers `origin`, and sends anything it cannot place to Meridian with its origin kept.
+- Hulls already followed the right rule (`shipPlaces` asks the world; `shipsAt` remembers); only the
+  station half was wrong.
 
-**Two real bugs found and fixed on the way (both were shipped by slice 1):**
+**Files:** `src/net/custody.js` (`checkIn` via `stationsOfWorld`), `tests/multiplayer-carry.test.mjs`
+(+2). **Tests: 1013** (was 1011). **Save format unchanged (v29).** LESSONS L37.
 
-1. **`custody.hostProfile` wiped every guest's hold.** It sanitized a bundle profile with no `v`,
-   which the sanitizer reads as a pre-v12 save whose holds were `{ cargo, modules }` — so a visitor
-   would arrive with its ship and credits and **an empty hold**. It now stamps `v` first, exactly as
-   `applyTravellingProfile` always has. Regression test in `multiplayer-custody.test.mjs`.
-2. **Coming home duplicated every station locker.** `checkOut` empties the home stations, but the
-   session's narrow `save.write` only stored the guest list and world id — the emptying never
-   reached the game. The suitcase then carried cargo the live save still held, and `checkIn` added
-   it on top: **4 ferrite became 8.** A guest's own save is now installed through a new
-   `saveKit.install` (the host's narrow `write` is untouched), and a test asserts both the fix and
-   the failure it prevents (LESSONS L15).
+## 2026-11-23: Playtest 14 — leaving a world, the title's away card, and a new Test Ship
 
-**Files:** `src/data/multiplayer.js` (`suitcaseMaxBytes`, `suitcaseRepeatSec`, `BUILD = "2026-11-23a"`),
-`src/net/{custody,protocol,session}.js`, **new** `src/sim/multiplayer.js`, `src/util/events.js`,
-`src/state/{state,profile}.js`, `src/main.js`, `src/ui/{screens,menu,multiplayer}.js`,
-`src/sim/README.md`. **New tests:** `multiplayer-carry`, `multiplayer-visitors`,
-`multiplayer-bring-pilot` (28 new).
+Four reports from the owner's playtest. Three were bugs; one was a model swap.
 
-**A stronger third fix, found while proving the tests bite.** Reverting each fix and re-running showed two of the new tests
-passed anyway — they asserted only what the narrow seam happened to carry. The guest kit in the session test now models the
-real narrow `write`, and every guest-side store (packing *and* taking a newer suitcase from the host) goes through one
-`storePilot` rule. Undoing any of the three fixes now fails a test.
+- **Leaving a world was invisible, and locked the pilot out.** A departing guest stayed in the host's
+  players list, the chat said nothing, and its ship stayed. Worse, its record kept the OLD token hash —
+  so the next join was a *returning* guest, refused for a token it no longer had. `forgetPeer(peerId)` is
+  now the one rule: remove the row, say *"Bo left."*, drop the ship (`mp-guest-left`), republish presence,
+  and mark the record `left`, which a fresh link re-admits. Separately, `upsertGuest` let a
+  `welcome`/`presence` list (no peer id) **erase** a known one, so that guest could never be matched to
+  the peer that left.
+- **"Bring my pilot" appeared, then the world entered itself.** The join worked and `state.away` was set,
+  but `afterJoined` entered the world anyway — flying a frozen pilot whose cargo was elsewhere. It stops
+  and says so now.
+- **The away card's buttons did nothing, and trapped the player.** From the title there is no loaded
+  open-world save, so unpacking got a save with no profile; and `comeHome` opened with
+  `if (!leaveVisit()) return false`, which from the title returns before anything is unpacked. Now
+  `bringPilotHomeAtMenu()` unpacks the **stored** mode save, Rejoin rebuilds the link from the marker and
+  really joins, and the card explains both buttons.
+- **Test Ship draws the owner's `testship-v1.glb`** — drop-in (same generator, extensions, footprint),
+  centred on y, stray `Page camera` node gone. `compressed-model` re-recorded per LESSONS L17.
 
-**Tests: 1004, all green** (was 976). **Save format unchanged (v29).** **Build id: `2026-11-23a`.**
-**Not done yet, by design:** the guest's own screen showing the host's world (slice 8), crashes and
-reconnects (slice 5), and drawing a visiting ship on the host's screen — the pilot is real, docked
-and simulated, but `render/views.js` still draws one hull. That is slice 7/8. Playtest guide:
-`testing/TESTING-16-SLICE4.md`.
-
-## 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
-
-**Docs/test only; no code, no build, no save change.** `HANDOFF.md` is rewritten (not appended) at
-the end of every chat, and it had reached 7 bytes under its cap — leaving the next chat no room to
-record a change without deleting a fact first.
-
-- **`tests/docs.test.mjs`:** `"docs/HANDOFF.md": 14 * KB` -> `16 * KB`. This is the only place the
-  limit lives, so the change is one visible number. `HANDOFF.md`'s separate **150-line** guard is
-  unchanged, so the file cannot grow by sprawl — only by a slightly fuller sentence.
-- Nothing else in the docs changed, and no text was removed to make room.
+**Also:** `world.guests[id].left` is an **additive** save field, so **no version bump** (v29 stays).
+**Files:** `src/net/{session,custody,multiplayer}.js`, `src/{data/multiplayer,state/profile}.js`,
+`src/ui/{menu,multiplayer,screens}.js`, `src/assets/models/ship.testship.glb`, and new
+`tests/multiplayer-playtest14.test.mjs`. **Tests: 1011** (was 1004); each fix was verified by reverting
+it. **Build id: `2026-11-23b`.**
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
+
+- 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
 
 - 2026-11-22: Step 16 is eight slices — the owner agreed the plan
 

@@ -172,6 +172,21 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L37. A key that names a place must be checked against the place that will read it
+- **Seen (owner, playtest 14):** "What happens if a player joins a world with a pocket/station that doesn't exist in their local world and they
+  return to their local world?" — a stack bought at a station only the host's world has came home filed under that station's key, in a galaxy
+  with no such station: counted, saved, and unreachable for ever. A stack that had waited at the host's Meridian also came home to Meridian
+  instead of its own station, even though its `origin` was still in the record.
+- **Cause:** `checkIn` filed a locker at `locker.station` without asking the HOME world whether it has that station, and its own `relocate`
+  call passed no index — so `relocate` fell back to "does `world.stationStores` have a key with that name", which is the wrong question for a
+  station that has never held anything. `relocate` had the right rule all along (`origin` first, then the arrival station); the home path
+  never asked it.
+- **Rule:** every function that FILES something by place asks the world that will read the key, not the world it came from — and asks with
+  the world's station index (`stationsOfWorld`), not with whatever happens to be in its stores. Coming home prefers `origin`, so a stack that
+  waited somewhere else returns to its own station.
+- **Enforced by:** "cargo bought at a station only the host's world has comes home safely" and "a stack that waited at the host's Meridian comes
+  home to its OWN station" in `tests/multiplayer-carry.test.mjs`; reverting the fix fails both.
+
 ### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
 - **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."
 - **Cause:** Reset wiped only the *current* mode's half of the dual-mode save, while its words promise "Wipe credits, ships, base and contracts" — the other mode's pilot survived intact.

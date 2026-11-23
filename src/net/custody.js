@@ -60,7 +60,7 @@ import { isShipId } from "../data/ships.js";
 import { MODULES } from "../data/modules.js";
 import { ARRIVAL_STATION_KEY, TRAVEL_FIELDS, HOME_FIELDS, NET, KEY } from "../data/multiplayer.js";
 import { inventoryOf, stockVolume, guardOverfull } from "./station-inventory.js";
-import { stationIn } from "./world-places.js";
+import { stationIn, stationsOfWorld } from "./world-places.js";
 import { stationKeyAt, isPocket } from "../data/places.js";
 
 /* ------------------------------------------------------------------------- */
@@ -430,11 +430,21 @@ export function checkIn(save, bundle, options = {}) {
 
   const incomingProfile = isPlainObject(bundle?.profile) ? bundle.profile : {};
   const stations = isPlainObject(next.world.stationStores) ? next.world.stationStores : (next.world.stationStores = {});
+  // The home world's stations, asked once: a stack whose station this world does not have
+  // must not be filed under a key nobody can reach (playtest 14).
+  const homeIndex = options.index || stationsOfWorld(next.world, { wormholes: false });
+  const homeHas = key => !!stationIn(homeIndex, key);
+  const arrivalKey = idText(options.arrival) || ARRIVAL_STATION_KEY;
 
-  // Every locker stack the bundle carries comes home to the station it names.
+  // Every locker stack the bundle carries comes home to the station it names — or to
+  // Meridian when this world has no such station, keeping the `origin` it came from.
   for (const raw of Array.isArray(bundle?.lockers) ? bundle.lockers : []) {
     const locker = makeLocker(raw?.item, raw?.count, raw?.station, raw?.origin ?? raw?.station);
     if (!locker) continue;
+    // A stack BELONGS at its origin: if home has that station it goes back there, which is
+    // how a stack that waited at a friend's Meridian comes home to its own.
+    if (homeHas(locker.origin)) locker.station = locker.origin;
+    else if (!homeHas(locker.station)) locker.station = arrivalKey;
     if (!isPlainObject(stations[locker.station])) stations[locker.station] = newStock();
     stations[locker.station][locker.item] = (stations[locker.station][locker.item] || 0) + locker.count;
   }
@@ -477,7 +487,23 @@ export function checkIn(save, bundle, options = {}) {
     }
   }
 
-  const relocated = relocate({ profile: next.profile, lockers: [], unknown: bundle?.unknown }, next.world, { ...options, save: null });
+  // Come home against the world the pilot is actually returning TO.
+  //
+  // Playtest 14's question: what if a pilot stows cargo at a station only the friend's
+  // world has, then goes home? Before this, `checkIn` relocated without asking the home
+  // world whether it has the station — so a stack bought at `ada:outpost` was written
+  // under `ada:outpost` in a world that has no such station, and it was unreachable for
+  // good. A station this world lacks now sends the stack to Meridian with its `origin`
+  // kept, so a later `relocate` puts it back if that pocket ever exists here.
+  //
+  // `options.index` is the exact answer when a caller has one; otherwise the home world's
+  // index is built from its own galaxy seed.
+  const index = options.index || stationsOfWorld(next.world, { wormholes: false });
+  const relocated = relocate(
+    { profile: next.profile, lockers: [], unknown: bundle?.unknown },
+    next.world,
+    { ...options, index, save: null },
+  );
   next.profile = relocated.bundle.profile;
   next.world.stationStores = relocated.stations;
   guardOverfull(next.world);
