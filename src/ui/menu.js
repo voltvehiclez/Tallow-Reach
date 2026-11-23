@@ -361,9 +361,15 @@ function comeHome() {
  * Re-attempt the world the pilot is already in, from the title card (playtest 14).
  *
  * The join is asynchronous and the screen must not lie about it, so the answer is a
- * sentence either way. On success the ordinary join path runs (`mp-enter-world` is NOT
- * emitted for an away pilot — see `afterJoined`), leaving the player on the card with the
- * connection live, which is what "Rejoin" means: the pilot is still there, go and look.
+ * sentence either way.
+ *
+ * **On success the multiplayer screen opens, and the card goes** (owner, playtest 16). It
+ * used to leave the player exactly where they were, so the host's list showed the name, the
+ * laptop said "Rejoined", and nothing else happened — a rejoin you cannot see is
+ * indistinguishable from one that failed. The pilot stays away (that is what makes this a
+ * rejoin and not a trip home), and the join half of the screen is where it can be brought
+ * home or left; `emit("mp-enter-world")` is deliberately NOT used, because entering the
+ * world is what flying your own frozen ship would mean.
  */
 function rejoinStoredWorld(away) {
   const link = makeJoinUrl(away.worldId, away.token, pageBase());
@@ -371,6 +377,8 @@ function rejoinStoredWorld(away) {
     .then(result => {
       if (!result?.ok) { showNotice(result?.message || "Could not rejoin that world."); return; }
       showNotice(`Rejoined ${away.hostName ? away.hostName + "'s world" : "your friend's world"}.`);
+      // The screen redraws itself from `mp-state`; this is what puts it on top again.
+      openMultiplayer({ focus: "join", from: "menu" });
       render();
     })
     .catch(() => showNotice("Could not rejoin that world. Paste the link instead."));
@@ -399,11 +407,18 @@ const ACTIONS = {
   // (the multiplayer action below asks for one). Open World must start with no settings
   // stored at all — the step-10 fixes and the 11B recovery notices depend on it.
   intro() {
-    // Slice 4: a pilot that is away must come home BEFORE its world starts. If the suitcase
-    // will not open, `comeHome` says why and returns false — and we stop, because entering
-    // the world would fly a frozen pilot whose cargo is in another galaxy. (Fixing the
-    // suitcase needs the host, so the player goes back to the card, not into a cockpit.)
-    if (state.away && !comeHome()) return;
+    // **A pilot that is away does not open its own world at all** (owner, playtest 16).
+    //
+    // It used to try `comeHome()` and carry on if that worked, which read as "Open World
+    // silently unpacks my pilot". The owner asked for the other thing: the away card is the
+    // answer, and the two presses on it (Rejoin / Bring pilot home) are the only ways on.
+    // Entering the world with a frozen pilot would fly a hull whose cargo is in another
+    // galaxy, and unpacking without being asked is a decision about somebody's save.
+    if (state.away) {
+      showNotice("Your pilot is in your friend's world. Bring it home from the card first.");
+      if (state.ui && state.ui.intro) render();
+      return;
+    }
     enterGameMode("open");
   },
   // Step 16 slice 4: the two doors off the "Your pilot is in Ada's world" card.

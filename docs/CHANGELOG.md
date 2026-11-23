@@ -18,6 +18,34 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: Joining entered the world and left the pilot behind
+
+**Code change; rebuild needed.** The owner could join a friend's world, play, and never be offered
+**Bring my pilot** — because the offer was on the join screen and **a successful join closes that
+screen and enters the world**. The button was destroyed by the very thing it was meant to follow.
+
+- **The prompt is now a card in the world** (`#mp-bring-card`, `src/ui/multiplayer.js`), bottom
+  right, with *Bring my pilot* and *Not now*. It is not a modal: a guest who only wants to look
+  around and chat can ignore it, and the world keeps running behind it. The press goes through the
+  same `session.bringPilot()` the pause screen uses.
+- **The session decides when it is wanted** and says so on the bus: a new `mp-bring-prompt
+  {show, text}` event from `net/session.js` `publishBringPrompt()` (derived — guest, welcomed, has
+  not carried, not already away — never latched), plus `askBringPrompt()` so a screen that mounted
+  after the event can ask again. `net/` still never touches the DOM.
+- **Open World now refuses while the pilot is away** (owner's decision, playtest 16): it says where
+  the pilot is and leaves the card up. It used to try `comeHome()` and carry on, which read as
+  "Open World silently unpacks my pilot and drops me in".
+- **Rejoin reopens the multiplayer screen on success.** It connected (the host's list showed the
+  name) and then did nothing visible: the player stayed on the card with a "Rejoined" sentence — a
+  rejoin you cannot see is indistinguishable from one that failed. It still does **not** enter the
+  world, because the pilot is frozen there.
+- The click-mid-join race the owner found ("quickly click Bring my pilot before it logs me in")
+  goes with the old button: there is no longer a prompt to click while the world is loading.
+
+**Tests:** new `tests/multiplayer-playtest16.test.mjs` (6), including a real two-session join on the
+in-memory wire that asserts the prompt appears on join and disappears once the pilot actually
+crosses. Each fix verified by reverting it. **Build `2026-11-23d`, save v29 unchanged. 1026 tests.**
+
 ## 2026-11-23: The away card was a trap — Bring pilot home never worked
 
 **Code change; rebuild needed.** The owner's laptop could not come home, could not rejoin, and a
@@ -255,42 +283,9 @@ unblocked; 17d gains auth), `docs/ROADMAP.md`, `docs/TARGET_ARCHITECTURE.md`,
 
 **No save or build change.** Step 16 slice 4 (ships visible in multiplayer) is still the next build.
 
-## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
-
-Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details
-still said **`In use: none (the free public servers only)`** with `Code paths: 1 local, 1 public,
-0 relay`. The server had never been saved, so the offer carried nothing but local and public
-addresses — nothing to do with ExpressTURN answering or not. Three fixes, in the order they bite:
-
-- **The screen lied about itself.** `screenModel()` had two `relay:` keys: the player's saved
-  server, then the transport's *relay mode* flag, which overwrote it. Every reader of
-  `model.relay` (`In use:`, Copy relay settings) saw a boolean. The flag is now `relayMode`;
-  `relay` is the server, as every caller already assumed.
-- **Typing is saving.** A complete relay entry is saved 600 ms after the last keystroke in any
-  of the three boxes, with *"Relay server saved…"* on screen. The new `relayFromFields()` in
-  `net/turn.js` is the one parser for the boxes (whole pasted block, bare `host:port`, a comma
-  list, a `TRTURN:` line; typed username/credential win over the pasted ones). If an offer code
-  already exists it is **remade** immediately, because a code carries the servers that existed
-  when it was made — "saved" without a new code is still a code with `0 relay` paths.
-- **The guest sees the facts on the codes wire.** A session joined by codes has no data channel,
-  so `snapshot().diag` is null and the laptop's panel drew no Connection details at all.
-  `screenModel()` now builds a synthetic diag from the wire's own state plus the code's paths
-  (`codesOnly`): Signalling, Code paths, clock. "Browsers in the room" and the direct-link rows
-  are suppressed there, since a code carries neither.
-- **The In-use line owns the failure:** a saved relay with `codePaths.relay === 0` adds
-  *"— but the last code had no relay path, so that server did not answer. Press Test relay
-  servers."* A duplicate `role` key in the same object was also removed (build warning).
-
-**Files:** `src/net/turn.js` (`relayFromFields`), `src/ui/multiplayer.js` (`screenModel`,
-`relayServerHtml`, `queueRelaySave`, `save-relay`/`clear-relay`), `tests/multiplayer-ui.test.mjs`
-(3 new), `src/data/multiplayer.js` (`BUILD = "2026-11-22i"`).
-
-**Tests: 974, all green** (was 971). **Save format unchanged (v29).** **Build id: `2026-11-22i`.**
-Still unproven: whether ExpressTURN's free tier relays a packet at all — the next playtest's
-*Test relay servers* line decides that, and the panel now shows it on both machines either way.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
 - 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
 - 2026-11-22: The multiplayer screen is trimmed to a simple box
 

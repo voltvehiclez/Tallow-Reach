@@ -145,6 +145,10 @@
 //                                    the save half stores it with net/multiplayer.js `syncAway`
 //   mp-away-changed { away }        where this pilot is changed: null at home, a marker away
 //                                    (a screen redraw; the title card reads it)
+//   mp-bring-prompt { show, text }  a guest is in a friend's world and has NOT brought its pilot:
+//                                    `show` true puts the in-world "Bring my pilot" card up,
+//                                    false takes it down (it came over, or it left). The prompt
+//                                    itself lives in ui/multiplayer.js; net/ only asks for it.
 
 const handlers = new Map();
 

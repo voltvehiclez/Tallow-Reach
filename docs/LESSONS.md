@@ -172,6 +172,22 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L39. A screen that closes itself cannot ask the question it exists to ask
+- **Seen (owner, playtest 16):** "I join a multiplayer world, it joins without letting me click the bring my pilot prompt it
+  just joins." The owner played a whole session with no pilot in it, and clicking the button fast enough to beat the join put them on
+  the away card instead.
+- **Cause:** the only **Bring my pilot** button lived on the **join screen**, and a successful join **closes that screen and enters
+  the world** (`afterJoined` → `mp-enter-world`). The control was destroyed by the event it was supposed to follow, so it was never
+  on screen at the moment it was needed — and the one time it was clicked, it won a race and the world-entering code then saw an away
+  pilot and bailed out to the card.
+- **Rule:** a prompt that must appear **after** an action cannot live on the surface that action closes. Ask *the surface the player
+  is now looking at* — and derive "should this be showing?" from session state on the bus (`mp-bring-prompt`), never latch it, and let
+  a screen that mounted late ask again. If a successful action and a required question happen in that order, the question belongs to
+  the next screen.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a real two-session join asserts the prompt appears on join and goes once
+  the pilot crosses; the wiring tests assert the card is its own element, is asked for by `net/` over the bus, and that `afterJoined`
+  still enters the world. Reverting the derivation fails three of the six.
+
 ### L38. A save seam has two shapes, and guessing the wrong one looks like a broken save
 - **Seen (owner, playtest 15):** the away card became a trap. *"Bring pilot home"* always answered *"Your pilot's save could not be
   read, so it cannot come home yet"* — in Brave, in Chrome, on a first boot, and after every refresh — while Rejoin answered *"Your

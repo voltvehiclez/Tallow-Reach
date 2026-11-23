@@ -1,3 +1,37 @@
+## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
+
+Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details
+still said **`In use: none (the free public servers only)`** with `Code paths: 1 local, 1 public,
+0 relay`. The server had never been saved, so the offer carried nothing but local and public
+addresses — nothing to do with ExpressTURN answering or not. Three fixes, in the order they bite:
+
+- **The screen lied about itself.** `screenModel()` had two `relay:` keys: the player's saved
+  server, then the transport's *relay mode* flag, which overwrote it. Every reader of
+  `model.relay` (`In use:`, Copy relay settings) saw a boolean. The flag is now `relayMode`;
+  `relay` is the server, as every caller already assumed.
+- **Typing is saving.** A complete relay entry is saved 600 ms after the last keystroke in any
+  of the three boxes, with *"Relay server saved…"* on screen. The new `relayFromFields()` in
+  `net/turn.js` is the one parser for the boxes (whole pasted block, bare `host:port`, a comma
+  list, a `TRTURN:` line; typed username/credential win over the pasted ones). If an offer code
+  already exists it is **remade** immediately, because a code carries the servers that existed
+  when it was made — "saved" without a new code is still a code with `0 relay` paths.
+- **The guest sees the facts on the codes wire.** A session joined by codes has no data channel,
+  so `snapshot().diag` is null and the laptop's panel drew no Connection details at all.
+  `screenModel()` now builds a synthetic diag from the wire's own state plus the code's paths
+  (`codesOnly`): Signalling, Code paths, clock. "Browsers in the room" and the direct-link rows
+  are suppressed there, since a code carries neither.
+- **The In-use line owns the failure:** a saved relay with `codePaths.relay === 0` adds
+  *"— but the last code had no relay path, so that server did not answer. Press Test relay
+  servers."* A duplicate `role` key in the same object was also removed (build warning).
+
+**Files:** `src/net/turn.js` (`relayFromFields`), `src/ui/multiplayer.js` (`screenModel`,
+`relayServerHtml`, `queueRelaySave`, `save-relay`/`clear-relay`), `tests/multiplayer-ui.test.mjs`
+(3 new), `src/data/multiplayer.js` (`BUILD = "2026-11-22i"`).
+
+**Tests: 974, all green** (was 971). **Save format unchanged (v29).** **Build id: `2026-11-22i`.**
+Still unproven: whether ExpressTURN's free tier relays a packet at all — the next playtest's
+*Test relay servers* line decides that, and the panel now shows it on both machines either way.
+
 ## 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
 
 **Code change; rebuild needed.** Follow-up trims to the screen from the same day, all at the

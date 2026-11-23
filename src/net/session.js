@@ -271,6 +271,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // copy, so a `suitcase` message can be judged with `compare` instead of a guessed rule.
   let carried = null;
   let carriedRev = 0;
+  // The in-world prompt's last answer, so `publish` does not re-emit on every keystroke of
+  // chat while the state it describes has not moved.
+  let bringPromptShown = false;
   // Has the host confirmed it took the suitcase? Until it has, a `carry` is re-sent: the
   // welcome can arrive before the channel can carry anything (LESSONS L35).
   let carriedAcked = false;
@@ -299,6 +302,12 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (!next || typeof next !== "object") return;
     if (save.install) save.install(next);
     else save.write(next);
+  }
+
+  /** Re-state the in-world prompt (see `publishBringPrompt`). */
+  function askBringPrompt() {
+    bringPromptShown = !bringPromptShown;   // force the next emit through
+    publishBringPrompt();
   }
 
   function snapshot() {
@@ -337,6 +346,38 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     } catch (e) {
       /* a broken screen must not break a session */
     }
+    try {
+      publishBringPrompt();
+    } catch (e) {
+      /* ...and neither may a prompt */
+    }
+  }
+
+  /**
+   * Tell the screen whether this guest still has to press **Bring my pilot** (owner,
+   * playtest 16).
+   *
+   * The prompt used to live only on the join screen, and a successful join CLOSES that screen
+   * and enters the world — so the button was destroyed by the very thing it was meant to
+   * follow, and the player arrived with no pilot and no way to send one. The screen to ask is
+   * the one the player is now looking at, which only `ui/` knows, so this asks through the
+   * bus and sends the same answer every time (a screen that mounts late can ask again).
+   *
+   * `show` is derived, never latched: a guest that is connected, has not carried, and whose
+   * pilot is not already away wants the prompt; everything else wants it gone.
+   */
+  function publishBringPrompt() {
+    const wanted = role === "guest" && welcomed && !carried && !awayMark;
+    const text = wanted
+      ? "Press Bring my pilot to put your ship, hold and credits into this world."
+      : "";
+    if (wanted === !!bringPromptShown) {
+      // The answer has not changed; re-stating it is what lets a freshly mounted screen draw.
+      if (wanted) emit("mp-bring-prompt", { show: true, text });
+      return;
+    }
+    bringPromptShown = wanted;
+    emit("mp-bring-prompt", { show: wanted, text });
   }
 
   function noteLine(from, text, own = false) {
@@ -1278,8 +1319,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     finishCodes,
     acceptCodes,
     waitForWelcome,
-    // Slice 4: the guest's "Bring my pilot" press.
+    // Slice 4: the guest's "Bring my pilot" press, and the in-world prompt asking for it.
     bringPilot,
+    askBringPrompt,
     reconnect,
     escalateToRelay,
     checkRelays,
@@ -1521,6 +1563,23 @@ function readAwayCopy(worldId) {
     return readAway(worldId);
   } catch (e) {
     return null;
+  }
+}
+
+/**
+ * Ask the running session to re-state whether the "Bring my pilot" prompt should be up.
+ *
+ * The prompt is derived state (`publishBringPrompt`), so this is a nudge, not a decision —
+ * a screen that mounted after the event can ask again instead of polling. With no session
+ * there is nothing to ask and the prompt must go: a stale card floating over a title screen
+ * is worse than no card.
+ */
+export function askBringPrompt() {
+  try {
+    if (active && typeof active.askBringPrompt === "function") { active.askBringPrompt(); return; }
+    emit("mp-bring-prompt", { show: false, text: "" });
+  } catch (e) {
+    /* a screen must never break a session */
   }
 }
 

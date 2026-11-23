@@ -1024,7 +1024,9 @@ test("the title's Open World is where a visit ends, and the pilot comes home", (
   // pilot whose suitcase will not open, which is why the return value is checked.
   assert.match(menu, /bringPilotHomeAtMenu\(/, "the suitcase is unpacked by slice 4's one rule, menu-aware");
   assert.match(menu, /if \(!done\.ok\)/, "and a refusal stops the visit ending");
-  assert.match(menu, /if \(state\.away && !comeHome\(\)\) return;/, "nothing enters the open world with a frozen pilot");
+  // Playtest 16 replaced "try to come home and carry on" with a straight refusal: Open World
+  // does not start at all while the pilot is away, and the card's two presses are the way on.
+  assert.match(menu, /if \(state\.away\) \{/, "nothing enters the open world with a frozen pilot");
   // The join path must not trip over it: entering the world a join just produced is not a leave.
   const entered = menu.indexOf('on("mp-enter-world"');
   assert.doesNotMatch(menu.slice(entered, entered + 400), /comeHome/, "a fresh join does not leave");

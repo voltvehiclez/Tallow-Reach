@@ -153,7 +153,10 @@ test("playtest 15: the away card is never a dead end", () => {
   // Whatever else breaks, there must be a path off the card that does not need the host.
   const menu = read("src/ui/menu.js");
   assert.match(menu, /comehome\(\) \{\s*ACTIONS\.intro\(\);/, "Bring pilot home runs the same act as Open World");
-  assert.match(menu, /if \(state\.away && !comeHome\(\)\) return;/, "and entering the world unpacks first");
+  // Playtest 16 changed what that act does with an away pilot: it refuses and explains
+  // (the owner's choice — the card is the only way on), rather than unpacking behind them.
+  assert.match(menu, /if \(state\.away\) \{\s*showNotice\(\"Your pilot is in your friend's world/,
+    "Open World refuses while the pilot is away, and says why");
   const net = read("src/net/session.js");
   // Coming home needs no wire: the suitcase is the guest's own copy.
   assert.match(net, /const suitcase = away\.suitcase \|\| readAwayCopy\(away\.worldId\)/);
