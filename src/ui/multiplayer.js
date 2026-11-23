@@ -93,6 +93,11 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     // Step 16 slice 4: has the pilot actually crossed? The join surface shows
     // "Bring my pilot" until it has, then says so instead of offering it twice.
     brought: snap.carrying === true || snap.carriedAcked === true,
+    // Playtest 17, the owner's design: after a link connects, the SAME box becomes the choice —
+    // *Bring my pilot* or *Enter the world* — and nothing is loaded until one is pressed. The
+    // button used to live on a screen that the join itself closed, so it was destroyed by the
+    // event it existed to follow. Keep the player where he is until he has decided.
+    choosing: visiting && connected && !snap.carrying && !snap.carriedAcked,
     role: snap.role || null,
     state: snap.state || "idle",
     // The switch's words follow the session (LESSONS L32). Hosting is the only thing the
@@ -197,10 +202,6 @@ const panelView = {
 };
 
 let root = null;        // #mp-screen (the whole overlay)
-// The in-world "Bring my pilot" prompt (playtest 16). Its own element, because a join now
-// enters the world and the join screen is gone by the time the player needs to press it.
-let bringCard = null;
-let bringText = "";
 let chatBox = null;     // #mp-chat, bottom left
 let chatInput = null;
 let chatList = null;
@@ -248,16 +249,10 @@ export const isMultiplayerScreenOpen = () => !!root && !root.hidden;
 export function setupMultiplayer() {
   buildScreen();
   buildChat();
-  buildBringCard();
   on("mp-state", () => {
     draw();
     autoOfferWhenStalled();
-    // A guest that has just joined wants the prompt; asking again on every state keeps a
-    // screen that mounted after the event from missing it.
-    session.askBringPrompt?.();
   });
-  // The prompt the player actually sees: the world is on screen, the pilot is still at home.
-  on("mp-bring-prompt", ({ show, text } = {}) => showBringCard(!!show, text || ""));
   on("mp-chat-arrived", () => drawChat());
   // Step 16 slice 4: the pilot crossed (or came home). The join surface stops offering
   // "Bring my pilot" and states that it is here, and the title's card is re-read.
@@ -533,13 +528,23 @@ function joinHtml(model) {
       // Step 16 slice 4: the press that puts the PILOT on the wire. Joining only looks
       // around a friend's world; this is what freezes the pilot at home and sends its
       // ship, hold, credits and lockers across. Worded as the plan words it.
-      (model.visiting && !model.brought
-        ? `<div class="mp-row"><button type="button" class="go" data-mp="bring">Bring my pilot</button></div>` +
-          `<p class="mp-hint">Your pilot and its cargo travel to this world, and your own galaxy pauses ` +
-          `until it comes home. You can bring it home from the main menu even if your friend is offline.</p>`
+      // **Playtest 17, the owner's design.** Once the link connects, this same box becomes the
+      // choice: *Bring my pilot* (send the pilot, then enter) or *Enter the world* (look around
+      // first). Nothing is loaded until one is pressed — the join used to close this screen and
+      // load the world before the player could answer, which is how the button came to be
+      // destroyed by the very event it was meant to follow.
+      (model.choosing
+        ? `<p class="mp-hint mp-connected">Connected to ${escapeHtml(model.hostName || "your friend's world")}.` +
+          ` Choose what to do:</p>` +
+          `<div class="mp-row"><button type="button" class="go" data-mp="bring">Bring my pilot</button></div>` +
+          `<p class="mp-hint">It takes your ship, hold, credits and station lockers across, and your own ` +
+          `galaxy pauses until it comes home. Bringing it home works even if your friend is offline.</p>` +
+          `<div class="mp-row"><button type="button" data-mp="join-world">Enter the world without my pilot</button></div>` +
+          `<p class="mp-hint">You can look around and chat. Your pilot stays at home until you bring it.</p>`
         : "") +
-      (model.visiting && model.brought
-        ? `<p class="mp-hint">Your pilot is here: its ship, hold and credits came with it.</p>`
+      (model.visiting && model.brought && !model.choosing
+        ? `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
+          `<div class="mp-row"><button type="button" class="go" data-mp="join-world">Enter the world</button></div>`
         : "") +
       (model.visiting ? `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` : "") +
       `</section>`
@@ -737,6 +742,24 @@ export async function act(name, arg = "") {
       draw();
       return done.ok;
     }
+    // "Enter the world" — the second half of the owner's join box (playtest 17). Loading the
+    // world is a SEPARATE press from joining now, so a guest who only wants to chat never
+    // leaves this screen, and a guest who brought a pilot gets in with one press.
+    //
+    // For now "the world" is the guest's OWN galaxy: the wire carries no ship or world state
+    // (slices 7 and 8), so both players are in their own worlds and share chat and the pilot.
+    // That is deliberate and is what this placeholder is for — it lets the UI be tested.
+    case "join-world": {
+      if (!screenModel().visiting) {
+        setMessage("Join a friend's world first.", "error");
+        draw();
+        return false;
+      }
+      closeMultiplayer();
+      emit("mp-enter-world", {});
+      draw();
+      return true;
+    }
     case "leave": return leaveSession();
     case "save-relay": {
       const relay = relayFromFields(screenModel().relayFields);
@@ -898,19 +921,21 @@ async function joinFromBox() {
 }
 
 /** A guest who just joined: get out of the way so the world (or the menu) is playable. */
+/**
+ * A guest who just joined. **It no longer enters the world** (owner, playtest 17).
+ *
+ * This is the line that made the "Bring my pilot" prompt unusable: entering the world closed
+ * the multiplayer screen, so the button that lived on it was destroyed by the join, and the
+ * player arrived with no pilot and no way to send one. The owner's design is that the join box
+ * stays up after connecting and offers the two choices, so this only makes sure the box is
+ * showing them.
+ */
 function afterJoined() {
   if (!state.ui.intro) return;
-  closeMultiplayer();
-  // **Not when the pilot is away** (owner, playtest 14). Entering the world is what flying
-  // your own ship means, and an away pilot is frozen — its cargo is in another galaxy. This
-  // is why the title showed "Bring my pilot" for a moment and then entered the world by
-  // itself: the join worked, `state.away` was set, and nothing here looked at it.
-  if (state.away) {
-    setMessage("Your pilot is still in your friend's world. Bring it home below, then join again.", "hint");
-    draw();
-    return;
-  }
-  emit("mp-enter-world", {});
+  // The screen is already open — it is where the player pressed Join. It just needs to know
+  // that the connection is now live, which `mp-state` does; the redraw shows the choice.
+  setMessage("Connected. Bring your pilot, or enter the world without it.", "ok");
+  draw();
 }
 
 async function retryConnection() {
@@ -1275,74 +1300,6 @@ export const toggleMultiplayerScreen = () => (isMultiplayerScreenOpen() ? closeM
 /* ------------------------------------------------------------------------- */
 /* The chat box                                                               */
 /* ------------------------------------------------------------------------- */
-
-/* ------------------------------------------------------------------------- */
-/* "Bring my pilot" — the in-world prompt                                     */
-/* ------------------------------------------------------------------------- */
-
-/**
- * The card a guest sees **inside their friend's world** when the pilot has not travelled
- * (owner, playtest 16).
- *
- * Design, and why it is not the join screen (owner's choice, 2026-11-23): joining drops you
- * into the world, and the join screen closes as it does — so a button on that screen is
- * destroyed by the join itself. It lived there, which is why the owner never saw it and why
- * clicking it mid-join raced the world loading and landed them on the away card. This card
- * belongs to the world instead: it appears when the connection says the pilot is still at
- * home, and disappears the moment it comes over.
- *
- * It is **not a modal**. A player who only wants to look around and chat must be able to
- * ignore it, so it sits in a corner and the world keeps running behind it.
- */
-function buildBringCard() {
-  if (typeof document === "undefined") return;
-  bringCard = document.createElement("div");
-  bringCard.id = "mp-bring-card";
-  bringCard.hidden = true;
-  bringCard.innerHTML =
-    `<button type="button" id="mp-bring-go" class="go">Bring my pilot</button>` +
-    `<p id="mp-bring-why"></p>` +
-    `<div class="mp-bring-row">` +
-    `<button type="button" id="mp-bring-later" title="Look around without travelling">Not now</button>` +
-    `</div>`;
-  document.body.appendChild(bringCard);
-  bringCard.querySelector("#mp-bring-go")?.addEventListener("click", event => {
-    event.preventDefault();
-    // The one rule that puts the pilot on the wire (`net/session.js`), the same one the
-    // pause screen's button calls, so the two cannot drift.
-    const done = session.bringPilot();
-    if (!done?.ok) showBringCard(true, done?.message || "Your pilot could not travel.");
-    setMessage?.(done?.message || "", done?.ok ? "" : "error");
-  });
-  bringCard.querySelector("#mp-bring-later")?.addEventListener("click", event => {
-    event.preventDefault();
-    showBringCard(false, "");
-  });
-}
-
-/**
- * Show or hide the prompt. `text` replaces the explanation when there is something to say
- * (a refusal, say) and falls back to the standing sentence when there is not.
- */
-function showBringCard(show, text = "") {
-  if (!bringCard) return;
-  bringText = text;
-  if (!show) { bringCard.hidden = true; return; }
-  const why = bringCard.querySelector("#mp-bring-why");
-  if (why) {
-    why.textContent = text ||
-      "Your ship, hold, credits and lockers are still in your own galaxy. Bring them over to fly here.";
-  }
-  const go = bringCard.querySelector("#mp-bring-go");
-  if (go) go.disabled = false;
-  bringCard.hidden = false;
-}
-
-/** Read-only, for a test: is the prompt up, and what does it say? */
-export const bringPromptState = () => ({
-  shown: !!bringCard && bringCard.hidden === false,
-  text: bringText,
-});
 
 function buildChat() {
   if (typeof document === "undefined") return;

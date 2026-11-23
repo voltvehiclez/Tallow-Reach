@@ -18,6 +18,40 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: The join box holds the choice — and the card gets a door
+
+**Code change; rebuild needed.** The owner's design for playtest 17, and the two interaction bugs
+that came before it.
+
+- **A join no longer enters the world.** `afterJoined` used to close the multiplayer screen and
+  load the world the moment a link connected, which destroyed the only *Bring my pilot* button
+  before the player could press it (playtest 16) and made a mid-join click race the world load.
+  The screen now stays up, and the **same join box** becomes the choice the owner asked for:
+  *Connected. Choose what to do* — **Bring my pilot**, or **Enter the world without my pilot**.
+  Entering the world is its own action (`data-mp="join-world"`), and after a carry the box offers
+  *Enter the world*.
+- **The in-world prompt is deleted** (`#mp-bring-card`, its CSS and the `mp-bring-prompt` event).
+  It was a workaround for "the join screen closes"; the owner's ordering removes the cause, so the
+  workaround goes. Net deletion.
+- **The away card has a Main menu button** (owner: *"no option even to go to main menu... so hes
+  stuck"*). It dismisses the card for the moment (`state.ui.awayCardDismissed`) and is **not** a
+  decision about the save: the pilot stays away, and any arrival at the menu shows the card again.
+- **Bring pilot home is its own press again.** It routed through `ACTIONS.intro()` — Open World's
+  action — which refuses while a pilot is away, so the card's own button answered with the sentence
+  meant for Open World (playtest 17: *"a message I dont understand"*). It now calls
+  `bringPilotHomeAtMenu` directly, which is the owner's definition: *make the version of the
+  character that was in the friend's world the latest version of the local open world.*
+- **Rejoin with the host gone says so**: *"Ada is not there — their game is closed"*, instead of
+  *"Connection cancelled"*, which described the wire rather than the situation.
+- **Placeholder, at the owner's request:** entering the world loads the guest's **own** galaxy while
+  the connection stays live for chat and the pilot. That is honest for this build — the wire carries
+  no ship or world state (`KINDS` in `net/protocol.js` has no position messages), so the two players
+  were never in one world. Sharing it is slice 8.
+
+**Tests:** `tests/multiplayer-playtest16.test.mjs` rewritten to the new design (6), plus the
+playtest-14 guard replaced (joining never enters the world, for anybody). Verified by reverting the
+`comehome` routing and the `afterJoined` change. **Build `2026-11-23e`, save v29 unchanged. 1026 tests.**
+
 ## 2026-11-23: Joining entered the world and left the pilot behind
 
 **Code change; rebuild needed.** The owner could join a friend's world, play, and never be offered
@@ -261,30 +295,9 @@ cell: slice 3 confirmed, eight slices), `docs/architecture/multiplayer.md` (what
 and why they are separate), `docs/HANDOFF.md` (the snapshot, rewritten to fit its size limit).
 
 **No save change (v29), no build change.** Slice 4 is still the next build.
-## 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
-
-**Docs only; no code, no build.** The owner answered the three step-17 questions, and every doc
-that carried them is updated to the answers:
-
-- **Where the server runs / how browsers reach it:** Minecraft-style **port forwarding** — anyone
-  runs the server (own machine, rented, big host), players reach it at `host:port`, no domain or
-  certificate to start. **17b's blocker is closed**: the transport is a WebSocket listener on a
-  forwarded port. The one dependency still to approve is the WebSocket-server library (Node has no
-  built-in WebSocket server).
-- **Who joins:** anyone. A server may require **optional, modular auth** — **Supabase** first (free
-  plan, 50,000 monthly users), behind a small interface so a future provider can be swapped without
-  touching the game. The suitcase model is unchanged; auth only answers who is connecting.
-- **Who may host:** anyone.
-
-**Files:** `docs/REFACTOR_PLAN.md` (the questions block rewritten as the owner's answers; 17b
-unblocked; 17d gains auth), `docs/ROADMAP.md`, `docs/TARGET_ARCHITECTURE.md`,
-`docs/architecture/multiplayer.md`, `docs/HANDOFF.md`, `docs/VISION.md` ("dedicated servers" and
-"accounts" moved out of "Not planned", the decision recorded in the multiplayer section).
-
-**No save or build change.** Step 16 slice 4 (ships visible in multiplayer) is still the next build.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
 - 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
 - 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
 - 2026-11-22: The multiplayer screen is trimmed to a simple box

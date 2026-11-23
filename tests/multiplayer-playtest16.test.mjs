@@ -76,76 +76,77 @@ function hostAndGuest({ guestAway = false } = {}) {
 /** Nothing is mounted on the title screen until the player acts: keep `state.away` honest. */
 const clearAway = () => { state.away = null; };
 
-test("playtest 16: the in-world prompt is asked for by the session, not the join screen", () => {
-  // The prompt is DERIVED (`publishBringPrompt`) and sent on the bus, because `net/` may not
-  // touch the DOM and the screen that needs it is not the screen that does the joining.
-  const net = read("src/net/session.js");
-  assert.match(net, /function publishBringPrompt/, "the session works out whether the prompt is wanted");
-  assert.match(net, /role === "guest" && welcomed && !carried && !awayMark/,
-    "a connected guest that has not carried, and is not already away, wants it");
-  assert.match(net, /emit\("mp-bring-prompt", \{ show: wanted, text \}\)/, "and says so on the bus");
-  assert.match(net, /export function askBringPrompt/, "a screen that mounted late can ask again");
-  const events = read("src/util/events.js");
-  assert.match(events, /mp-bring-prompt \{ show, text \}/, "the event is documented like every other");
-});
-
-test("playtest 16: the prompt is a card in the world, not a button on the join screen", () => {
-  // The bug in one sentence: a join closes the join screen, so a button there is destroyed by
-  // the join. The card must be its own element.
-  const ui = read("src/ui/multiplayer.js");
-  assert.match(ui, /function buildBringCard/, "its own element");
-  assert.match(ui, /on\("mp-bring-prompt"/, "driven by the bus");
-  assert.match(ui, /bringCard\.hidden = false/, "shown without any screen of its own");
-  // ...and it must not be a modal: looking around and chatting without travelling is allowed.
-  assert.match(ui, /id="mp-bring-later"/, "\"Not now\" lets a player just look around");
-  const css = read("src/styles.css");
-  assert.match(css, /#mp-bring-card \{[^}]*position: fixed/, "it floats over the world");
-  // The press goes through the ONE rule that puts a pilot on the wire, not a private copy.
-  const press = ui.slice(ui.indexOf('bringCard.querySelector("#mp-bring-go")'));
-  assert.match(press.slice(0, 400), /session\.bringPilot\(\)/, "the card calls the same rule as the pause screen");
-});
-
-test("playtest 16: joining enters the world and the prompt follows it in", () => {
-  // `afterJoined` is what closes the join screen. It must NOT be suppressed for a guest that
-  // has not carried — that suppression was the bug — but it must still refuse to fly a frozen
-  // pilot (playtest 14's rule, kept).
+test("playtest 16/17: the join box holds the choice, and joining does not enter the world", () => {
+  // The bug this replaced: a successful join closed the multiplayer screen and loaded the
+  // world, destroying the only "Bring my pilot" button before the player could press it.
   const ui = read("src/ui/multiplayer.js");
   const after = ui.slice(ui.indexOf("function afterJoined()"));
   const body = after.slice(0, after.indexOf("\n}\n") + 3);
-  assert.match(body, /emit\("mp-enter-world"/, "a successful join still enters the world");
-  assert.match(body, /if \(state\.away\)/, "an away pilot still does not fly its own frozen ship");
+  assert.doesNotMatch(body, /emit\("mp-enter-world"/, "a join no longer loads the world by itself");
+  // The choice lives in the join block, driven by the session's own state.
+  assert.match(ui, /choosing: visiting && connected && !snap\.carrying && !snap\.carriedAcked/,
+    "the box offers the choice once the link is live and the pilot has not crossed");
+  assert.match(ui, /data-mp="bring">Bring my pilot</, "Bring my pilot is in that box");
+  assert.match(ui, /data-mp="join-world">Enter the world without my pilot</,
+    "and so is entering the world without it");
+  // Entering the world is its own press, which is what makes the placeholder possible.
+  assert.match(ui, /case "join-world":/, "there is an action for entering the world");
 });
 
-test("playtest 16: Open World REFUSES while the pilot is away, and says why", () => {
-  // The owner's decision: the card is the only way on. Unpacking behind the player's back was
-  // the old behaviour and read as "it just goes straight into open world".
+test("playtest 17: the in-world card is gone — the join box replaced it", () => {
+  // It was a workaround for "the join screen closes", and the owner's design removed the cause.
+  const ui = read("src/ui/multiplayer.js");
+  assert.doesNotMatch(ui, /buildBringCard|mp-bring-card/, "no second prompt floating over the world");
+  const css = read("src/styles.css");
+  assert.doesNotMatch(css, /#mp-bring-card/, "and no styles for one");
+  const events = read("src/util/events.js");
+  assert.doesNotMatch(events, /mp-bring-prompt/, "and no event asking for one");
+});
+
+test("playtest 17: the away card is never a room with no door", () => {
+  // The owner: "in the your pilot is in friends world menu there is no option even to go to
+  // main menu (which should be here). So hes stuck."
+  const screens = read("src/ui/screens.js");
+  const card = screens.slice(screens.indexOf("function awayCardHtml"));
+  const body = card.slice(0, card.indexOf("\n}\n") + 3);
+  assert.match(body, /data-a="menu">Main menu</, "the card has a Main menu button");
   const menu = read("src/ui/menu.js");
-  const act = menu.slice(menu.indexOf("  intro() {"));
-  const body = act.slice(0, 700);
-  assert.match(body, /if \(state\.away\) \{/, "an away pilot is refused up front");
-  assert.match(body, /showNotice\("Your pilot is in your friend's world/, "with the sentence that says where it is");
-  assert.doesNotMatch(body, /comeHome\(\)\);?\s*\n\s*enterGameMode/, "and Open World never unpacks on the way in");
-  // Bring pilot home is still the way out, so the refusal is not a dead end.
-  assert.match(menu, /comehome\(\) \{\s*ACTIONS\.intro\(\);/, "Bring pilot home is still its own press");
+  assert.match(menu, /  menu\(\) \{\s*state\.ui\.awayCardDismissed = true;/, "which dismisses the card");
+  // ...and dismissing it must NOT bring the pilot home or hide the fact it is away.
+  const act = menu.slice(menu.indexOf("  menu() {"));
+  const menuBody = act.slice(0, act.indexOf("\n  },") + 4);
+  assert.doesNotMatch(menuBody, /bringPilotHome|leaveVisit/, "Main menu is not a decision about the save");
+  assert.match(screens, /state\.away && !state\.ui\?\.awayCardDismissed/, "the card is only skipped when asked");
+  // A redraw from a *new* visit must show the card again.
+  assert.match(menu, /state\.ui\.awayCardDismissed = false;\n\s*resetStationPanels/, "arriving at the menu resets it");
 });
 
-test("playtest 16: Rejoin reopens the screen, so a rejoin you can see happens", () => {
-  // The owner: "Clicking rejoin makes my character name pop up in the hosts player chat.
-  // However on the guest side nothing happens, i stay in the your pilot is in friends world
-  // menu and i get a message saying Rejoined your friends world."
+test("playtest 17: Bring pilot home is its own press, and works with the host closed", () => {
+  // The owner's definition, in his words: "bringing pilot home simply means making the version
+  // of your character that was on your friends world be the latest version on your local open
+  // world." It routes through Open World's action before, which refuses while a pilot is away —
+  // so the card's own button answered with the sentence meant for Open World.
+  const menu = read("src/ui/menu.js");
+  const act = menu.slice(menu.indexOf("  comehome() {"));
+  const body = act.slice(0, act.indexOf("\n  },") + 4);
+  assert.match(body, /bringPilotHomeAtMenu\(/, "it unpacks the suitcase itself");
+  assert.doesNotMatch(body, /ACTIONS\.intro\(\)/, "and does not borrow Open World's refusal");
+  // No session is needed: the suitcase is the guest's own copy.
+  const net = read("src/net/session.js");
+  assert.match(net, /const suitcase = away\.suitcase \|\| readAwayCopy\(away\.worldId\)/);
+});
+
+test("playtest 17: Rejoin with the host gone says the host is gone", () => {
   const menu = read("src/ui/menu.js");
   const fn = menu.slice(menu.indexOf("function rejoinStoredWorld"));
   const body = fn.slice(0, fn.indexOf("\n}\n") + 3);
-  assert.match(body, /openMultiplayer\(\{ focus: "join", from: "menu" \}\)/, "the screen opens on success");
-  assert.match(body, /showNotice\(`Rejoined/, "and the sentence is still said");
-  // Entering the WORLD is still wrong here: the pilot is frozen, so it must not fly.
-  assert.doesNotMatch(body, /mp-enter-world/, "rejoin does not fly a frozen pilot");
+  assert.match(body, /is not there — their game is closed/, "it names the situation, not the wire");
+  assert.match(body, /cancel\|timeout\|refus\|unreach\|no answer/, "and decides that from the failure");
 });
 
-test("playtest 16: a real join asks for the pilot, and a real carry stops asking", async () => {
-  // The behaviour, not the wiring: two sessions on the in-memory wire, a guest that joins but
-  // has not carried. Before this, nothing at all asked the guest to bring its pilot — the only
-  // button was on the screen the join closes.
+test("playtest 17: a real join connects without carrying, and the carry works", async () => {
+  // The behaviour the owner asked for: joining connects, and the pilot stays home until the
+  // player presses Bring my pilot — which is what lets the join box offer the choice.
   const w = wire();
   session.setChannelFactory(w.factory);
   const hostSave = pilotSave();
@@ -164,22 +165,20 @@ test("playtest 16: a real join asks for the pilot, and a real carry stops asking
   const guestCh = w.made.at(-1);
   hostCh.deliver = (peer, value) => guestCh.reach(value, peer);
   guestCh.deliver = (peer, value) => hostCh.reach(value, peer);
-
-  const prompts = [];
-  on("mp-bring-prompt", prompt => prompts.push(prompt));
-
   hostCh.connect("guest-peer");
   guestCh.connect("host-peer");
   session.focusForTest(guest);
   await new Promise(resolve => setTimeout(resolve, 0));
 
-  assert.equal(prompts.at(-1)?.show, true, "the joined guest is asked to bring its pilot");
-  assert.match(prompts.at(-1)?.text || "", /Bring my pilot/);
+  const snap = guest.snapshot();
+  assert.equal(snap.role, "guest");
+  assert.equal(snap.state, "connected", "the join really connects");
+  assert.equal(snap.carrying, false, "and nothing crossed — the pilot is still home");
+  assert.equal(guestSave.away, null, "the save agrees");
 
   const carried = guest.bringPilot();
   assert.equal(carried.ok, true, `the press must work: ${carried.message}`);
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(prompts.at(-1)?.show, false, "and once the pilot is over, the prompt goes");
-  assert.equal(guestSave.away?.worldId, "w-1", "the pilot really is in the friend's world now");
+  assert.equal(guestSave.away?.worldId, "w-1", "now the pilot really is in the friend's world");
   session.stop();
 });

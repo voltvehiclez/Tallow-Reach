@@ -172,6 +172,21 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L40. A button that borrows another button's action inherits its refusals
+- **Seen (owner, playtest 17):** the away card's **Bring pilot home** answered *"your pilot is in your friends world, bring it home
+  from the card first"* — a sentence written for a *different* button, telling him to press the button he had just pressed. In the
+  same report: the card had no way back to the main menu at all, so he was stuck on it.
+- **Cause:** `comehome()` was `ACTIONS.intro()` — the Open World action — on the reasoning that "a pilot at home is a pilot at home".
+  The previous round then made `intro()` **refuse** whenever a pilot is away, which was right for Open World and turned the card's own
+  button into a refusal that argued with itself. A second, unrelated shape: the card replaced the whole title screen and every control
+  on it was a decision about the save, so there was no non-committal way off it.
+- **Rule:** an action says what the *player pressed*, not which other action it resembles — two buttons that happen to reach the same
+  place today are still two buttons, and coupling them means every future refusal on one is a lie on the other. And every screen that
+  replaces the whole menu needs one control that makes **no** decision about the save (a way back), because "cancel" must always exist.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — `comehome` must call `bringPilotHomeAtMenu` and must not call
+  `ACTIONS.intro()`; the card must render a Main menu button whose action touches neither the suitcase nor the visit. Reverting the
+  routing fails two tests (in this file and `playtest15`).
+
 ### L39. A screen that closes itself cannot ask the question it exists to ask
 - **Seen (owner, playtest 16):** "I join a multiplayer world, it joins without letting me click the bring my pilot prompt it
   just joins." The owner played a whole session with no pilot in it, and clicking the button fast enough to beat the join put them on

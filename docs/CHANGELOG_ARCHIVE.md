@@ -1,3 +1,25 @@
+## 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
+
+**Docs only; no code, no build.** The owner answered the three step-17 questions, and every doc
+that carried them is updated to the answers:
+
+- **Where the server runs / how browsers reach it:** Minecraft-style **port forwarding** — anyone
+  runs the server (own machine, rented, big host), players reach it at `host:port`, no domain or
+  certificate to start. **17b's blocker is closed**: the transport is a WebSocket listener on a
+  forwarded port. The one dependency still to approve is the WebSocket-server library (Node has no
+  built-in WebSocket server).
+- **Who joins:** anyone. A server may require **optional, modular auth** — **Supabase** first (free
+  plan, 50,000 monthly users), behind a small interface so a future provider can be swapped without
+  touching the game. The suitcase model is unchanged; auth only answers who is connecting.
+- **Who may host:** anyone.
+
+**Files:** `docs/REFACTOR_PLAN.md` (the questions block rewritten as the owner's answers; 17b
+unblocked; 17d gains auth), `docs/ROADMAP.md`, `docs/TARGET_ARCHITECTURE.md`,
+`docs/architecture/multiplayer.md`, `docs/HANDOFF.md`, `docs/VISION.md` ("dedicated servers" and
+"accounts" moved out of "Not planned", the decision recorded in the multiplayer section).
+
+**No save or build change.** Step 16 slice 4 (ships visible in multiplayer) is still the next build.
+
 ## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
 
 Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details

@@ -2690,27 +2690,8 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 }
 #pz #pz-mp { min-width: 220px; }
 
-/* The in-world "Bring my pilot" prompt (playtest 16).
-   Bottom-right, never over the HUD's centre: a guest who only wants to look around must be
-   able to ignore it, and it is not a modal. */
-#mp-bring-card {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 30;
-  width: min(340px, 30vw);
-  padding: 12px 14px;
-  background: rgba(7, 9, 11, .78);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  font-size: 12px;
-  text-shadow: 0 1px 2px #000;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
-}
-#mp-bring-card[hidden] { display: none; }
-#mp-bring-card p { margin: 8px 0 10px; line-height: 1.45; opacity: .82; }
-#mp-bring-card .mp-bring-row { display: flex; gap: 8px; justify-content: flex-end; }
-#mp-bring-card #mp-bring-go { width: 100%; }
+/* The join box after a successful connection (playtest 17): the choice, in place. */
+.mp-hint.mp-connected { color: #9fe8c8; }
 
 #mp-chat {
   position: fixed;

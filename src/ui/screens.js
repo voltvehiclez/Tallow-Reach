@@ -101,19 +101,26 @@ function awayCardHtml(away) {
     `<p class="away-actions">` +
     `<button class="go" data-a="rejoin">Rejoin</button>` +
     `<button class="go" data-a="comehome">Bring pilot home</button>` +
+    `<button data-a="menu">Main menu</button>` +
     `</p>` +
     `<p class="away-note"><b>Rejoin</b> connects you to that world again so you can see what ` +
     `your pilot is doing there — your own galaxy stays paused. <b>Bring pilot home</b> ends ` +
     `the visit and unpacks everything into this one.</p>` +
     `<p class="away-note">Bringing it home works even if your friend is offline: your pilot ` +
     `carries its own copy of everything it has done.</p>` +
+    // Every screen needs a door that is not "make a decision about your save" (playtest 17).
+    `<p class="away-note"><b>Main menu</b> just shows the ordinary menu — your pilot stays where ` +
+    `it is, and this card comes back when you return.</p>` +
     `</div>`
   );
 }
 
 export function introHtml() {
   // Slice 4: away from home? The menu is not the question any more.
-  if (state.away) return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
+  // ...unless the player asked for the menu anyway (playtest 17): the card had no way out, so
+  // "Main menu" dismisses it for this visit. The marker is untouched, so nothing is hidden —
+  // a reload, or any redraw from the save, brings the card back.
+  if (state.away && !state.ui?.awayCardDismissed) return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
   return (
     `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +
     `<p>You fly out of ${stationAt(DEFAULT_PLACE).n}, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +

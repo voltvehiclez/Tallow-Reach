@@ -138,13 +138,15 @@ test("playtest 14: a guest's peer id is not wiped by a welcome or a presence lis
 
 /* ---- 2: a join must not enter the world with a frozen pilot --------------------- */
 
-test("playtest 14: joining does not enter the world when the pilot is away", () => {
+test("playtest 14/17: joining never enters the world by itself", () => {
+  // Playtest 14 patched this by checking `state.away` before entering the world — the join
+  // still entered it for everybody else, which is how it destroyed the "Bring my pilot"
+  // button. Playtest 17 removed the auto-enter entirely: entering the world is its own press
+  // in the join box, so there is no longer a path that can fly a frozen pilot.
   const src = read("src/ui/multiplayer.js");
   const after = src.slice(src.indexOf("function afterJoined()"));
   const body = after.slice(0, after.indexOf("\n}\n"));
-  assert.match(body, /if \(state\.away\)/, "it checks whether the pilot is away");
-  assert.ok(body.indexOf("if (state.away)") < body.indexOf('emit("mp-enter-world"'),
-    "and answers before it enters the world");
+  assert.doesNotMatch(body, /mp-enter-world/, "a join does not enter the world, for anybody");
 });
 
 /* ---- 3: the away card's buttons must actually work ----------------------------- */

@@ -152,7 +152,10 @@ test("playtest 15: the away card is never a dead end", () => {
   // The player's own words: "refreshing both browsers makes the laptop stuck in this menu."
   // Whatever else breaks, there must be a path off the card that does not need the host.
   const menu = read("src/ui/menu.js");
-  assert.match(menu, /comehome\(\) \{\s*ACTIONS\.intro\(\);/, "Bring pilot home runs the same act as Open World");
+  // Playtest 17 corrected this: routing the card's button through Open World's action made it
+  // answer with Open World's refusal. It has its own body now.
+  assert.doesNotMatch(menu, /comehome\(\) \{\s*ACTIONS\.intro\(\);/, "Bring pilot home is NOT Open World's action");
+  assert.match(menu, /comehome\(\) \{\s*const done = bringPilotHomeAtMenu/, "it unpacks the suitcase itself");
   // Playtest 16 changed what that act does with an away pilot: it refuses and explains
   // (the owner's choice — the card is the only way on), rather than unpacking behind them.
   assert.match(menu, /if \(state\.away\) \{\s*showNotice\(\"Your pilot is in your friend's world/,

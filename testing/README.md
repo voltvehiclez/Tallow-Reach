@@ -12,6 +12,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 - [16 slice 2: save v29](TESTING-16-SAVE29.md)
 - [16 slice 3: the connection](TESTING-16-MULTIPLAYER.md)
+- [Playtest 17: the join box, the card's door, Bring pilot home](TESTING-PLAYTEST17.md)
 - [Playtest 16: the pilot follows you in](TESTING-PLAYTEST16.md)
 - [Playtest 15: the away card, coming home, Rejoin](TESTING-PLAYTEST15.md)
 - [16 slice 4: Bring my pilot, sync, Go home](TESTING-16-SLICE4.md)
@@ -22,6 +23,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 | Guide | Covers |
 | --- | --- |
 | [QUICK-16-SLICE4.md](QUICK-16-SLICE4.md) | The 10-minute version of the slice 4 test: get the zip, host, join, press **Bring my pilot**, note one station number, close the host, come home, check the number. |
+| [TESTING-PLAYTEST17.md](TESTING-PLAYTEST17.md) | Playtest 17 (build `2026-11-23e`): the join box holds the choice (Bring my pilot / Enter the world), the away card has a Main menu, and Bring pilot home works from the card with the host closed. |
 | [TESTING-PLAYTEST16.md](TESTING-PLAYTEST16.md) | Playtest 16 (build `2026-11-23d`): joining used to enter the world without ever offering **Bring my pilot**. The prompt is now a card inside the world, Open World refuses while the pilot is away, and Rejoin opens something you can see. |
 | [TESTING-PLAYTEST15.md](TESTING-PLAYTEST15.md) | Playtest 15 (build `2026-11-23c`): **Bring pilot home** and **Rejoin** never worked from the title card. Get an already-stuck laptop back out, then a full round trip: join, rejoin after a refresh, come home with the lockers intact. |
 | [TESTING-16-SLICE4.md](TESTING-16-SLICE4.md) | Step 16 slice 4: join a friend's world, press **Bring my pilot** (joining alone does not travel), check nothing is copied, then **Bring pilot home** from the title card with the host's browser closed. Nothing is drawn for a visiting ship yet. |

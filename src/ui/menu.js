@@ -178,6 +178,9 @@ export function setupMenu(options = {}) {
     cancelHeldStack();
     closeMultiplayer();
     state.ui.intro = true;
+    // Arriving at the menu is a fresh look at it: if the pilot is away, the card is the
+    // correct screen and must not stay dismissed from an earlier "Main menu" press.
+    state.ui.awayCardDismissed = false;
     resetStationPanels(state.ui);
     hideNotice();
     render();
@@ -375,10 +378,20 @@ function rejoinStoredWorld(away) {
   const link = makeJoinUrl(away.worldId, away.token, pageBase());
   joinWorld({ link })
     .then(result => {
-      if (!result?.ok) { showNotice(result?.message || "Could not rejoin that world."); return; }
+      if (!result?.ok) {
+        // Playtest 17: with the host's browser closed this said "Connection cancelled", which
+        // describes the wire rather than the situation. Say the thing the player can act on.
+        const why = /cancel|timeout|refus|unreach|no answer/i.test(result?.message || "")
+          ? `${away.hostName || "Your friend"} is not there — their game is closed. Bring your pilot home below, or try again once they are back.`
+          : (result?.message || "Could not rejoin that world.");
+        showNotice(why);
+        return;
+      }
       showNotice(`Rejoined ${away.hostName ? away.hostName + "'s world" : "your friend's world"}.`);
-      // The screen redraws itself from `mp-state`; this is what puts it on top again.
-      openMultiplayer({ focus: "join", from: "menu" });
+      // **Not re-opening the join box** (playtest 17). A rejoin means the pilot is away, and the
+      // card is the screen for that: it names the world and offers the three things that make
+      // sense. Opening the box here put a screen in front of the player they then had to escape.
+      // The redraw is enough — the connection is live and the chat is back.
       render();
     })
     .catch(() => showNotice("Could not rejoin that world. Paste the link instead."));
@@ -440,8 +453,36 @@ const ACTIONS = {
     openMultiplayer({ focus: "join", from: "menu" });
     showNotice("Paste your friend's link — this browser did not keep the last one.");
   },
+  // **Bring pilot home is its own press, not Open World** (owner, playtest 17).
+  //
+  // It used to call `ACTIONS.intro()` — the Open World action — on the reasoning that "a pilot
+  // at home is a pilot at home". That was wrong twice over: `intro()` refuses whenever a pilot
+  // is away (so this button answered with the sentence meant for a different button, and the
+  // owner could not come home at all), and the two acts are not the same. The owner's own
+  // definition: *"bringing pilot home simply means making the version of your character that
+  // was on your friends world be the latest version on your local open world."* That is
+  // `bringPilotHomeAtMenu`, and nothing else. It does not enter a world and it does not need
+  // the host — the suitcase is the guest's own copy.
   comehome() {
-    ACTIONS.intro();
+    const done = bringPilotHomeAtMenu({ mode: state.mode === "campaign" ? "campaign" : "open" });
+    if (!done.ok) { showNotice(done.message); return; }
+    applySave(done.modeSave || done.save);
+    leaveVisit();
+    saveCurrentGame();
+    showNotice("Your pilot is home.");
+    render();
+  },
+  /**
+   * Back to the ordinary title menu, with the pilot left where it is (owner, playtest 17: *"the
+   * your pilot is in friends world menu has no option even to go to main menu... so hes stuck"*).
+   *
+   * This does NOT bring the pilot home. It only shows the other menu — the away marker is
+   * untouched, so the card comes back the next time the title is drawn, which is what "your
+   * pilot is still away" means. Without it the card was a room with no door.
+   */
+  menu() {
+    state.ui.awayCardDismissed = true;
+    render();
   },
   // Step 16 slice 3: the title menu's way into co-op. One screen, opened here, that both
   // hosts a world and takes a friend's link or code — a guest never enters their own
