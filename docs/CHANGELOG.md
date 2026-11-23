@@ -18,6 +18,34 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: The multiplayer switch could not be pressed by a visitor
+
+**Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button
+doesnt work so i cant test the build properly."* Two faults, fatal together.
+
+- **The switch was drawn from `hosting` alone**, so a **visitor** saw *Multiplayer: Off* — and the
+  same control was **disabled while visiting** (`canSwitch: !!name && !visiting`). A guest was
+  therefore looking at a greyed-out Off switch with no way to press it.
+- **The pause surface does not draw the join block** (`surface === "host"`), and the only Leave
+  button lived there — so from the pause card a guest had no exit at all. That is why leaving via
+  the screen "worked" and the switch did not: they were different screens.
+- **Fixed:** the switch is on for `hosting || visiting` (still drawn from the session, never the
+  stored setting — L32), it is usable in every state (`canSwitch: !!name`), and pressing it while
+  visiting **leaves the friend's world** with a sentence saying the pilot is still there. A
+  `data-mp="leave"` button is also drawn beside the switch on the pause surface.
+- **`toggleHosting` was split**: its body moved to `openWorld()`, and the switch's branches are now
+  four lines that read like its label (visiting → leave, hosting → close, otherwise → open). One
+  press still hosts, exactly as before.
+- **`session.setEnabled(true)` now creates an idle host session** when nothing is running (it used
+  to write the setting and stop), so the switch always has something to act on; `snapshot()` gained
+  `enabled` and `session` so a screen can tell those apart. `setEnabled(false)` still stops
+  everything.
+
+**Tests:** three added to `tests/multiplayer-playtest16.test.mjs` (a visitor's switch is on and
+pressable and leaves; the switch still opens a world; the session can be switched on with nothing
+running). Reverting `switchOn`/`canSwitch` fails the first. **Build `2026-11-23f`, save v29
+unchanged. 1029 tests.**
+
 ## 2026-11-23: The join box holds the choice — and the card gets a door
 
 **Code change; rebuild needed.** The owner's design for playtest 17, and the two interaction bugs
@@ -265,38 +293,9 @@ approved them ("that looks good"), so slices 7–8 are no longer a proposal:
 
 **No save change (v29), no build change.** Slice 4 is the next build.
 
-## 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
-
-**Docs only; no code, no build.** The owner played the current build (`2026-11-22j`) and said it
-passed, so slice 3's reworks are confirmed and ROADMAP says so. Then they asked for the thing the
-plan always called the last debt: **"Also draw the guest's ship"** — *one world, two ships visible*.
-*(Slices 7–8 were **proposed** in this entry and agreed by the owner the next day — see the entry
-above.)*
-
-That is bigger than the plan's slice 4, so the plan now says exactly how big. Three decisions are
-recorded, and the next chat should not reopen them:
-
-- **Slice 4 is unchanged** (the suitcase: bring my pilot, sync, Go home). While a pilot is away its
-  own screen is a **card** — *"Your pilot is in Ada's world"* with **Rejoin** and **Bring pilot
-  home** — not its frozen pilot still flying its own sky, which reads as a bug.
-- **Slice 7 — a second pilot exists in the host's world.** The suitcase becomes a record in
-  `state.players` through `custody.hostProfile` + `configurePlayer` (the host's `sim/step.js`
-  already flies every active record), docked at the guest's own station because flight positions
-  never travel. The returned suitcase is written from the profile the host actually holds. A flat
-  **map marker** shows the other pilot, so it is visibly real before a camera exists for it.
-- **Slice 8 — one world on two screens** (8a snapshots out, 8b controls in, 8c the guest's screen
-  follows the host's pocket). **8b is a numbered change to the input rule**, not a side effect:
-  `state.localInput` is filled by `core/input.js` and read by the session, because `sim/` may not
-  import `core/`. Mirroring the local screen's input into remote players' `controls` is cheaper and
-  wrong — it would make a second pilot that answers to somebody else's stick.
-
-**Files:** `docs/REFACTOR_PLAN.md` (step 16's status and slices 7–8), `docs/ROADMAP.md` (step 16's
-cell: slice 3 confirmed, eight slices), `docs/architecture/multiplayer.md` (what the two slices are
-and why they are separate), `docs/HANDOFF.md` (the snapshot, rewritten to fit its size limit).
-
-**No save change (v29), no build change.** Slice 4 is still the next build.
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
 - 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
 - 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
 - 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows

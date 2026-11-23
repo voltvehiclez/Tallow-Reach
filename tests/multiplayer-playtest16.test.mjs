@@ -182,3 +182,42 @@ test("playtest 17: a real join connects without carrying, and the carry works", 
   assert.equal(guestSave.away?.worldId, "w-1", "now the pilot really is in the friend's world");
   session.stop();
 });
+
+/* ---- playtest 17: the switch that could not be pressed -------------------------- */
+
+test("playtest 17: a visitor's switch is ON and CAN be pressed — that is the way out", () => {
+  // The owner: "Multiplayer on/off button doesnt work so i cant test the build properly."
+  // Two faults, both fatal together: the switch read `hosting` (so a guest saw Off) and it was
+  // DISABLED while visiting — and the pause surface does not draw the join block, so the only
+  // Leave button was on a screen the guest could not reach from where they were.
+  const ui = read("src/ui/multiplayer.js");
+  assert.match(ui, /switchOn: hosting \|\| visiting/, "a visit counts as multiplayer being on");
+  assert.match(ui, /canSwitch: !!name,/, "and the switch is not disabled for a visitor");
+  const model = ui.slice(ui.indexOf("  if (model.visiting) {"));
+  assert.match(model.slice(0, 600), /leaveSession\(\)/, "pressing it while visiting leaves the world");
+  // ...and the same action is drawn beside the switch, where the player is looking.
+  assert.match(ui, /data-mp="leave">Leave \$\{/, "there is a Leave button on the pause surface too");
+});
+
+test("playtest 17: turning the switch on when nothing is running opens a world", () => {
+  // `openWorld` was carved out of `toggleHosting` so the action has one body; the model must
+  // still treat a press as "host", which is what every earlier test asserts too.
+  const ui = read("src/ui/multiplayer.js");
+  const fn = ui.slice(ui.indexOf("async function toggleHosting()"));
+  const body = fn.slice(0, fn.indexOf("/** Open the world and make the link."));
+  assert.match(body, /return openWorld\(\);/, "the last branch opens the room");
+  assert.match(ui, /async function openWorld\(\)/, "and that is a real function");
+});
+
+test("playtest 17: the session can be switched on with nothing running", () => {
+  // `setEnabled(true)` on a browser with no session used to write the setting and stop there,
+  // so the switch had nothing to act on. It now makes an idle host session to act on.
+  const net = read("src/net/session.js");
+  const fn = net.slice(net.indexOf("export function setEnabled(value)"));
+  const body = fn.slice(0, fn.indexOf("\n}\n") + 3);
+  assert.match(body, /if \(!active\) \{/, "a switched-on browser gets a session");
+  assert.match(body, /role: "host"/, "an idle host: nothing is opened until it hosts");
+  // ...and the snapshot now says whether that session exists, which the screen needs.
+  assert.match(net, /enabled: readSettings\(\)\.enabled === true, session: !!active/,
+    "the snapshot carries the switch and whether a session exists");
+});

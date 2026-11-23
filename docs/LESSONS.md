@@ -172,6 +172,20 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L41. A control that is disabled whenever it would be useful is not a control
+- **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test
+  multiplayer at all: the switch was greyed out and read Off.
+- **Cause:** two independent conditions, each sensible alone. The switch was drawn from `hosting` only, so a **visitor** saw Off; and
+  it was `disabled` whenever visiting. Worse, the pause card draws only the **host** block, and the Leave button lives in the **join**
+  block — so a guest at the pause card was looking at a dead switch beside no exit. "Leave worked from the screen but not from the
+  switch" was the tell: they were on different screens.
+- **Rule:** a control is disabled only when pressing it could not possibly do anything, and **every state a screen can be in must leave
+  the player a way out from that screen**. If a state exists in which the control reads a value the player cannot change, either make
+  the control work for that state or do not draw it. Also: when two screens offer the same exit, draw it on both — "the other screen has
+  a button" is not a way out of the screen you are on.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a visitor's switch is On, pressable, and leaves the visit; the Leave button
+  is drawn beside it. Reverting `switchOn`/`canSwitch` fails it.
+
 ### L40. A button that borrows another button's action inherits its refusals
 - **Seen (owner, playtest 17):** the away card's **Bring pilot home** answered *"your pilot is in your friends world, bring it home
   from the card first"* — a sentence written for a *different* button, telling him to press the button he had just pressed. In the

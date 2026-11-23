@@ -149,12 +149,30 @@ export const current = () => active;
 export const isOn = () => !!active && active.on;
 
 /** What a screen draws, without touching the session. */
-export const snapshot = () => (active ? active.snapshot() : emptySnapshot());
+/**
+ * The session's snapshot, plus the TWO facts a screen needs and cannot get anywhere else:
+ * whether the player's standing switch is on, and whether a session object exists at all.
+ *
+ * The owner's report (playtest 17) is why. The multiplayer switch reads *Off* until a world
+ * has been HOSTED (`switchOn: hosting`), and the switch is disabled while visiting — so a
+ * player who enters a friend's world silently sits in a state where the one control that
+ * opens multiplayer reads Off, greyed out, and nothing on screen can be pressed. The switch
+ * means "multiplayer is on on this browser", which is what `readSettings().enabled` records;
+ * clicking it must always find a session to act on, so one is created for a switched-on,
+ * idle browser.
+ */
+export const snapshot = () => {
+  const live = active ? active.snapshot() : emptySnapshot();
+  return { ...live, enabled: readSettings().enabled === true, session: !!active };
+};
 
 function emptySnapshot() {
   return {
     on: false,
     role: null,
+    // Nothing is running, but the standing switch may still be on (see `snapshot`).
+    enabled: readSettings().enabled === true,
+    session: false,
     state: "idle",
     line: "Multiplayer is off.",
     worldId: null,
@@ -1606,7 +1624,21 @@ export function setUsername(text) {
 export function setEnabled(value) {
   const wanted = value === true;
   writeSettings({ enabled: wanted });
-  if (!wanted) stop();
+  if (!wanted) {
+    stop();
+    return wanted;
+  }
+  // Switched ON with nothing running: create an idle session so the switch has something to
+  // act on and a screen has a snapshot to draw. A session is a host or a guest, so this is a
+  // host that has not opened a room yet (`hostWorld` gives it an id the first time) — which is
+  // exactly what "Multiplayer: On, waiting for you to send a link" means.
+  if (!active) {
+    const who = readSettings().name;
+    if (cleanName(who)) {
+      active = createSession({ role: "host", worldId: null, name: cleanName(who), token: makeToken(NET.tokenBytes), save: saveKit });
+    }
+  }
+  if (active) active.publish?.();
   return wanted;
 }
 
