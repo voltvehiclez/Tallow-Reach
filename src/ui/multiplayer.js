@@ -272,6 +272,12 @@ export function setupMultiplayer() {
     draw();
   });
   // A sentence the connection wants shown. `net/` cannot reach the screen itself.
+  //
+  // **Two places, two different audiences** (owner, playtest 19). `setMessage` is the line
+  // inside the card; `showNotice` is the one at the top of the screen, and it is the only one a
+  // player sees when the screen is closed (a join that failed at boot). This is not the doubled
+  // refusal he reported — that was one action raising both in `openWorld`, and it is fixed —
+  // but a connection notice is genuinely meant for somebody who may not be looking at the card.
   on("mp-notice", text => {
     setMessage(text, "hint");
     showNotice(text);
@@ -902,10 +908,15 @@ async function openWorld() {
   const model = screenModel();
   // The owner's rule, enforced here as well as by the disabled switch: no name, no world.
   if (!model.nameSet) {
-    // A popup, not a line in the card (owner's request, playtest 17), and it says where the
-    // box is: the main menu. Nothing here focuses a field, because there is no field to focus.
-    showNotice("You need a username before multiplayer can be turned on. \"Exit to main menu\" at the bottom of this card — the username box is at the top of the main menu.");
-    setMessage("No username yet — multiplayer stays off until you set one on the main menu.", "error");
+    // **One refusal, in one place** (owner, playtest 19: *"Opening multiplayer in pause menu
+    // without a username shows a teal pop up and a red pop up. The red one is enough, the teal
+    // one at the top is just unnecessary info."*).
+    //
+    // It used to raise both: a notice at the top of the screen AND the red line in the card,
+    // saying the same thing twice. The card's own line stays — it sits next to the switch that
+    // caused it, stays until it is replaced, and reaches a screen reader through the card.
+    // `showNotice` also swallows routine confirmations, so it was never the reliable half.
+    setMessage("No username yet. Set one on the main menu — \"Exit to main menu\" is at the bottom of this card.", "error");
     draw();
     return false;
   }

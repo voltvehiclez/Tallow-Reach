@@ -120,10 +120,10 @@ test("the switch cannot be turned on without a username — and says why if it i
   assert.equal(ui.screenModel().messageKind, "error");
   // The sentence has somewhere to live: the message element is always in the card.
   assert.match(html(), /id="mp-msg"/);
-  // And the popup says the same, plus where the box actually is.
-  const popup = shownNotice();
-  assert.match(popup, /username/i);
-  assert.match(popup, /main menu/i, "the popup names where the username box is");
+  // **One refusal, one place** (owner, playtest 19: the teal notice at the top was "unnecessary
+  // info" beside the red one). The card's own line carries it, and it names where the box is.
+  assert.match(ui.panelState().message, /main menu/i, "the refusal names where the username box is");
+  assert.equal(shownNotice(), "", "and no second popup repeats it at the top of the screen");
 });
 
 test("a name enables both front doors without a redraw of the field", async () => {

@@ -1,7 +1,7 @@
 # Testing playtest 18: the away card, the menu, and the username box
 
-**Build: `2026-11-23h`.** The away card prints its build at the bottom — if it does not say
-`2026-11-23h`, you are on an older download and these checks will look wrong.
+**Build: `2026-11-23i`.** The away card prints its build at the bottom — if it does not say
+`2026-11-23i`, you are on an older download and these checks will look wrong.
 
 Two machines, or one window plus a private window. Host on one, guest on the other.
 
@@ -58,7 +58,7 @@ Two machines, or one window plus a private window. Host on one, guest on the oth
 
 1. Look at the main menu.
    **Expect:** one box showing just **your name**, centred, no "Username:" label — the same width
-   as Campaign / Open World underneath. Empty, it shows *your name* faintly in the middle.
+   as Campaign / Open World underneath. Empty, it shows **Username** faintly in the middle.
 2. Clear it, then press **Join Multiplayer World**.
    **Expect:** a popup asking for a username (at least 3 characters).
 
@@ -66,7 +66,8 @@ Two machines, or one window plus a private window. Host on one, guest on the oth
 
 1. Fresh browser, no username. **Open World → pause (P) → Open Multiplayer.**
 2. Press the **Multiplayer: Off** switch.
-   **Expect:** a popup saying you need a username, and that the box is on the main menu.
+   **Expect:** **one** red message in the card, saying you need a username and that it is on the
+   main menu. **No** teal popup at the top of the screen repeating it.
 
 ---
 

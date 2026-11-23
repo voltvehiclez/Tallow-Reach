@@ -18,6 +18,28 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: One refusal, one place, and a placeholder that says what it wants
+
+**Code change; rebuild needed; build `2026-11-23i`.** Two small corrections to playtest 18, both
+from the owner.
+
+1. **The empty username box says "Username" faintly** (it said "your name"). Same centred,
+   label-free box; only the placeholder text changed.
+2. **The missing-username refusal is said once.** Open World without a username raised *two*
+   messages: a notice at the top of the screen (teal) and the red line in the card. The owner:
+   *"the red one is enough, the teal one at the top is just unnecessary info."* The card's line
+   stays — it sits beside the switch that caused it, stays put until replaced, and reaches a
+   screen reader through the card — and it now also says where the box is ("Exit to main menu" is
+   at the bottom of this card). `showNotice` is no longer called from that path.
+
+`mp-notice` still shows in both places on purpose: that is how a connection reports something to
+a player who has the screen *closed* (a join that failed at boot), which is a different audience
+from the card's own line.
+
+`src/ui/screens.js`, `src/ui/multiplayer.js`, `src/data/multiplayer.js` (BUILD),
+`tests/multiplayer-ui.test.mjs` (asserts the refusal is in the card and NOT in a top notice),
+`testing/TESTING-PLAYTEST18.md` (build + the two expectations). Save version unchanged (29).
+
 ## 2026-11-23: The away card is a question about custody, not the title screen
 
 **Code change; rebuild needed; build `2026-11-23h`.** Four things from the owner's playtest 18.
@@ -270,63 +292,10 @@ Four reports from the owner's playtest. Three were bugs; one was a model swap.
 `tests/multiplayer-playtest14.test.mjs`. **Tests: 1013** (was 1004); each fix was verified by reverting
 it. **Build id: `2026-11-23b`.**
 
-## 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
-
-The first slice where something of the player's actually travels. **"Bring my pilot"** packs the
-pilot into a suitcase, the host receives it as a real docked ship, writes a newer copy back about
-two seconds after anything changes, and **"Bring pilot home"** puts it back — with the host offline.
-
-- **Joining is not travelling** (a deliberate decision, not an oversight): the plan quotes
-  ""Bring my pilot"" as an action, so pressing **Join** only looks around a friend's world. A pilot
-  is frozen at home only when the player asks for it.
-- **Two new wire kinds.** `carry` (guest -> host) and `suitcase` (host -> guest, and the newer copy
-  back), both `{ guestId, name, epoch, rev, bundle }`, capped at `NET.suitcaseMaxBytes` = 256 KB of
-  JSON and **refused in words, never truncated**. `epoch`/`rev` travel *beside* the bundle so
-  `compare()` never has to trust the contents. `cleanCarry` validates size and shape but **never
-  strips content ids** (LESSONS L16): cargo the build does not know about still travels.
-- **The host never holds the guest's secret** — only a `tokenHash` — and never trusts the bundle:
-  it goes through `relocate()`, so a locker whose station this galaxy lacks waits at Meridian and
-  remembers where it came from.
-- **The frozen pilot's record is never captured from the runtime.** `captureActiveModeSave` now
-  hands an away pilot's record through untouched, so an autosave or a mode cycle cannot fold live
-  cargo into a record the suitcase already owns.
-- **The title screen becomes a card** while the pilot is away — *"Your pilot is in Ada's world"* +
-  **Rejoin** / **Bring pilot home** — driven by `mp-away-changed`. Open World refuses to start with
-  a frozen pilot rather than flying one.
-
-**Two real bugs found and fixed on the way (both were shipped by slice 1):**
-
-1. **`custody.hostProfile` wiped every guest's hold.** It sanitized a bundle profile with no `v`,
-   which the sanitizer reads as a pre-v12 save whose holds were `{ cargo, modules }` — so a visitor
-   would arrive with its ship and credits and **an empty hold**. It now stamps `v` first, exactly as
-   `applyTravellingProfile` always has. Regression test in `multiplayer-custody.test.mjs`.
-2. **Coming home duplicated every station locker.** `checkOut` empties the home stations, but the
-   session's narrow `save.write` only stored the guest list and world id — the emptying never
-   reached the game. The suitcase then carried cargo the live save still held, and `checkIn` added
-   it on top: **4 ferrite became 8.** A guest's own save is now installed through a new
-   `saveKit.install` (the host's narrow `write` is untouched), and a test asserts both the fix and
-   the failure it prevents (LESSONS L15).
-
-**Files:** `src/data/multiplayer.js` (`suitcaseMaxBytes`, `suitcaseRepeatSec`, `BUILD = "2026-11-23a"`),
-`src/net/{custody,protocol,session}.js`, **new** `src/sim/multiplayer.js`, `src/util/events.js`,
-`src/state/{state,profile}.js`, `src/main.js`, `src/ui/{screens,menu,multiplayer}.js`,
-`src/sim/README.md`. **New tests:** `multiplayer-carry`, `multiplayer-visitors`,
-`multiplayer-bring-pilot` (28 new).
-
-**A stronger third fix, found while proving the tests bite.** Reverting each fix and re-running showed two of the new tests
-passed anyway — they asserted only what the narrow seam happened to carry. The guest kit in the session test now models the
-real narrow `write`, and every guest-side store (packing *and* taking a newer suitcase from the host) goes through one
-`storePilot` rule. Undoing any of the three fixes now fails a test.
-
-**Tests: 1004, all green** (was 976). **Save format unchanged (v29).** **Build id: `2026-11-23a`.**
-**Not done yet, by design:** the guest's own screen showing the host's world (slice 8), crashes and
-reconnects (slice 5), and drawing a visiting ship on the host's screen — the pilot is real, docked
-and simulated, but `render/views.js` still draws one hull. That is slice 7/8. Playtest guide:
-`testing/TESTING-16-SLICE4.md`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
 - 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
+- 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
 - 2026-11-22: Step 16 is eight slices — the owner agreed the plan
 - 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
 - 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth

@@ -166,9 +166,9 @@ export function introHtml() {
     // **The name alone, centred** (owner, playtest 18): the "Username:" label is gone and the
     // text sits in the middle of the box, so the box reads like the Campaign / Open World
     // buttons under it rather than like a form. The placeholder carries the meaning instead —
-    // an empty box says "your name" in the same centred style.
+    // an empty box says "Username" faintly, in the same centred style.
     `<div class="menu-username-box">` +
-    `<input id="menu-username" class="menu-username" maxlength="24" placeholder="your name" ` +
+    `<input id="menu-username" class="menu-username" maxlength="24" placeholder="Username" ` +
     `aria-label="Your username" ` +
     `value="${esc(readSettings().name || "")}" autocomplete="off" spellcheck="false"></div>` +
     `<button class="go" data-a="campaign">Campaign</button>` +
