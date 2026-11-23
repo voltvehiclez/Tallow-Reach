@@ -18,6 +18,40 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: The away card was a trap — Bring pilot home never worked
+
+**Code change; rebuild needed.** The owner's laptop could not come home, could not rejoin, and a
+refresh did not help: three symptoms of **one** confusion between two records.
+
+- **`saveKit.read()` returns a MODE save** (`{ profile, world, away }` — one pilot), while
+  `bringPilotHomeAtMenu` was written against the **dual-mode envelope** (`{ v, mode, open, campaign }`)
+  and indexed `root[mode]`. On a mode save that is `undefined` **every time**, so "Bring pilot home"
+  refused before it looked at the suitcase: *"Your pilot's save could not be read"*. This is why it
+  failed on a first boot in Brave, in Chrome, on refresh — it never depended on the connection.
+  `src/net/session.js` now accepts **both** shapes (`isModeSave`), writes back in the shape it was
+  given, and returns the mode save as `modeSave` so the screen loads the right thing.
+- **Rejoin was refused by its own guard.** `joinWorld` (and the paste-code door) rejected any join
+  while an away marker existed — including a join to the world the pilot was *already in*. The guard
+  now refuses only a **different** world, so rejoining is a rejoin and not a second trip.
+- **Coming home also installs, not just writes.** `write` is the host's narrow seam (guest list +
+  world id), so the returned pilot never reached the disk; the card cleared, the screen said "home",
+  and a refresh put the pilot back on the card (L34's trap in a second place). `saveKit.install` is
+  called, and `setSaveKit` can now replace `install` too.
+- **Order changed in `ui/menu.js` `comeHome`:** the suitcase opens **before** the visit is left. The
+  old order dropped the connection and *then* reported the refusal — which is exactly what the owner
+  saw: clicking Bring pilot home removed the row from the host's players list while the laptop stayed
+  stuck on the card, with Rejoin unable to get back in. A refusal now changes nothing.
+- `saveKit.install` also understands a mode save (it used to assume an envelope and would have
+  installed the wrong half).
+
+**Tests:** new `tests/multiplayer-playtest15.test.mjs` (7 tests) drives the real functions and the
+in-memory wire: a mode save can be brought home and its locker really comes back, an envelope still
+works, a genuinely unreadable save still refuses, a real rejoin connects while the pilot stays away,
+and a different world is still refused. Each was checked by **reverting the fix** and watching it fail
+with the owner's own sentence: `the card must be leavable; it said: Your pilot's save could not be
+read…` and `Rejoin must be allowed; it said: Your pilot is already visiting another world.` Save
+version unchanged (v29). 1020 tests.
+
 ---
 
 ## 2026-11-23: Test Ship faced sideways — the model brings its own rotation
@@ -255,32 +289,9 @@ addresses — nothing to do with ExpressTURN answering or not. Three fixes, in t
 Still unproven: whether ExpressTURN's free tier relays a packet at all — the next playtest's
 *Test relay servers* line decides that, and the panel now shows it on both machines either way.
 
-## 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
-
-**Code change; rebuild needed.** Follow-up trims to the screen from the same day, all at the
-owner's request:
-
-- **The username box is one box**: the "Username:" label moved *inside* it, so it reads
-  `Username: Aceface` instead of a label above a bare field (`src/ui/screens.js`,
-  `src/styles.css`).
-- **Copy world id moved into More details** (it was beside Copy link), and **the
-  "Your world is open. Copy the link and send it to your friend." popup is gone** — the link
-  box says it by itself (`src/ui/multiplayer.js`).
-- **The teal status row is removed from the screen** — "Multiplayer is off." / "Hosting.
-  Waiting for your friend to join…" repeated on both doors (pause and menu) without saying
-  anything the switch and the link box do not (`src/ui/multiplayer.js`, `src/styles.css`).
-- **The chat box**: the typing font now matches the lines above it (no more monospace input),
-  and the **Players column stays compact when the box is open** (about its collapsed width),
-  so the Pin button sits right next to the "Players" heading and the lines get the space
-  (`src/styles.css`).
-
-**Files:** `src/ui/multiplayer.js`, `src/ui/screens.js`, `src/styles.css`; tests updated
-(`tests/multiplayer-ui.test.mjs`).
-
-**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.**
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
 - 2026-11-22: The multiplayer screen is trimmed to a simple box
 
 - 2026-11-22: Step 17 revised — slices 17a–17d, and the server's open questions

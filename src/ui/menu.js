@@ -323,16 +323,19 @@ function loadedMessage(text) {
  * rather than opening the suitcase itself, so the two doors cannot drift apart.
  */
 function comeHome() {
-  // The session goes first, always: a guest that walks home while still connected leaves a
-  // row in the host's players list and a ship in the host's world (playtest 14). Leaving
-  // the visit is not conditional on there being a suitcase to unpack.
-  leaveVisit();
   const away = state.away;
   if (away) {
-    // **From the title there is no open-world save loaded**, so the pilot is unpacked
-    // against the mode save that is stored — which is where the frozen pilot actually is.
-    // This is why "Bring pilot home" on the card did nothing: the old path walked out of
-    // `leaveVisit()` believing it had failed, and never reached the unpacking at all.
+    // **The suitcase is opened BEFORE the visit is left** (playtest 15).
+    //
+    // Leaving first meant a refusal — which is what the broken shape check always produced —
+    // dropped the connection *and* kept the pilot frozen: the host's players list lost the
+    // row, the laptop showed the away card, and Rejoin could not get back in. The player
+    // described exactly that. Opening the suitcase does not need the wire (it is the guest's
+    // own copy), so it goes first, and a refusal now leaves everything as it was: still
+    // visiting, still listed, still able to try again.
+    //
+    // From the title there is no open-world save loaded, which is why the unpacking is done
+    // against the mode save that is STORED — that is where the frozen pilot actually lives.
     const done = bringPilotHomeAtMenu({ mode: state.mode === "campaign" ? "campaign" : "open" });
     if (!done.ok) {
       showNotice(done.message);
@@ -340,8 +343,12 @@ function comeHome() {
     }
     // The stored save now holds the returned pilot; load it so the screen and the runtime
     // agree with the disk before anything else runs.
-    applySave(done.save);
+    applySave(done.modeSave || done.save);
   }
+  // Leaving the visit still always happens — but only once the suitcase has opened, so a
+  // refusal cannot cost the player its connection. A guest that never carried a pilot (it
+  // only looked around) has no suitcase, and leaves here exactly as before.
+  leaveVisit();
   closeMultiplayer();
   saveCurrentGame();
   showNotice(away?.hostName

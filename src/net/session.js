@@ -103,15 +103,26 @@ const saveKit = {
    * emptying has to reach the save that is actually stored.
    */
   install: next => {
-    if (!next || typeof next !== "object" || !next.profile) return;
-    applySave({ ...currentRootSave(), open: next });
+    if (!next || typeof next !== "object") return;
+    // A dual-mode envelope installs itself; a mode save goes into the half it belongs to.
+    if (next.open || next.campaign) { applySave(next); return; }
+    if (!next.profile) return;
+    const mode = state.mode === "campaign" ? "campaign" : "open";
+    applySave({ ...currentRootSave(), [mode]: next });
   },
 };
 
-/** Replace the save handles (tests, and any host that keeps its save elsewhere). */
+/**
+ * Replace the save handles (tests, and any host that keeps its save elsewhere).
+ *
+ * `install` is part of the kit for the same reason `read` is: it is the only handle that can
+ * put a WHOLE pilot back, and the title card's Bring pilot home calls the module's own
+ * `saveKit` rather than a session's. A test that cannot replace it cannot model the game.
+ */
 export function setSaveKit(kit) {
   saveKit.read = kit.read || saveKit.read;
   saveKit.write = kit.write || saveKit.write;
+  saveKit.install = kit.install || saveKit.install;
 }
 
 /** The live save, as the session sees it (a fresh snapshot every call). */
@@ -195,7 +206,13 @@ export async function joinWorld({ link, name = readSettings().name } = {}) {
   const who = cleanName(name);
   if (!who) return { ok: false, message: "Set a username first." };
   if (state.mode === "campaign") return { ok: false, message: "The campaign is single player. Joining works from the open world." };
-  if (isAway(liveSave())) return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
+  // Rejoining the world the pilot is ALREADY visiting is the whole point of the away card's
+  // Rejoin button, so the away marker only refuses a join to a DIFFERENT world (playtest 15:
+  // a visitor could not get back into the friends' world it was still standing in).
+  const awayNow = liveSave()?.away || null;
+  if (awayNow && awayNow.worldId !== found.worldId) {
+    return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
+  }
   if (active) stop();
 
   const session = createSession({ role: "guest", worldId: found.worldId, name: who, token: found.token, save: saveKit });
@@ -1402,11 +1419,24 @@ export function bringPilot() {
  * reads `state.away` and a card that cannot go away is the bug.
  */
 export function bringPilotHomeAtMenu({ mode = "open" } = {}) {
-  const root = liveSave();
-  const half = root && typeof root === "object" ? root[mode] : null;
-  if (!half || typeof half !== "object") {
+  const live = liveSave();
+  // **`liveSave()` is a MODE save, not the dual-mode envelope** (playtest 15).
+  //
+  // `saveKit.read` returns `sanitizeSave(...)` — one pilot with `profile`, `world` and
+  // `away` — while a root save is `{ v, mode, open, campaign }`. This function was written
+  // against the envelope and indexed `root[mode]`, which on a mode save is `undefined`
+  // every single time, so "Bring pilot home" could never work from the title: it refused
+  // before it looked at the suitcase. Accept both, because the seam is injectable (a test
+  // or a host may hand the session a root), and a wrong guess here is a pilot trapped on
+  // the away card.
+  const modeSave = isModeSave(live) ? live : (live && typeof live === "object" ? live[mode] : null);
+  if (!modeSave || typeof modeSave !== "object") {
     return { ok: false, message: "Your pilot's save could not be read, so it cannot come home yet. Do not reset — tell the host." };
   }
+  // Coming home is about ONE pilot, so everything below works on the mode save, and only
+  // an actual envelope is written back as an envelope (`rootWithMode`).
+  const root = isModeSave(live) ? null : live;
+  const half = modeSave;
   if (!half.away) {
     // Nothing stored to unpack: the live state is all there is. Clear it rather than trap
     // the player on a card about a pilot that is not away.
@@ -1415,14 +1445,33 @@ export function bringPilotHomeAtMenu({ mode = "open" } = {}) {
   }
   const done = bringPilotHome(half);
   if (!done.ok) return done;
-  const next = { ...root, [mode]: done.save };
+  // Write back in the shape the seam gave us: a mode save as a mode save (the game's own
+  // seam installs the whole pilot), an envelope as an envelope.
+  const next = root ? { ...root, [mode]: done.save } : done.save;
   saveKit.write(next);
+  // `write` is the host's narrow seam and only ever takes the guest list and the world id,
+  // so the returned pilot has to be installed too or the suitcase's contents never reach
+  // the stored save (LESSONS L34 — the same trap that made cargo stick after coming home).
+  if (saveKit.install) saveKit.install(next);
   state.away = null;
   if (active && active.role === "guest") {
     try { active.stop(); } catch (e) { /* the host may be long gone */ }
     active = null;
   }
-  return { ok: true, save: next, message: done.message };
+  return { ok: true, save: next, modeSave: done.save, message: done.message };
+}
+
+/**
+ * One pilot's half of a save (`profile`, `world`, `away`) — as opposed to the dual-mode
+ * envelope (`{ v, mode, open, campaign }`) that holds two of them.
+ *
+ * The difference matters: `saveKit.read()` hands back a MODE save, and reading it as an
+ * envelope yields `undefined` for every mode. Nothing else in this file needs the
+ * distinction, so this is the one place that decides it.
+ */
+function isModeSave(save) {
+  return !!save && typeof save === "object" && !Array.isArray(save) &&
+    !!save.profile && typeof save.profile === "object";
 }
 
 /**
@@ -1499,8 +1548,13 @@ export async function codesAcceptFrom(offer, { name = readSettings().name } = {}
   const who = cleanName(name);
   if (!who) return { ok: false, message: "Set a username first." };
   if (state.mode === "campaign") return { ok: false, message: "The campaign is single player. Joining works from the open world." };
-  if (isAway(liveSave())) return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
   const invited = codeWorldId(offer);
+  // Same rule as `joinWorld`: a code for the world the pilot is already visiting is a
+  // rejoin, not a second trip away.
+  const awayNow = liveSave()?.away || null;
+  if (awayNow && invited && awayNow.worldId !== invited) {
+    return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
+  }
   if (!invited) {
     return { ok: false, message: "That is not a host's join code. Ask them to copy the whole code — it starts with TRJOIN:." };
   }

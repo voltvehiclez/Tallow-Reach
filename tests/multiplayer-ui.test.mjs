@@ -1011,7 +1011,14 @@ test("the title's Open World is where a visit ends, and the pilot comes home", (
   // Playtest 14: leaving the visit is NO LONGER a precondition. It used to return false here,
   // and from the title there is no session to leave — so the card's button gave up before it
   // had unpacked anything, and the player was trapped with no way home.
-  assert.match(menu, /leaveVisit\(\);\n/, "the visit is always left, when there is one");
+  // Playtest 15: it is left, but only AFTER the suitcase opens. Leaving first meant a
+  // refusal took the connection away and left the pilot frozen — the host's list dropped the
+  // row while the laptop stayed on the card.
+  const home = menu.slice(menu.indexOf("function comeHome()"));
+  const body = home.slice(0, home.indexOf("\n}\n") + 3);
+  assert.match(body, /leaveVisit\(\);/, "the visit is always left");
+  assert.ok(body.indexOf("bringPilotHomeAtMenu(") < body.indexOf("leaveVisit();"),
+    "and only once the pilot is actually home");
   // Slice 4 turned "unpack it here" into "ask the one rule that knows how", so the menu
   // cannot drift from the card's Bring pilot home. The rule refuses rather than wiping a
   // pilot whose suitcase will not open, which is why the return value is checked.

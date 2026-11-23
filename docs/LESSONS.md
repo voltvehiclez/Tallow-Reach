@@ -172,6 +172,25 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L38. A save seam has two shapes, and guessing the wrong one looks like a broken save
+- **Seen (owner, playtest 15):** the away card became a trap. *"Bring pilot home"* always answered *"Your pilot's save could not be
+  read, so it cannot come home yet"* — in Brave, in Chrome, on a first boot, and after every refresh — while Rejoin answered *"Your
+  pilot is already visiting another world, bring it home first"*. Clicking Bring pilot home removed the laptop's row from the host's
+  players list and still left it on the card.
+- **Cause:** `saveKit.read()` returns a **MODE** save (`{ profile, world, away }`, one pilot). `bringPilotHomeAtMenu` was written
+  against the dual-mode **ENVELOPE** (`{ v, mode, open, campaign }`) and read `root[mode]`, which is `undefined` on a mode save — so it
+  refused before it ever looked at the suitcase. The refusal was blamed on the player's data, which is why nobody suspected the shape.
+  Two things made it worse: `joinWorld` refused *every* join while an away marker existed, including a rejoin to the world the pilot was
+  standing in; and `comeHome` left the visit *before* opening the suitcase, so a refusal cost the connection as well.
+- **Rule:** a seam that can hand you one of two shapes must **say which one it is** in one place and accept both (`isModeSave`), and
+  write back the shape it was given. Anything that *refuses* must refuse only the thing it actually objects to — a guard against
+  "visiting another world" is not a guard against the world you are visiting. And do the work that can fail **before** the step that
+  destroys state, so a refusal changes nothing.
+- **Enforced by:** `tests/multiplayer-playtest15.test.mjs` — a mode save comes home and its locker really arrives, an envelope still
+  works, an unreadable save still refuses, a real rejoin connects with the pilot still away, a different world is still refused; and
+  `tests/multiplayer-ui.test.mjs` asserts `bringPilotHomeAtMenu` runs before `leaveVisit` in `comeHome`. Reverting either fix fails with
+  the owner's own words.
+
 ### L37. A key that names a place must be checked against the place that will read it
 - **Seen (owner, playtest 14):** "What happens if a player joins a world with a pocket/station that doesn't exist in their local world and they
   return to their local world?" — a stack bought at a station only the host's world has came home filed under that station's key, in a galaxy

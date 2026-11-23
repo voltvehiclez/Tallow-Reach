@@ -1,3 +1,27 @@
+## 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
+
+**Code change; rebuild needed.** Follow-up trims to the screen from the same day, all at the
+owner's request:
+
+- **The username box is one box**: the "Username:" label moved *inside* it, so it reads
+  `Username: Aceface` instead of a label above a bare field (`src/ui/screens.js`,
+  `src/styles.css`).
+- **Copy world id moved into More details** (it was beside Copy link), and **the
+  "Your world is open. Copy the link and send it to your friend." popup is gone** — the link
+  box says it by itself (`src/ui/multiplayer.js`).
+- **The teal status row is removed from the screen** — "Multiplayer is off." / "Hosting.
+  Waiting for your friend to join…" repeated on both doors (pause and menu) without saying
+  anything the switch and the link box do not (`src/ui/multiplayer.js`, `src/styles.css`).
+- **The chat box**: the typing font now matches the lines above it (no more monospace input),
+  and the **Players column stays compact when the box is open** (about its collapsed width),
+  so the Pin button sits right next to the "Players" heading and the lines get the space
+  (`src/styles.css`).
+
+**Files:** `src/ui/multiplayer.js`, `src/ui/screens.js`, `src/styles.css`; tests updated
+(`tests/multiplayer-ui.test.mjs`).
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.**
+
 ## 2026-11-22: The multiplayer screen is trimmed to a simple box
 
 **Code change; rebuild needed.** At the owner's request the multiplayer UI is cut down to what
