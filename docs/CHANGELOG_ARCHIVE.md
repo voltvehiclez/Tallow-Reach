@@ -1,3 +1,31 @@
+## 2026-11-22: The multiplayer screen is trimmed to a simple box
+
+**Code change; rebuild needed.** At the owner's request the multiplayer UI is cut down to what
+a player needs to *do* something, with the rest behind one toggle:
+
+- **The main menu's username box gets a "Username:" label**, and the box is set in the same
+  type as the Campaign / Open World buttons (`src/ui/screens.js`, `src/styles.css`).
+- **The chat window** loses its **Expand** button (names ellipsize to `name…` now, always);
+  the column is renamed **"Current players" → "Players"**; and the lines box is about **double**
+  its previous height (`src/ui/multiplayer.js`, `src/styles.css`).
+- **The pause card's multiplayer row is one button** — the "Hosting, waiting for your friend"
+  state row is gone (the screen's status line says it), the button's neighbour switch reads
+  **"Multiplayer: On/Off"**, and the switch is drawn like the pause card's **sound switch with
+  a knob** (the `.sw` styles are no longer scoped to `#pz`).
+- **One "More details" toggle** (right of Copy link when hosting, below the join box from the
+  menu) reveals the offer/answer codes, the relay server and the connection report above the
+  Close button. The hosting hint row and the **Players list** row are removed — the chat column
+  already says who is here. "Copy world id" stays where it is: it is wired and used.
+- **The relay boxes open pre-filled with the built-in ExpressTURN** (address, username,
+  credential) via a new `builtinRelayFields()` in `src/net/turn.js`, so a player never retypes
+  three values the game ships with.
+- **The "Send the offer code…" message popup clears itself after a few seconds** (errors stay).
+
+**Files:** `src/ui/multiplayer.js`, `src/ui/pause.js`, `src/ui/screens.js`, `src/net/turn.js`,
+`src/styles.css`, `src/ui/README.md`; tests updated (`tests/multiplayer-ui.test.mjs`,
+`tests/ui-overlays.test.mjs`, `tests/navigation.test.mjs`).
+
+**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22f`.**
 ## 2026-11-22: Step 17 revised — slices 17a–17d, and the server's open questions
 
 **Docs only; no code, no build.** The step 17 plan in [REFACTOR_PLAN.md](REFACTOR_PLAN.md) is revised at the

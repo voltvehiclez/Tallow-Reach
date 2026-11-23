@@ -52,6 +52,22 @@ test('owner compressed Test Ship decodes offline with the embedded Draco decoder
   }
   assert.equal(json.images[0].mimeType, 'image/webp');
   assert.equal(SHIPS.testship.modelLength, 14.8925);
-  assert.equal(SHIPS.testship.modelYaw, Math.PI / 2);
+  // **The orientation check that would have caught playtest 15** (owner: the ship was
+  // "looking to the left"). `modelYaw` corrects the SOURCE model, so the question is what
+  // the DRAWN nose points at — the node's own rotation applied first, then this yaw. The
+  // new file ships a +90° node rotation that the old one did not have; keeping the old
+  // model's π/2 on top of it faced the ship at −X.
+  {
+    const THREE = await import("three");
+    const node = new THREE.Object3D();
+    const q = json.nodes[0].rotation;           // [x, y, z, w] from the file itself
+    if (q) node.quaternion.set(q[0], q[1], q[2], q[3]);
+    const nose = new THREE.Vector3(1, 0, 0).applyQuaternion(node.quaternion);   // raw mesh runs +X
+    const yaw = new THREE.Object3D();
+    yaw.rotateY(SHIPS.testship.modelYaw);
+    nose.applyQuaternion(yaw.quaternion);
+    assert.ok(nose.z < -0.99, `the drawn nose must point forward (−Z); it points (${nose.x.toFixed(2)}, ${nose.y.toFixed(2)}, ${nose.z.toFixed(2)})`);
+    assert.ok(Math.abs(nose.y) < 0.01, "and not up or down");
+  }
   assert.equal(SHIPS.testship.cameraPadding, 1.2);
 });

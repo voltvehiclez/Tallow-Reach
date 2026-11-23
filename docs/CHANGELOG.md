@@ -20,6 +20,25 @@ the next person must know (save version, rebuild needed, known issues).
 
 ---
 
+## 2026-11-23: Test Ship faced sideways — the model brings its own rotation
+
+Owner, playtest 15: *"it is looking to the left, needs to be rotated 90 degrees clockwise when looking from the top."*
+
+The new `testship-v1.glb` carries a **+90° Y rotation on its own node** (quaternion `[0, 0.7071, 0, 0.7071]`); the
+old file had none. So as loaded, the nose already pointed forward — and the old file's `modelYaw: Math.PI / 2` was
+applied **on top**, turning it to face −X. `modelYaw` corrects the *source model*, not the raw mesh, so a replacement
+`.glb` usually needs a different value. It is now `0`.
+
+`tests/compressed-model.test.mjs` replaces its old `modelYaw === π/2` assertion with one that **applies the node
+rotation and then the yaw to the nose vector** and asserts the result is −Z: with `π/2` restored it fails with
+`(-1.00, 0.00, -0.00)`, which is exactly the bug the owner saw. `src/data/README.md` records the trap.
+
+**Note on the diagnosis:** raw-vertex analysis said the mesh runs along +X and `+π/2` *should* be forward — which
+contradicted the report. The node rotation is what the first three attempts missed; three.js's own matrix confirmed it.
+
+**Files:** `src/data/ships.js`, `src/data/README.md`, `tests/compressed-model.test.mjs`. **Tests: 1013, all green.**
+Save unchanged (v29). Imported-look only — no gameplay value touched.
+
 ## 2026-11-23: Where a joining pilot lands, and where it comes home to
 
 The owner asked how arrival and return choose a place, and what happens when a station exists in one
@@ -260,36 +279,9 @@ owner's request:
 
 **Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.**
 
-## 2026-11-22: The multiplayer screen is trimmed to a simple box
-
-**Code change; rebuild needed.** At the owner's request the multiplayer UI is cut down to what
-a player needs to *do* something, with the rest behind one toggle:
-
-- **The main menu's username box gets a "Username:" label**, and the box is set in the same
-  type as the Campaign / Open World buttons (`src/ui/screens.js`, `src/styles.css`).
-- **The chat window** loses its **Expand** button (names ellipsize to `name…` now, always);
-  the column is renamed **"Current players" → "Players"**; and the lines box is about **double**
-  its previous height (`src/ui/multiplayer.js`, `src/styles.css`).
-- **The pause card's multiplayer row is one button** — the "Hosting, waiting for your friend"
-  state row is gone (the screen's status line says it), the button's neighbour switch reads
-  **"Multiplayer: On/Off"**, and the switch is drawn like the pause card's **sound switch with
-  a knob** (the `.sw` styles are no longer scoped to `#pz`).
-- **One "More details" toggle** (right of Copy link when hosting, below the join box from the
-  menu) reveals the offer/answer codes, the relay server and the connection report above the
-  Close button. The hosting hint row and the **Players list** row are removed — the chat column
-  already says who is here. "Copy world id" stays where it is: it is wired and used.
-- **The relay boxes open pre-filled with the built-in ExpressTURN** (address, username,
-  credential) via a new `builtinRelayFields()` in `src/net/turn.js`, so a player never retypes
-  three values the game ships with.
-- **The "Send the offer code…" message popup clears itself after a few seconds** (errors stay).
-
-**Files:** `src/ui/multiplayer.js`, `src/ui/pause.js`, `src/ui/screens.js`, `src/net/turn.js`,
-`src/styles.css`, `src/ui/README.md`; tests updated (`tests/multiplayer-ui.test.mjs`,
-`tests/ui-overlays.test.mjs`, `tests/navigation.test.mjs`).
-
-**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22f`.**
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
+
+- 2026-11-22: The multiplayer screen is trimmed to a simple box
 
 - 2026-11-22: Step 17 revised — slices 17a–17d, and the server's open questions
 
