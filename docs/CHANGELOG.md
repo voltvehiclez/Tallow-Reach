@@ -18,6 +18,34 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: The switch says why, and the away card is a proper card
+
+**Code change; rebuild needed; build `2026-11-23g`.** Three things the owner hit in one playtest,
+only the first of which was a real fault in the code:
+
+1. **No username, no switch, no explanation** (his report: *"the multiplayer on/off button doesnt
+   work, not clickable"*). The switch was drawn `disabled`, and a disabled button receives no
+   click, so the refusal could never be shown. He asked for the refusal: *"make it so that a pop
+   up comes saying you have to have a username to turn multiplayer on."* The switch is now
+   pressable in every state (`aria-disabled` instead of `disabled`) and a press without a name
+   shows a notice that names where the box is — the **main menu**, the only place it exists (the
+   hint used to say "Set a username above", pointing at a field that is not on that screen).
+2. **The away card was the wrong build.** He was running a download from before `daa42d6`, which
+   is the commit that first gave that card a **Main menu** button and fixed *Bring pilot home*.
+   The card now says `Build 2026-11-23g` at the bottom, and the multiplayer screen's *More
+   details* says the build too: two machines on different builds cannot talk, and a stale
+   download must be visible without a console.
+3. **Main menu was a small box on the left.** Only that one button on the card lacked
+   `class="go"`, and `.away-card` had no CSS at all, so the browser laid the three buttons out
+   differently. The card is now a grid, every button is a full-width `.go`, and the notes are
+   styled.
+
+`src/ui/multiplayer.js`, `src/ui/screens.js`, `src/ui/notice.js`, `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), `tests/multiplayer-ui.test.mjs` (the switch test now requires
+`aria-disabled` and the popup), `tests/multiplayer-playtest16.test.mjs` (the card's build stamp,
+three `.go` buttons, the CSS). `showNotice` now records the message even where there is no
+`document`, so a refusal cannot throw in the test runner. Save version unchanged (29).
+
 ## 2026-11-23: The multiplayer switch could not be pressed by a visitor
 
 **Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button
@@ -273,28 +301,10 @@ record a change without deleting a fact first.
   limit lives, so the change is one visible number. `HANDOFF.md`'s separate **150-line** guard is
   unchanged, so the file cannot grow by sprawl — only by a slightly fuller sentence.
 - Nothing else in the docs changed, and no text was removed to make room.
-## 2026-11-22: Step 16 is eight slices — the owner agreed the plan
-
-**Docs only; no code, no build, no save change.** The owner reviewed the eight slices of step 16 and
-approved them ("that looks good"), so slices 7–8 are no longer a proposal:
-
-- **The plan is eight slices, not six.** Slices 1–6 are unchanged (4 is still the next build);
-  7–8 are the owner's *"one world, two ships visible"*. `REFACTOR_PLAN.md` says **agreed**, and the
-  two places that still said "six slices" (`REFACTOR_PLAN.md`'s summary line,
-  `architecture/multiplayer.md`'s header, and the index row in `ARCHITECTURE.md`) now say eight.
-- **The order is still 4 → 5 → 6 → 7 → 8.** Slices 7–8 come *after* trading, not next: they are
-  the last debt in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) (*death and recovery*, *player
-  presentation and input*), and nothing in them works until the suitcase (slice 4) carries a pilot.
-- **ROADMAP's step-17 cell stops repeating "slice 4 is next"** — that belongs to step 16's cell,
-  which is the one place step status is kept.
-
-**Files:** `docs/REFACTOR_PLAN.md`, `docs/ROADMAP.md`, `docs/architecture/multiplayer.md`,
-`docs/ARCHITECTURE.md`, `docs/HANDOFF.md`.
-
-**No save change (v29), no build change.** Slice 4 is the next build.
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-22: Step 16 is eight slices — the owner agreed the plan
 - 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
 - 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
 - 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved

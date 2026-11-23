@@ -862,6 +862,29 @@ button:focus-visible {
   margin-top: 22px;
 }
 .main-menu-actions .go { margin-top: 0; }
+/* ---- The away card (step 16 slice 4): where the pilot is, and the ways out ----
+   The card had NO styles, so its three buttons were laid out by the browser: the two with
+   `.go` filled the panel and the third ("Main menu", the only one without the class) shrank
+   to a small box on the left — the owner saw exactly that (playtest 17). One column, every
+   button a full-width `.go`, so no button on this card looks like a different kind of thing. */
+.away-card {
+  display: grid;
+  gap: 12px;
+}
+.away-card h2 { margin: 0; }
+.away-actions {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 2px;
+}
+.away-actions .go { margin-top: 0; }
+.away-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--dim);
+  line-height: 1.45;
+}
+.away-build { opacity: .65; letter-spacing: .04em; }
 /* ---- Outfitting: the ship in the middle, module bays around it ----
    Lives inside the reusable left-side window (#station-left), scaled neatly so
    all three columns fit comfortably across desktop resolutions without ever

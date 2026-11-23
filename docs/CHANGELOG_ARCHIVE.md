@@ -1,3 +1,23 @@
+## 2026-11-22: Step 16 is eight slices — the owner agreed the plan
+
+**Docs only; no code, no build, no save change.** The owner reviewed the eight slices of step 16 and
+approved them ("that looks good"), so slices 7–8 are no longer a proposal:
+
+- **The plan is eight slices, not six.** Slices 1–6 are unchanged (4 is still the next build);
+  7–8 are the owner's *"one world, two ships visible"*. `REFACTOR_PLAN.md` says **agreed**, and the
+  two places that still said "six slices" (`REFACTOR_PLAN.md`'s summary line,
+  `architecture/multiplayer.md`'s header, and the index row in `ARCHITECTURE.md`) now say eight.
+- **The order is still 4 → 5 → 6 → 7 → 8.** Slices 7–8 come *after* trading, not next: they are
+  the last debt in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) (*death and recovery*, *player
+  presentation and input*), and nothing in them works until the suitcase (slice 4) carries a pilot.
+- **ROADMAP's step-17 cell stops repeating "slice 4 is next"** — that belongs to step 16's cell,
+  which is the one place step status is kept.
+
+**Files:** `docs/REFACTOR_PLAN.md`, `docs/ROADMAP.md`, `docs/architecture/multiplayer.md`,
+`docs/ARCHITECTURE.md`, `docs/HANDOFF.md`.
+
+**No save change (v29), no build change.** Slice 4 is the next build.
+
 ## 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
 
 **Docs only; no code, no build.** The owner played the current build (`2026-11-22j`) and said it

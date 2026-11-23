@@ -14,6 +14,7 @@ import { CACHE, STATION, capacityOf, loadOf, slotsAt } from "../sim/inventory.js
 import { moduleInfoData } from "../sim/fitting.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { state } from "../state/state.js";
+import { BUILD } from "../data/multiplayer.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import {
   storedUnits,
@@ -101,7 +102,7 @@ function awayCardHtml(away) {
     `<p class="away-actions">` +
     `<button class="go" data-a="rejoin">Rejoin</button>` +
     `<button class="go" data-a="comehome">Bring pilot home</button>` +
-    `<button data-a="menu">Main menu</button>` +
+    `<button class="go" data-a="menu">Main menu</button>` +
     `</p>` +
     `<p class="away-note"><b>Rejoin</b> connects you to that world again so you can see what ` +
     `your pilot is doing there — your own galaxy stays paused. <b>Bring pilot home</b> ends ` +
@@ -111,6 +112,13 @@ function awayCardHtml(away) {
     // Every screen needs a door that is not "make a decision about your save" (playtest 17).
     `<p class="away-note"><b>Main menu</b> just shows the ordinary menu — your pilot stays where ` +
     `it is, and this card comes back when you return.</p>` +
+    // **Which build this is, on the card itself** (owner, playtest 17: *"Still no options to
+    // bring me back to main menu. Stuck here."* while looking at `Bring pilot home` / `Rejoin`
+    // only). The Main menu button and the fix to `Bring pilot home` both landed in
+    // `2026-11-23f`; a card without them means the browser is running an older download, not
+    // that the code is wrong. This line is the whole difference between those two readings,
+    // and it is on the one screen a stuck player can reach.
+    `<p class="away-note away-build">Build ${esc(BUILD)}</p>` +
     `</div>`
   );
 }

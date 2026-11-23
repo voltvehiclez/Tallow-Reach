@@ -1,6 +1,11 @@
 # Testing playtest 17: the join box, the card's door, and Bring pilot home
 
-**Build: `2026-11-23e`.** Both machines, or one window plus a private window.
+**Build: `2026-11-23g`.** Both machines, or one window plus a private window.
+
+> **Check the build first.** The away card now prints its build at the bottom, and the
+> multiplayer screen's **More details** prints it at the top. If either says anything other than
+> **`2026-11-23g`**, the browser is running an older download — that, and not the code, is what
+> made the card look like a dead end with a small "Main menu" box. Re-download, and check again.
 
 Your five points, all in one build. Two were bugs I made, one was a message that made no sense,
 one is now a deliberate placeholder, and one was your design and is now the design.
@@ -33,9 +38,20 @@ get the ordinary menu, not the away card.
 ## 2. The away card has a door
 
 1. With your pilot away, go to the title. **Expect:** the away card.
-2. Press **Main menu**. **Expect:** the ordinary menu appears. Your pilot is **still away** — the
+2. **Expect** three buttons of the **same size**, one under another, filling the panel:
+   **Rejoin**, **Bring pilot home**, **Main menu**. No small box hanging on the left.
+3. Press **Main menu**. **Expect:** the ordinary menu appears. Your pilot is **still away** — the
    card comes back if you leave to a world and return to the title.
-3. **Expect** nothing about your save changed: the pilot did not come home, and it did not leave.
+4. **Expect** nothing about your save changed: the pilot did not come home, and it did not leave.
+
+## 2b. No username: the switch answers instead of doing nothing
+
+1. Open **Open World → pause (P) → Open Multiplayer**, on a browser with **no username** set.
+2. Press the **Multiplayer: Off** switch.
+3. **Expect:** a popup: *"You need a username before multiplayer can be turned on…"*, and it says
+   the username box is on the **main menu**. The switch stays **Off**.
+4. Press **Exit to main menu** (bottom of the pause card), type a username at the top of the menu,
+   come back in through the pause card. **Expect:** the switch works and opens your world.
 
 ## 3. Bring pilot home works from the card, with the host closed
 

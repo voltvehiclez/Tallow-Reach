@@ -26,6 +26,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import * as ui from "../src/ui/multiplayer.js";
+import { shownNotice } from "../src/ui/notice.js";
 import { uniqueName } from "../src/net/session.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import * as session from "../src/net/session.js";
@@ -105,17 +106,24 @@ test("the switch cannot be turned on without a username — and says why if it i
   assert.equal(cold.canJoin, false, "and so is Join");
   assert.equal(cold.joinAvailable, true, "but the join box is there: joining is not hidden");
 
-  // The switch is disabled in the markup too, not only in the model.
-  assert.match(html(), /data-mp="host"[^>]*disabled/);
+  // **The switch itself stays pressable** (owner, playtest 17: "make it so that a pop up comes
+  // saying you have to have a username"). A `disabled` button receives no click, so the popup
+  // he asked for could never appear: the markup marks it aria-disabled instead.
+  assert.match(html(), /data-mp="host"[^>]*aria-disabled="true"/);
+  assert.doesNotMatch(html(), /data-mp="host"[^>]* disabled/, "the switch is not disabled");
 
-  // And the action refuses even if a hand-rolled click gets through.
+  // Pressing it refuses in words — in the card and, above it, in a popup.
   const worked = await ui.act("host");
   assert.equal(worked, false);
   assert.equal(fake.calls.includes("hostWorld"), false, "nothing was hosted");
-  assert.match(ui.panelState().message, /username first/i);
+  assert.match(ui.panelState().message, /username/i);
   assert.equal(ui.screenModel().messageKind, "error");
   // The sentence has somewhere to live: the message element is always in the card.
   assert.match(html(), /id="mp-msg"/);
+  // And the popup says the same, plus where the box actually is.
+  const popup = shownNotice();
+  assert.match(popup, /username/i);
+  assert.match(popup, /main menu/i, "the popup names where the username box is");
 });
 
 test("a name enables both front doors without a redraw of the field", async () => {

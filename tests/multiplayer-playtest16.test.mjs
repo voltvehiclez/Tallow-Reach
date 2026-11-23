@@ -110,6 +110,18 @@ test("playtest 17: the away card is never a room with no door", () => {
   const card = screens.slice(screens.indexOf("function awayCardHtml"));
   const body = card.slice(0, card.indexOf("\n}\n") + 3);
   assert.match(body, /data-a="menu">Main menu</, "the card has a Main menu button");
+  // ...and names its build, so a player on an older download can tell that is what happened
+  // (playtest 17: the owner reported a card with no door while running the build before it).
+  assert.match(body, /away-build">Build \$\{esc\(BUILD\)\}/, "the card says which build it is");
+  // Every button on the card is the same kind of button. "Main menu" was the one without
+  // `class="go"`, so it rendered as a small box on the left (owner, playtest 17).
+  const buttons = body.match(/<button[^>]*>/g) || [];
+  assert.equal(buttons.length, 3, "three ways out");
+  for (const tag of buttons) assert.match(tag, /class="go"/, `${tag} is a full-width button`);
+  // ...and the card has styles of its own, so the layout is a column and not the browser's.
+  const css = read("src/styles.css");
+  assert.match(css, /\.away-actions \{[^}]*display: grid/, "the ways out are a column");
+  assert.match(css, /\.away-note \{/, "the notes are styled");
   const menu = read("src/ui/menu.js");
   assert.match(menu, /  menu\(\) \{\s*state\.ui\.awayCardDismissed = true;/, "which dismisses the card");
   // ...and dismissing it must NOT bring the pilot home or hide the fact it is away.

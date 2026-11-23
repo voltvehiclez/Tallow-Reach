@@ -394,6 +394,9 @@ function detailsRow() {
 function detailsHtml(model) {
   return (
     `<section class="mp-block" id="mp-details"${panelView.detailsOpen ? "" : " hidden"}>` +
+    // The build, in the open (playtest 17): two machines on different builds cannot talk, and
+    // a player on an old download needs to be able to say so without opening a console.
+    `<p class="mp-hint">Build ${escapeHtml(BUILD)}</p>` +
     `<div class="mp-row"><button type="button" data-mp="copy-world">Copy world id</button></div>` +
     codesHtml(model) + relayServerHtml(model) + diagHtml(model) +
     `</section>`
@@ -432,7 +435,13 @@ function hostHtml(model) {
     : "";
   const switchHtml =
     `<button type="button" class="sw mp-switch" data-mp="host" role="switch" ` +
-    `aria-checked="${model.switchOn ? "true" : "false"}"${model.canSwitch ? "" : " disabled"}>` +
+    `aria-checked="${model.switchOn ? "true" : "false"}"` +
+    // Why a switch that cannot do anything is still pressable (owner, playtest 17): he asked
+    // for a popup saying a username is needed, and **a `disabled` button receives no click at
+    // all**, so the refusal could never be shown. The switch is the first control on the card;
+    // a press that cannot be honoured answers in words instead of silently doing nothing.
+    (model.canSwitch ? "" : ` aria-disabled="true"`) +
+    `>` +
     `<i></i><span>${model.switchOn ? "Multiplayer: On" : "Multiplayer: Off"}</span></button>` +
     leaveRow;
   // The hosting hint ("send the link below…") is gone: the link row says "send this to your
@@ -441,7 +450,9 @@ function hostHtml(model) {
   const hint = model.visiting
     ? "You are in a friend's world. Leave it first to host your own."
     : !model.nameSet
-      ? "Set a username above, then turn this on."
+      // The only username box in the game is on the title menu, so the hint names the
+      // journey rather than a field ("above" pointed at nothing — playtest 17).
+      ? "You need a username before multiplayer can be turned on. It is on the main menu."
       : !model.hosting
         ? "Turns this world into a room and makes a link to send to a friend."
         : "";
@@ -891,8 +902,10 @@ async function openWorld() {
   const model = screenModel();
   // The owner's rule, enforced here as well as by the disabled switch: no name, no world.
   if (!model.nameSet) {
-    setMessage("Type a username first — nobody can join a world with no name on it.", "error");
-    focusField("name");
+    // A popup, not a line in the card (owner's request, playtest 17), and it says where the
+    // box is: the main menu. Nothing here focuses a field, because there is no field to focus.
+    showNotice("You need a username before multiplayer can be turned on. \"Exit to main menu\" at the bottom of this card — the username box is at the top of the main menu.");
+    setMessage("No username yet — multiplayer stays off until you set one on the main menu.", "error");
     draw();
     return false;
   }

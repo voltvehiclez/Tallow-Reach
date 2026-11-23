@@ -101,8 +101,12 @@ export function setupNotices() {
 /** Show a message the pilot must read. Never changes the panel's layout. */
 export function showNotice(text) {
   if (!text) return;
-  if (!root) setupNotices();
   current = String(text);
+  // Recorded even where there is no document to paint on (the test runner, a headless
+  // import): `shownNotice()` is how a test checks that a refusal reached the pilot, and a
+  // refusal that threw on a missing DOM would be worse than one that only records itself.
+  if (typeof document === "undefined") return;
+  if (!root) setupNotices();
   root.textContent = current;
   placeNotice();
   root.hidden = false;
