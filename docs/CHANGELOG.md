@@ -63,7 +63,7 @@ Four reports from the owner's playtest. Three were bugs; one was a model swap.
 **Also:** `world.guests[id].left` is an **additive** save field, so **no version bump** (v29 stays).
 **Files:** `src/net/{session,custody,multiplayer}.js`, `src/{data/multiplayer,state/profile}.js`,
 `src/ui/{menu,multiplayer,screens}.js`, `src/assets/models/ship.testship.glb`, and new
-`tests/multiplayer-playtest14.test.mjs`. **Tests: 1011** (was 1004); each fix was verified by reverting
+`tests/multiplayer-playtest14.test.mjs`. **Tests: 1013** (was 1004); each fix was verified by reverting
 it. **Build id: `2026-11-23b`.**
 
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))

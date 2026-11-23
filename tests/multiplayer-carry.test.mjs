@@ -287,3 +287,49 @@ test("slice 4: saving while away hands the frozen record through untouched", asy
     state.away = before.away;
   }
 });
+
+/* ------------------------------------------------------------------------- */
+/* Coming home to a world that may not have the station (playtest 14)         */
+/* ------------------------------------------------------------------------- */
+
+test("slice 4: cargo bought at a station only the host's world has comes home safely", async () => {
+  // The owner's question. A guest buys power cells at one of Ada's stations; that station
+  // does not exist in its own galaxy. Before this was fixed, `checkIn` filed the stack
+  // under `ada:outpost` in a world with no such station — the cargo existed, was counted,
+  // and could never be reached again.
+  const { stationsOfWorld } = await import("../src/net/world-places.js");
+  const home = makeSave();
+  const { save: packed, bundle } = checkOut(home, { worldId: "w-1", hostName: "Ada", guestId: "g-1", token: "t" });
+  const bought = { ...bundle, lockers: [...bundle.lockers, { item: "cell", count: 6, station: "ada:outpost", origin: "ada:outpost", unknown: false }] };
+
+  const back = checkIn(packed, { ...bought, rev: 1 });
+  assert.equal(back.world.stationStores["ada:outpost"], undefined,
+    "no stack is filed under a station this world does not have");
+  const total = Object.entries(back.world.stationStores).reduce((n, [, stock]) => n + (stock.cell || 0), 0);
+  assert.equal(total, 6, "and none of the 6 cells is lost");
+  assert.ok(back.world.stationStores["reach:meridian"], "they wait at Meridian, which every world has");
+  // The index is what answered, not the stores: a key with no stock is not a station.
+  assert.ok(stationsOfWorld(back.world, { wormholes: false }).places["reach:meridian"]);
+});
+
+test("slice 4: a stack that waited at the host's Meridian comes home to its OWN station", async () => {
+  const { stationsOfWorld } = await import("../src/net/world-places.js");
+  const world = newWorld();
+  const own = Object.keys(stationsOfWorld(world, { wormholes: false }).places).find(k => k !== "reach:meridian");
+  const home = makeSave();
+  home.world = world;
+  home.world.stationStores = { [own]: { ferrite: 4 } };
+  const { save: packed, bundle } = checkOut(home, { worldId: "w-1", hostName: "Ada", guestId: "g-1", token: "t" });
+  assert.equal(bundle.lockers[0].station, own, "it left its own station");
+
+  // In the host's world that station does not exist, so it waits at Meridian — origin kept.
+  const { relocate } = await import("../src/net/custody.js");
+  const out = relocate(bundle, { stationStores: { "reach:meridian": {} } }, { hasStation: k => k === "reach:meridian" });
+  assert.equal(out.bundle.lockers[0].station, "reach:meridian", "it waits at Meridian there");
+  assert.equal(out.bundle.lockers[0].origin, own, "remembering where it belongs");
+
+  // Home again: it goes back to its own station, not to Meridian.
+  const back = checkIn(packed, { ...out.bundle, rev: 1 });
+  assert.equal(back.world.stationStores[own]?.ferrite, 4, "it came home to its own station");
+  assert.equal((back.world.stationStores["reach:meridian"]?.ferrite) || 0, 0, "and not a unit parked at Meridian");
+});
