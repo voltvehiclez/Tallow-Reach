@@ -191,6 +191,24 @@ function withHeldStackRestored(profile, world, held) {
 export const isDualModeSave = save => !!(save && typeof save === "object" && save.open && save.campaign);
 
 function captureActiveModeSave() {
+  // Step 16 slice 4: **a pilot that is away is not captured from the runtime.**
+  //
+  // Its record is frozen, not idle. `checkOut` emptied its station stocks into the
+  // suitcase, and the suitcase — not this runtime — is the only copy of what travelled.
+  // The three captures below all fold LIVE facts into the save (where the ship is, what is
+  // on its racks, a stack held on the cursor), and every one of them would either stamp
+  // cargo that the suitcase also holds into the frozen record (L15: items moved, never
+  // copied) or record a resume point for a pilot that is not here. Cycling a mode,
+  // switching save slots or autosaving while visiting must hand the record through
+  // unchanged, marker and all.
+  if (state.away) {
+    return {
+      v: SAVE_VERSION,
+      profile: state.profile,
+      world: state.worldState,
+      away: cleanAway(state.away),
+    };
+  }
   captureResume();
   captureInstances();
   if (state.mode !== "campaign") captureWormholes();

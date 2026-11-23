@@ -258,7 +258,9 @@ test("a token names one guest to one host, and the host never stores the token",
   const record = guestRecord({ name: "Ada", token, guestId: "g-1", epoch: 2, rev: 5, lastSeen: 10 });
   assert.equal(record.token, undefined, "the record has no token field at all");
   assert.equal(record.tokenHash, hash);
-  assert.deepEqual(Object.keys(record).sort(), ["bundle", "epoch", "lastSeen", "name", "rev", "tokenHash"]);
+  // `left` (playtest 14) is the "has gone home" mark on a record that is holding a pilot's
+  // suitcase. It is still no secret: the list is what a host may store.
+  assert.deepEqual(Object.keys(record).sort(), ["bundle", "epoch", "lastSeen", "left", "name", "rev", "tokenHash"]);
 });
 
 test("the handshake refuses a version mismatch, the wrong world and a wrong token with a readable sentence", () => {
@@ -412,4 +414,27 @@ test("totals() proves nothing was copied or lost on the way", () => {
   const back = new Map([...totals(save)].filter(([key]) => !key.startsWith("locker:")));
   const outNoLockers = new Map([...out].filter(([key]) => !key.startsWith("locker:")));
   for (const [key, value] of outNoLockers) assert.equal(back.get(key), value, `${key} counts the same either side`);
+});
+
+test("hostProfile keeps a visitor's cargo, its fleet and its fits (LESSONS L16/L15)", () => {
+  // Found while building slice 4. `hostProfile` is what makes a visiting pilot a SHIP in
+  // the host's world, and it used to hand the sanitizer a profile with no `v`. A save with
+  // no version is read as pre-v12, whose holds were `{ cargo, modules }`, so every hold came
+  // back EMPTY: a guest would arrive with its ship, its credits and nothing in its hold.
+  //
+  // `applyTravellingProfile` had always stamped `v` for this exact reason (see its comment);
+  // `hostProfile` did not. This reads the result back the way the sim does.
+  const save = { v: SAVE_VERSION, profile: newProfile(), world: newWorld(), away: null };
+  save.profile.cr = 4321;
+  save.profile.holds[save.profile.ship] = { ferrite: 7, lumenite: 2 };
+  const { bundle } = checkOut(save, { worldId: "w", hostName: "Ada", guestId: "g", token: "t", name: "Acey" });
+
+  const profile = hostProfile(bundle);
+  assert.equal(profile.v, SAVE_VERSION, "the visitor's profile is stamped as a current save");
+  assert.deepEqual(profile.holds[profile.ship], { ferrite: 7, lumenite: 2 }, "its hold arrives whole");
+  assert.equal(profile.cr, 4321, "and its credits");
+  assert.ok(profile.loadout?.[profile.ship], "and its fit, so it has a hull and thrusters");
+  // The home half is still stripped: a visitor has no missions of its own.
+  assert.deepEqual(profile.missions, []);
+  assert.deepEqual(profile.flags, {});
 });

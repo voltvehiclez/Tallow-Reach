@@ -11,6 +11,8 @@
 //   chat       { t, text, from, at }                      either way, one line
 //   presence   { t, guests[{ guestId, name, docked }] }   host -> guests, who is here
 //   ping/pong  { t, at }                                  either way, `NET.heartbeatSec`
+//   carry      { t, guestId, name, epoch, rev, bundle }   guest -> host: the suitcase, on arrival
+//   suitcase   { t, guestId, name, epoch, rev, bundle }   host -> guest: the newer copy of it
 //
 // Nothing here carries a save, a bundle or a pilot: slices 4 and 5 add those as new
 // `t` values, and the handshake they will use is already written and tested in
@@ -29,7 +31,7 @@
 import { NET } from "../data/multiplayer.js";
 
 /** Every message kind this build understands. An unknown `t` is dropped, not echoed. */
-export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong"];
+export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase"];
 
 /** The longest a name, an id or a chat line may be on the wire. */
 const LIMITS = {
@@ -38,6 +40,7 @@ const LIMITS = {
   text: NET.chatLineMax,
   message: 300,
   list: 32,
+  suitcase: NET.suitcaseMaxBytes,
 };
 
 const text = (value, max) => (typeof value === "string" ? value.slice(0, max) : "");
@@ -83,6 +86,13 @@ export function cleanMessage(kind, fields = {}) {
     case "ping":
     case "pong":
       return { t: kind, at: Math.max(0, Math.floor(Number(fields.at) || 0)) };
+    // Slice 4: the pilot actually travels. `carry` is the guest handing its suitcase to
+    // the host on arrival; `suitcase` is the host handing the newer copy back. Both carry
+    // one bundle and nothing else, and both are size-capped before they are believed.
+    case "carry":
+      return cleanCarry(fields, "carry");
+    case "suitcase":
+      return cleanCarry(fields, "suitcase");
     default:
       return null;
   }
@@ -97,6 +107,44 @@ function cleanChat(fields = {}) {
     from: text(fields.from, LIMITS.name),
     at: Math.max(0, Math.floor(Number(fields.at) || 0)),
   };
+}
+
+/**
+ * A suitcase on the wire.
+ *
+ * **This is the one message whose payload is not rebuilt field by field.** A bundle holds
+ * `profile` (the travelled half), station `lockers`, and an `unknown` record of content ids
+ * this build may not know — and dropping an id it does not recognise is exactly the bug
+ * LESSONS L16 and the custody tests exist to prevent ("items moved, never copied" is only
+ * true if the copy is whole). So the shape is checked, the size is capped, and the content
+ * ids are left alone; the *receiver* never trusts the bundle as a profile anyway — it goes
+ * through `custody.relocate` and `sanitizeSave` before a hull or a hold is written.
+ *
+ * `carry` also names the guest (`guestId`, `name`) so the host can answer the right peer
+ * even when two guests are mid-handshake.
+ */
+function cleanCarry(fields = {}, kind) {
+  const bundle = fields.bundle;
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) return null;
+  if (!bundle.profile || typeof bundle.profile !== "object" || Array.isArray(bundle.profile)) return null;
+  let size = 0;
+  try {
+    size = JSON.stringify(bundle).length;
+  } catch (e) {
+    return null;                                  // unserialisable: not a suitcase
+  }
+  if (!Number.isFinite(size) || size > LIMITS.suitcase) return null;
+  const message = {
+    t: kind,
+    guestId: text(fields.guestId || bundle.guestId, LIMITS.id),
+    name: text(fields.name || bundle.name, LIMITS.name),
+    // The ordering pair travels BESIDE the bundle, not inside it: `compare` must be able
+    // to order two copies without trusting anything inside either one.
+    epoch: Math.max(0, Math.floor(Number(fields.epoch) || 0)),
+    rev: Math.max(0, Math.floor(Number(fields.rev) || 0)),
+    bundle,
+  };
+  return message;
 }
 
 function cleanGuestList(raw) {

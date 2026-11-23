@@ -44,7 +44,7 @@ Rules:
 - A module needs an entry in `items.js` as well as `modules.js` (recipe 16 step 1), and a row in
   `shops.js` if the player should be able to buy one (recipe 4).
 
-Imported ship visuals may set `modelYaw` (radians) and `modelLength` (metres along −Z); the renderer centres and uniformly fits them without changing gameplay `sc`.
+Imported ship visuals may set `modelYaw` (radians) and `modelLength` (metres along −Z); the renderer centres and uniformly fits them without changing gameplay `sc`. **`modelYaw` corrects the SOURCE model, so a replacement .glb usually needs a different value**: some exports carry their own rotation on the node (Test Ship's `testship-v1.glb` ships +90° Y), and yaw that was right for the old file then points the ship sideways. `tests/compressed-model.test.mjs` applies the node rotation and the yaw to the nose vector and asserts it ends up at −Z, so this cannot come back unnoticed.
 
 Optional `cameraPadding` multiplies automatic model-relative camera framing (default 1); Test Ship uses 1.2 after owner playtesting. It does not change model or flight scale.
 

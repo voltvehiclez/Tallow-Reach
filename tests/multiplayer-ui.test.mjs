@@ -1008,9 +1008,16 @@ test("opening your own world leaves a friend's, and hosting is untouched", async
 test("the title's Open World is where a visit ends, and the pilot comes home", () => {
   const menu = read("src/ui/menu.js");
   assert.match(menu, /function comeHome\(\)/);
-  assert.match(menu, /if \(!leaveVisit\(\)\) return false;/, "it only acts on a real visit");
-  assert.match(menu, /checkIn\(currentRootSave\(\), away\.suitcase\)/, "the suitcase is unpacked the same way slice 4 will");
-  assert.match(menu, /intro\(\) \{[\s\S]*?comeHome\(\);[\s\S]*?enterGameMode\("open"\)/, "and it runs before the open world loads");
+  // Playtest 14: leaving the visit is NO LONGER a precondition. It used to return false here,
+  // and from the title there is no session to leave — so the card's button gave up before it
+  // had unpacked anything, and the player was trapped with no way home.
+  assert.match(menu, /leaveVisit\(\);\n/, "the visit is always left, when there is one");
+  // Slice 4 turned "unpack it here" into "ask the one rule that knows how", so the menu
+  // cannot drift from the card's Bring pilot home. The rule refuses rather than wiping a
+  // pilot whose suitcase will not open, which is why the return value is checked.
+  assert.match(menu, /bringPilotHomeAtMenu\(/, "the suitcase is unpacked by slice 4's one rule, menu-aware");
+  assert.match(menu, /if \(!done\.ok\)/, "and a refusal stops the visit ending");
+  assert.match(menu, /if \(state\.away && !comeHome\(\)\) return;/, "nothing enters the open world with a frozen pilot");
   // The join path must not trip over it: entering the world a join just produced is not a leave.
   const entered = menu.indexOf('on("mp-enter-world"');
   assert.doesNotMatch(menu.slice(entered, entered + 400), /comeHome/, "a fresh join does not leave");

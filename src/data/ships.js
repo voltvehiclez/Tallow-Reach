@@ -105,8 +105,13 @@ export const SHIPS = {
     d: "A proof of concept: 100× the basic hull's Hull HP and ten times the damage.",
     cargo: 20,
     dmg: 10, mine: 1, sc: 1, hpMul: 100,
-    // Imported nose points +X; fit visually to 115% of Wasp length, not flight scale.
-    modelYaw: Math.PI / 2, modelLength: 14.8925,
+    // The model's raw vertices run along X with the nose at +X, BUT its own node already
+    // carries a +90° Y rotation (quaternion [0, 0.7071, 0, 0.7071]), so as loaded the nose
+    // already points at −Z, which is the game's forward. `modelYaw` corrects the SOURCE
+    // model, not the raw mesh — the old file had no node rotation and needed π/2; this one
+    // needs none, and adding π/2 turned it to face −X (owner, playtest 15: "looking to the
+    // left"). Checked by applying the node quaternion and then this yaw to the nose vector.
+    modelYaw: 0, modelLength: 14.8925,
     cameraPadding: 1.2, // owner playtest: 20% more room than automatic framing
     price: 1, col: 0x8a6d3b,
   },

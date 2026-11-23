@@ -80,7 +80,40 @@ const HOME_ICON_SVG =
   `<path d="M3.6 6.6v6.8h3.1V9.8h2.6v3.6h3.1V6.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>` +
   `</svg>`;
 
+/**
+ * Step 16 slice 4: the card a guest sees instead of its frozen pilot.
+ *
+ * While a pilot is visiting somebody else's world its own save is FROZEN — that is what
+ * `checkOut`'s marker means, and flying it here would either stamp over the home record or
+ * fly a hull whose cargo is in another galaxy. So the title screen stops being a menu of
+ * things to do and becomes a card about one thing: where the pilot is, and the two ways out.
+ *
+ * Both buttons go through `data-a`, which `ui/menu.js` already routes, so this is markup
+ * only: no new listener, and the same actions a keyboard-only player reaches.
+ */
+function awayCardHtml(away) {
+  const host = away.hostName ? `${esc(away.hostName)}'s world` : "a friend's world";
+  return (
+    `<div class="away-card">` +
+    `<h2>Your pilot is in ${host}</h2>` +
+    `<p>It took its ship, its cargo, its credits and its station lockers with it — they are all ` +
+    `in ${host} until it comes home. This galaxy is paused while you are away.</p>` +
+    `<p class="away-actions">` +
+    `<button class="go" data-a="rejoin">Rejoin</button>` +
+    `<button class="go" data-a="comehome">Bring pilot home</button>` +
+    `</p>` +
+    `<p class="away-note"><b>Rejoin</b> connects you to that world again so you can see what ` +
+    `your pilot is doing there — your own galaxy stays paused. <b>Bring pilot home</b> ends ` +
+    `the visit and unpacks everything into this one.</p>` +
+    `<p class="away-note">Bringing it home works even if your friend is offline: your pilot ` +
+    `carries its own copy of everything it has done.</p>` +
+    `</div>`
+  );
+}
+
 export function introHtml() {
+  // Slice 4: away from home? The menu is not the question any more.
+  if (state.away) return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
   return (
     `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +
     `<p>You fly out of ${stationAt(DEFAULT_PLACE).n}, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +

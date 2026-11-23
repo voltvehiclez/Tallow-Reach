@@ -8,17 +8,28 @@ import { SHIPS } from '../src/data/ships.js';
 
 test('Test Ship import faces forward, is centred, and is 15% longer than Wasp', () => {
   const model = new THREE.Group();
-  // Off-centre small source model, nose pointing right (+X).
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 0.4, 1));
-  mesh.position.set(3, 1, -2);
+  // Off-centre small source model, nose pointing right (+X) in its own mesh data.
+  const mesh = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.4, 1));
+  body.position.set(3, 1, -2);
+  mesh.add(body);
+  // **The real .glb carries a +90° Y rotation on its node** (playtest 15), so as loaded its
+  // nose already points forward. Modelled here, because a synthetic source without it tests
+  // a shape the game never loads — which is how the sideways Test Ship passed its tests.
+  mesh.rotateY(Math.PI / 2);
   model.add(mesh);
   const fitted = fitShipModel(model, SHIPS.testship);
   const bounds = new THREE.Box3().setFromObject(fitted);
   const waspBounds = new THREE.Box3().setFromObject(buildPlayerShip('wasp'));
   assert.ok(bounds.getCenter(new THREE.Vector3()).length() < 1e-6);
   assert.ok(Math.abs(bounds.getSize(new THREE.Vector3()).z / waspBounds.getSize(new THREE.Vector3()).z - 1.15) < 1e-6);
-  const forward = new THREE.Vector3(1, 0, 0).transformDirection(model.matrixWorld);
-  assert.ok(forward.distanceTo(new THREE.Vector3(0, 0, -1)) < 1e-6);
+  // The nose is a direction through the WHOLE hierarchy: the source's own node rotation and
+  // then `modelYaw`. Reading `model.matrixWorld` alone only applies the yaw, which is why
+  // this test could not see a source model that was already rotated.
+  fitted.updateMatrixWorld(true);
+  const forward = new THREE.Vector3(1, 0, 0).transformDirection(mesh.matrixWorld);
+  assert.ok(forward.distanceTo(new THREE.Vector3(0, 0, -1)) < 1e-6,
+    `the drawn nose must face −Z; it faces (${forward.x.toFixed(2)}, ${forward.y.toFixed(2)}, ${forward.z.toFixed(2)})`);
   assert.equal(SHIPS.testship.sc, 1, 'visual import correction must not change gameplay scale');
 });
 

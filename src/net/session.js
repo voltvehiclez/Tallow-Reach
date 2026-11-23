@@ -20,9 +20,18 @@
 // weaker check — a known guest must prove its token even while the rest is still being
 // built, because that is the one check a wrong implementation would quietly lose.
 //
-// **What a session does not do yet.** It moves no pilot. The suitcase is slice 4, so a
-// bug here cannot cost anybody a ship; what it can do is fail to connect, and every
-// failure is a sentence rather than an exception.
+// **Slice 4: the pilot travels.** A guest that is welcome packs its open-world pilot with
+// `custody.checkOut`, sends the suitcase as one `carry` message, and its home save then
+// carries the `away` marker (so its own pilot is frozen). The host `relocate`s the bundle
+// into its world, stores it with `putGuest`, and asks `sim/` to build a docked record
+// (`mp-guest-arrive`). From then on the host writes the copy back: when something the
+// guest owns changes, it raises `rev` (never more than once per `NET.revStepMs`) and
+// sends a `suitcase` message about `NET.snapshotSec` later; the guest stores it with
+// `syncAway`. `goHome()` applies that copy with `custody.checkIn` and clears the marker,
+// and it works with the host offline because the suitcase is the guest's own copy.
+//
+// **Nothing is ever truncated.** A suitcase too big for `NET.suitcaseMaxBytes` is refused
+// with a sentence and the pilot stays home; half a pilot is worse than one that did not go.
 //
 // **Event bus.** `mp-state` fires whenever anything a screen shows has changed, with a
 // snapshot attached. `mp-chat-arrived` fires for a line from somebody else. `mp-notice`
@@ -30,20 +39,28 @@
 // test enforces it, and the reason is real — a connection must not need a DOM).
 
 import { emit } from "../util/events.js";
-import { state, currentRootSave } from "../state/state.js";
+import { state, currentRootSave, applySave } from "../state/state.js";
 import { SAVE_VERSION, sanitizeSave } from "../state/profile.js";
 import { createChannel, stateLine } from "./transport.js";
 import { createPasteLink, codeWorldId } from "./paste.js";
 import { readMessage, cleanMessage, isChatLine } from "./protocol.js";
-import { handshake } from "./custody.js";
+import {
+  handshake, makeToken, checkOut, checkIn, relocate, compare,
+  guestRecord, bundleFromProfile, bundleBytes, awayRecord,
+} from "./custody.js";
 import {
   worldIdFor, putGuest, dropGuest, guestList, seenGuest, isAway,
+  adoptHostWorld, syncAway, leaveHostWorld,
 } from "./multiplayer.js";
-import { makeToken } from "./custody.js";
+import { stationsOfWorld } from "./world-places.js";
+import { readAway } from "../state/storage.js";
 import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
 import { readSettings, writeSettings, cleanName } from "./settings.js";
 import { checkTurnServers, turnSummary } from "./turn.js";
 import { NET, CHAT } from "../data/multiplayer.js";
+
+/** A whole, non-negative number: what every count on the wire is. */
+const whole = value => Math.max(0, Math.floor(Number(value) || 0));
 
 /* ------------------------------------------------------------------------- */
 /* How the session reaches the save                                           */
@@ -73,6 +90,21 @@ const saveKit = {
       if (next.world.guests && typeof next.world.guests === "object") state.worldState.guests = next.world.guests;
       if (typeof next.world.worldId === "string") state.worldState.worldId = next.world.worldId;
     }
+  },
+  /**
+   * Install a WHOLE mode save, for the guest's own pilot only (slice 4).
+   *
+   * This is separate from `write` on purpose, and the separation is the whole point:
+   * `write` is the host's narrow business (the guest list and the world id), while this
+   * is the one case where multiplayer legitimately replaces the pilot's own half — when
+   * it packs itself away (`checkOut` empties the station stocks, so leaving them in the
+   * live save while the suitcase also carries them would duplicate every stack on the way
+   * home) or comes back (`checkIn`). LESSONS L15: items are moved, never copied, so the
+   * emptying has to reach the save that is actually stored.
+   */
+  install: next => {
+    if (!next || typeof next !== "object" || !next.profile) return;
+    applySave({ ...currentRootSave(), open: next });
   },
 };
 
@@ -216,7 +248,41 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   let greeted = false;      // has this guest managed to say hello at all?
   const greetedPeers = new Set(); // ...and to which peers (a hello is per connection)
 
+  /* --- slice 4: the suitcase ------------------------------------------------------- */
+  // The guest's bundle, packed when the join is accepted and kept while the visit lasts.
+  // `carried` is what the host last gave us; `carriedRev` is the ordering pair of that
+  // copy, so a `suitcase` message can be judged with `compare` instead of a guessed rule.
+  let carried = null;
+  let carriedRev = 0;
+  // Has the host confirmed it took the suitcase? Until it has, a `carry` is re-sent: the
+  // welcome can arrive before the channel can carry anything (LESSONS L35).
+  let carriedAcked = false;
+  // The host's side: the peer that owns each guest id, so a write-back goes to the right
+  // browser when two guests are in the room.
+  const guestPeer = new Map();
+  // The host's write-back throttle: one raise per guest per `NET.revStepMs`, and the
+  // timer that sends it `NET.snapshotSec` later (the plan's two seconds).
+  const pendingWrite = new Map();   // guestId -> { at, timer }
+  const lastWrite = new Map();      // guestId -> timestamp of the last raise
+  // The guest's own "is this mine?" state: its home save is frozen while it is away.
+  let awayMark = null;
+
   const ownGuestId = () => `guest-${token.slice(0, 8)}`;
+
+  /**
+   * Store a change to the GUEST'S OWN pilot.
+   *
+   * Not `save.write`: that seam is deliberately narrow, because a host may only touch the
+   * guest list and the world id. A guest changing its own record — packing (`checkOut`
+   * empties the home stations) or taking a newer suitcase from the host (the away marker
+   * and the copy) — needs the whole mode save installed, or the change never reaches the
+   * game while the wire thinks it did. LESSONS L34.
+   */
+  function storePilot(next) {
+    if (!next || typeof next !== "object") return;
+    if (save.install) save.install(next);
+    else save.write(next);
+  }
 
   function snapshot() {
     const status = channel ? channel.state() : paste ? paste.state() : { state: "idle", reason: "" };
@@ -224,6 +290,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       on,
       role,
       state: status.state,
+      // Slice 4: what a screen needs to say about the pilot rather than the pipe.
+      away: awayMark ? { ...awayMark, suitcase: undefined } : null,
+      carrying: !!carried,
+      carriedAcked,
       line: stateLine(status),
       worldId,
       name: shown,
@@ -277,6 +347,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       case "welcome": return onWelcome(message, peerId);
       case "refuse": return onRefuse(message);
       case "presence": return onPresence(message);
+      // Slice 4: the pilot itself.
+      case "carry": return onCarry(message, peerId);
+      case "suitcase":
+        // Either side may receive one: the host sends the newer copy back, and a guest
+        // that rejoined gets its own copy re-sent. `who` decides nothing — the ordering
+        // pair does.
+        if (role === "guest") return onSuitcase(message);
+        return onSuitcaseAck(message);
       case "ping": return send({ t: "pong", at: Date.now() }, peerId);
       default: return undefined;
     }
@@ -292,7 +370,13 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // flow yet, so a first hello carries no record and is admitted on the strength of the
     // link it arrived with — that is the slice-4 decision, made here in ONE place, with a
     // comment, rather than by quietly weakening the check for known guests.
-    const checked = record
+    // A record the pilot has already LEFT does not hold its current token: it is holding
+    // its suitcase, not an identity. The fresh join link is the proof (the old peer is
+    // gone, the host made a new token), so a marked record is re-admitted and the new
+    // token replaces the old hash — otherwise a pilot that visited once could never come
+    // back, which is exactly what playtest 14 hit.
+    const returning = !!record && record.left === true;
+    const checked = record && !returning
       ? handshake({
         token: message.token,
         guestId: message.guestId,
@@ -321,8 +405,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const recorded = putGuest(current, message.guestId, {
       name: display,
       token: message.token,
-      epoch: 0,
-      rev: 0,
+      // `left: false` re-admits a pilot that had gone home, and keeps its old `epoch`/`rev`
+      // so its suitcase still orders correctly against what the guest holds (playtest 14).
+      left: false,
+      epoch: returning ? record?.epoch : 0,
+      rev: returning ? record?.rev : 0,
       bundle: null,
       lastSeen: Date.now(),
     });
@@ -392,6 +479,340 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (message.youName && message.youName !== name) {
       noteLine("Tallow Reach", `You are ${message.youName} here — the host already has a ${name}.`);
     }
+    // Slice 4: **joining is not travelling.** "Bring my pilot" is a separate press, because
+    // the plan quotes it as an action and because a visiting pilot is frozen at home — a
+    // player who only wants to see a friend's galaxy and talk should not have their own
+    // world paused for it. The ONE exception is a rejoin: a pilot that is already away is
+    // already packed, so its suitcase goes back on the wire to catch the host up.
+    if (isAway(save.read())) {
+      carried = save.read()?.away?.suitcase || null;
+      carriedRev = save.read()?.away?.rev || 0;
+      awayMark = save.read()?.away || null;
+      if (carried) sendCarryMessage(carried);
+    } else {
+      emit("mp-away-changed", { away: null, canBring: true });
+    }
+  }
+
+  /* ------------------------------------------------------------------------- */
+  /* Slice 4: the suitcase                                                      */
+  /* ------------------------------------------------------------------------- */
+
+  /**
+   * Guest side: freeze the home pilot into a bundle and hand it to the host.
+   *
+   * `checkOut` lifts the travelled half AND every station locker out of the home save, so
+   * the local copy no longer holds them — items are moved, never copied. The returned
+   * save (with its `away` marker) is written back through the save kit, which is what
+   * makes the pilot frozen at home from this moment.
+   *
+   * A bundle too big for the wire is refused *before* anything is written, so a pilot
+   * that cannot travel stays home with all its cargo.
+   */
+  function sendCarry() {
+    if (role !== "guest" || carried !== null) return false;
+    const home = save.read();
+    if (isAway(home)) {
+      // Already away from a previous visit: its suitcase is the copy, not this save.
+      carried = home.away?.suitcase || null;
+      carriedRev = home.away?.rev || 0;
+      awayMark = home.away || null;
+      if (!carried) {
+        emit("mp-notice", "Your pilot is already visiting another world, and its suitcase could not be read. Bring it home from the main menu first.");
+        return false;
+      }
+      return sendCarryMessage(carried);
+    }
+    let packed = null;
+    try {
+      packed = checkOut(home, { worldId, hostName: hostName || "", guestId: ownGuestId(), name, token });
+    } catch (error) {
+      emit("mp-notice", `Your pilot could not be packed for the trip: ${error?.message || "the suitcase did not close"}.`);
+      return false;
+    }
+    const size = bundleBytes(packed.bundle);
+    if (size > NET.suitcaseMaxBytes) {
+      emit("mp-notice", `Your pilot carries too much to travel (${Math.round(size / 1024)} KB of cargo and fits; the limit is ${Math.round(NET.suitcaseMaxBytes / 1024)} KB). Sell or store some of it and try again.`);
+      return false;
+    }
+    carried = packed.bundle;
+    carriedRev = whole(packed.bundle.rev);
+    awayMark = packed.save.away || null;
+    // The home save keeps the marker, an emptied stations half and the frozen pilot, and
+    // the suitcase has the rest. Installing it (not merely `write`ing it) is what stops
+    // the cargo existing in two places at once.
+    storePilot(packed.save);
+    emit("mp-away-changed", { away: awayMark });
+    return sendCarryMessage(carried);
+  }
+
+  /** Session side of "Bring my pilot": pack, install the frozen record, put it on the wire. */
+  function bringPilot() {
+    if (role !== "guest") return { ok: false, message: "Only a visitor brings a pilot — this world is yours." };
+    if (carried) return { ok: true, message: "Your pilot is already here." };
+    const sent = sendCarry();
+    return sent
+      ? { ok: true, message: "Your pilot is on its way." }
+      : { ok: false, message: "Your pilot could not travel — see the message on screen for why." };
+  }
+
+  function sendCarryMessage(bundle) {
+    const message = cleanMessage("carry", {
+      guestId: ownGuestId(),
+      name,
+      epoch: bundle?.epoch || 0,
+      rev: bundle?.rev || 0,
+      bundle,
+    });
+    if (!message) {
+      emit("mp-notice", "Your suitcase could not be put on the wire. Your pilot is still at home.");
+      return false;
+    }
+    // A `carry` names one host, so it goes to the peer that welcomed us; a code-jointed
+    // visit has exactly one wire and no peer id.
+    const sent = hostPeerId ? send(message, hostPeerId) : send(message);
+    if (!sent) {
+      // Not an error yet: the host retries nothing, so we do. The welcome may arrive
+      // before the channel can carry anything (the same race the hello had, L35).
+      setTimeout(() => { if (on && carried && !carriedAcked) sendCarryMessage(carried); }, NET.helloRetrySec * 1000);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Guest side: the host wrote the pilot and sent the newer copy back.
+   *
+   * The ordering pair decides, never the arrival order: `compare` is slice 1's rule and
+   * the only thing allowed to answer "is this newer than what I have". A copy that is not
+   * newer is dropped silently — it is a late message, not an error.
+   */
+  function onSuitcase(message) {
+    if (role !== "guest") return;
+    carriedAcked = true;
+    const incoming = { epoch: whole(message?.epoch), rev: whole(message?.rev) };
+    if (carried && compare(incoming, { epoch: awayMark?.epoch || 0, rev: carriedRev }) > 0) return;   // older: ignore
+    if (!message?.bundle) return;
+    carried = message.bundle;
+    carriedRev = incoming.rev;
+    if (awayMark) {
+      awayMark = { ...awayMark, epoch: incoming.epoch, rev: incoming.rev, suitcase: carried };
+      const stored = syncAway({ ...save.read(), away: awayMark }, carried, incoming);
+      storePilot(stored);
+      awayMark = stored.away || awayMark;
+    }
+    emit("mp-away-changed", { away: awayMark });
+    publish();
+  }
+
+  /**
+   * Host side: a guest's suitcase arrived.
+   *
+   * The bundle is not trusted: it goes through `relocate` (anything whose station this
+   * world lacks waits at Meridian and remembers where it came from) and the world's own
+   * station stocks are written from the result. `putGuest` stores it with the guest's
+   * token *hash*, never the token, and the record keeps `(epoch, rev)`.
+   *
+   * Then `sim/` is asked to build the record (`mp-guest-arrive`) — through the event bus,
+   * because `net/` and `sim/` do not import each other in that direction.
+   */
+  function onCarry(message, peerId) {
+    if (role !== "host") return;
+    const guestId = message.guestId || message.bundle?.guestId;
+    const record = save.read()?.world?.guests?.[guestId] || null;
+    // A known guest must prove its token; a first visit is admitted on the link it came
+    // with, exactly as the hello is (see `firstHelloCheck`).
+    // Same rule as a hello: a record the pilot has LEFT is proof of nothing, and the fresh
+    // link is. (See `onHello`; playtest 14.)
+    const checked = record && record.left !== true
+      ? handshake({
+        token: message.bundle?.token,
+        guestId,
+        record,
+        version: message.bundle?.v,
+        worldVersion: SAVE_VERSION,
+        worldId: message.bundle?.worldId,
+        expectedWorldId: worldId,
+      })
+      : { ok: true, reason: null, message: "" };
+    if (!checked.ok) {
+      send({ t: "refuse", reason: checked.reason, message: checked.message }, peerId);
+      noteLine("Tallow Reach", `${message.name || "A pilot"}'s pilot could not arrive: ${checked.message}`);
+      return;
+    }
+    if (!remoteCanJoin()) {
+      send({ t: "refuse", reason: "full", message: "This world is holding as many visiting pilots as it can. Ask the host to send somebody home." }, peerId);
+      return;
+    }
+
+    const current = save.read();
+    const index = stationsOfWorld(current.world);
+    const relocated = relocate(message.bundle, current.world, { index });
+    const stored = putGuest(current, guestId, {
+      name: message.name || record?.name || "Guest",
+      token: message.bundle?.token || "",
+      epoch: whole(message.epoch) ?? record?.epoch,
+      rev: whole(message.rev) ?? record?.rev,
+      bundle: { ...relocated.bundle, token: "" },
+      lastSeen: Date.now(),
+    });
+    stored.world.stationStores = relocated.stations;
+    save.write(stored);
+
+    if (peerId) guestPeer.set(guestId, peerId);
+    // The record itself is the simulation's job. `net/` may not touch state.players.
+    emit("mp-guest-arrive", {
+      guestId,
+      name: message.name || record?.name || "Guest",
+      profile: null,             // main.js fills this from the bundle with custody.hostProfile
+      bundle: relocated.bundle,
+    });
+    send(cleanMessage("suitcase", {
+      guestId,
+      name: message.name || record?.name || "",
+      epoch: whole(message.epoch),
+      rev: whole(message.rev),
+      bundle: { ...relocated.bundle, token: "" },
+    }), peerId);
+    noteLine("Tallow Reach", `${message.name || "A pilot"}'s pilot arrived — ${relocated.bundle.summary?.text || "suitcase received"}.`);
+    publish();
+  }
+
+  /**
+   * Host side: a guest's connection dropped without a goodbye (playtest 14).
+   *
+   * Three things were left behind, and all three were visible: the guest stayed in the
+   * players list, no line in the chat said it had gone, and its record stayed in
+   * `world.guests` — so the next join was treated as a RETURNING guest and demanded a token
+   * the pilot had already been given a new one of. That last one is what made "Join" from
+   * the main menu do nothing at all for a pilot that had visited before.
+   *
+   * The record is marked `left` rather than deleted: the pilot's suitcase is still in it,
+   * and if the same pilot comes back it must get its own ship and cargo rather than a
+   * fresh one. A marked record is compared on `lastSeen` by the next hello.
+   */
+  function forgetPeer(peerId) {
+    const gone = guests.filter(g => g.peerId === peerId);
+    for (let i = guests.length - 1; i >= 0; i--) {
+      if (guests[i].peerId === peerId) guests.splice(i, 1);
+    }
+    peerNames.delete(peerId);
+    greetedPeers.delete(peerId);
+    if (!gone.length) return;
+
+    // The record, so a returning pilot is not locked out of its own suitcase.
+    let stored = save.read();
+    for (const g of gone) {
+      const record = stored?.world?.guests?.[g.guestId];
+      if (record) stored = putGuest(stored, g.guestId, { ...record, left: true, lastSeen: Date.now() });
+      // The ship leaves the simulation (slice 4's docked visitor).
+      emit("mp-guest-left", { guestId: g.guestId, name: g.name });
+      noteLine("Tallow Reach", `${g.name} left.`);
+    }
+    if (stored) save.write(stored);
+    // Everybody else's list, so a third pilot does not see a ghost either.
+    publishPresence();
+  }
+
+  /**
+   * Host side: the guest adopted the copy we wrote. Nothing to do but note it — the write
+   * already happened, and `compare` protects against a copy arriving out of order.
+   */
+  function onSuitcaseAck() {
+    // The host receives nothing it needs to act on: the copy it sent was already stored
+    // before it left. (A guest answers a suitcase by storing it — `onSuitcase` above.)
+    return undefined;
+  }
+
+  /** Is there room for one more visiting pilot? (`NET.maxGuests`, a live-session limit.) */
+  function remoteCanJoin() {
+    return guests.length < NET.maxGuests;
+  }
+
+  /**
+   * Host side: something the guest owns changed, so raise `rev` and write the copy back.
+   *
+   * Throttled twice over: no more than one raise per `NET.revStepMs`, and the message
+   * goes `NET.snapshotSec` after the *last* change, so a busy second is one snapshot
+   * rather than sixty. The plan asks for exactly this.
+   */
+  function noteGuestChanged(guestId) {
+    if (role !== "host") return false;
+    const now = Date.now();
+    const last = lastWrite.get(guestId) || 0;
+    if (now - last < NET.revStepMs) {
+      // Too soon: make sure one is pending, and let its own timer do the work.
+      if (!pendingWrite.has(guestId)) scheduleWrite(guestId);
+      return false;
+    }
+    lastWrite.set(guestId, now);
+    scheduleWrite(guestId);
+    return true;
+  }
+
+  function scheduleWrite(guestId) {
+    const existing = pendingWrite.get(guestId);
+    if (existing?.timer) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      pendingWrite.delete(guestId);
+      writeBack(guestId);
+    }, Math.max(0, NET.snapshotSec) * 1000);
+    if (typeof timer?.unref === "function") timer.unref();
+    pendingWrite.set(guestId, { at: Date.now(), timer });
+  }
+
+  /**
+   * Host side: read the visiting pilot's LIVE profile back out as a suitcase and send it.
+   *
+   * The records themselves belong to `sim/` (a ship with a fit, a hold, Hull HP), so this
+   * asks for the live profile through the bus and answers on `mp-guest-bundle`. When
+   * there is no live record (the guest is docked out of the world, or `sim/` is not
+   * running — a test) the stored bundle is sent unchanged, which is still a correct copy.
+   */
+  function writeBack(guestId) {
+    const current = save.read();
+    const record = current?.world?.guests?.[guestId];
+    if (!record) return false;
+    const live = liveBundleFor(guestId);
+    const rev = Math.max(whole(record.rev) + 1, whole(live?.rev));
+    const bundle = live
+      ? bundleFromProfile(live.profile, {
+        lockers: live.lockers || [],
+        previous: { ...record.bundle, guestId, worldId, hostName: name },
+        name: record.name,
+        rev,
+      })
+      : { ...(record.bundle || {}), rev };
+    if (!bundle?.profile) return false;
+    const stored = putGuest(current, guestId, { rev, bundle: { ...bundle, token: "" }, lastSeen: Date.now() });
+    save.write(stored);
+    const peerId = guestPeer.get(guestId) || null;
+    const message = cleanMessage("suitcase", {
+      guestId,
+      name: record.name,
+      epoch: whole(record.epoch),
+      rev,
+      bundle: { ...bundle, token: "" },
+    });
+    if (message) send(message, peerId);
+    publish();
+    return true;
+  }
+
+  /**
+   * The live profile of a visiting pilot, as `sim/` knows it.
+   *
+   * `sim/` cannot be imported from here (the arrow points the other way), so this asks
+   * on the bus with a synchronous "answer me now" event: `main.js` listens and fills in
+   * the payload. With no listener (headless tests) the answer is simply absent, and the
+   * stored bundle is used — never a guess.
+   */
+  function liveBundleFor(guestId) {
+    const request = { guestId, profile: null, lockers: [], answered: false };
+    try {
+      emit("mp-guest-bundle-request", request);
+    } catch (e) { /* a broken listener must not break a session */ }
+    return request.answered ? request : null;
   }
 
   function onRefuse(message) {
@@ -407,9 +828,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
   function upsertGuest(entry) {
     if (!entry?.guestId) return;
+    // A `welcome` and a `presence` list carry no peer id, and spreading one over a known
+    // guest used to WIPE the peer id — so that guest could never be matched to the peer
+    // that left, and stayed in the list for ever (playtest 14).
+    const clean = { ...entry };
+    if (!clean.peerId) delete clean.peerId;
     const at = guests.findIndex(g => g.guestId === entry.guestId);
-    if (at >= 0) guests[at] = { ...guests[at], ...entry };
-    else guests.push({ guestId: entry.guestId, name: entry.name || "Guest", docked: !!entry.docked });
+    if (at >= 0) guests[at] = { ...guests[at], ...clean };
+    else guests.push({ guestId: entry.guestId, name: entry.name || "Guest", docked: !!entry.docked, peerId: entry.peerId || null });
   }
 
   /**
@@ -512,16 +938,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
         if (event?.kind === "join") { stalled = false; clearStallTimer(); }
         if (event?.kind === "leave" && event.peerId) {
           if (role === "host") {
-            const left = guests.filter(g => g.peerId === event.peerId);
-            if (left.length) {
-              for (let i = guests.length - 1; i >= 0; i--) {
-                if (guests[i].peerId === event.peerId) guests.splice(i, 1);
-              }
-              for (const g of left) noteLine("Tallow Reach", `${g.name} left.`);
-              publishPresence();
-            }
-            peerNames.delete(event.peerId);
-            greetedPeers.delete(event.peerId);
+            forgetPeer(event.peerId);
           } else if (role === "guest" && welcomed) {
             const hostGone = hostPeerId ? event.peerId === hostPeerId : (channel && channel.peers().length === 0);
             if (hostGone) {
@@ -844,6 +1261,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     finishCodes,
     acceptCodes,
     waitForWelcome,
+    // Slice 4: the guest's "Bring my pilot" press.
+    bringPilot,
     reconnect,
     escalateToRelay,
     checkRelays,
@@ -944,6 +1363,116 @@ export function leaveVisit() {
   stop();
   writeSettings({ ...readSettings(), enabled: false });
   return worldId || true;
+}
+
+/**
+ * "Bring my pilot" (slice 4) — the press that actually puts the pilot on the wire.
+ *
+ * Separate from `joinWorld` on purpose (see `onWelcome`): joining a friend's world to look
+ * around costs nothing, and only this refuses to leave your own world behind. Returns
+ * `{ ok, message }` so a screen can say what happened without reading a marker.
+ */
+/**
+ * "Bring my pilot" (slice 4), as a screen calls it.
+ *
+ * The session that is running owns the packing (it holds the token, the world id and the
+ * wire), so this only finds it. With no session there is nothing to bring a pilot TO —
+ * a visit begins by joining — and the sentence says which press is missing.
+ */
+export function bringPilot() {
+  if (!active || typeof active.bringPilot !== "function") {
+    return { ok: false, message: "Join your friend's world first, then bring your pilot." };
+  }
+  return active.bringPilot();
+}
+
+/**
+ * "Bring my pilot home" from the TITLE screen (playtest 14).
+ *
+ * The card's two buttons used to do nothing, and the reason was one line: from the title
+ * there is no open-world save loaded to unpack into (`currentRootSave()` describes whatever
+ * mode happens to be active), so `bringPilotHome` was handed a save with no profile and
+ * declined — and `ui/menu.js`'s `comeHome` returned false before it restored anything. The
+ * player was then stuck: Rejoin did nothing, a new link was refused with "bring it home
+ * first", and nothing on the card could bring it home.
+ *
+ * So the unpacking happens against the mode save that is *stored*, which is where the
+ * frozen pilot actually lives, and the result is written straight back through the same
+ * `saveKit`. The marker on the live state is cleared here too, because the title screen
+ * reads `state.away` and a card that cannot go away is the bug.
+ */
+export function bringPilotHomeAtMenu({ mode = "open" } = {}) {
+  const root = liveSave();
+  const half = root && typeof root === "object" ? root[mode] : null;
+  if (!half || typeof half !== "object") {
+    return { ok: false, message: "Your pilot's save could not be read, so it cannot come home yet. Do not reset — tell the host." };
+  }
+  if (!half.away) {
+    // Nothing stored to unpack: the live state is all there is. Clear it rather than trap
+    // the player on a card about a pilot that is not away.
+    state.away = null;
+    return { ok: true, save: root, message: "Your pilot is home." };
+  }
+  const done = bringPilotHome(half);
+  if (!done.ok) return done;
+  const next = { ...root, [mode]: done.save };
+  saveKit.write(next);
+  state.away = null;
+  if (active && active.role === "guest") {
+    try { active.stop(); } catch (e) { /* the host may be long gone */ }
+    active = null;
+  }
+  return { ok: true, save: next, message: done.message };
+}
+
+/**
+ * "Bring my pilot home" (slice 4) — the one action that must work with the host OFFLINE.
+ *
+ * The suitcase is the guest's own copy (`away.suitcase`, kept up to date by `syncAway`),
+ * so coming home needs no connection at all: apply it with `custody.checkIn`, clear the
+ * marker, and the pilot is back with everything it was holding in the friend's world.
+ *
+ * `save` is the home save, which the caller owns (this module may not read the game's
+ * whole save shape). Returns `{ ok, save, message }` — a new save, never a mutated one.
+ */
+export function bringPilotHome(save, { reason = "" } = {}) {
+  const away = save?.away || null;
+  if (!away) return { ok: false, save, message: "Your pilot is not away — there is nothing to bring home." };
+  const suitcase = away.suitcase || readAwayCopy(away.worldId);
+  if (!suitcase?.profile) {
+    return {
+      ok: false,
+      save,
+      message: "Your pilot's suitcase could not be read, so it cannot come home yet. Do not reset — press Wait and reconnect to the host so it can send a fresh copy.",
+    };
+  }
+  let home = null;
+  try {
+    home = checkIn(save, suitcase);
+  } catch (error) {
+    return { ok: false, save, message: `Your pilot could not come home: ${error?.message || "the suitcase did not open"}.` };
+  }
+  // The marker is cleared by `checkIn`; the per-world key is `leaveHostWorld`'s job, and
+  // the guest can only be home from one world, so both halves happen here.
+  const settled = leaveHostWorld(home);
+  // A session that was still open is now looking at a world that is not running.
+  if (active && active.role === "guest") {
+    try { active.stop(); } catch (e) { /* ignore */ }
+  }
+  return {
+    ok: true,
+    save: settled,
+    message: reason || `Your pilot is home${away.hostName ? `, back from ${away.hostName}'s world` : ""}.`,
+  };
+}
+
+/** The suitcase under `away:<worldId>`, for a save whose in-save copy is damaged. */
+function readAwayCopy(worldId) {
+  try {
+    return readAway(worldId);
+  } catch (e) {
+    return null;
+  }
 }
 
 /** Was this browser visiting somebody else's world? (The screen asks before it asks why.) */

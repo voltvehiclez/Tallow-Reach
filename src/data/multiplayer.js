@@ -70,7 +70,9 @@ export const AWAY_FIELDS = ["worldId", "hostName", "guestId", "token", "epoch", 
  * One record in `world.guests` (save v29, slice 2): the host's copy of a visiting
  * pilot. Deleting the entry is always safe, because the guest keeps a suitcase.
  */
-export const GUEST_FIELDS = ["name", "tokenHash", "epoch", "rev", "bundle", "lastSeen"];
+// `left` (playtest 14): the pilot has gone home, so this record is holding its suitcase
+// rather than an identity — the next hello may re-admit it on a fresh link.
+export const GUEST_FIELDS = ["name", "tokenHash", "epoch", "rev", "bundle", "lastSeen", "left"];
 
 /** Pseudo-field name used for the lockers, which live in a save's `world`, not its profile. */
 export const LOCKERS_FIELD = "lockers";
@@ -112,7 +114,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-22j";
+export const BUILD = "2026-11-23b";
 
 export const NET = {
   snapshotSec: 2,
@@ -131,6 +133,15 @@ export const NET = {
   helloWaitSec: 12,
   revStepMs: 250,
   keepPrevious: 1,
+  // Slice 4: the biggest suitcase the wire will carry, in characters of JSON. A pilot's
+  // travelled half is a few KB (a hold of stacks, a fleet, its fits); this cap is a
+  // backstop so a corrupt or hostile bundle cannot be pushed through a data channel,
+  // and so a refusal is a sentence instead of a dropped packet. Raised only with a
+  // measured reason.
+  suitcaseMaxBytes: 262144,
+  // How often the host re-sends a guest its suitcase even when nothing changed, so a
+  // copy lost on a flaky channel is healed without a reconnect. The plan's two seconds.
+  suitcaseRepeatSec: 30,
 };
 
 /**

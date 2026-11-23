@@ -10,7 +10,8 @@ import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../stat
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
-import { leaveVisit } from "../net/session.js";
+import { leaveVisit, joinWorld } from "../net/session.js";
+import { makeJoinUrl, pageBase } from "../net/join-link.js";
 import { readSettings, writeSettings } from "../net/settings.js";
 // The same guard `installDragListeners` uses below: a headless import (a test) has a
 // `document` stand-in without `addEventListener`, and an import-time throw there takes
@@ -20,7 +21,7 @@ if (typeof document !== "undefined" && typeof document.addEventListener === "fun
     if (e.target?.id === "menu-username") writeSettings({ ...readSettings(), name: e.target.value });
   });
 }
-import { checkIn } from "../net/custody.js";
+import { bringPilotHome, bringPilotHomeAtMenu } from "../net/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -126,6 +127,14 @@ export function setupMenu(options = {}) {
   wirePanelSurface(panel);
   wirePanelSurface(leftPanel);
   installDragListeners();
+
+  // Step 16 slice 4: the pilot crossed into a friend's world, or came home. That changes
+  // what the start screen IS — a menu, or one card saying where the pilot is — so it
+  // redraws itself instead of waiting for a click. `ui/multiplayer.js` sets `state.away`
+  // from the same event; this listener only redraws, so neither file imports the other.
+  on("mp-away-changed", () => {
+    if (state.ui && state.ui.intro) render();
+  });
 
   // While the start screen is up it owns the panel: booting a save prepares the
   // ship (docked or flying) but must not replace or hide the start screen.
@@ -246,6 +255,21 @@ export function renderLeft() {
   if (view === "o") mountOutfitting();
 }
 
+/**
+ * Redraw the screen after something outside a click changed it (slice 4: the pilot
+ * crossing, or coming home). A no-op before the panel exists, so the bus can call it
+ * during `main.js` setup without an order dependency.
+ */
+export function redrawScreen() {
+  if (!panel) return;
+  render();
+}
+
+// Step 16 slice 4: the pilot crossed into a friend's world, or came home. That changes
+// what the title screen IS (a menu, or a card saying where the pilot is), so it redraws
+// itself rather than waiting for the next click. `state.away` is set by
+// `ui/multiplayer.js`, which owns the bus listener; this is only the redraw.
+
 export function render() {
   panel.hidden = false;
   panel.innerHTML = state.ui.intro
@@ -294,20 +318,55 @@ function loadedMessage(text) {
  * world they had walked away from. The host's own world is untouched: same room, same menu
  * round trip, so nothing is disconnected for them.
  *
- * The pilot comes home through the suitcase when the save carries one (`state.away` is
- * written by slice 4); until that slice is wired the local save is already the latest copy,
- * so the marker is simply cleared. `checkIn` is the same rule slice 4 uses, so this path
- * cannot drift from it.
+ * The pilot comes home through its suitcase (`state.away.suitcase`, written by slice 4).
+ * `net/session.js`'s `bringPilotHome` is the ONE rule for that, and this path asks it
+ * rather than opening the suitcase itself, so the two doors cannot drift apart.
  */
 function comeHome() {
-  if (!leaveVisit()) return false;
+  // The session goes first, always: a guest that walks home while still connected leaves a
+  // row in the host's players list and a ship in the host's world (playtest 14). Leaving
+  // the visit is not conditional on there being a suitcase to unpack.
+  leaveVisit();
   const away = state.away;
-  if (away && away.suitcase) applySave(checkIn(currentRootSave(), away.suitcase));
-  else if (away) state.away = null;
+  if (away) {
+    // **From the title there is no open-world save loaded**, so the pilot is unpacked
+    // against the mode save that is stored — which is where the frozen pilot actually is.
+    // This is why "Bring pilot home" on the card did nothing: the old path walked out of
+    // `leaveVisit()` believing it had failed, and never reached the unpacking at all.
+    const done = bringPilotHomeAtMenu({ mode: state.mode === "campaign" ? "campaign" : "open" });
+    if (!done.ok) {
+      showNotice(done.message);
+      return false;
+    }
+    // The stored save now holds the returned pilot; load it so the screen and the runtime
+    // agree with the disk before anything else runs.
+    applySave(done.save);
+  }
   closeMultiplayer();
   saveCurrentGame();
-  showNotice("Left your friend's world. Your pilot is back in your own.");
+  showNotice(away?.hostName
+    ? `Your pilot is home, back from ${away.hostName}'s world.`
+    : "You have left your friend's world.");
   return true;
+}
+
+/**
+ * Re-attempt the world the pilot is already in, from the title card (playtest 14).
+ *
+ * The join is asynchronous and the screen must not lie about it, so the answer is a
+ * sentence either way. On success the ordinary join path runs (`mp-enter-world` is NOT
+ * emitted for an away pilot — see `afterJoined`), leaving the player on the card with the
+ * connection live, which is what "Rejoin" means: the pilot is still there, go and look.
+ */
+function rejoinStoredWorld(away) {
+  const link = makeJoinUrl(away.worldId, away.token, pageBase());
+  joinWorld({ link })
+    .then(result => {
+      if (!result?.ok) { showNotice(result?.message || "Could not rejoin that world."); return; }
+      showNotice(`Rejoined ${away.hostName ? away.hostName + "'s world" : "your friend's world"}.`);
+      render();
+    })
+    .catch(() => showNotice("Could not rejoin that world. Paste the link instead."));
 }
 
 function enterGameMode(mode) {
@@ -333,8 +392,34 @@ const ACTIONS = {
   // (the multiplayer action below asks for one). Open World must start with no settings
   // stored at all — the step-10 fixes and the 11B recovery notices depend on it.
   intro() {
-    comeHome();
+    // Slice 4: a pilot that is away must come home BEFORE its world starts. If the suitcase
+    // will not open, `comeHome` says why and returns false — and we stop, because entering
+    // the world would fly a frozen pilot whose cargo is in another galaxy. (Fixing the
+    // suitcase needs the host, so the player goes back to the card, not into a cockpit.)
+    if (state.away && !comeHome()) return;
     enterGameMode("open");
+  },
+  // Step 16 slice 4: the two doors off the "Your pilot is in Ada's world" card.
+  //
+  // `rejoin` reopens the multiplayer screen on the JOIN half with the last world already
+  // filled in, so the player presses one button rather than pasting a link they have
+  // already pasted once. `comehome` is the same act as `intro`'s (a pilot at home is a
+  // pilot at home), so it calls that rather than growing a second path.
+  rejoin() {
+    // A real attempt, not just a screen (owner, playtest 14: "Rejoin doesnt do anything").
+    // The title has the world's id on the marker, so the link can be rebuilt from it — the
+    // token comes from the settings, where the join that created the marker put it. When
+    // that is not possible the screen still opens, with the box ready, and says why.
+    const away = state.away;
+    if (away?.token) {
+      rejoinStoredWorld(away);
+      return;
+    }
+    openMultiplayer({ focus: "join", from: "menu" });
+    showNotice("Paste your friend's link — this browser did not keep the last one.");
+  },
+  comehome() {
+    ACTIONS.intro();
   },
   // Step 16 slice 3: the title menu's way into co-op. One screen, opened here, that both
   // hosts a world and takes a friend's link or code — a guest never enters their own
