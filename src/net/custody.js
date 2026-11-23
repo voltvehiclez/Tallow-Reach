@@ -193,6 +193,57 @@ export function compare(a, b) {
   return 0;
 }
 
+/**
+ * **Is the copy in the friend's world newer than the one I hold?** (owner, playtest 18)
+ *
+ * The owner's rule, in his words: *"This your pilot is in menu should only come if you try to
+ * join your local open world but a more new version of your save was on an online world."*
+ *
+ * While a pilot is away, `checkOut` leaves a full frozen copy of the traveling half in the home
+ * save, so the two copies can be compared directly — there is no clock to trust and no way for
+ * the player to be wrong about it. A copy is **newer** when the host's own `{epoch, rev}`
+ * ordering says so, or it carries more done: more credits, or more cargo in the holds.
+ *
+ * Ties and missing data answer **false**: equal means nothing of the player's is waiting across
+ * the wire, so the ordinary world opens and no card is raised. That asymmetry is deliberate — a
+ * false "yes" puts a card in front of somebody whose own world was never in doubt (the trap in
+ * playtest 17), while a false "no" only costs a press the player can still make.
+ */
+export function isNewerCopy(mine, theirs) {
+  if (!mine || !theirs) return false;
+  // The host's ordering pair, when both sides carry one and they disagree. Only a strict
+  // win decides; an unknown pair (`compare` ranks missing numbers lowest, so it can invent a
+  // winner from `undefined`) must fall through to what the copies actually contain.
+  const order = compare(theirs, mine);
+  const known = copy => Number.isFinite(Number(copy?.epoch)) && Number.isFinite(Number(copy?.rev));
+  if (known(theirs) && known(mine)) {
+    if (order < 0) return true;
+    if (order > 0) return false;
+  }
+  const number = value => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  const more = (a, b) => number(a) > number(b) + 1e-9;
+  const credits = copy => copy.cr ?? copy.profile?.cr;
+  if (more(credits(theirs), credits(mine))) return true;
+  const cargo = hold => {
+    let count = 0;
+    for (const items of Object.values(hold || {})) {
+      for (const amount of Object.values(items || {})) count += number(amount);
+    }
+    return count;
+  };
+  if (more(cargo(theirs.profile?.holds), cargo(mine.profile?.holds))) return true;
+  // **Hull is not a "newer" signal.** `hp` is the fraction remaining, so a pilot that took a
+  // beating while visiting has a LOWER number — counting it as newer would treat damage as
+  // progress, and counting it as older would hide a whole trip's worth of damage. Credits and
+  // cargo only ever go the one way, and the host's `{epoch, rev}` above covers the rest.
+  // **Lockers are deliberately NOT compared.** `checkOut` empties the home world's stations
+  // into the suitcase, so the home copy always holds zero stacks while the traveler holds all
+  // of them — counting them would report "newer" every single time, which is the false card
+  // this function exists to stop. The pilot's lockers do not change while it is away either:
+  // it trades into the HOST's stations, which belong to the host's world, not its suitcase.
+  return false;
+}
+
 /** m³ a bundle's holds and lockers take up. */
 export function bundleVolume(bundle) {
   let used = 0;

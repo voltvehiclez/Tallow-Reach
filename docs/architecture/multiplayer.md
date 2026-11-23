@@ -330,10 +330,29 @@ because each half is a feature in its own right and neither can be tested alone:
   (`state.localInput`, a numbered input-rule change — see [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)),
   and the guest's screen following the **host's** pocket. Only then are two ships drawn in one sky.
 
-**The guest's own screen in slice 4 is a card, not a world** (owner, 2026-11-22): while its pilot is
-away it shows *"Your pilot is in Ada's world"* with **Rejoin** and **Bring pilot home** — because a
-frozen pilot still being flown in its own sky reads as a bug, and the alternative (drawing the
-host's world) is slice 8, not slice 4.
+**The guest's own screen in slice 4 is its own world, and the card is a question about custody**
+(owner, playtest 18, 2026-11-23 — this replaces the earlier "the card IS the title screen" rule):
+
+- The **main menu is always the main menu.** Being away no longer replaces it, so a player who
+  leaves a friend's world lands somewhere ordinary and cannot be stranded on a save question.
+- The card *"Your pilot is in Ada's world"* appears **only** when the player presses **Open World**
+  **and** `net/session.js`'s `newerCopyAway()` says the copy in that world is genuinely newer. The
+  rule is the owner's: *"should only come if you try to join your local open world but a more new
+  version of your save was on an online world."*
+- If nothing newer is waiting, **Open World opens the pilot's own world**, away marker and all. The
+  frozen travelling half stays in the save untouched, so bringing a newer copy home later still
+  works — it is a copy, not a move.
+- Newer is decided by `custody.isNewerCopy`: the host's `{epoch, rev}` pair first (only when both
+  copies carry one), then more credits, then more cargo. **A tie is not newer**, and hull damage
+  and locker counts are deliberately not signals (damage is not progress; the home stations are
+  emptied into the suitcase, so lockers would always look newer).
+- The card has **two** buttons — **Bring pilot home** and **Main menu**. **Rejoin was removed**
+  (playtest 18): rejoining is *main menu → Join Multiplayer World*, one path that explains itself.
+
+**Bring pilot home** is unchanged and is exactly what the owner described: the copy from the
+friend's world — credits, ships, hull, holds, cargo and lockers — becomes the local save, and the
+local missions, story flags and statistics stay local (`custody.checkIn`). Campaign play never
+affects it: the two halves of a save share a file, nothing else.
 
 ## Known gaps (until their slice lands)
 

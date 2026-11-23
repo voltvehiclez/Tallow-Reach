@@ -172,6 +172,21 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L42. A screen that replaces the menu must earn it, every time, by evidence
+- **Seen (owner, playtest 18):** *"Laptop joins fine a host world. Leaving puts you into the Your Pilot is in hostpc world... for the
+  laptop exiting the main menu in hostpcs world should put the laptop user in the main menu."* The menu had been replaced by a save
+  question, and that question's own "Main menu" button re-raised it on the next draw.
+- **Cause:** the condition for the card was *the away marker exists*, which is true for the whole visit, so the card was the title
+  screen for as long as the visit lasted. Nothing compared the two copies, even though `compare()` had existed since slice 1. A state
+  flag described *what happened* (the pilot left) and was used as if it described *a problem* (a newer copy is waiting).
+- **Rule:** a screen that takes the menu's place must be raised by a **press** and justified by **evidence at that press**, not by a
+  state that persists. When a flag means "an event happened", ask what the player can *do* about it right now; if the answer is "only
+  sometimes", the flag needs a companion test, and the screen needs a door that leaves the flag alone. And a comparison must have a
+  defined answer for a **tie** — decide it deliberately (here: a tie is NOT newer) and write the reason down, or the UI will raise
+  false alarms whenever data is missing.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when `ui.awayCard` was raised by the press; Open
+  World asks `newerCopyAway()`; a tie, missing ordering pair, damage and locker counts are all NOT newer.
+
 ### L41. A control that is disabled whenever it would be useful is not a control
 - **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test
   multiplayer at all: the switch was greyed out and read Off.

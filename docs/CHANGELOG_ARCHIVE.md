@@ -1,3 +1,15 @@
+## 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
+
+**Docs/test only; no code, no build, no save change.** `HANDOFF.md` is rewritten (not appended) at
+the end of every chat, and it had reached 7 bytes under its cap — leaving the next chat no room to
+record a change without deleting a fact first.
+
+- **`tests/docs.test.mjs`:** `"docs/HANDOFF.md": 14 * KB` -> `16 * KB`. This is the only place the
+  limit lives, so the change is one visible number. `HANDOFF.md`'s separate **150-line** guard is
+  unchanged, so the file cannot grow by sprawl — only by a slightly fuller sentence.
+- Nothing else in the docs changed, and no text was removed to make room.
+
+
 ## 2026-11-22: Step 16 is eight slices — the owner agreed the plan
 
 **Docs only; no code, no build, no save change.** The owner reviewed the eight slices of step 16 and

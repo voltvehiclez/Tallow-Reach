@@ -12,6 +12,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 - [16 slice 2: save v29](TESTING-16-SAVE29.md)
 - [16 slice 3: the connection](TESTING-16-MULTIPLAYER.md)
+- [Playtest 18: the away card, the menu, the username box](TESTING-PLAYTEST18.md)
 - [Playtest 17: the join box, the card's door, Bring pilot home](TESTING-PLAYTEST17.md)
 - [Playtest 16: the pilot follows you in](TESTING-PLAYTEST16.md)
 - [Playtest 15: the away card, coming home, Rejoin](TESTING-PLAYTEST15.md)

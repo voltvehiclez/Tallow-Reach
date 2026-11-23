@@ -45,7 +45,7 @@ import { createChannel, stateLine } from "./transport.js";
 import { createPasteLink, codeWorldId } from "./paste.js";
 import { readMessage, cleanMessage, isChatLine } from "./protocol.js";
 import {
-  handshake, makeToken, checkOut, checkIn, relocate, compare,
+  handshake, makeToken, checkOut, checkIn, relocate, compare, isNewerCopy,
   guestRecord, bundleFromProfile, bundleBytes, awayRecord,
 } from "./custody.js";
 import {
@@ -1490,6 +1490,46 @@ export function bringPilotHomeAtMenu({ mode = "open" } = {}) {
 function isModeSave(save) {
   return !!save && typeof save === "object" && !Array.isArray(save) &&
     !!save.profile && typeof save.profile === "object";
+}
+
+/**
+ * **Is a newer copy of this pilot waiting in the friend's world?** (owner, playtest 18)
+ *
+ * The owner's rule: the "your pilot is in Ada's world" card shows *only* when the player tries
+ * to open their own world and the copy online is newer. This answers that question from the
+ * STORED save, so the title screen can ask it without loading a world, and Open World can ask it
+ * again at the moment of pressing.
+ *
+ * `mine` is the frozen travelling half left in the home save by `checkOut` — it copies the
+ * pilot's own fields into the suitcase and leaves them in place, so the home profile still holds
+ * the pilot exactly as it left, which is the baseline this asks about. `theirs` is the suitcase
+ * under `away` (the copy the host keeps writing back), in the same shape. See
+ * `custody.isNewerCopy` for the rules and for why a tie is NOT newer.
+ *
+ * Reads, never writes. Returns false when there is no away marker or no readable pair, so a
+ * damaged marker can never raise a card that the player cannot dismiss.
+ */
+export function newerCopyAway({ mode = "open" } = {}) {
+  let live = null;
+  try {
+    live = liveSave();
+  } catch (e) {
+    return false;
+  }
+  const modeSave = isModeSave(live) ? live : (live && typeof live === "object" ? live[mode] : null);
+  const away = modeSave?.away || state.away || null;
+  if (!away) return false;
+  const theirs = away.suitcase || readAwayCopy(away.worldId);
+  if (!theirs?.profile) return false;
+  let mine = null;
+  try {
+    // The home copy is a whole save; `checkOut`'s travelling half is `profile` + the lockers
+    // that are still in its stations, which is exactly the shape `isNewerCopy` reads.
+    mine = { profile: modeSave?.profile || {}, cr: modeSave?.profile?.cr };
+  } catch (e) {
+    return false;
+  }
+  return isNewerCopy(mine, theirs);
 }
 
 /**

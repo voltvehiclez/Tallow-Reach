@@ -161,15 +161,22 @@ test("playtest 14: coming home from the title unpacks the STORED mode save", () 
   assert.match(net, /state\.away = null/, "it clears the marker the card reads, or the card can never go away");
 });
 
-test("playtest 14: Rejoin is a real attempt, not a screen", () => {
+test("playtest 18: Rejoin is gone, and joining is the main menu's one door", () => {
+  // Playtest 14 asked for a Rejoin that actually joined, and got one. Playtest 18 removed it:
+  // the owner's report was "The rejoin button also doesnt seem to work in current build even if
+  // the host is online. Remove the rejoin button I dont think it serves much purpose right now.
+  // If you want to rejoin the friends world you go -> main menu -> join multiplayer".
   const src = read("src/ui/menu.js");
-  assert.match(src, /function rejoinStoredWorld\(/, "there is a rejoin that actually joins");
-  assert.match(src, /makeJoinUrl\(away\.worldId, away\.token/, "it rebuilds the link from the marker");
-  assert.match(src, /joinWorld\(\{ link \}\)/, "and calls the real join");
-  // ...and the card says what each button does, so the player is not guessing.
   const screens = read("src/ui/screens.js");
-  assert.match(screens, /<b>Rejoin<\/b> connects you/);
-  assert.match(screens, /<b>Bring pilot home<\/b> ends/);
+  assert.doesNotMatch(src, /function rejoinStoredWorld\(/, "the rejoin helper is gone");
+  assert.doesNotMatch(src, /rejoin\(\) \{/, "and so is its action");
+  assert.doesNotMatch(screens, /data-a="rejoin"/, "the card offers no Rejoin button");
+  assert.doesNotMatch(screens, /<b>Rejoin<\/b>/, "and no line explaining one");
+  // The way back in is unchanged and is on the main menu: Join Multiplayer World.
+  assert.match(screens, /data-a="multiplayer">Join Multiplayer World</);
+  // The card still says what its two buttons do, so the player is not guessing.
+  assert.match(screens, /<b>Bring pilot home<\/b> makes the copy from that world your own save/);
+  assert.match(screens, /<b>Main menu<\/b> just shows the ordinary menu/);
 });
 
 /* ---- 4: the test ship's new model -------------------------------------------- */

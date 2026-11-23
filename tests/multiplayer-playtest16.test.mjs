@@ -103,6 +103,52 @@ test("playtest 17: the in-world card is gone — the join box replaced it", () =
   assert.doesNotMatch(events, /mp-bring-prompt/, "and no event asking for one");
 });
 
+test("playtest 18: the card appears on Open World, and only for a newer copy", () => {
+  // The owner's rule, verbatim: "This your pilot is in menu should only come if you try to join
+  // your local open world but a more new version of your save was on an online world."
+  const screens = read("src/ui/screens.js");
+  // The menu is the menu: being away no longer replaces it.
+  assert.match(screens, /if \(state\.away && state\.ui\?\.awayCard\) return/,
+    "the card shows only when the press raised it");
+  const menu = read("src/ui/menu.js");
+  assert.match(menu, /if \(newerCopyAway\(\{ mode:/, "Open World asks the custody question");
+  assert.match(menu, /state\.ui\.awayCard = true;\s*if \(state\.ui\) state\.ui\.intro = true;/,
+    "a newer copy raises the card");
+  // ...and nothing newer opens the world instead of stopping the player.
+  assert.match(menu, /state\.ui\.awayCard = false;\s*\}\s*enterGameMode\("open"\);/,
+    "nothing newer opens the player's own world");
+  // Arriving at the menu clears it, so Main menu lands on the menu.
+  assert.match(menu, /state\.ui\.intro = true;[\s\S]{0,400}state\.ui\.awayCard = false;/,
+    "the menu clears the card");
+});
+
+test("playtest 18: 'newer' is decided by the custody rule, and a tie is not newer", async () => {
+  const { isNewerCopy } = await import("../src/net/custody.js");
+  const mine = { epoch: 1, rev: 4, profile: { cr: 100, holds: { wasp: { ore: 5 } } } };
+  // More credits, more cargo: newer.
+  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 900, holds: { wasp: { ore: 5 } } } }), true);
+  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 100, holds: { wasp: { ore: 9 } } } }), true);
+  // The host's own ordering pair decides first.
+  assert.equal(isNewerCopy(mine, { ...mine, rev: 9 }), true, "a raised rev is newer");
+  assert.equal(isNewerCopy({ ...mine, rev: 9 }, mine), false, "a stale rev is not");
+  // Less of everything is NOT newer, and neither is a dead heat — a false card is the trap.
+  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 1, holds: {} } }), false);
+  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 100, holds: { wasp: { ore: 5 } } } }), false,
+    "a tie is not newer");
+  // Found while building this: `compare` ranks MISSING numbers lowest, so a copy with no
+  // epoch/rev at all "loses" and looks older — which reported "newer" for two identical copies
+  // and raised the card for nothing. Only a pair both sides actually carry may decide.
+  assert.equal(isNewerCopy({ profile: { cr: 100 } }, { profile: { cr: 100 } }), false,
+    "two copies with no ordering pair and the same contents are a tie, not newer");
+  assert.equal(isNewerCopy(mine, null), false);
+  assert.equal(isNewerCopy(null, mine), false);
+  // Lockers are never the signal: the home stations are emptied into the suitcase, so counting
+  // them would report "newer" on every single visit.
+  assert.equal(isNewerCopy(mine, { ...mine, lockers: [{ item: "ore", count: 99 }] }), false);
+  const custody = read("src/net/custody.js");
+  assert.match(custody, /Lockers are deliberately NOT compared/);
+});
+
 test("playtest 17: the away card is never a room with no door", () => {
   // The owner: "in the your pilot is in friends world menu there is no option even to go to
   // main menu (which should be here). So hes stuck."
@@ -116,21 +162,21 @@ test("playtest 17: the away card is never a room with no door", () => {
   // Every button on the card is the same kind of button. "Main menu" was the one without
   // `class="go"`, so it rendered as a small box on the left (owner, playtest 17).
   const buttons = body.match(/<button[^>]*>/g) || [];
-  assert.equal(buttons.length, 3, "three ways out");
+  assert.equal(buttons.length, 2, "two doors off the card: home, or the menu");
   for (const tag of buttons) assert.match(tag, /class="go"/, `${tag} is a full-width button`);
   // ...and the card has styles of its own, so the layout is a column and not the browser's.
   const css = read("src/styles.css");
   assert.match(css, /\.away-actions \{[^}]*display: grid/, "the ways out are a column");
   assert.match(css, /\.away-note \{/, "the notes are styled");
   const menu = read("src/ui/menu.js");
-  assert.match(menu, /  menu\(\) \{\s*state\.ui\.awayCardDismissed = true;/, "which dismisses the card");
+  assert.match(menu, /  menu\(\) \{\s*state\.ui\.awayCard = false;/, "which dismisses the card");
   // ...and dismissing it must NOT bring the pilot home or hide the fact it is away.
   const act = menu.slice(menu.indexOf("  menu() {"));
   const menuBody = act.slice(0, act.indexOf("\n  },") + 4);
   assert.doesNotMatch(menuBody, /bringPilotHome|leaveVisit/, "Main menu is not a decision about the save");
-  assert.match(screens, /state\.away && !state\.ui\?\.awayCardDismissed/, "the card is only skipped when asked");
-  // A redraw from a *new* visit must show the card again.
-  assert.match(menu, /state\.ui\.awayCardDismissed = false;\n\s*resetStationPanels/, "arriving at the menu resets it");
+  assert.match(screens, /state\.away && state\.ui\?\.awayCard/, "the card is drawn only when asked");
+  // Arriving at the menu clears it, so Main menu lands on the menu.
+  assert.match(menu, /state\.ui\.awayCard = false;\n\s*resetStationPanels/, "arriving at the menu clears it");
 });
 
 test("playtest 17: Bring pilot home is its own press, and works with the host closed", () => {
@@ -146,14 +192,6 @@ test("playtest 17: Bring pilot home is its own press, and works with the host cl
   // No session is needed: the suitcase is the guest's own copy.
   const net = read("src/net/session.js");
   assert.match(net, /const suitcase = away\.suitcase \|\| readAwayCopy\(away\.worldId\)/);
-});
-
-test("playtest 17: Rejoin with the host gone says the host is gone", () => {
-  const menu = read("src/ui/menu.js");
-  const fn = menu.slice(menu.indexOf("function rejoinStoredWorld"));
-  const body = fn.slice(0, fn.indexOf("\n}\n") + 3);
-  assert.match(body, /is not there — their game is closed/, "it names the situation, not the wire");
-  assert.match(body, /cancel\|timeout\|refus\|unreach\|no answer/, "and decides that from the failure");
 });
 
 test("playtest 17: a real join connects without carrying, and the carry works", async () => {

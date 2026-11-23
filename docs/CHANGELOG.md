@@ -18,6 +18,39 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: The away card is a question about custody, not the title screen
+
+**Code change; rebuild needed; build `2026-11-23h`.** Four things from the owner's playtest 18.
+
+1. **The menu is the menu again.** Being away used to replace the whole title screen with the
+   away card, and its "Main menu" button re-raised it on the next draw — so leaving a friend's
+   world dumped the player on a save question with no way past it. The owner's rule: *"This your
+   pilot is in menu should only come if you try to join your local open world but a more new
+   version of your save was on an online world."* The card is now raised by a press on **Open
+   World** and nothing else, and it appears there only when
+   `session.newerCopyAway()` finds a genuinely newer copy. Otherwise Open World opens the pilot's
+   own world, away marker and all — the frozen travelling half stays put, so nothing is lost.
+2. **"Newer" is decided by one rule** (`custody.isNewerCopy`): the host's `{epoch, rev}` pair
+   first (only when both copies carry one), then more credits, then more cargo. **A tie is not
+   newer** — a false card is the trap this fixes. Hull damage and locker counts are deliberately
+   excluded: damage is not progress, and `checkOut` empties the home stations into the suitcase,
+   so counting lockers would report "newer" on every visit.
+3. **Rejoin is gone** (owner: *"Remove the rejoin button I dont think it serves much purpose right
+   now. If you want to rejoin the friends world you go -> main menu -> join multiplayer"*). The
+   card offers **Bring pilot home** and **Main menu**.
+4. **The menu's username box is the bare centred name** — no "Username:" label, text centred like
+   the buttons under it (owner's request).
+
+Confirmed unchanged, in the owner's words: *Bring pilot home* makes the online copy the local
+save (credits, ships, hull, holds, cargo, lockers), while missions, story flags and statistics stay
+local; campaign play never affects multiplayer/open world.
+
+`src/net/custody.js` (`isNewerCopy`), `src/net/session.js` (`newerCopyAway`), `src/ui/menu.js`
+(Open World's press, `comehome`, `main-menu`, Rejoin removed), `src/ui/screens.js` (card condition,
+two buttons, centred name, copy), `src/state/state.js` (`ui.awayCard`), `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), four test files. Save version unchanged (29); no save shape
+changed — `isNewerCopy` only reads.
+
 ## 2026-11-23: The switch says why, and the away card is a proper card
 
 **Code change; rebuild needed; build `2026-11-23g`.** Three things the owner hit in one playtest,
@@ -291,19 +324,9 @@ reconnects (slice 5), and drawing a visiting ship on the host's screen — the p
 and simulated, but `render/views.js` still draws one hull. That is slice 7/8. Playtest guide:
 `testing/TESTING-16-SLICE4.md`.
 
-## 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
-
-**Docs/test only; no code, no build, no save change.** `HANDOFF.md` is rewritten (not appended) at
-the end of every chat, and it had reached 7 bytes under its cap — leaving the next chat no room to
-record a change without deleting a fact first.
-
-- **`tests/docs.test.mjs`:** `"docs/HANDOFF.md": 14 * KB` -> `16 * KB`. This is the only place the
-  limit lives, so the change is one visible number. `HANDOFF.md`'s separate **150-line** guard is
-  unchanged, so the file cannot grow by sprawl — only by a slightly fuller sentence.
-- Nothing else in the docs changed, and no text was removed to make room.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
 - 2026-11-22: Step 16 is eight slices — the owner agreed the plan
 - 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
 - 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth

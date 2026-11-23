@@ -2799,6 +2799,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 .menu-username-box {
   display: flex;
   align-items: center;
+  /* The box is the block the buttons under it are, and the name sits in the middle of it
+     (owner, playtest 18). It used to be a label on the left plus a field on the right. */
+  justify-content: center;
   gap: 8px;
   width: 100%;
   box-sizing: border-box;
@@ -2807,10 +2810,6 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   background: #0d1215;
   border: 1px solid var(--line);
   padding: 8px 10px;
-}
-.menu-username-prefix {
-  flex: none;
-  color: var(--dim);
 }
 .menu-username {
   flex: 1 1 auto;
@@ -2821,7 +2820,7 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   background: transparent;
   border: none;
   padding: 0;
-  text-align: left;
+  text-align: center;
 }
 .menu-username-box:focus-within { outline: 1px solid var(--amber); }
 #mp-chat-pin {
