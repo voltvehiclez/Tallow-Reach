@@ -11,6 +11,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 ## Current guides
 
 - [16 slice 5: crashes and reconnects](TESTING-16-SLICE5.md)
+- [16 slice 5: QUICK version (10 minutes)](QUICK-16-SLICE5.md)
 - [16 slice 2: save v29](TESTING-16-SAVE29.md)
 - [16 slice 3: the connection](TESTING-16-MULTIPLAYER.md)
 - [Playtest 18: the away card, the menu, the username box](TESTING-PLAYTEST18.md)
@@ -24,6 +25,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 | Guide | Covers |
 | --- | --- |
+| [QUICK-16-SLICE5.md](QUICK-16-SLICE5.md) | The 10-minute version of the slice 5 test: host, join, bring the pilot, **close the host's browser**, watch the guest land on the main menu with **Lost connection to host**, dismiss it, check the pilot can still come home, rejoin with the same link, then close the guest's tab and watch the host's list drop it. |
 | [TESTING-16-SLICE5.md](TESTING-16-SLICE5.md) | Step 16 slice 5 (build `2026-11-24a`): the host's game closes (or the connection drops) while the pilot is in its world — the guest is put back on the **main menu** with **Lost connection to host**, one button; rejoining keeps the copy the server already has; going into the local world instead offers **Bring pilot home**; a closed tab is a clean goodbye; a second window takes the pilot over. No visiting ship is drawn yet. |
 | [QUICK-16-SLICE4.md](QUICK-16-SLICE4.md) | The 10-minute version of the slice 4 test: get the zip, host, join, press **Bring my pilot**, note one station number, close the host, come home, check the number. |
 | [TESTING-PLAYTEST17.md](TESTING-PLAYTEST17.md) | Playtest 17 (build `2026-11-23e`): the join box holds the choice (Bring my pilot / Enter the world), the away card has a Main menu, and Bring pilot home works from the card with the host closed. |
