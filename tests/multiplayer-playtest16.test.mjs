@@ -302,40 +302,48 @@ test("playtest 17: the session can be switched on with nothing running", () => {
     "the snapshot carries the switch and whether a session exists");
 });
 
-test("playtest 20: a pilot that is away cannot fly its own world — one guard, every door", () => {
-  // The owner, playtest 20: *"the pilot's own world pausing while it is away is not working as
-  // intended"* (A3). It did not pause: playtest 18's Open World opened the world with the away
-  // marker still set, and the multiplayer screen's **Enter the world** did the same, so a pilot
-  // whose travelling half was packed into a suitcase could fly its own galaxy — a galaxy that
-  // `captureActiveModeSave` then refuses to fold into the save, so the flying was recorded nowhere
-  // and the frozen half stayed frozen. A refusal at one door is not a refusal: the guard belongs
-  // where every door ends.
+test("playtest 21: the visit opens the stand-in world and says it is not your friend's", () => {
+  // The owner's reports, in order: playtest 20 — *"the pilot's own world pausing while it is away
+  // is not working as intended"*; playtest 21 — *"Clicking the bring my pilot now when joining a
+  // world doesnt log you into their open world. Im just stuck at the menu where you add link."*
+  //
+  // The first put a guard in front of every door into the open world, and the second showed what
+  // that costs: a player who had just sent their pilot was left on the join screen with nothing
+  // to press. The owner's decision: *"drop me into the local world, add a pop up that this is not
+  // the hosts world (yet)"* — because the friend's world on this screen is step 16 slice 7.
   const menu = read("src/ui/menu.js");
   const fn = menu.slice(menu.indexOf("function enterGameMode(mode) {"));
-  const guard = fn.indexOf('if (mode === "open" && state.away) {');
-  assert.ok(guard > 0, "entering the open world refuses while the pilot is away");
-  assert.ok(guard < fn.indexOf("state.ui.intro = false;"), "and refuses before anything is loaded");
-  const body = fn.slice(guard, fn.indexOf("state.ui.intro = false;"));
-  assert.match(body, /state\.ui\.awayCard = true;/, "the refusal is the away card");
-  assert.doesNotMatch(body, /newerCopyAway|awayNewer/, "with no copy called newer");
-  assert.match(body, /render\(\);/, "and drawn");
-  // Every door goes through it: `switchGameMode` is what actually swaps the world in, and the UI
-  // calls it from this one function only (the campaign's own call is a different mode).
-  assert.equal(menu.split("switchGameMode(").length - 1, 1, "the UI swaps a world in from one place only");
-  // The second door: the multiplayer screen's Enter the world, which used to close the screen and
-  // load the guest's own galaxy.
+  const head = fn.slice(0, fn.indexOf("state.ui.intro = false;"));
+  assert.doesNotMatch(head, /state\.away/, "the world opens; there is no guard in front of it");
+  // The title press still asks the custody question (playtest 20), which is a different rule.
+  assert.match(menu, /ACTIONS = \{/, "actions are still the menu's own");
+  const intro = menu.slice(menu.indexOf("  intro() {"));
+  assert.match(intro.slice(0, 2400), /if \(state\.away\) \{\s*state\.ui\.awayCard = true;/,
+    "Open World from the menu still raises the away card first");
+
   const ui = read("src/ui/multiplayer.js");
+  // Bringing the pilot is one press, not two: the world opens as soon as it crosses.
+  const bring = ui.slice(ui.indexOf('case "bring": {'));
+  const bringBody = bring.slice(0, bring.indexOf('case "join-world"'));
+  assert.match(bringBody, /if \(done\.ok && state\.ui\.intro\) \{\s*closeMultiplayer\(\);\s*emit\("mp-enter-world", \{\}\);/,
+    "a pilot that crossed is a player who is in the world");
+  // ...and Enter the world is drawn while the pilot is away, which is what playtest 20 hid.
   const join = ui.slice(ui.indexOf('case "join-world": {'));
   const joinBody = join.slice(0, join.indexOf('case "leave":'));
-  assert.match(joinBody, /if \(state\.away\) \{/, "Enter the world refuses while the pilot is away");
-  assert.match(joinBody, /paused where you left it/, "and says what pausing means");
-  assert.match(joinBody, /press Open World on the main menu to bring the pilot home/,
-    "and names the way home rather than leaving a dead end");
-  assert.ok(joinBody.indexOf("state.away") < joinBody.indexOf('emit("mp-enter-world"'),
-    "the refusal comes before the world is entered");
-  // And the screen does not offer the button at all: a control whose only answer is a refusal is
-  // the bug L41 describes. The Leave row below it is the way off the screen either way.
-  assert.match(ui, /model\.visiting && model\.brought && !model\.choosing\s*\? \(state\.away/,
-    "the row is drawn differently while the pilot is away");
-  assert.match(ui, /Your own galaxy is paused where you left it/, "in the guest's own words");
+  assert.doesNotMatch(joinBody, /state\.away/, "the door does not refuse because the pilot is away");
+  assert.match(joinBody, /emit\("mp-enter-world", \{\}\)/, "it opens the world");
+  assert.match(ui, /model\.visiting && model\.brought && !model\.choosing[\s\S]{0,600}data-mp="join-world">Enter the world</,
+    "the button is on the panel with the pilot already here");
+  assert.match(ui, /That is your <strong>own<\/strong> galaxy for now[\s\S]{0,240}slice 7/,
+    "and the panel says which galaxy it opens, before the press");
+
+  // The pop-up the owner asked for: on the way into the stand-in, in words that name the friend.
+  const enter = menu.slice(menu.indexOf('on("mp-enter-world"'));
+  const enterBody = enter.slice(0, enter.indexOf("  });") + 5);
+  assert.match(enterBody, /if \(state\.away\) \{/, "it only speaks when the pilot is away");
+  assert.match(enterBody, /showNotice\(`This is your own galaxy, not \$\{where\}/, "a notice, not a card");
+  assert.match(enterBody, /slice 7/, "naming what is missing");
+  assert.match(enterBody, /Anything you earn or buy here stays here/, "and the one fact that matters for a save");
+  assert.match(enterBody, /state\.away\.hostName/, "in the friend's own name when there is one");
 });
+

@@ -336,11 +336,11 @@ replaced the "only if newer" gate):
 
 - The **main menu is always the main menu** (playtest 18): leaving a friend's world lands somewhere
   ordinary, never on a save question.
-- A pilot that is away **cannot enter its own galaxy at all** — the title's **Open World** and the
-  multiplayer screen's **Enter the world** both land on the card. One guard decides it
-  (`enterGameMode("open")`, the UI's only caller of `switchGameMode`). Playtest 18 opened the world
-  when nothing was newer, flying a hull whose cargo was in a suitcase elsewhere and recording none
-  of it (`captureActiveModeSave` refuses a live capture while away).
+- The title's **Open World** press lands on the card. A player already in a visit reaches the world
+  from the multiplayer screen instead, and gets the **stand-in** (playtest 21): today that is this
+  browser's own galaxy holding the pilot's latest copy, said in a notice when it opens, because the
+  wire carries no world state until slices 7-8. The stand-in is a look, not progress — the travelling
+  half is in the suitcase, and `captureActiveModeSave` folds no live facts into a save that is away.
 - The card *"Your pilot is in Ada's world"* appears **only** on an **Open World** press, and it
   appears **every time** while the pilot is away: the press is a custody decision either way.
 - **Nothing is compared** (owner, playtest 20: *"even small things like pilot position can
@@ -397,8 +397,7 @@ Four rules, and one hole closed:
 - A visiting pilot is **not drawn yet**: it is a real, docked, simulated record (`sim/multiplayer.js`)
   but `render/views.js` draws one hull and `core/input.js` fills only local controls (slices 7–8).
   This is the largest visible gap.
-- A guest's screen is its own world; while its pilot is away there is nothing to enter, so a visit
-  is chat and its galaxy waits where it was (slice 8c).
+- A guest's screen is its own world, stand-in or not; it does not follow the host's pocket (8c).
 - The player list is names, not positions or ships; non-local death is step-16 work.
 - A hosted world's pause card does not pause its *guests*; the host's own clock follows `state.pause`
   as it always has (the no-pause rule is built, slice 3).

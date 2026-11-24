@@ -18,6 +18,38 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one
+
+**Code change; rebuild needed; build `2026-11-24d`.** Save version unchanged (29).
+
+The owner, looking at the join screen after pressing **Bring my pilot**: *"Clicking the bring my
+pilot now when joining a world doesnt log you into their open world. Im just stuck at the menu where
+you add link. Looks like this after ive clicked bring my pilot. Should transition to their world when
+im in like this."* And, once it was clear that drawing the friend's world is slice 7: *"If so drop
+me into the local world add a pop up that this is not the hosts world (yet)."*
+
+The first report was caused by the fix for the third: playtest 20's A3 guard shut **every** door into
+the open world while the pilot was away, so the pilot could cross and the player still had nowhere to
+go. The guard was the right rule enforced one screen too far.
+
+- **Bringing the pilot enters the world** — one press, not two. The panel's *Enter the world* button
+  is back for a visit, and pressing it (or bringing the pilot) opens the world and closes the panel.
+- **The title's Open World still asks first.** A player on the menu pressing Open World while the
+  pilot is elsewhere is choosing between a pilot at home and a pilot in somebody else's galaxy, so
+  it is still the away card. The visit is a different place to be standing, and it gets the world.
+- **The world says what it is.** Entering it while the pilot is away raises a notice: *"This is your
+  own galaxy, not Ada's world — their world on your screen is not built yet (step 16, slice 7).
+  Anything you earn or buy here stays here."* The panel says the same before the press, so nobody
+  has to find out afterwards.
+- **The stand-in is honest about saves.** The travelling half is in the suitcase, and
+  `captureActiveModeSave` folds no live facts into a save that is away: flying the stand-in does not
+  change the copy that comes home, which is the one in the friend's world.
+
+`src/ui/multiplayer.js` (bring enters, the row and its hint), `src/ui/menu.js` (the guard is gone;
+the notice on `mp-enter-world` lives beside the title press that still asks), `src/data/multiplayer.js`
+(BUILD). Tests: the playtest-20 A3 test became "the visit opens the stand-in world and says it is not
+your friend's", which proves the one-press entry, the button, the notice and its words.
+
 ## 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home
 
 **Code change; rebuild needed; build `2026-11-24c`.** One rule, in the owner's words: *"Doesnt
@@ -328,44 +360,9 @@ screen and enters the world**. The button was destroyed by the very thing it was
 in-memory wire that asserts the prompt appears on join and disappears once the pilot actually
 crosses. Each fix verified by reverting it. **Build `2026-11-23d`, save v29 unchanged. 1026 tests.**
 
-## 2026-11-23: The away card was a trap — Bring pilot home never worked
-
-**Code change; rebuild needed.** The owner's laptop could not come home, could not rejoin, and a
-refresh did not help: three symptoms of **one** confusion between two records.
-
-- **`saveKit.read()` returns a MODE save** (`{ profile, world, away }` — one pilot), while
-  `bringPilotHomeAtMenu` was written against the **dual-mode envelope** (`{ v, mode, open, campaign }`)
-  and indexed `root[mode]`. On a mode save that is `undefined` **every time**, so "Bring pilot home"
-  refused before it looked at the suitcase: *"Your pilot's save could not be read"*. This is why it
-  failed on a first boot in Brave, in Chrome, on refresh — it never depended on the connection.
-  `src/net/session.js` now accepts **both** shapes (`isModeSave`), writes back in the shape it was
-  given, and returns the mode save as `modeSave` so the screen loads the right thing.
-- **Rejoin was refused by its own guard.** `joinWorld` (and the paste-code door) rejected any join
-  while an away marker existed — including a join to the world the pilot was *already in*. The guard
-  now refuses only a **different** world, so rejoining is a rejoin and not a second trip.
-- **Coming home also installs, not just writes.** `write` is the host's narrow seam (guest list +
-  world id), so the returned pilot never reached the disk; the card cleared, the screen said "home",
-  and a refresh put the pilot back on the card (L34's trap in a second place). `saveKit.install` is
-  called, and `setSaveKit` can now replace `install` too.
-- **Order changed in `ui/menu.js` `comeHome`:** the suitcase opens **before** the visit is left. The
-  old order dropped the connection and *then* reported the refusal — which is exactly what the owner
-  saw: clicking Bring pilot home removed the row from the host's players list while the laptop stayed
-  stuck on the card, with Rejoin unable to get back in. A refusal now changes nothing.
-- `saveKit.install` also understands a mode save (it used to assume an envelope and would have
-  installed the wrong half).
-
-**Tests:** new `tests/multiplayer-playtest15.test.mjs` (7 tests) drives the real functions and the
-in-memory wire: a mode save can be brought home and its locker really comes back, an envelope still
-works, a genuinely unreadable save still refuses, a real rejoin connects while the pilot stays away,
-and a different world is still refused. Each was checked by **reverting the fix** and watching it fail
-with the owner's own sentence: `the card must be leavable; it said: Your pilot's save could not be
-read…` and `Rejoin must be allowed; it said: Your pilot is already visiting another world.` Save
-version unchanged (v29). 1020 tests.
-
----
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-23: The away card was a trap — Bring pilot home never worked
 - 2026-11-23: Test Ship faced sideways — the model brings its own rotation
 - 2026-11-23: Where a joining pilot lands, and where it comes home to
 - 2026-11-23: Playtest 14 — leaving a world, the title's away card, and a new Test Ship

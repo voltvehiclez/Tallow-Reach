@@ -193,6 +193,16 @@ export function setupMenu(options = {}) {
   on("mp-enter-world", () => {
     if (!state.ui.intro) return;
     enterGameMode("open");
+    // **This is not your friend's world yet, and the game says so** (owner, playtest 21: *"drop me
+    // into the local world, add a pop up that this is not the hosts world (yet)"*). A stand-in
+    // that pretends to be somebody's world is worse than a placeholder that admits it: the pilot
+    // is in Ada's galaxy, not this one, and anything earned here does not go home with it. The
+    // sentence is a notice rather than a card because it has no decision in it — it is news, and
+    // the panel the player just left carries the same words for as long as the visit lasts.
+    if (state.away) {
+      const where = state.away.hostName ? `${state.away.hostName}'s world` : "your friend's world";
+      showNotice(`This is your own galaxy, not ${where} — their world on your screen is not built yet (step 16, slice 7). Anything you earn or buy here stays here.`);
+    }
     // The same landing as the Open World button: a docked pilot gets the station panel,
     // a pilot out in space gets the view.
     if (!state.player || state.player.docked) render();
@@ -379,21 +389,17 @@ function comeHome() {
  */
 
 function enterGameMode(mode) {
-  // **A pilot that is away cannot fly its own world, and this is the only place that is decided**
-  // (step 16 slice 5 — the owner's A3: *"the pilot's own world pausing while it is away is not
-  // working as intended"*). Playtest 18 had let Open World open the world with the away marker
-  // still set, which was the hole: the travelling half of the pilot is packed in a suitcase in
-  // somebody else's galaxy, and `captureActiveModeSave` deliberately does not fold a live runtime
-  // into a save that is away — so flying here advances a galaxy whose pilot is not in it and
-  // records none of it. One guard covers every door (the title's Open World, the multiplayer
-  // screen's Enter the world, and anything added later): they all land on the card, which is a
-  // question the player can answer. LESSONS L42.
-  if (mode === "open" && state.away) {
-    state.ui.intro = true;
-    state.ui.awayCard = true;
-    render();
-    return false;
-  }
+  // **A pilot that is away opens the stand-in world, not its own** (owner, playtests 20 and 21).
+  //
+  // Playtest 20 (A3) put a guard here that refused every door into the open world while the
+  // marker was set, and playtest 21 found the cost: after *Bring my pilot* the player sat on the
+  // join screen with nothing left to press — *"Im just stuck at the menu where you add link …
+  // Should transition to their world when im in like this."* The owner's answer was to keep the
+  // stand-in and say so: what loads today IS this browser's own galaxy, carrying the pilot's
+  // latest copy, because the friend's world cannot be drawn on this screen until slices 7-8. The
+  // notice in `on("mp-enter-world")` is where that is said; the title's **Open World** press
+  // still asks the custody question first (`ACTIONS.intro`), which is the playtest-20 rule that
+  // has not changed.
   state.ui.intro = false;
   state.ui.campaign = false;
   // A prompt about a connection is not news once the player is flying their own world
@@ -419,7 +425,12 @@ const ACTIONS = {
   // (the multiplayer action below asks for one). Open World must start with no settings
   // stored at all — the step-10 fixes and the 11B recovery notices depend on it.
   intro() {
-    // **A pilot that is away does not open its own world at all** (owner, playtest 16).
+    // **A pilot that is away does not open its own world from THIS press** (playtests 16-21).
+    //
+    // The press asks; the visit opens (playtest 21): a player already in a friend's world gets
+    // into the stand-in galaxy from the multiplayer screen, because that is where they are — but
+    // a player on the menu pressing Open World is choosing between a pilot at home and a pilot
+    // somewhere else, and that is a question about their save, so it is asked here.
     //
     // It used to try `comeHome()` and carry on if that worked, which read as "Open World
     // silently unpacks my pilot". The owner asked for the other thing: the away card is the

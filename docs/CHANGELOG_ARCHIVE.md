@@ -1,3 +1,39 @@
+## 2026-11-23: The away card was a trap — Bring pilot home never worked
+
+**Code change; rebuild needed.** The owner's laptop could not come home, could not rejoin, and a
+refresh did not help: three symptoms of **one** confusion between two records.
+
+- **`saveKit.read()` returns a MODE save** (`{ profile, world, away }` — one pilot), while
+  `bringPilotHomeAtMenu` was written against the **dual-mode envelope** (`{ v, mode, open, campaign }`)
+  and indexed `root[mode]`. On a mode save that is `undefined` **every time**, so "Bring pilot home"
+  refused before it looked at the suitcase: *"Your pilot's save could not be read"*. This is why it
+  failed on a first boot in Brave, in Chrome, on refresh — it never depended on the connection.
+  `src/net/session.js` now accepts **both** shapes (`isModeSave`), writes back in the shape it was
+  given, and returns the mode save as `modeSave` so the screen loads the right thing.
+- **Rejoin was refused by its own guard.** `joinWorld` (and the paste-code door) rejected any join
+  while an away marker existed — including a join to the world the pilot was *already in*. The guard
+  now refuses only a **different** world, so rejoining is a rejoin and not a second trip.
+- **Coming home also installs, not just writes.** `write` is the host's narrow seam (guest list +
+  world id), so the returned pilot never reached the disk; the card cleared, the screen said "home",
+  and a refresh put the pilot back on the card (L34's trap in a second place). `saveKit.install` is
+  called, and `setSaveKit` can now replace `install` too.
+- **Order changed in `ui/menu.js` `comeHome`:** the suitcase opens **before** the visit is left. The
+  old order dropped the connection and *then* reported the refusal — which is exactly what the owner
+  saw: clicking Bring pilot home removed the row from the host's players list while the laptop stayed
+  stuck on the card, with Rejoin unable to get back in. A refusal now changes nothing.
+- `saveKit.install` also understands a mode save (it used to assume an envelope and would have
+  installed the wrong half).
+
+**Tests:** new `tests/multiplayer-playtest15.test.mjs` (7 tests) drives the real functions and the
+in-memory wire: a mode save can be brought home and its locker really comes back, an envelope still
+works, a genuinely unreadable save still refuses, a real rejoin connects while the pilot stays away,
+and a different world is still refused. Each was checked by **reverting the fix** and watching it fail
+with the owner's own sentence: `the card must be leavable; it said: Your pilot's save could not be
+read…` and `Rejoin must be allowed; it said: Your pilot is already visiting another world.` Save
+version unchanged (v29). 1020 tests.
+
+---
+
 ## 2026-11-23: Test Ship faced sideways — the model brings its own rotation
 
 Owner, playtest 15: *"it is looking to the left, needs to be rotated 90 degrees clockwise when looking from the top."*

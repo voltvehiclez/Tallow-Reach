@@ -3,7 +3,7 @@
 This slice is about the ugly moments: **the host's game closes**, **the connection to it goes away**,
 **your pilot is in that world**, and **a closed tab**. Nothing new is drawn in space.
 
-**Build: `2026-11-24c`** — both machines. If one screen shows a different build string (title card, or
+**Build: `2026-11-24d`** — both machines. If one screen shows a different build string (title card, or
 Pause > Open Multiplayer > Connection details), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -80,9 +80,26 @@ one.
   the bug this part is for — send me the block from **Copy details** on both machines.
 - Nothing is doubled and nothing is asked: the pilot did not come home and go back, it just resumed.
 
-## Part 3 — Your own world is paused, and the card is how it comes back
+## Part 2b — Bring my pilot puts you in the world (new in `2026-11-24d`)
 
-This is the one that changed most, so please do it even if nothing else looks different.
+1. Set up as in part 0, and press **Bring my pilot**.
+2. Watch what happens by itself.
+
+**What to check:**
+
+- The panel closes and you are **in a world** — one press, no second button.
+- A notice appears at the top of the screen for a few seconds: *"This is your own galaxy, not Ada's
+  world — their world on your screen is not built yet (step 16, slice 7). Anything you earn or buy
+  here stays here."* That notice is on purpose: the world you are in is **your** galaxy, holding
+  your pilot's latest copy. Drawing your friend's world is the next slice.
+- Press **P** and check the multiplayer panel: it still offers **Enter the world**, and says in a
+  line above it that this is your own galaxy for now.
+- Leave and rejoin: the same thing happens, and nothing is asked twice.
+
+## Part 3 — Your own world, and the card that brings the pilot back
+
+This is the one that changed most across the last few builds, so please do it even if nothing else
+looks different.
 
 1. On the **guest**, while the pilot is away, press **P > Open multiplayer**. Look at the join box.
 2. Then leave the visit (**Leave** on that panel, or **Exit to main menu** at the bottom of the pause
@@ -91,9 +108,9 @@ This is the one that changed most, so please do it even if nothing else looks di
 
 **What to check:**
 
-- The multiplayer panel **no longer offers Enter the world** while the pilot is away. It says your
-  own galaxy is paused where you left it, and that **Leave**, then **Open World** on the menu, brings
-  the pilot home.
+- The multiplayer panel still offers **Enter the world** while the pilot is away, and says above it
+  that this is your own galaxy for now (part 2b). What it does **not** do is drop you into your own
+  world from the menu: that press asks first.
 - **Every** press of **Open World** now shows this card — whichever machine, however long you were
   away, whether or not anything changed in your friend's world:
 
@@ -103,8 +120,9 @@ This is the one that changed most, so please do it even if nothing else looks di
   latest version from that world**, however little looks different — a hull parked at a different
   station, a stack a little lighter, a module swapped. That is the owner's rule for this build.)*
 - **Main menu** takes you to the ordinary menu, and your pilot is still away — nothing is decided.
-- **Open World** never drops you into your own world with the pilot away. That is bug A3: if it does,
-  tell me what you pressed.
+- **Open World** pressed **on the main menu** never drops you into your own world with the pilot away
+  — it asks first. (Being *inside* a visit is different: part 2b.) That is bug A3: if the menu press
+  opens the world, tell me what you pressed.
 - Press **Bring pilot home** with the host still closed. The card goes, the ordinary menu comes back,
   a sentence says your pilot is home — **and now Open World opens your world**.
 - **Even a visit where nothing happened comes home.** Do part 3 once after a visit where you did

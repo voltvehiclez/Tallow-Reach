@@ -1,6 +1,6 @@
 # Quick test: step 16 slice 5 (10 minutes)
 
-**Build `2026-11-24c`.** Two browsers with separate saves: one normal window, one incognito/private
+**Build `2026-11-24d`.** Two browsers with separate saves: one normal window, one incognito/private
 window. Everything below is the new behaviour; if a step does not match, send me the step number and
 **Copy details** from both machines.
 
@@ -15,7 +15,8 @@ window. Everything below is the new behaviour; if a step does not match, send me
 3. **Window 1 (host):** **Open World** → **P** (pause) → **Open Multiplayer** → switch multiplayer
    **on** → **Copy link**. If the room looks empty, wait ~12 s for an offer code.
 4. **Window 2 (guest):** title → **Join Multiplayer World** → paste the link → **Join** →
-   **Bring my pilot**. Wait for the notice that the pilot is on its way.
+   **Bring my pilot**. It should put you straight **into a world**, with a notice saying this is your
+   own galaxy and not your friend's yet (drawing theirs is slice 7).
 5. **Check:** the guest's own world is now paused (the pilot is away); the host's players list
    (**Enter** opens chat) shows the visitor. On the guest, **P → Open multiplayer** no longer offers
    **Enter the world** — it says your own galaxy is paused and how to get the pilot home.

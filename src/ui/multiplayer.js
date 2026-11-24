@@ -643,19 +643,18 @@ function joinHtml(model) {
           `<div class="mp-row"><button type="button" data-mp="join-world">Enter the world without my pilot</button></div>` +
           `<p class="mp-hint">You can look around and chat. Your pilot stays at home until you bring it.</p>`
         : "") +
-      // **The pilot is here, so this world is not** (playtest 20, A3). While the pilot is away its
-      // own galaxy is paused — entering it would fly a hull whose cargo is in a suitcase in
-      // somebody else's galaxy — so the screen does not offer a button it would have to refuse.
-      // It says where the pilot is and how to get it home, and the **Leave** row below is the way
-      // off this screen (LESSONS L41/L42).
+      // **Enter the world, and say what it opens** (playtest 21). Playtest 20 hid this button while
+      // the pilot was away, because the world behind it is the pilot's own — which made the screen
+      // a dead end the moment the pilot crossed. The owner's answer: put the player in the world
+      // and tell them the truth about it. Until the friend's world can be drawn on this screen
+      // (slices 7-8), the world is the pilot's own galaxy holding its latest copy, and the word
+      // for that is on the button's own hint and in the notice the world opens with.
       (model.visiting && model.brought && !model.choosing
-        ? (state.away
-          ? `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
-            `<p class="mp-hint">Your own galaxy is paused where you left it, and opens the ` +
-            `moment the pilot is home. <strong>Leave</strong> this visit, then press ` +
-            `<strong>Open World</strong> on the main menu to bring it home.</p>`
-          : `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
-            `<div class="mp-row"><button type="button" class="go" data-mp="join-world">Enter the world</button></div>`)
+        ? `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
+          `<div class="mp-row"><button type="button" class="go" data-mp="join-world">Enter the world</button></div>` +
+          `<p class="mp-hint">That is your <strong>own</strong> galaxy for now, with your pilot's copy in ` +
+          `it. Your friend's world on your screen is not built yet (slice 7) — anything you earn or buy ` +
+          `there stays in that galaxy, because the copy that comes home is the one in their world.</p>`
         : "") +
       (model.visiting ? `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` : "") +
       `</section>`
@@ -850,6 +849,23 @@ export async function act(name, arg = "") {
     case "bring": {
       const done = session.bringPilot();
       setMessage(done.message, done.ok ? "" : "error");
+      // **Bringing the pilot enters the world** (owner, playtest 21: *"Clicking the bring my
+      // pilot now when joining a world doesnt log you into their open world. Im just stuck at the
+      // menu where you add link. … Should transition to their world when im in like this."*).
+      // It used to leave the player on this screen with nothing to press, which read as a failure
+      // even though the pilot had crossed. The two halves of the owner's join box are now one
+      // press: send the pilot, then be in the world.
+      //
+      // What loads is the **stand-in** galaxy — the wire still carries no world state, so the
+      // friend's world on this screen is slice 7/8. Saying that is `ui/menu.js`'s job (the notice
+      // that opens with the world), because this screen is gone by then.
+      // `state.ui.intro` is the title screen, which is where this screen's join half lives: if the
+      // player is somehow looking at it from inside a world, the panel stays open rather than
+      // closing on nothing.
+      if (done.ok && state.ui.intro) {
+        closeMultiplayer();
+        emit("mp-enter-world", {});
+      }
       draw();
       return done.ok;
     }
@@ -863,17 +879,6 @@ export async function act(name, arg = "") {
     case "join-world": {
       if (!screenModel().visiting) {
         setMessage("Join a friend's world first.", "error");
-        draw();
-        return false;
-      }
-      // A pilot that is away cannot enter its own world (playtest 20, A3): there is no shared
-      // world on the wire yet (slice 8), so "the world" here would be the pilot's own galaxy —
-      // which is paused while its travelling half is in a suitcase somewhere else. This screen is
-      // the one place that can say so and still hand the player the way home, so it answers with
-      // the sentence instead of closing onto a title screen with no explanation.
-      if (state.away) {
-        const where = state.away?.hostName ? `${state.away.hostName}'s world` : "a friend's world";
-        setMessage(`Your pilot is in ${where}, so your own galaxy is paused where you left it. Leave this visit, then press Open World on the main menu to bring the pilot home — your own world opens the moment it is home.`, "error");
         draw();
         return false;
       }
