@@ -26,6 +26,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import * as ui from "../src/ui/multiplayer.js";
+import { shownNotice } from "../src/ui/notice.js";
 import { uniqueName } from "../src/net/session.js";
 import { isSimulationPaused } from "../src/sim/step.js";
 import * as session from "../src/net/session.js";
@@ -105,17 +106,24 @@ test("the switch cannot be turned on without a username — and says why if it i
   assert.equal(cold.canJoin, false, "and so is Join");
   assert.equal(cold.joinAvailable, true, "but the join box is there: joining is not hidden");
 
-  // The switch is disabled in the markup too, not only in the model.
-  assert.match(html(), /data-mp="host"[^>]*disabled/);
+  // **The switch itself stays pressable** (owner, playtest 17: "make it so that a pop up comes
+  // saying you have to have a username"). A `disabled` button receives no click, so the popup
+  // he asked for could never appear: the markup marks it aria-disabled instead.
+  assert.match(html(), /data-mp="host"[^>]*aria-disabled="true"/);
+  assert.doesNotMatch(html(), /data-mp="host"[^>]* disabled/, "the switch is not disabled");
 
-  // And the action refuses even if a hand-rolled click gets through.
+  // Pressing it refuses in words — in the card and, above it, in a popup.
   const worked = await ui.act("host");
   assert.equal(worked, false);
   assert.equal(fake.calls.includes("hostWorld"), false, "nothing was hosted");
-  assert.match(ui.panelState().message, /username first/i);
+  assert.match(ui.panelState().message, /username/i);
   assert.equal(ui.screenModel().messageKind, "error");
   // The sentence has somewhere to live: the message element is always in the card.
   assert.match(html(), /id="mp-msg"/);
+  // **One refusal, one place** (owner, playtest 19: the teal notice at the top was "unnecessary
+  // info" beside the red one). The card's own line carries it, and it names where the box is.
+  assert.match(ui.panelState().message, /main menu/i, "the refusal names where the username box is");
+  assert.equal(shownNotice(), "", "and no second popup repeats it at the top of the screen");
 });
 
 test("a name enables both front doors without a redraw of the field", async () => {
@@ -1011,13 +1019,22 @@ test("the title's Open World is where a visit ends, and the pilot comes home", (
   // Playtest 14: leaving the visit is NO LONGER a precondition. It used to return false here,
   // and from the title there is no session to leave — so the card's button gave up before it
   // had unpacked anything, and the player was trapped with no way home.
-  assert.match(menu, /leaveVisit\(\);\n/, "the visit is always left, when there is one");
+  // Playtest 15: it is left, but only AFTER the suitcase opens. Leaving first meant a
+  // refusal took the connection away and left the pilot frozen — the host's list dropped the
+  // row while the laptop stayed on the card.
+  const home = menu.slice(menu.indexOf("function comeHome()"));
+  const body = home.slice(0, home.indexOf("\n}\n") + 3);
+  assert.match(body, /leaveVisit\(\);/, "the visit is always left");
+  assert.ok(body.indexOf("bringPilotHomeAtMenu(") < body.indexOf("leaveVisit();"),
+    "and only once the pilot is actually home");
   // Slice 4 turned "unpack it here" into "ask the one rule that knows how", so the menu
   // cannot drift from the card's Bring pilot home. The rule refuses rather than wiping a
   // pilot whose suitcase will not open, which is why the return value is checked.
   assert.match(menu, /bringPilotHomeAtMenu\(/, "the suitcase is unpacked by slice 4's one rule, menu-aware");
   assert.match(menu, /if \(!done\.ok\)/, "and a refusal stops the visit ending");
-  assert.match(menu, /if \(state\.away && !comeHome\(\)\) return;/, "nothing enters the open world with a frozen pilot");
+  // Playtest 16 replaced "try to come home and carry on" with a straight refusal: Open World
+  // does not start at all while the pilot is away, and the card's two presses are the way on.
+  assert.match(menu, /if \(state\.away\) \{/, "nothing enters the open world with a frozen pilot");
   // The join path must not trip over it: entering the world a join just produced is not a leave.
   const entered = menu.indexOf('on("mp-enter-world"');
   assert.doesNotMatch(menu.slice(entered, entered + 400), /comeHome/, "a fresh join does not leave");

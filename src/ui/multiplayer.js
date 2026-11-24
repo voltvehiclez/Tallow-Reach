@@ -93,12 +93,24 @@ export function screenModel({ snap = api.snapshot(), settings = readSettings(), 
     // Step 16 slice 4: has the pilot actually crossed? The join surface shows
     // "Bring my pilot" until it has, then says so instead of offering it twice.
     brought: snap.carrying === true || snap.carriedAcked === true,
+    // Playtest 17, the owner's design: after a link connects, the SAME box becomes the choice —
+    // *Bring my pilot* or *Enter the world* — and nothing is loaded until one is pressed. The
+    // button used to live on a screen that the join itself closed, so it was destroyed by the
+    // event it existed to follow. Keep the player where he is until he has decided.
+    choosing: visiting && connected && !snap.carrying && !snap.carriedAcked,
     role: snap.role || null,
     state: snap.state || "idle",
     // The switch's words follow the session (LESSONS L32). Hosting is the only thing the
-    // switch can start, so an On switch always means "this world is open to guests".
-    switchOn: hosting,
-    canSwitch: !!name && !visiting,
+    // switch can start, so an On switch always means "this world is open to guests" — plus a
+    // visit, which is the one state that was invisible here (owner, playtest 17): a guest saw
+    // *Off* on a control that was **disabled**, so there was no way to stop the visit from the
+    // pause card at all.
+    switchOn: hosting || visiting,
+    // **Every state can work the switch, including a visitor** (playtest 17). A greyed switch
+    // reading "On" with no way to press it is the report we are fixing. For a visitor the
+    // switch is a *turn it off* control: pressing it leaves the friend's world (the same
+    // `data-mp="leave"` action sits beside it, saying what will happen).
+    canSwitch: !!name,
     canHost: !!name && !visiting,
     // The join block is there whenever nothing of yours is running; the button waits for
     // a name. Without this split the block drew "you are in a friend's world" to somebody
@@ -260,6 +272,12 @@ export function setupMultiplayer() {
     draw();
   });
   // A sentence the connection wants shown. `net/` cannot reach the screen itself.
+  //
+  // **Two places, two different audiences** (owner, playtest 19). `setMessage` is the line
+  // inside the card; `showNotice` is the one at the top of the screen, and it is the only one a
+  // player sees when the screen is closed (a join that failed at boot). This is not the doubled
+  // refusal he reported — that was one action raising both in `openWorld`, and it is fixed —
+  // but a connection notice is genuinely meant for somebody who may not be looking at the card.
   on("mp-notice", text => {
     setMessage(text, "hint");
     showNotice(text);
@@ -382,6 +400,9 @@ function detailsRow() {
 function detailsHtml(model) {
   return (
     `<section class="mp-block" id="mp-details"${panelView.detailsOpen ? "" : " hidden"}>` +
+    // The build, in the open (playtest 17): two machines on different builds cannot talk, and
+    // a player on an old download needs to be able to say so without opening a console.
+    `<p class="mp-hint">Build ${escapeHtml(BUILD)}</p>` +
     `<div class="mp-row"><button type="button" data-mp="copy-world">Copy world id</button></div>` +
     codesHtml(model) + relayServerHtml(model) + diagHtml(model) +
     `</section>`
@@ -411,17 +432,33 @@ function nameHtml(model) {
 }
 
 function hostHtml(model) {
+  // A visitor needs a way out that is not "find the Leave button in the join block", because
+  // the join block is hidden on the pause surface. This is the same `data-mp="leave"` action,
+  // placed where the player is looking when they go to turn multiplayer off (playtest 17).
+  const leaveRow = model.visiting
+    ? `<div class="mp-row"><button type="button" data-mp="leave">Leave ${escapeHtml(model.hostName ? model.hostName + "'s world" : "your friend's world")}</button></div>` +
+      `<p class="mp-hint">Leaving stops the connection. Your pilot stays where it is until you bring it home.</p>`
+    : "";
   const switchHtml =
     `<button type="button" class="sw mp-switch" data-mp="host" role="switch" ` +
-    `aria-checked="${model.switchOn ? "true" : "false"}"${model.canSwitch || model.hosting ? "" : " disabled"}>` +
-    `<i></i><span>${model.switchOn ? "Multiplayer: On" : "Multiplayer: Off"}</span></button>`;
+    `aria-checked="${model.switchOn ? "true" : "false"}"` +
+    // Why a switch that cannot do anything is still pressable (owner, playtest 17): he asked
+    // for a popup saying a username is needed, and **a `disabled` button receives no click at
+    // all**, so the refusal could never be shown. The switch is the first control on the card;
+    // a press that cannot be honoured answers in words instead of silently doing nothing.
+    (model.canSwitch ? "" : ` aria-disabled="true"`) +
+    `>` +
+    `<i></i><span>${model.switchOn ? "Multiplayer: On" : "Multiplayer: Off"}</span></button>` +
+    leaveRow;
   // The hosting hint ("send the link below…") is gone: the link row says "send this to your
   // friend" and the message popup says it too, so a third copy of the same sentence was noise
   // (owner's request, 2026-11-22).
   const hint = model.visiting
     ? "You are in a friend's world. Leave it first to host your own."
     : !model.nameSet
-      ? "Set a username above, then turn this on."
+      // The only username box in the game is on the title menu, so the hint names the
+      // journey rather than a field ("above" pointed at nothing — playtest 17).
+      ? "You need a username before multiplayer can be turned on. It is on the main menu."
       : !model.hosting
         ? "Turns this world into a room and makes a link to send to a friend."
         : "";
@@ -523,13 +560,23 @@ function joinHtml(model) {
       // Step 16 slice 4: the press that puts the PILOT on the wire. Joining only looks
       // around a friend's world; this is what freezes the pilot at home and sends its
       // ship, hold, credits and lockers across. Worded as the plan words it.
-      (model.visiting && !model.brought
-        ? `<div class="mp-row"><button type="button" class="go" data-mp="bring">Bring my pilot</button></div>` +
-          `<p class="mp-hint">Your pilot and its cargo travel to this world, and your own galaxy pauses ` +
-          `until it comes home. You can bring it home from the main menu even if your friend is offline.</p>`
+      // **Playtest 17, the owner's design.** Once the link connects, this same box becomes the
+      // choice: *Bring my pilot* (send the pilot, then enter) or *Enter the world* (look around
+      // first). Nothing is loaded until one is pressed — the join used to close this screen and
+      // load the world before the player could answer, which is how the button came to be
+      // destroyed by the very event it was meant to follow.
+      (model.choosing
+        ? `<p class="mp-hint mp-connected">Connected to ${escapeHtml(model.hostName || "your friend's world")}.` +
+          ` Choose what to do:</p>` +
+          `<div class="mp-row"><button type="button" class="go" data-mp="bring">Bring my pilot</button></div>` +
+          `<p class="mp-hint">It takes your ship, hold, credits and station lockers across, and your own ` +
+          `galaxy pauses until it comes home. Bringing it home works even if your friend is offline.</p>` +
+          `<div class="mp-row"><button type="button" data-mp="join-world">Enter the world without my pilot</button></div>` +
+          `<p class="mp-hint">You can look around and chat. Your pilot stays at home until you bring it.</p>`
         : "") +
-      (model.visiting && model.brought
-        ? `<p class="mp-hint">Your pilot is here: its ship, hold and credits came with it.</p>`
+      (model.visiting && model.brought && !model.choosing
+        ? `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
+          `<div class="mp-row"><button type="button" class="go" data-mp="join-world">Enter the world</button></div>`
         : "") +
       (model.visiting ? `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` : "") +
       `</section>`
@@ -727,6 +774,24 @@ export async function act(name, arg = "") {
       draw();
       return done.ok;
     }
+    // "Enter the world" — the second half of the owner's join box (playtest 17). Loading the
+    // world is a SEPARATE press from joining now, so a guest who only wants to chat never
+    // leaves this screen, and a guest who brought a pilot gets in with one press.
+    //
+    // For now "the world" is the guest's OWN galaxy: the wire carries no ship or world state
+    // (slices 7 and 8), so both players are in their own worlds and share chat and the pilot.
+    // That is deliberate and is what this placeholder is for — it lets the UI be tested.
+    case "join-world": {
+      if (!screenModel().visiting) {
+        setMessage("Join a friend's world first.", "error");
+        draw();
+        return false;
+      }
+      closeMultiplayer();
+      emit("mp-enter-world", {});
+      draw();
+      return true;
+    }
     case "leave": return leaveSession();
     case "save-relay": {
       const relay = relayFromFields(screenModel().relayFields);
@@ -812,6 +877,20 @@ export async function act(name, arg = "") {
 
 async function toggleHosting() {
   const model = screenModel();
+  // **The switch's one job is the thing it names** (LESSONS L32, and playtest 17):
+  //   visiting     -> off, which means leaving the friend's world. A guest used to see a
+  //                   DISABLED switch reading Off with no other way out from the pause card.
+  //   hosting      -> off, closing the room.
+  //   anything else-> on, which opens the room. One press, as it has always been.
+  if (model.visiting) {
+    const away = state.away;
+    leaveSession();
+    setMessage(away
+      ? "Left your friend's world. Your pilot is still there — bring it home from the main menu."
+      : "Left your friend's world.", "hint");
+    draw();
+    return true;
+  }
   if (model.hosting) {
     api.stop();
     api.setEnabled(false);
@@ -821,10 +900,23 @@ async function toggleHosting() {
     draw();
     return true;
   }
+  return openWorld();
+}
+
+/** Open the world and make the link. The switch's second press, and the pause card's door. */
+async function openWorld() {
+  const model = screenModel();
   // The owner's rule, enforced here as well as by the disabled switch: no name, no world.
   if (!model.nameSet) {
-    setMessage("Type a username first — nobody can join a world with no name on it.", "error");
-    focusField("name");
+    // **One refusal, in one place** (owner, playtest 19: *"Opening multiplayer in pause menu
+    // without a username shows a teal pop up and a red pop up. The red one is enough, the teal
+    // one at the top is just unnecessary info."*).
+    //
+    // It used to raise both: a notice at the top of the screen AND the red line in the card,
+    // saying the same thing twice. The card's own line stays — it sits next to the switch that
+    // caused it, stays until it is replaced, and reaches a screen reader through the card.
+    // `showNotice` also swallows routine confirmations, so it was never the reliable half.
+    setMessage("No username yet. Set one on the main menu — \"Exit to main menu\" is at the bottom of this card.", "error");
     draw();
     return false;
   }
@@ -842,9 +934,6 @@ async function toggleHosting() {
     return false;
   }
   api.setEnabled(true);
-  // No popup: the link box says "send this to your friend" by itself, so the confirmation
-  // was a second copy of the same sentence (owner's request, 2026-11-22). The busy message
-  // `withBusy` left behind is cleared with it.
   setMessage("", "hint");
   draw();
   return true;
@@ -888,19 +977,21 @@ async function joinFromBox() {
 }
 
 /** A guest who just joined: get out of the way so the world (or the menu) is playable. */
+/**
+ * A guest who just joined. **It no longer enters the world** (owner, playtest 17).
+ *
+ * This is the line that made the "Bring my pilot" prompt unusable: entering the world closed
+ * the multiplayer screen, so the button that lived on it was destroyed by the join, and the
+ * player arrived with no pilot and no way to send one. The owner's design is that the join box
+ * stays up after connecting and offers the two choices, so this only makes sure the box is
+ * showing them.
+ */
 function afterJoined() {
   if (!state.ui.intro) return;
-  closeMultiplayer();
-  // **Not when the pilot is away** (owner, playtest 14). Entering the world is what flying
-  // your own ship means, and an away pilot is frozen — its cargo is in another galaxy. This
-  // is why the title showed "Bring my pilot" for a moment and then entered the world by
-  // itself: the join worked, `state.away` was set, and nothing here looked at it.
-  if (state.away) {
-    setMessage("Your pilot is still in your friend's world. Bring it home below, then join again.", "hint");
-    draw();
-    return;
-  }
-  emit("mp-enter-world", {});
+  // The screen is already open — it is where the player pressed Join. It just needs to know
+  // that the connection is now live, which `mp-state` does; the redraw shows the choice.
+  setMessage("Connected. Bring your pilot, or enter the world without it.", "ok");
+  draw();
 }
 
 async function retryConnection() {

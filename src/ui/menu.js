@@ -10,7 +10,9 @@ import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../stat
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
-import { leaveVisit, joinWorld } from "../net/session.js";
+// Named imports only, like every other line here: `net/session.js` is injected into tests with
+// `setSaveKit`, so this file must never hold a copy of something it can ask for.
+import { leaveVisit, joinWorld, newerCopyAway } from "../net/session.js";
 import { makeJoinUrl, pageBase } from "../net/join-link.js";
 import { readSettings, writeSettings } from "../net/settings.js";
 // The same guard `installDragListeners` uses below: a headless import (a test) has a
@@ -178,6 +180,10 @@ export function setupMenu(options = {}) {
     cancelHeldStack();
     closeMultiplayer();
     state.ui.intro = true;
+    // Arriving at the menu is always the ordinary menu (owner, playtest 18). The away card is
+    // raised by a press on Open World and by nothing else, so it is cleared here rather than
+    // set: a player who was looking at the card and pressed Main menu lands on the menu.
+    state.ui.awayCard = false;
     resetStationPanels(state.ui);
     hideNotice();
     render();
@@ -323,16 +329,19 @@ function loadedMessage(text) {
  * rather than opening the suitcase itself, so the two doors cannot drift apart.
  */
 function comeHome() {
-  // The session goes first, always: a guest that walks home while still connected leaves a
-  // row in the host's players list and a ship in the host's world (playtest 14). Leaving
-  // the visit is not conditional on there being a suitcase to unpack.
-  leaveVisit();
   const away = state.away;
   if (away) {
-    // **From the title there is no open-world save loaded**, so the pilot is unpacked
-    // against the mode save that is stored — which is where the frozen pilot actually is.
-    // This is why "Bring pilot home" on the card did nothing: the old path walked out of
-    // `leaveVisit()` believing it had failed, and never reached the unpacking at all.
+    // **The suitcase is opened BEFORE the visit is left** (playtest 15).
+    //
+    // Leaving first meant a refusal — which is what the broken shape check always produced —
+    // dropped the connection *and* kept the pilot frozen: the host's players list lost the
+    // row, the laptop showed the away card, and Rejoin could not get back in. The player
+    // described exactly that. Opening the suitcase does not need the wire (it is the guest's
+    // own copy), so it goes first, and a refusal now leaves everything as it was: still
+    // visiting, still listed, still able to try again.
+    //
+    // From the title there is no open-world save loaded, which is why the unpacking is done
+    // against the mode save that is STORED — that is where the frozen pilot actually lives.
     const done = bringPilotHomeAtMenu({ mode: state.mode === "campaign" ? "campaign" : "open" });
     if (!done.ok) {
       showNotice(done.message);
@@ -340,8 +349,12 @@ function comeHome() {
     }
     // The stored save now holds the returned pilot; load it so the screen and the runtime
     // agree with the disk before anything else runs.
-    applySave(done.save);
+    applySave(done.modeSave || done.save);
   }
+  // Leaving the visit still always happens — but only once the suitcase has opened, so a
+  // refusal cannot cost the player its connection. A guest that never carried a pilot (it
+  // only looked around) has no suitcase, and leaves here exactly as before.
+  leaveVisit();
   closeMultiplayer();
   saveCurrentGame();
   showNotice(away?.hostName
@@ -354,20 +367,16 @@ function comeHome() {
  * Re-attempt the world the pilot is already in, from the title card (playtest 14).
  *
  * The join is asynchronous and the screen must not lie about it, so the answer is a
- * sentence either way. On success the ordinary join path runs (`mp-enter-world` is NOT
- * emitted for an away pilot — see `afterJoined`), leaving the player on the card with the
- * connection live, which is what "Rejoin" means: the pilot is still there, go and look.
+ * sentence either way.
+ *
+ * **On success the multiplayer screen opens, and the card goes** (owner, playtest 16). It
+ * used to leave the player exactly where they were, so the host's list showed the name, the
+ * laptop said "Rejoined", and nothing else happened — a rejoin you cannot see is
+ * indistinguishable from one that failed. The pilot stays away (that is what makes this a
+ * rejoin and not a trip home), and the join half of the screen is where it can be brought
+ * home or left; `emit("mp-enter-world")` is deliberately NOT used, because entering the
+ * world is what flying your own frozen ship would mean.
  */
-function rejoinStoredWorld(away) {
-  const link = makeJoinUrl(away.worldId, away.token, pageBase());
-  joinWorld({ link })
-    .then(result => {
-      if (!result?.ok) { showNotice(result?.message || "Could not rejoin that world."); return; }
-      showNotice(`Rejoined ${away.hostName ? away.hostName + "'s world" : "your friend's world"}.`);
-      render();
-    })
-    .catch(() => showNotice("Could not rejoin that world. Paste the link instead."));
-}
 
 function enterGameMode(mode) {
   state.ui.intro = false;
@@ -392,34 +401,77 @@ const ACTIONS = {
   // (the multiplayer action below asks for one). Open World must start with no settings
   // stored at all — the step-10 fixes and the 11B recovery notices depend on it.
   intro() {
-    // Slice 4: a pilot that is away must come home BEFORE its world starts. If the suitcase
-    // will not open, `comeHome` says why and returns false — and we stop, because entering
-    // the world would fly a frozen pilot whose cargo is in another galaxy. (Fixing the
-    // suitcase needs the host, so the player goes back to the card, not into a cockpit.)
-    if (state.away && !comeHome()) return;
+    // **A pilot that is away does not open its own world at all** (owner, playtest 16).
+    //
+    // It used to try `comeHome()` and carry on if that worked, which read as "Open World
+    // silently unpacks my pilot". The owner asked for the other thing: the away card is the
+    // answer, and its press (**Bring pilot home**) is the only way on. Entering the world with
+    // a frozen pilot would fly a hull whose cargo is in another galaxy, and unpacking without
+    // being asked is a decision about somebody's save.
+    //
+    // **Playtest 18 moved WHERE the card appears, and this press is the one place it is
+    // decided** (owner's rule: *"This your pilot is in menu should only come if you try to join
+    // your local open world but a more new version of your save was on an online world."*).
+    //
+    //   away + a NEWER copy online -> raise the card. Nothing opens: the newer pilot has to be
+    //                                 brought home first (the card's own button), and after
+    //                                 that press `state.away` is cleared and Open World works.
+    //   away + nothing newer        -> open the pilot's own world, exactly as if it were home.
+    //
+    // The second branch is the fix for the trap: being *away* is no longer enough to stop a
+    // player flying. The frozen travelling half stays frozen in the save while they do, so
+    // bringing the newer copy home later still works, and nothing is overwritten.
+    if (state.away) {
+      if (newerCopyAway({ mode: state.mode === "campaign" ? "campaign" : "open" })) {
+        state.ui.awayCard = true;
+        if (state.ui) state.ui.intro = true;
+        render();
+        return;
+      }
+      state.ui.awayCard = false;
+    }
     enterGameMode("open");
   },
-  // Step 16 slice 4: the two doors off the "Your pilot is in Ada's world" card.
+  // Step 16 slice 4: the door off the "Your pilot is in Ada's world" card.
   //
-  // `rejoin` reopens the multiplayer screen on the JOIN half with the last world already
-  // filled in, so the player presses one button rather than pasting a link they have
-  // already pasted once. `comehome` is the same act as `intro`'s (a pilot at home is a
-  // pilot at home), so it calls that rather than growing a second path.
-  rejoin() {
-    // A real attempt, not just a screen (owner, playtest 14: "Rejoin doesnt do anything").
-    // The title has the world's id on the marker, so the link can be rebuilt from it — the
-    // token comes from the settings, where the join that created the marker put it. When
-    // that is not possible the screen still opens, with the box ready, and says why.
-    const away = state.away;
-    if (away?.token) {
-      rejoinStoredWorld(away);
-      return;
-    }
-    openMultiplayer({ focus: "join", from: "menu" });
-    showNotice("Paste your friend's link — this browser did not keep the last one.");
-  },
+  // It is its own press, not Open World (owner, playtest 17). Rejoin was removed in playtest
+  // 18: joining is one press from the main menu, and a second, differently-shaped way in was
+  // the thing that did not work.
+  // **Bring pilot home is its own press, not Open World** (owner, playtest 17).
+  //
+  // It used to call `ACTIONS.intro()` — the Open World action — on the reasoning that "a pilot
+  // at home is a pilot at home". That was wrong twice over: `intro()` refuses whenever a pilot
+  // is away (so this button answered with the sentence meant for a different button, and the
+  // owner could not come home at all), and the two acts are not the same. The owner's own
+  // definition: *"bringing pilot home simply means making the version of your character that
+  // was on your friends world be the latest version on your local open world."* That is
+  // `bringPilotHomeAtMenu`, and nothing else. It does not enter a world and it does not need
+  // the host — the suitcase is the guest's own copy.
   comehome() {
-    ACTIONS.intro();
+    const done = bringPilotHomeAtMenu({ mode: state.mode === "campaign" ? "campaign" : "open" });
+    if (!done.ok) { showNotice(done.message); return; }
+    applySave(done.modeSave || done.save);
+    leaveVisit();
+    saveCurrentGame();
+    // The card asked the question and the player answered it, so it goes (playtest 18): the
+    // next thing they see is the ordinary menu, with Open World ready. The older copy is gone
+    // by now — `bringPilotHome` put the newer one in its place — so pressing Open World opens
+    // the world rather than raising the card again.
+    state.ui.awayCard = false;
+    showNotice("Your pilot is home.");
+    render();
+  },
+  /**
+   * Back to the ordinary title menu, with the pilot left where it is (owner, playtest 17: *"the
+   * your pilot is in friends world menu has no option even to go to main menu... so hes stuck"*).
+   *
+   * This does NOT bring the pilot home. It only shows the other menu — the away marker is
+   * untouched, so the card comes back the next time the title is drawn, which is what "your
+   * pilot is still away" means. Without it the card was a room with no door.
+   */
+  menu() {
+    state.ui.awayCard = false;
+    render();
   },
   // Step 16 slice 3: the title menu's way into co-op. One screen, opened here, that both
   // hosts a world and takes a friend's link or code — a guest never enters their own

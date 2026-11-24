@@ -172,6 +172,85 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L42. A screen that replaces the menu must earn it, every time, by evidence
+- **Seen (owner, playtest 18):** *"Laptop joins fine a host world. Leaving puts you into the Your Pilot is in hostpc world... for the
+  laptop exiting the main menu in hostpcs world should put the laptop user in the main menu."* The menu had been replaced by a save
+  question, and that question's own "Main menu" button re-raised it on the next draw.
+- **Cause:** the condition for the card was *the away marker exists*, which is true for the whole visit, so the card was the title
+  screen for as long as the visit lasted. Nothing compared the two copies, even though `compare()` had existed since slice 1. A state
+  flag described *what happened* (the pilot left) and was used as if it described *a problem* (a newer copy is waiting).
+- **Rule:** a screen that takes the menu's place must be raised by a **press** and justified by **evidence at that press**, not by a
+  state that persists. When a flag means "an event happened", ask what the player can *do* about it right now; if the answer is "only
+  sometimes", the flag needs a companion test, and the screen needs a door that leaves the flag alone. And a comparison must have a
+  defined answer for a **tie** — decide it deliberately (here: a tie is NOT newer) and write the reason down, or the UI will raise
+  false alarms whenever data is missing.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when `ui.awayCard` was raised by the press; Open
+  World asks `newerCopyAway()`; a tie, missing ordering pair, damage and locker counts are all NOT newer.
+
+### L41. A control that is disabled whenever it would be useful is not a control
+- **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test
+  multiplayer at all: the switch was greyed out and read Off.
+- **Cause:** two independent conditions, each sensible alone. The switch was drawn from `hosting` only, so a **visitor** saw Off; and
+  it was `disabled` whenever visiting. Worse, the pause card draws only the **host** block, and the Leave button lives in the **join**
+  block — so a guest at the pause card was looking at a dead switch beside no exit. "Leave worked from the screen but not from the
+  switch" was the tell: they were on different screens.
+- **Rule:** a control is disabled only when pressing it could not possibly do anything, and **every state a screen can be in must leave
+  the player a way out from that screen**. If a state exists in which the control reads a value the player cannot change, either make
+  the control work for that state or do not draw it. Also: when two screens offer the same exit, draw it on both — "the other screen has
+  a button" is not a way out of the screen you are on.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a visitor's switch is On, pressable, and leaves the visit; the Leave button
+  is drawn beside it. Reverting `switchOn`/`canSwitch` fails it.
+
+### L40. A button that borrows another button's action inherits its refusals
+- **Seen (owner, playtest 17):** the away card's **Bring pilot home** answered *"your pilot is in your friends world, bring it home
+  from the card first"* — a sentence written for a *different* button, telling him to press the button he had just pressed. In the
+  same report: the card had no way back to the main menu at all, so he was stuck on it.
+- **Cause:** `comehome()` was `ACTIONS.intro()` — the Open World action — on the reasoning that "a pilot at home is a pilot at home".
+  The previous round then made `intro()` **refuse** whenever a pilot is away, which was right for Open World and turned the card's own
+  button into a refusal that argued with itself. A second, unrelated shape: the card replaced the whole title screen and every control
+  on it was a decision about the save, so there was no non-committal way off it.
+- **Rule:** an action says what the *player pressed*, not which other action it resembles — two buttons that happen to reach the same
+  place today are still two buttons, and coupling them means every future refusal on one is a lie on the other. And every screen that
+  replaces the whole menu needs one control that makes **no** decision about the save (a way back), because "cancel" must always exist.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — `comehome` must call `bringPilotHomeAtMenu` and must not call
+  `ACTIONS.intro()`; the card must render a Main menu button whose action touches neither the suitcase nor the visit. Reverting the
+  routing fails two tests (in this file and `playtest15`).
+
+### L39. A screen that closes itself cannot ask the question it exists to ask
+- **Seen (owner, playtest 16):** "I join a multiplayer world, it joins without letting me click the bring my pilot prompt it
+  just joins." The owner played a whole session with no pilot in it, and clicking the button fast enough to beat the join put them on
+  the away card instead.
+- **Cause:** the only **Bring my pilot** button lived on the **join screen**, and a successful join **closes that screen and enters
+  the world** (`afterJoined` → `mp-enter-world`). The control was destroyed by the event it was supposed to follow, so it was never
+  on screen at the moment it was needed — and the one time it was clicked, it won a race and the world-entering code then saw an away
+  pilot and bailed out to the card.
+- **Rule:** a prompt that must appear **after** an action cannot live on the surface that action closes. Ask *the surface the player
+  is now looking at* — and derive "should this be showing?" from session state on the bus (`mp-bring-prompt`), never latch it, and let
+  a screen that mounted late ask again. If a successful action and a required question happen in that order, the question belongs to
+  the next screen.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a real two-session join asserts the prompt appears on join and goes once
+  the pilot crosses; the wiring tests assert the card is its own element, is asked for by `net/` over the bus, and that `afterJoined`
+  still enters the world. Reverting the derivation fails three of the six.
+
+### L38. A save seam has two shapes, and guessing the wrong one looks like a broken save
+- **Seen (owner, playtest 15):** the away card became a trap. *"Bring pilot home"* always answered *"Your pilot's save could not be
+  read, so it cannot come home yet"* — in Brave, in Chrome, on a first boot, and after every refresh — while Rejoin answered *"Your
+  pilot is already visiting another world, bring it home first"*. Clicking Bring pilot home removed the laptop's row from the host's
+  players list and still left it on the card.
+- **Cause:** `saveKit.read()` returns a **MODE** save (`{ profile, world, away }`, one pilot). `bringPilotHomeAtMenu` was written
+  against the dual-mode **ENVELOPE** (`{ v, mode, open, campaign }`) and read `root[mode]`, which is `undefined` on a mode save — so it
+  refused before it ever looked at the suitcase. The refusal was blamed on the player's data, which is why nobody suspected the shape.
+  Two things made it worse: `joinWorld` refused *every* join while an away marker existed, including a rejoin to the world the pilot was
+  standing in; and `comeHome` left the visit *before* opening the suitcase, so a refusal cost the connection as well.
+- **Rule:** a seam that can hand you one of two shapes must **say which one it is** in one place and accept both (`isModeSave`), and
+  write back the shape it was given. Anything that *refuses* must refuse only the thing it actually objects to — a guard against
+  "visiting another world" is not a guard against the world you are visiting. And do the work that can fail **before** the step that
+  destroys state, so a refusal changes nothing.
+- **Enforced by:** `tests/multiplayer-playtest15.test.mjs` — a mode save comes home and its locker really arrives, an envelope still
+  works, an unreadable save still refuses, a real rejoin connects with the pilot still away, a different world is still refused; and
+  `tests/multiplayer-ui.test.mjs` asserts `bringPilotHomeAtMenu` runs before `leaveVisit` in `comeHome`. Reverting either fix fails with
+  the owner's own words.
+
 ### L37. A key that names a place must be checked against the place that will read it
 - **Seen (owner, playtest 14):** "What happens if a player joins a world with a pocket/station that doesn't exist in their local world and they
   return to their local world?" — a stack bought at a station only the host's world has came home filed under that station's key, in a galaxy

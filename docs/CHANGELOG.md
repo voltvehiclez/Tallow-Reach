@@ -18,6 +18,213 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-23: One refusal, one place, and a placeholder that says what it wants
+
+**Code change; rebuild needed; build `2026-11-23i`.** Two small corrections to playtest 18, both
+from the owner.
+
+1. **The empty username box says "Username" faintly** (it said "your name"). Same centred,
+   label-free box; only the placeholder text changed.
+2. **The missing-username refusal is said once.** Open World without a username raised *two*
+   messages: a notice at the top of the screen (teal) and the red line in the card. The owner:
+   *"the red one is enough, the teal one at the top is just unnecessary info."* The card's line
+   stays — it sits beside the switch that caused it, stays put until replaced, and reaches a
+   screen reader through the card — and it now also says where the box is ("Exit to main menu" is
+   at the bottom of this card). `showNotice` is no longer called from that path.
+
+`mp-notice` still shows in both places on purpose: that is how a connection reports something to
+a player who has the screen *closed* (a join that failed at boot), which is a different audience
+from the card's own line.
+
+`src/ui/screens.js`, `src/ui/multiplayer.js`, `src/data/multiplayer.js` (BUILD),
+`tests/multiplayer-ui.test.mjs` (asserts the refusal is in the card and NOT in a top notice),
+`testing/TESTING-PLAYTEST18.md` (build + the two expectations). Save version unchanged (29).
+
+## 2026-11-23: The away card is a question about custody, not the title screen
+
+**Code change; rebuild needed; build `2026-11-23h`.** Four things from the owner's playtest 18.
+
+1. **The menu is the menu again.** Being away used to replace the whole title screen with the
+   away card, and its "Main menu" button re-raised it on the next draw — so leaving a friend's
+   world dumped the player on a save question with no way past it. The owner's rule: *"This your
+   pilot is in menu should only come if you try to join your local open world but a more new
+   version of your save was on an online world."* The card is now raised by a press on **Open
+   World** and nothing else, and it appears there only when
+   `session.newerCopyAway()` finds a genuinely newer copy. Otherwise Open World opens the pilot's
+   own world, away marker and all — the frozen travelling half stays put, so nothing is lost.
+2. **"Newer" is decided by one rule** (`custody.isNewerCopy`): the host's `{epoch, rev}` pair
+   first (only when both copies carry one), then more credits, then more cargo. **A tie is not
+   newer** — a false card is the trap this fixes. Hull damage and locker counts are deliberately
+   excluded: damage is not progress, and `checkOut` empties the home stations into the suitcase,
+   so counting lockers would report "newer" on every visit.
+3. **Rejoin is gone** (owner: *"Remove the rejoin button I dont think it serves much purpose right
+   now. If you want to rejoin the friends world you go -> main menu -> join multiplayer"*). The
+   card offers **Bring pilot home** and **Main menu**.
+4. **The menu's username box is the bare centred name** — no "Username:" label, text centred like
+   the buttons under it (owner's request).
+
+Confirmed unchanged, in the owner's words: *Bring pilot home* makes the online copy the local
+save (credits, ships, hull, holds, cargo, lockers), while missions, story flags and statistics stay
+local; campaign play never affects multiplayer/open world.
+
+`src/net/custody.js` (`isNewerCopy`), `src/net/session.js` (`newerCopyAway`), `src/ui/menu.js`
+(Open World's press, `comehome`, `main-menu`, Rejoin removed), `src/ui/screens.js` (card condition,
+two buttons, centred name, copy), `src/state/state.js` (`ui.awayCard`), `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), four test files. Save version unchanged (29); no save shape
+changed — `isNewerCopy` only reads.
+
+## 2026-11-23: The switch says why, and the away card is a proper card
+
+**Code change; rebuild needed; build `2026-11-23g`.** Three things the owner hit in one playtest,
+only the first of which was a real fault in the code:
+
+1. **No username, no switch, no explanation** (his report: *"the multiplayer on/off button doesnt
+   work, not clickable"*). The switch was drawn `disabled`, and a disabled button receives no
+   click, so the refusal could never be shown. He asked for the refusal: *"make it so that a pop
+   up comes saying you have to have a username to turn multiplayer on."* The switch is now
+   pressable in every state (`aria-disabled` instead of `disabled`) and a press without a name
+   shows a notice that names where the box is — the **main menu**, the only place it exists (the
+   hint used to say "Set a username above", pointing at a field that is not on that screen).
+2. **The away card was the wrong build.** He was running a download from before `daa42d6`, which
+   is the commit that first gave that card a **Main menu** button and fixed *Bring pilot home*.
+   The card now says `Build 2026-11-23g` at the bottom, and the multiplayer screen's *More
+   details* says the build too: two machines on different builds cannot talk, and a stale
+   download must be visible without a console.
+3. **Main menu was a small box on the left.** Only that one button on the card lacked
+   `class="go"`, and `.away-card` had no CSS at all, so the browser laid the three buttons out
+   differently. The card is now a grid, every button is a full-width `.go`, and the notes are
+   styled.
+
+`src/ui/multiplayer.js`, `src/ui/screens.js`, `src/ui/notice.js`, `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), `tests/multiplayer-ui.test.mjs` (the switch test now requires
+`aria-disabled` and the popup), `tests/multiplayer-playtest16.test.mjs` (the card's build stamp,
+three `.go` buttons, the CSS). `showNotice` now records the message even where there is no
+`document`, so a refusal cannot throw in the test runner. Save version unchanged (29).
+
+## 2026-11-23: The multiplayer switch could not be pressed by a visitor
+
+**Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button
+doesnt work so i cant test the build properly."* Two faults, fatal together.
+
+- **The switch was drawn from `hosting` alone**, so a **visitor** saw *Multiplayer: Off* — and the
+  same control was **disabled while visiting** (`canSwitch: !!name && !visiting`). A guest was
+  therefore looking at a greyed-out Off switch with no way to press it.
+- **The pause surface does not draw the join block** (`surface === "host"`), and the only Leave
+  button lived there — so from the pause card a guest had no exit at all. That is why leaving via
+  the screen "worked" and the switch did not: they were different screens.
+- **Fixed:** the switch is on for `hosting || visiting` (still drawn from the session, never the
+  stored setting — L32), it is usable in every state (`canSwitch: !!name`), and pressing it while
+  visiting **leaves the friend's world** with a sentence saying the pilot is still there. A
+  `data-mp="leave"` button is also drawn beside the switch on the pause surface.
+- **`toggleHosting` was split**: its body moved to `openWorld()`, and the switch's branches are now
+  four lines that read like its label (visiting → leave, hosting → close, otherwise → open). One
+  press still hosts, exactly as before.
+- **`session.setEnabled(true)` now creates an idle host session** when nothing is running (it used
+  to write the setting and stop), so the switch always has something to act on; `snapshot()` gained
+  `enabled` and `session` so a screen can tell those apart. `setEnabled(false)` still stops
+  everything.
+
+**Tests:** three added to `tests/multiplayer-playtest16.test.mjs` (a visitor's switch is on and
+pressable and leaves; the switch still opens a world; the session can be switched on with nothing
+running). Reverting `switchOn`/`canSwitch` fails the first. **Build `2026-11-23f`, save v29
+unchanged. 1029 tests.**
+
+## 2026-11-23: The join box holds the choice — and the card gets a door
+
+**Code change; rebuild needed.** The owner's design for playtest 17, and the two interaction bugs
+that came before it.
+
+- **A join no longer enters the world.** `afterJoined` used to close the multiplayer screen and
+  load the world the moment a link connected, which destroyed the only *Bring my pilot* button
+  before the player could press it (playtest 16) and made a mid-join click race the world load.
+  The screen now stays up, and the **same join box** becomes the choice the owner asked for:
+  *Connected. Choose what to do* — **Bring my pilot**, or **Enter the world without my pilot**.
+  Entering the world is its own action (`data-mp="join-world"`), and after a carry the box offers
+  *Enter the world*.
+- **The in-world prompt is deleted** (`#mp-bring-card`, its CSS and the `mp-bring-prompt` event).
+  It was a workaround for "the join screen closes"; the owner's ordering removes the cause, so the
+  workaround goes. Net deletion.
+- **The away card has a Main menu button** (owner: *"no option even to go to main menu... so hes
+  stuck"*). It dismisses the card for the moment (`state.ui.awayCardDismissed`) and is **not** a
+  decision about the save: the pilot stays away, and any arrival at the menu shows the card again.
+- **Bring pilot home is its own press again.** It routed through `ACTIONS.intro()` — Open World's
+  action — which refuses while a pilot is away, so the card's own button answered with the sentence
+  meant for Open World (playtest 17: *"a message I dont understand"*). It now calls
+  `bringPilotHomeAtMenu` directly, which is the owner's definition: *make the version of the
+  character that was in the friend's world the latest version of the local open world.*
+- **Rejoin with the host gone says so**: *"Ada is not there — their game is closed"*, instead of
+  *"Connection cancelled"*, which described the wire rather than the situation.
+- **Placeholder, at the owner's request:** entering the world loads the guest's **own** galaxy while
+  the connection stays live for chat and the pilot. That is honest for this build — the wire carries
+  no ship or world state (`KINDS` in `net/protocol.js` has no position messages), so the two players
+  were never in one world. Sharing it is slice 8.
+
+**Tests:** `tests/multiplayer-playtest16.test.mjs` rewritten to the new design (6), plus the
+playtest-14 guard replaced (joining never enters the world, for anybody). Verified by reverting the
+`comehome` routing and the `afterJoined` change. **Build `2026-11-23e`, save v29 unchanged. 1026 tests.**
+
+## 2026-11-23: Joining entered the world and left the pilot behind
+
+**Code change; rebuild needed.** The owner could join a friend's world, play, and never be offered
+**Bring my pilot** — because the offer was on the join screen and **a successful join closes that
+screen and enters the world**. The button was destroyed by the very thing it was meant to follow.
+
+- **The prompt is now a card in the world** (`#mp-bring-card`, `src/ui/multiplayer.js`), bottom
+  right, with *Bring my pilot* and *Not now*. It is not a modal: a guest who only wants to look
+  around and chat can ignore it, and the world keeps running behind it. The press goes through the
+  same `session.bringPilot()` the pause screen uses.
+- **The session decides when it is wanted** and says so on the bus: a new `mp-bring-prompt
+  {show, text}` event from `net/session.js` `publishBringPrompt()` (derived — guest, welcomed, has
+  not carried, not already away — never latched), plus `askBringPrompt()` so a screen that mounted
+  after the event can ask again. `net/` still never touches the DOM.
+- **Open World now refuses while the pilot is away** (owner's decision, playtest 16): it says where
+  the pilot is and leaves the card up. It used to try `comeHome()` and carry on, which read as
+  "Open World silently unpacks my pilot and drops me in".
+- **Rejoin reopens the multiplayer screen on success.** It connected (the host's list showed the
+  name) and then did nothing visible: the player stayed on the card with a "Rejoined" sentence — a
+  rejoin you cannot see is indistinguishable from one that failed. It still does **not** enter the
+  world, because the pilot is frozen there.
+- The click-mid-join race the owner found ("quickly click Bring my pilot before it logs me in")
+  goes with the old button: there is no longer a prompt to click while the world is loading.
+
+**Tests:** new `tests/multiplayer-playtest16.test.mjs` (6), including a real two-session join on the
+in-memory wire that asserts the prompt appears on join and disappears once the pilot actually
+crosses. Each fix verified by reverting it. **Build `2026-11-23d`, save v29 unchanged. 1026 tests.**
+
+## 2026-11-23: The away card was a trap — Bring pilot home never worked
+
+**Code change; rebuild needed.** The owner's laptop could not come home, could not rejoin, and a
+refresh did not help: three symptoms of **one** confusion between two records.
+
+- **`saveKit.read()` returns a MODE save** (`{ profile, world, away }` — one pilot), while
+  `bringPilotHomeAtMenu` was written against the **dual-mode envelope** (`{ v, mode, open, campaign }`)
+  and indexed `root[mode]`. On a mode save that is `undefined` **every time**, so "Bring pilot home"
+  refused before it looked at the suitcase: *"Your pilot's save could not be read"*. This is why it
+  failed on a first boot in Brave, in Chrome, on refresh — it never depended on the connection.
+  `src/net/session.js` now accepts **both** shapes (`isModeSave`), writes back in the shape it was
+  given, and returns the mode save as `modeSave` so the screen loads the right thing.
+- **Rejoin was refused by its own guard.** `joinWorld` (and the paste-code door) rejected any join
+  while an away marker existed — including a join to the world the pilot was *already in*. The guard
+  now refuses only a **different** world, so rejoining is a rejoin and not a second trip.
+- **Coming home also installs, not just writes.** `write` is the host's narrow seam (guest list +
+  world id), so the returned pilot never reached the disk; the card cleared, the screen said "home",
+  and a refresh put the pilot back on the card (L34's trap in a second place). `saveKit.install` is
+  called, and `setSaveKit` can now replace `install` too.
+- **Order changed in `ui/menu.js` `comeHome`:** the suitcase opens **before** the visit is left. The
+  old order dropped the connection and *then* reported the refusal — which is exactly what the owner
+  saw: clicking Bring pilot home removed the row from the host's players list while the laptop stayed
+  stuck on the card, with Rejoin unable to get back in. A refusal now changes nothing.
+- `saveKit.install` also understands a mode save (it used to assume an envelope and would have
+  installed the wrong half).
+
+**Tests:** new `tests/multiplayer-playtest15.test.mjs` (7 tests) drives the real functions and the
+in-memory wire: a mode save can be brought home and its locker really comes back, an envelope still
+works, a genuinely unreadable save still refuses, a real rejoin connects while the pilot stays away,
+and a different world is still refused. Each was checked by **reverting the fix** and watching it fail
+with the owner's own sentence: `the card must be leavable; it said: Your pilot's save could not be
+read…` and `Rejoin must be allowed; it said: Your pilot is already visiting another world.` Save
+version unchanged (v29). 1020 tests.
+
 ---
 
 ## 2026-11-23: Test Ship faced sideways — the model brings its own rotation
@@ -85,202 +292,15 @@ Four reports from the owner's playtest. Three were bugs; one was a model swap.
 `tests/multiplayer-playtest14.test.mjs`. **Tests: 1013** (was 1004); each fix was verified by reverting
 it. **Build id: `2026-11-23b`.**
 
-## 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
-
-The first slice where something of the player's actually travels. **"Bring my pilot"** packs the
-pilot into a suitcase, the host receives it as a real docked ship, writes a newer copy back about
-two seconds after anything changes, and **"Bring pilot home"** puts it back — with the host offline.
-
-- **Joining is not travelling** (a deliberate decision, not an oversight): the plan quotes
-  ""Bring my pilot"" as an action, so pressing **Join** only looks around a friend's world. A pilot
-  is frozen at home only when the player asks for it.
-- **Two new wire kinds.** `carry` (guest -> host) and `suitcase` (host -> guest, and the newer copy
-  back), both `{ guestId, name, epoch, rev, bundle }`, capped at `NET.suitcaseMaxBytes` = 256 KB of
-  JSON and **refused in words, never truncated**. `epoch`/`rev` travel *beside* the bundle so
-  `compare()` never has to trust the contents. `cleanCarry` validates size and shape but **never
-  strips content ids** (LESSONS L16): cargo the build does not know about still travels.
-- **The host never holds the guest's secret** — only a `tokenHash` — and never trusts the bundle:
-  it goes through `relocate()`, so a locker whose station this galaxy lacks waits at Meridian and
-  remembers where it came from.
-- **The frozen pilot's record is never captured from the runtime.** `captureActiveModeSave` now
-  hands an away pilot's record through untouched, so an autosave or a mode cycle cannot fold live
-  cargo into a record the suitcase already owns.
-- **The title screen becomes a card** while the pilot is away — *"Your pilot is in Ada's world"* +
-  **Rejoin** / **Bring pilot home** — driven by `mp-away-changed`. Open World refuses to start with
-  a frozen pilot rather than flying one.
-
-**Two real bugs found and fixed on the way (both were shipped by slice 1):**
-
-1. **`custody.hostProfile` wiped every guest's hold.** It sanitized a bundle profile with no `v`,
-   which the sanitizer reads as a pre-v12 save whose holds were `{ cargo, modules }` — so a visitor
-   would arrive with its ship and credits and **an empty hold**. It now stamps `v` first, exactly as
-   `applyTravellingProfile` always has. Regression test in `multiplayer-custody.test.mjs`.
-2. **Coming home duplicated every station locker.** `checkOut` empties the home stations, but the
-   session's narrow `save.write` only stored the guest list and world id — the emptying never
-   reached the game. The suitcase then carried cargo the live save still held, and `checkIn` added
-   it on top: **4 ferrite became 8.** A guest's own save is now installed through a new
-   `saveKit.install` (the host's narrow `write` is untouched), and a test asserts both the fix and
-   the failure it prevents (LESSONS L15).
-
-**Files:** `src/data/multiplayer.js` (`suitcaseMaxBytes`, `suitcaseRepeatSec`, `BUILD = "2026-11-23a"`),
-`src/net/{custody,protocol,session}.js`, **new** `src/sim/multiplayer.js`, `src/util/events.js`,
-`src/state/{state,profile}.js`, `src/main.js`, `src/ui/{screens,menu,multiplayer}.js`,
-`src/sim/README.md`. **New tests:** `multiplayer-carry`, `multiplayer-visitors`,
-`multiplayer-bring-pilot` (28 new).
-
-**A stronger third fix, found while proving the tests bite.** Reverting each fix and re-running showed two of the new tests
-passed anyway — they asserted only what the narrow seam happened to carry. The guest kit in the session test now models the
-real narrow `write`, and every guest-side store (packing *and* taking a newer suitcase from the host) goes through one
-`storePilot` rule. Undoing any of the three fixes now fails a test.
-
-**Tests: 1004, all green** (was 976). **Save format unchanged (v29).** **Build id: `2026-11-23a`.**
-**Not done yet, by design:** the guest's own screen showing the host's world (slice 8), crashes and
-reconnects (slice 5), and drawing a visiting ship on the host's screen — the pilot is real, docked
-and simulated, but `render/views.js` still draws one hull. That is slice 7/8. Playtest guide:
-`testing/TESTING-16-SLICE4.md`.
-
-## 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
-
-**Docs/test only; no code, no build, no save change.** `HANDOFF.md` is rewritten (not appended) at
-the end of every chat, and it had reached 7 bytes under its cap — leaving the next chat no room to
-record a change without deleting a fact first.
-
-- **`tests/docs.test.mjs`:** `"docs/HANDOFF.md": 14 * KB` -> `16 * KB`. This is the only place the
-  limit lives, so the change is one visible number. `HANDOFF.md`'s separate **150-line** guard is
-  unchanged, so the file cannot grow by sprawl — only by a slightly fuller sentence.
-- Nothing else in the docs changed, and no text was removed to make room.
-## 2026-11-22: Step 16 is eight slices — the owner agreed the plan
-
-**Docs only; no code, no build, no save change.** The owner reviewed the eight slices of step 16 and
-approved them ("that looks good"), so slices 7–8 are no longer a proposal:
-
-- **The plan is eight slices, not six.** Slices 1–6 are unchanged (4 is still the next build);
-  7–8 are the owner's *"one world, two ships visible"*. `REFACTOR_PLAN.md` says **agreed**, and the
-  two places that still said "six slices" (`REFACTOR_PLAN.md`'s summary line,
-  `architecture/multiplayer.md`'s header, and the index row in `ARCHITECTURE.md`) now say eight.
-- **The order is still 4 → 5 → 6 → 7 → 8.** Slices 7–8 come *after* trading, not next: they are
-  the last debt in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) (*death and recovery*, *player
-  presentation and input*), and nothing in them works until the suitcase (slice 4) carries a pilot.
-- **ROADMAP's step-17 cell stops repeating "slice 4 is next"** — that belongs to step 16's cell,
-  which is the one place step status is kept.
-
-**Files:** `docs/REFACTOR_PLAN.md`, `docs/ROADMAP.md`, `docs/architecture/multiplayer.md`,
-`docs/ARCHITECTURE.md`, `docs/HANDOFF.md`.
-
-**No save change (v29), no build change.** Slice 4 is the next build.
-
-## 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
-
-**Docs only; no code, no build.** The owner played the current build (`2026-11-22j`) and said it
-passed, so slice 3's reworks are confirmed and ROADMAP says so. Then they asked for the thing the
-plan always called the last debt: **"Also draw the guest's ship"** — *one world, two ships visible*.
-*(Slices 7–8 were **proposed** in this entry and agreed by the owner the next day — see the entry
-above.)*
-
-That is bigger than the plan's slice 4, so the plan now says exactly how big. Three decisions are
-recorded, and the next chat should not reopen them:
-
-- **Slice 4 is unchanged** (the suitcase: bring my pilot, sync, Go home). While a pilot is away its
-  own screen is a **card** — *"Your pilot is in Ada's world"* with **Rejoin** and **Bring pilot
-  home** — not its frozen pilot still flying its own sky, which reads as a bug.
-- **Slice 7 — a second pilot exists in the host's world.** The suitcase becomes a record in
-  `state.players` through `custody.hostProfile` + `configurePlayer` (the host's `sim/step.js`
-  already flies every active record), docked at the guest's own station because flight positions
-  never travel. The returned suitcase is written from the profile the host actually holds. A flat
-  **map marker** shows the other pilot, so it is visibly real before a camera exists for it.
-- **Slice 8 — one world on two screens** (8a snapshots out, 8b controls in, 8c the guest's screen
-  follows the host's pocket). **8b is a numbered change to the input rule**, not a side effect:
-  `state.localInput` is filled by `core/input.js` and read by the session, because `sim/` may not
-  import `core/`. Mirroring the local screen's input into remote players' `controls` is cheaper and
-  wrong — it would make a second pilot that answers to somebody else's stick.
-
-**Files:** `docs/REFACTOR_PLAN.md` (step 16's status and slices 7–8), `docs/ROADMAP.md` (step 16's
-cell: slice 3 confirmed, eight slices), `docs/architecture/multiplayer.md` (what the two slices are
-and why they are separate), `docs/HANDOFF.md` (the snapshot, rewritten to fit its size limit).
-
-**No save change (v29), no build change.** Slice 4 is still the next build.
-## 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
-
-**Docs only; no code, no build.** The owner answered the three step-17 questions, and every doc
-that carried them is updated to the answers:
-
-- **Where the server runs / how browsers reach it:** Minecraft-style **port forwarding** — anyone
-  runs the server (own machine, rented, big host), players reach it at `host:port`, no domain or
-  certificate to start. **17b's blocker is closed**: the transport is a WebSocket listener on a
-  forwarded port. The one dependency still to approve is the WebSocket-server library (Node has no
-  built-in WebSocket server).
-- **Who joins:** anyone. A server may require **optional, modular auth** — **Supabase** first (free
-  plan, 50,000 monthly users), behind a small interface so a future provider can be swapped without
-  touching the game. The suitcase model is unchanged; auth only answers who is connecting.
-- **Who may host:** anyone.
-
-**Files:** `docs/REFACTOR_PLAN.md` (the questions block rewritten as the owner's answers; 17b
-unblocked; 17d gains auth), `docs/ROADMAP.md`, `docs/TARGET_ARCHITECTURE.md`,
-`docs/architecture/multiplayer.md`, `docs/HANDOFF.md`, `docs/VISION.md` ("dedicated servers" and
-"accounts" moved out of "Not planned", the decision recorded in the multiplayer section).
-
-**No save or build change.** Step 16 slice 4 (ships visible in multiplayer) is still the next build.
-
-## 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
-
-Playtest 12 typed ExpressTURN's three values, made a code, and the host's own Connection details
-still said **`In use: none (the free public servers only)`** with `Code paths: 1 local, 1 public,
-0 relay`. The server had never been saved, so the offer carried nothing but local and public
-addresses — nothing to do with ExpressTURN answering or not. Three fixes, in the order they bite:
-
-- **The screen lied about itself.** `screenModel()` had two `relay:` keys: the player's saved
-  server, then the transport's *relay mode* flag, which overwrote it. Every reader of
-  `model.relay` (`In use:`, Copy relay settings) saw a boolean. The flag is now `relayMode`;
-  `relay` is the server, as every caller already assumed.
-- **Typing is saving.** A complete relay entry is saved 600 ms after the last keystroke in any
-  of the three boxes, with *"Relay server saved…"* on screen. The new `relayFromFields()` in
-  `net/turn.js` is the one parser for the boxes (whole pasted block, bare `host:port`, a comma
-  list, a `TRTURN:` line; typed username/credential win over the pasted ones). If an offer code
-  already exists it is **remade** immediately, because a code carries the servers that existed
-  when it was made — "saved" without a new code is still a code with `0 relay` paths.
-- **The guest sees the facts on the codes wire.** A session joined by codes has no data channel,
-  so `snapshot().diag` is null and the laptop's panel drew no Connection details at all.
-  `screenModel()` now builds a synthetic diag from the wire's own state plus the code's paths
-  (`codesOnly`): Signalling, Code paths, clock. "Browsers in the room" and the direct-link rows
-  are suppressed there, since a code carries neither.
-- **The In-use line owns the failure:** a saved relay with `codePaths.relay === 0` adds
-  *"— but the last code had no relay path, so that server did not answer. Press Test relay
-  servers."* A duplicate `role` key in the same object was also removed (build warning).
-
-**Files:** `src/net/turn.js` (`relayFromFields`), `src/ui/multiplayer.js` (`screenModel`,
-`relayServerHtml`, `queueRelaySave`, `save-relay`/`clear-relay`), `tests/multiplayer-ui.test.mjs`
-(3 new), `src/data/multiplayer.js` (`BUILD = "2026-11-22i"`).
-
-**Tests: 974, all green** (was 971). **Save format unchanged (v29).** **Build id: `2026-11-22i`.**
-Still unproven: whether ExpressTURN's free tier relays a packet at all — the next playtest's
-*Test relay servers* line decides that, and the panel now shows it on both machines either way.
-
-## 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
-
-**Code change; rebuild needed.** Follow-up trims to the screen from the same day, all at the
-owner's request:
-
-- **The username box is one box**: the "Username:" label moved *inside* it, so it reads
-  `Username: Aceface` instead of a label above a bare field (`src/ui/screens.js`,
-  `src/styles.css`).
-- **Copy world id moved into More details** (it was beside Copy link), and **the
-  "Your world is open. Copy the link and send it to your friend." popup is gone** — the link
-  box says it by itself (`src/ui/multiplayer.js`).
-- **The teal status row is removed from the screen** — "Multiplayer is off." / "Hosting.
-  Waiting for your friend to join…" repeated on both doors (pause and menu) without saying
-  anything the switch and the link box do not (`src/ui/multiplayer.js`, `src/styles.css`).
-- **The chat box**: the typing font now matches the lines above it (no more monospace input),
-  and the **Players column stays compact when the box is open** (about its collapsed width),
-  so the Pin button sits right next to the "Players" heading and the lines get the space
-  (`src/styles.css`).
-
-**Files:** `src/ui/multiplayer.js`, `src/ui/screens.js`, `src/styles.css`; tests updated
-(`tests/multiplayer-ui.test.mjs`).
-
-**Save format unchanged (v29).** Rebuild needed. **Build id: `2026-11-22g`.**
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
+- 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
+- 2026-11-22: Step 16 is eight slices — the owner agreed the plan
+- 2026-11-22: Slice 3 confirmed by the owner; "one world, two ships visible" planned as slices 7 and 8
+- 2026-11-22: Step 17's open questions answered — Minecraft-style servers, anyone hosts, optional Supabase auth
+- 2026-11-22: Playtest 13 of slice 3 — a relay server that cannot be left unsaved
+- 2026-11-22: The multiplayer screen, refined — labels inside boxes, no redundant rows
 - 2026-11-22: The multiplayer screen is trimmed to a simple box
 
 - 2026-11-22: Step 17 revised — slices 17a–17d, and the server's open questions

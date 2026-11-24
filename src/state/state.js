@@ -408,6 +408,10 @@ export const state = {
     cargo: null,       // the in-flight ship inventory; null while closed
     cache: null,       // the rift-cache trade (ui/cache.js); null while closed
     multiplayer: false, // the multiplayer screen (ui/multiplayer.js); a modal while open
+    // Raised only by a press on Open World, and only when the copy in a friend's world is
+    // newer (owner, playtest 18 — before that, being away replaced the whole menu). Session
+    // only: a reload is a fresh menu, and the marker itself is on the save.
+    awayCard: false,
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
     tab: "l",          // right station panel: l missions (accept), i inventory, b base, s saves

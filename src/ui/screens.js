@@ -14,6 +14,7 @@ import { CACHE, STATION, capacityOf, loadOf, slotsAt } from "../sim/inventory.js
 import { moduleInfoData } from "../sim/fitting.js";
 import { cacheTradeRecord, cacheUnits } from "../sim/instances.js";
 import { state } from "../state/state.js";
+import { BUILD } from "../data/multiplayer.js";
 import { SLOT_COUNT, readSlot } from "../state/storage.js";
 import {
   storedUnits,
@@ -98,22 +99,47 @@ function awayCardHtml(away) {
     `<h2>Your pilot is in ${host}</h2>` +
     `<p>It took its ship, its cargo, its credits and its station lockers with it — they are all ` +
     `in ${host} until it comes home. This galaxy is paused while you are away.</p>` +
+    // **Rejoin is gone** (owner, playtest 18: *"Remove the rejoin button I dont think it serves
+    // much purpose right now. If you want to rejoin the friends world you go -> main menu ->
+    // join multiplayer and join here."*). The card is about the pilot's save, not the wire: it
+    // offers the two acts that change the save, and the menu for everything else. Joining is
+    // already one press from the main menu, and that path explains itself.
     `<p class="away-actions">` +
-    `<button class="go" data-a="rejoin">Rejoin</button>` +
     `<button class="go" data-a="comehome">Bring pilot home</button>` +
+    `<button class="go" data-a="menu">Main menu</button>` +
     `</p>` +
-    `<p class="away-note"><b>Rejoin</b> connects you to that world again so you can see what ` +
-    `your pilot is doing there — your own galaxy stays paused. <b>Bring pilot home</b> ends ` +
-    `the visit and unpacks everything into this one.</p>` +
+    `<p class="away-note"><b>Bring pilot home</b> makes the copy from that world your own save — ` +
+    `everything your pilot did there comes back with it.</p>` +
     `<p class="away-note">Bringing it home works even if your friend is offline: your pilot ` +
     `carries its own copy of everything it has done.</p>` +
+    // Every screen needs a door that is not "make a decision about your save" (playtest 17).
+    `<p class="away-note"><b>Main menu</b> just shows the ordinary menu — your pilot stays where ` +
+    `it is, and this card comes back when you return.</p>` +
+    // **Which build this is, on the card itself** (owner, playtest 17: *"Still no options to
+    // bring me back to main menu. Stuck here."* while looking at `Bring pilot home` / `Rejoin`
+    // only). The Main menu button and the fix to `Bring pilot home` both landed in
+    // `2026-11-23f`; a card without them means the browser is running an older download, not
+    // that the code is wrong. This line is the whole difference between those two readings,
+    // and it is on the one screen a stuck player can reach.
+    `<p class="away-note away-build">Build ${esc(BUILD)}</p>` +
     `</div>`
   );
 }
 
 export function introHtml() {
-  // Slice 4: away from home? The menu is not the question any more.
-  if (state.away) return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
+  // **The card is not the title screen any more** (owner, playtest 18).
+  //
+  // It used to be: being away meant the menu stopped being a menu. The owner's rule instead:
+  // *"This your pilot is in menu should only come if you try to join your local open world but
+  // a more new version of your save was on an online world."* The menu is always the menu; the
+  // card is raised by Open World's press, from `ACTIONS.intro`, and it only appears there when
+  // `net/session.js`'s `newerCopyAway()` says a newer copy is actually waiting. Otherwise the
+  // pilot's own world simply opens.
+  //
+  // `state.ui.awayCard` is therefore the switch, not the suggestion: it is set only by a press
+  // on Open World, and its "Main menu" press clears it (playtest 17's door), landing the player
+  // on the ordinary menu with the marker untouched.
+  if (state.away && state.ui?.awayCard) return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
   return (
     `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +
     `<p>You fly out of ${stationAt(DEFAULT_PLACE).n}, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +
@@ -137,8 +163,13 @@ export function introHtml() {
     `<div class="main-menu-actions">` +
     // The label is part of the box, not a row above it: the box reads "Username: Aceface"
     // (owner's request, 2026-11-22).
-    `<div class="menu-username-box"><span class="menu-username-prefix">Username:</span>` +
-    `<input id="menu-username" class="menu-username" maxlength="24" placeholder="your name" ` +
+    // **The name alone, centred** (owner, playtest 18): the "Username:" label is gone and the
+    // text sits in the middle of the box, so the box reads like the Campaign / Open World
+    // buttons under it rather than like a form. The placeholder carries the meaning instead —
+    // an empty box says "Username" faintly, in the same centred style.
+    `<div class="menu-username-box">` +
+    `<input id="menu-username" class="menu-username" maxlength="24" placeholder="Username" ` +
+    `aria-label="Your username" ` +
     `value="${esc(readSettings().name || "")}" autocomplete="off" spellcheck="false"></div>` +
     `<button class="go" data-a="campaign">Campaign</button>` +
     `<button class="go" data-a="intro">Open World</button>` +

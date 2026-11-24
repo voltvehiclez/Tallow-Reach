@@ -45,7 +45,7 @@ import { createChannel, stateLine } from "./transport.js";
 import { createPasteLink, codeWorldId } from "./paste.js";
 import { readMessage, cleanMessage, isChatLine } from "./protocol.js";
 import {
-  handshake, makeToken, checkOut, checkIn, relocate, compare,
+  handshake, makeToken, checkOut, checkIn, relocate, compare, isNewerCopy,
   guestRecord, bundleFromProfile, bundleBytes, awayRecord,
 } from "./custody.js";
 import {
@@ -103,15 +103,26 @@ const saveKit = {
    * emptying has to reach the save that is actually stored.
    */
   install: next => {
-    if (!next || typeof next !== "object" || !next.profile) return;
-    applySave({ ...currentRootSave(), open: next });
+    if (!next || typeof next !== "object") return;
+    // A dual-mode envelope installs itself; a mode save goes into the half it belongs to.
+    if (next.open || next.campaign) { applySave(next); return; }
+    if (!next.profile) return;
+    const mode = state.mode === "campaign" ? "campaign" : "open";
+    applySave({ ...currentRootSave(), [mode]: next });
   },
 };
 
-/** Replace the save handles (tests, and any host that keeps its save elsewhere). */
+/**
+ * Replace the save handles (tests, and any host that keeps its save elsewhere).
+ *
+ * `install` is part of the kit for the same reason `read` is: it is the only handle that can
+ * put a WHOLE pilot back, and the title card's Bring pilot home calls the module's own
+ * `saveKit` rather than a session's. A test that cannot replace it cannot model the game.
+ */
 export function setSaveKit(kit) {
   saveKit.read = kit.read || saveKit.read;
   saveKit.write = kit.write || saveKit.write;
+  saveKit.install = kit.install || saveKit.install;
 }
 
 /** The live save, as the session sees it (a fresh snapshot every call). */
@@ -138,12 +149,30 @@ export const current = () => active;
 export const isOn = () => !!active && active.on;
 
 /** What a screen draws, without touching the session. */
-export const snapshot = () => (active ? active.snapshot() : emptySnapshot());
+/**
+ * The session's snapshot, plus the TWO facts a screen needs and cannot get anywhere else:
+ * whether the player's standing switch is on, and whether a session object exists at all.
+ *
+ * The owner's report (playtest 17) is why. The multiplayer switch reads *Off* until a world
+ * has been HOSTED (`switchOn: hosting`), and the switch is disabled while visiting — so a
+ * player who enters a friend's world silently sits in a state where the one control that
+ * opens multiplayer reads Off, greyed out, and nothing on screen can be pressed. The switch
+ * means "multiplayer is on on this browser", which is what `readSettings().enabled` records;
+ * clicking it must always find a session to act on, so one is created for a switched-on,
+ * idle browser.
+ */
+export const snapshot = () => {
+  const live = active ? active.snapshot() : emptySnapshot();
+  return { ...live, enabled: readSettings().enabled === true, session: !!active };
+};
 
 function emptySnapshot() {
   return {
     on: false,
     role: null,
+    // Nothing is running, but the standing switch may still be on (see `snapshot`).
+    enabled: readSettings().enabled === true,
+    session: false,
     state: "idle",
     line: "Multiplayer is off.",
     worldId: null,
@@ -195,7 +224,13 @@ export async function joinWorld({ link, name = readSettings().name } = {}) {
   const who = cleanName(name);
   if (!who) return { ok: false, message: "Set a username first." };
   if (state.mode === "campaign") return { ok: false, message: "The campaign is single player. Joining works from the open world." };
-  if (isAway(liveSave())) return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
+  // Rejoining the world the pilot is ALREADY visiting is the whole point of the away card's
+  // Rejoin button, so the away marker only refuses a join to a DIFFERENT world (playtest 15:
+  // a visitor could not get back into the friends' world it was still standing in).
+  const awayNow = liveSave()?.away || null;
+  if (awayNow && awayNow.worldId !== found.worldId) {
+    return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
+  }
   if (active) stop();
 
   const session = createSession({ role: "guest", worldId: found.worldId, name: who, token: found.token, save: saveKit });
@@ -1261,7 +1296,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     finishCodes,
     acceptCodes,
     waitForWelcome,
-    // Slice 4: the guest's "Bring my pilot" press.
+    // Slice 4: the guest's "Bring my pilot" press, and the in-world prompt asking for it.
     bringPilot,
     reconnect,
     escalateToRelay,
@@ -1402,11 +1437,24 @@ export function bringPilot() {
  * reads `state.away` and a card that cannot go away is the bug.
  */
 export function bringPilotHomeAtMenu({ mode = "open" } = {}) {
-  const root = liveSave();
-  const half = root && typeof root === "object" ? root[mode] : null;
-  if (!half || typeof half !== "object") {
+  const live = liveSave();
+  // **`liveSave()` is a MODE save, not the dual-mode envelope** (playtest 15).
+  //
+  // `saveKit.read` returns `sanitizeSave(...)` — one pilot with `profile`, `world` and
+  // `away` — while a root save is `{ v, mode, open, campaign }`. This function was written
+  // against the envelope and indexed `root[mode]`, which on a mode save is `undefined`
+  // every single time, so "Bring pilot home" could never work from the title: it refused
+  // before it looked at the suitcase. Accept both, because the seam is injectable (a test
+  // or a host may hand the session a root), and a wrong guess here is a pilot trapped on
+  // the away card.
+  const modeSave = isModeSave(live) ? live : (live && typeof live === "object" ? live[mode] : null);
+  if (!modeSave || typeof modeSave !== "object") {
     return { ok: false, message: "Your pilot's save could not be read, so it cannot come home yet. Do not reset — tell the host." };
   }
+  // Coming home is about ONE pilot, so everything below works on the mode save, and only
+  // an actual envelope is written back as an envelope (`rootWithMode`).
+  const root = isModeSave(live) ? null : live;
+  const half = modeSave;
   if (!half.away) {
     // Nothing stored to unpack: the live state is all there is. Clear it rather than trap
     // the player on a card about a pilot that is not away.
@@ -1415,14 +1463,73 @@ export function bringPilotHomeAtMenu({ mode = "open" } = {}) {
   }
   const done = bringPilotHome(half);
   if (!done.ok) return done;
-  const next = { ...root, [mode]: done.save };
+  // Write back in the shape the seam gave us: a mode save as a mode save (the game's own
+  // seam installs the whole pilot), an envelope as an envelope.
+  const next = root ? { ...root, [mode]: done.save } : done.save;
   saveKit.write(next);
+  // `write` is the host's narrow seam and only ever takes the guest list and the world id,
+  // so the returned pilot has to be installed too or the suitcase's contents never reach
+  // the stored save (LESSONS L34 — the same trap that made cargo stick after coming home).
+  if (saveKit.install) saveKit.install(next);
   state.away = null;
   if (active && active.role === "guest") {
     try { active.stop(); } catch (e) { /* the host may be long gone */ }
     active = null;
   }
-  return { ok: true, save: next, message: done.message };
+  return { ok: true, save: next, modeSave: done.save, message: done.message };
+}
+
+/**
+ * One pilot's half of a save (`profile`, `world`, `away`) — as opposed to the dual-mode
+ * envelope (`{ v, mode, open, campaign }`) that holds two of them.
+ *
+ * The difference matters: `saveKit.read()` hands back a MODE save, and reading it as an
+ * envelope yields `undefined` for every mode. Nothing else in this file needs the
+ * distinction, so this is the one place that decides it.
+ */
+function isModeSave(save) {
+  return !!save && typeof save === "object" && !Array.isArray(save) &&
+    !!save.profile && typeof save.profile === "object";
+}
+
+/**
+ * **Is a newer copy of this pilot waiting in the friend's world?** (owner, playtest 18)
+ *
+ * The owner's rule: the "your pilot is in Ada's world" card shows *only* when the player tries
+ * to open their own world and the copy online is newer. This answers that question from the
+ * STORED save, so the title screen can ask it without loading a world, and Open World can ask it
+ * again at the moment of pressing.
+ *
+ * `mine` is the frozen travelling half left in the home save by `checkOut` — it copies the
+ * pilot's own fields into the suitcase and leaves them in place, so the home profile still holds
+ * the pilot exactly as it left, which is the baseline this asks about. `theirs` is the suitcase
+ * under `away` (the copy the host keeps writing back), in the same shape. See
+ * `custody.isNewerCopy` for the rules and for why a tie is NOT newer.
+ *
+ * Reads, never writes. Returns false when there is no away marker or no readable pair, so a
+ * damaged marker can never raise a card that the player cannot dismiss.
+ */
+export function newerCopyAway({ mode = "open" } = {}) {
+  let live = null;
+  try {
+    live = liveSave();
+  } catch (e) {
+    return false;
+  }
+  const modeSave = isModeSave(live) ? live : (live && typeof live === "object" ? live[mode] : null);
+  const away = modeSave?.away || state.away || null;
+  if (!away) return false;
+  const theirs = away.suitcase || readAwayCopy(away.worldId);
+  if (!theirs?.profile) return false;
+  let mine = null;
+  try {
+    // The home copy is a whole save; `checkOut`'s travelling half is `profile` + the lockers
+    // that are still in its stations, which is exactly the shape `isNewerCopy` reads.
+    mine = { profile: modeSave?.profile || {}, cr: modeSave?.profile?.cr };
+  } catch (e) {
+    return false;
+  }
+  return isNewerCopy(mine, theirs);
 }
 
 /**
@@ -1499,8 +1606,13 @@ export async function codesAcceptFrom(offer, { name = readSettings().name } = {}
   const who = cleanName(name);
   if (!who) return { ok: false, message: "Set a username first." };
   if (state.mode === "campaign") return { ok: false, message: "The campaign is single player. Joining works from the open world." };
-  if (isAway(liveSave())) return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
   const invited = codeWorldId(offer);
+  // Same rule as `joinWorld`: a code for the world the pilot is already visiting is a
+  // rejoin, not a second trip away.
+  const awayNow = liveSave()?.away || null;
+  if (awayNow && invited && awayNow.worldId !== invited) {
+    return { ok: false, message: "Your pilot is already visiting another world. Bring it home first." };
+  }
   if (!invited) {
     return { ok: false, message: "That is not a host's join code. Ask them to copy the whole code — it starts with TRJOIN:." };
   }
@@ -1552,7 +1664,21 @@ export function setUsername(text) {
 export function setEnabled(value) {
   const wanted = value === true;
   writeSettings({ enabled: wanted });
-  if (!wanted) stop();
+  if (!wanted) {
+    stop();
+    return wanted;
+  }
+  // Switched ON with nothing running: create an idle session so the switch has something to
+  // act on and a screen has a snapshot to draw. A session is a host or a guest, so this is a
+  // host that has not opened a room yet (`hostWorld` gives it an id the first time) — which is
+  // exactly what "Multiplayer: On, waiting for you to send a link" means.
+  if (!active) {
+    const who = readSettings().name;
+    if (cleanName(who)) {
+      active = createSession({ role: "host", worldId: null, name: cleanName(who), token: makeToken(NET.tokenBytes), save: saveKit });
+    }
+  }
+  if (active) active.publish?.();
   return wanted;
 }
 
