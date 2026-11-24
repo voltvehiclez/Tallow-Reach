@@ -12,7 +12,7 @@ import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
 // Named imports only, like every other line here: `net/session.js` is injected into tests with
 // `setSaveKit`, so this file must never hold a copy of something it can ask for.
-import { leaveVisit, joinWorld, newerCopyAway } from "../net/session.js";
+import { leaveVisit, joinWorld } from "../net/session.js";
 import { makeJoinUrl, pageBase } from "../net/join-link.js";
 import { readSettings, writeSettings } from "../net/settings.js";
 // The same guard `installDragListeners` uses below: a headless import (a test) has a
@@ -193,6 +193,16 @@ export function setupMenu(options = {}) {
   on("mp-enter-world", () => {
     if (!state.ui.intro) return;
     enterGameMode("open");
+    // **This is not your friend's world yet, and the game says so** (owner, playtest 21: *"drop me
+    // into the local world, add a pop up that this is not the hosts world (yet)"*). A stand-in
+    // that pretends to be somebody's world is worse than a placeholder that admits it: the pilot
+    // is in Ada's galaxy, not this one, and anything earned here does not go home with it. The
+    // sentence is a notice rather than a card because it has no decision in it — it is news, and
+    // the panel the player just left carries the same words for as long as the visit lasts.
+    if (state.away) {
+      const where = state.away.hostName ? `${state.away.hostName}'s world` : "your friend's world";
+      showNotice(`This is your own galaxy, not ${where} — their world on your screen is not built yet (step 16, slice 7). Anything you earn or buy here stays here.`);
+    }
     // The same landing as the Open World button: a docked pilot gets the station panel,
     // a pilot out in space gets the view.
     if (!state.player || state.player.docked) render();
@@ -379,8 +389,22 @@ function comeHome() {
  */
 
 function enterGameMode(mode) {
+  // **A pilot that is away opens the stand-in world, not its own** (owner, playtests 20 and 21).
+  //
+  // Playtest 20 (A3) put a guard here that refused every door into the open world while the
+  // marker was set, and playtest 21 found the cost: after *Bring my pilot* the player sat on the
+  // join screen with nothing left to press — *"Im just stuck at the menu where you add link …
+  // Should transition to their world when im in like this."* The owner's answer was to keep the
+  // stand-in and say so: what loads today IS this browser's own galaxy, carrying the pilot's
+  // latest copy, because the friend's world cannot be drawn on this screen until slices 7-8. The
+  // notice in `on("mp-enter-world")` is where that is said; the title's **Open World** press
+  // still asks the custody question first (`ACTIONS.intro`), which is the playtest-20 rule that
+  // has not changed.
   state.ui.intro = false;
   state.ui.campaign = false;
+  // A prompt about a connection is not news once the player is flying their own world
+  // (step 16 slice 5); the marker itself is untouched, so nothing is lost by closing it.
+  state.ui.lostHost = null;
   const switched = switchGameMode(mode);
   if (switched) afterSaveChange();
   resetStationPanels(state.ui);
@@ -401,7 +425,12 @@ const ACTIONS = {
   // (the multiplayer action below asks for one). Open World must start with no settings
   // stored at all — the step-10 fixes and the 11B recovery notices depend on it.
   intro() {
-    // **A pilot that is away does not open its own world at all** (owner, playtest 16).
+    // **A pilot that is away does not open its own world from THIS press** (playtests 16-21).
+    //
+    // The press asks; the visit opens (playtest 21): a player already in a friend's world gets
+    // into the stand-in galaxy from the multiplayer screen, because that is where they are — but
+    // a player on the menu pressing Open World is choosing between a pilot at home and a pilot
+    // somewhere else, and that is a question about their save, so it is asked here.
     //
     // It used to try `comeHome()` and carry on if that worked, which read as "Open World
     // silently unpacks my pilot". The owner asked for the other thing: the away card is the
@@ -409,26 +438,26 @@ const ACTIONS = {
     // a frozen pilot would fly a hull whose cargo is in another galaxy, and unpacking without
     // being asked is a decision about somebody's save.
     //
-    // **Playtest 18 moved WHERE the card appears, and this press is the one place it is
-    // decided** (owner's rule: *"This your pilot is in menu should only come if you try to join
-    // your local open world but a more new version of your save was on an online world."*).
+    // **Playtest 18 moved WHERE the card appears: a press on Open World, never by itself.**
+    // **Playtest 20 moved WHEN it appears from that press: always, while the pilot is away**
+    // (owner: *"logging into the guests own open world does not give a prompt to bring their
+    // pilot home. It should to confirm its updating to the local open world to latest version
+    // of their pilot."*).
     //
-    //   away + a NEWER copy online -> raise the card. Nothing opens: the newer pilot has to be
-    //                                 brought home first (the card's own button), and after
-    //                                 that press `state.away` is cleared and Open World works.
-    //   away + nothing newer        -> open the pilot's own world, exactly as if it were home.
-    //
-    // The second branch is the fix for the trap: being *away* is no longer enough to stop a
-    // player flying. The frozen travelling half stays frozen in the save while they do, so
-    // bringing the newer copy home later still works, and nothing is overwritten.
+    // The earlier rule asked whether a newer copy was waiting and opened the world when there
+    // was not, which is a question the player cannot answer: "nothing changed there" and "this
+    // world is not up to date with my pilot" are different facts, and only the second one is
+    // about the save. Opening your own world while your pilot is in somebody else's is always
+    // a custody decision — bring the pilot home, or go back to the menu — so this press always
+    // asks. There is nothing to compare, either (owner, playtest 20: *"game should always try to
+    // use the latest pilot version"*): the card has one answer, and **Bring pilot home** always
+    // takes the copy that world holds. It still has its **Main menu** door (playtest 17), so
+    // there is no trap.
     if (state.away) {
-      if (newerCopyAway({ mode: state.mode === "campaign" ? "campaign" : "open" })) {
-        state.ui.awayCard = true;
-        if (state.ui) state.ui.intro = true;
-        render();
-        return;
-      }
-      state.ui.awayCard = false;
+      state.ui.awayCard = true;
+      state.ui.intro = true;
+      render();
+      return;
     }
     enterGameMode("open");
   },
@@ -458,7 +487,23 @@ const ACTIONS = {
     // by now — `bringPilotHome` put the newer one in its place — so pressing Open World opens
     // the world rather than raising the card again.
     state.ui.awayCard = false;
+    // A lost connection and a newer copy are two screens about the same pilot: once it is home,
+    // neither of them says anything true (step 16 slice 5).
+    state.ui.lostHost = null;
     showNotice("Your pilot is home.");
+    render();
+  },
+  /**
+   * **The lost-connection prompt's one button** (step 16 slice 5, owner 2026-11-24).
+   *
+   * Dismissing it is the whole of it: the player is already on the main menu — `ui/multiplayer.js`
+   * put them there when the connection went — so this closes the prompt and reveals the menu
+   * underneath. It touches nothing else: not the save, not the away marker, not the session
+   * (which is already stopped). That is the point of it — a prompt about a connection must not
+   * be able to change anything a player owns.
+   */
+  lostHostOk() {
+    state.ui.lostHost = null;
     render();
   },
   /**
@@ -471,6 +516,7 @@ const ACTIONS = {
    */
   menu() {
     state.ui.awayCard = false;
+    state.ui.lostHost = null;
     render();
   },
   // Step 16 slice 3: the title menu's way into co-op. One screen, opened here, that both

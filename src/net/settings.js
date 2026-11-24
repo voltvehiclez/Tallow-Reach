@@ -20,6 +20,10 @@ import { NET } from "../data/multiplayer.js";
 const clean = value =>
   (typeof value === "string" ? value : "").replace(/\s+/g, " ").trim().slice(0, NET.nameMax);
 
+/** A secret is letters and digits (`custody.makeToken`), or nothing at all. */
+const cleanToken = value =>
+  String(typeof value === "string" ? value : "").replace(/[^A-Za-z0-9]/g, "").slice(0, 64);
+
 /**
  * The player's own relay server, as far as storage is concerned: three short strings or
  * nothing. It is validated properly in `net/turn.js` (a server needs a login to be usable);
@@ -44,9 +48,15 @@ function cleanRelay(value) {
  *                 The game brings its own (ExpressTURN's free tier, `ICE.turn`); this is the
  *                 player's, tried first, for when the built-in one stops answering or when they
  *                 have a better one (see `net/turn.js`).
+ *   pilotToken    **this browser's own identity as a guest** (playtest 22). It used to be the
+ *                 secret in the join link, which is one per world — so two friends using the same
+ *                 link were the same pilot to the host, and the second arrival kicked the first.
+ *                 An invitation is not an identity: this is made once per browser and kept, so a
+ *                 rejoin after a lost connection is still the same pilot to the host, and a
+ *                 second window of the same browser is still a takeover.
  */
 export function readSettings() {
-  const fallback = { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" };
+  const fallback = { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "", pilotToken: "" };
   try {
     const raw = globalThis.localStorage?.getItem(KEY);
     if (!raw) return fallback;
@@ -57,6 +67,7 @@ export function readSettings() {
       autoJoin: value?.autoJoin !== false,
       relay: cleanRelay(value?.relay),
       lastJoin: typeof value?.lastJoin === "string" ? value.lastJoin : "",
+      pilotToken: cleanToken(value?.pilotToken),
     };
   } catch (e) {
     // No storage, or something wrote nonsense there: multiplayer still works for
@@ -74,6 +85,7 @@ export function writeSettings(patch = {}) {
     autoJoin: next.autoJoin !== false,
     relay: cleanRelay(next.relay),
     lastJoin: typeof next.lastJoin === "string" ? next.lastJoin : "",
+    pilotToken: cleanToken(next.pilotToken),
   };
   try {
     globalThis.localStorage?.setItem(KEY, JSON.stringify(record));

@@ -1257,8 +1257,8 @@ export function cleanAway(raw) {
  * copy — so a damaged entry is dropped rather than failing the save.
  *
  * A record with no token hash cannot be the record of anybody (there is nothing to
- * prove against), so it is dropped. There is no count limit here: `NET.maxGuests`
- * limits a live hosted session (slice 4), not what a save may have recorded.
+ * prove against), so it is dropped. There is no count limit here: `NET.maxGuests` is a valve on a
+ * live hosted session, not a player cap and not a limit on what a save may have recorded.
  */
 function cleanGuests(raw) {
   const out = {};

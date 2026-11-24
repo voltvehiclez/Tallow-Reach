@@ -1,3 +1,194 @@
+## 2026-11-23: The multiplayer switch could not be pressed by a visitor
+
+**Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button
+doesnt work so i cant test the build properly."* Two faults, fatal together.
+
+- **The switch was drawn from `hosting` alone**, so a **visitor** saw *Multiplayer: Off* — and the
+  same control was **disabled while visiting** (`canSwitch: !!name && !visiting`). A guest was
+  therefore looking at a greyed-out Off switch with no way to press it.
+- **The pause surface does not draw the join block** (`surface === "host"`), and the only Leave
+  button lived there — so from the pause card a guest had no exit at all. That is why leaving via
+  the screen "worked" and the switch did not: they were different screens.
+- **Fixed:** the switch is on for `hosting || visiting` (still drawn from the session, never the
+  stored setting — L32), it is usable in every state (`canSwitch: !!name`), and pressing it while
+  visiting **leaves the friend's world** with a sentence saying the pilot is still there. A
+  `data-mp="leave"` button is also drawn beside the switch on the pause surface.
+- **`toggleHosting` was split**: its body moved to `openWorld()`, and the switch's branches are now
+  four lines that read like its label (visiting → leave, hosting → close, otherwise → open). One
+  press still hosts, exactly as before.
+- **`session.setEnabled(true)` now creates an idle host session** when nothing is running (it used
+  to write the setting and stop), so the switch always has something to act on; `snapshot()` gained
+  `enabled` and `session` so a screen can tell those apart. `setEnabled(false)` still stops
+  everything.
+
+**Tests:** three added to `tests/multiplayer-playtest16.test.mjs` (a visitor's switch is on and
+pressable and leaves; the switch still opens a world; the session can be switched on with nothing
+running). Reverting `switchOn`/`canSwitch` fails the first. **Build `2026-11-23f`, save v29
+unchanged. 1029 tests.**
+
+## 2026-11-23: The join box holds the choice — and the card gets a door
+
+**Code change; rebuild needed.** The owner's design for playtest 17, and the two interaction bugs
+that came before it.
+
+- **A join no longer enters the world.** `afterJoined` used to close the multiplayer screen and
+  load the world the moment a link connected, which destroyed the only *Bring my pilot* button
+  before the player could press it (playtest 16) and made a mid-join click race the world load.
+  The screen now stays up, and the **same join box** becomes the choice the owner asked for:
+  *Connected. Choose what to do* — **Bring my pilot**, or **Enter the world without my pilot**.
+  Entering the world is its own action (`data-mp="join-world"`), and after a carry the box offers
+  *Enter the world*.
+- **The in-world prompt is deleted** (`#mp-bring-card`, its CSS and the `mp-bring-prompt` event).
+  It was a workaround for "the join screen closes"; the owner's ordering removes the cause, so the
+  workaround goes. Net deletion.
+- **The away card has a Main menu button** (owner: *"no option even to go to main menu... so hes
+  stuck"*). It dismisses the card for the moment (`state.ui.awayCardDismissed`) and is **not** a
+  decision about the save: the pilot stays away, and any arrival at the menu shows the card again.
+- **Bring pilot home is its own press again.** It routed through `ACTIONS.intro()` — Open World's
+  action — which refuses while a pilot is away, so the card's own button answered with the sentence
+  meant for Open World (playtest 17: *"a message I dont understand"*). It now calls
+  `bringPilotHomeAtMenu` directly, which is the owner's definition: *make the version of the
+  character that was in the friend's world the latest version of the local open world.*
+- **Rejoin with the host gone says so**: *"Ada is not there — their game is closed"*, instead of
+  *"Connection cancelled"*, which described the wire rather than the situation.
+- **Placeholder, at the owner's request:** entering the world loads the guest's **own** galaxy while
+  the connection stays live for chat and the pilot. That is honest for this build — the wire carries
+  no ship or world state (`KINDS` in `net/protocol.js` has no position messages), so the two players
+  were never in one world. Sharing it is slice 8.
+
+**Tests:** `tests/multiplayer-playtest16.test.mjs` rewritten to the new design (6), plus the
+playtest-14 guard replaced (joining never enters the world, for anybody). Verified by reverting the
+`comehome` routing and the `afterJoined` change. **Build `2026-11-23e`, save v29 unchanged. 1026 tests.**
+
+## 2026-11-23: Joining entered the world and left the pilot behind
+
+**Code change; rebuild needed.** The owner could join a friend's world, play, and never be offered
+**Bring my pilot** — because the offer was on the join screen and **a successful join closes that
+screen and enters the world**. The button was destroyed by the very thing it was meant to follow.
+
+- **The prompt is now a card in the world** (`#mp-bring-card`, `src/ui/multiplayer.js`), bottom
+  right, with *Bring my pilot* and *Not now*. It is not a modal: a guest who only wants to look
+  around and chat can ignore it, and the world keeps running behind it. The press goes through the
+  same `session.bringPilot()` the pause screen uses.
+- **The session decides when it is wanted** and says so on the bus: a new `mp-bring-prompt
+  {show, text}` event from `net/session.js` `publishBringPrompt()` (derived — guest, welcomed, has
+  not carried, not already away — never latched), plus `askBringPrompt()` so a screen that mounted
+  after the event can ask again. `net/` still never touches the DOM.
+- **Open World now refuses while the pilot is away** (owner's decision, playtest 16): it says where
+  the pilot is and leaves the card up. It used to try `comeHome()` and carry on, which read as
+  "Open World silently unpacks my pilot and drops me in".
+- **Rejoin reopens the multiplayer screen on success.** It connected (the host's list showed the
+  name) and then did nothing visible: the player stayed on the card with a "Rejoined" sentence — a
+  rejoin you cannot see is indistinguishable from one that failed. It still does **not** enter the
+  world, because the pilot is frozen there.
+- The click-mid-join race the owner found ("quickly click Bring my pilot before it logs me in")
+  goes with the old button: there is no longer a prompt to click while the world is loading.
+
+**Tests:** new `tests/multiplayer-playtest16.test.mjs` (6), including a real two-session join on the
+in-memory wire that asserts the prompt appears on join and disappears once the pilot actually
+crosses. Each fix verified by reverting it. **Build `2026-11-23d`, save v29 unchanged. 1026 tests.**
+
+## 2026-11-23: The away card was a trap — Bring pilot home never worked
+
+**Code change; rebuild needed.** The owner's laptop could not come home, could not rejoin, and a
+refresh did not help: three symptoms of **one** confusion between two records.
+
+- **`saveKit.read()` returns a MODE save** (`{ profile, world, away }` — one pilot), while
+  `bringPilotHomeAtMenu` was written against the **dual-mode envelope** (`{ v, mode, open, campaign }`)
+  and indexed `root[mode]`. On a mode save that is `undefined` **every time**, so "Bring pilot home"
+  refused before it looked at the suitcase: *"Your pilot's save could not be read"*. This is why it
+  failed on a first boot in Brave, in Chrome, on refresh — it never depended on the connection.
+  `src/net/session.js` now accepts **both** shapes (`isModeSave`), writes back in the shape it was
+  given, and returns the mode save as `modeSave` so the screen loads the right thing.
+- **Rejoin was refused by its own guard.** `joinWorld` (and the paste-code door) rejected any join
+  while an away marker existed — including a join to the world the pilot was *already in*. The guard
+  now refuses only a **different** world, so rejoining is a rejoin and not a second trip.
+- **Coming home also installs, not just writes.** `write` is the host's narrow seam (guest list +
+  world id), so the returned pilot never reached the disk; the card cleared, the screen said "home",
+  and a refresh put the pilot back on the card (L34's trap in a second place). `saveKit.install` is
+  called, and `setSaveKit` can now replace `install` too.
+- **Order changed in `ui/menu.js` `comeHome`:** the suitcase opens **before** the visit is left. The
+  old order dropped the connection and *then* reported the refusal — which is exactly what the owner
+  saw: clicking Bring pilot home removed the row from the host's players list while the laptop stayed
+  stuck on the card, with Rejoin unable to get back in. A refusal now changes nothing.
+- `saveKit.install` also understands a mode save (it used to assume an envelope and would have
+  installed the wrong half).
+
+**Tests:** new `tests/multiplayer-playtest15.test.mjs` (7 tests) drives the real functions and the
+in-memory wire: a mode save can be brought home and its locker really comes back, an envelope still
+works, a genuinely unreadable save still refuses, a real rejoin connects while the pilot stays away,
+and a different world is still refused. Each was checked by **reverting the fix** and watching it fail
+with the owner's own sentence: `the card must be leavable; it said: Your pilot's save could not be
+read…` and `Rejoin must be allowed; it said: Your pilot is already visiting another world.` Save
+version unchanged (v29). 1020 tests.
+
+---
+
+## 2026-11-23: Test Ship faced sideways — the model brings its own rotation
+
+Owner, playtest 15: *"it is looking to the left, needs to be rotated 90 degrees clockwise when looking from the top."*
+
+The new `testship-v1.glb` carries a **+90° Y rotation on its own node** (quaternion `[0, 0.7071, 0, 0.7071]`); the
+old file had none. So as loaded, the nose already pointed forward — and the old file's `modelYaw: Math.PI / 2` was
+applied **on top**, turning it to face −X. `modelYaw` corrects the *source model*, not the raw mesh, so a replacement
+`.glb` usually needs a different value. It is now `0`.
+
+`tests/compressed-model.test.mjs` replaces its old `modelYaw === π/2` assertion with one that **applies the node
+rotation and then the yaw to the nose vector** and asserts the result is −Z: with `π/2` restored it fails with
+`(-1.00, 0.00, -0.00)`, which is exactly the bug the owner saw. `src/data/README.md` records the trap.
+
+**Note on the diagnosis:** raw-vertex analysis said the mesh runs along +X and `+π/2` *should* be forward — which
+contradicted the report. The node rotation is what the first three attempts missed; three.js's own matrix confirmed it.
+
+**Files:** `src/data/ships.js`, `src/data/README.md`, `tests/compressed-model.test.mjs`. **Tests: 1013, all green.**
+Save unchanged (v29). Imported-look only — no gameplay value touched.
+
+## 2026-11-23: Where a joining pilot lands, and where it comes home to
+
+The owner asked how arrival and return choose a place, and what happens when a station exists in one
+world and not the other. Answering it found **two holes** on the return path.
+
+- **Arriving** (already right): a guest lands **docked at its own active ship's station** if the host's
+  galaxy has that pocket, otherwise at **Meridian**. Flight positions never travel.
+- **Coming home** (was wrong): a stack bought at a station **only the friend's world has** came home
+  filed under that station's key in a galaxy with no such station — counted, saved and **unreachable for
+  ever**; and a stack that waited at the friend's Meridian came home to Meridian instead of its **own**
+  station, even though its `origin` was still recorded. `checkIn` now asks the home world's station index,
+  prefers `origin`, and sends anything it cannot place to Meridian with its origin kept.
+- Hulls already followed the right rule (`shipPlaces` asks the world; `shipsAt` remembers); only the
+  station half was wrong.
+
+**Files:** `src/net/custody.js` (`checkIn` via `stationsOfWorld`), `tests/multiplayer-carry.test.mjs`
+(+2). **Tests: 1013** (was 1011). **Save format unchanged (v29).** LESSONS L37.
+
+## 2026-11-23: Playtest 14 — leaving a world, the title's away card, and a new Test Ship
+
+Four reports from the owner's playtest. Three were bugs; one was a model swap.
+
+- **Leaving a world was invisible, and locked the pilot out.** A departing guest stayed in the host's
+  players list, the chat said nothing, and its ship stayed. Worse, its record kept the OLD token hash —
+  so the next join was a *returning* guest, refused for a token it no longer had. `forgetPeer(peerId)` is
+  now the one rule: remove the row, say *"Bo left."*, drop the ship (`mp-guest-left`), republish presence,
+  and mark the record `left`, which a fresh link re-admits. Separately, `upsertGuest` let a
+  `welcome`/`presence` list (no peer id) **erase** a known one, so that guest could never be matched to
+  the peer that left.
+- **"Bring my pilot" appeared, then the world entered itself.** The join worked and `state.away` was set,
+  but `afterJoined` entered the world anyway — flying a frozen pilot whose cargo was elsewhere. It stops
+  and says so now.
+- **The away card's buttons did nothing, and trapped the player.** From the title there is no loaded
+  open-world save, so unpacking got a save with no profile; and `comeHome` opened with
+  `if (!leaveVisit()) return false`, which from the title returns before anything is unpacked. Now
+  `bringPilotHomeAtMenu()` unpacks the **stored** mode save, Rejoin rebuilds the link from the marker and
+  really joins, and the card explains both buttons.
+- **Test Ship draws the owner's `testship-v1.glb`** — drop-in (same generator, extensions, footprint),
+  centred on y, stray `Page camera` node gone. `compressed-model` re-recorded per LESSONS L17.
+
+**Also:** `world.guests[id].left` is an **additive** save field, so **no version bump** (v29 stays).
+**Files:** `src/net/{session,custody,multiplayer}.js`, `src/{data/multiplayer,state/profile}.js`,
+`src/ui/{menu,multiplayer,screens}.js`, `src/assets/models/ship.testship.glb`, and new
+`tests/multiplayer-playtest14.test.mjs`. **Tests: 1013** (was 1004); each fix was verified by reverting
+it. **Build id: `2026-11-23b`.**
+
 ## 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
 
 The first slice where something of the player's actually travels. **"Bring my pilot"** packs the

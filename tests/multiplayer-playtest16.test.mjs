@@ -103,50 +103,80 @@ test("playtest 17: the in-world card is gone — the join box replaced it", () =
   assert.doesNotMatch(events, /mp-bring-prompt/, "and no event asking for one");
 });
 
-test("playtest 18: the card appears on Open World, and only for a newer copy", () => {
-  // The owner's rule, verbatim: "This your pilot is in menu should only come if you try to join
-  // your local open world but a more new version of your save was on an online world."
+test("playtest 18 + 20: the card appears on Open World, and always while the pilot is away", () => {
+  // Playtest 18's rule still stands: *"This your pilot is in menu should only come if you try to
+  // join your local open world"* — the card is raised by that press and by nothing else.
+  //
+  // Playtest 20 corrected WHEN that press asks (owner: *"logging into the guests own open world
+  // does not give a prompt to bring their pilot home. It should to confirm its updating to the
+  // local open world to latest version of their pilot."*). Whether the copy in that world is
+  // newer is not the question: being away at all means this world is not up to date with its
+  // pilot, so the press always asks.
   const screens = read("src/ui/screens.js");
   // The menu is the menu: being away no longer replaces it.
-  assert.match(screens, /if \(state\.away && state\.ui\?\.awayCard\) return/,
+  assert.match(screens, /if \(state\.away && state\.ui\?\.awayCard\) \{/,
     "the card shows only when the press raised it");
   const menu = read("src/ui/menu.js");
-  assert.match(menu, /if \(newerCopyAway\(\{ mode:/, "Open World asks the custody question");
-  assert.match(menu, /state\.ui\.awayCard = true;\s*if \(state\.ui\) state\.ui\.intro = true;/,
-    "a newer copy raises the card");
-  // ...and nothing newer opens the world instead of stopping the player.
-  assert.match(menu, /state\.ui\.awayCard = false;\s*\}\s*enterGameMode\("open"\);/,
-    "nothing newer opens the player's own world");
+  assert.match(menu, /if \(state\.away\) \{\s*state\.ui\.awayCard = true;/,
+    "Open World always raises the card while the pilot is away");
+  assert.doesNotMatch(menu, /if \(newerCopyAway/, "and not only when something newer is waiting");
+  // ...and nothing opens from that press: the card is the whole answer.
+  assert.match(menu, /state\.ui\.awayCard = true;[\s\S]{0,240}return;\s*\}\s*enterGameMode\("open"\);/,
+    "nothing opens until the pilot is home");
+  // **Nothing is compared at all** (owner, playtest 20: *"Doesnt matter if nothing has changed,
+  // game should always try to use the latest pilot version since even small things like pilot
+  // position can change."*). The card takes the marker and nothing else, and the comparison that
+  // used to label it is gone from the codebase rather than merely unused.
+  assert.match(screens, /function awayCardHtml\(away\) \{/, "the card needs no verdict");
+  assert.match(screens, /awayCardHtml\(state\.away\)\)?/, "it is drawn from the marker");
+  assert.doesNotMatch(menu + screens, /newerCopyAway|awayNewer/, "no copy is called newer");
+  assert.doesNotMatch(read("src/net/session.js"), /export function newerCopyAway/, "and has no home");
+  assert.doesNotMatch(read("src/state/state.js"), /awayNewer/, "not even as a flag");
   // Arriving at the menu clears it, so Main menu lands on the menu.
   assert.match(menu, /state\.ui\.intro = true;[\s\S]{0,400}state\.ui\.awayCard = false;/,
     "the menu clears the card");
 });
 
-test("playtest 18: 'newer' is decided by the custody rule, and a tie is not newer", async () => {
-  const { isNewerCopy } = await import("../src/net/custody.js");
-  const mine = { epoch: 1, rev: 4, profile: { cr: 100, holds: { wasp: { ore: 5 } } } };
-  // More credits, more cargo: newer.
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 900, holds: { wasp: { ore: 5 } } } }), true);
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 100, holds: { wasp: { ore: 9 } } } }), true);
-  // The host's own ordering pair decides first.
-  assert.equal(isNewerCopy(mine, { ...mine, rev: 9 }), true, "a raised rev is newer");
-  assert.equal(isNewerCopy({ ...mine, rev: 9 }, mine), false, "a stale rev is not");
-  // Less of everything is NOT newer, and neither is a dead heat — a false card is the trap.
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 1, holds: {} } }), false);
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 100, holds: { wasp: { ore: 5 } } } }), false,
-    "a tie is not newer");
-  // Found while building this: `compare` ranks MISSING numbers lowest, so a copy with no
-  // epoch/rev at all "loses" and looks older — which reported "newer" for two identical copies
-  // and raised the card for nothing. Only a pair both sides actually carry may decide.
-  assert.equal(isNewerCopy({ profile: { cr: 100 } }, { profile: { cr: 100 } }), false,
-    "two copies with no ordering pair and the same contents are a tie, not newer");
-  assert.equal(isNewerCopy(mine, null), false);
-  assert.equal(isNewerCopy(null, mine), false);
-  // Lockers are never the signal: the home stations are emptied into the suitcase, so counting
-  // them would report "newer" on every single visit.
-  assert.equal(isNewerCopy(mine, { ...mine, lockers: [{ item: "ore", count: 99 }] }), false);
+test("playtest 20: coming home takes the copy that world holds — a tie is not a reason to skip it", async () => {
+  // The owner: *"Doesnt matter if nothing has changed, game should always try to use the latest
+  // pilot version since even small things like pilot position can change."*
+  //
+  // Playtest 18 had the game decide by credits and cargo whether the friend's world held anything
+  // worth collecting, and skip the question when it did not. Two things were wrong with that: the
+  // comparison is invisible to the player, and it is not even the right measure — `shipPlaces`
+  // (which station a hull is parked at), hull damage and modules are all facts that change with
+  // no number moving. So the copy comes home, always, and nothing is weighed first.
+  const { checkOut } = await import("../src/net/custody.js");
+  const { SAVE_VERSION, newProfile, newWorld, sanitizeSave } = await import("../src/state/profile.js");
+  const makeSave = () => sanitizeSave({ v: SAVE_VERSION, profile: newProfile(), world: newWorld(), away: null });
+
+  const home = makeSave();
+  const { save: packed, bundle } = checkOut(home, { worldId: "w-1", hostName: "Ada", guestId: "g-1", token: "t" });
+  // The host wrote the pilot while the guest was there: same credits, one hull parked a station
+  // further along and a little hull damage. Nothing a credits-or-cargo rule can see.
+  const parked = Object.keys(bundle.profile.shipPlaces || {})[0] || bundle.profile.ship;
+  const written = {
+    ...bundle,
+    // the pair is deliberately UNCHANGED: this is the tie the old rule answered "not newer" for
+    epoch: packed.away.epoch,
+    rev: packed.away.rev,
+    profile: { ...bundle.profile, hp: { ...(bundle.profile.hp || {}), [parked]: 0.5 } },
+  };
+  const stored = { ...packed, away: { ...packed.away, suitcase: written } };
+
+  const done = session.bringPilotHome(stored);
+  assert.equal(done.ok, true, done.message);
+  assert.equal(done.save.away, null, "the pilot is home");
+  assert.equal(done.save.profile.hp[parked], 0.5, "the damage taken there came home");
+  assert.deepEqual(done.save.profile.shipPlaces, written.profile.shipPlaces,
+    "and so did where every hull was parked");
+  // Nothing compares: the helpers that answered "is it newer?" are gone, so no future caller can
+  // put the question back in front of the one act that has no alternative.
   const custody = read("src/net/custody.js");
-  assert.match(custody, /Lockers are deliberately NOT compared/);
+  assert.doesNotMatch(custody, /export function isNewerCopy/, "the comparison is deleted, not idle");
+  const session_ = read("src/net/session.js");
+  assert.match(session_, /It takes the copy that world holds, and asks nothing about whether it changed/,
+    "and the rule is written where the act lives");
 });
 
 test("playtest 17: the away card is never a room with no door", () => {
@@ -271,3 +301,49 @@ test("playtest 17: the session can be switched on with nothing running", () => {
   assert.match(net, /enabled: readSettings\(\)\.enabled === true, session: !!active/,
     "the snapshot carries the switch and whether a session exists");
 });
+
+test("playtest 21: the visit opens the stand-in world and says it is not your friend's", () => {
+  // The owner's reports, in order: playtest 20 — *"the pilot's own world pausing while it is away
+  // is not working as intended"*; playtest 21 — *"Clicking the bring my pilot now when joining a
+  // world doesnt log you into their open world. Im just stuck at the menu where you add link."*
+  //
+  // The first put a guard in front of every door into the open world, and the second showed what
+  // that costs: a player who had just sent their pilot was left on the join screen with nothing
+  // to press. The owner's decision: *"drop me into the local world, add a pop up that this is not
+  // the hosts world (yet)"* — because the friend's world on this screen is step 16 slice 7.
+  const menu = read("src/ui/menu.js");
+  const fn = menu.slice(menu.indexOf("function enterGameMode(mode) {"));
+  const head = fn.slice(0, fn.indexOf("state.ui.intro = false;"));
+  assert.doesNotMatch(head, /state\.away/, "the world opens; there is no guard in front of it");
+  // The title press still asks the custody question (playtest 20), which is a different rule.
+  assert.match(menu, /ACTIONS = \{/, "actions are still the menu's own");
+  const intro = menu.slice(menu.indexOf("  intro() {"));
+  assert.match(intro.slice(0, 2400), /if \(state\.away\) \{\s*state\.ui\.awayCard = true;/,
+    "Open World from the menu still raises the away card first");
+
+  const ui = read("src/ui/multiplayer.js");
+  // Bringing the pilot is one press, not two: the world opens as soon as it crosses.
+  const bring = ui.slice(ui.indexOf('case "bring": {'));
+  const bringBody = bring.slice(0, bring.indexOf('case "join-world"'));
+  assert.match(bringBody, /if \(done\.ok && state\.ui\.intro\) \{\s*closeMultiplayer\(\);\s*emit\("mp-enter-world", \{\}\);/,
+    "a pilot that crossed is a player who is in the world");
+  // ...and Enter the world is drawn while the pilot is away, which is what playtest 20 hid.
+  const join = ui.slice(ui.indexOf('case "join-world": {'));
+  const joinBody = join.slice(0, join.indexOf('case "leave":'));
+  assert.doesNotMatch(joinBody, /state\.away/, "the door does not refuse because the pilot is away");
+  assert.match(joinBody, /emit\("mp-enter-world", \{\}\)/, "it opens the world");
+  assert.match(ui, /model\.visiting && model\.brought && !model\.choosing[\s\S]{0,600}data-mp="join-world">Enter the world</,
+    "the button is on the panel with the pilot already here");
+  assert.match(ui, /That is your <strong>own<\/strong> galaxy for now[\s\S]{0,240}slice 7/,
+    "and the panel says which galaxy it opens, before the press");
+
+  // The pop-up the owner asked for: on the way into the stand-in, in words that name the friend.
+  const enter = menu.slice(menu.indexOf('on("mp-enter-world"'));
+  const enterBody = enter.slice(0, enter.indexOf("  });") + 5);
+  assert.match(enterBody, /if \(state\.away\) \{/, "it only speaks when the pilot is away");
+  assert.match(enterBody, /showNotice\(`This is your own galaxy, not \$\{where\}/, "a notice, not a card");
+  assert.match(enterBody, /slice 7/, "naming what is missing");
+  assert.match(enterBody, /Anything you earn or buy here stays here/, "and the one fact that matters for a save");
+  assert.match(enterBody, /state\.away\.hostName/, "in the friend's own name when there is one");
+});
+

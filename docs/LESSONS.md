@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-22.*
+*Last checked: 2026-11-24.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -45,23 +45,6 @@ Mission lessons are first because missions are where most bugs have come from. T
 
 ## Everything else
 
-### L12. A new way to change state skipped the normal refresh
-- **Seen (step 10):** after loading a save the sound was dead, the start screen reappeared on docking, and
-  Load/Import/Reset did not redraw the screen.
-- **Rule:** state changes go through the one path that also does the refresh (events, `loadGame`-style
-  functions). A new route that sets state directly must emit what the listeners expect.
-- **Enforced by:** `tests/step10-fixes.test.mjs` and the baseline playtest.
-
-### L13. Anything that accumulates per frame must be multiplied by the time step
-- **Seen:** the ship blurred and warp roll differed on a 240 Hz display.
-- **Rule:** use `dt`; render between ticks by interpolation. See `architecture/simulation-and-rendering.md`.
-- **Enforced by:** `tests/sim-step.test.mjs` (the fixed-step tests).
-
-### L14. `matrixWorld` is last frame's transform
-- **Rule:** after moving an object, update its matrix before reading `matrixWorld` for a gun or camera position.
-  See `architecture/simulation-and-rendering.md`.
-- **Enforced by:** NOT YET: add a test if this bites again (it cannot be checked headlessly today, only by eye).
-
 ### L16. A hull id is not a ship
 - **Seen (owner):** "If you die, you get a free wasp. Cant then equip equipment to the ship." The replacement Wasp had no bays in
   Outfitting and flew with no thrusters and no Hull HP.
@@ -74,14 +57,6 @@ Mission lessons are first because missions are where most bugs have come from. T
   ones its replacement needs, in the same step.
 - **Enforced by:** `tests/ship-recovery.test.mjs`, and the post-death snapshots in `tests/single-player-combat-8b.test.mjs`
   (they record power, shields, hull, a gun bay and an empty hold for the replacement ship).
-
-### L17. A recorded-state fixture only proves what changed if you diff it
-- **Seen:** fixing the spare Wasp changed the recorded 8b lifecycle fixture, which failed as a long unreadable deep-equal.
-- **Rule:** when behaviour changes on purpose, re-record the fixture and diff old against new. Accept it only if every difference
-  sits inside the behaviour you meant to change — here snapshots from the death onwards changed and every earlier one was
-  identical, which is the evidence the fix did nothing else. Say so in a comment beside the fixture's test. A blanket re-record
-  that "makes the test pass" would hide real regressions.
-- **Enforced by:** the comment above the fixture assertion in `tests/single-player-combat-8b.test.mjs`.
 
 ### L18. A rule about *where* something happens was left to the caller
 - **Seen (owner):** "It doesn't seem like the game cares which location you hand in a mission in." Contracts and missions
@@ -111,24 +86,6 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/step14-instances.test.mjs` — the reload test asserts `placeAt(record.id).sky.kind` is the
   template's declared kind (the reader's own path), and the template test asserts every template declares a `sky.kind`
   in `SKY_KINDS` and no `planet` feature.
-
----
-
-### L20. A frame that throws stops the picture but not the loop, so a one-line bug plays as a dead game
-- **Seen (owner, step 14 playtest):** "the game crashes … a few seconds after you've destroyed the last guardian" —
-  a frozen screen, no message, and the only word about it a line in the browser console nobody was looking at.
-- **Cause:** `main.js` asks for the next frame *before* it does the frame's work, so an exception inside a frame leaves
-  the loop alive and the last good image on the glass: the game is running and looks dead. The pasted error was from a
-  stale build, but the shape of the failure is the lesson — anything that can throw in front of the player takes the
-  whole game down with it, silently.
-- **Rule:** work that can throw in front of the player is caught where it happens, **said on screen in a sentence with
-  the error's own first line** (`ui/crash.js`, `reportCrash`), and the picture is drawn anyway. A repeat is counted, not
-  listed (a per-frame error would bury the sentence in a second); the card lists a few distinct problems and says how
-  many it left out. The net listens only to what the browser reports as uncaught plus the frame loop's own catch — no
-  `sim/` module may call it and no game rule may depend on it, and a test that expects an error still gets it thrown.
-- **Enforced by:** `tests/crash.test.mjs` — the card's sentence and where it came from, repeat counting, the four-line
-  cap with its "and N more" line, dismissal, and that a broken `document` cannot itself become the crash — plus the
-  `frame`/`drawFrame` split in `main.js`.
 
 ---
 
@@ -172,46 +129,137 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L45. A panel raised by an event has to leave on its own
+- **Seen (owner, playtest 20):** *"Chat when a message is said then the chat is visible. However it
+  doesnt go away. Should go away after maybe 6-7 seconds unless the user has pinned the chat."*
+  The box was drawn for the whole session, so a line that arrived while nobody was looking stayed
+  over the glass until the player opened a menu.
+- **Cause:** visibility was a property of the *session* (`a session is on and no panel owns the
+  screen`), not of the *news*. Nothing owned the end of the event, so there was no clock to run
+  and nothing to stop.
+- **Rule:** anything that appears **because something happened** needs three things written with
+  it: a clock that takes it away, a switch the player owns to keep it (here **Pin**, with its own
+  word on the button), and one reason it may stay while the player is mid-action (a half-written
+  line). Make the decision a pure function of `{pin, typing, saidAt, now}` so the timer is the
+  only untested part.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — "playtest 20: the chat shows a line and takes
+  itself away, unless it is pinned": hidden before anything is said, up inside `CHAT.autoHideSec`,
+  gone after it, pinned and typing keep it, a panel or the title does not.
+
+### L47. An invitation is not an identity
+- **Seen (owner, playtest 22):** *"If a second guest player joins, first guest is kicked out … the first
+  guest is never really able to rejoin."* One friend could visit; the second took the first one's place,
+  and the one thrown out then met *"That link has already been used, or it was copied wrongly"*.
+- **Cause:** a join link carries **one** secret per world (`?join=<worldId>#<token>`), and the guest used
+  that secret as **its own**: `guestId = guest-<token.slice(0,8)>`, `hello.token = linkToken`. Every friend
+  on one link arrived as the same pilot, so the host's one-window-per-pilot rule (correct code) retired the
+  first to make room, rewrote the record's hash, and left the retired browser holding a secret that no
+  longer matched. The symptom named the wrong object entirely.
+- **Rule:** a credential the *sender* hands out is never the identity of the *receiver*. Identity is minted
+  where the pilot lives (here `tr_mp.pilotToken`, one per browser) and sent every time; the invitation only
+  decides *where* it may be used. "Same person?" and "allowed in?" are two questions, and one shared secret
+  cannot answer both.
+- **A cap is a different bug from a collision.** The same report said "unlimited players"; raising
+  `NET.maxGuests` would have hidden the symptom for a week without fixing anything — the limit was never
+  reached. Ask which one the evidence supports before changing a number.
+- **Enforced by:** `tests/multiplayer-session.test.mjs` — "two guests with the same link are two pilots, and
+  neither is kicked", "the same pilot in two windows is still a takeover", "a guest's identity is its own
+  browser's, not the link's secret".
+
+### L46. A state read at a glance wants a colour, not a second word
+- **Seen (owner, playtest 22):** the chat's Pin button changed its word to *Pinned*, in the same breath as
+  an ask to make that column **narrower** — the word was doing a job the colour can do.
+- **Cause:** a label that changes is *unambiguous*, which suits a big button and not a 46-pixel strip: the
+  longest label sets the width for ever, and the word still does not say which way the *press* goes.
+- **Rule:** in a narrow, glanceable control the state is the fill and the label is the verb: one word that
+  never changes (*Pin*), amber-filled when on, amber-outlined when off, with `aria-pressed` and a `title`
+  for anybody who cannot see colour.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the pin's word is asserted constant, both fills are
+  asserted in `src/styles.css`, and the players strip's width is capped.
+
+### L44. A secret one side strips has to be put back by the other
+- **Seen (slice 5, found by the reconnect test):** rejoining in a **fresh session** — what a closed tab
+  or a lost connection leaves — was refused as *"that link has already been used"*. The copy a guest
+  keeps is the copy the **host** sent back, and a host never keeps a token (`guestRecord` deletes it),
+  so the guest had nothing left to prove itself with. Every live-session test passed, because a
+  session still holds the copy it packed.
+- **Rule:** when one side deliberately does not store a value (a secret, a hash, a session token),
+  every later send takes it from the field that survives (`away.token`), never from the copy it was
+  removed from. And a rejoin is not a variant of a live session: test it with a **new** session,
+  because that is the only shape a restart has.
+- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "rejoining after a loss keeps the version the
+  server already has", which starts a second guest session against the same host.
+
+### L43. A rule with no caller is not a feature
+- **Seen (slice 5, found by writing the test that should have passed):** the host was to write a
+  visiting pilot's suitcase back every couple of seconds. `writeBack` and its trigger existed and the
+  docs described both — but the loop was never written, so a guest came home with the copy it
+  arrived with.
+- **Cause:** each piece was tested on its own and passed; nothing tested the **seam** — that something
+  calls the piece on a clock, in a live session. A function nothing calls passes every test it has,
+  because the tests call it themselves.
+- **Rule:** when a slice promises a loop ("kept current", "every N seconds"), the test runs two
+  sessions and asserts the other side's copy changed **without the test calling the function**, and
+  the docs name the caller. Before claiming a loop is built, grep its callers: if only tests call it,
+  it is not built.
+- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "the host writes what a visiting pilot
+  became, not only what it arrived with", which drives `syncGuests` from the session's own clock.
+
 ### L42. A screen that replaces the menu must earn it, every time, by evidence
-- **Seen (owner, playtest 18):** *"Laptop joins fine a host world. Leaving puts you into the Your Pilot is in hostpc world... for the
-  laptop exiting the main menu in hostpcs world should put the laptop user in the main menu."* The menu had been replaced by a save
-  question, and that question's own "Main menu" button re-raised it on the next draw.
-- **Cause:** the condition for the card was *the away marker exists*, which is true for the whole visit, so the card was the title
-  screen for as long as the visit lasted. Nothing compared the two copies, even though `compare()` had existed since slice 1. A state
-  flag described *what happened* (the pilot left) and was used as if it described *a problem* (a newer copy is waiting).
-- **Rule:** a screen that takes the menu's place must be raised by a **press** and justified by **evidence at that press**, not by a
-  state that persists. When a flag means "an event happened", ask what the player can *do* about it right now; if the answer is "only
-  sometimes", the flag needs a companion test, and the screen needs a door that leaves the flag alone. And a comparison must have a
-  defined answer for a **tie** — decide it deliberately (here: a tie is NOT newer) and write the reason down, or the UI will raise
-  false alarms whenever data is missing.
-- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when `ui.awayCard` was raised by the press; Open
-  World asks `newerCopyAway()`; a tie, missing ordering pair, damage and locker counts are all NOT newer.
+- **Seen (owner, playtest 18):** leaving a host's world put the laptop on *"Your pilot is in hostpc's
+  world"*, and that card's own **Main menu** button re-raised it on the next draw.
+- **Cause:** the condition was *the away marker exists*, true for the whole visit, so the card was the
+  title screen for as long as the visit lasted; nothing compared the copies. A flag describing *what
+  happened* (the pilot left) was used as if it described *a problem* (a newer copy is waiting).
+- **Rule:** a screen that takes the menu's place is raised by a **press** and justified by **evidence at
+  that press**, not by a state that persists. When a flag means "an event happened", ask what the
+  player can *do* right now; if the answer is "only sometimes", it needs a companion test and a door
+  that leaves the flag alone.
+- **Playtest 20 corrected the second half of this, twice over** (owner: *"logging into the guests
+  own open world does not give a prompt to bring their pilot home"*, then *"Doesnt matter if
+  nothing has changed, game should always try to use the latest pilot version since even small
+  things like pilot position can change."*). The evidence a press needs is not that two copies
+  differ — that is a question the player cannot see — but that the player is about to do something
+  the state forbids: **while the pilot is away, Open World always asks, and its answer always
+  takes the copy that world holds.** A comparison that decides whether to *offer* the one act that
+  brings the pilot back is a comparison deciding nothing: the comparison is gone (`isNewerCopy`,
+  `newerCopyAway` deleted), and `shipPlaces`/hull damage move with no number changing.
+- **Playtest 21 finished the shape: a rule that closes a door must leave a room to stand in.** A3's
+  guard soon stopped *every* way into the open world, so a player who had just sent their pilot sat
+  on the join screen with nothing to press — the right rule, enforced one screen too far. When the
+  honest answer is "this is not built yet", build a **named stand-in** and say what it is in one
+  sentence (a notice when the world opens), rather than locking the door and explaining the lock.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when
+  `ui.awayCard` was raised by the press; Open World asks unconditionally while away and compares
+  nothing; "coming home takes the copy that world holds — a tie is not a reason to skip it"; and
+  "the visit opens the stand-in world and says it is not your friend's".
 
 ### L41. A control that is disabled whenever it would be useful is not a control
 - **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test
   multiplayer at all: the switch was greyed out and read Off.
-- **Cause:** two independent conditions, each sensible alone. The switch was drawn from `hosting` only, so a **visitor** saw Off; and
-  it was `disabled` whenever visiting. Worse, the pause card draws only the **host** block, and the Leave button lives in the **join**
-  block — so a guest at the pause card was looking at a dead switch beside no exit. "Leave worked from the screen but not from the
-  switch" was the tell: they were on different screens.
-- **Rule:** a control is disabled only when pressing it could not possibly do anything, and **every state a screen can be in must leave
-  the player a way out from that screen**. If a state exists in which the control reads a value the player cannot change, either make
-  the control work for that state or do not draw it. Also: when two screens offer the same exit, draw it on both — "the other screen has
-  a button" is not a way out of the screen you are on.
-- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a visitor's switch is On, pressable, and leaves the visit; the Leave button
-  is drawn beside it. Reverting `switchOn`/`canSwitch` fails it.
+- **Cause:** two conditions, each sensible alone: the switch was drawn from `hosting` only, so a
+  **visitor** saw Off, and it was `disabled` whenever visiting. Worse, the pause card draws the
+  **host** block while Leave lives in the **join** block, so a guest saw a dead switch and no exit.
+- **Rule:** a control is disabled only when pressing it could not possibly do anything, and **every
+  state a screen can be in leaves the player a way out from that screen**. If a state exists where
+  the control reads a value the player cannot change, make it work there or do not draw it. When
+  two screens offer the same exit, draw it on both: "the other screen has a button" is not a way
+  out of the screen you are on.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a visitor's switch is On, pressable and
+  leaves the visit; the Leave button is drawn beside it.
 
 ### L40. A button that borrows another button's action inherits its refusals
 - **Seen (owner, playtest 17):** the away card's **Bring pilot home** answered *"your pilot is in your friends world, bring it home
   from the card first"* — a sentence written for a *different* button, telling him to press the button he had just pressed. In the
   same report: the card had no way back to the main menu at all, so he was stuck on it.
-- **Cause:** `comehome()` was `ACTIONS.intro()` — the Open World action — on the reasoning that "a pilot at home is a pilot at home".
-  The previous round then made `intro()` **refuse** whenever a pilot is away, which was right for Open World and turned the card's own
-  button into a refusal that argued with itself. A second, unrelated shape: the card replaced the whole title screen and every control
-  on it was a decision about the save, so there was no non-committal way off it.
-- **Rule:** an action says what the *player pressed*, not which other action it resembles — two buttons that happen to reach the same
-  place today are still two buttons, and coupling them means every future refusal on one is a lie on the other. And every screen that
-  replaces the whole menu needs one control that makes **no** decision about the save (a way back), because "cancel" must always exist.
+- **Cause:** `comehome()` was `ACTIONS.intro()` — the Open World action — on the reasoning that "a
+  pilot at home is a pilot at home". The previous round made `intro()` **refuse** whenever a pilot
+  is away, which was right for Open World and turned the card's own button into a refusal arguing
+  with itself. The card also replaced the whole title screen with nothing but save decisions.
+- **Rule:** an action says what the *player pressed*, not which other action it resembles — two
+  buttons that reach the same place today are still two, and coupling them makes every future
+  refusal on one a lie on the other. And every screen that replaces the whole menu needs one
+  control that makes **no** decision about the save (a way back): "cancel" must always exist.
 - **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — `comehome` must call `bringPilotHomeAtMenu` and must not call
   `ACTIONS.intro()`; the card must render a Main menu button whose action touches neither the suitcase nor the visit. Reverting the
   routing fails two tests (in this file and `playtest15`).
@@ -233,50 +281,40 @@ Mission lessons are first because missions are where most bugs have come from. T
   still enters the world. Reverting the derivation fails three of the six.
 
 ### L38. A save seam has two shapes, and guessing the wrong one looks like a broken save
-- **Seen (owner, playtest 15):** the away card became a trap. *"Bring pilot home"* always answered *"Your pilot's save could not be
-  read, so it cannot come home yet"* — in Brave, in Chrome, on a first boot, and after every refresh — while Rejoin answered *"Your
-  pilot is already visiting another world, bring it home first"*. Clicking Bring pilot home removed the laptop's row from the host's
-  players list and still left it on the card.
-- **Cause:** `saveKit.read()` returns a **MODE** save (`{ profile, world, away }`, one pilot). `bringPilotHomeAtMenu` was written
-  against the dual-mode **ENVELOPE** (`{ v, mode, open, campaign }`) and read `root[mode]`, which is `undefined` on a mode save — so it
-  refused before it ever looked at the suitcase. The refusal was blamed on the player's data, which is why nobody suspected the shape.
-  Two things made it worse: `joinWorld` refused *every* join while an away marker existed, including a rejoin to the world the pilot was
-  standing in; and `comeHome` left the visit *before* opening the suitcase, so a refusal cost the connection as well.
-- **Rule:** a seam that can hand you one of two shapes must **say which one it is** in one place and accept both (`isModeSave`), and
-  write back the shape it was given. Anything that *refuses* must refuse only the thing it actually objects to — a guard against
-  "visiting another world" is not a guard against the world you are visiting. And do the work that can fail **before** the step that
-  destroys state, so a refusal changes nothing.
-- **Enforced by:** `tests/multiplayer-playtest15.test.mjs` — a mode save comes home and its locker really arrives, an envelope still
-  works, an unreadable save still refuses, a real rejoin connects with the pilot still away, a different world is still refused; and
-  `tests/multiplayer-ui.test.mjs` asserts `bringPilotHomeAtMenu` runs before `leaveVisit` in `comeHome`. Reverting either fix fails with
-  the owner's own words.
+- **Seen (owner, playtest 15):** the away card became a trap. *"Bring pilot home"* always answered
+  *"Your pilot's save could not be read, so it cannot come home yet"*, and it still removed the
+  laptop's row from the host's players list while leaving it on the card.
+- **Cause:** `saveKit.read()` returns a **MODE** save (`{ profile, world, away }`); `bringPilotHomeAtMenu`
+  was written against the dual-mode **ENVELOPE** and read `root[mode]`, which is `undefined` on a mode
+  save — so it refused before it looked at the suitcase, and the blame landed on the player's data.
+  Two things made it worse: `joinWorld` refused *every* join while an away marker existed, including a
+  rejoin to the world the pilot was standing in; and `comeHome` left the visit *before* opening the
+  suitcase, so a refusal cost the connection as well.
+- **Rule:** a seam that can hand you one of two shapes must **say which one it is** in one place and
+  accept both (`isModeSave`), and write back the shape it was given. A refusal refuses only the thing
+  it objects to — a guard against "visiting another world" is not a guard against the world you are
+  visiting. And do the work that can fail **before** the step that destroys state.
+- **Enforced by:** `tests/multiplayer-playtest15.test.mjs` — a mode save comes home with its locker, an
+  envelope still works, an unreadable save refuses, a real rejoin connects with the pilot away, a
+  different world is refused; and `tests/multiplayer-ui.test.mjs` asserts `bringPilotHomeAtMenu` runs
+  before `leaveVisit`.
 
 ### L37. A key that names a place must be checked against the place that will read it
-- **Seen (owner, playtest 14):** "What happens if a player joins a world with a pocket/station that doesn't exist in their local world and they
-  return to their local world?" — a stack bought at a station only the host's world has came home filed under that station's key, in a galaxy
-  with no such station: counted, saved, and unreachable for ever. A stack that had waited at the host's Meridian also came home to Meridian
-  instead of its own station, even though its `origin` was still in the record.
-- **Cause:** `checkIn` filed a locker at `locker.station` without asking the HOME world whether it has that station, and its own `relocate`
-  call passed no index — so `relocate` fell back to "does `world.stationStores` have a key with that name", which is the wrong question for a
-  station that has never held anything. `relocate` had the right rule all along (`origin` first, then the arrival station); the home path
-  never asked it.
-- **Rule:** every function that FILES something by place asks the world that will read the key, not the world it came from — and asks with
-  the world's station index (`stationsOfWorld`), not with whatever happens to be in its stores. Coming home prefers `origin`, so a stack that
-  waited somewhere else returns to its own station.
-- **Enforced by:** "cargo bought at a station only the host's world has comes home safely" and "a stack that waited at the host's Meridian comes
-  home to its OWN station" in `tests/multiplayer-carry.test.mjs`; reverting the fix fails both.
+- **Seen (owner, playtest 14):** a stack bought at a station only the host's world has came home filed
+  under that station's key, in a galaxy with no such station: counted, saved, unreachable for ever. A
+  stack that had waited at the host's Meridian came home to Meridian instead of its own station,
+  though its `origin` was still in the record.
+- **Cause:** `checkIn` filed a locker at `locker.station` without asking the HOME world whether it has
+  that station, and passed `relocate` no index — so it fell back to "does `world.stationStores` have
+  that key", the wrong question for a station that has never held anything. `relocate` had the right
+  rule all along (`origin` first); the home path never asked it.
+- **Rule:** every function that FILES something by place asks the world that will read the key, not
+  the world it came from — and asks with the world's station index (`stationsOfWorld`), not with
+  whatever happens to be in its stores. Coming home prefers `origin`, so a stack that waited
+  elsewhere returns to its own station.
+- **Enforced by:** "cargo bought at a station only the host's world has comes home safely" and "a stack
+  that waited at the host's Meridian comes home to its OWN station" in
+  `tests/multiplayer-carry.test.mjs`; reverting the fix fails both.
 
-### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
-- **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."
-- **Cause:** Reset wiped only the *current* mode's half of the dual-mode save, while its words promise "Wipe credits, ships, base and contracts" — the other mode's pilot survived intact.
-- **Rule:** a control's words are its contract: Reset wipes **both** halves (`resetAllSave` in `state/state.js`, staying in the mode pressed from); label any per-mode wipe as one.
-- **Enforced by:** `tests/reset-save.test.mjs` (both halves dirtied; after a campaign reset both read 600 cr, one Wasp).
-
-### L31. Direct-from-plant fallback and pre-check `setDraw` let a `0 MJ` ship fly and show phantom MJ/s
-
-- **Seen (owner, 2026-11-18):** unequipping the power cell left the tank at `0 MJ`, yet the ship still flew and showed `Using X of Y MJ/s`.
-- **Cause:** `hasPower` fell back to `p.gen >= mjps` when `p.stored === 0`, `player.js`/`shield.js` called `setDraw` before checking power, and wall-blocked mining beams bypassed `hasPower`.
-- **Rule:** every system with `draw > 0` requires `p.stored > 0` (`hasPower`) and records `setDraw(..., 0)` whenever unpowered.
-- **Enforced by:** `tests/slice3-assets-inventory-power.test.mjs`, `tests/content.test.mjs`, `tests/shield.test.mjs`.
-
-[More lessons](archive/reticle-and-recovery-lessons.md) — L21–L29, moved to keep this file under its size limit.
+[More lessons](archive/reticle-and-recovery-lessons.md) — L12–L14, L17, L20, L21–L29, L31 and L32,
+moved verbatim to keep this file under its size limit.

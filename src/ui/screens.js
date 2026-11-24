@@ -98,7 +98,8 @@ function awayCardHtml(away) {
     `<div class="away-card">` +
     `<h2>Your pilot is in ${host}</h2>` +
     `<p>It took its ship, its cargo, its credits and its station lockers with it — they are all ` +
-    `in ${host} until it comes home. This galaxy is paused while you are away.</p>` +
+    `in ${host} until it comes home. This galaxy is paused while you are away: it cannot fly ` +
+    `one pilot in two worlds.</p>` +
     // **Rejoin is gone** (owner, playtest 18: *"Remove the rejoin button I dont think it serves
     // much purpose right now. If you want to rejoin the friends world you go -> main menu ->
     // join multiplayer and join here."*). The card is about the pilot's save, not the wire: it
@@ -108,8 +109,18 @@ function awayCardHtml(away) {
     `<button class="go" data-a="comehome">Bring pilot home</button>` +
     `<button class="go" data-a="menu">Main menu</button>` +
     `</p>` +
-    `<p class="away-note"><b>Bring pilot home</b> makes the copy from that world your own save — ` +
-    `everything your pilot did there comes back with it.</p>` +
+    `<p class="away-note"><b>Bring pilot home</b> makes the copy from that world your own save, so ` +
+    `this galaxy catches up to the latest version of your pilot — everything it did there comes ` +
+    `back with it.</p>` +
+    // **Always the latest copy, never a comparison** (owner, playtest 20: *"Doesnt matter if
+    // nothing has changed, game should always try to use the latest pilot version since even
+    // small things like pilot position can change."*). There used to be a "hold newer work" /
+    // "nothing has changed" branch here, and both halves were a lie: the second invited the
+    // player to skip the one act that gets their pilot back, and the first asked them to trust a
+    // number they cannot see. The sentence says what happens instead.
+    `<p class="away-note">It is the copy ${host} holds, whatever has happened to it there — a ` +
+    `hull parked at a different station, a stack a little lighter, a module swapped. Nothing is ` +
+    `compared first: while your pilot is away, that copy is the truth about it.</p>` +
     `<p class="away-note">Bringing it home works even if your friend is offline: your pilot ` +
     `carries its own copy of everything it has done.</p>` +
     // Every screen needs a door that is not "make a decision about your save" (playtest 17).
@@ -126,20 +137,74 @@ function awayCardHtml(away) {
   );
 }
 
+/**
+ * Step 16 slice 5: **"Lost connection to host"** — what a guest gets when the host's game
+ * closes, or when the connection to it goes away mid-game.
+ *
+ * The owner's rule (2026-11-24): *"If the host closed their game or the guest loses connection
+ * to the host mid game they should be returned to the main menu with a prompt saying something
+ * like lost connection to host. Dismissing this returns you to main menu. Like Minecraft."*
+ *
+ * So this is a **notice with one door**, not a question about a save. It says what happened
+ * first (the host, and why), then the one thing a player actually needs to know — where the
+ * pilot is and that nothing about it changed — and then gets out of the way: one button, the
+ * same full-width kind every other card uses, and behind it the ordinary menu.
+ *
+ * Nothing here decides anything. It is drawn from `state.ui.lostHost`, which
+ * `ui/multiplayer.js` raises when the connection says so, and it is a pure function of the
+ * game state like every other screen in this file.
+ */
+function lostHostHtml(lost) {
+  const host = lost?.hostName ? `${esc(lost.hostName)}'s world` : "your friend's world";
+  const said = lost?.reason ? esc(lost.reason) : `The connection to ${host} dropped.`;
+  return (
+    `<div class="away-card">` +
+    `<h2>Lost connection to host</h2>` +
+    `<p>${said} You are back at the main menu.</p>` +
+    `<p class="away-actions">` +
+    `<button class="go" data-a="lostHostOk">Main menu</button>` +
+    `</p>` +
+    (state.away
+      ? `<p class="away-note">Nothing about your save changed: your pilot is still in ${host}, ` +
+        `with its ship, its cargo, its credits and its station lockers. Press <b>Open World</b> ` +
+        `and the game will offer to bring it home if that world holds a newer copy of it.</p>`
+      : `<p class="away-note">Nothing of yours was in ${host} — you were only looking around, so ` +
+        `there is nothing to bring home and nothing was lost.</p>`) +
+    `<p class="away-note">To join again, press <b>Join Multiplayer World</b> on the menu and ` +
+    `paste the host's link. The same link keeps working while your friend's world is the same ` +
+    `world.</p>` +
+    // The same build line as the other cards, for the same reason: a prompt that behaves unlike
+    // the one described in the guide is usually an older download, and this is where to look.
+    `<p class="away-note away-build">Build ${esc(BUILD)}</p>` +
+    `</div>`
+  );
+}
+
 export function introHtml() {
+  // **Three different screens, three different reasons** (step 16 slice 5).
+  //
+  //  - `lostHost` is raised by the connection when the host is gone (`mp-host-left`). It is a
+  //    statement with one door, shown whoever the player is — a looker-around lost a connection
+  //    too (LESSONS L40: it asks no question about a save, so there is nothing to be careful of).
+  //  - `awayCard` is raised by a press on Open World, and only for a newer copy (playtest 18).
+  //
+  // All of them replace the ordinary title, and all have a door back to it.
+  if (state.ui?.lostHost) return `<h1>Tallow Reach</h1>${lostHostHtml(state.ui.lostHost)}`;
   // **The card is not the title screen any more** (owner, playtest 18).
   //
   // It used to be: being away meant the menu stopped being a menu. The owner's rule instead:
-  // *"This your pilot is in menu should only come if you try to join your local open world but
-  // a more new version of your save was on an online world."* The menu is always the menu; the
-  // card is raised by Open World's press, from `ACTIONS.intro`, and it only appears there when
-  // `net/session.js`'s `newerCopyAway()` says a newer copy is actually waiting. Otherwise the
-  // pilot's own world simply opens.
+  // *"This your pilot is in menu should only come if you try to join your local open world"* —
+  // and, since playtest 20, **every** such press raises it, because a world cannot fly a pilot
+  // that is in another one. Nothing is compared any more either (the owner: *"game should always
+  // try to use the latest pilot version"*): the card asks one question and its answer always
+  // takes the copy that world holds.
   //
   // `state.ui.awayCard` is therefore the switch, not the suggestion: it is set only by a press
   // on Open World, and its "Main menu" press clears it (playtest 17's door), landing the player
   // on the ordinary menu with the marker untouched.
-  if (state.away && state.ui?.awayCard) return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
+  if (state.away && state.ui?.awayCard) {
+    return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
+  }
   return (
     `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +
     `<p>You fly out of ${stationAt(DEFAULT_PLACE).n}, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +

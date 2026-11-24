@@ -2723,7 +2723,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   z-index: 30;
   width: min(460px, 34vw);
   display: flex;
-  gap: 10px;
+  /* The strip on the right is narrow on purpose (playtest 22), so the gap between it and the
+     lines is a few pixels, not a band. */
+  gap: 6px;
   align-items: stretch;
   padding: 8px 10px;
   background: rgba(7, 9, 11, .62);
@@ -2742,12 +2744,13 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 }
 #mp-chat-who {
   flex: 0 0 auto;
-  /* Compact when the box is open, about the same width as its collapsed peek: the Pin
-     button then sits right next to the "Players" heading, and the lines get the space
-     (owner's request, 2026-11-22). */
-  min-width: 52px;
-  max-width: 64px;
-  padding-left: 9px;
+  /* **Narrow, and no indent** (owner, playtest 22: *"the player column needs to be less wide …
+     reducing the gap between Players and Pin. Keep name size the same"*). The old 9 px of
+     padding and the 10 px flex gap were most of the "gap"; the names keep their 12 px and
+     ellipsize instead of widening the column. */
+  min-width: 0;
+  max-width: 54px;
+  padding-left: 4px;
   border-left: 1px solid rgba(224, 164, 88, .28);
   color: var(--amber);
   font-size: 11px;
@@ -2781,6 +2784,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The row that counts the rest: a hosted world's size is the host's machine's business, so the
+   column stops at `CHAT.whoRows` names and says how many more (playtest 22). */
+#mp-chat-who li.mp-chat-more { opacity: .7; font-style: italic; }
 #mp-chat-lines {
   /* About double the previous height, at the owner's request: more room to read the
      conversation without scrolling. */
@@ -2825,24 +2831,48 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 .menu-username-box:focus-within { outline: 1px solid var(--amber); }
 #mp-chat-pin {
   align-self: flex-start;
+  /* **One word, two looks** (owner, playtest 21: *"always says Pin … solid yellow with black text
+     if pinned and transparent solid with yellow text if non pinned"*). The button keeps one label,
+     so the state lives in its colours — and `aria-pressed` carries it for anyone who cannot see
+     them. */
   background: transparent;
-  border: 1px solid rgba(224, 164, 88, .35);
-  color: var(--dim);
+  border: 1px solid var(--amber);
+  color: var(--amber);
   font-size: 9px;
-  padding: 1px 4px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 2px 4px;
   cursor: pointer;
 }
-body:not(.mp-chat-open) #mp-chat,
-body:not(.mp-chat-open) #mp-chat * {
+/* The box is clickable while it is *up*, not only while it is being typed in: the Pin button
+   is the one thing in it a pilot needs to reach without starting a sentence (playtest 20). */
+body:not(.mp-chat-live) #mp-chat,
+body:not(.mp-chat-live) #mp-chat * {
   pointer-events: none;
   cursor: none;
 }
-body:not(.mp-chat-open) #mp-chat-who {
-  min-width: 40px;
-  max-width: 52px;
-}
-#mp-chat-pin.is-pinned { color: var(--amber); border-color: var(--amber); }
+/* **Glancing, typing and pinned are three different boxes** (owner, playtest 21).
+   Glancing — a line arrived and the twelve-second clock is running — is the chat and nothing else:
+   the players column stays away, so a message from a friend does not push a list into the corner
+   of the view. Enter (typing) and the pin are the deliberate states, and they draw it. */
+body:not(.mp-chat-open):not(.mp-chat-pinned) #mp-chat-who { display: none; }
+/* **The Pin button exists only while the box is open for typing** (owner, playtest 22: *"when chat
+   is auto opened … the pin button shouldn't be there"*, and *"If you want to unpin the chat you
+   simply press enter and the pinned button appears again"*). A box that opened by itself — a line
+   arrived, or it is pinned and idle — shows the lines and nothing else; Enter brings the button
+   back, which is how a pinned box is unpinned. */
 body:not(.mp-chat-open) #mp-chat-pin { display: none; }
+body.mp-chat-pinned:not(.mp-chat-open) #mp-chat-who {
+  min-width: 40px;
+  max-width: 48px;
+}
+#mp-chat-pin.is-pinned,
+#mp-chat.is-pinned #mp-chat-pin {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #0b0d0f;
+}
+/* (The old `body:not(.mp-chat-live) #mp-chat-pin` rule is gone: open-only is stricter.) */
 #mp-chat-input {
   width: 100%;
   /* The same type as the lines above it: what is typed must look like what is said

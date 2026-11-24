@@ -132,7 +132,11 @@
 //   mp-state      snapshot          the multiplayer session changed (host/guest, peers, chat)
 //   mp-chat-arrived { from, text, at }  a line from somebody else
 //   mp-notice     text             `net/` asks for a sentence on screen (it may not import ui/)
-//   mp-host-left  { reason }       the host's browser went away
+//   mp-host-left  { reason, hostName }
+//                                    slice 5: the connection to the host is gone (its browser
+//                                    closed, or nothing has come back from it). `ui/` stops the
+//                                    session, returns the player to the main menu and raises
+//                                    "Lost connection to host"; the pilot's save is untouched
 //   mp-join-request { link }       a ?join= link in the address bar wants a yes/no
 //   mp-enter-world {}              a join from the title worked: enter the open world
 //   mp-guest-arrive { guestId, name, profile, place }

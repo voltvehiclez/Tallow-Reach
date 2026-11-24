@@ -34,7 +34,7 @@ import { setLibraryLoader, setRelayProbe, createChannel } from "../src/net/trans
 import { RELAYS, ICE } from "../src/data/multiplayer.js";
 import { SAVE_VERSION, newProfile, newWorld } from "../src/state/profile.js";
 import { state } from "../src/state/state.js";
-import { NET } from "../src/data/multiplayer.js";
+import { NET, CHAT } from "../src/data/multiplayer.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const read = rel => readFileSync(path.join(root, rel), "utf8");
@@ -594,6 +594,86 @@ test("the chat box shows its input whenever it is open — the guest could not t
   assert.match(open, /chatOpen = true;[\s\S]{0,400}chatInput\.hidden = false;[\s\S]{0,400}chatInput\.focus\(\)/);
 });
 
+test("playtest 20/21: the chat shows a line and takes itself away, unless it is pinned", () => {
+  // The owner's report: *"Chat when a message is said then the chat is visible. However it
+  // doesnt go away. Should go away after maybe 6-7 seconds unless the user has pinned the
+  // chat. So updates are always seen, pinning removes the 6-7 sec auto hid timer."*
+  // ...and, on playtest 21: *"When chat is viewed for a short time 7 sec right now. Increase time
+  // open to 12 seconds."*
+  const now = 1_000_000;
+  const window = CHAT.autoHideSec * 1000;
+  assert.equal(CHAT.autoHideSec, 12, "twelve seconds, at the owner's request");
+
+  // Nothing said yet: the box is not on screen. It used to be up for the whole session.
+  assert.equal(ui.chatKeepsOpen({ saidAt: 0, now }), false, "a box nobody has spoken in stays hidden");
+  // A line arrives: up, and still up inside the window...
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now }), true, "a line puts the box up");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + window - 500 }), true, "for long enough to read it");
+  // ...and gone after it.
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + window + 500 }), false, "and then it goes");
+  // The pin is the switch that removes the timer, and it outranks everything.
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + 600_000, pin: true }), true, "a pinned box never goes");
+  assert.equal(ui.chatKeepsOpen({ saidAt: 0, now, pin: true }), true, "even before anybody has spoken");
+  // A half-written line keeps it: the timer restarts rather than hiding what is being typed.
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + 600_000, typing: true }), true, "typing keeps it up");
+  // A panel or the title owns the screen; the pin is the one exception (that is what it is for).
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, panel: true }), false, "not over a station panel");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, intro: true }), false, "never over the title screen");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, panel: true, pin: true }), true, "a pinned box stays anyway");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, on: false }), false, "no session, no box");
+
+  // The wiring: a line is what shows it, one timer takes it away, and the pin is a real button
+  // that says what it did.
+  const source = read("src/ui/multiplayer.js");
+  assert.match(source, /on\("mp-chat-arrived", \(\) => pokeChat\(\)\)/, "an arriving line pokes the box");
+  assert.match(source, /function pokeChat\(\)[\s\S]{0,120}chatSaidAt = Date\.now\(\)/, "which restarts the clock");
+  assert.match(source, /chatHideTimer = setTimeout\(/, "and one timer is what hides it");
+  assert.match(source, /if \(chatPinned\) return;/, "a pinned box arms no timer");
+  // **The field being open keeps it too**: unpinning a box you are typing in must not take the
+  // field away with the pin (playtest 21's way out of a pinned box is Enter).
+  assert.match(source, /typing: chatOpen \|\| !!\(chatInput\?\.value \|\| ""\)\.trim\(\)/,
+    "an open field is a box somebody is using");
+
+  // **One word, two looks** (playtest 21): *"Make it so that it always says Pin, and make the
+  // button solid yellow with black text if pinned and transparent solid with yellow text if non
+  // pinned."* A label that changes under the cursor is a different button each time (L32), so the
+  // state lives in the colours and in `aria-pressed`.
+  assert.doesNotMatch(source, /pinBtn\.textContent =/, "the pin never renames itself");
+  assert.match(source, /pinBtn\.classList\.toggle\("is-pinned", chatPinned\)/, "its look follows the state");
+  assert.match(source, /pinBtn\.setAttribute\("aria-pressed", chatPinned \? "true" : "false"\)/,
+    "and so does the state a screen reader hears");
+  const css = read("src/styles.css");
+  // **The Pin button belongs to the open box** (owner, playtest 22): *"when chat is auto opened …
+  // the pin button shouldn't be there"* and *"if you want to unpin the chat you simply press enter
+  // and the pinned button appears again"*. That replaced playtest 20's "clickable whenever the box
+  // is up" rule — a button nobody is meant to press during a glance is not a button.
+  assert.match(css, /body:not\(\.mp-chat-open\) #mp-chat-pin \{ display: none; \}/,
+    "no Pin on a box that opened by itself, and none while pinned and idle");
+  assert.doesNotMatch(css, /body:not\(\.mp-chat-live\) #mp-chat-pin \{ display: none; \}/,
+    "the old visible-whenever-up rule is gone, not merely outranked");
+  assert.doesNotMatch(css, /body:not\(\.mp-chat-open\) #mp-chat,/,
+    "and the box itself takes the mouse while it is up");
+  assert.match(css, /#mp-chat-pin \{[^}]*background: transparent;[^}]*color: var\(--amber\);/,
+    "unpinned: transparent, yellow text");
+  assert.match(css, /#mp-chat-pin\.is-pinned[\s\S]{0,120}background: var\(--amber\);[\s\S]{0,80}color: #0b0d0f;/,
+    "pinned: solid yellow, black text");
+
+  // **Glancing is the chat and nothing else** (playtest 21: *"when chat message causes chat pop up
+  // for 12 seconds, only the chat is viewed ie not the player list (to reduce disturbance to
+  // player view)"*). The players column is drawn only while typing or pinned...
+  assert.match(css, /body:not\(\.mp-chat-open\):not\(\.mp-chat-pinned\) #mp-chat-who \{ display: none; \}/,
+    "a line arriving does not push the players column into the view");
+  // ...and a pinned box that nobody is typing in does not need the Pin button either: the box
+  // staying up is the answer to "did that do anything?", and Enter brings the button back
+  // (playtest 22 made that the whole rule: the button exists only for an open box).
+  assert.match(css, /body:not\(\.mp-chat-open\) #mp-chat-pin \{ display: none; \}/,
+    "a box nobody is typing in hides the button");
+  assert.match(source, /document\.body\.classList\.toggle\("mp-chat-pinned", chatPinned\)/,
+    "which the body has to be told about");
+  assert.match(source, /document\.body\.classList\.remove\("mp-chat-live", "mp-chat-open", "mp-chat-pinned"\)/,
+    "and loses it when the box goes");
+});
+
 test("chat works with nobody else connected: the line is shown, and says only you see it", () => {
   const fake = fakeApi({
     say: text => { fake.calls.push(["say", text]); return false; },
@@ -620,6 +700,24 @@ test("the chat box has a compact player column beside the lines", () => {
   assert.equal((rows.match(/<li/g) || []).length, 3, "one small row per pilot");
   const source = read("src/ui/multiplayer.js");
   assert.match(source, /id="mp-chat-who"/, "the column has its own element");
+
+  // **A busy room counts instead of growing** (playtest 22). There is no player cap any more, so
+  // the column names `CHAT.whoRows` pilots and says how many more there are.
+  assert.ok(CHAT.whoRows > 0 && CHAT.whoRows <= 12, `whoRows is ${CHAT.whoRows}`);
+  const many = ui.chatWhoHtml({
+    name: "Ada",
+    guests: Array.from({ length: 20 }, (_, i) => ({ guestId: `g${i}`, name: `P${i}` })),
+  });
+  assert.equal((many.match(/<li/g) || []).length, CHAT.whoRows + 1, "ten names and the row that counts the rest");
+  assert.match(many, /\+11 more/, "which counts them");
+
+  // **Narrow, and no indent** (playtest 22: *"the player column needs to be less wide … reducing the
+  // gap between Players and Pin. Keep name size the same"*). The column caps at 54 px, loses its
+  // 9 px indent, and the flex gap between the lines and the column came down; the names stay 12 px.
+  const css = read("src/styles.css");
+  assert.match(css, /#mp-chat-who \{[\s\S]{0,400}max-width: 54px;\s*padding-left: 4px;/, "the column is narrower");
+  assert.match(css, /#mp-chat \{[\s\S]{0,300}gap: 6px;/, "and sits closer to the lines");
+  assert.match(css, /#mp-chat-who li \{[\s\S]{0,200}font-size: 12px;/, "names keep their size");
 });
 
 test("joining is the main menu's job and hosting is the pause card's", async () => {

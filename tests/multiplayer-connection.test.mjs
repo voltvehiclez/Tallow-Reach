@@ -47,7 +47,7 @@ const withStorage = fn => {
 
 test("settings: a name is remembered, trimmed and capped, and never in a save", () => {
   withStorage(() => {
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" }, "nothing stored is a clean slate");
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "", pilotToken: "" }, "nothing stored is a clean slate");
     writeSettings({ name: "  Ada   Lovelace " });
     assert.equal(readSettings().name, "Ada Lovelace", "runs of spaces collapse and the ends are trimmed");
     assert.equal(nameIsSet(), true);
@@ -57,13 +57,13 @@ test("settings: a name is remembered, trimmed and capped, and never in a save", 
     assert.equal(nameIsSet(""), false);
     // The switches are separate from the name and keep their values.
     writeSettings({ enabled: true, autoJoin: false });
-    assert.deepEqual(readSettings(), { name: "x".repeat(NET.nameMax), enabled: true, autoJoin: false, relay: null, lastJoin: "" });
+    assert.deepEqual(readSettings(), { name: "x".repeat(NET.nameMax), enabled: true, autoJoin: false, relay: null, lastJoin: "", pilotToken: "" });
   });
   // No storage at all (private window): a working session, just no memory.
   const previous = globalThis.localStorage;
   delete globalThis.localStorage;
   try {
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" });
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "", pilotToken: "" });
     assert.doesNotThrow(() => writeSettings({ name: "Ada" }));
   } finally {
     globalThis.localStorage = previous;
@@ -73,9 +73,9 @@ test("settings: a name is remembered, trimmed and capped, and never in a save", 
 test("settings: nonsense in storage is ignored rather than fatal", () => {
   withStorage(mem => {
     mem.set("tr_mp", "{not json");
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" });
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "", pilotToken: "" });
     mem.set("tr_mp", JSON.stringify({ name: 42, enabled: "yes" }));
-    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "" }, "wrong types fall back");
+    assert.deepEqual(readSettings(), { name: "", enabled: false, autoJoin: true, relay: null, lastJoin: "", pilotToken: "" }, "wrong types fall back");
     // A relay server is remembered with the other settings, and nonsense is dropped.
     mem.set("tr_mp", JSON.stringify({ name: "Ada", relay: { urls: "turn:a.example:443", username: "u", credential: "c" } }));
     assert.deepEqual(readSettings().relay, { urls: "turn:a.example:443", username: "u", credential: "c" });
@@ -151,8 +151,9 @@ test("join link: the address bar and the page base are read without a browser", 
 
 test("protocol: every kind is cleaned to its own fields, and nothing else survives", () => {
   // Step 16 slice 4 added the two that carry a PILOT: `carry` (guest -> host) and
-  // `suitcase` (host -> guest, and the newer copy back).
-  assert.deepEqual(KINDS.sort(), ["carry", "chat", "hello", "ping", "pong", "presence", "refuse", "suitcase", "welcome"]);
+  // `suitcase` (host -> guest, and the newer copy back). Slice 5 added `bye`, which says
+  // "I am leaving" so the host can take a final copy and mark the record `left` at once.
+  assert.deepEqual(KINDS.sort(), ["bye", "carry", "chat", "hello", "ping", "pong", "presence", "refuse", "suitcase", "welcome"]);
 
   const hello = cleanMessage("hello", { v: SAVE_VERSION, worldId: "w-1", guestId: "g-1", name: "Ada", token: "tok", admin: true });
   assert.deepEqual(Object.keys(hello), ["t", "v", "worldId", "guestId", "name", "token"], "a hello carries no extra field");
