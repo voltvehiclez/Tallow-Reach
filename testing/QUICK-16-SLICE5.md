@@ -1,6 +1,6 @@
 # Quick test: step 16 slice 5 (10 minutes)
 
-**Build `2026-11-24b`.** Two browsers with separate saves: one normal window, one incognito/private
+**Build `2026-11-24c`.** Two browsers with separate saves: one normal window, one incognito/private
 window. Everything below is the new behaviour; if a step does not match, send me the step number and
 **Copy details** from both machines.
 
@@ -30,8 +30,8 @@ window. Everything below is the new behaviour; if a step does not match, send me
 8. **Check:** one button, full width. Press it → the ordinary menu (Open World / Campaign / Join
    Multiplayer World). Your pilot is **not** lost, and it is **not** in your own world either: press
    **Open World** and you *always* get the *"Your pilot is in Ada's world"* card with **Bring pilot
-   home**, whether or not anything changed over there. **Main menu** on the card leaves everything as
-   it was.
+   home**, whether or not anything changed over there — the copy from that world is always the one
+   that comes home. **Main menu** on the card leaves everything as it was.
 9. **Check the save:** press **Bring pilot home** on the card. Your credits, hold and station
    lockers come back — the same numbers, **once** each — and **Open World** then opens your world.
 

@@ -202,20 +202,22 @@ Mission lessons are first because missions are where most bugs have come from. T
   player can *do* right now; if the answer is "only sometimes", it needs a companion test and a door
   that leaves the flag alone. And a comparison needs a defined answer for a **tie** — decide it
   deliberately (here: a tie is NOT newer) and write the reason down.
-- **Playtest 20 corrected the second half of this** (owner: *"logging into the guests own open
-  world does not give a prompt to bring their pilot home. It should to confirm its updating to
-  the local open world to latest version of their pilot."*). The evidence a press needs is not
-  that two copies differ — that is a question the player cannot see — but that the player is
-  about to do something the state forbids: **while the pilot is away, Open World always asks**,
-  and the comparison only labels the card. Evidence gates the *screen*; it must not be so narrow
-  that the screen the player asked for never arrives. **And a refusal at one door is not a refusal**
+- **Playtest 20 corrected the second half of this, twice over** (owner: *"logging into the guests
+  own open world does not give a prompt to bring their pilot home"*, then *"Doesnt matter if
+  nothing has changed, game should always try to use the latest pilot version since even small
+  things like pilot position can change."*). The evidence a press needs is not that two copies
+  differ — that is a question the player cannot see — but that the player is about to do something
+  the state forbids: **while the pilot is away, Open World always asks, and its answer always
+  takes the copy that world holds.** A comparison that decides whether to *offer* the one act that
+  brings the pilot back is a comparison deciding nothing: the comparison is gone (`isNewerCopy`,
+  `newerCopyAway` deleted), and `shipPlaces`/hull damage move with no number changing. **And a refusal at one door is not a refusal**
   (playtest 20, A3): while the away marker is set, *two* doors reached the pilot's own galaxy, so it
   was not paused at all. Put the guard where every door ends (`enterGameMode("open")`), not beside
   the press that happened to be reported.
 - **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when
-  `ui.awayCard` was raised by the press; Open World asks unconditionally while away and passes
-  `newerCopyAway()` to the card as a label; a tie, a missing pair, damage and lockers are all NOT
-  newer; and "a pilot that is away cannot fly its own world — one guard, every door".
+  `ui.awayCard` was raised by the press; Open World asks unconditionally while away and compares
+  nothing; "coming home takes the copy that world holds — a tie is not a reason to skip it"; and
+  "a pilot that is away cannot fly its own world — one guard, every door".
 
 ### L41. A control that is disabled whenever it would be useful is not a control
 - **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test

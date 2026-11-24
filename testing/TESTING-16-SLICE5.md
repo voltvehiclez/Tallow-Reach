@@ -3,7 +3,7 @@
 This slice is about the ugly moments: **the host's game closes**, **the connection to it goes away**,
 **your pilot is in that world**, and **a closed tab**. Nothing new is drawn in space.
 
-**Build: `2026-11-24b`** — both machines. If one screen shows a different build string (title card, or
+**Build: `2026-11-24c`** — both machines. If one screen shows a different build string (title card, or
 Pause > Open Multiplayer > Connection details), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -99,14 +99,17 @@ This is the one that changed most, so please do it even if nothing else looks di
 
   > **Your pilot is in Ada's world** — **Bring pilot home** / **Main menu**
 
-  *(One line of it differs: "Ada's world holds newer work from your pilot than this galaxy does"
-  vs "Nothing has changed in Ada's world since your pilot arrived, so both copies are the same —
-  bringing it home is still how this galaxy gets its pilot back". Same question either way.)*
+  *(It no longer has a "newer" or "nothing changed" line: **Bring pilot home always takes the
+  latest version from that world**, however little looks different — a hull parked at a different
+  station, a stack a little lighter, a module swapped. That is the owner's rule for this build.)*
 - **Main menu** takes you to the ordinary menu, and your pilot is still away — nothing is decided.
 - **Open World** never drops you into your own world with the pilot away. That is bug A3: if it does,
   tell me what you pressed.
 - Press **Bring pilot home** with the host still closed. The card goes, the ordinary menu comes back,
   a sentence says your pilot is home — **and now Open World opens your world**.
+- **Even a visit where nothing happened comes home.** Do part 3 once after a visit where you did
+  nothing at all in your friend's world: the card still appears, and **Bring pilot home** still
+  works. There is no version of it that says "both copies are the same" any more.
 - Your **credits**, your **hold** and your **station lockers** are back — every stack exactly once.
   Check a number you noted before you left.
 - Your home stations' stocks are back to what they were before you left, **not double**.

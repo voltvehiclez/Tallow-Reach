@@ -414,7 +414,6 @@ export const state = {
     awayCard: false,
     // ...and whether that world holds newer work than this galaxy does. It changes what the
     // card SAYS, not whether it appears (owner, playtest 20: the press always asks).
-    awayNewer: false,
     // Step 16 slice 5: the connection to the host is gone (`{ hostName, reason }`), so the
     // main menu carries "Lost connection to host" until the player dismisses it. Raised by the
     // connection (`mp-host-left`), never by a press, and cleared by its one button — it is

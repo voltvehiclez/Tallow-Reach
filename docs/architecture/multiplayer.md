@@ -342,12 +342,11 @@ replaced the "only if newer" gate):
   when nothing was newer, flying a hull whose cargo was in a suitcase elsewhere and recording none
   of it (`captureActiveModeSave` refuses a live capture while away).
 - The card *"Your pilot is in Ada's world"* appears **only** on an **Open World** press, and it
-  appears **every time** while the pilot is away. `newerCopyAway()` now only labels it ("holds
-  newer work" vs "nothing has changed"): whether copies differ is not something a player can see,
-  and the press is a custody decision either way.
-- **Newer** is `custody.isNewerCopy`: the host's `{epoch, rev}` pair first (when both carry one),
-  then more credits, then more cargo. **A tie is not newer**; hull damage and lockers are not
-  signals (damage is not progress; the home stations are emptied into the suitcase).
+  appears **every time** while the pilot is away: the press is a custody decision either way.
+- **Nothing is compared** (owner, playtest 20: *"even small things like pilot position can
+  change"*): **Bring pilot home always installs the copy that world holds.** A `newerCopyAway` /
+  `isNewerCopy` pair used to weigh credits and cargo first, and it is deleted — the travelling half
+  is a photograph, not a rival, and `shipPlaces` or hull damage move with no number changing.
 - The card has **two** buttons — **Bring pilot home** and **Main menu**. **Rejoin was removed**
   (playtest 18): rejoining is *main menu → Join Multiplayer World*, one path that explains itself.
 

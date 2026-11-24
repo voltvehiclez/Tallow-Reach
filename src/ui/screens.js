@@ -92,7 +92,7 @@ const HOME_ICON_SVG =
  * Both buttons go through `data-a`, which `ui/menu.js` already routes, so this is markup
  * only: no new listener, and the same actions a keyboard-only player reaches.
  */
-function awayCardHtml(away, newer = false) {
+function awayCardHtml(away) {
   const host = away.hostName ? `${esc(away.hostName)}'s world` : "a friend's world";
   return (
     `<div class="away-card">` +
@@ -112,13 +112,15 @@ function awayCardHtml(away, newer = false) {
     `<p class="away-note"><b>Bring pilot home</b> makes the copy from that world your own save, so ` +
     `this galaxy catches up to the latest version of your pilot — everything it did there comes ` +
     `back with it.</p>` +
-    // **Why the card appears at all** (owner, playtest 20): a press on Open World while the pilot
-    // is away is a custody question, whichever copy is newer, so the card answers it either way
-    // instead of pretending the two facts are the same one.
-    (newer
-      ? `<p class="away-note">${host} holds newer work from your pilot than this galaxy does.</p>`
-      : `<p class="away-note">Nothing has changed in ${host} since your pilot arrived, so both ` +
-        `copies are the same — bringing it home is still how this galaxy gets its pilot back.</p>`) +
+    // **Always the latest copy, never a comparison** (owner, playtest 20: *"Doesnt matter if
+    // nothing has changed, game should always try to use the latest pilot version since even
+    // small things like pilot position can change."*). There used to be a "hold newer work" /
+    // "nothing has changed" branch here, and both halves were a lie: the second invited the
+    // player to skip the one act that gets their pilot back, and the first asked them to trust a
+    // number they cannot see. The sentence says what happens instead.
+    `<p class="away-note">It is the copy ${host} holds, whatever has happened to it there — a ` +
+    `hull parked at a different station, a stack a little lighter, a module swapped. Nothing is ` +
+    `compared first: while your pilot is away, that copy is the truth about it.</p>` +
     `<p class="away-note">Bringing it home works even if your friend is offline: your pilot ` +
     `carries its own copy of everything it has done.</p>` +
     // Every screen needs a door that is not "make a decision about your save" (playtest 17).
@@ -191,17 +193,17 @@ export function introHtml() {
   // **The card is not the title screen any more** (owner, playtest 18).
   //
   // It used to be: being away meant the menu stopped being a menu. The owner's rule instead:
-  // *"This your pilot is in menu should only come if you try to join your local open world but
-  // a more new version of your save was on an online world."* The menu is always the menu; the
-  // card is raised by Open World's press, from `ACTIONS.intro`, and it only appears there when
-  // `net/session.js`'s `newerCopyAway()` says a newer copy is actually waiting. Otherwise the
-  // pilot's own world simply opens.
+  // *"This your pilot is in menu should only come if you try to join your local open world"* —
+  // and, since playtest 20, **every** such press raises it, because a world cannot fly a pilot
+  // that is in another one. Nothing is compared any more either (the owner: *"game should always
+  // try to use the latest pilot version"*): the card asks one question and its answer always
+  // takes the copy that world holds.
   //
   // `state.ui.awayCard` is therefore the switch, not the suggestion: it is set only by a press
   // on Open World, and its "Main menu" press clears it (playtest 17's door), landing the player
   // on the ordinary menu with the marker untouched.
   if (state.away && state.ui?.awayCard) {
-    return `<h1>Tallow Reach</h1>${awayCardHtml(state.away, state.ui?.awayNewer === true)}`;
+    return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
   }
   return (
     `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +

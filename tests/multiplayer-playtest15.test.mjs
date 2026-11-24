@@ -158,11 +158,11 @@ test("playtest 15: the away card is never a dead end", () => {
   assert.match(menu, /comehome\(\) \{\s*const done = bringPilotHomeAtMenu/, "it unpacks the suitcase itself");
   // Playtest 18 changed what Open World does with an away pilot: it raises the card instead of
   // flying a frozen pilot. Playtest 20 made that unconditional — the card is the press's whole
-  // answer — and left `newerCopyAway()` deciding only what the card says.
+  // answer — and removed the "is the copy newer?" question entirely: coming home always takes the
+  // copy the friend's world holds.
   assert.match(menu, /if \(state\.away\) \{\s*state\.ui\.awayCard = true;/,
     "Open World raises the card whenever the pilot is away");
-  assert.match(menu, /state\.ui\.awayNewer = newerCopyAway\(\{ mode:/,
-    "and the custody question only labels it");
+  assert.doesNotMatch(menu, /newerCopyAway|awayNewer/, "with nothing compared first");
   assert.match(menu, /state\.ui\.awayCard = true;/, "the card is raised by that press alone");
   const net = read("src/net/session.js");
   // Coming home needs no wire: the suitcase is the guest's own copy.

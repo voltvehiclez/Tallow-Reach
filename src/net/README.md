@@ -60,9 +60,11 @@ forwarding, with the wrapper still the only file that names a connection library
   needs a relay candidate from each side. `channel.diagnostics()` is what the screen reports.
 - **The newest copy wins, and the guest's own suitcase is what comes home.** The host writes a
   visitor's live profile back on a real change (`syncGuests`), a `rev` raise is never more than one
-  per `NET.revStepMs`, and the message follows `NET.snapshotSec` later. Whose copy is newer is
-  `compare` (slice 1) plus one fact it cannot express: a record marked `left` is holding a suitcase,
-  not an identity, so a pilot that has been home since hands over its own save.
+  per `NET.revStepMs`, and the message follows `NET.snapshotSec` later. `compare` (slice 1) orders
+  two copies on the wire, plus one fact it cannot express: a record marked `left` is holding a
+  suitcase, not an identity, so a pilot that has been home since hands over its own save. **The
+  player is asked nothing**: bringing a pilot home installs the copy that world holds, however
+  little looks different (owner, `2026-11-24c` — `newerCopyAway`/`isNewerCopy` are deleted).
 - **A pilot lives in one window.** A hello for the same `guestId` from a different live peer is a
   takeover: the older window is told in words and stops **quietly** — a `bye` from it would make the
   host mark the pilot gone and take its ship out of the world.

@@ -1,3 +1,22 @@
+## 2026-11-23: Test Ship faced sideways — the model brings its own rotation
+
+Owner, playtest 15: *"it is looking to the left, needs to be rotated 90 degrees clockwise when looking from the top."*
+
+The new `testship-v1.glb` carries a **+90° Y rotation on its own node** (quaternion `[0, 0.7071, 0, 0.7071]`); the
+old file had none. So as loaded, the nose already pointed forward — and the old file's `modelYaw: Math.PI / 2` was
+applied **on top**, turning it to face −X. `modelYaw` corrects the *source model*, not the raw mesh, so a replacement
+`.glb` usually needs a different value. It is now `0`.
+
+`tests/compressed-model.test.mjs` replaces its old `modelYaw === π/2` assertion with one that **applies the node
+rotation and then the yaw to the nose vector** and asserts the result is −Z: with `π/2` restored it fails with
+`(-1.00, 0.00, -0.00)`, which is exactly the bug the owner saw. `src/data/README.md` records the trap.
+
+**Note on the diagnosis:** raw-vertex analysis said the mesh runs along +X and `+π/2` *should* be forward — which
+contradicted the report. The node rotation is what the first three attempts missed; three.js's own matrix confirmed it.
+
+**Files:** `src/data/ships.js`, `src/data/README.md`, `tests/compressed-model.test.mjs`. **Tests: 1013, all green.**
+Save unchanged (v29). Imported-look only — no gameplay value touched.
+
 ## 2026-11-23: Where a joining pilot lands, and where it comes home to
 
 The owner asked how arrival and return choose a place, and what happens when a station exists in one

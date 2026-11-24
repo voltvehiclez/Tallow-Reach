@@ -12,7 +12,7 @@ import { launch, resumeFromSave } from "../sim/session.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
 // Named imports only, like every other line here: `net/session.js` is injected into tests with
 // `setSaveKit`, so this file must never hold a copy of something it can ask for.
-import { leaveVisit, joinWorld, newerCopyAway } from "../net/session.js";
+import { leaveVisit, joinWorld } from "../net/session.js";
 import { makeJoinUrl, pageBase } from "../net/join-link.js";
 import { readSettings, writeSettings } from "../net/settings.js";
 // The same guard `installDragListeners` uses below: a headless import (a test) has a
@@ -391,7 +391,6 @@ function enterGameMode(mode) {
   if (mode === "open" && state.away) {
     state.ui.intro = true;
     state.ui.awayCard = true;
-    state.ui.awayNewer = newerCopyAway({ mode: "open" });
     render();
     return false;
   }
@@ -434,16 +433,17 @@ const ACTIONS = {
     // pilot home. It should to confirm its updating to the local open world to latest version
     // of their pilot."*).
     //
-    // The earlier rule asked `newerCopyAway()` first and opened the world when nothing was
-    // newer, which is a question the player cannot answer: "nothing changed there" and "this
+    // The earlier rule asked whether a newer copy was waiting and opened the world when there
+    // was not, which is a question the player cannot answer: "nothing changed there" and "this
     // world is not up to date with my pilot" are different facts, and only the second one is
     // about the save. Opening your own world while your pilot is in somebody else's is always
     // a custody decision — bring the pilot home, or go back to the menu — so this press always
-    // asks. Nothing else changed: the card still has its **Main menu** door (playtest 17), so
-    // there is no trap, and `newerCopyAway()` now only decides what the card SAYS.
+    // asks. There is nothing to compare, either (owner, playtest 20: *"game should always try to
+    // use the latest pilot version"*): the card has one answer, and **Bring pilot home** always
+    // takes the copy that world holds. It still has its **Main menu** door (playtest 17), so
+    // there is no trap.
     if (state.away) {
       state.ui.awayCard = true;
-      state.ui.awayNewer = newerCopyAway({ mode: state.mode === "campaign" ? "campaign" : "open" });
       state.ui.intro = true;
       render();
       return;
@@ -476,7 +476,6 @@ const ACTIONS = {
     // by now — `bringPilotHome` put the newer one in its place — so pressing Open World opens
     // the world rather than raising the card again.
     state.ui.awayCard = false;
-    state.ui.awayNewer = false;
     // A lost connection and a newer copy are two screens about the same pilot: once it is home,
     // neither of them says anything true (step 16 slice 5).
     state.ui.lostHost = null;
@@ -506,7 +505,6 @@ const ACTIONS = {
    */
   menu() {
     state.ui.awayCard = false;
-    state.ui.awayNewer = false;
     state.ui.lostHost = null;
     render();
   },

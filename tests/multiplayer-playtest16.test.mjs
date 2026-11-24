@@ -123,40 +123,60 @@ test("playtest 18 + 20: the card appears on Open World, and always while the pil
   // ...and nothing opens from that press: the card is the whole answer.
   assert.match(menu, /state\.ui\.awayCard = true;[\s\S]{0,240}return;\s*\}\s*enterGameMode\("open"\);/,
     "nothing opens until the pilot is home");
-  // The copies still decide what the card SAYS, which is the one thing they can honestly decide.
-  assert.match(menu, /state\.ui\.awayNewer = newerCopyAway\(\{ mode:/, "the card is told which copy is newer");
-  assert.match(screens, /function awayCardHtml\(away, newer = false\)/, "and it says so");
-  assert.match(screens, /state\.away, state\.ui\?\.awayNewer === true/, "from the state, not a guess");
+  // **Nothing is compared at all** (owner, playtest 20: *"Doesnt matter if nothing has changed,
+  // game should always try to use the latest pilot version since even small things like pilot
+  // position can change."*). The card takes the marker and nothing else, and the comparison that
+  // used to label it is gone from the codebase rather than merely unused.
+  assert.match(screens, /function awayCardHtml\(away\) \{/, "the card needs no verdict");
+  assert.match(screens, /awayCardHtml\(state\.away\)\)?/, "it is drawn from the marker");
+  assert.doesNotMatch(menu + screens, /newerCopyAway|awayNewer/, "no copy is called newer");
+  assert.doesNotMatch(read("src/net/session.js"), /export function newerCopyAway/, "and has no home");
+  assert.doesNotMatch(read("src/state/state.js"), /awayNewer/, "not even as a flag");
   // Arriving at the menu clears it, so Main menu lands on the menu.
   assert.match(menu, /state\.ui\.intro = true;[\s\S]{0,400}state\.ui\.awayCard = false;/,
     "the menu clears the card");
 });
 
-test("playtest 18: 'newer' is decided by the custody rule, and a tie is not newer", async () => {
-  const { isNewerCopy } = await import("../src/net/custody.js");
-  const mine = { epoch: 1, rev: 4, profile: { cr: 100, holds: { wasp: { ore: 5 } } } };
-  // More credits, more cargo: newer.
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 900, holds: { wasp: { ore: 5 } } } }), true);
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 100, holds: { wasp: { ore: 9 } } } }), true);
-  // The host's own ordering pair decides first.
-  assert.equal(isNewerCopy(mine, { ...mine, rev: 9 }), true, "a raised rev is newer");
-  assert.equal(isNewerCopy({ ...mine, rev: 9 }, mine), false, "a stale rev is not");
-  // Less of everything is NOT newer, and neither is a dead heat — a false card is the trap.
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 1, holds: {} } }), false);
-  assert.equal(isNewerCopy(mine, { ...mine, profile: { cr: 100, holds: { wasp: { ore: 5 } } } }), false,
-    "a tie is not newer");
-  // Found while building this: `compare` ranks MISSING numbers lowest, so a copy with no
-  // epoch/rev at all "loses" and looks older — which reported "newer" for two identical copies
-  // and raised the card for nothing. Only a pair both sides actually carry may decide.
-  assert.equal(isNewerCopy({ profile: { cr: 100 } }, { profile: { cr: 100 } }), false,
-    "two copies with no ordering pair and the same contents are a tie, not newer");
-  assert.equal(isNewerCopy(mine, null), false);
-  assert.equal(isNewerCopy(null, mine), false);
-  // Lockers are never the signal: the home stations are emptied into the suitcase, so counting
-  // them would report "newer" on every single visit.
-  assert.equal(isNewerCopy(mine, { ...mine, lockers: [{ item: "ore", count: 99 }] }), false);
+test("playtest 20: coming home takes the copy that world holds — a tie is not a reason to skip it", async () => {
+  // The owner: *"Doesnt matter if nothing has changed, game should always try to use the latest
+  // pilot version since even small things like pilot position can change."*
+  //
+  // Playtest 18 had the game decide by credits and cargo whether the friend's world held anything
+  // worth collecting, and skip the question when it did not. Two things were wrong with that: the
+  // comparison is invisible to the player, and it is not even the right measure — `shipPlaces`
+  // (which station a hull is parked at), hull damage and modules are all facts that change with
+  // no number moving. So the copy comes home, always, and nothing is weighed first.
+  const { checkOut } = await import("../src/net/custody.js");
+  const { SAVE_VERSION, newProfile, newWorld, sanitizeSave } = await import("../src/state/profile.js");
+  const makeSave = () => sanitizeSave({ v: SAVE_VERSION, profile: newProfile(), world: newWorld(), away: null });
+
+  const home = makeSave();
+  const { save: packed, bundle } = checkOut(home, { worldId: "w-1", hostName: "Ada", guestId: "g-1", token: "t" });
+  // The host wrote the pilot while the guest was there: same credits, one hull parked a station
+  // further along and a little hull damage. Nothing a credits-or-cargo rule can see.
+  const parked = Object.keys(bundle.profile.shipPlaces || {})[0] || bundle.profile.ship;
+  const written = {
+    ...bundle,
+    // the pair is deliberately UNCHANGED: this is the tie the old rule answered "not newer" for
+    epoch: packed.away.epoch,
+    rev: packed.away.rev,
+    profile: { ...bundle.profile, hp: { ...(bundle.profile.hp || {}), [parked]: 0.5 } },
+  };
+  const stored = { ...packed, away: { ...packed.away, suitcase: written } };
+
+  const done = session.bringPilotHome(stored);
+  assert.equal(done.ok, true, done.message);
+  assert.equal(done.save.away, null, "the pilot is home");
+  assert.equal(done.save.profile.hp[parked], 0.5, "the damage taken there came home");
+  assert.deepEqual(done.save.profile.shipPlaces, written.profile.shipPlaces,
+    "and so did where every hull was parked");
+  // Nothing compares: the helpers that answered "is it newer?" are gone, so no future caller can
+  // put the question back in front of the one act that has no alternative.
   const custody = read("src/net/custody.js");
-  assert.match(custody, /Lockers are deliberately NOT compared/);
+  assert.doesNotMatch(custody, /export function isNewerCopy/, "the comparison is deleted, not idle");
+  const session_ = read("src/net/session.js");
+  assert.match(session_, /It takes the copy that world holds, and asks nothing about whether it changed/,
+    "and the rule is written where the act lives");
 });
 
 test("playtest 17: the away card is never a room with no door", () => {
@@ -297,7 +317,7 @@ test("playtest 20: a pilot that is away cannot fly its own world — one guard, 
   assert.ok(guard < fn.indexOf("state.ui.intro = false;"), "and refuses before anything is loaded");
   const body = fn.slice(guard, fn.indexOf("state.ui.intro = false;"));
   assert.match(body, /state\.ui\.awayCard = true;/, "the refusal is the away card");
-  assert.match(body, /state\.ui\.awayNewer = newerCopyAway\(/, "labelled by the copies it has");
+  assert.doesNotMatch(body, /newerCopyAway|awayNewer/, "with no copy called newer");
   assert.match(body, /render\(\);/, "and drawn");
   // Every door goes through it: `switchGameMode` is what actually swaps the world in, and the UI
   // calls it from this one function only (the campaign's own call is a different mode).
