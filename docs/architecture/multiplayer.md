@@ -306,9 +306,10 @@ without risking a save.
 4. **Join** — "Bring my pilot" (`checkOut`/`relocate` through the handshake slice 3 already
    answers), two-second snapshots, reconnects by `compare`, "Go home" from the suitcase with the
    host offline. **Built 2026-11-23a, in playtest** (rounds 14–19 fixed on top).
-5. **Crashes and reconnects** — "Your pilot is safe" with *Wait* and *Go home*, the host's copy kept
-   current, `compare` deciding between copies, a final copy on tab close, one session per
-   `guestId`. **Built 2026-11-24a** — see the next section.
+5. **Crashes and reconnects** — a lost host puts the player back on the main menu with **"Lost
+   connection to host"**, the host's copy kept current, `compare` deciding between copies, rejoining
+   keeps the copy the server has, a final copy on tab close, one session per `guestId`.
+   **Built 2026-11-24a** — see the next section.
 6. **Trading** — *View docked players*, a trade of items, a ship at that station, or credits, a first
    confirm that locks both sides and a second that commits; the host checks m³ in both station holds
    first and moves nothing if either side lacks room.
@@ -317,9 +318,9 @@ without risking a save.
 
 The owner asked for **"one world, two ships visible"** on 2026-11-22. The plan's own model says what
 that costs — the host's browser is the one authority, and a guest's screen draws what the host sends
-back — and it is the two debts [../TARGET_ARCHITECTURE.md](../TARGET_ARCHITECTURE.md) still lists as
-step-16 work (*death and recovery*, *player presentation and input*). It is split into two slices
-because each half is a feature in its own right and neither can be tested alone:
+back — and it is the two debts [../TARGET_ARCHITECTURE.md](../TARGET_ARCHITECTURE.md) still lists
+(*death and recovery*, *player presentation and input*). Two slices, because neither half can be
+tested alone:
 
 - **Slice 7 — a second pilot exists.** The suitcase becomes a record in `state.players` through
   `custody.hostProfile` + `configurePlayer` (the host's `sim/step.js` already flies every active
@@ -343,50 +344,60 @@ because each half is a feature in its own right and neither can be tested alone:
 - If nothing newer is waiting, **Open World opens the pilot's own world**, away marker and all. The
   frozen travelling half stays in the save untouched, so bringing a newer copy home later still
   works — it is a copy, not a move.
-- Newer is decided by `custody.isNewerCopy`: the host's `{epoch, rev}` pair first (only when both
-  copies carry one), then more credits, then more cargo. **A tie is not newer**, and hull damage
-  and locker counts are deliberately not signals (damage is not progress; the home stations are
-  emptied into the suitcase, so lockers would always look newer).
+- Newer is `custody.isNewerCopy`: the host's `{epoch, rev}` pair first (when both carry one), then
+  more credits, then more cargo. **A tie is not newer**; hull damage and locker counts are
+  deliberately not signals (damage is not progress; the home stations are emptied into the
+  suitcase, so lockers always look newer).
 - The card has **two** buttons — **Bring pilot home** and **Main menu**. **Rejoin was removed**
   (playtest 18): rejoining is *main menu → Join Multiplayer World*, one path that explains itself.
 
-**Bring pilot home** is unchanged and is exactly what the owner described: the copy from the
-friend's world — credits, ships, hull, holds, cargo and lockers — becomes the local save, and the
-local missions, story flags and statistics stay local (`custody.checkIn`). Campaign play never
-affects it: the two halves of a save share a file, nothing else.
+**Bring pilot home** is exactly what the owner described: the copy from the friend's world —
+credits, ships, hull, holds, cargo and lockers — becomes the local save, and the local missions,
+story flags and statistics stay local (`custody.checkIn`). Campaign play never affects it.
 
 ## Slice 5: crashes and reconnects (built 2026-11-24a)
 
 Four rules, and one hole closed:
 
-- **A host that goes away does not end the session.** `markHostLost` keeps the room, clears the hello
-  latches and emits `mp-host-left { reason, hostName }`; the title then raises **"Your pilot is
-  safe"** (`ui/screens.js`, `state.ui.lostCard`) with **Wait** (nothing about the save changes — also
-  the card's way out) and **Go home** (`bringPilotHomeAtMenu`, the one rule). The session is kept
-  through the main menu for exactly this state (`ui/multiplayer.js`), so a host that reopens the
-  same world is met again: the guest's copy goes back, the pilot is re-admitted, `mp-host-back` says
-  so. A guest whose pilot is NOT away gets a sentence instead, and its session stops.
-- **The copy is kept current.** `writeBack` had no caller until this slice: `syncGuests` now asks
-  `sim/` for each visitor's live profile every `NET.snapshotSec`, raises `rev` on a real change
-  (`NET.revStepMs` floor, message `NET.snapshotSec` later) and re-sends an unchanged copy every
-  `NET.suitcaseRepeatSec`. Without it a guest came home from the copy it arrived with.
+- **A lost host is a lost room** (owner, 2026-11-24: *"returned to the main menu with a prompt saying
+  something like lost connection to host … Like Minecraft."*). The session states it once
+  (`markHostLost`, `mp-host-left`), for a departing peer **and** for silence (`checkHostAlive`:
+  nothing from the host for `NET.lastSeenSec` while a `ping` waits for its `pong`); `ui/multiplayer.js`
+  does the rest: the session stops **quietly** (no one left to say `bye` to) **before** the menu is
+  shown, and the menu carries **"Lost connection to host"** (`state.ui.lostHost`, `ui/screens.js`)
+  with **one** door, *Main menu*. It asks no question about a save (L40) and touches none.
+- **Rejoining keeps the version the server has** (owner, same day: *"when reconnecting to the server
+  after a disconnect your pilot's last version is already on the server"*). A rejoin is an ordinary
+  join: the hello re-admits the pilot (a `left` record is proof of nothing), the guest re-sends its
+  copy, and `compare` lets the newer win — what the host wrote back is not overwritten by the older
+  copy the guest holds. **The secret is put back on the way out:** the copy a guest keeps is the
+  host's copy and a host keeps no token, so `sendCarryMessage` fills it from `away.token`; without
+  that, a rejoin in a fresh session was refused as "that link has already been used". Going into
+  the **local** world instead is the away card: Open World offers *Bring pilot home* whenever that
+  world holds a newer copy (`newerCopyAway`) — playtest 18's rule, unchanged.
+- **The copy is kept current.** `writeBack` had no caller until this slice: `syncGuests` asks `sim/`
+  for each visitor's live profile every `NET.snapshotSec`, raises `rev` on a real change
+  (`NET.revStepMs` floor) and re-sends an unchanged copy every `NET.suitcaseRepeatSec`. Without it a
+  guest came home from the copy it arrived with.
 - **`compare` decides, never arrival order** (`onCarry`): a host loading an older save loses to a
   newer suitcase; a stale `carry` does not roll the world backwards (the record stands and its copy
   is sent back); a **`left` record hands over its own save**, because a pilot that has been home
-  since is the newest truth about itself. A tie takes the arriving copy.
-- **A departure is said, and a pilot lives in one window.** New kind **`bye`** (sent when a guest
-  session stops and on `pagehide`/`beforeunload`): the host writes the final copy back first, then
-  marks the record `left` and takes the ship out at once. A hello for the same `guestId` from a
-  different live peer is a **takeover**: the older window is told (`refuse` reason `replaced`), its
-  session stops **quietly** (no `bye`), and the record is not marked `left` — the ship stays for the
-  window that has the pilot. `ping`/`pong` now ride the keepalive and write `lastSeen`.
+  since is the newest truth about itself. A *dropped connection* is not that case: the hello
+  re-admits the pilot first, so its record is live and `compare` decides. A tie takes the arriving
+  copy.
+- **A departure is said, and a pilot lives in one window.** New kind **`bye`** (a guest session
+  stopping, and `pagehide`/`beforeunload`): the host writes the final copy back first, then marks the
+  record `left` and takes the ship out. A hello for the same `guestId` from a different live peer is
+  a **takeover**: the older window is told (`refuse` reason `replaced`), stops **quietly** (no
+  `bye`), and the record is not marked `left` — the ship stays with the window holding the pilot.
+  `ping`/`pong` ride the keepalive and write `lastSeen`.
 
 ## Known gaps (until their slice lands)
 
 - A visiting pilot is **not drawn yet**: it is a real, docked, simulated record (`sim/multiplayer.js`)
-  but `render/views.js` draws one hull, and `core/input.js` fills only the local pilot's controls
-  (slices 7–8, agreed). This is the largest visible gap.
-- A guest's own screen is still its own world; it does not follow the host's pocket (slice 8c).
-- The player list is names, not positions or ships; non-local death and recovery are step-16 work.
-- A hosted world's pause card does not pause the world's *guests*; the host's own clock follows
-  `state.pause` as it always has (the no-pause rule is built, slice 3).
+  but `render/views.js` draws one hull and `core/input.js` fills only local controls (slices 7–8).
+  This is the largest visible gap.
+- A guest's screen is still its own world; it does not follow the host's pocket (slice 8c).
+- The player list is names, not positions or ships; non-local death is step-16 work.
+- A hosted world's pause card does not pause its *guests*; the host's own clock follows `state.pause`
+  as it always has (the no-pause rule is built, slice 3).

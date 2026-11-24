@@ -172,32 +172,48 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L44. A secret one side strips has to be put back by the other
+- **Seen (slice 5, found by the reconnect test):** rejoining in a **fresh session** — what a closed tab
+  or a lost connection leaves — was refused as *"that link has already been used"*. The copy a guest
+  keeps is the copy the **host** sent back, and a host never keeps a token (`guestRecord` deletes it),
+  so the guest had nothing left to prove itself with. Every live-session test passed, because a
+  session still holds the copy it packed.
+- **Rule:** when one side deliberately does not store a value (a secret, a hash, a session token),
+  every later send takes it from the field that survives (`away.token`), never from the copy it was
+  removed from. And a rejoin is not a variant of a live session: test it with a **new** session,
+  because that is the only shape a restart has.
+- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "rejoining after a loss keeps the version the
+  server already has", which starts a second guest session against the same host.
+
 ### L43. A rule with no caller is not a feature
-- **Seen (slice 5, found by writing the test that should have passed):** the host was to write a visiting pilot's suitcase back
-  every couple of seconds. `writeBack` and its trigger (`noteGuestChanged`) existed and the docs described both — but the loop
-  calling them was never written, so a guest came home from the copy it arrived with.
-- **Cause:** each piece was tested on its own and passed; nothing tested the **seam** — that something calls the piece on a
-  clock, in a live session. A function nothing calls passes every test it has, because the tests call it themselves.
-- **Rule:** when a slice promises a loop ("kept current", "every N seconds"), the test runs two sessions and asserts the other
-  side's copy changed **without the test calling the function**, and the docs name the caller. Before claiming a loop is built,
-  grep for its callers: if only tests call it, it is not built.
-- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "the host writes what a visiting pilot became, not only what it arrived
-  with" drives `syncGuests` from the session's own clock, never by calling `writeBack`.
+- **Seen (slice 5, found by writing the test that should have passed):** the host was to write a
+  visiting pilot's suitcase back every couple of seconds. `writeBack` and its trigger existed and the
+  docs described both — but the loop was never written, so a guest came home with the copy it
+  arrived with.
+- **Cause:** each piece was tested on its own and passed; nothing tested the **seam** — that something
+  calls the piece on a clock, in a live session. A function nothing calls passes every test it has,
+  because the tests call it themselves.
+- **Rule:** when a slice promises a loop ("kept current", "every N seconds"), the test runs two
+  sessions and asserts the other side's copy changed **without the test calling the function**, and
+  the docs name the caller. Before claiming a loop is built, grep its callers: if only tests call it,
+  it is not built.
+- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "the host writes what a visiting pilot
+  became, not only what it arrived with", which drives `syncGuests` from the session's own clock.
 
 ### L42. A screen that replaces the menu must earn it, every time, by evidence
-- **Seen (owner, playtest 18):** *"Laptop joins fine a host world. Leaving puts you into the Your Pilot is in hostpc world... for the
-  laptop exiting the main menu in hostpcs world should put the laptop user in the main menu."* The menu had been replaced by a save
-  question, and that question's own "Main menu" button re-raised it on the next draw.
-- **Cause:** the condition for the card was *the away marker exists*, which is true for the whole visit, so the card was the title
-  screen for as long as the visit lasted. Nothing compared the two copies, even though `compare()` had existed since slice 1. A state
-  flag described *what happened* (the pilot left) and was used as if it described *a problem* (a newer copy is waiting).
-- **Rule:** a screen that takes the menu's place must be raised by a **press** and justified by **evidence at that press**, not by a
-  state that persists. When a flag means "an event happened", ask what the player can *do* about it right now; if the answer is "only
-  sometimes", the flag needs a companion test, and the screen needs a door that leaves the flag alone. And a comparison must have a
-  defined answer for a **tie** — decide it deliberately (here: a tie is NOT newer) and write the reason down, or the UI will raise
-  false alarms whenever data is missing.
-- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when `ui.awayCard` was raised by the press; Open
-  World asks `newerCopyAway()`; a tie, missing ordering pair, damage and locker counts are all NOT newer.
+- **Seen (owner, playtest 18):** leaving a host's world put the laptop on *"Your pilot is in hostpc's
+  world"*, and that card's own **Main menu** button re-raised it on the next draw.
+- **Cause:** the condition was *the away marker exists*, true for the whole visit, so the card was the
+  title screen for as long as the visit lasted; nothing compared the copies. A flag describing *what
+  happened* (the pilot left) was used as if it described *a problem* (a newer copy is waiting).
+- **Rule:** a screen that takes the menu's place is raised by a **press** and justified by **evidence at
+  that press**, not by a state that persists. When a flag means "an event happened", ask what the
+  player can *do* right now; if the answer is "only sometimes", it needs a companion test and a door
+  that leaves the flag alone. And a comparison needs a defined answer for a **tie** — decide it
+  deliberately (here: a tie is NOT newer) and write the reason down.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when `ui.awayCard`
+  was raised by the press; Open World asks `newerCopyAway()`; a tie, a missing pair, damage and
+  lockers are all NOT newer.
 
 ### L41. A control that is disabled whenever it would be useful is not a control
 - **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test
@@ -245,38 +261,40 @@ Mission lessons are first because missions are where most bugs have come from. T
   still enters the world. Reverting the derivation fails three of the six.
 
 ### L38. A save seam has two shapes, and guessing the wrong one looks like a broken save
-- **Seen (owner, playtest 15):** the away card became a trap. *"Bring pilot home"* always answered *"Your pilot's save could not be
-  read, so it cannot come home yet"* — in Brave, in Chrome, on a first boot, and after every refresh — while Rejoin answered *"Your
-  pilot is already visiting another world, bring it home first"*. Clicking Bring pilot home removed the laptop's row from the host's
-  players list and still left it on the card.
-- **Cause:** `saveKit.read()` returns a **MODE** save (`{ profile, world, away }`, one pilot). `bringPilotHomeAtMenu` was written
-  against the dual-mode **ENVELOPE** (`{ v, mode, open, campaign }`) and read `root[mode]`, which is `undefined` on a mode save — so it
-  refused before it ever looked at the suitcase. The refusal was blamed on the player's data, which is why nobody suspected the shape.
-  Two things made it worse: `joinWorld` refused *every* join while an away marker existed, including a rejoin to the world the pilot was
-  standing in; and `comeHome` left the visit *before* opening the suitcase, so a refusal cost the connection as well.
-- **Rule:** a seam that can hand you one of two shapes must **say which one it is** in one place and accept both (`isModeSave`), and
-  write back the shape it was given. Anything that *refuses* must refuse only the thing it actually objects to — a guard against
-  "visiting another world" is not a guard against the world you are visiting. And do the work that can fail **before** the step that
-  destroys state, so a refusal changes nothing.
-- **Enforced by:** `tests/multiplayer-playtest15.test.mjs` — a mode save comes home and its locker really arrives, an envelope still
-  works, an unreadable save still refuses, a real rejoin connects with the pilot still away, a different world is still refused; and
-  `tests/multiplayer-ui.test.mjs` asserts `bringPilotHomeAtMenu` runs before `leaveVisit` in `comeHome`. Reverting either fix fails with
-  the owner's own words.
+- **Seen (owner, playtest 15):** the away card became a trap. *"Bring pilot home"* always answered
+  *"Your pilot's save could not be read, so it cannot come home yet"*, and it still removed the
+  laptop's row from the host's players list while leaving it on the card.
+- **Cause:** `saveKit.read()` returns a **MODE** save (`{ profile, world, away }`); `bringPilotHomeAtMenu`
+  was written against the dual-mode **ENVELOPE** and read `root[mode]`, which is `undefined` on a mode
+  save — so it refused before it looked at the suitcase, and the blame landed on the player's data.
+  Two things made it worse: `joinWorld` refused *every* join while an away marker existed, including a
+  rejoin to the world the pilot was standing in; and `comeHome` left the visit *before* opening the
+  suitcase, so a refusal cost the connection as well.
+- **Rule:** a seam that can hand you one of two shapes must **say which one it is** in one place and
+  accept both (`isModeSave`), and write back the shape it was given. A refusal refuses only the thing
+  it objects to — a guard against "visiting another world" is not a guard against the world you are
+  visiting. And do the work that can fail **before** the step that destroys state.
+- **Enforced by:** `tests/multiplayer-playtest15.test.mjs` — a mode save comes home with its locker, an
+  envelope still works, an unreadable save refuses, a real rejoin connects with the pilot away, a
+  different world is refused; and `tests/multiplayer-ui.test.mjs` asserts `bringPilotHomeAtMenu` runs
+  before `leaveVisit`.
 
 ### L37. A key that names a place must be checked against the place that will read it
-- **Seen (owner, playtest 14):** "What happens if a player joins a world with a pocket/station that doesn't exist in their local world and they
-  return to their local world?" — a stack bought at a station only the host's world has came home filed under that station's key, in a galaxy
-  with no such station: counted, saved, and unreachable for ever. A stack that had waited at the host's Meridian also came home to Meridian
-  instead of its own station, even though its `origin` was still in the record.
-- **Cause:** `checkIn` filed a locker at `locker.station` without asking the HOME world whether it has that station, and its own `relocate`
-  call passed no index — so `relocate` fell back to "does `world.stationStores` have a key with that name", which is the wrong question for a
-  station that has never held anything. `relocate` had the right rule all along (`origin` first, then the arrival station); the home path
-  never asked it.
-- **Rule:** every function that FILES something by place asks the world that will read the key, not the world it came from — and asks with
-  the world's station index (`stationsOfWorld`), not with whatever happens to be in its stores. Coming home prefers `origin`, so a stack that
-  waited somewhere else returns to its own station.
-- **Enforced by:** "cargo bought at a station only the host's world has comes home safely" and "a stack that waited at the host's Meridian comes
-  home to its OWN station" in `tests/multiplayer-carry.test.mjs`; reverting the fix fails both.
+- **Seen (owner, playtest 14):** a stack bought at a station only the host's world has came home filed
+  under that station's key, in a galaxy with no such station: counted, saved, unreachable for ever. A
+  stack that had waited at the host's Meridian came home to Meridian instead of its own station,
+  though its `origin` was still in the record.
+- **Cause:** `checkIn` filed a locker at `locker.station` without asking the HOME world whether it has
+  that station, and passed `relocate` no index — so it fell back to "does `world.stationStores` have
+  that key", the wrong question for a station that has never held anything. `relocate` had the right
+  rule all along (`origin` first); the home path never asked it.
+- **Rule:** every function that FILES something by place asks the world that will read the key, not
+  the world it came from — and asks with the world's station index (`stationsOfWorld`), not with
+  whatever happens to be in its stores. Coming home prefers `origin`, so a stack that waited
+  elsewhere returns to its own station.
+- **Enforced by:** "cargo bought at a station only the host's world has comes home safely" and "a stack
+  that waited at the host's Meridian comes home to its OWN station" in
+  `tests/multiplayer-carry.test.mjs`; reverting the fix fails both.
 
 ### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
 - **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."

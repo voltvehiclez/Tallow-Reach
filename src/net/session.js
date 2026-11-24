@@ -270,12 +270,17 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   let welcomed = false;     // has the host answered at all?
   // Slice 5: **the host's browser went away, and the pilot did not.**
   //
-  // A dropped host used to end the session on the spot, which threw away the one thing that
-  // could still reconnect (the room), and told the player only in a sentence at the top of the
-  // screen. Now the session stays alive and keeps saying hello, so a host that reopens the same
-  // world (its `worldId` never changes) is met again without anybody retyping a link.
+  // The loss is a fact this session states once (`mp-host-left`, `snapshot().hostLost`); what
+  // the player sees is `ui/multiplayer.js`'s decision, and it is the owner's (2026-11-24): back
+  // to the main menu with "Lost connection to host" on it, like any other game, and join again
+  // by joining. The save is not touched here: the marker and the suitcase stay exactly as they
+  // were, so *Bring pilot home* still works with the host gone for ever.
   let hostLost = false;
   let lostReason = "";
+  // When the host last said anything at all. A crashed browser sends no `leave`, and a channel
+  // can take a minute to admit a peer is gone, so silence is the guest's own sign of life
+  // (`checkHostAlive`). Written for every message from the host and nothing else.
+  let lastHostHeard = 0;
   const welcomeWaiters = [];
   // "Nobody has appeared in the room and the wait is over." Not an error: the honest fact
   // that the relay route is not delivering, which is the moment the code path stops being a
@@ -359,7 +364,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       carrying: !!carried,
       carriedAcked,
       // Slice 5: the host's browser is gone, and the pilot is still in its world. A screen
-      // draws the "Your pilot is safe — Wait / Go home" card from this, never from a guess.
+      // draws "Lost connection to host" from this, never from a guess.
       hostLost,
       lostReason,
       line: stateLine(status),
@@ -406,6 +411,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   function receive(raw, peerId = null) {
     const message = readMessage(raw);
     if (!message) return;
+    // The host is alive: any message from it counts, because the point is not the message but
+    // that the other browser is still there (see `checkHostAlive`).
+    if (role === "guest" && (!hostPeerId || peerId === hostPeerId)) lastHostHeard = Date.now();
     if (isChatLine(message)) {
       noteLine(message.from || "Other pilot", message.text);
       return;
@@ -559,26 +567,20 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // A welcome can arrive more than once (the hello is repeated until it is answered), and
     // the player must not be told "Joined Ada's world" every two seconds.
     const first = !welcomed;
-    const regained = hostLost;
     welcomed = true;
     hostLost = false;
     lostReason = "";
+    lastHostHeard = Date.now();
     resolveWelcome({ ok: true });
     stalled = false;
     clearStallTimer();
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
-    // Slice 5: a host that went away and came back. The host's record of this pilot was
-    // marked `left` when its browser vanished, and its ship left the world with it — so the
-    // copy the guest holds goes back on the wire and the pilot is re-admitted. Whose copy
-    // wins is decided by the ordering pair in `onCarry`, never by who spoke last.
-    if (regained) {
-      if (carried) sendCarryMessage(carried);
-      try {
-        emit("mp-host-back", { name: hostName });
-      } catch (e) { /* a broken screen must not break a session */ }
-      publish();
-      return;
-    }
+    // **A lost host is a lost room** (owner, 2026-11-24): the player is put back on the main
+    // menu with "Lost connection to host" and joins again, so there is no half-connected state
+    // to come back from here. A rejoin is an ordinary join — and a host that still holds this
+    // pilot's record marked `left` re-admits it, because a `left` record is holding a
+    // suitcase, not an identity (see `onHello`). The copy the guest carries goes back on the
+    // wire in the `isAway` branch below, exactly as any other visit starts.
     if (!first) { publish(); return; }
     noteLine("Tallow Reach", `Joined ${message.name || "the host"}'s world.`);
     // A rename is not silent: being listed as somebody else without being told reads as a
@@ -664,12 +666,21 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
 
   function sendCarryMessage(bundle) {
+    // **The secret is put back on the way out** (slice 5, found by the reconnect test).
+    //
+    // The copy the guest keeps is the copy the HOST sent back, and a host never keeps a
+    // pilot's secret (`guestRecord` deletes it), so after the first suitcase arrives the
+    // stored bundle carries no token. A rejoin in a fresh session — which is exactly what a
+    // lost connection or a closed tab leaves — then had nothing to prove itself with and was
+    // refused as "that link has already been used". The marker's own `token` is the field
+    // that survives, so it is the one that goes on the wire.
+    const secret = awayMark?.token || bundle?.token || token;
     const message = cleanMessage("carry", {
       guestId: ownGuestId(),
       name,
       epoch: bundle?.epoch || 0,
       rev: bundle?.rev || 0,
-      bundle,
+      bundle: bundle ? { ...bundle, token: secret } : bundle,
     });
     if (!message) {
       emit("mp-notice", "Your suitcase could not be put on the wire. Your pilot is still at home.");
@@ -1435,21 +1446,22 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   /* --- slice 5: the host went away, and the pilot did not ------------------------- */
 
   /**
-   * The host's browser disappeared. **The pilot is not thrown away with it.**
+   * The host is gone: its browser closed, or nothing has come back from it (`checkHostAlive`).
+   * **The pilot is not thrown away with it.**
    *
-   * What the player used to get was a session that had already been stopped and one line of
-   * text: the room was gone, so nothing could reconnect, and the only copy left was whatever
-   * the guest happened to have stored. Now the session stays up and says so, so:
+   * This states the fact and nothing else. `snapshot().hostLost` is true and the bus hears
+   * `mp-host-left { reason, hostName }`; `ui/multiplayer.js` decides what the player gets, and
+   * that decision is the owner's (2026-11-24): *"returned to the main menu with a prompt saying
+   * something like lost connection to host. Dismissing this returns you to main menu. Like
+   * Minecraft."* So the UI stops the session and shows the prompt, and joining again is an
+   * ordinary join.
    *
-   *  - `snapshot().hostLost` is true, and the title screen draws the **"Your pilot is safe"
-   *    card** with *Wait* and *Go home* (`ui/screens.js`);
-   *  - the room is still joined, so a host that opens the same world again is met without
-   *    anybody retyping a link — the pilot is re-admitted and the guest's copy catches up;
-   *  - the pilot's own save is untouched: the marker and the suitcase stay exactly as they
-   *    were, so *Go home* still works with the host gone for ever.
+   * **The save is not touched here.** The marker and the suitcase stay exactly as they were,
+   * so *Bring pilot home* still works with the host gone for ever — that is the whole reason
+   * a lost host is not a lost pilot.
    *
    * Said once per loss: a channel can announce a departing peer more than once while it
-   * settles, and three identical cards in a row is how a player learns to ignore a screen.
+   * settles, and three prompts in a row is how a player learns to ignore a screen.
    */
   function markHostLost(reason) {
     const said = reason || "The host's browser went away.";
@@ -1462,7 +1474,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // This browser is no longer in the host's world, whatever its list last said.
     guests.length = 0;
     // The hello is what finds the host again, and it is sent to a peer — so the latches that
-    // stop it being repeated have to go, or the returning host would be met by silence.
+    // stop it being repeated have to go with the loss.
     greetedPeers.clear();
     greeted = false;
     publish();
@@ -1470,6 +1482,25 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       emit("mp-host-left", { reason: said, hostName });
     } catch (e) { /* a broken screen must not break a session */ }
     return true;
+  }
+
+  /**
+   * **A host that has stopped answering is a host that is gone** (owner, 2026-11-24: *"or the
+   * guest loses connection to the host mid game"*).
+   *
+   * Waiting for the transport to say so is not enough: a crashed browser sends no `leave`, and
+   * a channel can take a minute to give up on a peer, which is a minute of a player looking at
+   * a world it is no longer in. The guest already says `ping` every `NET.heartbeatSec` and the
+   * host answers `pong`, so silence for `NET.lastSeenSec` is a fair sign — the same number the
+   * host uses to say a guest is away, for the same reason.
+   *
+   * Takes the clock so a test can hand it one; the keepalive passes the real one.
+   */
+  function checkHostAlive(now = Date.now()) {
+    if (role !== "guest" || !on || !welcomed) return false;
+    if (!lastHostHeard) { lastHostHeard = now; return false; }
+    if (now - lastHostHeard <= Math.max(6, NET.lastSeenSec) * 1000) return false;
+    return markHostLost("The host stopped answering, so the connection to its world is gone.");
   }
 
   /**
@@ -1520,6 +1551,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     keepalive = setInterval(async () => {
       if (!on || !channel) return;
       if (role === "guest" && welcomed) send({ t: "ping", at: Date.now() });
+      // ...and the same tick asks whether the host is still there at all.
+      checkHostAlive();
       const status = channel.state();
       const dead = status.state === "lost" || status.state === "closed";
       if (!dead) return;
@@ -1640,6 +1673,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // Slice 5: the host's two-second "is the visitor still what we think?" check — the same
     // function its timer runs, so a test can ask without waiting two seconds.
     syncGuests,
+    // Slice 5: the guest's own watchdog, on the same seam — a test hands it a clock instead of
+    // waiting twenty seconds for a real one.
+    checkHostAlive,
     leaveWord,
     reconnect,
     escalateToRelay,
@@ -1715,10 +1751,16 @@ export function saveRelay(relay) {
   return record.relay;
 }
 
-/** Stop whatever is running. */
-export function stop() {
+/**
+ * Stop whatever is running.
+ *
+ * `quiet: true` leaves without a `bye` — for a session whose other end is already gone (a lost
+ * host, slice 5), where the goodbye has nobody to reach and writing one to a dead wire only
+ * makes the silence look deliberate.
+ */
+export function stop(options) {
   if (!active) return false;
-  active.stop();
+  active.stop(options);
   active = null;
   return true;
 }
@@ -1893,7 +1935,7 @@ export function bringPilotHome(save, { reason = "" } = {}) {
     return {
       ok: false,
       save,
-      message: "Your pilot's suitcase could not be read, so it cannot come home yet. Do not reset — press Wait and reconnect to the host so it can send a fresh copy.",
+      message: "Your pilot's suitcase could not be read, so it cannot come home yet. Do not reset — join the host again from the main menu so it can send a fresh copy.",
     };
   }
   let home = null;

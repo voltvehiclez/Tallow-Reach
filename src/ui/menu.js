@@ -381,9 +381,9 @@ function comeHome() {
 function enterGameMode(mode) {
   state.ui.intro = false;
   state.ui.campaign = false;
-  // A card about a connection is not news once the player is flying their own world
+  // A prompt about a connection is not news once the player is flying their own world
   // (step 16 slice 5); the marker itself is untouched, so nothing is lost by closing it.
-  state.ui.lostCard = null;
+  state.ui.lostHost = null;
   const switched = switchGameMode(mode);
   if (switched) afterSaveChange();
   resetStationPanels(state.ui);
@@ -461,27 +461,24 @@ const ACTIONS = {
     // by now — `bringPilotHome` put the newer one in its place — so pressing Open World opens
     // the world rather than raising the card again.
     state.ui.awayCard = false;
-    // A lost connection and a newer copy are two cards about the same pilot: once it is home,
-    // neither question is still open (step 16 slice 5).
-    state.ui.lostCard = null;
+    // A lost connection and a newer copy are two screens about the same pilot: once it is home,
+    // neither of them says anything true (step 16 slice 5).
+    state.ui.lostHost = null;
     showNotice("Your pilot is home.");
     render();
   },
   /**
-   * The "Your pilot is safe" card's **Wait** (step 16 slice 5).
+   * **The lost-connection prompt's one button** (step 16 slice 5, owner 2026-11-24).
    *
-   * It is the card's way out as much as a decision: the pilot stays in the friend's world, the
-   * save is not touched, and the ordinary menu comes back. The connection keeps looking (the
-   * session is not stopped — see `ui/multiplayer.js`), so the world coming back is announced
-   * without the player having to do anything.
+   * Dismissing it is the whole of it: the player is already on the main menu — `ui/multiplayer.js`
+   * put them there when the connection went — so this closes the prompt and reveals the menu
+   * underneath. It touches nothing else: not the save, not the away marker, not the session
+   * (which is already stopped). That is the point of it — a prompt about a connection must not
+   * be able to change anything a player owns.
    */
-  waitForHost() {
-    const lost = state.ui.lostCard || null;
-    state.ui.lostCard = null;
+  lostHostOk() {
+    state.ui.lostHost = null;
     render();
-    showNotice(lost?.hostName
-      ? `Waiting for ${lost.hostName}'s world. Your pilot is safe there.`
-      : "Waiting for your friend's world. Your pilot is safe there.");
   },
   /**
    * Back to the ordinary title menu, with the pilot left where it is (owner, playtest 17: *"the
@@ -493,7 +490,7 @@ const ACTIONS = {
    */
   menu() {
     state.ui.awayCard = false;
-    state.ui.lostCard = null;
+    state.ui.lostHost = null;
     render();
   },
   // Step 16 slice 3: the title menu's way into co-op. One screen, opened here, that both

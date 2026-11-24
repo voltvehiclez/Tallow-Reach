@@ -412,11 +412,11 @@ export const state = {
     // newer (owner, playtest 18 — before that, being away replaced the whole menu). Session
     // only: a reload is a fresh menu, and the marker itself is on the save.
     awayCard: false,
-    // Step 16 slice 5: the friend's browser went away while this pilot was visiting it.
-    // `{ hostName, reason }` while the "Your pilot is safe" card is up, else null. Raised by
-    // the connection (`mp-host-left`), never by a press, and cleared by Wait, Go home or a
-    // reconnect — it is news, and news does not need asking for.
-    lostCard: null,
+    // Step 16 slice 5: the connection to the host is gone (`{ hostName, reason }`), so the
+    // main menu carries "Lost connection to host" until the player dismisses it. Raised by the
+    // connection (`mp-host-left`), never by a press, and cleared by its one button — it is
+    // news, and news does not need asking for.
+    lostHost: null,
     starmapMemory: null, // last chart presentation, session-only and never saved
     destination: null, // system id or { pocketId }, saved with the local world
     tab: "l",          // right station panel: l missions (accept), i inventory, b base, s saves

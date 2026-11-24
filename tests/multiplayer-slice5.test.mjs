@@ -5,13 +5,14 @@
 //   * `compare` decides when two copies disagree — never the arrival order;
 //   * a host loading an OLDER save loses to a newer suitcase, and a stale one does not roll
 //     a world backwards;
-//   * "Your pilot is safe" with **Wait** and **Go home** when the host drops;
+//   * **a lost host is a lost room**: the player is returned to the main menu with "Lost
+//     connection to host", and rejoining keeps the version the server already has;
 //   * a final copy on tab close (`bye`), so a closed tab is not a lost visit;
 //   * one session per `guestId`: a newer connection kicks the older.
 //
 // Two sessions on an in-memory wire, exactly like `multiplayer-bring-pilot`: the real
 // handshake, the real protocol, the real save seams. What it cannot prove is that a browser
-// draws the card — that is the owner's playtest (testing/TESTING-16-SLICE5.md).
+// draws the prompt — that is the owner's playtest (testing/TESTING-16-SLICE5.md).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -124,11 +125,11 @@ test("slice 5: the host going away does not throw the pilot away", async () => {
   await new Promise(resolve => setTimeout(resolve, 0));
 
   const snap = guest.snapshot();
-  assert.equal(snap.on, true, "the session stays up — it is the only thing still looking");
-  assert.equal(snap.hostLost, true, "and says what happened");
+  assert.equal(snap.on, true, "the session states the loss; the screen decides what it means");
+  assert.equal(snap.hostLost, true, "it says what happened");
   assert.match(snap.lostReason, /host|closed|went away/i, "in a sentence a screen can show");
-  assert.equal(lost.length, 1, "the title raises the card once, not once per repeated event");
-  assert.equal(lost[0].hostName, "Ada", "and the card can name the world it was in");
+  assert.equal(lost.length, 1, "the prompt is raised once, not once per repeated event");
+  assert.equal(lost[0].hostName, "Ada", "and it can name the world it was in");
   // Nothing about the save moved: the marker, the suitcase and the frozen home half stay.
   assert.equal(guestSave.away.worldId, "w-1");
   assert.ok(guestSave.away.suitcase?.profile, "the copy it comes home from is still there");
@@ -139,40 +140,95 @@ test("slice 5: the host going away does not throw the pilot away", async () => {
   assert.equal(home.save.profile.cr, 800, "the pilot comes home with its credits");
 });
 
-test("slice 5: Wait keeps looking, and a host that comes back is met again", async () => {
-  const { host, guest, guestSave, guestChannel, hostChannel, hostSave } = await pair();
+test("slice 5: a host that stops answering is a lost host, without waiting for the wire", async () => {
+  // The owner's case (2026-11-24): *"the guest loses connection to the host mid game"*. A
+  // crashed browser sends no `leave`, and a channel can take a minute to admit a peer is
+  // gone, so the guest keeps its own clock: `ping` goes out every `NET.heartbeatSec` and the
+  // host answers, so silence for `NET.lastSeenSec` is a fair sign it is gone.
+  const { guest } = await pair();
   session.bringPilot();
-  assert.ok(Object.keys(hostSave.world.guests || {}).length, "the host holds the pilot");
+  const lost = [];
+  on("mp-host-left", payload => lost.push(payload));
 
-  const back = [];
-  on("mp-host-back", payload => back.push(payload));
+  const now = Date.now();
+  assert.equal(guest.checkHostAlive(now), false, "a host heard from a moment ago is here");
+  assert.equal(
+    guest.checkHostAlive(now + (NET.lastSeenSec - 1) * 1000),
+    false,
+    "and a few seconds of quiet is a slow relay, not a disaster",
+  );
+  assert.equal(
+    guest.checkHostAlive(now + (NET.lastSeenSec + 5) * 1000),
+    true,
+    "silence for the whole window is a lost host",
+  );
+  assert.equal(guest.snapshot().hostLost, true, "and the session says so");
+  assert.match(guest.snapshot().lostReason, /answering/i, "in words the prompt can show");
+  assert.equal(lost.length, 1, "once, like every other loss");
+  // A session that has been stopped cannot report a loss afterwards.
+  session.stop({ quiet: true });
+  assert.equal(guest.checkHostAlive(now + 999_999), false, "a stopped session is not watching");
+});
 
-  // The host's browser goes, on both sides of the wire (a dead browser does not run code).
+test("slice 5: rejoining after a loss keeps the version the server already has", async () => {
+  // The owner's other half (2026-11-24): *"when reconnecting to the server after a disconnect
+  // your pilot's last version is already on the server."* So a rejoin must not upload the copy
+  // the guest happens to be holding over a newer one the host wrote back — the guest catches
+  // up, it does not overwrite. This is the case `compare` is for, and the one that would be
+  // lost if "a record marked `left` hands over its own save" were applied to a dropped
+  // connection instead of to a pilot that has actually been home.
+  const { wire, host, guest, hostChannel, guestChannel, hostSave, guestSave } = await pair();
+  session.bringPilot();
+  const guestId = guestSave.away.guestId;
+  const bundle = guestSave.away.suitcase;
+
+  // The host wrote the pilot back twice; the last copy (rev 5, 1500 cr) had not reached the
+  // guest when the connection died, so the guest's suitcase is still rev 3 / 900 cr.
+  hostSave.world.guests[guestId] = {
+    ...hostSave.world.guests[guestId],
+    rev: 5,
+    bundle: { ...bundle, token: "", profile: { ...bundle.profile, cr: 1500 } },
+  };
+  guestSave.away = {
+    ...guestSave.away,
+    rev: 3,
+    suitcase: { ...bundle, rev: 3, profile: { ...bundle.profile, cr: 900 } },
+  };
+
   // This wire knows a peer by the id the other side addressed, so both ends call it
-  // `host-peer`; a real channel names the remote browser and agrees with itself.
+  // `host-peer`; the host's row for the guest is filed under the id the guest used for it.
   guestChannel.drop("host-peer");
   hostChannel.drop("host-peer");
-  assert.equal(guest.snapshot().hostLost, true, "the guest knows the host is gone");
-  assert.equal(host.snapshot().guests.length, 0, "and the host's list is empty");
-  assert.equal(hostSave.world.guests[Object.keys(hostSave.world.guests)[0]].left, true,
-    "the record is marked left, holding the suitcase rather than an identity");
+  assert.equal(guest.snapshot().hostLost, true, "the connection is gone");
+  assert.equal(hostSave.world.guests[guestId].left, true, "so the host holds the pilot, not the pilot");
+  session.stop({ quiet: true });
+  assert.equal(guest.snapshot().on, false, "and the session is over: the room with it");
 
-  // The host opens the same world again (its worldId never changes), so the room is the same
-  // and the guest meets it without anybody retyping a link.
+  // The player joins again from the main menu, with the same link: a new session, same pilot.
+  hostChannel.outbound.length = 0;
+  const again = session.createChannelForTest("guest", "w-1", "Bo", "guest-token", {
+    read: () => guestSave,
+    write: next => { if (next.world?.guests) guestSave.world.guests = next.world.guests; },
+    install: next => Object.assign(guestSave, JSON.parse(JSON.stringify(next))),
+  });
+  await again.start();
+  const againChannel = wire.made.at(-1);
+  againChannel.deliver = (peerId, value) => hostChannel.reach(value, peerId);
+  hostChannel.deliver = (peerId, value) => againChannel.reach(value, peerId);
+  againChannel.connect("guest-peer-2");
   hostChannel.connect("guest-peer-2");
-  guestChannel.connect("host-peer-2");
-  await new Promise(resolve => setTimeout(resolve, 10));
+  await new Promise(resolve => setTimeout(resolve, 20));
 
-  const snap = guest.snapshot();
-  assert.equal(snap.hostLost, false, "the loss is over");
-  assert.equal(snap.hostName, "Ada", "with the same host");
-  assert.equal(back.length >= 1, true, "and the screen is told the world is back");
-  assert.equal(host.snapshot().guests.length, 1, "the host has the pilot listed again");
-  const resent = carries(guestChannel).length;
-  assert.ok(resent >= 2, "the guest's copy went back over the wire to catch the host up");
-  const record = Object.values(hostSave.world.guests)[0];
-  assert.equal(record.left, false, "the record is no longer holding a suitcase");
-  assert.equal(record.bundle.profile.cr, 800, "and the pilot is the one the guest carries");
+  const record = hostSave.world.guests[guestId];
+  assert.equal(record.left, false, "the pilot is here again");
+  assert.equal(record.rev, 5, "with the version the server already had");
+  assert.equal(record.bundle.profile.cr, 1500, "not the older copy the guest carried");
+  // ...and the guest is handed the newer copy back, so the two agree again.
+  const back = suitcases(hostChannel).at(-1);
+  assert.equal(back?.value.rev, 5, "the newer copy goes back over the wire");
+  assert.equal(back?.value.bundle.profile.cr, 1500, "with its contents");
+  assert.equal(host.snapshot().guests.length, 1, "one pilot, one row");
+  again.stop({ quiet: true });
 });
 
 /* ------------------------------------------------------------------------- */
@@ -373,50 +429,53 @@ test("slice 5: a newer connection takes the pilot over, and the older one is tol
 /* What the screens are told                                                 */
 /* ------------------------------------------------------------------------- */
 
-test("slice 5: the card says the pilot is safe, and both ways off it are real", () => {
+test("slice 5: losing the host puts the menu up with one prompt and one door", () => {
+  // The owner's rule (2026-11-24): *"returned to the main menu with a prompt saying something
+  // like lost connection to host. Dismissing this returns you to main menu. Like Minecraft."*
   const screens = read("src/ui/screens.js");
-  const card = screens.slice(screens.indexOf("function lostCardHtml"));
-  const body = card.slice(0, card.indexOf("\n}\n") + 3);
+  const prompt = screens.slice(screens.indexOf("function lostHostHtml"));
+  const body = prompt.slice(0, prompt.indexOf("\n}\n") + 3);
 
-  assert.match(body, /Your pilot is safe/, "the first thing it says is the true one");
-  // Two buttons, both the card's own kind (the away card's lesson: one odd button reads as a bug).
+  assert.match(body, /<h2>Lost connection to host<\/h2>/, "it says what happened, in his words");
+  assert.match(body, /away-actions/, "as a card, like every other screen that stops the game");
   const buttons = body.match(/<button[^>]*>[^<]*<\/button>/g) || [];
-  assert.equal(buttons.length, 2, "Wait and Go home");
-  assert.match(body, /data-a="waitForHost">Wait</, "Wait makes no decision about the save");
-  assert.match(body, /data-a="comehome">Go home</, "and Go home is the one rule for coming home");
+  assert.equal(buttons.length, 1, "one door: dismissing it is the whole of it");
+  assert.match(body, /data-a="lostHostOk">Main menu</, "and that door is the main menu");
   for (const tag of body.match(/<button[^>]*>/g) || []) assert.match(tag, /class="go"/, `${tag} is a full-width button`);
   assert.match(body, /away-build">Build \$\{esc\(BUILD\)\}/, "and it names its build, like the away card");
+  // Two audiences, one screen: a pilot that is over there is told where it is, and a
+  // looker-around is told that nothing of its own was involved (LESSONS L40).
+  assert.match(body, /state\.away[\s\S]{0,400}Open World/, "the pilot is still in that world, and Open World offers it home");
+  assert.match(body, /only looking around/, "and a guest with nothing there is told so");
 
-  // It is drawn only while the pilot really is away, so coming home cannot leave it on screen.
-  assert.match(screens, /if \(state\.away && state\.ui\?\.lostCard\) return/,
-    "the card is drawn from the connection's news, and only for a pilot that is away");
+  // It is drawn whoever the player is — a lost connection is news, not a question about a save.
+  assert.match(screens, /if \(state\.ui\?\.lostHost\) return/, "the prompt is drawn from the connection's news");
 
-  // Wait leaves the save and the visit alone.
+  // Dismissing it changes nothing but the prompt.
   const menu = read("src/ui/menu.js");
-  const act = menu.slice(menu.indexOf("  waitForHost() {"));
-  const waiting = act.slice(0, act.indexOf("\n  },") + 4);
-  assert.doesNotMatch(waiting, /bringPilotHome|leaveVisit|api\.stop/, "Wait is not a decision about the save");
-  assert.match(waiting, /state\.ui\.lostCard = null;/, "it only closes the card");
+  const act = menu.slice(menu.indexOf("  lostHostOk() {"));
+  const dismissing = act.slice(0, act.indexOf("\n  },") + 4);
+  assert.doesNotMatch(dismissing, /bringPilotHome|leaveVisit|api\.stop|stop\(/, "dismissing is not a decision about the save");
+  assert.match(dismissing, /state\.ui\.lostHost = null;/, "it only closes the prompt");
 
-  // ...and the session is kept only for the state the card exists for.
+  // The connection stops itself and puts the menu up, before the menu's handler can look.
   const ui = read("src/ui/multiplayer.js");
-  assert.match(ui, /snap\.role === "guest" && snap\.hostLost === true/,
-    "a guest whose host vanished is not stopped on the way to the menu");
   const handler = ui.slice(ui.indexOf('on("mp-host-left"'));
   const handlerBody = handler.slice(0, handler.indexOf("\n  });") + 6);
-  assert.match(handlerBody, /state\.ui\.lostCard = \{ hostName: host, reason: said \}/,
-    "the card is raised by the connection, with the host's name");
-  // ...and only for a pilot that is actually over there: a guest that went to look around has
-  // nothing at stake, so it gets a sentence and its session stops.
-  assert.match(handlerBody, /if \(!state\.away\) \{[\s\S]{0,300}api\.stop\(\)/,
-    "no pilot in that world, no card — and nothing left looking");
+  assert.match(handlerBody, /api\.stop\(\{ quiet: true \}\)/, "the room is gone, so the session is closed without a goodbye");
+  assert.match(handlerBody, /state\.ui\.lostHost = \{ hostName: host, reason: said \}/, "the prompt carries the host's name and the reason");
+  assert.match(handlerBody, /emit\("main-menu", \{\}\)/, "and the player is put back on the main menu");
+  assert.doesNotMatch(handlerBody, /state\.away/, "every guest gets the prompt: a lost connection is not a save question");
+  assert.doesNotMatch(ui, /snap\.hostLost === true/, "no session is kept behind the menu any more");
 
-  // The event the card waits for is documented and emitted.
+  // The session states the loss and does not touch a save.
   const events = read("src/util/events.js");
-  assert.match(events, /mp-host-back  \{ name \}/, "the return is an event too");
+  assert.match(events, /mp-host-left  \{ reason, hostName \}/, "the loss is an event");
+  assert.doesNotMatch(events, /mp-host-back/, "and there is no \"it came back\" event: joining again is joining");
   const net = read("src/net/session.js");
   const lost = net.slice(net.indexOf("function markHostLost("));
   const lostBody = lost.slice(0, lost.indexOf("\n  }\n") + 4);
-  assert.doesNotMatch(lostBody, /stop\(/, "losing the host does not stop the session");
+  assert.doesNotMatch(lostBody, /stop\(/, "losing the host never stops a session or touches the pilot's save");
   assert.match(lostBody, /emit\("mp-host-left"/, "it says so instead");
+  assert.match(net, /function checkHostAlive/, "and silence is a loss too, not only a departing peer");
 });

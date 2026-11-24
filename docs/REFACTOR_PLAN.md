@@ -260,9 +260,10 @@ exists for exactly that, and the pause card says which path is in use.
    positions never travel); the host raises `rev` and snapshots about two seconds later; reconnects
    take the higher `(epoch, rev)`; "Go home" works from the suitcase with the host offline.
 5. **Crashes and reconnects.** `compare` decides when two copies disagree (a host loading an older
-   save loses to a newer suitcase); "Your pilot is safe"
-   with **Wait** and **Go home** when the host drops; a final copy on tab close (`bye`); one
-   session per `guestId`, a newer connection kicks the older. **Built 2026-11-24a.**
+   save loses to a newer suitcase); a lost host returns the player to the **main menu** with
+   "Lost connection to host", and rejoining keeps the copy the server has; a final copy on tab
+   close (`bye`); one session per `guestId`, a newer connection kicks the older.
+   **Built 2026-11-24a.**
 6. **Trading.** **View docked players** in the station, right-click a name > **Trade**: items, a
    ship at that station, or credits, a first confirm that locks both sides and a second that
    commits. The host checks both station holds' m³ first; if either side lacks room, nothing moves.

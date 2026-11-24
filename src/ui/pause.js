@@ -39,9 +39,9 @@ export function setupPause() {
   // Multiplayer is a screen of its own now (title menu and pause card both open it).
   const mpButton = overlay.querySelector("#pz-mp");
   if (mpButton) mpButton.onclick = () => openMultiplayer({ from: "pause" });
-  // Step 16 slice 5: a host that goes away puts the title screen up with the "Your pilot is
-  // safe" card on it. A pause card left on top of that would hide the one screen that says
-  // what happened and offers a way on — so the card goes with the world it was pausing.
+  // Step 16 slice 5: losing the host puts the main menu up with "Lost connection to host" on
+  // it. A pause card left on top of that would hide the one screen that says what happened —
+  // so the card goes with the world it was pausing.
   on("mp-host-left", () => {
     if (!overlay.hidden) setPause(false);
   });
