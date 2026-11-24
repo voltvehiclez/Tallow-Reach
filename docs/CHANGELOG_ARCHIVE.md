@@ -1,3 +1,21 @@
+## 2026-11-23: Where a joining pilot lands, and where it comes home to
+
+The owner asked how arrival and return choose a place, and what happens when a station exists in one
+world and not the other. Answering it found **two holes** on the return path.
+
+- **Arriving** (already right): a guest lands **docked at its own active ship's station** if the host's
+  galaxy has that pocket, otherwise at **Meridian**. Flight positions never travel.
+- **Coming home** (was wrong): a stack bought at a station **only the friend's world has** came home
+  filed under that station's key in a galaxy with no such station — counted, saved and **unreachable for
+  ever**; and a stack that waited at the friend's Meridian came home to Meridian instead of its **own**
+  station, even though its `origin` was still recorded. `checkIn` now asks the home world's station index,
+  prefers `origin`, and sends anything it cannot place to Meridian with its origin kept.
+- Hulls already followed the right rule (`shipPlaces` asks the world; `shipsAt` remembers); only the
+  station half was wrong.
+
+**Files:** `src/net/custody.js` (`checkIn` via `stationsOfWorld`), `tests/multiplayer-carry.test.mjs`
+(+2). **Tests: 1013** (was 1011). **Save format unchanged (v29).** LESSONS L37.
+
 ## 2026-11-23: Playtest 14 — leaving a world, the title's away card, and a new Test Ship
 
 Four reports from the owner's playtest. Three were bugs; one was a model swap.

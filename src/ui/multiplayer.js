@@ -36,10 +36,13 @@
 // tells this file when to redraw (`mp-state`). `net/` may not import `ui/`, so anything the
 // connection wants *said* arrives on the bus (`mp-notice`).
 //
-// **The one rule that matters in the chat box.** Enter opens it and Escape closes it, and
-// while it is open typing must not fly the ship. That is why it is a real `<input>`:
-// `core/input.js` ignores keys aimed at a text field, so the rule is kept by using the
-// platform instead of a second copy of it.
+// **The rules that matter in the chat box.** Enter opens it and Escape closes it, and while
+// it is open typing must not fly the ship. That is why it is a real `<input>`: `core/input.js`
+// ignores keys aimed at a text field, so the rule is kept by using the platform instead of a
+// second copy of it. And a panel raised by an event has to leave on its own (LESSONS L45,
+// playtest 20): a line shows the box for `CHAT.autoHideSec`, **Pin** keeps it, and a
+// half-written line keeps it — `chatKeepsOpen({ pin, typing, saidAt, now })` is that decision,
+// so the only untested part is the timer.
 //
 // The screen is opened from the title menu ("Join Multiplayer World") and from the pause
 // card ("Open Multiplayer"). Those are the only two front doors, and both call
@@ -216,6 +219,11 @@ let chatWho = null;
 let chatNote = null;
 let chatProblem = "";
 let chatFadeTimer = 0;
+// When somebody last said something (or this pilot last started typing), for the auto-hide
+// clock. 0 means nothing has been said yet, so the box starts hidden: chat is for the moment,
+// and a box that is always there is a box nobody reads (owner, playtest 20).
+let chatSaidAt = 0;
+let chatHideTimer = 0;     // takes the box away `CHAT.autoHideSec` after the last line
 // Is the box *open*? Its own flag, not "does the input have the cursor": a hidden input
 // cannot take the cursor, so asking the cursor first made the field stay hidden forever
 // and the box untypable — the guest's half of the 2026-11-21 report.
@@ -241,6 +249,36 @@ export function chatVisibility({ on, intro, panel, open }) {
   return { box, input: box && !!open };
 }
 
+/**
+ * **Does the box stay up by itself?** (owner, playtest 20)
+ *
+ * Four things can keep it on screen, and nothing else may:
+ *
+ *   pin       the player pressed **Pin**: the box is theirs to keep, timer and all.
+ *   typing    a half-written line is in the field. Hiding the box does not lose the text, but
+ *             losing the *view* of what you were writing mid-sentence is still rude.
+ *   fresh     somebody said something less than `CHAT.autoHideSec` ago. This is the whole
+ *             point: a line arrives, the box appears so it can be read, then it goes.
+ *   panel     ...never: a station panel, the title and the pause card own the screen, and a
+ *             pinned box is the one exception (it is what "pin" is for).
+ *
+ * Pure, and it takes the clock, so a test can ask "and seven seconds later?" without timers.
+ */
+export function chatKeepsOpen({
+  on = true,
+  intro = false,
+  panel = false,
+  pin = false,
+  typing = false,
+  saidAt = 0,
+  now = Date.now(),
+} = {}) {
+  if (!chatVisibility({ on, intro, panel, open: false }).box && !pin) return false;
+  if (pin) return true;
+  if (typing) return true;
+  return saidAt > 0 && now - saidAt < Math.max(0, CHAT.autoHideSec) * 1000;
+}
+
 /** Is the multiplayer screen open? (Also mirrored on `state.ui.multiplayer` for input.) */
 export const isMultiplayerScreenOpen = () => !!root && !root.hidden;
 
@@ -260,7 +298,8 @@ export function setupMultiplayer() {
     draw();
     autoOfferWhenStalled();
   });
-  on("mp-chat-arrived", () => drawChat());
+  // A line from somebody else: show the box so it is read, and give it its seven seconds.
+  on("mp-chat-arrived", () => pokeChat());
   // Step 16 slice 4: the pilot crossed (or came home). The join surface stops offering
   // "Bring my pilot" and states that it is here, and the title's card is re-read.
   on("mp-away-changed", ({ away } = {}) => {
@@ -604,9 +643,19 @@ function joinHtml(model) {
           `<div class="mp-row"><button type="button" data-mp="join-world">Enter the world without my pilot</button></div>` +
           `<p class="mp-hint">You can look around and chat. Your pilot stays at home until you bring it.</p>`
         : "") +
+      // **The pilot is here, so this world is not** (playtest 20, A3). While the pilot is away its
+      // own galaxy is paused — entering it would fly a hull whose cargo is in a suitcase in
+      // somebody else's galaxy — so the screen does not offer a button it would have to refuse.
+      // It says where the pilot is and how to get it home, and the **Leave** row below is the way
+      // off this screen (LESSONS L41/L42).
       (model.visiting && model.brought && !model.choosing
-        ? `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
-          `<div class="mp-row"><button type="button" class="go" data-mp="join-world">Enter the world</button></div>`
+        ? (state.away
+          ? `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
+            `<p class="mp-hint">Your own galaxy is paused where you left it, and opens the ` +
+            `moment the pilot is home. <strong>Leave</strong> this visit, then press ` +
+            `<strong>Open World</strong> on the main menu to bring it home.</p>`
+          : `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
+            `<div class="mp-row"><button type="button" class="go" data-mp="join-world">Enter the world</button></div>`)
         : "") +
       (model.visiting ? `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` : "") +
       `</section>`
@@ -814,6 +863,17 @@ export async function act(name, arg = "") {
     case "join-world": {
       if (!screenModel().visiting) {
         setMessage("Join a friend's world first.", "error");
+        draw();
+        return false;
+      }
+      // A pilot that is away cannot enter its own world (playtest 20, A3): there is no shared
+      // world on the wire yet (slice 8), so "the world" here would be the pilot's own galaxy —
+      // which is paused while its travelling half is in a suitcase somewhere else. This screen is
+      // the one place that can say so and still hand the player the way home, so it answers with
+      // the sentence instead of closing onto a title screen with no explanation.
+      if (state.away) {
+        const where = state.away?.hostName ? `${state.away.hostName}'s world` : "a friend's world";
+        setMessage(`Your pilot is in ${where}, so your own galaxy is paused where you left it. Leave this visit, then press Open World on the main menu to bring the pilot home — your own world opens the moment it is home.`, "error");
         draw();
         return false;
       }
@@ -1411,7 +1471,11 @@ function buildChat() {
   pinBtn?.addEventListener("click", () => {
     chatPinned = !chatPinned;
     pinBtn.classList.toggle("is-pinned", chatPinned);
-    drawChat();
+    // Said out loud as well as coloured: the amber border is a hint, the word is the answer
+    // to "did that do anything?" (owner, playtest 20 — the box was staying up forever).
+    pinBtn.textContent = chatPinned ? "Pinned" : "Pin";
+    pinBtn.setAttribute("aria-pressed", chatPinned ? "true" : "false");
+    pokeChat();
   });
 
   chatInput.addEventListener("keydown", event => {
@@ -1449,7 +1513,8 @@ function sendChatLine() {
   // must not also be left sitting in the field (pressing Enter again would send it twice).
   if (result.sent || result.echoed) chatInput.value = "";
   setChatProblem(result.problem);
-  drawChat();
+  // Your own line counts as news too: it stays up long enough to see that it went.
+  pokeChat();
   return result.sent;
 }
 
@@ -1548,14 +1613,20 @@ export function openChat() {
   // Visible *before* the focus call: a `[hidden]` field cannot take the cursor, so asking
   // for it first is a silent no-op (the guest's box opened with no way to type).
   if (chatInput) chatInput.hidden = false;
-  document.body.classList.add("mp-chat-open");
+  document.body.classList.add("mp-chat-open", "mp-chat-live");
   setChatProblem("");
   chatInput.focus();
-  drawChat();
+  pokeChat();
   return true;
 }
 
-/** Close the box (Escape, or Enter on an empty line). */
+/**
+ * Close the box (Escape, Enter on an empty line, or losing the field).
+ *
+ * An explicit close is a decision, so it hides even with a half-written line in the field —
+ * the text is still there when the box is opened again. A pinned box is the exception: the
+ * player asked for it to stay.
+ */
 export function closeChat() {
   if (!chatBox) return;
   chatOpen = false;
@@ -1563,8 +1634,48 @@ export function closeChat() {
   document.body.classList.remove("mp-chat-open");
   chatInput?.blur?.();
   if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
-  if (chatPinned) drawChat();
-  else chatBox.hidden = true;
+  if (chatPinned) { drawChat(); return; }
+  hideChatBox({ force: true });
+}
+
+/** A line was said, or this pilot started typing: show the box and restart its clock. */
+function pokeChat() {
+  chatSaidAt = Date.now();
+  drawChat();
+}
+
+/** Arm the one timer that takes the box away again. */
+function armChatHide() {
+  if (chatHideTimer) { clearTimeout(chatHideTimer); chatHideTimer = 0; }
+  if (!chatBox || chatBox.hidden || chatPinned) return;
+  chatHideTimer = setTimeout(() => {
+    chatHideTimer = 0;
+    if (chatPinned) return;
+    // Mid-sentence keeps it: a half-written line must not disappear because the other pilot
+    // stopped talking. The clock restarts, so it goes soon after the line is sent.
+    if ((chatInput?.value || "").trim()) { armChatHide(); return; }
+    hideChatBox();
+  }, Math.max(0, CHAT.autoHideSec) * 1000);
+  if (typeof chatHideTimer?.unref === "function") chatHideTimer.unref();
+}
+
+/**
+ * Take the box off the screen, and give the keyboard back to the ship.
+ *
+ * The automatic call refuses while a half-written line is in the field (`force` skips that,
+ * for a close the player asked for — Escape, a click back into the game, the pause card).
+ */
+function hideChatBox({ force = false } = {}) {
+  if (!chatBox) return false;
+  if (!force && (chatPinned || (chatInput?.value || "").trim())) return false;
+  chatBox.hidden = true;
+  chatOpen = false;
+  state.ui.chat = false;
+  if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
+  if (chatHideTimer) { clearTimeout(chatHideTimer); chatHideTimer = 0; }
+  document.body.classList.remove("mp-chat-live", "mp-chat-open");
+  if (document.activeElement === chatInput) chatInput.blur();
+  return true;
 }
 
 export const toggleChat = () => (isChatOpen() ? closeChat() : openChat());
@@ -1573,27 +1684,34 @@ function drawChat() {
   if (!chatBox) return;
   const snap = api.snapshot();
   if (!snap.on) {
-    chatBox.hidden = true;
-    chatOpen = false;
+    hideChatBox({ force: true });
     chatPinned = false;
-    document.body.classList.remove("mp-chat-open");
     return;
   }
   // The box is only there when multiplayer is on, and only while playing: on the title
   // screen and on a station panel it would sit over a menu that already has the screen.
+  // **And it is only there because it has something to say** (owner, playtest 20): a line
+  // said in the last `CHAT.autoHideSec`, a half-written line, or the pin.
   const shown = chatVisibility({
     on: snap.on,
     intro: !!state.ui.intro,
     panel: sessionIsPanelOpen(),
     open: chatOpen,
   });
-  if (!shown.box && !chatPinned) {
-    chatBox.hidden = true;
-    chatOpen = false;
-    document.body.classList.remove("mp-chat-open");
+  const keep = chatKeepsOpen({
+    on: snap.on,
+    intro: !!state.ui.intro,
+    panel: sessionIsPanelOpen(),
+    pin: chatPinned,
+    typing: !!(chatInput?.value || "").trim(),
+    saidAt: chatSaidAt,
+  });
+  if (!keep) {
+    hideChatBox({ force: true });
     return;
   }
   chatBox.hidden = false;
+  document.body.classList.add("mp-chat-live");
   document.body.classList.toggle("mp-chat-open", chatOpen);
   if (chatWho) chatWho.innerHTML = chatWhoHtml(snap);
   const lines = chatLog(snap);
@@ -1610,6 +1728,8 @@ function drawChat() {
   chatFadeTimer = setTimeout(() => {
     chatList.querySelectorAll("p").forEach(p => { p.style.opacity = "0.55"; });
   }, CHAT.lineLifeSec * 1000);
+  // ...and the clock that takes the whole box away, which a pinned box never sets.
+  armChatHide();
 }
 
 function sessionIsPanelOpen() {
@@ -1619,7 +1739,7 @@ function sessionIsPanelOpen() {
 /** Called when the game wants the chat box gone (pause, a station panel, the title). */
 export function chatAway() {
   closeChat();
-  if (chatBox) chatBox.hidden = true;
+  hideChatBox({ force: true });
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1696,6 +1816,11 @@ export function resetPanel() {
   drawnHtml = "";
   chatOpen = false;
   chatProblem = "";
+  // Slice 5: the box's own clock and switch, so one case cannot leave the next one showing.
+  if (chatHideTimer) { clearTimeout(chatHideTimer); chatHideTimer = 0; }
+  if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
+  chatSaidAt = 0;
+  chatPinned = false;
 }
 
 function escapeHtml(text) {

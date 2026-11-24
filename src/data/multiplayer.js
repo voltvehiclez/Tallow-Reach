@@ -115,7 +115,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-24a";
+export const BUILD = "2026-11-24b";
 
 export const NET = {
   snapshotSec: 2,
@@ -304,4 +304,9 @@ export const CHAT = {
   lineLifeSec: 45,
   typingRateSec: 4,
   historyLines: 40,
+  // How long the box stays up by itself after somebody says something (owner, playtest 20:
+  // *"Chat when a message is said then the chat is visible. However it doesnt go away. Should
+  // go away after maybe 6-7 seconds unless the user has pinned the chat."*). A line you have
+  // not read yet is why the box appears at all; the pin is the switch that keeps it up.
+  autoHideSec: 7,
 };

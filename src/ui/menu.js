@@ -379,6 +379,22 @@ function comeHome() {
  */
 
 function enterGameMode(mode) {
+  // **A pilot that is away cannot fly its own world, and this is the only place that is decided**
+  // (step 16 slice 5 — the owner's A3: *"the pilot's own world pausing while it is away is not
+  // working as intended"*). Playtest 18 had let Open World open the world with the away marker
+  // still set, which was the hole: the travelling half of the pilot is packed in a suitcase in
+  // somebody else's galaxy, and `captureActiveModeSave` deliberately does not fold a live runtime
+  // into a save that is away — so flying here advances a galaxy whose pilot is not in it and
+  // records none of it. One guard covers every door (the title's Open World, the multiplayer
+  // screen's Enter the world, and anything added later): they all land on the card, which is a
+  // question the player can answer. LESSONS L42.
+  if (mode === "open" && state.away) {
+    state.ui.intro = true;
+    state.ui.awayCard = true;
+    state.ui.awayNewer = newerCopyAway({ mode: "open" });
+    render();
+    return false;
+  }
   state.ui.intro = false;
   state.ui.campaign = false;
   // A prompt about a connection is not news once the player is flying their own world
@@ -412,26 +428,25 @@ const ACTIONS = {
     // a frozen pilot would fly a hull whose cargo is in another galaxy, and unpacking without
     // being asked is a decision about somebody's save.
     //
-    // **Playtest 18 moved WHERE the card appears, and this press is the one place it is
-    // decided** (owner's rule: *"This your pilot is in menu should only come if you try to join
-    // your local open world but a more new version of your save was on an online world."*).
+    // **Playtest 18 moved WHERE the card appears: a press on Open World, never by itself.**
+    // **Playtest 20 moved WHEN it appears from that press: always, while the pilot is away**
+    // (owner: *"logging into the guests own open world does not give a prompt to bring their
+    // pilot home. It should to confirm its updating to the local open world to latest version
+    // of their pilot."*).
     //
-    //   away + a NEWER copy online -> raise the card. Nothing opens: the newer pilot has to be
-    //                                 brought home first (the card's own button), and after
-    //                                 that press `state.away` is cleared and Open World works.
-    //   away + nothing newer        -> open the pilot's own world, exactly as if it were home.
-    //
-    // The second branch is the fix for the trap: being *away* is no longer enough to stop a
-    // player flying. The frozen travelling half stays frozen in the save while they do, so
-    // bringing the newer copy home later still works, and nothing is overwritten.
+    // The earlier rule asked `newerCopyAway()` first and opened the world when nothing was
+    // newer, which is a question the player cannot answer: "nothing changed there" and "this
+    // world is not up to date with my pilot" are different facts, and only the second one is
+    // about the save. Opening your own world while your pilot is in somebody else's is always
+    // a custody decision — bring the pilot home, or go back to the menu — so this press always
+    // asks. Nothing else changed: the card still has its **Main menu** door (playtest 17), so
+    // there is no trap, and `newerCopyAway()` now only decides what the card SAYS.
     if (state.away) {
-      if (newerCopyAway({ mode: state.mode === "campaign" ? "campaign" : "open" })) {
-        state.ui.awayCard = true;
-        if (state.ui) state.ui.intro = true;
-        render();
-        return;
-      }
-      state.ui.awayCard = false;
+      state.ui.awayCard = true;
+      state.ui.awayNewer = newerCopyAway({ mode: state.mode === "campaign" ? "campaign" : "open" });
+      state.ui.intro = true;
+      render();
+      return;
     }
     enterGameMode("open");
   },
@@ -461,6 +476,7 @@ const ACTIONS = {
     // by now — `bringPilotHome` put the newer one in its place — so pressing Open World opens
     // the world rather than raising the card again.
     state.ui.awayCard = false;
+    state.ui.awayNewer = false;
     // A lost connection and a newer copy are two screens about the same pilot: once it is home,
     // neither of them says anything true (step 16 slice 5).
     state.ui.lostHost = null;
@@ -490,6 +506,7 @@ const ACTIONS = {
    */
   menu() {
     state.ui.awayCard = false;
+    state.ui.awayNewer = false;
     state.ui.lostHost = null;
     render();
   },

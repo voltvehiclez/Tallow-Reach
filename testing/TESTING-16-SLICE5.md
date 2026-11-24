@@ -3,7 +3,7 @@
 This slice is about the ugly moments: **the host's game closes**, **the connection to it goes away**,
 **your pilot is in that world**, and **a closed tab**. Nothing new is drawn in space.
 
-**Build: `2026-11-24a`** — both machines. If one screen shows a different build string (title card, or
+**Build: `2026-11-24b`** — both machines. If one screen shows a different build string (title card, or
 Pause > Open Multiplayer > Connection details), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -31,7 +31,7 @@ before.
 3. **Guest**: title > **Join Multiplayer World** > paste the link > **Join** > **Bring my pilot**.
 
 **What to check (unchanged from slice 4):** the guest's notice says the pilot is on its way, and the
-pilot is now away — its own galaxy is paused.
+pilot is now away — its own galaxy is paused. See part 3 for how that shows up now.
 
 ## Part 1 — The host's game closes: back to the menu, with a prompt
 
@@ -80,25 +80,52 @@ one.
   the bug this part is for — send me the block from **Copy details** on both machines.
 - Nothing is doubled and nothing is asked: the pilot did not come home and go back, it just resumed.
 
-## Part 3 — The other door: your own world, and bringing the pilot home
+## Part 3 — Your own world is paused, and the card is how it comes back
 
-1. From the menu after a disconnect, press **Open World**.
-2. If the friend's world holds a **newer copy** of your pilot, you get the away card:
+This is the one that changed most, so please do it even if nothing else looks different.
 
-   > **Your pilot is in Ada's world** — **Bring pilot home** / **Main menu**
-
-3. Press **Bring pilot home** with the host still closed.
+1. On the **guest**, while the pilot is away, press **P > Open multiplayer**. Look at the join box.
+2. Then leave the visit (**Leave** on that panel, or **Exit to main menu** at the bottom of the pause
+   card), and from the **menu** press **Open World**.
+3. Do it a second time later, after the friend's world has been left alone for a while.
 
 **What to check:**
 
-- The card goes, the ordinary menu comes back, and a sentence says your pilot is home.
+- The multiplayer panel **no longer offers Enter the world** while the pilot is away. It says your
+  own galaxy is paused where you left it, and that **Leave**, then **Open World** on the menu, brings
+  the pilot home.
+- **Every** press of **Open World** now shows this card — whichever machine, however long you were
+  away, whether or not anything changed in your friend's world:
+
+  > **Your pilot is in Ada's world** — **Bring pilot home** / **Main menu**
+
+  *(One line of it differs: "Ada's world holds newer work from your pilot than this galaxy does"
+  vs "Nothing has changed in Ada's world since your pilot arrived, so both copies are the same —
+  bringing it home is still how this galaxy gets its pilot back". Same question either way.)*
+- **Main menu** takes you to the ordinary menu, and your pilot is still away — nothing is decided.
+- **Open World** never drops you into your own world with the pilot away. That is bug A3: if it does,
+  tell me what you pressed.
+- Press **Bring pilot home** with the host still closed. The card goes, the ordinary menu comes back,
+  a sentence says your pilot is home — **and now Open World opens your world**.
 - Your **credits**, your **hold** and your **station lockers** are back — every stack exactly once.
   Check a number you noted before you left.
 - Your home stations' stocks are back to what they were before you left, **not double**.
 
-*If nothing changed in the friend's world while the pilot was there, there is nothing to bring home
-and Open World simply opens your world — that is the playtest-18 rule and it is unchanged. Your pilot
-is still yours either way.*
+## Part 3b — The chat takes itself away
+
+1. On the **guest**, press **Enter** and send one line. Wait, watching the box.
+2. Send another line and press the **Pin** button in the chat box while it is up. Wait again.
+3. With the box pinned, press **Enter**, type a few words and do **not** send them. Wait, then press
+   **Pin** again (it should read **Pinned** while on) and watch.
+
+**What to check:**
+
+- After a line, the box stays about **seven seconds** and then goes. No press needed.
+- A line arriving from your friend brings it back, and it goes again seven seconds later.
+- **Pinned**, it stays up until you unpin it — and the button's word changes, so you can see which
+  state you are in.
+- A half-written line keeps it up; it does not vanish under your fingers.
+- Opening the pause card or the title screen still hides it, as before.
 
 ## Part 4 — A closed tab is a clean goodbye
 

@@ -2832,8 +2832,10 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   padding: 1px 4px;
   cursor: pointer;
 }
-body:not(.mp-chat-open) #mp-chat,
-body:not(.mp-chat-open) #mp-chat * {
+/* The box is clickable while it is *up*, not only while it is being typed in: the Pin button
+   is the one thing in it a pilot needs to reach without starting a sentence (playtest 20). */
+body:not(.mp-chat-live) #mp-chat,
+body:not(.mp-chat-live) #mp-chat * {
   pointer-events: none;
   cursor: none;
 }
@@ -2842,7 +2844,7 @@ body:not(.mp-chat-open) #mp-chat-who {
   max-width: 52px;
 }
 #mp-chat-pin.is-pinned { color: var(--amber); border-color: var(--amber); }
-body:not(.mp-chat-open) #mp-chat-pin { display: none; }
+body:not(.mp-chat-live) #mp-chat-pin { display: none; }
 #mp-chat-input {
   width: 100%;
   /* The same type as the lines above it: what is typed must look like what is said
@@ -2857,4 +2859,5 @@ body:not(.mp-chat-open) #mp-chat-pin { display: none; }
 #mp-chat-input[hidden] { display: none; }
 #mp-chat-note { margin: 0; color: #d98b7a; font-size: 12px; }
 #mp-chat-note[hidden] { display: none; }
+body:not(.mp-chat-open) #mp-chat-pin { opacity: .8; }
 body.mp-chat-open #mp-chat { background: rgba(7, 9, 11, .86); }

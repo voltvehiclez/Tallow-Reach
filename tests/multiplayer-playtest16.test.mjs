@@ -103,20 +103,30 @@ test("playtest 17: the in-world card is gone — the join box replaced it", () =
   assert.doesNotMatch(events, /mp-bring-prompt/, "and no event asking for one");
 });
 
-test("playtest 18: the card appears on Open World, and only for a newer copy", () => {
-  // The owner's rule, verbatim: "This your pilot is in menu should only come if you try to join
-  // your local open world but a more new version of your save was on an online world."
+test("playtest 18 + 20: the card appears on Open World, and always while the pilot is away", () => {
+  // Playtest 18's rule still stands: *"This your pilot is in menu should only come if you try to
+  // join your local open world"* — the card is raised by that press and by nothing else.
+  //
+  // Playtest 20 corrected WHEN that press asks (owner: *"logging into the guests own open world
+  // does not give a prompt to bring their pilot home. It should to confirm its updating to the
+  // local open world to latest version of their pilot."*). Whether the copy in that world is
+  // newer is not the question: being away at all means this world is not up to date with its
+  // pilot, so the press always asks.
   const screens = read("src/ui/screens.js");
   // The menu is the menu: being away no longer replaces it.
-  assert.match(screens, /if \(state\.away && state\.ui\?\.awayCard\) return/,
+  assert.match(screens, /if \(state\.away && state\.ui\?\.awayCard\) \{/,
     "the card shows only when the press raised it");
   const menu = read("src/ui/menu.js");
-  assert.match(menu, /if \(newerCopyAway\(\{ mode:/, "Open World asks the custody question");
-  assert.match(menu, /state\.ui\.awayCard = true;\s*if \(state\.ui\) state\.ui\.intro = true;/,
-    "a newer copy raises the card");
-  // ...and nothing newer opens the world instead of stopping the player.
-  assert.match(menu, /state\.ui\.awayCard = false;\s*\}\s*enterGameMode\("open"\);/,
-    "nothing newer opens the player's own world");
+  assert.match(menu, /if \(state\.away\) \{\s*state\.ui\.awayCard = true;/,
+    "Open World always raises the card while the pilot is away");
+  assert.doesNotMatch(menu, /if \(newerCopyAway/, "and not only when something newer is waiting");
+  // ...and nothing opens from that press: the card is the whole answer.
+  assert.match(menu, /state\.ui\.awayCard = true;[\s\S]{0,240}return;\s*\}\s*enterGameMode\("open"\);/,
+    "nothing opens until the pilot is home");
+  // The copies still decide what the card SAYS, which is the one thing they can honestly decide.
+  assert.match(menu, /state\.ui\.awayNewer = newerCopyAway\(\{ mode:/, "the card is told which copy is newer");
+  assert.match(screens, /function awayCardHtml\(away, newer = false\)/, "and it says so");
+  assert.match(screens, /state\.away, state\.ui\?\.awayNewer === true/, "from the state, not a guess");
   // Arriving at the menu clears it, so Main menu lands on the menu.
   assert.match(menu, /state\.ui\.intro = true;[\s\S]{0,400}state\.ui\.awayCard = false;/,
     "the menu clears the card");
@@ -270,4 +280,42 @@ test("playtest 17: the session can be switched on with nothing running", () => {
   // ...and the snapshot now says whether that session exists, which the screen needs.
   assert.match(net, /enabled: readSettings\(\)\.enabled === true, session: !!active/,
     "the snapshot carries the switch and whether a session exists");
+});
+
+test("playtest 20: a pilot that is away cannot fly its own world — one guard, every door", () => {
+  // The owner, playtest 20: *"the pilot's own world pausing while it is away is not working as
+  // intended"* (A3). It did not pause: playtest 18's Open World opened the world with the away
+  // marker still set, and the multiplayer screen's **Enter the world** did the same, so a pilot
+  // whose travelling half was packed into a suitcase could fly its own galaxy — a galaxy that
+  // `captureActiveModeSave` then refuses to fold into the save, so the flying was recorded nowhere
+  // and the frozen half stayed frozen. A refusal at one door is not a refusal: the guard belongs
+  // where every door ends.
+  const menu = read("src/ui/menu.js");
+  const fn = menu.slice(menu.indexOf("function enterGameMode(mode) {"));
+  const guard = fn.indexOf('if (mode === "open" && state.away) {');
+  assert.ok(guard > 0, "entering the open world refuses while the pilot is away");
+  assert.ok(guard < fn.indexOf("state.ui.intro = false;"), "and refuses before anything is loaded");
+  const body = fn.slice(guard, fn.indexOf("state.ui.intro = false;"));
+  assert.match(body, /state\.ui\.awayCard = true;/, "the refusal is the away card");
+  assert.match(body, /state\.ui\.awayNewer = newerCopyAway\(/, "labelled by the copies it has");
+  assert.match(body, /render\(\);/, "and drawn");
+  // Every door goes through it: `switchGameMode` is what actually swaps the world in, and the UI
+  // calls it from this one function only (the campaign's own call is a different mode).
+  assert.equal(menu.split("switchGameMode(").length - 1, 1, "the UI swaps a world in from one place only");
+  // The second door: the multiplayer screen's Enter the world, which used to close the screen and
+  // load the guest's own galaxy.
+  const ui = read("src/ui/multiplayer.js");
+  const join = ui.slice(ui.indexOf('case "join-world": {'));
+  const joinBody = join.slice(0, join.indexOf('case "leave":'));
+  assert.match(joinBody, /if \(state\.away\) \{/, "Enter the world refuses while the pilot is away");
+  assert.match(joinBody, /paused where you left it/, "and says what pausing means");
+  assert.match(joinBody, /press Open World on the main menu to bring the pilot home/,
+    "and names the way home rather than leaving a dead end");
+  assert.ok(joinBody.indexOf("state.away") < joinBody.indexOf('emit("mp-enter-world"'),
+    "the refusal comes before the world is entered");
+  // And the screen does not offer the button at all: a control whose only answer is a refusal is
+  // the bug L41 describes. The Leave row below it is the way off the screen either way.
+  assert.match(ui, /model\.visiting && model\.brought && !model\.choosing\s*\? \(state\.away/,
+    "the row is drawn differently while the pilot is away");
+  assert.match(ui, /Your own galaxy is paused where you left it/, "in the guest's own words");
 });

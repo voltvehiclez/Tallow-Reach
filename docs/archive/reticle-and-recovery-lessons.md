@@ -50,6 +50,30 @@ cannot fix synchronized paths. Exact overlaps need tie-break directions. Test
 trajectories and delayed reactions (`tests/enemy-flight.test.mjs`). Unchanged
 weapon stats do not prove unchanged difficulty: owner playtest is required.
 
+### L17. A recorded-state fixture only proves what changed if you diff it
+- **Seen:** fixing the spare Wasp changed the recorded 8b lifecycle fixture, which failed as a long unreadable deep-equal.
+- **Rule:** when behaviour changes on purpose, re-record the fixture and diff old against new. Accept it only if every difference
+  sits inside the behaviour you meant to change — here snapshots from the death onwards changed and every earlier one was
+  identical, which is the evidence the fix did nothing else. Say so in a comment beside the fixture's test. A blanket re-record
+  that "makes the test pass" would hide real regressions.
+- **Enforced by:** the comment above the fixture assertion in `tests/single-player-combat-8b.test.mjs`.
+
+### L20. A frame that throws stops the picture but not the loop, so a one-line bug plays as a dead game
+- **Seen (owner, step 14 playtest):** "the game crashes … a few seconds after you've destroyed the last guardian" —
+  a frozen screen, no message, and the only word about it a line in the browser console nobody was looking at.
+- **Cause:** `main.js` asks for the next frame *before* it does the frame's work, so an exception inside a frame leaves
+  the loop alive and the last good image on the glass: the game is running and looks dead. The pasted error was from a
+  stale build, but the shape of the failure is the lesson — anything that can throw in front of the player takes the
+  whole game down with it, silently.
+- **Rule:** work that can throw in front of the player is caught where it happens, **said on screen in a sentence with
+  the error's own first line** (`ui/crash.js`, `reportCrash`), and the picture is drawn anyway. A repeat is counted, not
+  listed (a per-frame error would bury the sentence in a second); the card lists a few distinct problems and says how
+  many it left out. The net listens only to what the browser reports as uncaught plus the frame loop's own catch — no
+  `sim/` module may call it and no game rule may depend on it, and a test that expects an error still gets it thrown.
+- **Enforced by:** `tests/crash.test.mjs` — the card's sentence and where it came from, repeat counting, the four-line
+  cap with its "and N more" line, dismissal, and that a broken `document` cannot itself become the crash — plus the
+  `frame`/`drawFrame` split in `main.js`.
+
 ### L21. When a new ask makes old code look like a special case, the shape underneath is usually the cause
 
 The canister's prize began as a list of `{ i, c }` stacks because that was the shape a save could carry, and the same

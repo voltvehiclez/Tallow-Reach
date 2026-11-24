@@ -92,13 +92,14 @@ const HOME_ICON_SVG =
  * Both buttons go through `data-a`, which `ui/menu.js` already routes, so this is markup
  * only: no new listener, and the same actions a keyboard-only player reaches.
  */
-function awayCardHtml(away) {
+function awayCardHtml(away, newer = false) {
   const host = away.hostName ? `${esc(away.hostName)}'s world` : "a friend's world";
   return (
     `<div class="away-card">` +
     `<h2>Your pilot is in ${host}</h2>` +
     `<p>It took its ship, its cargo, its credits and its station lockers with it — they are all ` +
-    `in ${host} until it comes home. This galaxy is paused while you are away.</p>` +
+    `in ${host} until it comes home. This galaxy is paused while you are away: it cannot fly ` +
+    `one pilot in two worlds.</p>` +
     // **Rejoin is gone** (owner, playtest 18: *"Remove the rejoin button I dont think it serves
     // much purpose right now. If you want to rejoin the friends world you go -> main menu ->
     // join multiplayer and join here."*). The card is about the pilot's save, not the wire: it
@@ -108,8 +109,16 @@ function awayCardHtml(away) {
     `<button class="go" data-a="comehome">Bring pilot home</button>` +
     `<button class="go" data-a="menu">Main menu</button>` +
     `</p>` +
-    `<p class="away-note"><b>Bring pilot home</b> makes the copy from that world your own save — ` +
-    `everything your pilot did there comes back with it.</p>` +
+    `<p class="away-note"><b>Bring pilot home</b> makes the copy from that world your own save, so ` +
+    `this galaxy catches up to the latest version of your pilot — everything it did there comes ` +
+    `back with it.</p>` +
+    // **Why the card appears at all** (owner, playtest 20): a press on Open World while the pilot
+    // is away is a custody question, whichever copy is newer, so the card answers it either way
+    // instead of pretending the two facts are the same one.
+    (newer
+      ? `<p class="away-note">${host} holds newer work from your pilot than this galaxy does.</p>`
+      : `<p class="away-note">Nothing has changed in ${host} since your pilot arrived, so both ` +
+        `copies are the same — bringing it home is still how this galaxy gets its pilot back.</p>`) +
     `<p class="away-note">Bringing it home works even if your friend is offline: your pilot ` +
     `carries its own copy of everything it has done.</p>` +
     // Every screen needs a door that is not "make a decision about your save" (playtest 17).
@@ -191,7 +200,9 @@ export function introHtml() {
   // `state.ui.awayCard` is therefore the switch, not the suggestion: it is set only by a press
   // on Open World, and its "Main menu" press clears it (playtest 17's door), landing the player
   // on the ordinary menu with the marker untouched.
-  if (state.away && state.ui?.awayCard) return `<h1>Tallow Reach</h1>${awayCardHtml(state.away)}`;
+  if (state.away && state.ui?.awayCard) {
+    return `<h1>Tallow Reach</h1>${awayCardHtml(state.away, state.ui?.awayNewer === true)}`;
+  }
   return (
     `<h1>Tallow Reach</h1><div class="sub">A quiet, dangerous ${term("flyable")}. Mine it, defend it, build on it.</div>` +
     `<p>You fly out of ${stationAt(DEFAULT_PLACE).n}, your own station. Take contracts, cut ore from the asteroid field, fight off raiders, loot the wrecks, and bring it all home. If your ship is destroyed you lose it and its cargo, and must buy it again.</p>` +

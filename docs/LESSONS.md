@@ -75,14 +75,6 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/ship-recovery.test.mjs`, and the post-death snapshots in `tests/single-player-combat-8b.test.mjs`
   (they record power, shields, hull, a gun bay and an empty hold for the replacement ship).
 
-### L17. A recorded-state fixture only proves what changed if you diff it
-- **Seen:** fixing the spare Wasp changed the recorded 8b lifecycle fixture, which failed as a long unreadable deep-equal.
-- **Rule:** when behaviour changes on purpose, re-record the fixture and diff old against new. Accept it only if every difference
-  sits inside the behaviour you meant to change — here snapshots from the death onwards changed and every earlier one was
-  identical, which is the evidence the fix did nothing else. Say so in a comment beside the fixture's test. A blanket re-record
-  that "makes the test pass" would hide real regressions.
-- **Enforced by:** the comment above the fixture assertion in `tests/single-player-combat-8b.test.mjs`.
-
 ### L18. A rule about *where* something happens was left to the caller
 - **Seen (owner):** "It doesn't seem like the game cares which location you hand in a mission in." Contracts and missions
   paid at whatever station the pilot happened to dock at, and the guidance named that station too.
@@ -111,24 +103,6 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/step14-instances.test.mjs` — the reload test asserts `placeAt(record.id).sky.kind` is the
   template's declared kind (the reader's own path), and the template test asserts every template declares a `sky.kind`
   in `SKY_KINDS` and no `planet` feature.
-
----
-
-### L20. A frame that throws stops the picture but not the loop, so a one-line bug plays as a dead game
-- **Seen (owner, step 14 playtest):** "the game crashes … a few seconds after you've destroyed the last guardian" —
-  a frozen screen, no message, and the only word about it a line in the browser console nobody was looking at.
-- **Cause:** `main.js` asks for the next frame *before* it does the frame's work, so an exception inside a frame leaves
-  the loop alive and the last good image on the glass: the game is running and looks dead. The pasted error was from a
-  stale build, but the shape of the failure is the lesson — anything that can throw in front of the player takes the
-  whole game down with it, silently.
-- **Rule:** work that can throw in front of the player is caught where it happens, **said on screen in a sentence with
-  the error's own first line** (`ui/crash.js`, `reportCrash`), and the picture is drawn anyway. A repeat is counted, not
-  listed (a per-frame error would bury the sentence in a second); the card lists a few distinct problems and says how
-  many it left out. The net listens only to what the browser reports as uncaught plus the frame loop's own catch — no
-  `sim/` module may call it and no game rule may depend on it, and a test that expects an error still gets it thrown.
-- **Enforced by:** `tests/crash.test.mjs` — the card's sentence and where it came from, repeat counting, the four-line
-  cap with its "and N more" line, dismissal, and that a broken `document` cannot itself become the crash — plus the
-  `frame`/`drawFrame` split in `main.js`.
 
 ---
 
@@ -172,6 +146,23 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
 
+### L45. A panel raised by an event has to leave on its own
+- **Seen (owner, playtest 20):** *"Chat when a message is said then the chat is visible. However it
+  doesnt go away. Should go away after maybe 6-7 seconds unless the user has pinned the chat."*
+  The box was drawn for the whole session, so a line that arrived while nobody was looking stayed
+  over the glass until the player opened a menu.
+- **Cause:** visibility was a property of the *session* (`a session is on and no panel owns the
+  screen`), not of the *news*. Nothing owned the end of the event, so there was no clock to run
+  and nothing to stop.
+- **Rule:** anything that appears **because something happened** needs three things written with
+  it: a clock that takes it away, a switch the player owns to keep it (here **Pin**, with its own
+  word on the button), and one reason it may stay while the player is mid-action (a half-written
+  line). Make the decision a pure function of `{pin, typing, saidAt, now}` so the timer is the
+  only untested part.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — "playtest 20: the chat shows a line and takes
+  itself away, unless it is pinned": hidden before anything is said, up inside `CHAT.autoHideSec`,
+  gone after it, pinned and typing keep it, a panel or the title does not.
+
 ### L44. A secret one side strips has to be put back by the other
 - **Seen (slice 5, found by the reconnect test):** rejoining in a **fresh session** — what a closed tab
   or a lost connection leaves — was refused as *"that link has already been used"*. The copy a guest
@@ -211,35 +202,47 @@ Mission lessons are first because missions are where most bugs have come from. T
   player can *do* right now; if the answer is "only sometimes", it needs a companion test and a door
   that leaves the flag alone. And a comparison needs a defined answer for a **tie** — decide it
   deliberately (here: a tie is NOT newer) and write the reason down.
-- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when `ui.awayCard`
-  was raised by the press; Open World asks `newerCopyAway()`; a tie, a missing pair, damage and
-  lockers are all NOT newer.
+- **Playtest 20 corrected the second half of this** (owner: *"logging into the guests own open
+  world does not give a prompt to bring their pilot home. It should to confirm its updating to
+  the local open world to latest version of their pilot."*). The evidence a press needs is not
+  that two copies differ — that is a question the player cannot see — but that the player is
+  about to do something the state forbids: **while the pilot is away, Open World always asks**,
+  and the comparison only labels the card. Evidence gates the *screen*; it must not be so narrow
+  that the screen the player asked for never arrives. **And a refusal at one door is not a refusal**
+  (playtest 20, A3): while the away marker is set, *two* doors reached the pilot's own galaxy, so it
+  was not paused at all. Put the guard where every door ends (`enterGameMode("open")`), not beside
+  the press that happened to be reported.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when
+  `ui.awayCard` was raised by the press; Open World asks unconditionally while away and passes
+  `newerCopyAway()` to the card as a label; a tie, a missing pair, damage and lockers are all NOT
+  newer; and "a pilot that is away cannot fly its own world — one guard, every door".
 
 ### L41. A control that is disabled whenever it would be useful is not a control
 - **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test
   multiplayer at all: the switch was greyed out and read Off.
-- **Cause:** two independent conditions, each sensible alone. The switch was drawn from `hosting` only, so a **visitor** saw Off; and
-  it was `disabled` whenever visiting. Worse, the pause card draws only the **host** block, and the Leave button lives in the **join**
-  block — so a guest at the pause card was looking at a dead switch beside no exit. "Leave worked from the screen but not from the
-  switch" was the tell: they were on different screens.
-- **Rule:** a control is disabled only when pressing it could not possibly do anything, and **every state a screen can be in must leave
-  the player a way out from that screen**. If a state exists in which the control reads a value the player cannot change, either make
-  the control work for that state or do not draw it. Also: when two screens offer the same exit, draw it on both — "the other screen has
-  a button" is not a way out of the screen you are on.
-- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a visitor's switch is On, pressable, and leaves the visit; the Leave button
-  is drawn beside it. Reverting `switchOn`/`canSwitch` fails it.
+- **Cause:** two conditions, each sensible alone: the switch was drawn from `hosting` only, so a
+  **visitor** saw Off, and it was `disabled` whenever visiting. Worse, the pause card draws the
+  **host** block while Leave lives in the **join** block, so a guest saw a dead switch and no exit.
+- **Rule:** a control is disabled only when pressing it could not possibly do anything, and **every
+  state a screen can be in leaves the player a way out from that screen**. If a state exists where
+  the control reads a value the player cannot change, make it work there or do not draw it. When
+  two screens offer the same exit, draw it on both: "the other screen has a button" is not a way
+  out of the screen you are on.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — a visitor's switch is On, pressable and
+  leaves the visit; the Leave button is drawn beside it.
 
 ### L40. A button that borrows another button's action inherits its refusals
 - **Seen (owner, playtest 17):** the away card's **Bring pilot home** answered *"your pilot is in your friends world, bring it home
   from the card first"* — a sentence written for a *different* button, telling him to press the button he had just pressed. In the
   same report: the card had no way back to the main menu at all, so he was stuck on it.
-- **Cause:** `comehome()` was `ACTIONS.intro()` — the Open World action — on the reasoning that "a pilot at home is a pilot at home".
-  The previous round then made `intro()` **refuse** whenever a pilot is away, which was right for Open World and turned the card's own
-  button into a refusal that argued with itself. A second, unrelated shape: the card replaced the whole title screen and every control
-  on it was a decision about the save, so there was no non-committal way off it.
-- **Rule:** an action says what the *player pressed*, not which other action it resembles — two buttons that happen to reach the same
-  place today are still two buttons, and coupling them means every future refusal on one is a lie on the other. And every screen that
-  replaces the whole menu needs one control that makes **no** decision about the save (a way back), because "cancel" must always exist.
+- **Cause:** `comehome()` was `ACTIONS.intro()` — the Open World action — on the reasoning that "a
+  pilot at home is a pilot at home". The previous round made `intro()` **refuse** whenever a pilot
+  is away, which was right for Open World and turned the card's own button into a refusal arguing
+  with itself. The card also replaced the whole title screen with nothing but save decisions.
+- **Rule:** an action says what the *player pressed*, not which other action it resembles — two
+  buttons that reach the same place today are still two, and coupling them makes every future
+  refusal on one a lie on the other. And every screen that replaces the whole menu needs one
+  control that makes **no** decision about the save (a way back): "cancel" must always exist.
 - **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — `comehome` must call `bringPilotHomeAtMenu` and must not call
   `ACTIONS.intro()`; the card must render a Main menu button whose action touches neither the suitcase nor the visit. Reverting the
   routing fails two tests (in this file and `playtest15`).
@@ -309,4 +312,5 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** every system with `draw > 0` requires `p.stored > 0` (`hasPower`) and records `setDraw(..., 0)` whenever unpowered.
 - **Enforced by:** `tests/slice3-assets-inventory-power.test.mjs`, `tests/content.test.mjs`, `tests/shield.test.mjs`.
 
-[More lessons](archive/reticle-and-recovery-lessons.md) — L21–L29, moved to keep this file under its size limit.
+[More lessons](archive/reticle-and-recovery-lessons.md) — L17, L20 and L21–L29, moved verbatim to
+keep this file under its size limit.

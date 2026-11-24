@@ -1,6 +1,6 @@
 # Quick test: step 16 slice 5 (10 minutes)
 
-**Build `2026-11-24a`.** Two browsers with separate saves: one normal window, one incognito/private
+**Build `2026-11-24b`.** Two browsers with separate saves: one normal window, one incognito/private
 window. Everything below is the new behaviour; if a step does not match, send me the step number and
 **Copy details** from both machines.
 
@@ -17,7 +17,8 @@ window. Everything below is the new behaviour; if a step does not match, send me
 4. **Window 2 (guest):** title → **Join Multiplayer World** → paste the link → **Join** →
    **Bring my pilot**. Wait for the notice that the pilot is on its way.
 5. **Check:** the guest's own world is now paused (the pilot is away); the host's players list
-   (**Enter** opens chat) shows the visitor.
+   (**Enter** opens chat) shows the visitor. On the guest, **P → Open multiplayer** no longer offers
+   **Enter the world** — it says your own galaxy is paused and how to get the pilot home.
 
 ## Part B — the bit this build is about (3 min)
 
@@ -27,12 +28,12 @@ window. Everything below is the new behaviour; if a step does not match, send me
    > **Lost connection to host** — one button: **Main menu**
 
 8. **Check:** one button, full width. Press it → the ordinary menu (Open World / Campaign / Join
-   Multiplayer World). Your pilot is **not** lost: press **Open World** and you get the *"Your pilot is
-   in Ada's world"* card with **Bring pilot home** (unless nothing changed over there, in which case
-   your own world just opens).
-9. **Check the save:** press **Open World** again, then **Bring pilot home** on the card if it appears.
-   Your credits, hold and station lockers come back — the same numbers, **once** each. The card has a
-   **Main menu** button too if you would rather wait.
+   Multiplayer World). Your pilot is **not** lost, and it is **not** in your own world either: press
+   **Open World** and you *always* get the *"Your pilot is in Ada's world"* card with **Bring pilot
+   home**, whether or not anything changed over there. **Main menu** on the card leaves everything as
+   it was.
+9. **Check the save:** press **Bring pilot home** on the card. Your credits, hold and station
+   lockers come back — the same numbers, **once** each — and **Open World** then opens your world.
 
 ## Part C — rejoin, and a closed tab (3 min)
 
@@ -44,6 +45,12 @@ window. Everything below is the new behaviour; if a step does not match, send me
     used"*, that is the bug: stop and tell me).
 12. **Guest:** with the pilot away, **close the tab**.
     **Check (host):** the visitor's row and the chat drop it within a second or two (*"Bo left."*).
+
+## Part C2 — the chat hides itself (1 min)
+
+12b. **Guest:** press **Enter**, send one line, and wait. **Check:** the box goes after about seven
+     seconds. Send another, press **Pin** in the box, wait. **Check:** it stays, and the button reads
+     **Pinned**; unpin it and it goes again.
 
 ## Part D — the 30-second version of "you keep playing" (1 min)
 

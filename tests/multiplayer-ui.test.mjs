@@ -34,7 +34,7 @@ import { setLibraryLoader, setRelayProbe, createChannel } from "../src/net/trans
 import { RELAYS, ICE } from "../src/data/multiplayer.js";
 import { SAVE_VERSION, newProfile, newWorld } from "../src/state/profile.js";
 import { state } from "../src/state/state.js";
-import { NET } from "../src/data/multiplayer.js";
+import { NET, CHAT } from "../src/data/multiplayer.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const read = rel => readFileSync(path.join(root, rel), "utf8");
@@ -592,6 +592,47 @@ test("the chat box shows its input whenever it is open — the guest could not t
   const source = read("src/ui/multiplayer.js");
   const open = source.slice(source.indexOf("export function openChat"));
   assert.match(open, /chatOpen = true;[\s\S]{0,400}chatInput\.hidden = false;[\s\S]{0,400}chatInput\.focus\(\)/);
+});
+
+test("playtest 20: the chat shows a line and takes itself away, unless it is pinned", () => {
+  // The owner's report: *"Chat when a message is said then the chat is visible. However it
+  // doesnt go away. Should go away after maybe 6-7 seconds unless the user has pinned the
+  // chat. So updates are always seen, pinning removes the 6-7 sec auto hid timer."*
+  const now = 1_000_000;
+  const window = CHAT.autoHideSec * 1000;
+  assert.ok(CHAT.autoHideSec >= 6 && CHAT.autoHideSec <= 7, `autoHideSec is ${CHAT.autoHideSec}`);
+
+  // Nothing said yet: the box is not on screen. It used to be up for the whole session.
+  assert.equal(ui.chatKeepsOpen({ saidAt: 0, now }), false, "a box nobody has spoken in stays hidden");
+  // A line arrives: up, and still up inside the window...
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now }), true, "a line puts the box up");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + window - 500 }), true, "for long enough to read it");
+  // ...and gone after it.
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + window + 500 }), false, "and then it goes");
+  // The pin is the switch that removes the timer, and it outranks everything.
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + 600_000, pin: true }), true, "a pinned box never goes");
+  assert.equal(ui.chatKeepsOpen({ saidAt: 0, now, pin: true }), true, "even before anybody has spoken");
+  // A half-written line keeps it: the timer restarts rather than hiding what is being typed.
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now: now + 600_000, typing: true }), true, "typing keeps it up");
+  // A panel or the title owns the screen; the pin is the one exception (that is what it is for).
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, panel: true }), false, "not over a station panel");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, intro: true }), false, "never over the title screen");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, panel: true, pin: true }), true, "a pinned box stays anyway");
+  assert.equal(ui.chatKeepsOpen({ saidAt: now, now, on: false }), false, "no session, no box");
+
+  // The wiring: a line is what shows it, one timer takes it away, and the pin is a real button
+  // that says what it did.
+  const source = read("src/ui/multiplayer.js");
+  assert.match(source, /on\("mp-chat-arrived", \(\) => pokeChat\(\)\)/, "an arriving line pokes the box");
+  assert.match(source, /function pokeChat\(\)[\s\S]{0,120}chatSaidAt = Date\.now\(\)/, "which restarts the clock");
+  assert.match(source, /chatHideTimer = setTimeout\(/, "and one timer is what hides it");
+  assert.match(source, /if \(chatPinned\) return;/, "a pinned box arms no timer");
+  assert.match(source, /pinBtn\.textContent = chatPinned \? "Pinned" : "Pin"/, "the pin says what it is");
+  const css = read("src/styles.css");
+  assert.match(css, /body:not\(\.mp-chat-live\) #mp-chat-pin \{ display: none; \}/,
+    "the pin is clickable while the box is up, not only while typing");
+  assert.doesNotMatch(css, /body:not\(\.mp-chat-open\) #mp-chat,/,
+    "and the box itself takes the mouse while it is up");
 });
 
 test("chat works with nobody else connected: the line is shown, and says only you see it", () => {
