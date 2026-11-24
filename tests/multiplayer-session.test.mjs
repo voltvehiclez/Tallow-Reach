@@ -189,7 +189,12 @@ test("a returning guest must prove the secret it was given — the slice-1 check
 
 test("a chat line from the guest arrives on the host, attributed and capped", async () => {
   const { host, guest, hostChannel } = await twoSessions();
-  hostChannel.reach(helloFrom(host));
+  // The hello comes from the guest's OWN peer — the id the host knows it by, which this
+  // in-memory wire calls `host-peer` (it is the id the guest addressed, handed back to the
+  // host). Since slice 5 a hello for the same guest id from a DIFFERENT peer is a second
+  // window taking the pilot over (`onHello`), and this test is about chat, not that rule: a
+  // repeated hello from the same peer is exactly what the guest's own retry sends.
+  hostChannel.reach(helloFrom(host), "host-peer");
 
   assert.equal(guest.say("dock with me"), true, "the guest can speak once connected");
   const line = host.snapshot().chat.at(-1);

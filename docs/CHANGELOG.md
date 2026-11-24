@@ -18,6 +18,48 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-24: Step 16 slice 5 — the pilot is safe, the copy is current, and one window flies it
+
+**Code change; rebuild needed; build `2026-11-24a`.** Crashes and reconnects, the fifth of step 16's
+eight slices ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). Save version unchanged (29): nothing new is
+saved.
+
+1. **A host that goes away no longer throws the pilot away.** The guest's session used to stop the
+   moment the host's browser vanished — ending the one thing that could ever reconnect, and leaving
+   a sentence at the top of the screen. Now the session stays up, keeps the room and keeps saying
+   hello, and the title screen raises **"Your pilot is safe"** with **Wait** and **Go home**. Wait
+   leaves the save and the visit untouched (it is the card's way out too); Go home is the same
+   action as the away card's **Bring pilot home**, so there is still one rule for coming home. A
+   host that reopens the same world is met again with no link retyped: the guest's copy goes back,
+   the pilot is re-admitted, and the card's news is a sentence instead (`mp-host-back`).
+2. **The copy is finally kept current — this was a real hole.** `writeBack` existed from slice 4
+   and **nothing ever called it**: a guest's suitcase only ever held the copy it arrived with, so
+   every credit, stack and module it earned in the friend's world was lost when it came home. The
+   host now asks `sim/` what each visiting pilot looks like every `NET.snapshotSec` and writes back
+   when it has changed (and re-sends an unchanged copy every `NET.suitcaseRepeatSec`).
+3. **Whose copy wins is `compare`, never arrival order** (`onCarry`): a host that loaded an older
+   save **loses** to a newer suitcase; a stale `carry` does not roll the world backwards; and a
+   pilot that came home and came back — a `left` record — hands over its own save, because that is
+   the newest truth about it. A tie takes the arriving copy.
+4. **A closed tab says goodbye.** New wire kind `bye`, sent when a guest session stops and on
+   `pagehide`/`beforeunload`: the host writes the final copy back **first**, then marks the record
+   `left` and takes the ship out of the world at once instead of waiting for a channel to close. A
+   crashed tab sends nothing; the host still copes (that is what slice 3's peer-leave handling is
+   for).
+5. **One session per `guestId`, and a newer connection kicks the older.** A second window on the
+   same link is told in words (*"This pilot was opened in another window…"*), its session stops
+   quietly (no `bye` — the pilot has not left), and the record is **not** marked `left`, so the ship
+   stays in the world for the window that now has it.
+6. **`NET.heartbeatSec` is real**: a guest now sends `ping`, and the host writes `lastSeen`, which is
+   what `guestIsHere` reads.
+
+`src/net/{session,protocol}.js`, `src/data/multiplayer.js` (BUILD), `src/state/state.js`
+(`ui.lostCard`), `src/ui/{screens,menu,multiplayer,pause}.js`, `src/util/events.js`, and new
+`tests/multiplayer-slice5.test.mjs` (9 tests, two live sessions on the in-memory wire). Two existing
+tests were corrected for the new rule, not weakened: the protocol's list of kinds, and one hello
+injected from a foreign peer (now a takeover, so it comes from the guest's own peer).
+**Tests: 1039** (was 1030).
+
 ## 2026-11-23: One refusal, one place, and a placeholder that says what it wants
 
 **Code change; rebuild needed; build `2026-11-23i`.** Two small corrections to playtest 18, both
@@ -264,36 +306,9 @@ world and not the other. Answering it found **two holes** on the return path.
 **Files:** `src/net/custody.js` (`checkIn` via `stationsOfWorld`), `tests/multiplayer-carry.test.mjs`
 (+2). **Tests: 1013** (was 1011). **Save format unchanged (v29).** LESSONS L37.
 
-## 2026-11-23: Playtest 14 — leaving a world, the title's away card, and a new Test Ship
-
-Four reports from the owner's playtest. Three were bugs; one was a model swap.
-
-- **Leaving a world was invisible, and locked the pilot out.** A departing guest stayed in the host's
-  players list, the chat said nothing, and its ship stayed. Worse, its record kept the OLD token hash —
-  so the next join was a *returning* guest, refused for a token it no longer had. `forgetPeer(peerId)` is
-  now the one rule: remove the row, say *"Bo left."*, drop the ship (`mp-guest-left`), republish presence,
-  and mark the record `left`, which a fresh link re-admits. Separately, `upsertGuest` let a
-  `welcome`/`presence` list (no peer id) **erase** a known one, so that guest could never be matched to
-  the peer that left.
-- **"Bring my pilot" appeared, then the world entered itself.** The join worked and `state.away` was set,
-  but `afterJoined` entered the world anyway — flying a frozen pilot whose cargo was elsewhere. It stops
-  and says so now.
-- **The away card's buttons did nothing, and trapped the player.** From the title there is no loaded
-  open-world save, so unpacking got a save with no profile; and `comeHome` opened with
-  `if (!leaveVisit()) return false`, which from the title returns before anything is unpacked. Now
-  `bringPilotHomeAtMenu()` unpacks the **stored** mode save, Rejoin rebuilds the link from the marker and
-  really joins, and the card explains both buttons.
-- **Test Ship draws the owner's `testship-v1.glb`** — drop-in (same generator, extensions, footprint),
-  centred on y, stray `Page camera` node gone. `compressed-model` re-recorded per LESSONS L17.
-
-**Also:** `world.guests[id].left` is an **additive** save field, so **no version bump** (v29 stays).
-**Files:** `src/net/{session,custody,multiplayer}.js`, `src/{data/multiplayer,state/profile}.js`,
-`src/ui/{menu,multiplayer,screens}.js`, `src/assets/models/ship.testship.glb`, and new
-`tests/multiplayer-playtest14.test.mjs`. **Tests: 1013** (was 1004); each fix was verified by reverting
-it. **Build id: `2026-11-23b`.**
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-23: Playtest 14 — leaving a world, the title's away card, and a new Test Ship
 - 2026-11-22: HANDOFF's size limit raised 14 KB -> 16 KB
 - 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
 - 2026-11-22: Step 16 is eight slices — the owner agreed the plan

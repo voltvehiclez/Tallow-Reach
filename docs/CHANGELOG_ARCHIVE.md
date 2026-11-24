@@ -1,3 +1,31 @@
+## 2026-11-23: Playtest 14 — leaving a world, the title's away card, and a new Test Ship
+
+Four reports from the owner's playtest. Three were bugs; one was a model swap.
+
+- **Leaving a world was invisible, and locked the pilot out.** A departing guest stayed in the host's
+  players list, the chat said nothing, and its ship stayed. Worse, its record kept the OLD token hash —
+  so the next join was a *returning* guest, refused for a token it no longer had. `forgetPeer(peerId)` is
+  now the one rule: remove the row, say *"Bo left."*, drop the ship (`mp-guest-left`), republish presence,
+  and mark the record `left`, which a fresh link re-admits. Separately, `upsertGuest` let a
+  `welcome`/`presence` list (no peer id) **erase** a known one, so that guest could never be matched to
+  the peer that left.
+- **"Bring my pilot" appeared, then the world entered itself.** The join worked and `state.away` was set,
+  but `afterJoined` entered the world anyway — flying a frozen pilot whose cargo was elsewhere. It stops
+  and says so now.
+- **The away card's buttons did nothing, and trapped the player.** From the title there is no loaded
+  open-world save, so unpacking got a save with no profile; and `comeHome` opened with
+  `if (!leaveVisit()) return false`, which from the title returns before anything is unpacked. Now
+  `bringPilotHomeAtMenu()` unpacks the **stored** mode save, Rejoin rebuilds the link from the marker and
+  really joins, and the card explains both buttons.
+- **Test Ship draws the owner's `testship-v1.glb`** — drop-in (same generator, extensions, footprint),
+  centred on y, stray `Page camera` node gone. `compressed-model` re-recorded per LESSONS L17.
+
+**Also:** `world.guests[id].left` is an **additive** save field, so **no version bump** (v29 stays).
+**Files:** `src/net/{session,custody,multiplayer}.js`, `src/{data/multiplayer,state/profile}.js`,
+`src/ui/{menu,multiplayer,screens}.js`, `src/assets/models/ship.testship.glb`, and new
+`tests/multiplayer-playtest14.test.mjs`. **Tests: 1013** (was 1004); each fix was verified by reverting
+it. **Build id: `2026-11-23b`.**
+
 ## 2026-11-22: Step 16 slice 4 — the pilot crosses the wire, and comes home
 
 The first slice where something of the player's actually travels. **"Bring my pilot"** packs the

@@ -132,7 +132,13 @@
 //   mp-state      snapshot          the multiplayer session changed (host/guest, peers, chat)
 //   mp-chat-arrived { from, text, at }  a line from somebody else
 //   mp-notice     text             `net/` asks for a sentence on screen (it may not import ui/)
-//   mp-host-left  { reason }       the host's browser went away
+//   mp-host-left  { reason, hostName }
+//                                    slice 5: the host's browser went away while this pilot was
+//                                    visiting it. The session STAYS ALIVE and keeps looking, so
+//                                    the title screen raises the "Your pilot is safe" card
+//                                    (Wait / Go home) rather than a line of text
+//   mp-host-back  { name }          that host's world came back and the pilot was met again;
+//                                    the card goes and the guest's copy catches up
 //   mp-join-request { link }       a ?join= link in the address bar wants a yes/no
 //   mp-enter-world {}              a join from the title worked: enter the open world
 //   mp-guest-arrive { guestId, name, profile, place }

@@ -268,6 +268,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   let hostName = "";
   let hostPeerId = null;
   let welcomed = false;     // has the host answered at all?
+  // Slice 5: **the host's browser went away, and the pilot did not.**
+  //
+  // A dropped host used to end the session on the spot, which threw away the one thing that
+  // could still reconnect (the room), and told the player only in a sentence at the top of the
+  // screen. Now the session stays alive and keeps saying hello, so a host that reopens the same
+  // world (its `worldId` never changes) is met again without anybody retyping a link.
+  let hostLost = false;
+  let lostReason = "";
   const welcomeWaiters = [];
   // "Nobody has appeared in the room and the wait is over." Not an error: the honest fact
   // that the relay route is not delivering, which is the moment the code path stops being a
@@ -302,7 +310,28 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // The guest's own "is this mine?" state: its home save is frozen while it is away.
   let awayMark = null;
 
+  /* --- slice 5: the copy stays current, and a departure is said out loud ------------ */
+  // The host's check: every `NET.snapshotSec` it asks `sim/` what each visiting pilot looks
+  // like NOW and compares it with what it last sent. That comparison is the whole feature —
+  // before it, `writeBack` existed and nothing ever called it, so a guest's suitcase only ever
+  // held the copy it arrived with and everything it did in the friend's world was lost when it
+  // went home. `suitcaseRepeatSec` re-sends an unchanged copy, so a packet lost on a flaky
+  // channel heals itself without a reconnect.
+  let guestSync = 0;                // the host's interval
+  const livePrint = new Map();      // guestId -> what the host last saw the pilot look like
+  const lastSent = new Map();       // guestId -> when it last went on the wire
+  // The guest's "I am closing this page" hook, so the host gets a final copy and is not left
+  // holding a pilot for a browser that is gone (a `bye`; see `net/protocol.js`).
+  let pageHook = null;
+
   const ownGuestId = () => `guest-${token.slice(0, 8)}`;
+
+  /** The guest id behind a peer, as the host knows them. */
+  const guestIdForPeer = peerId => {
+    for (const [guestId, id] of guestPeer) if (id === peerId) return guestId;
+    const row = guests.find(entry => entry.peerId === peerId);
+    return row?.guestId || "";
+  };
 
   /**
    * Store a change to the GUEST'S OWN pilot.
@@ -329,6 +358,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       away: awayMark ? { ...awayMark, suitcase: undefined } : null,
       carrying: !!carried,
       carriedAcked,
+      // Slice 5: the host's browser is gone, and the pilot is still in its world. A screen
+      // draws the "Your pilot is safe — Wait / Go home" card from this, never from a guess.
+      hostLost,
+      lostReason,
       line: stateLine(status),
       worldId,
       name: shown,
@@ -390,7 +423,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
         // pair does.
         if (role === "guest") return onSuitcase(message);
         return onSuitcaseAck(message);
-      case "ping": return send({ t: "pong", at: Date.now() }, peerId);
+      case "bye": return onBye(message, peerId);
+      case "ping": {
+        // Slice 5: a guest's heartbeat is the host's only sign of life between copies.
+        // `lastSeen` is what `net/multiplayer.js`'s `guestIsHere` reads, so it is written
+        // here and nowhere else.
+        if (role === "host" && peerId) markPeerSeen(peerId);
+        return send({ t: "pong", at: Date.now() }, peerId);
+      }
       default: return undefined;
     }
   }
@@ -427,6 +467,23 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       send({ t: "refuse", reason: checked.reason, message: checked.message }, peerId);
       noteLine("Tallow Reach", `${message.name || "A pilot"} could not join: ${checked.message}`);
       return;
+    }
+
+    // **One session per guest id: a newer connection kicks the older** (slice 5).
+    //
+    // A pilot lives in one place, so two windows flying it is a bug even when both are the
+    // same player. The newer connection wins because it is the one the player just opened.
+    // The old window is told in words (it keeps its suitcase and its marker — only that
+    // connection ends), and its row leaves the list **without** marking the record `left`,
+    // because the pilot has not gone anywhere: the same pilot is here, in the new window.
+    const replaced = guests.filter(entry => entry.guestId === message.guestId && entry.peerId && peerId && entry.peerId !== peerId);
+    if (replaced.length) {
+      const told = "This pilot was opened in another window, which has it now. Nothing was lost — your save still carries it.";
+      for (const row of replaced) {
+        send({ t: "refuse", reason: "replaced", message: told }, row.peerId);
+      }
+      removeRows(entry => entry.guestId === message.guestId && entry.peerId !== peerId);
+      noteLine("Tallow Reach", `${replaced[0].name || message.name || "A pilot"} moved to another window.`);
     }
 
     // Two pilots called `Acey` are two rows in the list and two names in chat, so the host
@@ -502,11 +559,26 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // A welcome can arrive more than once (the hello is repeated until it is answered), and
     // the player must not be told "Joined Ada's world" every two seconds.
     const first = !welcomed;
+    const regained = hostLost;
     welcomed = true;
+    hostLost = false;
+    lostReason = "";
     resolveWelcome({ ok: true });
     stalled = false;
     clearStallTimer();
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
+    // Slice 5: a host that went away and came back. The host's record of this pilot was
+    // marked `left` when its browser vanished, and its ship left the world with it — so the
+    // copy the guest holds goes back on the wire and the pilot is re-admitted. Whose copy
+    // wins is decided by the ordering pair in `onCarry`, never by who spoke last.
+    if (regained) {
+      if (carried) sendCarryMessage(carried);
+      try {
+        emit("mp-host-back", { name: hostName });
+      } catch (e) { /* a broken screen must not break a session */ }
+      publish();
+      return;
+    }
     if (!first) { publish(); return; }
     noteLine("Tallow Reach", `Joined ${message.name || "the host"}'s world.`);
     // A rename is not silent: being listed as somebody else without being told reads as a
@@ -682,19 +754,71 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
     const current = save.read();
     const index = stationsOfWorld(current.world);
+    const incoming = { epoch: whole(message.epoch), rev: whole(message.rev) };
+
+    // **Whose copy is newer? The ordering pair decides, never the arrival order** (slice 5).
+    //
+    // Three ways two copies of one pilot can disagree, and all three are real:
+    //
+    //  1. **The host loaded an older save** (a backup, a second machine, a browser that
+    //     restored yesterday's file) while the guest still holds the trip. The guest's copy
+    //     is newer, so it wins and becomes the world's record — the host does not get to
+    //     drag a pilot backwards just because its own file is old.
+    //  2. **A stale `carry` arrives late** (a re-sent message, a guest that reopened from an
+    //     old tab). The host's record is newer, so the record stands and the guest is sent
+    //     the newer copy back instead of being believed.
+    //  3. **The pilot came home and came back.** A `left` record is holding a suitcase, not
+    //     an identity: the pilot has been home since, may have bought a whole new fit there,
+    //     and its save is the newest truth about it. So a returning pilot's copy wins, and
+    //     that is the fact the ordering pair cannot express — which is exactly why the check
+    //     is `record.left` first and `compare` second, and not `compare` alone.
+    //
+    // A tie (`compare` says 0) takes the incoming copy: two copies with the same pair are
+    // the same trip, and the arriving one is by definition the one the guest just packed.
+    const stale = record && record.left !== true && compare(record, incoming) < 0;
+    if (stale) {
+      const kept = { ...(record.bundle || {}), token: "" };
+      if (kept?.profile) {
+        if (peerId) guestPeer.set(guestId, peerId);
+        // The world keeps ITS pilot, and the guest is told so in words rather than silently.
+        emit("mp-guest-arrive", {
+          guestId,
+          name: record.name || message.name || "Guest",
+          profile: null,
+          bundle: kept,
+        });
+        send(cleanMessage("suitcase", {
+          guestId,
+          name: record.name || message.name || "",
+          epoch: whole(record.epoch),
+          rev: whole(record.rev),
+          bundle: kept,
+        }), peerId);
+        noteLine("Tallow Reach", `${record.name || message.name || "A pilot"}'s pilot is newer in this world than the copy that arrived; this world kept its own.`);
+        save.write(seenGuest(save.read(), guestId, Date.now()));
+        publish();
+        return;
+      }
+      // A record with no bundle holds nothing to defend: fall through and take the guest's.
+    }
+
     const relocated = relocate(message.bundle, current.world, { index });
     const stored = putGuest(current, guestId, {
       name: message.name || record?.name || "Guest",
       token: message.bundle?.token || "",
-      epoch: whole(message.epoch) ?? record?.epoch,
-      rev: whole(message.rev) ?? record?.rev,
+      epoch: incoming.epoch,
+      rev: incoming.rev,
       bundle: { ...relocated.bundle, token: "" },
+      // A returning pilot's copy is the newest truth (see the note above), and it starts a
+      // new visit: the record stops claiming it is holding a suitcase.
+      left: false,
       lastSeen: Date.now(),
     });
     stored.world.stationStores = relocated.stations;
     save.write(stored);
 
     if (peerId) guestPeer.set(guestId, peerId);
+    livePrint.delete(guestId);
     // The record itself is the simulation's job. `net/` may not touch state.players.
     emit("mp-guest-arrive", {
       guestId,
@@ -705,8 +829,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     send(cleanMessage("suitcase", {
       guestId,
       name: message.name || record?.name || "",
-      epoch: whole(message.epoch),
-      rev: whole(message.rev),
+      epoch: incoming.epoch,
+      rev: incoming.rev,
       bundle: { ...relocated.bundle, token: "" },
     }), peerId);
     noteLine("Tallow Reach", `${message.name || "A pilot"}'s pilot arrived — ${relocated.bundle.summary?.text || "suitcase received"}.`);
@@ -727,17 +851,46 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    * fresh one. A marked record is compared on `lastSeen` by the next hello.
    */
   function forgetPeer(peerId) {
-    const gone = guests.filter(g => g.peerId === peerId);
-    for (let i = guests.length - 1; i >= 0; i--) {
-      if (guests[i].peerId === peerId) guests.splice(i, 1);
-    }
-    peerNames.delete(peerId);
-    greetedPeers.delete(peerId);
-    if (!gone.length) return;
+    retireRows(removeRows(row => row.peerId === peerId));
+  }
 
+  /**
+   * Take rows out of the players list **without deciding anything about the pilot**.
+   *
+   * Slice 5 needed this split: a guest whose connection dropped must be sent home in words
+   * (`retireRows`, which marks the record `left` and tells the sim the ship has gone), while a
+   * guest that merely moved to a newer window must leave the list **while its pilot stays put**
+   * (`onHello`'s takeover). One function that did both is what would have made a takeover look
+   * like a departure and delete the visitor's ship from the world.
+   */
+  function removeRows(match) {
+    const gone = [];
+    for (let i = guests.length - 1; i >= 0; i--) {
+      if (!match(guests[i])) continue;
+      gone.unshift(guests[i]);
+      guests.splice(i, 1);
+    }
+    for (const row of gone) {
+      if (row.peerId) {
+        peerNames.delete(row.peerId);
+        greetedPeers.delete(row.peerId);
+      }
+      if (!row.peerId || guestPeer.get(row.guestId) === row.peerId) guestPeer.delete(row.guestId);
+      livePrint.delete(row.guestId);
+      lastSent.delete(row.guestId);
+    }
+    return gone;
+  }
+
+  /** A row's pilot really has gone: mark the record `left`, tell the world, tell everybody. */
+  function retireRows(gone) {
+    if (!gone.length) return false;
     // The record, so a returning pilot is not locked out of its own suitcase.
     let stored = save.read();
+    const seen = new Set();
     for (const g of gone) {
+      if (seen.has(g.guestId)) continue;
+      seen.add(g.guestId);
       const record = stored?.world?.guests?.[g.guestId];
       if (record) stored = putGuest(stored, g.guestId, { ...record, left: true, lastSeen: Date.now() });
       // The ship leaves the simulation (slice 4's docked visitor).
@@ -747,6 +900,39 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (stored) save.write(stored);
     // Everybody else's list, so a third pilot does not see a ghost either.
     publishPresence();
+    return true;
+  }
+
+  /**
+   * Host side: the guest told us it is leaving (`bye`, slice 5) — a tab closing, "Go home",
+   * or "Leave".
+   *
+   * **The final copy is written back before the pilot is taken out of the world**, which is
+   * the whole reason the message exists: a guest that closes its tab holds a copy up to
+   * `suitcaseRepeatSec` old, and the newest version of it is here, in the host's live record.
+   * Writing it back means the last few seconds of the visit survive either way — in the copy
+   * that goes back over the wire if the tab is still listening, and in this world if it is not.
+   */
+  function onBye(message, peerId) {
+    if (role !== "host") return;
+    const guestId = message.guestId || guestIdForPeer(peerId);
+    if (!guestId) { forgetPeer(peerId); return; }
+    const row = guests.find(entry => entry.guestId === guestId) || null;
+    if (row?.peerId) guestPeer.set(guestId, row.peerId);
+    // Flush any change that is still waiting on its own timer, so the final copy is the newest.
+    const pending = pendingWrite.get(guestId);
+    if (pending?.timer) clearTimeout(pending.timer);
+    pendingWrite.delete(guestId);
+    writeBack(guestId);
+    retireRows(removeRows(entry => entry.guestId === guestId && (!peerId || !entry.peerId || entry.peerId === peerId)));
+  }
+
+  /** Host side: this peer's guest said "still here" (the `ping` heartbeat). */
+  function markPeerSeen(peerId) {
+    const guestId = guestIdForPeer(peerId);
+    if (!guestId) return;
+    const next = seenGuest(save.read(), guestId, Date.now());
+    save.write(next);
   }
 
   /**
@@ -830,8 +1016,52 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       bundle: { ...bundle, token: "" },
     });
     if (message) send(message, peerId);
+    lastSent.set(guestId, Date.now());
     publish();
     return true;
+  }
+
+  /**
+   * **Host side: is the visiting pilot still what this world thinks it is?** (slice 5)
+   *
+   * This is the loop the plan promised and nothing ran: `writeBack` existed from slice 4 but
+   * its only caller was `noteGuestChanged`, which nobody ever called — so a guest's suitcase
+   * only ever held the copy it arrived with, and every credit it earned, every stack it
+   * mined and every module it fitted in the friend's world was lost when it came home. The
+   * owner would have seen it as "coming home rolls my save back".
+   *
+   * It is a *comparison*, not a timer that writes: every `NET.snapshotSec` the host asks
+   * `sim/` what each visitor looks like now, and only a real difference raises `rev`. An
+   * unchanged copy is re-sent every `NET.suitcaseRepeatSec` so a packet lost on a bad channel
+   * heals without anybody reconnecting.
+   */
+  function syncGuests() {
+    if (role !== "host" || !on) return 0;
+    let changed = 0;
+    for (const guestId of [...guestPeer.keys()]) {
+      const live = liveBundleFor(guestId);
+      if (!live?.profile) continue;
+      let print = "";
+      try {
+        print = JSON.stringify({ profile: live.profile, lockers: live.lockers || [] });
+      } catch (e) {
+        continue;                                   // unserialisable: not something to send
+      }
+      const before = livePrint.get(guestId);
+      livePrint.set(guestId, print);
+      if (print !== before) {
+        if (noteGuestChanged(guestId)) changed += 1;
+        continue;
+      }
+      if (Date.now() - (lastSent.get(guestId) || 0) > NET.suitcaseRepeatSec * 1000) writeBack(guestId);
+    }
+    return changed;
+  }
+
+  function startGuestSync() {
+    if (guestSync || role !== "host") return;
+    guestSync = setInterval(syncGuests, Math.max(0.5, NET.snapshotSec) * 1000);
+    if (typeof guestSync?.unref === "function") guestSync.unref();
   }
 
   /**
@@ -851,6 +1081,16 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
 
   function onRefuse(message) {
+    // Slice 5: **the same pilot is open in a newer window.** This connection is over — the
+    // newer one has the pilot — but nothing about the save changes: the marker and the
+    // suitcase stay exactly where they are, so the pilot is not lost, it is elsewhere.
+    if (message.reason === "replaced") {
+      try {
+        emit("mp-notice", message.message || "This pilot was opened in another window, which has it now.");
+      } catch (e) { /* a broken screen must not break a session */ }
+      stop({ quiet: true });
+      return;
+    }
     noteLine("Tallow Reach", message.message || "The host could not let you in.");
   }
 
@@ -977,8 +1217,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
           } else if (role === "guest" && welcomed) {
             const hostGone = hostPeerId ? event.peerId === hostPeerId : (channel && channel.peers().length === 0);
             if (hostGone) {
-              stop();
-              emit("mp-host-left", { reason: "The host closed the game." });
+              markHostLost("The host closed the game.");
               return;
             }
           }
@@ -993,8 +1232,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     publish();
     await channel.join();
     greetEveryone();
-    if (role === "guest") startHelloRetry();
-    if (role === "host") armHostWait();
+    if (role === "guest") { startHelloRetry(); watchPage(); }
+    if (role === "host") { armHostWait(); startGuestSync(); }
     armStallTimer();
     startKeepalive();
     // Ask the relays once the room exists, so Connection details is never blank about them.
@@ -1152,14 +1391,33 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     });
   }
 
-  function stop() {
+  /**
+   * End this session. `quiet` is the one exception to the goodbye: a guest that was **replaced
+   * by a newer window** must not say "I am leaving", because the pilot has not left — the host
+   * would take the ship out of its world and mark the record `left` for a pilot that is
+   * standing right there in the other window.
+   */
+  function stop({ quiet = false } = {}) {
+    // Slice 5: tell the host on the way out, while there is still a wire to say it on. A
+    // `bye` makes the departure immediate and lossless (the final copy is written back and
+    // the record is marked `left` at once instead of when the browser's channel finally
+    // closes). It is not a promise: a crashed tab sends nothing, and the host still copes.
+    if (!quiet) {
+      try {
+        leaveWord();
+      } catch (e) { /* a goodbye is never worth throwing over */ }
+    }
     on = false;
     resolveWelcome({ ok: false, message: "Connection cancelled." });
     if (keepalive) { clearInterval(keepalive); keepalive = 0; }
     if (helloRetry) { clearInterval(helloRetry); helloRetry = 0; }
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
+    if (guestSync) { clearInterval(guestSync); guestSync = 0; }
+    for (const { timer } of pendingWrite.values()) if (timer) clearTimeout(timer);
+    pendingWrite.clear();
     clearStallTimer();
+    unwatchPage();
     try {
       channel?.leave();
       paste?.leave();
@@ -1168,19 +1426,100 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     paste = null;
     codes = null;
     guests.length = 0;
+    hostLost = false;
+    lostReason = "";
     if (active === session) active = null;
     publish();
+  }
+
+  /* --- slice 5: the host went away, and the pilot did not ------------------------- */
+
+  /**
+   * The host's browser disappeared. **The pilot is not thrown away with it.**
+   *
+   * What the player used to get was a session that had already been stopped and one line of
+   * text: the room was gone, so nothing could reconnect, and the only copy left was whatever
+   * the guest happened to have stored. Now the session stays up and says so, so:
+   *
+   *  - `snapshot().hostLost` is true, and the title screen draws the **"Your pilot is safe"
+   *    card** with *Wait* and *Go home* (`ui/screens.js`);
+   *  - the room is still joined, so a host that opens the same world again is met without
+   *    anybody retyping a link — the pilot is re-admitted and the guest's copy catches up;
+   *  - the pilot's own save is untouched: the marker and the suitcase stay exactly as they
+   *    were, so *Go home* still works with the host gone for ever.
+   *
+   * Said once per loss: a channel can announce a departing peer more than once while it
+   * settles, and three identical cards in a row is how a player learns to ignore a screen.
+   */
+  function markHostLost(reason) {
+    const said = reason || "The host's browser went away.";
+    if (hostLost) {
+      lostReason = said;
+      return false;
+    }
+    hostLost = true;
+    lostReason = said;
+    // This browser is no longer in the host's world, whatever its list last said.
+    guests.length = 0;
+    // The hello is what finds the host again, and it is sent to a peer — so the latches that
+    // stop it being repeated have to go, or the returning host would be met by silence.
+    greetedPeers.clear();
+    greeted = false;
+    publish();
+    try {
+      emit("mp-host-left", { reason: said, hostName });
+    } catch (e) { /* a broken screen must not break a session */ }
+    return true;
+  }
+
+  /**
+   * The guest's goodbye (`bye`, slice 5), sent when this session stops **and** when the page
+   * is being closed. Both are ordinary departures the host can act on at once.
+   */
+  function leaveWord() {
+    if (!on || role !== "guest" || !welcomed) return false;
+    const message = cleanMessage("bye", { guestId: ownGuestId(), name });
+    if (!message) return false;
+    return send(message, hostPeerId || null);
+  }
+
+  /**
+   * Listen for the page going away, so a closed tab is a `bye` rather than a silence.
+   *
+   * `pagehide` is the one event every browser fires on a close, a reload and a
+   * back-navigation; `beforeunload` covers the older ones. Nothing may be awaited here — a
+   * closing page gets no more turns — which is exactly why the message is sent synchronously
+   * and the host does the storing.
+   */
+  function watchPage() {
+    if (pageHook || typeof globalThis.addEventListener !== "function") return;
+    pageHook = () => {
+      try { leaveWord(); } catch (e) { /* nothing can be done on the way out */ }
+    };
+    globalThis.addEventListener("pagehide", pageHook);
+    globalThis.addEventListener("beforeunload", pageHook);
+  }
+
+  function unwatchPage() {
+    if (!pageHook || typeof globalThis.removeEventListener !== "function") { pageHook = null; return; }
+    globalThis.removeEventListener("pagehide", pageHook);
+    globalThis.removeEventListener("beforeunload", pageHook);
+    pageHook = null;
   }
 
   /**
    * A room can die quietly: a backgrounded tab, a laptop that slept, a relay that dropped us.
    * The transport reports `lost`, and a `lost` room will never recover on its own, so the
    * session reopens it — at most once every ten seconds, and never while one is starting.
+   *
+   * Slice 5 rides the same timer to say "still here" (`ping`), which is what keeps a host's
+   * `lastSeen` honest between copies of the pilot.
    */
   function startKeepalive() {
     if (keepalive) return;
     keepalive = setInterval(async () => {
       if (!on || !channel) return;
+      if (role === "guest" && welcomed) send({ t: "ping", at: Date.now() });
       const status = channel.state();
       const dead = status.state === "lost" || status.state === "closed";
       if (!dead) return;
@@ -1298,6 +1637,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     waitForWelcome,
     // Slice 4: the guest's "Bring my pilot" press, and the in-world prompt asking for it.
     bringPilot,
+    // Slice 5: the host's two-second "is the visitor still what we think?" check — the same
+    // function its timer runs, so a test can ask without waiting two seconds.
+    syncGuests,
+    leaveWord,
     reconnect,
     escalateToRelay,
     checkRelays,

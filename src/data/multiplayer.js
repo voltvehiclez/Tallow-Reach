@@ -98,8 +98,9 @@ export const ARRIVAL_STATION_KEY =
  * The connection and the suitcase. Numbers only: no behaviour lives here, so
  * retuning co-op is an edit to this table.
  *
- *   snapshotSec   (slice 4) how long after a change the host sends a guest its new suitcase
- *   heartbeatSec  (slice 3) how often the two sides say "still here"
+ *   snapshotSec   (slice 4) how long after a change the host sends a guest its new suitcase;
+ *                 slice 5 also runs the host's "has the visiting pilot changed?" check this often
+ *   heartbeatSec  (slice 3) how often the two sides say "still here" (slice 5 sends the ping)
  *   lastSeenSec   (slice 5) a guest unheard for this long is shown as disconnected
  *   offerSec      (slice 3) how long a join code stays valid before it must be re-made
  *   maxGuests     (slice 4) most visiting pilots one host holds at once
@@ -114,7 +115,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-23i";
+export const BUILD = "2026-11-24a";
 
 export const NET = {
   snapshotSec: 2,

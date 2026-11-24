@@ -1,6 +1,6 @@
 # LESSONS: classes of bug earlier chats hit, so you do not repeat them
 
-*Last checked: 2026-11-22.*
+*Last checked: 2026-11-24.*
 
 Read this before changing anything. Each entry is a **class** of bug (not a single instance): what the owner
 saw, the general cause, the rule that prevents it, and the test that enforces it. A rule backed by a failing
@@ -171,6 +171,18 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Cause:** `comeHome()` opened with `if (!leaveVisit()) return false;`. From the title there is no session to leave, so it returned before unpacking anything, and the caller showed nothing. The same shape hid the second half: unpacking used the ACTIVE save, which on the title is not the open world's, so even a caller that got that far had no profile to unpack into.
 - **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
 - **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
+
+### L43. A rule with no caller is not a feature
+- **Seen (slice 5, found by writing the test that should have passed):** the host was to write a visiting pilot's suitcase back
+  every couple of seconds. `writeBack` and its trigger (`noteGuestChanged`) existed and the docs described both — but the loop
+  calling them was never written, so a guest came home from the copy it arrived with.
+- **Cause:** each piece was tested on its own and passed; nothing tested the **seam** — that something calls the piece on a
+  clock, in a live session. A function nothing calls passes every test it has, because the tests call it themselves.
+- **Rule:** when a slice promises a loop ("kept current", "every N seconds"), the test runs two sessions and asserts the other
+  side's copy changed **without the test calling the function**, and the docs name the caller. Before claiming a loop is built,
+  grep for its callers: if only tests call it, it is not built.
+- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "the host writes what a visiting pilot became, not only what it arrived
+  with" drives `syncGuests` from the session's own clock, never by calling `writeBack`.
 
 ### L42. A screen that replaces the menu must earn it, every time, by evidence
 - **Seen (owner, playtest 18):** *"Laptop joins fine a host world. Leaving puts you into the Your Pilot is in hostpc world... for the

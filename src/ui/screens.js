@@ -126,7 +126,58 @@ function awayCardHtml(away) {
   );
 }
 
+/**
+ * Step 16 slice 5: **"Your pilot is safe"** — the card a guest gets when the host's browser
+ * goes away while the pilot is in its world.
+ *
+ * The owner's rule for the away card was that a card about the save appears only when the
+ * player asks about the save (playtest 18). This is the other kind of card: news. It appears
+ * because something happened *to* the player, it says the one thing that matters first (the
+ * pilot is not lost), and it offers the two things that can be done about it — and neither of
+ * them is a dead end:
+ *
+ *   Wait     leaves the pilot where it is and keeps the connection looking for the world.
+ *            Nothing about the save changes, so this is also this card's way out (L40).
+ *   Go home  brings the pilot back now, from the copy it carries — the same action as the
+ *            away card's Bring pilot home, so there is one rule for coming home, not two.
+ *
+ * Both go through `data-a`, which `ui/menu.js` routes, so the card needs no listener of its
+ * own and a keyboard-only player reaches the same actions.
+ */
+function lostCardHtml(lost) {
+  const host = lost?.hostName ? `${esc(lost.hostName)}'s world` : "your friend's world";
+  return (
+    `<div class="away-card">` +
+    `<h2>Your pilot is safe</h2>` +
+    `<p>The connection to ${host} dropped. That is a connection, not your save: your pilot is ` +
+    `still there with its ship, its cargo, its credits and its station lockers.</p>` +
+    `<p class="away-actions">` +
+    `<button class="go" data-a="waitForHost">Wait</button>` +
+    `<button class="go" data-a="comehome">Go home</button>` +
+    `</p>` +
+    `<p class="away-note"><b>Wait</b> leaves your pilot where it is and keeps looking for the ` +
+    `world. Nothing about your save changes, and if your friend opens it again the game ` +
+    `reconnects by itself while this page is open.</p>` +
+    `<p class="away-note"><b>Go home</b> brings your pilot back to this galaxy now, from the copy ` +
+    `it carries. Everything it did there comes with it — only the last few seconds stay in your ` +
+    `friend's world.</p>` +
+    // The same build line as the away card, for the same reason: a card that behaves unlike the
+    // one described in the guide is usually an older download, and this is where to see it.
+    `<p class="away-note away-build">Build ${esc(BUILD)}</p>` +
+    `</div>`
+  );
+}
+
 export function introHtml() {
+  // **Two different cards, two different reasons** (step 16 slice 5).
+  //
+  //  - `lostCard` is raised by the connection when the host's browser goes away, and is only
+  //    shown while the pilot really is away (`state.away`): coming home clears it by making
+  //    the condition untrue, not by remembering to tidy up.
+  //  - `awayCard` is raised by a press on Open World, and only for a newer copy (playtest 18).
+  //
+  // Both replace the ordinary title, and both have a door back to it.
+  if (state.away && state.ui?.lostCard) return `<h1>Tallow Reach</h1>${lostCardHtml(state.ui.lostCard)}`;
   // **The card is not the title screen any more** (owner, playtest 18).
   //
   // It used to be: being away meant the menu stopped being a menu. The owner's rule instead:

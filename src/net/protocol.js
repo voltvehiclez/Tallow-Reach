@@ -13,10 +13,17 @@
 //   ping/pong  { t, at }                                  either way, `NET.heartbeatSec`
 //   carry      { t, guestId, name, epoch, rev, bundle }   guest -> host: the suitcase, on arrival
 //   suitcase   { t, guestId, name, epoch, rev, bundle }   host -> guest: the newer copy of it
+//   bye        { t, guestId, name }                       guest -> host (slice 5): "I am going" —
+//                                                         a tab closing or a pilot leaving, so the
+//                                                         host writes the final copy back at once
+//                                                         and marks the record `left` (no ghost)
 //
-// Nothing here carries a save, a bundle or a pilot: slices 4 and 5 add those as new
-// `t` values, and the handshake they will use is already written and tested in
-// `net/custody.js` (`handshake`).
+// The `bye` is a courtesy, not a contract: a crashed tab sends nothing at all, which is why the
+// host still notices a peer that vanished on its own. It only makes the ordinary departure —
+// the close button, "Go home", "Leave" — immediate and lossless.
+//
+// The handshake every message above relies on is written and tested in `net/custody.js`
+// (`handshake`), never here.
 //
 // **Two rules that are easy to get wrong**
 //
@@ -31,7 +38,7 @@
 import { NET } from "../data/multiplayer.js";
 
 /** Every message kind this build understands. An unknown `t` is dropped, not echoed. */
-export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase"];
+export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye"];
 
 /** The longest a name, an id or a chat line may be on the wire. */
 const LIMITS = {
@@ -93,6 +100,15 @@ export function cleanMessage(kind, fields = {}) {
       return cleanCarry(fields, "carry");
     case "suitcase":
       return cleanCarry(fields, "suitcase");
+    // Slice 5: the guest is leaving on purpose. Two short strings, nothing else: the host
+    // answers it with a final `suitcase`, so this message must never be able to say more
+    // than "I am going".
+    case "bye":
+      return {
+        t: "bye",
+        guestId: text(fields.guestId, LIMITS.id),
+        name: text(fields.name, LIMITS.name),
+      };
     default:
       return null;
   }

@@ -8,7 +8,7 @@
 import { keys, syncControls, clearControls } from "../core/input.js";
 import { setAudioSuspended, isMuted, toggleMute } from "../core/audio.js";
 import { state, currentSave, saveCurrentGame } from "../state/state.js";
-import { emit } from "../util/events.js";
+import { emit, on } from "../util/events.js";
 import { pauseOverlayHtml } from "./overlays.js";
 import { hideNotice } from "./notice.js";
 import { resetStationPanels } from "./left-panel.js";
@@ -39,6 +39,12 @@ export function setupPause() {
   // Multiplayer is a screen of its own now (title menu and pause card both open it).
   const mpButton = overlay.querySelector("#pz-mp");
   if (mpButton) mpButton.onclick = () => openMultiplayer({ from: "pause" });
+  // Step 16 slice 5: a host that goes away puts the title screen up with the "Your pilot is
+  // safe" card on it. A pause card left on top of that would hide the one screen that says
+  // what happened and offers a way on — so the card goes with the world it was pausing.
+  on("mp-host-left", () => {
+    if (!overlay.hidden) setPause(false);
+  });
   showSoundState();
 }
 

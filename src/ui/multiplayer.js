@@ -269,6 +269,9 @@ export function setupMultiplayer() {
     // card redraws from its own listener (`ui/menu.js`) — this file must not import the
     // menu, because the menu imports this one.
     state.away = away || null;
+    // A pilot that just came home is not "still there", so a lost-connection card about it is
+    // no longer true (step 16 slice 5).
+    if (!state.away) state.ui.lostCard = null;
     draw();
   });
   // A sentence the connection wants shown. `net/` cannot reach the screen itself.
@@ -282,14 +285,54 @@ export function setupMultiplayer() {
     setMessage(text, "hint");
     showNotice(text);
   });
-  // The host closed the game: kick the guest back to the title screen with a clear reason.
-  on("mp-host-left", ({ reason } = {}) => {
+  /**
+   * Step 16 slice 5: **the host's browser went away, and the pilot is still in its world.**
+   *
+   * The old answer was a line of text at the top of the screen after the session had already
+   * been thrown away — which is the one thing the player cannot act on. Now the title screen
+   * comes up with the "Your pilot is safe" card on it (`ui/screens.js`), offering **Wait** and
+   * **Go home**, and the session is deliberately left running so a host that reopens the same
+   * world is met again. `net/session.js` decides that (`snapshot().hostLost`); this file only
+   * draws it, and never asks a question the connection cannot answer.
+   *
+   * The card carries the reason, so there is no second sentence on top of the screen (L40: one
+   * refusal, one place).
+   */
+  on("mp-host-left", ({ reason, hostName } = {}) => {
     panelView.offer = "";
     panelView.answer = "";
     panelView.fields.code = "";
     panelView.fields.join = "";
+    const snap = api.snapshot();
+    const host = hostName || snap.hostName || "";
+    const said = reason || "The connection to your friend's world dropped.";
+    // **Only a pilot that is over there gets the card.** A guest that only looked around has
+    // nothing in that world, so there is nothing to keep looking for: it is told in a sentence
+    // and the session stops, exactly as before this slice. One screen, one question, and the
+    // question only for the player who has one (LESSONS L40: do not ask a card's question
+    // about a save the player has not put at stake).
+    if (!state.away) {
+      state.ui.lostCard = null;
+      emit("main-menu", {});
+      api.stop();
+      showNotice(host ? `The connection to ${host}'s world dropped.` : said);
+      draw();
+      return;
+    }
+    state.ui.lostCard = { hostName: host, reason: said };
     emit("main-menu", {});
-    emit("mp-notice", reason || "The host closed the game.");
+    draw();
+  });
+  /**
+   * ...and the world came back. Said as a sentence, because the card has gone by then: the
+   * session reconnects on its own and the guest's copy catches up in the same breath.
+   */
+  on("mp-host-back", ({ name } = {}) => {
+    state.ui.lostCard = null;
+    showNotice(name
+      ? `${name}'s world is back. Your pilot is still there — it catches up by itself.`
+      : "Your friend's world is back. Your pilot is still there.");
+    draw();
   });
   // A `?join=` link found at boot (see net/boot.js). The session does the joining; this
   // file shows the result. The link is rebuilt from its two halves because that is the
@@ -313,12 +356,20 @@ export function setupMultiplayer() {
     chatAway();
     // Hosting is something you do while flying your own world (owner's rule): at the title
     // there is no world to be in, so the room closes instead of staying open behind the menu.
+    //
+    // **Except a guest whose host vanished** (step 16 slice 5). That session is not "behind the
+    // menu" — it is the only thing still looking for the pilot's world, and stopping it here
+    // would make the card's *Wait* a lie. It stops the ordinary way: Wait (the player goes back
+    // to the menu), Go home, Leave, or the switch.
     if (api.snapshot().on) {
-      api.stop();
-      api.setEnabled(false);
-      panelView.offer = "";
-      panelView.answer = "";
-      panelView.fields.code = "";
+      const snap = api.snapshot();
+      if (!(snap.role === "guest" && snap.hostLost === true)) {
+        api.stop();
+        api.setEnabled(false);
+        panelView.offer = "";
+        panelView.answer = "";
+        panelView.fields.code = "";
+      }
     }
   });
   draw();

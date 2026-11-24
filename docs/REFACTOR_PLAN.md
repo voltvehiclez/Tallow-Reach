@@ -113,8 +113,8 @@ steps still to build (16 and 17).
 
 # Step 16: Multiplayer (host-run co-op)
 
-**Status:** planned 2026-11-21 with the owner; slices are built one per chat. Slices **1–3 built**
-(2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; slice 4 (the pilot travels) is next.
+**Status:** planned 2026-11-21 with the owner, one slice per chat. Slices **1–3 built**
+(2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4** (2026-11-23a) and **slice 5** (2026-11-24a, awaiting playtest) built; slice 6 next.
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
 
 **Slices 7 and 8 were added on 2026-11-22 and AGREED by the owner the same day** ("Also draw the
@@ -259,10 +259,10 @@ exists for exactly that, and the pause card says which path is in use.
    refusal for a version mismatch; the guest arrives docked at its active ship's station (flight
    positions never travel); the host raises `rev` and snapshots about two seconds later; reconnects
    take the higher `(epoch, rev)`; "Go home" works from the suitcase with the host offline.
-5. **Crashes and reconnects.** `compare` and the choice screen when two copies disagree; "Your
-   pilot is safe" with **Wait** and **Go home** when the host drops; final guest snapshots on tab
-   close; a host loading an older save loses to a newer suitcase; one session per `guestId`, a
-   newer connection kicks the older.
+5. **Crashes and reconnects.** `compare` decides when two copies disagree (a host loading an older
+   save loses to a newer suitcase); "Your pilot is safe"
+   with **Wait** and **Go home** when the host drops; a final copy on tab close (`bye`); one
+   session per `guestId`, a newer connection kicks the older. **Built 2026-11-24a.**
 6. **Trading.** **View docked players** in the station, right-click a name > **Trade**: items, a
    ship at that station, or credits, a first confirm that locks both sides and a second that
    commits. The host checks both station holds' m³ first; if either side lacks room, nothing moves.
