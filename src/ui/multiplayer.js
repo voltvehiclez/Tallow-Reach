@@ -255,8 +255,10 @@ export function chatVisibility({ on, intro, panel, open }) {
  * Four things can keep it on screen, and nothing else may:
  *
  *   pin       the player pressed **Pin**: the box is theirs to keep, timer and all.
- *   typing    a half-written line is in the field. Hiding the box does not lose the text, but
- *             losing the *view* of what you were writing mid-sentence is still rude.
+ *   typing    the field is open, or a half-written line is in it. Hiding the box does not lose
+ *             the text, but losing the *view* of what you are writing mid-sentence is rude — and
+ *             unpinning a box you are typing in must not take the field away with the pin
+ *             (playtest 21).
  *   fresh     somebody said something less than `CHAT.autoHideSec` ago. This is the whole
  *             point: a line arrives, the box appears so it can be read, then it goes.
  *   panel     ...never: a station panel, the title and the pause card own the screen, and a
@@ -1475,12 +1477,17 @@ function buildChat() {
   pinBtn?.addEventListener("mousedown", e => e.preventDefault());
   pinBtn?.addEventListener("click", () => {
     chatPinned = !chatPinned;
+    // **One word, two looks** (owner, playtest 21: *"Make it so that it always says Pin, and make
+    // the button solid yellow with black text if pinned and transparent solid with yellow text if
+    // non pinned."*). The word is always `Pin` — a button whose *label* changes under the cursor
+    // is a different button each time — so the state has to be in the look, and in `aria-pressed`
+    // and the hover sentence for anyone who cannot see the colour.
     pinBtn.classList.toggle("is-pinned", chatPinned);
-    // Said out loud as well as coloured: the amber border is a hint, the word is the answer
-    // to "did that do anything?" (owner, playtest 20 — the box was staying up forever).
-    pinBtn.textContent = chatPinned ? "Pinned" : "Pin";
     pinBtn.setAttribute("aria-pressed", chatPinned ? "true" : "false");
+    pinBtn.title = chatPinned ? "Chat stays open — press to unpin" : "Keep the chat open";
+    if (chatBox) chatBox.classList.toggle("is-pinned", chatPinned);
     pokeChat();
+    drawChat();
   });
 
   chatInput.addEventListener("keydown", event => {
@@ -1678,7 +1685,10 @@ function hideChatBox({ force = false } = {}) {
   state.ui.chat = false;
   if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
   if (chatHideTimer) { clearTimeout(chatHideTimer); chatHideTimer = 0; }
-  document.body.classList.remove("mp-chat-live", "mp-chat-open");
+  // `mp-chat-pinned` goes with the box: a body class that outlives the box it describes is the
+  // same bug as a stale flag (L21), and the next box would draw itself pinned.
+  document.body.classList.remove("mp-chat-live", "mp-chat-open", "mp-chat-pinned");
+  chatBox.classList.remove("is-pinned");
   if (document.activeElement === chatInput) chatInput.blur();
   return true;
 }
@@ -1708,7 +1718,7 @@ function drawChat() {
     intro: !!state.ui.intro,
     panel: sessionIsPanelOpen(),
     pin: chatPinned,
-    typing: !!(chatInput?.value || "").trim(),
+    typing: chatOpen || !!(chatInput?.value || "").trim(),
     saidAt: chatSaidAt,
   });
   if (!keep) {
@@ -1718,6 +1728,19 @@ function drawChat() {
   chatBox.hidden = false;
   document.body.classList.add("mp-chat-live");
   document.body.classList.toggle("mp-chat-open", chatOpen);
+  // **Glancing, typing and pinned are three different boxes** (owner, playtest 21). Glancing —
+  // a line arrived and the clock is running — is the chat and nothing else: no players column
+  // shoved into the corner of the view. Typing (Enter) and pinned are the deliberate states, and
+  // they are the ones that show the list and the Pin button.
+  document.body.classList.toggle("mp-chat-pinned", chatPinned);
+  // The button's look is drawn from the state, not only set by its own click: a reset (a test, a
+  // new session) can change `chatPinned` without the button hearing about it.
+  const pinButton = chatBox.querySelector("#mp-chat-pin");
+  if (pinButton) {
+    pinButton.classList.toggle("is-pinned", chatPinned);
+    pinButton.setAttribute("aria-pressed", chatPinned ? "true" : "false");
+    pinButton.title = chatPinned ? "Chat stays open — press to unpin" : "Keep the chat open";
+  }
   if (chatWho) chatWho.innerHTML = chatWhoHtml(snap);
   const lines = chatLog(snap);
   chatList.innerHTML = lines.length

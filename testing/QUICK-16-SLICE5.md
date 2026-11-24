@@ -1,6 +1,6 @@
 # Quick test: step 16 slice 5 (10 minutes)
 
-**Build `2026-11-24d`.** Two browsers with separate saves: one normal window, one incognito/private
+**Build `2026-11-24e`.** Two browsers with separate saves: one normal window, one incognito/private
 window. Everything below is the new behaviour; if a step does not match, send me the step number and
 **Copy details** from both machines.
 
@@ -49,9 +49,10 @@ window. Everything below is the new behaviour; if a step does not match, send me
 
 ## Part C2 — the chat hides itself (1 min)
 
-12b. **Guest:** press **Enter**, send one line, and wait. **Check:** the box goes after about seven
-     seconds. Send another, press **Pin** in the box, wait. **Check:** it stays, and the button reads
-     **Pinned**; unpin it and it goes again.
+12b. **Guest:** press **Enter**, send one line, press **Escape**, and wait. **Check:** the box shows
+     only the chat (no Players column) and goes after about **twelve seconds**. Send another and press
+     **Pin** (it turns solid yellow with black text) — **Check:** it stays up and the Pin button hides
+     while you are not typing; press **Enter** and the button is back, so you can unpin it.
 
 ## Part D — the 30-second version of "you keep playing" (1 min)
 

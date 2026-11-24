@@ -2825,11 +2825,17 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 .menu-username-box:focus-within { outline: 1px solid var(--amber); }
 #mp-chat-pin {
   align-self: flex-start;
+  /* **One word, two looks** (owner, playtest 21: *"always says Pin … solid yellow with black text
+     if pinned and transparent solid with yellow text if non pinned"*). The button keeps one label,
+     so the state lives in its colours — and `aria-pressed` carries it for anyone who cannot see
+     them. */
   background: transparent;
-  border: 1px solid rgba(224, 164, 88, .35);
-  color: var(--dim);
+  border: 1px solid var(--amber);
+  color: var(--amber);
   font-size: 9px;
-  padding: 1px 4px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
   cursor: pointer;
 }
 /* The box is clickable while it is *up*, not only while it is being typed in: the Pin button
@@ -2839,11 +2845,25 @@ body:not(.mp-chat-live) #mp-chat * {
   pointer-events: none;
   cursor: none;
 }
-body:not(.mp-chat-open) #mp-chat-who {
+/* **Glancing, typing and pinned are three different boxes** (owner, playtest 21).
+   Glancing — a line arrived and the twelve-second clock is running — is the chat and nothing else:
+   the players column stays away, so a message from a friend does not push a list into the corner
+   of the view. Enter (typing) and the pin are the deliberate states, and they draw it. */
+body:not(.mp-chat-open):not(.mp-chat-pinned) #mp-chat-who { display: none; }
+/* Pinned and idle: the box staying up IS the answer to "did that do anything?", so the Pin button —
+   and the width it needed beside the players column — goes until the player presses Enter, which
+   brings it back for as long as the field is open (owner, playtest 21). */
+body.mp-chat-pinned:not(.mp-chat-open) #mp-chat-pin { display: none; }
+body.mp-chat-pinned:not(.mp-chat-open) #mp-chat-who {
   min-width: 40px;
   max-width: 52px;
 }
-#mp-chat-pin.is-pinned { color: var(--amber); border-color: var(--amber); }
+#mp-chat-pin.is-pinned,
+#mp-chat.is-pinned #mp-chat-pin {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #0b0d0f;
+}
 body:not(.mp-chat-live) #mp-chat-pin { display: none; }
 #mp-chat-input {
   width: 100%;
@@ -2859,5 +2879,4 @@ body:not(.mp-chat-live) #mp-chat-pin { display: none; }
 #mp-chat-input[hidden] { display: none; }
 #mp-chat-note { margin: 0; color: #d98b7a; font-size: 12px; }
 #mp-chat-note[hidden] { display: none; }
-body:not(.mp-chat-open) #mp-chat-pin { opacity: .8; }
 body.mp-chat-open #mp-chat { background: rgba(7, 9, 11, .86); }

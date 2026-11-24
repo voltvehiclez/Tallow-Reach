@@ -594,13 +594,15 @@ test("the chat box shows its input whenever it is open — the guest could not t
   assert.match(open, /chatOpen = true;[\s\S]{0,400}chatInput\.hidden = false;[\s\S]{0,400}chatInput\.focus\(\)/);
 });
 
-test("playtest 20: the chat shows a line and takes itself away, unless it is pinned", () => {
+test("playtest 20/21: the chat shows a line and takes itself away, unless it is pinned", () => {
   // The owner's report: *"Chat when a message is said then the chat is visible. However it
   // doesnt go away. Should go away after maybe 6-7 seconds unless the user has pinned the
   // chat. So updates are always seen, pinning removes the 6-7 sec auto hid timer."*
+  // ...and, on playtest 21: *"When chat is viewed for a short time 7 sec right now. Increase time
+  // open to 12 seconds."*
   const now = 1_000_000;
   const window = CHAT.autoHideSec * 1000;
-  assert.ok(CHAT.autoHideSec >= 6 && CHAT.autoHideSec <= 7, `autoHideSec is ${CHAT.autoHideSec}`);
+  assert.equal(CHAT.autoHideSec, 12, "twelve seconds, at the owner's request");
 
   // Nothing said yet: the box is not on screen. It used to be up for the whole session.
   assert.equal(ui.chatKeepsOpen({ saidAt: 0, now }), false, "a box nobody has spoken in stays hidden");
@@ -627,12 +629,42 @@ test("playtest 20: the chat shows a line and takes itself away, unless it is pin
   assert.match(source, /function pokeChat\(\)[\s\S]{0,120}chatSaidAt = Date\.now\(\)/, "which restarts the clock");
   assert.match(source, /chatHideTimer = setTimeout\(/, "and one timer is what hides it");
   assert.match(source, /if \(chatPinned\) return;/, "a pinned box arms no timer");
-  assert.match(source, /pinBtn\.textContent = chatPinned \? "Pinned" : "Pin"/, "the pin says what it is");
+  // **The field being open keeps it too**: unpinning a box you are typing in must not take the
+  // field away with the pin (playtest 21's way out of a pinned box is Enter).
+  assert.match(source, /typing: chatOpen \|\| !!\(chatInput\?\.value \|\| ""\)\.trim\(\)/,
+    "an open field is a box somebody is using");
+
+  // **One word, two looks** (playtest 21): *"Make it so that it always says Pin, and make the
+  // button solid yellow with black text if pinned and transparent solid with yellow text if non
+  // pinned."* A label that changes under the cursor is a different button each time (L32), so the
+  // state lives in the colours and in `aria-pressed`.
+  assert.doesNotMatch(source, /pinBtn\.textContent =/, "the pin never renames itself");
+  assert.match(source, /pinBtn\.classList\.toggle\("is-pinned", chatPinned\)/, "its look follows the state");
+  assert.match(source, /pinBtn\.setAttribute\("aria-pressed", chatPinned \? "true" : "false"\)/,
+    "and so does the state a screen reader hears");
   const css = read("src/styles.css");
   assert.match(css, /body:not\(\.mp-chat-live\) #mp-chat-pin \{ display: none; \}/,
     "the pin is clickable while the box is up, not only while typing");
   assert.doesNotMatch(css, /body:not\(\.mp-chat-open\) #mp-chat,/,
     "and the box itself takes the mouse while it is up");
+  assert.match(css, /#mp-chat-pin \{[^}]*background: transparent;[^}]*color: var\(--amber\);/,
+    "unpinned: transparent, yellow text");
+  assert.match(css, /#mp-chat-pin\.is-pinned[\s\S]{0,120}background: var\(--amber\);[\s\S]{0,80}color: #0b0d0f;/,
+    "pinned: solid yellow, black text");
+
+  // **Glancing is the chat and nothing else** (playtest 21: *"when chat message causes chat pop up
+  // for 12 seconds, only the chat is viewed ie not the player list (to reduce disturbance to
+  // player view)"*). The players column is drawn only while typing or pinned...
+  assert.match(css, /body:not\(\.mp-chat-open\):not\(\.mp-chat-pinned\) #mp-chat-who \{ display: none; \}/,
+    "a line arriving does not push the players column into the view");
+  // ...and a pinned box that nobody is typing in does not need the Pin button either: the box
+  // staying up is the answer to "did that do anything?", and Enter brings the button back.
+  assert.match(css, /body\.mp-chat-pinned:not\(\.mp-chat-open\) #mp-chat-pin \{ display: none; \}/,
+    "a pinned box that is idle hides the button");
+  assert.match(source, /document\.body\.classList\.toggle\("mp-chat-pinned", chatPinned\)/,
+    "which the body has to be told about");
+  assert.match(source, /document\.body\.classList\.remove\("mp-chat-live", "mp-chat-open", "mp-chat-pinned"\)/,
+    "and loses it when the box goes");
 });
 
 test("chat works with nobody else connected: the line is shown, and says only you see it", () => {

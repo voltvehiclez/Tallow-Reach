@@ -225,10 +225,9 @@ copy/paste code path, which needs no relay at all. Tests must never probe: `setR
 **The hello is repeated until it is answered.** A hello "sent" is not a hello heard: the channel
 opens seconds after the room says the peer is there, and a message into an unopened channel is gone
 without an error. So a guest repeats its hello every `NET.helloRetrySec` until a `welcome` arrives —
-the reply is the latch — and clears its per-peer latch each round. The host logs "joined" once per
+the reply is the latch — clearing its per-peer latch each round. The host logs "joined" once per
 guest however many hellos arrive. After `NET.helloWaitSec` with no answer the guest is told, with a
-different sentence for "nobody is in the room" than for "nothing gets through". The same retry
-covers the paste-code wire.
+different sentence for "nobody is in the room" than for "nothing gets through".
 
 **Names are labels; a duplicate gets a star.** The secret in the link is the identity, the name is
 what other people read. `uniqueName(wanted, taken)` hands the joining guest the first free variant —
@@ -290,7 +289,7 @@ Three decisions worth keeping:
   the code the player was told to send.
 
 **What a session is not allowed to do yet:** it moves no pilot and draws no remote ship —
-deliberate, so the owner can test it without risking a save.
+deliberate, so it can be tested without risking a save.
 
 ## Slices
 
@@ -365,14 +364,12 @@ Four rules, and one hole closed:
   `ui/multiplayer.js` stops the session **quietly** (no one left to say `bye` to) **before** the
   menu shows **"Lost connection to host"** (`state.ui.lostHost`) with **one** door, *Main menu*. It
   asks no question about a save (L40) and touches none.
-- **Rejoining keeps the version the server has** (owner, same day: *"when reconnecting to the server
-  after a disconnect your pilot's last version is already on the server"*). A rejoin is an ordinary
-  join: the hello re-admits the pilot (a `left` record is proof of nothing), the guest re-sends its
-  copy, and `compare` lets the newer win — what the host wrote back is not overwritten by the older
-  copy the guest holds. **The secret is put back on the way out:** the copy a guest keeps is the
-  host's copy and a host keeps no token, so `sendCarryMessage` fills it from `away.token`; without
-  that, a rejoin in a fresh session was refused as "that link has already been used". The **local**
-  world is the away card instead (playtest 20: every press, see above).
+- **Rejoining keeps the version the server has** (owner: *"when reconnecting to the server after a
+  disconnect your pilot's last version is already on the server"*). A rejoin is an ordinary join: the
+  hello re-admits the pilot (a `left` record is proof of nothing), the guest re-sends its copy, and
+  `compare` lets the newer win. **The secret is put back on the way out:** the copy a guest keeps is
+  the host's copy and a host keeps no token, so `sendCarryMessage` fills it from `away.token` —
+  without that, a rejoin in a fresh session was refused as "that link has already been used".
 - **The copy is kept current.** `writeBack` had no caller until this slice: `syncGuests` asks `sim/`
   for each visitor's live profile every `NET.snapshotSec`, raises `rev` on a real change
   (`NET.revStepMs` floor) and re-sends an unchanged copy every `NET.suitcaseRepeatSec` — without it
@@ -383,9 +380,12 @@ Four rules, and one hole closed:
   since is the newest truth about itself. A *dropped connection* is not that case: the hello
   re-admits the pilot first, so `compare` decides. A tie takes the arriving copy.
 - **The chat box takes itself away** (owner, playtest 20: *"it doesnt go away … unless the user has
-  pinned the chat"*). A line — anybody's — shows it for `CHAT.autoHideSec` (7 s); **Pin** keeps it,
-  and so does a half-written line. `chatKeepsOpen({ pin, typing, saidAt, now })` is the whole rule;
-  only the timer is untested (L45).
+  pinned the chat"*; 12 s since 21). A line — anybody's — shows it for `CHAT.autoHideSec`;
+  **Pin** keeps it, and so does an open field. `chatKeepsOpen({ pin, typing,
+  saidAt, now })` is the whole rule; only the timer is untested (L45). **Glancing, typing and pinned
+  are three boxes**: a glance is the chat alone; a pinned box nobody is typing in hides the Pin
+  button (the box staying up is the answer; Enter brings it back), and the button keeps the one word
+  **Pin**, putting its state in its colours (L32).
 - **A departure is said, and a pilot lives in one window.** New kind **`bye`** (a guest session
   stopping, and `pagehide`/`beforeunload`): the host writes the final copy back, marks the record
   `left` and takes the ship out. A hello for the same `guestId` from a different live peer is a

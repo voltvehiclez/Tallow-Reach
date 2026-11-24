@@ -18,6 +18,34 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-24: Playtest 21 — the chat box, four small things
+
+**Code change; rebuild needed; build `2026-11-24e`.** Save version unchanged (29). The last cleanup
+before slice 5 is signed off. The owner's list:
+
+1. **Twelve seconds, not seven** (owner: *"When chat is viewed for a short time 7 sec right now.
+   Increase time open to 12 seconds."*). `CHAT.autoHideSec` is the one number, so the box, its timer
+   and the test all move together.
+2. **A glance is the chat and nothing else** (owner: *"when chat message causes chat pop up for 12
+   seconds, only the chat is viewed ie not the player list (to reduce disturbance to player view)"*).
+   A line arriving shows the lines; the **Players** column is drawn only while the field is open or
+   the box is pinned. Glancing, typing and pinned are three different boxes.
+3. **A pinned box that nobody is typing in hides the Pin button** (owner: *"remove the Pinned icon …
+   This is so that when the chat is pinned the player column doesnt need to be as wide. If you want to
+   unpin the chat you simply press enter and the pinned button appears again"*). The box staying up
+   is the answer to "did that do anything?"; **Enter** brings the button back so it can be unpinned.
+   Unpinning never takes the field away: an open field keeps the box up (`chatKeepsOpen`'s `typing`).
+4. **One word, two looks** (owner: *"Make it so that it always says Pin, and make the button solid
+   yellow with black text if pinned and transparent solid with yellow text if non pinned"*). The label
+   never changes — a control whose word changes under the cursor is a different control each time
+   (L32) — so the state lives in the colours, in `aria-pressed`, and in the hover sentence. The
+   separate "dim when closed" opacity rule is gone with the old styling.
+
+`src/data/multiplayer.js` (`CHAT.autoHideSec` 12, BUILD), `src/ui/multiplayer.js` (the pin's look and
+state, the `mp-chat-pinned` body class, an open field counts as typing), `src/styles.css` (the three
+boxes, the two Pin looks). Tests: the playtest-20 chat test now asks all of it — twelve seconds, no
+renaming, the solid amber pinned look, the hidden column, the hidden button and the body class.
+
 ## 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one
 
 **Code change; rebuild needed; build `2026-11-24d`.** Save version unchanged (29).
@@ -298,70 +326,10 @@ pressable and leaves; the switch still opens a world; the session can be switche
 running). Reverting `switchOn`/`canSwitch` fails the first. **Build `2026-11-23f`, save v29
 unchanged. 1029 tests.**
 
-## 2026-11-23: The join box holds the choice — and the card gets a door
-
-**Code change; rebuild needed.** The owner's design for playtest 17, and the two interaction bugs
-that came before it.
-
-- **A join no longer enters the world.** `afterJoined` used to close the multiplayer screen and
-  load the world the moment a link connected, which destroyed the only *Bring my pilot* button
-  before the player could press it (playtest 16) and made a mid-join click race the world load.
-  The screen now stays up, and the **same join box** becomes the choice the owner asked for:
-  *Connected. Choose what to do* — **Bring my pilot**, or **Enter the world without my pilot**.
-  Entering the world is its own action (`data-mp="join-world"`), and after a carry the box offers
-  *Enter the world*.
-- **The in-world prompt is deleted** (`#mp-bring-card`, its CSS and the `mp-bring-prompt` event).
-  It was a workaround for "the join screen closes"; the owner's ordering removes the cause, so the
-  workaround goes. Net deletion.
-- **The away card has a Main menu button** (owner: *"no option even to go to main menu... so hes
-  stuck"*). It dismisses the card for the moment (`state.ui.awayCardDismissed`) and is **not** a
-  decision about the save: the pilot stays away, and any arrival at the menu shows the card again.
-- **Bring pilot home is its own press again.** It routed through `ACTIONS.intro()` — Open World's
-  action — which refuses while a pilot is away, so the card's own button answered with the sentence
-  meant for Open World (playtest 17: *"a message I dont understand"*). It now calls
-  `bringPilotHomeAtMenu` directly, which is the owner's definition: *make the version of the
-  character that was in the friend's world the latest version of the local open world.*
-- **Rejoin with the host gone says so**: *"Ada is not there — their game is closed"*, instead of
-  *"Connection cancelled"*, which described the wire rather than the situation.
-- **Placeholder, at the owner's request:** entering the world loads the guest's **own** galaxy while
-  the connection stays live for chat and the pilot. That is honest for this build — the wire carries
-  no ship or world state (`KINDS` in `net/protocol.js` has no position messages), so the two players
-  were never in one world. Sharing it is slice 8.
-
-**Tests:** `tests/multiplayer-playtest16.test.mjs` rewritten to the new design (6), plus the
-playtest-14 guard replaced (joining never enters the world, for anybody). Verified by reverting the
-`comehome` routing and the `afterJoined` change. **Build `2026-11-23e`, save v29 unchanged. 1026 tests.**
-
-## 2026-11-23: Joining entered the world and left the pilot behind
-
-**Code change; rebuild needed.** The owner could join a friend's world, play, and never be offered
-**Bring my pilot** — because the offer was on the join screen and **a successful join closes that
-screen and enters the world**. The button was destroyed by the very thing it was meant to follow.
-
-- **The prompt is now a card in the world** (`#mp-bring-card`, `src/ui/multiplayer.js`), bottom
-  right, with *Bring my pilot* and *Not now*. It is not a modal: a guest who only wants to look
-  around and chat can ignore it, and the world keeps running behind it. The press goes through the
-  same `session.bringPilot()` the pause screen uses.
-- **The session decides when it is wanted** and says so on the bus: a new `mp-bring-prompt
-  {show, text}` event from `net/session.js` `publishBringPrompt()` (derived — guest, welcomed, has
-  not carried, not already away — never latched), plus `askBringPrompt()` so a screen that mounted
-  after the event can ask again. `net/` still never touches the DOM.
-- **Open World now refuses while the pilot is away** (owner's decision, playtest 16): it says where
-  the pilot is and leaves the card up. It used to try `comeHome()` and carry on, which read as
-  "Open World silently unpacks my pilot and drops me in".
-- **Rejoin reopens the multiplayer screen on success.** It connected (the host's list showed the
-  name) and then did nothing visible: the player stayed on the card with a "Rejoined" sentence — a
-  rejoin you cannot see is indistinguishable from one that failed. It still does **not** enter the
-  world, because the pilot is frozen there.
-- The click-mid-join race the owner found ("quickly click Bring my pilot before it logs me in")
-  goes with the old button: there is no longer a prompt to click while the world is loading.
-
-**Tests:** new `tests/multiplayer-playtest16.test.mjs` (6), including a real two-session join on the
-in-memory wire that asserts the prompt appears on join and disappears once the pilot actually
-crosses. Each fix verified by reverting it. **Build `2026-11-23d`, save v29 unchanged. 1026 tests.**
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-23: The join box holds the choice — and the card gets a door
+- 2026-11-23: Joining entered the world and left the pilot behind
 - 2026-11-23: The away card was a trap — Bring pilot home never worked
 - 2026-11-23: Test Ship faced sideways — the model brings its own rotation
 - 2026-11-23: Where a joining pilot lands, and where it comes home to

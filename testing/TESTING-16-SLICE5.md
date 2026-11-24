@@ -3,7 +3,7 @@
 This slice is about the ugly moments: **the host's game closes**, **the connection to it goes away**,
 **your pilot is in that world**, and **a closed tab**. Nothing new is drawn in space.
 
-**Build: `2026-11-24d`** — both machines. If one screen shows a different build string (title card, or
+**Build: `2026-11-24e`** — both machines. If one screen shows a different build string (title card, or
 Pause > Open Multiplayer > Connection details), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -132,19 +132,24 @@ looks different.
   Check a number you noted before you left.
 - Your home stations' stocks are back to what they were before you left, **not double**.
 
-## Part 3b — The chat takes itself away
+## Part 3b — The chat takes itself away (rewritten for `2026-11-24e`)
 
-1. On the **guest**, press **Enter** and send one line. Wait, watching the box.
-2. Send another line and press the **Pin** button in the chat box while it is up. Wait again.
-3. With the box pinned, press **Enter**, type a few words and do **not** send them. Wait, then press
-   **Pin** again (it should read **Pinned** while on) and watch.
+1. On the **guest**, press **Enter**, send one line, and press **Escape** (so nobody is typing). Wait,
+   watching the box.
+2. Send another line and, while the box is up, press **Pin** once. Wait.
+3. With the box pinned and nothing typed, press **Enter** and look at the box; then press **Pin**
+   again and press **Escape**.
 
 **What to check:**
 
-- After a line, the box stays about **seven seconds** and then goes. No press needed.
-- A line arriving from your friend brings it back, and it goes again seven seconds later.
-- **Pinned**, it stays up until you unpin it — and the button's word changes, so you can see which
-  state you are in.
+- After a line, the box stays about **twelve seconds** and then it goes. No press needed.
+- While it is just showing a line, it is **only the chat** — no "Players" column on its right. The
+  list appears when you press **Enter** to type, or when the box is pinned.
+- A line arriving from your friend brings it back, and it goes again twelve seconds later.
+- **Pin** is the same word both ways: transparent with yellow text when off, **solid yellow with
+  black text** when on. It never says "Pinned".
+- **Pinned and not typing**, the box stays up and the Pin button is **hidden** (the box staying up is
+  the answer). Press **Enter** and the button is back, solid yellow — press it to unpin.
 - A half-written line keeps it up; it does not vanish under your fingers.
 - Opening the pause card or the title screen still hides it, as before.
 
