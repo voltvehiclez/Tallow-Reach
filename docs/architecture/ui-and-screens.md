@@ -55,9 +55,10 @@
   not. Nothing is drawn into an element that the current state does not render: `#mp-msg` is always in
   the card. Each door shows one block: the title menu's screen joins, the pause card's screen hosts
   (`screenModel().surface`).
-- **The chat box is two columns** (`#mp-chat`): the lines (264 px of them, scrollable) and the input
-  on the left, a compact **Current players** column on the right with one small row per pilot
-  (`#mp-chat-who`) — you, the host, then every guest (`chatWhoRows`). It opens on
+- **The chat box is two columns** (`#mp-chat`): the lines (scrollable) and the input on the left, a
+  compact **Players** column on the right (54 px, one small row per pilot — you, the host, then every
+  guest, `chatWhoRows`, and `+N more` past `CHAT.whoRows`). The column and the **Pin** button are shown
+  only while the field is open, so a line arriving shows the chat alone (playtest 22). It opens on
   **Enter** while a session is on — including a host with nobody joined yet — closes on **Escape**,
   and is open/closed by its own flag rather than by where the cursor is (focus is impossible while a
   field is `[hidden]`, and the guest's box was untypable because of it).

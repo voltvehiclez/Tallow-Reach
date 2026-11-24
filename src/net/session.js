@@ -217,6 +217,37 @@ export async function hostWorld({ save = liveSave(), name = readSettings().name 
   return { ok: true, worldId, link, url: makeJoinUrl(worldId, token, pageBase()) };
 }
 
+/**
+ * **This browser's own secret as a guest** (playtest 22), made once and kept.
+ *
+ * It used to be the token inside the join link, and that is one per world — so two friends who
+ * pasted the same link arrived as the *same pilot*: same `guestId`, same secret. The host's
+ * one-window rule then did exactly what it is for and kicked the first guest out when the second
+ * arrived, and the first could not come back because its record now belonged to somebody else.
+ * The owner's report: *"If a second guest player joins, first guest is kicked out ... the first
+ * guest never really joins and eventually they are in the world with no chat function."*
+ *
+ * So the invitation and the identity are two different things (LESSONS L46). This lives in the
+ * browser's settings, not in a save: a pilot may play on two machines, and each browser is one
+ * window. Keeping it also makes a rejoin the *same* guest to the host, which is what lets the
+ * host hand back the copy it has been writing all along.
+ */
+let sessionToken = "";
+function pilotToken() {
+  if (sessionToken) return sessionToken;
+  const stored = readSettings().pilotToken;
+  if (stored) { sessionToken = stored; return sessionToken; }
+  sessionToken = makeToken(NET.tokenBytes);
+  try { writeSettings({ pilotToken: sessionToken }); } catch (e) { /* no storage: this session only */ }
+  return sessionToken;
+}
+
+/**
+ * This browser's identity as a guest, for anything that needs to name it (a test, a future
+ * server). `joinWorld` uses the same function, so there is one answer to "who is this browser".
+ */
+export const guestToken = () => pilotToken();
+
 /** Join somebody's world from a join link (a whole pasted URL works too). */
 export async function joinWorld({ link, name = readSettings().name } = {}) {
   const found = readJoinLink(link);
@@ -233,7 +264,11 @@ export async function joinWorld({ link, name = readSettings().name } = {}) {
   }
   if (active) stop();
 
-  const session = createSession({ role: "guest", worldId: found.worldId, name: who, token: found.token, save: saveKit });
+  // The link's own secret is the host's invitation, and a guest no longer wears it: its identity
+  // is this browser's (`pilotToken()`). Room membership — the room is derived from the world id,
+  // see `transport.js` — is what admits a first-time guest, exactly as before; that the invitation
+  // is not *checked* is written down in `net/README.md` and is step 17's to close.
+  const session = createSession({ role: "guest", worldId: found.worldId, name: who, token: pilotToken(), save: saveKit });
   active = session;
   await session.start();
   const joined = await session.waitForWelcome();
@@ -759,7 +794,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       return;
     }
     if (!remoteCanJoin()) {
-      send({ t: "refuse", reason: "full", message: "This world is holding as many visiting pilots as it can. Ask the host to send somebody home." }, peerId);
+      // Only reachable at the valve (`NET.maxGuests`), which is far past what a machine carries:
+      // there is no player cap in the game (owner, playtest 22).
+      send({ t: "refuse", reason: "full", message: "This room is past what one machine can carry. Try again in a little while." }, peerId);
       return;
     }
 
@@ -956,7 +993,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     return undefined;
   }
 
-  /** Is there room for one more visiting pilot? (`NET.maxGuests`, a live-session limit.) */
+  /**
+   * Is there room for one more visiting pilot? **Yes, in every case a person will meet.**
+   * `NET.maxGuests` is a valve against a runaway room, not a rule of the game: the real limit is
+   * the host's machine and connection (owner, playtest 22: *"i want unlimited players"*).
+   */
   function remoteCanJoin() {
     return guests.length < NET.maxGuests;
   }
@@ -1975,7 +2016,9 @@ export async function codesAcceptFrom(offer, { name = readSettings().name } = {}
     role: "guest",
     worldId: invited,
     name: who,
-    token: makeToken(NET.tokenBytes),
+    // The same identity every guest session uses (playtest 22): a paste code is an invitation
+    // too, and an invitation must not become the pilot's name to the host.
+    token: pilotToken(),
     save: saveKit,
   });
   active = session;

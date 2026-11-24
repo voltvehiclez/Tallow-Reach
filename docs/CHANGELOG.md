@@ -18,6 +18,45 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-24: Playtest 22 — two friends on one link, and no player cap
+
+**Code change; rebuild needed; build `2026-11-24f`.** Save version unchanged (29) — the new value lives in
+the browser's own settings, not in a save.
+
+The owner, with two browsers open: *"When a second guest player joins, first guest is kicked out and this
+error message comes on if first guest tries to join again with 'That link has already been used, or it was
+copied wrongly'."* Plus a list of small things about the chat's right-hand column, which playtest 21 had
+already started.
+
+- **The kick-out was identity, not capacity.** A join link carries **one** secret per world
+  (`?join=<worldId>#<token>`), and the guest was using that secret **as its own**: `guestId` was
+  `guest-<first 8 characters of the link token>`, and its hello carried the same token. Two friends on one
+  link therefore arrived as the *same pilot*, and the host's one-window-per-pilot rule (correct, and kept)
+  retired the first to make room — rewriting the record's token hash, which is why the retired browser was
+  then told the link "has already been used". Its session was gone, so no welcome, so no chat: the second
+  half of the report.
+- **A guest is now its own browser.** `src/net/settings.js` keeps `pilotToken` beside the name in `tr_mp`
+  (made once with `makeToken`, never shown, never in a save); `src/net/session.js` exposes it as
+  `guestToken()`/`pilotToken()`, and both doors in (`joinWorld` from a link, `acceptCode` from a paste code)
+  send it as the guest's identity. The invitation now only says *where* a pilot may go. LESSONS **L47**.
+- **There is no player cap.** `NET.maxGuests` 4 → 100, documented for what it is: a valve against a runaway
+  room, not a rule of the game. The limit is the host's machine and connection (owner: *"i want unlimited
+  players"*). The players column stops at `CHAT.whoRows` (10) names and adds `+N more`, so a busy world
+  cannot grow the HUD.
+- **One-time note for an existing world:** a guest record written by `2026-11-24d` or earlier is keyed by the
+  old link-derived id. That browser now arrives as a *new* guest, and the old record simply stays unused (a
+  record is never deleted). Nothing breaks; the pilot's own copy is what it flies with.
+- **The chat's right-hand column is quieter** (owner, playtest 22): **Pin shows only while the box is open
+  for typing** — so an auto-opened chat, and a pinned box nobody is typing in, draw the lines and nothing
+  else (`body:not(.mp-chat-open) #mp-chat-pin`, replacing playtest 21's narrower rule). The column is
+  narrower (54 px, no 9 px indent), the gap between it and the lines came down 10 px → 6 px, and the names
+  keep their 12 px and ellipsize. The word is still **Pin**, in the two colours playtest 21 gave it (L46).
+  The twelve-second clock from `2026-11-24e` is unchanged, and your own sent line still counts.
+
+Run `npm run build` and `npm test` (1045 tests). Playtest guide:
+[../testing/TESTING-22-CHAT.md](../testing/TESTING-22-CHAT.md), quick version
+[../testing/QUICK-22-CHAT.md](../testing/QUICK-22-CHAT.md).
+
 ## 2026-11-24: Playtest 21 — the chat box, four small things
 
 **Code change; rebuild needed; build `2026-11-24e`.** Save version unchanged (29). The last cleanup
@@ -298,36 +337,9 @@ only the first of which was a real fault in the code:
 three `.go` buttons, the CSS). `showNotice` now records the message even where there is no
 `document`, so a refusal cannot throw in the test runner. Save version unchanged (29).
 
-## 2026-11-23: The multiplayer switch could not be pressed by a visitor
-
-**Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button
-doesnt work so i cant test the build properly."* Two faults, fatal together.
-
-- **The switch was drawn from `hosting` alone**, so a **visitor** saw *Multiplayer: Off* — and the
-  same control was **disabled while visiting** (`canSwitch: !!name && !visiting`). A guest was
-  therefore looking at a greyed-out Off switch with no way to press it.
-- **The pause surface does not draw the join block** (`surface === "host"`), and the only Leave
-  button lived there — so from the pause card a guest had no exit at all. That is why leaving via
-  the screen "worked" and the switch did not: they were different screens.
-- **Fixed:** the switch is on for `hosting || visiting` (still drawn from the session, never the
-  stored setting — L32), it is usable in every state (`canSwitch: !!name`), and pressing it while
-  visiting **leaves the friend's world** with a sentence saying the pilot is still there. A
-  `data-mp="leave"` button is also drawn beside the switch on the pause surface.
-- **`toggleHosting` was split**: its body moved to `openWorld()`, and the switch's branches are now
-  four lines that read like its label (visiting → leave, hosting → close, otherwise → open). One
-  press still hosts, exactly as before.
-- **`session.setEnabled(true)` now creates an idle host session** when nothing is running (it used
-  to write the setting and stop), so the switch always has something to act on; `snapshot()` gained
-  `enabled` and `session` so a screen can tell those apart. `setEnabled(false)` still stops
-  everything.
-
-**Tests:** three added to `tests/multiplayer-playtest16.test.mjs` (a visitor's switch is on and
-pressable and leaves; the switch still opens a world; the session can be switched on with nothing
-running). Reverting `switchOn`/`canSwitch` fails the first. **Build `2026-11-23f`, save v29
-unchanged. 1029 tests.**
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-23: The multiplayer switch could not be pressed by a visitor
 - 2026-11-23: The join box holds the choice — and the card gets a door
 - 2026-11-23: Joining entered the world and left the pilot behind
 - 2026-11-23: The away card was a trap — Bring pilot home never worked

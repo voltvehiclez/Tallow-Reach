@@ -192,8 +192,9 @@ export const guestIsHere = (record, now = Date.now()) =>
 
 /**
  * The number of visiting pilots a host is holding, and whether it may take another.
- * `NET.maxGuests` is a live-session limit (slice 4), not a reason to delete a record:
- * a pilot that is not connected still owns its copy, and a host that refuses it would
+ * `NET.maxGuests` is a valve, not a rule: a hosted world has no player cap, and the real limit is
+ * the host's machine and connection (owner, playtest 22). It is also never a reason to delete a
+ * record — a pilot that is not connected still owns its copy, and a host that forgot it would
  * strand somebody. So this only answers; nothing is dropped.
  */
 export const guestCount = save => Object.keys(isPlainObject(save?.world?.guests) ? save.world.guests : {}).length;

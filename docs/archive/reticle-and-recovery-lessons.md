@@ -178,3 +178,33 @@ and reading the shield bar — not at the plumbing that carries it.
 - **Cause:** `updateScenery(dt)` advanced movers once per render frame before `simClock.advance(dt)` — on any 2-tick frame tick 1 took the whole push and tick 2 saw a frozen mover (`0 m/s`), while high-Hz frames jittered; scaled movers also multiplied local distance by `rLoc / radius` instead of `radius / rLoc`.
 - **Rule:** every live collider moves inside the fixed `SIM_DT` step (`stepScenery`), scales local distances back to world metres, and never rounds an active collision push down to `0 m/s`.
 - **Enforced by:** `tests/slice1-speed-missions-contracts.test.mjs` (24–240 Hz sweeps, scaled movers, sub-0.5 m/s push).
+
+### L12. A new way to change state skipped the normal refresh
+- **Seen (step 10):** after loading a save the sound was dead, the start screen reappeared on docking, and
+  Load/Import/Reset did not redraw the screen.
+- **Rule:** state changes go through the one path that also does the refresh (events, `loadGame`-style
+  functions). A new route that sets state directly must emit what the listeners expect.
+- **Enforced by:** `tests/step10-fixes.test.mjs` and the baseline playtest.
+
+### L31. Direct-from-plant fallback and pre-check `setDraw` let a `0 MJ` ship fly and show phantom MJ/s
+
+- **Seen (owner, 2026-11-18):** unequipping the power cell left the tank at `0 MJ`, yet the ship still flew and showed `Using X of Y MJ/s`.
+- **Cause:** `hasPower` fell back to `p.gen >= mjps` when `p.stored === 0`, `player.js`/`shield.js` called `setDraw` before checking power, and wall-blocked mining beams bypassed `hasPower`.
+- **Rule:** every system with `draw > 0` requires `p.stored > 0` (`hasPower`) and records `setDraw(..., 0)` whenever unpowered.
+- **Enforced by:** `tests/slice3-assets-inventory-power.test.mjs`, `tests/content.test.mjs`, `tests/shield.test.mjs`.
+
+### L32. A reset that only wipes the mode you are standing in reads as "reset does not work"
+- **Seen (owner, 2026-11-21):** "Resetting save does not reset fully. Credits arent changed to 600. You own a test ship."
+- **Cause:** Reset wiped only the *current* mode's half of the dual-mode save, while its words promise "Wipe credits, ships, base and contracts" — the other mode's pilot survived intact.
+- **Rule:** a control's words are its contract: Reset wipes **both** halves (`resetAllSave` in `state/state.js`, staying in the mode pressed from); label any per-mode wipe as one.
+- **Enforced by:** `tests/reset-save.test.mjs` (both halves dirtied; after a campaign reset both read 600 cr, one Wasp).
+
+### L13. Anything that accumulates per frame must be multiplied by the time step
+- **Seen:** the ship blurred and warp roll differed on a 240 Hz display.
+- **Rule:** use `dt`; render between ticks by interpolation. See `architecture/simulation-and-rendering.md`.
+- **Enforced by:** `tests/sim-step.test.mjs` (the fixed-step tests).
+
+### L14. `matrixWorld` is last frame's transform
+- **Rule:** after moving an object, update its matrix before reading `matrixWorld` for a gun or camera position.
+  See `architecture/simulation-and-rendering.md`.
+- **Enforced by:** NOT YET: add a test if this bites again (it cannot be checked headlessly today, only by eye).

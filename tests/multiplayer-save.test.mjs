@@ -247,14 +247,24 @@ test("v29: the guest list is newest-seen first, and 'here' is a window not a fla
 });
 
 test("v29: taking a guest is a live-session limit, never a reason to delete a record", () => {
+  // **There is no player cap in the game** (owner, playtest 22): *"i want unlimited players. The
+  // limit is the host's computer and connection speed, and tolerable lag."* `NET.maxGuests` is now
+  // only a sanity valve against a runaway room — a number far beyond what any machine will carry,
+  // so the interesting part of this test is the second half: a record is somebody's pilot, and a
+  // limit never deletes one.
   let save = newSave();
   assert.equal(canTakeGuest(save), true);
-  for (let i = 0; i < NET.maxGuests; i++) save = putGuest(save, `g-${i}`, { token: `t${i}`, name: `P${i}` });
-  assert.equal(guestCount(save), NET.maxGuests);
-  assert.equal(canTakeGuest(save), false, "a full session says no to a new arrival");
+  assert.ok(NET.maxGuests >= 32, `maxGuests is ${NET.maxGuests}, which is a valve, not a game rule`);
+  const fill = Math.min(NET.maxGuests, 8);
+  for (let i = 0; i < fill; i++) save = putGuest(save, `g-${i}`, { token: `t${i}`, name: `P${i}` });
+  assert.equal(guestCount(save), fill);
+  assert.equal(canTakeGuest(save), true, "eight friends is nowhere near the valve");
   // …and every record is still there, because a record is somebody's pilot.
-  assert.equal(guestCount(save), NET.maxGuests);
-  assert.deepEqual(Object.keys(save.world.guests).sort(), ["g-0", "g-1", "g-2", "g-3"]);
+  assert.deepEqual(Object.keys(save.world.guests).sort(), ["g-0", "g-1", "g-2", "g-3", "g-4", "g-5", "g-6", "g-7"]);
+  // The valve itself: it does close, and closing it still deletes nothing.
+  for (let i = fill; i < NET.maxGuests; i++) save = putGuest(save, `g-${i}`, { token: `t${i}`, name: `P${i}` });
+  assert.equal(canTakeGuest(save), false, "the valve says no, so a runaway room cannot grow forever");
+  assert.equal(guestCount(save), NET.maxGuests, "and every pilot is still there");
 });
 
 /* ------------------------------------------------------------------------- */

@@ -643,8 +643,14 @@ test("playtest 20/21: the chat shows a line and takes itself away, unless it is 
   assert.match(source, /pinBtn\.setAttribute\("aria-pressed", chatPinned \? "true" : "false"\)/,
     "and so does the state a screen reader hears");
   const css = read("src/styles.css");
-  assert.match(css, /body:not\(\.mp-chat-live\) #mp-chat-pin \{ display: none; \}/,
-    "the pin is clickable while the box is up, not only while typing");
+  // **The Pin button belongs to the open box** (owner, playtest 22): *"when chat is auto opened …
+  // the pin button shouldn't be there"* and *"if you want to unpin the chat you simply press enter
+  // and the pinned button appears again"*. That replaced playtest 20's "clickable whenever the box
+  // is up" rule — a button nobody is meant to press during a glance is not a button.
+  assert.match(css, /body:not\(\.mp-chat-open\) #mp-chat-pin \{ display: none; \}/,
+    "no Pin on a box that opened by itself, and none while pinned and idle");
+  assert.doesNotMatch(css, /body:not\(\.mp-chat-live\) #mp-chat-pin \{ display: none; \}/,
+    "the old visible-whenever-up rule is gone, not merely outranked");
   assert.doesNotMatch(css, /body:not\(\.mp-chat-open\) #mp-chat,/,
     "and the box itself takes the mouse while it is up");
   assert.match(css, /#mp-chat-pin \{[^}]*background: transparent;[^}]*color: var\(--amber\);/,
@@ -658,9 +664,10 @@ test("playtest 20/21: the chat shows a line and takes itself away, unless it is 
   assert.match(css, /body:not\(\.mp-chat-open\):not\(\.mp-chat-pinned\) #mp-chat-who \{ display: none; \}/,
     "a line arriving does not push the players column into the view");
   // ...and a pinned box that nobody is typing in does not need the Pin button either: the box
-  // staying up is the answer to "did that do anything?", and Enter brings the button back.
-  assert.match(css, /body\.mp-chat-pinned:not\(\.mp-chat-open\) #mp-chat-pin \{ display: none; \}/,
-    "a pinned box that is idle hides the button");
+  // staying up is the answer to "did that do anything?", and Enter brings the button back
+  // (playtest 22 made that the whole rule: the button exists only for an open box).
+  assert.match(css, /body:not\(\.mp-chat-open\) #mp-chat-pin \{ display: none; \}/,
+    "a box nobody is typing in hides the button");
   assert.match(source, /document\.body\.classList\.toggle\("mp-chat-pinned", chatPinned\)/,
     "which the body has to be told about");
   assert.match(source, /document\.body\.classList\.remove\("mp-chat-live", "mp-chat-open", "mp-chat-pinned"\)/,
@@ -693,6 +700,24 @@ test("the chat box has a compact player column beside the lines", () => {
   assert.equal((rows.match(/<li/g) || []).length, 3, "one small row per pilot");
   const source = read("src/ui/multiplayer.js");
   assert.match(source, /id="mp-chat-who"/, "the column has its own element");
+
+  // **A busy room counts instead of growing** (playtest 22). There is no player cap any more, so
+  // the column names `CHAT.whoRows` pilots and says how many more there are.
+  assert.ok(CHAT.whoRows > 0 && CHAT.whoRows <= 12, `whoRows is ${CHAT.whoRows}`);
+  const many = ui.chatWhoHtml({
+    name: "Ada",
+    guests: Array.from({ length: 20 }, (_, i) => ({ guestId: `g${i}`, name: `P${i}` })),
+  });
+  assert.equal((many.match(/<li/g) || []).length, CHAT.whoRows + 1, "ten names and the row that counts the rest");
+  assert.match(many, /\+11 more/, "which counts them");
+
+  // **Narrow, and no indent** (playtest 22: *"the player column needs to be less wide … reducing the
+  // gap between Players and Pin. Keep name size the same"*). The column caps at 54 px, loses its
+  // 9 px indent, and the flex gap between the lines and the column came down; the names stay 12 px.
+  const css = read("src/styles.css");
+  assert.match(css, /#mp-chat-who \{[\s\S]{0,400}max-width: 54px;\s*padding-left: 4px;/, "the column is narrower");
+  assert.match(css, /#mp-chat \{[\s\S]{0,300}gap: 6px;/, "and sits closer to the lines");
+  assert.match(css, /#mp-chat-who li \{[\s\S]{0,200}font-size: 12px;/, "names keep their size");
 });
 
 test("joining is the main menu's job and hosting is the pause card's", async () => {

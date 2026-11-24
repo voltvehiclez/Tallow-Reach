@@ -103,7 +103,10 @@ export const ARRIVAL_STATION_KEY =
  *   heartbeatSec  (slice 3) how often the two sides say "still here" (slice 5 sends the ping)
  *   lastSeenSec   (slice 5) a guest unheard for this long is shown as disconnected
  *   offerSec      (slice 3) how long a join code stays valid before it must be re-made
- *   maxGuests     (slice 4) most visiting pilots one host holds at once
+ *   maxGuests     (slice 4) a valve on a live hosted room, **not a player cap**: a world has no
+ *                 player limit, and the practical limit is the host's machine and connection
+ *                 (owner, playtest 22: *"i want unlimited players"*). Far past what one machine
+ *                 carries, so it only stops a runaway room
  *   nameMax       (slice 3) longest display name a player may set
  *   chatLineMax   (slice 3) longest chat message the host will pass on
  *   tokenBytes    (slice 1) size of the secret that names one guest to one host
@@ -115,14 +118,14 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-24e";
+export const BUILD = "2026-11-24f";
 
 export const NET = {
   snapshotSec: 2,
   heartbeatSec: 5,
   lastSeenSec: 20,
   offerSec: 120,
-  maxGuests: 4,
+  maxGuests: 100,
   nameMax: 24,
   chatLineMax: 240,
   tokenBytes: 24,
@@ -304,6 +307,10 @@ export const CHAT = {
   lineLifeSec: 45,
   typingRateSec: 4,
   historyLines: 40,
+  // How many rows the players column draws before it stops and counts the rest: there is no
+  // player cap any more (playtest 22), so a busy world can hold more pilots than a 60-pixel
+  // column can name.
+  whoRows: 10,
   // How long the box stays up by itself after somebody says something (owner, playtest 20:
   // *"Chat when a message is said then the chat is visible. However it doesnt go away. Should
   // go away after maybe 6-7 seconds unless the user has pinned the chat."* — raised to 12 on

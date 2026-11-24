@@ -286,3 +286,106 @@ test("nothing in net/ imports the layers above it (slice 2's rule still holds)",
   const transport = readFileSync(path.join(root, "src/net", "transport.js"), "utf8");
   assert.match(transport, /import\("trystero"\)/, "transport.js is where it lives");
 });
+
+/* ------------------------------------------------------------------------- */
+/* Playtest 22: two friends, one link, and nobody kicked out                  */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Three sessions on one wire: a host and **two** guests, each guest a different browser.
+ *
+ * The host's `send(value, peerId)` goes to that peer; `broadcast` goes to both. Each guest
+ * sends everything to the host, as a star does. This is the shape the real room has (one
+ * Trystero room, one host, N guests), which a two-way fixture cannot show.
+ */
+async function threeSessions({ hostName = "Ada", guestNames = ["Bo", "Cy"], tokens = ["bo-secret", "cy-secret"], connect = true } = {}) {
+  const wire = makeWire();
+  session.setChannelFactory(wire.factory);
+  const hostSave = makeSave();
+  const hostKit = { read: () => hostSave, write: next => Object.assign(hostSave, next) };
+  const host = session.createChannelForTest("host", "w-1", hostName, "host-token", hostKit);
+  await host.start();
+  const hostChannel = wire.made.at(-1);
+
+  const guests = [];
+  for (let i = 0; i < guestNames.length; i++) {
+    const guestSave = makeSave();
+    const guestKit = { read: () => guestSave, write: () => { /* a guest keeps nothing locally yet */ } };
+    const guest = session.createChannelForTest("guest", "w-1", guestNames[i], tokens[i], guestKit);
+    await guest.start();
+    guests.push({ guest, channel: wire.made.at(-1), save: guestSave });
+  }
+
+  // Star wiring, in both directions.
+  hostChannel.deliver = (peerId, value) => {
+    const target = guests.find(g => g.channel.peerId === `peer-${guests.indexOf(g) + 1}`);
+    target?.channel.reach(value, "host-peer");
+  };
+  guests.forEach((g, i) => {
+    g.channel.deliver = (peerId, value) => hostChannel.reach(value, `peer-${i + 1}`);
+  });
+  // A connection makes each guest say hello by itself, which is the game's own path — the tests
+  // that inspect one specific hello turn it off so the real one cannot colour the reading.
+  if (connect) {
+    guests.forEach((g, i) => g.channel.connect(`peer-${i + 1}`));
+    hostChannel.connect("peer-1");
+    hostChannel.connect("peer-2");
+  }
+
+  return { host, hostChannel, guests, hostSave };
+}
+
+test("playtest 22: two guests with the same link are two pilots, and neither is kicked", async () => {
+  // The owner: *"If a second guest player joins, first guest is kicked out and this error message
+  // comes on if first guest tries to join again with 'That link has already been used' … the first
+  // guest is never really able to rejoin."*
+  //
+  // The cause was identity, not the guest limit: the link's `#token` is **one per world**, and the
+  // guest used it as its own secret, so both friends arrived as the same pilot — same `guestId`,
+  // same token — and the host's one-window rule did exactly what it is for.
+  const { host, hostChannel, guests } = await threeSessions({ connect: false });
+  hostChannel.outbound.length = 0;
+
+  hostChannel.reach(helloFrom(host, { guestId: "guest-bo-secre", name: "Bo", token: "bo-secret" }), "peer-1");
+  hostChannel.reach(helloFrom(host, { guestId: "guest-cy-secre", name: "Cy", token: "cy-secret" }), "peer-2");
+
+  const refusals = hostChannel.outbound.filter(m => m.value.t === "refuse");
+  assert.deepEqual(refusals.map(m => m.value.reason), [], "nobody is refused");
+  assert.deepEqual(host.snapshot().guests.map(g => g.name).sort(), ["Bo", "Cy"], "the host lists both pilots");
+  // ...and each got its own welcome, aimed at its own peer.
+  const welcomes = hostChannel.outbound.filter(m => m.value.t === "welcome");
+  assert.equal(welcomes.length, 2, "two welcomes, one per arrival");
+  assert.deepEqual(welcomes.map(m => m.peerId).sort(), ["peer-1", "peer-2"], "each to its own browser");
+  assert.equal(guests.length, 2);
+});
+
+test("playtest 22: the same pilot in two windows is still a takeover — that rule is untouched", async () => {
+  // One pilot lives in one place: a second window of the *same* browser must still retire the
+  // first, or two windows would fly one save. Identity is per browser, so that is what it catches.
+  const { host, hostChannel } = await threeSessions({ connect: false });
+  hostChannel.outbound.length = 0;
+
+  hostChannel.reach(helloFrom(host, { guestId: "guest-bo-secre", name: "Bo", token: "bo-secret" }), "peer-1");
+  hostChannel.outbound.length = 0;
+  hostChannel.reach(helloFrom(host, { guestId: "guest-bo-secre", name: "Bo", token: "bo-secret" }), "peer-2");
+
+  const told = hostChannel.outbound.find(m => m.value.t === "refuse");
+  assert.equal(told?.value.reason, "replaced", "the older window is told, not the new one");
+  assert.equal(told?.peerId, "peer-1", "and it is the older window that hears it");
+  assert.equal(host.snapshot().guests.length, 1, "one pilot, one row");
+});
+
+test("playtest 22: a guest's identity is its own browser's, not the link's secret", async () => {
+  // The fix, at its source: one function answers \"who is this browser\", it is stable across
+  // calls (so a rejoin is the same pilot to the host) and it is *not* the token in the link.
+  const first = session.guestToken();
+  assert.equal(typeof first, "string");
+  assert.ok(first.length >= 16, "a real secret, not a label");
+  assert.equal(session.guestToken(), first, "the same browser is the same guest every time");
+  const source = readFileSync(path.join(root, "src/net/session.js"), "utf8");
+  assert.match(source, /token: pilotToken\(\), save: saveKit/, "a join wears this browser's identity");
+  assert.doesNotMatch(source, /token: found\.token/, "and never the link's");
+  // It lives in the browser's settings, beside the name — one identity per browser, not per world.
+  const settings = readFileSync(path.join(root, "src/net/settings.js"), "utf8");
+  assert.match(settings, /pilotToken/, "and it is kept there");
+});

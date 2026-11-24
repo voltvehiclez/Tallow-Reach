@@ -1602,9 +1602,14 @@ export function chatWhoHtml(snap) {
   const rows = chatWhoRows(snap);
   // The column says what it is: these are the pilots connected right now. Long names
   // ellipsize to `name…` (the CSS on `#mp-chat-who li`), so the column never pushes the
-  // lines box around (owner's request, 2026-11-22).
+  // lines box around (owner's request, 2026-11-22). Past `CHAT.whoRows` it counts the rest
+  // instead of growing: there is no player cap any more (playtest 22), so a busy world can
+  // hold more pilots than a narrow column can name.
+  const shown = rows.slice(0, Math.max(1, CHAT.whoRows));
+  const extra = rows.length - shown.length;
   return `<h2>Players</h2><ul>` +
-    rows.map(name => `<li>${escapeHtml(name)}</li>`).join("") +
+    shown.map(name => `<li>${escapeHtml(name)}</li>`).join("") +
+    (extra > 0 ? `<li class="mp-chat-more">+${extra} more</li>` : "") +
     `</ul>`;
 }
 

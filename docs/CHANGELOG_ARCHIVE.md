@@ -1,3 +1,31 @@
+## 2026-11-23: The multiplayer switch could not be pressed by a visitor
+
+**Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button
+doesnt work so i cant test the build properly."* Two faults, fatal together.
+
+- **The switch was drawn from `hosting` alone**, so a **visitor** saw *Multiplayer: Off* — and the
+  same control was **disabled while visiting** (`canSwitch: !!name && !visiting`). A guest was
+  therefore looking at a greyed-out Off switch with no way to press it.
+- **The pause surface does not draw the join block** (`surface === "host"`), and the only Leave
+  button lived there — so from the pause card a guest had no exit at all. That is why leaving via
+  the screen "worked" and the switch did not: they were different screens.
+- **Fixed:** the switch is on for `hosting || visiting` (still drawn from the session, never the
+  stored setting — L32), it is usable in every state (`canSwitch: !!name`), and pressing it while
+  visiting **leaves the friend's world** with a sentence saying the pilot is still there. A
+  `data-mp="leave"` button is also drawn beside the switch on the pause surface.
+- **`toggleHosting` was split**: its body moved to `openWorld()`, and the switch's branches are now
+  four lines that read like its label (visiting → leave, hosting → close, otherwise → open). One
+  press still hosts, exactly as before.
+- **`session.setEnabled(true)` now creates an idle host session** when nothing is running (it used
+  to write the setting and stop), so the switch always has something to act on; `snapshot()` gained
+  `enabled` and `session` so a screen can tell those apart. `setEnabled(false)` still stops
+  everything.
+
+**Tests:** three added to `tests/multiplayer-playtest16.test.mjs` (a visitor's switch is on and
+pressable and leaves; the switch still opens a world; the session can be switched on with nothing
+running). Reverting `switchOn`/`canSwitch` fails the first. **Build `2026-11-23f`, save v29
+unchanged. 1029 tests.**
+
 ## 2026-11-23: The join box holds the choice — and the card gets a door
 
 **Code change; rebuild needed.** The owner's design for playtest 17, and the two interaction bugs
