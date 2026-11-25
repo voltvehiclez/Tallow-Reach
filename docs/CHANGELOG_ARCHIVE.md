@@ -1,3 +1,61 @@
+## 2026-11-24: Step 16 slice 5 — a lost host, the copy kept current, and one window per pilot
+
+**Code change; rebuild needed; build `2026-11-24a`.** Crashes and reconnects, the fifth of step 16's
+eight slices ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). Save version unchanged (29): nothing new is
+saved.
+
+1. **A lost host puts the player back on the main menu** — with a prompt, like any other game
+   (owner, 2026-11-24: *"returned to the main menu with a prompt saying something like lost
+   connection to host. Dismissing this returns you to main menu. Like Minecraft."*). The session
+   states the loss once — for a departing peer **and** for a host that has gone quiet for
+   `NET.lastSeenSec` while a `ping` waits for its `pong` — `ui/multiplayer.js` stops the session
+   quietly (nobody is left to say goodbye to) and shows the menu, and the menu carries **"Lost
+   connection to host"** with one door, **Main menu**. Dismissing it changes nothing else. It is
+   shown to every guest, because a guest that only looked around lost a connection too, and it asks
+   no question about a save. **The pilot's save is not touched:** the marker and the suitcase stay,
+   so *Bring pilot home* still works with the host gone for ever.
+   *(The first version of this slice offered a "Your pilot is safe" card with Wait and Go home and
+   kept the room alive so a returning host was met again. The owner replaced it the same day: a
+   lost connection is a connection, not a save question.)*
+2. **Rejoining keeps the version the server has** (owner, same day: *"when reconnecting to the
+   server after a disconnect your pilot's last version is already on the server"*). A rejoin is an
+   ordinary join: the hello re-admits the pilot, the guest sends back the copy it carries, and
+   `compare` lets the newer one win — so a copy the host wrote back while the guest was away is not
+   overwritten by the older one the guest holds. This found a real bug: the copy a guest keeps is
+   the **host's** copy, and a host never keeps a token, so a rejoin in a fresh session (a closed
+   tab, a lost connection) had nothing to prove itself with and was refused as *"that link has
+   already been used"*. `sendCarryMessage` now puts the secret back from `away.token`. Going into
+   the **local** world instead is the away card, unchanged: Open World offers *Bring pilot home*
+   when that world holds a newer copy.
+3. **The copy is finally kept current — this was a real hole.** `writeBack` existed from slice 4
+   and **nothing ever called it**: a guest's suitcase only ever held the copy it arrived with, so
+   every credit, stack and module it earned in the friend's world was lost when it came home. The
+   host now asks `sim/` what each visiting pilot looks like every `NET.snapshotSec` and writes back
+   when it has changed (and re-sends an unchanged copy every `NET.suitcaseRepeatSec`).
+4. **Whose copy wins is `compare`, never arrival order** (`onCarry`): a host that loaded an older
+   save **loses** to a newer suitcase; a stale `carry` does not roll the world backwards; and a
+   pilot that came home and came back — a `left` record — hands over its own save, because that is
+   the newest truth about it. A *dropped connection* is not that case: the hello re-admits the
+   pilot first, so `compare` decides. A tie takes the arriving copy.
+5. **A closed tab says goodbye.** New wire kind `bye`, sent when a guest session stops and on
+   `pagehide`/`beforeunload`: the host writes the final copy back **first**, then marks the record
+   `left` and takes the ship out of the world at once instead of waiting for a channel to close. A
+   crashed tab sends nothing; the host still copes (that is what slice 3's peer-leave handling is
+   for).
+6. **One session per `guestId`, and a newer connection kicks the older.** A second window on the
+   same link is told in words (*"This pilot was opened in another window…"*), its session stops
+   quietly (no `bye` — the pilot has not left), and the record is **not** marked `left`, so the ship
+   stays in the world for the window that now has it.
+7. **`NET.heartbeatSec` is real**: a guest now sends `ping`, the host writes `lastSeen`, which is what
+   `guestIsHere` reads — and the same ping is the guest's own sign that the host is still there.
+
+`src/net/{session,protocol}.js`, `src/data/multiplayer.js` (BUILD), `src/state/state.js`
+(`ui.lostHost`), `src/ui/{screens,menu,multiplayer,pause}.js`, `src/util/events.js`, and new
+`tests/multiplayer-slice5.test.mjs` (10 tests, two live sessions on the in-memory wire). Two existing
+tests were corrected for the new rule, not weakened: the protocol's list of kinds, and one hello
+injected from a foreign peer (now a takeover, so it comes from the guest's own peer).
+**Tests: 1039** (was 1030).
+
 ## 2026-11-23: One refusal, one place, and a placeholder that says what it wants
 
 **Code change; rebuild needed; build `2026-11-23i`.** Two small corrections to playtest 18, both

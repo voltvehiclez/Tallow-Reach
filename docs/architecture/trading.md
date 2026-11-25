@@ -1,7 +1,7 @@
 # Trading between docked pilots (step 16, slice 6)
 
 *Last checked: 2026-11-24. **Designed, not built — and built LAST** (owner's order 2026-11-24:
-7 → 8 → 6). The decisions are the owner's (their two rounds of answers, 2026-11-24); the file names
+7 → 8 → 6). The decisions are the owner's (their answers, 2026-11-24); the file names
 and code facts are this tree's. Slice list: [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md).*
 
 Trading is last for two reasons. It needs both pilots looking at the **same station** and each
@@ -38,9 +38,14 @@ name, not a place. Slice 6 therefore starts by making presence say **where a pil
 - Each half is a **grid in the inventory theme**, reusing the Inventory screen's cells and drag
   (`ui/screens.js` `inventoryHtml`, `ui/menu.js` `finishStationDrag`): clicking or dragging moves a
   thing **only into your own half**. Nothing can be dropped on the other pilot's side.
-- **Items** go in from your ship's hold. **Ships** go in too: the **ship names in the ships list
-  become clickable and draggable** for exactly this (the `Base` tab's list). A ship **carries its fit
-  and its cargo**, and **the ship you are piloting cannot be offered** (owner, 2026-11-24).
+- **Items** go in from **your ship's hold and from the station's own storage** — any items in
+  station (owner, 2026-11-24). The half therefore shows both sources, and each stack remembers
+  which container it came from, because they are not the same place: a held item lives in the
+  pilot's inventory (`sim/inventory.js`); a station item is that station's stock
+  (`world.stationStores[…]`; a guest's live in its suitcase lockers). **Ships** go in too: the
+  **ship names in the ships list become clickable and draggable** for exactly this (the `Base`
+  tab's list). A ship **carries its fit and its cargo**, and **the ship you are piloting cannot be
+  offered** (owner, 2026-11-24).
 - **Credits:** a small **Add credits** button inside your half adds an amount to the offer.
 - Either pilot may add, remove or change anything in their own half freely while the window is open.
 
@@ -50,10 +55,9 @@ name, not a place. Slice 6 therefore starts by making presence say **where a pil
   half; the exchange runs once **both** are confirmed.
 - **An edit invalidates a confirmation.** The owner's reason: *"This is to prevent scamming"* — a
   pilot must not be able to change what it is giving after the other side has agreed to it.
-- **The one detail left open:** the owner's sentence reads "unconfirms their confirmed button" (the
-  editor's), but only clearing **both** confirms actually stops the scam, because a pilot that had
-  already confirmed does not re-read the other half. Written here as the intended rule — **any edit
-  clears both confirms** — and asked as question 1 in the hand-over.
+- **Any edit clears BOTH confirms** (owner, 2026-11-24) — not only the editor's. That is the only
+  rule that stops the scam, because a pilot that had already confirmed does not re-read the other
+  half. Both pilots must confirm again.
 - The same rule covers **credits**: changing the amount after a confirm is an edit like any other.
 
 ## Executing the swap
@@ -83,6 +87,10 @@ empty, and `checkIn` puts them back at home. In the host's world, `world.station
   Writing them into the host's station stores instead would silently give the **host** the guest's
   items.
 
+The same is true in reverse for **offers**: a guest's station-storage items are in those lockers, so
+putting one up for trade takes it out of the lockers, and cancelling the trade puts it back with its
+`origin` intact.
+
 That route needs no new save shape: suitcase lockers already carry item, count, station and origin,
 and the guest's suitcase is what the host writes back every `NET.snapshotSec` anyway.
 
@@ -96,8 +104,9 @@ and the guest's suitcase is what the host writes back every `NET.snapshotSec` an
    the two pilots and holds the authoritative offers.
 3. **The UI:** the `Trade` right tab (the list) and the trade window as a left panel, following
    `ui/screens.js` / `ui/left-panel.js` and the popover, notice and drag conventions in
-   [ui-and-screens.md](ui-and-screens.md). The halves reuse the inventory grid; the ships list gains
-   draggable rows; **Add credits** is a small number field and a button.
+   [ui-and-screens.md](ui-and-screens.md). The halves reuse the inventory grid over **two sources**
+   (ship hold + this station's storage); the ships list gains draggable rows; **Add credits** is a
+   small number field and a button.
 4. **The exchange** (host side, `sim/`): take both offers, check capacity on both sides, swap
    atomically, emit one bus event, and say why in words on failure. No partial move, ever.
 5. **Save:** nothing new on the host's own side, and a guest's received items/ships/credits ride in
@@ -112,10 +121,7 @@ and the guest's suitcase is what the host writes back every `NET.snapshotSec` an
 - **No partial stack amounts beyond what the inventory grid already offers** — a build detail, not a
   design decision.
 
-## Open questions for the owner
+## Settled 2026-11-24
 
-1. **Whose confirm clears when a half is edited?** Intended here: **both** (only that stops the scam).
-   If the rule really is "only the editor's", say so and this line changes.
-2. **Where do offers come from?** The design says your half takes **items from your ship's hold**;
-   can you also put up items that are sitting in **station storage** at that station, or is the
-   station only where received goods land?
+Both details this file once left open are the owner's answers: **any edit clears both confirms**,
+and **a half takes any items in station as well as the ship's hold**.
