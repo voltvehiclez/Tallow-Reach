@@ -18,6 +18,33 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
+
+**No code change; no rebuild needed — the build the owner passed is `2026-11-25d`.** Save version
+**29**, unchanged.
+
+*"Play test 8a passed."* That closes slice 8a, and with it the whole of step 16's **"one world, two
+ships"** half: host-authoritative ship snapshots at 24 Hz, a guest drawing every other pilot as a
+**view** (100 ms behind, interpolated, never guessed), the host drawing its visiting record with no
+wire at all, and the guest outside its own hull.
+
+What the passing round actually covers, because three fixes went in after the first playtest of it:
+
+- a friend's hull is **selectable** — **F** on the hull, or the **N** list's **Ship** filter, which
+  now carries **every** ship (NPC and player, docked included) — wearing **the pilot's own name** and
+  showing **hull/shield bars** like any other ship;
+- **leaving and rejoining the same link works**, including from a browser an older build had locked
+  out (the record that holds no secret cannot refuse anybody, and the host repairs it);
+- a visiting hull is **solid and takes damage** — collision, bolts, warheads, shields first — and its
+  destruction is said in words on both screens.
+
+Known and deliberate, carried into the remaining slices: a visitor **cannot fly** in the host's world
+(controls are **8b**), its screen does not follow the host's pocket (**8c**), and a destroyed visitor
+does not **respawn** (step 16's *death and recovery* debt). No save change anywhere in 8a.
+
+Merged to `main`. Next: **8b** (a guest's controls reach the host), then 8c, then **6** (trading —
+last, by the owner's order 2026-11-24). Guide: [../testing/TESTING-16-SLICE8A.md](../testing/TESTING-16-SLICE8A.md).
+
 ## 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included
 
 **Code change; rebuild needed; build `2026-11-25d`.** Save version unchanged (**29**); no save field,
@@ -301,21 +328,9 @@ The owner described the trade system in two rounds of answers. It is recorded in
 - **Prerequisite:** a real docked presence — `net/session.js` still admits guests with
   `docked: false`; slice 6 begins by reporting where a pilot is docked.
 
-## 2026-11-24: Slice 4 playtest passed
-
-**No code change; no rebuild needed.** Save version unchanged (29).
-
-The owner played `testing/TESTING-16-SLICE4.md` and said it passed (2026-11-24): **Bring my pilot**
-sends the pilot, the two-second profile sync keeps the host's copy current, and **Bring pilot home**
-takes it back. Slice 4 is now **PLAYTEST-CONFIRMED** in [ROADMAP.md](ROADMAP.md),
-[HANDOFF.md](HANDOFF.md), [REFACTOR_PLAN.md](REFACTOR_PLAN.md) and
-[architecture/multiplayer.md](architecture/multiplayer.md).
-
-That leaves **slice 7 built, awaiting the owner's playtest** (`testing/TESTING-16-SLICE7.md`), then
-slice 8 (snapshots, prediction, the second screen) and slice 6 (trading) last.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Slice 4 playtest passed
 - 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
 - 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map
 - 2026-11-24: Playtest 22 — two friends on one link, and no player cap

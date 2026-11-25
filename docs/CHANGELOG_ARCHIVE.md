@@ -1,4 +1,17 @@
 
+## 2026-11-24: Slice 4 playtest passed
+
+**No code change; no rebuild needed.** Save version unchanged (29).
+
+The owner played `testing/TESTING-16-SLICE4.md` and said it passed (2026-11-24): **Bring my pilot**
+sends the pilot, the two-second profile sync keeps the host's copy current, and **Bring pilot home**
+takes it back. Slice 4 is now **PLAYTEST-CONFIRMED** in [ROADMAP.md](ROADMAP.md),
+[HANDOFF.md](HANDOFF.md), [REFACTOR_PLAN.md](REFACTOR_PLAN.md) and
+[architecture/multiplayer.md](architecture/multiplayer.md).
+
+That leaves **slice 7 built, awaiting the owner's playtest** (`testing/TESTING-16-SLICE7.md`), then
+slice 8 (snapshots, prediction, the second screen) and slice 6 (trading) last.
+
 ## 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
 
 **Docs only; no rebuild needed.** Save version unchanged (29). No code moved in this change.
