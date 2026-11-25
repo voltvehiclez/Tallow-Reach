@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-24 (slices 1–3 playtest-confirmed, 4 in playtest, 5 built to `2026-11-24f`; 7–8 agreed; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-24 (slices 1–4 playtest-confirmed, 5 to `2026-11-24f`, 7 built to `2026-11-24g`, 8 next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -14,17 +14,15 @@ beats mean nothing in somebody else's galaxy.
 
 ## Step 17: dedicated servers (planned 2026-11-22, not built)
 
-The owner added **step 17** to the plan: a **dedicated server** hosts a world. It is step 16's host with no screen — a headless
-build of the same project (the sim runs with no browser, principle 2) — stepping the fixed loop, holding the
-world, streaming snapshots and taking controls. Clients are thin: controls in, snapshots out, in a **star**
-topology, so one port-forwarded server can hold a world for a measured number of players (it goes in
-`src/data/multiplayer.js`). Step 16's peer-to-peer stays the two-friend default; the transport wrapper
-(`src/net/transport.js`, still the only file naming a connection library) gains a server role, and the link
-gains the server's address. The server-side transport is a WebSocket listener on a
-forwarded port, reached as `host:port` — Minecraft-style port forwarding (owner, 2026-11-22); the one open
-dependency question is the WebSocket-server library 17b needs (Node has no built-in one). The plan and its
-four slices (**17a** headless server, **17b** server transport, **17c** snapshots and controls, **17d** scale,
-public address, auth, admin) are **step 17 of [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)**.
+The owner added **step 17**: a **dedicated server** hosts a world — step 16's host with no screen (a
+headless build of the same project), stepping the fixed loop, holding the world and streaming snapshots
+and controls in a **star** topology, so one port-forwarded server (`host:port`, Minecraft-style) can hold
+a world for a measured number of players (the number goes in `src/data/multiplayer.js`). Peer-to-peer
+stays the two-friend default; `src/net/transport.js` (still the only file naming a connection library)
+gains a server role and the link gains the server's address. The one open dependency question is the
+WebSocket-server library 17b needs (Node has no built-in one). Four slices — **17a** headless server,
+**17b** server transport, **17c** snapshots and controls, **17d** scale, public address, auth, admin —
+are **step 17 of [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)**.
 
 **Guard rails against accidents, not cheating** (vision pillar 5; [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)).
 
@@ -296,8 +294,8 @@ deliberate, so it can be tested without risking a save.
 3. **The connection** — `net/transport.js` (Trystero for the one-link join, paste codes as the
    fallback), Pause > Open Multiplayer, chat and the player list. **Built 2026-11-21.**
 4. **Join** — "Bring my pilot" (`checkOut`/`relocate` through the handshake slice 3 already
-   answers), two-second snapshots, reconnects by `compare`, "Go home" from the suitcase with the
-   host offline. **Built 2026-11-23a, in playtest** (rounds 14–19 fixed on top).
+   answers), two-second *profile* snapshots, reconnects by `compare`, "Go home" from the suitcase with the
+   host offline. **Built 2026-11-23a, playtest-confirmed 2026-11-24** (rounds 14–19 fixed on top).
 5. **Crashes and reconnects** — a lost host puts the player back on the main menu with **"Lost
    connection to host"**, the host's copy kept current, `compare` deciding between copies, rejoining
    keeps the copy the server has, a final copy on tab close, one session per `guestId`; and the
@@ -305,24 +303,27 @@ deliberate, so it can be tested without risking a save.
    **Built 2026-11-24a, reworked 2026-11-24b** — see the next section.
 6. **Trading** — *View docked players*, a trade of items, a ship at that station, or credits, a first
    confirm that locks both sides and a second that commits; the host checks m³ in both station holds
-   first and moves nothing if either side lacks room.
+   first and moves nothing if either side lacks room. **Built last** (owner, 2026-11-24: order 7 → 8 → 6).
 
-## Slices 7 and 8: the second pilot, then the second screen (planned 2026-11-22)
+## Slices 7 and 8: the second pilot, then the second screen (7 built; 8 planned)
 
 The owner asked for **"one world, two ships visible"** on 2026-11-22. The plan's own model says what
 that costs — the host's browser is the authority, and a guest's screen draws what the host sends back —
 plus the two debts [../TARGET_ARCHITECTURE.md](../TARGET_ARCHITECTURE.md) still lists (*death and
 recovery*, *player presentation and input*). Two slices, because neither half can be tested alone:
 
-- **Slice 7 — a second pilot exists.** The suitcase becomes a record in `state.players` through
-  `custody.hostProfile` + `configurePlayer` (the host's `sim/step.js` already flies every active
-  record), docked at the guest's own station because **flight positions never travel**. The host
-  writes the guest's suitcase back from the profile it actually holds, raises `rev` on the
-  `NET.revStepMs` floor and sends it about `NET.snapshotSec` later. The owner sees a **flat map
-  marker** for the other pilot, so "the second pilot is real" is visible before a camera exists.
+- **Slice 7 — the pilot is on the map (built 2026-11-24).** Slice 4 had already turned the suitcase
+  into a record in `state.players` (`custody.hostProfile` + `configurePlayer`, docked at its own
+  station because flight positions never travel), and written it back. What was left was
+  visibility: `ui/starmap.js` `pilotBlips` reads `state.players` and draws each visitor's name under
+  the pocket it stands in on the system map, and `pilotPanelMarkup` names every visitor with its
+  system in the side panel (a visitor arrives at *its own* home station, possibly another system).
+  `render/views.js` still draws one hull (8).
 - **Slice 8 — one world on two screens.** Snapshots out (`SHIP_FIELDS`), controls in
   (`state.localInput`, a numbered input-rule change — see [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)),
   and the guest's screen following the **host's** pocket. Only then are two ships drawn in one sky.
+  The guest predicts its own ship, and remotes are interpolated:
+  [client-prediction.md](client-prediction.md).
 
 **Away means this world is paused, and the card says so** (owner, playtests 18 and 20 — playtest 20
 replaced the "only if newer" gate):
@@ -390,8 +391,8 @@ Four rules, and one hole closed:
 
 ## Known gaps (until their slice lands)
 
-- A visiting pilot is **not drawn yet**: it is a real, docked, simulated record (`sim/multiplayer.js`) but
-  `render/views.js` draws one hull (slices 7–8). The largest visible gap.
+- A visiting pilot is **not drawn in space yet** (slice 8): `render/views.js` draws one hull. Since
+  slice 7 it is a **named blip** on the system map and in the panel.
 - A guest's screen is its own world, stand-in or not; it does not follow the host's pocket (8c).
 - The invitation is **not checked** when a browser joins the room: one that knows the world id can join
   without the link. Step 17's job.

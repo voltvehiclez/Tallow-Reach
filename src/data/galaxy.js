@@ -67,6 +67,10 @@ export const GALAXY = {
     exitLength: 120, minSeparation: 82, minZoom: 1, maxZoom: 3,
     blackHoleChance: 0.05, coreRadius: 26, blackHoleRadius: 20,
     coreLabelOffset: 14, coreLabelLineHeight: 14, labelGap: 8,
+    // Visiting pilots (step 16 slice 7): the line height of the amber blip row drawn
+    // under a pocket's own name, in screen pixels like every other size here. The map
+    // scales it with the zoom, so a name stays the same size at every zoom level.
+    pilotBlipGap: 12,
     beltDot: { size: 4.2, color: 0xc8b18a, opacity: 0.85 },
     planetDot: { size: 5.2, color: 0x8fd2ff, opacity: 0.95 },
   },

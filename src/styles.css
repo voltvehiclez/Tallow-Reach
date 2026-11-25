@@ -2410,6 +2410,11 @@ textarea {
 .sm-node text { fill: var(--ink); font-size: 11px; paint-order: stroke; stroke: #07090b; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
 .sm-node.current text { fill: var(--amber); }
 .sm-here-label { fill: var(--amber); font-size: .85em; }
+/* Visiting pilots (step 16 slice 7): a friend's pilot is a name under the pocket it stands
+   in, in amber, so it reads as a person rather than as one more pocket. */
+.sm-node .sm-pilot-blip { fill: var(--amber); font-size: .9em; }
+.sm-pilots { margin: 8px 0 0; color: var(--ink); font-size: 13px; }
+.sm-pilots span { color: var(--dim); margin-right: 6px; }
 .sm-notice { margin: 6px 0 0; color: var(--amber); }
 .sm-help { margin: 0; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 13px; }
 .sm-details { min-height: 0; overflow: visible; border: 1px solid var(--line); padding: 14px; background: rgba(13,18,21,.8); }

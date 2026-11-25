@@ -1,3 +1,64 @@
+## 2026-11-23: The away card is a question about custody, not the title screen
+
+**Code change; rebuild needed; build `2026-11-23h`.** Four things from the owner's playtest 18.
+
+1. **The menu is the menu again.** Being away used to replace the whole title screen with the
+   away card, and its "Main menu" button re-raised it on the next draw — so leaving a friend's
+   world dumped the player on a save question with no way past it. The owner's rule: *"This your
+   pilot is in menu should only come if you try to join your local open world but a more new
+   version of your save was on an online world."* The card is now raised by a press on **Open
+   World** and nothing else, and it appears there only when
+   `session.newerCopyAway()` finds a genuinely newer copy. Otherwise Open World opens the pilot's
+   own world, away marker and all — the frozen travelling half stays put, so nothing is lost.
+2. **"Newer" is decided by one rule** (`custody.isNewerCopy`): the host's `{epoch, rev}` pair
+   first (only when both copies carry one), then more credits, then more cargo. **A tie is not
+   newer** — a false card is the trap this fixes. Hull damage and locker counts are deliberately
+   excluded: damage is not progress, and `checkOut` empties the home stations into the suitcase,
+   so counting lockers would report "newer" on every visit.
+3. **Rejoin is gone** (owner: *"Remove the rejoin button I dont think it serves much purpose right
+   now. If you want to rejoin the friends world you go -> main menu -> join multiplayer"*). The
+   card offers **Bring pilot home** and **Main menu**.
+4. **The menu's username box is the bare centred name** — no "Username:" label, text centred like
+   the buttons under it (owner's request).
+
+Confirmed unchanged, in the owner's words: *Bring pilot home* makes the online copy the local
+save (credits, ships, hull, holds, cargo, lockers), while missions, story flags and statistics stay
+local; campaign play never affects multiplayer/open world.
+
+`src/net/custody.js` (`isNewerCopy`), `src/net/session.js` (`newerCopyAway`), `src/ui/menu.js`
+(Open World's press, `comehome`, `main-menu`, Rejoin removed), `src/ui/screens.js` (card condition,
+two buttons, centred name, copy), `src/state/state.js` (`ui.awayCard`), `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), four test files. Save version unchanged (29); no save shape
+changed — `isNewerCopy` only reads.
+
+## 2026-11-23: The switch says why, and the away card is a proper card
+
+**Code change; rebuild needed; build `2026-11-23g`.** Three things the owner hit in one playtest,
+only the first of which was a real fault in the code:
+
+1. **No username, no switch, no explanation** (his report: *"the multiplayer on/off button doesnt
+   work, not clickable"*). The switch was drawn `disabled`, and a disabled button receives no
+   click, so the refusal could never be shown. He asked for the refusal: *"make it so that a pop
+   up comes saying you have to have a username to turn multiplayer on."* The switch is now
+   pressable in every state (`aria-disabled` instead of `disabled`) and a press without a name
+   shows a notice that names where the box is — the **main menu**, the only place it exists (the
+   hint used to say "Set a username above", pointing at a field that is not on that screen).
+2. **The away card was the wrong build.** He was running a download from before `daa42d6`, which
+   is the commit that first gave that card a **Main menu** button and fixed *Bring pilot home*.
+   The card now says `Build 2026-11-23g` at the bottom, and the multiplayer screen's *More
+   details* says the build too: two machines on different builds cannot talk, and a stale
+   download must be visible without a console.
+3. **Main menu was a small box on the left.** Only that one button on the card lacked
+   `class="go"`, and `.away-card` had no CSS at all, so the browser laid the three buttons out
+   differently. The card is now a grid, every button is a full-width `.go`, and the notes are
+   styled.
+
+`src/ui/multiplayer.js`, `src/ui/screens.js`, `src/ui/notice.js`, `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), `tests/multiplayer-ui.test.mjs` (the switch test now requires
+`aria-disabled` and the popup), `tests/multiplayer-playtest16.test.mjs` (the card's build stamp,
+three `.go` buttons, the CSS). `showNotice` now records the message even where there is no
+`document`, so a refusal cannot throw in the test runner. Save version unchanged (29).
+
 ## 2026-11-23: The multiplayer switch could not be pressed by a visitor
 
 **Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button

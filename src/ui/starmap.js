@@ -7,7 +7,7 @@
 import { GALAXY } from "../data/galaxy.js";
 import { chartGalaxy, straightEdgeBlockers } from "./chart-lines.js";
 import { routeDisplay, flightRouteRows, pocketMarkerMarkup } from "./route-display.js";
-import { placeAt, placeDef } from "../data/places.js";
+import { placeAt, placeDef, isPocket } from "../data/places.js";
 import { term, Term, terms } from "../data/terms.js";
 import { state, localPlayer, profileOf, msg } from "../state/state.js";
 import { setDestination } from "../state/destination.js";
@@ -325,6 +325,67 @@ export function pocketLabelLayout(chart, point, radius, unit, tuning = GALAXY.sy
   return new Map(placed.map(label => [label.node.id, label]));
 }
 
+/**
+ * Every visiting pilot in the host's world, wherever it is (step 16 slice 7).
+ *
+ * The host's `sim/step.js` already flies a visitor as a real, docked record, but until slice
+ * 8 there is no camera to draw its hull. `state.players` is where that record lives
+ * (`sim/multiplayer.js` `arriveGuest` fills in `guestId`, `name` and `place`), so this is the
+ * one reader that turns it into something a player can SEE: `pilotBlips` draws the ones a
+ * chart holds, `pilotPanelMarkup` names them all (LESSONS L19: one source, two renderings).
+ *
+ * Only records that are not the pilot at the controls are visitors. A place that is not a
+ * pocket of this world (a rift, a pocket this build no longer has) is listed by name alone
+ * rather than guessed at. Pure: it reads `state.players` and never writes.
+ */
+export function visitingPilots(players = state.players, local = localPlayer()) {
+  const out = [];
+  for (const P of Array.isArray(players) ? players : []) {
+    if (!P || P === local) continue;
+    if (typeof P.guestId !== "string" || !P.guestId) continue;
+    const place = typeof P.place === "string" ? P.place : "";
+    // A pocket of this world has a readable name and a system; anything else (a run, a
+    // pocket this build no longer has) is listed by name alone rather than guessed at.
+    const pocket = place && isPocket(place) ? placeAt(place) : null;
+    out.push({
+      id: P.guestId,
+      name: String(P.name || "Pilot"),
+      place,
+      placeName: pocket?.n || "",
+      systemName: pocket?.parent ? placeAt(pocket.parent).n || "" : "",
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+/** The visiting pilots a chart can draw: every one whose pocket is on that map. */
+export function pilotBlips(chart, players = state.players, local = localPlayer()) {
+  const out = [];
+  for (const pilot of visitingPilots(players, local)) {
+    const node = chart?.byId?.[pilot.place];
+    if (!node) continue;
+    out.push({ ...pilot, nodeId: node.id, pos: node.pos });
+  }
+  // A stable order, so two pilots at one pocket keep their rows on every redraw.
+  return out.sort((a, b) => a.place.localeCompare(b.place) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+/**
+ * The visiting pilots, as one row in the side panel. The map can only draw the ones whose
+ * system is selected, and its labels can be nudged by `pocketLabelLayout`; so the panel names
+ * **every** visitor with the system it is in — a friend who arrived in another system is still
+ * findable. It reads the same records as the map, never a second copy.
+ */
+export function pilotPanelMarkup(pilots) {
+  if (!Array.isArray(pilots) || !pilots.length) return "";
+  const rows = pilots.map(p => {
+    if (!p.placeName) return esc(p.name);
+    const system = p.systemName && p.systemName !== p.placeName ? ` (${esc(p.systemName)})` : "";
+    return `${esc(p.name)} · ${esc(p.placeName)}${system}`;
+  }).join("; ");
+  return `<p class="sm-pilots"><span>Visiting pilots</span> ${rows}</p>`;
+}
+
 /** A centred local box around the pockets and their outward exit stubs. */
 export function systemChartBounds(chart, padding = GALAXY.systemMap.padding) {
   const points = [...chart.nodes.map(n => n.pos), ...chart.exits.map(e => e.end)];
@@ -492,6 +553,11 @@ export function setupStarmap() {
   on("docked", ({ player } = {}) => { if (!player || player === localPlayer()) closeStarmap(); });
   on("died", () => closeStarmap());
   on("wormhole-link-renewed", () => { if (state.ui.starmap) render(); });
+  // A visiting pilot arriving or going home changes what the map should show (slice 7). The
+  // map is not otherwise redrawn on the event, so without this a guest who joins while the
+  // chart is open would only appear after the player clicked something.
+  on("mp-guest-arrived", () => { if (state.ui.starmap) render(); });
+  on("mp-guest-left", () => { if (state.ui.starmap) render(); });
   on("place-changed", ({ from, to, player } = {}) => {
     if (player && player !== localPlayer()) return;
     const before = state.galaxy?.pocketsById?.[from]?.parent;
@@ -1010,10 +1076,18 @@ function galaxyMarkup(world, view, know, here, unit, route = null, objectiveSyst
   return `<defs>${masks.join("")}</defs>` + lines + routeLines + nodes;
 }
 
-function systemMarkup(world, view, know, here, unit, route = null, objectivePockets = new Map()) {
+export function systemMarkup(world, view, know, here, unit, route = null, objectivePockets = new Map(), pilots = null) {
   const chart = pocketConnections(world, view.selected, know);
   const system = chart.system;
   if (!system) return "";
+  // Visiting pilots (slice 7): the same blips the side panel names, grouped by pocket so a
+  // busy station stacks rows in a stable order instead of overwriting one name.
+  const blipsByNode = new Map();
+  for (const blip of pilots || pilotBlips(chart)) {
+    const at = blipsByNode.get(blip.nodeId) || [];
+    at.push(blip);
+    blipsByNode.set(blip.nodeId, at);
+  }
   const ox = system.pos[0], oy = -system.pos[1];
   const point = p => [ox + p[0], oy - p[1]];
   const lines = chart.edges.map(edge => {
@@ -1078,13 +1152,15 @@ function systemMarkup(world, view, know, here, unit, route = null, objectivePock
     const kindLabel = station ? ", station pocket" : nodeRole === "planet" ? ", planet" : nodeRole === "belt" ? ", asteroid belt" : "";
     const peerAttr = node.peerSystemId ? ` data-peer-system="${esc(node.peerSystemId)}"` : "";
     const hereLabel = current ? `<tspan class="sm-here-label" x="${lx}" dy="${12 * unit}">(You are here)</tspan>` : "";
+    const pilotRows = (blipsByNode.get(node.id) || []).map(blip =>
+      `<tspan class="sm-pilot-blip" data-pilot="${esc(blip.id)}" x="${lx}" dy="${GALAXY.systemMap.pilotBlipGap * unit}">· ${esc(blip.name)}</tspan>`).join("");
     return `<g class="sm-node sm-pocket-node${station ? " sm-station-node" : nodeRole ? ` sm-${nodeRole}-node` : ""}${current ? " current" : ""}${roleClass}${objectiveColor ? " objective" : ""}" data-pocket="${esc(node.id)}"${peerAttr}${objectiveColor ? ` style="--objective-color:${esc(objectiveColor)}"` : ""}
       role="button" tabindex="0" aria-label="${esc(node.pocket.n)}${node.peerSystemId ? ", gate to neighbouring system" : ""}${kindLabel}${current ? ", current pocket" : ""}${objectiveColor ? ", mission objective" : ""}">
       <circle class="sm-hit" cx="${x}" cy="${y}" r="${radius + 9 * unit}"/>
       ${labelLink}
       ${dot}
       ${marker}
-      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}${hereLabel}</text>
+      <text x="${lx}" y="${ly}" text-anchor="${anchor}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(node.pocket.n)}${hereLabel}${pilotRows}</text>
     </g>`;
   }).join("");
   // The core is a named chart object, not a pocket: no data-pocket, travel action,
@@ -1140,8 +1216,14 @@ function render() {
     objectivePockets.set(target.place, target.color);
     if (target.system) objectiveSystems.set(target.system, target.color);
   }
+  // Visiting pilots (slice 7), read once so the map and the panel under it name the same
+  // records: `sim/multiplayer.js` is the writer, this render is the reader (LESSONS L19).
+  // The map can only draw the ones in the selected system; the panel names every one and
+  // the system it is in, so a friend who arrived elsewhere is still findable.
+  const pilots = selected ? pilotBlips(pocketConnections(world, view.selected, know)) : [];
+  const visitors = visitingPilots();
   const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route, objectiveSystems) : "";
-  const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit, route, objectivePockets) : "";
+  const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit, route, objectivePockets, pilots) : "";
   const galaxyOpacity = transition ? (transition.toMode === "system" ? 1 - eased : eased) : 1;
   const systemOpacity = transition ? (transition.toMode === "system" ? eased : 1 - eased) : 1;
   const chart = transition
@@ -1196,6 +1278,7 @@ function render() {
             <p class="sm-current"><span>Current pocket</span> ${pocketMarkerMarkup(here, true)}${esc(here.n)}</p>
             <h3>${esc(Term("flyable"))}s</h3>
             <ul class="sm-pockets">${rows}</ul>${routeDetails}` : `<h2>No visible ${esc(terms("mapNode"))}</h2>`}
+          ${pilotPanelMarkup(visitors)}
         </aside>
       </div>
       ${menu}

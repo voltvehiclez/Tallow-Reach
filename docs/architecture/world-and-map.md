@@ -93,7 +93,8 @@ These are real, current limits. None of them is a bug in play today.
   dashed lines and blue remote endpoint dots; their labels are clickable travel targets quoting the reciprocal
   gate pocket, and double-clicking either one opens that peer system map directly. Station pockets render as
   squares and generated trader features/station pockets use deterministic varied names; the right panel stays
-  a compact name-only overview. Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing
+  a compact name-only overview, plus a **Visiting pilots** row (every visitor, with its system) and an amber `· name` under
+  each visiting pilot's pocket in the selected system (step 16 slice 7: `pilotBlips` reads `state.players`; no hull is drawn in space until 8). Galaxy pan is bounded to 0.5–1 screen pixels per pointer pixel, increasing
   gently when zoomed out; core radii are map units so system zoom scales the graphic. Pocket names are laid
   out without collisions and crowded labels get a small connector back to their dot. An active destination
   draws solid orange overlays and small directional arrows on galaxy links and local pocket hops; only

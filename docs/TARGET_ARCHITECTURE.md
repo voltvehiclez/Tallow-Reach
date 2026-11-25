@@ -187,8 +187,10 @@ player }`), so missions, achievements and sound can subscribe without the sim kn
 
 - **Host-authoritative.** The host's browser runs the one true simulation for everyone. A guest's
   browser sends its `controls` several times a second and draws what the host sends back (positions
-  and state of nearby entities), smoothing between updates. Flight with inertia hides small lag, so
-  no client-side prediction at first.
+  and state of nearby entities), smoothing between updates. Flight with inertia hides small lag;
+  since 2026-11-24 the owner also wants a **measured amount of guest-side prediction of its own
+  ship only** (everything remote is still interpolated) — see
+  [architecture/client-prediction.md](architecture/client-prediction.md).
 - **One link to join.** The host copies a URL; the guest opens it and is in. Browsers cannot
   accept incoming connections on their own, so this needs a small *signalling* step (WebRTC with a
   free broker, or a tiny relay). That is the one place the "no npm dependencies" rule may have to be

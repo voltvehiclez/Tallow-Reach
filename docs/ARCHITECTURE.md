@@ -97,7 +97,7 @@ about each other, use the event bus instead.
 | Change what gets saved               | `state/profile.js` (`newProfile` / `newWorld`, `sanitizeProfile` / `sanitizeWorld`, bump `SAVE_VERSION`, add a migration in `sanitizeSave`) |
 | Change the in-flight power readout   | `ui/hud.js` (the power block) and `#pw` in `src/index.html`, styles under "Flight HUD" |
 | Change randomness, or make a run reproducible | `util/rng.js` (`random`, `setSeed`, `makeRng`) |
-| Change how two browsers connect, or what a message on the wire holds | `net/transport.js` (the wrapper: the only file that names the library), `net/protocol.js` (the message kinds and their caps), `net/session.js` (who is admitted, the guest list, the chat). `RELAYS`/`ROOM_NAMESPACE`/`CHAT` are in `data/multiplayer.js`; see [architecture/multiplayer.md](architecture/multiplayer.md) |
+| Change how two browsers connect, or what a message on the wire holds | `net/transport.js` (the wrapper: the only file that names the library), `net/protocol.js` (the message kinds and their caps), `net/session.js` (who is admitted, the guest list, the chat). `RELAYS`/`ROOM_NAMESPACE`/`CHAT` are in `data/multiplayer.js`; see [architecture/multiplayer.md](architecture/multiplayer.md); prediction and interpolation: [architecture/client-prediction.md](architecture/client-prediction.md) |
 | Change the join link, or what a guest has to paste | `net/join-link.js` (`?join=<worldId>#<token>`, the secret after the `#`) and `net/paste.js` (the `TRJOIN:` codes used when no relay answers) |
 | Change what a pilot may carry into someone else's world | `data/multiplayer.js` (`TRAVEL_FIELDS`, `HOME_FIELDS`); packed and unpacked by `net/custody.js`; see [architecture/multiplayer.md](architecture/multiplayer.md) |
 | Change what the `away` marker or a host's guest record holds | `data/multiplayer.js` (`AWAY_FIELDS`, `GUEST_FIELDS`), validated by `cleanAway`/`cleanGuests` in `state/profile.js`, changed through `net/multiplayer.js` |
@@ -162,6 +162,7 @@ Read the one that matches the work. Each holds that area's conventions and known
 | [architecture/mission-principles.md](architecture/mission-principles.md) | How the eight architecture principles apply to the mission framework, and the limits of validation |
 | [architecture/world-and-map.md](architecture/world-and-map.md) | World and map: places, the starmap, travel, place memory, where you log out |
 | [architecture/multiplayer.md](architecture/multiplayer.md) | Multiplayer (step 16): the suitcase, what travels, what stays home, station keys across worlds, the connection and the eight slices |
+| [architecture/client-prediction.md](architecture/client-prediction.md) | Netcode for a guest (step 16 slice 8, planned): the guest predicts its own ship from ticked inputs; remote ships and enemies are interpolated ~100 ms behind 20–30 Hz snapshots |
 | [architecture/feature-notes.md](architecture/feature-notes.md) | Detailed notes on features built in steps 10 to 13 (galaxy, starmap, place templates, missions), moved out of HANDOFF |
 | [MISSION_RULES.md](MISSION_RULES.md) | How missions must behave, the linter and the invariant tests |
 
