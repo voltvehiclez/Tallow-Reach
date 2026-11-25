@@ -21,6 +21,9 @@ easiest.
 - **The guest's own screen does not show your world yet** (slice 8), so a guest sees no blip: it is the
   only pilot in the world its screen is drawing.
 - **No trading** (slice 6, which now comes **last**; see the note at the end).
+- **The visitor does not move on your map.** It is docked where it arrived and sends no position or
+  controls; its own flying happens on its own screen, in its own galaxy, until slice 8. The name
+  staying put is expected.
 - A pilot is only **drawn** where it is standing. If it arrives in another system (it lands at *its
   own* home station), look for its name under **that system** on the galaxy chart — the panel row
   names the system too.

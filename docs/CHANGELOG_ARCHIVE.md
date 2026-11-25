@@ -1,3 +1,35 @@
+## 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one
+
+**Code change; rebuild needed; build `2026-11-24d`.** Save version unchanged (29).
+
+The owner, looking at the join screen after pressing **Bring my pilot**: *"Clicking the bring my
+pilot now when joining a world doesnt log you into their open world. Im just stuck at the menu where
+you add link. Looks like this after ive clicked bring my pilot. Should transition to their world when
+im in like this."* And, once it was clear that drawing the friend's world is slice 7: *"If so drop
+me into the local world add a pop up that this is not the hosts world (yet)."*
+
+The first report was caused by the fix for the third: playtest 20's A3 guard shut **every** door into
+the open world while the pilot was away, so the pilot could cross and the player still had nowhere to
+go. The guard was the right rule enforced one screen too far.
+
+- **Bringing the pilot enters the world** — one press, not two. The panel's *Enter the world* button
+  is back for a visit, and pressing it (or bringing the pilot) opens the world and closes the panel.
+- **The title's Open World still asks first.** A player on the menu pressing Open World while the
+  pilot is elsewhere is choosing between a pilot at home and a pilot in somebody else's galaxy, so
+  it is still the away card. The visit is a different place to be standing, and it gets the world.
+- **The world says what it is.** Entering it while the pilot is away raises a notice: *"This is your
+  own galaxy, not Ada's world — their world on your screen is not built yet (step 16, slice 7).
+  Anything you earn or buy here stays here."* The panel says the same before the press, so nobody
+  has to find out afterwards.
+- **The stand-in is honest about saves.** The travelling half is in the suitcase, and
+  `captureActiveModeSave` folds no live facts into a save that is away: flying the stand-in does not
+  change the copy that comes home, which is the one in the friend's world.
+
+`src/ui/multiplayer.js` (bring enters, the row and its hint), `src/ui/menu.js` (the guard is gone;
+the notice on `mp-enter-world` lives beside the title press that still asks), `src/data/multiplayer.js`
+(BUILD). Tests: the playtest-20 A3 test became "the visit opens the stand-in world and says it is not
+your friend's", which proves the one-press entry, the button, the notice and its words.
+
 ## 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home
 
 **Code change; rebuild needed; build `2026-11-24c`.** One rule, in the owner's words: *"Doesnt
