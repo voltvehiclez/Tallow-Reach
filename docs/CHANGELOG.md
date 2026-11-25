@@ -18,6 +18,55 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-25: Playtest 23 — a friend can be selected, and a pilot can always come back
+
+**Code change; rebuild needed; build `2026-11-25b`.** Save version unchanged (**29**): the fixes
+change what an edit does to an existing record, never the record's shape.
+
+Two reports from the owner's playtest of slice 8a, with the same root of the trouble — *state that
+was drawn or stored but never asked about again*:
+
+1. **A visiting pilot could not be selected.** *"cannot select a friends ship"*. Slice 8a drew the
+   hull and stopped there: F only ever offered hostiles, rocks, crates, rifts, gates, canisters and
+   the station; the N list turned a pilot row into a **name-only** lock (kind `"n"`), and the HUD drew
+   hull/shield bars for `k === "e"` alone. A visitor is not a hostile and, on a guest, not even a
+   record — so the fix is a new lock kind, **`"p"`**, and one new fact the screen publishes:
+   **`state.otherPilots`**, the mirror of every pilot `render/views.js` is drawing (`{ k: "p", id,
+   name, ship, place, pos, quat, hull, shield, dead, docked }`). The mirror is the only place a friend
+   exists on a guest's screen (slice 8a forbids a record), and it is what makes one fix cover both
+   screens. `sim/targeting.js` offers those pilots to F (reticle first, then the same cone as a
+   hostile), `lockName` returns **the pilot's own name**, `pruneLock` drops the lock when the hull
+   stops being drawn, the N list lists it under its **Ship** filter as a real row, and the HUD gives
+   its lock **the same two bars as any ship**. `sim/pilot-stats.js` (new) owns the two fractions, so
+   the host's own screen and the wire cannot disagree about a friend's bars — and `SHIP_FIELDS` gains
+   **`shield`** (a 0..1 fraction, clamped like `hull`) for exactly that reason: the owner asked for
+   "hull/shield stats like any other ship", and a bar that is always 0% because the number never
+   travelled is a decoration. An unlocked friend also wears its name in the sky now.
+2. **A pilot could not come back after leaving.** *"Stuck on 85% handshake … 'The link has already
+   been used, or it was copied wrongly.'"* The link was fine: `custody.guestRecord` hashed whatever
+   token it was handed, and the host's **write-back** (the two-second check, and the `left` mark a
+   departure writes) edits a record **without** the guest's secret — so a record that had been
+   written back once held the hash of **nothing** instead of the hash of the pilot's token, and every
+   later hello failed the handshake with that sentence, for ever. It looked intermittent because a
+   record marked `left` is re-admitted without a token check while a dropped-connection record is
+   not. Fix: **an update that carries no secret never changes the secret's hash**
+   (`custody.recordTokenHash`, `putGuest` passes the stored hash through). Nothing else about the
+   handshake changed, and a real token still replaces the hash (that is how a pilot is renamed onto a
+   new browser).
+
+Files: `src/data/multiplayer.js` (`SHIP_FIELDS` + `shield`), `src/sim/pilot-stats.js` (new),
+`src/sim/targeting.js`, `src/sim/flight-instruments.js`, `src/state/state.js` (`otherPilots`),
+`src/render/views.js`, `src/render/shipstream.js`, `src/net/ships.js`, `src/net/protocol.js`,
+`src/net/custody.js`, `src/net/multiplayer.js`, `src/ui/hud.js`, `src/ui/target-display.js`, plus the
+READMEs of `sim/`, `net/`, `render/`, `data/` and `state/`. Tests: **`tests/multiplayer-pilot-lock.test.mjs`**
+(12 new: the two fractions, F on a friend, the cone, prune, the N row, the host's and the guest's
+mirror, the shield field, and the HUD's gate) and **`tests/multiplayer-rejoin.test.mjs`** (5 new,
+written as the class rather than the case; all 5 fail on the old code).
+
+**What the owner should look for:** F on a friend's hull gives that pilot's name and two bars; the N
+list shows the friend as a Ship row with its name; and leaving and rejoining the same link works
+every time, including "Bring my pilot" afterwards.
+
 ## 2026-11-25: Step 16 slice 8a — the second hull, and the snapshots under it
 
 **Code change; rebuild needed; build `2026-11-25a`.** Save version unchanged (**29**) — nothing new
@@ -228,47 +277,9 @@ way to *see* it. This slice is the seeing, while the hull in space waits for sli
 the host's world (8), so a guest sees no blip of its own — it is the only pilot in the world its screen
 draws. Playtest guide: [../testing/TESTING-16-SLICE7.md](../testing/TESTING-16-SLICE7.md).
 
-## 2026-11-24: Playtest 22 — two friends on one link, and no player cap
-
-**Code change; rebuild needed; build `2026-11-24f`.** Save version unchanged (29) — the new value lives in
-the browser's own settings, not in a save.
-
-The owner, with two browsers open: *"When a second guest player joins, first guest is kicked out and this
-error message comes on if first guest tries to join again with 'That link has already been used, or it was
-copied wrongly'."* Plus a list of small things about the chat's right-hand column, which playtest 21 had
-already started.
-
-- **The kick-out was identity, not capacity.** A join link carries **one** secret per world
-  (`?join=<worldId>#<token>`), and the guest was using that secret **as its own**: `guestId` was
-  `guest-<first 8 characters of the link token>`, and its hello carried the same token. Two friends on one
-  link therefore arrived as the *same pilot*, and the host's one-window-per-pilot rule (correct, and kept)
-  retired the first to make room — rewriting the record's token hash, which is why the retired browser was
-  then told the link "has already been used". Its session was gone, so no welcome, so no chat: the second
-  half of the report.
-- **A guest is now its own browser.** `src/net/settings.js` keeps `pilotToken` beside the name in `tr_mp`
-  (made once with `makeToken`, never shown, never in a save); `src/net/session.js` exposes it as
-  `guestToken()`/`pilotToken()`, and both doors in (`joinWorld` from a link, `acceptCode` from a paste code)
-  send it as the guest's identity. The invitation now only says *where* a pilot may go. LESSONS **L47**.
-- **There is no player cap.** `NET.maxGuests` 4 → 100, documented for what it is: a valve against a runaway
-  room, not a rule of the game. The limit is the host's machine and connection (owner: *"i want unlimited
-  players"*). The players column stops at `CHAT.whoRows` (10) names and adds `+N more`, so a busy world
-  cannot grow the HUD.
-- **One-time note for an existing world:** a guest record written by `2026-11-24d` or earlier is keyed by the
-  old link-derived id. That browser now arrives as a *new* guest, and the old record simply stays unused (a
-  record is never deleted). Nothing breaks; the pilot's own copy is what it flies with.
-- **The chat's right-hand column is quieter** (owner, playtest 22): **Pin shows only while the box is open
-  for typing** — so an auto-opened chat, and a pinned box nobody is typing in, draw the lines and nothing
-  else (`body:not(.mp-chat-open) #mp-chat-pin`, replacing playtest 21's narrower rule). The column is
-  narrower (54 px, no 9 px indent), the gap between it and the lines came down 10 px → 6 px, and the names
-  keep their 12 px and ellipsize. The word is still **Pin**, in the two colours playtest 21 gave it (L46).
-  The twelve-second clock from `2026-11-24e` is unchanged, and your own sent line still counts.
-
-Run `npm run build` and `npm test` (1045 tests). Playtest guide:
-[../testing/TESTING-22-CHAT.md](../testing/TESTING-22-CHAT.md), quick version
-[../testing/QUICK-22-CHAT.md](../testing/QUICK-22-CHAT.md).
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Playtest 22 — two friends on one link, and no player cap
 - 2026-11-24: Playtest 21 — the chat box, four small things
 - 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one
 - 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home

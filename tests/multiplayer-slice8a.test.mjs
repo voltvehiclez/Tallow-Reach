@@ -550,7 +550,12 @@ test("slice 8a: the snapshot path is views only — nothing in it can write to t
   // two new modules are allowed to import, because a comment does not stop a later chat.
   const ships = source("src/net/ships.js");
   assert.doesNotMatch(ships, /from "\.\.\/state\//, "net/ships.js reads records it is handed; it does not reach state");
-  assert.doesNotMatch(ships, /from "\.\.\/sim\//, "and it simulates nothing");
+  // One `sim/` import is allowed, and it is arithmetic rather than the world: since playtest 23 the
+  // two health fractions live in `sim/pilot-stats.js` so the host's own screen and the wire cannot
+  // disagree about a friend's bars. `net/` importing `sim/` is the allowed direction (`net/world-places.js`
+  // already does, for the galaxy); the reverse is still forbidden below.
+  assert.doesNotMatch(ships.replace(/from "\.\.\/sim\/pilot-stats\.js"/, ""), /from "\.\.\/sim\//, "and it simulates nothing");
+  assert.doesNotMatch(source("src/sim/pilot-stats.js"), /^import /m, "the helper it borrows is arithmetic and imports nothing");
   assert.doesNotMatch(ships, /P[.\[]\w*\]?\s*=\s*[^=]/, "it never assigns to the record it was handed");
   assert.doesNotMatch(ships, /\.set\(|\.copy\(/, "and never moves a vector it did not make");
 

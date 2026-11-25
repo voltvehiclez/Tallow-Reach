@@ -39,6 +39,7 @@ import { instantiateModel, modelTemplate, engNodes } from "./gltf.js";
 import { colliderFromObject } from "./collideModel.js";
 import { setRockSoup } from "../sim/colliders.js";
 import { BULLET_COLOURS } from "../data/weapons.js";
+import { hullFraction, shieldFraction } from "../sim/pilot-stats.js";
 
 /* ------------------------------------------------------------------------- */
 /* Entity view registry                                                       */
@@ -709,6 +710,54 @@ export class PlayerShipView {
 // the launch point its arrival put it on. A dead pilot draws nothing.
 const pilotViews = new Map(); // id -> { mesh, hull }
 
+// **Every other pilot is a lock target, like anything else in the sky** (playtest 23).
+//
+// The owner's words: a visiting pilot "must be selectable (F / list), must show the player's name,
+// and must show hull/shield stats like any other ship". Two things were missing for that, and both
+// are the screen's job rather than the simulation's:
+//
+//   `state.otherPilots`  the list `sim/targeting.js` offers to F and the N-list rows are built
+//                        from. A guest has no record for a friend — slice 8a forbids it — so the
+//                        only place the friend exists is the pose this file drew. Publishing it
+//                        keeps the arrow pointing one way: the renderer writes the mirror, the
+//                        simulation and the HUD read it, and nothing is ever written back into a
+//                        pilot. These are the numbers a marker is placed from, not sim state.
+//   a lock reference     `tagLockView` on the hull mesh, so the reticle can pick a friend exactly
+//                        as it picks a rock (`render/target-picking.js`).
+//
+// The reference is ONE object per pilot, updated in place every frame: F compares targets by
+// identity, and a fresh object each frame would silently drop the lock on the next one.
+const pilotRefs = new Map(); // id -> { k, id, name, ship, place, pos, quat, hull, shield, dead }
+
+const clamp01 = (value, fallback) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+};
+
+function pilotRefFor(id) {
+  let ref = pilotRefs.get(id);
+  if (!ref) {
+    ref = {
+      k: "p",
+      id,
+      name: "",
+      ship: "",
+      place: "",
+      pos: new THREE.Vector3(),
+      quat: new THREE.Quaternion(),
+      hull: 1,
+      shield: 0,
+      dead: false,
+      docked: false,
+    };
+    // The lock the reticle picks, and the one `tagLockView` hands back: `{ k, o }`, `o` this ref.
+    ref.lock = { k: "p", o: ref };
+    pilotRefs.set(id, ref);
+  }
+  return ref;
+}
+
 function applyOtherPilotPose(mesh, pose) {
   mesh.position.copy(pose.pos);
   mesh.quaternion.copy(pose.quat);
@@ -725,12 +774,18 @@ function poseOfRecord(P, alpha, at) {
   const p = renderPlayerPose(P, alpha);
   return {
     id: P.guestId || P.id || `pilot-${at}`,
+    name: P.name || P.profile?.name || "",
     ship: P.ship,
     place: P.place || state.place,
     pos: _otherPose.pos.copy(p.pos),
     quat: _otherPose.quat.copy(p.quat),
     throttle: Number(p.thr) || 0,
     dead: P.dead === true,
+    docked: P.docked === true,
+    // The same two fractions the host puts on the wire (`sim/pilot-stats.js`), so the bar the
+    // host draws for a friend and the bar the friend's own screen gets can never disagree.
+    hull: hullFraction(P),
+    shield: shieldFraction(P),
   };
 }
 const _otherPose = {
@@ -745,6 +800,7 @@ const _otherPose = {
 export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
   const local = localPlayer();
   const seen = new Set();
+  const drawn = [];
   const draw = (id, ship, pose) => {
     // Another pilot's hull is drawn only where this screen is looking, and only while it exists.
     if (!id || pose.dead || pose.place !== state.place) return;
@@ -763,6 +819,23 @@ export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
       pilotViews.set(key, view);
     }
     applyOtherPilotPose(view.mesh, pose);
+
+    // The pickable, nameable copy of that pilot (see the note by `pilotRefs`). Its own name comes
+    // off the wire (a guest) or off the record (the host); a pilot nobody named is still a pilot.
+    const ref = pilotRefFor(key);
+    ref.name = String(pose.name || "").trim() || "Pilot";
+    ref.ship = hull;
+    ref.place = pose.place || state.place;
+    // From the pose, not from the mesh: the mesh is the renderer's, and on a headless screen its
+    // `position` is a stub. The pose is the number the hull was placed from either way.
+    ref.pos.copy(pose.pos);
+    ref.quat.copy(pose.quat);
+    ref.hull = clamp01(pose.hull, 1);
+    ref.shield = clamp01(pose.shield, 0);
+    ref.dead = pose.dead === true;
+    ref.docked = pose.docked === true;
+    tagLockView(view.mesh, ref.lock);
+    drawn.push(ref);
   };
   // The host (or anybody) with a visiting record: drawn with no wire at all.
   for (const P of state.players) {
@@ -775,7 +848,11 @@ export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
     if (seen.has(key)) continue;
     scene.remove(view.mesh);
     pilotViews.delete(key);
+    pilotRefs.delete(key);            // a pilot that left is no longer a target
   }
+  // The mirror the simulation and the HUD read. Replaced wholesale, exactly like the sky it
+  // describes: a pilot that stopped being drawn stops being selectable in the same frame.
+  state.otherPilots = drawn;
 }
 
 /** How many other-pilot hulls are drawn (the tests check this number). */

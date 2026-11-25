@@ -10,7 +10,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 ## Current guides
 
-- [16 slice 8a: the second hull appears](TESTING-16-SLICE8A.md)
+- [16 slice 8a: the second hull appears — and playtest 23's two fixes](TESTING-16-SLICE8A.md)
 - [16 slice 7: the visitor's name on the galaxy chart and the system map](TESTING-16-SLICE7.md)
 - [Playtest 22: two guests on one link, and the chat's column](TESTING-22-CHAT.md)
 - [Playtest 22: QUICK version (10 minutes)](QUICK-22-CHAT.md)
@@ -30,7 +30,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 | Guide | Covers |
 | --- | --- |
 | [QUICK-22-CHAT.md](QUICK-22-CHAT.md) | The 10-minute version: three windows, one link — both guests in at once, a refresh that still gets in, then the chat (12 s, lines only when it opens by itself, one Pin in two colours, a narrow column). |
-| [TESTING-16-SLICE8A.md](TESTING-16-SLICE8A.md) | Step 16 slice 8a (build `2026-11-25a`): a friend's **hull is drawn in your world** — parked at the station it arrived at, the friend's own ship, gone when it goes home and back when it rejoins; two visitors are two hulls. It does **not** move (controls are 8b), the guest's screen still shows its own galaxy (8c), and nothing can be locked or shot. Includes what to check when you see nothing, and the old behaviour (chat, no pause, lost host, Bring pilot home) still holds. |
+| [TESTING-16-SLICE8A.md](TESTING-16-SLICE8A.md) | Step 16 slice 8a (build `2026-11-25b`): a friend's **hull is drawn in your world** — parked at the station it arrived at, the friend's own ship, gone when it goes home and back when it rejoins; two visitors are two hulls. **Part 6 is playtest 23's retest:** the friend's ship is now **selectable** (F and the N list), wears **its pilot's name**, and shows **hull/shield bars** like any other ship; and **leaving and rejoining the same link always works** (no more 85% stop, no "the link has already been used"). It does **not** move (8b), the guest's screen still shows its own galaxy (8c), and a friend cannot be hit. Includes what to check when you see nothing. |
 | [TESTING-16-SLICE7.md](TESTING-16-SLICE7.md) | Step 16 slice 7 (build `2026-11-24h`): a friend's visiting pilot is **named on the galaxy chart under its system** (no zooming needed), **under the pocket it stands in** on the system map, and in a **Visiting pilots** row at the **top** of the side panel — two visitors stack in one order, a pilot that goes home takes its row with it, and a "if you see nothing" list covers the empty-map cases (no Bring my pilot, stale build, another system). No ship in space yet (slice 8), no trading (now last). |
 | [TESTING-22-CHAT.md](TESTING-22-CHAT.md) | Playtest 22 (build `2026-11-24f`): **two friends on the same join link, neither kicked**, a refresh rejoining as the same pilot, and one pilot in one window; then the chat — right-hand column only while typing, `Pin` always one word in two colours, twelve seconds including your own line, players strip capped at ten names. |
 | [QUICK-16-SLICE5.md](QUICK-16-SLICE5.md) | The 10-minute version of the slice 5 test: host, join, bring the pilot, **close the host's browser**, watch the guest land on the main menu with **Lost connection to host**, dismiss it, check the pilot can still come home, rejoin with the same link, then close the guest's tab and watch the host's list drop it. |

@@ -256,12 +256,12 @@ export function awayRecord({ worldId, hostName, guestId, token, epoch = 0, rev =
  * somebody's pilot. `world.guests` is written by the host, read by the host, and
  * never travels.
  */
-export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0, left = false } = {}) {
+export function guestRecord({ name, token, tokenHash, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0, left = false } = {}) {
   const kept = isPlainObject(bundle) ? clone(bundle) : null;
   if (kept) delete kept.token;
   return {
     name: String(name || "").slice(0, NET.nameMax),
-    tokenHash: hashToken(token, idText(guestId) || ""),
+    tokenHash: recordTokenHash(token, tokenHash, idText(guestId) || ""),
     epoch: whole(epoch),
     rev: whole(rev),
     bundle: kept,
@@ -270,6 +270,22 @@ export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle =
     // suitcase; the mark is what lets the next hello re-admit it (see `onHello`).
     left: left === true,
   };
+}
+
+/**
+ * The hash a guest record keeps (playtest 23).
+ *
+ * A real secret always wins. **An update that carries no secret must keep the hash it was given**,
+ * never hash an absent one: the host's write-back and a pile of `left` marks both edit a record
+ * without touching its token, and hashing `undefined` over the stored hash locked a pilot out of
+ * its own record for ever — *"That link has already been used, or it was copied wrongly"*, on every
+ * rejoin of a pilot whose browser had already been written back once. The token is the guest's; the
+ * host only ever holds this.
+ */
+function recordTokenHash(token, tokenHash, salt) {
+  if (typeof token === "string" && token) return hashToken(token, salt);
+  if (typeof tokenHash === "string" && tokenHash) return tokenHash;
+  return hashToken(token, salt);
 }
 
 /**

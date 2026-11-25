@@ -57,6 +57,7 @@ function frameFrom(entry, at) {
     docked: entry.docked === true,
     dead: entry.dead === true,
     hull: num(entry.hull, 1),
+    shield: num(entry.shield, 0),
   };
 }
 
@@ -74,6 +75,7 @@ function poseFrom(frame, pos = frame.pos, quat = frame.quat, velocity = frame.ve
     docked: frame.docked,
     dead: frame.dead,
     hull: frame.hull,
+    shield: frame.shield,
   };
 }
 

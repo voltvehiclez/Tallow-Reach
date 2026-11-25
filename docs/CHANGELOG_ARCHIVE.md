@@ -1,3 +1,42 @@
+## 2026-11-24: Playtest 22 — two friends on one link, and no player cap
+
+**Code change; rebuild needed; build `2026-11-24f`.** Save version unchanged (29) — the new value lives in
+the browser's own settings, not in a save.
+
+The owner, with two browsers open: *"When a second guest player joins, first guest is kicked out and this
+error message comes on if first guest tries to join again with 'That link has already been used, or it was
+copied wrongly'."* Plus a list of small things about the chat's right-hand column, which playtest 21 had
+already started.
+
+- **The kick-out was identity, not capacity.** A join link carries **one** secret per world
+  (`?join=<worldId>#<token>`), and the guest was using that secret **as its own**: `guestId` was
+  `guest-<first 8 characters of the link token>`, and its hello carried the same token. Two friends on one
+  link therefore arrived as the *same pilot*, and the host's one-window-per-pilot rule (correct, and kept)
+  retired the first to make room — rewriting the record's token hash, which is why the retired browser was
+  then told the link "has already been used". Its session was gone, so no welcome, so no chat: the second
+  half of the report.
+- **A guest is now its own browser.** `src/net/settings.js` keeps `pilotToken` beside the name in `tr_mp`
+  (made once with `makeToken`, never shown, never in a save); `src/net/session.js` exposes it as
+  `guestToken()`/`pilotToken()`, and both doors in (`joinWorld` from a link, `acceptCode` from a paste code)
+  send it as the guest's identity. The invitation now only says *where* a pilot may go. LESSONS **L47**.
+- **There is no player cap.** `NET.maxGuests` 4 → 100, documented for what it is: a valve against a runaway
+  room, not a rule of the game. The limit is the host's machine and connection (owner: *"i want unlimited
+  players"*). The players column stops at `CHAT.whoRows` (10) names and adds `+N more`, so a busy world
+  cannot grow the HUD.
+- **One-time note for an existing world:** a guest record written by `2026-11-24d` or earlier is keyed by the
+  old link-derived id. That browser now arrives as a *new* guest, and the old record simply stays unused (a
+  record is never deleted). Nothing breaks; the pilot's own copy is what it flies with.
+- **The chat's right-hand column is quieter** (owner, playtest 22): **Pin shows only while the box is open
+  for typing** — so an auto-opened chat, and a pinned box nobody is typing in, draw the lines and nothing
+  else (`body:not(.mp-chat-open) #mp-chat-pin`, replacing playtest 21's narrower rule). The column is
+  narrower (54 px, no 9 px indent), the gap between it and the lines came down 10 px → 6 px, and the names
+  keep their 12 px and ellipsize. The word is still **Pin**, in the two colours playtest 21 gave it (L46).
+  The twelve-second clock from `2026-11-24e` is unchanged, and your own sent line still counts.
+
+Run `npm run build` and `npm test` (1045 tests). Playtest guide:
+[../testing/TESTING-22-CHAT.md](../testing/TESTING-22-CHAT.md), quick version
+[../testing/QUICK-22-CHAT.md](../testing/QUICK-22-CHAT.md).
+
 ## 2026-11-24: Playtest 21 — the chat box, four small things
 
 **Code change; rebuild needed; build `2026-11-24e`.** Save version unchanged (29). The last cleanup

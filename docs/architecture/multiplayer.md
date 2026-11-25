@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, **8a built to `2026-11-25a`**, 8b next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, **8a built to `2026-11-25b`** including playtest 23's two fixes, 8b next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -292,16 +292,19 @@ recovery*, *player presentation and input*). Two slices, because neither half ca
   are two ships drawn in one sky on both screens. The guest predicts its own ship, and remotes are
   interpolated: [client-prediction.md](client-prediction.md).
 
-## Slice 8a: ship snapshots (built 2026-11-25, awaiting the playtest)
+## Slice 8a: ship snapshots (built 2026-11-25, re-sent as `2026-11-25b` with playtest 23's fixes)
 
 **The host says where every pilot is; a guest draws it and simulates nothing.** Five pieces, and
 every number below is in `src/data/multiplayer.js`:
 
-- **`SHIP_FIELDS`** — the whole of what travels about one pilot: id, name, hull, place, position,
-  rotation, velocity, throttle, docked, dead, and hull as a fraction. `id` and `ship` are the two
-  the plan's list did not name and a reader cannot do without: which pilot, and which hull to
-  build. Nothing else is on it — no fit, no hold, no credits, no damage taken — so a snapshot
-  cannot move a rule on the far side. `HOST_PILOT_ID` is the host's own hull on the wire.
+- **`SHIP_FIELDS`** — the whole of what travels about one pilot: id, name, ship, place, position,
+  rotation, velocity, throttle, docked, dead, hull as a fraction, and — since playtest 23 —
+  **shield as a fraction**. `id` and `ship` are the two the plan's list did not name and a reader
+  cannot do without: which pilot, and which hull to build. `shield` joined them for one plain
+  reason: the owner asked a friend's lock to show *"hull/shield stats like any other ship"*, and a
+  bar that is always 0% because the number never travelled is a decoration. Nothing else is on it —
+  no fit, no hold, no credits, no damage taken — so a snapshot cannot move a rule on the far side.
+  `HOST_PILOT_ID` is the host's own hull on the wire.
 - **`SHIP_STREAM`** — `hz: 24` (**the owner's 20–30 Hz band**; `NET.snapshotSec` stays the 2 s
   *suitcase* sync, a different fact), `delayMs: 100`, `samples: 6`, `staleMs: 1500`, `snapM: 50`.
 - **The message** is `ships` (`net/protocol.js`): cleaned on the way out **and** in like every other
@@ -331,24 +334,11 @@ prediction, ack/rewind, cosmetic muzzle and lag compensation (8d/8e —
 `SAVE_VERSION` stays 29. Tests: `tests/multiplayer-slice8a.test.mjs`; guide:
 [../../testing/TESTING-16-SLICE8A.md](../../testing/TESTING-16-SLICE8A.md).
 
-**Away means this world is paused, and the card says so** (owner, playtests 18 and 20 — playtest 20
-replaced the "only if newer" gate):
-
-- The **main menu is always the main menu** (playtest 18): leaving a friend's world lands somewhere
-  ordinary, never on a save question.
-- The title's **Open World** press lands on the card. A player already in a visit reaches the world
-  from the multiplayer screen instead, and gets the **stand-in** (playtest 21): today that is this
-  browser's own galaxy holding the pilot's latest copy, said in a notice when it opens, because the
-  wire carries no world state until slices 7-8. The stand-in is a look, not progress — the travelling
-  half is in the suitcase, and `captureActiveModeSave` folds no live facts into a save that is away.
-- The card *"Your pilot is in Ada's world"* appears **only** on an **Open World** press, and it
-  appears **every time** while the pilot is away: the press is a custody decision either way.
-- **Nothing is compared** (owner, playtest 20: *"even small things like pilot position can
-  change"*): **Bring pilot home always installs the copy that world holds.** A `newerCopyAway` /
-  `isNewerCopy` pair used to weigh credits and cargo first, and it is deleted — the travelling half
-  is a photograph, not a rival, and `shipPlaces` or hull damage move with no number changing.
-- The card has **two** buttons — **Bring pilot home** and **Main menu**. **Rejoin was removed**
-  (playtest 18): rejoining is *main menu → Join Multiplayer World*, one path that explains itself.
+**Away means this world is paused, and the card says so** (owner, playtests 18 and 20). The four
+rules — the main menu is always the main menu, the card is raised by **every** Open World press, the
+stand-in is a look rather than progress, and **nothing is compared** because the press always takes
+the copy that world holds — are stated in full, word for word, in
+[archive/MULTIPLAYER_SLICE5_NOTES.md](../archive/MULTIPLAYER_SLICE5_NOTES.md).
 
 **Bring pilot home** is exactly what the owner described: the copy from the friend's world —
 credits, ships, hull, holds, cargo and lockers — becomes the local save; missions, story flags and
@@ -356,44 +346,59 @@ statistics stay local (`custody.checkIn`). Campaign play never affects it.
 
 ## Slice 5: crashes and reconnects (built 2026-11-24a, reworked 2026-11-24b)
 
-Four rules, and one hole closed:
+Playtest-confirmed on 2026-11-24. The rules — **a lost host is a lost room**, **rejoining keeps the
+version the server has**, **the copy is kept current**, **`compare` decides, never arrival order**,
+**the chat takes itself away**, **a departure is said and a pilot lives in one window** — are stated in
+full, word for word, in
+[archive/MULTIPLAYER_SLICE5_NOTES.md](../archive/MULTIPLAYER_SLICE5_NOTES.md). Playtest 23 added one
+correction to the record-keeping those rules depend on: see below.
 
-- **A lost host is a lost room** (owner, 2026-11-24: *"returned to the main menu with a prompt saying
-  something like lost connection to host … Like Minecraft."*). Stated once by the session
-  (`markHostLost`, `mp-host-left`), for a departing peer **and** for silence (`checkHostAlive`:
-  nothing from the host for `NET.lastSeenSec` while a `ping` waits for its `pong`); then
-  `ui/multiplayer.js` stops the session **quietly** (no one left to say `bye` to) **before** the
-  menu shows **"Lost connection to host"** (`state.ui.lostHost`) with **one** door, *Main menu*. It
-  asks no question about a save (L40) and touches none.
-- **Rejoining keeps the version the server has** (owner: *"when reconnecting to the server after a
-  disconnect your pilot's last version is already on the server"*). A rejoin is an ordinary join: the
-  hello re-admits the pilot (a `left` record is proof of nothing), the guest re-sends its copy, and
-  `compare` lets the newer win. **The secret is put back on the way out:** the copy a guest keeps is
-  the host's copy and a host keeps no token, so `sendCarryMessage` fills it from `away.token` —
-  without that, a rejoin in a fresh session was refused as "that link has already been used".
-- **The copy is kept current.** `writeBack` had no caller until this slice: `syncGuests` asks `sim/` for
-  each visitor's live profile every `NET.snapshotSec`, raises `rev` on a real change (`NET.revStepMs`
-  floor) and re-sends an unchanged copy every `NET.suitcaseRepeatSec` — without it a guest came home
-  from the copy it arrived with.
-- **`compare` decides, never arrival order** (`onCarry`): a host loading an older save loses to a newer
-  suitcase; a stale `carry` does not roll the world backwards (the record stands and its copy is sent
-  back); a **`left` record hands over its own save**, because a pilot home since is the newest truth
-  about itself. A *dropped connection* is not that case (the hello re-admits first). A tie takes the arriving
-  copy.
-- **The chat box takes itself away** (owner, playtest 20: *"it doesnt go away … unless the user has
-  pinned the chat"*; 12 s since 21, and your own sent line counts). A line — anybody's — shows it for
-  `CHAT.autoHideSec`; **Pin** keeps it, and so does an open field. `chatKeepsOpen({ pin, typing,
-  saidAt, now })` is the whole rule; only the timer is untested (L45). **Glancing, typing and pinned
-  are three boxes**: a glance is the chat alone, across the full width — the players column and the
-  **Pin** button exist only while the field is open (`body:not(.mp-chat-open) #mp-chat-pin`, playtest
-  22), which is also how a pinned box is unpinned (Enter brings the button back). The column is 54 px
-  with no indent, names ellipsize at 12 px, and past `CHAT.whoRows` (10) it adds `+N more`. The button
-  keeps the word **Pin**, its state in its colours (L32, L46).
-- **A departure is said, and a pilot lives in one window.** New kind **`bye`** (a guest session
-  stopping, and `pagehide`/`beforeunload`): the host writes the final copy back, marks the record
-  `left` and takes the ship out. A hello for the same `guestId` from a different live peer is a
-  **takeover**: the older window is told (`refuse` reason `replaced`), stops **quietly** (no `bye`),
-  and the record is not marked `left`. `ping`/`pong` ride the keepalive, writing `lastSeen`.
+## Playtest 23: a friend is a ship like any other, and a pilot can always come back (built 2026-11-25b)
+
+The owner's playtest of 8a reported two bugs. Both are fixed in the working tree **inside slice 8a**
+— the slice was re-sent as `2026-11-25b` rather than renamed — and both are covered by tests that
+fail on the old code.
+
+**1. "Cannot select a friend's ship."** Slice 8a drew the hull and stopped there, and a visiting
+pilot was never a target: `sim/targeting.js` offered only hostiles, rocks, crates, rifts, gates,
+canisters and the station (a visitor is a `state.players` record, not a hostile, and on a guest there
+is no record at all), `LOCK_KIND_BY_ROW` had no entry for the N list's pilot row so it became a
+**name-only** lock with no health, and `ui/hud.js` drew bars for `k === "e"` alone.
+
+The fix is one lock kind and one published fact:
+
+- **`k: "p"`** is another pilot. `render/views.js` publishes **`state.otherPilots`** — the mirror of
+  every pilot it draws, one **stable reference per pilot updated in place** (F compares targets by
+  identity, so a fresh object each frame would drop the lock). It is the only place a friend exists on
+  a guest's screen, which is why the renderer writes it and `sim/` and `ui/` only read it — never
+  written back into a pilot, never saved.
+- `sim/targeting.js` `otherPilotsThere(player)` is the list F offers (reticle first via
+  `tagLockView` on the hull mesh, then the same cone hostiles get), `lockName` returns **the pilot's
+  own name**, `lockPosition` returns the drawn pose, and `pruneLock` drops the lock the moment the
+  hull stops being drawn (left, dead, another pocket).
+- The N list's row keeps its kind (`Ship`, so the filters and icons already work) and now maps to
+  `"p"`; `isPocketRowLocked`/`selectPocketObject` behave like any other row (including a second
+  click releasing it).
+- `ui/hud.js` gives a `"p"` lock **the same two bars as a hostile's** and labels an unlocked friend's
+  hull with its name; `ui/target-display.js` gives `p`/`Pilot` the friendly tone.
+- **`sim/pilot-stats.js`** (new) owns the two fractions so the host's own screen and the wire cannot
+  disagree about a friend's bars; `shield` is on `SHIP_FIELDS`, clamped like `hull`.
+
+**A pilot lock fires nothing.** `sim/weapons.js` only ever feeds a missile from `F.lock?.k === "e"`, so
+locking a friend changes no weapon rule.
+
+**2. "Stuck on 85% handshake — the link has already been used."** The link was never the problem:
+`custody.guestRecord` hashed whatever token it was handed, and the host's **write-back** (the
+two-second `syncGuests`), the `left` mark a departure writes and the final copy on `bye` all edit a
+guest record **without** the guest's secret. Each such edit re-hashed `undefined` over the stored
+`tokenHash`, so the record kept the hash of *nothing* and every later hello failed the handshake — for
+ever. It read as intermittent because a `left` record is re-admitted without a token check.
+
+The rule now, in one line: **an update that carries no secret never changes the secret's hash.**
+`custody.recordTokenHash(token, tokenHash, salt)` prefers a real token, keeps the stored hash
+otherwise, and only hashes "nothing" for a brand-new record (the old shape). `putGuest` passes
+`tokenHash: previous?.tokenHash` through. A real token still replaces the hash — that is how a pilot is
+renamed onto a new browser. Tests: `tests/multiplayer-rejoin.test.mjs` (all five fail on the old code).
 
 ## Known gaps (until their slice lands)
 
@@ -401,8 +406,10 @@ Four rules, and one hole closed:
   (8b) and its screen does not follow the host's pocket (8c), so a friend's hull appears on the
   guest's screen only if both happen to be in the same pocket. The host's side is complete: every
   visitor is drawn from `state.players`.
-- A remote hull carries **no name label**, and another pilot cannot be locked or shot at: the
-  snapshot is a picture, not a target (a lockable remote is step-16 debt, *player presentation*).
+- ~~A remote hull carries no name label and cannot be locked.~~ **Built (`2026-11-25b`)**: a friend is
+  a lock (`k: "p"`) with its name and hull/shield bars, a Ship row in the N list, and its name over
+  its hull. It still **cannot be hit**: weapons only ever act on a hostile lock (`k === "e"`), which
+  is a rule for a later slice (damage on a remote is *death and recovery* debt).
 - The invitation is **not checked** when a browser joins the room: one that knows the world id can join
   without the link. Step 17's job.
 - The player list is names, not positions or ships; non-local death is step-16 work.

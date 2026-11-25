@@ -24,7 +24,14 @@ export function pocketObjects(P, detect = () => true) {
       add(kind, o, o.n || o.dest || (o.type ? itemName(o.type) : o.item ? itemName(o.item) : kind), o.pos);
     }
   }
-  for (const ship of state.players) if (ship !== P && ship.place === place && !ship.docked) add('Ship', ship, ship.profile?.name || 'Ship', ship.pos);
+  // Step 16 slice 8a (playtest 23): another pilot is a row like anything else in the pocket — and
+  // the row is built from the **mirror** the screen draws (`state.otherPilots`, `render/views.js`)
+  // rather than from `state.players`, because a guest has no record for a friend at all. That is
+  // how a visiting pilot became selectable from the N list on both screens, with its own name.
+  for (const pilot of state.otherPilots || []) {
+    if (!pilot || pilot.dead || pilot.place !== place || pilot.docked) continue;
+    add('Ship', pilot, pilot.name || 'Pilot', pilot.pos);
+  }
   return rows.sort((a,b) => a.distance-b.distance || a.name.localeCompare(b.name));
 }
 

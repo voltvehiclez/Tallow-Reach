@@ -143,16 +143,21 @@ export function putGuest(save, guestId, { name, token, epoch, rev, bundle, lastS
   if (!id) return next;
   if (!isPlainObject(next.world)) next.world = {};
   if (!isPlainObject(next.world.guests)) next.world.guests = {};
+  const previous = next.world.guests[id];
   const record = guestRecord({
-    name: name ?? next.world.guests[id]?.name,
+    name: name ?? previous?.name,
     token,
+    // An edit that does not carry the secret (a write-back, a `left` mark) keeps the stored hash:
+    // re-hashing nothing would lock the pilot out of its own record (playtest 23;
+    // `tests/multiplayer-rejoin.test.mjs` is the class, not the case).
+    tokenHash: previous?.tokenHash,
     guestId: id,
-    epoch: epoch ?? next.world.guests[id]?.epoch,
-    rev: rev ?? next.world.guests[id]?.rev,
-    bundle: bundle ?? next.world.guests[id]?.bundle,
+    epoch: epoch ?? previous?.epoch,
+    rev: rev ?? previous?.rev,
+    bundle: bundle ?? previous?.bundle,
     lastSeen: lastSeen ?? Date.now(),
     // An explicit `false` must clear the mark, so `left ?? old` would be wrong here.
-    left: typeof left === "boolean" ? left : next.world.guests[id]?.left === true,
+    left: typeof left === "boolean" ? left : previous?.left === true,
   });
   next.world.guests[id] = record;
   // Round-trip through the cleaner so the in-memory record and the saved one are the

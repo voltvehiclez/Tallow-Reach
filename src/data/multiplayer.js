@@ -86,6 +86,12 @@ export const LOCKERS_FIELD = "lockers";
  *   ship      the hull id, so the reader builds the right hull. It is not on the plan's list
  *             because the plan assumed a reader that already knows the hull; a guest's screen
  *             does not — it knows nothing about the friend's fleet.
+ *   shield    shield as a fraction 0..1, the same kind of number as `hull`. Also not on the
+ *             plan's list, and added for one plain reason: the owner's playtest of 2026-11-25
+ *             (playtest 23) said a friend's hull "must show hull/shield stats like any other
+ *             ship", and a bar that is always 0% because the number never travelled is not a
+ *             stat, it is a decoration. It is still only a picture: a fraction, never HP, never
+ *             a fit, and nothing a rule reads.
  *
  * Everything here is a *picture*: a remote ship is a view, never sim state. Nothing in this
  * list can write to the guest's world, and a snapshot never carries a fit, a hold, credits,
@@ -104,6 +110,7 @@ export const SHIP_FIELDS = [
   "docked",    // drawn parked at its station rather than in flight
   "dead",      // its hull is gone: not drawn at all
   "hull",      // hull as a fraction 0..1, for a reader that wants to show it
+  "shield",    // shield as a fraction 0..1, for the second bar (playtest 23)
 ];
 
 /**
@@ -182,7 +189,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-25a";
+export const BUILD = "2026-11-25b";
 
 export const NET = {
   snapshotSec: 2,

@@ -244,6 +244,9 @@ function cleanShips(raw) {
       docked: entry.docked === true,
       dead: entry.dead === true,
       hull: Math.round(Math.max(0, Math.min(1, num(entry.hull, 1))) * 1000) / 1000,
+      // Shield, the second bar (playtest 23). A fraction on the wire, clamped like the hull: a
+      // message that says 7.5 shields is a number a reader can draw, not HP from a host's fit.
+      shield: Math.round(Math.max(0, Math.min(1, num(entry.shield, 0))) * 1000) / 1000,
     });
   }
   return out;

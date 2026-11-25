@@ -11,7 +11,7 @@ smooths them. You only *see* that half once your screens are in the same pocket 
 guide proves it with the host's side, which needs no wire at all, plus a check that nothing on the
 guest's screen has gone strange.
 
-**Build: `2026-11-25a`** — both machines. If one screen shows a different build string (title card,
+**Build: `2026-11-25b`** — both machines. If one screen shows a different build string (title card,
 or Pause > **Open Multiplayer** > **Connection details**), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -27,9 +27,10 @@ easiest.
   visiting pilot is docked where it arrived, so its hull is parked. A still hull is the point.
 - **The guest's screen still shows its own galaxy** (slice 8c), so a guest usually sees no friend in
   its sky. Nothing to look for there yet.
-- **No names over hulls, no target lock on a friend** (step 16 debt, *player presentation*).
 - **No trading** (slice 6, which comes last).
-- **No damage, no kills, no prediction** (8d and later).
+- **A friend cannot be hit, killed or predicted** (8d and later). Locking one is fine — it is a target
+  marker, not a weapon: missiles still only lock a hostile.
+- **Names over hulls and a lock on a friend are now built** (playtest 23) — see Part 6.
 
 ---
 
@@ -107,6 +108,57 @@ slice does not arrange (8c does).
 
 ---
 
+## Part 6 — Playtest 23: the two bugs you reported, retested
+
+These were the two reports from the last playtest. Both are fixed in **`2026-11-25b`**, and this part
+is the retest — please do it in this order, because the second one needs a rejoin.
+
+### 6a — Your friend's ship can be selected, and it has a name and bars
+
+On the **host**, in the same pocket as the visiting pilot (Part 0/1):
+
+1. Look at the friend's hull. It now wears **its pilot's name** above it, like any other ship.
+2. Put the white centre dot **on the hull** and press **F**.
+3. Press **F** again to release it, and again to take it back.
+
+**What to check:**
+
+- The lock marker carries **the pilot's name** (in this guide, *Acey*) — not "Ship", not a guest id.
+- Under the name are **two bars: shield and hull**, with percentages, exactly as a hostile's lock has.
+
+4. Press **N** and find **Acey** in the list, under the type **(Ship)**.
+5. Click that row: the same lock is taken. Click it again: it is released.
+
+**What to check:** a friend's row behaves like every other row, including the highlighted selection.
+
+6. (If a friend is at the keyboard) ask them to move — nothing moves yet, that is 8b — so use **N** →
+   *Acey* → **F** targets the row instead. **F** on a *distant* friend's hull still works if the dot
+   is close to it: the lock assists, the same way it does for a hostile.
+
+### 6b — Leaving and rejoining the same link now always works
+
+This is the one that used to fail at **85%**, with *"The link has already been used, or it was copied
+wrongly."*
+
+1. **Guest**: **Bring my pilot** and stay in the world for **half a minute** (this matters — the old
+   bug needed the host to write the visitor's copy back at least once, which happens a few seconds in).
+2. **Guest**: **P** > **Open Multiplayer** > **Bring pilot home**. **Host**: the hull goes and the
+   line says *Acey left.*
+3. **Guest**: **Join Multiplayer World** > **the same link** > **Join** > **Bring my pilot**.
+4. Do 2 and 3 **twice more**, and once leave by simply **closing the guest's tab**.
+
+**What to check:**
+
+- The handshake reaches **100%** every time — no 85% stop, ever.
+- **Bring my pilot** never answers with *"The link has already been used…"*.
+- After each rejoin the host sees **one** hull and **one** *Acey* in the player list, not two.
+- Chat still works after a rejoin, in both directions.
+
+If a rejoin is still refused, please say **which step** and **what the message line said** — that
+sentence is the most useful thing in the report.
+
+---
+
 ## If you see nothing
 
 - **Was it a "Bring my pilot", or only a Join?** Joining looks around; it does not put the pilot in
@@ -116,9 +168,11 @@ slice does not arrange (8c does).
   warp to that system on **M**).
 - **Look at the launch point, not inside the station.** The hull is parked where ships appear when
   they launch — ahead of the station's face, not in the docking bay.
-- **Both builds `2026-11-25a`?** Compare the title card or **Connection details**.
+- **Both builds `2026-11-25b`?** Compare the title card or **Connection details**.
 - **Too dark?** A dark hull against a dark sky at 200 m is hard to see from the docked camera; undock
   and approach.
+- **No bars on the lock?** They belong to the *pilot* lock (Part 6a). If **F** gives you a name but no
+  bars, say so — and check the build string first: `2026-11-25a` has no pilot lock at all.
 
 ## What to report
 

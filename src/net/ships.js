@@ -10,6 +10,10 @@
 //   shipEntries(players, opts)   every pilot in a world, the host's own first
 //   hullFraction(P)              Hull HP as 0..1 (1 when a record has no hull figure yet)
 //
+// The two health fractions are not computed here: `sim/pilot-stats.js` owns them, because the
+// host's own screen draws the same numbers for a visiting record with no wire at all
+// (`render/views.js`) and the bar a guest sees must not disagree with the bar the host sees.
+//
 // **No `net/` knowledge and no `sim/` writes.** It reads records (plain data: Vector3s and
 // numbers) and returns plain arrays and numbers, so a test can hand it a stub record. Nothing
 // here mutates a pilot, and nothing here can be written back into the host's world: the wire is
@@ -21,6 +25,9 @@
 
 import { HOST_PILOT_ID, SHIP_FIELDS } from "../data/multiplayer.js";
 import { shipTypeOf } from "../data/ships.js";
+import { hullFraction, shieldFraction } from "../sim/pilot-stats.js";
+
+export { hullFraction, shieldFraction };
 
 /** A wire number: a millimetre is plenty, and three decimals keep the packet small. */
 const round = (value, places = 3) => {
@@ -40,18 +47,6 @@ function quatOf(P) {
   const len = Math.hypot(out[0], out[1], out[2], out[3]);
   if (!Number.isFinite(len) || len < 1e-6) return [0, 0, 0, 1];
   return out.map(value => round(value / len, 4));
-}
-
-/**
- * Hull HP as a fraction of the record's own maximum. A record that has not had its hull fitted
- * yet (`hullMax` 0, as a visitor is for one frame) reads as whole rather than as zero, because a
- * hull drawn as wrecked when it is simply unknown would be a lie on the screen.
- */
-export function hullFraction(P) {
-  const max = Number(P?.hullMax);
-  const hp = Number(P?.hull);
-  if (!Number.isFinite(max) || max <= 0 || !Number.isFinite(hp)) return 1;
-  return Math.max(0, Math.min(1, hp / max));
 }
 
 /**
@@ -76,6 +71,7 @@ export function shipEntry(P, { id = "", name = "" } = {}) {
     docked: P.docked === true,
     dead: P.dead === true,
     hull: round(hullFraction(P)),
+    shield: round(shieldFraction(P)),
   };
   // The table in `data/multiplayer.js` is the contract, so an entry is built from it: a field
   // added there and forgotten here would be a silent hole in the picture.

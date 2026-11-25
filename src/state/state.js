@@ -329,6 +329,13 @@ export const state = {
   multiplayer: false,   // step 16: true while this browser hosts/visits a world, so the card does not pause it
   players: [],         // player records, including their own controls
   localPlayerIndex: 0,  // which player this screen and its input follow
+  // Step 16 slice 8a (playtest 23): the **mirror** of every other pilot this screen is drawing —
+  // `[{ k: "p", id, name, ship, place, pos, quat, hull, shield, dead }]`, written wholesale once a
+  // frame by `render/views.js` and read by `sim/targeting.js` (F, the N-list rows) and the HUD
+  // (the lock's name and its hull/shield bars). It exists because a guest has no record for a
+  // friend to lock: the only place a friend exists on that screen is the pose that was drawn. It
+  // is never written back into a pilot, never saved, and never read by a rule — presentation only.
+  otherPilots: [],
   // Local-player compatibility alias for the local UI and single-player callers.
   get player() { return localPlayer(); },
   set player(player) {
