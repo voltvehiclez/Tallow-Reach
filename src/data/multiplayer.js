@@ -118,7 +118,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-24f";
+export const BUILD = "2026-11-24h";
 
 export const NET = {
   snapshotSec: 2,

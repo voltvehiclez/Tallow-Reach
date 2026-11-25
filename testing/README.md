@@ -10,6 +10,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 
 ## Current guides
 
+- [16 slice 7: the visitor's name on the galaxy chart and the system map](TESTING-16-SLICE7.md)
 - [Playtest 22: two guests on one link, and the chat's column](TESTING-22-CHAT.md)
 - [Playtest 22: QUICK version (10 minutes)](QUICK-22-CHAT.md)
 - [16 slice 5: crashes and reconnects](TESTING-16-SLICE5.md)
@@ -28,6 +29,7 @@ the guide for the step, load an **old** save, and back up a zip. `TEST-OLD-CODES
 | Guide | Covers |
 | --- | --- |
 | [QUICK-22-CHAT.md](QUICK-22-CHAT.md) | The 10-minute version: three windows, one link — both guests in at once, a refresh that still gets in, then the chat (12 s, lines only when it opens by itself, one Pin in two colours, a narrow column). |
+| [TESTING-16-SLICE7.md](TESTING-16-SLICE7.md) | Step 16 slice 7 (build `2026-11-24h`): a friend's visiting pilot is **named on the galaxy chart under its system** (no zooming needed), **under the pocket it stands in** on the system map, and in a **Visiting pilots** row at the **top** of the side panel — two visitors stack in one order, a pilot that goes home takes its row with it, and a "if you see nothing" list covers the empty-map cases (no Bring my pilot, stale build, another system). No ship in space yet (slice 8), no trading (now last). |
 | [TESTING-22-CHAT.md](TESTING-22-CHAT.md) | Playtest 22 (build `2026-11-24f`): **two friends on the same join link, neither kicked**, a refresh rejoining as the same pilot, and one pilot in one window; then the chat — right-hand column only while typing, `Pin` always one word in two colours, twelve seconds including your own line, players strip capped at ten names. |
 | [QUICK-16-SLICE5.md](QUICK-16-SLICE5.md) | The 10-minute version of the slice 5 test: host, join, bring the pilot, **close the host's browser**, watch the guest land on the main menu with **Lost connection to host**, dismiss it, check the pilot can still come home, rejoin with the same link, then close the guest's tab and watch the host's list drop it. |
 | [TESTING-16-SLICE5.md](TESTING-16-SLICE5.md) | Step 16 slice 5 (build `2026-11-24a`): the host's game closes (or the connection drops) while the pilot is in its world — the guest is put back on the **main menu** with **Lost connection to host**, one button; rejoining keeps the copy the server already has; going into the local world instead offers **Bring pilot home**; a closed tab is a clean goodbye; a second window takes the pilot over. No visiting ship is drawn yet. |

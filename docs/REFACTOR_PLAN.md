@@ -114,7 +114,11 @@ steps still to build (16 and 17).
 # Step 16: Multiplayer (host-run co-op)
 
 **Status:** planned 2026-11-21 with the owner, one slice per chat. Slices **1–3 built**
-(2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4** (2026-11-23a) and **slice 5** (2026-11-24a, awaiting playtest) built; slice 6 next.
+(2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4**
+(2026-11-23a), **playtest-confirmed 2026-11-24**, and **slice 5** (`2026-11-24f`) built; **slice 7**
+(`2026-11-24h`) built and playtest-confirmed 2026-11-24.
+**Build order changed by the owner 2026-11-24: 7, then 8, then 6 (trading last). The numbers
+are names, not a schedule** (renumbering would falsify the archive and every guide).
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
 
 **Slices 7 and 8 were added on 2026-11-22 and AGREED by the owner the same day** ("Also draw the
@@ -264,31 +268,24 @@ exists for exactly that, and the pause card says which path is in use.
    "Lost connection to host", and rejoining keeps the copy the server has; a final copy on tab
    close (`bye`); one session per `guestId`, a newer connection kicks the older.
    **Built 2026-11-24a.**
-6. **Trading.** **View docked players** in the station, right-click a name > **Trade**: items, a
-   ship at that station, or credits, a first confirm that locks both sides and a second that
-   commits. The host checks both station holds' m³ first; if either side lacks room, nothing moves.
-7. **A second pilot exists in the host's world.** The suitcase becomes a player record:
-   `custody.hostProfile(bundle)` -> `configurePlayer(P, profile)` -> `state.players`, on
-   `mp-guest-arrived`. The host's `sim/step.js` already flies every non-docked, non-dead record,
-   so the guest flies from the moment its record exists. The record is **docked at the guest's
-   active ship's station** (`bundle.homeStation`/`shipPlaces`, falling back to `MERIDIAN`),
-   because flight positions never travel. `custody.guestRecord` then stores the guest's suitcase
-   with the **returned** profile (`guestRecord({ bundle: bundleOf(P) })` — a helper that reads
-   `profileOf(P)` back into a `TRAVEL_FIELDS` bundle), so the sync writes what the guest actually
-   became. The host raises `rev` (`NET.revStepMs` floor) and sends it back about `NET.snapshotSec`
-   later; the guest stores it with `syncAway`. **Only the travelled half exists here** — `player.js`
-   refuses a non-local record that borrows the local fit, and `hostProfile` strips the home half
-   (missions, flags, stats) so no story step can fire for a visitor. In this slice the guest's own
-   screen is unchanged and the host draws **one small marker** for the other pilot on the pocket
-   map, labelled with its name: the owner can see the pilot is real before a camera exists for it.
-   **Tests:** two records with different kits, the returned suitcase, the `rev`/two-second rule,
-   the map blip.
+6. **Trading** (**built LAST** — order 7, 8, 6). A **Trade** station tab beside Base/Saves
+   lists the pilots docked here; another's **Trade** opens a two-half window on both screens
+   (items, ships, credits), two confirms, and the host swaps at once only if the receiving station
+   storage and hangar have room — else nothing moves.
+   Design: [architecture/trading.md](architecture/trading.md).
+7. **The visiting pilot is on the map.** Slice 4 had already made the visitor a real, docked record
+   (`sim/multiplayer.js` via `mp-guest-arrived`), so what was left was visibility: `ui/starmap.js`
+   `pilotBlips` reads `state.players` and draws the name under its system on the galaxy chart and
+   under its pocket on the system map, and names **every** visitor with its system at the top of the
+   side panel. **Built 2026-11-24.** The hull in space is slice 8. **Tests:**
+   `tests/multiplayer-slice7.test.mjs`.
 8. **One world, two screens — the ship on the glass.**
    - **8a — snapshots out.** A `snapshot` message kind (`SHIP_FIELDS` in `data/multiplayer.js`:
      name, place, pos, quat, velocity, throttle, docked, dead, hull fraction; capped and cleaned
-     like every other kind) sent at `NET.snapshotSec` for every pilot in `state.players`, so the
-     guest's `render/views.js` can draw them as ordinary entity views with interpolation. Remote
-     ships are **views only** — no sim state, nothing writable.
+     like every other kind) sent at the ship-snapshot rate (20–30 Hz, owner 2026-11-24; a new value
+     in `data/multiplayer.js` — `NET.snapshotSec` is the 2 s *profile* sync) for every pilot in
+     `state.players`, so the guest's `render/views.js` can draw them as ordinary entity views with
+     interpolation. Remote ships are **views only** — no sim state, nothing writable.
    - **8b — controls in.** A `controls` message kind carrying
      `{ steer, thrust, strafe, lift, roll, fire, sec, stop, brake, boost }`, cleaned on arrival and
      length-capped, written into that peer's player record (principle 7: input is a command, not a
@@ -301,9 +298,13 @@ exists for exactly that, and the pause card says which path is in use.
      the guest's sim skips world systems it does not own, and its pilot record is the one the
      snapshots drive. The guest's own galaxy stays loaded but is not stepped — it is where the
      pilot returns to on Go home.
-   - **Honest limits:** no client-side prediction (the plan's own words), and a remote ship lags
-     by up to `NET.snapshotSec`; both are retuned later, not hidden. Shots *hitting* a remote
-     ship need the host to resolve them, and come with slice 5.
+   - **8d — the guest predicts its own ship (owner, 2026-11-24); 8e makes the muzzle cosmetic.** Tick-tagged inputs, an `ack`
+     carrying the whole predicted state, rewind-and-replay of unconfirmed inputs, a ~100 ms error
+     blend and a snap only after a warp or respawn. Remotes are **interpolated, never predicted**,
+     ~100 ms behind 20–30 Hz snapshots; damage, kills, loot, mining, inventory, docking and warp
+     stay host-confirmed. The dry run `flight()` needs, the per-guest aim direction, the cosmetic
+     muzzle, the order to build it and lag compensation (deferred to playtests) are
+     [architecture/client-prediction.md](architecture/client-prediction.md).
 
 ## Rules each slice must keep
 

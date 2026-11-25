@@ -1,3 +1,223 @@
+## 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home
+
+**Code change; rebuild needed; build `2026-11-24c`.** One rule, in the owner's words: *"Doesnt
+matter if nothing has changed, game should always try to use the latest pilot version since even
+small things like pilot position can change."* Save version unchanged (29).
+
+Since playtest 18 the game had asked itself **whether the friend's world held anything worth
+collecting** — `newerCopyAway()` in `net/session.js`, `isNewerCopy()` in `net/custody.js`, weighing
+the host's `{epoch, rev}` pair and then credits and cargo — and the away card had a "holds newer
+work" line or a "nothing has changed, both copies are the same" line to match. Two things were
+wrong with it. The comparison is invisible to the player, so it asked them to trust a number they
+cannot see; and it is not even the right measure, because the facts that change with no number
+moving are exactly the ones the owner named — `shipPlaces` (which station a hull is parked at),
+hull damage, a swapped module.
+
+So the question is gone, all of it:
+
+- **Bring pilot home always installs the copy that world holds.** The travelling half is packed in
+  the suitcase for the whole visit, so the home record is a photograph, not a rival: there is
+  nothing to weigh and no second opinion to hold. `newerCopyAway()` and `isNewerCopy()` are
+  **deleted**, not merely unused, so no future caller can put the question back in front of the
+  one act that brings a pilot back.
+- **The card says what happens instead of asking which copy is newer:** *"It is the copy Ada's
+  world holds, whatever has happened to it there — a hull parked at a different station, a stack a
+  little lighter, a module swapped. Nothing is compared first: while your pilot is away, that copy
+  is the truth about it."* One message, no branches.
+- **`compare` still guards the wire.** Two copies arriving out of order must not roll a newer one
+  back, and a `left` record still hands over its own save. That is ordering, not a question for the
+  player, and it is untouched.
+- `state.ui.awayNewer` is gone with it, and the playtest-20 test that asserted the card was
+  "labelled by the copies" now asserts the opposite: nothing anywhere compares.
+
+`src/net/{session,custody}.js`, `src/ui/{menu,screens}.js`, `src/state/state.js`,
+`src/data/multiplayer.js` (BUILD). Tests: `multiplayer-playtest16` (the is-newer unit test became
+"coming home takes the copy that world holds — a tie is not a reason to skip it", which packs a
+real suitcase, leaves the ordering pair *unchanged* and proves the damage and the parked hulls come
+home) and `multiplayer-playtest15` retargeted; 214 in the multiplayer and docs suites, green.
+
+## 2026-11-24: Playtest 20 — the chat goes away, and Open World always asks about the pilot
+
+**Code change; rebuild needed; build `2026-11-24b`.** Two bugs from the owner's playtest of slice 5,
+plus the parts of that playtest that passed. Save version unchanged (29).
+
+1. **The chat box takes itself away** (owner: *"Chat when a message is said then the chat is
+   visible. However it doesnt go away. Should go away after maybe 6-7 seconds unless the user has
+   pinned the chat."*). The box used to be drawn for the whole session, so a line stayed over the
+   glass until a menu was opened. Now a line — yours or somebody else's — puts it up for
+   `CHAT.autoHideSec` (7 s) and then it goes. The **Pin** button (in the box since slice 3, and
+   until now only reachable while typing) reads **Pinned** when on and removes the timer. A
+   half-written line keeps the box: the clock restarts rather than hiding what is being typed. The
+   whole decision is `chatKeepsOpen({ pin, typing, saidAt, now })` in `ui/multiplayer.js`, so the
+   timer is the only part a test does not cover; `styles.css` now makes the box (and the pin)
+   clickable whenever it is *up*, not only while the field is open. LESSONS L45.
+2. **Open World always asks about the pilot** (owner: *"logging into the guests own open world does
+   not give a prompt to bring their pilot home. It should to confirm its updating to the local open
+   world to latest version of their pilot."*). Playtest 18 gated the away card on `newerCopyAway()`,
+   so a visit that changed nothing opened the local world with no question at all. The press now
+   always raises the card, because being away is the fact that matters: this galaxy cannot fly a
+   pilot that is in another one. `newerCopyAway()` still runs, but only to label the card ("Ada's
+   world holds newer work from your pilot" / "nothing has changed, bringing it home is still how
+   this galaxy gets its pilot back"). The card keeps its **Main menu** door. LESSONS L42 corrected.
+   **Worth knowing:** with the card unconditional, the local galaxy really is paused while the
+   pilot is away — the card's own promise, which could not be seen before.
+3. **A3, the pause that was not there:** a visiting pilot's own world was not paused, because
+   playtest 18 had let **Open World** open it whenever no newer copy was waiting, and the
+   multiplayer screen's **Enter the world** did the same. Both doors are shut now, by **one** guard
+   where every door ends (`enterGameMode(\"open\")`): the press raises the away card, so the galaxy
+   waits where it was. The panel no longer offers a button it would have to refuse — while the pilot
+   is away it says where the pilot is and that **Leave** then **Open World** brings it home. Nothing
+   else about a visit changed: chat and the player list work exactly as before. LESSONS L42.
+4. **The rest of the playtest passed:** the host's game closing puts the guest back on the main menu
+   with "Lost connection to host", dismissing it works, rejoining with the same link works, a closed
+   guest tab is a clean goodbye, and ordinary play is unaffected.
+
+`src/data/multiplayer.js` (BUILD, `CHAT.autoHideSec`), `src/ui/{multiplayer,menu,screens}.js`,
+`src/state/state.js` (`ui.awayNewer`), `src/styles.css`. Tests: two new
+(`multiplayer-ui`'s chat, `multiplayer-playtest16`'s one guard/every door), and
+`multiplayer-playtest15`/`-16` retargeted to playtest 20's rule — green.
+
+## 2026-11-24: Step 16 slice 5 — a lost host, the copy kept current, and one window per pilot
+
+**Code change; rebuild needed; build `2026-11-24a`.** Crashes and reconnects, the fifth of step 16's
+eight slices ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)). Save version unchanged (29): nothing new is
+saved.
+
+1. **A lost host puts the player back on the main menu** — with a prompt, like any other game
+   (owner, 2026-11-24: *"returned to the main menu with a prompt saying something like lost
+   connection to host. Dismissing this returns you to main menu. Like Minecraft."*). The session
+   states the loss once — for a departing peer **and** for a host that has gone quiet for
+   `NET.lastSeenSec` while a `ping` waits for its `pong` — `ui/multiplayer.js` stops the session
+   quietly (nobody is left to say goodbye to) and shows the menu, and the menu carries **"Lost
+   connection to host"** with one door, **Main menu**. Dismissing it changes nothing else. It is
+   shown to every guest, because a guest that only looked around lost a connection too, and it asks
+   no question about a save. **The pilot's save is not touched:** the marker and the suitcase stay,
+   so *Bring pilot home* still works with the host gone for ever.
+   *(The first version of this slice offered a "Your pilot is safe" card with Wait and Go home and
+   kept the room alive so a returning host was met again. The owner replaced it the same day: a
+   lost connection is a connection, not a save question.)*
+2. **Rejoining keeps the version the server has** (owner, same day: *"when reconnecting to the
+   server after a disconnect your pilot's last version is already on the server"*). A rejoin is an
+   ordinary join: the hello re-admits the pilot, the guest sends back the copy it carries, and
+   `compare` lets the newer one win — so a copy the host wrote back while the guest was away is not
+   overwritten by the older one the guest holds. This found a real bug: the copy a guest keeps is
+   the **host's** copy, and a host never keeps a token, so a rejoin in a fresh session (a closed
+   tab, a lost connection) had nothing to prove itself with and was refused as *"that link has
+   already been used"*. `sendCarryMessage` now puts the secret back from `away.token`. Going into
+   the **local** world instead is the away card, unchanged: Open World offers *Bring pilot home*
+   when that world holds a newer copy.
+3. **The copy is finally kept current — this was a real hole.** `writeBack` existed from slice 4
+   and **nothing ever called it**: a guest's suitcase only ever held the copy it arrived with, so
+   every credit, stack and module it earned in the friend's world was lost when it came home. The
+   host now asks `sim/` what each visiting pilot looks like every `NET.snapshotSec` and writes back
+   when it has changed (and re-sends an unchanged copy every `NET.suitcaseRepeatSec`).
+4. **Whose copy wins is `compare`, never arrival order** (`onCarry`): a host that loaded an older
+   save **loses** to a newer suitcase; a stale `carry` does not roll the world backwards; and a
+   pilot that came home and came back — a `left` record — hands over its own save, because that is
+   the newest truth about it. A *dropped connection* is not that case: the hello re-admits the
+   pilot first, so `compare` decides. A tie takes the arriving copy.
+5. **A closed tab says goodbye.** New wire kind `bye`, sent when a guest session stops and on
+   `pagehide`/`beforeunload`: the host writes the final copy back **first**, then marks the record
+   `left` and takes the ship out of the world at once instead of waiting for a channel to close. A
+   crashed tab sends nothing; the host still copes (that is what slice 3's peer-leave handling is
+   for).
+6. **One session per `guestId`, and a newer connection kicks the older.** A second window on the
+   same link is told in words (*"This pilot was opened in another window…"*), its session stops
+   quietly (no `bye` — the pilot has not left), and the record is **not** marked `left`, so the ship
+   stays in the world for the window that now has it.
+7. **`NET.heartbeatSec` is real**: a guest now sends `ping`, the host writes `lastSeen`, which is what
+   `guestIsHere` reads — and the same ping is the guest's own sign that the host is still there.
+
+`src/net/{session,protocol}.js`, `src/data/multiplayer.js` (BUILD), `src/state/state.js`
+(`ui.lostHost`), `src/ui/{screens,menu,multiplayer,pause}.js`, `src/util/events.js`, and new
+`tests/multiplayer-slice5.test.mjs` (10 tests, two live sessions on the in-memory wire). Two existing
+tests were corrected for the new rule, not weakened: the protocol's list of kinds, and one hello
+injected from a foreign peer (now a takeover, so it comes from the guest's own peer).
+**Tests: 1039** (was 1030).
+
+## 2026-11-23: One refusal, one place, and a placeholder that says what it wants
+
+**Code change; rebuild needed; build `2026-11-23i`.** Two small corrections to playtest 18, both
+from the owner.
+
+1. **The empty username box says "Username" faintly** (it said "your name"). Same centred,
+   label-free box; only the placeholder text changed.
+2. **The missing-username refusal is said once.** Open World without a username raised *two*
+   messages: a notice at the top of the screen (teal) and the red line in the card. The owner:
+   *"the red one is enough, the teal one at the top is just unnecessary info."* The card's line
+   stays — it sits beside the switch that caused it, stays put until replaced, and reaches a
+   screen reader through the card — and it now also says where the box is ("Exit to main menu" is
+   at the bottom of this card). `showNotice` is no longer called from that path.
+
+`mp-notice` still shows in both places on purpose: that is how a connection reports something to
+a player who has the screen *closed* (a join that failed at boot), which is a different audience
+from the card's own line.
+
+`src/ui/screens.js`, `src/ui/multiplayer.js`, `src/data/multiplayer.js` (BUILD),
+`tests/multiplayer-ui.test.mjs` (asserts the refusal is in the card and NOT in a top notice),
+`testing/TESTING-PLAYTEST18.md` (build + the two expectations). Save version unchanged (29).
+
+## 2026-11-23: The away card is a question about custody, not the title screen
+
+**Code change; rebuild needed; build `2026-11-23h`.** Four things from the owner's playtest 18.
+
+1. **The menu is the menu again.** Being away used to replace the whole title screen with the
+   away card, and its "Main menu" button re-raised it on the next draw — so leaving a friend's
+   world dumped the player on a save question with no way past it. The owner's rule: *"This your
+   pilot is in menu should only come if you try to join your local open world but a more new
+   version of your save was on an online world."* The card is now raised by a press on **Open
+   World** and nothing else, and it appears there only when
+   `session.newerCopyAway()` finds a genuinely newer copy. Otherwise Open World opens the pilot's
+   own world, away marker and all — the frozen travelling half stays put, so nothing is lost.
+2. **"Newer" is decided by one rule** (`custody.isNewerCopy`): the host's `{epoch, rev}` pair
+   first (only when both copies carry one), then more credits, then more cargo. **A tie is not
+   newer** — a false card is the trap this fixes. Hull damage and locker counts are deliberately
+   excluded: damage is not progress, and `checkOut` empties the home stations into the suitcase,
+   so counting lockers would report "newer" on every visit.
+3. **Rejoin is gone** (owner: *"Remove the rejoin button I dont think it serves much purpose right
+   now. If you want to rejoin the friends world you go -> main menu -> join multiplayer"*). The
+   card offers **Bring pilot home** and **Main menu**.
+4. **The menu's username box is the bare centred name** — no "Username:" label, text centred like
+   the buttons under it (owner's request).
+
+Confirmed unchanged, in the owner's words: *Bring pilot home* makes the online copy the local
+save (credits, ships, hull, holds, cargo, lockers), while missions, story flags and statistics stay
+local; campaign play never affects multiplayer/open world.
+
+`src/net/custody.js` (`isNewerCopy`), `src/net/session.js` (`newerCopyAway`), `src/ui/menu.js`
+(Open World's press, `comehome`, `main-menu`, Rejoin removed), `src/ui/screens.js` (card condition,
+two buttons, centred name, copy), `src/state/state.js` (`ui.awayCard`), `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), four test files. Save version unchanged (29); no save shape
+changed — `isNewerCopy` only reads.
+
+## 2026-11-23: The switch says why, and the away card is a proper card
+
+**Code change; rebuild needed; build `2026-11-23g`.** Three things the owner hit in one playtest,
+only the first of which was a real fault in the code:
+
+1. **No username, no switch, no explanation** (his report: *"the multiplayer on/off button doesnt
+   work, not clickable"*). The switch was drawn `disabled`, and a disabled button receives no
+   click, so the refusal could never be shown. He asked for the refusal: *"make it so that a pop
+   up comes saying you have to have a username to turn multiplayer on."* The switch is now
+   pressable in every state (`aria-disabled` instead of `disabled`) and a press without a name
+   shows a notice that names where the box is — the **main menu**, the only place it exists (the
+   hint used to say "Set a username above", pointing at a field that is not on that screen).
+2. **The away card was the wrong build.** He was running a download from before `daa42d6`, which
+   is the commit that first gave that card a **Main menu** button and fixed *Bring pilot home*.
+   The card now says `Build 2026-11-23g` at the bottom, and the multiplayer screen's *More
+   details* says the build too: two machines on different builds cannot talk, and a stale
+   download must be visible without a console.
+3. **Main menu was a small box on the left.** Only that one button on the card lacked
+   `class="go"`, and `.away-card` had no CSS at all, so the browser laid the three buttons out
+   differently. The card is now a grid, every button is a full-width `.go`, and the notes are
+   styled.
+
+`src/ui/multiplayer.js`, `src/ui/screens.js`, `src/ui/notice.js`, `src/styles.css`,
+`src/data/multiplayer.js` (BUILD), `tests/multiplayer-ui.test.mjs` (the switch test now requires
+`aria-disabled` and the popup), `tests/multiplayer-playtest16.test.mjs` (the card's build stamp,
+three `.go` buttons, the CSS). `showNotice` now records the message even where there is no
+`document`, so a refusal cannot throw in the test runner. Save version unchanged (29).
+
 ## 2026-11-23: The multiplayer switch could not be pressed by a visitor
 
 **Code change; rebuild needed.** The owner could not test the build: *"Multiplayer on/off button
