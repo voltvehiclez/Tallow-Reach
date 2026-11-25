@@ -36,12 +36,20 @@ or that their ship on their screen does not match. All three are the next two sl
 
 ## Part 2 — It stops when the guest stops
 
-1. **Guest**: fly at speed, then **close the tab** (not "Leave" — a crash).
+1. **Guest**: fly at speed, then **close the tab**.
 2. **Host**: watch what the hull does.
 
-**What to check:** within about half a second the hull **stops being asked for anything** — it coasts
-to a halt instead of flying on into a rock or firing forever. Then the host notices the guest is gone
-(*"Acey left."* / the lost-connection sentence) and the hull disappears.
+**What to check:** a tab closed the ordinary way says goodbye, so the hull **goes at once** with a line
+saying the pilot left. That is correct — nothing to report.
+
+3. Then try the harder case: **Guest**: cut the connection instead of closing (turn the machine's Wi-Fi
+   off, or force-quit the browser), with the ship at speed.
+4. **Host**: watch for about half a second (the hull should not keep firing or hold its throttle into
+   a rock — it coasts), and then for the loss of the peer.
+
+**What to check:** a guest that simply **vanishes** is asked for nothing after about **0.4 s**, so the
+hull coasts rather than flying on; the host then says the guest is gone (the visiting row and the chat)
+and the hull is removed. No hull should keep thrusting forever after its pilot has disappeared.
 
 ## Part 3 — It is still a ship like any other
 
@@ -76,6 +84,8 @@ pilot still comes home with everything it had.
   when the message goes out asks for nothing.
 - **The hull jumps or stutters?** It is drawn ~100 ms behind, interpolated, exactly as in 8a. A jump is
   a launch, a warp or a respawn.
+- **The hull vanishes when the guest closes the tab?** Expected — a clean close says goodbye. The
+  coasting behaviour in Part 2 needs a cut connection, not a closed tab.
 - **The hull will not dock again?** Correct for this slice: a guest has no way to ask for a docking
   yet, so a launched visitor flies until it goes home. Docking, death and respawn are later work.
 
