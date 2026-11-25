@@ -1,3 +1,38 @@
+
+## 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map
+
+**Code change; rebuild needed; build `2026-11-24g`.** Save version unchanged (29) — nothing new is
+saved, so every older save loads exactly as before.
+
+Slice 4 already made a guest a **real, docked, simulated record** in the host's world; there was no
+way to *see* it. This slice is the seeing, while the hull in space waits for slice 8.
+
+- **The visitor is a name under its pocket.** `src/ui/starmap.js` `pilotBlips` reads `state.players`
+  (the record `sim/multiplayer.js` fills on arrival) and `systemMarkup` draws each visitor as an amber
+  `sm-pilot-blip` row under the pocket it is standing in on the **system (pocket) map** — `· Acey`
+  below `Meridian Station`. Two visitors at one station stack in a stable name order, and a pilot the
+  chart cannot place (a rift, an unlisted pocket) is skipped rather than guessed.
+- **The panel says it too, and says where.** `pilotPanelMarkup` adds a **Visiting pilots** row to the
+  side panel — `Acey · Meridian Station (Meridian System)` — naming **every** visitor and the system
+  it is in, whichever system is selected. That is deliberate: a visitor arrives at *its own* home
+  station, which may be in another system, and a map with no blip must not look like a visit that
+  never happened. The map and the panel read the one record; neither is a copy.
+- **Content is data:** the row height is `GALAXY.systemMap.pilotBlipGap` in `src/data/galaxy.js`; the
+  look is three rules in `src/styles.css`. `BUILD` is `2026-11-24g`.
+- **Tests:** `tests/multiplayer-slice7.test.mjs` (9 tests): the blip is the visitor's own place and
+  name, the host's pilot is never a blip, the system map's own markup carries it, a visitor in another
+  system is not on this chart but is still named in the panel, two visitors stack, going home removes
+  the row, an arriving or leaving pilot repaints an open map, and the blip is styled.
+- **The order of the remaining work changed** (owner, 2026-11-24): trading moves to **last**, because
+  it needs both players to see the same station. The slices keep their **names**, not a schedule:
+  **7 (this) → 8 → 6 (trading)**. `REFACTOR_PLAN.md`, `ROADMAP.md`, `HANDOFF.md` and
+  `architecture/multiplayer.md` say so; renumbering was rejected because the archive is word-for-word
+  and dozens of guides and UI strings say "slice 7".
+
+**Still not there, by design:** no hull is drawn in space (slice 8), and a guest's screen does not show
+the host's world (8), so a guest sees no blip of its own — it is the only pilot in the world its screen
+draws. Playtest guide: [../testing/TESTING-16-SLICE7.md](../testing/TESTING-16-SLICE7.md).
+
 ## 2026-11-24: Playtest 22 — two friends on one link, and no player cap
 
 **Code change; rebuild needed; build `2026-11-24f`.** Save version unchanged (29) — the new value lives in

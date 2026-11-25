@@ -18,6 +18,72 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
+
+**Code change; rebuild needed; build `2026-11-25c`.** Save version unchanged (**29**): one repair
+rewrites a record's hash in a save that already exists, but no record gains a field.
+
+The owner retested `2026-11-25b` and sent two reports.
+
+1. **One browser still could not join.** *"That link has already been used, or it was copied
+   wrongly"*, for ever, on the browser he had used before — while a **new** browser joined the same
+   link and the same build fine, and *"bring my pilot"* did not help. The first round fixed the code
+   that damaged a record, but **it could not repair a record it had already damaged**: an edit without
+   a secret had hashed *nothing* over the pilot's hash, so the host's save held the hash of no secret
+   at all, and every later join for that record failed the token check — its own pilot included.
+   Three changes, all in the join:
+   - `custody.js` — **`recordHoldsNoSecret(record, guestId)`**: a record whose hash is the hash of
+     the empty string cannot identify anybody, so it must never refuse anybody. `handshake` admits
+     such a record and returns **`repaired: true`**; a record that *does* hold a secret still refuses
+     a wrong one (this is the narrow repair, not a weaker handshake — the unchecked invitation is
+     step 17's job). The host's own log says *"…'s saved link had been damaged by an older build. It
+     has been repaired"*, once, and `onHello`'s `putGuest` writes the real hash on the way in, so the
+     next join is an ordinary one.
+   - `session.js` — **a `carry` never rewrites the secret of a record that already exists.** The
+     hello is the only place an identity is proven and it has already been answered when a carry
+     arrives; the token a carry carries is `away.token` first, i.e. whatever an older build left in
+     the suitcase. Only a first contact takes a hash from a bundle.
+   - `session.js` — **a refusal ends the attempt instead of looping.** A guest used to sit in
+     "joining" for ever and could only press Join again and read the same sentence ("stuck in a
+     loop", his words). Now the session stops quietly, the host's own words go to the chat log and the
+     menu notice, and Join is a clean second attempt.
+2. **A visiting hull was not collidable and took no damage.** *"The guest ship that spawns in is not
+   clippable and doesnt take damage. Every ship should by default take damage and be collidable in
+   tallow reach unless otherwise specified."* Slice 8a drew the visitor and simulated it, but nothing
+   treated it as a **body**: the local pilot's bolts and warheads only ever tested `W.enemies`, and
+   the collision pass only ran for `state.players` against rocks, scenery and hostiles. Now a visiting
+   hull is a hull:
+   - `sim/player.js` — **`pilotHullRadius(P)`** (`SHIP_RADIUS` scaled by `SHIPS[...].sc`, the number
+     the screen draws it with) and a **pilot-vs-pilot collision pass** in `flight()`: the two ships
+     separate, ricochet (restitution 0.4) and pay the same `impact > 25 → 0.015/m·s` damage a rock or
+     a hostile ram charges. A **parked** visitor is included — its hull is drawn at the arrival launch
+     point, so it is hit-able there — and pays in this pass because `step.js` skips a docked record's
+     own tick; a flying visitor pays in its own. One collision, one hit, per pilot per tick.
+   - `sim/combat.js` — the pilot's **bolts** stop on another pilot's hull (`< 6 m`) and damage it
+     shields-first, exactly as on a hostile; the shooter's own hull, a dead wreck and a pilot in
+     another pocket are skipped.
+   - `sim/missile.js` — the pilot's **warheads** burst on another pilot's hull instead of sailing
+     through it (`< 6 m + hull radius`), with the same three exceptions.
+   - `sim/multiplayer.js` + `ui/multiplayer.js` — a visitor's hull reaching zero is **said out loud**:
+     `mp-guest-destroyed { guestId, name }` becomes the chat line *"…'s ship was destroyed in this
+     world. Its pilot is safe in its suitcase — go home to fly it again."* `hurt` already marked a
+     non-local record `dead`, `SHIP_FIELDS.dead` already stopped the far screen drawing it, and the
+     host's `views.js` already skipped it — the missing piece was the sentence. **Recovery is still
+     not built** (step 16 debt), so the words promise nothing the code cannot keep.
+
+**Tests:** `tests/multiplayer-damage.test.mjs` (new, **13**): the hash of nothing recognised (and a
+real hash not), a damaged record admitted and repaired end-to-end through two real sessions, a good
+hash never overwritten by a stale carry, a genuine mismatch still refused with the attempt ended in
+words, hulls separated and both sides paying, a slow nudge hurting nobody, pockets kept apart, bolts
+shields-then-hull and not through their owner, warheads bursting on a friend's hull, and a visitor
+destroyed with both screens told. `npm test` **1104/1104**.
+
+**What the owner must do:** hard-reload with Ctrl+Shift+R, then open **Connection → Connection
+details** and check the build line reads **`2026-11-25c`**. On the old browser, use the **same link**
+again — it should now join without the host issuing anything new. Then spawn a friend and try to fly
+through it, shoot it, and put a warhead in it: both hulls should knock apart and both should take
+damage. `testing/TESTING-16-SLICE8A.md` Part 7 is this retest.
+
 ## 2026-11-25: Playtest 23 — a friend can be selected, and a pilot can always come back
 
 **Code change; rebuild needed; build `2026-11-25b`.** Save version unchanged (**29**): the fixes
@@ -243,42 +309,9 @@ snapshot rate and a new 8d), [architecture/multiplayer.md](architecture/multipla
 - **Order:** host-authoritative snapshots with interpolation, then own-ship prediction, then the
   cosmetic muzzle effects, then (only if playtests demand it) lag compensation.
 
-## 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map
-
-**Code change; rebuild needed; build `2026-11-24g`.** Save version unchanged (29) — nothing new is
-saved, so every older save loads exactly as before.
-
-Slice 4 already made a guest a **real, docked, simulated record** in the host's world; there was no
-way to *see* it. This slice is the seeing, while the hull in space waits for slice 8.
-
-- **The visitor is a name under its pocket.** `src/ui/starmap.js` `pilotBlips` reads `state.players`
-  (the record `sim/multiplayer.js` fills on arrival) and `systemMarkup` draws each visitor as an amber
-  `sm-pilot-blip` row under the pocket it is standing in on the **system (pocket) map** — `· Acey`
-  below `Meridian Station`. Two visitors at one station stack in a stable name order, and a pilot the
-  chart cannot place (a rift, an unlisted pocket) is skipped rather than guessed.
-- **The panel says it too, and says where.** `pilotPanelMarkup` adds a **Visiting pilots** row to the
-  side panel — `Acey · Meridian Station (Meridian System)` — naming **every** visitor and the system
-  it is in, whichever system is selected. That is deliberate: a visitor arrives at *its own* home
-  station, which may be in another system, and a map with no blip must not look like a visit that
-  never happened. The map and the panel read the one record; neither is a copy.
-- **Content is data:** the row height is `GALAXY.systemMap.pilotBlipGap` in `src/data/galaxy.js`; the
-  look is three rules in `src/styles.css`. `BUILD` is `2026-11-24g`.
-- **Tests:** `tests/multiplayer-slice7.test.mjs` (9 tests): the blip is the visitor's own place and
-  name, the host's pilot is never a blip, the system map's own markup carries it, a visitor in another
-  system is not on this chart but is still named in the panel, two visitors stack, going home removes
-  the row, an arriving or leaving pilot repaints an open map, and the blip is styled.
-- **The order of the remaining work changed** (owner, 2026-11-24): trading moves to **last**, because
-  it needs both players to see the same station. The slices keep their **names**, not a schedule:
-  **7 (this) → 8 → 6 (trading)**. `REFACTOR_PLAN.md`, `ROADMAP.md`, `HANDOFF.md` and
-  `architecture/multiplayer.md` say so; renumbering was rejected because the archive is word-for-word
-  and dozens of guides and UI strings say "slice 7".
-
-**Still not there, by design:** no hull is drawn in space (slice 8), and a guest's screen does not show
-the host's world (8), so a guest sees no blip of its own — it is the only pilot in the world its screen
-draws. Playtest guide: [../testing/TESTING-16-SLICE7.md](../testing/TESTING-16-SLICE7.md).
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map
 - 2026-11-24: Playtest 22 — two friends on one link, and no player cap
 - 2026-11-24: Playtest 21 — the chat box, four small things
 - 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one

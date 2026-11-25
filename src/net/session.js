@@ -528,6 +528,13 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       noteLine("Tallow Reach", `${message.name || "A pilot"} could not join: ${checked.message}`);
       return;
     }
+    // **A record that had been damaged by an older build is repaired, and said out loud**
+    // (playtest 23's leftovers): its stored copy had lost the hash of the pilot's secret, so it
+    // refused its own pilot for ever. `handshake` admits it and `putGuest` below writes the real
+    // hash; the note is there so the host is not left guessing what just happened.
+    if (checked.repaired) {
+      noteLine("Tallow Reach", `${message.name || "A pilot"}'s saved link had been damaged by an older build. It has been repaired, and that pilot can join this world normally from now on.`);
+    }
 
     // **One session per guest id: a newer connection kicks the older** (slice 5).
     //
@@ -870,7 +877,15 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const relocated = relocate(message.bundle, current.world, { index });
     const stored = putGuest(current, guestId, {
       name: message.name || record?.name || "Guest",
-      token: message.bundle?.token || "",
+      // **A `carry` never rewrites the secret of a record that already exists** (playtest 23).
+      //
+      // The hello is the only place an identity is proven, and it has already been answered by the
+      // time a carry arrives; the token this message puts on the wire is `away.token` first, which is
+      // whatever this browser used the last time it checked the pilot out — possibly from an older
+      // build. Letting that overwrite the stored hash is how a rejoin could be locked out by its own
+      // suitcase, so the record's own hash stands and only a first contact (no record yet) takes the
+      // hash from the bundle.
+      token: record ? "" : (message.bundle?.token || ""),
       epoch: incoming.epoch,
       rev: incoming.rev,
       bundle: { ...relocated.bundle, token: "" },
@@ -1224,7 +1239,19 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       stop({ quiet: true });
       return;
     }
+    // **A refusal ends this attempt; it does not loop** (playtest 23's leftovers).
+    //
+    // The owner's stuck browser sat in "joining" for ever, so the only thing it could do was press
+    // Join again and read the same sentence — "stuck in a loop" were his words. A host that says no
+    // has said it; the session stops here (there is nothing left to say to that host), the menu keeps
+    // the host's own words so the player has something to act on, and Join is a clean second attempt.
+    // The damaged-record case that caused this one is repaired on the host's side now, so this is the
+    // floor under any refusal that is still genuine — a link that really belongs to somebody else.
     noteLine("Tallow Reach", message.message || "The host could not let you in.");
+    try {
+      emit("mp-notice", message.message || "The host could not let you in.");
+    } catch (e) { /* a broken screen must not break a session */ }
+    stop({ quiet: true });
   }
 
   function onPresence(message) {

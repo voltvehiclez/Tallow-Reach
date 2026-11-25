@@ -11,7 +11,7 @@ smooths them. You only *see* that half once your screens are in the same pocket 
 guide proves it with the host's side, which needs no wire at all, plus a check that nothing on the
 guest's screen has gone strange.
 
-**Build: `2026-11-25b`** — both machines. If one screen shows a different build string (title card,
+**Build: `2026-11-25c`** — both machines. If one screen shows a different build string (title card,
 or Pause > **Open Multiplayer** > **Connection details**), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -110,7 +110,7 @@ slice does not arrange (8c does).
 
 ## Part 6 — Playtest 23: the two bugs you reported, retested
 
-These were the two reports from the last playtest. Both are fixed in **`2026-11-25b`**, and this part
+These were the two reports from the last playtest. Both are fixed (first in `2026-11-25b`, then again in **`2026-11-25c`**), and this part
 is the retest — please do it in this order, because the second one needs a rejoin.
 
 ### 6a — Your friend's ship can be selected, and it has a name and bars
@@ -159,6 +159,54 @@ sentence is the most useful thing in the report.
 
 ---
 
+## Part 7 — Playtest 23, second round: the stuck browser and the hull you can touch
+
+Two more reports from the last playtest, both fixed in **`2026-11-25c`**. Part 7a is the one that
+matters most: it is the browser that was **still** locked out, and it should heal itself.
+
+### 7a — The browser that was stuck can come back on the same link
+
+Use the **same browser** you used when it failed — the old one, not a new one. **Do not ask the host
+for a new link.**
+
+1. **Host**: open the world as usual and leave it open.
+2. **Old guest browser**: **Join Multiplayer World** > **the same link as before** > **Bring my pilot**.
+3. If it still says *"That link has already been used…"*: **do it once more**. A refusal now ends the
+   attempt cleanly instead of spinning — you get the host's sentence and nothing else to wait for.
+
+**What to check:**
+
+- The handshake reaches **100%** and the world opens; the pilot is there.
+- On the **host**, one line appears in the chat: *"…'s saved link had been damaged by an older build.
+  It has been repaired, and that pilot can join this world normally from now on."* — once is normal.
+- **Leave and rejoin a second time**: no repair line this time (nothing left to repair), and it joins.
+- **Bring my pilot** works after that rejoin: your credits, ships and cargo come home.
+
+### 7b — A visiting ship is solid and takes damage
+
+You asked for this one directly: *every ship takes damage and is collidable in Tallow Reach unless
+specified otherwise*. Do it on the **host's** screen, in the same pocket as the visiting hull.
+
+1. Undock, fly at the friend's hull at speed and hit it head-on.
+2. Shoot it: put the dot on it and fire the guns.
+3. Fire a **missile** at it (lock it first, then the missile key).
+
+**What to check:**
+
+- **Flying into it:** you are pushed aside and slowed, and your **shields drop** (then hull). The
+  friend's hull takes the same hit — ask them, or watch the bars on the **F** lock.
+- **Shooting it:** the bolts stop **on** the hull instead of passing through, and its shield/hull bars
+  (**F** lock) drop. A missile bursts on it.
+- **A slow nudge** (under about 25 m/s) separates the two ships and hurts nobody — that is the rock rule.
+- **Destroying it:** when its hull reaches zero the hull disappears from both screens and the chat says
+  *"…'s ship was destroyed in this world. Its pilot is safe in its suitcase — go home to fly it again."*
+
+**Do not report:** that the destroyed pilot cannot respawn in that world. Recovery is not built yet
+(it is the next slice's debt) — coming home and bringing the pilot again is the way back, and that is
+what the line says. Also do not report that the visitor cannot fly: controls are 8b.
+
+---
+
 ## If you see nothing
 
 - **Was it a "Bring my pilot", or only a Join?** Joining looks around; it does not put the pilot in
@@ -168,11 +216,11 @@ sentence is the most useful thing in the report.
   warp to that system on **M**).
 - **Look at the launch point, not inside the station.** The hull is parked where ships appear when
   they launch — ahead of the station's face, not in the docking bay.
-- **Both builds `2026-11-25b`?** Compare the title card or **Connection details**.
+- **Both builds `2026-11-25c`?** Compare the title card or **Connection details**.
 - **Too dark?** A dark hull against a dark sky at 200 m is hard to see from the docked camera; undock
   and approach.
-- **No bars on the lock?** They belong to the *pilot* lock (Part 6a). If **F** gives you a name but no
-  bars, say so — and check the build string first: `2026-11-25a` has no pilot lock at all.
+- **No bars on the lock?** They belong to the *pilot* lock (Part 6a). Check the build string first:
+  `2026-11-25a` has no pilot lock at all.
 
 ## What to report
 

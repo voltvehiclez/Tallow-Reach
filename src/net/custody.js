@@ -289,6 +289,25 @@ function recordTokenHash(token, tokenHash, salt) {
 }
 
 /**
+ * **Does this record hold a secret at all?** (playtest 23, second round.)
+ *
+ * A record whose stored hash is the hash of *nothing* cannot identify anybody: it was either written
+ * by a first contact that carried no token, or damaged by the build in which an edit without the
+ * secret re-hashed `undefined` over the stored hash (see `recordTokenHash`). There is nothing there
+ * to protect, so such a record must never refuse the pilot that presents a real token — and refusing
+ * was exactly the stuck loop the owner hit: one browser, written back once by that build, was told
+ * *"That link has already been used"* on every join, for ever, while a fresh browser joined fine.
+ *
+ * A record that DOES hold a secret still refuses a wrong one: this is the narrow repair, not a
+ * weaker handshake (the invitation is still the unchecked part of the join — step 17 closes that).
+ */
+export function recordHoldsNoSecret(record, guestId) {
+  const stored = typeof record?.tokenHash === "string" ? record.tokenHash : "";
+  if (!stored) return true;
+  return tokenCheck("", stored, idText(guestId) || "");
+}
+
+/**
  * The three facts the join handshake checks, and a sentence for each refusal. The
  * words are what the guest reads, so they say what to do, not what went wrong inside.
  */
@@ -303,6 +322,12 @@ export function handshake({ token, guestId, record, version, worldVersion, world
   }
   if (expectedWorldId && worldId && worldId !== expectedWorldId) {
     return { ok: false, reason: "world", message: "That link is for a different world. The host needs to make a new one." };
+  }
+  // A record that holds no secret cannot refuse anybody, and the pilot that arrives with a real one
+  // claims it (`onHello` writes the hash on the way in). `repaired` is what the host says out loud,
+  // so a browser damaged by an older build is not left as a mystery.
+  if (recordHoldsNoSecret(record, guestId)) {
+    return { ok: true, reason: null, message: "", repaired: true };
   }
   if (!tokenCheck(token, record.tokenHash, idText(guestId) || "")) {
     return { ok: false, reason: "token", message: "That link has already been used, or it was copied wrongly. Ask the host for a new one." };
