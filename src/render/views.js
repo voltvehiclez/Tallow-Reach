@@ -1,5 +1,8 @@
-// STEP 16 LOCAL-ONLY: the player hull and beam view follow only the local player.
 // Views: one mesh per entity, built and kept in step by this file.
+//
+// Step 16 slice 8a ended the local-only rule for **other pilots**: every hull but yours is drawn
+// from `state.players` on the host and from the host's snapshots on a guest (see "Other pilots"
+// below). The mining beam is still the local pilot's own.
 //
 // Refactor step 7 moved every world entity out of `sim/` and into plain data
 // (`sim/enemy.js`, `sim/entity.js`). This file owns the *meshes*. It watches the
@@ -238,6 +241,9 @@ function capturePose(e) {
 export function snapshotSimPoses() {
   const P = localPlayer();
   if (P) capturePose(P);
+  // Step 16 slice 8a: every other pilot is a record too, so its hull interpolates between ticks
+  // exactly as the local one does (a visitor is flown by this host's own sim, not by a mesh).
+  for (const other of state.players) if (other && other !== P) capturePose(other);
   for (const [, handler] of kinds) {
     for (const e of handler.list()) {
       if (e) capturePose(e);
@@ -677,6 +683,104 @@ export class PlayerShipView {
   remove() { scene.remove(this.mesh); }
 }
 
+/* ------------------------------------------------------------------------- */
+/* Other pilots (step 16, slice 8a): the hull of everybody else               */
+/* ------------------------------------------------------------------------- */
+
+// The owner's ask for slice 8 — *"one world, two ships visible"* — begins here: **a second hull on
+// the glass**. It is drawn from two sources, and neither of them is sim state on the guest:
+//
+//   the host      `state.players` already holds every visiting pilot as a real record the host's
+//                 own `sim/step.js` flies. No wire is involved at all: the same interpolation the
+//                 local hull gets (`renderPlayerPose`) is used, so a visitor moves smoothly while
+//                 the host watches. This is the half the owner most wanted to see.
+//   a guest       a list of poses arrives from `render/shipstream.js` (the host's snapshots, drawn
+//                 `SHIP_STREAM.delayMs` in the past and interpolated between two of them). They are
+//                 read once a frame and copied onto meshes; nothing is written back, and there is
+//                 no record, no copy and nothing to save.
+//
+// **Only pilots in the pocket being drawn.** A hull from another pocket would hang in this sky
+// like a ghost, so `place` decides — and on the guest side that is what keeps the slice honest
+// until 8c makes the guest's screen follow the host's pocket.
+//
+// **Docked pilots are drawn.** The local hull hides while docked because the camera is on the
+// station card and the ship is "inside"; another pilot's hull is the one sign that somebody is
+// here at all, and a visitor cannot fly in this world yet (controls are 8b), so it is parked at
+// the launch point its arrival put it on. A dead pilot draws nothing.
+const pilotViews = new Map(); // id -> { mesh, hull }
+
+function applyOtherPilotPose(mesh, pose) {
+  mesh.position.copy(pose.pos);
+  mesh.quaternion.copy(pose.quat);
+  // The same engine glow the local hull gets, from the throttle that travelled; boost is not on
+  // the wire (slice 8a) so a friend's boost does not lengthen its flame here.
+  if (mesh.eng) {
+    const glow = 0.5 + Math.max(0, Number(pose.throttle) || 0) * 2;
+    for (const eng of mesh.eng) eng.scale.set(eng.scale.x, eng.scale.y, (eng.userData.engZ0 ?? 1) * glow);
+  }
+}
+
+/** One pose from a live record, interpolated exactly as the local hull is. */
+function poseOfRecord(P, alpha, at) {
+  const p = renderPlayerPose(P, alpha);
+  return {
+    id: P.guestId || P.id || `pilot-${at}`,
+    ship: P.ship,
+    place: P.place || state.place,
+    pos: _otherPose.pos.copy(p.pos),
+    quat: _otherPose.quat.copy(p.quat),
+    throttle: Number(p.thr) || 0,
+    dead: P.dead === true,
+  };
+}
+const _otherPose = {
+  pos: new THREE.Vector3(),
+  quat: new THREE.Quaternion(),
+};
+
+/**
+ * Draw every other pilot once a frame: the host's own records, plus (on a guest) the poses its
+ * ship stream interpolated. `remote` entries are `render/shipstream.js` samples.
+ */
+export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
+  const local = localPlayer();
+  const seen = new Set();
+  const draw = (id, ship, pose) => {
+    // Another pilot's hull is drawn only where this screen is looking, and only while it exists.
+    if (!id || pose.dead || pose.place !== state.place) return;
+    const key = String(id);
+    seen.add(key);
+    let view = pilotViews.get(key);
+    const hull = shipTypeOf(ship) || DEFAULT_SHIP;
+    if (view && view.hull !== hull) {
+      scene.remove(view.mesh);
+      view = null;
+    }
+    if (!view) {
+      const mesh = buildPlayerShip(hull);
+      scene.add(mesh);
+      view = { mesh, hull };
+      pilotViews.set(key, view);
+    }
+    applyOtherPilotPose(view.mesh, pose);
+  };
+  // The host (or anybody) with a visiting record: drawn with no wire at all.
+  for (const P of state.players) {
+    if (!P || P === local || !P.pos) continue;
+    draw(P.guestId || P.id, P.ship, poseOfRecord(P, alpha, state.players.indexOf(P)));
+  }
+  // A guest: what the host said, already interpolated by the stream.
+  for (const pose of Array.isArray(remote) ? remote : []) draw(pose.id, pose.ship, pose);
+  for (const [key, view] of [...pilotViews]) {
+    if (seen.has(key)) continue;
+    scene.remove(view.mesh);
+    pilotViews.delete(key);
+  }
+}
+
+/** How many other-pilot hulls are drawn (the tests check this number). */
+export const otherPilotViewCount = () => pilotViews.size;
+
 let activePlayerView = null;
 function ensurePlayerView() {
   const hull = shipTypeOf(state.profile.ship) || DEFAULT_SHIP;
@@ -730,10 +834,15 @@ export function updateEnemyViews(alpha = 1) {
   updateGroup("enemy");
 }
 
-/** Reconcile other entities, then the player hull and mining beam. */
-export function updateEntityViews(alpha = 1) {
+/**
+ * Reconcile other entities, then every other pilot's hull, then the local hull and mining beam.
+ * `remote` is a guest's interpolated ship poses (`render/shipstream.js`); a host passes nothing
+ * and still draws its visitors, because they are records in `state.players`.
+ */
+export function updateEntityViews(alpha = 1, remote = []) {
   frameAlpha = alpha;
   updateGroup("entity");
+  updateOtherPilotViews(alpha, remote);
   updatePlayerView();
   updateBeamView();
 }

@@ -18,6 +18,52 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-25: Step 16 slice 8a — the second hull, and the snapshots under it
+
+**Code change; rebuild needed; build `2026-11-25a`.** Save version unchanged (**29**) — nothing new
+is saved: a ship snapshot is runtime only and is thrown away with the session.
+
+The owner asked for *"one world, two ships visible"*. Slice 7 made the visitor a name on the map;
+this slice draws it. Two halves, and the first one needs no wire at all:
+
+- **The host sees its visiting pilot.** `render/views.js` draws every **non-local record in
+  `state.players`** as a hull (`updateOtherPilotViews`, `otherPilotViewCount`), interpolated with the
+  same `renderPlayerPose` the local ship uses, so a visitor appears the moment it arrives. A docked
+  visitor is drawn **parked at the launch point its arrival put it on** — a visitor cannot fly in
+  this world until 8b, and a hull hidden until then would be no hull at all. Only pilots in the
+  **pocket being drawn** get a mesh; a dead pilot draws nothing.
+- **The wire underneath it** (host → guest, one direction): a new `ships` message kind in
+  `net/protocol.js`, carrying `SHIP_FIELDS` for every pilot — id, name, hull, place, position,
+  rotation, velocity, throttle, docked, dead, hull fraction. `src/data/multiplayer.js` gains
+  `SHIP_FIELDS`, `HOST_PILOT_ID` and **`SHIP_STREAM`**: `hz: 24` (**the owner's 20–30 Hz band; this
+  is a NEW value — `NET.snapshotSec` stays the 2 s *profile/suitcase* sync and means something
+  else**), `delayMs: 100`, `samples: 6`, `staleMs: 1500`, `snapM: 50`. The message is cleaned on the
+  way out **and** in like every other kind, and capped at `LIMITS.ships` (24) pilots per packet;
+  `session.js` sends several packets rather than dropping pilots, because there is no player cap.
+- **The guest draws it and simulates nothing.** `net/session.js` emits `mp-ships` (minus the guest's
+  own entry, which its own screen already draws); **`render/shipstream.js`** (new) keeps the last few
+  snapshots per pilot and gives the renderer a pose **100 ms in the past**, interpolated between the
+  two snapshots that straddle that moment, **held — never extrapolated** — past the newest, and drawn
+  as a step when the jump is over `snapM` or the pilot changed pocket. A pilot unheard for `staleMs`
+  is dropped, so a friend who left, a host that stopped sending and a dead channel all empty the sky.
+- **`net/ships.js`** (new) is the host's side of the picture: `shipEntry`/`shipEntries` turn live
+  records into exactly `SHIP_FIELDS`, as plain arrays and numbers. `session.js` never reads the
+  simulation: it asks on the bus (`mp-ships-request`) and `main.js` answers, the same seam the
+  suitcase uses. `net/` stays out of `sim/`, and `sim/` still never imports `net/`.
+
+**What a guest will not see yet, and should not be reported:** its own screen still shows its own
+galaxy (8c), so a friend's hull appears only if both are in the same pocket; a friend's hull does not
+move (controls are 8b); there is no name over a hull and a friend cannot be locked or shot at.
+
+Files: `src/data/multiplayer.js`, `src/net/ships.js` (new), `src/net/protocol.js`,
+`src/net/session.js`, `src/render/shipstream.js` (new), `src/render/views.js`, `src/main.js`,
+`src/util/events.js`, plus the READMEs of `data/`, `net/` and `render/`. Docs: `HANDOFF.md`,
+`ROADMAP.md`, `architecture/multiplayer.md` (three sections moved word for word to
+`docs/archive/` to stay under its size limit), `testing/TESTING-16-SLICE8A.md` (new) and
+`testing/README.md`. Tests: **`tests/multiplayer-slice8a.test.mjs`** (19 new: the field list, the
+protocol cap, the two sessions, interpolation/hold/stale, and the hulls drawn on both sides), and the
+pinned `KINDS` list in `tests/multiplayer-connection.test.mjs` now names `ships`.
+
 ## 2026-11-24: A visiting pilot's place is fixed at arrival (asked and recorded)
 
 **Docs only; no rebuild needed.** Save version unchanged (29). Build stays `2026-11-24h`.
@@ -221,35 +267,9 @@ Run `npm run build` and `npm test` (1045 tests). Playtest guide:
 [../testing/TESTING-22-CHAT.md](../testing/TESTING-22-CHAT.md), quick version
 [../testing/QUICK-22-CHAT.md](../testing/QUICK-22-CHAT.md).
 
-## 2026-11-24: Playtest 21 — the chat box, four small things
-
-**Code change; rebuild needed; build `2026-11-24e`.** Save version unchanged (29). The last cleanup
-before slice 5 is signed off. The owner's list:
-
-1. **Twelve seconds, not seven** (owner: *"When chat is viewed for a short time 7 sec right now.
-   Increase time open to 12 seconds."*). `CHAT.autoHideSec` is the one number, so the box, its timer
-   and the test all move together.
-2. **A glance is the chat and nothing else** (owner: *"when chat message causes chat pop up for 12
-   seconds, only the chat is viewed ie not the player list (to reduce disturbance to player view)"*).
-   A line arriving shows the lines; the **Players** column is drawn only while the field is open or
-   the box is pinned. Glancing, typing and pinned are three different boxes.
-3. **A pinned box that nobody is typing in hides the Pin button** (owner: *"remove the Pinned icon …
-   This is so that when the chat is pinned the player column doesnt need to be as wide. If you want to
-   unpin the chat you simply press enter and the pinned button appears again"*). The box staying up
-   is the answer to "did that do anything?"; **Enter** brings the button back so it can be unpinned.
-   Unpinning never takes the field away: an open field keeps the box up (`chatKeepsOpen`'s `typing`).
-4. **One word, two looks** (owner: *"Make it so that it always says Pin, and make the button solid
-   yellow with black text if pinned and transparent solid with yellow text if non pinned"*). The label
-   never changes — a control whose word changes under the cursor is a different control each time
-   (L32) — so the state lives in the colours, in `aria-pressed`, and in the hover sentence. The
-   separate "dim when closed" opacity rule is gone with the old styling.
-
-`src/data/multiplayer.js` (`CHAT.autoHideSec` 12, BUILD), `src/ui/multiplayer.js` (the pin's look and
-state, the `mp-chat-pinned` body class, an open field counts as typing), `src/styles.css` (the three
-boxes, the two Pin looks). Tests: the playtest-20 chat test now asks all of it — twelve seconds, no
-renaming, the solid amber pinned look, the hidden column, the hidden button and the body class.
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Playtest 21 — the chat box, four small things
 - 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one
 - 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home
 - 2026-11-24: Playtest 20 — the chat goes away, and Open World always asks about the pilot

@@ -116,7 +116,8 @@ steps still to build (16 and 17).
 **Status:** planned 2026-11-21 with the owner, one slice per chat. Slices **1–3 built**
 (2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4**
 (2026-11-23a), **playtest-confirmed 2026-11-24**, and **slice 5** (`2026-11-24f`) built; **slice 7**
-(`2026-11-24h`) built and playtest-confirmed 2026-11-24.
+(`2026-11-24h`) built and playtest-confirmed 2026-11-24; **slice 8a** (`2026-11-25a`) built,
+awaiting its playtest.
 **Build order changed by the owner 2026-11-24: 7, then 8, then 6 (trading last). The numbers
 are names, not a schedule** (renumbering would falsify the archive and every guide).
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
@@ -280,12 +281,11 @@ exists for exactly that, and the pause card says which path is in use.
    side panel. **Built 2026-11-24.** The hull in space is slice 8. **Tests:**
    `tests/multiplayer-slice7.test.mjs`.
 8. **One world, two screens — the ship on the glass.**
-   - **8a — snapshots out.** A `snapshot` message kind (`SHIP_FIELDS` in `data/multiplayer.js`:
-     name, place, pos, quat, velocity, throttle, docked, dead, hull fraction; capped and cleaned
-     like every other kind) sent at the ship-snapshot rate (20–30 Hz, owner 2026-11-24; a new value
-     in `data/multiplayer.js` — `NET.snapshotSec` is the 2 s *profile* sync) for every pilot in
-     `state.players`, so the guest's `render/views.js` can draw them as ordinary entity views with
-     interpolation. Remote ships are **views only** — no sim state, nothing writable.
+   - **8a — snapshots out (built 2026-11-25, `2026-11-25a`, awaiting playtest).** A `ships` message
+     kind (`SHIP_FIELDS` in `data/multiplayer.js`; capped and cleaned like every other kind) sent at
+     the ship-snapshot rate (20–30 Hz, owner 2026-11-24; a NEW value, `SHIP_STREAM` —
+     `NET.snapshotSec` is the 2 s *profile* sync) for every pilot, so a guest's `render/views.js`
+     draws them with interpolation. Remote ships are **views only** — no sim state, nothing writable.
    - **8b — controls in.** A `controls` message kind carrying
      `{ steer, thrust, strafe, lift, roll, fire, sec, stop, brake, boost }`, cleaned on arrival and
      length-capped, written into that peer's player record (principle 7: input is a command, not a

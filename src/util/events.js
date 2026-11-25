@@ -149,6 +149,12 @@
 //                                    the save half stores it with net/multiplayer.js `syncAway`
 //   mp-away-changed { away }        where this pilot is changed: null at home, a marker away
 //                                    (a screen redraw; the title card reads it)
+//   mp-ships-request { ships, name, answered }
+//                                    slice 8a: `net/` asks for the picture of every pilot in this
+//                                    world; `main.js` fills it from `state.players` with
+//                                    `net/ships.js`. Synchronous, like the suitcase request
+//   mp-ships      { ships, at }     the host's ship snapshots arrived (guest side);
+//                                    `render/shipstream.js` buffers them and interpolates
 
 const handlers = new Map();
 

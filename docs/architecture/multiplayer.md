@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-24 (slices 1–4 playtest-confirmed, 5 to `2026-11-24f`, 7 confirmed 2026-11-24 to `2026-11-24h`, 8 next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, **8a built to `2026-11-25a`**, 8b next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -14,15 +14,10 @@ beats mean nothing in somebody else's galaxy.
 
 ## Step 17: dedicated servers (planned 2026-11-22, not built)
 
-The owner added **step 17**: a **dedicated server** hosts a world — step 16's host with no screen (a
-headless build of the same project), stepping the fixed loop, holding the world and streaming snapshots
-and controls in a **star** topology, so one port-forwarded server (`host:port`, Minecraft-style) can hold
-a world for a measured number of players (the number goes in `src/data/multiplayer.js`). Peer-to-peer
-stays the two-friend default; `src/net/transport.js` (still the only file naming a connection library)
-gains a server role and the link gains the server's address. The one open dependency question is the
-WebSocket-server library 17b needs (Node has no built-in one). Four slices — **17a** headless server,
-**17b** server transport, **17c** snapshots and controls, **17d** scale, public address, auth, admin —
-are **step 17 of [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)**.
+A headless build of this project hosting one world, star topology, `host:port` the way
+Minecraft works. The design (four slices, the open dependency question) is step 17 of
+[../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); the summary that used to be here is archived
+word for word in [archive/MULTIPLAYER_STEP17_NOTE.md](../archive/MULTIPLAYER_STEP17_NOTE.md).
 
 **Guard rails against accidents, not cheating** (vision pillar 5; [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)).
 
@@ -190,32 +185,12 @@ received**. That order separates the three failures that all look like "you are 
 wrong rooms (differing world ids), a right room with no path (2 browsers, sent rising, received 0), and
 different builds. The first four playtests of this slice were diagnosed by guessing.
 
-**Reachable is not usable.** Playtest 6 showed `Relays reachable: 3 of 5` on both machines and still one
-browser in each room: a relay can accept a WebSocket and then refuse the game's events (`blocked:`,
-`restricted:`, `auth-required:`), and the library **retires** it silently. The count that matters is
-its own, `getRelaySockets()`, printed as **`Relays connected: N`** — which is why the pinned list keeps
-more than one family of servers: a live relay that will not carry this protocol is worse than a dead
-one, because it inflates a number.
-
-Whatever the relays do, **the copy/paste codes work without them** — two players swap two codes and the
-browsers connect directly. After `NET.helloWaitSec` with nobody in the room the session marks itself
-**stalled** (`armStallTimer`), the host's screen auto-creates the offer (`autoOfferWhenStalled`, once
-per screen opening), a stalled guest gets the paste box on the pause card, and `net/paste.js` always
-offers `ICE.turn` beside its STUN — a player reaching for codes has already learned the easy route
-failed, so the only question left is whether a path exists at all.
-
-**The relays are pinned, and their health is on screen.** This is the one failure that looks
-impossible from inside the game: same build, same world id, both `finding`, **one browser in each
-room and zero messages sent** — the introduction itself never happened, so the path, the relay and
-the handshake are all irrelevant (playtest 5). The library picks *five of thirty* public signalling
-relays by `shuffle(defaults, strToNum(appId)).slice(0, 5)`; the app id makes it the same five on every
-machine, which makes the failure look like a contradiction — but this game's five were three obscure
-or dead servers, so both players subscribed to the same silence. `RELAYS.relayUrls` in
-`data/multiplayer.js` therefore **names the relays** (six long-running ones; the library uses the
-first five) and `transport.checkRelays()` opens a WebSocket to each and counts the answers, shown as
-**Relays reachable: N of 5** (asked when the screen opens, on Reconnect, cached 20 s). **0 of 5**
-means the player's network blocks them and no retry can help — the block says so and points at the
-copy/paste code path, which needs no relay at all. Tests must never probe: `setRelayProbe(null)`.
+**The relays, in three facts that cost playtests 5, 6 and 8 to learn:** a relay can accept
+a socket and refuse the game's events, so the count that matters is the library's own
+`Relays connected: N`, never "reachable"; the relay list is **pinned** in
+`RELAYS.relayUrls` because the library's shuffled five included dead servers; and a
+copy/paste code works with no relay at all. The full account is archived word for word in
+[archive/MULTIPLAYER_RELAY_NOTES.md](../archive/MULTIPLAYER_RELAY_NOTES.md).
 
 **The hello is repeated until it is answered.** A hello "sent" is not a hello heard: the channel
 opens seconds after the room says the peer is there, and a message into an unopened channel is gone
@@ -245,18 +220,9 @@ Chat (**Enter**) and the player list arrive in the same slice, so the pipe is pr
 of the player's crosses it. A hosted world **never pauses**, and the pause card
 carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a pause.
 
-### What slice 3 built (2026-11-21)
-
-| File | The one job |
-|---|---|
-| `net/transport.js` | the wrapper: `createChannel` → `join/send/broadcast/leave/peers/state`; `trystero` is named here and nowhere else (lazily, through a loader a test can replace); every failure becomes `lost` + a sentence |
-| `net/session.js` | one session: `hostWorld`, `joinWorld`, the paste codes, the handshake through `custody.handshake`, the guest list, the recent chat, `mp-state` on the bus |
-| `net/protocol.js` | seven message kinds, each cleaned and length-capped on the way out **and** in |
-| `net/paste.js` | the broker-free fallback: a `TRJOIN:` offer code and an answer code, browser WebRTC only |
-| `net/join-link.js` | `?join=<worldId>#<token>`, and reading one out of a pasted sentence |
-| `net/settings.js` | the username (`tr_mp`), capped and cleaned; a number is refused rather than shown |
-| `net/boot.js` | a `?join=` link in the address bar: asks first, used once, speaks through `mp-notice` |
-| `ui/multiplayer.js` | the multiplayer screen (name, host, join, codes) and the chat box; every control is a `data-mp` action, and no connection state of its own |
+**What slice 3 built (2026-11-21)** is archived word for word in
+[archive/MULTIPLAYER_SLICE3_NOTES.md](../archive/MULTIPLAYER_SLICE3_NOTES.md); the live
+file-by-file list is `src/net/README.md`.
 
 Three decisions worth keeping:
 
@@ -281,8 +247,9 @@ Three decisions worth keeping:
   that is always in the card. The offer code lives in the screen's model, so a redraw cannot delete
   the code the player was told to send.
 
-**What a session is not allowed to do yet:** it moves no pilot and draws no remote ship —
-deliberate, so it can be tested without risking a save.
+**What the connection still does not do:** it moves no pilot (8b), and it decides no ship's
+position (the host's sim does). What slice 8a added is a *picture* — a guest's hull on the host's
+screen, the host's hull on the guest's — and every number in it is drawn, never simulated.
 
 ## Slices
 
@@ -306,7 +273,7 @@ deliberate, so it can be tested without risking a save.
    swaps at once only if station storage and hangar have room. **Built last** (order 7 → 8 → 6).
    Design: [trading.md](trading.md).
 
-## Slices 7 and 8: the second pilot, then the second screen (7 built; 8 planned)
+## Slices 7 and 8: the second pilot, then the second screen (7 built; 8a built)
 
 The owner asked for **"one world, two ships visible"** on 2026-11-22. The plan's own model says what
 that costs — the host's browser is the authority, and a guest's screen draws what the host sends back —
@@ -319,11 +286,50 @@ recovery*, *player presentation and input*). Two slices, because neither half ca
   on the galaxy chart and under its **pocket** on the system map, and `pilotPanelMarkup` names every
   visitor with its system at the **top** of the side panel (it may have arrived elsewhere).
   `render/views.js` still draws one hull (8).
-- **Slice 8 — one world on two screens.** Snapshots out (`SHIP_FIELDS`), controls in
+- **Slice 8 — one world on two screens.** Snapshots out (`SHIP_FIELDS`, **8a built**), controls in
   (`state.localInput`, a numbered input-rule change — see [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)),
-  and the guest's screen following the **host's** pocket. Only then are two ships drawn in one sky.
-  The guest predicts its own ship, and remotes are interpolated:
-  [client-prediction.md](client-prediction.md).
+  and the guest's screen following the **host's** pocket. 8a draws the second hull; only after 8c
+  are two ships drawn in one sky on both screens. The guest predicts its own ship, and remotes are
+  interpolated: [client-prediction.md](client-prediction.md).
+
+## Slice 8a: ship snapshots (built 2026-11-25, awaiting the playtest)
+
+**The host says where every pilot is; a guest draws it and simulates nothing.** Five pieces, and
+every number below is in `src/data/multiplayer.js`:
+
+- **`SHIP_FIELDS`** — the whole of what travels about one pilot: id, name, hull, place, position,
+  rotation, velocity, throttle, docked, dead, and hull as a fraction. `id` and `ship` are the two
+  the plan's list did not name and a reader cannot do without: which pilot, and which hull to
+  build. Nothing else is on it — no fit, no hold, no credits, no damage taken — so a snapshot
+  cannot move a rule on the far side. `HOST_PILOT_ID` is the host's own hull on the wire.
+- **`SHIP_STREAM`** — `hz: 24` (**the owner's 20–30 Hz band**; `NET.snapshotSec` stays the 2 s
+  *suitcase* sync, a different fact), `delayMs: 100`, `samples: 6`, `staleMs: 1500`, `snapM: 50`.
+- **The message** is `ships` (`net/protocol.js`): cleaned on the way out **and** in like every other
+  kind, capped at `LIMITS.ships` (24) pilots per packet. More pilots than that and `session.js`
+  sends more packets — `NET.maxGuests` is a valve, not a cap (playtest 22), so nothing is dropped.
+- **The sender** is `session.js` `broadcastShips`, on a `1000 / SHIP_STREAM.hz` timer, started by
+  any hosting path. It does not read the simulation: it asks for the picture on the bus
+  (`mp-ships-request`), and `main.js` answers with `net/ships.js` `shipEntries(state.players)`. No
+  guests, no packets.
+- **The receiver** is the guest's own screen. `session.js` drops the guest's own entry (it already
+  draws its own hull) and emits `mp-ships`; `render/shipstream.js` keeps the last few snapshots per
+  pilot and hands `render/views.js` a pose **100 ms in the past**, interpolated between the two
+  snapshots that straddle it. Past the newest snapshot the pose is **held, never guessed**; a jump
+  over `snapM` or a change of pocket is drawn as the step it is.
+
+**The host needs no wire at all.** `render/views.js` draws every non-local record in
+`state.players` as a hull, interpolated exactly as the local ship is, so a visitor appears on the
+host's screen the moment it arrives — the half the owner most wanted to see.
+
+**A docked visitor is drawn**, parked at the launch point its arrival put it on: a visitor cannot
+fly in this world yet (controls are 8b), and a hull hidden until then would be no hull at all. A
+dead pilot draws nothing; only pilots in the **pocket being drawn** get a mesh.
+
+**Not in 8a:** controls in (8b), the guest's screen following the host's pocket (8c), any
+prediction, ack/rewind, cosmetic muzzle and lag compensation (8d/8e —
+[client-prediction.md](client-prediction.md)). No save change: the stream is runtime only and
+`SAVE_VERSION` stays 29. Tests: `tests/multiplayer-slice8a.test.mjs`; guide:
+[../../testing/TESTING-16-SLICE8A.md](../../testing/TESTING-16-SLICE8A.md).
 
 **Away means this world is paused, and the card says so** (owner, playtests 18 and 20 — playtest 20
 replaced the "only if newer" gate):
@@ -391,9 +397,12 @@ Four rules, and one hole closed:
 
 ## Known gaps (until their slice lands)
 
-- A visiting pilot is **not drawn in space yet** (slice 8): `render/views.js` draws one hull. Since
-  slice 7 it is a **named blip** on the system map and in the panel.
-- A guest's screen is its own world, stand-in or not; it does not follow the host's pocket (8c).
+- A guest's own ship is drawn where **its own** screen put it; its controls do not reach the host
+  (8b) and its screen does not follow the host's pocket (8c), so a friend's hull appears on the
+  guest's screen only if both happen to be in the same pocket. The host's side is complete: every
+  visitor is drawn from `state.players`.
+- A remote hull carries **no name label**, and another pilot cannot be locked or shot at: the
+  snapshot is a picture, not a target (a lockable remote is step-16 debt, *player presentation*).
 - The invitation is **not checked** when a browser joins the room: one that knows the world id can join
   without the link. Step 17's job.
 - The player list is names, not positions or ships; non-local death is step-16 work.

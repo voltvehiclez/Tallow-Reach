@@ -1,3 +1,31 @@
+## 2026-11-24: Playtest 21 — the chat box, four small things
+
+**Code change; rebuild needed; build `2026-11-24e`.** Save version unchanged (29). The last cleanup
+before slice 5 is signed off. The owner's list:
+
+1. **Twelve seconds, not seven** (owner: *"When chat is viewed for a short time 7 sec right now.
+   Increase time open to 12 seconds."*). `CHAT.autoHideSec` is the one number, so the box, its timer
+   and the test all move together.
+2. **A glance is the chat and nothing else** (owner: *"when chat message causes chat pop up for 12
+   seconds, only the chat is viewed ie not the player list (to reduce disturbance to player view)"*).
+   A line arriving shows the lines; the **Players** column is drawn only while the field is open or
+   the box is pinned. Glancing, typing and pinned are three different boxes.
+3. **A pinned box that nobody is typing in hides the Pin button** (owner: *"remove the Pinned icon …
+   This is so that when the chat is pinned the player column doesnt need to be as wide. If you want to
+   unpin the chat you simply press enter and the pinned button appears again"*). The box staying up
+   is the answer to "did that do anything?"; **Enter** brings the button back so it can be unpinned.
+   Unpinning never takes the field away: an open field keeps the box up (`chatKeepsOpen`'s `typing`).
+4. **One word, two looks** (owner: *"Make it so that it always says Pin, and make the button solid
+   yellow with black text if pinned and transparent solid with yellow text if non pinned"*). The label
+   never changes — a control whose word changes under the cursor is a different control each time
+   (L32) — so the state lives in the colours, in `aria-pressed`, and in the hover sentence. The
+   separate "dim when closed" opacity rule is gone with the old styling.
+
+`src/data/multiplayer.js` (`CHAT.autoHideSec` 12, BUILD), `src/ui/multiplayer.js` (the pin's look and
+state, the `mp-chat-pinned` body class, an open field counts as typing), `src/styles.css` (the three
+boxes, the two Pin looks). Tests: the playtest-20 chat test now asks all of it — twelve seconds, no
+renaming, the solid amber pinned look, the hidden column, the hidden button and the body class.
+
 ## 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one
 
 **Code change; rebuild needed; build `2026-11-24d`.** Save version unchanged (29).

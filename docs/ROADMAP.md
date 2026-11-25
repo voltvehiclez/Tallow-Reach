@@ -6,20 +6,16 @@
 > and its prompt is in [REFACTOR_PLAN.md](REFACTOR_PLAN.md); the current state of the game is in
 > [HANDOFF.md](HANDOFF.md).
 
-*Last checked: 2026-11-24.*
+*Last checked: 2026-11-25.*
 
 **Current position (rewritten 2026-11-22):** the table below is the status. Saves are version **29**; step 15 and
 14c are ticked, and step 16 (multiplayer) is in progress — slices 1–4 playtest-confirmed, **slice 5 PLAYTEST-CONFIRMED** (`2026-11-24f`);
 **slice 7 PLAYTEST-CONFIRMED** (fix and confirm on `2026-11-24h`); build order **7 → 8 → 6** (trading last; owner, 2026-11-24). **Step 17
 (dedicated servers) was added 2026-11-22 and is not built**
 ([REFACTOR_PLAN.md](REFACTOR_PLAN.md)).
-**Slices 14a and 14b are built, playtested and ticked: the owner's four playtest bugs are fixed and confirmed, their "works well" round's two notes — odd lines in the painted sky, and a ship that still flew while a loot card was open — shipped 2026-11-14**
-([../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)): the Basic rift is on Meridian's shelf; using it
-opens a **shimmering dark-orange anomaly** in clear space; **R** goes in and out; **F** locks the door, the way out and
-the canister; the run is generated from a template and a seed under a **shattered sky of its own**; its guardians are
-hardened; the prize is a **canister opened with R** once the objective is done; the way out stays sealed until then; the
-20-minute clock kills the pilot still inside; and a run is **saved** (`world.instances`), so logging out mid-rift comes
-back mid-rift. `npm test` is green and the build is measured per build.
+**Slices 14a and 14b are ticked** (owner, 2026-11-14): the rift, its anomaly, the shattered sky and
+the canister; the full status paragraph is in
+[archive/ROADMAP_STATUS_2026-11-10.md](archive/ROADMAP_STATUS_2026-11-10.md).
 **On 2026-11-16 the owner confirmed all pending playtests passed (14c, the cube-map skies, the collision-damage fix, the Test Ship and both bug rounds); 14c is ticked.** 14c recap: a pocket spawns itself inside an existing
 system, hangs on its map as a **Simple Wormhole** (**20 minutes from pocket spawn**, saved in `world.wormholes`), holds a
 skybox, asteroid formations and a centre grey dark sphere to lock, collapses on time, and the far side is a small site
@@ -79,7 +75,7 @@ Tick with the date when the game plays identically, `npm test` is green and the 
 | 14c | Simple wormholes: a pocket that spawns itself inside an existing system, its 20-minute entry clock, collapse on expiry, the Stable wormhole way out, re-enterable until it expires (save v21) | D | [x] **2026-11-16: owner playtest passed** (`testing/TESTING-14C-WORMHOLES.md`). 75 standing, never more than 3 per system, staggered on a fresh universe, 20 minutes from spawn, `collapse` only, the way out always a **Stable wormhole**. |
 | 14d | Wormhole systems: uncharted space, persistent and saved, its own dynamic wormhole pockets, a map button back to normal space (save v25) | D | [x] **2026-11-19: owner playtest passed.** |
 | 15 | Campaign scaffolding (save v26) | D | [x] **Built 2026-11-19; rounds 1–5 applied; playtest approved 2026-11-21.** Dual-mode envelope, shared pilot, fixed seven-system campaign (`240515`); finish = nothing yet |
-| 16 | Multiplayer (host-run co-op, WebRTC; 8 slices) | | [ ] **slices 1–4 PLAYTEST-CONFIRMED** (1–3 on 2026-11-22; 4 on 2026-11-24). **Slice 4 (2026-11-23a)**: Bring my pilot / sync / Go home. **Slice 5 PLAYTEST-CONFIRMED (`2026-11-24f`)**: a lost host returns to the menu with "Lost connection to host", rejoining keeps the server's copy, the copy kept current, `bye`, one window per pilot; the chat hides itself unless pinned. **Playtest 22 (`f`): two guests share one link** (a guest is its own browser, L47), **no player cap**, chat 12 s and lines-only when it opens by itself — **passed**. **Slice 7 PLAYTEST-CONFIRMED 2026-11-24 (`2026-11-24h`)**: a visiting pilot is named on the galaxy chart, under its pocket, and in the panel's Visiting pilots row. **Build order 2026-11-24: 7 → 8 → 6 (trading last; its design set 2026-11-24).** Slices 7–8 added 2026-11-22 (one world, two ships) — see [REFACTOR_PLAN.md](REFACTOR_PLAN.md)** |
+| 16 | Multiplayer (host-run co-op, WebRTC; 8 slices) | | [ ] **slices 1–4 PLAYTEST-CONFIRMED** (1–3 on 2026-11-22; 4 on 2026-11-24). **Slice 4 (2026-11-23a)**: Bring my pilot / sync / Go home. **Slice 5 PLAYTEST-CONFIRMED (`2026-11-24f`)**: a lost host returns to the menu with "Lost connection to host", rejoining keeps the server's copy, the copy kept current, `bye`, one window per pilot; the chat hides itself unless pinned. **Playtest 22 (`f`): two guests share one link** (a guest is its own browser, L47), **no player cap**, chat 12 s and lines-only when it opens by itself — **passed**. **Slice 7 PLAYTEST-CONFIRMED 2026-11-24 (`2026-11-24h`)**: a visiting pilot is named on the galaxy chart, under its pocket, and in the panel's Visiting pilots row. **Slice 8a BUILT 2026-11-25 (`2026-11-25a`), awaiting the playtest**: the host sends `SHIP_FIELDS` for every pilot at `SHIP_STREAM.hz` 24 as a `ships` message (a new value — `NET.snapshotSec` stays the 2 s suitcase sync), the guest draws them as **views only** through `render/shipstream.js` (100 ms behind, interpolated, never predicted), and **the host draws its visiting record with no wire at all** — a second hull parked at the station it arrived at. Next: 8b (controls in). Guide: `testing/TESTING-16-SLICE8A.md`. **Build order 2026-11-24: 7 → 8 → 6 (trading last; its design set 2026-11-24).** Slices 7–8 added 2026-11-22 (one world, two ships) — see [REFACTOR_PLAN.md](REFACTOR_PLAN.md)** |
 | 17 | Dedicated servers: a headless server hosts one world for 50 players (the number lives in `src/data/multiplayer.js`) via **Minecraft-style port forwarding** (`host:port`); anyone may host, anyone may join, with **optional modular auth (Supabase first, 50k/month)** | | [ ] **Planned 2026-11-22: written in [REFACTOR_PLAN.md](REFACTOR_PLAN.md), slices 17a–17d, with the owner's answers. Not built — step 16 comes first** |
 
 Save version numbers above are the plan. If a step needs a different one, the AI changes this table and the

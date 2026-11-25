@@ -27,3 +27,15 @@ found modules do **not** get random stats, so a stock stays a plain count per it
 the six standard parts for 1 cr each (beam 900, missile pod 1500); shop stock can be limited (`max`)
 but no row uses it yet, and `setShopStock()` is still the unused restock hook. Data-only content
 (rows 1 to 8 of "Content you can add now") can go ahead in parallel.
+
+---
+
+## Appended 2026-11-25, moved out of ROADMAP.md word for word (step 16 slice 8a)
+
+**Slices 14a and 14b are built, playtested and ticked: the owner's four playtest bugs are fixed and confirmed, their "works well" round's two notes — odd lines in the painted sky, and a ship that still flew while a loot card was open — shipped 2026-11-14**
+([../testing/TESTING-14-RIFTS.md](../testing/TESTING-14-RIFTS.md)): the Basic rift is on Meridian's shelf; using it
+opens a **shimmering dark-orange anomaly** in clear space; **R** goes in and out; **F** locks the door, the way out and
+the canister; the run is generated from a template and a seed under a **shattered sky of its own**; its guardians are
+hardened; the prize is a **canister opened with R** once the objective is done; the way out stays sealed until then; the
+20-minute clock kills the pilot still inside; and a run is **saved** (`world.instances`), so logging out mid-rift comes
+back mid-rift. `npm test` is green and the build is measured per build.
