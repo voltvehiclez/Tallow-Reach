@@ -301,9 +301,10 @@ deliberate, so it can be tested without risking a save.
    keeps the copy the server has, a final copy on tab close, one session per `guestId`; and the
    away card on every Open World press, so a visiting pilot's own world really is paused.
    **Built 2026-11-24a, reworked 2026-11-24b** — see the next section.
-6. **Trading** — *View docked players*, a trade of items, a ship at that station, or credits, a first
-   confirm that locks both sides and a second that commits; the host checks m³ in both station holds
-   first and moves nothing if either side lacks room. **Built last** (owner, 2026-11-24: order 7 → 8 → 6).
+6. **Trading** — a **Trade** station tab lists the pilots docked here; another's **Trade** opens
+   two inventory-style halves on both screens (items, ships, credits), two confirms, and the host
+   swaps at once only if station storage and hangar have room. **Built last** (order 7 → 8 → 6).
+   Design: [trading.md](trading.md).
 
 ## Slices 7 and 8: the second pilot, then the second screen (7 built; 8 planned)
 

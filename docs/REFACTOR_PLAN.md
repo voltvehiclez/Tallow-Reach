@@ -118,8 +118,7 @@ steps still to build (16 and 17).
 (2026-11-23a), **playtest-confirmed 2026-11-24**, and **slice 5** (`2026-11-24f`) built; **slice 7**
 (`2026-11-24g`) built, awaiting playtest.
 **Build order changed by the owner 2026-11-24: 7, then 8, then 6 (trading last). The numbers
-are names, not a schedule** — renumbering them would falsify the archive and every guide that
-says "slice 7".
+are names, not a schedule** (renumbering would falsify the archive and every guide).
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
 
 **Slices 7 and 8 were added on 2026-11-22 and AGREED by the owner the same day** ("Also draw the
@@ -269,10 +268,11 @@ exists for exactly that, and the pause card says which path is in use.
    "Lost connection to host", and rejoining keeps the copy the server has; a final copy on tab
    close (`bye`); one session per `guestId`, a newer connection kicks the older.
    **Built 2026-11-24a.**
-6. **Trading** (**built LAST** — build order changed 2026-11-24: 7, then 8, then 6).
-   **View docked players** in the station, right-click a name > **Trade**: items, a
-   ship at that station, or credits, a first confirm that locks both sides and a second that
-   commits. The host checks both station holds' m³ first; if either side lacks room, nothing moves.
+6. **Trading** (**built LAST** — order 7, 8, 6). A **Trade** station tab beside Base/Saves
+   lists the pilots docked here; another's **Trade** opens a two-half window on both screens
+   (items, ships, credits), two confirms, and the host swaps at once only if the receiving station
+   storage and hangar have room — else nothing moves.
+   Design: [architecture/trading.md](architecture/trading.md).
 7. **The visiting pilot is on the map.** Slice 4 had already made a visitor a real, docked,
    simulated record (`sim/multiplayer.js` via `mp-guest-arrived`), so what was left of the
    original slice was visibility: `ui/starmap.js` `pilotBlips` reads `state.players` and draws

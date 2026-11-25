@@ -18,6 +18,29 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-24: Slice 6's trading design, from the owner
+
+**Docs only; no rebuild needed.** Save version unchanged (29). Trading is still **last** (7 → 8 → 6).
+
+The owner described the trade system in two rounds of answers. It is recorded in
+[architecture/trading.md](architecture/trading.md) and summarised in slice 6 of
+[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
+
+- **Where:** a new **Trade** station tab beside Base/Saves lists the pilots docked at this station —
+  your own row included, with no button on it. Another pilot's **Trade** opens the window in the
+  left-hand panel **on both screens at once**. Close button top right; **undocking cancels**;
+  stations only.
+- **Halves:** theirs left, yours right, inventory-style grids — items and **ships** (a ship carries
+  its fit and cargo; **the ship you are piloting cannot be offered**), plus an **Add credits** button.
+- **Confirms:** one per half; with both confirmed the **host** swaps everything atomically and **only
+  if the receiving station storage and hangar have room** — otherwise nothing moves at all.
+- **Anti-scam:** an edit after a confirm clears the confirmation; the same rule covers credits. One
+  detail is left open (whose confirm clears — the safe rule, **both**, is written as intended).
+- **Custody:** a guest's received items must go into the lockers of its visiting record, not the
+  host's station stores, or the goods would never come home (`net/custody.js` `checkOut`/`checkIn`).
+- **Prerequisite:** a real docked presence — `net/session.js` still admits guests with
+  `docked: false`; slice 6 begins by reporting where a pilot is docked.
+
 ## 2026-11-24: Slice 4 playtest passed
 
 **No code change; no rebuild needed.** Save version unchanged (29).
@@ -328,30 +351,9 @@ saved.
 tests were corrected for the new rule, not weakened: the protocol's list of kinds, and one hello
 injected from a foreign peer (now a takeover, so it comes from the guest's own peer).
 **Tests: 1039** (was 1030).
-
-## 2026-11-23: One refusal, one place, and a placeholder that says what it wants
-
-**Code change; rebuild needed; build `2026-11-23i`.** Two small corrections to playtest 18, both
-from the owner.
-
-1. **The empty username box says "Username" faintly** (it said "your name"). Same centred,
-   label-free box; only the placeholder text changed.
-2. **The missing-username refusal is said once.** Open World without a username raised *two*
-   messages: a notice at the top of the screen (teal) and the red line in the card. The owner:
-   *"the red one is enough, the teal one at the top is just unnecessary info."* The card's line
-   stays — it sits beside the switch that caused it, stays put until replaced, and reaches a
-   screen reader through the card — and it now also says where the box is ("Exit to main menu" is
-   at the bottom of this card). `showNotice` is no longer called from that path.
-
-`mp-notice` still shows in both places on purpose: that is how a connection reports something to
-a player who has the screen *closed* (a join that failed at boot), which is a different audience
-from the card's own line.
-
-`src/ui/screens.js`, `src/ui/multiplayer.js`, `src/data/multiplayer.js` (BUILD),
-`tests/multiplayer-ui.test.mjs` (asserts the refusal is in the card and NOT in a top notice),
-`testing/TESTING-PLAYTEST18.md` (build + the two expectations). Save version unchanged (29).
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-23: One refusal, one place, and a placeholder that says what it wants
 - 2026-11-23: The away card is a question about custody, not the title screen
 - 2026-11-23: The switch says why, and the away card is a proper card
 - 2026-11-23: The multiplayer switch could not be pressed by a visitor

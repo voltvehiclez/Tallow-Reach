@@ -1,3 +1,25 @@
+## 2026-11-23: One refusal, one place, and a placeholder that says what it wants
+
+**Code change; rebuild needed; build `2026-11-23i`.** Two small corrections to playtest 18, both
+from the owner.
+
+1. **The empty username box says "Username" faintly** (it said "your name"). Same centred,
+   label-free box; only the placeholder text changed.
+2. **The missing-username refusal is said once.** Open World without a username raised *two*
+   messages: a notice at the top of the screen (teal) and the red line in the card. The owner:
+   *"the red one is enough, the teal one at the top is just unnecessary info."* The card's line
+   stays — it sits beside the switch that caused it, stays put until replaced, and reaches a
+   screen reader through the card — and it now also says where the box is ("Exit to main menu" is
+   at the bottom of this card). `showNotice` is no longer called from that path.
+
+`mp-notice` still shows in both places on purpose: that is how a connection reports something to
+a player who has the screen *closed* (a join that failed at boot), which is a different audience
+from the card's own line.
+
+`src/ui/screens.js`, `src/ui/multiplayer.js`, `src/data/multiplayer.js` (BUILD),
+`tests/multiplayer-ui.test.mjs` (asserts the refusal is in the card and NOT in a top notice),
+`testing/TESTING-PLAYTEST18.md` (build + the two expectations). Save version unchanged (29).
+
 ## 2026-11-23: The away card is a question about custody, not the title screen
 
 **Code change; rebuild needed; build `2026-11-23h`.** Four things from the owner's playtest 18.
