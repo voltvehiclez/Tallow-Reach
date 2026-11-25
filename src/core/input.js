@@ -78,6 +78,25 @@ export function syncControls() {
     c.stop = c.brake = c.boost = c.fire = c.sec = false;
     c.steer.x = c.steer.y = 0;
   }
+  // Step 16 slice 8b: **the same asking, in one place a session may read.** `net/` may not import
+  // `core/` (the layers point one way) and `sim/` may not either, so the wire's copy of this
+  // browser's input is `state.localInput` — one new state, one new writer, mirrored here on every
+  // key or mouse change. Copied field by field rather than by reference: a session must never be
+  // able to write back into the pilot's own controls through it.
+  const wire = state.localInput;
+  if (wire) {
+    wire.thrust = c.thrust;
+    wire.strafe = c.strafe;
+    wire.lift = c.lift;
+    wire.roll = c.roll;
+    wire.stop = c.stop;
+    wire.brake = c.brake;
+    wire.boost = c.boost;
+    wire.fire = c.fire;
+    wire.sec = c.sec;
+    wire.steer.x = c.steer.x;
+    wire.steer.y = c.steer.y;
+  }
 }
 
 /** Release held flight input when a modal chart opens or the window loses focus. */

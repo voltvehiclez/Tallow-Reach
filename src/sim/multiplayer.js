@@ -35,7 +35,8 @@
 import { emit, on } from "../util/events.js";
 import { state } from "../state/state.js";
 import { createPlayerRecord } from "./player.js";
-import { configurePlayer } from "./session.js";
+import { configurePlayer, launch } from "./session.js";
+import { CONTROLS } from "../data/multiplayer.js";
 import { stationAt } from "./places.js";
 import { isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { neutralControls } from "../state/controls.js";
@@ -146,6 +147,100 @@ on("player-dead", ({ player } = {}) => {
   const name = player.name || guests.get(player.guestId)?.name || "";
   emit("mp-guest-destroyed", { guestId: player.guestId, name });
 });
+
+/* ------------------------------------------------------------------------- */
+/* Slice 8b: the guest's controls reach its ship                             */
+/* ------------------------------------------------------------------------- */
+
+/** Nothing asked for: the shape a record's controls go back to when its pilot goes quiet. */
+function quietControls(c) {
+  c.thrust = c.strafe = c.lift = c.roll = 0;
+  c.stop = c.brake = c.boost = c.fire = c.sec = false;
+  c.steer.x = c.steer.y = 0;
+}
+
+/** Does this asking want the ship to do something? (Anything but "nothing".) */
+function asksToFly(input = {}) {
+  const axis = value => Math.abs(Number(value) || 0) > 0.001;
+  const steer = input.steer || {};
+  return axis(input.thrust) || axis(input.strafe) || axis(input.lift) || axis(input.roll) ||
+    axis(steer.x) || axis(steer.y) || input.fire === true || input.sec === true || input.boost === true;
+}
+
+/**
+ * **A guest says what it is asking its ship to do, and the host writes it down** (slice 8b).
+ *
+ * The rule the plan set (refactor principle 7, *input is a command*): a guest sends a command, not a
+ * key. `net/protocol.js` has already rebuilt the message field by field and clamped every axis, and
+ * `net/session.js` has already decided *which* pilot the message belongs to — the peer it came from,
+ * never a name in the message. So this writes the asking into that record's own `controls`, exactly
+ * where `core/input.js` writes the local pilot's, and the host's sim decides what it means: thrust
+ * ramps the throttle, `fire` needs power and a gun, and every consequence — damage, kills, loot,
+ * docking, warp — stays the host's. The guest's own ship at home is untouched.
+ *
+ * **A docked visitor launches the first time it asks to fly.** A visitor arrives docked at its
+ * station; the only hull it has is the one in this world, so an asking that is not "nothing" is the
+ * same thing the local pilot's launch is, and it goes through the same `launch()` — full power, the
+ * station's launch point, a snap for the far screen. A guest standing at its own station counter
+ * leaning on a key therefore does not move a hull; it launches one.
+ *
+ * Returns false for an unknown, dead, or already-gone visitor: a message from a peer that has left is
+ * not an error, it is just late.
+ */
+export function applyGuestControls(guestId, input) {
+  const id = typeof guestId === "string" ? guestId.trim() : "";
+  const entry = guests.get(id);
+  if (!entry || !input) return false;
+  const P = entry.player;
+  if (!P || P.dead) return false;
+  const c = P.controls;
+  const axis = value => Math.max(-1, Math.min(1, Number(value) || 0));
+  c.thrust = axis(input.thrust);
+  c.strafe = axis(input.strafe);
+  c.lift = axis(input.lift);
+  c.roll = axis(input.roll);
+  c.stop = input.stop === true;
+  c.brake = input.brake === true;
+  c.boost = input.boost === true;
+  c.fire = input.fire === true;
+  c.sec = input.sec === true;
+  c.steer.x = axis(input.steer?.x);
+  c.steer.y = axis(input.steer?.y);
+  // **Its own aim, not the host's.** `state.aimDirection` is the local screen's camera direction;
+  // `sim/weapons.js` fires a non-local record along its own `aimDirection`, so this is what makes a
+  // guest's shot go where the guest is looking rather than along the host's nose.
+  const aim = input.aim;
+  if (aim && Number.isFinite(aim[0] + aim[1] + aim[2])) {
+    const len = Math.hypot(aim[0], aim[1], aim[2]);
+    if (len > 1e-6) {
+      P.aimDirection = P.aimDirection || { x: 0, y: 0, z: -1 };
+      P.aimDirection.x = aim[0] / len;
+      P.aimDirection.y = aim[1] / len;
+      P.aimDirection.z = aim[2] / len;
+    }
+  }
+  P.inputAt = state.time;
+  if (P.docked && asksToFly(input)) launch(P, P.profile);
+  return true;
+}
+
+/**
+ * **A silent guest does not fly on** (slice 8b). Called once per sim tick.
+ *
+ * A closed tab, a backgrounded window or a lost channel stops the messages, and the record would
+ * otherwise keep the last asking for ever — a hull holding its throttle into a rock, or firing with
+ * nobody at the trigger. After `CONTROLS.staleMs` (data) the record is asked for nothing; the flight
+ * model bleeds the throttle off by itself, which is what letting go of the stick does. A docked or
+ * dead record is left alone (there is nothing to stop), and one that has never been asked anything
+ * is skipped, so a visitor that has not touched a key is not "stale".
+ */
+export function ageGuestControls() {
+  for (const entry of guests.values()) {
+    const P = entry?.player;
+    if (!P || P.docked || P.dead || !Number.isFinite(P.inputAt)) continue;
+    if ((state.time - P.inputAt) * 1000 > CONTROLS.staleMs) quietControls(P.controls);
+  }
+}
 
 /** For tests: forget every visitor without emitting events. */
 export function resetGuests() {

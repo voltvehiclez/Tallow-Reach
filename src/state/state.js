@@ -357,6 +357,17 @@ export const state = {
   },
   aimOrigin: null, // camera origin for exact reticle picking, runtime only
   aimDirection: { x: 0, y: 0, z: -1 }, // last rendered camera direction, supplied by the frame loop
+  /**
+   * **What this browser's pilot is asking its ship to do, for the wire** (step 16 slice 8b).
+   *
+   * `core/input.js` is the only writer: it copies the local control record here at the end of
+   * `syncControls()`, so a session can read one plain object without importing `core/` (the layers
+   * point one way: `sim/` may not reach up, and `net/` may not either). Same shape as
+   * `state/controls.js`'s `neutralControls()`, always fully populated, and it means nothing on a
+   * screen that is not hosting or visiting — a guest sends it to the host, which writes it into its
+   * own record of that pilot. See `data/multiplayer.js` `CONTROLS` for the rate and the stale rule.
+   */
+  localInput: neutralControls(),
   paused: false,
   time: 0,             // seconds of unpaused play
   // A line to prepend to the next death notice, or null. An instance's expiry says why the pilot

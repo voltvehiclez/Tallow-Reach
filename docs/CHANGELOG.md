@@ -18,6 +18,57 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-25: Step 16 slice 8b — the guest's controls reach its ship
+
+**Code change; rebuild needed; build `2026-11-25e`.** Save version unchanged (**29**); one new wire
+kind, one new state, no saved field.
+
+Slice 8a made a friend **visible**. This makes the friend **flyable**: the guest says what it is
+asking its ship to do, the host writes it into that visitor's own control record, and the host's sim —
+already the only writer of the truth — decides what it means.
+
+- **`controls` (`net/protocol.js`)** — a new kind carrying the control record plus the pilot's aim:
+  `{ steer{x,y}, roll, thrust, strafe, lift, stop, brake, boost, fire, sec, aim[x,y,z] }`
+  (`CONTROL_FIELDS` in `data/multiplayer.js`). Rebuilt field by field on send **and** read: every axis
+  clamped to -1..1, every held control only a real `true`, `aim` through the vec3 cleaner. A message
+  never names a pilot — **the peer is the identity** — so no guest can drive another's ship.
+- **`state.localInput` — the numbered decision, as planned.** `core/input.js` writes the local control
+  record today and `sim/` may not import `core/`; so 8b adds **one new state, one new writer**:
+  `state.localInput`, mirrored at the end of `syncControls()`, which the session reads. It is a copy,
+  not a reference, so a session can never write back into the pilot's own controls.
+- **The guest's clock** (`CONTROLS.hz` **30**, data) sends that asking 30 times a second — faster than
+  the 24 Hz snapshot stream on purpose, so a snapshot is never what a control waits behind. Nothing is
+  sent until a `welcome` is heard, and nothing at all once the session stops.
+- **`sim/multiplayer.js` `applyGuestControls(guestId, input)`** writes the asking into that visitor's
+  own `controls` (where `core/input.js` writes the local pilot's) and its `aimDirection` (its own
+  looking direction, so a guest's shot goes where the **guest** looks, not along the host's nose).
+  **A docked visitor launches the first time it asks to fly** — it has no other hull in this world —
+  through the same `launch()` the local pilot uses, so it leaves fully charged from the station's
+  launch point. An asking of nothing leaves a docked visitor parked.
+- **A silent guest does not fly on** (`ageGuestControls`, called each tick): after `CONTROLS.staleMs`
+  (**400 ms**, data) the record is asked for nothing, so a closed tab, a backgrounded window or a lost
+  channel cannot leave a hull holding its throttle into a rock. It stays launched; it coasts.
+- **Wiring:** `net/session.js` resolves the **peer** to a guest id and hands `{ guestId, input }` to
+  the bus (`mp-guest-controls`); `main.js` — the only place allowed to touch both — calls the sim.
+  A controls message from a peer that was never welcomed, or for a record that has gone, is dropped.
+
+**Not in 8b, by the plan:** prediction, acks and rewind (**8d**), cosmetic muzzle (**8e**), and the
+guest's screen following the host's pocket (**8c**) — a guest still sees its **own** galaxy, so this
+slice is watched from the **host's** screen. **A launched visitor cannot dock again yet** (docking is
+host-confirmed and a guest has no way to ask); it flies until it goes home.
+
+**Tests:** `tests/multiplayer-controls.test.mjs` (new, **11**): the kind and its fields, every axis
+clamped and every held control honest, `state.localInput` mirrored but never shared, the asking landing
+in the record and the hull actually flying under `stepSim`, an asking of nothing not launching, unknown
+and dead visitors driving nothing, aim normalised, silence neutralising after `staleMs`, the peer — not
+the message — deciding whose ship it is, and the guest's own send being cleaned and stopping with the
+session. `tests/multiplayer-connection.test.mjs`'s exhaustive `KINDS` list gained `controls`.
+`npm test` **1117/1117** (248 s), build **3598 KB** (`game/tallow-reach.html`, build string `2026-11-25e`).
+
+**What the owner must do:** hard-reload with Ctrl+Shift+R on **both** machines, check **Connection
+details** reads **`2026-11-25e`**, then follow `testing/TESTING-16-SLICE8B.md` — bring the pilot in,
+and watch the **host's** screen while the guest presses W: the friend's hull launches and flies.
+
 ## 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
 
 **No code change; no rebuild needed — the build the owner passed is `2026-11-25d`.** Save version
@@ -305,31 +356,9 @@ Two owner answers settle the details [architecture/trading.md](architecture/trad
   unchanged: the station for the host, the lockers of the visiting record for a guest, so goods
   come home.
 
-## 2026-11-24: Slice 6's trading design, from the owner
-
-**Docs only; no rebuild needed.** Save version unchanged (29). Trading is still **last** (7 → 8 → 6).
-
-The owner described the trade system in two rounds of answers. It is recorded in
-[architecture/trading.md](architecture/trading.md) and summarised in slice 6 of
-[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
-
-- **Where:** a new **Trade** station tab beside Base/Saves lists the pilots docked at this station —
-  your own row included, with no button on it. Another pilot's **Trade** opens the window in the
-  left-hand panel **on both screens at once**. Close button top right; **undocking cancels**;
-  stations only.
-- **Halves:** theirs left, yours right, inventory-style grids — items and **ships** (a ship carries
-  its fit and cargo; **the ship you are piloting cannot be offered**), plus an **Add credits** button.
-- **Confirms:** one per half; with both confirmed the **host** swaps everything atomically and **only
-  if the receiving station storage and hangar have room** — otherwise nothing moves at all.
-- **Anti-scam:** an edit after a confirm clears the confirmation; the same rule covers credits. One
-  detail is left open (whose confirm clears — the safe rule, **both**, is written as intended).
-- **Custody:** a guest's received items must go into the lockers of its visiting record, not the
-  host's station stores, or the goods would never come home (`net/custody.js` `checkOut`/`checkIn`).
-- **Prerequisite:** a real docked presence — `net/session.js` still admits guests with
-  `docked: false`; slice 6 begins by reporting where a pilot is docked.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Slice 6's trading design, from the owner
 - 2026-11-24: Slice 4 playtest passed
 - 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
 - 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map

@@ -29,7 +29,7 @@ import {
   isMultiplayerScreenOpen, closeMultiplayer,
 } from "./ui/multiplayer.js";
 import { installJoinLink } from "./net/boot.js";
-import { arriveGuest, leaveGuest, guestRecordOf, guestPlayers } from "./sim/multiplayer.js";
+import { arriveGuest, leaveGuest, guestRecordOf, guestPlayers, applyGuestControls } from "./sim/multiplayer.js";
 import { hostProfile, bundleFromProfile } from "./net/custody.js";
 import { shipEntries } from "./net/ships.js";
 import { createShipStream } from "./render/shipstream.js";
@@ -115,6 +115,13 @@ function installMultiplayerVisitors() {
   });
   on("mp-guest-left", ({ guestId } = {}) => {
     leaveGuest(guestId);
+  });
+  // **Slice 8b: the guest's asking reaches its ship.** `net/` may not import `sim/` (the layers point
+  // one way) and the peer id is already resolved there, so the session hands over `{ guestId, input }`
+  // and this is the one place that writes it into the visiting record. A message for a pilot whose
+  // record has gone is dropped by the sim itself, which is the right place to know that.
+  on("mp-guest-controls", ({ guestId, input } = {}) => {
+    applyGuestControls(guestId, input);
   });
   // The host's write-back asks what the visiting pilot is NOW. Answering synchronously
   // is deliberate: the session needs the live profile in the same call that builds the

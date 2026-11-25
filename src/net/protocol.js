@@ -24,6 +24,14 @@
 //                                                         `LIMITS.ships` pilots, so a full world
 //                                                         is a few messages, never a truncation —
 //                                                         `maxGuests` is a valve, not a cap
+//   controls   { t, steer{x,y}, roll, thrust, strafe, lift, stop, brake, boost, fire, sec,
+//                aim[x,y,z] }                             guest -> host (slice 8b): what that
+//                                                         pilot is asking its ship to do,
+//                                                         `CONTROLS.hz` times a second. It is a
+//                                                         **command**, not a key: the host writes it
+//                                                         into its own record of that pilot's
+//                                                         controls and its own sim decides what it
+//                                                         means (refactor principle 7)
 //
 // The `bye` is a courtesy, not a contract: a crashed tab sends nothing at all, which is why the
 // host still notices a peer that vanished on its own. It only makes the ordinary departure —
@@ -45,7 +53,7 @@
 import { NET } from "../data/multiplayer.js";
 
 /** Every message kind this build understands. An unknown `t` is dropped, not echoed. */
-export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships"];
+export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships", "controls"];
 
 /**
  * The longest a name, an id or a chat line may be on the wire, and the other hard caps.
@@ -122,6 +130,12 @@ export function cleanMessage(kind, fields = {}) {
     // `data/multiplayer.js` is the list of fields; nothing here can reach a rule.
     case "ships":
       return { t: "ships", ships: cleanShips(fields.ships) };
+    // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
+    // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
+    // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
+    // `data/multiplayer.js` is the list of what travels.
+    case "controls":
+      return cleanControls(fields);
     // Slice 5: the guest is leaving on purpose. Two short strings, nothing else: the host
     // answers it with a final `suitcase`, so this message must never be able to say more
     // than "I am going".
@@ -250,6 +264,38 @@ function cleanShips(raw) {
     });
   }
   return out;
+}
+
+/**
+ * One pilot's controls (slice 8b). A command, not a key: the host has already decided who this
+ * message belongs to (the peer it came from, never the message), so nothing here names a pilot.
+ *
+ * Every axis is a number in **-1..1** and every held control is **exactly `true`**; anything else is
+ * the neutral value, because a ship that reads a bad number is a ship flying into a rock. `aim`
+ * reuses the vec3 cleaner and is normalised by the sim when it is written into the record, so a
+ * zero vector cannot leave a pilot aiming nowhere.
+ */
+function cleanControls(fields = {}) {
+  const axis = value => {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.round(Math.max(-1, Math.min(1, n)) * 1000) / 1000 : 0;
+  };
+  const held = value => value === true;
+  const steer = fields.steer && typeof fields.steer === "object" ? fields.steer : {};
+  return {
+    t: "controls",
+    steer: { x: axis(steer.x), y: axis(steer.y) },
+    roll: axis(fields.roll),
+    thrust: axis(fields.thrust),
+    strafe: axis(fields.strafe),
+    lift: axis(fields.lift),
+    stop: held(fields.stop),
+    brake: held(fields.brake),
+    boost: held(fields.boost),
+    fire: held(fields.fire),
+    sec: held(fields.sec),
+    aim: cleanVec3(fields.aim, [0, 0, -1]),
+  };
 }
 
 function cleanGuestList(raw) {

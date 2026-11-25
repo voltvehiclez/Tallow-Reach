@@ -65,7 +65,7 @@ import { readAway } from "../state/storage.js";
 import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
 import { readSettings, writeSettings, cleanName } from "./settings.js";
 import { checkTurnServers, turnSummary } from "./turn.js";
-import { NET, CHAT, SHIP_STREAM } from "../data/multiplayer.js";
+import { NET, CHAT, SHIP_STREAM, CONTROLS } from "../data/multiplayer.js";
 
 /** A whole, non-negative number: what every count on the wire is. */
 const whole = value => Math.max(0, Math.floor(Number(value) || 0));
@@ -376,6 +376,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // The host's timer. `shipTick` is cleared on stop like every other timer; the rate is
   // `SHIP_STREAM.hz` (data), NOT `NET.snapshotSec`, which stays the two-second suitcase sync.
   let shipTick = 0;
+  // Slice 8b: the guest's timer, the other direction, at `CONTROLS.hz`. Cleared on stop with the
+  // rest; a guest that is not in a world its pilot can fly sends nothing (`sendControls` decides).
+  let controlTick = 0;
 
   const ownGuestId = () => `guest-${token.slice(0, 8)}`;
 
@@ -484,6 +487,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       // straight to the screen's own stream, and its own entry is dropped (it already draws its
       // own hull, and two of them would z-fight).
       case "ships": return onShips(message);
+      // Slice 8b: the guest's asking, twice a snapshot's rate.
+      case "controls": return onControls(message, peerId);
       case "ping": {
         // Slice 5: a guest's heartbeat is the host's only sign of life between copies.
         // `lastSeen` is what `net/multiplayer.js`'s `guestIsHere` reads, so it is written
@@ -1212,6 +1217,61 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     } catch (e) { /* a broken screen must not break a session */ }
   }
 
+  /* --- slice 8b: what the guest is asking its ship to do ------------------------------ */
+
+  /**
+   * Guest side: say what this pilot is asking its ship to do, `CONTROLS.hz` times a second.
+   *
+   * The source is **`state.localInput`** — the one new state slice 8b adds, written by
+   * `core/input.js` and readable from here without importing `core/` (the layers point one way).
+   * The aim comes from `state.aimDirection`, the local screen's own camera direction, because each
+   * pilot aims for itself: the host fires a guest's guns along that guest's `aimDirection`, never the
+   * host's nose. Nothing is sent while the pilot is not in a world it can fly (the title screen, the
+   * campaign card, or while docked at its **own** station the asking would launch the visiting hull
+   * from across the galaxy), and nothing is sent at all unless a `welcome` has been heard.
+   */
+  function sendControls() {
+    if (role !== "guest" || !on || !welcomed) return false;
+    const input = state.localInput;
+    if (!input) return false;
+    const aim = state.aimDirection || {};
+    const message = cleanMessage("controls", {
+      steer: input.steer || {},
+      roll: input.roll, thrust: input.thrust, strafe: input.strafe, lift: input.lift,
+      stop: input.stop, brake: input.brake, boost: input.boost, fire: input.fire, sec: input.sec,
+      aim: [aim.x, aim.y, aim.z],
+    });
+    return message ? send(message) : false;
+  }
+
+  /** The guest's clock for that asking. Started when a session starts as a guest. */
+  function startControlStream() {
+    if (controlTick || role !== "guest") return false;
+    controlTick = setInterval(sendControls, Math.max(1, Math.round(1000 / CONTROLS.hz)));
+    if (typeof controlTick?.unref === "function") controlTick.unref();
+    return true;
+  }
+
+  /**
+   * Host side: a peer says what its pilot is asking its ship to do.
+   *
+   * **The peer is the identity, never the message.** A controls message names no pilot at all, so a
+   * peer can only ever drive the record the host already matched to it — a guest cannot reach another
+   * guest's ship, or the host's, by guessing an id. `applyGuestControls` lives in `sim/` and this file
+   * may not import it (the arrow points one way), so the asking goes onto the bus and `main.js` hands
+   * it to the sim. A peer that has not been welcomed has no row here and is ignored, as is one that
+   * has left: a late message is not an error.
+   */
+  function onControls(message, peerId) {
+    if (role !== "host") return;
+    const entry = guests.find(row => row.peerId && row.peerId === peerId);
+    if (!entry) return;
+    markPeerSeen(peerId);
+    try {
+      emit("mp-guest-controls", { guestId: entry.guestId, input: message });
+    } catch (e) { /* a broken screen must not break a session */ }
+  }
+
   /**
    * The live profile of a visiting pilot, as `sim/` knows it.
    *
@@ -1392,7 +1452,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     publish();
     await channel.join();
     greetEveryone();
-    if (role === "guest") { startHelloRetry(); watchPage(); }
+    if (role === "guest") { startHelloRetry(); startControlStream(); watchPage(); }
     if (role === "host") { armHostWait(); startGuestSync(); startShipStream(); }
     armStallTimer();
     startKeepalive();
@@ -1577,6 +1637,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     if (guestSync) { clearInterval(guestSync); guestSync = 0; }
     if (shipTick) { clearInterval(shipTick); shipTick = 0; }
+    if (controlTick) { clearInterval(controlTick); controlTick = 0; }
     for (const { timer } of pendingWrite.values()) if (timer) clearTimeout(timer);
     pendingWrite.clear();
     clearStallTimer();
@@ -1828,6 +1889,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // Slice 8a: the host's ship snapshot, sent by its own timer at `SHIP_STREAM.hz`. Exposed the
     // same way, so a test can send one without waiting for a real 42 ms clock.
     broadcastShips,
+    // Slice 8b: the guest's asking, sent by its own timer at `CONTROLS.hz`. Exposed for the same
+    // reason — a test drives one message instead of waiting for a 33 ms clock.
+    sendControls,
     // Slice 5: the guest's own watchdog, on the same seam — a test hands it a clock instead of
     // waiting twenty seconds for a real one.
     checkHostAlive,

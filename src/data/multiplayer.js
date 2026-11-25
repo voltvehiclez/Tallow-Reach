@@ -145,6 +145,43 @@ export const SHIP_STREAM = {
 };
 
 /**
+ * What a guest asks its ship to do (slice 8b) — the fields of a `controls` message, and the two
+ * timings that keep the other side honest.
+ *
+ * The fields are the **control record** `state/controls.js` already defines, one for one: the sim
+ * reads `P.controls` and knows nothing about keys, so a guest's asking can be written into its
+ * record with the same shape the local pilot's has. `aim` is the one field the record does not have
+ * — each pilot aims with its own camera (`state.aimDirection` is the local one), so a guest's
+ * looking direction travels beside its stick and lands in its record as `aimDirection`.
+ *
+ *   hz        messages a second, guest to host. Faster than `SHIP_STREAM.hz` (24) on purpose: a
+ *             snapshot must never be the thing a control waits behind, and 30 Hz is one message per
+ *             render frame on a 60 Hz screen every other frame.
+ *   staleMs   silence this long and the guest's ship is asked for **nothing** — a closed tab, a
+ *             backgrounded window or a lost channel must not leave a hull flying on forever. Set
+ *             well above one message (33 ms) and above a frame hitch, well under `NET.lastSeenSec`.
+ */
+export const CONTROLS = {
+  hz: 30,
+  staleMs: 400,
+};
+
+/** The fields one `controls` message carries, in the order `state/controls.js` documents them. */
+export const CONTROL_FIELDS = [
+  "steer",     // { x, y } -1..1
+  "roll",      // -1..1
+  "thrust",    // -1..1
+  "strafe",    // -1..1
+  "lift",      // -1..1
+  "stop",      // held
+  "brake",     // held
+  "boost",     // held
+  "fire",      // held
+  "sec",       // held
+  "aim",       // [x, y, z], the guest's own looking direction
+];
+
+/**
  * Where a pilot arrives in a world, and where cargo goes when the station it was
  * stored at does not exist there. Meridian Station is every world's home station.
  */
@@ -189,7 +226,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-25d";
+export const BUILD = "2026-11-25e";
 
 export const NET = {
   snapshotSec: 2,

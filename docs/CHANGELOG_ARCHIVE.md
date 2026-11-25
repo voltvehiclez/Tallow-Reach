@@ -1,4 +1,27 @@
 
+## 2026-11-24: Slice 6's trading design, from the owner
+
+**Docs only; no rebuild needed.** Save version unchanged (29). Trading is still **last** (7 → 8 → 6).
+
+The owner described the trade system in two rounds of answers. It is recorded in
+[architecture/trading.md](architecture/trading.md) and summarised in slice 6 of
+[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
+
+- **Where:** a new **Trade** station tab beside Base/Saves lists the pilots docked at this station —
+  your own row included, with no button on it. Another pilot's **Trade** opens the window in the
+  left-hand panel **on both screens at once**. Close button top right; **undocking cancels**;
+  stations only.
+- **Halves:** theirs left, yours right, inventory-style grids — items and **ships** (a ship carries
+  its fit and cargo; **the ship you are piloting cannot be offered**), plus an **Add credits** button.
+- **Confirms:** one per half; with both confirmed the **host** swaps everything atomically and **only
+  if the receiving station storage and hangar have room** — otherwise nothing moves at all.
+- **Anti-scam:** an edit after a confirm clears the confirmation; the same rule covers credits. One
+  detail is left open (whose confirm clears — the safe rule, **both**, is written as intended).
+- **Custody:** a guest's received items must go into the lockers of its visiting record, not the
+  host's station stores, or the goods would never come home (`net/custody.js` `checkOut`/`checkIn`).
+- **Prerequisite:** a real docked presence — `net/session.js` still admits guests with
+  `docked: false`; slice 6 begins by reporting where a pilot is docked.
+
 ## 2026-11-24: Slice 4 playtest passed
 
 **No code change; no rebuild needed.** Save version unchanged (29).

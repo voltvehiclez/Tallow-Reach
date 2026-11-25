@@ -14,7 +14,8 @@ command (principle 7), not a key.
 - **Run `flight(dt, P, runtime)` locally every tick** (`sim/player.js`), on the guest's own controls
   and its copy of its own ship. The loop is already fixed at 60 Hz (`SIM_DT = 1 / 60` in
   `data/simulation.js`, `sim/step.js` `createSimClock`), and controls are already a per-pilot
-  record (`state.controls`; 8b adds `state.localInput` for the wire — see the plan).
+  record (`state.controls`; **8b, built, adds `state.localInput`** — the same asking, mirrored field by
+  field for the wire).
 - **Tag every input with a tick number** and send it. The host answers with its authoritative ship
   state **plus the last input tick it processed** (the `ack`).
 - The guest **rewinds to that state and replays the inputs the host has not confirmed yet**. The
@@ -91,7 +92,9 @@ adds a buffer and a delay, not a renderer. The ship-snapshot rate is a **new** d
 
 ## Order to build it
 
-1. **Host-authoritative snapshots with interpolation** (8a, extended to 20–30 Hz).
+1. **Host-authoritative snapshots with interpolation** (8a, built at 24 Hz). **Inputs now travel too**
+   (8b, built): 30 Hz, cleaned both ways, written into the visitor's own record by its peer id — the
+   host's simulation flies the guest's ship, which is what everything below corrects for.
 2. **Predict the guest's own ship** (8d): ticked inputs, ack, rewind and replay, the 100 ms blend.
 3. **The cosmetic muzzle effects** (8e): flash and sound now, the host's bullet replaces them.
 4. **Lag compensation only if playtests demand it** — never as a first move.
