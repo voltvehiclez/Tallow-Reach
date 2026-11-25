@@ -1,3 +1,41 @@
+## 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home
+
+**Code change; rebuild needed; build `2026-11-24c`.** One rule, in the owner's words: *"Doesnt
+matter if nothing has changed, game should always try to use the latest pilot version since even
+small things like pilot position can change."* Save version unchanged (29).
+
+Since playtest 18 the game had asked itself **whether the friend's world held anything worth
+collecting** — `newerCopyAway()` in `net/session.js`, `isNewerCopy()` in `net/custody.js`, weighing
+the host's `{epoch, rev}` pair and then credits and cargo — and the away card had a "holds newer
+work" line or a "nothing has changed, both copies are the same" line to match. Two things were
+wrong with it. The comparison is invisible to the player, so it asked them to trust a number they
+cannot see; and it is not even the right measure, because the facts that change with no number
+moving are exactly the ones the owner named — `shipPlaces` (which station a hull is parked at),
+hull damage, a swapped module.
+
+So the question is gone, all of it:
+
+- **Bring pilot home always installs the copy that world holds.** The travelling half is packed in
+  the suitcase for the whole visit, so the home record is a photograph, not a rival: there is
+  nothing to weigh and no second opinion to hold. `newerCopyAway()` and `isNewerCopy()` are
+  **deleted**, not merely unused, so no future caller can put the question back in front of the
+  one act that brings a pilot back.
+- **The card says what happens instead of asking which copy is newer:** *"It is the copy Ada's
+  world holds, whatever has happened to it there — a hull parked at a different station, a stack a
+  little lighter, a module swapped. Nothing is compared first: while your pilot is away, that copy
+  is the truth about it."* One message, no branches.
+- **`compare` still guards the wire.** Two copies arriving out of order must not roll a newer one
+  back, and a `left` record still hands over its own save. That is ordering, not a question for the
+  player, and it is untouched.
+- `state.ui.awayNewer` is gone with it, and the playtest-20 test that asserted the card was
+  "labelled by the copies" now asserts the opposite: nothing anywhere compares.
+
+`src/net/{session,custody}.js`, `src/ui/{menu,screens}.js`, `src/state/state.js`,
+`src/data/multiplayer.js` (BUILD). Tests: `multiplayer-playtest16` (the is-newer unit test became
+"coming home takes the copy that world holds — a tie is not a reason to skip it", which packs a
+real suitcase, leaves the ordering pair *unchanged* and proves the damage and the parked hulls come
+home) and `multiplayer-playtest15` retargeted; 214 in the multiplayer and docs suites, green.
+
 ## 2026-11-24: Playtest 20 — the chat goes away, and Open World always asks about the pilot
 
 **Code change; rebuild needed; build `2026-11-24b`.** Two bugs from the owner's playtest of slice 5,

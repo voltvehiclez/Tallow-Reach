@@ -18,6 +18,20 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-24: Slice 7 playtest passed
+
+**No code change; no rebuild needed.** Save version unchanged (29). The build stays `2026-11-24h` —
+the galaxy-chart fix is what made it work.
+
+The owner: *"Works."* Slice 7 — a visiting pilot named on the **galaxy chart**, under its **pocket**
+on the system map, and in a **Visiting pilots** row at the top of the panel — is
+**PLAYTEST-CONFIRMED** in [ROADMAP.md](ROADMAP.md), [HANDOFF.md](HANDOFF.md),
+[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
+
+Step 16 now stands at slices **1–5 and 7 confirmed**. **Slice 8** (host-authoritative snapshots, the
+guest's own-ship prediction, the second screen) is next; slice 6 (trading, design in
+[architecture/trading.md](architecture/trading.md)) is last.
+
 ## 2026-11-24: Slice 7 fix — the visitor is named on the galaxy chart, and the panel row leads
 
 **Code change; rebuild needed; build `2026-11-24h`.** Save version unchanged (29); no new wire message.
@@ -251,46 +265,9 @@ go. The guard was the right rule enforced one screen too far.
 the notice on `mp-enter-world` lives beside the title press that still asks), `src/data/multiplayer.js`
 (BUILD). Tests: the playtest-20 A3 test became "the visit opens the stand-in world and says it is not
 your friend's", which proves the one-press entry, the button, the notice and its words.
-
-## 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home
-
-**Code change; rebuild needed; build `2026-11-24c`.** One rule, in the owner's words: *"Doesnt
-matter if nothing has changed, game should always try to use the latest pilot version since even
-small things like pilot position can change."* Save version unchanged (29).
-
-Since playtest 18 the game had asked itself **whether the friend's world held anything worth
-collecting** — `newerCopyAway()` in `net/session.js`, `isNewerCopy()` in `net/custody.js`, weighing
-the host's `{epoch, rev}` pair and then credits and cargo — and the away card had a "holds newer
-work" line or a "nothing has changed, both copies are the same" line to match. Two things were
-wrong with it. The comparison is invisible to the player, so it asked them to trust a number they
-cannot see; and it is not even the right measure, because the facts that change with no number
-moving are exactly the ones the owner named — `shipPlaces` (which station a hull is parked at),
-hull damage, a swapped module.
-
-So the question is gone, all of it:
-
-- **Bring pilot home always installs the copy that world holds.** The travelling half is packed in
-  the suitcase for the whole visit, so the home record is a photograph, not a rival: there is
-  nothing to weigh and no second opinion to hold. `newerCopyAway()` and `isNewerCopy()` are
-  **deleted**, not merely unused, so no future caller can put the question back in front of the
-  one act that brings a pilot back.
-- **The card says what happens instead of asking which copy is newer:** *"It is the copy Ada's
-  world holds, whatever has happened to it there — a hull parked at a different station, a stack a
-  little lighter, a module swapped. Nothing is compared first: while your pilot is away, that copy
-  is the truth about it."* One message, no branches.
-- **`compare` still guards the wire.** Two copies arriving out of order must not roll a newer one
-  back, and a `left` record still hands over its own save. That is ordering, not a question for the
-  player, and it is untouched.
-- `state.ui.awayNewer` is gone with it, and the playtest-20 test that asserted the card was
-  "labelled by the copies" now asserts the opposite: nothing anywhere compares.
-
-`src/net/{session,custody}.js`, `src/ui/{menu,screens}.js`, `src/state/state.js`,
-`src/data/multiplayer.js` (BUILD). Tests: `multiplayer-playtest16` (the is-newer unit test became
-"coming home takes the copy that world holds — a tie is not a reason to skip it", which packs a
-real suitcase, leaves the ordering pair *unchanged* and proves the damage and the parked hulls come
-home) and `multiplayer-playtest15` retargeted; 214 in the multiplayer and docs suites, green.
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Playtest 20 (second round) — the latest pilot always comes home
 - 2026-11-24: Playtest 20 — the chat goes away, and Open World always asks about the pilot
 - 2026-11-24: Step 16 slice 5 — a lost host, the copy kept current, and one window per pilot
 - 2026-11-23: One refusal, one place, and a placeholder that says what it wants

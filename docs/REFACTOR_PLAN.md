@@ -116,7 +116,7 @@ steps still to build (16 and 17).
 **Status:** planned 2026-11-21 with the owner, one slice per chat. Slices **1–3 built**
 (2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4**
 (2026-11-23a), **playtest-confirmed 2026-11-24**, and **slice 5** (`2026-11-24f`) built; **slice 7**
-(`2026-11-24h`) built, awaiting playtest.
+(`2026-11-24h`) built and playtest-confirmed 2026-11-24.
 **Build order changed by the owner 2026-11-24: 7, then 8, then 6 (trading last). The numbers
 are names, not a schedule** (renumbering would falsify the archive and every guide).
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
