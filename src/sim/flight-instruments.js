@@ -28,8 +28,18 @@ export function pocketObjects(P, detect = () => true) {
   // the row is built from the **mirror** the screen draws (`state.otherPilots`, `render/views.js`)
   // rather than from `state.players`, because a guest has no record for a friend at all. That is
   // how a visiting pilot became selectable from the N list on both screens, with its own name.
+  //
+  // **Every ship in the pocket, docked or not** (owner, playtest 23's follow-up): *"the filter in N
+  // tab for Ships shows ALL ships. Both player ships and ALL npc ships."* The row used to skip a
+  // **docked** pilot, on the reasoning that a hull inside a station is not out in the pocket — but a
+  // visitor cannot fly at all yet (controls are 8b), so it is docked for its whole visit, and the row
+  // was therefore never there: the friend was missing from the list on the host's screen, and the
+  // host's own hull was missing on the guest's while the host sat at a station. A visitor's hull is
+  // **drawn** parked at the launch point its arrival put it on and, since `2026-11-25c`, it is solid
+  // and takes damage — a body you can see and shoot is a ship in the list. Dead and another pocket
+  // stay out: neither is a ship in this sky.
   for (const pilot of state.otherPilots || []) {
-    if (!pilot || pilot.dead || pilot.place !== place || pilot.docked) continue;
+    if (!pilot || pilot.dead || pilot.place !== place) continue;
     add('Ship', pilot, pilot.name || 'Pilot', pilot.pos);
   }
   return rows.sort((a,b) => a.distance-b.distance || a.name.localeCompare(b.name));

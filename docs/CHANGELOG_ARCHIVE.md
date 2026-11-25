@@ -1,4 +1,32 @@
 
+## 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
+
+**Docs only; no rebuild needed.** Save version unchanged (29). No code moved in this change.
+
+The owner wants a measured amount of **client prediction**: a guest predicts **its own ship**, and
+everything remote is **interpolated, never predicted**. The brief is now
+[architecture/client-prediction.md](architecture/client-prediction.md), linked from the plan (8a's
+snapshot rate and a new 8d), [architecture/multiplayer.md](architecture/multiplayer.md),
+[TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+
+- **Predict only the guest's own ship:** run `flight()` locally every 60 Hz tick on its own
+  controls, tag inputs with a tick, take the host's `ack` (the whole predicted state plus the last
+  tick), rewind and replay unconfirmed inputs. Rotation is not corrected unless it diverges;
+  position and velocity error blend over ~100 ms; snap only after a warp or a respawn. The stick is
+  a held position (−1…1), so inputs go unordered and unreliable with a little redundancy.
+- **Never predicted:** damage, kills, loot, enemies, missiles, mining, inventory, docking and warp —
+  shown only when the host confirms. Remotes are drawn ~100 ms in the past from 20–30 Hz snapshots,
+  using the existing `simClock.alpha()` render interpolation.
+- **Aim:** each guest sends its own aim direction; `sim/weapons.js` already falls back to
+  `P.aimDirection` for a non-local record.
+- **Lag compensation is deferred:** enemies are slow and the pilot's bullets are 900 m/s, so a
+  ~150 ms view is ~5–19 m of error. Playtest first; only then 250 ms of host-side enemy history.
+- **One claimed bug checked and not found:** the asteroid loop in `sim/player.js` uses `a`, and
+  `hurt()` is called with no profile, so there is no shadowed `r` in this tree (2026-11-24). Nothing
+  was renamed.
+- **Order:** host-authoritative snapshots with interpolation, then own-ship prediction, then the
+  cosmetic muzzle effects, then (only if playtests demand it) lag compensation.
+
 ## 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map
 
 **Code change; rebuild needed; build `2026-11-24g`.** Save version unchanged (29) — nothing new is

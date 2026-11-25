@@ -30,6 +30,7 @@ import { createPlayer } from "../src/sim/player.js";
 import { configurePlayer } from "../src/sim/session.js";
 import { toggleLock, pruneLock, lockName, lockPosition, targetHealth, selectPocketObject, isPocketRowLocked } from "../src/sim/targeting.js";
 import { pocketObjects } from "../src/sim/flight-instruments.js";
+import { POCKET_FILTERS, sortedPocketRows } from "../src/ui/pocket-list.js";
 import { hullFraction, shieldFraction } from "../src/sim/pilot-stats.js";
 import { shipEntry } from "../src/net/ships.js";
 import { cleanMessage } from "../src/net/protocol.js";
@@ -187,12 +188,40 @@ test("playtest 23: the N list carries a friend as a Ship row with the pilot's ow
   assert.equal(P.flight.lock, null, "a second click releases it");
 });
 
-test("playtest 23: a docked friend is not a list row and a flying one is", () => {
+test("playtest 23 follow-up: the N list's Ship filter carries every ship, docked friend included", () => {
+  // The owner, report of the guest missing: *"the filter in N tab for Ships shows ALL ships. Both
+  // player ships and ALL npc ships."* A visitor cannot fly yet (8b), so it is **docked for its whole
+  // visit**: skipping docked pilots hid the friend from the host's list and the host from the guest's.
+  // A hull that is drawn parked and can be hit is a ship in the list.
   const P = setup();
   const parked = drawnPilot({ id: "parked", docked: true });
   const flying = drawnPilot({ id: "flying", pos: [0, 0, -200] });
   const rows = pocketObjects(P).filter(row => row.object === parked || row.object === flying);
-  assert.deepEqual(rows.map(row => row.object), [flying], "a pilot parked inside a station is not out in the pocket");
+  assert.deepEqual(rows.map(row => row.object), [parked, flying], "both pilots are rows");
+  assert.deepEqual(rows.map(row => row.kind), ["Ship", "Ship"], "and both are ships");
+  // The Ship filter is the one place every ship lives, so a visitor must survive it — and the row
+  // still says the pilot's own name, not an id and not "Ship".
+  const shown = sortedPocketRows(rows, { ...Object.fromEntries(POCKET_FILTERS.map(k => [k, false])), Ship: true });
+  assert.deepEqual(shown.map(row => row.name), ["Acey", "Acey"], "both are shown when only Ship is ticked");
+  const rowNames = rows.map(row => row.name);
+  assert.deepEqual(rowNames, ["Acey", "Acey"], "a pilot row is its pilot's name");
+});
+
+test("playtest 23 follow-up: a dead pilot and one in another pocket are not ship rows", () => {
+  const P = setup();
+  const dead = drawnPilot({ id: "dead", name: "Bo", dead: true });
+  const elsewhere = drawnPilot({ id: "elsewhere", name: "Cy", place: "sys-000-elsewhere" });
+  const rows = pocketObjects(P).filter(row => row.object === dead || row.object === elsewhere);
+  assert.deepEqual(rows, [], "a wreck and a pilot in another sky are not ships here");
+});
+
+test("playtest 23 follow-up: a parked visitor's row takes the same lock a flying one does", () => {
+  const P = setup();
+  const parked = drawnPilot({ id: "parked", docked: true });
+  assert.equal(selectPocketObject(parked, P), true, "the row is selectable");
+  assert.deepEqual(P.flight.lock, { k: "p", o: parked }, "and it locks as a pilot, so the bars come too");
+  selectPocketObject(parked, P);
+  assert.equal(P.flight.lock, null, "a second click releases it");
 });
 
 /* ------------------------------------------------------------------------- */

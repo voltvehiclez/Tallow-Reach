@@ -4,7 +4,7 @@ Reads `state`, calls sim actions. No game rules here.
 
 | File | What it does |
 |---|---|
-| `pocket-list.js` | Pocket type labels, safe browser-local checkbox preferences, filtering, reversible sorting and pure selectable-row HTML (`pocketRowsHtml`), plus the seven saved filter presets (`cleanFilterPresets`, `presetSlotsHtml`, `presetMenuHtml`; stored on the profile, save v28). The same filters govern the floating HUD labels in `hud.js`. |
+| `pocket-list.js` | Pocket type labels, safe browser-local checkbox preferences, filtering, reversible sorting and pure selectable-row HTML (`pocketRowsHtml`), plus the seven saved filter presets (`cleanFilterPresets`, `presetSlotsHtml`, `presetMenuHtml`; stored on the profile, save v28). The same filters govern the floating HUD labels in `hud.js`. `pocketType` is why the **Ship** box is the one place every ship lives: an NPC ship row is kind `Hostile` and a pilot row is kind `Ship`, and both land on the same filter (playtest 23's follow-up asked for exactly that). |
 | `location-display.js` | Plain current system/pocket text; named off-chart systems use their S-number; instances use Uncharted Space, not a false system. |
 | `weapon-slots.js` | Pure ten-slot hotbar markup: primary 1–5, secondary 6–0, family icons, fitted markers, ammo and independent selected banks. |
 | `vitals.js` | Pure clamped vertical HUD meter fill calculation. |

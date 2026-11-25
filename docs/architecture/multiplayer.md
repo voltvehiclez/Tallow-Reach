@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, **8a built to `2026-11-25c`** including both rounds of playtest 23's fixes, 8b next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, **8a built to `2026-11-25d`** including playtest 23's fixes and follow-ups, 8b next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -278,14 +278,13 @@ every number below is in `src/data/multiplayer.js`:
   **shield as a fraction**. `id` and `ship` are the two the plan's list did not name and a reader
   cannot do without: which pilot, and which hull to build. `shield` joined them because the owner asked
   a friend's lock to show *"hull/shield stats like any other ship"*, and a bar always at 0% is a
-  decoration. Nothing else is on it —
-  no fit, no hold, no credits, no damage taken — so a snapshot cannot move a rule on the far side.
-  `HOST_PILOT_ID` is the host's own hull on the wire.
+  decoration. Nothing else is on it — no fit, no hold, no credits — so a snapshot cannot move a rule on
+  the far side. `HOST_PILOT_ID` is the host's own hull on the wire.
 - **`SHIP_STREAM`** — `hz: 24` (**the owner's 20–30 Hz band**; `NET.snapshotSec` is still the 2 s
   *suitcase* sync), `delayMs: 100`, `samples: 6`, `staleMs: 1500`, `snapM: 50`.
 - **The message** is `ships` (`net/protocol.js`): cleaned on the way out **and** in like every other
-  kind, capped at `LIMITS.ships` (24) pilots per packet. More pilots than that and `session.js`
-  sends more packets — `NET.maxGuests` is a valve, not a cap (playtest 22), so nothing is dropped.
+  kind, capped at `LIMITS.ships` (24) pilots per packet — more pilots and `session.js` sends more
+  packets, because `NET.maxGuests` is a valve, not a cap (playtest 22). Nothing is ever dropped.
 - **The sender** is `session.js` `broadcastShips`, on a `1000 / SHIP_STREAM.hz` timer, started by any
   hosting path. It does not read the simulation: it asks on the bus (`mp-ships-request`) and `main.js`
   answers with `net/ships.js` `shipEntries(state.players)`. No guests, no packets.
@@ -295,12 +294,11 @@ every number below is in `src/data/multiplayer.js`:
   snapshots that straddle it. Past the newest snapshot the pose is **held, never guessed**; a jump
   over `snapM` or a change of pocket is drawn as the step it is.
 
-**The host needs no wire at all.** `render/views.js` draws every non-local record in
-`state.players` as a hull, interpolated exactly as the local ship is, so a visitor appears on the
-host's screen the moment it arrives — the half the owner most wanted to see.
+**The host needs no wire.** `render/views.js` draws every non-local record in `state.players` as a
+hull, interpolated as the local ship is, so a visitor appears on the
+host's screen the moment it arrives.
 
-**A docked visitor is drawn**, parked at its arrival launch point: a visitor cannot fly yet (controls
-are 8b), and a hull hidden until then would be no hull. A
+**A docked visitor is drawn**, parked at its arrival launch point (it cannot fly yet — 8b). A
 dead pilot draws nothing; only pilots in the **pocket being drawn** get a mesh.
 
 **Not in 8a:** controls in (8b), the guest's screen following the host's pocket (8c), any
@@ -353,14 +351,15 @@ The fix is one lock kind and one published fact:
   hull stops being drawn (left, dead, another pocket).
 - The N list's row keeps its kind (`Ship`, so the filters and icons already work) and now maps to
   `"p"`; `isPocketRowLocked`/`selectPocketObject` behave like any other row (including a second
-  click releasing it).
+  click releasing it). **A docked pilot is a row too** (`2026-11-25d`): a visitor cannot fly yet (8b),
+  so it is docked for its whole visit, and skipping docked pilots hid the friend. Only **dead** and
+  **another pocket** keep a pilot out, so the **Ship** filter carries every ship there is.
 - `ui/hud.js` gives a `"p"` lock **the same two bars as a hostile's** and labels an unlocked friend's
   hull with its name; `ui/target-display.js` gives `p`/`Pilot` the friendly tone.
 - **`sim/pilot-stats.js`** (new) owns the two fractions so the host's own screen and the wire cannot
   disagree about a friend's bars; `shield` is on `SHIP_FIELDS`, clamped like `hull`.
 
-**A pilot lock fires nothing.** `sim/weapons.js` only feeds a missile from `F.lock?.k === "e"`, so locking
-a friend changes no weapon rule.
+**A pilot lock fires nothing:** `sim/weapons.js` feeds a missile only from `F.lock?.k === "e"`.
 
 **2. "Stuck on 85% handshake — the link has already been used."** The link was never the problem:
 `custody.guestRecord` hashed whatever token it was handed, and the host's **write-back** (the
@@ -404,13 +403,12 @@ renamed onto a new browser. Tests: `tests/multiplayer-rejoin.test.mjs` (all five
   (8b) and its screen does not follow the host's pocket (8c), so a friend's hull appears on the
   guest's screen only if both happen to be in the same pocket. The host's side is complete: every
   visitor is drawn from `state.players`.
-- ~~A remote hull carries no name label and cannot be locked.~~ **Built (`2026-11-25b`)**: a friend is
-  a lock (`k: "p"`) with its name and hull/shield bars, a Ship row in the N list, and its name over
-  its hull.
-- ~~A remote hull cannot be hit.~~ **Built (`2026-11-25c`)**: every pilot's hull is solid and takes
-  damage — collision, bullets and warheads, shields first. What is still missing is **recovery**: a
-  destroyed visitor is marked `dead` and both screens say so, and nothing brings it back this visit
-  (step 16 debt, *death and recovery*; the pilot is safe in its suitcase, and flying it home works).
+- ~~A remote hull carries no name label and cannot be locked or hit.~~ **Built (`2026-11-25b`, `c`)**:
+  a friend is a lock (`k: "p"`) with its name and bars, a Ship row in the N list (`d`), and its name
+  over its hull; every pilot's hull is solid and takes damage (collision, bolts, warheads, shields
+  first). What is still missing is **recovery**: a destroyed visitor is marked `dead`, both screens say
+  so, and nothing brings it back this visit (step 16 debt — its pilot is safe in its suitcase, and
+  flying it home works).
 - The invitation is **not checked** when a browser joins the room: one that knows the world id can join
   without the link. Step 17's job.
 - The player list is names, not positions or ships; non-local death is step-16 work.

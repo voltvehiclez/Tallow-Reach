@@ -18,6 +18,39 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included
+
+**Code change; rebuild needed; build `2026-11-25d`.** Save version unchanged (**29**); no save field,
+no wire change, one row rule.
+
+The owner, after `2026-11-25c` worked: *"Make it so that the filter in N tab for Ships shows ALL ships.
+Both player ships and ALL npc ships. Right now cant see the guest in the N tab."*
+
+**What was wrong.** The N (navigation) list already put every hostile under its **Ship** filter
+(`ui/pocket-list.js`: `pocketType('Hostile') === 'Ship'`), so all NPC ships were there. The **pilot**
+row was the one that went missing: `sim/flight-instruments.js` `pocketObjects` skipped a **docked**
+pilot, on the old reasoning that a hull inside a station is not out in the pocket. But a visitor
+**cannot fly at all yet** (controls are 8b), so it is docked for its entire visit — the row was never
+drawn, on either screen. That is exactly the friend the owner could not find; the same rule hid the
+**host's** own hull from a guest's list while the host sat at a station.
+
+**The fix, in one line of rule:** a pilot's row is skipped only when it is **dead** or in **another
+pocket**. Docked or flying, it is a ship in this sky — its hull is drawn parked at the launch point its
+arrival put it on and, since `2026-11-25c`, it is solid and takes damage. So the **Ship** filter is now
+one place where every ship appears: every NPC ship, every other player's ship, and (on a guest) the
+host's ship. The row carries the pilot's own name and locks as a pilot (`k: "p"`), so its hull/shield
+bars come with it, and a second click releases it, exactly like any other row.
+
+**Tests:** `tests/multiplayer-pilot-lock.test.mjs` grew three (now **14**): a docked and a flying pilot
+are both `Ship` rows and both survive the Ship-only filter with the pilot's name on them; a dead pilot
+and one in another pocket are not rows; and a **parked** visitor's row takes the same pilot lock a
+flying one does (`tests/multiplayer-damage.test.mjs` and the rest unchanged). The old
+"a docked friend is not a list row" test was **replaced**, not deleted quietly — it encoded the rule
+that hid the friend.
+
+`npm test` **1106/1106**, build 3596 KB. CTRL+SHIFT+R, then check **Connection details** reads
+`2026-11-25d`. Retest: `testing/TESTING-16-SLICE8A.md` **Part 8**.
+
 ## 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
 
 **Code change; rebuild needed; build `2026-11-25c`.** Save version unchanged (**29**): one repair
@@ -281,36 +314,9 @@ takes it back. Slice 4 is now **PLAYTEST-CONFIRMED** in [ROADMAP.md](ROADMAP.md)
 That leaves **slice 7 built, awaiting the owner's playtest** (`testing/TESTING-16-SLICE7.md`), then
 slice 8 (snapshots, prediction, the second screen) and slice 6 (trading) last.
 
-## 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
-
-**Docs only; no rebuild needed.** Save version unchanged (29). No code moved in this change.
-
-The owner wants a measured amount of **client prediction**: a guest predicts **its own ship**, and
-everything remote is **interpolated, never predicted**. The brief is now
-[architecture/client-prediction.md](architecture/client-prediction.md), linked from the plan (8a's
-snapshot rate and a new 8d), [architecture/multiplayer.md](architecture/multiplayer.md),
-[TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
-
-- **Predict only the guest's own ship:** run `flight()` locally every 60 Hz tick on its own
-  controls, tag inputs with a tick, take the host's `ack` (the whole predicted state plus the last
-  tick), rewind and replay unconfirmed inputs. Rotation is not corrected unless it diverges;
-  position and velocity error blend over ~100 ms; snap only after a warp or a respawn. The stick is
-  a held position (−1…1), so inputs go unordered and unreliable with a little redundancy.
-- **Never predicted:** damage, kills, loot, enemies, missiles, mining, inventory, docking and warp —
-  shown only when the host confirms. Remotes are drawn ~100 ms in the past from 20–30 Hz snapshots,
-  using the existing `simClock.alpha()` render interpolation.
-- **Aim:** each guest sends its own aim direction; `sim/weapons.js` already falls back to
-  `P.aimDirection` for a non-local record.
-- **Lag compensation is deferred:** enemies are slow and the pilot's bullets are 900 m/s, so a
-  ~150 ms view is ~5–19 m of error. Playtest first; only then 250 ms of host-side enemy history.
-- **One claimed bug checked and not found:** the asteroid loop in `sim/player.js` uses `a`, and
-  `hurt()` is called with no profile, so there is no shadowed `r` in this tree (2026-11-24). Nothing
-  was renamed.
-- **Order:** host-authoritative snapshots with interpolation, then own-ship prediction, then the
-  cosmetic muzzle effects, then (only if playtests demand it) lag compensation.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
 - 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map
 - 2026-11-24: Playtest 22 — two friends on one link, and no player cap
 - 2026-11-24: Playtest 21 — the chat box, four small things

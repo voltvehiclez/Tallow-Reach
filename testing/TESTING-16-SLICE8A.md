@@ -11,7 +11,7 @@ smooths them. You only *see* that half once your screens are in the same pocket 
 guide proves it with the host's side, which needs no wire at all, plus a check that nothing on the
 guest's screen has gone strange.
 
-**Build: `2026-11-25c`** — both machines. If one screen shows a different build string (title card,
+**Build: `2026-11-25d`** — both machines. If one screen shows a different build string (title card,
 or Pause > **Open Multiplayer** > **Connection details**), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -207,6 +207,29 @@ what the line says. Also do not report that the visitor cannot fly: controls are
 
 ---
 
+## Part 8 — The N list's Ship filter shows every ship
+
+Your report: *"the filter in N tab for Ships shows ALL ships. Both player ships and ALL npc ships.
+Right now cant see the guest in the N tab."* The Ship box already carried every **NPC** ship; the
+missing row was the **pilot**, because the list skipped docked pilots and a visitor is docked for its
+whole visit (it cannot fly yet — that is 8b).
+
+1. On the **host**, with a friend in the world (Part 0/1), press **N**.
+2. Tick **Ship** and leave the other boxes alone (there are preset buttons too, if you prefer).
+3. Look for the friend's name in the list, e.g. **Acey (Ship)**.
+4. Click that row, then click it again. Press **N** or **Escape** to close.
+
+**What to check:**
+
+- The friend appears as **Acey (Ship)** — the pilot's name, not an id — even though they are parked at
+  the station and cannot move.
+- Clicking the row takes the pilot lock, with **hull/shield bars**; a second click releases it.
+- With **only Ship** ticked, everything that is a ship is still there: raiders, freighters, and the
+  friend. Nothing that is not a ship (rocks, cargo, stations) appears.
+- On the **guest's** screen, **N** → **Ship** lists the **host's** ship too.
+
+---
+
 ## If you see nothing
 
 - **Was it a "Bring my pilot", or only a Join?** Joining looks around; it does not put the pilot in
@@ -216,7 +239,7 @@ what the line says. Also do not report that the visitor cannot fly: controls are
   warp to that system on **M**).
 - **Look at the launch point, not inside the station.** The hull is parked where ships appear when
   they launch — ahead of the station's face, not in the docking bay.
-- **Both builds `2026-11-25c`?** Compare the title card or **Connection details**.
+- **Both builds `2026-11-25d`?** Compare the title card or **Connection details**.
 - **Too dark?** A dark hull against a dark sky at 200 m is hard to see from the docked camera; undock
   and approach.
 - **No bars on the lock?** They belong to the *pilot* lock (Part 6a). Check the build string first:
