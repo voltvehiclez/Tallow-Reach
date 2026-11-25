@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-24 (slices 1–4 playtest-confirmed, 5 to `2026-11-24f`, 7 confirmed 2026-11-24 to `2026-11-24h`, 8 next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, **8a built to `2026-11-25d`** including playtest 23's fixes and follow-ups, 8b next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -14,15 +14,10 @@ beats mean nothing in somebody else's galaxy.
 
 ## Step 17: dedicated servers (planned 2026-11-22, not built)
 
-The owner added **step 17**: a **dedicated server** hosts a world — step 16's host with no screen (a
-headless build of the same project), stepping the fixed loop, holding the world and streaming snapshots
-and controls in a **star** topology, so one port-forwarded server (`host:port`, Minecraft-style) can hold
-a world for a measured number of players (the number goes in `src/data/multiplayer.js`). Peer-to-peer
-stays the two-friend default; `src/net/transport.js` (still the only file naming a connection library)
-gains a server role and the link gains the server's address. The one open dependency question is the
-WebSocket-server library 17b needs (Node has no built-in one). Four slices — **17a** headless server,
-**17b** server transport, **17c** snapshots and controls, **17d** scale, public address, auth, admin —
-are **step 17 of [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)**.
+A headless build of this project hosting one world, star topology, `host:port` the way
+Minecraft works. The design (four slices, the open dependency question) is step 17 of
+[../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); the summary that used to be here is archived
+word for word in [archive/MULTIPLAYER_STEP17_NOTE.md](../archive/MULTIPLAYER_STEP17_NOTE.md).
 
 **Guard rails against accidents, not cheating** (vision pillar 5; [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)).
 
@@ -154,87 +149,45 @@ Either way the handshake afterwards is the same, and it is already written and t
 (`net/custody.js` `handshake`): game version, `worldId` and the guest's secret, each refusal with a
 sentence the guest can act on. A guest turned away learns why.
 
-**Two machines need a path; one machine never does.** The signalling relay introduces the two
-browsers and both sides then believe they are connected — but the *data* connection needs a network
-path, and a home network often has none: no hairpin NAT, and the local addresses Chrome hides behind
-`*.local` mDNS names get dropped by a firewall or a multicast-hostile router. Two tabs on one machine
-share a process, so the failure is invisible there (LESSONS L35). The answer is `ICE.turn`
-(`data/multiplayer.js` — the game's own **ExpressTURN free-tier** account since 2026-11-22, after the
-three public relays it used to list were measured dead from the owner's PC) handed to the library as
-`turnConfig`, used
-**only after** `NET.helloWaitSec` of a direct attempt with a browser in the room and no hello
-admitted — and **by both ends**, because a relayed path needs a relay candidate from each side: the
-guest escalates from its hello timer, the host from its own ("a browser is here, nobody was
-welcomed"). `transport.restart({ useTurn })` is a fresh join; the screen's **Reconnect** asks for the
-same thing. A room that dies on its own (a backgrounded tab, a slept laptop, a dropped relay) stays
-`lost` for ever, so `session.startKeepalive()` reopens it at most once every ten seconds.
-
-**A code is a list of paths, and only some of them cross a network.** The codes proved that two
-machines can connect without any broker — and then failed the moment one of them was on **4G**
-(playtest 8). Nothing was wrong with the exchange: a laptop on a carrier network and a PC at home
-sit behind different NATs with no address they both reach, so the only path that works is a
-**relay (TURN) candidate**, and a code only gets one if gathering is still running when the server
-answers. Hence `ICE.gatherMs` (8 s, not 4) and one TURN server in `ICE.turn` with **two doors** — 3478 over
-UDP and 3478 over TCP — because a phone that blocks UDP can still open the TCP one. (ExpressTURN's
-free plan is those two; the TLS door is a paid plan's, and listing a door that cannot answer is worse
-than a shorter list.)
-Measured: the owner's laptop on 4G joined a hosted link with no codes at all (2026-11-22), the first
-time anything but same-wifi worked. `paste.js` counts the candidates by
-kind (`paths()`, `hasRelayPath()`) and the screen says which kind of code the player is holding —
-`relay: 0` means "same network only", before it is sent rather than after it fails.
+**Two machines need a path; one machine never does.** The short of it: a home network often has none
+(no hairpin NAT, `*.local` names dropped), two tabs on one machine hide the failure, and the answer is
+`ICE.turn` (the game's own ExpressTURN free tier) used **only after** `NET.helloWaitSec` of a direct
+attempt with a browser in the room and no hello admitted — **by both ends**, since a relayed path needs
+a candidate from each. A code only crosses a network if gathering was still running when the server
+answered, hence `ICE.gatherMs` 8 s and two doors on 3478 (UDP and TCP). Measured 2026-11-22: the
+owner's laptop on 4G joined a hosted link with no codes at all; `paste.js`'s `paths()`/`hasRelayPath()`
+tell the player `relay: 0` before they send anything. The full account — escalation timers, keepalive,
+the four doors, and the 4G measurement — is archived word for word in
+[archive/MULTIPLAYER_RELAY_NOTES.md](../archive/MULTIPLAYER_RELAY_NOTES.md).
 
 **Diagnose by facts, not by mood.** `diagFacts()`/`diagReport()` (**Connection details**, copyable with
-one button) print the **build string**, the **world id**, the signalling state and its sentence, **how
-many browsers are in the room**, the direct link's state, relay on/off and **messages sent versus
-received**. That order separates the three failures that all look like "you are the only one there":
-wrong rooms (differing world ids), a right room with no path (2 browsers, sent rising, received 0), and
-different builds. The first four playtests of this slice were diagnosed by guessing.
+one button) print the **build string**, the **world id**, the signalling state, **how many browsers are
+in the room**, the direct link, relay on/off and **messages sent versus received**. That order separates
+the three failures that all look like "you are the only one there": wrong rooms, a right room with no
+path (2 browsers, sent rising, received 0), and different builds. The first four playtests of this slice
+were diagnosed by guessing.
 
-**Reachable is not usable.** Playtest 6 showed `Relays reachable: 3 of 5` on both machines and still one
-browser in each room: a relay can accept a WebSocket and then refuse the game's events (`blocked:`,
-`restricted:`, `auth-required:`), and the library **retires** it silently. The count that matters is
-its own, `getRelaySockets()`, printed as **`Relays connected: N`** — which is why the pinned list keeps
-more than one family of servers: a live relay that will not carry this protocol is worse than a dead
-one, because it inflates a number.
+**The relays, in three facts that cost playtests 5, 6 and 8 to learn:** a relay can accept
+a socket and refuse the game's events, so the count that matters is the library's own
+`Relays connected: N`, never "reachable"; the relay list is **pinned** in
+`RELAYS.relayUrls` because the library's shuffled five included dead servers; and a
+copy/paste code works with no relay at all. The full account is archived word for word in
+[archive/MULTIPLAYER_RELAY_NOTES.md](../archive/MULTIPLAYER_RELAY_NOTES.md).
 
-Whatever the relays do, **the copy/paste codes work without them** — two players swap two codes and the
-browsers connect directly. After `NET.helloWaitSec` with nobody in the room the session marks itself
-**stalled** (`armStallTimer`), the host's screen auto-creates the offer (`autoOfferWhenStalled`, once
-per screen opening), a stalled guest gets the paste box on the pause card, and `net/paste.js` always
-offers `ICE.turn` beside its STUN — a player reaching for codes has already learned the easy route
-failed, so the only question left is whether a path exists at all.
+**The hello is repeated, per peer, until it is answered.** A hello "sent" is not a hello heard: the
+channel opens seconds after the room says the peer is there, and a message into an unopened channel is
+gone without an error — while `join()` returns before the other pilot is introduced, so the first hello
+has nobody to go to. It used to latch "greeted" anyway: chat worked and the list stayed empty
+(*connected*, empty). So `sayHello(peerId)` latches only on a send that left, is repeated every
+`NET.helloRetrySec` and on `onPeer`, and the `welcome` is the real latch; the host logs "joined" once
+per guest however many hellos arrive. After `NET.helloWaitSec` the guest is told, in one sentence for
+"nobody is in the room" and another for "nothing gets through".
 
-**The relays are pinned, and their health is on screen.** This is the one failure that looks
-impossible from inside the game: same build, same world id, both `finding`, **one browser in each
-room and zero messages sent** — the introduction itself never happened, so the path, the relay and
-the handshake are all irrelevant (playtest 5). The library picks *five of thirty* public signalling
-relays by `shuffle(defaults, strToNum(appId)).slice(0, 5)`; the app id makes it the same five on every
-machine, which makes the failure look like a contradiction — but this game's five were three obscure
-or dead servers, so both players subscribed to the same silence. `RELAYS.relayUrls` in
-`data/multiplayer.js` therefore **names the relays** (six long-running ones; the library uses the
-first five) and `transport.checkRelays()` opens a WebSocket to each and counts the answers, shown as
-**Relays reachable: N of 5** (asked when the screen opens, on Reconnect, cached 20 s). **0 of 5**
-means the player's network blocks them and no retry can help — the block says so and points at the
-copy/paste code path, which needs no relay at all. Tests must never probe: `setRelayProbe(null)`.
+**Names are labels; a duplicate gets a star.** Identity is the browser's own (see above). `uniqueName(wanted,
+taken)` hands the guest the first free variant — `Acey`, `Acey*`, `Acey**` — counted against the host's
+name and every guest but its own row (a rejoin grows no star). It travels back in `welcome.youName`,
+trimmed to `NET.nameMax`.
 
-**The hello is repeated until it is answered.** A hello "sent" is not a hello heard: the channel
-opens seconds after the room says the peer is there, and a message into an unopened channel is gone
-without an error. So a guest repeats its hello every `NET.helloRetrySec` until a `welcome` arrives —
-the reply is the latch — clearing its per-peer latch each round. The host logs "joined" once per
-guest however many hellos arrive. After `NET.helloWaitSec` with no answer the guest is told, with a
-different sentence for "nobody is in the room" than for "nothing gets through".
-
-**Names are labels; a duplicate gets a star.** Identity is the browser's own (see above); a name is
-what other people read. `uniqueName(wanted, taken)` hands the joining guest the first free variant —
-`Acey`, `Acey*`, `Acey**` — counted against the host's name and every guest but its own row (a rejoin
-grows no second star). The host stores it and sends it back in `welcome.youName`; the guest adopts it
-and chats under it, trimmed to fit `NET.nameMax`.
-
-**The hello is per peer and retried.** `join()` returns when the room opens, before the other pilot is
-introduced, so the first hello has nobody to go to. It used to latch "greeted" anyway: the host never
-admitted the guest nor listed it, while chat (one broadcast per line) worked — *connected*, empty
-list. `sayHello(peerId)` latches only on a send that left, and is re-sent on `onPeer` and when the
-paste wire's channel opens.
 
 **A code names the world.** `TRJOIN:` codes carry the host's `worldId` (`CODE_VERSION` 2; version 1 is
 still read): a guest joining by code has no link to carry it, and without it the host's own handshake
@@ -245,18 +198,9 @@ Chat (**Enter**) and the player list arrive in the same slice, so the pipe is pr
 of the player's crosses it. A hosted world **never pauses**, and the pause card
 carries **Open Multiplayer** (on/off, the join link, the paste box) instead of a pause.
 
-### What slice 3 built (2026-11-21)
-
-| File | The one job |
-|---|---|
-| `net/transport.js` | the wrapper: `createChannel` → `join/send/broadcast/leave/peers/state`; `trystero` is named here and nowhere else (lazily, through a loader a test can replace); every failure becomes `lost` + a sentence |
-| `net/session.js` | one session: `hostWorld`, `joinWorld`, the paste codes, the handshake through `custody.handshake`, the guest list, the recent chat, `mp-state` on the bus |
-| `net/protocol.js` | seven message kinds, each cleaned and length-capped on the way out **and** in |
-| `net/paste.js` | the broker-free fallback: a `TRJOIN:` offer code and an answer code, browser WebRTC only |
-| `net/join-link.js` | `?join=<worldId>#<token>`, and reading one out of a pasted sentence |
-| `net/settings.js` | the username (`tr_mp`), capped and cleaned; a number is refused rather than shown |
-| `net/boot.js` | a `?join=` link in the address bar: asks first, used once, speaks through `mp-notice` |
-| `ui/multiplayer.js` | the multiplayer screen (name, host, join, codes) and the chat box; every control is a `data-mp` action, and no connection state of its own |
+**What slice 3 built (2026-11-21)** is archived word for word in
+[archive/MULTIPLAYER_SLICE3_NOTES.md](../archive/MULTIPLAYER_SLICE3_NOTES.md); the live
+file-by-file list is `src/net/README.md`.
 
 Three decisions worth keeping:
 
@@ -273,16 +217,15 @@ Three decisions worth keeping:
   there for (owner's playtest 2). The card still releases every held control key on the way in, so
   the ship cannot fly itself behind it while the world keeps stepping.
 - **The screen is drawn from a model, and its refusals from a sentence.** `screenModel()` turns the
-  session snapshot and the screen's own view state into everything the player sees; `act(name)` does
-  what a button does and returns whether it worked. Both are callable with no DOM, which is how
-  `tests/multiplayer-ui.test.mjs` drives the real buttons. The switch is drawn from the **session**
-  (`hosting`), never from the stored setting: a switch that says On for a world that is not open is a
-  lie (LESSONS L32), so a failed host snaps it back to Off with the reason in `#mp-msg` — an element
-  that is always in the card. The offer code lives in the screen's model, so a redraw cannot delete
-  the code the player was told to send.
+  session snapshot and the screen's view state into everything the player sees; `act(name)` does what a
+  button does. Both run with no DOM, which is how `tests/multiplayer-ui.test.mjs` drives the real
+  buttons. The switch is drawn from the **session** (`hosting`), never from the stored setting (LESSONS
+  L32), so a failed host snaps back to Off with the reason in `#mp-msg`. The offer code lives in the
+  model, so a redraw cannot delete the code the player was told to send.
 
-**What a session is not allowed to do yet:** it moves no pilot and draws no remote ship —
-deliberate, so it can be tested without risking a save.
+**What the connection still does not do:** it moves no pilot (8b), and it decides no ship's
+position (the host's sim does). What slice 8a added is a *picture* — a guest's hull on the host's
+screen, the host's hull on the guest's — and every number in it is drawn, never simulated.
 
 ## Slices
 
@@ -306,7 +249,7 @@ deliberate, so it can be tested without risking a save.
    swaps at once only if station storage and hangar have room. **Built last** (order 7 → 8 → 6).
    Design: [trading.md](trading.md).
 
-## Slices 7 and 8: the second pilot, then the second screen (7 built; 8 planned)
+## Slices 7 and 8: the second pilot, then the second screen (7 built; 8a built)
 
 The owner asked for **"one world, two ships visible"** on 2026-11-22. The plan's own model says what
 that costs — the host's browser is the authority, and a guest's screen draws what the host sends back —
@@ -319,30 +262,56 @@ recovery*, *player presentation and input*). Two slices, because neither half ca
   on the galaxy chart and under its **pocket** on the system map, and `pilotPanelMarkup` names every
   visitor with its system at the **top** of the side panel (it may have arrived elsewhere).
   `render/views.js` still draws one hull (8).
-- **Slice 8 — one world on two screens.** Snapshots out (`SHIP_FIELDS`), controls in
+- **Slice 8 — one world on two screens.** Snapshots out (`SHIP_FIELDS`, **8a built**), controls in
   (`state.localInput`, a numbered input-rule change — see [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)),
-  and the guest's screen following the **host's** pocket. Only then are two ships drawn in one sky.
-  The guest predicts its own ship, and remotes are interpolated:
-  [client-prediction.md](client-prediction.md).
+  and the guest's screen following the **host's** pocket. 8a draws the second hull; only after 8c
+  are two ships drawn in one sky on both screens. The guest predicts its own ship, and remotes are
+  interpolated: [client-prediction.md](client-prediction.md).
 
-**Away means this world is paused, and the card says so** (owner, playtests 18 and 20 — playtest 20
-replaced the "only if newer" gate):
+## Slice 8a: ship snapshots (built 2026-11-25, re-sent as `2026-11-25b` with playtest 23's fixes)
 
-- The **main menu is always the main menu** (playtest 18): leaving a friend's world lands somewhere
-  ordinary, never on a save question.
-- The title's **Open World** press lands on the card. A player already in a visit reaches the world
-  from the multiplayer screen instead, and gets the **stand-in** (playtest 21): today that is this
-  browser's own galaxy holding the pilot's latest copy, said in a notice when it opens, because the
-  wire carries no world state until slices 7-8. The stand-in is a look, not progress — the travelling
-  half is in the suitcase, and `captureActiveModeSave` folds no live facts into a save that is away.
-- The card *"Your pilot is in Ada's world"* appears **only** on an **Open World** press, and it
-  appears **every time** while the pilot is away: the press is a custody decision either way.
-- **Nothing is compared** (owner, playtest 20: *"even small things like pilot position can
-  change"*): **Bring pilot home always installs the copy that world holds.** A `newerCopyAway` /
-  `isNewerCopy` pair used to weigh credits and cargo first, and it is deleted — the travelling half
-  is a photograph, not a rival, and `shipPlaces` or hull damage move with no number changing.
-- The card has **two** buttons — **Bring pilot home** and **Main menu**. **Rejoin was removed**
-  (playtest 18): rejoining is *main menu → Join Multiplayer World*, one path that explains itself.
+**The host says where every pilot is; a guest draws it and simulates nothing.** Five pieces, and
+every number below is in `src/data/multiplayer.js`:
+
+- **`SHIP_FIELDS`** — the whole of what travels about one pilot: id, name, ship, place, position,
+  rotation, velocity, throttle, docked, dead, hull as a fraction, and — since playtest 23 —
+  **shield as a fraction**. `id` and `ship` are the two the plan's list did not name and a reader
+  cannot do without: which pilot, and which hull to build. `shield` joined them because the owner asked
+  a friend's lock to show *"hull/shield stats like any other ship"*, and a bar always at 0% is a
+  decoration. Nothing else is on it — no fit, no hold, no credits — so a snapshot cannot move a rule on
+  the far side. `HOST_PILOT_ID` is the host's own hull on the wire.
+- **`SHIP_STREAM`** — `hz: 24` (**the owner's 20–30 Hz band**; `NET.snapshotSec` is still the 2 s
+  *suitcase* sync), `delayMs: 100`, `samples: 6`, `staleMs: 1500`, `snapM: 50`.
+- **The message** is `ships` (`net/protocol.js`): cleaned on the way out **and** in like every other
+  kind, capped at `LIMITS.ships` (24) pilots per packet — more pilots and `session.js` sends more
+  packets, because `NET.maxGuests` is a valve, not a cap (playtest 22). Nothing is ever dropped.
+- **The sender** is `session.js` `broadcastShips`, on a `1000 / SHIP_STREAM.hz` timer, started by any
+  hosting path. It does not read the simulation: it asks on the bus (`mp-ships-request`) and `main.js`
+  answers with `net/ships.js` `shipEntries(state.players)`. No guests, no packets.
+- **The receiver** is the guest's own screen. `session.js` drops the guest's own entry (it already
+  draws its own hull) and emits `mp-ships`; `render/shipstream.js` keeps the last few snapshots per
+  pilot and hands `render/views.js` a pose **100 ms in the past**, interpolated between the two
+  snapshots that straddle it. Past the newest snapshot the pose is **held, never guessed**; a jump
+  over `snapM` or a change of pocket is drawn as the step it is.
+
+**The host needs no wire.** `render/views.js` draws every non-local record in `state.players` as a
+hull, interpolated as the local ship is, so a visitor appears on the
+host's screen the moment it arrives.
+
+**A docked visitor is drawn**, parked at its arrival launch point (it cannot fly yet — 8b). A
+dead pilot draws nothing; only pilots in the **pocket being drawn** get a mesh.
+
+**Not in 8a:** controls in (8b), the guest's screen following the host's pocket (8c), any
+prediction, ack/rewind, cosmetic muzzle and lag compensation (8d/8e —
+[client-prediction.md](client-prediction.md)). No save change: the stream is runtime only and
+`SAVE_VERSION` stays 29. Tests: `tests/multiplayer-slice8a.test.mjs`; guide:
+[../../testing/TESTING-16-SLICE8A.md](../../testing/TESTING-16-SLICE8A.md).
+
+**Away means this world is paused, and the card says so** (owner, playtests 18 and 20). The four
+rules — the main menu is always the main menu, the card is raised by **every** Open World press, the
+stand-in is a look rather than progress, and **nothing is compared** because the press always takes
+the copy that world holds — are stated in full, word for word, in
+[archive/MULTIPLAYER_SLICE5_NOTES.md](../archive/MULTIPLAYER_SLICE5_NOTES.md).
 
 **Bring pilot home** is exactly what the owner described: the copy from the friend's world —
 credits, ships, hull, holds, cargo and lockers — becomes the local save; missions, story flags and
@@ -350,52 +319,97 @@ statistics stay local (`custody.checkIn`). Campaign play never affects it.
 
 ## Slice 5: crashes and reconnects (built 2026-11-24a, reworked 2026-11-24b)
 
-Four rules, and one hole closed:
+Playtest-confirmed on 2026-11-24. The rules — **a lost host is a lost room**, **rejoining keeps the
+version the server has**, **the copy is kept current**, **`compare` decides, never arrival order**,
+**the chat takes itself away**, **a departure is said and a pilot lives in one window** — are stated in
+full, word for word, in
+[archive/MULTIPLAYER_SLICE5_NOTES.md](../archive/MULTIPLAYER_SLICE5_NOTES.md). Playtest 23 added one
+correction to the record-keeping those rules depend on: see below.
 
-- **A lost host is a lost room** (owner, 2026-11-24: *"returned to the main menu with a prompt saying
-  something like lost connection to host … Like Minecraft."*). Stated once by the session
-  (`markHostLost`, `mp-host-left`), for a departing peer **and** for silence (`checkHostAlive`:
-  nothing from the host for `NET.lastSeenSec` while a `ping` waits for its `pong`); then
-  `ui/multiplayer.js` stops the session **quietly** (no one left to say `bye` to) **before** the
-  menu shows **"Lost connection to host"** (`state.ui.lostHost`) with **one** door, *Main menu*. It
-  asks no question about a save (L40) and touches none.
-- **Rejoining keeps the version the server has** (owner: *"when reconnecting to the server after a
-  disconnect your pilot's last version is already on the server"*). A rejoin is an ordinary join: the
-  hello re-admits the pilot (a `left` record is proof of nothing), the guest re-sends its copy, and
-  `compare` lets the newer win. **The secret is put back on the way out:** the copy a guest keeps is
-  the host's copy and a host keeps no token, so `sendCarryMessage` fills it from `away.token` —
-  without that, a rejoin in a fresh session was refused as "that link has already been used".
-- **The copy is kept current.** `writeBack` had no caller until this slice: `syncGuests` asks `sim/` for
-  each visitor's live profile every `NET.snapshotSec`, raises `rev` on a real change (`NET.revStepMs`
-  floor) and re-sends an unchanged copy every `NET.suitcaseRepeatSec` — without it a guest came home
-  from the copy it arrived with.
-- **`compare` decides, never arrival order** (`onCarry`): a host loading an older save loses to a newer
-  suitcase; a stale `carry` does not roll the world backwards (the record stands and its copy is sent
-  back); a **`left` record hands over its own save**, because a pilot home since is the newest truth
-  about itself. A *dropped connection* is not that case (the hello re-admits first). A tie takes the arriving
-  copy.
-- **The chat box takes itself away** (owner, playtest 20: *"it doesnt go away … unless the user has
-  pinned the chat"*; 12 s since 21, and your own sent line counts). A line — anybody's — shows it for
-  `CHAT.autoHideSec`; **Pin** keeps it, and so does an open field. `chatKeepsOpen({ pin, typing,
-  saidAt, now })` is the whole rule; only the timer is untested (L45). **Glancing, typing and pinned
-  are three boxes**: a glance is the chat alone, across the full width — the players column and the
-  **Pin** button exist only while the field is open (`body:not(.mp-chat-open) #mp-chat-pin`, playtest
-  22), which is also how a pinned box is unpinned (Enter brings the button back). The column is 54 px
-  with no indent, names ellipsize at 12 px, and past `CHAT.whoRows` (10) it adds `+N more`. The button
-  keeps the word **Pin**, its state in its colours (L32, L46).
-- **A departure is said, and a pilot lives in one window.** New kind **`bye`** (a guest session
-  stopping, and `pagehide`/`beforeunload`): the host writes the final copy back, marks the record
-  `left` and takes the ship out. A hello for the same `guestId` from a different live peer is a
-  **takeover**: the older window is told (`refuse` reason `replaced`), stops **quietly** (no `bye`),
-  and the record is not marked `left`. `ping`/`pong` ride the keepalive, writing `lastSeen`.
+## Playtest 23: a friend is a ship like any other, and a pilot can always come back (built `2026-11-25b`, repaired `2026-11-25c`)
+
+The owner's playtest of 8a reported two bugs. Both are fixed in the working tree **inside slice 8a**
+— the slice was re-sent as `2026-11-25b` rather than renamed — and both are covered by tests that
+fail on the old code.
+
+**1. "Cannot select a friend's ship."** Slice 8a drew the hull and stopped there, and a visiting
+pilot was never a target: `sim/targeting.js` offered only hostiles, rocks, crates, rifts, gates,
+canisters and the station (a visitor is a `state.players` record, not a hostile, and on a guest there
+is no record at all), `LOCK_KIND_BY_ROW` had no entry for the N list's pilot row so it became a
+**name-only** lock with no health, and `ui/hud.js` drew bars for `k === "e"` alone.
+
+The fix is one lock kind and one published fact:
+
+- **`k: "p"`** is another pilot. `render/views.js` publishes **`state.otherPilots`** — the mirror of
+  every pilot it draws, one **stable reference per pilot updated in place** (F compares targets by
+  identity, so a fresh object each frame would drop the lock). It is the only place a friend exists on
+  a guest's screen, which is why the renderer writes it and `sim/` and `ui/` only read it — never
+  written back into a pilot, never saved.
+- `sim/targeting.js` `otherPilotsThere(player)` is the list F offers (reticle first via
+  `tagLockView` on the hull mesh, then the same cone hostiles get), `lockName` returns **the pilot's
+  own name**, `lockPosition` returns the drawn pose, and `pruneLock` drops the lock the moment the
+  hull stops being drawn (left, dead, another pocket).
+- The N list's row keeps its kind (`Ship`, so the filters and icons already work) and now maps to
+  `"p"`; `isPocketRowLocked`/`selectPocketObject` behave like any other row (including a second
+  click releasing it). **A docked pilot is a row too** (`2026-11-25d`): a visitor cannot fly yet (8b),
+  so it is docked for its whole visit, and skipping docked pilots hid the friend. Only **dead** and
+  **another pocket** keep a pilot out, so the **Ship** filter carries every ship there is.
+- `ui/hud.js` gives a `"p"` lock **the same two bars as a hostile's** and labels an unlocked friend's
+  hull with its name; `ui/target-display.js` gives `p`/`Pilot` the friendly tone.
+- **`sim/pilot-stats.js`** (new) owns the two fractions so the host's own screen and the wire cannot
+  disagree about a friend's bars; `shield` is on `SHIP_FIELDS`, clamped like `hull`.
+
+**A pilot lock fires nothing:** `sim/weapons.js` feeds a missile only from `F.lock?.k === "e"`.
+
+**2. "Stuck on 85% handshake — the link has already been used."** The link was never the problem:
+`custody.guestRecord` hashed whatever token it was handed, and the host's **write-back** (the
+two-second `syncGuests`), the `left` mark a departure writes and the final copy on `bye` all edit a
+guest record **without** the guest's secret. Each such edit re-hashed `undefined` over the stored
+`tokenHash`, so the record kept the hash of *nothing* and every later hello failed the handshake — for
+ever. It read as intermittent because a `left` record is re-admitted without a token check.
+
+The rule now, in one line: **an update that carries no secret never changes the secret's hash.**
+`custody.recordTokenHash(token, tokenHash, salt)` prefers a real token, keeps the stored hash
+otherwise, and only hashes "nothing" for a brand-new record (the old shape). `putGuest` passes
+`tokenHash: previous?.tokenHash` through. A real token still replaces the hash — that is how a pilot is
+renamed onto a new browser. Tests: `tests/multiplayer-rejoin.test.mjs` (all five fail on the old code).
+
+### Second round (`2026-11-25c`): the record the repair could not reach, and a hull that was only a picture
+
+- **A repair cannot fix what is already stored.** The host's save still held a record whose `tokenHash`
+  was the hash of *nothing*, so every join for it failed, its own pilot's included. The handshake now
+  asks `custody.recordHoldsNoSecret(record, guestId)` first: a record whose hash is
+  `hashToken("", salt)` (or empty) cannot identify anybody, so it **must not refuse anybody** —
+  `handshake` admits it and answers **`repaired: true`**, `putGuest` writes the real hash, and the host's
+  log says so once. **A record that does hold a secret still refuses a wrong one**: a narrow repair, not
+  a weaker handshake (the unchecked invitation is step 17).
+- **A `carry` never rewrites an existing record's hash** — the hello has proved the identity already and
+  `away.token` may be an older build's leftover, so only a first contact takes a hash from a bundle.
+  **A refusal ends the attempt**: the guest no longer sits in "joining" for ever, and the host's words
+  reach the chat log and the menu notice.
+- **A pilot's hull is a body.** `sim/player.js`'s **`pilotHullRadius(P)`** (`SHIP_RADIUS` × the hull's
+  `SHIPS[...].sc`) and a **pilot-vs-pilot pass** in `flight()`: ships separate, ricochet (0.4) and pay
+  the same `impact > 25 → 0.015/m·s` a rock does. A **docked** visitor is included (its hull is drawn at
+  its arrival launch point) and pays here, because `step.js` skips a docked record's tick — one
+  collision, one hit, per pilot per tick. `combat.js`'s bolts and `missile.js`'s warheads stop on
+  another pilot's hull, shields first, skipping the shooter, a wreck and another pocket.
+- **Destroyed is said out loud:** `mp-guest-destroyed` (`sim/multiplayer.js` → `ui/multiplayer.js`) is a
+  chat line saying the ship is gone from this world and the pilot is safe in its suitcase; recovery is
+  still step-16 debt, so the words promise nothing. Tests: `tests/multiplayer-damage.test.mjs` (13).
 
 ## Known gaps (until their slice lands)
 
-- A visiting pilot is **not drawn in space yet** (slice 8): `render/views.js` draws one hull. Since
-  slice 7 it is a **named blip** on the system map and in the panel.
-- A guest's screen is its own world, stand-in or not; it does not follow the host's pocket (8c).
+- A guest's own ship is drawn where **its own** screen put it; its controls do not reach the host
+  (8b) and its screen does not follow the host's pocket (8c), so a friend's hull appears on the
+  guest's screen only if both happen to be in the same pocket. The host's side is complete: every
+  visitor is drawn from `state.players`.
+- ~~A remote hull carries no name label and cannot be locked or hit.~~ **Built (`2026-11-25b`, `c`)**:
+  a friend is a lock (`k: "p"`) with its name and bars, a Ship row in the N list (`d`), and its name
+  over its hull; every pilot's hull is solid and takes damage (collision, bolts, warheads, shields
+  first). What is still missing is **recovery**: a destroyed visitor is marked `dead`, both screens say
+  so, and nothing brings it back this visit (step 16 debt — its pilot is safe in its suitcase, and
+  flying it home works).
 - The invitation is **not checked** when a browser joins the room: one that knows the world id can join
   without the link. Step 17's job.
 - The player list is names, not positions or ships; non-local death is step-16 work.
-- A hosted world's pause card does not pause its *guests*; the host's own clock follows `state.pause`
-  as it always has (the no-pause rule is built, slice 3).
+- A hosted world's pause card does not pause its *guests* (slice 3).

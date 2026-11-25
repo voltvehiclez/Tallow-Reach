@@ -32,7 +32,7 @@
 // now has a live pilot to write back) and for a notice. `mp-guest-left { guestId, name }`
 // when it goes.
 
-import { emit } from "../util/events.js";
+import { emit, on } from "../util/events.js";
 import { state } from "../state/state.js";
 import { createPlayerRecord } from "./player.js";
 import { configurePlayer } from "./session.js";
@@ -128,6 +128,24 @@ export function leaveGuest(guestId) {
   emit("mp-notice", `${entry.name || "A pilot"} left.`);
   return true;
 }
+
+/**
+ * **A visitor's hull reached zero** (playtest 23's second report: every ship takes damage unless
+ * something says otherwise).
+ *
+ * `hurt` already marks a non-local record `dead` at zero hull, and a dead record is not drawn (the
+ * host's `render/views.js` and, through `SHIP_FIELDS.dead`, the guest's own sky agree). What was
+ * missing is the *sentence*: a hull that simply vanishes is a mystery on both screens.
+ *
+ * Recovery is not built (a visitor has no respawn — step 16 debt, *death and recovery*), so the words
+ * say exactly what is true: the ship is gone from this world for this visit, the pilot itself is safe
+ * in its suitcase, and going home flies it again. Nothing here touches the visitor's copy.
+ */
+on("player-dead", ({ player } = {}) => {
+  if (!isGuestRecord(player)) return;
+  const name = player.name || guests.get(player.guestId)?.name || "";
+  emit("mp-guest-destroyed", { guestId: player.guestId, name });
+});
 
 /** For tests: forget every visitor without emitting events. */
 export function resetGuests() {

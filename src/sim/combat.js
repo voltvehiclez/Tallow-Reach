@@ -382,6 +382,26 @@ export function updateBullets(dt, placeId = state.place) {
           break;
         }
       }
+      // **Another pilot's hull stops a shot** (playtest 23, second report: *"the guest ship that
+      // spawns in is not clippable and doesnt take damage. Every ship should by default take damage
+      // and be collidable in tallow reach unless otherwise specified."*). A friend's hull is a body
+      // in this world, so the pilot's own fire damages it exactly as it damages a hostile — shields
+      // first, then hull, through the same `hurt` every other hit uses. Three exceptions, and each
+      // is a fact about the shot rather than a favour: the shooter's own hull is never in its own
+      // way, a pilot in another pocket is not there to hit, and a hull already dead is not a target.
+      // A **docked** visitor is included: its hull is drawn parked at its station's launch point, and
+      // what is drawn is what can be hit (its own arrival is what put it in the sky).
+      if (!dead) {
+        for (const player of state.players) {
+          if (!player || player === b.owner || player.dead) continue;
+          if ((player.place || state.place) !== placeId) continue;
+          if (playerPos(player).distanceTo(b.pos) < 6) {
+            hurt(b.dmg, player);
+            dead = true;
+            break;
+          }
+        }
+      }
     } else if (!dead && !b.own) {
       for (const player of state.players) {
         if (!player || player.docked || player.dead) continue;

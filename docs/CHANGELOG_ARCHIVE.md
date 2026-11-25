@@ -1,3 +1,146 @@
+
+## 2026-11-24: Slice 4 playtest passed
+
+**No code change; no rebuild needed.** Save version unchanged (29).
+
+The owner played `testing/TESTING-16-SLICE4.md` and said it passed (2026-11-24): **Bring my pilot**
+sends the pilot, the two-second profile sync keeps the host's copy current, and **Bring pilot home**
+takes it back. Slice 4 is now **PLAYTEST-CONFIRMED** in [ROADMAP.md](ROADMAP.md),
+[HANDOFF.md](HANDOFF.md), [REFACTOR_PLAN.md](REFACTOR_PLAN.md) and
+[architecture/multiplayer.md](architecture/multiplayer.md).
+
+That leaves **slice 7 built, awaiting the owner's playtest** (`testing/TESTING-16-SLICE7.md`), then
+slice 8 (snapshots, prediction, the second screen) and slice 6 (trading) last.
+
+## 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
+
+**Docs only; no rebuild needed.** Save version unchanged (29). No code moved in this change.
+
+The owner wants a measured amount of **client prediction**: a guest predicts **its own ship**, and
+everything remote is **interpolated, never predicted**. The brief is now
+[architecture/client-prediction.md](architecture/client-prediction.md), linked from the plan (8a's
+snapshot rate and a new 8d), [architecture/multiplayer.md](architecture/multiplayer.md),
+[TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+
+- **Predict only the guest's own ship:** run `flight()` locally every 60 Hz tick on its own
+  controls, tag inputs with a tick, take the host's `ack` (the whole predicted state plus the last
+  tick), rewind and replay unconfirmed inputs. Rotation is not corrected unless it diverges;
+  position and velocity error blend over ~100 ms; snap only after a warp or a respawn. The stick is
+  a held position (−1…1), so inputs go unordered and unreliable with a little redundancy.
+- **Never predicted:** damage, kills, loot, enemies, missiles, mining, inventory, docking and warp —
+  shown only when the host confirms. Remotes are drawn ~100 ms in the past from 20–30 Hz snapshots,
+  using the existing `simClock.alpha()` render interpolation.
+- **Aim:** each guest sends its own aim direction; `sim/weapons.js` already falls back to
+  `P.aimDirection` for a non-local record.
+- **Lag compensation is deferred:** enemies are slow and the pilot's bullets are 900 m/s, so a
+  ~150 ms view is ~5–19 m of error. Playtest first; only then 250 ms of host-side enemy history.
+- **One claimed bug checked and not found:** the asteroid loop in `sim/player.js` uses `a`, and
+  `hurt()` is called with no profile, so there is no shadowed `r` in this tree (2026-11-24). Nothing
+  was renamed.
+- **Order:** host-authoritative snapshots with interpolation, then own-ship prediction, then the
+  cosmetic muzzle effects, then (only if playtests demand it) lag compensation.
+
+## 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map
+
+**Code change; rebuild needed; build `2026-11-24g`.** Save version unchanged (29) — nothing new is
+saved, so every older save loads exactly as before.
+
+Slice 4 already made a guest a **real, docked, simulated record** in the host's world; there was no
+way to *see* it. This slice is the seeing, while the hull in space waits for slice 8.
+
+- **The visitor is a name under its pocket.** `src/ui/starmap.js` `pilotBlips` reads `state.players`
+  (the record `sim/multiplayer.js` fills on arrival) and `systemMarkup` draws each visitor as an amber
+  `sm-pilot-blip` row under the pocket it is standing in on the **system (pocket) map** — `· Acey`
+  below `Meridian Station`. Two visitors at one station stack in a stable name order, and a pilot the
+  chart cannot place (a rift, an unlisted pocket) is skipped rather than guessed.
+- **The panel says it too, and says where.** `pilotPanelMarkup` adds a **Visiting pilots** row to the
+  side panel — `Acey · Meridian Station (Meridian System)` — naming **every** visitor and the system
+  it is in, whichever system is selected. That is deliberate: a visitor arrives at *its own* home
+  station, which may be in another system, and a map with no blip must not look like a visit that
+  never happened. The map and the panel read the one record; neither is a copy.
+- **Content is data:** the row height is `GALAXY.systemMap.pilotBlipGap` in `src/data/galaxy.js`; the
+  look is three rules in `src/styles.css`. `BUILD` is `2026-11-24g`.
+- **Tests:** `tests/multiplayer-slice7.test.mjs` (9 tests): the blip is the visitor's own place and
+  name, the host's pilot is never a blip, the system map's own markup carries it, a visitor in another
+  system is not on this chart but is still named in the panel, two visitors stack, going home removes
+  the row, an arriving or leaving pilot repaints an open map, and the blip is styled.
+- **The order of the remaining work changed** (owner, 2026-11-24): trading moves to **last**, because
+  it needs both players to see the same station. The slices keep their **names**, not a schedule:
+  **7 (this) → 8 → 6 (trading)**. `REFACTOR_PLAN.md`, `ROADMAP.md`, `HANDOFF.md` and
+  `architecture/multiplayer.md` say so; renumbering was rejected because the archive is word-for-word
+  and dozens of guides and UI strings say "slice 7".
+
+**Still not there, by design:** no hull is drawn in space (slice 8), and a guest's screen does not show
+the host's world (8), so a guest sees no blip of its own — it is the only pilot in the world its screen
+draws. Playtest guide: [../testing/TESTING-16-SLICE7.md](../testing/TESTING-16-SLICE7.md).
+
+## 2026-11-24: Playtest 22 — two friends on one link, and no player cap
+
+**Code change; rebuild needed; build `2026-11-24f`.** Save version unchanged (29) — the new value lives in
+the browser's own settings, not in a save.
+
+The owner, with two browsers open: *"When a second guest player joins, first guest is kicked out and this
+error message comes on if first guest tries to join again with 'That link has already been used, or it was
+copied wrongly'."* Plus a list of small things about the chat's right-hand column, which playtest 21 had
+already started.
+
+- **The kick-out was identity, not capacity.** A join link carries **one** secret per world
+  (`?join=<worldId>#<token>`), and the guest was using that secret **as its own**: `guestId` was
+  `guest-<first 8 characters of the link token>`, and its hello carried the same token. Two friends on one
+  link therefore arrived as the *same pilot*, and the host's one-window-per-pilot rule (correct, and kept)
+  retired the first to make room — rewriting the record's token hash, which is why the retired browser was
+  then told the link "has already been used". Its session was gone, so no welcome, so no chat: the second
+  half of the report.
+- **A guest is now its own browser.** `src/net/settings.js` keeps `pilotToken` beside the name in `tr_mp`
+  (made once with `makeToken`, never shown, never in a save); `src/net/session.js` exposes it as
+  `guestToken()`/`pilotToken()`, and both doors in (`joinWorld` from a link, `acceptCode` from a paste code)
+  send it as the guest's identity. The invitation now only says *where* a pilot may go. LESSONS **L47**.
+- **There is no player cap.** `NET.maxGuests` 4 → 100, documented for what it is: a valve against a runaway
+  room, not a rule of the game. The limit is the host's machine and connection (owner: *"i want unlimited
+  players"*). The players column stops at `CHAT.whoRows` (10) names and adds `+N more`, so a busy world
+  cannot grow the HUD.
+- **One-time note for an existing world:** a guest record written by `2026-11-24d` or earlier is keyed by the
+  old link-derived id. That browser now arrives as a *new* guest, and the old record simply stays unused (a
+  record is never deleted). Nothing breaks; the pilot's own copy is what it flies with.
+- **The chat's right-hand column is quieter** (owner, playtest 22): **Pin shows only while the box is open
+  for typing** — so an auto-opened chat, and a pinned box nobody is typing in, draw the lines and nothing
+  else (`body:not(.mp-chat-open) #mp-chat-pin`, replacing playtest 21's narrower rule). The column is
+  narrower (54 px, no 9 px indent), the gap between it and the lines came down 10 px → 6 px, and the names
+  keep their 12 px and ellipsize. The word is still **Pin**, in the two colours playtest 21 gave it (L46).
+  The twelve-second clock from `2026-11-24e` is unchanged, and your own sent line still counts.
+
+Run `npm run build` and `npm test` (1045 tests). Playtest guide:
+[../testing/TESTING-22-CHAT.md](../testing/TESTING-22-CHAT.md), quick version
+[../testing/QUICK-22-CHAT.md](../testing/QUICK-22-CHAT.md).
+
+## 2026-11-24: Playtest 21 — the chat box, four small things
+
+**Code change; rebuild needed; build `2026-11-24e`.** Save version unchanged (29). The last cleanup
+before slice 5 is signed off. The owner's list:
+
+1. **Twelve seconds, not seven** (owner: *"When chat is viewed for a short time 7 sec right now.
+   Increase time open to 12 seconds."*). `CHAT.autoHideSec` is the one number, so the box, its timer
+   and the test all move together.
+2. **A glance is the chat and nothing else** (owner: *"when chat message causes chat pop up for 12
+   seconds, only the chat is viewed ie not the player list (to reduce disturbance to player view)"*).
+   A line arriving shows the lines; the **Players** column is drawn only while the field is open or
+   the box is pinned. Glancing, typing and pinned are three different boxes.
+3. **A pinned box that nobody is typing in hides the Pin button** (owner: *"remove the Pinned icon …
+   This is so that when the chat is pinned the player column doesnt need to be as wide. If you want to
+   unpin the chat you simply press enter and the pinned button appears again"*). The box staying up
+   is the answer to "did that do anything?"; **Enter** brings the button back so it can be unpinned.
+   Unpinning never takes the field away: an open field keeps the box up (`chatKeepsOpen`'s `typing`).
+4. **One word, two looks** (owner: *"Make it so that it always says Pin, and make the button solid
+   yellow with black text if pinned and transparent solid with yellow text if non pinned"*). The label
+   never changes — a control whose word changes under the cursor is a different control each time
+   (L32) — so the state lives in the colours, in `aria-pressed`, and in the hover sentence. The
+   separate "dim when closed" opacity rule is gone with the old styling.
+
+`src/data/multiplayer.js` (`CHAT.autoHideSec` 12, BUILD), `src/ui/multiplayer.js` (the pin's look and
+state, the `mp-chat-pinned` body class, an open field counts as typing), `src/styles.css` (the three
+boxes, the two Pin looks). Tests: the playtest-20 chat test now asks all of it — twelve seconds, no
+renaming, the solid amber pinned look, the hidden column, the hidden button and the body class.
+
 ## 2026-11-24: Playtest 21 — Bring my pilot puts you in the world, and the world says which one
 
 **Code change; rebuild needed; build `2026-11-24d`.** Save version unchanged (29).

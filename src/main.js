@@ -31,6 +31,8 @@ import {
 import { installJoinLink } from "./net/boot.js";
 import { arriveGuest, leaveGuest, guestRecordOf, guestPlayers } from "./sim/multiplayer.js";
 import { hostProfile, bundleFromProfile } from "./net/custody.js";
+import { shipEntries } from "./net/ships.js";
+import { createShipStream } from "./render/shipstream.js";
 import { stationsOfWorld } from "./net/world-places.js";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
@@ -74,6 +76,37 @@ import {
  * (`custody.hostProfile`: the travelled half, with no missions, flags or statistics, so
  * no story step can fire for a guest), and `sim/multiplayer.js` builds the ship.
  */
+/* ------------------------------------------------------------------------- */
+/* Slice 8a: where every pilot is, on the wire and on the glass                */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The ship snapshot, wired once at boot.
+ *
+ * Three small joins, and each is here because `net/` and `render/` may not import each other:
+ *
+ *   `mp-ships-request`   the host's session asks what every pilot looks like; `net/ships.js`
+ *                        turns the live records in `state.players` into the wire fields.
+ *   `mp-ships`           the guest's session hands on what the host sent; the screen's own
+ *                        `render/shipstream.js` keeps the buffer that becomes poses.
+ *   `mp-state`           a session that ends forgets every friend at once, so a hull can never
+ *                        outlive the connection that described it.
+ */
+const shipStream = createShipStream();
+
+function installMultiplayerShips() {
+  on("mp-ships-request", request => {
+    if (!request) return;
+    request.ships = shipEntries(state.players, {
+      localIndex: state.localPlayerIndex,
+      localName: request.name || "",
+    });
+    request.answered = true;
+  });
+  on("mp-ships", ({ ships, at } = {}) => shipStream.receive(ships, at));
+  on("mp-state", snapshot => { if (!snapshot || !snapshot.on) shipStream.clear(); });
+}
+
 function installMultiplayerVisitors() {
   on("mp-guest-arrive", ({ guestId, name, bundle } = {}) => {
     if (!bundle) return;
@@ -166,6 +199,7 @@ setupWarpFlash();
 setupPause();
 setupMultiplayer();
 installMultiplayerVisitors();
+installMultiplayerShips();
 setupMissionLog();
 setupCampaign();
 setupStarmap();
@@ -387,7 +421,9 @@ function drawFrame(now) {
   simClock.advance(dt);
   const alpha = simClock.alpha();
   updateEnemyViews(alpha);    // interpolate each hostile's mesh between 60 Hz ticks
-  updateEntityViews(alpha);   // and every bullet, missile, crate, particle, rock and the ship
+  // Slice 8a: every other pilot. A host draws its visiting records straight from `state.players`
+  // (no wire at all); a guest draws what the host sent, `SHIP_STREAM.delayMs` in the past.
+  updateEntityViews(alpha, shipStream.sample());   // and every bullet, missile, crate, particle, rock and the ship
   updateWarpStreaks(dt);      // all three hide themselves when no warp is running
   updateWarpFlash();
 

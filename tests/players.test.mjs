@@ -108,6 +108,11 @@ test("single-player flight changes the local record, not a second player's recor
   local.docked = false;
   const guest = createPlayerRecord();
   state.players.push(guest);
+  // Parked well away from the local ship **on purpose** (playtest 23b): another pilot's hull is a
+  // body, so two records sharing the origin would be separated by the collision pass — which is the
+  // new rule, not the sharing this test is about. What must not travel is the local record's own
+  // flight: its runtime, its controls, its position.
+  guest.pos.set(0, 0, -500);
   local.controls.thrust = 1;
   guest.controls.thrust = -1;
   const before = guest.pos.toArray();

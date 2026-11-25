@@ -50,6 +50,9 @@ export const MARKER_TONE_BY_KIND = Object.freeze({
   station: 'i',
   s: 'i',
   Ship: 'i',
+  // Another pilot (playtest 23): friendly ice, the same tone its N-list row and label wear.
+  Pilot: 'i',
+  p: 'i',
   Rift: 'i',
   rift: 'i',
   r: 'i',

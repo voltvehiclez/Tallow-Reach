@@ -657,8 +657,21 @@ function drawMarkers() {
     mark(interpolatedPos(e), e.role === "prowl" ? "Unmarked" : e.friendly ? e.n : "Hostile", markerStyle(kind, e), 70, -36, null, lock && !objColor ? "dim" : "", objColor);
   });
 
+  // Step 16 slice 8a (playtest 23): another pilot is a ship in the sky like any other, so it wears
+  // its pilot's name. Without this a friend's hull was an anonymous shape until F found it, which
+  // is not what "like any other ship" means. The locked one is labelled by the lock marker instead.
+  for (const pilot of state.otherPilots || []) {
+    if (pilot.dead || pilot.place !== (P.place || state.place)) continue;
+    if (lock && lock.k === "p" && lock.o === pilot) continue;
+    if (!labelOn("Ship")) continue;
+    mark(interpolatedPos(pilot), pilot.name || "Pilot", markerStyle("Ship", pilot), 70, -36, null, lock ? "dim" : "");
+  }
+
   if (lock) {
-    const hostile = lock.k === "e";
+    // Which locks carry hull/shield bars. A hostile has had them since the bars existed; another
+    // pilot gets them now (playtest 23: "hull/shield stats like any other ship"). Nothing else in
+    // the sky has a health pool, so nothing else shows one.
+    const bars = lock.k === "e" || lock.k === "p";
     const style = lockMarkerStyle(lock, o => featureById(o?.place, o?.feature));
     const lockObj = lock.k === "s"
       ? featureById(lock.o?.place, lock.o?.feature)
@@ -672,7 +685,7 @@ function drawMarkers() {
           : lock.k;
     const objColor = objectObjectiveColor(lockObj, lockKind, objCtx);
     const pos = lock.o && lock.o.pos ? interpolatedPos(lock.o) : lockPosition(lock);
-    const visible = mark(pos, lockedBeltName ?? lockName(lock), style, 70, -36, hostile ? targetHealth(lock.o) : null, "lock", objColor);
+    const visible = mark(pos, lockedBeltName ?? lockName(lock), style, 70, -36, bars ? targetHealth(lock.o) : null, "lock", objColor);
     if (visible) mark(pos, null, style, 0, 0, null, "lk", objColor);
   }
 

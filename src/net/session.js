@@ -33,6 +33,14 @@
 // **Nothing is ever truncated.** A suitcase too big for `NET.suitcaseMaxBytes` is refused
 // with a sentence and the pilot stays home; half a pilot is worse than one that did not go.
 //
+// **Slice 8a: ship snapshots.** The host says where every pilot is `SHIP_STREAM.hz` times a
+// second (24), one `ships` message per `LIMITS.ships` pilots; a guest hands each message to
+// `render/shipstream.js` through the bus (`mp-ships`) and draws the result. This file never
+// measures a ship: it asks the game for the picture (`mp-ships-request`, answered by `main.js`)
+// exactly as it asks for a visiting pilot's suitcase, because `net/` must not read or write the
+// simulation. **One direction only** — the host's picture of its own world. Controls coming the
+// other way are 8b, and a guest never sends its position anywhere.
+//
 // **Event bus.** `mp-state` fires whenever anything a screen shows has changed, with a
 // snapshot attached. `mp-chat-arrived` fires for a line from somebody else. `mp-notice`
 // is how `net/` asks for a sentence to be shown: `net/` may not import `ui/` (the layers
@@ -43,7 +51,7 @@ import { state, currentRootSave, applySave } from "../state/state.js";
 import { SAVE_VERSION, sanitizeSave } from "../state/profile.js";
 import { createChannel, stateLine } from "./transport.js";
 import { createPasteLink, codeWorldId } from "./paste.js";
-import { readMessage, cleanMessage, isChatLine } from "./protocol.js";
+import { readMessage, cleanMessage, isChatLine, LIMITS } from "./protocol.js";
 import {
   handshake, makeToken, checkOut, checkIn, relocate, compare,
   guestRecord, bundleFromProfile, bundleBytes, awayRecord,
@@ -57,7 +65,7 @@ import { readAway } from "../state/storage.js";
 import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
 import { readSettings, writeSettings, cleanName } from "./settings.js";
 import { checkTurnServers, turnSummary } from "./turn.js";
-import { NET, CHAT } from "../data/multiplayer.js";
+import { NET, CHAT, SHIP_STREAM } from "../data/multiplayer.js";
 
 /** A whole, non-negative number: what every count on the wire is. */
 const whole = value => Math.max(0, Math.floor(Number(value) || 0));
@@ -364,6 +372,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // holding a pilot for a browser that is gone (a `bye`; see `net/protocol.js`).
   let pageHook = null;
 
+  /* --- slice 8a: where every pilot is, 24 times a second --------------------------- */
+  // The host's timer. `shipTick` is cleared on stop like every other timer; the rate is
+  // `SHIP_STREAM.hz` (data), NOT `NET.snapshotSec`, which stays the two-second suitcase sync.
+  let shipTick = 0;
+
   const ownGuestId = () => `guest-${token.slice(0, 8)}`;
 
   /** The guest id behind a peer, as the host knows them. */
@@ -467,6 +480,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
         if (role === "guest") return onSuitcase(message);
         return onSuitcaseAck(message);
       case "bye": return onBye(message, peerId);
+      // Slice 8a: the host's picture of every pilot. A guest keeps none of it as state: it goes
+      // straight to the screen's own stream, and its own entry is dropped (it already draws its
+      // own hull, and two of them would z-fight).
+      case "ships": return onShips(message);
       case "ping": {
         // Slice 5: a guest's heartbeat is the host's only sign of life between copies.
         // `lastSeen` is what `net/multiplayer.js`'s `guestIsHere` reads, so it is written
@@ -510,6 +527,13 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       send({ t: "refuse", reason: checked.reason, message: checked.message }, peerId);
       noteLine("Tallow Reach", `${message.name || "A pilot"} could not join: ${checked.message}`);
       return;
+    }
+    // **A record that had been damaged by an older build is repaired, and said out loud**
+    // (playtest 23's leftovers): its stored copy had lost the hash of the pilot's secret, so it
+    // refused its own pilot for ever. `handshake` admits it and `putGuest` below writes the real
+    // hash; the note is there so the host is not left guessing what just happened.
+    if (checked.repaired) {
+      noteLine("Tallow Reach", `${message.name || "A pilot"}'s saved link had been damaged by an older build. It has been repaired, and that pilot can join this world normally from now on.`);
     }
 
     // **One session per guest id: a newer connection kicks the older** (slice 5).
@@ -853,7 +877,15 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const relocated = relocate(message.bundle, current.world, { index });
     const stored = putGuest(current, guestId, {
       name: message.name || record?.name || "Guest",
-      token: message.bundle?.token || "",
+      // **A `carry` never rewrites the secret of a record that already exists** (playtest 23).
+      //
+      // The hello is the only place an identity is proven, and it has already been answered by the
+      // time a carry arrives; the token this message puts on the wire is `away.token` first, which is
+      // whatever this browser used the last time it checked the pilot out — possibly from an older
+      // build. Letting that overwrite the stored hash is how a rejoin could be locked out by its own
+      // suitcase, so the record's own hash stands and only a first contact (no record yet) takes the
+      // hash from the bundle.
+      token: record ? "" : (message.bundle?.token || ""),
       epoch: incoming.epoch,
       rev: incoming.rev,
       bundle: { ...relocated.bundle, token: "" },
@@ -1116,6 +1148,70 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (typeof guestSync?.unref === "function") guestSync.unref();
   }
 
+  /* --- slice 8a: the ship snapshot stream --------------------------------------------- */
+
+  /**
+   * The picture of every pilot in this world, as the game builds it.
+   *
+   * `net/` must not read `state.players` (the layers point one way), so this asks the bus the
+   * same way the suitcase does: a synchronous request that `main.js` answers with
+   * `net/ships.js`'s `shipEntries`. With no answer (a headless test) there is nothing to send,
+   * never a guess.
+   */
+  function collectShips() {
+    const request = { ships: [], name: name || shown, answered: false };
+    try {
+      emit("mp-ships-request", request);
+    } catch (e) { /* a broken listener must not break a session */ }
+    return request.answered && Array.isArray(request.ships) ? request.ships : [];
+  }
+
+  /**
+   * Host side: send the picture now.
+   *
+   * One message per `LIMITS.ships` pilots, so a world with more pilots than one packet may carry
+   * sends more packets instead of losing the ones at the end (`NET.maxGuests` is a valve, not a
+   * cap — playtest 22). A world with nobody visiting sends nothing, and the timer is cheap: no
+   * guests, no work.
+   */
+  function broadcastShips() {
+    if (role !== "host" || !on) return 0;
+    if (!guests.length) return 0;
+    const ships = collectShips();
+    if (!ships.length) return 0;
+    let sent = 0;
+    for (let i = 0; i < ships.length; i += LIMITS.ships) {
+      const message = cleanMessage("ships", { ships: ships.slice(i, i + LIMITS.ships) });
+      if (message && send(message)) sent += message.ships.length;
+    }
+    return sent;
+  }
+
+  /**
+   * The host's clock for that picture. Started by any hosting path (a link, a paste code) and
+   * cleared by `stop()`; `setInterval` at `SHIP_STREAM.hz`, so 24 sends a second.
+   */
+  function startShipStream() {
+    if (shipTick || role !== "host") return false;
+    shipTick = setInterval(broadcastShips, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
+    if (typeof shipTick?.unref === "function") shipTick.unref();
+    return true;
+  }
+
+  /**
+   * Guest side: the host's picture arrived. It is handed on as it is — cleaned on the way in by
+   * `readMessage` — and nothing here decides where a ship is; the screen's stream interpolates.
+   * **Our own entry is dropped:** this screen already draws its own hull.
+   */
+  function onShips(message) {
+    if (role !== "guest") return;
+    const mine = ownGuestId();
+    const ships = (message.ships || []).filter(entry => entry && entry.id && entry.id !== mine);
+    try {
+      emit("mp-ships", { ships, at: Date.now() });
+    } catch (e) { /* a broken screen must not break a session */ }
+  }
+
   /**
    * The live profile of a visiting pilot, as `sim/` knows it.
    *
@@ -1143,7 +1239,19 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       stop({ quiet: true });
       return;
     }
+    // **A refusal ends this attempt; it does not loop** (playtest 23's leftovers).
+    //
+    // The owner's stuck browser sat in "joining" for ever, so the only thing it could do was press
+    // Join again and read the same sentence — "stuck in a loop" were his words. A host that says no
+    // has said it; the session stops here (there is nothing left to say to that host), the menu keeps
+    // the host's own words so the player has something to act on, and Join is a clean second attempt.
+    // The damaged-record case that caused this one is repaired on the host's side now, so this is the
+    // floor under any refusal that is still genuine — a link that really belongs to somebody else.
     noteLine("Tallow Reach", message.message || "The host could not let you in.");
+    try {
+      emit("mp-notice", message.message || "The host could not let you in.");
+    } catch (e) { /* a broken screen must not break a session */ }
+    stop({ quiet: true });
   }
 
   function onPresence(message) {
@@ -1285,7 +1393,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     await channel.join();
     greetEveryone();
     if (role === "guest") { startHelloRetry(); watchPage(); }
-    if (role === "host") { armHostWait(); startGuestSync(); }
+    if (role === "host") { armHostWait(); startGuestSync(); startShipStream(); }
     armStallTimer();
     startKeepalive();
     // Ask the relays once the room exists, so Connection details is never blank about them.
@@ -1309,6 +1417,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const offer = await paste.offer();
     noteCodePaths();
     codes = { offer, answer: null };
+    // A host that joins by paste code is hosting too: its ship snapshots go out over that wire.
+    startShipStream();
     publish();
     return codes;
   }
@@ -1466,6 +1576,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (helloWait) { clearTimeout(helloWait); helloWait = 0; }
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     if (guestSync) { clearInterval(guestSync); guestSync = 0; }
+    if (shipTick) { clearInterval(shipTick); shipTick = 0; }
     for (const { timer } of pendingWrite.values()) if (timer) clearTimeout(timer);
     pendingWrite.clear();
     clearStallTimer();
@@ -1714,6 +1825,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // Slice 5: the host's two-second "is the visitor still what we think?" check — the same
     // function its timer runs, so a test can ask without waiting two seconds.
     syncGuests,
+    // Slice 8a: the host's ship snapshot, sent by its own timer at `SHIP_STREAM.hz`. Exposed the
+    // same way, so a test can send one without waiting for a real 42 ms clock.
+    broadcastShips,
     // Slice 5: the guest's own watchdog, on the same seam — a test hands it a clock instead of
     // waiting twenty seconds for a real one.
     checkHostAlive,

@@ -256,12 +256,12 @@ export function awayRecord({ worldId, hostName, guestId, token, epoch = 0, rev =
  * somebody's pilot. `world.guests` is written by the host, read by the host, and
  * never travels.
  */
-export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0, left = false } = {}) {
+export function guestRecord({ name, token, tokenHash, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0, left = false } = {}) {
   const kept = isPlainObject(bundle) ? clone(bundle) : null;
   if (kept) delete kept.token;
   return {
     name: String(name || "").slice(0, NET.nameMax),
-    tokenHash: hashToken(token, idText(guestId) || ""),
+    tokenHash: recordTokenHash(token, tokenHash, idText(guestId) || ""),
     epoch: whole(epoch),
     rev: whole(rev),
     bundle: kept,
@@ -270,6 +270,41 @@ export function guestRecord({ name, token, guestId, epoch = 0, rev = 0, bundle =
     // suitcase; the mark is what lets the next hello re-admit it (see `onHello`).
     left: left === true,
   };
+}
+
+/**
+ * The hash a guest record keeps (playtest 23).
+ *
+ * A real secret always wins. **An update that carries no secret must keep the hash it was given**,
+ * never hash an absent one: the host's write-back and a pile of `left` marks both edit a record
+ * without touching its token, and hashing `undefined` over the stored hash locked a pilot out of
+ * its own record for ever — *"That link has already been used, or it was copied wrongly"*, on every
+ * rejoin of a pilot whose browser had already been written back once. The token is the guest's; the
+ * host only ever holds this.
+ */
+function recordTokenHash(token, tokenHash, salt) {
+  if (typeof token === "string" && token) return hashToken(token, salt);
+  if (typeof tokenHash === "string" && tokenHash) return tokenHash;
+  return hashToken(token, salt);
+}
+
+/**
+ * **Does this record hold a secret at all?** (playtest 23, second round.)
+ *
+ * A record whose stored hash is the hash of *nothing* cannot identify anybody: it was either written
+ * by a first contact that carried no token, or damaged by the build in which an edit without the
+ * secret re-hashed `undefined` over the stored hash (see `recordTokenHash`). There is nothing there
+ * to protect, so such a record must never refuse the pilot that presents a real token — and refusing
+ * was exactly the stuck loop the owner hit: one browser, written back once by that build, was told
+ * *"That link has already been used"* on every join, for ever, while a fresh browser joined fine.
+ *
+ * A record that DOES hold a secret still refuses a wrong one: this is the narrow repair, not a
+ * weaker handshake (the invitation is still the unchecked part of the join — step 17 closes that).
+ */
+export function recordHoldsNoSecret(record, guestId) {
+  const stored = typeof record?.tokenHash === "string" ? record.tokenHash : "";
+  if (!stored) return true;
+  return tokenCheck("", stored, idText(guestId) || "");
 }
 
 /**
@@ -287,6 +322,12 @@ export function handshake({ token, guestId, record, version, worldVersion, world
   }
   if (expectedWorldId && worldId && worldId !== expectedWorldId) {
     return { ok: false, reason: "world", message: "That link is for a different world. The host needs to make a new one." };
+  }
+  // A record that holds no secret cannot refuse anybody, and the pilot that arrives with a real one
+  // claims it (`onHello` writes the hash on the way in). `repaired` is what the host says out loud,
+  // so a browser damaged by an older build is not left as a mystery.
+  if (recordHoldsNoSecret(record, guestId)) {
+    return { ok: true, reason: null, message: "", repaired: true };
   }
   if (!tokenCheck(token, record.tokenHash, idText(guestId) || "")) {
     return { ok: false, reason: "token", message: "That link has already been used, or it was copied wrongly. Ask the host for a new one." };

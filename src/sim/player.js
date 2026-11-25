@@ -277,6 +277,50 @@ export function flight(dt, P = state.player, runtime = null) {
     }
   }
 
+  // **Another pilot's hull is solid, like a rock or a hostile** (playtest 23, second report: *"the
+  // guest ship that spawns in is not clippable and doesnt take damage. Every ship should by default
+  // take damage and be collidable in tallow reach unless otherwise specified."*).
+  //
+  // A visiting pilot is a record in `state.players` and `render/views.js` draws its hull, so it is a
+  // body: the two ships separate and ricochet off each other with the same maths and the same 25 m/s
+  // / 0.015 damage rule the enemy hulls use. A **docked** visitor is included on purpose — its hull
+  // is still drawn, parked at the launch point its arrival put it on, and a body you can see is a
+  // body you can hit. It has no tick of its own (`step.js` skips a docked record), so it pays for the
+  // collision here; an active visitor pays for itself in its own tick, which is why only this pilot
+  // pays when the other one is flying. That keeps one collision one hit per tick per pilot.
+  for (const other of state.players) {
+    if (!other || other === P || other.dead || !other.pos) continue;
+    if ((other.place || state.place) !== (P.place || state.place)) continue;
+    const rr = SHIP_RADIUS + pilotHullRadius(other);
+    let dx = P.pos.x - other.pos.x, dy = P.pos.y - other.pos.y, dz = P.pos.z - other.pos.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 >= rr * rr) continue;
+    let d = Math.sqrt(d2), nx, ny, nz;
+    if (d > 1e-6) { nx = dx / d; ny = dy / d; nz = dz / d; } else { nx = 0; ny = 0; nz = 1; d = 0; }
+    const overlap = rr - d, half = overlap * 0.5;
+    P.pos.x += nx * half; P.pos.y += ny * half; P.pos.z += nz * half;
+    other.pos.x -= nx * half; other.pos.y -= ny * half; other.pos.z -= nz * half;
+    if (half > 0) pushed = true;
+    const impact = Math.hypot(P.v.x - other.v.x, P.v.y - other.v.y, P.v.z - other.v.z);
+    const vnP = P.v.x * nx + P.v.y * ny + P.v.z * nz,
+      vnO = other.v.x * nx + other.v.y * ny + other.v.z * nz;
+    if (vnP < vnO) {   // approaching — equal hull masses swap normal velocity parts, restitution 0.4
+      const REST = 0.4,
+        newP = (vnP * (1 - REST) + vnO * (1 + REST)) / 2,
+        newO = (vnO * (1 - REST) + vnP * (1 + REST)) / 2;
+      P.v.x += (newP - vnP) * nx; P.v.y += (newP - vnP) * ny; P.v.z += (newP - vnP) * nz;
+      other.v.x += (newO - vnO) * nx; other.v.y += (newO - vnO) * ny; other.v.z += (newO - vnO) * nz;
+    }
+    if (impact > 25) {
+      hurt(impact * 0.015, P);
+      // A parked hull cannot pay in its own tick, so it pays here — through the same shield-then-hull
+      // path every other hit uses. A record with no profile of its own is not a pilot this sim may
+      // hurt (`hurt` refuses to borrow the local fit, L16), so it is left alone.
+      const theirs = profileOf(other);
+      if (other.docked && theirs && theirs !== state.profile) hurt(impact * 0.015, other, theirs);
+    }
+  }
+
   const place = P.place || state.place;
   for (const collider of placeCollidersOf(place)) {
     const speed = P.v.length();
@@ -300,6 +344,13 @@ export function flight(dt, P = state.player, runtime = null) {
     ? V(P.pos.x - stepStart.x, P.pos.y - stepStart.y, P.pos.z - stepStart.z).dot(fwdQ(P.quat)) / dt
     : 0;
 }
+
+/**
+ * How big another pilot's hull is, in metres, for a collision with ours: the same base radius the
+ * local ship is a sphere of, scaled by the hull's own model scale (`SHIPS[...].sc`) — the number the
+ * screen draws it with, so what you see is what you hit.
+ */
+export const pilotHullRadius = P => SHIP_RADIUS * (shipDef(P?.ship)?.sc || 1);
 
 /** Reflect the ship's velocity off a collision normal, keeping 40% of its energy. */
 function bounceOff(P, hit) {

@@ -78,6 +78,73 @@ export const GUEST_FIELDS = ["name", "tokenHash", "epoch", "rev", "bundle", "las
 export const LOCKERS_FIELD = "lockers";
 
 /**
+ * **What travels about another pilot's ship** (slice 8a): the fields one entry of a `ships`
+ * message carries, and nothing else. The plan's list — name, place, position, rotation,
+ * velocity, throttle, docked, dead, hull fraction — plus the two a reader cannot work without:
+ *
+ *   id        which pilot this is (the guest's `guestId`; `HOST_PILOT_ID` for the host)
+ *   ship      the hull id, so the reader builds the right hull. It is not on the plan's list
+ *             because the plan assumed a reader that already knows the hull; a guest's screen
+ *             does not — it knows nothing about the friend's fleet.
+ *   shield    shield as a fraction 0..1, the same kind of number as `hull`. Also not on the
+ *             plan's list, and added for one plain reason: the owner's playtest of 2026-11-25
+ *             (playtest 23) said a friend's hull "must show hull/shield stats like any other
+ *             ship", and a bar that is always 0% because the number never travelled is not a
+ *             stat, it is a decoration. It is still only a picture: a fraction, never HP, never
+ *             a fit, and nothing a rule reads.
+ *
+ * Everything here is a *picture*: a remote ship is a view, never sim state. Nothing in this
+ * list can write to the guest's world, and a snapshot never carries a fit, a hold, credits,
+ * hull damage taken, or anything a rule would read. `tests/multiplayer-slice8a.test.mjs` pins
+ * the list against what the wire actually carries.
+ */
+export const SHIP_FIELDS = [
+  "id",        // which pilot (a guestId, or HOST_PILOT_ID)
+  "name",      // the name the host lists it under
+  "ship",      // the hull id, so the far screen draws the right hull
+  "place",     // the pocket it is in; a screen only draws pilots in the pocket it shows
+  "pos",       // [x, y, z] metres
+  "quat",      // [x, y, z, w]
+  "velocity",  // [x, y, z] metres/second
+  "throttle",  // -1..1, for the engine glow
+  "docked",    // drawn parked at its station rather than in flight
+  "dead",      // its hull is gone: not drawn at all
+  "hull",      // hull as a fraction 0..1, for a reader that wants to show it
+  "shield",    // shield as a fraction 0..1, for the second bar (playtest 23)
+];
+
+/**
+ * The pilot id the host's own ship carries on the wire. A guest's id is its `guestId`; the host
+ * has none (it never joins anybody's world), and a reader needs to tell the two apart.
+ */
+export const HOST_PILOT_ID = "host";
+
+/**
+ * The ship snapshot stream (slice 8a) — how often the host says where every pilot is, and how
+ * long the far screen takes to draw it.
+ *
+ *   hz        snapshots per second, host to guest. **20–30 Hz is the owner's band** (2026-11-24);
+ *             24 sits inside it with a tidy 41.7 ms gap. This is NOT `NET.snapshotSec` — that
+ *             two-second value is the *profile* sync (the suitcase), which stays where it is.
+ *   delayMs   the far screen draws the world this far in the past and interpolates between the
+ *             two snapshots that straddle that moment (`render/shipstream.js`), so a lost or
+ *             late packet shows as a slightly older pose, never a jump. One snapshot and a bit.
+ *   samples   how many snapshots are kept per pilot: enough to straddle `delayMs` with room for
+ *             jitter, and a hard cap so a long silence cannot grow a buffer.
+ *   staleMs   a pilot unheard for this long is dropped from the screen (a guest that left, or a
+ *             host that stopped sending). Longer than `delayMs` plus a few packets.
+ *   snapM     a jump longer than this between two snapshots is a teleport (a launch, a warp, a
+ *             respawn) and is drawn as a jump, not smeared across the screen.
+ */
+export const SHIP_STREAM = {
+  hz: 24,
+  delayMs: 100,
+  samples: 6,
+  staleMs: 1500,
+  snapM: 50,
+};
+
+/**
  * Where a pilot arrives in a world, and where cargo goes when the station it was
  * stored at does not exist there. Meridian Station is every world's home station.
  */
@@ -112,13 +179,17 @@ export const ARRIVAL_STATION_KEY =
  *   tokenBytes    (slice 1) size of the secret that names one guest to one host
  *   revStepMs     (slice 4) floor between two `rev` raises, so a busy second is one snapshot
  *   keepPrevious  (slice 2) how many older versions of a save to keep under `:prev`
+ *
+ * **Not here: how often ships move.** Slice 8a's ship snapshots run at `SHIP_STREAM.hz` (24 Hz),
+ * which is a different fact from `snapshotSec` (the 2 s suitcase sync) and lives in its own block
+ * below so the two can never be confused for one another.
  */
 /**
  * Which build this page is. Two machines that show different strings are not running the same
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-24h";
+export const BUILD = "2026-11-25d";
 
 export const NET = {
   snapshotSec: 2,

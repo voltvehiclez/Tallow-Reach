@@ -324,6 +324,22 @@ export function setupMultiplayer() {
     showNotice(text);
   });
   /**
+   * **A visiting pilot's ship was destroyed in this world** (playtest 23's second report: every ship
+   * takes damage unless something says otherwise). The hull leaves both skies — `dead` rides on the
+   * wire — so this is the line that explains why, and it is a **chat line** because the audience is
+   * the guest: it is the guest's ship, and the guest may not be looking at this card.
+   *
+   * Recovery is not built (step 16 debt, *death and recovery*): the pilot is safe in its suitcase and
+   * flying it home is what brings it back. Saying anything else would be a promise the code cannot
+   * keep.
+   */
+  on("mp-guest-destroyed", ({ name } = {}) => {
+    const who = name || "A pilot";
+    const text = `${who}'s ship was destroyed in this world. Its pilot is safe in its suitcase — go home to fly it again.`;
+    setMessage(text, "hint");
+    api.say(text);
+  });
+  /**
    * Step 16 slice 5: **the connection to the host is gone, mid-game.**
    *
    * The owner's rule (2026-11-24): *"If the host closed their game or the guest loses

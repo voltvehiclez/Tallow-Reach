@@ -17,6 +17,13 @@
 //                                                         a tab closing or a pilot leaving, so the
 //                                                         host writes the final copy back at once
 //                                                         and marks the record `left` (no ghost)
+//   ships      { t, ships[{ id, name, ship, place, pos, quat, velocity, throttle,
+//                           docked, dead, hull }] }        host -> guests (slice 8a): where every
+//                                                         pilot is, `SHIP_STREAM.hz` times a
+//                                                         second. One message carries up to
+//                                                         `LIMITS.ships` pilots, so a full world
+//                                                         is a few messages, never a truncation —
+//                                                         `maxGuests` is a valve, not a cap
 //
 // The `bye` is a courtesy, not a contract: a crashed tab sends nothing at all, which is why the
 // host still notices a peer that vanished on its own. It only makes the ordinary departure —
@@ -38,16 +45,27 @@
 import { NET } from "../data/multiplayer.js";
 
 /** Every message kind this build understands. An unknown `t` is dropped, not echoed. */
-export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye"];
+export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships"];
 
-/** The longest a name, an id or a chat line may be on the wire. */
-const LIMITS = {
+/**
+ * The longest a name, an id or a chat line may be on the wire, and the other hard caps.
+ *
+ * Exported because a sender has to know how much one message may carry: `ships` is sent in
+ * batches of `LIMITS.ships`, so a world with more pilots than that sends more than one message
+ * per snapshot instead of dropping the ones at the end.
+ */
+export const LIMITS = {
   id: 160,
   name: NET.nameMax,
   text: NET.chatLineMax,
   message: 300,
   list: 32,
   suitcase: NET.suitcaseMaxBytes,
+  // Slice 8a: how many pilots one `ships` message carries. A wire cap, never a player cap.
+  ships: 24,
+  // The largest a position, a velocity or any other single axis figure may be, in metres. A
+  // pocket is kilometres across at most; bigger than this is a hand-made or corrupt packet.
+  reach: 1e6,
 };
 
 const text = (value, max) => (typeof value === "string" ? value.slice(0, max) : "");
@@ -100,6 +118,10 @@ export function cleanMessage(kind, fields = {}) {
       return cleanCarry(fields, "carry");
     case "suitcase":
       return cleanCarry(fields, "suitcase");
+    // Slice 8a: where every pilot is, as a plain picture. `SHIP_FIELDS` in
+    // `data/multiplayer.js` is the list of fields; nothing here can reach a rule.
+    case "ships":
+      return { t: "ships", ships: cleanShips(fields.ships) };
     // Slice 5: the guest is leaving on purpose. Two short strings, nothing else: the host
     // answers it with a final `suitcase`, so this message must never be able to say more
     // than "I am going".
@@ -161,6 +183,73 @@ function cleanCarry(fields = {}, kind) {
     bundle,
   };
   return message;
+}
+
+/**
+ * One number on the wire: a finite value, clamped to `±LIMITS.reach` and rounded to three
+ * decimals (a millimetre, and three bytes shorter than the float). `fallback` is what a
+ * missing or hostile value becomes.
+ */
+function num(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.round(Math.max(-LIMITS.reach, Math.min(LIMITS.reach, n)) * 1000) / 1000;
+}
+
+/** `[x, y, z]` from anything vector-shaped, or the zero/identity fallback. */
+function cleanVec3(raw, fallback = [0, 0, 0]) {
+  if (Array.isArray(raw)) return [num(raw[0]), num(raw[1]), num(raw[2])];
+  if (raw && typeof raw === "object") return [num(raw.x), num(raw.y), num(raw.z)];
+  return fallback.slice();
+}
+
+/**
+ * `[x, y, z, w]`, normalised, because the far screen slerps with it: a zero or NaN rotation
+ * would leave a hull facing nowhere for ever. A rotation that is not a rotation becomes the
+ * identity, which draws an upright ship — wrong, but never broken.
+ */
+function cleanQuat(raw) {
+  const q = Array.isArray(raw)
+    ? [num(raw[0]), num(raw[1]), num(raw[2]), num(raw[3])]
+    : raw && typeof raw === "object"
+      ? [num(raw.x), num(raw.y), num(raw.z), num(raw.w)]
+      : [0, 0, 0, 1];
+  const len = Math.hypot(q[0], q[1], q[2], q[3]);
+  if (!Number.isFinite(len) || len < 1e-6) return [0, 0, 0, 1];
+  return q.map(v => Math.round((v / len) * 10000) / 10000);
+}
+
+/**
+ * A ship snapshot: the pilots the host drew, as `SHIP_FIELDS` says, capped at `LIMITS.ships`
+ * per message. An entry with no id is dropped (nothing could be keyed on it), and every other
+ * field is rebuilt from its own type — a peer is never believed about what it sent.
+ */
+function cleanShips(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const entry of raw) {
+    if (out.length >= LIMITS.ships) break;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const id = text(entry.id, LIMITS.id);
+    if (!id) continue;
+    out.push({
+      id,
+      name: text(entry.name, LIMITS.name),
+      ship: text(entry.ship, 40),
+      place: text(entry.place, LIMITS.id),
+      pos: cleanVec3(entry.pos),
+      quat: cleanQuat(entry.quat),
+      velocity: cleanVec3(entry.velocity),
+      throttle: Math.round(Math.max(-1, Math.min(1, num(entry.throttle))) * 1000) / 1000,
+      docked: entry.docked === true,
+      dead: entry.dead === true,
+      hull: Math.round(Math.max(0, Math.min(1, num(entry.hull, 1))) * 1000) / 1000,
+      // Shield, the second bar (playtest 23). A fraction on the wire, clamped like the hull: a
+      // message that says 7.5 shields is a number a reader can draw, not HP from a host's fit.
+      shield: Math.round(Math.max(0, Math.min(1, num(entry.shield, 0))) * 1000) / 1000,
+    });
+  }
+  return out;
 }
 
 function cleanGuestList(raw) {

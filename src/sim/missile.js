@@ -16,6 +16,7 @@ import { emit } from "../util/events.js";
 import { state, localPlayer, placeWorld, profileOf } from "../state/state.js";
 import { enemyPos, enemyVel } from "./enemy.js";
 import { hitHostile } from "./combat.js";
+import { hurt, pilotHullRadius } from "./player.js";
 import { boom, puff } from "./effects.js";
 import { addEntity, dropEntity } from "./entity.js";
 import { placeCollidersOf, sweepColliders } from "./colliders.js";
@@ -93,6 +94,22 @@ export function updateMissileFlight(dt, placeId = state.place) {
         hitHostile(e, s.dmg, enemyPos(e), s.owner, placeId);
         end = true;
         break;
+      }
+    }
+    // **Another pilot's hull is a body here too** (playtest 23's second report: every ship takes
+    // damage and is collidable unless something says otherwise). A warhead that reaches a friend's
+    // hull bursts on it — shields first, through the same `hurt` — instead of sailing through and
+    // blowing up on the rock behind it. Its own hull, a dead wreck and a pilot in another pocket are
+    // all excluded, exactly as for the bolts.
+    if (!end) {
+      for (const player of state.players) {
+        if (!player || player === s.owner || player.dead) continue;
+        if ((player.place || state.place) !== placeId) continue;
+        if (player.pos.distanceTo(s.pos) < 6 + pilotHullRadius(player)) {
+          hurt(s.dmg, player);
+          end = true;
+          break;
+        }
       }
     }
     if (!end) {
