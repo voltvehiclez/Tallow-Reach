@@ -18,6 +18,29 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-24: Slice 7 fix — the visitor is named on the galaxy chart, and the panel row leads
+
+**Code change; rebuild needed; build `2026-11-24h`.** Save version unchanged (29); no new wire message.
+
+The owner's report: *"Slice 7 doesnt seem to have worked. See no viewing of a player in map as the
+host."* The record and the drawing were right — the map's panel row updated the moment a pilot
+arrived — but the feature was where nobody looks: the map opens on the **galaxy** chart, where slice 7
+drew nothing, and the panel row sat *under* the pocket list, below the fold.
+
+- **The galaxy chart draws the visitor now.** `galaxyMarkup` takes `systemPilots`; a system with a
+  visiting pilot is named even at labels-off and carries an amber `· Acey` row under its name, so
+  "where is my friend?" is answered on the view the map opens on.
+- **The Visiting pilots row leads the panel** — under the heading, above *Current pocket*, with an
+  amber rule, instead of after the pocket rows and route details.
+- **Two tests added** (`tests/multiplayer-slice7.test.mjs`, now 10): the galaxy row renders from the
+  one visitor list, and the panel row is placed before the pocket list in the renderer.
+- **The guide says why a map can be empty** (`testing/TESTING-16-SLICE7.md`): no pilot crosses unless
+  the guest presses **Bring my pilot**, the guest lands at *its own* home station, and both windows
+  must be build `2026-11-24h`.
+
+`ui/starmap.js`, `src/styles.css`, `src/data/multiplayer.js` (BUILD), `tests/multiplayer-slice7.test.mjs`,
+the slice-7 guide, `world-and-map.md`, `architecture/multiplayer.md`, `src/ui/README.md`.
+
 ## 2026-11-24: Trading: both confirms clear, and offers come from the hold or the station
 
 **Docs only; no rebuild needed.** Save version unchanged (29). No code moved.
@@ -266,49 +289,9 @@ So the question is gone, all of it:
 "coming home takes the copy that world holds — a tie is not a reason to skip it", which packs a
 real suitcase, leaves the ordering pair *unchanged* and proves the damage and the parked hulls come
 home) and `multiplayer-playtest15` retargeted; 214 in the multiplayer and docs suites, green.
-
-## 2026-11-24: Playtest 20 — the chat goes away, and Open World always asks about the pilot
-
-**Code change; rebuild needed; build `2026-11-24b`.** Two bugs from the owner's playtest of slice 5,
-plus the parts of that playtest that passed. Save version unchanged (29).
-
-1. **The chat box takes itself away** (owner: *"Chat when a message is said then the chat is
-   visible. However it doesnt go away. Should go away after maybe 6-7 seconds unless the user has
-   pinned the chat."*). The box used to be drawn for the whole session, so a line stayed over the
-   glass until a menu was opened. Now a line — yours or somebody else's — puts it up for
-   `CHAT.autoHideSec` (7 s) and then it goes. The **Pin** button (in the box since slice 3, and
-   until now only reachable while typing) reads **Pinned** when on and removes the timer. A
-   half-written line keeps the box: the clock restarts rather than hiding what is being typed. The
-   whole decision is `chatKeepsOpen({ pin, typing, saidAt, now })` in `ui/multiplayer.js`, so the
-   timer is the only part a test does not cover; `styles.css` now makes the box (and the pin)
-   clickable whenever it is *up*, not only while the field is open. LESSONS L45.
-2. **Open World always asks about the pilot** (owner: *"logging into the guests own open world does
-   not give a prompt to bring their pilot home. It should to confirm its updating to the local open
-   world to latest version of their pilot."*). Playtest 18 gated the away card on `newerCopyAway()`,
-   so a visit that changed nothing opened the local world with no question at all. The press now
-   always raises the card, because being away is the fact that matters: this galaxy cannot fly a
-   pilot that is in another one. `newerCopyAway()` still runs, but only to label the card ("Ada's
-   world holds newer work from your pilot" / "nothing has changed, bringing it home is still how
-   this galaxy gets its pilot back"). The card keeps its **Main menu** door. LESSONS L42 corrected.
-   **Worth knowing:** with the card unconditional, the local galaxy really is paused while the
-   pilot is away — the card's own promise, which could not be seen before.
-3. **A3, the pause that was not there:** a visiting pilot's own world was not paused, because
-   playtest 18 had let **Open World** open it whenever no newer copy was waiting, and the
-   multiplayer screen's **Enter the world** did the same. Both doors are shut now, by **one** guard
-   where every door ends (`enterGameMode(\"open\")`): the press raises the away card, so the galaxy
-   waits where it was. The panel no longer offers a button it would have to refuse — while the pilot
-   is away it says where the pilot is and that **Leave** then **Open World** brings it home. Nothing
-   else about a visit changed: chat and the player list work exactly as before. LESSONS L42.
-4. **The rest of the playtest passed:** the host's game closing puts the guest back on the main menu
-   with "Lost connection to host", dismissing it works, rejoining with the same link works, a closed
-   guest tab is a clean goodbye, and ordinary play is unaffected.
-
-`src/data/multiplayer.js` (BUILD, `CHAT.autoHideSec`), `src/ui/{multiplayer,menu,screens}.js`,
-`src/state/state.js` (`ui.awayNewer`), `src/styles.css`. Tests: two new
-(`multiplayer-ui`'s chat, `multiplayer-playtest16`'s one guard/every door), and
-`multiplayer-playtest15`/`-16` retargeted to playtest 20's rule — green.
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Playtest 20 — the chat goes away, and Open World always asks about the pilot
 - 2026-11-24: Step 16 slice 5 — a lost host, the copy kept current, and one window per pilot
 - 2026-11-23: One refusal, one place, and a placeholder that says what it wants
 - 2026-11-23: The away card is a question about custody, not the title screen

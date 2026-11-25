@@ -1,11 +1,11 @@
 # Testing step 16 slice 7: the visiting pilot is on the map
 
 Slice 4 made your friend's pilot a real, docked ship inside your world; you just could not **see**
-it. This slice puts it on the map: on the **system (pocket) map**, the visitor's name is drawn under
-the pocket it is standing in, in amber, and the right-hand panel gains a **Visiting pilots** line.
-No ship is drawn in space yet — that is slice 8.
+it. This slice puts it on the **map**, in three places: the visitor's name under its **system** on the
+galaxy chart, under the **pocket** it stands in on the system (pocket) map, and a **Visiting pilots**
+row at the **top** of the right-hand panel. No ship is drawn in space yet — that is slice 8.
 
-**Build: `2026-11-24g`** — both machines. If one screen shows a different build string (title card, or
+**Build: `2026-11-24h`** — both machines. If one screen shows a different build string (title card, or
 Pause > Open Multiplayer > Connection details), they are not running the same file.
 
 You need **two browsers** with separate saves: one normal window and one incognito/private window is
@@ -21,9 +21,9 @@ easiest.
 - **The guest's own screen does not show your world yet** (slice 8), so a guest sees no blip: it is the
   only pilot in the world its screen is drawing.
 - **No trading** (slice 6, which now comes **last**; see the note at the end).
-- A pilot is only **drawn** on the map of the system it is standing in. If it arrives in another
-  system (it lands at *its own* home station), the **Visiting pilots** row in the panel names that
-  system; select it to see the blip under the pocket.
+- A pilot is only **drawn** where it is standing. If it arrives in another system (it lands at *its
+  own* home station), look for its name under **that system** on the galaxy chart — the panel row
+  names the system too.
 
 ---
 
@@ -33,31 +33,43 @@ easiest.
 2. **Host**: **Open World** > **P** (pause) > **Open Multiplayer** > switch multiplayer **on** >
    **Copy link**.
 3. **Guest**: title > **Join Multiplayer World** > paste the link > **Join** > **Bring my pilot**.
-4. On the **host**, press **M** (the starmap).
+4. On the **host**, press **M** (the starmap). It opens on the **galaxy** chart.
+5. Check the host's message line: bringing the pilot in should have said **Acey arrived at Meridian
+   Station**. That notice is the moment the visitor exists in your world.
 
-**What to check:** the map opens on the host's own system. The guest lands at **its own home station**,
-which by default is **Meridian Station** — also where a fresh pilot starts, so with two fresh saves
-both pilots are in the same place. If the host has flown elsewhere, the guest is still at Meridian:
-the **Visiting pilots** row in the panel names the system to open (Part 1).
+**What to check:** the map opens on the galaxy chart, and the system the guest is docked in now
+carries its name under the system's own name: **· Acey** in amber. The guest lands at **its own home
+station**, which by default is **Meridian Station** — also where a fresh pilot starts, so with two
+fresh saves both pilots are in the same system.
 
-## Part 1 — The name is under the pocket
+## Part 1 — The name, on both maps
 
-1. On the **host**, read the right-hand panel's **Visiting pilots** row. It names the pocket the guest
-   is in and, in brackets, the system — click that system (or click the host's own system dot) so the
-   **pocket map** is showing.
-2. Find the guest's pocket. With two fresh saves it is the host's own pocket, marked *You are here*.
+1. On the **host**, read the **right-hand panel** first: directly under the system's name, at the **top**
+   of the panel, there is a line with an amber bar beside it: **Visiting pilots Acey · Meridian Station
+   (Meridian System)**.
+2. Then open the **pocket map**: click the guest's system (or press **M** twice and click it). With two
+   fresh saves it is the host's own system.
 
 **What to check:**
 
-- Under the pocket's own name there is a line in **amber**: **· Acey** (the guest's name, with a small
-  dot in front). If the pocket is the host's own, the order is the pocket name, *(You are here)*, then
-  the pilot; at any other pocket the pilot is the line straight under the name. If the guest's name is
-  the same as the host's it will carry a star (`Acey*`), exactly as in the chat.
-- The right-hand panel has a line **Visiting pilots Acey · Meridian Station (Meridian System)** — always,
-  whichever system is selected, and it names the system so a pilot that arrived elsewhere is findable.
-- The name is **not** a separate pin elsewhere on the map: it belongs to the pocket the pilot is
-  standing in.
+- On the **galaxy chart**: `· Acey` under the system name — **no zooming needed**.
+- On the **pocket map**: `· Acey` under the pocket the pilot stands in. If that pocket is the host's own
+  it is the third line, after *(You are here)*; otherwise it is the line straight under the pocket's
+  name. If the guest's name is the same as the host's it carries a star (`Acey*`), as in the chat.
+- The panel row names **every** visitor and the system each is in, whichever system is selected — so a
+  friend who arrived elsewhere is findable from there.
 - Nothing else changed: travel, routes, missions and the *You are here* line work exactly as before.
+
+## If you see nothing
+
+That is the report this update answers, so check these three in order:
+
+1. **Did the guest press "Bring my pilot"?** Joining only looks around; no pilot crosses the wire, so
+   there is nothing to draw and no *arrived* notice. This is the commonest reason for an empty map.
+2. **Same build?** Title card and Pause > Open Multiplayer > *Connection details* must both say
+   **`2026-11-24h`**.
+3. **Different systems?** The guest lands at *its own* home station. If the host is elsewhere, the name
+   is under the guest's **system** on the galaxy chart, and the panel row says which system that is.
 
 ## Part 2 — Two visitors, two rows
 

@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-24 (slices 1–4 playtest-confirmed, 5 to `2026-11-24f`, 7 built to `2026-11-24g`, 8 next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-24 (slices 1–4 playtest-confirmed, 5 to `2026-11-24f`, 7 built to `2026-11-24h`, 8 next, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -313,12 +313,11 @@ that costs — the host's browser is the authority, and a guest's screen draws w
 plus the two debts [../TARGET_ARCHITECTURE.md](../TARGET_ARCHITECTURE.md) still lists (*death and
 recovery*, *player presentation and input*). Two slices, because neither half can be tested alone:
 
-- **Slice 7 — the pilot is on the map (built 2026-11-24).** Slice 4 had already turned the suitcase
-  into a record in `state.players` (`custody.hostProfile` + `configurePlayer`, docked at its own
-  station because flight positions never travel), and written it back. What was left was
-  visibility: `ui/starmap.js` `pilotBlips` reads `state.players` and draws each visitor's name under
-  the pocket it stands in on the system map, and `pilotPanelMarkup` names every visitor with its
-  system in the side panel (a visitor arrives at *its own* home station, possibly another system).
+- **Slice 7 — the pilot is on the map (built 2026-11-24, `2026-11-24h`).** Slice 4 had already made
+  the visitor a record in `state.players`, docked at its own station; what was left was visibility:
+  `ui/starmap.js` `pilotBlips` reads `state.players` and draws the visitor's name under its **system**
+  on the galaxy chart and under its **pocket** on the system map, and `pilotPanelMarkup` names every
+  visitor with its system at the **top** of the side panel (it may have arrived elsewhere).
   `render/views.js` still draws one hull (8).
 - **Slice 8 — one world on two screens.** Snapshots out (`SHIP_FIELDS`), controls in
   (`state.localInput`, a numbered input-rule change — see [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md)),

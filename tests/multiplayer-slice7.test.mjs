@@ -20,7 +20,7 @@ import { createPlayer } from "../src/sim/player.js";
 import { checkOut, hostProfile } from "../src/net/custody.js";
 import { arriveGuest, leaveGuest, resetGuests } from "../src/sim/multiplayer.js";
 import { chartGalaxy } from "../src/ui/chart-lines.js";
-import { pocketConnections, pilotBlips, visitingPilots, pilotPanelMarkup, systemMarkup } from "../src/ui/starmap.js";
+import { pocketConnections, pilotBlips, visitingPilots, pilotPanelMarkup, systemMarkup, galaxyMarkup } from "../src/ui/starmap.js";
 
 const starmapSource = readFileSync(new URL("../src/ui/starmap.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
@@ -89,6 +89,26 @@ test("slice 7: the system map draws the blip under the right pocket (the reader'
   assert.equal((markup.match(/data-pilot="/g) || []).length, 1, "one visiting pilot, one blip");
 });
 
+test("slice 7: the galaxy chart names a visitor under its system, without zooming in", () => {
+  // The owner's first report was "I see no viewing of a player on map": the map opens on the
+  // galaxy and the pocket blip only exists one click in. The galaxy chart is where the
+  // question "where is my friend?" is actually asked, so the name belongs there too.
+  freshHost();
+  const guest = addGuest();
+  const here = placeAt(DEFAULT_PLACE);
+  const world = chartGalaxy(state.galaxy);
+  const know = state.worldState.galaxy?.knowledge || {};
+  const visitors = visitingPilots();
+  assert.equal(visitors[0].systemId, here.parent, "a visitor carries the system it is in");
+  const withPilot = galaxyMarkup(world, { selected: null, labels: false }, know, here, 1, null, new Map(),
+    new Map([[here.parent, visitors]]));
+  assert.ok(withPilot.includes(`data-pilot="${guest.guestId}"`), "named on the galaxy chart");
+  assert.ok(withPilot.includes("· Acey"));
+  // Same chart, no visitors: no pilot rows at all, so the row above is the thing that drew it.
+  const without = galaxyMarkup(world, { selected: null, labels: false }, know, here, 1, null, new Map(), new Map());
+  assert.ok(!without.includes("data-pilot="), "no visitors, no rows");
+});
+
 test("slice 7: the side panel names every visiting pilot and where it is", () => {
   freshHost();
   addGuest();
@@ -99,6 +119,8 @@ test("slice 7: the side panel names every visiting pilot and where it is", () =>
   assert.ok(panel.includes(`(${placeAt(pocket.parent).n})`), "and the system, so the player knows which map to open");
   assert.equal(pilotPanelMarkup([]), "", "a world with no visitors says nothing at all");
   assert.match(starmapSource, /pilotPanelMarkup\(visitors\)/, "the renderer actually draws that row");
+  assert.ok(starmapSource.indexOf("pilotPanelMarkup(visitors)") < starmapSource.indexOf('<p class="sm-current">'),
+    "the row sits under the heading, before the pocket list — not at the bottom where it was invisible");
 });
 
 test("slice 7: a visitor in another system is not a blip on this one", () => {

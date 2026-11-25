@@ -352,6 +352,7 @@ export function visitingPilots(players = state.players, local = localPlayer()) {
       name: String(P.name || "Pilot"),
       place,
       placeName: pocket?.n || "",
+      systemId: pocket?.parent || "",
       systemName: pocket?.parent ? placeAt(pocket.parent).n || "" : "",
     });
   }
@@ -1015,7 +1016,7 @@ function onClickNow(e) {
   }
 }
 
-function galaxyMarkup(world, view, know, here, unit, route = null, objectiveSystems = new Map()) {
+export function galaxyMarkup(world, view, know, here, unit, route = null, objectiveSystems = new Map(), systemPilots = new Map()) {
   const systems = visibleSystems(world, know);
   const paths = new Map(), masks = [];
   const clearance = (Math.max(GALAXY.map.homeRadius, GALAXY.map.nodeRadius) + 4) * unit;
@@ -1059,10 +1060,15 @@ function galaxyMarkup(world, view, know, here, unit, route = null, objectiveSyst
     // Even the current system rings: the mission's pocket may be another
     // pocket of this same system (Meridian Station -> Kestrel Hollow).
     const objectiveColor = objectiveSystems.get(s.id) || "";
-    const label = chosen || current || view.labels;
+    // A system with a visiting pilot is named even when no other label would be drawn:
+    // the galaxy chart is where a host asks "where is my friend?" without zooming in.
+    const pilotsHere = systemPilots.get(s.id) || [];
+    const label = chosen || current || view.labels || pilotsHere.length > 0;
     const labelX = s.pos[0] + radius + 5 * unit;
     const labelY = -s.pos[1] + 3 * unit;
     const hereLabel = current ? `<tspan class="sm-here-label" x="${labelX}" dy="${12 * unit}">(You are here)</tspan>` : "";
+    const pilotRows = pilotsHere.map(pilot =>
+      `<tspan class="sm-pilot-blip" data-pilot="${esc(pilot.id)}" x="${labelX}" dy="${GALAXY.systemMap.pilotBlipGap * unit}">· ${esc(pilot.name)}</tspan>`).join("");
     return `<g class="sm-node${current ? " current" : ""}${chosen ? " selected" : ""}${roleClass}${objectiveColor ? " objective" : ""}"${objectiveColor ? ` style="--objective-color:${esc(objectiveColor)}"` : ""}
       data-system="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.n)}${current ? ", current system" : ""}${objectiveColor ? ", mission objective" : ""}">
       <title>${esc(s.n)}</title>
@@ -1070,7 +1076,7 @@ function galaxyMarkup(world, view, know, here, unit, route = null, objectiveSyst
       <circle class="sm-dot" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius}"/>
       ${marker}
       ${chosen && !current ? `<circle class="sm-ring" cx="${s.pos[0]}" cy="${-s.pos[1]}" r="${radius + 5 * unit}"/>` : ""}
-      ${label ? `<text x="${labelX}" y="${labelY}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}${hereLabel}</text>` : ""}
+      ${label ? `<text x="${labelX}" y="${labelY}" style="font-size:${11 * unit}px;stroke-width:${3 * unit}px">${esc(s.n)}${hereLabel}${pilotRows}</text>` : ""}
     </g>`;
   }).join("");
   return `<defs>${masks.join("")}</defs>` + lines + routeLines + nodes;
@@ -1222,7 +1228,13 @@ function render() {
   // the system it is in, so a friend who arrived elsewhere is still findable.
   const pilots = selected ? pilotBlips(pocketConnections(world, view.selected, know)) : [];
   const visitors = visitingPilots();
-  const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route, objectiveSystems) : "";
+  const systemPilots = new Map();
+  for (const visitor of visitors) {
+    const at = systemPilots.get(visitor.systemId) || [];
+    at.push(visitor);
+    systemPilots.set(visitor.systemId, at);
+  }
+  const galaxy = showGalaxy ? galaxyMarkup(world, view, know, here, unit, route, objectiveSystems, systemPilots) : "";
   const system = showSystem && view.selected ? systemMarkup(world, view, know, here, unit, route, objectivePockets, pilots) : "";
   const galaxyOpacity = transition ? (transition.toMode === "system" ? 1 - eased : eased) : 1;
   const systemOpacity = transition ? (transition.toMode === "system" ? eased : 1 - eased) : 1;
@@ -1274,11 +1286,11 @@ function render() {
           <p class="sm-help">${help}</p>
         </section>
         <aside class="sm-details" aria-label="System overview">
-          ${selected ? `<h2>${esc(selected.n)}</h2>
-            <p class="sm-current"><span>Current pocket</span> ${pocketMarkerMarkup(here, true)}${esc(here.n)}</p>
-            <h3>${esc(Term("flyable"))}s</h3>
-            <ul class="sm-pockets">${rows}</ul>${routeDetails}` : `<h2>No visible ${esc(terms("mapNode"))}</h2>`}
+          <h2>${selected ? esc(selected.n) : `No visible ${esc(terms("mapNode"))}`}</h2>
           ${pilotPanelMarkup(visitors)}
+          ${selected ? `<p class="sm-current"><span>Current pocket</span> ${pocketMarkerMarkup(here, true)}${esc(here.n)}</p>
+            <h3>${esc(Term("flyable"))}s</h3>
+            <ul class="sm-pockets">${rows}</ul>${routeDetails}` : ""}
         </aside>
       </div>
       ${menu}

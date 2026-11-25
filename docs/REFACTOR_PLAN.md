@@ -116,7 +116,7 @@ steps still to build (16 and 17).
 **Status:** planned 2026-11-21 with the owner, one slice per chat. Slices **1–3 built**
 (2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4**
 (2026-11-23a), **playtest-confirmed 2026-11-24**, and **slice 5** (`2026-11-24f`) built; **slice 7**
-(`2026-11-24g`) built, awaiting playtest.
+(`2026-11-24h`) built, awaiting playtest.
 **Build order changed by the owner 2026-11-24: 7, then 8, then 6 (trading last). The numbers
 are names, not a schedule** (renumbering would falsify the archive and every guide).
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
@@ -273,11 +273,11 @@ exists for exactly that, and the pause card says which path is in use.
    (items, ships, credits), two confirms, and the host swaps at once only if the receiving station
    storage and hangar have room — else nothing moves.
    Design: [architecture/trading.md](architecture/trading.md).
-7. **The visiting pilot is on the map.** Slice 4 had already made a visitor a real, docked,
-   simulated record (`sim/multiplayer.js` via `mp-guest-arrived`), so what was left of the
-   original slice was visibility: `ui/starmap.js` `pilotBlips` reads `state.players` and draws
-   the pilot's name under the pocket it stands in on the system map, and names **every** visitor
-   with its system in the side panel (so one that arrived elsewhere is still findable). **Built 2026-11-24.** The hull in space is slice 8. **Tests:**
+7. **The visiting pilot is on the map.** Slice 4 had already made the visitor a real, docked record
+   (`sim/multiplayer.js` via `mp-guest-arrived`), so what was left was visibility: `ui/starmap.js`
+   `pilotBlips` reads `state.players` and draws the name under its system on the galaxy chart and
+   under its pocket on the system map, and names **every** visitor with its system at the top of the
+   side panel. **Built 2026-11-24.** The hull in space is slice 8. **Tests:**
    `tests/multiplayer-slice7.test.mjs`.
 8. **One world, two screens — the ship on the glass.**
    - **8a — snapshots out.** A `snapshot` message kind (`SHIP_FIELDS` in `data/multiplayer.js`:
