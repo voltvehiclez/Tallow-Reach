@@ -236,8 +236,11 @@ test("slice 5: rejoining after a loss keeps the version the server already has",
 /* ------------------------------------------------------------------------- */
 
 /** A carry exactly as the guest's session writes one. */
-const carryFrom = (bundle, { guestId, name = "Bo", epoch = 0, rev = 0 } = {}) => ({
-  t: "carry", guestId, name, epoch, rev, bundle,
+// `fresh` (playtest 24): the copy was packed out of the pilot's own home save a moment ago. Only a
+// guest can know that, and it is the fact that lets "went home and came back" beat this world's
+// raised `rev` without also letting a dropped connection roll the world back.
+const carryFrom = (bundle, { guestId, name = "Bo", epoch = 0, rev = 0, fresh = false } = {}) => ({
+  t: "carry", guestId, name, epoch, rev, fresh, bundle,
 });
 
 test("slice 5: the host's older save loses to a newer suitcase", async () => {
@@ -311,7 +314,9 @@ test("slice 5: a pilot that came home and came back wins with its own save", asy
   };
   const returned = { ...bundle, token: "guest-token", profile: { ...bundle.profile, cr: 2500 } };
 
-  hostChannel.reach(carryFrom(returned, { guestId, rev: 0 }), "host-peer");
+  // It says it came from home (`fresh`), which is what the pair cannot express: the record's `rev`
+  // is 40 and the fresh copy's is 0 because `checkOut` starts every trip at zero.
+  hostChannel.reach(carryFrom(returned, { guestId, rev: 0, fresh: true }), "host-peer");
   await new Promise(resolve => setTimeout(resolve, 0));
 
   const record = hostSave.world.guests[guestId];

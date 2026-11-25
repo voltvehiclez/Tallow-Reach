@@ -2801,6 +2801,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   display: grid;
   gap: 2px;
   align-content: end;
+  /* Text is only selectable in the box the player opened with Enter (owner, playtest 24): a
+     glance at a line that arrived is not a document, and a pinned box is a readout. */
+  user-select: none;
 }
 #mp-chat-lines p { margin: 0; transition: opacity .6s; }
 #mp-chat-lines p.mp-chat-system { color: var(--amber); font-style: italic; opacity: .9; }
@@ -2893,3 +2896,6 @@ body.mp-chat-pinned:not(.mp-chat-open) #mp-chat-who {
 #mp-chat-note { margin: 0; color: #d98b7a; font-size: 12px; }
 #mp-chat-note[hidden] { display: none; }
 body.mp-chat-open #mp-chat { background: rgba(7, 9, 11, .86); }
+/* Selecting and copying the conversation (owner, playtest 24): while the box is open for typing,
+   the lines take the mouse as text, and a press on them never closes the box. */
+body.mp-chat-open #mp-chat-lines { user-select: text; cursor: text; }

@@ -771,8 +771,9 @@ function applyOtherPilotPose(mesh, pose) {
 
 /** One pose from a live record, interpolated exactly as the local hull is. */
 function poseOfRecord(P, alpha, at) {
+  const snapped = P.snap === true;
   const p = renderPlayerPose(P, alpha);
-  return {
+  const pose = {
     id: P.guestId || P.id || `pilot-${at}`,
     name: P.name || P.profile?.name || "",
     ship: P.ship,
@@ -787,6 +788,21 @@ function poseOfRecord(P, alpha, at) {
     hull: hullFraction(P),
     shield: shieldFraction(P),
   };
+  // **A visitor's `snap` belongs to the screen that drew it** (owner, playtest 24).
+  //
+  // `snap` means "do not interpolate: this frame is a jump". On the local hull `chaseView` clears
+  // it once it has snapped the camera to it — but nothing ever cleared it for *another* pilot, and
+  // `launch()` sets it when a visitor's hull leaves the station. So from the moment a guest took
+  // off, every frame of its hull took the un-interpolated branch and was placed at the last 60 Hz
+  // tick while a 240 Hz camera moved every frame: a ~60 Hz sawtooth on the hull and on its name
+  // tag, worse the faster the guest flew, and only visible while the host turned. This is the same
+  // fault the 2026-11-08 fix removed from the local hull and from NPCs; the visitor was the one
+  // record nobody cleared.
+  //
+  // Consuming it here (after the pose has been taken, so the jump frame is still drawn as a jump)
+  // gives back the between-tick interpolation the rest of the sky already has.
+  if (snapped) P.snap = false;
+  return pose;
 }
 const _otherPose = {
   pos: new THREE.Vector3(),

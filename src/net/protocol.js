@@ -11,7 +11,11 @@
 //   chat       { t, text, from, at }                      either way, one line
 //   presence   { t, guests[{ guestId, name, docked }] }   host -> guests, who is here
 //   ping/pong  { t, at }                                  either way, `NET.heartbeatSec`
-//   carry      { t, guestId, name, epoch, rev, bundle }   guest -> host: the suitcase, on arrival
+//   carry      { t, guestId, name, epoch, rev, bundle, fresh }  guest -> host: the suitcase, on
+//                                                         arrival. `fresh` means "packed in the
+//                                                         pilot's own home save just now", i.e. it
+//                                                         came home and this is a new trip — the one
+//                                                         fact an ordering pair cannot express
 //   suitcase   { t, guestId, name, epoch, rev, bundle }   host -> guest: the newer copy of it
 //   bye        { t, guestId, name }                       guest -> host (slice 5): "I am going" —
 //                                                         a tab closing or a pilot leaving, so the
@@ -194,6 +198,11 @@ function cleanCarry(fields = {}, kind) {
     // to order two copies without trusting anything inside either one.
     epoch: Math.max(0, Math.floor(Number(fields.epoch) || 0)),
     rev: Math.max(0, Math.floor(Number(fields.rev) || 0)),
+    // **Provenance, not content** (playtest 24): a `carry` packed from the pilot's own home save
+    // after it came home is the newest truth about it, whatever the ordering pair says — a fresh
+    // `checkOut` starts at zero while a host raises `rev` on every write-back. Only a `carry`
+    // carries it; a `suitcase` answers with the world's own copy and has nothing to claim.
+    ...(kind === "carry" ? { fresh: fields.fresh === true } : {}),
     bundle,
   };
   return message;

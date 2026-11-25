@@ -229,6 +229,14 @@ let chatHideTimer = 0;     // takes the box away `CHAT.autoHideSec` after the la
 // and the box untypable — the guest's half of the 2026-11-21 report.
 let chatOpen = false;
 let chatPinned = false;
+// **Selecting the conversation** (owner, playtest 24: *"when opening chat with enter you should be
+// able to highlight the chat to copy paste it with mouse [but] attempting to select text in chat
+// when opened with enter closes the chat window"*). The mouse going down on the lines is not the
+// pilot clicking back into the game, so it must neither close the box nor be mistaken for one — and
+// a redraw while the mouse is down would throw the selection away, so lines are held back until it
+// is over.
+let chatSelecting = false;
+let chatDirty = false;     // a line arrived while the text was being selected
 // Auto-dismiss timer for informational message popups (the "Send the offer code…" one):
 // a confirmation the player has read should clear itself, an error must not.
 let msgTimer = 0;
@@ -1520,12 +1528,73 @@ function buildChat() {
       closeChat();
     }
   });
-  // Clicking into the box is a normal way to type; clicking a line must not steal focus.
+  // Clicking into the box is a normal way to type; clicking a line is how a line is selected and
+  // copied, and it must not take the box away (owner, playtest 24).
   chatInput.addEventListener("blur", () => {
     // Losing focus closes an empty box (the pilot clicked back into the game), but keeps
     // a half-written line: losing half a sentence to a stray click is not a feature.
-    if (!chatInput.value) setTimeout(() => { if (document.activeElement !== chatInput) closeChat(); }, 120);
+    // A press that landed on the conversation is not a click back into the game: it starts a
+    // selection, and the box stays until the player clicks somewhere else.
+    if (chatSelecting) return;
+    if (!chatInput.value) setTimeout(() => {
+      if (document.activeElement !== chatInput && !chatSelecting) closeChat();
+    }, 120);
   });
+
+  // **A press on the lines is a selection, not a click into the game.** `pointerdown` in the
+  // capture phase, so it is decided before anything else looks at the event: inside the box's
+  // conversation it starts a selection; anywhere outside the box it ends one and, if the field is
+  // empty and nothing half-written is in it, closes the box the way it always has.
+  document.addEventListener("pointerdown", event => {
+    if (!chatBox || chatBox.hidden) return;
+    const target = event.target;
+    const inLines = !!(target?.closest?.("#mp-chat-lines")) && chatBox.contains(target);
+    if (inLines && chatOpen) {
+      chatSelecting = true;
+      return;
+    }
+    if (!chatSelecting) return;
+    const where = inLines ? "lines" : (chatBox.contains(target) ? "box" : "outside");
+    endChatSelection({
+      keep: pressKeepsChat(where, { open: chatOpen, pinned: chatPinned, text: chatInput?.value }),
+    });
+  }, true);
+
+  // Escape while a selection is up: the cursor is no longer in the field, so the box's own
+  // keydown handler will not see this one, and the game would read it as "pause".
+  document.addEventListener("keydown", event => {
+    if (!chatOpen || chatSelecting === false || document.activeElement === chatInput) return;
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeChat();
+  }, true);
+}
+
+/**
+ * **Does a press keep the chat box?** (owner, playtest 24). Written as a function with no DOM in it
+ * because it is the rule, not the plumbing: a press on the conversation starts a selection and
+ * keeps the box; a press on the box itself (the field, Pin) is typing and keeps it; a press
+ * anywhere else ends the selection and lets an empty, unpinned box close the way it always has.
+ */
+export function pressKeepsChat(where, { open = false, pinned = false, text = "" } = {}) {
+  if (where === "lines") return open === true;
+  if (where === "box") return true;
+  return pinned === true || String(text || "").trim() !== "";
+}
+
+/**
+ * The selection is over: redraw anything that arrived while the mouse was down, and, when the
+ * press that ended it did not keep the box, close an empty one.
+ */
+function endChatSelection({ keep = true } = {}) {
+  if (!chatSelecting) return;
+  chatSelecting = false;
+  if (chatDirty) {
+    chatDirty = false;
+    drawChat();
+  }
+  if (!keep && chatOpen) closeChat();
 }
 
 /**
@@ -1662,6 +1731,8 @@ export function openChat() {
  */
 export function closeChat() {
   if (!chatBox) return;
+  chatSelecting = false;
+  chatDirty = false;
   chatOpen = false;
   state.ui.chat = false;
   document.body.classList.remove("mp-chat-open");
@@ -1681,6 +1752,8 @@ function pokeChat() {
 function armChatHide() {
   if (chatHideTimer) { clearTimeout(chatHideTimer); chatHideTimer = 0; }
   if (!chatBox || chatBox.hidden || chatPinned) return;
+  // A box with text selected under the cursor is being read, not ignored.
+  if (chatSelecting) return;
   chatHideTimer = setTimeout(() => {
     chatHideTimer = 0;
     if (chatPinned) return;
@@ -1700,12 +1773,14 @@ function armChatHide() {
  */
 function hideChatBox({ force = false } = {}) {
   if (!chatBox) return false;
-  if (!force && (chatPinned || (chatInput?.value || "").trim())) return false;
+  if (!force && (chatPinned || chatSelecting || (chatInput?.value || "").trim())) return false;
   chatBox.hidden = true;
   chatOpen = false;
   state.ui.chat = false;
   if (chatFadeTimer) { clearTimeout(chatFadeTimer); chatFadeTimer = 0; }
   if (chatHideTimer) { clearTimeout(chatHideTimer); chatHideTimer = 0; }
+  chatSelecting = false;
+  chatDirty = false;
   // `mp-chat-pinned` goes with the box: a body class that outlives the box it describes is the
   // same bug as a stale flag (L21), and the next box would draw itself pinned.
   document.body.classList.remove("mp-chat-live", "mp-chat-open", "mp-chat-pinned");
@@ -1718,6 +1793,9 @@ export const toggleChat = () => (isChatOpen() ? closeChat() : openChat());
 
 function drawChat() {
   if (!chatBox) return;
+  // A redraw replaces the lines, which drops a selection the player is dragging. Hold it back and
+  // paint once the mouse is up (`endChatSelection`).
+  if (chatSelecting) { chatDirty = true; return; }
   const snap = api.snapshot();
   if (!snap.on) {
     hideChatBox({ force: true });

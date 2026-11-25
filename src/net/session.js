@@ -716,7 +716,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // the cargo existing in two places at once.
     storePilot(packed.save);
     emit("mp-away-changed", { away: awayMark });
-    return sendCarryMessage(carried);
+    // `fresh: true` — this suitcase was packed out of the home save just now, so it is the newest
+    // copy of the pilot there is, even though `checkOut` starts its pair at zero (playtest 24).
+    return sendCarryMessage(carried, { fresh: true });
   }
 
   /** Session side of "Bring my pilot": pack, install the frozen record, put it on the wire. */
@@ -729,7 +731,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       : { ok: false, message: "Your pilot could not travel — see the message on screen for why." };
   }
 
-  function sendCarryMessage(bundle) {
+  function sendCarryMessage(bundle, { fresh = false } = {}) {
     // **The secret is put back on the way out** (slice 5, found by the reconnect test).
     //
     // The copy the guest keeps is the copy the HOST sent back, and a host never keeps a
@@ -744,6 +746,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       name,
       epoch: bundle?.epoch || 0,
       rev: bundle?.rev || 0,
+      // **This copy came out of the home save a moment ago** (`sendCarry`'s own `checkOut`), so it
+      // is the newest truth about the pilot even though its ordering pair starts at zero. A
+      // rejoin of an older stored suitcase does not claim it: that copy may be behind this world
+      // (playtest 24, and case 2 above).
+      fresh: fresh === true,
       bundle: bundle ? { ...bundle, token: secret } : bundle,
     });
     if (!message) {
@@ -844,15 +851,25 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     //  2. **A stale `carry` arrives late** (a re-sent message, a guest that reopened from an
     //     old tab). The host's record is newer, so the record stands and the guest is sent
     //     the newer copy back instead of being believed.
-    //  3. **The pilot came home and came back.** A `left` record is holding a suitcase, not
-    //     an identity: the pilot has been home since, may have bought a whole new fit there,
-    //     and its save is the newest truth about it. So a returning pilot's copy wins, and
-    //     that is the fact the ordering pair cannot express — which is exactly why the check
-    //     is `record.left` first and `compare` second, and not `compare` alone.
+    //  3. **The pilot came home and came back.** The pilot has been home since, may have
+    //     bought a whole new fit there — or, in the owner's playtest 24, *repaired its hull* —
+    //     and its save is the newest truth about it. **But the pair cannot say so**: a fresh
+    //     `checkOut` starts its trip at `epoch 0, rev 0` while this world raises `rev` on every
+    //     write-back, so the copy that carries the repair is the one that *looks* older. That is
+    //     the whole of the bug the owner hit, and the reason a copy now says which it is:
+    //     **`fresh`** means "packed in the pilot's own home save just now". A fresh copy wins,
+    //     and only the guest can know it.
+    //
+    //     This used to be read off the record's own `left` mark, which conflated two very
+    //     different situations: *went home* (believe the guest) and *the connection dropped*
+    //     (believe this world). Case 2's test pins the second: a dropped guest rejoins carrying
+    //     an older copy and must not roll the world back. So `fresh` rides on the message and
+    //     `left` is only ever about admission now.
     //
     // A tie (`compare` says 0) takes the incoming copy: two copies with the same pair are
     // the same trip, and the arriving one is by definition the one the guest just packed.
-    const stale = record && record.left !== true && compare(record, incoming) < 0;
+    const fresh = message.fresh === true;
+    const stale = record && !fresh && compare(record, incoming) < 0;
     if (stale) {
       const kept = { ...(record.bundle || {}), token: "" };
       if (kept?.profile) {
