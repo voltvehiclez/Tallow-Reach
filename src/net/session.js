@@ -487,6 +487,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       // straight to the screen's own stream, and its own entry is dropped (it already draws its
       // own hull, and two of them would z-fight).
       case "ships": return onShips(message);
+      case "entities": return onEntities(message);
       // Slice 8b: the guest's asking, twice a snapshot's rate.
       case "controls": return onControls(message, peerId);
       // Slice 8c: the guest asks the host to warp or dock its own ship. The host re-checks
@@ -1236,8 +1237,37 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       if (now - lastKeepaliveShipAt < interval) return;
       lastKeepaliveShipAt = now;
       broadcastShips();
+      broadcastEntities();
     });
   } catch (e) {}
+
+  /* --- host -> guest: world entities (bullets/missiles/crates/fx) --- */
+  let entityTick = 0;
+  let lastKeepaliveEntityAt = 0;
+  function collectEntities() {
+    const request = { place: "", bullets: [], missiles: [], crates: [], fx: [], answered: false };
+    try { emit("mp-entities-request", request); } catch (e) {}
+    return request.answered ? request : null;
+  }
+  function broadcastEntities() {
+    if (role !== "host" || !on) return 0;
+    if (!guests.length) return 0;
+    const data = collectEntities();
+    if (!data || !data.place) return 0;
+    const message = cleanMessage("entities", data);
+    if (message && send(message)) return 1;
+    return 0;
+  }
+  function startEntityStream() {
+    if (entityTick || role !== "host") return false;
+    entityTick = setInterval(broadcastEntities, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
+    if (typeof entityTick?.unref === "function") entityTick.unref();
+    return true;
+  }
+  function onEntities(message) {
+    if (role !== "guest") return;
+    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], at: Date.now() }); } catch (e) {}
+  }
 
   /**
    * Guest side: the host's picture arrived. It is handed on as it is — cleaned on the way in by
@@ -1538,7 +1568,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     await channel.join();
     greetEveryone();
     if (role === "guest") { startHelloRetry(); startControlStream(); watchPage(); }
-    if (role === "host") { armHostWait(); startGuestSync(); startShipStream(); }
+    if (role === "host") { armHostWait(); startGuestSync(); startShipStream(); startEntityStream(); }
     armStallTimer();
     startKeepalive();
     // Ask the relays once the room exists, so Connection details is never blank about them.
@@ -1563,7 +1593,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     noteCodePaths();
     codes = { offer, answer: null };
     // A host that joins by paste code is hosting too: its ship snapshots go out over that wire.
-    startShipStream();
+    startShipStream(); startEntityStream();
     publish();
     return codes;
   }
@@ -1722,6 +1752,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     if (guestSync) { clearInterval(guestSync); guestSync = 0; }
     if (shipTick) { clearInterval(shipTick); shipTick = 0; }
+    if (entityTick) { clearInterval(entityTick); entityTick = 0; }
     if (controlTick) { clearInterval(controlTick); controlTick = 0; }
     for (const { timer } of pendingWrite.values()) if (timer) clearTimeout(timer);
     pendingWrite.clear();

@@ -5,7 +5,7 @@ import { pickLockSurface } from "./render/target-picking.js";
 
 import { renderer, scene, camera, stars, showPlace, stepScenery, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame } from "./state/state.js";
+import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame, placeWorld } from "./state/state.js";
 import { loadAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { shipDef } from "./data/ships.js";
@@ -98,7 +98,7 @@ import {
  */
 const shipStream = createShipStream();
 // Own ship needs its own interpolated buffer too — otherwise a 165 Hz guest sees its own hull at 24 Hz. Same timings but a shorter delay for responsiveness (60 ms vs 100 ms for other pilots).
-const guestSelfStream = createShipStream({ delayMs: 60, samples: 6, staleMs: 1500, snapM: 50 });
+const guestSelfStream = createShipStream({ delayMs: 35, samples: 8, staleMs: 1500, snapM: 50 });
 
 /** Slice 8c: is this browser the guest whose own galaxy is frozen? */
 function isGuestVisiting() {
@@ -204,6 +204,77 @@ function installMultiplayerShips() {
   });
   on("mp-host-left", () => {
     if (state.guestHome) restoreGuestHome();
+  });
+}
+
+function installMultiplayerEntities() {
+  // Host: answer what is in each pocket that has a guest (or host) so guest sees same bullets/missiles/fx
+  on("mp-entities-request", request => {
+    if (!request || !Array.isArray(request.places)) return;
+    try {
+      const places = new Set();
+      // Host place
+      if (state.place) places.add(state.place);
+      for (const g of guestPlayers()) if (g?.place) places.add(g.place);
+      // Local player may be in different place than state.place due to warp?
+      const P = localPlayer();
+      if (P?.place) places.add(P.place);
+      for (const placeId of places) {
+        const W = placeWorld(placeId);
+        if (!W) continue;
+        const bullets = (W.bullets || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], quat: e.quat ? [e.quat.x, e.quat.y, e.quat.z, e.quat.w] : [0,0,0,1], colour: e.colour || e.color || 0
+        }));
+        const missiles = (W.missiles || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], quat: e.quat ? [e.quat.x, e.quat.y, e.quat.z, e.quat.w] : [0,0,0,1]
+        }));
+        const crates = (W.crates || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], item: e.item || "salv"
+        }));
+        const fx = (W.fx || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], col: e.col || 0xffaa00, size: e.size || 1, l: e.l || 0, t: e.t || 1
+        }));
+        // Only send non-empty places to save bandwidth, but send at least host place if guests nearby
+        if (bullets.length || missiles.length || crates.length || fx.length) {
+          request.places.push({ place: placeId, bullets, missiles, crates, fx });
+        }
+      }
+      // If no entities but guests exist, still send empty for their place so guest can clear stale
+      if (!request.places.length) {
+        for (const placeId of places) request.places.push({ place: placeId, bullets: [], missiles: [], crates: [], fx: [] });
+      }
+      request.answered = true;
+    } catch (e) {}
+  });
+  // Guest: apply host's entities for that pocket, replacing local arrays
+  on("mp-entities", ({ place, bullets, missiles, crates, fx } = {}) => {
+    if (!place || typeof place !== "string") return;
+    // Only apply for the pocket we are currently in, or for guest's own place (host authoritative)
+    // We allow any place update; guest may be in host place
+    try {
+      const W = placeWorld(place);
+      // Helper to convert wire vec to THREE
+      const toVec = a => Array.isArray(a) ? new THREE.Vector3(a[0], a[1], a[2]) : new THREE.Vector3(0,0,0);
+      const toQuat = a => Array.isArray(a) ? new THREE.Quaternion(a[0], a[1], a[2], a[3]) : new THREE.Quaternion(0,0,0,1);
+      // Replace bullets
+      W.bullets.length = 0;
+      for (const b of Array.isArray(bullets) ? bullets : []) {
+        W.bullets.push({ id: b.id, kind: "bullet", pos: toVec(b.pos), quat: toQuat(b.quat), colour: b.colour, _net: true });
+      }
+      W.missiles.length = 0;
+      for (const m of Array.isArray(missiles) ? missiles : []) {
+        W.missiles.push({ id: m.id, kind: "missile", pos: toVec(m.pos), quat: toQuat(m.quat), _net: true });
+      }
+      W.crates.length = 0;
+      for (const c of Array.isArray(crates) ? crates : []) {
+        W.crates.push({ id: c.id, kind: "crate", pos: toVec(c.pos), item: c.item });
+      }
+      // Fx: keep lifetime for fade
+      W.fx.length = 0;
+      for (const f of Array.isArray(fx) ? fx : []) {
+        W.fx.push({ id: f.id, kind: "fx", pos: toVec(f.pos), col: f.col, size: f.size, l: f.l, t: f.t });
+      }
+    } catch (e) {}
   });
 }
 
@@ -320,6 +391,7 @@ setupPause();
 setupMultiplayer();
 installMultiplayerVisitors();
 installMultiplayerShips();
+installMultiplayerEntities();
 setupMissionLog();
 setupCampaign();
 setupStarmap();
@@ -512,11 +584,18 @@ let hostTickAt = 0;
 function advanceHostClock() {
   if (!isNetOn() || isSimulationPaused()) return;
   const now = performance.now();
-  const dt = Math.min(MAX_FRAME_DT, (now - hostTickAt) / 1000);
+  const realDt = (now - hostTickAt) / 1000;
   hostTickAt = now;
   if (now - last > 80) {
     last = now;
-    simClock.advance(dt);
+    // Background tabs throttle to ~1 Hz: cap loses 95% of wall time and ship turns 20× slow.
+    // Catch up by stepping in MAX_FRAME_DT chunks so 1 s stall still advances 60 ticks.
+    let remaining = realDt;
+    while (remaining > 1e-9) {
+      const chunk = Math.min(remaining, MAX_FRAME_DT);
+      simClock.advance(chunk);
+      remaining -= chunk;
+    }
     try { emit("host-keepalive-tick", {}); } catch (e) {}
   }
 }
@@ -607,7 +686,7 @@ function drawFrame(now) {
   simClock.advance(dt);
   // Guest's own ship is a stream too (see installMultiplayerShips) — otherwise a 165 Hz screen jitters at 24 Hz. Apply its interpolated pose before rendering so the camera chases the smoothed position, not the last raw packet.
   if (isGuestVisiting()) {
-    const selfPoses = guestSelfStream.sample(now);
+    const selfPoses = guestSelfStream.sample(Date.now());
     if (selfPoses.length) applySelfShip(selfPoses[0]);
   }
   const alpha = simClock.alpha();

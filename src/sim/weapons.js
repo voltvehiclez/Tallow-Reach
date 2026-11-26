@@ -19,6 +19,7 @@ import { boom } from "./effects.js";
 import { enemyPos } from "./enemy.js";
 import { playerPos, playerFwd, playerMount } from "./pilot.js";
 import { launchMissile, updateMissileFlight } from "./missile.js";
+import { otherPilotsThere } from "./targeting.js";
 import { dropEntity } from "./entity.js";
 import { rockMemoryId } from "./asteroids.js";
 import { markRockMined } from "./place-memory.js";
@@ -295,7 +296,8 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
     let best = null,
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!local || !state.freeCam.on) {
-      const selected = F.lock?.k === "e" && W.enemies.includes(F.lock.o) && F.lock.o.hp > 0 && !F.lock.o.friendly ? F.lock.o : null;
+      const selectedEnemy = F.lock?.k === "e" && W.enemies.includes(F.lock.o) && F.lock.o.hp > 0 && !F.lock.o.friendly ? F.lock.o : null;
+      const selectedPilot = F.lock?.k === "p" && otherPilotsThere(P).includes(F.lock.o) && !F.lock.o.dead ? F.lock.o : null;
       for (const e of W.enemies) {
         if (e.hp <= 0 || e.friendly) continue;
         const q = enemyPos(e).clone().sub(pp),
@@ -307,12 +309,27 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
           best = e;
         }
       }
-      // A valid F-selected hostile wins even when another ship crosses nearer the reticle.
-      // Range/cone/free-camera limits still apply; there is no through-space lock cheat.
-      if (selected) {
-        const q = enemyPos(selected).clone().sub(pp), d = q.length();
+      // Other pilots (guest/host) are lockable exactly like hostiles: same cone/range, same priority for F-lock
+      for (const pilot of otherPilotsThere(P)) {
+        if (pilot.dead) continue;
+        const q = pilot.pos.clone().sub(pp);
+        const d = q.length();
+        if (d > MISSILE.range) continue;
+        const angle = Math.acos(clamp(q.dot(cf) / d, -1, 1));
+        if (angle < bestAngle) {
+          bestAngle = angle;
+          best = pilot;
+        }
+      }
+      // F-selected target wins even when another ship crosses nearer the reticle.
+      if (selectedEnemy) {
+        const q = enemyPos(selectedEnemy).clone().sub(pp), d = q.length();
         const angle = d > 0 ? Math.acos(clamp(q.dot(cf) / d, -1, 1)) : Infinity;
-        if (d <= MISSILE.range && angle < (MISSILE.cone * Math.PI) / 180) best = selected;
+        if (d <= MISSILE.range && angle < (MISSILE.cone * Math.PI) / 180) best = selectedEnemy;
+      } else if (selectedPilot) {
+        const q = selectedPilot.pos.clone().sub(pp), d = q.length();
+        const angle = d > 0 ? Math.acos(clamp(q.dot(cf) / d, -1, 1)) : Infinity;
+        if (d <= MISSILE.range && angle < (MISSILE.cone * Math.PI) / 180) best = selectedPilot;
       }
     }
 

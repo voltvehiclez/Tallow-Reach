@@ -59,7 +59,7 @@
 import { NET } from "../data/multiplayer.js";
 
 /** Every message kind this build understands. An unknown `t` is dropped, not echoed. */
-export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships", "controls", "warp", "dock"];
+export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships", "controls", "warp", "dock", "entities"];
 
 /**
  * The longest a name, an id or a chat line may be on the wire, and the other hard caps.
@@ -77,6 +77,7 @@ export const LIMITS = {
   suitcase: NET.suitcaseMaxBytes,
   // Slice 8a: how many pilots one `ships` message carries. A wire cap, never a player cap.
   ships: 24,
+  entities: 32,
   // The largest a position, a velocity or any other single axis figure may be, in metres. A
   // pocket is kilometres across at most; bigger than this is a hand-made or corrupt packet.
   reach: 1e6,
@@ -136,6 +137,9 @@ export function cleanMessage(kind, fields = {}) {
     // `data/multiplayer.js` is the list of fields; nothing here can reach a rule.
     case "ships":
       return { t: "ships", ships: cleanShips(fields.ships) };
+    // 8c+: host -> guest: bullets/missiles/crates/fx in the same pocket. Visual only; host authoritative.
+    case "entities":
+      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx) };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
     // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
     // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
@@ -313,6 +317,47 @@ function cleanControls(fields = {}) {
     sec: held(fields.sec),
     aim: cleanVec3(fields.aim, [0, 0, -1]),
   };
+}
+
+function cleanBullets(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object") continue;
+    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), quat: cleanQuat(e.quat), colour: Math.max(0, Math.floor(Number(e.colour) || 0)) });
+  }
+  return out;
+}
+function cleanMissiles(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object") continue;
+    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), quat: cleanQuat(e.quat) });
+  }
+  return out;
+}
+function cleanCrates(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object") continue;
+    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), item: text(e.item, 20) });
+  }
+  return out;
+}
+function cleanFx(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object") continue;
+    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), col: Math.max(0, Math.floor(Number(e.col) || 0)), size: Math.max(0, num(e.size, 1)), l: Math.max(0, num(e.l, 0)), t: Math.max(0, num(e.t, 1)) });
+  }
+  return out;
 }
 
 function cleanGuestList(raw) {

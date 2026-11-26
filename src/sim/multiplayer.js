@@ -167,11 +167,11 @@ on("player-dead", ({ player } = {}) => {
     // Keep profile's hp in sync so suitcase sync sends repaired hull
     if (P.profile?.hp && P.hullMax > 0) P.profile.hp[P.profile.ship] = Math.max(0.2, P.hull / P.hullMax);
     // Ensure host world has board at home station
-    try { const { ensureBoard } = awaitImportBoard(); } catch(e) {}
+    try { ensureBoard(state.worldState, home); } catch (e) {}
+    P.dockedAt = state.time;
     emit("mp-notice", `${name || "A pilot"} was destroyed and recovered at ${station?.n || home}.`);
   } catch (e) {}
 });
-function awaitImportBoard() { return null; }
 
 /* ------------------------------------------------------------------------- */
 /* Slice 8b: the guest's controls reach its ship                             */
@@ -245,7 +245,10 @@ export function applyGuestControls(guestId, input) {
     }
   }
   P.inputAt = state.time;
-  if (P.docked && asksToFly(input)) launch(P, P.profile);
+  if (P.docked && asksToFly(input)) {
+    const sinceDock = state.time - (P.dockedAt || 0);
+    if (sinceDock > 0.6) launch(P, P.profile);
+  }
   return true;
 }
 

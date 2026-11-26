@@ -49,20 +49,9 @@ export function stepSim(dt) {
   // contracts, place memory) stay frozen.
   if (isGuest()) {
     if (state.hud) state.hud.prompt = "";
-    const P = state.player;
-    // Cosmetic weapon flight for the guest's own pocket so they see their bullets.
-    // Host still decides damage; this is just what the guest's eyes get.
-    if (P && !P.docked && !P.dead) {
-      if (P.drive) P.en = P.drive.bmax;
-      if (P.aimDirection) { /* keep aim from local camera */ }
-      try { updatePrimary(dt, P); } catch (e) {}
-      try { updateMissiles(dt, P, false); } catch (e) {}
-      const placeId = P.place || state.place;
-      try { updateMissileFlight(dt, placeId); } catch (e) {}
-      try { updateBullets(dt, placeId); } catch (e) {}
-      try { updateCrates(dt, placeId); } catch (e) {}
-      try { updateEffects(dt, placeId); } catch (e) {}
-    }
+    // Guest does not simulate its own galaxy; host is authoritative for all world effects.
+    // Bullets/missiles/crates/fx for the visited pocket are synced via mp-entities.
+    // Local cosmetic is disabled to avoid duplicate host-confirmed projectiles.
     return;
   }
   // Slice 8b: a guest that stopped saying what it is asking its ship to do is asked for nothing

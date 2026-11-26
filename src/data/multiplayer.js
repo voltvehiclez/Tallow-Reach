@@ -137,9 +137,9 @@ export const HOST_PILOT_ID = "host";
  *             respawn) and is drawn as a jump, not smeared across the screen.
  */
 export const SHIP_STREAM = {
-  hz: 24,
-  delayMs: 100,
-  samples: 6,
+  hz: 30,
+  delayMs: 50,
+  samples: 8,
   staleMs: 1500,
   snapM: 50,
 };

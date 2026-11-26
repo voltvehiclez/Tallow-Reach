@@ -151,6 +151,7 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
     P.warp = null;
   }
   P.docked = true;
+  P.dockedAt = state.time;
   P.v.set(0, 0, 0);
   P.thr = 0;
   if (profile.ships.includes(profile.ship) && P.hullMax > 0) {
