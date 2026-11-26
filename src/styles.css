@@ -49,6 +49,31 @@ body.no-reticle canvas {
   cursor: default;
 }
 
+/* **One pointer at a time** (owner, playtest 25). While the pilot steers, the orange
+   circle (#cur) is the pointer and *nothing* under the mouse may show the system arrow —
+   a pinned chat box took the mouse and put a white cursor inside the ring. A surface that
+   takes the stick (chat typing, the hold, the chart, the cache, the multiplayer screen, the
+   N list, pause, a station) drops body.pilot-pointer (ui/pointer.js, once a frame) and the
+   system cursor works there exactly as before. `!important` because that is the rule: no
+   element's own `cursor: pointer` or `cursor: text` outranks it while the pilot is flying.
+   The second half hides the ring on those surfaces, so the two pointers are never drawn
+   together. */
+body.pilot-pointer,
+body.pilot-pointer * {
+  cursor: none !important;
+}
+body:not(.pilot-pointer) #cur {
+  display: none;
+}
+/* ...and the empty screen belongs to the system cursor too. The canvas hides it for mouse-look
+   flight, so a surface that takes the stick has to give it back **everywhere**, not only over its
+   own box (owner, playtest 25: "when chat is open ... the mouse cursor white windows one can freely
+   move, same way when hitting N tab" — the arrow appeared over the chat and vanished beside it).
+   A type selector with no `!important`, so `#shipview` and any other canvas keep their own cursor. */
+body:not(.pilot-pointer) canvas {
+  cursor: default;
+}
+
 /* ---- Flight HUD (top-left bars, top-right info, centre messages, markers) ---- */
 #hud>div {
   position: fixed;
@@ -2693,6 +2718,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 #mp-screen .mp-switch { justify-self: start; min-width: 220px; width: auto; }
 #mp-screen .mp-switch:disabled { color: var(--dim); border-color: var(--line); cursor: not-allowed; }
 .mp-hint { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.4; }
+/* The running build, in the chat's empty line (playtest 25): two players spent a round testing an
+   old download, and this is the one place they both always look while flying. */
+.mp-build { margin-left: 6px; font-size: 11px; letter-spacing: .04em; opacity: .75; font-variant-numeric: tabular-nums; }
 .mp-hint code { color: var(--ink); }
 .mp-msg {
   margin: 0;
@@ -2801,6 +2829,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
   display: grid;
   gap: 2px;
   align-content: end;
+  /* Text is only selectable in the box the player opened with Enter (owner, playtest 24): a
+     glance at a line that arrived is not a document, and a pinned box is a readout. */
+  user-select: none;
 }
 #mp-chat-lines p { margin: 0; transition: opacity .6s; }
 #mp-chat-lines p.mp-chat-system { color: var(--amber); font-style: italic; opacity: .9; }
@@ -2893,3 +2924,6 @@ body.mp-chat-pinned:not(.mp-chat-open) #mp-chat-who {
 #mp-chat-note { margin: 0; color: #d98b7a; font-size: 12px; }
 #mp-chat-note[hidden] { display: none; }
 body.mp-chat-open #mp-chat { background: rgba(7, 9, 11, .86); }
+/* Selecting and copying the conversation (owner, playtest 24): while the box is open for typing,
+   the lines take the mouse as text, and a press on them never closes the box. */
+body.mp-chat-open #mp-chat-lines { user-select: text; cursor: text; }

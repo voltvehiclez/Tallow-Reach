@@ -153,7 +153,9 @@ test("protocol: every kind is cleaned to its own fields, and nothing else surviv
   // Step 16 slice 4 added the two that carry a PILOT: `carry` (guest -> host) and
   // `suitcase` (host -> guest, and the newer copy back). Slice 5 added `bye`, which says
   // "I am leaving" so the host can take a final copy and mark the record `left` at once.
-  assert.deepEqual(KINDS.sort(), ["bye", "carry", "chat", "hello", "ping", "pong", "presence", "refuse", "ships", "suitcase", "welcome"]);
+  // Slice 8a added `ships` (where every pilot is) and slice 8b `controls` (what one guest is asking
+  // its ship to do). The list is exhaustive on purpose: a kind nobody meant to add fails here.
+  assert.deepEqual(KINDS.sort(), ["bye", "carry", "chat", "controls", "hello", "ping", "pong", "presence", "refuse", "ships", "suitcase", "welcome"]);
 
   const hello = cleanMessage("hello", { v: SAVE_VERSION, worldId: "w-1", guestId: "g-1", name: "Ada", token: "tok", admin: true });
   assert.deepEqual(Object.keys(hello), ["t", "v", "worldId", "guestId", "name", "token"], "a hello carries no extra field");

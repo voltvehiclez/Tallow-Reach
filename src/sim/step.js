@@ -16,6 +16,7 @@ import { updatePlaceMemory } from "./place-memory.js";
 import { updateContractTimers } from "./contracts.js";
 import { updateInstances, updateRifts } from "./instances.js";
 import { updateWormholes } from "./wormholes.js";
+import { ageGuestControls } from "./multiplayer.js";
 import { SIM_DT, MAX_FRAME_DT } from "../data/simulation.js";
 
 /** The frame loop's pause gate. A hosted multiplayer world never pauses merely
@@ -33,6 +34,9 @@ export function isSimulationPaused() {
 /** One simulation tick. Caller does not step while paused. */
 export function stepSim(dt) {
   state.time += dt;
+  // Slice 8b: a guest that stopped saying what it is asking its ship to do is asked for nothing
+  // (`CONTROLS.staleMs`), so a closed tab cannot leave a hull flying on into a rock.
+  ageGuestControls();
   updatePlaceMemory(dt);
   updateContractTimers(dt);
   // A hint lasts until the next sim tick, not just a display frame. This keeps

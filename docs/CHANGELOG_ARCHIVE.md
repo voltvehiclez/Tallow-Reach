@@ -1,4 +1,27 @@
 
+## 2026-11-24: Slice 6's trading design, from the owner
+
+**Docs only; no rebuild needed.** Save version unchanged (29). Trading is still **last** (7 → 8 → 6).
+
+The owner described the trade system in two rounds of answers. It is recorded in
+[architecture/trading.md](architecture/trading.md) and summarised in slice 6 of
+[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
+
+- **Where:** a new **Trade** station tab beside Base/Saves lists the pilots docked at this station —
+  your own row included, with no button on it. Another pilot's **Trade** opens the window in the
+  left-hand panel **on both screens at once**. Close button top right; **undocking cancels**;
+  stations only.
+- **Halves:** theirs left, yours right, inventory-style grids — items and **ships** (a ship carries
+  its fit and cargo; **the ship you are piloting cannot be offered**), plus an **Add credits** button.
+- **Confirms:** one per half; with both confirmed the **host** swaps everything atomically and **only
+  if the receiving station storage and hangar have room** — otherwise nothing moves at all.
+- **Anti-scam:** an edit after a confirm clears the confirmation; the same rule covers credits. One
+  detail is left open (whose confirm clears — the safe rule, **both**, is written as intended).
+- **Custody:** a guest's received items must go into the lockers of its visiting record, not the
+  host's station stores, or the goods would never come home (`net/custody.js` `checkOut`/`checkIn`).
+- **Prerequisite:** a real docked presence — `net/session.js` still admits guests with
+  `docked: false`; slice 6 begins by reporting where a pilot is docked.
+
 ## 2026-11-24: Slice 4 playtest passed
 
 **No code change; no rebuild needed.** Save version unchanged (29).
@@ -518,6 +541,58 @@ read…` and `Rejoin must be allowed; it said: Your pilot is already visiting an
 version unchanged (v29). 1020 tests.
 
 ---
+
+## 2026-11-24: A visiting pilot's place is fixed at arrival (asked and recorded)
+
+**Docs only; no rebuild needed.** Save version unchanged (29). Build stays `2026-11-24h`.
+
+The owner asked whether the visiting pilot's name on the map should follow the friend when it moves
+pockets or systems. It cannot yet, and that is expected:
+
+- in the host's world the visitor is a **docked record created at arrival** (`sim/multiplayer.js`
+  `arriveGuest`, `place = bundle.homeStation`), and nothing writes its `place` afterwards;
+- no controls or position are sent yet (8a/8b), and the guest's own screen is its own galaxy (8c), so
+  a guest's travel never reaches the host.
+
+`world-and-map.md` and `testing/TESTING-16-SLICE7.md` now say so. After slice 8 the blip follows by
+itself: it reads the record's `place` on every repaint, and a moving pilot emits `place-changed`.
+
+## 2026-11-24: Slice 7 playtest passed
+
+**No code change; no rebuild needed.** Save version unchanged (29). The build stays `2026-11-24h` —
+the galaxy-chart fix is what made it work.
+
+The owner: *"Works."* Slice 7 — a visiting pilot named on the **galaxy chart**, under its **pocket**
+on the system map, and in a **Visiting pilots** row at the top of the panel — is
+**PLAYTEST-CONFIRMED** in [ROADMAP.md](ROADMAP.md), [HANDOFF.md](HANDOFF.md),
+[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
+
+Step 16 now stands at slices **1–5 and 7 confirmed**. **Slice 8** (host-authoritative snapshots, the
+guest's own-ship prediction, the second screen) is next; slice 6 (trading, design in
+[architecture/trading.md](architecture/trading.md)) is last.
+
+## 2026-11-24: Slice 7 fix — the visitor is named on the galaxy chart, and the panel row leads
+
+**Code change; rebuild needed; build `2026-11-24h`.** Save version unchanged (29); no new wire message.
+
+The owner's report: *"Slice 7 doesnt seem to have worked. See no viewing of a player in map as the
+host."* The record and the drawing were right — the map's panel row updated the moment a pilot
+arrived — but the feature was where nobody looks: the map opens on the **galaxy** chart, where slice 7
+drew nothing, and the panel row sat *under* the pocket list, below the fold.
+
+- **The galaxy chart draws the visitor now.** `galaxyMarkup` takes `systemPilots`; a system with a
+  visiting pilot is named even at labels-off and carries an amber `· Acey` row under its name, so
+  "where is my friend?" is answered on the view the map opens on.
+- **The Visiting pilots row leads the panel** — under the heading, above *Current pocket*, with an
+  amber rule, instead of after the pocket rows and route details.
+- **Two tests added** (`tests/multiplayer-slice7.test.mjs`, now 10): the galaxy row renders from the
+  one visitor list, and the panel row is placed before the pocket list in the renderer.
+- **The guide says why a map can be empty** (`testing/TESTING-16-SLICE7.md`): no pilot crosses unless
+  the guest presses **Bring my pilot**, the guest lands at *its own* home station, and both windows
+  must be build `2026-11-24h`.
+
+`ui/starmap.js`, `src/styles.css`, `src/data/multiplayer.js` (BUILD), `tests/multiplayer-slice7.test.mjs`,
+the slice-7 guide, `world-and-map.md`, `architecture/multiplayer.md`, `src/ui/README.md`.
 
 ## 2026-11-23: Test Ship faced sideways — the model brings its own rotation
 

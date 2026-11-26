@@ -65,7 +65,7 @@ import { readAway } from "../state/storage.js";
 import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
 import { readSettings, writeSettings, cleanName } from "./settings.js";
 import { checkTurnServers, turnSummary } from "./turn.js";
-import { NET, CHAT, SHIP_STREAM } from "../data/multiplayer.js";
+import { NET, CHAT, SHIP_STREAM, CONTROLS } from "../data/multiplayer.js";
 
 /** A whole, non-negative number: what every count on the wire is. */
 const whole = value => Math.max(0, Math.floor(Number(value) || 0));
@@ -376,6 +376,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // The host's timer. `shipTick` is cleared on stop like every other timer; the rate is
   // `SHIP_STREAM.hz` (data), NOT `NET.snapshotSec`, which stays the two-second suitcase sync.
   let shipTick = 0;
+  // Slice 8b: the guest's timer, the other direction, at `CONTROLS.hz`. Cleared on stop with the
+  // rest; a guest that is not in a world its pilot can fly sends nothing (`sendControls` decides).
+  let controlTick = 0;
 
   const ownGuestId = () => `guest-${token.slice(0, 8)}`;
 
@@ -484,6 +487,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       // straight to the screen's own stream, and its own entry is dropped (it already draws its
       // own hull, and two of them would z-fight).
       case "ships": return onShips(message);
+      // Slice 8b: the guest's asking, twice a snapshot's rate.
+      case "controls": return onControls(message, peerId);
       case "ping": {
         // Slice 5: a guest's heartbeat is the host's only sign of life between copies.
         // `lastSeen` is what `net/multiplayer.js`'s `guestIsHere` reads, so it is written
@@ -711,7 +716,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // the cargo existing in two places at once.
     storePilot(packed.save);
     emit("mp-away-changed", { away: awayMark });
-    return sendCarryMessage(carried);
+    // `fresh: true` — this suitcase was packed out of the home save just now, so it is the newest
+    // copy of the pilot there is, even though `checkOut` starts its pair at zero (playtest 24).
+    return sendCarryMessage(carried, { fresh: true });
   }
 
   /** Session side of "Bring my pilot": pack, install the frozen record, put it on the wire. */
@@ -724,7 +731,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       : { ok: false, message: "Your pilot could not travel — see the message on screen for why." };
   }
 
-  function sendCarryMessage(bundle) {
+  function sendCarryMessage(bundle, { fresh = false } = {}) {
     // **The secret is put back on the way out** (slice 5, found by the reconnect test).
     //
     // The copy the guest keeps is the copy the HOST sent back, and a host never keeps a
@@ -739,6 +746,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       name,
       epoch: bundle?.epoch || 0,
       rev: bundle?.rev || 0,
+      // **This copy came out of the home save a moment ago** (`sendCarry`'s own `checkOut`), so it
+      // is the newest truth about the pilot even though its ordering pair starts at zero. A
+      // rejoin of an older stored suitcase does not claim it: that copy may be behind this world
+      // (playtest 24, and case 2 above).
+      fresh: fresh === true,
       bundle: bundle ? { ...bundle, token: secret } : bundle,
     });
     if (!message) {
@@ -839,15 +851,25 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     //  2. **A stale `carry` arrives late** (a re-sent message, a guest that reopened from an
     //     old tab). The host's record is newer, so the record stands and the guest is sent
     //     the newer copy back instead of being believed.
-    //  3. **The pilot came home and came back.** A `left` record is holding a suitcase, not
-    //     an identity: the pilot has been home since, may have bought a whole new fit there,
-    //     and its save is the newest truth about it. So a returning pilot's copy wins, and
-    //     that is the fact the ordering pair cannot express — which is exactly why the check
-    //     is `record.left` first and `compare` second, and not `compare` alone.
+    //  3. **The pilot came home and came back.** The pilot has been home since, may have
+    //     bought a whole new fit there — or, in the owner's playtest 24, *repaired its hull* —
+    //     and its save is the newest truth about it. **But the pair cannot say so**: a fresh
+    //     `checkOut` starts its trip at `epoch 0, rev 0` while this world raises `rev` on every
+    //     write-back, so the copy that carries the repair is the one that *looks* older. That is
+    //     the whole of the bug the owner hit, and the reason a copy now says which it is:
+    //     **`fresh`** means "packed in the pilot's own home save just now". A fresh copy wins,
+    //     and only the guest can know it.
+    //
+    //     This used to be read off the record's own `left` mark, which conflated two very
+    //     different situations: *went home* (believe the guest) and *the connection dropped*
+    //     (believe this world). Case 2's test pins the second: a dropped guest rejoins carrying
+    //     an older copy and must not roll the world back. So `fresh` rides on the message and
+    //     `left` is only ever about admission now.
     //
     // A tie (`compare` says 0) takes the incoming copy: two copies with the same pair are
     // the same trip, and the arriving one is by definition the one the guest just packed.
-    const stale = record && record.left !== true && compare(record, incoming) < 0;
+    const fresh = message.fresh === true;
+    const stale = record && !fresh && compare(record, incoming) < 0;
     if (stale) {
       const kept = { ...(record.bundle || {}), token: "" };
       if (kept?.profile) {
@@ -1212,6 +1234,61 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     } catch (e) { /* a broken screen must not break a session */ }
   }
 
+  /* --- slice 8b: what the guest is asking its ship to do ------------------------------ */
+
+  /**
+   * Guest side: say what this pilot is asking its ship to do, `CONTROLS.hz` times a second.
+   *
+   * The source is **`state.localInput`** — the one new state slice 8b adds, written by
+   * `core/input.js` and readable from here without importing `core/` (the layers point one way).
+   * The aim comes from `state.aimDirection`, the local screen's own camera direction, because each
+   * pilot aims for itself: the host fires a guest's guns along that guest's `aimDirection`, never the
+   * host's nose. Nothing is sent while the pilot is not in a world it can fly (the title screen, the
+   * campaign card, or while docked at its **own** station the asking would launch the visiting hull
+   * from across the galaxy), and nothing is sent at all unless a `welcome` has been heard.
+   */
+  function sendControls() {
+    if (role !== "guest" || !on || !welcomed) return false;
+    const input = state.localInput;
+    if (!input) return false;
+    const aim = state.aimDirection || {};
+    const message = cleanMessage("controls", {
+      steer: input.steer || {},
+      roll: input.roll, thrust: input.thrust, strafe: input.strafe, lift: input.lift,
+      stop: input.stop, brake: input.brake, boost: input.boost, fire: input.fire, sec: input.sec,
+      aim: [aim.x, aim.y, aim.z],
+    });
+    return message ? send(message) : false;
+  }
+
+  /** The guest's clock for that asking. Started when a session starts as a guest. */
+  function startControlStream() {
+    if (controlTick || role !== "guest") return false;
+    controlTick = setInterval(sendControls, Math.max(1, Math.round(1000 / CONTROLS.hz)));
+    if (typeof controlTick?.unref === "function") controlTick.unref();
+    return true;
+  }
+
+  /**
+   * Host side: a peer says what its pilot is asking its ship to do.
+   *
+   * **The peer is the identity, never the message.** A controls message names no pilot at all, so a
+   * peer can only ever drive the record the host already matched to it — a guest cannot reach another
+   * guest's ship, or the host's, by guessing an id. `applyGuestControls` lives in `sim/` and this file
+   * may not import it (the arrow points one way), so the asking goes onto the bus and `main.js` hands
+   * it to the sim. A peer that has not been welcomed has no row here and is ignored, as is one that
+   * has left: a late message is not an error.
+   */
+  function onControls(message, peerId) {
+    if (role !== "host") return;
+    const entry = guests.find(row => row.peerId && row.peerId === peerId);
+    if (!entry) return;
+    markPeerSeen(peerId);
+    try {
+      emit("mp-guest-controls", { guestId: entry.guestId, input: message });
+    } catch (e) { /* a broken screen must not break a session */ }
+  }
+
   /**
    * The live profile of a visiting pilot, as `sim/` knows it.
    *
@@ -1392,7 +1469,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     publish();
     await channel.join();
     greetEveryone();
-    if (role === "guest") { startHelloRetry(); watchPage(); }
+    if (role === "guest") { startHelloRetry(); startControlStream(); watchPage(); }
     if (role === "host") { armHostWait(); startGuestSync(); startShipStream(); }
     armStallTimer();
     startKeepalive();
@@ -1577,6 +1654,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     if (guestSync) { clearInterval(guestSync); guestSync = 0; }
     if (shipTick) { clearInterval(shipTick); shipTick = 0; }
+    if (controlTick) { clearInterval(controlTick); controlTick = 0; }
     for (const { timer } of pendingWrite.values()) if (timer) clearTimeout(timer);
     pendingWrite.clear();
     clearStallTimer();
@@ -1828,6 +1906,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // Slice 8a: the host's ship snapshot, sent by its own timer at `SHIP_STREAM.hz`. Exposed the
     // same way, so a test can send one without waiting for a real 42 ms clock.
     broadcastShips,
+    // Slice 8b: the guest's asking, sent by its own timer at `CONTROLS.hz`. Exposed for the same
+    // reason — a test drives one message instead of waiting for a 33 ms clock.
+    sendControls,
     // Slice 5: the guest's own watchdog, on the same seam — a test hands it a clock instead of
     // waiting twenty seconds for a real one.
     checkHostAlive,

@@ -18,6 +18,157 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-25: Playtest 25 — one pointer at a time, and a lead pip for anything you can lock
+
+**Code change; rebuild needed; build `2026-11-25i`.** Save version unchanged (**29**); nothing saved
+and nothing on the wire changed.
+
+The owner confirmed all three playtest-24 fixes ("1. Works. 2. Works. 3. Works.") and sent two new
+reports from the same flight. Neither is a slice-8b feature; both are rules that were only ever
+written down in one place.
+
+- **1. "Pinning chat makes it so that when your orange circle cursor goes over the pinned chat your
+  white windows cursor is visible."** Two pointers live on the same screen: the system cursor and the
+  HUD's own orange circle (`#cur`). Only `canvas` hid the system one, so any element that took the
+  mouse — the pinned chat box does, `pointer-events: auto` — put a white arrow inside the ring. The
+  owner's rule is general: *"In the ship UI your orange circle cursor should always be prioritised if
+  you are steering. So UIs [that] decouple the steering like chat, inventory etc it's ok there to show
+  the white windows cursor."* So the answer is one body class, `pilot-pointer`, owned by the new
+  `src/ui/pointer.js`: **is the stick live?** — in a ship, not docked, not the title screen, not
+  paused, no surface holding the flight keys (chat, cargo, cache, chart, multiplayer screen, N list,
+  an act's end card). `main.js` asks it once a frame (`syncPointer()`, one comparison, a `classList`
+  write only when the answer changes) and `styles.css` finishes both halves: `body.pilot-pointer * {
+  cursor: none !important }` and `body:not(.pilot-pointer) #cur { display: none }` — so a pilot never
+  sees two pointers at once, in either direction. **Free camera (Left Alt) is not a decoupling** and
+  keeps the ring, per the owner: *"i still want the orange cursor like now since we are still flying
+  the ship just from a different view point."*
+- **2. "Lead indicator is not visible when I select a guest as a host with f."** The ballistic pip
+  was hard-wired to `lock.k === 'e'` — hostiles only — although playtest 23 made every pilot
+  selectable, so a locked friend drew nothing. It now follows **whatever F has locked, as long as it
+  is moving**: hostiles, visiting pilots on either machine, anything with a velocity. A pilot's lock
+  reference had no velocity at all, so `render/views.js` now carries one (`ref.v`): the host's
+  record's own interpolated `v`, or the `velocity` the host already sends in `SHIP_FIELDS` and
+  `render/shipstream.js` already smooths. Two gates stay, both about the shot: a wreck is skipped
+  (`hp <= 0`), and a target under `LEAD_MIN_SPEED` (0.5 m/s) has nothing to lead — a rock, a crate at
+  rest, a station and a rift door keep the screen quiet. The **weapon** side is unchanged, at the
+  owner's word (*"make the lead indicator currently only be for primary weapon, it's easier that way
+  right now"*): the selected primary bay's gun leads; an empty bay or the hitscan mining beam does
+  not, and the missile launcher is not consulted yet.
+- **3. "When chat is open the white cursor is only visible over the chat box."** The canvas hides the
+  system cursor for mouse-look flight, so a surface that took the stick only got the arrow back on its
+  own elements — everywhere else it was still `none`. The rule now gives the cursor the **whole
+  screen** on any decoupled surface (`body:not(.pilot-pointer) canvas { cursor: default }`, a type
+  selector with no `!important`, so a canvas with its own cursor keeps it), which is exactly what the
+  N list already did.
+- **4. "Are you sure that is the new build?"** The owner tested the previous round on a bundle that
+  contained neither fix, and nothing on the screen said which build was running. The chat box's empty
+  line now reads *Press Enter to chat. **Build 2026-11-25h*** — the one place both players always look
+  while flying. A screen without a build there is an old download or a cached page; hard-reload.
+- **Docs.** New guide [TESTING-25-POINTER-AND-LEAD.md](../testing/TESTING-25-POINTER-AND-LEAD.md)
+  (both reports, step by step). The rule itself is written into
+  [docs/architecture/ui-and-screens.md](architecture/ui-and-screens.md) and the two module READMEs.
+- **Tests.** `tests/playtest25-fixes.test.mjs` (8): the pointer table (including free camera and each
+  decoupling surface), the once-per-change DOM write, the two CSS rules, the frame loop's call, and
+  the lead pip — a pilot's reference carries a velocity on the host's screen and on a guest's, and
+  the instrument's gates (any lock, moving only, primary bay only). `npm test` **1131/1131**.
+
+## 2026-11-25: Playtest 24 — a repaired pilot comes back repaired, the visitor's hull stops blurring, and the chat can be copied
+
+**Code change; rebuild needed; build `2026-11-25f`.** Save version unchanged (**29**); one new field on
+one existing wire message, and no saved field at all.
+
+The owner's first flight of 8b reported three things. All of them are here, each with a test that fails
+on the old code.
+
+- **1. "Repair the pilot at home, bring it back, and it is still damaged"** — and the host said *"this
+  world kept its own"*. The repair really was in the suitcase; the world simply refused it. The ordering
+  pair (`epoch`, `rev`) cannot express "this copy came from home": a host raises `rev` on **every**
+  write-back, while a fresh `checkOut` starts every trip at `epoch 0, rev 0` — so the copy carrying the
+  repair is the one that looks older, and the damaged copy won. Slice 5's rule had been reading the
+  guest's own `left` mark instead, which conflated two different situations: *the pilot went home*
+  (believe the guest) and *the connection dropped* (believe this world — that rule is still pinned by
+  its own test). So a `carry` now says which it is: **`fresh: true`** means *packed out of the pilot's
+  own home save just now*, and only the guest can know it. `net/protocol.js` carries the flag;
+  `net/session.js` sets it in `sendCarry` (a new `checkOut`) and never on a rejoin of a stored suitcase,
+  and `onCarry` believes a fresh copy whatever the pair says. `left` is only about admission now.
+- **2. "The guest's hull and name tag go blurry on the host's screen, worse the faster it flies, only
+  while the host turns"** — the 2026-11-08 high-refresh sawtooth, back on the one record that fix never
+  reached. `snap` means "draw this frame un-interpolated", and only `chaseView` ever cleared it — for the
+  **local** hull. A visiting record keeps its `snap` from `launch()` for ever, so its hull was placed at
+  the last 60 Hz tick under a 240 Hz camera. `render/views.js` `poseOfRecord` now consumes the flag
+  after taking the pose, so the jump frame is still a jump and every frame after it interpolates like
+  the rest of the sky.
+- **3. "Opening chat with Enter should let me select and copy the text; selecting closes the box"** —
+  the field's `blur` handler closed an empty box, and a press on the lines blurs the field. Now a press
+  on the conversation starts a selection and keeps the box (and holds the redraws back, so a line that
+  arrives mid-drag cannot wipe the selection); a press on the field or **Pin** is typing; a press
+  anywhere else ends the selection and closes an empty, unpinned box exactly as before. Text is
+  selectable **only in the box opened with Enter** — `styles.css` gives the lines `user-select: none`
+  and turns it on under `body.mp-chat-open`, which is the owner's own line: not a glance, not a pinned
+  readout. Escape still closes it while a selection is up (the field no longer has the cursor, so the
+  box's own key handler would not see it).
+
+**Tests:** `tests/playtest24-fixes.test.mjs` (new, **5**): the repair surviving the round trip end to end
+(two real sessions, the host's own write-back, `bringPilotHome`, a repair, a rejoin — and the host's chat
+saying the pilot *arrived* rather than *kept its own*), the fresh flag reaching the wire with its pair at
+zero, a visitor's hull interpolating between ticks, a docked visitor untouched, and the chat press rule
+plus the stylesheet rule. `tests/multiplayer-slice5.test.mjs`'s "came home and came back" case now sends
+`fresh: true` — the same claim, said out loud. `npm test` **1122/1122**, build **3599 KB**.
+
+**What the owner must do:** hard-reload on **both** machines, check **Connection details** reads
+**`2026-11-25f`**, then follow `testing/TESTING-16-SLICE8B-FIXES.md`.
+
+## 2026-11-25: Step 16 slice 8b — the guest's controls reach its ship
+
+**Code change; rebuild needed; build `2026-11-25e`.** Save version unchanged (**29**); one new wire
+kind, one new state, no saved field.
+
+Slice 8a made a friend **visible**. This makes the friend **flyable**: the guest says what it is
+asking its ship to do, the host writes it into that visitor's own control record, and the host's sim —
+already the only writer of the truth — decides what it means.
+
+- **`controls` (`net/protocol.js`)** — a new kind carrying the control record plus the pilot's aim:
+  `{ steer{x,y}, roll, thrust, strafe, lift, stop, brake, boost, fire, sec, aim[x,y,z] }`
+  (`CONTROL_FIELDS` in `data/multiplayer.js`). Rebuilt field by field on send **and** read: every axis
+  clamped to -1..1, every held control only a real `true`, `aim` through the vec3 cleaner. A message
+  never names a pilot — **the peer is the identity** — so no guest can drive another's ship.
+- **`state.localInput` — the numbered decision, as planned.** `core/input.js` writes the local control
+  record today and `sim/` may not import `core/`; so 8b adds **one new state, one new writer**:
+  `state.localInput`, mirrored at the end of `syncControls()`, which the session reads. It is a copy,
+  not a reference, so a session can never write back into the pilot's own controls.
+- **The guest's clock** (`CONTROLS.hz` **30**, data) sends that asking 30 times a second — faster than
+  the 24 Hz snapshot stream on purpose, so a snapshot is never what a control waits behind. Nothing is
+  sent until a `welcome` is heard, and nothing at all once the session stops.
+- **`sim/multiplayer.js` `applyGuestControls(guestId, input)`** writes the asking into that visitor's
+  own `controls` (where `core/input.js` writes the local pilot's) and its `aimDirection` (its own
+  looking direction, so a guest's shot goes where the **guest** looks, not along the host's nose).
+  **A docked visitor launches the first time it asks to fly** — it has no other hull in this world —
+  through the same `launch()` the local pilot uses, so it leaves fully charged from the station's
+  launch point. An asking of nothing leaves a docked visitor parked.
+- **A silent guest does not fly on** (`ageGuestControls`, called each tick): after `CONTROLS.staleMs`
+  (**400 ms**, data) the record is asked for nothing, so a closed tab, a backgrounded window or a lost
+  channel cannot leave a hull holding its throttle into a rock. It stays launched; it coasts.
+- **Wiring:** `net/session.js` resolves the **peer** to a guest id and hands `{ guestId, input }` to
+  the bus (`mp-guest-controls`); `main.js` — the only place allowed to touch both — calls the sim.
+  A controls message from a peer that was never welcomed, or for a record that has gone, is dropped.
+
+**Not in 8b, by the plan:** prediction, acks and rewind (**8d**), cosmetic muzzle (**8e**), and the
+guest's screen following the host's pocket (**8c**) — a guest still sees its **own** galaxy, so this
+slice is watched from the **host's** screen. **A launched visitor cannot dock again yet** (docking is
+host-confirmed and a guest has no way to ask); it flies until it goes home.
+
+**Tests:** `tests/multiplayer-controls.test.mjs` (new, **11**): the kind and its fields, every axis
+clamped and every held control honest, `state.localInput` mirrored but never shared, the asking landing
+in the record and the hull actually flying under `stepSim`, an asking of nothing not launching, unknown
+and dead visitors driving nothing, aim normalised, silence neutralising after `staleMs`, the peer — not
+the message — deciding whose ship it is, and the guest's own send being cleaned and stopping with the
+session. `tests/multiplayer-connection.test.mjs`'s exhaustive `KINDS` list gained `controls`.
+`npm test` **1117/1117** (248 s), build **3598 KB** (`game/tallow-reach.html`, build string `2026-11-25e`).
+
+**What the owner must do:** hard-reload with Ctrl+Shift+R on **both** machines, check **Connection
+details** reads **`2026-11-25e`**, then follow `testing/TESTING-16-SLICE8B.md` — bring the pilot in,
+and watch the **host's** screen while the guest presses W: the friend's hull launches and flies.
+
 ## 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
 
 **No code change; no rebuild needed — the build the owner passed is `2026-11-25d`.** Save version
@@ -239,58 +390,6 @@ Files: `src/data/multiplayer.js`, `src/net/ships.js` (new), `src/net/protocol.js
 protocol cap, the two sessions, interpolation/hold/stale, and the hulls drawn on both sides), and the
 pinned `KINDS` list in `tests/multiplayer-connection.test.mjs` now names `ships`.
 
-## 2026-11-24: A visiting pilot's place is fixed at arrival (asked and recorded)
-
-**Docs only; no rebuild needed.** Save version unchanged (29). Build stays `2026-11-24h`.
-
-The owner asked whether the visiting pilot's name on the map should follow the friend when it moves
-pockets or systems. It cannot yet, and that is expected:
-
-- in the host's world the visitor is a **docked record created at arrival** (`sim/multiplayer.js`
-  `arriveGuest`, `place = bundle.homeStation`), and nothing writes its `place` afterwards;
-- no controls or position are sent yet (8a/8b), and the guest's own screen is its own galaxy (8c), so
-  a guest's travel never reaches the host.
-
-`world-and-map.md` and `testing/TESTING-16-SLICE7.md` now say so. After slice 8 the blip follows by
-itself: it reads the record's `place` on every repaint, and a moving pilot emits `place-changed`.
-
-## 2026-11-24: Slice 7 playtest passed
-
-**No code change; no rebuild needed.** Save version unchanged (29). The build stays `2026-11-24h` —
-the galaxy-chart fix is what made it work.
-
-The owner: *"Works."* Slice 7 — a visiting pilot named on the **galaxy chart**, under its **pocket**
-on the system map, and in a **Visiting pilots** row at the top of the panel — is
-**PLAYTEST-CONFIRMED** in [ROADMAP.md](ROADMAP.md), [HANDOFF.md](HANDOFF.md),
-[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
-
-Step 16 now stands at slices **1–5 and 7 confirmed**. **Slice 8** (host-authoritative snapshots, the
-guest's own-ship prediction, the second screen) is next; slice 6 (trading, design in
-[architecture/trading.md](architecture/trading.md)) is last.
-
-## 2026-11-24: Slice 7 fix — the visitor is named on the galaxy chart, and the panel row leads
-
-**Code change; rebuild needed; build `2026-11-24h`.** Save version unchanged (29); no new wire message.
-
-The owner's report: *"Slice 7 doesnt seem to have worked. See no viewing of a player in map as the
-host."* The record and the drawing were right — the map's panel row updated the moment a pilot
-arrived — but the feature was where nobody looks: the map opens on the **galaxy** chart, where slice 7
-drew nothing, and the panel row sat *under* the pocket list, below the fold.
-
-- **The galaxy chart draws the visitor now.** `galaxyMarkup` takes `systemPilots`; a system with a
-  visiting pilot is named even at labels-off and carries an amber `· Acey` row under its name, so
-  "where is my friend?" is answered on the view the map opens on.
-- **The Visiting pilots row leads the panel** — under the heading, above *Current pocket*, with an
-  amber rule, instead of after the pocket rows and route details.
-- **Two tests added** (`tests/multiplayer-slice7.test.mjs`, now 10): the galaxy row renders from the
-  one visitor list, and the panel row is placed before the pocket list in the renderer.
-- **The guide says why a map can be empty** (`testing/TESTING-16-SLICE7.md`): no pilot crosses unless
-  the guest presses **Bring my pilot**, the guest lands at *its own* home station, and both windows
-  must be build `2026-11-24h`.
-
-`ui/starmap.js`, `src/styles.css`, `src/data/multiplayer.js` (BUILD), `tests/multiplayer-slice7.test.mjs`,
-the slice-7 guide, `world-and-map.md`, `architecture/multiplayer.md`, `src/ui/README.md`.
-
 ## 2026-11-24: Trading: both confirms clear, and offers come from the hold or the station
 
 **Docs only; no rebuild needed.** Save version unchanged (29). No code moved.
@@ -305,31 +404,12 @@ Two owner answers settle the details [architecture/trading.md](architecture/trad
   unchanged: the station for the host, the lockers of the visiting record for a guest, so goods
   come home.
 
-## 2026-11-24: Slice 6's trading design, from the owner
-
-**Docs only; no rebuild needed.** Save version unchanged (29). Trading is still **last** (7 → 8 → 6).
-
-The owner described the trade system in two rounds of answers. It is recorded in
-[architecture/trading.md](architecture/trading.md) and summarised in slice 6 of
-[REFACTOR_PLAN.md](REFACTOR_PLAN.md) and [architecture/multiplayer.md](architecture/multiplayer.md).
-
-- **Where:** a new **Trade** station tab beside Base/Saves lists the pilots docked at this station —
-  your own row included, with no button on it. Another pilot's **Trade** opens the window in the
-  left-hand panel **on both screens at once**. Close button top right; **undocking cancels**;
-  stations only.
-- **Halves:** theirs left, yours right, inventory-style grids — items and **ships** (a ship carries
-  its fit and cargo; **the ship you are piloting cannot be offered**), plus an **Add credits** button.
-- **Confirms:** one per half; with both confirmed the **host** swaps everything atomically and **only
-  if the receiving station storage and hangar have room** — otherwise nothing moves at all.
-- **Anti-scam:** an edit after a confirm clears the confirmation; the same rule covers credits. One
-  detail is left open (whose confirm clears — the safe rule, **both**, is written as intended).
-- **Custody:** a guest's received items must go into the lockers of its visiting record, not the
-  host's station stores, or the goods would never come home (`net/custody.js` `checkOut`/`checkIn`).
-- **Prerequisite:** a real docked presence — `net/session.js` still admits guests with
-  `docked: false`; slice 6 begins by reporting where a pilot is docked.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-24: Slice 7 playtest passed
+- 2026-11-24: Slice 7 fix — the visitor is named on the galaxy chart, and the panel row leads
+- 2026-11-24: A visiting pilot's place is fixed at arrival (asked and recorded)
+- 2026-11-24: Slice 6's trading design, from the owner
 - 2026-11-24: Slice 4 playtest passed
 - 2026-11-24: Step 16 slice 8 — the owner's client-prediction brief, recorded
 - 2026-11-24: Step 16 slice 7 — the visiting pilot is on the map

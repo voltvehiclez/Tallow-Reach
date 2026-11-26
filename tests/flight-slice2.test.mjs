@@ -36,7 +36,10 @@ test('Ballistic interception accounts for transverse motion and inherited shoote
  assert.equal(interceptPoint(origin,V(),target,V(),0),null);
  assert.ok(interceptPoint(origin,V(),target,V(0,0,100),100));
  const hud=readFileSync('src/ui/hud.js','utf8');
- assert.match(hud,/if \(!gun\) return/);assert.match(hud,/lock\?\.k !== 'e'/);
+ // Playtest 25 widened the target side: the pip follows any lock that moves, not hostiles only.
+ assert.match(hud,/if \(!gun\) return/);
+ assert.doesNotMatch(hud,/lock\?\.k !== 'e'/, 'not hostiles-only any more');
+ assert.match(hud,/targetVel\.lengthSq\(\) < LEAD_MIN_SPEED/, 'a target at rest has nothing to lead');
 });
 test('Displacement speed includes scenery push with zero engine velocity, never teleport distance',()=>{
  const p=setup();
@@ -82,7 +85,8 @@ test('Status frame bottoms align with throttle without changing X positions or t
 test('Lead prediction shares the rendered target and player poses instead of raw tick positions',()=>{
  const hud=readFileSync('src/ui/hud.js','utf8');
  assert.match(hud,/const pose = renderPlayerPose\(P\)/);
- assert.match(hud,/interceptPoint\(origin, pose.v, interpolatedPos\(lock.o\), interpolatedVelocity\(lock.o\)/);
+ assert.match(hud,/const targetVel = interpolatedVelocity\(lock.o\)/);
+ assert.match(hud,/interceptPoint\(origin, pose.v, interpolatedPos\(lock.o\), targetVel,/);
  assert.doesNotMatch(hud,/interceptPoint\(origin, P.v, lock.o.pos/);
 });
 

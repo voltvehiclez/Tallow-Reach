@@ -746,6 +746,10 @@ function pilotRefFor(id) {
       place: "",
       pos: new THREE.Vector3(),
       quat: new THREE.Quaternion(),
+      // **How fast that hull is going** (owner, playtest 25): the ballistic lead instrument draws
+      // where to aim *ahead* of a locked target, and F can lock a pilot — so a pilot has to carry
+      // the one number a lead is computed from, exactly as a hostile record does (`v`).
+      v: new THREE.Vector3(),
       hull: 1,
       shield: 0,
       dead: false,
@@ -771,8 +775,9 @@ function applyOtherPilotPose(mesh, pose) {
 
 /** One pose from a live record, interpolated exactly as the local hull is. */
 function poseOfRecord(P, alpha, at) {
+  const snapped = P.snap === true;
   const p = renderPlayerPose(P, alpha);
-  return {
+  const pose = {
     id: P.guestId || P.id || `pilot-${at}`,
     name: P.name || P.profile?.name || "",
     ship: P.ship,
@@ -786,11 +791,30 @@ function poseOfRecord(P, alpha, at) {
     // host draws for a friend and the bar the friend's own screen gets can never disagree.
     hull: hullFraction(P),
     shield: shieldFraction(P),
+    // The velocity the lead instrument leads with, interpolated at the same render time as the
+    // pose (the same numbers `sim/targeting.js` and the HUD read off any other record).
+    velocity: interpolatedVelocity(P, alpha, _otherPose.vel),
   };
+  // **A visitor's `snap` belongs to the screen that drew it** (owner, playtest 24).
+  //
+  // `snap` means "do not interpolate: this frame is a jump". On the local hull `chaseView` clears
+  // it once it has snapped the camera to it — but nothing ever cleared it for *another* pilot, and
+  // `launch()` sets it when a visitor's hull leaves the station. So from the moment a guest took
+  // off, every frame of its hull took the un-interpolated branch and was placed at the last 60 Hz
+  // tick while a 240 Hz camera moved every frame: a ~60 Hz sawtooth on the hull and on its name
+  // tag, worse the faster the guest flew, and only visible while the host turned. This is the same
+  // fault the 2026-11-08 fix removed from the local hull and from NPCs; the visitor was the one
+  // record nobody cleared.
+  //
+  // Consuming it here (after the pose has been taken, so the jump frame is still drawn as a jump)
+  // gives back the between-tick interpolation the rest of the sky already has.
+  if (snapped) P.snap = false;
+  return pose;
 }
 const _otherPose = {
   pos: new THREE.Vector3(),
   quat: new THREE.Quaternion(),
+  vel: new THREE.Vector3(),
 };
 
 /**
@@ -834,6 +858,10 @@ export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
     ref.shield = clamp01(pose.shield, 0);
     ref.dead = pose.dead === true;
     ref.docked = pose.docked === true;
+    // The host's own records hand over their interpolated velocity; a guest's poses carry the
+    // host's (`SHIP_FIELDS.velocity`), already smoothed by `render/shipstream.js`. A record with
+    // neither reads as still, which is honest: a docked or stationary hull has nothing to lead.
+    if (pose.velocity) ref.v.copy(pose.velocity); else ref.v.set(0, 0, 0);
     tagLockView(view.mesh, ref.lock);
     drawn.push(ref);
   };

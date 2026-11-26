@@ -114,10 +114,11 @@ steps still to build (16 and 17).
 # Step 16: Multiplayer (host-run co-op)
 
 **Status:** planned 2026-11-21 with the owner, one slice per chat. Slices **1–3 built**
-(2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4**
-(2026-11-23a), **playtest-confirmed 2026-11-24**, and **slice 5** (`2026-11-24f`) built; **slice 7**
-(`2026-11-24h`) built and playtest-confirmed 2026-11-24; **slice 8a** (`2026-11-25a`) built,
-awaiting its playtest.
+(2026-11-21) and **playtest-confirmed by the owner 2026-11-22**; **slice 4** (`2026-11-23a`),
+**playtest-confirmed 2026-11-24**, and **slice 5** (`2026-11-24f`) built; **slice 7** (`2026-11-24h`)
+built and playtest-confirmed 2026-11-24; **slice 8a** playtest-confirmed 2026-11-25
+(`2026-11-25d`); **slice 8b** (`e`) playtest-confirmed, its three reports fixed in `f` (a repaired
+pilot arrives repaired; a visitor's hull interpolates; chat text is selectable).
 **Build order changed by the owner 2026-11-24: 7, then 8, then 6 (trading last). The numbers
 are names, not a schedule** (renumbering would falsify the archive and every guide).
 **Multiplayer is open world only** — the campaign stays single player (owner, 2026-11-21).
@@ -286,18 +287,16 @@ exists for exactly that, and the pause card says which path is in use.
      the ship-snapshot rate (20–30 Hz, owner 2026-11-24; a NEW value, `SHIP_STREAM` —
      `NET.snapshotSec` is the 2 s *profile* sync) for every pilot, so a guest's `render/views.js`
      draws them with interpolation. Remote ships are **views only** — no sim state, nothing writable.
-   - **8b — controls in.** A `controls` message kind carrying
-     `{ steer, thrust, strafe, lift, roll, fire, sec, stop, brake, boost }`, cleaned on arrival and
-     length-capped, written into that peer's player record (principle 7: input is a command, not a
-     key). **The numbered decision:** `core/input.js` writes the local pilot's `state.controls`
-     today, and `sim/` may not import `core/`; so 8b adds `state.localInput`, filled by
-     `core/input.js`, which the session reads — one new state and one new writer, recorded here
-     because it touches a rule, not because it is a loophole.
-   - **8c — the host's world on the guest's screen.** The guest does not run its own world:
-     `state.place` and the scenery follow the host's pocket (`place-entered` from the snapshot),
-     the guest's sim skips world systems it does not own, and its pilot record is the one the
-     snapshots drive. The guest's own galaxy stays loaded but is not stepped — it is where the
-     pilot returns to on Go home.
+   - **8b — controls in (built `e`, playtest-confirmed; fixes `f`).** A `controls` message kind carrying
+     the control record plus `aim`, cleaned on arrival and length-capped, written into that peer's
+     player record by its peer id (principle 7: input is a command, not a key). **The numbered
+     decision:** `core/input.js` writes `state.controls` today and `sim/` may not import `core/`, so
+     8b adds `state.localInput`, filled by `core/input.js` and read by the session — one new state,
+     one new writer, recorded because it touches a rule.
+   - **8c — the host's world on the guest's screen.** `state.place` and the scenery follow the host's
+     pocket (`place-entered` from the snapshot), the guest's sim skips world systems it does not own,
+     and its pilot record is the one the snapshots drive. The guest's own galaxy stays loaded but is
+     not stepped — it is where the pilot returns to on Go home.
    - **8d — the guest predicts its own ship (owner, 2026-11-24); 8e makes the muzzle cosmetic.** Tick-tagged inputs, an `ack`
      carrying the whole predicted state, rewind-and-replay of unconfirmed inputs, a ~100 ms error
      blend and a snap only after a warp or respawn. Remotes are **interpolated, never predicted**,
