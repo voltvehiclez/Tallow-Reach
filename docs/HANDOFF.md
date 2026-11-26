@@ -5,7 +5,7 @@ code**: give complete files (or exact find-and-replace edits) with full paths, a
 run and what to click. Different AI assistants work in separate chats and none remembers earlier ones.
 **The docs are the memory.** Do not read every doc: read this file, then only what your task needs.
 
-*Last checked: 2026-11-25 (build `2026-11-25b`). This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
+*Last checked: 2026-11-26 (build `2026-11-26a`). This file is a snapshot, not a log: rewrite it (do not append) at the end of a chat.*
 
 ## Start here (every chat)
 
@@ -32,88 +32,60 @@ run and what to click. Different AI assistants work in separate chats and none r
 
 ## Where the game is now
 
-- Save version: **v29** (v29 adds the `away` marker beside the profile — a pilot visiting another
-  world — and the host side, `world.worldId` + `world.guests`; v28 added the seven filter presets).
-- **Which steps are done, built or next: the step table in [ROADMAP.md](ROADMAP.md).** It is the only place step status is kept (this file, REFACTOR_PLAN and the README do
-  not repeat it); tick steps there.
-- **Ask the owner at the start:** "Did the pending playtests in ROADMAP pass?" Tick them if so; fix a reported bug first.
-- **Step 15 campaign (built, owner-approved 2026-11-21; v28):** a separate mode with its own pilot and a fixed galaxy (`240515`), dual-mode save envelope; First Sortie is a flight-school tutorial for Dane Korr. Act's words: [FIRST-SORTIE-DIALOGUE.md](FIRST-SORTIE-DIALOGUE.md); rules: [MISSION_RULES.md](MISSION_RULES.md); guide: [../testing/TESTING-15-CAMPAIGN.md](../testing/TESTING-15-CAMPAIGN.md); full build notes archived in [archive/HANDOFF_PLAYTEST_HISTORY_2026-11-19.md](archive/HANDOFF_PLAYTEST_HISTORY_2026-11-19.md).
-- **Step 16 multiplayer — eight slices; 1–5, 7, 8a and 8b PLAYTEST-CONFIRMED (8b passed on `e`), its three playtest-24 reports fixed in `f`, 6 (trading) last:** [REFACTOR_PLAN.md](REFACTOR_PLAN.md), rules in [architecture/multiplayer.md](architecture/multiplayer.md). **Slice 1:** `data/multiplayer.js` says what travels, `net/custody.js` packs it. **Slice 2, save v29:** `save.away`, `world.guests`. **Slice 3:** `net/transport.js` names `trystero@0.27.0` (the one library); `net/session.js` a session, `net/protocol.js` the messages, `net/paste.js` the `TRJOIN:` codes; one screen, `ui/multiplayer.js` (host: switch → link → codes; join: one box). **Enter** opens chat; **a hosted world never pauses**; no campaign row. TURN relays are dead; the game carries its own (`ICE.turn`). Opening your own world ends a visit. **Slice 4:** **Join** only looks around — **Bring my pilot** freezes the pilot at home and sends it. `carry`/`suitcase` are capped at `NET.suitcaseMaxBytes` 256 KB and **refused in words, never truncated**; `epoch`/`rev` ride beside; `cleanCarry` never strips unknown ids (L16). The host keeps a **`tokenHash`, never the token**; the visitor is a real docked ship (`sim/multiplayer.js`). **Bring pilot home** works offline from the suitcase; the away card is raised by **every Open World press** — L33–L36 (holds, lockers, `forgetPeer`). **Slice 5 (`a`): a lost host (closed browser, or `NET.lastSeenSec` of silence) puts the guest on the **menu**. **The copy is kept current** (`NET.snapshotSec`); **`compare` decides**, never arrival order; **`bye`** = a final copy; **one window per pilot**. **Playtest 22:** identity is **the browser's own** (`tr_mp.pilotToken`), so two friends use one link (L47). Chat: **12 s** unless pinned, lines-only when self-opened (L46). **Slice 7 (`h`):** a visitor is a blip under its system and a panel row. **Slice 8a (`b`) — the second hull, and playtest 23's two fixes.** The host sends `SHIP_FIELDS` at **24 Hz** as a `ships` message, capped (`LIMITS.ships` 24 per packet, batched). A guest draws them as **views only** (`render/shipstream.js`: 100 ms behind, interpolated, held — never guessed); **the host needs no wire**: `render/views.js` draws each visiting record from `state.players`. Same pocket only. No save change. **Playtest 23 (`b`) fixed two bugs, both tested: (1) a friend is a ship like any other** — `render/views.js` publishes `state.otherPilots` (a guest's only friend) and `sim/targeting.js` offers it to **F** as lock kind **`"p"`**, with **the pilot's own name** and **hull/shield bars**; the N list has it as a **Ship** row and `SHIP_FIELDS` gained **`shield`** (`sim/pilot-stats.js` owns both fractions). **(2) A pilot can always come back** — the host's write-back and `left` mark edit a record **without** the guest's secret, and `guestRecord` had re-hashed `undefined` over the stored `tokenHash`, locking a pilot out of its own link for ever; **an edit that carries no secret never changes the hash** (`custody.recordTokenHash`). **Second round (`c`):** a record holding the hash of *nothing* **cannot refuse anybody** (`handshake` admits it, `putGuest` writes the real hash); a **`carry` never rewrites an existing record's hash**; a refusal **ends the attempt**. **A pilot's hull is a body:** ships collide (`pilotHullRadius`), bolts and warheads stop on it shields-first, and a destroyed visitor is announced (`mp-guest-destroyed`). **Third round (`d`):** the N list's **Ship** filter carries every ship — a **docked** pilot is a row too. **Playtest 24 (`f`):** fixed, owner-confirmed. **Playtest 25 (`i`):** one pointer at a time — the orange circle is the only cursor while the pilot steers (`ui/pointer.js`; free camera keeps it), the system one on a surface that takes the stick; the lead pip follows **any lock that moves**, a visiting pilot included. **8b (`e`) — the guest flies.** A `controls` kind (clamped; **the peer is the identity**) goes out at 30 Hz from **`state.localInput`** — one state, one writer (`core/input.js`) — and `applyGuestControls` writes it into that visitor's `controls` + `aimDirection`; a docked visitor **launches on its first asking**, and silence quiets it after `staleMs` **400**. No prediction (**8d**), no pocket-follow (**8c**); a launched visitor cannot dock yet. Guides: [8B](../testing/TESTING-16-SLICE8B.md), [8B-FIXES](../testing/TESTING-16-SLICE8B-FIXES.md), [8A](../testing/TESTING-16-SLICE8A.md), [5](../testing/TESTING-16-SLICE5.md), [7](../testing/TESTING-16-SLICE7.md). **Step 17 (dedicated servers) planned, not built** — headless server, one world, Minecraft-style port forwarding, optional auth (Supabase).
-- **Shared flight model (2026-11-21):** every ship flies `sim/flight-model.js` from data stats; NPCs via `sim/npc-pilot.js` (`flight` block in `data/enemies.js`). N presets gate floating labels.
+- Save version: **v29** (v29 adds `away` beside profile — a pilot visiting another world — and host side `world.worldId` + `world.guests`; v28 added seven filter presets).
+- **Which steps are done, built or next: the step table in [ROADMAP.md](ROADMAP.md).** Only place step status is kept; tick steps there.
+- **Ask the owner at start:** "Did the pending playtests in ROADMAP pass?" Tick them if so; fix a reported bug first.
+- **Step 15 campaign (built, owner-approved 2026-11-21; v28):** separate mode, own pilot, fixed galaxy `240515`, dual-mode envelope; First Sortie flight-school for Dane Korr. Words: [FIRST-SORTIE-DIALOGUE.md](FIRST-SORTIE-DIALOGUE.md); rules: [MISSION_RULES.md](MISSION_RULES.md); guide: [../testing/TESTING-15-CAMPAIGN.md](../testing/TESTING-15-CAMPAIGN.md).
+- **Step 16 multiplayer — eight slices; 1–5, 7, 8a/8b PLAYTEST-CONFIRMED, 8c BUILT (awaiting playtest), 6 (trading) last:** [REFACTOR_PLAN.md](REFACTOR_PLAN.md), rules in [architecture/multiplayer.md](architecture/multiplayer.md). **Slice 1:** `data/multiplayer.js` travel list, `net/custody.js` packs. **2, v29:** `save.away`, `world.guests`. **3:** `net/transport.js` `trystero@0.27.0` only file naming it; `net/session.js` session, `net/protocol.js` messages, `net/paste.js` `TRJOIN:`; one screen `ui/multiplayer.js`; **Enter** chat; **hosted world never pauses**; no campaign row; `ICE.turn` fallback. **4:** Join looks only — **Bring my pilot** freezes home pilot & sends suitcase (`carry`/`suitcase` capped 256 KB, `epoch`/`rev` beside, `tokenHash` only). **Bring pilot home** offline; away card on every Open World press. **5:** lost host → menu; `compare` wins, `bye` final copy, one window per pilot; browser identity L47, chat 12 s L46. **7:** blip & panel row. **8a:** host `SHIP_FIELDS` 24 Hz `ships`, `LIMITS.ships` batched; guest **views only** (`shipstream` 100 ms, interpolated, held); host draws visitors from `state.players`; same pocket only. **Playtest 23 fixes:** friend is selectable (`p` lock, own name, hull/shield via `pilot-stats.js`, `shield` in `SHIP_FIELDS`), always rejoinable (`recordTokenHash`, `carry` never rewrites hash, refusal ends attempt), hull is solid (`pilotHullRadius`), N-Ship lists docked too. **Playtest 24:** fresh `carry` beats stale `rev`, visitor blur removed, chat selectable. **Playtest 25:** one pointer (`ui/pointer.js`), lead pip for any moving lock including pilots. **8b:** guest `controls` 30 Hz from `state.localInput` (`core/input.js` only writer) + `aim`, `applyGuestControls`; docked launches on first ask, stale 400 ms. **8c (new `2026-11-26a`, not yet playtested):** guest screen is host world — `state.place`/scenery follow snapshot's own-ship place (`mp-self-ship`, `sim/places.enterPlace`), guest sim skipped (`sim/step.isGuest()` early return), pilot record driven by snapshots, own galaxy stashed in `state.guestHome` (runtime only per choice A) restored on Go home/host-lost; guests can **warp/dock freely** via `warp`/`dock` requests (host re-checks, new `protocol.js` kinds, `mp-guest-warp/dock`); HUD is guest's ship; cut on host warp (owner ok); rifts host-only; no save change. Guides: [8C](../testing/TESTING-16-SLICE8C.md), [8B-FIXES](../testing/TESTING-16-SLICE8B-FIXES.md), [8B](../testing/TESTING-16-SLICE8B.md), [8A](../testing/TESTING-16-SLICE8A.md). **Step 17 (dedicated servers) planned, not built.**
+- **Shared flight model (2026-11-21):** `sim/flight-model.js`; NPCs `sim/npc-pilot.js`.
 - **Earlier playtest history:** PRs #37–#61: [archive/HANDOFF_PLAYTEST_HISTORY_2026-11-19.md](archive/HANDOFF_PLAYTEST_HISTORY_2026-11-19.md).
-- **Scenery:** Meridian only — sun-facing C opening, 1000 m arrival; other fields 2.5× wider (`sceneryFeatures`).
-- **Stock camera:** `BASE_HFOV = 85`, chase 14.9 / 23.1 / 14.3. Do not change unasked.
-- **System space (2026-11-16, playtest passed):** every pocket has a derived 3D AU position and the **system sky layer** (`render/systemsky.js`). Detail: [architecture/world-and-map.md](architecture/world-and-map.md).
-- **Models & collision (2026-11-16):** a drop-in `.glb` per drawn thing, collided with the drawn mesh; **everything solid hurts** ([GLB_MODELS.md](GLB_MODELS.md)).
-- **Earlier confirmed (2026-11-16):** Test Ship (1 cr, `testship`, 1000 Hull, 10× damage); 14c wormholes (ordinary systems, 75 standing, ≤3 per system, 20-minute clock, save v21→v25); cube-map skies (`STARFIELD.enabled = false`, panoramas kept but not drawn, `render/cubemap.js`).
+- **Scenery:** Meridian C opening, 1000 m arrival; other fields 2.5× wider.
+- **Stock camera:** `BASE_HFOV=85`, chase 14.9/23.1/14.3. Do not change unasked.
+- **System space (2026-11-16, passed):** derived 3D AU + system sky layer. Detail: [architecture/world-and-map.md](architecture/world-and-map.md).
+- **Models & collision (2026-11-16):** drop-in `.glb` collided with mesh; everything solid hurts ([GLB_MODELS.md](GLB_MODELS.md)).
+- **Earlier confirmed:** Test Ship (1 cr, `testship`), 14c wormholes (75 standing, ≤3/system, 20 min, v21→v25), cube skies (`STARFIELD.enabled=false`).
 
 ## The owner's ground rules (do not break these)
 
-- No new npm dependencies; plain ES modules. The one planned exception is a small networking library at the
-  multiplayer step (16), with the owner's approval. For anything else, stop and ask.
-- Keep the folder structure and conventions. Tuning numbers live in `src/data/`. Restructuring happens only
-  as a numbered refactor step, never as a side effect.
-- Saves stay backward-compatible: bump `SAVE_VERSION` in `src/state/profile.js`, add a migration and an
-  old-save test whenever the saved shape changes. Storage keys `tr1`, `tr_s1..tr_s3` and the `TR1:` code
-  prefix never change.
-- Systems talk through the event bus (`src/util/events.js`), not by importing each other.
-- Do not change behaviour nobody asked about (the FLIGHT and CAMERA feel and authored hull bonuses/holds
-  are intentional).
-- Run `npm test` and `npm run build`, or say plainly what could not run. Never guess results. End every reply
-  that changes `src/` by telling the owner to run `npm run build` and `npm test`.
-- `game/tallow-reach.html` is generated. Never edit it by hand.
-- Add a short top entry to [CHANGELOG.md](CHANGELOG.md) for every change and include it in the delivery.
-  **It holds at most 10 full entries:** after adding yours, if there are more than 10, move the oldest ones verbatim to the
-  top of `CHANGELOG_ARCHIVE.md` and add one index line each, so exactly 10 remain. Never delete history.
-- Refactors follow [REFACTOR_PLAN.md](REFACTOR_PLAN.md): plan in plain language, ask the open questions, wait for
-  the owner's OK, build one slice, deliver a playtest guide, tick the step only after the owner says it passed.
-- **Missions must behave like real life** ([MISSION_RULES.md](MISSION_RULES.md)): items only enter the hold by a
-  real pickup or hand-over, dialogue buttons never change the world, nothing spawns in the pilot's face, and a
-  mission is never stuck or silently failed. Build missions from the templates; the linter and invariant tests
-  must pass.
-- For simple or conversational requests, answer in chat; do not rebuild guides or backups unless asked. Check a
-  file exists before overwriting it.
+- No new npm dependencies; plain ES modules. One exception: small networking library at step 16 with approval.
+- Keep folder structure/conventions. Tuning numbers in `src/data/`. Restructuring only as numbered refactor step.
+- Saves backward-compatible: bump `SAVE_VERSION` in `src/state/profile.js`, add migration + old-save test. Storage keys `tr1`, `tr_s1..tr_s3`, `TR1:` prefix never change.
+- Systems talk via event bus (`src/util/events.js`), not by importing each other.
+- Do not change behaviour nobody asked about (FLIGHT/CAMERA feel, hull bonuses/holds intentional).
+- Run `npm test` and `npm run build`, or say plainly what could not run. Never guess. End every `src/` change by telling owner to run both.
+- `game/tallow-reach.html` is generated. Never edit by hand.
+- Add short top entry to [CHANGELOG.md](CHANGELOG.md) for every change. It holds at most 10 full entries; move oldest verbatim to archive with index lines if over. Never delete history.
+- Refactors follow [REFACTOR_PLAN.md](REFACTOR_PLAN.md): plan in plain language, ask open questions, wait for OK, build one slice, deliver guide, tick only after owner says passed.
+- **Missions must behave like real life** ([MISSION_RULES.md](MISSION_RULES.md)): items enter hold only by real pickup/hand-over, dialogue never changes world, nothing spawns in face, never stuck/silent fail. Build from templates; linter/invariants must pass.
+- For simple/conversational requests, answer in chat; do not rebuild guides/backups unless asked. Check file exists before overwriting.
 
 ## Keeping the game scalable (the owner plans to make it much bigger)
 
-1. **Content is data.** A new enemy, item, ship, module, loot table, shop, place, encounter or mission is an
-   entry in `src/data/` plus a recipe. If adding plain content seems to need a change in `src/sim/`, stop: the
-   framework is missing a feature. Extend the framework first (its own change, with tests) and tell the owner.
-2. **The eight architecture principles** in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) hold for every change:
-   the sim is pure (no screen, sound or keyboard), entities are data and meshes are views, all randomness goes
-   through `util/rng.js`, profile/world/session state stay apart, players are a list, input is a command, the
-   sim runs on a fixed step. Never deepen a listed "debt".
-3. **Do not hard-code ids** of a specific enemy, place or mission in code. Look things up by id from data.
-4. **Every new system ships with:** a data table, an event, a test, and an entry in the matching recipe or area
-   doc. A mission or content type without a linter or test is unfinished.
-5. **Keep the docs small.** Add a new recipe as its own file in `docs/recipes/` (next number) and a row in
-   [HOW_TO_ADD.md](HOW_TO_ADD.md); add area facts to the matching file in `docs/architecture/`. Do not grow this
-   file or `ARCHITECTURE.md`. `npm test` fails if a doc grows past its size limit or a link breaks.
+1. **Content is data.** New enemy/item/ship/module/loot/shop/place/encounter/mission is `src/data/` entry + recipe. If plain content seems to need `src/sim/` change, framework missing feature — extend framework first (its own change, tests) and tell owner.
+2. **Eight architecture principles** in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) hold: sim pure, entities data/meshes views, randomness via `util/rng.js`, profile/world/session apart, players list, input is command, sim on fixed step. Never deepen listed debt.
+3. Do not hard-code ids of enemy/place/mission in code. Look up by id from data.
+4. Every new system ships with: data table, event, test, and entry in matching recipe/area doc. Mission/content type without linter/test unfinished.
+5. Keep docs small. New recipe as own file in `docs/recipes/` (next number) and row in [HOW_TO_ADD.md](HOW_TO_ADD.md); area facts to matching `docs/architecture/` file. Do not grow this file or `ARCHITECTURE.md`. `npm test` fails if doc over size limit or link breaks.
 
 ## Before you end a chat (checklist)
 
-1. `docs/CHANGELOG.md`: new top entry added, at most 10 full entries left (oldest moved to the archive, with index lines).
-2. `docs/ROADMAP.md`: step status ticked or updated (only if the owner confirmed a playtest passed).
-3. This file: rewrite "Where the game is now" if it changed (the save version must match `SAVE_VERSION`).
-4. Docs you verified against the code: update their "Last checked" date. New or changed `src/` file: update that folder's
-   `README.md` and, for a new recipe or area fact, the index or area file.
-5. Tell the owner to run `npm run build` and `npm test`, and to zip the project as the next chat's baseline.
+1. `docs/CHANGELOG.md`: new top entry added, at most 10 full entries left (oldest moved to archive with index lines).
+2. `docs/ROADMAP.md`: step status ticked/updated (only if owner confirmed playtest passed).
+3. This file: rewrite "Where the game is now" if it changed (save version must match `SAVE_VERSION`).
+4. Docs verified against code: update "Last checked" date. New/changed `src/` file: update folder `README.md` and, for new recipe/area fact, index/area file.
+5. Tell owner to run `npm run build` and `npm test`, and zip project as next chat's baseline.
 
 ## When the owner reports a bug
 
-1. Reproduce it as a failing test first when you can.
-2. Find the **root cause** and fix the whole **class** of bug, not only the one case.
-3. Add or extend a regression test (for missions, an invariant in `tests/mission-invariants.test.mjs`).
-4. Add or update an entry in [LESSONS.md](LESSONS.md): what the owner saw, the general cause, the rule, the
-   test that enforces it. If it is a repeat of an existing lesson, say so there and strengthen the test.
-5. Mention it in the CHANGELOG entry. Do not tick the affected step until the owner re-plays it.
+1. Reproduce as failing test first when you can.
+2. Find root cause and fix whole class, not only one case.
+3. Add/extend regression test (missions: invariant in `tests/mission-invariants.test.mjs`).
+4. Add/update [LESSONS.md](LESSONS.md): what owner saw, general cause, rule, test that enforces. If repeat, strengthen test.
+5. Mention in CHANGELOG entry. Do not tick affected step until owner re-plays.
 
-The owner's report usually has three parts: *what I did, what I expected, what happened.* If one is missing,
-ask for it.
+Owner report usually: *what I did, what I expected, what happened.* If missing, ask.
 
 ## Build, test and play
-
-From the project folder:
 
 ```sh
 npm install        # first time only
@@ -122,21 +94,21 @@ npm test
 node serve.mjs     # optional: serves game/ on http://localhost:8080
 ```
 
-Or double-click `game/tallow-reach.html`. If a preview blocks localStorage, open it in its own tab. Guides: [../testing/](../testing/README.md) — `TESTING-BASELINE.md` plus the step's guide. To try the mission test missions, open the game with `?testmissions` on the end of the address.
+Or double-click `game/tallow-reach.html`. If preview blocks localStorage, open in own tab. Guides: [../testing/](../testing/README.md) — `TESTING-BASELINE.md` plus step's guide. To try test missions, open game with `?testmissions`.
 
 ## Map of the docs
 
 | File or folder | What it holds |
 | --- | --- |
-| `LESSONS.md` | Classes of bug earlier chats hit, the rule that prevents each, and the test that enforces it. |
-| `MISSION_RULES.md` | How missions must behave; the linter, templates, invariant tests and test missions. |
-| `VISION.md` | The owner's intent, settled decisions, open questions. |
-| `ROADMAP.md` | Step status (the only place), content you can add now, the parking lot, the log. |
-| `REFACTOR_PLAN.md` | The refactor steps still to do, with prompts. Finished steps are in `archive/`. |
-| `TARGET_ARCHITECTURE.md` | The end-state design, the eight principles, the debt register. |
-| `ARCHITECTURE.md` | How the code works **now**: layers, events, state, saves. Area details in `architecture/`. |
+| `LESSONS.md` | Classes of bug earlier chats hit, rule that prevents each, test that enforces it. |
+| `MISSION_RULES.md` | How missions must behave; linter, templates, invariant tests and test missions. |
+| `VISION.md` | Owner's intent, settled decisions, open questions. |
+| `ROADMAP.md` | Step status (only place), content you can add now, parking lot, log. |
+| `REFACTOR_PLAN.md` | Refactor steps still to do, with prompts. Finished steps in `archive/`. |
+| `TARGET_ARCHITECTURE.md` | End-state design, eight principles, debt register. |
+| `ARCHITECTURE.md` | How code works **now**: layers, events, state, saves. Area details in `architecture/`. |
 | `HOW_TO_ADD.md` | Index of 22 recipes in `recipes/`. |
 | `CHANGELOG.md` / `CHANGELOG_ARCHIVE.md` | Recent changes in full, older history. Never delete entries. |
-| `AI_PROMPTS.md` | Prompts the owner pastes into new chats. |
-| `archive/` | Superseded text, kept word for word: old HANDOFF, finished refactor steps, old status prose. |
-| `../testing/` | Owner playtest guides (current ones on top, `passed/` for finished steps). Each `src/` folder also has a short `README.md` listing its files and rules. |
+| `AI_PROMPTS.md` | Prompts owner pastes into new chats. |
+| `archive/` | Superseded text word for word: old HANDOFF, finished refactor steps, old status prose. |
+| `../testing/` | Owner playtest guides (current on top, `passed/` finished steps). Each `src/` folder also has short `README.md` listing files/rules. |

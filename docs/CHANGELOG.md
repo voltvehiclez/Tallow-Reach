@@ -18,6 +18,19 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-26: Slice 8c — the host's world on the guest's screen
+
+**Code change; rebuild needed; build `2026-11-26a`.** Save version unchanged (**29**); no saved field, no wire snapshot format change beyond two new guest→host kinds (`warp`, `dock`).
+
+The guest still ran its own world in 8b — its own sim stepped its own scenery while the host's snapshots were only views. 8c makes the guest's screen the host's world, per [REFACTOR_PLAN.md](REFACTOR_PLAN.md) slice 8c and the owner's four decisions of 2026-11-26:
+
+- **Guest can warp and dock freely** (not follow the host). A guest Warp or Dock press sends a `warp`/`dock` request (`net/protocol.js` new kinds, `net/session.js` `requestWarp`/`requestDock`, host re-checks `travelQuote`/`tryDock` via `mp-guest-warp`/`mp-guest-dock` in `main.js`). Host warp never drags the guest; rift/instance only affects who is in it.
+- **State and scenery follow the host's pocket via the snapshot.** Guest's own-ship entry (`HOST-pilot-filter` removed for self) arrives as `mp-self-ship` and is applied to `localPlayer` (`pos`/`quat`/`v`/`thr`/`docked`/`dead`/`place`, hull/shield fractions back to HP) with a `snap` on place change; `state.place` and scenery (`enterPlace` → `place-entered` → `showPlace`) follow the guest's own authoritative place, not the host's. Own galaxy stays loaded but is **not stepped** — `sim/step.js` early-return when `state.away` (`isGuest()`), so single-player is identical.
+- **HUD is the guest's ship**, not the host's. Pilot record driven by snapshots; per the owner's choice A, `state.guestHome` (runtime only, never saved) stashes `place`/`worldPlace` on `mp-away-changed` and restores on Go home / host-lost / session end (`showPlace`, clear stream). `SAVE_VERSION` stays **29** (no reload persistence; reload while away is a fresh start and Bring pilot home still works).
+- **Wire:** two new kinds `warp { to }` and `dock {}` (cleaned, capped `LIMITS.id`), one new emit `mp-self-ship` plus the existing `mp-ships` stream (100 ms delay, 24 Hz). Layers kept: `net/` may import `sim/` never reverse, `net/` never imports `core/`, `sim/` never imports `net/`, only `transport.js` names Trystero.
+- **Docs & guide:** new [testing/TESTING-16-SLICE8C.md](../testing/TESTING-16-SLICE8C.md) linked from [testing/README.md](../testing/README.md) (cut on host warp, free warp/dock, Go home, what you still won't see — enemies/bullets still host-only). Updated module READMEs and [ARCHITECTURE.md](ARCHITECTURE.md).
+- **Tests:** `tests/docs.test.mjs` still green (HANDOFF 16-KB, ROADMAP 35-KB limits); `tests/multiplayer-connection.test.mjs` updated for the two new kinds; `npm test` green; `npm run build` 3604 KB.
+
 ## 2026-11-25: Playtest 25 — one pointer at a time, and a lead pip for anything you can lock
 
 **Code change; rebuild needed; build `2026-11-25i`.** Save version unchanged (**29**); nothing saved

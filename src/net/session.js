@@ -489,6 +489,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       case "ships": return onShips(message);
       // Slice 8b: the guest's asking, twice a snapshot's rate.
       case "controls": return onControls(message, peerId);
+      // Slice 8c: the guest asks the host to warp or dock its own ship. The host re-checks
+      // travel/dock rules for that pilot and decides; a guest cannot move itself.
+      case "warp": return onWarp(message, peerId);
+      case "dock": return onDock(message, peerId);
       case "ping": {
         // Slice 5: a guest's heartbeat is the host's only sign of life between copies.
         // `lastSeen` is what `net/multiplayer.js`'s `guestIsHere` reads, so it is written
@@ -1223,14 +1227,23 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   /**
    * Guest side: the host's picture arrived. It is handed on as it is — cleaned on the way in by
    * `readMessage` — and nothing here decides where a ship is; the screen's stream interpolates.
-   * **Our own entry is dropped:** this screen already draws its own hull.
+   *
+   * **Slice 8c: the guest's own ship is in that picture too.** Slice 8a dropped it (the screen
+   * drew its own hull, and two would z-fight); slice 8c is the step where the guest *stops* drawing
+   * its own hull and draws what the host says instead — position, place, docked and hull all come
+   * from the host's truth. So the own entry is split off and sent as `mp-self-ship` (the place
+   * follower and the HUD updater read it), while other pilots stay on `mp-ships`.
    */
   function onShips(message) {
     if (role !== "guest") return;
+    const now = Date.now();
     const mine = ownGuestId();
-    const ships = (message.ships || []).filter(entry => entry && entry.id && entry.id !== mine);
+    const all = Array.isArray(message.ships) ? message.ships : [];
+    const own = all.find(entry => entry && entry.id === mine) || null;
+    const ships = all.filter(entry => entry && entry.id && entry.id !== mine);
     try {
-      emit("mp-ships", { ships, at: Date.now() });
+      emit("mp-ships", { ships, at: now });
+      if (own) emit("mp-self-ship", { ship: own, at: now });
     } catch (e) { /* a broken screen must not break a session */ }
   }
 
@@ -1287,6 +1300,46 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     try {
       emit("mp-guest-controls", { guestId: entry.guestId, input: message });
     } catch (e) { /* a broken screen must not break a session */ }
+  }
+
+  /* --- slice 8c: warp and dock requests ------------------------------------------- */
+
+  function onWarp(message, peerId) {
+    if (role !== "host") return;
+    const entry = guests.find(row => row.peerId && row.peerId === peerId);
+    if (!entry) return;
+    const to = typeof message.to === "string" ? message.to.trim() : "";
+    if (!to) return;
+    markPeerSeen(peerId);
+    try {
+      emit("mp-guest-warp", { guestId: entry.guestId, to });
+    } catch (e) { /* a broken listener must not break a session */ }
+  }
+
+  function onDock(message, peerId) {
+    if (role !== "host") return;
+    const entry = guests.find(row => row.peerId && row.peerId === peerId);
+    if (!entry) return;
+    markPeerSeen(peerId);
+    try {
+      emit("mp-guest-dock", { guestId: entry.guestId });
+    } catch (e) { /* a broken listener must not break a session */ }
+  }
+
+  /** Guest side: ask the host to warp my ship to `to` (a place id). */
+  function sendWarp(to) {
+    if (role !== "guest" || !on || !welcomed) return false;
+    const dest = typeof to === "string" ? to.trim() : "";
+    if (!dest) return false;
+    const message = cleanMessage("warp", { to: dest });
+    return message ? send(message) : false;
+  }
+
+  /** Guest side: ask the host to dock my ship now. */
+  function sendDock() {
+    if (role !== "guest" || !on || !welcomed) return false;
+    const message = cleanMessage("dock", {});
+    return message ? send(message) : false;
   }
 
   /**
@@ -1909,6 +1962,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // Slice 8b: the guest's asking, sent by its own timer at `CONTROLS.hz`. Exposed for the same
     // reason — a test drives one message instead of waiting for a 33 ms clock.
     sendControls,
+    // Slice 8c: the guest asks the host to move its own ship (warp/dock). Same seam.
+    sendWarp,
+    sendDock,
     // Slice 5: the guest's own watchdog, on the same seam — a test hands it a clock instead of
     // waiting twenty seconds for a real one.
     checkHostAlive,
@@ -1918,6 +1974,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     checkRelays,
     channel: () => channel,
     paste: () => paste,
+    ownGuestId,
     /**
      * Test-only hook: pretend a message arrived from a peer. In the game, the channel's
      * `onData` calls `receive`; a test has no channel, so it calls this instead.
@@ -1961,6 +2018,15 @@ export function uniqueName(wanted, taken = []) {
 
 /** Send a chat line. False when nobody is listening, or the line is empty. */
 export const say = text => (active ? active.say(text) : false);
+
+/** Guest: ask the host to warp my ship to `to` (slice 8c). */
+export const requestWarp = to => (active ? active.sendWarp(to) : false);
+
+/** Guest: ask the host to dock my ship (slice 8c). */
+export const requestDock = () => (active ? active.sendDock() : false);
+
+/** Own guest id for this session (for tests/main). */
+export const ownId = () => (active ? active.ownGuestId?.() || "" : "");
 
 /** Another attempt, through a relay. The screen's "Reconnect" button. */
 export const reconnect = () => (active ? active.reconnect() : false);

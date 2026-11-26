@@ -13,7 +13,11 @@ broker-free fallback), `join-link.js` (the one link a guest needs), `settings.js
 `boot.js` (a `?join=` link in the address bar). Slices 1 and 2 are the rules and their save fields; slice 8a adds `ships.js`, the picture of every
 pilot the host sends 24 times a second (the guest draws it and simulates nothing); slice 8b adds the
 other direction — the guest's `controls` at 30 Hz, which the host writes into that visitor's own record
-and its own simulation flies.
+and its own simulation flies. Slice 8c puts the host's world on the guest's screen — `state.place`
+and scenery follow the host's pocket via `place-entered` from the snapshot's own-ship entry
+(`mp-self-ship`), the guest's sim is frozen (`state.away` → `sim/step.js` early return), its pilot
+record is driven by snapshots (`state.guestHome` stashed runtime-only, choice A, restored on Go home),
+and guests can warp/dock freely via `warp`/`dock` requests (host re-checks).
 
 **Step 17 (planned 2026-11-22): dedicated servers.** The server side of the connection will live here too — a
 headless build of the same project (no `ui/`, `render/` or `core/`) hosting one world for 50+ players via port

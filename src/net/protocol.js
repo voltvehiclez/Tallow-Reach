@@ -36,6 +36,8 @@
 //                                                         into its own record of that pilot's
 //                                                         controls and its own sim decides what it
 //                                                         means (refactor principle 7)
+//   warp       { t, to }                                  guest -> host (slice 8c): \"take my ship to this pocket\" — a request, not a teleport; host re-checks travel rules and runs startWarp for that pilot
+//   dock       { t }                                        guest -> host (slice 8c): \"dock now\" — host runs tryDock for that pilot when in range
 //
 // The `bye` is a courtesy, not a contract: a crashed tab sends nothing at all, which is why the
 // host still notices a peer that vanished on its own. It only makes the ordinary departure —
@@ -57,7 +59,7 @@
 import { NET } from "../data/multiplayer.js";
 
 /** Every message kind this build understands. An unknown `t` is dropped, not echoed. */
-export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships", "controls"];
+export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships", "controls", "warp", "dock"];
 
 /**
  * The longest a name, an id or a chat line may be on the wire, and the other hard caps.
@@ -140,6 +142,12 @@ export function cleanMessage(kind, fields = {}) {
     // `data/multiplayer.js` is the list of what travels.
     case "controls":
       return cleanControls(fields);
+    // Slice 8c: the guest asks the host to warp or dock its own ship. The host re-checks
+    // everything (travelQuote, dock range) and decides; a guest cannot teleport itself.
+    case "warp":
+      return { t: "warp", to: text(fields.to, LIMITS.id) };
+    case "dock":
+      return { t: "dock" };
     // Slice 5: the guest is leaving on purpose. Two short strings, nothing else: the host
     // answers it with a final `suitcase`, so this message must never be able to say more
     // than "I am going".

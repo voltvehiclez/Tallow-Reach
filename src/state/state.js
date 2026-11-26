@@ -327,6 +327,7 @@ export const state = {
   galaxyRecovery: null, // { from, to } when a removed pocket required safe recovery
   away: null,           // v29: the marker while this pilot is visiting another world, else null
   multiplayer: false,   // step 16: true while this browser hosts/visits a world, so the card does not pause it
+  guestHome: null,      // slice 8c (runtime only, never saved): { place, worldPlace } where this pilot was before visiting, so Go home can restore the sky (choice A: not persisted across reload — reload is a fresh start)
   players: [],         // player records, including their own controls
   localPlayerIndex: 0,  // which player this screen and its input follow
   // Step 16 slice 8a (playtest 23): the **mirror** of every other pilot this screen is drawing —

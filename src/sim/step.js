@@ -31,9 +31,23 @@ export function isSimulationPaused() {
   return !!(state.paused || state.ui.intro || state.ui.campaignEnd);
 }
 
+/** Is this browser a guest inside somebody else's world? (Slice 8c: its own galaxy is stashed, not stepped.) */
+export function isGuest() {
+  return !!state.away;
+}
+
 /** One simulation tick. Caller does not step while paused. */
 export function stepSim(dt) {
   state.time += dt;
+  // Slice 8c: a visiting guest does not run its own galaxy. The host's browser is the only
+  // writer of the truth; this browser draws what the host sent, and its own world stays
+  // loaded but frozen so Go home can put it back exactly where it was. Single player (no away)
+  // is unchanged — the early return is only taken while away.
+  if (isGuest()) {
+    // The hint still expires on a tick, even while the world is frozen.
+    if (state.hud) state.hud.prompt = "";
+    return;
+  }
   // Slice 8b: a guest that stopped saying what it is asking its ship to do is asked for nothing
   // (`CONTROLS.staleMs`), so a closed tab cannot leave a hull flying on into a rock.
   ageGuestControls();
