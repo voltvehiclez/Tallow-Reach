@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, 8a built and played, **8b built to `2026-11-25f`** and playtested, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-25 (slices 1–5 and 7 playtest-confirmed, 8a built and played, **8b built to `2026-11-25f`**, playtested, confirmed, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea

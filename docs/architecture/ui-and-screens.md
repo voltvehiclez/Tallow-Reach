@@ -27,9 +27,26 @@
   pause or plot a route (warping still needs a launch, and the chart says "Docked: launch to
   warp." on its chart panel). Only the title screen, the pause overlay itself, a dead pilot or a
   warp in progress refuses. Do not copy a `!docked` condition into a key handler instead.
-- **The pointer follows the reticle.** The canvas hides the system pointer for mouse-look flight, since the HUD draws
-  its own reticle (`#cur`); `ui/hud.js` `setReticle()` hides the HUD and adds `body.no-reticle` together, so on the title
-  screen and while docked the real pointer is back and never disappears over the empty screen beside the panel.
+- **One pointer at a time, and it is chosen by one rule** (`ui/pointer.js`, playtest 25). Two cursors share the
+  screen: the system pointer and the HUD's own orange circle (`#cur`). `pilotPointer(state)` answers *is the stick
+  live?* — in a ship, not docked, not the title screen, not paused, and no surface holding the flight keys (chat,
+  cargo, cache, starmap, the multiplayer screen, the N list, an act's end card; `pointerTaken`). `main.js` calls
+  `syncPointer()` once a frame and it writes the one body class only when the answer changes. `styles.css` then
+  draws exactly one: while `body.pilot-pointer` is on, **nothing** under the mouse may show the system cursor
+  (`cursor: none !important` — the pinned chat box, which takes the mouse, used to put a white arrow inside the
+  ring); while it is off, the ring is hidden (`body:not(.pilot-pointer) #cur { display: none }`). **Free camera (Left
+  Alt) is not a decoupling** and keeps the ring: the pilot is still flying, from another viewpoint.
+  `ui/hud.js` `setReticle()` still hides the HUD and adds `body.no-reticle` together, so on the title screen and
+  while docked the HUD — and the ring with it — is away.
+- **The ballistic lead pip follows the lock, and the lock decides nothing else.** `ui/hud.js` draws the white
+  circle (`#weapon-lead`) where a shot must be aimed to meet a moving target: the selected **primary** bay's gun
+  speed against the target's interpolated velocity (`sim/flight-instruments.js` `interceptPoint`), at the same
+  render time as the muzzle. Any lock counts (playtest 25: hostiles, a visiting pilot on either machine, anything F
+  can select) as long as the target is **moving** — under `LEAD_MIN_SPEED` (0.5 m/s) there is nothing to lead, so a
+  rock, a crate at rest, a station and a rift door keep the screen quiet. The weapon side is the primary bay only:
+  an empty bay or the hitscan mining beam hides it, and the missile launcher is not consulted yet. A pilot's lock
+  reference carries the one number a lead needs (`v`), which `render/views.js` fills from the record's own velocity
+  on a host and from the velocity `SHIP_FIELDS` already puts on the wire for a guest.
 - **Inventory tiles have three item actions, all behind a right-click.** Click moves one, Shift-click moves the
   stack; right-click opens **Use** (only for an item with a `use` field, `sim/consumables.js` `canUse`), **Sell**
   (a quantity box) and **Discard ×N**. Discard is a two-step popover shared by the

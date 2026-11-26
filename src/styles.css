@@ -49,6 +49,23 @@ body.no-reticle canvas {
   cursor: default;
 }
 
+/* **One pointer at a time** (owner, playtest 25). While the pilot steers, the orange
+   circle (#cur) is the pointer and *nothing* under the mouse may show the system arrow —
+   a pinned chat box took the mouse and put a white cursor inside the ring. A surface that
+   takes the stick (chat typing, the hold, the chart, the cache, the multiplayer screen, the
+   N list, pause, a station) drops body.pilot-pointer (ui/pointer.js, once a frame) and the
+   system cursor works there exactly as before. `!important` because that is the rule: no
+   element's own `cursor: pointer` or `cursor: text` outranks it while the pilot is flying.
+   The second half hides the ring on those surfaces, so the two pointers are never drawn
+   together. */
+body.pilot-pointer,
+body.pilot-pointer * {
+  cursor: none !important;
+}
+body:not(.pilot-pointer) #cur {
+  display: none;
+}
+
 /* ---- Flight HUD (top-left bars, top-right info, centre messages, markers) ---- */
 #hud>div {
   position: fixed;

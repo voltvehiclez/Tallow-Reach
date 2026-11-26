@@ -746,6 +746,10 @@ function pilotRefFor(id) {
       place: "",
       pos: new THREE.Vector3(),
       quat: new THREE.Quaternion(),
+      // **How fast that hull is going** (owner, playtest 25): the ballistic lead instrument draws
+      // where to aim *ahead* of a locked target, and F can lock a pilot — so a pilot has to carry
+      // the one number a lead is computed from, exactly as a hostile record does (`v`).
+      v: new THREE.Vector3(),
       hull: 1,
       shield: 0,
       dead: false,
@@ -787,6 +791,9 @@ function poseOfRecord(P, alpha, at) {
     // host draws for a friend and the bar the friend's own screen gets can never disagree.
     hull: hullFraction(P),
     shield: shieldFraction(P),
+    // The velocity the lead instrument leads with, interpolated at the same render time as the
+    // pose (the same numbers `sim/targeting.js` and the HUD read off any other record).
+    velocity: interpolatedVelocity(P, alpha, _otherPose.vel),
   };
   // **A visitor's `snap` belongs to the screen that drew it** (owner, playtest 24).
   //
@@ -807,6 +814,7 @@ function poseOfRecord(P, alpha, at) {
 const _otherPose = {
   pos: new THREE.Vector3(),
   quat: new THREE.Quaternion(),
+  vel: new THREE.Vector3(),
 };
 
 /**
@@ -850,6 +858,10 @@ export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
     ref.shield = clamp01(pose.shield, 0);
     ref.dead = pose.dead === true;
     ref.docked = pose.docked === true;
+    // The host's own records hand over their interpolated velocity; a guest's poses carry the
+    // host's (`SHIP_FIELDS.velocity`), already smoothed by `render/shipstream.js`. A record with
+    // neither reads as still, which is honest: a docked or stationary hull has nothing to lead.
+    if (pose.velocity) ref.v.copy(pose.velocity); else ref.v.set(0, 0, 0);
     tagLockView(view.mesh, ref.lock);
     drawn.push(ref);
   };

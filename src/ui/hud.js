@@ -35,6 +35,9 @@ const $ = id => document.getElementById(id);
 const MARKER_POOL = 28;
 const MARKER_MARGIN_X = 75;   // keep labels this far from the screen edge
 const MARKER_MARGIN_Y = 30;
+// A locked target slower than this (m/s) has nothing to lead, so the ballistic pip stays away:
+// its "intercept" is the hull itself and it would sit on the lock marker already drawn there.
+const LEAD_MIN_SPEED = 0.5;
 
 let markers = [];
 let markerCount = 0;
@@ -746,15 +749,31 @@ function updateInstruments(dt, P, F) {
   }
   el.lead.hidden = true;
   const lock = F.lock;
-  if (state.warp || P.docked || lock?.k !== 'e' || lock.o.hp <= 0) return;
+  if (state.warp || P.docked || !lock) return;
+  // **Whatever F has locked, if it moves** (owner, playtest 25: *"ALL objects, ships, npcs,
+  // players, anything that has a velocity and is selected with F with a weapon that isnt hitscan
+  // has the lead indicator"*). It used to be hostiles only (`lock.k === 'e'`), so locking a
+  // visiting pilot — which playtest 23 made possible — showed no pip at all.
+  //
+  // Two gates are left, and both are about the shot rather than the target: a wreck is not worth
+  // aiming at, and a target that is not moving has nowhere to be but where it is, so its "lead" is
+  // the hull itself and the pip would only sit on the marker already there. A rock, a crate at
+  // rest, a station and a rift door all answer 0 m/s and keep the screen quiet.
+  if (Number.isFinite(lock.o?.hp) && lock.o.hp <= 0) return;
+  // The weapon is still the **selected primary bay** (owner, playtest 25: *"make the lead
+  // indicator currently only be for primary weapon, it's easier that way right now"*): a gun in
+  // that bay leads; an empty bay or the hitscan mining beam does not suggest a ballistic lead.
   const gun = P.guns.find(g => g.i === primarySlotIndex(state.profile.pw, P));
-  if (!gun) return; // Empty bays and hitscan mining beams must not suggest a ballistic lead.
+  if (!gun) return;
+  const targetVel = interpolatedVelocity(lock.o);
+  if (targetVel.lengthSq() < LEAD_MIN_SPEED * LEAD_MIN_SPEED) return;
   // Use the camera/hull render time, not the next fixed-step pose.
   const pose = renderPlayerPose(P);
   const barrels = Math.max(1, gun.barrels || 1);
   const origin = playerMount('gun', gun.i, 0, barrels, pose, state.profile.ship);
   if (barrels > 1) origin.add(playerMount('gun', gun.i, barrels-1, barrels, pose, state.profile.ship)).multiplyScalar(0.5);
-  const point = interceptPoint(origin, pose.v, interpolatedPos(lock.o), interpolatedVelocity(lock.o), gun.speed, BULLET_LIFETIME);
+  // Where the screen drew it, not the next fixed-step pose — the same render time as the origin.
+  const point = interceptPoint(origin, pose.v, interpolatedPos(lock.o), targetVel, gun.speed, BULLET_LIFETIME);
   if (!point) return;
   const screen = point.project(camera);
   if (screen.z < -1 || screen.z > 1 || Math.abs(screen.x) > 1 || Math.abs(screen.y) > 1) return;

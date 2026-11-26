@@ -24,6 +24,7 @@ import { restoreWormholes } from "./sim/wormholes.js";
 import { jumpRoute } from "./sim/navigation.js";
 import { prepareGalaxySave } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
+import { syncPointer } from "./ui/pointer.js";
 import {
   setupMultiplayer, openChat, chatAway, isChatOpen,
   isMultiplayerScreenOpen, closeMultiplayer,
@@ -456,6 +457,9 @@ function drawFrame(now) {
 function frame(now) {
   requestAnimationFrame(frame);
   try {
+    // One pointer at a time (playtest 25): the orange circle while the pilot steers, the system
+    // cursor on the surfaces that take the stick. One comparison a frame.
+    syncPointer();
     if (state.paused || isChatOpen()) {
       const c = localPlayer()?.controls;
       if (c) {
