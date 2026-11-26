@@ -46,7 +46,7 @@
 // is how `net/` asks for a sentence to be shown: `net/` may not import `ui/` (the layers
 // test enforces it, and the reason is real — a connection must not need a DOM).
 
-import { emit } from "../util/events.js";
+import { emit, on } from "../util/events.js";
 import { state, currentRootSave, applySave } from "../state/state.js";
 import { SAVE_VERSION, sanitizeSave } from "../state/profile.js";
 import { createChannel, stateLine } from "./transport.js";
@@ -1223,6 +1223,21 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (typeof shipTick?.unref === "function") shipTick.unref();
     return true;
   }
+
+  // Host minimised / tab hidden stalls rAF, so the regular 24 Hz timer is
+  // throttled to ~1 Hz and the guest freezes. A worker in main.js keeps the
+  // sim advancing; this hook keeps the ship picture at 24 Hz too.
+  let lastKeepaliveShipAt = 0;
+  try {
+    on("host-keepalive-tick", () => {
+      if (role !== "host" || !on) return;
+      const now = Date.now();
+      const interval = Math.max(1, Math.round(1000 / SHIP_STREAM.hz));
+      if (now - lastKeepaliveShipAt < interval) return;
+      lastKeepaliveShipAt = now;
+      broadcastShips();
+    });
+  } catch (e) {}
 
   /**
    * Guest side: the host's picture arrived. It is handed on as it is — cleaned on the way in by

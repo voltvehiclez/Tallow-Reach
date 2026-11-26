@@ -43,9 +43,26 @@ export function stepSim(dt) {
   // writer of the truth; this browser draws what the host sent, and its own world stays
   // loaded but frozen so Go home can put it back exactly where it was. Single player (no away)
   // is unchanged — the early return is only taken while away.
+  // However the guest still needs to see its *own* weapon effects — muzzle flash, cannon
+  // bullets and missiles it fires — even though hits are host-confirmed. So we run the
+  // weapon/visual half for the local pocket only; world systems (enemies, rifts, wormholes,
+  // contracts, place memory) stay frozen.
   if (isGuest()) {
-    // The hint still expires on a tick, even while the world is frozen.
     if (state.hud) state.hud.prompt = "";
+    const P = state.player;
+    // Cosmetic weapon flight for the guest's own pocket so they see their bullets.
+    // Host still decides damage; this is just what the guest's eyes get.
+    if (P && !P.docked && !P.dead) {
+      if (P.drive) P.en = P.drive.bmax;
+      if (P.aimDirection) { /* keep aim from local camera */ }
+      try { updatePrimary(dt, P); } catch (e) {}
+      try { updateMissiles(dt, P, false); } catch (e) {}
+      const placeId = P.place || state.place;
+      try { updateMissileFlight(dt, placeId); } catch (e) {}
+      try { updateBullets(dt, placeId); } catch (e) {}
+      try { updateCrates(dt, placeId); } catch (e) {}
+      try { updateEffects(dt, placeId); } catch (e) {}
+    }
     return;
   }
   // Slice 8b: a guest that stopped saying what it is asking its ship to do is asked for nothing
