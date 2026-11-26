@@ -107,6 +107,10 @@ test("playtest 25: styles.css draws one pointer, and hides the ring on a decoupl
     "while the pilot steers, nothing under the mouse shows the system arrow",
   );
   assert.match(css, /body:not\(\.pilot-pointer\) #cur \{\s*\n\s*display: none;/, "and the ring is hidden where the system cursor is not");
+  // The whole screen, not just the box that took the mouse: with the chat open the arrow was only
+  // visible over the chat itself, because the canvas still hid it everywhere else.
+  assert.match(css, /body:not\(\.pilot-pointer\) canvas \{\s*\n\s*cursor: default;/, "the empty screen gives the arrow back too");
+  assert.doesNotMatch(css, /body:not\(\.pilot-pointer\) canvas \{[^}]*!important/, "but no !important, so a canvas with its own cursor keeps it");
 });
 
 test("playtest 25: the frame loop asks the rule every frame", () => {
@@ -224,4 +228,14 @@ test("playtest 25: the pip is drawn for every lock that moves, with the selected
   // easier that way right now"* — the launcher is not consulted by this instrument.
   const instrument = hud.slice(hud.indexOf("function updateInstruments"), hud.indexOf("function updateInstruments") + 4000);
   assert.doesNotMatch(instrument, /missile|launcher/, "the secondary is not part of this pip");
+});
+
+test("playtest 25: the running build is on the chat's empty line, so a stale download says so", () => {
+  // Two players spent a whole round testing a bundle with neither fix in it, because nothing on the
+  // screen said which build was running. The chat's empty line is the one place both of them always
+  // look while flying (and it is in the screenshot that started this), so the build goes there.
+  const ui = read("ui/multiplayer.js");
+  assert.match(ui, /import \{[^}]*\bBUILD\b[^}]*\} from "\.\.\/data\/multiplayer\.js";/, "the UI reads the one build string");
+  assert.match(ui, /Press Enter to chat\. <span class="mp-build">Build \$\{escapeHtml\(BUILD\)\}<\/span>/, "and puts it in the hint line");
+  assert.match(css, /\.mp-build \{/, "styled as a small aside, not part of the sentence");
 });

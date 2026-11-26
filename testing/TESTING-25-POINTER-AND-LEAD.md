@@ -1,8 +1,13 @@
 # Playtest 25 — one pointer, and a lead pip for anything you can lock
 
-**Build `2026-11-25g`.** Hard-reload on **both** machines before testing anything: the build string
-on the **Connection details** card must read `2026-11-25g` (if you are only playing alone, the title
+**Build `2026-11-25i`.** Hard-reload on **both** machines before testing anything: the build string
+on the **Connection details** card must read `2026-11-25i` (if you are only playing alone, the title
 screen's version line will do).
+
+**How to be sure it is this build:** while you are connected, the chat box's empty line says
+*Press Enter to chat. **Build 2026-11-25h***. If it does not show a build at all, the page is an older
+download or a cached copy — hard-reload (Ctrl+Shift+R) and look again. In the previous round both
+machines ran an older bundle and neither fix could possibly have appeared.
 
 Two reports, both from the same flight of the playtest-24 build. They are unrelated to each other, so
 test them in either order.
@@ -25,8 +30,9 @@ orange circle is hidden there — one pointer, never two.
 2. Open the chat with **Enter**, pin it (**Pin**), press **Enter** again to close the field. Fly with
    the mouse and sweep the pointer across the pinned box: **no white cursor anywhere**, and the
    ship keeps answering the stick while the pointer is over the box.
-3. Press **Enter** to type. Now the **white cursor** is back, and the orange circle is **gone** —
-   over the box, over the field, over the screen.
+3. Press **Enter** to type. Now the **white cursor** is back and the orange circle is **gone** — and
+   the arrow moves **freely over the whole screen**, exactly as it does with the N list open, not
+   only while it is over the chat box.
 4. Close it (**Escape**). The orange circle comes back the moment the box closes.
 5. Sanity: **I** (hold), **M** (chart), **N** (list), **Escape** (pause), and dock at a station — each
    of those shows the white cursor, and each returns to the orange circle when it closes.
@@ -70,7 +76,7 @@ you were host or guest, and which primary bay was selected.
 ## What to report
 
 - Which of the two sections, the **number** of the step that misbehaved, and what you saw instead.
-- Whether the **Connection details** card read `2026-11-25g` on **both** machines (a stale bundle on
+- Whether the **Connection details** card read `2026-11-25i` on **both** machines (a stale bundle on
   one side makes the whole test lie).
 - One oddity is expected and harmless: while the mouse pushes into a full-screen chart or the hold,
   the ship is deliberately not steering — that is what those surfaces are for.

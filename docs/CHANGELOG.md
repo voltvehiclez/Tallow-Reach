@@ -20,7 +20,7 @@ the next person must know (save version, rebuild needed, known issues).
 
 ## 2026-11-25: Playtest 25 — one pointer at a time, and a lead pip for anything you can lock
 
-**Code change; rebuild needed; build `2026-11-25g`.** Save version unchanged (**29**); nothing saved
+**Code change; rebuild needed; build `2026-11-25i`.** Save version unchanged (**29**); nothing saved
 and nothing on the wire changed.
 
 The owner confirmed all three playtest-24 fixes ("1. Works. 2. Works. 3. Works.") and sent two new
@@ -54,13 +54,23 @@ written down in one place.
   owner's word (*"make the lead indicator currently only be for primary weapon, it's easier that way
   right now"*): the selected primary bay's gun leads; an empty bay or the hitscan mining beam does
   not, and the missile launcher is not consulted yet.
+- **3. "When chat is open the white cursor is only visible over the chat box."** The canvas hides the
+  system cursor for mouse-look flight, so a surface that took the stick only got the arrow back on its
+  own elements — everywhere else it was still `none`. The rule now gives the cursor the **whole
+  screen** on any decoupled surface (`body:not(.pilot-pointer) canvas { cursor: default }`, a type
+  selector with no `!important`, so a canvas with its own cursor keeps it), which is exactly what the
+  N list already did.
+- **4. "Are you sure that is the new build?"** The owner tested the previous round on a bundle that
+  contained neither fix, and nothing on the screen said which build was running. The chat box's empty
+  line now reads *Press Enter to chat. **Build 2026-11-25h*** — the one place both players always look
+  while flying. A screen without a build there is an old download or a cached page; hard-reload.
 - **Docs.** New guide [TESTING-25-POINTER-AND-LEAD.md](../testing/TESTING-25-POINTER-AND-LEAD.md)
   (both reports, step by step). The rule itself is written into
   [docs/architecture/ui-and-screens.md](architecture/ui-and-screens.md) and the two module READMEs.
 - **Tests.** `tests/playtest25-fixes.test.mjs` (8): the pointer table (including free camera and each
   decoupling surface), the once-per-change DOM write, the two CSS rules, the frame loop's call, and
   the lead pip — a pilot's reference carries a velocity on the host's screen and on a guest's, and
-  the instrument's gates (any lock, moving only, primary bay only). `npm test` **1130/1130**.
+  the instrument's gates (any lock, moving only, primary bay only). `npm test` **1131/1131**.
 
 ## 2026-11-25: Playtest 24 — a repaired pilot comes back repaired, the visitor's hull stops blurring, and the chat can be copied
 

@@ -1846,7 +1846,7 @@ function drawChat() {
     ? lines.map(line => line.from === "Tallow Reach"
         ? `<p class="mp-chat-system">${escapeHtml(line.text)}</p>`
         : `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")
-    : `<p class="mp-hint">Press Enter to chat.</p>`;
+    : `<p class="mp-hint">Press Enter to chat. <span class="mp-build">Build ${escapeHtml(BUILD)}</span></p>`;
   chatList.scrollTop = chatList.scrollHeight;
   if (chatInput) chatInput.hidden = !shown.input;
   setChatProblem(chatProblem);

@@ -65,6 +65,14 @@ body.pilot-pointer * {
 body:not(.pilot-pointer) #cur {
   display: none;
 }
+/* ...and the empty screen belongs to the system cursor too. The canvas hides it for mouse-look
+   flight, so a surface that takes the stick has to give it back **everywhere**, not only over its
+   own box (owner, playtest 25: "when chat is open ... the mouse cursor white windows one can freely
+   move, same way when hitting N tab" — the arrow appeared over the chat and vanished beside it).
+   A type selector with no `!important`, so `#shipview` and any other canvas keep their own cursor. */
+body:not(.pilot-pointer) canvas {
+  cursor: default;
+}
 
 /* ---- Flight HUD (top-left bars, top-right info, centre messages, markers) ---- */
 #hud>div {
@@ -2710,6 +2718,9 @@ textarea.mp-input, textarea.mp-code { resize: vertical; word-break: break-all; }
 #mp-screen .mp-switch { justify-self: start; min-width: 220px; width: auto; }
 #mp-screen .mp-switch:disabled { color: var(--dim); border-color: var(--line); cursor: not-allowed; }
 .mp-hint { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.4; }
+/* The running build, in the chat's empty line (playtest 25): two players spent a round testing an
+   old download, and this is the one place they both always look while flying. */
+.mp-build { margin-left: 6px; font-size: 11px; letter-spacing: .04em; opacity: .75; font-variant-numeric: tabular-nums; }
 .mp-hint code { color: var(--ink); }
 .mp-msg {
   margin: 0;
