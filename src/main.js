@@ -5,7 +5,7 @@ import { pickLockSurface } from "./render/target-picking.js";
 
 import { renderer, scene, camera, stars, showPlace, stepScenery, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame } from "./state/state.js";
+import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame, placeWorld } from "./state/state.js";
 import { loadAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { shipDef } from "./data/ships.js";
@@ -35,6 +35,9 @@ import { hostProfile, bundleFromProfile } from "./net/custody.js";
 import { shipEntries } from "./net/ships.js";
 import { createShipStream } from "./render/shipstream.js";
 import { stationsOfWorld } from "./net/world-places.js";
+import { requestWarp as netRequestWarp, requestDock as netRequestDock, isVisiting as netIsVisiting, isOn as isNetOn } from "./net/session.js";
+import { enterPlace as simEnterPlace } from "./sim/places.js";
+import * as THREE from "three";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
 import { setupPause, setPause } from "./ui/pause.js";
 import { setupMissionLog, updateDialogueClock, isFailureNoticeOpen, dismissFailureNotice } from "./ui/missionlog.js";
@@ -94,6 +97,82 @@ import {
  *                        outlive the connection that described it.
  */
 const shipStream = createShipStream();
+// Own ship needs its own interpolated buffer too — otherwise a 165 Hz guest sees its own hull at 24 Hz. Same timings but a shorter delay for responsiveness (60 ms vs 100 ms for other pilots).
+const guestSelfStream = createShipStream({ delayMs: 35, samples: 8, staleMs: 1500, snapM: 50 });
+
+/** Slice 8c: is this browser the guest whose own galaxy is frozen? */
+function isGuestVisiting() {
+  return !!state.away;
+}
+
+/** Apply one authoritative snapshot of our own ship (from the host) to the local record. */
+function applySelfShip(entry) {
+  const P = localPlayer();
+  if (!P || !entry || typeof entry !== "object") return;
+  const placeId = typeof entry.place === "string" ? entry.place.trim() : "";
+  // Place first: entering a new pocket builds its scenery and sky.
+  if (placeId && placeId !== state.place && placeId !== P.place) {
+    try {
+      const entered = simEnterPlace(placeId, P);
+      if (!entered) {
+        P.place = placeId;
+        state.place = placeId;
+        emit("place-entered", { id: placeId, player: P });
+      }
+    } catch (e) { /* a bad place id must not crash the frame */ }
+  } else if (placeId && placeId !== P.place) {
+    P.place = placeId;
+  }
+  // Position/rotation/velocity/throttle/docked/dead — the host's truth. Guest does not simulate.
+  // `entry` may be a shipstream sample (pos is Vector3/Quaternion) or the raw wire entry (arrays).
+  const pos = entry.pos;
+  if (Array.isArray(pos)) P.pos.set(pos[0], pos[1], pos[2]);
+  else if (pos && typeof pos.x === "number") P.pos.copy(pos);
+  const quat = entry.quat;
+  if (Array.isArray(quat)) P.quat.set(quat[0], quat[1], quat[2], quat[3]);
+  else if (quat && typeof quat.x === "number") P.quat.copy(quat);
+  const vel = entry.velocity || entry.vel || entry.v;
+  if (Array.isArray(vel)) P.v.set(vel[0], vel[1], vel[2]);
+  else if (vel && typeof vel.x === "number") P.v.copy(vel);
+  P.thr = Number.isFinite(entry.throttle) ? entry.throttle : P.thr;
+  P.docked = entry.docked === true;
+  P.dead = entry.dead === true;
+  if (Number.isFinite(entry.hull)) {
+    const max = Number(P.hullMax) || 0;
+    P.hull = max > 0 ? Math.max(0, entry.hull * max) : (entry.hull > 0 ? max || 100 : 0);
+  }
+  if (Number.isFinite(entry.shield)) {
+    const max = Number(P.shMax) || 0;
+    P.sh = max > 0 ? Math.max(0, entry.shield * max) : 0;
+  }
+  // A warp that moved us is a teleport, not a smear — snap the camera this frame.
+  const curPos = Array.isArray(entry.pos) ? new THREE.Vector3(entry.pos[0], entry.pos[1], entry.pos[2]) : entry.pos;
+  if (P.snap !== true && (P.place !== placeId || (curPos && P.pos.distanceTo(curPos) > 50))) {
+    P.snap = true;
+  }
+}
+
+/* Stash our own galaxy place while visiting, so Go home can restore the sky. Slice 8c choice A: runtime only. */
+function stashGuestHome() {
+  if (state.guestHome) return;
+  state.guestHome = {
+    place: state.place,
+    worldPlace: state.worldState ? state.worldState.place : state.place,
+  };
+}
+function restoreGuestHome() {
+  const home = state.guestHome;
+  if (!home) return;
+  const id = home.place || home.worldPlace;
+  state.guestHome = null;
+  if (typeof id === "string" && id) {
+    const P = localPlayer();
+    try { simEnterPlace(id, P); } catch (e) {}
+    showPlace(state.place);
+    if (P) { P.docked = false; P.warp = null; }
+  }
+  shipStream.clear();
+}
 
 function installMultiplayerShips() {
   on("mp-ships-request", request => {
@@ -105,7 +184,98 @@ function installMultiplayerShips() {
     request.answered = true;
   });
   on("mp-ships", ({ ships, at } = {}) => shipStream.receive(ships, at));
-  on("mp-state", snapshot => { if (!snapshot || !snapshot.on) shipStream.clear(); });
+  on("mp-self-ship", ({ ship, at } = {}) => {
+    if (!isGuestVisiting() || !ship) return;
+    // Own ship is also a stream (see guestSelfStream) so a 165 Hz guest does not see its
+    // own hull at 24 Hz. The pose is interpolated like any other pilot, but with a shorter
+    // delay (60 ms vs 100 ms) so controls feel less laggy; the frame loop samples it each frame.
+    guestSelfStream.receive([ship], at || Date.now());
+  });
+  on("mp-away-changed", ({ away } = {}) => {
+    if (away) stashGuestHome();
+    else restoreGuestHome();
+  });
+  on("mp-state", snapshot => {
+    if (!snapshot || !snapshot.on) {
+      shipStream.clear();
+      guestSelfStream.clear();
+      if (snapshot && !snapshot.on && state.guestHome) restoreGuestHome();
+    }
+  });
+  on("mp-host-left", () => {
+    if (state.guestHome) restoreGuestHome();
+  });
+}
+
+function installMultiplayerEntities() {
+  // Host: answer what is in each pocket that has a guest (or host) so guest sees same bullets/missiles/fx
+  on("mp-entities-request", request => {
+    if (!request || !Array.isArray(request.places)) return;
+    try {
+      const places = new Set();
+      // Host place
+      if (state.place) places.add(state.place);
+      for (const g of guestPlayers()) if (g?.place) places.add(g.place);
+      // Local player may be in different place than state.place due to warp?
+      const P = localPlayer();
+      if (P?.place) places.add(P.place);
+      for (const placeId of places) {
+        const W = placeWorld(placeId);
+        if (!W) continue;
+        const bullets = (W.bullets || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], quat: e.quat ? [e.quat.x, e.quat.y, e.quat.z, e.quat.w] : [0,0,0,1], colour: e.colour || e.color || 0
+        }));
+        const missiles = (W.missiles || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], quat: e.quat ? [e.quat.x, e.quat.y, e.quat.z, e.quat.w] : [0,0,0,1]
+        }));
+        const crates = (W.crates || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], item: e.item || "salv"
+        }));
+        const fx = (W.fx || []).slice(0, 32).map(e => ({
+          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], col: e.col || 0xffaa00, size: e.size || 1, l: e.l || 0, t: e.t || 1
+        }));
+        // Only send non-empty places to save bandwidth, but send at least host place if guests nearby
+        if (bullets.length || missiles.length || crates.length || fx.length) {
+          request.places.push({ place: placeId, bullets, missiles, crates, fx });
+        }
+      }
+      // If no entities but guests exist, still send empty for their place so guest can clear stale
+      if (!request.places.length) {
+        for (const placeId of places) request.places.push({ place: placeId, bullets: [], missiles: [], crates: [], fx: [] });
+      }
+      request.answered = true;
+    } catch (e) {}
+  });
+  // Guest: apply host's entities for that pocket, replacing local arrays
+  on("mp-entities", ({ place, bullets, missiles, crates, fx } = {}) => {
+    if (!place || typeof place !== "string") return;
+    // Only apply for the pocket we are currently in, or for guest's own place (host authoritative)
+    // We allow any place update; guest may be in host place
+    try {
+      const W = placeWorld(place);
+      // Helper to convert wire vec to THREE
+      const toVec = a => Array.isArray(a) ? new THREE.Vector3(a[0], a[1], a[2]) : new THREE.Vector3(0,0,0);
+      const toQuat = a => Array.isArray(a) ? new THREE.Quaternion(a[0], a[1], a[2], a[3]) : new THREE.Quaternion(0,0,0,1);
+      // Replace bullets
+      W.bullets.length = 0;
+      for (const b of Array.isArray(bullets) ? bullets : []) {
+        W.bullets.push({ id: b.id, kind: "bullet", pos: toVec(b.pos), quat: toQuat(b.quat), colour: b.colour, _net: true });
+      }
+      W.missiles.length = 0;
+      for (const m of Array.isArray(missiles) ? missiles : []) {
+        W.missiles.push({ id: m.id, kind: "missile", pos: toVec(m.pos), quat: toQuat(m.quat), _net: true });
+      }
+      W.crates.length = 0;
+      for (const c of Array.isArray(crates) ? crates : []) {
+        W.crates.push({ id: c.id, kind: "crate", pos: toVec(c.pos), item: c.item });
+      }
+      // Fx: keep lifetime for fade
+      W.fx.length = 0;
+      for (const f of Array.isArray(fx) ? fx : []) {
+        W.fx.push({ id: f.id, kind: "fx", pos: toVec(f.pos), col: f.col, size: f.size, l: f.l, t: f.t });
+      }
+    } catch (e) {}
+  });
 }
 
 function installMultiplayerVisitors() {
@@ -123,6 +293,19 @@ function installMultiplayerVisitors() {
   // record has gone is dropped by the sim itself, which is the right place to know that.
   on("mp-guest-controls", ({ guestId, input } = {}) => {
     applyGuestControls(guestId, input);
+  });
+  // **Slice 8c: the guest asks the host to warp or dock its own ship.** Same one-way rule:
+  // net resolves the peer to a guestId and emits, sim decides and runs the action. A request
+  // for an unknown pilot is ignored here too.
+  on("mp-guest-warp", ({ guestId, to } = {}) => {
+    const P = guestRecordOf(guestId);
+    if (!P || !to) return;
+    try { startWarp(P, to); } catch (e) {}
+  });
+  on("mp-guest-dock", ({ guestId } = {}) => {
+    const P = guestRecordOf(guestId);
+    if (!P) return;
+    try { tryDock(P, P.profile, state.worldState); } catch (e) {}
   });
   // The host's write-back asks what the visiting pilot is NOW. Answering synchronously
   // is deliberate: the session needs the live profile in the same call that builds the
@@ -208,6 +391,7 @@ setupPause();
 setupMultiplayer();
 installMultiplayerVisitors();
 installMultiplayerShips();
+installMultiplayerEntities();
 setupMissionLog();
 setupCampaign();
 setupStarmap();
@@ -271,13 +455,19 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       if (playing && !repeat) setSecondaryWeapon(Number(name.split(":")[1]) - 1);
       break;
     case "dock":
-      if (playing && !state.warp) tryDock();
+      if (playing && !state.warp) {
+        if (isGuestVisiting()) netRequestDock();
+        else tryDock();
+      }
       break;
     case "rift":
       // Step 14: one deliberate press goes in or out of a wormhole — into a rift door that is
       // within range, or out through the instance's own way out. Never by contact. Beside a run's
       // canister the same press opens the trade (ui/cache.js), and pressing it again puts it away:
       // the pilot's hands are on the cargo, so R stays the canister's key until they are done.
+      // Slice 8c: a guest's rift is not simulated locally — the host owns rifts/wormholes.
+      // Pressing R while visiting does nothing (does not affect host either).
+      if (isGuestVisiting()) break;
       if (repeat) break;
       if (isFailureNoticeOpen()) { dismissFailureNotice(); break; }
       if (isCacheOpen()) closeCache();
@@ -306,7 +496,10 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
     case "travel":
       // The map only proposes a destination. The sim rechecks the direct link,
       // costs and requirements, then runs the existing warp animation on success.
-      if (!state.ui.intro && !state.paused && !localPlayer().docked) startWarp(localPlayer(), nameTo);
+      if (!state.ui.intro && !state.paused && !localPlayer().docked) {
+        if (isGuestVisiting()) netRequestWarp(nameTo);
+        else startWarp(localPlayer(), nameTo);
+      }
       break;
     case "chat":
       // Step 16 slice 3: Enter opens the chat box, and only while multiplayer is on and
@@ -380,6 +573,70 @@ const simClock = createSimClock(undefined, {
   afterStep: snapRenderedPlayer,
 });
 
+// When this browser is hosting, the world must keep running even if the tab is
+// hidden or minimised — otherwise the guest sees a freeze. `requestAnimationFrame`
+// stalls in a hidden tab, so a worker (not throttled) drives the same clock
+// from wall time. It is cheap: one tick per SIM_DT (~60 Hz) and only while a
+// session is on. Fallback to setInterval if workers are blocked.
+let hostTick = null;
+let hostWorker = null;
+let hostTickAt = 0;
+function advanceHostClock() {
+  if (!isNetOn() || isSimulationPaused()) return;
+  const now = performance.now();
+  const realDt = (now - hostTickAt) / 1000;
+  hostTickAt = now;
+  if (now - last > 80) {
+    last = now;
+    // Background tabs throttle to ~1 Hz: cap loses 95% of wall time and ship turns 20× slow.
+    // Catch up by stepping in MAX_FRAME_DT chunks so 1 s stall still advances 60 ticks.
+    let remaining = realDt;
+    while (remaining > 1e-9) {
+      const chunk = Math.min(remaining, MAX_FRAME_DT);
+      simClock.advance(chunk);
+      remaining -= chunk;
+    }
+    try { emit("host-keepalive-tick", {}); } catch (e) {}
+  }
+}
+let hostWorkerUrl = null;
+function startHostTick() {
+  if (hostTick || hostWorker) return;
+  hostTickAt = performance.now();
+  try {
+    const blob = new Blob(["setInterval(()=>postMessage('tick'),16)"], { type: "application/javascript" });
+    const url = URL.createObjectURL(blob);
+    hostWorkerUrl = url;
+    hostWorker = new Worker(url);
+    hostWorker.onmessage = advanceHostClock;
+    hostWorker.onerror = () => {
+      try { hostWorker.terminate(); } catch (e) {}
+      hostWorker = null;
+      if (hostWorkerUrl) { try { URL.revokeObjectURL(hostWorkerUrl); } catch (e) {} hostWorkerUrl = null; }
+      hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
+      if (typeof hostTick?.unref === "function") hostTick.unref();
+    };
+  } catch (e) {
+    hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
+    if (typeof hostTick?.unref === "function") hostTick.unref();
+  }
+}
+function stopHostTick() {
+  if (hostWorker) { try { hostWorker.terminate(); } catch (e) {} hostWorker = null; }
+  if (hostWorkerUrl) { try { URL.revokeObjectURL(hostWorkerUrl); } catch (e) {} hostWorkerUrl = null; }
+  if (hostTick) { clearInterval(hostTick); hostTick = null; }
+}
+on("mp-state", snap => { if (snap?.on) startHostTick(); else stopHostTick(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && isNetOn()) startHostTick();
+});
+// Blur also stalls rAF on some window managers (clicking to second monitor).
+addEventListener("blur", () => { if (isNetOn()) startHostTick(); });
+addEventListener("focus", () => {
+  // Let rAF take over again; keep tick for a moment to avoid gap on focus switch.
+  setTimeout(() => { if (!document.hidden && hostTickAt && performance.now() - last < 200) stopHostTick(); }, 500);
+});
+
 /**
  * One frame. Split from `frame` below so that anything it throws can be caught without stopping the
  * loop: the next frame is asked for first, then the work is tried, then — if the work broke — the
@@ -427,6 +684,11 @@ function drawFrame(now) {
     Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
   }
   simClock.advance(dt);
+  // Guest's own ship is a stream too (see installMultiplayerShips) — otherwise a 165 Hz screen jitters at 24 Hz. Apply its interpolated pose before rendering so the camera chases the smoothed position, not the last raw packet.
+  if (isGuestVisiting()) {
+    const selfPoses = guestSelfStream.sample(Date.now());
+    if (selfPoses.length) applySelfShip(selfPoses[0]);
+  }
   const alpha = simClock.alpha();
   updateEnemyViews(alpha);    // interpolate each hostile's mesh between 60 Hz ticks
   // Slice 8a: every other pilot. A host draws its visiting records straight from `state.players`

@@ -31,9 +31,29 @@ export function isSimulationPaused() {
   return !!(state.paused || state.ui.intro || state.ui.campaignEnd);
 }
 
+/** Is this browser a guest inside somebody else's world? (Slice 8c: its own galaxy is stashed, not stepped.) */
+export function isGuest() {
+  return !!state.away;
+}
+
 /** One simulation tick. Caller does not step while paused. */
 export function stepSim(dt) {
   state.time += dt;
+  // Slice 8c: a visiting guest does not run its own galaxy. The host's browser is the only
+  // writer of the truth; this browser draws what the host sent, and its own world stays
+  // loaded but frozen so Go home can put it back exactly where it was. Single player (no away)
+  // is unchanged — the early return is only taken while away.
+  // However the guest still needs to see its *own* weapon effects — muzzle flash, cannon
+  // bullets and missiles it fires — even though hits are host-confirmed. So we run the
+  // weapon/visual half for the local pocket only; world systems (enemies, rifts, wormholes,
+  // contracts, place memory) stay frozen.
+  if (isGuest()) {
+    if (state.hud) state.hud.prompt = "";
+    // Guest does not simulate its own galaxy; host is authoritative for all world effects.
+    // Bullets/missiles/crates/fx for the visited pocket are synced via mp-entities.
+    // Local cosmetic is disabled to avoid duplicate host-confirmed projectiles.
+    return;
+  }
   // Slice 8b: a guest that stopped saying what it is asking its ship to do is asked for nothing
   // (`CONTROLS.staleMs`), so a closed tab cannot leave a hull flying on into a rock.
   ageGuestControls();

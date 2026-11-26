@@ -71,14 +71,29 @@ export function updateMissileFlight(dt, placeId = state.place) {
     s.l -= dt;
 
     // Steer toward the target, leading it by its velocity.
+    // Hostiles and other pilots (guest/host) share the same homing: missile copies hostile logic for pilots.
+    let steerPos = null, steerVel = null;
     if (s.t && W.enemies.includes(s.t)) {
-      const ep = enemyPos(s.t),
-        ev = enemyVel(s.t),
-        tt = ep.clone().sub(s.pos).length() / Math.max(s.sp, 1),
-        aim = ep.clone().addScaledVector(ev, tt * 0.85).sub(s.pos).normalize();
-      s.d.lerp(aim, Math.min(1, MISSILE.turn * dt)).normalize();
+      steerPos = enemyPos(s.t);
+      steerVel = enemyVel(s.t);
+    } else if (s.t && s.t.pos && typeof s.t.pos.x === "number" && !s.t.dead) {
+      // Pilot target (otherPilotsThere reference) — pos is interpolated render pose, v is lead velocity
+      // Verify still present in this place via otherPilotsThere or state.players
+      const stillThere = state.players.includes(s.t) || (state.otherPilots || []).includes(s.t);
+      if (stillThere && (s.t.place || state.place) === placeId) {
+        steerPos = s.t.pos;
+        steerVel = s.t.v || null;
+      } else {
+        s.t = null;
+      }
     } else {
       s.t = null;
+    }
+    if (steerPos) {
+      const ev = steerVel || V(0,0,0);
+      const tt = steerPos.clone().sub(s.pos).length() / Math.max(s.sp, 1);
+      const aim = steerPos.clone().addScaledVector(ev, tt * 0.85).sub(s.pos).normalize();
+      s.d.lerp(aim, Math.min(1, MISSILE.turn * dt)).normalize();
     }
 
     s.sp = Math.min(MISSILE.max, s.sp + MISSILE.acc * dt);

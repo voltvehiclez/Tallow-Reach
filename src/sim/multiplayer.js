@@ -38,6 +38,7 @@ import { createPlayerRecord } from "./player.js";
 import { configurePlayer, launch } from "./session.js";
 import { CONTROLS } from "../data/multiplayer.js";
 import { stationAt } from "./places.js";
+import { ensureBoard } from "./contracts.js";
 import { isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { neutralControls } from "../state/controls.js";
 
@@ -146,6 +147,30 @@ on("player-dead", ({ player } = {}) => {
   if (!isGuestRecord(player)) return;
   const name = player.name || guests.get(player.guestId)?.name || "";
   emit("mp-guest-destroyed", { guestId: player.guestId, name });
+  // Slice 8c fix: guest death respawns docked at home (Meridian if none) so the
+  // guest does not sit dead in host world. Host is authoritative: reset hull,
+  // move to arrival place, dock. Cargo loss/fee not charged for visitors.
+  try {
+    const P = player;
+    const home = arrivalPlace(P.profile, P.profile?.homeStation) || DEFAULT_PLACE;
+    P.dead = false;
+    P.hull = P.hullMax || 100;
+    P.sh = P.shMax || 0;
+    P.place = home;
+    const station = stationAt(home);
+    if (station?.launch?.pos) P.pos.set(...station.launch.pos);
+    else P.pos.set(0, 0, 0);
+    P.v.set(0, 0, 0);
+    P.thr = 0;
+    P.docked = true;
+    P.warp = null;
+    // Keep profile's hp in sync so suitcase sync sends repaired hull
+    if (P.profile?.hp && P.hullMax > 0) P.profile.hp[P.profile.ship] = Math.max(0.2, P.hull / P.hullMax);
+    // Ensure host world has board at home station
+    try { ensureBoard(state.worldState, home); } catch (e) {}
+    P.dockedAt = state.time;
+    emit("mp-notice", `${name || "A pilot"} was destroyed and recovered at ${station?.n || home}.`);
+  } catch (e) {}
 });
 
 /* ------------------------------------------------------------------------- */
@@ -220,7 +245,10 @@ export function applyGuestControls(guestId, input) {
     }
   }
   P.inputAt = state.time;
-  if (P.docked && asksToFly(input)) launch(P, P.profile);
+  if (P.docked && asksToFly(input)) {
+    const sinceDock = state.time - (P.dockedAt || 0);
+    if (sinceDock > 0.6) launch(P, P.profile);
+  }
   return true;
 }
 

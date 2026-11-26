@@ -704,10 +704,10 @@ export class PlayerShipView {
 // like a ghost, so `place` decides — and on the guest side that is what keeps the slice honest
 // until 8c makes the guest's screen follow the host's pocket.
 //
-// **Docked pilots are drawn.** The local hull hides while docked because the camera is on the
-// station card and the ship is "inside"; another pilot's hull is the one sign that somebody is
-// here at all, and a visitor cannot fly in this world yet (controls are 8b), so it is parked at
-// the launch point its arrival put it on. A dead pilot draws nothing.
+// **Docked pilots are hidden.** The local hull hides while docked because the camera is on the
+// station card and the ship is "inside". The same applies to other pilots: a docked hull
+// parked at the launch point would read as a ghost in the sky, and the owner reported it as a
+// bug (host docked still visible). A dead pilot also draws nothing.
 const pilotViews = new Map(); // id -> { mesh, hull }
 
 // **Every other pilot is a lock target, like anything else in the sky** (playtest 23).
@@ -826,8 +826,8 @@ export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
   const seen = new Set();
   const drawn = [];
   const draw = (id, ship, pose) => {
-    // Another pilot's hull is drawn only where this screen is looking, and only while it exists.
-    if (!id || pose.dead || pose.place !== state.place) return;
+    // Another pilot's hull is drawn only where this screen is looking, and only while it exists and flying.
+    if (!id || pose.dead || pose.docked || pose.place !== state.place) return;
     const key = String(id);
     seen.add(key);
     let view = pilotViews.get(key);

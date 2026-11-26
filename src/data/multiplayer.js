@@ -137,9 +137,9 @@ export const HOST_PILOT_ID = "host";
  *             respawn) and is drawn as a jump, not smeared across the screen.
  */
 export const SHIP_STREAM = {
-  hz: 24,
-  delayMs: 100,
-  samples: 6,
+  hz: 30,
+  delayMs: 50,
+  samples: 8,
   staleMs: 1500,
   snapM: 50,
 };
@@ -226,7 +226,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-25i";
+export const BUILD = "2026-11-26a";
 
 export const NET = {
   snapshotSec: 2,
