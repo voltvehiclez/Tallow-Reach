@@ -64,3 +64,15 @@ test("enemies: what is on the wire is what this build's enemy views can read", (
   assert.deepEqual(Object.keys(e).sort(), ["boost", "def", "friendly", "hp", "id", "mx", "pos", "quat", "v"].sort(), "the contract is exactly the nine fields");
   assert.deepEqual(JSON.parse(JSON.stringify(message)), message, "and it survives a JSON round trip");
 });
+
+test("entities: pickups and enemy gunfire clean to what this build can read", () => {
+  const message = cleanMessage("entities", {
+    place: DEFAULT_PLACE,
+    picks: 3.7,                       // fractional counts floor to whole chimes
+    efires: [12, 12, 0, -4, "x", 99, 9988, 777, 555, 333, 111, 222, 444],   // dupes, junk, over the cap
+  });
+  assert.equal(message.picks, 3);
+  assert.deepEqual(message.efires, [12, 99, 9988, 777, 555, 333, 111, 222], "ids survive whole, junk drops, at most eight, no repeats");
+  assert.equal(cleanMessage("entities", {}).picks, 0, "absent counter is zero");
+  assert.equal(cleanMessage("entities", {}).efires.length, 0, "absent list is empty");
+});

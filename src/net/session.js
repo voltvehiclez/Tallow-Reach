@@ -1268,7 +1268,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
   function onEntities(message) {
     if (role !== "guest") return;
-    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], at: Date.now() }); } catch (e) {}
+    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], picks: message.picks || 0, efires: Array.isArray(message.efires) ? message.efires : [], at: Date.now() }); } catch (e) {}
   }
 
   /**

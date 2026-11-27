@@ -97,6 +97,12 @@ export function shipEntry(P, { id = "", name = "" } = {}) {
     lockT: round(Math.max(0, Number(F.missileLock && F.missileLock.t) || 0)),
     lockLocked: !!(F.missileLock && F.missileLock.locked),
     lockTarget: !!(F.missileLock && F.missileLock.target),
+    // --- the warp block: the drive's own timings, verbatim.
+    warpOn: !!(P.warp && P.warp.fx !== undefined),
+    warpFx: round(Math.max(0, Math.min(1, Number(P.warp && P.warp.fx) || 0))),
+    warpFlash: round(Math.max(0, Math.min(1, Number(P.warp && P.warp.flash) || 0))),
+    warps: u16(P.wxWarps),
+    bursts: u16(P.wxBursts),
   };
   // The table in `data/multiplayer.js` is the contract, so an entry is built from it: a field
   // added there and forgotten here would be a silent hole in the picture.

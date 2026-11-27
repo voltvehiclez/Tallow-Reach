@@ -16,6 +16,9 @@ import { on, emit } from "./util/events.js";
 import { createPlayer, setShip } from "./sim/player.js";
 import { setWeapon, setSecondaryWeapon, refreshGuns } from "./sim/weapons.js";
 import { pocketBoomCount } from "./sim/effects.js";
+import { pocketPickCount, drainEFires } from "./sim/sfxlog.js";
+import { enemyDef } from "./data/enemies.js";
+import { WARP } from "./data/sectors.js";
 import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
 import { launch, tryDock, resumeFromSave } from "./sim/session.js";
@@ -109,13 +112,13 @@ function isGuestVisiting() {
 /* The own weapon-effects block: the sim-side counters arrive on the own ship entry; a counter that
  * advanced plays its sound once (a lost packet collapses two into one, never a backlog). Counters
  * that went BACKWARDS mean a fresh record on the host — re-baseline silently, never a salvo. */
-const ownWxSeen = { shots: 0, missiles: 0, locks: 0, ore: 0, hits: 0, boosts: 0 };
+const ownWxSeen = { shots: 0, missiles: 0, locks: 0, ore: 0, hits: 0, boosts: 0, warps: 0, bursts: 0 };
 let ownWxBaselined = false;
 function resetOwnWeaponWx() {
   for (const k of Object.keys(ownWxSeen)) ownWxSeen[k] = 0;
   ownWxBaselined = false;
 }
-const ownWxSfx = { shots: "cannon", missiles: "missile-fire", locks: "missile-lock", ore: "ore-gained", hits: "hit", boosts: "boost" };
+const ownWxSfx = { shots: "cannon", missiles: "missile-fire", locks: "missile-lock", ore: "ore-gained", hits: "hit", boosts: "boost", warps: "warp-charge", bursts: "warp-burst" };
 function applyOwnWeaponWx(entry) {
   // The beam is state, not events: it is drawn from the host's record exactly as the local sim would
   // leave it, so `render/views.js` and `core/audio.js` need no guest branch at all.
@@ -150,7 +153,11 @@ function applyOwnWeaponWx(entry) {
     if (cur > prev) {
       const times = Math.min(cur - prev, 2);
       for (let i = 0; i < times; i++) {
-        try { emit("sfx", { name: ownWxSfx[key] }); } catch (e) { /* a missing audio path must not break the net path */ }
+        if (key === "warps") {
+          try { emit("sfx", { name: "warp-charge", dur: WARP.charge }); } catch (e) { /* a missing audio path must not break the net path */ }
+        } else {
+          try { emit("sfx", { name: ownWxSfx[key] }); } catch (e) { /* a missing audio path must not break the net path */ }
+        }
         // A wound on the guest goes through the same hurt bus a local wound does, so the HUD flash
         // and any hurt listener behave as if the guest's own sim had been the one to apply it.
         if (key === "hits") {
@@ -211,6 +218,19 @@ function applySelfShip(entry) {
     P.sh = max > 0 ? Math.max(0, entry.shield * max) : 0;
   }
   applyOwnWeaponWx(entry);
+  // The warp the host is flying for us: the same timings the local sim would keep, mirrored so the
+  // streaks, camera widen and flash overlay run unchanged (they all read `state.warp`).
+  {
+    const wantWarp = entry.warpOn === true;
+    if (wantWarp) {
+      const fx = Number.isFinite(entry.warpFx) ? Math.max(0, Math.min(1, entry.warpFx)) : 0;
+      const flash = Number.isFinite(entry.warpFlash) ? Math.max(0, Math.min(1, entry.warpFlash)) : 0;
+      const w = P.warp || (P.warp = { from: "", to: "", t: 0, fx: 0, flash: 0, switched: false, steer: { x: 0, y: 0 } });
+      w.fx = fx; w.flash = flash;
+    } else if (P.warp) {
+      P.warp = null;
+    }
+  }
   // A warp that moved us is a teleport, not a smear — snap the camera this frame.
   const curPos = Array.isArray(entry.pos) ? new THREE.Vector3(entry.pos[0], entry.pos[1], entry.pos[2]) : entry.pos;
   if (P.snap !== true && (P.place !== placeId || (curPos && P.pos.distanceTo(curPos) > 50))) {
@@ -315,7 +335,7 @@ function installMultiplayerEntities() {
       }));
       // Always answer for a pocket with a visitor — even with empty lists, so the guest clears
       // what is no longer there.
-      request.places.push({ place: placeId, bullets, missiles, crates, fx, booms: pocketBoomCount(placeId), enemies });
+      request.places.push({ place: placeId, bullets, missiles, crates, fx, booms: pocketBoomCount(placeId), enemies, picks: pocketPickCount(placeId), efires: drainEFires(placeId) });
     }
     request.answered = true;
   });
@@ -360,10 +380,40 @@ function installMultiplayerEntities() {
   // How many pocket explosions this screen has already rumbled for, per place — a counter that
   // went backwards means a rebooted host, so re-baseline silently rather than rumble in a loop.
   const boomSeen = new Map();
-  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies } = {}) => {
+  const pickSeen = new Map();
+  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires } = {}) => {
     if (!place || typeof place !== "string" || !isGuestVisiting()) return;
     if (place !== state.place) return;   // entities only for the pocket this screen is in
+    const W = placeWorld(place);   // the synced records; shooters that died this packet are still here
 
+    // A pickup chime is what a single-player screen would have heard — same pocket gate, same blip.
+    const pick = Math.floor(Number(picks) || 0);
+    const prevPick = pickSeen.get(place) ?? pick;
+    if (pick < prevPick) pickSeen.set(place, pick);
+    else if (pick > prevPick) {
+      const times = Math.min(pick - prevPick, 2);
+      for (let i = 0; i < times; i++) {
+        try { emit("sfx", { name: "pickup" }); } catch (e) {}
+      }
+      pickSeen.set(place, pick);
+    }
+    // Gunfire is only for ears in the pocket: each entry is a shooter's id — check our own range.
+    if (Array.isArray(efires) && efires.length && localPlayer()) {
+      const me = localPlayer().pos;
+      let heard = 0;
+      for (const id of efires) {
+        if (heard >= 2) break;
+        const rid = Math.floor(Number(id) || 0);
+        const shooter = W.enemies.find(r => r && r.id === rid);
+        // Distance to *this screen's* pilot, the same gate the host uses for its own local ear —
+        // just measured from our own ship instead of the host's.
+        const hr = shooter ? enemyDef(shooter.def)?.hearRange ?? 0 : 0;
+        if (shooter && hr > 0 && me.distanceToSquared(shooter.pos) <= hr * hr) {
+          try { emit("sfx", { name: "enemy-fire" }); } catch (e) {}
+          heard += 1;
+        }
+      }
+    }
     // A rumble is what a single-player screen would have heard: the pocket just blew something up.
     const boom = Math.floor(Number(booms) || 0);
     const prevBoom = boomSeen.get(place) ?? boom;
@@ -376,7 +426,6 @@ function installMultiplayerEntities() {
       boomSeen.set(place, boom);
     }
     try {
-      const W = placeWorld(place);
       syncList(W.bullets, bullets, "bullet", raw => ({
         id: 0, kind: "bullet", pos: new THREE.Vector3(), quat: new THREE.Quaternion(), colour: raw.colour, _net: true,
       }));

@@ -137,6 +137,15 @@ export const SHIP_FIELDS = [
   "lockT",     // seconds on the current target (lock takes MISSILE.lock of them)
   "lockLocked",// the lock is complete
   "lockTarget",// a lock target is held (a true boole — the host's record, never an entity)
+  // --- the warp block (2026-11-27): a guest's own warp must look and sound exactly as a local one.
+  // `warpOn`/`warpFx`/`warpFlash` mirror the drive's FX fractions verbatim into the guest's own
+  // `state.warp`, lighting up the existing streaks, camera widen and flash overlay; the two u16
+  // counters replay the charge and the arrival burst the moment they advance.
+  "warpOn",    // the drive is running right now
+  "warpFx",    // 0..1, the charge curve (streaks, camera widen, speed readout)
+  "warpFlash", // 0..1, the arrival flash overlay
+  "warps",     // drives spun up (charge sound)
+  "bursts",    // arrivals out of a warp (burst sound)
 ];
 
 /**

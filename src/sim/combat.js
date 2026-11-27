@@ -23,6 +23,7 @@ import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { hurt } from "./player.js";
 import { boom } from "./effects.js";
+import { pickupLog } from "./sfxlog.js";
 import { playerPos, playerVel } from "./pilot.js";
 import { addEntity, dropEntity, freshQuat } from "./entity.js";
 import { placeCollidersOf, sweepColliders } from "./colliders.js";
@@ -472,6 +473,7 @@ export function updateCrates(dt, placeId = state.place) {
           encounter: c.encounter,
           encounterType: c.encounterType || null,
         });
+        pickupLog(placeId);
         if (local) msg(`Picked up ${itemName(k)}`, 2);
         if (placeId === state.place) emit("sfx", { name: "pickup" });
         break;

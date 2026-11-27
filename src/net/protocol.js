@@ -40,7 +40,8 @@
 //   dock       { t }                                        guest -> host (slice 8c): \"dock now\" — host runs tryDock for that pilot when in range
 //   entities   { t, place, bullets[{ id, pos, quat, colour }], missiles[{ id, pos, quat }],
 //                crates[{ id, pos, quat, item }], fx[{ id, pos, col, size, l, t }], booms (u16),
-//                enemies[{ id, def, friendly, boost, pos, quat, v, hp, mx }] }
+//                enemies[{ id, def, friendly, boost, pos, quat, v, hp, mx }], picks (u16),
+//                efires[ids] (enemy-fire events since the previous broadcast) }
 //                                                        host -> guests: one message per pocket
 //                                                        that holds a visitor, `SHIP_STREAM.hz`
 //                                                        a second. Visual only; hits, loot and
@@ -148,7 +149,7 @@ export function cleanMessage(kind, fields = {}) {
     // One message per pocket that holds a visitor: the world's transient objects, as the
     // host's sim holds them. Visual only; the host decides hits, loot and lifetimes.
     case "entities":
-      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms), enemies: cleanEnemies(fields.enemies) };
+      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms), enemies: cleanEnemies(fields.enemies), picks: u16(fields.picks), efires: cleanEFires(fields.efires) };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
     // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
     // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
@@ -315,12 +316,18 @@ function cleanShips(raw) {
       lockT: Math.round(Math.max(0, Math.min(60, num(entry.lockT, 0))) * 1000) / 1000,
       lockLocked: entry.lockLocked === true,
       lockTarget: entry.lockTarget === true,
+      warpOn: entry.warpOn === true,
+      warpFx: Math.round(Math.max(0, Math.min(1, num(entry.warpFx, 0))) * 1000) / 1000,
+      warpFlash: Math.round(Math.max(0, Math.min(1, num(entry.warpFlash, 0))) * 1000) / 1000,
+      warps: u16(entry.warps),
+      bursts: u16(entry.bursts),
     });
     // The weapon-effects block costs nothing until it is used: a default-zero field is omitted,
     // not sent as `0` — 24 pilots every 42 ms is not the place to carry a full launch history.
     // A reader's own cleaning (or `Number(x) || 0`) gives the same zero back, so nothing is lost.
     const last = out[out.length - 1];
-    for (const key of ["shots", "missiles", "locks", "ore", "hits", "boosts"]) if (!last[key]) delete last[key];
+    for (const key of ["shots", "missiles", "locks", "ore", "hits", "boosts", "warps", "bursts"]) if (!last[key]) delete last[key];
+    if (!last.warpOn) { delete last.warpFx; delete last.warpFlash; }
     if (!last.beamOn && last.beamStart.every(v => v === 0) && last.beamEnd.every(v => v === 0)) {
       delete last.beamStart;
       delete last.beamEnd;
@@ -433,6 +440,19 @@ function cleanEnemies(raw) {
       hp: Math.max(0, Math.round(num(e.hp, 0) * 100) / 100),
       mx: Math.max(0, Math.round(num(e.mx, 0) * 100) / 100),
     });
+  }
+  return out;
+}
+
+/** Enemy fires since the last packet: raw ids, capped at 8. The guest gates by its own ears. */
+const EFIS_CAP = 8;
+function cleanEFires(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= EFIS_CAP) break;
+    const id = Math.floor(Number(e));
+    if (Number.isFinite(id) && id > 0 && !out.includes(id)) out.push(id);
   }
   return out;
 }

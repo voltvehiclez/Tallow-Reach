@@ -59,6 +59,7 @@ export function startWarp(player = localPlayer(), to = null) {
   if (P === localPlayer()) state.freeCam.on = false;
   P.flight.beamOn = false;
   P.flight.beamT = 0;
+  P.wxWarps = (P.wxWarps || 0) + 1;   // any pilot: the wire carries this so a far screen hears its own drive spin up
   if (P === localPlayer()) emit("sfx", { name: "warp-charge", dur: WARP.charge });
   emit("warp-start", { from, to, player: P });
   return true;
@@ -116,6 +117,7 @@ function arrive(P, from, to) {
   P.flight.lock = null;
   P.flight.missileLock = { target: null, t: 0, locked: false };
   enterPlace(to, P);
+  P.wxBursts = (P.wxBursts || 0) + 1;   // any pilot: the wire carries this so a far screen hears its own arrival
   if (P === localPlayer()) {
     emit("sfx", { name: "warp-burst" });
     msg(`Warp: ${placeAt(from).n} to ${dest.n}. ${dest.d}`, 4);

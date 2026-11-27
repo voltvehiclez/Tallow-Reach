@@ -74,6 +74,11 @@ function frameFrom(entry, at) {
     lockT: num(entry.lockT, 0),
     lockLocked: entry.lockLocked === true,
     lockTarget: entry.lockTarget === true,
+    warpOn: entry.warpOn === true,
+    warpFx: num(entry.warpFx, 0),
+    warpFlash: num(entry.warpFlash, 0),
+    warps: num(entry.warps, 0),
+    bursts: num(entry.bursts, 0),
   };
 }
 
@@ -108,6 +113,11 @@ function poseFrom(frame, pos = frame.pos, quat = frame.quat, velocity = frame.ve
     lockT: frame.lockT,
     lockLocked: frame.lockLocked,
     lockTarget: frame.lockTarget,
+    warpOn: frame.warpOn,
+    warpFx: frame.warpFx,
+    warpFlash: frame.warpFlash,
+    warps: frame.warps,
+    bursts: frame.bursts,
   };
 }
 
