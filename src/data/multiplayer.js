@@ -111,6 +111,41 @@ export const SHIP_FIELDS = [
   "dead",      // its hull is gone: not drawn at all
   "hull",      // hull as a fraction 0..1, for a reader that wants to show it
   "shield",    // shield as a fraction 0..1, for the second bar (playtest 23)
+  "boost",     // the ship is boosting — the far screen lengthens this hull's flame and shakes the
+               // own camera on a screen that shows it (the engine glow reads it)
+  "shake",     // camera shake amplitude 0..1, decayed on the simulation clock; a guest's own
+               // boost shake rides the host's clock like everything else of that ship
+  // --- the weapon-effects block (2026-11-26, build `2026-11-26b`): the own ship's weapons must look and
+  // sound the same to a visiting pilot as they do single-player. `shots`/`missiles`/`locks`/`ore`/
+  // `hits`/`boosts` are monotonically increasing event counters (u16, wraps); the own screen plays
+  // each counter's sound locally when it advances — a packet that loses a beat collapses two shots
+  // into one sound, never a backlog. `beamOn`/`beamStart`/`beamEnd`/`mineFrac` are the mining beam's
+  // state verbatim from the host's sim (beamStart/beamEnd world metres, y-up).
+  "shots",     // cannon volleys fired
+  "missiles",  // missiles launched
+  "locks",     // missile locks acquired
+  "ore",       // ore banked by the beam
+  "hits",      // times this hull was hit (shield or hull)
+  "boosts",    // boost ignitions
+  "beamOn",    // the mining beam is cutting right now
+  "beamStart", // where the beam leaves the ship, [x,y,z]
+  "beamEnd",   // where the beam stops (rock or wall), [x,y,z]
+  "mineFrac",  // progress to the next ore, 0..1
+  // --- the missile-lock block: the own screen must draw the lock ring and the cone exactly as a
+  // single-player world does (the host's sim owns the lock; the guest simulates nothing).
+  "cone",      // the launcher's lock cone in degrees, 0 when no launcher is fitted
+  "lockT",     // seconds on the current target (lock takes MISSILE.lock of them)
+  "lockLocked",// the lock is complete
+  "lockTarget",// a lock target is held (a true boole — the host's record, never an entity)
+  // --- the warp block (2026-11-27): a guest's own warp must look and sound exactly as a local one.
+  // `warpOn`/`warpFx`/`warpFlash` mirror the drive's FX fractions verbatim into the guest's own
+  // `state.warp`, lighting up the existing streaks, camera widen and flash overlay; the two u16
+  // counters replay the charge and the arrival burst the moment they advance.
+  "warpOn",    // the drive is running right now
+  "warpFx",    // 0..1, the charge curve (streaks, camera widen, speed readout)
+  "warpFlash", // 0..1, the arrival flash overlay
+  "warps",     // drives spun up (charge sound)
+  "bursts",    // arrivals out of a warp (burst sound)
 ];
 
 /**
@@ -137,9 +172,9 @@ export const HOST_PILOT_ID = "host";
  *             respawn) and is drawn as a jump, not smeared across the screen.
  */
 export const SHIP_STREAM = {
-  hz: 30,
-  delayMs: 50,
-  samples: 8,
+  hz: 24,
+  delayMs: 100,
+  samples: 6,
   staleMs: 1500,
   snapM: 50,
 };
@@ -226,7 +261,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-26a";
+export const BUILD = "2026-11-26b";
 
 export const NET = {
   snapshotSec: 2,

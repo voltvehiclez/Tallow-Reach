@@ -96,7 +96,8 @@ export function chaseView(dt, P, fc, pose = P) {
 
 /** Random offset for the current shake level. Null when there is no shake. */
 export function shakeOffset(P, dt, shipScale) {
-  P.shake *= Math.exp(-dt * 6);
+  // The amplitude decays on the simulation clock (`sim/player.js` flight), per pilot — the render
+  // layer only reads it, so the host's visitor shake reaches the guest's camera.
   if (P.shake <= 0.01) return null;
   return V(R(-1, 1), R(-1, 1), R(-1, 1)).multiplyScalar(P.shake * 0.3 * shipScale);
 }

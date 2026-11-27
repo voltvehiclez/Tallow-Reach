@@ -249,9 +249,10 @@ recovery*, *player presentation and input*). Two slices, because neither half ca
 **The host says where every pilot is; a guest draws it and simulates nothing.** Every number below is
 in `src/data/multiplayer.js`:
 
-- **`SHIP_FIELDS`** — id, name, ship, place, position, rotation, velocity, throttle, docked, dead, hull
-  and (playtest 23) **shield**, both fractions, and nothing else — no fit, no hold, no credits — so a
-  snapshot cannot move a rule on the far side. `HOST_PILOT_ID` is the host's own hull.
+- **`SHIP_FIELDS`** — id, name, ship, place, pos, quat, velocity, throttle, docked, dead, hull,
+  shield (playtest 23), plus (`26b`) **boost**/**shake** and the weapon-effects block (beam, lock ring,
+  u16 fire counters) — nothing else: a snapshot can move no rule.
+  `HOST_PILOT_ID` is the host's own hull.
 - **`SHIP_STREAM`** — `hz: 24` (**the owner's 20–30 Hz band**, not the 2 s *suitcase* sync), `delayMs`
   100, `samples` 6, `staleMs` 1500, `snapM` 50.
 - **The message** is `ships` (`net/protocol.js`): cleaned both ways like every other kind, capped at
@@ -302,7 +303,7 @@ host's world decides *where* the hull starts. Until then a neutral input leaves 
 8a drew it; the first real key press is what puts a visitor in flight.
 
 **Not in 8b:** the guest's screen following the host's pocket (8c); prediction, ack and rewind (8d —
-[client-prediction.md](client-prediction.md)); cosmetic muzzle and lag compensation (8e). A guest cannot
+[client-prediction.md](client-prediction.md)); immediacy is 8d's (8e dropped, owner 2026-11-27). A guest cannot
 dock, die and recover yet, so a launched visitor flies until it goes home. No save change:
 `SAVE_VERSION` stays 29. Tests: `tests/multiplayer-controls.test.mjs`; guide:
 [../../testing/TESTING-16-SLICE8B.md](../../testing/TESTING-16-SLICE8B.md).

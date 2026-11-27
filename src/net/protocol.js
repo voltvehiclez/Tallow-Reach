@@ -38,6 +38,14 @@
 //                                                         means (refactor principle 7)
 //   warp       { t, to }                                  guest -> host (slice 8c): \"take my ship to this pocket\" — a request, not a teleport; host re-checks travel rules and runs startWarp for that pilot
 //   dock       { t }                                        guest -> host (slice 8c): \"dock now\" — host runs tryDock for that pilot when in range
+//   entities   { t, place, bullets[{ id, pos, quat, colour }], missiles[{ id, pos, quat }],
+//                crates[{ id, pos, quat, item }], fx[{ id, pos, col, size, l, t }], booms (u16),
+//                enemies[{ id, def, friendly, boost, pos, quat, v, hp, mx }], picks (u16),
+//                efires[ids] (enemy-fire events since the previous broadcast) }
+//                                                        host -> guests: one message per pocket
+//                                                        that holds a visitor, `SHIP_STREAM.hz`
+//                                                        a second. Visual only; hits, loot and
+//                                                        lifetimes are the host's sim's business
 //
 // The `bye` is a courtesy, not a contract: a crashed tab sends nothing at all, which is why the
 // host still notices a peer that vanished on its own. It only makes the ordinary departure —
@@ -138,8 +146,10 @@ export function cleanMessage(kind, fields = {}) {
     case "ships":
       return { t: "ships", ships: cleanShips(fields.ships) };
     // 8c+: host -> guest: bullets/missiles/crates/fx in the same pocket. Visual only; host authoritative.
+    // One message per pocket that holds a visitor: the world's transient objects, as the
+    // host's sim holds them. Visual only; the host decides hits, loot and lifetimes.
     case "entities":
-      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx) };
+      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms), enemies: cleanEnemies(fields.enemies), picks: u16(fields.picks), efires: cleanEFires(fields.efires) };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
     // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
     // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
@@ -254,6 +264,13 @@ function cleanQuat(raw) {
   return q.map(v => Math.round((v / len) * 10000) / 10000);
 }
 
+/** A monotonically increasing counter on the wire: an integer 0..65535 (u16, wraps mod 65536). */
+const u16 = value => {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n % 65536;
+};
+
 /**
  * A ship snapshot: the pilots the host drew, as `SHIP_FIELDS` says, capped at `LIMITS.ships`
  * per message. An entry with no id is dropped (nothing could be keyed on it), and every other
@@ -282,7 +299,44 @@ function cleanShips(raw) {
       // Shield, the second bar (playtest 23). A fraction on the wire, clamped like the hull: a
       // message that says 7.5 shields is a number a reader can draw, not HP from a host's fit.
       shield: Math.round(Math.max(0, Math.min(1, num(entry.shield, 0))) * 1000) / 1000,
+      boost: entry.boost === true,
+      shake: Math.round(Math.max(0, Math.min(1, num(entry.shake, 0))) * 1000) / 1000,
+      // --- weapon effects, cleaned like everything else; a peer is never believed about a number.
+      shots: u16(entry.shots),
+      missiles: u16(entry.missiles),
+      locks: u16(entry.locks),
+      ore: u16(entry.ore),
+      hits: u16(entry.hits),
+      boosts: u16(entry.boosts),
+      beamOn: entry.beamOn === true,
+      beamStart: cleanVec3(entry.beamStart),
+      beamEnd: cleanVec3(entry.beamEnd),
+      mineFrac: Math.round(Math.max(0, Math.min(1, num(entry.mineFrac, 0))) * 1000) / 1000,
+      cone: Math.round(Math.max(0, Math.min(45, num(entry.cone, 0))) * 100) / 100,
+      lockT: Math.round(Math.max(0, Math.min(60, num(entry.lockT, 0))) * 1000) / 1000,
+      lockLocked: entry.lockLocked === true,
+      lockTarget: entry.lockTarget === true,
+      warpOn: entry.warpOn === true,
+      warpFx: Math.round(Math.max(0, Math.min(1, num(entry.warpFx, 0))) * 1000) / 1000,
+      warpFlash: Math.round(Math.max(0, Math.min(1, num(entry.warpFlash, 0))) * 1000) / 1000,
+      warps: u16(entry.warps),
+      bursts: u16(entry.bursts),
     });
+    // The weapon-effects block costs nothing until it is used: a default-zero field is omitted,
+    // not sent as `0` — 24 pilots every 42 ms is not the place to carry a full launch history.
+    // A reader's own cleaning (or `Number(x) || 0`) gives the same zero back, so nothing is lost.
+    const last = out[out.length - 1];
+    for (const key of ["shots", "missiles", "locks", "ore", "hits", "boosts", "warps", "bursts"]) if (!last[key]) delete last[key];
+    if (!last.warpOn) { delete last.warpFx; delete last.warpFlash; }
+    if (!last.beamOn && last.beamStart.every(v => v === 0) && last.beamEnd.every(v => v === 0)) {
+      delete last.beamStart;
+      delete last.beamEnd;
+    }
+    if (!last.mineFrac) delete last.mineFrac;
+    if (!last.cone) delete last.cone;
+    if (!last.lockT) delete last.lockT;
+    if (!last.lockLocked) delete last.lockLocked;
+    if (!last.lockTarget) delete last.lockTarget;
   }
   return out;
 }
@@ -345,7 +399,7 @@ function cleanCrates(raw) {
   for (const e of raw) {
     if (out.length >= LIMITS.entities) break;
     if (!e || typeof e !== "object") continue;
-    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), item: text(e.item, 20) });
+    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), quat: cleanQuat(e.quat), item: text(e.item, 20) });
   }
   return out;
 }
@@ -356,6 +410,49 @@ function cleanFx(raw) {
     if (out.length >= LIMITS.entities) break;
     if (!e || typeof e !== "object") continue;
     out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), col: Math.max(0, Math.floor(Number(e.col) || 0)), size: Math.max(0, num(e.size, 1)), l: Math.max(0, num(e.l, 0)), t: Math.max(0, num(e.t, 1)) });
+  }
+  return out;
+}
+
+/**
+ * Enemies on the wire: everything a far screen needs to draw the hull, lock it and show it as hurt.
+ * The damage itself is host-side; a snapshot can carry no rule. `def` picks the mesh and the
+ * faction glow, `v` is the one number a ballistic lead is computed from, `mx` is the def's full hull
+ * so the far screen can fraction the bar the same way `sim/pilot-stats.js` does.
+ */
+function cleanEnemies(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
+    const id = Math.floor(Number(e.id));
+    const def = text(e.def, 40);
+    if (!Number.isFinite(id) || id <= 0 || !def) continue;
+    out.push({
+      id,
+      def,
+      friendly: e.friendly === true,
+      boost: e.boost === true,
+      pos: cleanVec3(e.pos),
+      quat: cleanQuat(e.quat),
+      v: cleanVec3(e.v),
+      hp: Math.max(0, Math.round(num(e.hp, 0) * 100) / 100),
+      mx: Math.max(0, Math.round(num(e.mx, 0) * 100) / 100),
+    });
+  }
+  return out;
+}
+
+/** Enemy fires since the last packet: raw ids, capped at 8. The guest gates by its own ears. */
+const EFIS_CAP = 8;
+function cleanEFires(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= EFIS_CAP) break;
+    const id = Math.floor(Number(e));
+    if (Number.isFinite(id) && id > 0 && !out.includes(id)) out.push(id);
   }
   return out;
 }

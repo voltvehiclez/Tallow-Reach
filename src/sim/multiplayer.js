@@ -30,7 +30,9 @@
 // **The event bus.** `mp-guest-arrive { guestId, name, profile, place }` -> this file.
 // `mp-guest-arrived { player, guestId, name, place }` <- this file, for `net/` (the host
 // now has a live pilot to write back) and for a notice. `mp-guest-left { guestId, name }`
-// when it goes.
+// when it goes. A visitor that is destroyed is recovered by `sim/session.js`'s `die(P, profile)`
+// — same losses, fee and home-station fallback as the local pilot, docked at that station —
+// which is what `player-dead` reaches for every record.
 
 import { emit, on } from "../util/events.js";
 import { state } from "../state/state.js";
@@ -38,7 +40,6 @@ import { createPlayerRecord } from "./player.js";
 import { configurePlayer, launch } from "./session.js";
 import { CONTROLS } from "../data/multiplayer.js";
 import { stationAt } from "./places.js";
-import { ensureBoard } from "./contracts.js";
 import { isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { neutralControls } from "../state/controls.js";
 
@@ -131,48 +132,6 @@ export function leaveGuest(guestId) {
   return true;
 }
 
-/**
- * **A visitor's hull reached zero** (playtest 23's second report: every ship takes damage unless
- * something says otherwise).
- *
- * `hurt` already marks a non-local record `dead` at zero hull, and a dead record is not drawn (the
- * host's `render/views.js` and, through `SHIP_FIELDS.dead`, the guest's own sky agree). What was
- * missing is the *sentence*: a hull that simply vanishes is a mystery on both screens.
- *
- * Recovery is not built (a visitor has no respawn — step 16 debt, *death and recovery*), so the words
- * say exactly what is true: the ship is gone from this world for this visit, the pilot itself is safe
- * in its suitcase, and going home flies it again. Nothing here touches the visitor's copy.
- */
-on("player-dead", ({ player } = {}) => {
-  if (!isGuestRecord(player)) return;
-  const name = player.name || guests.get(player.guestId)?.name || "";
-  emit("mp-guest-destroyed", { guestId: player.guestId, name });
-  // Slice 8c fix: guest death respawns docked at home (Meridian if none) so the
-  // guest does not sit dead in host world. Host is authoritative: reset hull,
-  // move to arrival place, dock. Cargo loss/fee not charged for visitors.
-  try {
-    const P = player;
-    const home = arrivalPlace(P.profile, P.profile?.homeStation) || DEFAULT_PLACE;
-    P.dead = false;
-    P.hull = P.hullMax || 100;
-    P.sh = P.shMax || 0;
-    P.place = home;
-    const station = stationAt(home);
-    if (station?.launch?.pos) P.pos.set(...station.launch.pos);
-    else P.pos.set(0, 0, 0);
-    P.v.set(0, 0, 0);
-    P.thr = 0;
-    P.docked = true;
-    P.warp = null;
-    // Keep profile's hp in sync so suitcase sync sends repaired hull
-    if (P.profile?.hp && P.hullMax > 0) P.profile.hp[P.profile.ship] = Math.max(0.2, P.hull / P.hullMax);
-    // Ensure host world has board at home station
-    try { ensureBoard(state.worldState, home); } catch (e) {}
-    P.dockedAt = state.time;
-    emit("mp-notice", `${name || "A pilot"} was destroyed and recovered at ${station?.n || home}.`);
-  } catch (e) {}
-});
-
 /* ------------------------------------------------------------------------- */
 /* Slice 8b: the guest's controls reach its ship                             */
 /* ------------------------------------------------------------------------- */
@@ -245,10 +204,7 @@ export function applyGuestControls(guestId, input) {
     }
   }
   P.inputAt = state.time;
-  if (P.docked && asksToFly(input)) {
-    const sinceDock = state.time - (P.dockedAt || 0);
-    if (sinceDock > 0.6) launch(P, P.profile);
-  }
+  if (P.docked && asksToFly(input)) launch(P, P.profile);
   return true;
 }
 

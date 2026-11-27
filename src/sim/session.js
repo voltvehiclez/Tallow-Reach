@@ -287,16 +287,23 @@ export function tryDock(P = state.player, profile = profileOf(P), world = state.
  * The ship is destroyed. It is lost for good, its cargo is gone, and a
  * recovery fee is charged. The player falls back to another ship, or
  * the station lends a Wasp if they have nothing left.
+ *
+ * `die()` is the local pilot's own death: it re-enters the home station's pocket and docks
+ * there. `die(P, profile)` with a visiting record is the same recovery in the world that
+ * holds the truth (the host's): the hull is lost, the fee is charged, the home-hangar
+ * fallback or the lent Wasp follows, and the record wakes up **docked** at the home station
+ * in that world — never standing on an undock point, never outside the ship's own fit.
  */
-export function die() {
+export function die(P = state.player, profile = profileOf(P)) {
   // Anything that has to happen while the pilot is still where they died runs here, before the ship
   // and its hold are removed and before the docking below resolves a station. An instance despawns
   // at once and puts the pilot back where they entered: `sim/instances.js` listens for `dying`.
-  emit("dying", { player: state.player });
-  const S = state.profile,
+  emit("dying", { player: P });
+  const S = profile || profileOf(P),
+    local = P === state.player,
     lost = S.ship;
   const fee = Math.min(S.cr, RECOVERY_FEE);
-  boom(state.player.pos, 30, 0xffa050);
+  boom(P.pos, 30, 0xffa050, P.place || state.place);
 
   let text = `Your ${shipName(lost)} was destroyed and is gone for good. Cargo lost, ${fee} cr recovery fee.`;
   // What ran out of time says why first (`onExpire.message` in data/instances.js), then the ordinary
@@ -323,24 +330,70 @@ export function die() {
     S.ship = atHome[0];
     ensureShipRecords(S, S.ship, home);
     S.shipPlaces[S.ship] = home;
-    setShip(S.ship);
+    setShip(S.ship, P, S);
   } else {
     const lent = nextShipId(DEFAULT_SHIP, S.ships);
     S.ships.push(lent);
     S.ship = lent;
     // The lent Wasp is a complete ship: empty hold, no damage, stock modules.
     addShipRecords(S, lent, home);
-    setShip(lent);
+    setShip(S.ship, P, S);
     text += " The station lent you a spare Wasp.";
   }
+  // The fresh hull is a fresh hull: every fitted system follows it, exactly as a swap does.
+  // (Before this the lent Wasp flew on the lost ship's fitted thrusters and shields.)
+  refillPower(P, S);
+  refreshDrive(P, S);
+  refreshShield(P, S);
+  refreshGuns(P, S);
+  refreshHull(P, S);
 
-  clearTransient(state.player.place || state.place);
-  enterPlace(home, state.player);
-  dock();
-  emit("died", text);
+  // Only the local pilot's death pocket is cleared: `clearTransient` wipes enemies, bullets and
+  // crates world-wide in that pocket, which is the home station's own sky when a visitor died.
+  if (local) clearTransient(P.place || state.place);
+  if (local) {
+    enterPlace(home, P);
+    dock();
+    emit("died", text);
+    return;
+  }
+  // A visitor dies in the world that holds its truth. No place change is emitted — a
+  // `place-entered` here would drag the host's screen into the guest's home pocket; the
+  // visitor's screen learns of the respawn from the ship stream and the suitcase. The
+  // record is put **docked at the home station**, inside the station's own position, like
+  // any other dock — never at the launch point.
+  P.dead = false;
+  P.warp = null;
+  P.v.set(0, 0, 0);
+  P.thr = 0;
+  P.place = home;
+  const station = stationAt(home);
+  if (station?.pos) P.pos.set(...station.pos);
+  dock(P, S, state.worldState);
+  const name = P.name || "A visiting pilot";
+  emit("mp-guest-recovered", { guestId: P.guestId, name, home, text });
+  emit("mp-notice", `${name} was destroyed and recovered at ${station?.n || home}. Cargo lost, ${fee} cr recovery fee.`);
 }
 
 on("player-dead", ({ player } = {}) => {
-  // Non-local death recovery belongs to step 16 (multiplayer respawn).
-  if (!player || player === state.player) die();
+  // A visitor recovers like any other pilot (step 16 death rule): same losses, same fee,
+  // docked at the home station in the world that holds the record — built-in, not a debt.
+  if (!player) return;
+  if (player === state.player) { die(); return; }
+  const profile = player.profile || profileOf(player);
+  // Only a record that is a hull (a real ship runtime) can be recovered — a bare payload that
+  // merely *carries* the news is not a ship and has nothing to charge. And a recovery that
+  // throws must never take the rest of the `player-dead` fan-out down with it.
+  const isHull = !!(player.pos && player.hullMax !== undefined);
+  if (profile && isHull) {
+    try {
+      die(player, profile);
+      return;
+    } catch (e) {
+      console.error("visitor recovery failed", e);
+      emit("mp-notice", `${player.name || "A visiting pilot"}'s ship was destroyed and the recovery failed.`);
+      return;
+    }
+  }
+  emit("mp-notice", `${player.name || "A pilot"}'s ship was destroyed.`);
 });

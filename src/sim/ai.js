@@ -25,6 +25,7 @@ import { enemyFwd, dropEnemy, enemyHullRadius, turnEnemy } from "./enemy.js";
 import { collideRockAt, collideSphereAt, placeCollidersOf, reflectVelocity, sweepColliders } from "./colliders.js";
 import { dropEntity } from "./entity.js";
 import { playerPos } from "./pilot.js";
+import { efireLog } from "./sfxlog.js";
 
 // Keep the reusable behaviour id for authored content; personality is data-driven.
 export const AI_BEHAVIOURS = { chase: flyFighter, escort: flyEscort, story: flyStory };
@@ -162,6 +163,7 @@ export function updateEnemies(dt, placeId = state.place) {
             const shot = fire(e.pos, dir, def.bspd, false, def.dmg, undefined, placeId,
               String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null,
               { colour: BULLET_COLOURS.cannon });
+            efireLog(placeId, e.id);
             if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });
           }
         }
@@ -183,6 +185,7 @@ export function updateEnemies(dt, placeId = state.place) {
       // the generic fire helper defaults to the local pilot's place.
       shot.place = placeId;
       shot.missionId = missionId;
+      efireLog(placeId, e.id);
       if (dist < def.hearRange) emit("sfx", { name: "enemy-fire" });
     }
   }

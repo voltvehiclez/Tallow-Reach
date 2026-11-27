@@ -13,10 +13,22 @@ import { state, placeWorld } from "../state/state.js";
 import { emit } from "../util/events.js";
 import { addEntity, dropEntity } from "./entity.js";
 
+/* How many pocket-rumble explosions (`boom` with more than ten particles — the same gate the
+ * `sfx` blast uses locally) a place has seen since this process booted. The pocket's entity
+ * packet carries it so a guest screen can rumble exactly where it would have heard one in a
+ * single-player world. Monotonic, wraps as u16 on the wire; never saved. */
+const pocketBooms = new Map();
+export function pocketBoomCount(placeId) {
+  return pocketBooms.get(placeId) || 0;
+}
+
 /** Burst of `count` particles from point `p`. Big bursts also make a rumble. */
 export function boom(p, count, color, placeId = state.place) {
   // How loud an explosion is depends on its size, so the size goes with the event.
-  if (count > 10 && placeId === state.place) emit("sfx", { name: "explosion", count });
+  if (count > 10) {
+    pocketBooms.set(placeId, (pocketBooms.get(placeId) || 0) + 1);
+    if (placeId === state.place) emit("sfx", { name: "explosion", count });
+  }
   for (let i = 0; i < count; i++) {
     add({
       kind: "fx",

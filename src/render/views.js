@@ -2,7 +2,8 @@
 //
 // Step 16 slice 8a ended the local-only rule for **other pilots**: every hull but yours is drawn
 // from `state.players` on the host and from the host's snapshots on a guest (see "Other pilots"
-// below). The mining beam is still the local pilot's own.
+// below). The mining beam follows the OWN local pilot on every screen — a visiting guest's
+// beam rides the host's snapshot into its own `state.flight`.
 //
 // Refactor step 7 moved every world entity out of `sim/` and into plain data
 // (`sim/enemy.js`, `sim/entity.js`). This file owns the *meshes*. It watches the
@@ -704,10 +705,10 @@ export class PlayerShipView {
 // like a ghost, so `place` decides — and on the guest side that is what keeps the slice honest
 // until 8c makes the guest's screen follow the host's pocket.
 //
-// **Docked pilots are hidden.** The local hull hides while docked because the camera is on the
-// station card and the ship is "inside". The same applies to other pilots: a docked hull
-// parked at the launch point would read as a ghost in the sky, and the owner reported it as a
-// bug (host docked still visible). A dead pilot also draws nothing.
+// **A docked pilot is not drawn.** The local hull hides while docked because the camera is on the
+// station card and the ship is "inside"; the same rule holds for every other pilot (owner,
+// 2026-11-26): a docked hull is inside the station and out of the sky. A dead pilot draws
+// nothing.
 const pilotViews = new Map(); // id -> { mesh, hull }
 
 // **Every other pilot is a lock target, like anything else in the sky** (playtest 23).
@@ -765,10 +766,9 @@ function pilotRefFor(id) {
 function applyOtherPilotPose(mesh, pose) {
   mesh.position.copy(pose.pos);
   mesh.quaternion.copy(pose.quat);
-  // The same engine glow the local hull gets, from the throttle that travelled; boost is not on
-  // the wire (slice 8a) so a friend's boost does not lengthen its flame here.
+  // The same engine glow the local hull gets, from the throttle and boost that travelled.
   if (mesh.eng) {
-    const glow = 0.5 + Math.max(0, Number(pose.throttle) || 0) * 2;
+    const glow = 0.5 + Math.max(0, Number(pose.throttle) || 0) * 2 + (pose.boost ? 2.4 : 0);
     for (const eng of mesh.eng) eng.scale.set(eng.scale.x, eng.scale.y, (eng.userData.engZ0 ?? 1) * glow);
   }
 }
@@ -787,6 +787,7 @@ function poseOfRecord(P, alpha, at) {
     throttle: Number(p.thr) || 0,
     dead: P.dead === true,
     docked: P.docked === true,
+    boost: P.boost === true,
     // The same two fractions the host puts on the wire (`sim/pilot-stats.js`), so the bar the
     // host draws for a friend and the bar the friend's own screen gets can never disagree.
     hull: hullFraction(P),
@@ -826,7 +827,8 @@ export function updateOtherPilotViews(alpha = frameAlpha, remote = []) {
   const seen = new Set();
   const drawn = [];
   const draw = (id, ship, pose) => {
-    // Another pilot's hull is drawn only where this screen is looking, and only while it exists and flying.
+    // Another pilot's hull is drawn only where this screen is looking, and only while it exists
+    // and is flying. A docked hull is inside its station (owner, 2026-11-26) — it is not in the sky.
     if (!id || pose.dead || pose.docked || pose.place !== state.place) return;
     const key = String(id);
     seen.add(key);

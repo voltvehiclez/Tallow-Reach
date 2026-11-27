@@ -48,8 +48,8 @@ easiest.
 ## Part 1 — The hull, on the host's screen
 
 The visitor arrives **docked at its own home station** — **Meridian Station** for a fresh save — and
-a docked visitor is drawn **parked at that station's launch point** (the spot 200 m out that a ship
-appears at when it launches).
+a docked visitor is **not drawn**: it is inside its station (owner, 2026-11-26). It appears only
+once it launches.
 
 1. On the **host**, be in the same pocket as the visitor (with two fresh saves you already are: both
    pilots start at Meridian).

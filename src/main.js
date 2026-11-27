@@ -15,9 +15,13 @@ import { updateAudio, initAudio } from "./core/audio.js";
 import { on, emit } from "./util/events.js";
 import { createPlayer, setShip } from "./sim/player.js";
 import { setWeapon, setSecondaryWeapon, refreshGuns } from "./sim/weapons.js";
+import { pocketBoomCount } from "./sim/effects.js";
+import { pocketPickCount, drainEFires } from "./sim/sfxlog.js";
+import { enemyDef } from "./data/enemies.js";
+import { WARP } from "./data/sectors.js";
 import { loadPlace } from "./sim/places.js";
 import { toggleLock } from "./sim/targeting.js";
-import { tryDock, resumeFromSave } from "./sim/session.js";
+import { launch, tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
 import { riftAction, restoreInstances } from "./sim/instances.js";
 import { restoreWormholes } from "./sim/wormholes.js";
@@ -105,6 +109,66 @@ function isGuestVisiting() {
   return !!state.away;
 }
 
+/* The own weapon-effects block: the sim-side counters arrive on the own ship entry; a counter that
+ * advanced plays its sound once (a lost packet collapses two into one, never a backlog). Counters
+ * that went BACKWARDS mean a fresh record on the host — re-baseline silently, never a salvo. */
+const ownWxSeen = { shots: 0, missiles: 0, locks: 0, ore: 0, hits: 0, boosts: 0, warps: 0, bursts: 0 };
+let ownWxBaselined = false;
+function resetOwnWeaponWx() {
+  for (const k of Object.keys(ownWxSeen)) ownWxSeen[k] = 0;
+  ownWxBaselined = false;
+}
+const ownWxSfx = { shots: "cannon", missiles: "missile-fire", locks: "missile-lock", ore: "ore-gained", hits: "hit", boosts: "boost", warps: "warp-charge", bursts: "warp-burst" };
+function applyOwnWeaponWx(entry) {
+  // The beam is state, not events: it is drawn from the host's record exactly as the local sim would
+  // leave it, so `render/views.js` and `core/audio.js` need no guest branch at all.
+  const F = state.flight;
+  if (F) {
+    F.beamOn = entry.beamOn === true;
+    const bs = entry.beamStart, be = entry.beamEnd;
+    const toV3 = v => Array.isArray(v) ? new THREE.Vector3(v[0] || 0, v[1] || 0, v[2] || 0)
+      : v && typeof v.x === "number" ? new THREE.Vector3(v.x, v.y, v.z) : null;
+    const sb = toV3(bs), eb = toV3(be);
+    if (sb) F.beamStart = sb;
+    if (eb) F.beamEnd = eb;
+    if (Number.isFinite(entry.mineFrac)) F.mineFrac = entry.mineFrac;
+    // The lock ring and the cone follow the host's truth; the guest simulates no missiles.
+    if (Number.isFinite(entry.cone)) F.coneAngle = entry.cone;
+    const ML = F.missileLock || (F.missileLock = { target: null, t: 0, locked: false });
+    if (Number.isFinite(entry.lockT)) ML.t = entry.lockT;
+    ML.locked = entry.lockLocked === true;
+    // A lock needs a target object; a stub is all the HUD reads (truthy). The host's record stays host-side.
+    ML.target = entry.lockTarget === true ? (ML.target || { _net: true }) : null;
+  }
+  if (!ownWxBaselined) {
+    // First picture after joining: adopt the host's counters without a salvo of stale sounds.
+    for (const key of Object.keys(ownWxSeen)) ownWxSeen[key] = Math.max(0, Math.floor(Number(entry[key]) || 0));
+    ownWxBaselined = true;
+    return;
+  }
+  for (const key of Object.keys(ownWxSeen)) {
+    const cur = Math.max(0, Math.floor(Number(entry[key]) || 0));
+    const prev = ownWxSeen[key];
+    if (cur < prev) { ownWxSeen[key] = cur; continue; }
+    if (cur > prev) {
+      const times = Math.min(cur - prev, 2);
+      for (let i = 0; i < times; i++) {
+        if (key === "warps") {
+          try { emit("sfx", { name: "warp-charge", dur: WARP.charge }); } catch (e) { /* a missing audio path must not break the net path */ }
+        } else {
+          try { emit("sfx", { name: ownWxSfx[key] }); } catch (e) { /* a missing audio path must not break the net path */ }
+        }
+        // A wound on the guest goes through the same hurt bus a local wound does, so the HUD flash
+        // and any hurt listener behave as if the guest's own sim had been the one to apply it.
+        if (key === "hits") {
+          try { emit("hurt", { shielded: (localPlayer()?.sh ?? 0) > 0, player: localPlayer() }); } catch (e) { /* the flash must not break the net path */ }
+        }
+      }
+      ownWxSeen[key] = cur;
+    }
+  }
+}
+
 /** Apply one authoritative snapshot of our own ship (from the host) to the local record. */
 function applySelfShip(entry) {
   const P = localPlayer();
@@ -135,8 +199,16 @@ function applySelfShip(entry) {
   if (Array.isArray(vel)) P.v.set(vel[0], vel[1], vel[2]);
   else if (vel && typeof vel.x === "number") P.v.copy(vel);
   P.thr = Number.isFinite(entry.throttle) ? entry.throttle : P.thr;
+  const wasDocked = P.docked === true;
   P.docked = entry.docked === true;
   P.dead = entry.dead === true;
+  P.boost = entry.boost === true;
+  if (Number.isFinite(entry.shake)) P.shake = Math.max(0, Math.min(1, Number(entry.shake) || 0));
+  // The station card and the reticle follow the host's dock decisions, like a local dock: this is
+  // what puts the guest in the station screen (and its own suitcase on it) when the host docks it.
+  if (P.docked !== wasDocked) {
+    try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) { /* UI must never break the net path */ }
+  }
   if (Number.isFinite(entry.hull)) {
     const max = Number(P.hullMax) || 0;
     P.hull = max > 0 ? Math.max(0, entry.hull * max) : (entry.hull > 0 ? max || 100 : 0);
@@ -144,6 +216,20 @@ function applySelfShip(entry) {
   if (Number.isFinite(entry.shield)) {
     const max = Number(P.shMax) || 0;
     P.sh = max > 0 ? Math.max(0, entry.shield * max) : 0;
+  }
+  applyOwnWeaponWx(entry);
+  // The warp the host is flying for us: the same timings the local sim would keep, mirrored so the
+  // streaks, camera widen and flash overlay run unchanged (they all read `state.warp`).
+  {
+    const wantWarp = entry.warpOn === true;
+    if (wantWarp) {
+      const fx = Number.isFinite(entry.warpFx) ? Math.max(0, Math.min(1, entry.warpFx)) : 0;
+      const flash = Number.isFinite(entry.warpFlash) ? Math.max(0, Math.min(1, entry.warpFlash)) : 0;
+      const w = P.warp || (P.warp = { from: "", to: "", t: 0, fx: 0, flash: 0, switched: false, steer: { x: 0, y: 0 } });
+      w.fx = fx; w.flash = flash;
+    } else if (P.warp) {
+      P.warp = null;
+    }
   }
   // A warp that moved us is a teleport, not a smear — snap the camera this frame.
   const curPos = Array.isArray(entry.pos) ? new THREE.Vector3(entry.pos[0], entry.pos[1], entry.pos[2]) : entry.pos;
@@ -193,7 +279,7 @@ function installMultiplayerShips() {
   });
   on("mp-away-changed", ({ away } = {}) => {
     if (away) stashGuestHome();
-    else restoreGuestHome();
+    else { resetOwnWeaponWx(); restoreGuestHome(); }
   });
   on("mp-state", snapshot => {
     if (!snapshot || !snapshot.on) {
@@ -207,74 +293,166 @@ function installMultiplayerShips() {
   });
 }
 
+/*
+ * Slice 8c entities, rebuilt: the host's pocket arrives as data; the guest draws it and
+ * simulates nothing.
+ *
+ *   `mp-entities-request`  the host's session asks what is in each pocket a visitor occupies;
+ *                          answered synchronously, like the suitcase and the ship list
+ *   `mp-entities`          per pocket: bullets, missiles, crates and fx records in `state.world`'s
+ *                          own lists, as plain objects with stable identities — the views'
+ *                          between-ticks interpolation works on them exactly as it does on the
+ *                          host's own, and a record the next snapshot no longer names is dropped
+ */
 function installMultiplayerEntities() {
-  // Host: answer what is in each pocket that has a guest (or host) so guest sees same bullets/missiles/fx
+  // Host: answer what is in every pocket that holds a visitor, so the guest sees the same sky.
   on("mp-entities-request", request => {
     if (!request || !Array.isArray(request.places)) return;
-    try {
-      const places = new Set();
-      // Host place
-      if (state.place) places.add(state.place);
-      for (const g of guestPlayers()) if (g?.place) places.add(g.place);
-      // Local player may be in different place than state.place due to warp?
-      const P = localPlayer();
-      if (P?.place) places.add(P.place);
-      for (const placeId of places) {
-        const W = placeWorld(placeId);
-        if (!W) continue;
-        const bullets = (W.bullets || []).slice(0, 32).map(e => ({
-          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], quat: e.quat ? [e.quat.x, e.quat.y, e.quat.z, e.quat.w] : [0,0,0,1], colour: e.colour || e.color || 0
-        }));
-        const missiles = (W.missiles || []).slice(0, 32).map(e => ({
-          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], quat: e.quat ? [e.quat.x, e.quat.y, e.quat.z, e.quat.w] : [0,0,0,1]
-        }));
-        const crates = (W.crates || []).slice(0, 32).map(e => ({
-          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], item: e.item || "salv"
-        }));
-        const fx = (W.fx || []).slice(0, 32).map(e => ({
-          id: e.id, pos: [e.pos.x, e.pos.y, e.pos.z], col: e.col || 0xffaa00, size: e.size || 1, l: e.l || 0, t: e.t || 1
-        }));
-        // Only send non-empty places to save bandwidth, but send at least host place if guests nearby
-        if (bullets.length || missiles.length || crates.length || fx.length) {
-          request.places.push({ place: placeId, bullets, missiles, crates, fx });
+    const wanted = new Set();
+    for (const g of guestPlayers()) if (g?.place) wanted.add(g.place);
+    request.places.length = 0;
+    const vec = v => [v.x, v.y, v.z];
+    const quat = q => (q ? [q.x, q.y, q.z, q.w] : [0, 0, 0, 1]);
+    for (const placeId of wanted) {
+      const W = placeWorld(placeId);
+      if (!W) continue;
+      const bullets = (W.bullets || []).map(e => ({
+        id: e.id, pos: vec(e.pos), quat: quat(e.quat),
+        colour: Number.isFinite(e.colour) ? e.colour : Number.isFinite(e.color) ? e.color : 0xffcc66,
+      }));
+      const missiles = (W.missiles || []).map(e => ({ id: e.id, pos: vec(e.pos), quat: quat(e.quat) }));
+      const crates = (W.crates || []).map(e => ({ id: e.id, pos: vec(e.pos), quat: quat(e.quat), item: e.item || "salv" }));
+      const fx = (W.fx || []).map(e => ({
+        id: e.id, pos: vec(e.pos), col: Number.isFinite(e.col) ? e.col : 0xffaa00,
+        size: e.size || 1, l: Number.isFinite(e.l) ? e.l : 0, t: Number.isFinite(e.t) ? e.t : 1,
+      }));
+      // Enemies, from the host's first-hand record: the guest draws and locks them exactly as the
+      // host does (views read `def`, F-lock reads `W.enemies`), while every wound stays host-side.
+      const enemies = (W.enemies || []).map(e => ({
+        id: e.id, def: e.def, friendly: e.friendly === true, boost: e.boosting === true,
+        pos: vec(e.pos), quat: quat(e.quat), v: vec(e.v || { x: 0, y: 0, z: 0 }),
+        hp: Number.isFinite(e.hp) ? e.hp : 0, mx: Number.isFinite(e.mx) ? e.mx : 0,
+      }));
+      // Always answer for a pocket with a visitor — even with empty lists, so the guest clears
+      // what is no longer there.
+      request.places.push({ place: placeId, bullets, missiles, crates, fx, booms: pocketBoomCount(placeId), enemies, picks: pocketPickCount(placeId), efires: drainEFires(placeId) });
+    }
+    request.answered = true;
+  });
+  // Guest: apply the pocket we are in. Records are kept per id so the between-ticks
+  // interpolation has an identity to hold on to; the host's sim is the clock.
+  const syncList = (list, incoming, kind, make) => {
+    const incomingArr = Array.isArray(incoming) ? incoming : [];
+    const seen = new Set();
+    for (const raw of incomingArr) {
+      if (!raw || typeof raw !== "object") continue;
+      const id = Math.floor(Number(raw.id) || 0);
+      seen.add(id);
+      let rec = null;
+      for (const r of list) if (r && r._net === true && r.id === id) { rec = r; break; }
+      if (!rec) {
+        rec = make(raw) || { id, kind, pos: new THREE.Vector3(), _net: true };
+        rec._net = true;
+        rec.id = id;
+        rec.kind = kind;
+        list.push(rec);
+      }
+      rec.pos.set(raw.pos?.[0] || 0, raw.pos?.[1] || 0, raw.pos?.[2] || 0);
+      if (raw.quat && rec.quat) rec.quat.set(raw.quat[0] || 0, raw.quat[1] || 0, raw.quat[2] || 0, raw.quat[3] ?? 1);
+      if (rec.quat && raw.quat) rec.quat.normalize();
+      if (kind === "bullet") rec.colour = raw.colour;
+      else if (kind === "crate") rec.item = typeof raw.item === "string" ? raw.item : "salv";
+      else if (kind === "fx") {
+        rec.col = raw.col; rec.size = raw.size; rec.l = raw.l; rec.t = raw.t;
+      }
+    }
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i] && list[i]._net === true && !seen.has(list[i].id)) list.splice(i, 1);
+    }
+  };
+  // A hostile record to draw, lock and lead — the host's first-hand truth, never the guest's sim.
+  const makeEnemy = raw => ({
+    id: 0, kind: "enemy", def: "raider", place, _net: true,
+    pos: new THREE.Vector3(), quat: new THREE.Quaternion(), v: new THREE.Vector3(),
+    hp: 0, mx: 0, friendly: false, boosting: false,
+  });
+
+  // How many pocket explosions this screen has already rumbled for, per place — a counter that
+  // went backwards means a rebooted host, so re-baseline silently rather than rumble in a loop.
+  const boomSeen = new Map();
+  const pickSeen = new Map();
+  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires } = {}) => {
+    if (!place || typeof place !== "string" || !isGuestVisiting()) return;
+    if (place !== state.place) return;   // entities only for the pocket this screen is in
+    const W = placeWorld(place);   // the synced records; shooters that died this packet are still here
+
+    // A pickup chime is what a single-player screen would have heard — same pocket gate, same blip.
+    const pick = Math.floor(Number(picks) || 0);
+    const prevPick = pickSeen.get(place) ?? pick;
+    if (pick < prevPick) pickSeen.set(place, pick);
+    else if (pick > prevPick) {
+      const times = Math.min(pick - prevPick, 2);
+      for (let i = 0; i < times; i++) {
+        try { emit("sfx", { name: "pickup" }); } catch (e) {}
+      }
+      pickSeen.set(place, pick);
+    }
+    // Gunfire is only for ears in the pocket: each entry is a shooter's id — check our own range.
+    if (Array.isArray(efires) && efires.length && localPlayer()) {
+      const me = localPlayer().pos;
+      let heard = 0;
+      for (const id of efires) {
+        if (heard >= 2) break;
+        const rid = Math.floor(Number(id) || 0);
+        const shooter = W.enemies.find(r => r && r.id === rid);
+        // Distance to *this screen's* pilot, the same gate the host uses for its own local ear —
+        // just measured from our own ship instead of the host's.
+        const hr = shooter ? enemyDef(shooter.def)?.hearRange ?? 0 : 0;
+        if (shooter && hr > 0 && me.distanceToSquared(shooter.pos) <= hr * hr) {
+          try { emit("sfx", { name: "enemy-fire" }); } catch (e) {}
+          heard += 1;
         }
       }
-      // If no entities but guests exist, still send empty for their place so guest can clear stale
-      if (!request.places.length) {
-        for (const placeId of places) request.places.push({ place: placeId, bullets: [], missiles: [], crates: [], fx: [] });
+    }
+    // A rumble is what a single-player screen would have heard: the pocket just blew something up.
+    const boom = Math.floor(Number(booms) || 0);
+    const prevBoom = boomSeen.get(place) ?? boom;
+    if (boom < prevBoom) boomSeen.set(place, boom);
+    else if (boom > prevBoom) {
+      const times = Math.min(boom - prevBoom, 2);
+      for (let i = 0; i < times; i++) {
+        try { emit("sfx", { name: "explosion" }); } catch (e) {}
       }
-      request.answered = true;
-    } catch (e) {}
-  });
-  // Guest: apply host's entities for that pocket, replacing local arrays
-  on("mp-entities", ({ place, bullets, missiles, crates, fx } = {}) => {
-    if (!place || typeof place !== "string") return;
-    // Only apply for the pocket we are currently in, or for guest's own place (host authoritative)
-    // We allow any place update; guest may be in host place
+      boomSeen.set(place, boom);
+    }
     try {
-      const W = placeWorld(place);
-      // Helper to convert wire vec to THREE
-      const toVec = a => Array.isArray(a) ? new THREE.Vector3(a[0], a[1], a[2]) : new THREE.Vector3(0,0,0);
-      const toQuat = a => Array.isArray(a) ? new THREE.Quaternion(a[0], a[1], a[2], a[3]) : new THREE.Quaternion(0,0,0,1);
-      // Replace bullets
-      W.bullets.length = 0;
-      for (const b of Array.isArray(bullets) ? bullets : []) {
-        W.bullets.push({ id: b.id, kind: "bullet", pos: toVec(b.pos), quat: toQuat(b.quat), colour: b.colour, _net: true });
+      syncList(W.bullets, bullets, "bullet", raw => ({
+        id: 0, kind: "bullet", pos: new THREE.Vector3(), quat: new THREE.Quaternion(), colour: raw.colour, _net: true,
+      }));
+      syncList(W.missiles, missiles, "missile", () => ({
+        id: 0, kind: "missile", pos: new THREE.Vector3(), quat: new THREE.Quaternion(), _net: true,
+      }));
+      syncList(W.crates, crates, "crate", () => ({
+        id: 0, kind: "crate", pos: new THREE.Vector3(), quat: new THREE.Quaternion(), item: "salv", _net: true,
+      }));
+      syncList(W.fx, fx, "fx", () => ({
+        id: 0, kind: "fx", pos: new THREE.Vector3(), col: 0xffaa00, size: 1, l: 0, t: 1, _net: true,
+      }));
+      syncList(W.enemies, enemies, "enemy", makeEnemy);
+      // The per-record fields syncList does not know, applied in place after the positional ones.
+      for (const rec of W.enemies) {
+        if (!rec || rec._net !== true) continue;
+        const raw = Array.isArray(enemies) ? enemies.find(r => r && Math.floor(Number(r.id) || 0) === rec.id) : null;
+        if (!raw) continue;
+        rec.def = typeof raw.def === "string" && raw.def ? raw.def : rec.def;
+        rec.friendly = raw.friendly === true;
+        rec.boosting = raw.boost === true;
+        rec.hp = Number.isFinite(raw.hp) ? raw.hp : rec.hp;
+        rec.mx = Number.isFinite(raw.mx) ? raw.mx : rec.mx;
+        rec.v = rec.v && typeof rec.v.set === "function" ? rec.v : new THREE.Vector3();
+        rec.v.set(Number(raw.v?.[0]) || 0, Number(raw.v?.[1]) || 0, Number(raw.v?.[2]) || 0);
       }
-      W.missiles.length = 0;
-      for (const m of Array.isArray(missiles) ? missiles : []) {
-        W.missiles.push({ id: m.id, kind: "missile", pos: toVec(m.pos), quat: toQuat(m.quat), _net: true });
-      }
-      W.crates.length = 0;
-      for (const c of Array.isArray(crates) ? crates : []) {
-        W.crates.push({ id: c.id, kind: "crate", pos: toVec(c.pos), item: c.item });
-      }
-      // Fx: keep lifetime for fade
-      W.fx.length = 0;
-      for (const f of Array.isArray(fx) ? fx : []) {
-        W.fx.push({ id: f.id, kind: "fx", pos: toVec(f.pos), col: f.col, size: f.size, l: f.l, t: f.t });
-      }
-    } catch (e) {}
+    } catch (e) { /* a broken pocket must never take the screen down */ }
   });
 }
 
@@ -305,7 +483,10 @@ function installMultiplayerVisitors() {
   on("mp-guest-dock", ({ guestId } = {}) => {
     const P = guestRecordOf(guestId);
     if (!P) return;
-    try { tryDock(P, P.profile, state.worldState); } catch (e) {}
+    // One button, like a local dock: in flight it docks, docked it launches. A visitor cannot
+    // `launch()` locally (the teleport-to-launch-point bug), so both directions ride the host's
+    // sim — `docked` follows on the next snapshot.
+    try { if (P.docked) launch(P, P.profile); else tryDock(P, P.profile, state.worldState); } catch (e) {}
   });
   // The host's write-back asks what the visiting pilot is NOW. Answering synchronously
   // is deliberate: the session needs the live profile in the same call that builds the
@@ -563,7 +744,7 @@ addEventListener("resize", () => {
 
 // --- Frame loop ------------------------------------------------------------
 
-let last = performance.now();
+let lastFrameAt = performance.now();
 const cameraAim = camera.position.clone();
 const simClock = createSimClock(undefined, {
   beforeStep: () => {
@@ -584,20 +765,25 @@ let hostTickAt = 0;
 function advanceHostClock() {
   if (!isNetOn() || isSimulationPaused()) return;
   const now = performance.now();
-  const realDt = (now - hostTickAt) / 1000;
+  const dt = (now - hostTickAt) / 1000;
   hostTickAt = now;
-  if (now - last > 80) {
-    last = now;
-    // Background tabs throttle to ~1 Hz: cap loses 95% of wall time and ship turns 20× slow.
-    // Catch up by stepping in MAX_FRAME_DT chunks so 1 s stall still advances 60 ticks.
-    let remaining = realDt;
-    while (remaining > 1e-9) {
-      const chunk = Math.min(remaining, MAX_FRAME_DT);
-      simClock.advance(chunk);
-      remaining -= chunk;
-    }
-    try { emit("host-keepalive-tick", {}); } catch (e) {}
+  if (!Number.isFinite(dt) || dt <= 0) return;
+  // rAF is driving the sim at 60 Hz while the tab is visible: stepping here too would run the
+  // world at double speed. Only step when rAF has actually stalled (hidden/starved tab).
+  if (now - lastFrameAt <= 80) return;
+  // Catch up by stepping in MAX_FRAME_DT chunks in wall time, however late the tick is — a
+  // throttled 1 Hz host keeps the world exactly on real time for its guests. Clamp the catch-up
+  // so a long sleep never simulates more than five seconds in one go.
+  let remaining = Math.min(dt, 5);
+  while (remaining > 1e-9) {
+    const chunk = Math.min(remaining, MAX_FRAME_DT);
+    simClock.advance(chunk);
+    remaining -= chunk;
   }
+  // The host-keepalive-tick is what broadcasts ships + entities from this path (the session
+  // self-throttles to the ship-stream rate). Without it the guest saw a frozen sky/world while
+  // the host was tabbed out.
+  try { emit("host-keepalive-tick", {}); } catch (e) {}
 }
 let hostWorkerUrl = null;
 function startHostTick() {
@@ -634,7 +820,7 @@ document.addEventListener("visibilitychange", () => {
 addEventListener("blur", () => { if (isNetOn()) startHostTick(); });
 addEventListener("focus", () => {
   // Let rAF take over again; keep tick for a moment to avoid gap on focus switch.
-  setTimeout(() => { if (!document.hidden && hostTickAt && performance.now() - last < 200) stopHostTick(); }, 500);
+  setTimeout(() => { if (!document.hidden && hostTickAt && performance.now() - lastFrameAt < 200) stopHostTick(); }, 500);
 });
 
 /**
@@ -644,8 +830,8 @@ addEventListener("focus", () => {
  * the last good picture frozen on the glass with a live loop behind it, which plays as a dead game.
  */
 function drawFrame(now) {
-  const dt = Math.min(MAX_FRAME_DT, (now - last) / 1000);
-  last = now;
+  const dt = Math.min(MAX_FRAME_DT, (now - lastFrameAt) / 1000);
+  lastFrameAt = now;
 
   // Dialogue lines read themselves out on their own clock, even while the
   // dialogue's own pause holds the world still.

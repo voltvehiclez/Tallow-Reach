@@ -333,17 +333,15 @@ export function setupMultiplayer() {
   });
   /**
    * **A visiting pilot's ship was destroyed in this world** (playtest 23's second report: every ship
-   * takes damage unless something says otherwise). The hull leaves both skies — `dead` rides on the
-   * wire — so this is the line that explains why, and it is a **chat line** because the audience is
-   * the guest: it is the guest's ship, and the guest may not be looking at this card.
-   *
-   * Recovery is not built (step 16 debt, *death and recovery*): the pilot is safe in its suitcase and
-   * flying it home is what brings it back. Saying anything else would be a promise the code cannot
-   * keep.
+   * takes damage unless something says otherwise). The record is recovered by the ordinary death
+   * rules: the hull is gone for good, its cargo is lost, the recovery fee is charged, and the
+   * pilot wakes docked at the home station in this world (Meridian if this world has no such
+   * pocket), per `sim/session.js` `die(P, profile)`. The line is a **chat line** because the
+   * audience is the guest: it is the guest's ship, and the guest may not be looking at this card.
    */
-  on("mp-guest-destroyed", ({ name } = {}) => {
+  on("mp-guest-recovered", ({ name } = {}) => {
     const who = name || "A pilot";
-    const text = `${who}'s ship was destroyed in this world. Its pilot is safe in its suitcase — go home to fly it again.`;
+    const text = `${who}'s ship was destroyed and recovered at its home station — cargo lost, fee paid.`;
     setMessage(text, "hint");
     api.say(text);
   });

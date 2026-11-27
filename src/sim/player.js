@@ -96,6 +96,12 @@ export function setShip(id, P = state.player, profile = profileOf(P)) {
 
 /** Flight model. Mouse steers, WASD strafes and throttles, Shift boosts. */
 export function flight(dt, P = state.player, runtime = null) {
+  // Camera shake decays on the simulation clock, per pilot, so a shake triggered aboard a visiting
+  // hull decays on the host's clock and reaches its screen on the wire (`SHIP_FIELDS.shake`).
+  if (P && P.shake > 0) {
+    const decayed = P.shake * Math.exp(-dt * 6);
+    P.shake = decayed <= 0.005 ? 0 : decayed;
+  }
   // Unconfigured non-local records cannot silently borrow the local fit or profile.
   if (
     P !== state.player &&
@@ -204,6 +210,7 @@ export function flight(dt, P = state.player, runtime = null) {
     boostAllowed: canBoost,
     onBoostIgnite: () => {
       P.shake = 1;
+      P.wxBoosts = (P.wxBoosts || 0) + 1;
       emit("sfx", { name: "boost" });
       // The ignition: one flat gulp out of the cells, not a trickle.
       r.power.stored = Math.max(0, r.power.stored - (drv.ignite || 0));
@@ -364,6 +371,7 @@ export function hurt(d, P = state.player, profile = null) {
     throw new Error("Non-local damage requires its own profile");
   }
   P.last = state.time;
+  P.wxHits = (P.wxHits || 0) + 1;
   emit("sfx", { name: "hit" });
   if (P.sh > 0) {
     P.sh -= d;

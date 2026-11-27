@@ -26,7 +26,9 @@ import { handshake, hashToken, recordHoldsNoSecret, tokenCheck } from "../src/ne
 import { on } from "../src/util/events.js";
 import { state, profileOf } from "../src/state/state.js";
 import { createPlayer } from "../src/sim/player.js";
-import { configurePlayer } from "../src/sim/session.js";
+import { configurePlayer, homeStationPlace } from "../src/sim/session.js";
+import { stationAt } from "../src/sim/places.js";
+import { RECOVERY_FEE } from "../src/data/station.js";
 import { flight, hurt, pilotHullRadius } from "../src/sim/player.js";
 import { arriveGuest, guestRecordOf, resetGuests } from "../src/sim/multiplayer.js";
 import { updateBullets } from "../src/sim/combat.js";
@@ -323,6 +325,7 @@ test("playtest 23b: a shot never hurts the hull that fired it, and a dead hull i
 test("playtest 23b: a warhead bursts on another pilot's hull instead of sailing past it", () => {
   const { P, visitor } = worldWithVisitor();
   visitor.sh = 0;
+  visitor.hull = 60;                        // a hit this size is not lethal: recovery is the test above
   visitor.pos.set(0, 0, -20);
   const before = visitor.hull;
   addEntity(state.world.missiles, {
@@ -350,15 +353,29 @@ test("playtest 23b: a warhead does not burst on the hull that fired it", () => {
 /* 3. Destroyed, and said out loud                                           */
 /* ------------------------------------------------------------------------- */
 
-test("playtest 23b: a visitor's hull can be destroyed, and both screens are told in words", () => {
+test("step 16 death: a visitor's hull recovers like a pilot — docked at home, fee paid, cargo lost", () => {
   const { visitor } = worldWithVisitor();
-  const destroyed = [];
-  on("mp-guest-destroyed", payload => destroyed.push(payload));
+  const recovered = [];
+  on("mp-guest-recovered", payload => recovered.push(payload));
 
+  const cr = visitor.profile.cr;
+  const lostShip = visitor.profile.ship;
+  visitor.profile.holds[lostShip].ferrite = 5;    // cargo aboard, which the death must lose
   hurt(visitor.hull + (visitor.sh || 0) + 1, visitor, profileOf(visitor));
-  assert.equal(visitor.dead, true, "a non-local hull at zero is marked dead, as it always was");
-  assert.deepEqual(destroyed, [{ guestId: "guest-1", name: "Acey" }], "and the world says so once, by name");
-  assert.equal(shipEntry(visitor, { id: "guest-1" }).dead, true, "the far screen stops drawing it (SHIP_FIELDS.dead)");
+
+  // The ordinary recovery ran, with the visitor's own profile, in the world that holds the record:
+  assert.equal(visitor.dead, false, "the hull is not left dead in the field — a visitor recovers like any pilot");
+  assert.equal(visitor.docked, true, "and wakes docked, never standing on an undock point");
+  const home = homeStationPlace(visitor.profile);
+  const station = stationAt(home);
+  assert.deepEqual([visitor.pos.x, visitor.pos.y, visitor.pos.z], station.pos,
+    "docked at the station's own position, as a local pilot does");
+  assert.equal(visitor.profile.cr, cr - RECOVERY_FEE, "the recovery fee was charged, as it always is");
+  assert.equal(visitor.profile.holds?.[lostShip]?.ferrite ?? 0, 0, "the lost hull took its cargo with it");
+  assert.equal(visitor.hull, visitor.hullMax, "and a fresh hull stands in its place");
+  assert.equal(recovered.length, 1, "the world is told once, by name");
+  assert.equal(recovered[0].guestId, "guest-1");
+  assert.equal(shipEntry(visitor, { id: "guest-1" }).dead, false, "the far screen draws it docked again (SHIP_FIELDS)");
 
   // The local pilot is untouched by any of it: this is one record's hull, not a global state.
   assert.equal(state.player.dead ?? false, false);

@@ -96,7 +96,9 @@ adds a buffer and a delay, not a renderer. The ship-snapshot rate is a **new** d
    (8b, built): 30 Hz, cleaned both ways, written into the visitor's own record by its peer id — the
    host's simulation flies the guest's ship, which is what everything below corrects for.
 2. **Predict the guest's own ship** (8d): ticked inputs, ack, rewind and replay, the 100 ms blend.
-3. **The cosmetic muzzle effects** (8e): flash and sound now, the host's bullet replaces them.
+3. ~~**The cosmetic muzzle effects** (8e)~~ **(dropped as a slice, owner 2026-11-27).** Weapon-effects parity is the fundamental rule, not a slice:
+   `2026-11-26b` sends the beam/lock/cannon/missile state and re-plays host-confirmed sounds on the own screen; a muzzle flash *before* the host
+   confirms the shot is the one piece that only 8d's prediction can give — add it inside 8d if the owner wants it, never as its own slice.
 4. **Lag compensation only if playtests demand it** — never as a first move.
 
 ## Where the numbers live, and what stays the same
