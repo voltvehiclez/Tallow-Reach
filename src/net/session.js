@@ -47,7 +47,7 @@
 // test enforces it, and the reason is real — a connection must not need a DOM).
 
 import { emit, on } from "../util/events.js";
-import { state, currentRootSave, applySave } from "../state/state.js";
+import { state, localPlayer, currentRootSave, applySave } from "../state/state.js";
 import { SAVE_VERSION, sanitizeSave } from "../state/profile.js";
 import { createChannel, stateLine } from "./transport.js";
 import { createPasteLink, codeWorldId } from "./paste.js";
@@ -1309,6 +1309,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    */
   function sendControls() {
     if (role !== "guest" || !on || !welcomed) return false;
+    if (state.ui?.intro || state.ui?.campaignEnd || state.paused) return false;
+    if (localPlayer()?.docked) return false;
     const input = state.localInput;
     if (!input) return false;
     const aim = state.aimDirection || {};

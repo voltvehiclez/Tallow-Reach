@@ -191,9 +191,9 @@ export function createShipStream({ delayMs, samples, staleMs, snapM } = {}) {
           break;
         }
       }
-      // A step this big is a teleport or a change of pocket: draw where the pilot is now.
+      // A step this big, or a dock/death state flip, is a jump: snap instead of blending.
       const span = b.at - a.at;
-      if (span <= 0 || a.place !== b.place || a.pos.distanceToSquared(b.pos) > snap * snap) {
+      if (span <= 0 || a.place !== b.place || a.docked !== b.docked || a.dead !== b.dead || a.pos.distanceToSquared(b.pos) > snap * snap) {
         out.push(poseFrom(b, b.pos.clone(), b.quat.clone(), b.velocity.clone()));
         continue;
       }

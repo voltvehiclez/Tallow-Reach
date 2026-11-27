@@ -154,6 +154,13 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   P.dockedAt = state.time;
   P.v.set(0, 0, 0);
   P.thr = 0;
+  P.acc = 0;
+  P.boost = false;
+  if (P.controls) {
+    P.controls.thrust = P.controls.strafe = P.controls.lift = P.controls.roll = 0;
+    P.controls.stop = P.controls.brake = P.controls.boost = P.controls.fire = P.controls.sec = false;
+    if (P.controls.steer) P.controls.steer.x = P.controls.steer.y = 0;
+  }
   if (profile.ships.includes(profile.ship) && P.hullMax > 0) {
     profile.hp[profile.ship] = Math.max(REPAIR_MIN_HULL, P.hull / P.hullMax);
   }
@@ -177,6 +184,7 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   // own pocket so its named shop can be used.
   const dockedAt = stationAt(placeId) ? placeId : DEFAULT_PLACE;
   if (local) enterPlace(dockedAt, P);
+  else P.place = dockedAt;
   // Park the flown ship in this station's hangar so Outfitting and Inventory scope to it.
   if (profile.ships.includes(profile.ship)) {
     (profile.shipPlaces || (profile.shipPlaces = {}))[profile.ship] = dockedAt;

@@ -242,13 +242,15 @@ function capturePose(e) {
 /** Snapshot active entity and player poses immediately before a 60 Hz sim tick. */
 export function snapshotSimPoses() {
   const P = localPlayer();
-  if (P) capturePose(P);
+  if (P && !state.away) capturePose(P);
   // Step 16 slice 8a: every other pilot is a record too, so its hull interpolates between ticks
   // exactly as the local one does (a visitor is flown by this host's own sim, not by a mesh).
   for (const other of state.players) if (other && other !== P) capturePose(other);
   for (const [, handler] of kinds) {
     for (const e of handler.list()) {
-      if (e) capturePose(e);
+      // Network-mirrored entities (`_net`) are already smoothed per render frame by entityStream;
+      // snapshotting them on a 60 Hz clock against 24 Hz data causes sawtooth jitter.
+      if (e && !e._net) capturePose(e);
     }
   }
 }
@@ -256,12 +258,13 @@ export function snapshotSimPoses() {
 /** Snap the local player's previous pose after teleports (launch, warp, dock). */
 export function snapRenderedPlayer() {
   const P = localPlayer();
-  if (P && (P.snap || P.docked)) capturePose(P);
+  if (P && !state.away && (P.snap || P.docked)) capturePose(P);
 }
 
 /** Interpolated world position for `e` at fractional tick `alpha` (for HUD markers). */
 export function interpolatedPos(e, alpha = frameAlpha, out = new THREE.Vector3()) {
   if (!e || !e.pos) return out;
+  if (e._net) return out.copy(e.pos);
   const p = prevPoses.get(e);
   if (!p || alpha >= 1 || p.pos.distanceToSquared(e.pos) > TELEPORT_DIST_SQ) {
     return out.copy(e.pos);
@@ -272,6 +275,7 @@ export function interpolatedPos(e, alpha = frameAlpha, out = new THREE.Vector3()
 /** Velocity at the same render time as interpolatedPos (for ballistic instruments). */
 export function interpolatedVelocity(e, alpha = frameAlpha, out = new THREE.Vector3()) {
   if (!e?.v) return out.set(0, 0, 0);
+  if (e._net) return out.copy(e.v);
   const p = prevPoses.get(e);
   if (!p?.v || alpha >= 1 || p.pos.distanceToSquared(e.pos) > TELEPORT_DIST_SQ) return out.copy(e.v);
   return out.copy(p.v).lerp(e.v, alpha);
@@ -280,6 +284,15 @@ export function interpolatedVelocity(e, alpha = frameAlpha, out = new THREE.Vect
 /** Interpolated pose for `P` at fractional tick `alpha` (shared by hull view and camera). */
 export function renderPlayerPose(P = localPlayer(), alpha = frameAlpha) {
   if (!P || !P.pos) return P;
+  if (state.away && P === localPlayer()) {
+    _playerPose.pos.copy(P.pos);
+    _playerPose.quat.copy(P.quat);
+    if (P.v) _playerPose.v.copy(P.v);
+    _playerPose.thr = P.thr || 0;
+    _playerPose.bs = P.bs || 0;
+    _playerPose.docked = !!P.docked;
+    return _playerPose;
+  }
   const p = prevPoses.get(P);
   if (
     !p ||
@@ -330,6 +343,11 @@ function initialPose(e, m) {
   return m;
 }
 function updatePose(e, m) {
+  if (e._net) {
+    m.position.copy(e.pos);
+    if (e.quat) m.quaternion.copy(e.quat);
+    return;
+  }
   const p = prevPoses.get(e);
   if (!p || frameAlpha >= 1 || p.pos.distanceToSquared(e.pos) > TELEPORT_DIST_SQ) {
     m.position.copy(e.pos);

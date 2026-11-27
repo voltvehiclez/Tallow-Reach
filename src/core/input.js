@@ -114,6 +114,10 @@ on("navigation-input", () => {
   emit("freecam", false);
 });
 
+on("docked", ({ player } = {}) => {
+  if (!player || player === localPlayer()) clearControls();
+});
+
 // One-shot actions. Left Alt toggles free camera separately through its boolean event.
 export const BINDINGS = {
   KeyN: "navigation",
@@ -183,7 +187,11 @@ export function installInput() {
   addEventListener("blur", clearControls);
 
   addEventListener("mousemove", e => {
-    if (state.ui.navigation || state.paused || modalSurface()) { pointer.x = pointer.y = 0; syncControls(); return; }
+    if (state.ui.navigation || state.paused || state.ui.intro || localPlayer()?.docked || modalSurface()) {
+      pointer.x = pointer.y = 0;
+      syncControls();
+      return;
+    }
     pointer.x = (e.clientX / innerWidth - 0.5) * 2;
     pointer.y = (e.clientY / innerHeight - 0.5) * 2;
     syncControls();
@@ -191,9 +199,10 @@ export function installInput() {
   });
 
   addEventListener("mousedown", e => {
-    // A click inside a modal surface is a click on the panel, never a trigger pull.
-    if (!modalSurface() && !state.ui.navigation && e.button === 0) keys.fire = 1;
-    if (!modalSurface() && !state.ui.navigation && e.button === 2) keys.sec = 1;
+    // A click inside a modal surface (or while docked/paused/on menu) is never a trigger pull.
+    const blockFire = modalSurface() || state.ui.navigation || state.paused || state.ui.intro || localPlayer()?.docked;
+    if (!blockFire && e.button === 0) keys.fire = 1;
+    if (!blockFire && e.button === 2) keys.sec = 1;
     syncControls();
   });
   addEventListener("mouseup", e => {

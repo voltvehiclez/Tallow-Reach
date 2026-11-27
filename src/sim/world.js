@@ -29,3 +29,51 @@ export function clearWorldObjects(placeId = state.place) {
   clearEntities(w.gates);
   clearEntities(w.caches);
 }
+
+/**
+ * Remove every network-mirrored entity (`_net: true`) across all cached pockets,
+ * plus any guest-visit pilot mirror / beam / remote lock state.
+ * Used when returning from a host world or disconnecting so stale host records
+ * (which have no local simulation velocity/direction) never crash local stepSim().
+ */
+export function clearNetEntities() {
+  for (const [placeId, container] of state.places.entries()) {
+    const w = container?.entities;
+    if (!w) continue;
+    for (const e of [...(w.enemies || [])]) if (e?._net === true) dropEnemy(e, placeId);
+    for (const key of ["bullets", "missiles", "crates", "fx", "rifts", "gates", "caches"]) {
+      const list = w[key];
+      if (!Array.isArray(list)) continue;
+      for (const item of [...list]) if (item?._net === true) dropEntity(list, item);
+    }
+  }
+  state.otherPilots = [];
+  if (state.flight) {
+    state.flight.beamOn = false;
+    state.flight.mineFrac = 0;
+    if (state.flight.lock && (state.flight.lock.k === "p" || state.flight.lock.o?._net === true)) {
+      state.flight.lock = null;
+    }
+    if (state.flight.missileLock?.target?._net === true) {
+      state.flight.missileLock = { target: null, t: 0, locked: false };
+    }
+  }
+}
+
+/**
+ * Remove stale non-network transient objects from one pocket when syncing the host's truth
+ * on a visiting guest screen so local boot/single-player NPCs never float frozen beside live ones.
+ */
+export function purgeNonNetEntities(placeId = state.place) {
+  const w = placeWorld(placeId);
+  if (!w) return;
+  for (const e of [...(w.enemies || [])]) if (e && !e._net) dropEnemy(e, placeId);
+  for (const key of ["bullets", "missiles", "fx"]) {
+    const list = w[key];
+    if (!Array.isArray(list)) continue;
+    for (const item of [...list]) if (item && !item._net) dropEntity(list, item);
+  }
+  for (const crate of [...(w.crates || [])]) {
+    if (crate && !crate._net && !crate.persistent) dropEntity(w.crates, crate);
+  }
+}

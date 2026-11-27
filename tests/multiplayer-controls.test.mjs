@@ -137,14 +137,22 @@ function worldWithVisitor() {
   return { P, visitor };
 }
 
-test("slice 8b: a guest's asking is written into its own record, and the host's sim is what moves it", () => {
+test("slice 8b/8c: a docked visitor waits for explicit launch, then flies on host sim from its controls", () => {
   const { visitor } = worldWithVisitor();
   assert.equal(visitor.docked, true, "a visitor arrives docked");
+  // Slice 8c replaced 8b's auto-launch-on-controls stopgap with explicit `Launch` (`mp-guest-dock` -> `launch()`),
+  // so stray/in-flight controls packets never pop a docked guest back into space.
+  const ignored = applyGuestControls("guest-1", { ...THRUST_ON, fire: true, aim: [0, 0, -1] });
+  assert.equal(ignored, false, "controls sent while docked are ignored");
+  assert.equal(visitor.docked, true, "visitor stays parked at the station until Launch");
+  assert.equal(visitor.controls.thrust, 0);
+
+  launch(visitor, visitor.profile);
+  assert.equal(visitor.docked, false, "explicit Launch puts the visitor at the launch point");
   const took = applyGuestControls("guest-1", { ...THRUST_ON, fire: true, aim: [0, 0, -1] });
-  assert.equal(took, true, "a known visitor's asking is accepted");
+  assert.equal(took, true, "a launched visitor's asking is accepted");
   assert.equal(visitor.controls.thrust, 1, "the same field `core/input.js` fills for the local pilot");
   assert.equal(visitor.controls.fire, true);
-  assert.equal(visitor.docked, false, "asking to fly launches the docked visitor: it has no other hull");
   assert.ok(visitor.pos.distanceTo(state.player.pos) > 0, "and it is out at its station's launch point");
 
   const at = visitor.pos.clone();
@@ -193,7 +201,7 @@ test("slice 8b: the sim clamps again, and the aim is normalised into the record"
 
 test("slice 8b: a guest that goes quiet is asked for nothing after `CONTROLS.staleMs`", () => {
   const { visitor } = worldWithVisitor();
-  applyGuestControls("guest-1", { ...THRUST_ON, fire: true, boost: true });
+  launch(visitor, visitor.profile);
   state.time = 0;                       // `applyGuestControls` stamps `inputAt` from the sim clock
   applyGuestControls("guest-1", { ...THRUST_ON, fire: true, boost: true });
   state.time = CONTROLS.staleMs / 1000 - 0.01;
@@ -297,11 +305,21 @@ test("slice 8b: the guest's own send is cleaned, and stops when the session does
   const { guest, guestChannel } = await joined();
   guestChannel.outbound.length = 0;
   const previous = state.localInput;
+  const prevIntro = state.ui.intro;
+  const prevPaused = state.paused;
+  const local = state.players[state.localPlayerIndex];
+  const prevDocked = local?.docked;
+  state.ui.intro = false;
+  state.paused = false;
+  if (local) local.docked = false;
   state.localInput = { ...neutralControls(), thrust: 50, fire: true };
   state.aimDirection = { x: 0, y: 0, z: -1 };
   const sent = guest.sendControls();
   const message = guestChannel.outbound.at(-1)?.value;
   state.localInput = previous;
+  state.ui.intro = prevIntro;
+  state.paused = prevPaused;
+  if (local && prevDocked !== undefined) local.docked = prevDocked;
   assert.equal(sent, true, "the guest sends");
   assert.equal(message.t, "controls", "and it is a controls message");
   assert.equal(message.thrust, 1, "clamped on the way out as well as on the way in");
