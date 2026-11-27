@@ -24,7 +24,7 @@ if (typeof document !== "undefined" && typeof document.addEventListener === "fun
     if (e.target?.id === "menu-username") writeSettings({ ...readSettings(), name: e.target.value });
   });
 }
-import { bringPilotHome, bringPilotHomeAtMenu, requestDock as netRequestDock } from "../net/session.js";
+import { bringPilotHome, bringPilotHomeAtMenu, requestDock as netRequestDock, requestGuestAction } from "../net/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -194,15 +194,11 @@ export function setupMenu(options = {}) {
   on("mp-enter-world", () => {
     if (!state.ui.intro) return;
     enterGameMode("open");
-    // **This is not your friend's world yet, and the game says so** (owner, playtest 21: *"drop me
-    // into the local world, add a pop up that this is not the hosts world (yet)"*). A stand-in
-    // that pretends to be somebody's world is worse than a placeholder that admits it: the pilot
-    // is in Ada's galaxy, not this one, and anything earned here does not go home with it. The
-    // sentence is a notice rather than a card because it has no decision in it — it is news, and
-    // the panel the player just left carries the same words for as long as the visit lasts.
+    // Entering the friend's world shows a brief notice naming the host. Home progress stays
+    // frozen while away, and anything earned or bought comes home in the guest copy.
     if (state.away) {
       const where = state.away.hostName ? `${state.away.hostName}'s world` : "your friend's world";
-      showNotice(`This is your own galaxy, not ${where} — their world on your screen is not built yet (step 16, slice 7). Anything you earn or buy here stays here.`);
+      showNotice(`Visiting ${where}.`);
     }
     // The same landing as the Open World button: a docked pilot gets the station panel,
     // a pilot out in space gets the view.
@@ -219,6 +215,19 @@ export function setupMenu(options = {}) {
   on("mission-ui-refresh", () => {
     if (state.ui.intro || panel.hidden) return;
     render();
+  });
+  on("mp-visit", () => {
+    if (state.ui.intro || !panel || panel.hidden) return;
+    const hasPopover = Boolean(
+      panel?.querySelector?.(".inv-sell-popover, .inv-take-popover, .inv-discard-popover, .shop-buy-popover, .ship-sell-popover, .inv-context") ||
+      leftPanel?.querySelector?.(".inv-sell-popover, .inv-take-popover, .inv-discard-popover, .shop-buy-popover, .ship-sell-popover, .inv-context")
+    );
+    const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+    const typing = Boolean(
+      activeEl?.tagName === "INPUT" &&
+      (panel?.contains?.(activeEl) || leftPanel?.contains?.(activeEl))
+    );
+    if (!hasPopover && !typing) render();
   });
   // Tick this station's contract refresh countdown live once a second while the
   // right-hand Missions (Contract board) tab is visible, without touching any
@@ -296,6 +305,7 @@ export function render() {
 }
 
 function save() {
+  if (state.away) return;
   saveCurrentGame();
 }
 
@@ -609,14 +619,17 @@ const ACTIONS = {
 
   // Contracts
   acc(i) {
+    if (state.away) { requestGuestAction({ op: "acc", slot: +i }); return; }
     toast(contracts.acceptContract(+i));
   },
   ref() {
+    if (state.away) { requestGuestAction({ op: "ref" }); return; }
     // Only this station's board reshuffles, gated by its own 10-minute cooldown.
     const msgText = contracts.refreshBoard(state.worldState, state.place);
     if (msgText) toast(msgText);
   },
   drop(i) {
+    if (state.away) { requestGuestAction({ op: "drop", id: String(i || "") }); return; }
     // Abandon used to be silent; keep that contract-board behavior while the
     // generic runner removes the selected active mission. The button carries a
     // mission id (the panel lists only this station's missions, so a position
@@ -624,6 +637,7 @@ const ACTIONS = {
     contracts.abandonContract(i);
   },
   done(i) {
+    if (state.away) { requestGuestAction({ op: "done", id: String(i || "") }); return; }
     toast(contracts.completeContract(i));
   },
   story(id) {
@@ -647,6 +661,10 @@ const ACTIONS = {
       toast("That mission is already active.");
       return;
     }
+    if (state.away) {
+      requestGuestAction({ op: "story", id });
+      return;
+    }
     const accepted = contracts.acceptMission(definition);
     toast(accepted ? (campaignMode ? "Campaign mission accepted." : "Story mission accepted.") : "Could not start that mission.");
   },
@@ -654,6 +672,12 @@ const ACTIONS = {
   // Stored ships (inside Inventory)
   sel(id) {
     cancelHeldStack();
+    if (state.away) {
+      requestGuestAction({ op: "sel", id });
+      state.ui.invShip = null;
+      state.ui.fit = null;
+      return;
+    }
     const msgText = eco.selectShip(id);
     if (msgText) toast(msgText);
     state.ui.invShip = null;
@@ -661,9 +685,11 @@ const ACTIONS = {
     inventoryChanged();
   },
   buy(id) {
+    if (state.away) { requestGuestAction({ op: "buyShip", id, n: 1 }); return; }
     eco.buyShip(id);
   },
   rp(id) {
+    if (state.away) { requestGuestAction({ op: "rp", id }); return; }
     const msgText = eco.repairShip(id);
     if (msgText) toast(msgText);
   },
@@ -678,11 +704,16 @@ const ACTIONS = {
   wb(arg) {
     const parts = String(arg || "").split(":");
     const [shop, kind, id] = parts.length >= 3 ? parts : [parts[0], null, parts[1]];
+    if (state.away) {
+      requestGuestAction({ op: "buy", shop, kind: kind || "", id, n: 1 });
+      return;
+    }
     const msgText = eco.buyItem(shop, id, 1, state.player, state.profile, state.worldState, kind);
     if (msgText) toast(msgText);
     inventoryChanged();
   },
   wr() {
+    if (state.away) { requestGuestAction({ op: "wr" }); return; }
     toast(eco.restockMissiles());
   },
 
@@ -724,6 +755,16 @@ const ACTIONS = {
     const ship = viewedShip();
     const [from, to] = dir === "s" ? [inv.STATION, ship] : [ship, inv.STATION];
     const count = n === "all" ? Infinity : Math.max(1, +n || 1);
+    if (state.away) {
+      requestGuestAction({
+        op: "invMove",
+        where: from,
+        toWhere: to,
+        id,
+        n: count === Infinity ? 100000 : count,
+      });
+      return;
+    }
     inv.moveItem(from, to, id, count);
     inventoryChanged();
   },
@@ -743,6 +784,10 @@ const ACTIONS = {
   },
   bayUnequip(arg) {
     const [g, i] = String(arg || "").split(":");
+    if (state.away) {
+      requestGuestAction({ op: "bayUnequip", group: g, bay: +i, toWhere: inv.STATION, toSlot: -1 });
+      return;
+    }
     let res = fitting.unequipTo(g, +i, inv.STATION, -1);
     if (!res.ok && state.profile.ship) {
       const alt = fitting.unequipTo(g, +i, state.profile.ship, -1);
@@ -754,22 +799,27 @@ const ACTIONS = {
 
   // Base
   dep() {
+    if (state.away) { requestGuestAction({ op: "dep" }); return; }
     toast(eco.storeHold());
     inventoryChanged();
   },
   wd() {
+    if (state.away) { requestGuestAction({ op: "wd" }); return; }
     eco.withdrawStored();
     inventoryChanged();
   },
   sellh() {
+    if (state.away) { requestGuestAction({ op: "sellh" }); return; }
     toast(eco.sellHold());
     inventoryChanged();
   },
   sells() {
+    if (state.away) { requestGuestAction({ op: "sells" }); return; }
     toast(eco.sellStored());
     inventoryChanged();
   },
   up(mod) {
+    if (state.away) { requestGuestAction({ op: "up", id: mod }); return; }
     eco.upgradeBase(mod);
   },
 
@@ -950,6 +1000,19 @@ function confirmInventorySell(button) {
     return;
   }
   const slotIdx = Number(popover.dataset.slot);
+  if (state.away) {
+    requestGuestAction({
+      op: "invSell",
+      id,
+      where: source,
+      slot: Number.isInteger(slotIdx) ? slotIdx : -1,
+      n: amount,
+    });
+    closePanelPopovers();
+    uiSound("confirm");
+    render();
+    return;
+  }
   const text = eco.sellInventoryItem(
     id,
     source,
@@ -1014,6 +1077,17 @@ function openInventoryDiscard(button) {
     id,
     count,
     onDiscard: (place, item, amount) => {
+      if (state.away) {
+        requestGuestAction({
+          op: "invDiscard",
+          id: item,
+          where: place,
+          slot: Number.isInteger(slotIdx) ? slotIdx : -1,
+          n: amount,
+        });
+        uiSound("confirm");
+        return;
+      }
       toast(inv.discardItem(
         place,
         item,
@@ -1225,6 +1299,13 @@ function confirmShopBuy(node) {
     input?.focus?.();
     return;
   }
+  if (state.away) {
+    requestGuestAction({ op: "buy", shop, kind: kind || "", id, n: amount });
+    closePanelPopovers();
+    uiSound("confirm");
+    render();
+    return;
+  }
   const text = eco.buyItem(shop, id, amount, state.player, state.profile, state.worldState, kind || null);
   if (text) toast(text);
   inventoryChanged();
@@ -1385,6 +1466,12 @@ function confirmHangarShipSell(target) {
   if (!popover) return;
   const shipId = popover.dataset.shipId;
   closePanelPopovers();
+  if (state.away) {
+    requestGuestAction({ op: "sellShip", id: shipId });
+    uiSound("confirm");
+    render();
+    return;
+  }
   const text = eco.sellShip(shipId);
   if (text) toast(text);
   inventoryChanged();
@@ -1703,6 +1790,115 @@ export function finishStationDrag(drag, dropTarget) {
   if (!drag || !dropTarget || typeof dropTarget.closest !== "function") {
     return { ok: false, message: "" };
   }
+  if (state.away) {
+    if (drag.kind === "inv") {
+      const bayBtn = dropTarget.closest("button.mod-bay[data-fit-group][data-fit-bay]");
+      if (bayBtn) {
+        requestGuestAction({
+          op: "fitFrom",
+          where: drag.where,
+          slot: drag.slot,
+          group: bayBtn.dataset.fitGroup,
+          bay: Number(bayBtn.dataset.fitBay),
+          id: drag.id,
+        });
+        return { ok: true, message: "" };
+      }
+      const modCard = dropTarget.closest("section.mod[data-group]");
+      if (modCard && modCard.dataset.group) {
+        const group = modCard.dataset.group;
+        const bays = state.profile.loadout?.[state.profile.ship]?.[group];
+        const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+        requestGuestAction({
+          op: "fitFrom",
+          where: drag.where,
+          slot: drag.slot,
+          group,
+          bay: emptyIdx >= 0 ? emptyIdx : 0,
+          id: drag.id,
+        });
+        return { ok: true, message: "" };
+      }
+      const ownGroup = MODULES[drag.id]?.g || drag.modGroup;
+      const leftBox = dropTarget.closest("#station-left");
+      if (leftBox && ownGroup) {
+        const bays = state.profile.loadout?.[state.profile.ship]?.[ownGroup];
+        const emptyIdx = Array.isArray(bays) ? bays.findIndex(x => !x) : -1;
+        requestGuestAction({
+          op: "fitFrom",
+          where: drag.where,
+          slot: drag.slot,
+          group: ownGroup,
+          bay: emptyIdx >= 0 ? emptyIdx : 0,
+          id: drag.id,
+        });
+        return { ok: true, message: "" };
+      }
+      const slotBtn = dropTarget.closest("button[data-a='invSlot']");
+      if (slotBtn) {
+        const toWhere = slotBtn.dataset.where;
+        const toSlot = Number(slotBtn.dataset.slot);
+        if (!toWhere || !Number.isInteger(toSlot) || (toWhere === drag.where && toSlot === drag.slot)) {
+          return { ok: false, message: "" };
+        }
+        requestGuestAction({ op: "invClick", where: drag.where, slot: drag.slot });
+        requestGuestAction({ op: "invClick", where: toWhere, slot: toSlot });
+        return { ok: true, message: "" };
+      }
+      const invCol = dropTarget.closest(".inv-col[data-inv-where]");
+      if (invCol && invCol.dataset.invWhere && invCol.dataset.invWhere !== drag.where) {
+        requestGuestAction({
+          op: "invClick",
+          where: drag.where,
+          slot: drag.slot,
+          toWhere: invCol.dataset.invWhere,
+          shift: true,
+        });
+        return { ok: true, message: "" };
+      }
+      return { ok: false, message: "" };
+    }
+    if (drag.kind === "bay") {
+      const slotBtn = dropTarget.closest("button[data-a='invSlot']");
+      if (slotBtn && slotBtn.dataset.where) {
+        requestGuestAction({
+          op: "bayUnequip",
+          group: drag.group,
+          bay: drag.bay,
+          toWhere: slotBtn.dataset.where,
+          toSlot: Number(slotBtn.dataset.slot),
+        });
+        return { ok: true, message: "" };
+      }
+      const invCol = dropTarget.closest(".inv-col[data-inv-where]");
+      if (invCol && invCol.dataset.invWhere) {
+        requestGuestAction({
+          op: "bayUnequip",
+          group: drag.group,
+          bay: drag.bay,
+          toWhere: invCol.dataset.invWhere,
+          toSlot: -1,
+        });
+        return { ok: true, message: "" };
+      }
+      const bayBtn = dropTarget.closest("button.mod-bay[data-fit-group][data-fit-bay]");
+      if (bayBtn) {
+        const toGroup = bayBtn.dataset.fitGroup;
+        const toBay = Number(bayBtn.dataset.fitBay);
+        if (toGroup === drag.group && toBay === drag.bay) return { ok: false, message: "" };
+        if (toGroup !== drag.group) {
+          const m = MODULES[drag.id];
+          return {
+            ok: false,
+            message: m ? `${m.n} only fits in its own module group.` : "That module does not fit there.",
+          };
+        }
+        requestGuestAction({ op: "baySwap", group: drag.group, bay: drag.bay, toSlot: toBay });
+        return { ok: true, message: "" };
+      }
+    }
+    return { ok: false, message: "" };
+  }
   if (drag.kind === "inv") {
     const bayBtn = dropTarget.closest("button.mod-bay[data-fit-group][data-fit-bay]");
     if (bayBtn) {
@@ -1996,6 +2192,11 @@ async function onClick(e) {
   }
   if (name === "home") {
     closePanelPopovers();
+    if (state.away) {
+      requestGuestAction({ op: "home" });
+      uiSound("confirm");
+      return;
+    }
     const alreadyHome = homeStationPlace(state.profile) === state.place;
     const msg = setHomeStation();
     if (alreadyHome && state.profile.homeStation === state.place) {
@@ -2088,6 +2289,16 @@ async function onClick(e) {
     const where = btn.dataset.where || inv.STATION;
     const slotIdx = Number(btn.dataset.slot);
     closePanelPopovers();
+    if (state.away) {
+      requestGuestAction({
+        op: "invEquip",
+        id: itemId,
+        where,
+        slot: Number.isInteger(slotIdx) ? slotIdx : -1,
+      });
+      uiSound("click");
+      return;
+    }
     const res = fitting.equipModuleFromInventory(
       where,
       Number.isInteger(slotIdx) ? slotIdx : -1,

@@ -11,12 +11,20 @@ import { spawnStaticEncounter } from "./encounters.js";
 import { restoreMissionDrops } from "./combat.js";
 import { recordSystemVisit } from "./galaxy.js";
 
+/** Restore persisted mission crates at `id` for the host world and any visiting pilots. */
+function restoreAllMissionDrops(id) {
+  restoreMissionDrops(id, state.worldState, "host");
+  for (const p of state.players) {
+    if (p?.guestWorld) restoreMissionDrops(id, p.guestWorld, p.guestId || "host");
+  }
+}
+
 /** Build a place's entities once per session. Safe to call repeatedly. */
 export function loadPlace(id) {
   const container = state.places.get(id) || (placeWorld(id), state.places.get(id));
   if (container.loaded) {
     refreshPlace(id);
-    restoreMissionDrops(id);
+    restoreAllMissionDrops(id);
     return container;
   }
   for (const feature of placeDef(id).features) {
@@ -26,7 +34,7 @@ export function loadPlace(id) {
     // scenery is built by render/ from the same definition on place-entered.
   }
   container.loaded = true;
-  restoreMissionDrops(id);
+  restoreAllMissionDrops(id);
   return container;
 }
 
@@ -77,10 +85,12 @@ export function enterPlace(id, player = state.player) {
   // An instance belongs to no system, so there is no system visit to record for it.
   if (local && !instance) recordSystemVisit(state.galaxy, state.worldState.galaxy?.knowledge, id);
   if ((player ? player.place : state.place) === id) {
+    if (player?.guestWorld) player.guestWorld.place = id;
     if (local) state.place = id;
     return true;
   }
   if (player) player.place = id;
+  if (player?.guestWorld) player.guestWorld.place = id;
   if (local) {
     state.place = id;
     // Slice 14b: a run is a place like any other as far as a save is concerned, so the saved world

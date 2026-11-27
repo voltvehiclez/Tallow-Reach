@@ -334,16 +334,14 @@ test("playtest 21: the visit opens the stand-in world and says it is not your fr
   assert.match(joinBody, /emit\("mp-enter-world", \{\}\)/, "it opens the world");
   assert.match(ui, /model\.visiting && model\.brought && !model\.choosing[\s\S]{0,600}data-mp="join-world">Enter the world</,
     "the button is on the panel with the pilot already here");
-  assert.match(ui, /That is your <strong>own<\/strong> galaxy for now[\s\S]{0,240}slice 7/,
+  assert.match(ui, /You will enter your <strong>friend's<\/strong> world with your pilot's copy/,
     "and the panel says which galaxy it opens, before the press");
 
-  // The pop-up the owner asked for: on the way into the stand-in, in words that name the friend.
+  // The pop-up when entering the friend's world, naming the friend.
   const enter = menu.slice(menu.indexOf('on("mp-enter-world"'));
   const enterBody = enter.slice(0, enter.indexOf("  });") + 5);
   assert.match(enterBody, /if \(state\.away\) \{/, "it only speaks when the pilot is away");
-  assert.match(enterBody, /showNotice\(`This is your own galaxy, not \$\{where\}/, "a notice, not a card");
-  assert.match(enterBody, /slice 7/, "naming what is missing");
-  assert.match(enterBody, /Anything you earn or buy here stays here/, "and the one fact that matters for a save");
+  assert.match(enterBody, /showNotice\(`Visiting \$\{where\}\.`\)/, "a notice, not a card");
   assert.match(enterBody, /state\.away\.hostName/, "in the friend's own name when there is one");
 });
 

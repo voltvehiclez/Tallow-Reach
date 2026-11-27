@@ -1,3 +1,35 @@
+## 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included
+
+**Code change; rebuild needed; build `2026-11-25d`.** Save version unchanged (**29**); no save field,
+no wire change, one row rule.
+
+The owner, after `2026-11-25c` worked: *"Make it so that the filter in N tab for Ships shows ALL ships.
+Both player ships and ALL npc ships. Right now cant see the guest in the N tab."*
+
+**What was wrong.** The N (navigation) list already put every hostile under its **Ship** filter
+(`ui/pocket-list.js`: `pocketType('Hostile') === 'Ship'`), so all NPC ships were there. The **pilot**
+row was the one that went missing: `sim/flight-instruments.js` `pocketObjects` skipped a **docked**
+pilot, on the old reasoning that a hull inside a station is not out in the pocket. But a visitor
+**cannot fly at all yet** (controls are 8b), so it is docked for its entire visit — the row was never
+drawn, on either screen. That is exactly the friend the owner could not find; the same rule hid the
+**host's** own hull from a guest's list while the host sat at a station.
+
+**The fix, in one line of rule:** a pilot's row is skipped only when it is **dead** or in **another
+pocket**. Docked or flying, it is a ship in this sky — its hull is drawn parked at the launch point its
+arrival put it on and, since `2026-11-25c`, it is solid and takes damage. So the **Ship** filter is now
+one place where every ship appears: every NPC ship, every other player's ship, and (on a guest) the
+host's ship. The row carries the pilot's own name and locks as a pilot (`k: "p"`), so its hull/shield
+bars come with it, and a second click releases it, exactly like any other row.
+
+**Tests:** `tests/multiplayer-pilot-lock.test.mjs` grew three (now **14**): a docked and a flying pilot
+are both `Ship` rows and both survive the Ship-only filter with the pilot's name on them; a dead pilot
+and one in another pocket are not rows; and a **parked** visitor's row takes the same pilot lock a
+flying one does (`tests/multiplayer-damage.test.mjs` and the rest unchanged). The old
+"a docked friend is not a list row" test was **replaced**, not deleted quietly — it encoded the rule
+that hid the friend.
+
+`npm test` **1106/1106**, build 3596 KB. CTRL+SHIFT+R, then check **Connection details** reads
+
 ## 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
 
 **Code change; rebuild needed; build `2026-11-25c`.** Save version unchanged (**29**): one repair

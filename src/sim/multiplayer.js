@@ -34,7 +34,7 @@
 // — same losses, fee and home-station fallback as the local pilot, docked at that station —
 // which is what `player-dead` reaches for every record.
 
-import { emit, on } from "../util/events.js";
+import { emit } from "../util/events.js";
 import { state } from "../state/state.js";
 import { createPlayerRecord } from "./player.js";
 import { configurePlayer } from "./session.js";
@@ -42,6 +42,15 @@ import { CONTROLS } from "../data/multiplayer.js";
 import { stationAt } from "./places.js";
 import { isPocket, DEFAULT_PLACE } from "../data/places.js";
 import { neutralControls } from "../state/controls.js";
+import {
+  cancelGuestHeld,
+  createGuestWorld,
+  guestLockerSnapshot,
+  guestProfileSnapshot,
+  runGuestAction,
+} from "./guest-actions.js";
+
+export { cancelGuestHeld, guestLockerSnapshot, guestProfileSnapshot };
 
 /** The visiting pilots this world is holding, by guest id. Runtime only, never saved. */
 const guests = new Map();
@@ -76,7 +85,7 @@ export function arrivalPlace(profile = null, requested = null) {
  * Returns the record. Refuses (and says so) rather than throwing: a bad suitcase must
  * cost the guest its visit, never the host's game.
  */
-export function arriveGuest({ guestId, name = "", profile = null, place = null } = {}) {
+export function arriveGuest({ guestId, name = "", profile = null, place = null, lockers = [] } = {}) {
   const id = typeof guestId === "string" ? guestId.trim() : "";
   if (!id) return null;
   if (!profile || typeof profile !== "object") return null;
@@ -89,6 +98,12 @@ export function arriveGuest({ guestId, name = "", profile = null, place = null }
   P.guestId = id;
   P.name = String(name || "").slice(0, 40);
   P.place = arrivalPlace(profile, place);
+  // Per-visitor persistent world/station storage, boards and drop state (never shared with the host).
+  const seeded = createGuestWorld(P.place, lockers);
+  P.guestWorld = seeded.world;
+  P.guestLockerOrigins = seeded.origins;
+  P.guestUnknownLockers = seeded.unknownLockers;
+  P.guestHeld = null;
   // Docked, with the station's own launch point as its position, so a snapshot has
   // somewhere sane to be even before the guest undocks.
   const station = stationAt(P.place);
@@ -113,6 +128,12 @@ export function arriveGuest({ guestId, name = "", profile = null, place = null }
   return P;
 }
 
+/** Execute one validated `act` request from `guestId` against its own live `(P, profile, guestWorld)`. */
+export function executeGuestAction(guestId, action) {
+  const P = guestRecordOf(typeof guestId === "string" ? guestId.trim() : "");
+  return runGuestAction(P, action);
+}
+
 /**
  * The visitor goes home (or was kicked). Its record leaves the world; the suitcase is
  * `net/`'s business and is already the newest copy by the time this runs.
@@ -121,6 +142,7 @@ export function leaveGuest(guestId) {
   const id = typeof guestId === "string" ? guestId.trim() : "";
   const entry = guests.get(id);
   if (!entry) return false;
+  cancelGuestHeld(entry.player);
   guests.delete(id);
   const at = state.players.indexOf(entry.player);
   if (at >= 0) state.players.splice(at, 1);

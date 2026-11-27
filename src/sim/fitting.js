@@ -47,7 +47,8 @@ function activeShipHere(profile = state.profile, world = state.worldState) {
   if (!ship || !shipDef(ship) || !Array.isArray(profile?.ships) || !profile.ships.includes(ship)) {
     return false;
   }
-  if (!profile.shipAt || !profile.shipAt[ship]) return true;
+  const hasPlace = (profile.shipPlaces && profile.shipPlaces[ship]) || (profile.shipAt && profile.shipAt[ship]);
+  if (!hasPlace) return true;
   const here = world === state.worldState ? state.place : (world?.place || state.place);
   return shipStation(profile, ship, here) === here;
 }
@@ -74,9 +75,9 @@ function bayList(group, i, profile = state.profile) {
  * Spare parts in storage that would fit a `group` bay, in the order they
  * arrived: one entry per part, so three beams are three "beam_basic"s.
  */
-export function storedFor(group, world = state.worldState) {
+export function storedFor(group, world = state.worldState, profile = state.profile) {
   const out = [];
-  for (const { id, n } of itemsAt(STATION, state.profile, world)) {
+  for (const { id, n } of itemsAt(STATION, profile, world)) {
     if (!isModule(id) || MODULES[id].g !== group) continue;
     for (let i = 0; i < n; i++) out.push(id);
   }

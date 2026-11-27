@@ -58,7 +58,11 @@ export function stepSim(dt) {
   // (`CONTROLS.staleMs`), so a closed tab cannot leave a hull flying on into a rock.
   ageGuestControls();
   updatePlaceMemory(dt);
+  // Update contract cooldown timers for the local world and each visitor's world.
   updateContractTimers(dt);
+  for (const p of state.players) {
+    if (p?.guestWorld) updateContractTimers(dt, p.guestWorld);
+  }
   // A hint lasts until the next sim tick, not just a display frame. This keeps
   // it visible when a display renders more than once between sim ticks.
   state.hud.prompt = "";

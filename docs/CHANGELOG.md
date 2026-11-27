@@ -18,6 +18,19 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Guest ship, station, inventory/fitting, and mission sync + owner isolation (build `2026-11-27b`)
+
+**Code change; rebuild needed; build `2026-11-27b`.** Save version unchanged (**29**). Wire adds two allowlisted/capped kinds (`act` guest→host and `visit` host→guest) plus optional mission/owner metadata on `entities` (`enemies`/`crates`).
+
+Implemented full host-authoritative state synchronization for visiting guests while preserving host/guest mission, inventory, and save-custody isolation:
+
+1. **Authoritative guest world & 36 `ACT_OPS` actions (`src/sim/guest-actions.js`, `src/sim/multiplayer.js`):** Each guest gets an isolated `P.guestWorld` (`stationStores`, `stationSlots`, `boards`, `base`, `missionState`) seeded with arrived lockers and preserved unknown items. `runGuestAction` executes `pw`/`sw` weapon selection, inventory/cursor-hold drag-drop (`guestHeld`), outfitting bay equip/swap/unequip, shop/hangar/shipyard (`buyShip` directly via `economy.js`), contracts, and story dialogue/choices strictly on `(P, P.profile, P.guestWorld)`. `guestProfileSnapshot`/`guestLockerSnapshot` fold live cursor holds non-destructively during suitcase write-backs.
+2. **Wire protocol & session loop (`src/net/protocol.js`, `src/net/session.js`, `src/data/multiplayer.js`):** Added `act` / `visit` cleaning & limits (`cleanAct`, `cleanHeld`, `cleanVisit`), peer-verified `onAct`, dirty-checked `pushVisit`/`pushVisitIfDirty`, module-level `mp-guest-visit-push` forwarding, and `requestGuestAction`. Preserved `state.guestHome` in `saveKit.read`/`install` and guarded `saveCurrentGame()` (`src/state/state.js`) to return `null` while `state.away` is set.
+3. **Mission/HUD owner isolation (`src/sim/{missions,combat,contracts,ai,economy,fitting,places,session,step}.js`, `src/state/profile.js`, `src/ui/mission-hud.js`, `src/render/entitystream.js`):** Stamped non-host `mission.owner`, isolated mission spawns/kills/drops per owner while leaving ambient kills shared, filtered HUD objective highlights by `viewerOwner`, and carried `missionId`/`encounter`/`missionOwner` across `entities` sync.
+4. **Guest client UI & anti-bounce wiring (`src/main.js`, `src/ui/{menu,inventory-ui,cargo,missionlog,multiplayer}.js`):** Registered `installMultiplayerShips` before `setupMenu` so `applyVisitSnapshot` runs before UI redraws; added `stashGuestHome` rejoin/replay on `mp-enter-world`, `withinShipGrace` (`300 ms`), `withinDockGrace` (`250 ms`), and `latestSlotReqId` anti-bounce; routed docked/cargo/inventory/dialogue/weapon-slot interactions to `requestGuestAction`; and updated entering-world notice/hint copy.
+
+**Tests:** Added `tests/multiplayer-guest-sync.test.mjs` (**5** suites) and updated `tests/multiplayer-connection.test.mjs` and `tests/multiplayer-playtest16.test.mjs`.
+
 ## 2026-11-27: Slice 8c playtest fixes (build `2026-11-27a`) — pause-menu toggle, docked stability, clean return home, and smooth guest enemies/SFX
 
 **Code change; rebuild needed; build `2026-11-27a` (`npm run build` 3625 KB).** Save version unchanged (**29**); no saved field or wire format changes.
@@ -239,39 +252,9 @@ does not **respawn** (step 16's *death and recovery* debt). No save change anywh
 Merged to `main`. Next: **8b** (a guest's controls reach the host), then 8c, then **6** (trading —
 last, by the owner's order 2026-11-24). Guide: [../testing/TESTING-16-SLICE8A.md](../testing/TESTING-16-SLICE8A.md).
 
-## 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included
-
-**Code change; rebuild needed; build `2026-11-25d`.** Save version unchanged (**29**); no save field,
-no wire change, one row rule.
-
-The owner, after `2026-11-25c` worked: *"Make it so that the filter in N tab for Ships shows ALL ships.
-Both player ships and ALL npc ships. Right now cant see the guest in the N tab."*
-
-**What was wrong.** The N (navigation) list already put every hostile under its **Ship** filter
-(`ui/pocket-list.js`: `pocketType('Hostile') === 'Ship'`), so all NPC ships were there. The **pilot**
-row was the one that went missing: `sim/flight-instruments.js` `pocketObjects` skipped a **docked**
-pilot, on the old reasoning that a hull inside a station is not out in the pocket. But a visitor
-**cannot fly at all yet** (controls are 8b), so it is docked for its entire visit — the row was never
-drawn, on either screen. That is exactly the friend the owner could not find; the same rule hid the
-**host's** own hull from a guest's list while the host sat at a station.
-
-**The fix, in one line of rule:** a pilot's row is skipped only when it is **dead** or in **another
-pocket**. Docked or flying, it is a ship in this sky — its hull is drawn parked at the launch point its
-arrival put it on and, since `2026-11-25c`, it is solid and takes damage. So the **Ship** filter is now
-one place where every ship appears: every NPC ship, every other player's ship, and (on a guest) the
-host's ship. The row carries the pilot's own name and locks as a pilot (`k: "p"`), so its hull/shield
-bars come with it, and a second click releases it, exactly like any other row.
-
-**Tests:** `tests/multiplayer-pilot-lock.test.mjs` grew three (now **14**): a docked and a flying pilot
-are both `Ship` rows and both survive the Ship-only filter with the pilot's name on them; a dead pilot
-and one in another pocket are not rows; and a **parked** visitor's row takes the same pilot lock a
-flying one does (`tests/multiplayer-damage.test.mjs` and the rest unchanged). The old
-"a docked friend is not a list row" test was **replaced**, not deleted quietly — it encoded the rule
-that hid the friend.
-
-`npm test` **1106/1106**, build 3596 KB. CTRL+SHIFT+R, then check **Connection details** reads
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included
 - 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
 - 2026-11-25: Playtest 23 — a friend can be selected, and a pilot can always come back
 - 2026-11-25: Step 16 slice 8a — the second hull, and the snapshots under it

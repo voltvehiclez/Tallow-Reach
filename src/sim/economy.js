@@ -65,10 +65,10 @@ function assertEconomyPilot(P, profile) {
 export const holdLoad = (profile = state.profile) => loadOf(profile.ship, profile);
 
 /** m³ in use in the station's storage: ore plus spare modules. */
-export const storedUnits = (world = state.worldState) => loadOf(STATION, state.profile, world);
+export const storedUnits = (world = state.worldState, profile = state.profile) => loadOf(STATION, profile, world);
 
 /** The station's storage capacity in m³. */
-export const storageCap = (world = state.worldState) => capacityOf(STATION, state.profile, world);
+export const storageCap = (world = state.worldState, profile = state.profile) => capacityOf(STATION, profile, world);
 
 /** Repair cost for a ship. Costs rise steeply with damage. Hull HP come from the
  *  fitted hull module — no module fitted means nothing to repair, and a free repair. */

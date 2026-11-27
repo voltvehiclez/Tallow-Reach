@@ -17,7 +17,7 @@ import { itemName } from "../data/items.js";
 import { placeAt } from "../data/places.js";
 import { shipDef } from "../data/ships.js";
 import { enemyDef } from "../data/enemies.js";
-import { state, msg, say, localPlayer, profileOf, placeWorld } from "../state/state.js";
+import { state, msg, say, localPlayer, profileOf, placeWorld, ownerOf, playerByOwner, worldByOwner } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
@@ -45,8 +45,8 @@ function sparks(hit, placeId) {
   boom({ x: hit.x, y: hit.y, z: hit.z }, 4, 0xffd9a0, placeId);
 }
 
-function missionDropList(placeId, create = true) {
-  const world = state.worldState;
+function missionDropList(placeId, create = true, world = state.worldState) {
+  if (!world || typeof world !== "object") return [];
   const states = world.missionState;
   if (!create && (!states || typeof states !== "object" || Array.isArray(states))) return [];
   if (!world.missionState || typeof world.missionState !== "object" || Array.isArray(world.missionState)) {
@@ -83,13 +83,13 @@ function sameMissionDrop(drop, missionId, item, slot = null) {
   return slot == null ? own == null : own === slot;
 }
 
-function missionDropFor(placeId, missionId, item, slot = null) {
-  return missionDropList(placeId, false).find(drop => sameMissionDrop(drop, missionId, item, slot)) || null;
+function missionDropFor(placeId, missionId, item, slot = null, world = state.worldState) {
+  return missionDropList(placeId, false, world).find(drop => sameMissionDrop(drop, missionId, item, slot)) || null;
 }
 
 /** The lowest crate slot this mission has not used yet in a place. */
-export function nextMissionCrateSlot(placeId, missionId, item) {
-  const used = new Set(missionDropList(placeId, false)
+export function nextMissionCrateSlot(placeId, missionId, item, world = state.worldState) {
+  const used = new Set(missionDropList(placeId, false, world)
     .filter(drop => drop && drop.missionId === missionId && drop.item === item)
     .map(drop => crateSlotOf(drop.slot))
     .filter(slot => slot != null));
@@ -104,8 +104,8 @@ function missionDropPosition(drop) {
     : null;
 }
 
-function rememberMissionDrop(placeId, missionId, item, pos, slot = null) {
-  const drops = missionDropList(placeId);
+function rememberMissionDrop(placeId, missionId, item, pos, slot = null, world = state.worldState) {
+  const drops = missionDropList(placeId, true, world);
   const existing = drops.find(drop => sameMissionDrop(drop, missionId, item, slot));
   if (existing) return existing;
   const record = {
@@ -121,7 +121,8 @@ function rememberMissionDrop(placeId, missionId, item, pos, slot = null) {
 
 function saveMissionDropPosition(crate) {
   if (!crate?.missionId || !crate.persistent) return;
-  const drops = missionDropList(crate.place || state.place, false);
+  const world = worldByOwner(crate.missionOwner || "host");
+  const drops = missionDropList(crate.place || state.place, false, world);
   const record = drops.find(drop => sameMissionDrop(drop, crate.missionId, crate.item, crate.crateSlot));
   if (record && record.collected !== true) {
     record.pos = [Number(crate.pos.x) || 0, Number(crate.pos.y) || 0, Number(crate.pos.z) || 0];
@@ -129,9 +130,10 @@ function saveMissionDropPosition(crate) {
 }
 
 /** Mark a mission crate collected, or remove it when its mission is abandoned. */
-export function removeMissionDrop(crate, collected = false) {
+export function removeMissionDrop(crate, collected = false, world = null) {
   if (!crate?.missionId || !crate.persistent) return;
-  const drops = missionDropList(crate.place || state.place, false);
+  const ownerWorld = world || worldByOwner(crate.missionOwner || "host");
+  const drops = missionDropList(crate.place || state.place, false, ownerWorld);
   const index = drops.findIndex(drop => sameMissionDrop(drop, crate.missionId, crate.item, crate.crateSlot));
   if (index < 0) return;
   if (collected) drops[index].collected = true;
@@ -139,9 +141,9 @@ export function removeMissionDrop(crate, collected = false) {
 }
 
 /** Remove all persisted drops owned by one mission, including already-collected markers. */
-export function clearMissionDrops(missionId) {
-  if (!missionId) return;
-  const stateByPlace = state.worldState?.missionState;
+export function clearMissionDrops(missionId, world = state.worldState) {
+  if (!missionId || !world) return;
+  const stateByPlace = world.missionState;
   if (!stateByPlace || typeof stateByPlace !== "object" || Array.isArray(stateByPlace)) return;
   for (const place of Object.keys(stateByPlace)) {
     const drops = stateByPlace[place]?.drops;
@@ -153,33 +155,36 @@ export function clearMissionDrops(missionId) {
 }
 
 /** Rebuild uncollected mission crates when a saved pocket is loaded. */
-export function restoreMissionDrops(placeId = state.place) {
+export function restoreMissionDrops(placeId = state.place, world = state.worldState, owner = "host") {
   const W = placeWorld(placeId);
-  const drops = missionDropList(placeId, false);
+  const ownerId = owner || "host";
+  const drops = missionDropList(placeId, false, world);
   for (const drop of [...drops]) {
     if (!drop || drop.collected || !drop.missionId || !drop.item) continue;
     const slot = crateSlotOf(drop.slot);
     if (W.crates.some(crate =>
-      crate.persistent && sameMissionDrop(crate, drop.missionId, drop.item, slot))) continue;
+      crate.persistent && (crate.missionOwner || "host") === ownerId && sameMissionDrop(crate, drop.missionId, drop.item, slot))) continue;
     const pos = missionDropPosition(drop);
-    if (pos) spawnCrate(pos, drop.item, placeId, null, null, drop.missionId, true, slot);
+    if (pos) spawnCrate(pos, drop.item, placeId, null, null, drop.missionId, true, slot, ownerId, world);
   }
 
   // A pre-physical-flow v19 save can already be waiting at Border Signal's
   // collect step without a mission-drop record: the old script handed the item
   // out directly and never saved a defeat position. Give that save one safe,
   // deterministic crate at the pocket arrival point rather than soft-locking it.
-  for (const mission of state.profile?.missions || []) {
+  const pilot = playerByOwner(ownerId);
+  const profile = pilot ? profileOf(pilot) : (ownerId === "host" ? state.profile : null);
+  for (const mission of profile?.missions || []) {
     // Only a mission that is still ON its collect step needs a legacy crate;
     // a failed one is gone and a finished one is past every step.
     if (mission.failed) continue;
     const step = mission.steps?.[mission.step ?? mission.current];
     if (step?.kind !== "collect" || step.missionItem !== true || step.place !== placeId || !step.item) continue;
     if (drops.some(drop => drop?.missionId === mission.id && drop.item === step.item)) continue;
-    if (W.crates.some(crate => crate.missionId === mission.id && crate.item === step.item && crate.persistent)) continue;
+    if (W.crates.some(crate => crate.missionId === mission.id && crate.item === step.item && crate.persistent && (crate.missionOwner || "host") === ownerId)) continue;
     const arrival = placeAt(placeId)?.enter?.pos;
     const pos = Array.isArray(arrival) && arrival.length === 3 ? V(...arrival) : V(0, 0, 0);
-    spawnCrate(pos, step.item, placeId, null, null, mission.id);
+    spawnCrate(pos, step.item, placeId, null, null, mission.id, true, null, ownerId, world);
   }
 }
 
@@ -250,6 +255,7 @@ function killHostile(e, byPlayer = undefined, placeId = e.place || state.place) 
     player: byPlayer,
     place: placeId,
     encounter: e.encounter || null,
+    missionOwner: e.missionOwner || null,
   });
 
   // Every hostile keeps its ordinary authored loot. A mission's authored item is
@@ -258,6 +264,8 @@ function killHostile(e, byPlayer = undefined, placeId = e.place || state.place) 
   const missionId = String(e.encounter || "").startsWith("mission:")
     ? String(e.encounter).slice("mission:".length)
     : null;
+  const dropOwner = e.missionOwner || "host";
+  const dropWorld = worldByOwner(dropOwner);
   const authoredDrops = Array.isArray(e.dropOnDefeat)
     ? e.dropOnDefeat
     : e.dropOnDefeat && typeof e.dropOnDefeat === "object"
@@ -270,14 +278,14 @@ function killHostile(e, byPlayer = undefined, placeId = e.place || state.place) 
       // Ordinary loot remains ordinary loot even when it came from a mission
       // wave. It keeps the normal expiry and pickup behavior, while its mission
       // tag still lets abandonment clear the scripted wave's leftovers.
-      spawnCrate(scattered(enemyPos(e), scatter), drop.item, placeId, null, null, missionId, false);
+      spawnCrate(scattered(enemyPos(e), scatter), drop.item, placeId, null, null, missionId, false, null, dropOwner);
     }
   }
   for (const drop of authoredDrops) {
     const count = Math.max(1, Math.floor(+drop.count || 1));
     const scatter = Math.max(0, Number(drop.scatter) || 0);
     for (let k = 0; k < count; k++) {
-      spawnCrate(scattered(enemyPos(e), scatter), drop.item, placeId, null, null, missionId, true);
+      spawnCrate(scattered(enemyPos(e), scatter), drop.item, placeId, null, null, missionId, true, null, dropOwner, dropWorld);
     }
   }
   if (!byPlayer || byPlayer === state.player) msg("Hostile destroyed", 2);
@@ -298,21 +306,25 @@ export function spawnCrate(
   missionId = null,
   persistent = !!missionId,
   crateSlot = null,
+  missionOwner = null,
+  world = worldByOwner(missionOwner || "host"),
 ) {
   const W = placeWorld(placeId);
   const slot = missionId && persistent ? crateSlotOf(crateSlot) : null;
+  const ownerId = missionId ? (missionOwner || "host") : null;
   let at = V(p.x, p.y, p.z);
   if (missionId && persistent) {
-    const saved = missionDropFor(placeId, missionId, item, slot);
+    const saved = missionDropFor(placeId, missionId, item, slot, world);
     if (saved?.collected) return null;
     const existing = W.crates.find(crate =>
       crate.missionId === missionId && crate.item === item && crate.persistent &&
+      (crate.missionOwner || "host") === ownerId &&
       (slot == null ? crateSlotOf(crate.crateSlot) == null : crateSlotOf(crate.crateSlot) === slot)
     );
     if (existing) return existing;
     const savedPos = missionDropPosition(saved);
     if (savedPos) at = savedPos;
-    else rememberMissionDrop(placeId, missionId, item, at, slot);
+    else rememberMissionDrop(placeId, missionId, item, at, slot, world);
   }
   const e = {
     kind: "crate",
@@ -320,6 +332,7 @@ export function spawnCrate(
     encounter,
     encounterType,
     missionId,
+    missionOwner: ownerId,
     persistent: !!missionId && persistent,
     crateSlot: slot,
     pos: at,
@@ -426,7 +439,10 @@ export function updateCrates(dt, placeId = state.place) {
   for (let i = C.length - 1; i >= 0; i--) {
     const c = C[i];
     if (!c || C.indexOf(c) === -1) continue;
-    const candidates = active.map(p => {
+    const pool = c.missionId && c.persistent && c.missionOwner
+      ? active.filter(p => ownerOf(p) === c.missionOwner)
+      : active;
+    const candidates = pool.map(p => {
       const q = playerPos(p).clone().sub(c.pos);
       return { p, q, d: q.length() };
     });
@@ -470,6 +486,7 @@ export function updateCrates(dt, placeId = state.place) {
           place: placeId,
           missionId: c.missionId || null,
           missionItem: !!c.persistent,
+          missionOwner: c.missionOwner || null,
           encounter: c.encounter,
           encounterType: c.encounterType || null,
         });

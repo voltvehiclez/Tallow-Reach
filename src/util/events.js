@@ -158,6 +158,13 @@
 //                                    world; `main.js` fills it from `state.players` with
 //                                    `net/ships.js`. Synchronous, like the suitcase request
 //   mp-ships      { ships, at }     the host's ship snapshots arrived (guest side);
+//   mp-guest-act  { guestId, action, answered, result }
+//                                    host side: a guest requested an authoritative UI/station/inventory/slot action
+//   mp-guest-visit-request { guestId, answered, snapshot }
+//                                    host side: net/ asks main.js for the live guest visit snapshot
+//   mp-guest-visit-push { guestId, ackReqId?, notice?, sound? }
+//                                    host side: push an immediate authoritative `visit` snapshot to one guest
+//   mp-visit      snapshot          guest side: authoritative host snapshot (profile, guestWorld, held, ship stats) arrived
 //                                    `render/shipstream.js` buffers them and interpolates
 
 const handlers = new Map();
