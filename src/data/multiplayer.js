@@ -115,7 +115,7 @@ export const SHIP_FIELDS = [
                // own camera on a screen that shows it (the engine glow reads it)
   "shake",     // camera shake amplitude 0..1, decayed on the simulation clock; a guest's own
                // boost shake rides the host's clock like everything else of that ship
-  // --- the weapon-effects block (2026-11-26, build `26c`): the own ship's weapons must look and
+  // --- the weapon-effects block (2026-11-26, build `2026-11-26b`): the own ship's weapons must look and
   // sound the same to a visiting pilot as they do single-player. `shots`/`missiles`/`locks`/`ore`/
   // `hits`/`boosts` are monotonically increasing event counters (u16, wraps); the own screen plays
   // each counter's sound locally when it advances — a packet that loses a beat collapses two shots
