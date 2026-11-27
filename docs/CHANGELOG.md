@@ -18,6 +18,17 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Fix guest `G` docking and undocked relog HUD/reticle (build `2026-11-27d`)
+
+**Code change; rebuild needed; build `2026-11-27d`.** Save version unchanged (**29**); no save or wire schema changes.
+
+Fixed two live-playtest integration bugs found in `2026-11-27c`:
+
+1. **Guest `G` docking (`src/main.js`).** Imported missing `cancelGuestHeld` from `./sim/multiplayer.js` (previously throwing `ReferenceError` inside `mp-guest-dock`'s `try/catch` and sending an empty notice back to the guest), and added `console.error` + guarded `reportCrash` logging in `mp-guest-dock`, `mp-guest-warp`, `applyVisitSnapshot`, and `restoreGuestHome` so no net-side failure fails silently.
+2. **Undocked guest relog HUD and reticle (`src/ui/menu.js`, `src/ui/hud.js`, `src/util/events.js`, `src/main.js`).** `enterGameMode("open")` now emits `"open-world-entered"` after clearing `state.ui.intro`, and `ui/hud.js` attaches `syncWorldHud` to `"open-world-entered"` and `"mp-refresh-visit"` (clearing route/weapon-slot caches and calling `setReticle(Boolean(state.player && !state.player.docked))`). Also fixed `mp-refresh-visit` in `src/main.js` to pass `latestSelf[0]` instead of the `Pose[]` array to `applySelfShip`.
+
+**Tests:** Extended `tests/multiplayer-playtest-20261127.test.mjs` with an esbuild whole-bundle undeclared-call guard (`src/main.js`) and a two-VM real `src/main.js` end-to-end playtest covering `KeyG` docking (`cancelGuestHeld` + `docked` + HUD/panel sync), contract accept/progress/hand-in, abrupt disconnect, and undocked relog HUD/reticle recovery. **Docs:** Updated `docs/HANDOFF.md`, `docs/LESSONS.md` (`L54`; moved `L42`–`L44` to `docs/archive/MULTIPLAYER_SLICE4_5_LESSONS.md`), `docs/architecture/multiplayer.md`, and `src/ui/README.md`.
+
 ## 2026-11-27: Post-8c live playtest fixes (build `2026-11-27c`) — guest HUD speed, docking, per-host `visitState` persistence, and UI resume guard
 
 **Code change; rebuild needed; build `2026-11-27c` (`npm run build` 3660 KB).** Save version unchanged (**29**; additive `visitState` field on `world.guests[guestId]` listed in `GUEST_FIELDS`).
@@ -238,35 +249,9 @@ session. `tests/multiplayer-connection.test.mjs`'s exhaustive `KINDS` list gaine
 details** reads **`2026-11-25e`**, then follow `testing/TESTING-16-SLICE8B.md` — bring the pilot in,
 and watch the **host's** screen while the guest presses W: the friend's hull launches and flies.
 
-## 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
-
-**No code change; no rebuild needed — the build the owner passed is `2026-11-25d`.** Save version
-**29**, unchanged.
-
-*"Play test 8a passed."* That closes slice 8a, and with it the whole of step 16's **"one world, two
-ships"** half: host-authoritative ship snapshots at 24 Hz, a guest drawing every other pilot as a
-**view** (100 ms behind, interpolated, never guessed), the host drawing its visiting record with no
-wire at all, and the guest outside its own hull.
-
-What the passing round actually covers, because three fixes went in after the first playtest of it:
-
-- a friend's hull is **selectable** — **F** on the hull, or the **N** list's **Ship** filter, which
-  now carries **every** ship (NPC and player, docked included) — wearing **the pilot's own name** and
-  showing **hull/shield bars** like any other ship;
-- **leaving and rejoining the same link works**, including from a browser an older build had locked
-  out (the record that holds no secret cannot refuse anybody, and the host repairs it);
-- a visiting hull is **solid and takes damage** — collision, bolts, warheads, shields first — and its
-  destruction is said in words on both screens.
-
-Known and deliberate, carried into the remaining slices: a visitor **cannot fly** in the host's world
-(controls are **8b**), its screen does not follow the host's pocket (**8c**), and a destroyed visitor
-does not **respawn** (step 16's *death and recovery* debt). No save change anywhere in 8a.
-
-Merged to `main`. Next: **8b** (a guest's controls reach the host), then 8c, then **6** (trading —
-last, by the owner's order 2026-11-24). Guide: [../testing/TESTING-16-SLICE8A.md](../testing/TESTING-16-SLICE8A.md).
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
 - 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included
 - 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
 - 2026-11-25: Playtest 23 — a friend can be selected, and a pilot can always come back

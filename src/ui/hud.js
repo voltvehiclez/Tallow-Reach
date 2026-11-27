@@ -306,6 +306,14 @@ export function setupHud() {
     weaponSlotsCache = null;
     setReticle(true);
   });
+  const syncWorldHud = () => {
+    if (state.ui.intro) return;
+    routeCache = null;
+    weaponSlotsCache = null;
+    setReticle(Boolean(state.player && !state.player.docked));
+  };
+  on("open-world-entered", syncWorldHud);
+  on("mp-refresh-visit", syncWorldHud);
   on("campaign-act-entered", () => {
     weaponSlotsCache = null;
     setReticle(Boolean(state.player && !state.player.docked));

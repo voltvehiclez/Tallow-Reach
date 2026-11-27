@@ -46,6 +46,7 @@ import {
   guestPlayers,
   applyGuestControls,
   executeGuestAction,
+  cancelGuestHeld,
   guestLockerSnapshot,
   guestProfileSnapshot,
   guestVisitStateSnapshot,
@@ -346,7 +347,7 @@ function restoreGuestHome() {
   }
   if (typeof id === "string" && id) {
     const wasDocked = P?.docked === true;
-    try { simEnterPlace(id, P); } catch (e) {}
+    try { simEnterPlace(id, P); } catch (e) { console.error("[restoreGuestHome] enter place failed", e); }
     showPlace(state.place);
     if (P) {
       P.warp = null;
@@ -361,7 +362,7 @@ function restoreGuestHome() {
         refreshGuns(P);
       }
       if (!state.ui.intro && P.docked !== wasDocked) {
-        try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {}
+        try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) { console.error("[restoreGuestHome] event failed", e); }
       }
     }
   }
@@ -437,7 +438,9 @@ function applyVisitSnapshot(visit) {
           state.place = visit.place;
           emit("place-entered", { id: visit.place, player: P });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("[applyVisitSnapshot] enter place failed", e);
+      }
     }
     const wantDocked = visit.docked === true;
     if (wantDocked !== lastVisitDockState) {
@@ -452,7 +455,9 @@ function applyVisitSnapshot(visit) {
         syncSpeedFromVelocity(P, Boolean(P.warp));
       }
       P.snap = true;
-      try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {}
+      try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {
+        console.error("[applyVisitSnapshot] event failed", e);
+      }
     }
   }
 
@@ -466,7 +471,9 @@ function applyVisitSnapshot(visit) {
         message: newlyFailed.failureMessage || "It can no longer be completed.",
         player: P,
       });
-    } catch (e) {}
+    } catch (e) {
+      console.error("[applyVisitSnapshot] mission-failed event failed", e);
+    }
   }
   if (visit.notice) notify(visit.notice);
   if (visit.sound) uiSound(visit.sound);
@@ -498,7 +505,7 @@ function installMultiplayerShips() {
     if (isGuestVisiting() && lastVisitSnapshot) {
       applyVisitSnapshot(lastVisitSnapshot);
       const latestSelf = guestSelfStream.sample(Date.now());
-      if (latestSelf) applySelfShip(latestSelf);
+      if (latestSelf.length) applySelfShip(latestSelf[0]);
     }
   });
   on("mp-enter-world", () => {
@@ -631,7 +638,12 @@ function installMultiplayerVisitors() {
   on("mp-guest-warp", ({ guestId, to } = {}) => {
     const P = guestRecordOf(guestId);
     if (!P || !to) return;
-    try { startWarp(P, to); } catch (e) {}
+    try {
+      startWarp(P, to);
+    } catch (e) {
+      console.error("[mp-guest-warp]", e);
+      if (typeof document !== "undefined") reportCrash("mp-guest-warp", e);
+    }
     emit("mp-guest-visit-push", { guestId });
   });
   on("mp-guest-dock", ({ guestId } = {}) => {
@@ -650,7 +662,11 @@ function installMultiplayerVisitors() {
           notice = dockFailureReason(P, P.profile);
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[mp-guest-dock]", e);
+      if (typeof document !== "undefined") reportCrash("mp-guest-dock", e);
+      notice = "Docking failed unexpectedly.";
+    }
     emit("mp-guest-visit-push", {
       guestId,
       notice,

@@ -340,7 +340,9 @@ preserving `tokenHash` across metadata/write-back updates (`tests/playtest24-fix
   state; `hostProfile(bundle, visitState)` + `arriveGuest()` + `applyResumePlacement()` restore pose,
   pocket, docked station, health/boost, and salvage crates without leaking into the portable suitcase or
   home save. `enterGameMode("open")` preserves `state.away` (`mp-refresh-home` / `mp-refresh-visit`) rather
-  than overwriting with `resumeFromSave()`.
+  than overwriting with `resumeFromSave()`, emits `"open-world-entered"` so `ui/hud.js` (`syncWorldHud`)
+  re-syncs HUD/reticle state on undocked joins, and `main.js` indexes `latestSelf[0]` on `mp-refresh-visit`
+  plus imports `cancelGuestHeld` in `mp-guest-dock` (logging dock/warp/visit errors via `console.error`).
 
 **Tests:** `tests/multiplayer-guest-sync.test.mjs`, `tests/multiplayer-8c-fixes.test.mjs`,
 `tests/multiplayer-playtest-20261127.test.mjs`; guide: [../../testing/TESTING-16-SLICE8C.md](../../testing/TESTING-16-SLICE8C.md).

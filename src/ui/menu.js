@@ -429,6 +429,7 @@ function enterGameMode(mode) {
   }
   if (state.away) emit("mp-refresh-visit", {});
   emit("mission-ui-refresh", {});
+  emit("open-world-entered", {});
   const notice = recoveryNotice();
   if (notice) showNotice(notice);
 }

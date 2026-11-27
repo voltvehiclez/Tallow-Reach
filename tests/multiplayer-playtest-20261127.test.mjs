@@ -529,3 +529,469 @@ test("Bug 4 UI guard: enterGameMode('open') preserves guest airborne visit state
   assert.equal(P.place, "hollow", "guest pocket stayed at hollow");
   assert.equal(panel.hidden, true, "airborne guest hides outpost panel instead of trapping on station menu");
 });
+
+/* ------------------------------------------------------------------------- */
+/* 2026-11-27d fixes:                                                        */
+/*   A. `src/main.js` missing `cancelGuestHeld` import broke host `G` dock   */
+/*   B. Undocked guest relog missed `hud.js` `open-world-entered` sync &     */
+/*      `mp-refresh-visit` passed `Pose[]` instead of `Pose` to applySelfShip*/
+/* ------------------------------------------------------------------------- */
+
+test("Bug A static guard (2026-11-27d): no undeclared free-variable calls in bundled src/main.js", async () => {
+  const esbuild = await import("esbuild");
+  const res = await esbuild.build({
+    entryPoints: [path.join(ROOT, "src/main.js")],
+    bundle: true,
+    write: false,
+    format: "iife",
+    external: ["three", "trystero", "three/*"],
+    loader: { ".webp": "dataurl", ".glb": "dataurl", ".txt": "text" },
+    minifyIdentifiers: true,
+    logLevel: "silent",
+  });
+  const code = res.outputFiles[0].text;
+  let out = "", i = 0;
+  while (i < code.length) {
+    const c = code[i], n = code[i + 1];
+    if (c === "/" && n === "/") { while (i < code.length && code[i] !== "\n") i++; continue; }
+    if (c === "/" && n === "*") { i += 2; while (i < code.length && !(code[i] === "*" && code[i + 1] === "/")) i++; i += 2; continue; }
+    if (c === "\"" || c === "'") { const q = c; i++; while (i < code.length && code[i] !== q) { if (code[i] === "\\") i++; i++; } i++; out += "\"\""; continue; }
+    if (c === "`") {
+      i++;
+      while (i < code.length && code[i] !== "`") {
+        if (code[i] === "\\") { i += 2; continue; }
+        if (code[i] === "$" && code[i + 1] === "{") { i += 2; out += " "; continue; }
+        i++;
+      }
+      i++; continue;
+    }
+    if (c === "/") {
+      const prevNonWs = out.trimEnd().slice(-1);
+      if ("(=,[!&|?:;{}\n+".includes(prevNonWs) || out.trimEnd().endsWith("return")) {
+        i++;
+        while (i < code.length && code[i] !== "/") {
+          if (code[i] === "\\") i++;
+          else if (code[i] === "[") { i++; while (i < code.length && code[i] !== "]") { if (code[i] === "\\") i++; i++; } }
+          i++;
+        }
+        i++; out += "/r/"; continue;
+      }
+    }
+    out += c; i++;
+  }
+  const allowed = new Set([
+    "Array", "ArrayBuffer", "AudioContext", "Blob", "Boolean", "CustomEvent", "Date", "Error",
+    "Float32Array", "Image", "Int32Array", "Map", "Number", "Object", "Promise", "Proxy",
+    "RTCPeerConnection", "RegExp", "ResizeObserver", "Set", "String", "TextDecoder",
+    "TextEncoder", "TypeError", "Uint8Array", "URL", "URLSearchParams", "WeakMap", "WeakSet",
+    "WebSocket", "Worker", "addEventListener", "alert", "atob", "btoa", "catch", "class",
+    "clearInterval", "clearTimeout", "confirm", "console", "decodeURIComponent", "document",
+    "encodeURIComponent", "fetch", "for", "function", "globalThis", "history", "if", "import",
+    "innerHeight", "innerWidth", "isFinite", "isNaN", "localStorage", "location", "navigator",
+    "new", "parseFloat", "parseInt", "performance", "prompt", "queueMicrotask",
+    "requestAnimationFrame", "return", "setInterval", "setTimeout", "super", "switch", "throw",
+    "typeof", "webkitAudioContext", "while", "await", "async",
+  ]);
+  const undeclared = [];
+  for (const m of out.matchAll(/(?<![.$\w])([A-Za-z_][A-Za-z0-9_]{3,})\s*\(/g)) {
+    const id = m[1];
+    if (allowed.has(id)) continue;
+    let p = m.index + m[0].length, depth = 1;
+    while (p < out.length && depth > 0) {
+      if (out[p] === "(") depth++;
+      else if (out[p] === ")") depth--;
+      p++;
+    }
+    while (p < out.length && /\s/.test(out[p])) p++;
+    if (out[p] === "{") continue;
+    undeclared.push(id);
+  }
+  assert.deepEqual(undeclared, [], `undeclared calls in src/main.js bundle: ${undeclared.join(", ")}`);
+
+  const mainSrc = read("src/main.js");
+  assert.match(mainSrc, /import\s*\{[\s\S]*\bcancelGuestHeld\b[\s\S]*\}\s*from\s*"\.\/sim\/multiplayer\.js"/);
+  assert.match(mainSrc, /if\s*\(\s*latestSelf\.length\s*\)\s*applySelfShip\(\s*latestSelf\[0\]\s*\)/);
+});
+
+test("Bug A & B end-to-end (2026-11-27d): real src/main.js two-VM playtest covers KeyG docking, mission progress/hand-in, and undocked relog HUD/reticle", async () => {
+  const esbuild = await import("esbuild");
+  const vm = await import("node:vm");
+  const shell = read("src/index.html");
+  const bundle = await esbuild.build({
+    stdin: {
+      contents: `
+        import "./src/main.js";
+        import * as stateMod from "./src/state/state.js";
+        import * as netSession from "./src/net/session.js";
+        import * as mpUi from "./src/ui/multiplayer.js";
+        import * as menuUi from "./src/ui/menu.js";
+        import * as eventsMod from "./src/util/events.js";
+        import * as placesMod from "./src/sim/places.js";
+        import * as travelMod from "./src/sim/travel.js";
+        import * as invMod from "./src/sim/inventory.js";
+        globalThis.__APP = { stateMod, netSession, mpUi, menuUi, eventsMod, placesMod, travelMod, invMod };
+      `,
+      resolveDir: ROOT,
+    },
+    bundle: true,
+    write: false,
+    format: "iife",
+    loader: { ".webp": "dataurl", ".glb": "dataurl", ".txt": "text" },
+    plugins: [{
+      name: "stub-gl-only",
+      setup(build) {
+        const map = {
+          "render/scene.js": "scene-stub",
+          "render/menuview.js": "menuview-stub",
+          "render/gltf.js": "gltf-stub",
+          "render/shipviewer.js": "shipviewer-stub",
+          "core/audio.js": "audio-stub",
+          "render/warpfx.js": "warpfx-stub",
+          "render/views.js": "views-stub",
+          "render/target-picking.js": "pick-stub",
+          "ui/outfitting.js": "outfitting-stub",
+          "ui/crash.js": "crash-stub",
+        };
+        build.onResolve({ filter: /^trystero$/ }, () => ({ path: "trystero-stub", namespace: "stub" }));
+        build.onResolve({ filter: /^\./ }, args => {
+          const abs = path.resolve(args.resolveDir, args.path).replace(/\\/g, "/");
+          for (const [suffix, name] of Object.entries(map)) {
+            if (abs.endsWith("/src/" + suffix)) return { path: name, namespace: "stub" };
+          }
+        });
+        build.onLoad({ filter: /.*/, namespace: "stub" }, async args => {
+          if (args.path === "trystero-stub") return { contents: "export function joinRoom(cfg, roomId){ return globalThis.__makeRoom(cfg, roomId); } export function getRelaySockets(){ return {}; }" };
+          if (args.path === "scene-stub") return { contents: `
+            import * as THREE from "three";
+            export const renderer = { setPixelRatio(){}, setSize(){}, render(){}, domElement: document.createElement("canvas") };
+            export const scene = new THREE.Scene();
+            export const camera = new THREE.PerspectiveCamera(60, 1280/800, 0.1, 20000);
+            export const stars = new THREE.Group();
+            export const showPlace = () => {};
+            export const stepScenery = () => {};
+            export const updateScenery = () => {};
+            export const forgetPlace = () => {};
+          `, resolveDir: ROOT };
+          if (args.path === "menuview-stub") return { contents: "export const updateMenuView=()=>{}; export const menuView=()=>({scene:{},camera:{}}); export const resizeMenuView=()=>{};" };
+          if (args.path === "gltf-stub") return { contents: "export const instantiateModel=()=>null; export const modelTemplate=()=>null; export const spinNodes=()=>[]; export const engNodes=()=>[]; export const preloadAfterPaint=()=>Promise.resolve(); export const preloadModels=()=>Promise.resolve();" };
+          if (args.path === "shipviewer-stub") return { contents: "export const createShipViewer=()=>({ render(){}, dispose(){}, resize(){}, setShip(){} });" };
+          if (args.path === "audio-stub") return { contents: "export const updateAudio=()=>{}; export const initAudio=()=>{}; export const uiSound=()=>{}; export const hoverSound=()=>{}; export const isMuted=()=>false; export const toggleMute=()=>false; export const setAudioSuspended=()=>{};" };
+          if (args.path === "warpfx-stub") return { contents: "export const setupWarpStreaks=()=>{}; export const updateWarpStreaks=()=>{};" };
+          if (args.path === "views-stub") return { contents: `
+            import * as THREE from "three";
+            export const installEnemyViews=()=>{};
+            export const updateEnemyViews=()=>{};
+            export const updateEntityViews=()=>{};
+            export const snapshotSimPoses=()=>{};
+            export const snapRenderedPlayer=()=>{};
+            export const renderPlayerPose=(P)=>({pos:P.pos,quat:P.quat,v:P.v});
+            export const interpolatedPos=(o)=>o?.pos||new THREE.Vector3();
+            export const interpolatedVelocity=(o)=>o?.v||new THREE.Vector3();
+          `, resolveDir: ROOT };
+          if (args.path === "pick-stub") return { contents: "export const pickLockSurface=()=>null;" };
+          if (args.path === "outfitting-stub") return { contents: "export const updateOutfitting=()=>{}; export const mountOutfitting=()=>{};" };
+          if (args.path === "crash-stub") return { contents: "export const installCrashNotice=()=>{}; export const reportCrash=(w,e)=>{ globalThis.__CRASHES.push([w, String(e)]); };" };
+        });
+      },
+    }],
+  });
+
+  const code = bundle.outputFiles[0].text;
+  const rooms = new Map();
+  const roomByWho = new Map();
+  function makeVirtualRoom(who, roomId) {
+    const peerId = who + "-peer";
+    const listeners = { join: [], leave: [], msg: [] };
+    if (!rooms.has(roomId)) rooms.set(roomId, new Map());
+    const peersMap = rooms.get(roomId);
+    const api = {
+      peerId,
+      makeAction() {
+        return {
+          send(data, opts) {
+            const target = opts?.target;
+            for (const [id, other] of peersMap.entries()) {
+              if (id === peerId) continue;
+              if (target && id !== target) continue;
+              queueMicrotask(() => other._deliver(data, peerId));
+            }
+            return Promise.resolve();
+          },
+          onMessage(fn) { listeners.msg.push(fn); },
+        };
+      },
+      onPeerJoin(fn) { listeners.join.push(fn); },
+      onPeerLeave(fn) { listeners.leave.push(fn); },
+      onError() {},
+      getPeers() {
+        const o = {};
+        for (const id of peersMap.keys()) if (id !== peerId) o[id] = { direct: true };
+        return o;
+      },
+      leave() {
+        peersMap.delete(peerId);
+        for (const [, other] of peersMap.entries()) other._peerLeft(peerId);
+      },
+      _deliver(data, fromPeer) { for (const fn of listeners.msg) fn(data, { peerId: fromPeer }); },
+      _peerJoined(id) { for (const fn of listeners.join) fn({ peerId: id }); },
+      _peerLeft(id) { for (const fn of listeners.leave) fn({ peerId: id }); },
+    };
+    roomByWho.set(who, api);
+    const existing = [...peersMap.keys()];
+    peersMap.set(peerId, api);
+    queueMicrotask(() => {
+      for (const id of existing) { peersMap.get(id)?._peerJoined(peerId); api._peerJoined(id); }
+    });
+    return api;
+  }
+
+  const allIntervals = [];
+  const allTimeouts = [];
+  function bootInstance(who, existingStorage = null) {
+    const storage = existingStorage || new Map();
+    const winListeners = {};
+    const elsById = new Map();
+    function makeEl(tag = "div", id = "") {
+      const elListeners = {};
+      const el = {
+        tagName: tag.toUpperCase(), id, hidden: false, type: "", checked: false,
+        textContent: "", _innerHTML: "", value: "", dataset: {}, style: {}, children: [],
+        parentElement: null, attributes: {},
+        classList: {
+          _s: new Set(),
+          add(...xs) { xs.forEach(x => this._s.add(x)); },
+          remove(...xs) { xs.forEach(x => this._s.delete(x)); },
+          toggle(x, f) { const on = f === undefined ? !this._s.has(x) : !!f; if (on) this._s.add(x); else this._s.delete(x); return on; },
+          contains(x) { return this._s.has(x); },
+        },
+        get innerHTML() { return this._innerHTML; },
+        set innerHTML(v) {
+          this._innerHTML = String(v);
+          this.children = [];
+          const stack = [this];
+          const VOID = new Set(["input", "img", "br", "hr"]);
+          for (const m of this._innerHTML.matchAll(/<(\/?)(\w+)([^>]*)>/g)) {
+            const closing = !!m[1]; const t = m[2].toLowerCase(); const attrs = m[3];
+            if (closing) { if (stack.length > 1) stack.pop(); continue; }
+            const cid = (attrs.match(/\bid="([^"]+)"/) || [])[1] || "";
+            const c = makeEl(t, cid);
+            if (/\bhidden\b/.test(attrs)) c.hidden = true;
+            const cls = (attrs.match(/\bclass="([^"]+)"/) || [])[1];
+            if (cls) cls.split(/\s+/).forEach(x => x && c.classList.add(x));
+            const typeM = attrs.match(/\btype="([^"]+)"/);
+            if (typeM) c.type = typeM[1];
+            for (const dm of attrs.matchAll(/\bdata-([a-z0-9-]+)="([^"]*)"/gi)) {
+              c.dataset[dm[1].replace(/-([a-z])/g, (_, ch) => ch.toUpperCase())] = dm[2];
+            }
+            stack[stack.length - 1].appendChild(c);
+            if (!VOID.has(t) && !attrs.endsWith("/")) stack.push(c);
+          }
+        },
+        appendChild(c) { c.parentElement = this; this.children.push(c); return c; },
+        prepend(c) { c.parentElement = this; this.children.unshift(c); return c; },
+        append(...cs) { cs.forEach(c => this.appendChild(c)); },
+        remove() {},
+        addEventListener(t, fn) { (elListeners[t] ||= []).push(fn); },
+        dispatchEvent(ev) { for (const fn of elListeners[ev.type] || []) fn(ev); },
+        setAttribute(k, v) { this.attributes[k] = String(v); },
+        getAttribute(k) { return this.attributes[k] ?? null; },
+        contains(target) { return target === this || this.children.some(c => c.contains?.(target)); },
+        querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+        querySelectorAll(sel) {
+          const out = [];
+          const walk = node => {
+            for (const c of node.children || []) {
+              let match = false;
+              if (sel.startsWith("#")) match = c.id === sel.slice(1);
+              else if (sel.startsWith(".")) match = c.classList.contains(sel.slice(1));
+              else if (sel.startsWith("[")) {
+                const dm = sel.match(/^\[data-([a-z0-9-]+)(?:="([^"]*)")?\]$/i);
+                if (dm) {
+                  const k = dm[1].replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+                  match = dm[2] === undefined ? (k in c.dataset) : c.dataset[k] === dm[2];
+                }
+              } else match = c.tagName === sel.toUpperCase();
+              if (match) out.push(c);
+              walk(c);
+            }
+          };
+          walk(this);
+          return out;
+        },
+        closest() { return null; },
+        focus() { doc.activeElement = this; },
+        blur() { if (doc.activeElement === this) doc.activeElement = doc.body; },
+        select() {},
+        getBoundingClientRect() { return { top: 0, left: 0, width: 100, height: 20 }; },
+        getContext() { return { clearRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, save(){}, restore(){} }; },
+      };
+      if (id) elsById.set(id, el);
+      return el;
+    }
+    for (const m of shell.matchAll(/<(\w+)\s+[^>]*id="([^"]+)"([^>]*)>/g)) {
+      const el = makeEl(m[1], m[2]);
+      if (/\bhidden\b/.test(m[0])) el.hidden = true;
+    }
+    const body = makeEl("body");
+    const doc = {
+      body, documentElement: { clientWidth: 1280, clientHeight: 800 }, activeElement: body,
+      visibilityState: "visible", hidden: false,
+      createElement: tag => makeEl(tag), createElementNS: (_ns, tag) => makeEl(tag),
+      getElementById: id => elsById.get(id) || null, addEventListener() {},
+    };
+    const rafQueue = [];
+    let simNow = 1000;
+    const ctx = {
+      __CRASHES: [], __makeRoom: (_cfg, roomId) => makeVirtualRoom(who, roomId),
+      console,
+      setTimeout: (fn, ms, ...a) => { const t = setTimeout(fn, ms, ...a); allTimeouts.push(t); return t; },
+      clearTimeout,
+      setInterval: (fn, ms, ...a) => { const t = setInterval(fn, ms, ...a); allIntervals.push(t); return t; },
+      clearInterval, queueMicrotask, Promise,
+      Math, Date, JSON, Object, Array, Map, Set, Number, String, Boolean, Error, TypeError, RegExp,
+      Uint8Array, Float32Array, Int32Array, ArrayBuffer, URL, Blob, TextEncoder, TextDecoder,
+      localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)), removeItem: k => storage.delete(k), clear: () => storage.clear() },
+      location: { href: "https://example.test/", search: "", hash: "" }, history: { replaceState() {} },
+      innerWidth: 1280, innerHeight: 800, devicePixelRatio: 1,
+      performance: { now: () => simNow },
+      requestAnimationFrame: fn => { rafQueue.push(fn); return rafQueue.length; },
+      addEventListener(t, fn) { (winListeners[t] ||= []).push(fn); },
+      document: doc, window: null, navigator: { clipboard: { writeText: async () => {} } }, crypto: globalThis.crypto,
+    };
+    ctx.window = ctx; ctx.globalThis = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(code, ctx);
+    return {
+      ctx, doc, elsById, storage,
+      stepFrame(ms = 16.666) { simNow += ms; const b = rafQueue.splice(0); for (const fn of b) fn(simNow); },
+      pressKey(c) { for (const fn of winListeners.keydown || []) fn({ code: c, repeat: false, altKey: false, target: doc.body, preventDefault() {} }); },
+      releaseKey(c) { for (const fn of winListeners.keyup || []) fn({ code: c, altKey: false, target: doc.body, preventDefault() {} }); },
+    };
+  }
+
+  try {
+    const host = bootInstance("HOST");
+    const guest = bootInstance("GUEST");
+    const tick = async (g, n = 8) => {
+      for (let i = 0; i < n; i++) {
+        host.stepFrame(16.7);
+        g.stepFrame(16.7);
+        await new Promise(r => setTimeout(r, 12));
+      }
+    };
+
+    host.ctx.__APP.netSession.setUsername("HostPilot");
+    host.elsById.get("panel").dispatchEvent({ type: "click", target: { closest() { return { dataset: { a: "intro" }, disabled: false }; } }, preventDefault() {} });
+    await new Promise(r => setTimeout(r, 15));
+    await host.ctx.__APP.netSession.hostWorld({ name: "HostPilot" });
+    const link = host.ctx.__APP.netSession.currentLink().link;
+
+    guest.ctx.__APP.netSession.setUsername("GuestPilot");
+    await guest.ctx.__APP.netSession.joinWorld({ link });
+    await tick(guest, 4);
+    assert.equal(await guest.ctx.__APP.mpUi.act("bring"), true);
+    await tick(guest, 6);
+
+    // Accept contract & launch
+    const cr0 = guest.ctx.__APP.stateMod.state.profile.cr;
+    guest.ctx.__APP.netSession.requestGuestAction({ op: "acc", slot: 0 });
+    await tick(guest, 6);
+    const gm = host.ctx.__APP.stateMod.state.players[1].profile.missions[0];
+    assert.ok(gm, "guest accepted mission on host");
+
+    guest.elsById.get("panel").dispatchEvent({ type: "click", target: { closest() { return { dataset: { a: "go" }, disabled: false }; } }, preventDefault() {} });
+    await tick(guest, 8);
+    assert.equal(guest.ctx.__APP.stateMod.localPlayer().docked, false);
+
+    // Simulate guest flight & mission progress, then press G near Meridian Station!
+    const P = host.ctx.__APP.stateMod.state.players[1];
+    const W = host.ctx.__APP.stateMod.placeWorld("reach");
+    if (gm.type === "salvage") {
+      for (const c of W.crates.filter(c => c.missionId === gm.id)) { P.pos.copy(c.pos); await tick(guest, 3); }
+    } else if (gm.type === "mine") {
+      // Tier-3 mining contracts can exceed a Wasp's 20 m³ hold, so a pilot delivers across trips
+      // (ship hold + station storage) just as `handInRequirements` checks both.
+      const toShip = Math.min(gm.n, 10);
+      host.ctx.__APP.invMod.addItem(P.profile.ship, gm.o, toShip, P.profile, P.guestWorld);
+      if (gm.n > toShip) {
+        host.ctx.__APP.invMod.addItem("station", gm.o, gm.n - toShip, P.profile, P.guestWorld);
+      }
+      host.ctx.__APP.eventsMod.emit("mined", { ore: gm.o, amount: gm.n, player: P });
+    } else if (gm.type === "hunt") {
+      for (let round = 0; round < 6; round++) {
+        const foes = [...W.enemies].filter(e => e.missionId === gm.id && e.hp > 0);
+        if (!foes.length) break;
+        for (const e of foes) {
+          e.hp = 0;
+          host.ctx.__APP.eventsMod.emit("enemy-killed", { enemy: e, player: P });
+        }
+        await tick(guest, 4);
+      }
+    }
+    const st = host.ctx.__APP.placesMod.stationAt("reach");
+    P.pos.set(...st.launch.pos);
+    P.v.set(0, 0, 0);
+    await tick(guest, 6);
+    assert.match(guest.elsById.get("pr").textContent, /Press G to dock at Meridian Station/);
+
+    // Bug A: pressing KeyG must NOT throw inside mp-guest-dock; guest docks and HUD hides.
+    P.guestHeld = { item: "ferrite", count: 1, from: { kind: "ship", index: 0 } };
+    guest.pressKey("KeyG");
+    guest.releaseKey("KeyG");
+    await tick(guest, 8);
+    assert.equal(guest.ctx.__APP.stateMod.localPlayer().docked, true, "KeyG docked guest");
+    assert.equal(P.docked, true, "host docked guest");
+    assert.equal(P.guestHeld, null, "cancelGuestHeld cleared held cursor item on dock");
+    assert.equal(guest.elsById.get("hud").hidden, true, "HUD hidden after KeyG dock");
+    assert.equal(guest.elsById.get("panel").hidden, false, "station panel shown after KeyG dock");
+
+    // Hand in completed mission
+    guest.ctx.__APP.netSession.requestGuestAction({ op: "done", id: gm.id });
+    await tick(guest, 8);
+    assert.equal(guest.ctx.__APP.stateMod.state.profile.cr, cr0 + gm.r, "guest received mission reward");
+    assert.equal(guest.ctx.__APP.stateMod.state.profile.missions.length, 0, "guest mission cleared after hand-in");
+
+    // Launch again, fly out, drop peer abruptly (`room.leave()`), and relog in GUEST2!
+    guest.elsById.get("panel").dispatchEvent({ type: "click", target: { closest() { return { dataset: { a: "go" }, disabled: false }; } }, preventDefault() {} });
+    await tick(guest, 8);
+    guest.pressKey("KeyW"); await tick(guest, 10); guest.releaseKey("KeyW");
+    guest.pressKey("KeyX"); await tick(guest, 10); guest.releaseKey("KeyX");
+    await tick(guest, 6);
+    const posAtDrop = host.ctx.__APP.stateMod.state.players[1].pos.toArray();
+    roomByWho.get("GUEST").leave();
+    await tick(guest, 4);
+
+    // Bug B: fresh GUEST2 joins while undocked (`mp-visit` arrives before `join-world`); HUD & reticle MUST show!
+    const guest2 = bootInstance("GUEST2", new Map(guest.storage));
+    guest2.ctx.__APP.netSession.setUsername("GuestPilot");
+    await guest2.ctx.__APP.netSession.joinWorld({ link });
+    await tick(guest2, 8);
+    assert.equal(await guest2.ctx.__APP.mpUi.act("join-world"), true);
+    await tick(guest2, 8);
+
+    const g2p = guest2.ctx.__APP.stateMod.localPlayer();
+    assert.equal(g2p.docked, false, "GUEST2 relogged undocked");
+    assert.ok(Math.hypot(g2p.pos.x - posAtDrop[0], g2p.pos.y - posAtDrop[1], g2p.pos.z - posAtDrop[2]) < 1, "GUEST2 restored flight position");
+    assert.equal(guest2.elsById.get("hud").hidden, false, "Bug B fixed: HUD visible on undocked relog");
+    assert.equal(guest2.elsById.get("mk").style.display, "", "world markers visible on undocked relog");
+    assert.equal(guest2.doc.body.classList.contains("no-reticle"), false, "Bug B fixed: reticle enabled on undocked relog");
+    assert.equal(guest2.doc.body.classList.contains("pilot-pointer"), true, "flight pointer enabled on undocked relog");
+    assert.equal(guest2.elsById.get("panel").hidden, true, "station panel hidden on undocked relog");
+    assert.ok(guest2.elsById.get("weapon-slots").innerHTML.length > 0, "weapon slots rendered on undocked relog");
+
+    // Relogged GUEST2 can also KeyG dock cleanly
+    guest2.pressKey("KeyG");
+    guest2.releaseKey("KeyG");
+    await tick(guest2, 8);
+    assert.equal(guest2.ctx.__APP.stateMod.localPlayer().docked, true, "relogged GUEST2 docks on KeyG");
+    assert.equal(guest2.elsById.get("hud").hidden, true);
+    assert.equal(guest2.elsById.get("panel").hidden, false);
+
+    assert.deepEqual(host.ctx.__CRASHES, []);
+    assert.deepEqual(guest.ctx.__CRASHES, []);
+    assert.deepEqual(guest2.ctx.__CRASHES, []);
+  } finally {
+    for (const t of allIntervals) clearInterval(t);
+    for (const t of allTimeouts) clearTimeout(t);
+  }
+});

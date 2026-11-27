@@ -143,6 +143,7 @@
 //                                    "Lost connection to host"; the pilot's save is untouched
 //   mp-join-request { link }       a ?join= link in the address bar wants a yes/no
 //   mp-enter-world {}              a join from the title worked: enter the open world
+//   open-world-entered {}          open world entered from title (ui/hud.js syncs reticle/HUD)
 //   mp-guest-arrive { guestId, name, profile, place }
 //                                    slice 4: a guest's suitcase has arrived; sim/multiplayer.js
 //                                    turns it into a docked player record
