@@ -43,6 +43,47 @@ export function profileOf(player = localPlayer()) {
   return player.profile || null;
 }
 
+/** Find the pilot record in `state.players` that owns `target` (player or profile). */
+export function playerOf(target = localPlayer()) {
+  const local = localPlayer();
+  if (!target || target === local || target === state.profile) return local;
+  if (typeof target === "object" && state.players.includes(target)) return target;
+  if (typeof target === "object") {
+    for (const p of state.players) {
+      if (p && p.profile === target) return p;
+    }
+  }
+  return null;
+}
+
+/** Persistent world/station state belonging to `target` (guest's `guestWorld` or host `state.worldState`). */
+export function worldOf(target = localPlayer(), fallback = state.worldState) {
+  const player = playerOf(target);
+  if (player && player.guestWorld) return player.guestWorld;
+  if (player && player === localPlayer()) return state.worldState;
+  return fallback;
+}
+
+/** Canonical mission/crate/wave owner id: `"host"` for local/unknown, or the visitor's `guestId`. */
+export function ownerOf(target = localPlayer()) {
+  const player = playerOf(target);
+  if (player && player.guestId) return player.guestId;
+  return "host";
+}
+
+/** Pilot record matching canonical `owner` id (`"host"` -> local pilot, guestId -> matching guest). */
+export function playerByOwner(owner = "host") {
+  if (!owner || owner === "host") return localPlayer();
+  return state.players.find(p => p && p.guestId === owner) || null;
+}
+
+/** World/station record matching canonical `owner` id (`"host"` or guestId). */
+export function worldByOwner(owner = "host", fallback = state.worldState) {
+  const player = playerByOwner(owner);
+  if (player && player.guestWorld) return player.guestWorld;
+  return fallback;
+}
+
 /**
  * Record where the local pilot is right now, so the next load puts them back
  * there. Null while docked (or dead): loading then opens the station menu.
@@ -204,8 +245,8 @@ function captureActiveModeSave() {
   if (state.away) {
     return {
       v: SAVE_VERSION,
-      profile: state.profile,
-      world: state.worldState,
+      profile: state.guestHome?.profile || state.profile,
+      world: state.guestHome?.worldState || state.worldState,
       away: cleanAway(state.away),
     };
   }
@@ -273,6 +314,7 @@ export const freshModeSave = newModeSave;
 
 /** Persist both mode halves in the active browser slot. */
 export function saveCurrentGame() {
+  if (state.away) return null;
   return saveAutosave(currentRootSave());
 }
 
@@ -284,6 +326,7 @@ function installNestedSave(save) {
   // it comes back through the suitcase (net/multiplayer.js). Every save older than
   // v29 has no marker and loads as "at home".
   state.away = cleanAway(save.away);
+  if (!state.away) state.guestHome = null;
   // Chart presentation belongs to this runtime session, not a loaded save.
   state.ui.starmapMemory = null;
   state.ui.destination = save.world.destination || null;

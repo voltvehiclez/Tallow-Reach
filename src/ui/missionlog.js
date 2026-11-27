@@ -29,6 +29,7 @@ import {
 } from "../sim/missions.js";
 import { setPause } from "./pause.js";
 import { dialogueReadSeconds } from "../data/missions/rules.js";
+import { requestGuestAction } from "../net/session.js";
 
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;",
@@ -361,10 +362,10 @@ export function renderDialogue() {
 // Every line moves on by itself once it has been up long enough to read. A station
 // line can also be clicked; a line said in space waits its full time, so a mission
 // may depend on it. Choices are never taken for the pilot.
-let readClock = { key: "", elapsed: 0 };
+let readClock = { key: "", elapsed: 0, sentKey: "" };
 
 export function resetDialogueClock() {
-  readClock = { key: "", elapsed: 0 };
+  readClock = { key: "", elapsed: 0, sentKey: "" };
 }
 
 /** Advance the open dialogue by one line when its reading time has passed.
@@ -382,9 +383,15 @@ export function updateDialogueClock(dt) {
   const blocked = dialogue.requiresDock && (away || (!!state.player && !state.player.docked));
   if (blocked) return false;
   const key = `${mission.id}:${mission.step}:${dialogue.lineIndex}:${dialogue.line}`;
-  if (key !== readClock.key) readClock = { key, elapsed: 0 };
+  if (key !== readClock.key) readClock = { key, elapsed: 0, sentKey: readClock.sentKey };
   readClock.elapsed += Math.max(0, Number(dt) || 0);
   if (readClock.elapsed < dialogueReadSeconds(dialogue.line)) return false;
+  if (state.away) {
+    if (readClock.sentKey === key) return false;
+    readClock.sentKey = key;
+    requestGuestAction({ op: "dlgNext", id: mission.id });
+    return true;
+  }
   resetDialogueClock();
   const changed = nextMissionDialogue(mission.id);
   if (!changed) return false;
@@ -405,6 +412,15 @@ function onDialogueClick(event) {
   const away = !!dialogue?.station && dialogue.station !== state.place;
   if (dialogue?.requiresDock && (away || (state.player && !state.player.docked))) {
     renderDialogue();
+    return;
+  }
+  if (state.away) {
+    event.preventDefault();
+    event.stopPropagation();
+    uiSound(button.dataset.dialogueChoice ? "confirm" : "click");
+    requestGuestAction(button.dataset.dialogueChoice
+      ? { op: "dlgChoice", id: mission.id, choice: button.dataset.dialogueChoice }
+      : { op: "dlgNext", id: mission.id });
     return;
   }
   const changed = button.dataset.dialogueChoice
@@ -517,6 +533,7 @@ export function setupMissionLog() {
     "mission-abandoned",
     "mission-inventory-changed",
     "mission-ui-refresh",
+    "mp-visit",
     "main-menu",
     "docked",
     "launched",
@@ -527,7 +544,7 @@ export function setupMissionLog() {
       // opened, so closing the last dialogue line left the card saying Abandon
       // until another tab was opened. Tell the panel to redraw whenever a mission
       // changes; menu.js ignores this while the panel is hidden or on the title.
-      const panelAlreadyRedraws = ["mission-ui-refresh", "main-menu", "docked", "launched"].includes(event);
+      const panelAlreadyRedraws = ["mission-ui-refresh", "mp-visit", "main-menu", "docked", "launched"].includes(event);
       if (!panelAlreadyRedraws) emit("mission-ui-refresh", {});
     });
   }

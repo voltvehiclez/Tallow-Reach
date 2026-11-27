@@ -67,7 +67,17 @@
 import { NET } from "../data/multiplayer.js";
 
 /** Every message kind this build understands. An unknown `t` is dropped, not echoed. */
-export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships", "controls", "warp", "dock", "entities"];
+export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", "pong", "carry", "suitcase", "bye", "ships", "controls", "warp", "dock", "entities", "act", "visit"];
+
+/** Allowlisted guest `act` operation names validated on both wire send and receive. */
+export const ACT_OPS = [
+  "pw", "sw",
+  "invCancel", "invClick", "invRight", "invTake", "invStack", "invMove", "invSell", "invDiscard", "invUse", "invEquip",
+  "fitClick", "fitPlace", "fitFrom", "bayUnequip", "baySwap",
+  "sel", "buyShip", "sellShip", "rp", "home", "buy", "wr",
+  "dep", "wd", "sellh", "sells", "up",
+  "acc", "ref", "drop", "done", "story", "dlgNext", "dlgChoice",
+];
 
 /**
  * The longest a name, an id or a chat line may be on the wire, and the other hard caps.
@@ -162,6 +172,12 @@ export function cleanMessage(kind, fields = {}) {
       return { t: "warp", to: text(fields.to, LIMITS.id) };
     case "dock":
       return { t: "dock" };
+    // Step 16 follow-up: guest intent for weapons, inventory, fitting, shops, contracts and missions.
+    case "act":
+      return cleanAct(fields);
+    // Step 16 follow-up: authoritative state sync for a visiting guest (profile, guestWorld, held).
+    case "visit":
+      return cleanVisit(fields);
     // Slice 5: the guest is leaving on purpose. Two short strings, nothing else: the host
     // answers it with a final `suitcase`, so this message must never be able to say more
     // than "I am going".
@@ -399,7 +415,15 @@ function cleanCrates(raw) {
   for (const e of raw) {
     if (out.length >= LIMITS.entities) break;
     if (!e || typeof e !== "object") continue;
-    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), quat: cleanQuat(e.quat), item: text(e.item, 20) });
+    const item = { id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), quat: cleanQuat(e.quat), item: text(e.item, 20) };
+    const missionId = text(e.missionId, LIMITS.id);
+    const encounter = text(e.encounter, LIMITS.id);
+    const missionOwner = text(e.missionOwner, LIMITS.id);
+    if (missionId) item.missionId = missionId;
+    if (e.persistent === true) item.persistent = true;
+    if (encounter) item.encounter = encounter;
+    if (missionOwner) item.missionOwner = missionOwner;
+    out.push(item);
   }
   return out;
 }
@@ -429,7 +453,7 @@ function cleanEnemies(raw) {
     const id = Math.floor(Number(e.id));
     const def = text(e.def, 40);
     if (!Number.isFinite(id) || id <= 0 || !def) continue;
-    out.push({
+    const row = {
       id,
       def,
       friendly: e.friendly === true,
@@ -439,9 +463,110 @@ function cleanEnemies(raw) {
       v: cleanVec3(e.v),
       hp: Math.max(0, Math.round(num(e.hp, 0) * 100) / 100),
       mx: Math.max(0, Math.round(num(e.mx, 0) * 100) / 100),
-    });
+    };
+    const missionId = text(e.missionId, LIMITS.id);
+    const encounter = text(e.encounter, LIMITS.id);
+    const missionOwner = text(e.missionOwner, LIMITS.id);
+    if (missionId) row.missionId = missionId;
+    if (encounter) row.encounter = encounter;
+    if (missionOwner) row.missionOwner = missionOwner;
+    out.push(row);
   }
   return out;
+}
+
+function cleanAct(fields = {}) {
+  const op = text(fields.op, 32);
+  if (!ACT_OPS.includes(op)) return null;
+  const out = { t: "act", op };
+  const reqId = Math.floor(Number(fields.reqId));
+  if (Number.isFinite(reqId) && reqId >= 0) out.reqId = reqId;
+  const id = text(fields.id, LIMITS.id);
+  const choice = text(fields.choice, 64);
+  const where = text(fields.where, 40);
+  const toWhere = text(fields.toWhere, 40);
+  const group = text(fields.group, 24);
+  const shop = text(fields.shop, 40);
+  const kind = text(fields.kind, 40);
+  if (id) out.id = id;
+  if (choice) out.choice = choice;
+  if (where) out.where = where;
+  if (toWhere) out.toWhere = toWhere;
+  if (group) out.group = group;
+  if (shop) out.shop = shop;
+  if (kind) out.kind = kind;
+  for (const key of ["slot", "toSlot", "bay"]) {
+    if (fields[key] === undefined || fields[key] === null) continue;
+    const v = Math.floor(Number(fields[key]));
+    if (Number.isFinite(v) && v >= -1 && v <= 512) out[key] = v;
+  }
+  if (fields.n !== undefined && fields.n !== null) {
+    const n = Math.floor(Number(fields.n));
+    if (Number.isFinite(n) && n > 0) out.n = Math.min(100000, n);
+  }
+  if (fields.shift === true) out.shift = true;
+  return out;
+}
+
+function cleanHeld(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const id = text(raw.id, 40);
+  const n = Math.max(0, Math.floor(Number(raw.n) || 0));
+  if (!id || n <= 0) return null;
+  const out = {
+    id,
+    n,
+    kind: text(raw.kind, 24),
+    where: text(raw.where, 40),
+  };
+  const slot = Math.floor(Number(raw.slot));
+  if (Number.isFinite(slot) && slot >= 0 && slot <= 512) out.slot = slot;
+  const stationKey = text(raw.stationKey, LIMITS.id);
+  const ship = text(raw.ship, 40);
+  const instanceId = text(raw.instanceId, LIMITS.id);
+  if (stationKey) out.stationKey = stationKey;
+  if (ship) out.ship = ship;
+  if (instanceId) out.instanceId = instanceId;
+  if (raw.fromBay === true) {
+    out.fromBay = true;
+    const group = text(raw.group, 24);
+    const bay = Math.floor(Number(raw.bay));
+    if (group) out.group = group;
+    if (Number.isFinite(bay) && bay >= 0 && bay <= 32) out.bay = bay;
+  }
+  return out;
+}
+
+function cleanVisit(fields = {}) {
+  const profile = fields.profile;
+  const world = fields.world;
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
+  if (!world || typeof world !== "object" || Array.isArray(world)) return null;
+  let size = 0;
+  try {
+    size = JSON.stringify(profile).length + JSON.stringify(world).length;
+  } catch (e) {
+    return null;
+  }
+  if (!Number.isFinite(size) || size > LIMITS.suitcase) return null;
+  return {
+    t: "visit",
+    ackReqId: Math.max(0, Math.floor(Number(fields.ackReqId) || 0)),
+    notice: text(fields.notice, LIMITS.message),
+    sound: text(fields.sound, 24),
+    docked: fields.docked === true,
+    place: text(fields.place, LIMITS.id),
+    pw: Math.max(0, Math.min(4, Math.floor(Number(fields.pw) || 0))),
+    sw: Math.max(0, Math.min(4, Math.floor(Number(fields.sw) || 0))),
+    msl: Math.max(0, Math.floor(Number(fields.msl) || 0)),
+    hull: Math.round(Math.max(0, num(fields.hull, 0)) * 1000) / 1000,
+    hullMax: Math.round(Math.max(0, num(fields.hullMax, 0)) * 1000) / 1000,
+    shield: Math.round(Math.max(0, num(fields.shield, 0)) * 1000) / 1000,
+    shieldMax: Math.round(Math.max(0, num(fields.shieldMax, 0)) * 1000) / 1000,
+    held: cleanHeld(fields.held),
+    profile,
+    world,
+  };
 }
 
 /** Enemy fires since the last packet: raw ids, capped at 8. The guest gates by its own ears. */

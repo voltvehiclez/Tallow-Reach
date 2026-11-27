@@ -124,6 +124,7 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
   const profile = options.profile || state.profile;
   const place = options.place || state.place;
   const worldState = options.worldState || state.worldState;
+  const viewerOwner = options.owner || state.away?.guestId || "host";
   const missions = orderedActiveMissions(options.missions, profile);
 
   const isStation = kind === "station" || kind === "s" || object.kind === "station";
@@ -157,6 +158,7 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
     }
 
     if (isShip) {
+      if (object.missionOwner && object.missionOwner !== (mission.owner || viewerOwner)) continue;
       const friendly = object.friendly === true || enemyDef(object.def)?.friendly === true;
       if (friendly) {
         // A friendly story ship glows only when the live objective is to fly
@@ -189,6 +191,7 @@ export function objectObjectiveColor(object, kind = "", options = {}) {
     }
 
     if (isCrate) {
+      if (object.missionOwner && object.missionOwner !== (mission.owner || viewerOwner)) continue;
       if (!done && object.missionId === mission.id && object.persistent) return color;
       if (!done && !readyHandIn) {
         for (const step of steps) {

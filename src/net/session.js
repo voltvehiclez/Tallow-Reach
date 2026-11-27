@@ -48,7 +48,8 @@
 
 import { emit, on } from "../util/events.js";
 import { state, localPlayer, currentRootSave, applySave } from "../state/state.js";
-import { SAVE_VERSION, sanitizeSave } from "../state/profile.js";
+import { SAVE_VERSION, cleanAway, sanitizeSave } from "../state/profile.js";
+import { readAway, saveAutosave } from "../state/storage.js";
 import { createChannel, stateLine } from "./transport.js";
 import { createPasteLink, codeWorldId } from "./paste.js";
 import { readMessage, cleanMessage, isChatLine, LIMITS } from "./protocol.js";
@@ -61,7 +62,6 @@ import {
   adoptHostWorld, syncAway, leaveHostWorld,
 } from "./multiplayer.js";
 import { stationsOfWorld } from "./world-places.js";
-import { readAway } from "../state/storage.js";
 import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
 import { readSettings, writeSettings, cleanName } from "./settings.js";
 import { checkTurnServers, turnSummary } from "./turn.js";
@@ -84,6 +84,14 @@ const whole = value => Math.max(0, Math.floor(Number(value) || 0));
 const saveKit = {
   /** The live mode save: profile, world and the away marker for the pilot at the controls. */
   read: () => {
+    if (state.away && state.guestHome?.profile && state.guestHome?.worldState) {
+      return sanitizeSave({
+        v: SAVE_VERSION,
+        profile: state.guestHome.profile,
+        world: state.guestHome.worldState,
+        away: state.away,
+      });
+    }
     const root = currentRootSave();
     return sanitizeSave(state.mode === "campaign" ? root.campaign : root.open);
   },
@@ -112,11 +120,22 @@ const saveKit = {
    */
   install: next => {
     if (!next || typeof next !== "object") return;
+    // While visiting with an active live `visit` snapshot, suitcase updates must update
+    // the frozen home snapshot + localStorage WITHOUT overwriting the live visit view.
+    if (!next.open && !next.campaign && next.profile && state.away && next.away && state.guestHome) {
+      const clean = sanitizeSave(next);
+      state.guestHome.profile = JSON.parse(JSON.stringify(clean.profile));
+      state.guestHome.worldState = JSON.parse(JSON.stringify(clean.world));
+      state.away = cleanAway(clean.away);
+      saveAutosave(currentRootSave());
+      return;
+    }
     // A dual-mode envelope installs itself; a mode save goes into the half it belongs to.
-    if (next.open || next.campaign) { applySave(next); return; }
+    if (next.open || next.campaign) { applySave(next); saveAutosave(currentRootSave()); return; }
     if (!next.profile) return;
     const mode = state.mode === "campaign" ? "campaign" : "open";
     applySave({ ...currentRootSave(), [mode]: next });
+    saveAutosave(currentRootSave());
   },
 };
 
@@ -367,7 +386,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // channel heals itself without a reconnect.
   let guestSync = 0;                // the host's interval
   const livePrint = new Map();      // guestId -> what the host last saw the pilot look like
+  const visitPrint = new Map();     // guestId -> what the host last sent in `visit`
   const lastSent = new Map();       // guestId -> when it last went on the wire
+  let nextActReqId = 1;
   // The guest's "I am closing this page" hook, so the host gets a final copy and is not left
   // holding a pilot for a browser that is gone (a `bye`; see `net/protocol.js`).
   let pageHook = null;
@@ -494,6 +515,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       // travel/dock rules for that pilot and decides; a guest cannot move itself.
       case "warp": return onWarp(message, peerId);
       case "dock": return onDock(message, peerId);
+      case "act": return onAct(message, peerId);
+      case "visit": return onVisit(message);
       case "ping": {
         // Slice 5: a guest's heartbeat is the host's only sign of life between copies.
         // `lastSeen` is what `net/multiplayer.js`'s `guestIsHere` reads, so it is written
@@ -560,6 +583,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
         send({ t: "refuse", reason: "replaced", message: told }, row.peerId);
       }
       removeRows(entry => entry.guestId === message.guestId && entry.peerId !== peerId);
+      visitPrint.delete(message.guestId);
       noteLine("Tallow Reach", `${replaced[0].name || message.name || "A pilot"} moved to another window.`);
     }
 
@@ -893,6 +917,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
           rev: whole(record.rev),
           bundle: kept,
         }), peerId);
+        pushVisit(guestId);
         noteLine("Tallow Reach", `${record.name || message.name || "A pilot"}'s pilot is newer in this world than the copy that arrived; this world kept its own.`);
         save.write(seenGuest(save.read(), guestId, Date.now()));
         publish();
@@ -926,6 +951,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
     if (peerId) guestPeer.set(guestId, peerId);
     livePrint.delete(guestId);
+    visitPrint.delete(guestId);
     // The record itself is the simulation's job. `net/` may not touch state.players.
     emit("mp-guest-arrive", {
       guestId,
@@ -940,6 +966,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       rev: incoming.rev,
       bundle: { ...relocated.bundle, token: "" },
     }), peerId);
+    pushVisit(guestId);
     noteLine("Tallow Reach", `${message.name || "A pilot"}'s pilot arrived — ${relocated.bundle.summary?.text || "suitcase received"}.`);
     publish();
   }
@@ -984,6 +1011,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       }
       if (!row.peerId || guestPeer.get(row.guestId) === row.peerId) guestPeer.delete(row.guestId);
       livePrint.delete(row.guestId);
+      visitPrint.delete(row.guestId);
       lastSent.delete(row.guestId);
     }
     return gone;
@@ -1162,11 +1190,92 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       livePrint.set(guestId, print);
       if (print !== before) {
         if (noteGuestChanged(guestId)) changed += 1;
+        pushVisitIfDirty(guestId);
         continue;
       }
+      pushVisitIfDirty(guestId);
       if (Date.now() - (lastSent.get(guestId) || 0) > NET.suitcaseRepeatSec * 1000) writeBack(guestId);
     }
     return changed;
+  }
+
+  function pushVisit(guestId, { ackReqId = 0, notice = "", sound = "" } = {}) {
+    if (role !== "host" || !on || !guestId) return false;
+    const req = { guestId, answered: false, snapshot: null };
+    try { emit("mp-guest-visit-request", req); } catch (e) {}
+    if (!req.answered || !req.snapshot) return false;
+    const snap = req.snapshot;
+    try {
+      visitPrint.set(guestId, JSON.stringify({
+        docked: !!snap.docked,
+        place: snap.place || "",
+        pw: snap.pw || 0,
+        sw: snap.sw || 0,
+        msl: snap.msl || 0,
+        hull: snap.hull || 0,
+        shield: snap.shield || 0,
+        held: snap.held || null,
+        profile: snap.profile || null,
+        world: snap.world || null,
+      }));
+    } catch (e) {}
+    const msg = cleanMessage("visit", {
+      ...snap,
+      ackReqId,
+      notice,
+      sound,
+    });
+    if (!msg) return false;
+    const peerId = guestPeer.get(guestId) || null;
+    if (!peerId && channel && !(paste && paste.live())) return false;
+    return send(msg, peerId);
+  }
+
+  function pushVisitIfDirty(guestId) {
+    if (role !== "host" || !on || !guestId) return false;
+    const req = { guestId, answered: false, snapshot: null };
+    try { emit("mp-guest-visit-request", req); } catch (e) {}
+    if (!req.answered || !req.snapshot) return false;
+    const snap = req.snapshot;
+    let print = "";
+    try {
+      print = JSON.stringify({
+        docked: !!snap.docked,
+        place: snap.place || "",
+        pw: snap.pw || 0,
+        sw: snap.sw || 0,
+        msl: snap.msl || 0,
+        hull: snap.hull || 0,
+        shield: snap.shield || 0,
+        held: snap.held || null,
+        profile: snap.profile || null,
+        world: snap.world || null,
+      });
+    } catch (e) {
+      return false;
+    }
+    if (print === visitPrint.get(guestId)) return false;
+    visitPrint.set(guestId, print);
+    const msg = cleanMessage("visit", snap);
+    if (!msg) return false;
+    const peerId = guestPeer.get(guestId) || null;
+    if (!peerId && channel && !(paste && paste.live())) return false;
+    return send(msg, peerId);
+  }
+
+  function onVisitPush(payload = {}) {
+    if (role !== "host" || !on || !payload.guestId) return;
+    pushVisit(payload.guestId, payload);
+    const live = liveBundleFor(payload.guestId);
+    if (live?.profile) {
+      try {
+        const print = JSON.stringify({ profile: live.profile, lockers: live.lockers || [] });
+        if (print !== livePrint.get(payload.guestId)) {
+          livePrint.set(payload.guestId, print);
+          noteGuestChanged(payload.guestId);
+        }
+      } catch (e) {}
+    }
   }
 
   function startGuestSync() {
@@ -1389,6 +1498,49 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (role !== "guest" || !on || !welcomed) return false;
     const message = cleanMessage("dock", {});
     return message ? send(message) : false;
+  }
+
+  /** Guest side: ask the host to execute a validated inventory/fitting/shop/mission/slot action. */
+  function sendAction(action = {}) {
+    if (role !== "guest" || !on || !welcomed || !action || typeof action !== "object") return 0;
+    const reqId = Number.isInteger(action.reqId) && action.reqId >= 0 ? action.reqId : nextActReqId++;
+    const message = cleanMessage("act", { ...action, reqId });
+    if (!message) return 0;
+    return send(message, hostPeerId || null) ? reqId : 0;
+  }
+
+  function onAct(message, peerId) {
+    if (role !== "host") return;
+    const entry = peerId
+      ? guests.find(row => row.peerId === peerId)
+      : (guests.length === 1 && !guests[0].peerId ? guests[0] : null);
+    if (!entry) return;
+    markPeerSeen(peerId);
+    const req = { guestId: entry.guestId, action: message, answered: false, result: null };
+    try { emit("mp-guest-act", req); } catch (e) {}
+    const res = req.result || {};
+    pushVisit(entry.guestId, {
+      ackReqId: message.reqId || 0,
+      notice: res.notice || "",
+      sound: res.sound || "",
+    });
+    if (res.changed) {
+      const live = liveBundleFor(entry.guestId);
+      if (live?.profile) {
+        try {
+          const print = JSON.stringify({ profile: live.profile, lockers: live.lockers || [] });
+          if (print !== livePrint.get(entry.guestId)) {
+            livePrint.set(entry.guestId, print);
+            noteGuestChanged(entry.guestId);
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  function onVisit(message) {
+    if (role !== "guest") return;
+    try { emit("mp-visit", { ...message, at: Date.now() }); } catch (e) {}
   }
 
   /**
@@ -1758,6 +1910,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (shipTick) { clearInterval(shipTick); shipTick = 0; }
     if (entityTick) { clearInterval(entityTick); entityTick = 0; }
     if (controlTick) { clearInterval(controlTick); controlTick = 0; }
+    visitPrint.clear();
     for (const { timer } of pendingWrite.values()) if (timer) clearTimeout(timer);
     pendingWrite.clear();
     clearStallTimer();
@@ -2015,6 +2168,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // Slice 8c: the guest asks the host to move its own ship (warp/dock). Same seam.
     sendWarp,
     sendDock,
+    sendAction,
+    pushVisit,
+    onVisitPush,
     // Slice 5: the guest's own watchdog, on the same seam — a test hands it a clock instead of
     // waiting twenty seconds for a real one.
     checkHostAlive,
@@ -2074,6 +2230,13 @@ export const requestWarp = to => (active ? active.sendWarp(to) : false);
 
 /** Guest: ask the host to dock my ship (slice 8c). */
 export const requestDock = () => (active ? active.sendDock() : false);
+
+/** Guest: ask the host to execute a validated game action (returns reqId > 0 if sent, else 0). */
+export const requestGuestAction = action => (active ? active.sendAction(action) : 0);
+
+on("mp-guest-visit-push", payload => {
+  if (active && typeof active.onVisitPush === "function") active.onVisitPush(payload);
+});
 
 /** Own guest id for this session (for tests/main). */
 export const ownId = () => (active ? active.ownGuestId?.() || "" : "");

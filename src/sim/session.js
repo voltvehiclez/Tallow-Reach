@@ -8,7 +8,7 @@ import { emit, on } from "../util/events.js";
 import { DEFAULT_SHIP, nextShipId, shipName } from "../data/ships.js";
 import { DEFAULT_PLACE, isPocket, isInstancePlace, isWormholePlace } from "../data/places.js";
 import { RECOVERY_FEE, REPAIR_MIN_HULL } from "../data/station.js";
-import { state, msg, profileOf, currentSave, placeWorld, saveCurrentGame } from "../state/state.js";
+import { state, msg, profileOf, worldOf, ownerOf, currentSave, placeWorld, saveCurrentGame } from "../state/state.js";
 import { addShipRecords, ensureShipRecords } from "../state/profile.js";
 import { clearTransient } from "./world.js";
 import { stationAt, fieldAt, launchFace, enterPlace, arrivalPos } from "./places.js";
@@ -77,20 +77,22 @@ const DOCK_MAX_SPEED = 70;  // m/s
  * it can be counted, restored from a save and cleared away when that mission is
  * handed in — while the salvage inside the hold stays ordinary cargo.
  */
-function ensureSalvageCrates(placeId, profile) {
+function ensureSalvageCrates(placeId, profile, player = null) {
   const field = fieldAt(placeId);
   if (!field?.salvage) return;
   const W = placeWorld(placeId);
+  const owner = ownerOf(player || profile);
+  const world = worldOf(player || profile);
   const [sx, sy, sz] = field.salvage.spread;
   for (const mission of activeMissions(profile)) {
     if (mission?.type !== "salvage" || mission.failed || missionObjectivesDone(mission)) continue;
     const progress = missionProgress(mission);
     const missing = Math.max(0, progress.total - progress.done) -
-      W.crates.filter(crate => crate?.missionId === mission.id && crate.item === "salv").length;
-    let slot = nextMissionCrateSlot(placeId, mission.id, "salv");
+      W.crates.filter(crate => crate?.missionId === mission.id && crate.item === "salv" && (crate.missionOwner || "host") === owner).length;
+    let slot = nextMissionCrateSlot(placeId, mission.id, "salv", world);
     for (let i = 0; i < missing; i++) {
       const at = V(...field.pos).add(V(R(-sx, sx), R(-sy, sy), R(-sz, sz)));
-      spawnCrate(at, "salv", placeId, null, null, mission.id, true, slot++);
+      spawnCrate(at, "salv", placeId, null, null, mission.id, true, slot++, owner, world);
     }
   }
 }
@@ -131,7 +133,7 @@ export function launch(P = state.player, profile = profileOf(P)) {
   // those: two jobs running side by side each need their own crates flown out
   // and picked up. Top up whatever is still to be recovered on every launch, so
   // a crate lost with a reloaded pocket never leaves a contract unreachable.
-  ensureSalvageCrates(placeId, profile);
+  ensureSalvageCrates(placeId, profile, P);
 
   emit("launched", { player: P });
   if (local) {
@@ -141,7 +143,7 @@ export function launch(P = state.player, profile = profileOf(P)) {
 }
 
 /** Dock at the outpost: clear the field if nobody else is flying, repair shields, save. */
-export function dock(P = state.player, profile = profileOf(P), world = state.worldState) {
+export function dock(P = state.player, profile = profileOf(P), world = worldOf(P)) {
   assertSessionPilot(P, profile, "dock");
   const local = P === state.player;
   if (local) {
@@ -185,6 +187,7 @@ export function dock(P = state.player, profile = profileOf(P), world = state.wor
   const dockedAt = stationAt(placeId) ? placeId : DEFAULT_PLACE;
   if (local) enterPlace(dockedAt, P);
   else P.place = dockedAt;
+  if (P.guestWorld) P.guestWorld.place = dockedAt;
   // Park the flown ship in this station's hangar so Outfitting and Inventory scope to it.
   if (profile.ships.includes(profile.ship)) {
     (profile.shipPlaces || (profile.shipPlaces = {}))[profile.ship] = dockedAt;
@@ -375,9 +378,10 @@ export function die(P = state.player, profile = profileOf(P)) {
   P.v.set(0, 0, 0);
   P.thr = 0;
   P.place = home;
+  if (P.guestWorld) P.guestWorld.place = home;
   const station = stationAt(home);
   if (station?.pos) P.pos.set(...station.pos);
-  dock(P, S, state.worldState);
+  dock(P, S, P.guestWorld || state.worldState);
   const name = P.name || "A visiting pilot";
   emit("mp-guest-recovered", { guestId: P.guestId, name, home, text });
   emit("mp-notice", `${name} was destroyed and recovered at ${station?.n || home}. Cargo lost, ${fee} cr recovery fee.`);

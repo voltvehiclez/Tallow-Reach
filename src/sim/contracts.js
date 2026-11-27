@@ -153,7 +153,7 @@ export function updateContractTimers(dt, world = state.worldState) {
     const next = Math.max(0, prev - dt);
     timers[placeId] = next;
     if (Math.ceil(prev) !== Math.ceil(next)) {
-      emit("board-timer-changed", { placeId, remaining: next, ready: next <= 0 });
+      emit("board-timer-changed", { placeId, remaining: next, ready: next <= 0, world });
     }
   }
 }
@@ -164,11 +164,11 @@ export function describe(mission) {
 }
 
 /** Accept one offer and remove only that offer from the station's board. */
-export function acceptContract(index, profile = state.profile, world = state.worldState, placeId = state.place) {
+export function acceptContract(index, profile = state.profile, world = state.worldState, placeId = state.place, player = undefined) {
   const offers = boardAt(placeId, world);
   const offer = offers[index];
   if (!offer) return undefined;
-  const mission = acceptMission(offer, profile, placeId);
+  const mission = acceptMission(offer, profile, placeId, player);
   if (!mission) return undefined;
   offers.splice(index, 1);
   // Ensure legacy in-memory boards with no timer entry remember they were rolled,
@@ -178,14 +178,14 @@ export function acceptContract(index, profile = state.profile, world = state.wor
   return "Contract accepted. Launch when ready.";
 }
 
-export function abandonContract(index, profile = state.profile) {
+export function abandonContract(index, profile = state.profile, player = undefined) {
   if (index && typeof index === "object") return abandonMission(undefined, index);
-  return abandonMission(index, profile);
+  return abandonMission(index, profile, player);
 }
 
-export function completeContract(index, profile = state.profile) {
+export function completeContract(index, profile = state.profile, player = undefined, world = undefined) {
   if (index && typeof index === "object") return completeMission(undefined, index);
-  return completeMission(index, profile);
+  return completeMission(index, profile, player, world);
 }
 
 export {

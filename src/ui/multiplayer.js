@@ -668,18 +668,14 @@ function joinHtml(model) {
           `<div class="mp-row"><button type="button" data-mp="join-world">Enter the world without my pilot</button></div>` +
           `<p class="mp-hint">You can look around and chat. Your pilot stays at home until you bring it.</p>`
         : "") +
-      // **Enter the world, and say what it opens** (playtest 21). Playtest 20 hid this button while
-      // the pilot was away, because the world behind it is the pilot's own — which made the screen
-      // a dead end the moment the pilot crossed. The owner's answer: put the player in the world
-      // and tell them the truth about it. Until the friend's world can be drawn on this screen
-      // (slices 7-8), the world is the pilot's own galaxy holding its latest copy, and the word
-      // for that is on the button's own hint and in the notice the world opens with.
+      // **Enter the world, and say what it opens** (playtest 21). Now that the live guest visit
+      // syncs the host's world, station UI, and ship copy onto the guest's screen, entering puts
+      // the player directly into their friend's world while keeping their home save frozen.
       (model.visiting && model.brought && !model.choosing
         ? `<p class="mp-hint mp-connected">Your pilot is here: its ship, hold and credits came with it.</p>` +
           `<div class="mp-row"><button type="button" class="go" data-mp="join-world">Enter the world</button></div>` +
-          `<p class="mp-hint">That is your <strong>own</strong> galaxy for now, with your pilot's copy in ` +
-          `it. Your friend's world on your screen is not built yet (slice 7) — anything you earn or buy ` +
-          `there stays in that galaxy, because the copy that comes home is the one in their world.</p>`
+          `<p class="mp-hint">You will enter your <strong>friend's</strong> world with your pilot's copy. ` +
+          `Your home world is paused while away, and anything you earn or buy comes home with you.</p>`
         : "") +
       (model.visiting ? `<div class="mp-row"><button type="button" data-mp="leave">Leave</button></div>` : "") +
       `</section>`

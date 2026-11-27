@@ -72,12 +72,16 @@ function cleanCrate(raw) {
   if (!raw || typeof raw !== "object") return null;
   const id = Math.floor(Number(raw.id) || 0);
   if (id <= 0) return null;
-  return {
+  const out = {
     id,
     pos: vec3(raw.pos),
     quat: quat4(raw.quat),
     item: typeof raw.item === "string" && raw.item ? raw.item : "salv",
   };
+  if (typeof raw.missionId === "string" && raw.missionId) out.missionId = raw.missionId;
+  if (raw.persistent === true) out.persistent = true;
+  if (typeof raw.missionOwner === "string" && raw.missionOwner) out.missionOwner = raw.missionOwner;
+  return out;
 }
 
 function cleanFx(raw) {
@@ -99,7 +103,7 @@ function cleanEnemy(raw) {
   const id = Math.floor(Number(raw.id) || 0);
   const def = typeof raw.def === "string" ? raw.def.trim() : "";
   if (id <= 0 || !def) return null;
-  return {
+  const out = {
     id,
     def,
     friendly: raw.friendly === true,
@@ -110,6 +114,10 @@ function cleanEnemy(raw) {
     hp: Number.isFinite(raw.hp) ? raw.hp : 0,
     mx: Number.isFinite(raw.mx) ? raw.mx : 0,
   };
+  if (typeof raw.missionId === "string" && raw.missionId) out.missionId = raw.missionId;
+  if (typeof raw.encounter === "string" && raw.encounter) out.encounter = raw.encounter;
+  if (typeof raw.missionOwner === "string" && raw.missionOwner) out.missionOwner = raw.missionOwner;
+  return out;
 }
 
 const cleanList = (arr, fn) => (Array.isArray(arr) ? arr.map(fn).filter(Boolean) : []);
@@ -316,10 +324,16 @@ export function syncPocketEntities(W, snapshot, place) {
       pos: V(),
       quat: Q(),
       item: typeof raw.item === "string" ? raw.item : "salv",
+      missionId: typeof raw.missionId === "string" && raw.missionId ? raw.missionId : null,
+      persistent: raw.persistent === true,
+      missionOwner: typeof raw.missionOwner === "string" && raw.missionOwner ? raw.missionOwner : null,
       _net: true,
     }),
     (rec, raw) => {
       rec.item = typeof raw.item === "string" && raw.item ? raw.item : "salv";
+      rec.missionId = typeof raw.missionId === "string" && raw.missionId ? raw.missionId : null;
+      rec.persistent = raw.persistent === true;
+      rec.missionOwner = typeof raw.missionOwner === "string" && raw.missionOwner ? raw.missionOwner : null;
     },
   );
 
@@ -350,6 +364,9 @@ export function syncPocketEntities(W, snapshot, place) {
         n: enemyDef(def)?.n || def,
         friendly: raw.friendly === true,
         boosting: raw.boost === true,
+        missionId: typeof raw.missionId === "string" && raw.missionId ? raw.missionId : null,
+        encounter: typeof raw.encounter === "string" && raw.encounter ? raw.encounter : null,
+        missionOwner: typeof raw.missionOwner === "string" && raw.missionOwner ? raw.missionOwner : null,
         hp: Number.isFinite(raw.hp) ? raw.hp : 0,
         mx: Number.isFinite(raw.mx) ? raw.mx : 0,
         pos: V(),
@@ -365,6 +382,9 @@ export function syncPocketEntities(W, snapshot, place) {
       rec.n = enemyDef(def)?.n || def;
       rec.friendly = raw.friendly === true;
       rec.boosting = raw.boost === true;
+      rec.missionId = typeof raw.missionId === "string" && raw.missionId ? raw.missionId : null;
+      rec.encounter = typeof raw.encounter === "string" && raw.encounter ? raw.encounter : null;
+      rec.missionOwner = typeof raw.missionOwner === "string" && raw.missionOwner ? raw.missionOwner : null;
       rec.hp = Number.isFinite(raw.hp) ? raw.hp : rec.hp;
       rec.mx = Number.isFinite(raw.mx) ? raw.mx : rec.mx;
       if (!rec.v || typeof rec.v.set !== "function") rec.v = V();

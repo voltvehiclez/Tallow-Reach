@@ -593,7 +593,7 @@ function cleanMission(raw) {
     current,
     counters,
   };
-  for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "timeout", "elapsed", "failed", "failure", "failureMessage", "checkpoint", "allowTravel"]) {
+  for (const key of ["type", "tier", "n", "r", "o", "e", "faction", "origin", "sector", "owner", "timeout", "elapsed", "failed", "failure", "failureMessage", "checkpoint", "allowTravel"]) {
     if (raw[key] !== undefined && !(borderDefinition && key === "timeout")) mission[key] = raw[key];
   }
   // Optional objectives are authored data; their progress is save state. An act

@@ -17,7 +17,7 @@ import { ENEMIES, DEFAULT_ENEMY, enemyDef } from "../data/enemies.js";
 import { encounterDef, encounterRespawn } from "../data/encounters.js";
 import { profileOf } from "../state/state.js";
 import { missionForObjective, remainingObjective } from "./missions.js";
-import { state, placeWorld, instanceAt } from "../state/state.js";
+import { state, placeWorld, instanceAt, ownerOf, worldByOwner } from "../state/state.js";
 import { markEncounterCleared, memoryCooling } from "./place-memory.js";
 import { clearMissionDrops, fire, removeMissionDrop } from "./combat.js";
 import { boom } from "./effects.js";
@@ -67,6 +67,7 @@ export function spawnEnemy(id, pos, placeId = state.place, encounter = null, opt
     brain: createBrain(Math.floor(random() * 0xffffffff)),
   };
   if (options.role) e.role = options.role;
+  if (options.missionOwner) e.missionOwner = options.missionOwner;
   if (options.course) {
     const course = startCourseAtBeginning(options.course, options.phase || "lesson");
     if (course) e.course = course;
@@ -162,7 +163,7 @@ export function updateEnemies(dt, placeId = state.place) {
             // enters the world: `entity-spawned` builds the mesh straight away.
             const shot = fire(e.pos, dir, def.bspd, false, def.dmg, undefined, placeId,
               String(e.encounter || "").startsWith("mission:") ? String(e.encounter).slice("mission:".length) : null,
-              { colour: BULLET_COLOURS.cannon });
+              { colour: BULLET_COLOURS.cannon, ...(e.missionOwner ? { missionOwner: e.missionOwner } : {}) });
             efireLog(placeId, e.id);
             if (range < def.hearRange) emit("sfx", { name: "enemy-fire" });
           }
@@ -185,6 +186,7 @@ export function updateEnemies(dt, placeId = state.place) {
       // the generic fire helper defaults to the local pilot's place.
       shot.place = placeId;
       shot.missionId = missionId;
+      if (e.missionOwner) shot.missionOwner = e.missionOwner;
       efireLog(placeId, e.id);
       if (dist < def.hearRange) emit("sfx", { name: "enemy-fire" });
     }
@@ -312,48 +314,52 @@ export function updateEnemies(dt, placeId = state.place) {
 }
 
 /** Remove entities created by one mission without clearing ordinary place content. */
-function clearMissionContents(missionId) {
+function clearMissionContents(missionId, owner = null) {
   if (!missionId) return;
   const tag = String(missionId);
   const encounter = `mission:${tag}`;
+  const matchesOwner = entity => !owner || (entity.missionOwner || "host") === owner;
   for (const placeId of state.places.keys()) {
     const W = placeWorld(placeId);
     for (const enemy of [...W.enemies]) {
-      if (enemy.encounter === encounter) dropEnemy(enemy, placeId);
+      if (enemy.encounter === encounter && matchesOwner(enemy)) dropEnemy(enemy, placeId);
     }
     for (const bullet of [...W.bullets]) {
-      if (bullet.missionId === tag) dropEntity(W.bullets, bullet);
+      if (bullet.missionId === tag && matchesOwner(bullet)) dropEntity(W.bullets, bullet);
     }
     for (const crate of [...W.crates]) {
-      if (crate.missionId === tag) {
-        removeMissionDrop(crate);
+      if (crate.missionId === tag && matchesOwner(crate)) {
+        removeMissionDrop(crate, false, worldByOwner(crate.missionOwner || owner || "host"));
         dropEntity(W.crates, crate);
       }
     }
   }
-  clearMissionDrops(tag);
+  clearMissionDrops(tag, worldByOwner(owner || "host"));
 }
 
 // Abandoning a mission removes its scripted wave and any mission loot/shots,
 // but leaves ordinary patrols, derelicts and other place content untouched.
-on("mission-abandoned", ({ mission } = {}) => clearMissionContents(mission?.id));
-on("mission-rewarded", ({ mission } = {}) => clearMissionContents(mission?.id));
-on("mission-failed", ({ mission, action } = {}) => {
-  if (action === "abandon") clearMissionContents(mission?.id);
+on("mission-abandoned", ({ mission, player } = {}) =>
+  clearMissionContents(mission?.id, mission?.owner || ownerOf(player)));
+on("mission-rewarded", ({ mission, player } = {}) =>
+  clearMissionContents(mission?.id, mission?.owner || ownerOf(player)));
+on("mission-failed", ({ mission, action, player } = {}) => {
+  if (action === "abandon") clearMissionContents(mission?.id, mission?.owner || ownerOf(player));
 });
 
 // A generated patrol is clear only after its last member is destroyed. The
 // encounter feature id, not the enemy type, is what is remembered in the world.
-on("enemy-killed", ({ place, encounter, player } = {}) => {
+on("enemy-killed", ({ place, encounter, player, missionOwner } = {}) => {
   if (!place || !encounter) return;
   const W = placeWorld(place);
   // Mission waves use their mission id as an encounter tag. When the last
   // member dies, wake a matching data-defined wait step instead of requiring
   // the UI or a test harness to inject `mission-trigger` by hand.
   if (String(encounter).startsWith("mission:")) {
-    if (!W.enemies.some(enemy => enemy.encounter === encounter)) {
+    const owner = missionOwner || "host";
+    if (!W.enemies.some(enemy => enemy.encounter === encounter && (enemy.missionOwner || "host") === owner)) {
       const missionId = String(encounter).slice("mission:".length);
-      emit("mission-trigger", { trigger: "wave-clear", mission: missionId, place, player });
+      emit("mission-trigger", { trigger: "wave-clear", mission: missionId, place, player, missionOwner: owner });
     }
     return;
   }
@@ -384,8 +390,10 @@ on("mission-script", ({ action, player, place, mission } = {}) => {
   const dropOnDefeat = action.dropOnDefeat && typeof action.dropOnDefeat === "object"
     ? { ...action.dropOnDefeat }
     : null;
+  const owner = mission?.owner || ownerOf(player);
   const options = {
     loot: action.loot === false ? null : action.loot,
+    missionOwner: owner,
     ...(action.role ? { role: action.role } : {}),
     ...(action.warpIn ? { warpIn: true, toward: origin } : {}),
     ...(action.course ? { course: action.course, phase: action.phase || "lesson" } : {}),

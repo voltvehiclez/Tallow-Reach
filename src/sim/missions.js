@@ -11,7 +11,7 @@ import { refreshGuns } from "./guns.js";
 import { itemCat, itemName, itemStack, itemVol } from "../data/items.js";
 import { enemyDef } from "../data/enemies.js";
 import { placeAt, placeDef, isPocket, DEFAULT_PLACE } from "../data/places.js";
-import { state, profileOf, placeWorld } from "../state/state.js";
+import { state, profileOf, placeWorld, playerOf, worldOf, ownerOf, playerByOwner } from "../state/state.js";
 import { STATION, addItem, capacityOf, countOf, hasRoomFor, loadOf, stationStock, stockOf, takeItem } from "./inventory.js";
 import { enterPlace, arrivalPos, stationAt } from "./places.js";
 
@@ -268,16 +268,17 @@ function handInNextText(mission, profile) {
   // hold both count, the sentence already names the station, and the docked
   // card says exactly what is missing when the pilot tries to hand in.
   if (deliveryContract(mission)) return text;
-  const delivery = missionDeliveryRequirement(mission, profile);
+  const delivery = missionDeliveryRequirement(mission, profile, worldOf(profile));
   const have = delivery ? delivery.station + delivery.hold : requirement.count;
   return have >= requirement.count ? text : `${text} You have ${have} of ${requirement.count}.`;
 }
 
 /** Explain a resource-blocked script instead of leaving a vague generic step. */
 function blockedScriptText(step, profile = state.profile) {
+  const world = worldOf(profile);
   for (const action of scriptActions(step)) {
     const kind = scriptKind(action);
-    if ((kind !== "give-item" && kind !== "take-item") || scriptActionReady(action, profile)) continue;
+    if ((kind !== "give-item" && kind !== "take-item") || scriptActionReady(action, profile, world)) continue;
     const station = action.target === "station";
     if (kind === "give-item") return station
       ? "Make room in station storage to continue."
@@ -331,7 +332,7 @@ export function missionNextText(mission, profile = state.profile) {
   if (resourceHint) {
     // A dock-side step cannot continue in flight, so say that too: the player
     // must never be told to "make room" while nothing tells them to go back.
-    const here = profile === state.profile ? state.player : null;
+    const here = profile === state.profile ? state.player : playerOf(profile);
     return step.requiresDock === true && here && here.docked !== true
       ? `Dock at a station and ${resourceHint.charAt(0).toLowerCase()}${resourceHint.slice(1)}`
       : resourceHint;
@@ -378,9 +379,9 @@ export function missionForObjective(profile, kind) {
   ) || null;
 }
 
-function freshId(type) {
+function freshId(type, owner = "host") {
   nextMissionId += 1;
-  return `contract:${type}:${nextMissionId}`;
+  return owner && owner !== "host" ? `contract:${type}:${owner}:${nextMissionId}` : `contract:${type}:${nextMissionId}`;
 }
 
 function cloneData(value) {
@@ -400,8 +401,9 @@ function huntAreaHint(at) {
   return field?.n || null;
 }
 
-export function instantiateMission(offer, at = state.place) {
-  const mission = missionFromContract(offer, freshId(offer?.type));
+export function instantiateMission(offer, at = state.place, owner = "host") {
+  const mission = missionFromContract(offer, freshId(offer?.type, owner));
+  if (mission && owner && owner !== "host") mission.owner = owner;
   // Remember the station the contract was taken from, so the hand-in guidance
   // can name it while the pilot is out in the field. `origin` is already part of
   // the saved mission shape, so no save migration is needed.
@@ -426,10 +428,11 @@ export function instantiateMission(offer, at = state.place) {
 }
 
 /** Clone a data-only story definition into the saved runtime shape. */
-export function instantiateStoryMission(definition, id = definition?.id) {
+export function instantiateStoryMission(definition, id = definition?.id, owner = "host") {
   if (!definition || definition.kind !== "story" || !Array.isArray(definition.steps) || !definition.steps.length) return null;
   const mission = cloneData(definition);
   mission.id = id || `story:${++nextMissionId}`;
+  if (owner && owner !== "host") mission.owner = owner;
   mission.step = 0;
   mission.current = 0;
   mission.counters = {};
@@ -676,8 +679,7 @@ function scriptActions(step) {
   return step?.action ? [step.action] : [];
 }
 
-function placeState(place) {
-  const world = state.worldState;
+function placeState(place, world = state.worldState) {
   if (!world.missionState || typeof world.missionState !== "object" || Array.isArray(world.missionState)) {
     world.missionState = {};
   }
@@ -690,15 +692,16 @@ function placeState(place) {
 function executeScriptAction(action, mission, profile, payload = {}) {
   const kind = scriptKind(action);
   if (!kind) return false;
-  const player = payload.player || (profile === state.profile ? state.player : null);
+  const player = payload.player || playerOf(profile);
+  const world = worldOf(player || profile);
   const place = action.place || action.sector || player?.place || state.place;
   const count = Math.max(1, Math.floor(+action.count || 1));
   if (kind === "give-item" || kind === "take-item") {
     const item = action.item;
     const where = action.target === "station" ? STATION : profile.ship;
     const changed = kind === "give-item"
-      ? addItem(where, item, count, profile, state.worldState)
-      : takeItem(where, item, count, profile, state.worldState);
+      ? addItem(where, item, count, profile, world)
+      : takeItem(where, item, count, profile, world);
     emit(kind === "give-item" ? "mission-item-given" : "mission-item-taken", {
       mission, item, count: changed, target: action.target || "ship", player,
     });
@@ -709,8 +712,8 @@ function executeScriptAction(action, mission, profile, payload = {}) {
   }
   if (kind === "set-sector-state") {
     const values = action.set || action.state || (action.key ? { [action.key]: action.value } : {});
-    Object.assign(placeState(place), values);
-    emit("mission-sector-state", { mission, place, state: placeState(place), player });
+    Object.assign(placeState(place, world), values);
+    emit("mission-sector-state", { mission, place, state: placeState(place, world), player });
     return true;
   }
   if (kind === "play-sound") {
@@ -739,25 +742,26 @@ function executeScriptAction(action, mission, profile, payload = {}) {
   return false;
 }
 
-function scriptActionReady(action, profile) {
+function scriptActionReady(action, profile, world = worldOf(profile)) {
   const kind = scriptKind(action);
   if (kind !== "give-item" && kind !== "take-item") return true;
   const item = action.item;
   const count = Math.max(1, Math.floor(+action.count || 1));
   const where = action.target === "station" ? STATION : profile.ship;
   return kind === "give-item"
-    ? hasRoomFor(where, item, count, profile, state.worldState)
-    : countOf(where, item, profile, state.worldState) >= count;
+    ? hasRoomFor(where, item, count, profile, world)
+    : countOf(where, item, profile, world) >= count;
 }
 
 function scriptActionsReady(actions, profile, payload = {}) {
   const planned = new Map();
-  const player = payload.player || (profile === state.profile ? state.player : null);
+  const player = payload.player || playerOf(profile);
+  const world = worldOf(player || profile);
   const stockFor = where => {
     if (!planned.has(where)) {
       planned.set(where, {
-        counts: { ...stockOf(where, profile, state.worldState) },
-        load: loadOf(where, profile, state.worldState),
+        counts: { ...stockOf(where, profile, world) },
+        load: loadOf(where, profile, world),
       });
     }
     return planned.get(where);
@@ -777,7 +781,7 @@ function scriptActionsReady(actions, profile, payload = {}) {
         continue;
       }
       const volume = itemVol(item);
-      if (!(volume > 0) || stock.load + count * volume > capacityOf(where, profile, state.worldState) ||
+      if (!(volume > 0) || stock.load + count * volume > capacityOf(where, profile, world) ||
           have + count > itemStack(item)) return false;
       stock.counts[item] = have + count;
       stock.load += count * volume;
@@ -795,7 +799,7 @@ function scriptActionsReady(actions, profile, payload = {}) {
 
 function stepSituationReady(step, profile, payload = {}) {
   if (payload.fromDialogue) return false;
-  const player = payload.player || (profile === state.profile ? state.player : null);
+  const player = payload.player || playerOf(profile);
   const requiredPlace = step.place || step.sector || step.requiresPlace;
   if (requiredPlace && (!player || player.place !== requiredPlace)) return false;
   if (state.loading || player?.loading || player?.dead || player?.warp ||
@@ -891,6 +895,7 @@ function rememberMissionPickup(mission, event, payload = {}) {
  *  before its dialogue finishes and its `kill` step becomes current. */
 function rememberMissionKill(mission, event, payload = {}) {
   if (event !== "enemy-killed" || payload.encounter !== `mission:${mission.id}`) return false;
+  if (payload.missionOwner && payload.missionOwner !== (mission.owner || "host")) return false;
   ensureCounters(mission);
   const current = missionStep(mission);
   if (current?.kind === "kill" && objectiveMatches(current, event, payload, mission)) return false;
@@ -958,6 +963,8 @@ function objectiveMatches(step, event, payload = {}, mission = null) {
   const actualPlace = payload.player?.place || payload.place || payload.id || payload.target;
   if (requiredPlace && requiredPlace !== actualPlace) return false;
   if (step.kind === "kill") {
+    if (String(payload.encounter || "").startsWith("mission:") && payload.missionOwner &&
+        payload.missionOwner !== (mission?.owner || "host")) return false;
     return (!step.enemy || step.enemy === payload.def) && (!step.faction || step.faction === payload.faction);
   }
   if (step.kind === "control") {
@@ -972,6 +979,8 @@ function objectiveMatches(step, event, payload = {}, mission = null) {
     // in space, and another contract's crates (or loose Salvage from a wreck)
     // must not finish its count. The recovered item is ordinary cargo, so any
     // Salvage can still pay the hand-in.
+    if ((step.owned === true || step.missionItem === true) && payload.missionOwner &&
+        payload.missionOwner !== (mission?.owner || "host")) return false;
     if (step.owned === true &&
         (payload.missionId !== mission?.id || payload.player?.docked === true)) return false;
     return (!step.item || step.item === payload.item) &&
@@ -997,7 +1006,10 @@ function objectiveMatches(step, event, payload = {}, mission = null) {
       (!step.item || step.item === payload.item);
   }
   if (step.kind === "wait") {
-    if (event === "mission-trigger") return !step.trigger || step.trigger === payload.trigger || step.trigger === payload.id;
+    if (event === "mission-trigger") {
+      if (payload.missionOwner && payload.missionOwner !== (mission?.owner || "host")) return false;
+      return !step.trigger || step.trigger === payload.trigger || step.trigger === payload.id;
+    }
     if (event === "place-entered") {
       const target = step.place || step.sector || step.target;
       return !!target && target === (payload.id || payload.place || payload.player?.place);
@@ -1141,7 +1153,11 @@ export function advanceMissions(event, payload = {}) {
   const ownerlessKill = !payload.player && !payload.profile &&
     (event === "enemy-killed" || (event === "mission-trigger" && !!payload.mission));
   const profiles = ownerlessKill
-    ? [...new Set([state.profile, ...state.players.map(p => p?.profile)].filter(Boolean))]
+    ? (payload.missionOwner
+        ? (payload.missionOwner === "host"
+            ? [...new Set([state.profile, ...state.players.filter(p => ownerOf(p) === "host").map(p => p?.profile)].filter(Boolean))]
+            : [profileOf(playerByOwner(payload.missionOwner))].filter(Boolean))
+        : [...new Set([state.profile, ...state.players.map(p => p?.profile)].filter(Boolean))])
     : [profileFor(payload)];
   let changed = false;
   for (const profile of profiles) {
@@ -1203,7 +1219,7 @@ export function missionOnlyItems(mission) {
 }
 
 /** Every copy of an item anywhere the pilot can reach without it being lost. */
-function missionCopies(item, profile) {
+function missionCopies(item, profile, world = worldOf(profile)) {
   let total = 0;
   const seen = new Set();
   const add = stock => {
@@ -1212,9 +1228,9 @@ function missionCopies(item, profile) {
     total += Math.max(0, Number(stock[item]) || 0);
   };
   for (const hold of Object.values(profile?.holds || {})) add(hold);
-  const world = state.worldState || {};
-  for (const stock of Object.values(world.stationStores || {})) add(stock);
-  add(world.store);
+  const w = world || {};
+  for (const stock of Object.values(w.stationStores || {})) add(stock);
+  add(w.store);
   return total;
 }
 
@@ -1226,18 +1242,19 @@ function missionCopies(item, profile) {
  * goods (ore, salvage) can be recovered again, so they never count as lost, and
  * neither does an item that is still in the ship or at a station.
  */
-export function missionLostHandIn(mission, profile = state.profile) {
+export function missionLostHandIn(mission, profile = state.profile, world = worldOf(profile)) {
   if (!mission || isMissionFailed(mission) || !missionObjectivesDone(mission)) return null;
   const requirement = missionHandIn(mission);
   if (!requirement || itemCat(requirement.item) !== "mission") return null;
-  return missionCopies(requirement.item, profile) >= requirement.count ? null : requirement;
+  return missionCopies(requirement.item, profile, world) >= requirement.count ? null : requirement;
 }
 
 /** Fail every active mission that owes a hand-in it can never make. Says why. */
 function failLostHandIns(payload = {}, profile = profileFor(payload)) {
+  const world = worldOf(payload.player || profile);
   let changed = false;
   for (const mission of [...missionsOf(profile)]) {
-    const lost = missionLostHandIn(mission, profile);
+    const lost = missionLostHandIn(mission, profile, world);
     if (!lost) continue;
     changed = failMission(mission, "lost-item", profile, payload, {
       action: "abandon",
@@ -1282,18 +1299,21 @@ function failMissionsFor(reason, payload = {}) {
   return changed;
 }
 
-export function acceptMission(offer, profile = state.profile, at = state.place) {
+export function acceptMission(offer, profile = state.profile, at = state.place, player = playerOf(profile)) {
   // A story mission can only be active once. The Mission log hides an active
   // offer, but the rule belongs here: a second copy (a double click, a retry, a
   // network message) would run the same script twice and double every spawn.
   // Reject first so a duplicate accept never grants or selects the fixed hull.
   if (offer?.kind === "story" && missionsOf(profile).some(active => active.id === offer.id)) return undefined;
+  const targetPlayer = player || playerOf(profile);
+  const owner = ownerOf(targetPlayer || profile);
   // A story mission can assign the hull the fiction says the pilot is flying.
   // The grant belongs to the shared pilot; this mode's selection is pointed at it.
   if (offer?.fixedShip && !grantFixedShip(profile, offer.fixedShip, at, { campaign: isCampaignMissionId(offer?.id) })) return undefined;
-  if (offer?.fixedShip && profile === state.profile && state.player) {
-    state.player.missileStock = profile.msl;
-    refreshGuns(state.player, profile);
+  if (offer?.fixedShip && targetPlayer) {
+    targetPlayer.ship = profile.ship;
+    targetPlayer.missileStock = profile.msl;
+    refreshGuns(targetPlayer, profile);
   }
   // Every mission is handed in at one station: its data may name it, otherwise it
   // is the station that gave the mission out (this one, unless the pilot is not
@@ -1303,13 +1323,13 @@ export function acceptMission(offer, profile = state.profile, at = state.place) 
   // station is filed there even if the caller is not standing in it (tests, or a
   // board browsed for a docked friend).
   const mission = stampHandInStation(
-    offer?.kind === "story" ? instantiateStoryMission(offer) : instantiateMission(offer, at),
+    offer?.kind === "story" ? instantiateStoryMission(offer, offer?.id, owner) : instantiateMission(offer, at, owner),
     at,
   );
   if (!mission) return undefined;
   missionsOf(profile).push(mission);
-  activateAutomatic(mission, profile, { profile });
-  emit("mission-accepted", { mission, player: profile === state.profile ? state.player : undefined });
+  activateAutomatic(mission, profile, { profile, player: targetPlayer });
+  emit("mission-accepted", { mission, player: targetPlayer || undefined });
   return mission;
 }
 
@@ -1551,8 +1571,14 @@ export function missionDeliveryRequirement(mission, profile = state.profile, wor
 }
 
 /** Ready to be paid at the station the pilot is at right now. */
-export function canCompleteMissionHere(mission, profile = state.profile) {
-  return canCollectMissionReward(mission, profile) && atMissionHandInStation(mission);
+export function canCompleteMissionHere(
+  mission,
+  profile = state.profile,
+  player = playerOf(profile),
+  world = worldOf(player || profile),
+) {
+  const here = player?.place || world?.place || state.place;
+  return canCollectMissionReward(mission, profile, world) && atMissionHandInStation(mission, here);
 }
 
 export function canCollectMissionReward(mission, profile = state.profile, world = state.worldState) {
@@ -1577,16 +1603,24 @@ function consumeDelivery(mission, profile, world = state.worldState) {
   return null;
 }
 
-export function completeMission(indexOrId, profile = state.profile, player = profile === state.profile ? state.player : undefined) {
-  if (player && (state.loading || player.loading || player.dead || player.warp || player.inCombat || player.docked !== true)) {
+export function completeMission(
+  indexOrId,
+  profile = state.profile,
+  player = profile === state.profile ? state.player : undefined,
+  world = undefined,
+) {
+  const targetPlayer = player;
+  const targetWorld = world || worldOf(targetPlayer || profile);
+  const here = targetPlayer?.place || targetWorld?.place || state.place;
+  if (targetPlayer && (state.loading || targetPlayer.loading || targetPlayer.dead || targetPlayer.warp || targetPlayer.inCombat || targetPlayer.docked !== true)) {
     return "Dock at a station to collect the reward.";
   }
-  const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(m => missionReadyForHandIn(m, profile));
-  if (!mission || !missionReadyForHandIn(mission, profile)) return undefined;
+  const mission = missionAt(indexOrId, profile) || missionsOf(profile).find(m => missionReadyForHandIn(m, profile, targetWorld));
+  if (!mission || !missionReadyForHandIn(mission, profile, targetWorld)) return undefined;
   // One station takes the hand-in. Anywhere else pays nothing and says where to
   // go, so the reward can never be collected at the wrong counter.
-  if (!atMissionHandInStation(mission)) return `Hand this in at ${missionHandInStationName(mission)}.`;
-  const deliveryError = consumeDelivery(mission, profile);
+  if (!atMissionHandInStation(mission, here)) return `Hand this in at ${missionHandInStationName(mission)}.`;
+  const deliveryError = consumeDelivery(mission, profile, targetWorld);
   if (deliveryError) return deliveryError;
   const base = Math.max(0, Math.floor(+mission.rewards?.credits || +mission.r || 0));
   const reward = base + missionBonus(mission);
@@ -1595,19 +1629,20 @@ export function completeMission(indexOrId, profile = state.profile, player = pro
   const list = missionsOf(profile);
   list.splice(list.indexOf(mission), 1);
   const campaignCompletion = noteCampaignCompletion(mission, profile);
-  if (campaignCompletion) emit("campaign-mission-completed", { mission, player: profile === state.profile ? state.player : undefined });
-  emit("mission-rewarded", { mission, reward, player: profile === state.profile ? state.player : undefined });
+  if (campaignCompletion) emit("campaign-mission-completed", { mission, player: targetPlayer || undefined });
+  emit("mission-rewarded", { mission, reward, player: targetPlayer || undefined });
   return `Paid ${reward} cr.`;
 }
 
-export function abandonMission(indexOrId, profile = state.profile) {
+export function abandonMission(indexOrId, profile = state.profile, player = playerOf(profile)) {
+  const targetPlayer = player || playerOf(profile);
   const mission = missionAt(indexOrId, profile) || missionsOf(profile)[0];
   if (!mission) return undefined;
-  failMission(mission, "abandon", profile, { player: profile === state.profile ? state.player : undefined });
+  failMission(mission, "abandon", profile, { player: targetPlayer || undefined });
   const list = missionsOf(profile);
   const index = list.indexOf(mission);
   if (index >= 0) list.splice(index, 1);
-  emit("mission-abandoned", { mission, player: profile === state.profile ? state.player : undefined });
+  emit("mission-abandoned", { mission, player: targetPlayer || undefined });
   return `${missionKindWord(mission)} abandoned.`;
 }
 
@@ -1678,6 +1713,7 @@ export function missionRespawnActions(mission) {
 function rearmWaves(place, player, profile) {
   if (!player || player.docked || player.dead || player.warp || state.loading || player.loading) return;
   if (!place || !isPocket(place)) return;
+  const owner = ownerOf(player || profile);
   for (const mission of [...missionsOf(profile)]) {
     if (isMissionFailed(mission)) continue;
     const kills = killObjectivesIn(mission);
@@ -1690,7 +1726,7 @@ function rearmWaves(place, player, profile) {
       const remaining = stepCount(target.step) - counterValue(mission, target.key);
       if (remaining <= 0) continue;
       const alive = placeWorld(place).enemies
-        .filter(e => e.def === enemy && e.encounter === `mission:${mission.id}`).length;
+        .filter(e => e.def === enemy && e.encounter === `mission:${mission.id}` && (e.missionOwner || "host") === owner).length;
       const deficit = remaining - alive;
       if (deficit <= 0) continue;
       emit("mission-script", {
@@ -1703,12 +1739,12 @@ function rearmWaves(place, player, profile) {
 }
 
 on("place-entered", ({ id, player } = {}) => {
-  if (player !== state.player) return;
-  rearmWaves(id || state.place, player, profileFor({ player }));
+  if (!player) return;
+  rearmWaves(id || player.place || state.place, player, profileFor({ player }));
 });
 on("launched", ({ player } = {}) => {
-  if (player !== state.player) return;
-  rearmWaves(state.place, player, profileFor({ player }));
+  if (!player) return;
+  rearmWaves(player.place || state.place, player, profileFor({ player }));
 });
 
 // Death is punishment enough, so a destroyed ship does NOT fail a mission by default.

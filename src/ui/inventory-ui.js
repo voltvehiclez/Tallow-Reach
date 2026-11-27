@@ -37,6 +37,9 @@ import {
   unequipTo,
 } from "../sim/fitting.js";
 import { moduleDetailsHtml } from "./screens.js";
+import { requestGuestAction } from "../net/session.js";
+
+const isLiveAway = profile => Boolean(state.away && profile === state.profile);
 
 let ghostEl = null;
 let trackingMove = false;
@@ -151,7 +154,7 @@ export function showDragGhost(id, n, clientX, clientY, slotSize) {
   renderGhostCard(id, n, clientX, clientY, slotSize);
 }
 
-function syncHeldGhost(clientX, clientY, slotSize) {
+export function syncHeldGhost(clientX, clientY, slotSize) {
   const held = state.ui.invHeld;
   if (!held || !(held.n > 0)) {
     clearHeldGhost();
@@ -177,6 +180,11 @@ export function cancelHeldStack(profile = state.profile, world = state.worldStat
     return false;
   }
   state.ui.invHeld = null;
+  if (isLiveAway(profile)) {
+    requestGuestAction({ op: "invCancel" });
+    syncHeldGhost();
+    return true;
+  }
   if (held.fromBay) {
     const p = profile === state.profile ? state.player : undefined;
     returnBayHeld(held, p, profile, world);
@@ -220,6 +228,21 @@ export function clickInventorySlot({
   const idx = Math.floor(+slot);
   if (!where || !Number.isInteger(idx) || idx < 0) {
     return { changed: false, message: "", picked: false, moved: 0 };
+  }
+  if (isLiveAway(profile)) {
+    if (shiftKey && (!otherWhere || otherWhere === where)) {
+      return { changed: false, message: "", picked: false, moved: 0 };
+    }
+    const hadHeld = Boolean(getHeldStack());
+    requestGuestAction({
+      op: "invClick",
+      where,
+      slot: idx,
+      toWhere: otherWhere || "",
+      shift: Boolean(shiftKey),
+    });
+    if (clientX || clientY) renderGhostCard(state.ui.invHeld?.id, state.ui.invHeld?.n, clientX, clientY, slotSize);
+    return { changed: true, message: "", picked: !hadHeld && !shiftKey, moved: 0 };
   }
 
   // Shift+left-click transfers the whole stack straight to the other open inventory.
@@ -277,6 +300,10 @@ export function rightClickInventorySlot({
   if (!where || !Number.isInteger(idx) || idx < 0) {
     return { handled: true, changed: false, message: "" };
   }
+  if (isLiveAway(profile)) {
+    requestGuestAction({ op: "invRight", where, slot: idx });
+    return { handled: true, changed: true, message: "" };
+  }
   const res = held.fromBay
     ? placeBayHeldInSlot(held, where, idx, profile, world)
     : placeHeldStack(held, where, idx, { one: true }, profile, world);
@@ -296,6 +323,11 @@ export function pickupSlotAmount({
   profile = state.profile,
   world = state.worldState,
 }) {
+  if (isLiveAway(profile)) {
+    requestGuestAction({ op: "invTake", where, slot: Math.floor(+slot), n: Math.floor(+amount) });
+    if (clientX || clientY) lastPointer = { x: clientX, y: clientY, known: true };
+    return { ok: true, held: null, message: "" };
+  }
   if (hasHeldStack()) cancelHeldStack(profile, world);
   const res = takeFromSlot(where, Math.floor(+slot), amount, profile, world);
   if (!res.ok || !res.held) return res;
@@ -310,6 +342,10 @@ export function pickupSlotAmount({
  * it merges cleanly with the rest.
  */
 export function runStackAll(where, profile = state.profile, world = state.worldState) {
+  if (isLiveAway(profile)) {
+    requestGuestAction({ op: "invStack", where });
+    return { changed: true, message: "" };
+  }
   const held = getHeldStack();
   let returned = false;
   if (held && held.where === where) {
@@ -525,6 +561,12 @@ export function clickOutfittingBay({
   if (!group || !Number.isInteger(idx) || idx < 0) {
     return { changed: false, picked: false, message: "" };
   }
+  if (isLiveAway(profile)) {
+    const hadHeld = Boolean(getHeldStack());
+    requestGuestAction({ op: "fitClick", group, bay: idx, shift: Boolean(shiftKey) });
+    if (clientX || clientY) lastPointer = { x: clientX, y: clientY, known: true };
+    return { changed: true, picked: !hadHeld && !shiftKey, message: "" };
+  }
   const held = getHeldStack();
   if (shiftKey && !held) {
     let res = unequipTo(group, idx, STATION, -1, player, profile, world);
@@ -562,6 +604,11 @@ export function placeHeldOnOutfittingBay({
 }) {
   const held = getHeldStack();
   if (!held) return { handled: false, changed: false, message: "" };
+  if (isLiveAway(profile)) {
+    requestGuestAction({ op: "fitPlace", group, bay: Math.floor(+bay) });
+    if (clientX || clientY) lastPointer = { x: clientX, y: clientY, known: true };
+    return { handled: true, changed: true, message: "" };
+  }
   const res = placeHeldInBay(held, group, Math.floor(+bay), player, profile, world);
   state.ui.invHeld = res.held || null;
   syncHeldGhost(clientX, clientY);

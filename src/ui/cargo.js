@@ -32,6 +32,7 @@ import {
 } from "./inventory-ui.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
+import { requestGuestAction } from "../net/session.js";
 
 let root = null;
 let menu = null;
@@ -53,6 +54,7 @@ function renderCargo() {
 }
 
 function saveQuietly() {
+  if (state.away) return;
   try {
     saveCurrentGame();
   } catch {
@@ -294,6 +296,17 @@ function openCargoDiscard(entry) {
     id,
     count,
     onDiscard: (place, itemId, amount) => {
+      if (state.away) {
+        requestGuestAction({
+          op: "invDiscard",
+          id: itemId,
+          where: place,
+          slot: Number.isInteger(slotIdx) ? slotIdx : -1,
+          n: amount,
+        });
+        uiSound("confirm");
+        return;
+      }
       notify(discardItem(
         place,
         itemId,
@@ -317,6 +330,12 @@ function useConsumable(entry) {
   const where = entry.dataset.where || state.profile.ship;
   if (!canUse(id)) return;
   closeContextMenu();
+  if (state.away) {
+    requestGuestAction({ op: "invUse", id, where });
+    uiSound("confirm");
+    closeCargo();
+    return;
+  }
   const before = countOf(where, id);
   notify(useItem(id, where));
   uiSound("confirm");
@@ -519,6 +538,14 @@ export function setupCargo() {
   on("docked", () => closeCargo({ silent: true }));
   on("main-menu", () => closeCargo({ silent: true }));
   on("died", () => closeCargo({ silent: true }));
+  on("mp-visit", () => {
+    if (!isCargoOpen()) return;
+    const card = root && root.querySelector(".cargo-card");
+    const editing = Boolean(
+      card?.querySelector?.(".inv-discard-popover, .inv-take-popover, .ship-info-popover, .mod-info-popover, .inv-context")
+    );
+    if (!editing) renderCargo();
+  });
   return root;
 }
 
