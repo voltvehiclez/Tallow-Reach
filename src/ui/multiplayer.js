@@ -304,7 +304,8 @@ export const isMultiplayerScreenOpen = () => !!root && !root.hidden;
 export function setupMultiplayer() {
   buildScreen();
   buildChat();
-  on("mp-state", () => {
+  on("mp-state", snap => {
+    state.multiplayer = !!(snap?.on ?? api.snapshot().on);
     draw();
     autoOfferWhenStalled();
   });

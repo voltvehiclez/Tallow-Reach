@@ -1,6 +1,8 @@
 # Playtest — step 16, slice 8c: the host's world on the guest's screen
 
-**Build: `2026-11-26b`** — both machines. Check it in **Connection details** (or the title card); two machines on different builds cannot be trusted to agree about anything.
+**Build: `2026-11-27a`** — both machines. Check it in **Connection details** (or the title card); two machines on different builds cannot be trusted to agree about anything.
+
+*Fixes in `2026-11-27a`: Pause-menu Multiplayer toggle works immediately; docked guests stay docked until explicit Launch and camera snaps across dock/launch; returning home purges all `_net` entities and leftover controls cleanly; remote hostiles/bullets interpolate smoothly, hostile shots stay red, and explosions/AI gunfire SFX match single-player.*
 
 *In 8b your keys made the host's hull move, but you were still flying in your own galaxy. In 8c your screen becomes the host's world: your ship is driven by what the host says, your own galaxy is frozen behind you, and you can go home to it.*
 
@@ -59,7 +61,8 @@
 
 - Guest's **G** sends a `dock` request; host runs `tryDock` for that pilot when in range. On the next snapshot the guest's screen flips to docked: the station view and the panel open, the reticle is gone — the same flow as a local dock.
 - The panel shows **the guest's own ship's hangar and Inventory** (the visiting pilot's suitcase: its hull, its fit, its hold) with **Launch** on its own button. **Launch** asks the host to launch the visitor — the ship leaves on the host's sim, the panel closes when the snapshot flips.
-- Pressing **W** while docked **launches** again (same as 8b's docked visitor launching on first asking).
+- Pressing **W** while docked keeps you docked — guests launch only when you press **Launch** (`2026-11-27a`, fixing stray inputs re-launching docked guests).
+- The camera snaps immediately across dock and launch transitions (no slow pan from station to space).
 - A guest far from any station pressing **G** does nothing — host rejects it.
 - **A docked hull is not visible to anyone** — inside the station, every screen (owner, 2026-11-26).
 

@@ -37,7 +37,7 @@
 import { emit, on } from "../util/events.js";
 import { state } from "../state/state.js";
 import { createPlayerRecord } from "./player.js";
-import { configurePlayer, launch } from "./session.js";
+import { configurePlayer } from "./session.js";
 import { CONTROLS } from "../data/multiplayer.js";
 import { stationAt } from "./places.js";
 import { isPocket, DEFAULT_PLACE } from "../data/places.js";
@@ -143,16 +143,8 @@ function quietControls(c) {
   c.steer.x = c.steer.y = 0;
 }
 
-/** Does this asking want the ship to do something? (Anything but "nothing".) */
-function asksToFly(input = {}) {
-  const axis = value => Math.abs(Number(value) || 0) > 0.001;
-  const steer = input.steer || {};
-  return axis(input.thrust) || axis(input.strafe) || axis(input.lift) || axis(input.roll) ||
-    axis(steer.x) || axis(steer.y) || input.fire === true || input.sec === true || input.boost === true;
-}
-
 /**
- * **A guest says what it is asking its ship to do, and the host writes it down** (slice 8b).
+ * **A guest says what it is asking its ship to do, and the host writes it down** (slice 8b/8c).
  *
  * The rule the plan set (refactor principle 7, *input is a command*): a guest sends a command, not a
  * key. `net/protocol.js` has already rebuilt the message field by field and clamped every axis, and
@@ -162,21 +154,18 @@ function asksToFly(input = {}) {
  * ramps the throttle, `fire` needs power and a gun, and every consequence — damage, kills, loot,
  * docking, warp — stays the host's. The guest's own ship at home is untouched.
  *
- * **A docked visitor launches the first time it asks to fly.** A visitor arrives docked at its
- * station; the only hull it has is the one in this world, so an asking that is not "nothing" is the
- * same thing the local pilot's launch is, and it goes through the same `launch()` — full power, the
- * station's launch point, a snap for the far screen. A guest standing at its own station counter
- * leaning on a key therefore does not move a hull; it launches one.
+ * **Docked visitors never auto-launch from flight controls (slice 8c).** Launching and docking happen
+ * only via explicit `mp-guest-dock` (`launch()` / `tryDock()`). Ignoring controls while `P.docked`
+ * prevents late in-flight packets after `tryDock()` from popping a docked guest right back out into space.
  *
- * Returns false for an unknown, dead, or already-gone visitor: a message from a peer that has left is
- * not an error, it is just late.
+ * Returns false for an unknown, dead, docked, or already-gone visitor.
  */
 export function applyGuestControls(guestId, input) {
   const id = typeof guestId === "string" ? guestId.trim() : "";
   const entry = guests.get(id);
   if (!entry || !input) return false;
   const P = entry.player;
-  if (!P || P.dead) return false;
+  if (!P || P.dead || P.docked) return false;
   const c = P.controls;
   const axis = value => Math.max(-1, Math.min(1, Number(value) || 0));
   c.thrust = axis(input.thrust);
@@ -204,7 +193,6 @@ export function applyGuestControls(guestId, input) {
     }
   }
   P.inputAt = state.time;
-  if (P.docked && asksToFly(input)) launch(P, P.profile);
   return true;
 }
 

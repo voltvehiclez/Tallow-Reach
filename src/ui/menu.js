@@ -9,6 +9,7 @@ import { state, currentSave, currentRootSave, applySave, resetPlaces, saveCurren
 import { readSlot, writeSlot, deleteSlot, decodeSave, encodeSave } from "../state/storage.js";
 import { setShip } from "../sim/player.js";
 import { launch, resumeFromSave } from "../sim/session.js";
+import { clearNetEntities } from "../sim/world.js";
 import { prepareGalaxySave, switchGameMode } from "../sim/galaxy-session.js";
 // Named imports only, like every other line here: `net/session.js` is injected into tests with
 // `setSaveKit`, so this file must never hold a copy of something it can ask for.
@@ -365,6 +366,8 @@ function comeHome() {
   // refusal cannot cost the player its connection. A guest that never carried a pilot (it
   // only looked around) has no suitcase, and leaves here exactly as before.
   leaveVisit();
+  if (away) afterSaveChange();
+  else clearNetEntities();
   closeMultiplayer();
   saveCurrentGame();
   showNotice(away?.hostName
@@ -409,7 +412,10 @@ function enterGameMode(mode) {
   if (switched) afterSaveChange();
   resetStationPanels(state.ui);
   initAudio();
-  if (!switched) resumeFromSave();
+  if (!switched) {
+    clearNetEntities();
+    resumeFromSave();
+  }
   emit("mission-ui-refresh", {});
   const notice = recoveryNotice();
   if (notice) showNotice(notice);
@@ -481,6 +487,7 @@ const ACTIONS = {
     if (!done.ok) { showNotice(done.message); return; }
     applySave(done.modeSave || done.save);
     leaveVisit();
+    afterSaveChange();
     saveCurrentGame();
     // The card asked the question and the player answered it, so it goes (playtest 18): the
     // next thing they see is the ordinary menu, with Open World ready. The older copy is gone
@@ -841,6 +848,7 @@ function afterSaveChange() {
   cancelHeldStack();
   closeStarmap();
   const placeId = state.worldState.place;
+  clearNetEntities();
   resetPlaces();
   state.place = placeId;
   setShip(state.profile.ship);

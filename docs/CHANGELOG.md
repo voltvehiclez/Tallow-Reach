@@ -18,6 +18,19 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Slice 8c playtest fixes (build `2026-11-27a`) — pause-menu toggle, docked stability, clean return home, and smooth guest enemies/SFX
+
+**Code change; rebuild needed; build `2026-11-27a` (`npm run build` 3625 KB).** Save version unchanged (**29**); no saved field or wire format changes.
+
+Fixed four bugs reported in owner playtesting of Slice 8c (`2026-11-26b`):
+
+1. **Multiplayer toggle from the Pause menu works properly.** `setupMultiplayer()` (`src/ui/multiplayer.js`) and `src/main.js` now sync `state.multiplayer` inside their `mp-state` listener whenever multiplayer starts or stops, instead of leaving it `false` until returning to the main menu.
+2. **Docked guests stay docked cleanly and the camera snaps on dock/launch.** Removed auto-launch on non-zero guest input in `src/sim/multiplayer.js` (`applyGuestControls` ignores inputs while `P.docked`, so guests launch only on explicit Launch / `dock` requests); guarded `sendControls()` (`src/net/session.js`) against `intro`, `campaignEnd`, `paused`, and `docked`; reset `localInput` on `"docked"` only for the local pilot (`src/core/input.js`); cleared controls when opening pause or chat (`src/main.js`); cleared velocity/boost/controls in `dock()` (`src/sim/session.js`); and snapped `shipStream` + `applySelfShip` camera/pose immediately when `docked`, `dead`, or `place` changes (`src/render/shipstream.js`, `src/main.js`).
+3. **Leaving a multiplayer world leaves zero leftover remote state.** Added `clearNetEntities()` / `purgeNonNetEntities()` in `src/sim/world.js` (walking `container.entities` on every pocket in `state.places`), wired cleanup + `clearControls()` into `restoreGuestHome()` (`src/main.js`), `comeHome()`, `enterGameMode()`, `ACTIONS.comehome()`, and `afterSaveChange()` (`src/ui/menu.js`), and saved/restored `docked` across guest home stash/restore.
+4. **Guest remote hostiles/bullets interpolate smoothly, hostile shots stay red, and pocket SFX match single-player.** Added `src/render/entitystream.js` (`createEntityStream`, `syncPocketEntities`, `hasNetEntities`, `collectGuestPocketSfx`) for 100 ms buffered interpolation across `enemies`, `bullets`, `missiles`, `crates`, and `fx`, and purged stale local non-`_net` NPCs when syncing the host pocket; updated `src/render/views.js` to skip 60 Hz `prevPoses` interpolation for `_net` entities and `state.away` local pilots; restored `BULLET_COLOURS.hostile` fallback on non-player shots (`src/main.js`); and passed `count: 30` on `explosion` SFX plus first-packet baseline handling (`efires`, `hearRange`, docked silence).
+
+**Tests:** `tests/multiplayer-8c-fixes.test.mjs` (new, **9** tests covering Bugs 1–4) and updated `tests/multiplayer-controls.test.mjs`; `npm test` **1150/1150**. **Docs:** archived L37–L41 to `docs/archive/MULTIPLAYER_SLICE4_5_LESSONS.md`, added L48–L51 in `docs/LESSONS.md`, updated `src/{sim,render}/README.md`, `testing/TESTING-16-SLICE8C.md`, `HANDOFF.md`.
+
 ## 2026-11-26: Slice 8c follow-up (build `2026-11-26b`) — a visitor recovers like a pilot, and the pocket's shots reach the guest
 
 **Code change; rebuild needed; build `2026-11-26b` (`npm run build` 3611 KB).** Save version unchanged (**29**); the wire gains no new message kinds — the previously dead `entities` message is now actually sent, per pocket, and crates gained `quat` in its cleaning.
@@ -257,125 +270,10 @@ flying one does (`tests/multiplayer-damage.test.mjs` and the rest unchanged). Th
 that hid the friend.
 
 `npm test` **1106/1106**, build 3596 KB. CTRL+SHIFT+R, then check **Connection details** reads
-`2026-11-25d`. Retest: `testing/TESTING-16-SLICE8A.md` **Part 8**.
-
-## 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
-
-**Code change; rebuild needed; build `2026-11-25c`.** Save version unchanged (**29**): one repair
-rewrites a record's hash in a save that already exists, but no record gains a field.
-
-The owner retested `2026-11-25b` and sent two reports.
-
-1. **One browser still could not join.** *"That link has already been used, or it was copied
-   wrongly"*, for ever, on the browser he had used before — while a **new** browser joined the same
-   link and the same build fine, and *"bring my pilot"* did not help. The first round fixed the code
-   that damaged a record, but **it could not repair a record it had already damaged**: an edit without
-   a secret had hashed *nothing* over the pilot's hash, so the host's save held the hash of no secret
-   at all, and every later join for that record failed the token check — its own pilot included.
-   Three changes, all in the join:
-   - `custody.js` — **`recordHoldsNoSecret(record, guestId)`**: a record whose hash is the hash of
-     the empty string cannot identify anybody, so it must never refuse anybody. `handshake` admits
-     such a record and returns **`repaired: true`**; a record that *does* hold a secret still refuses
-     a wrong one (this is the narrow repair, not a weaker handshake — the unchecked invitation is
-     step 17's job). The host's own log says *"…'s saved link had been damaged by an older build. It
-     has been repaired"*, once, and `onHello`'s `putGuest` writes the real hash on the way in, so the
-     next join is an ordinary one.
-   - `session.js` — **a `carry` never rewrites the secret of a record that already exists.** The
-     hello is the only place an identity is proven and it has already been answered when a carry
-     arrives; the token a carry carries is `away.token` first, i.e. whatever an older build left in
-     the suitcase. Only a first contact takes a hash from a bundle.
-   - `session.js` — **a refusal ends the attempt instead of looping.** A guest used to sit in
-     "joining" for ever and could only press Join again and read the same sentence ("stuck in a
-     loop", his words). Now the session stops quietly, the host's own words go to the chat log and the
-     menu notice, and Join is a clean second attempt.
-2. **A visiting hull was not collidable and took no damage.** *"The guest ship that spawns in is not
-   clippable and doesnt take damage. Every ship should by default take damage and be collidable in
-   tallow reach unless otherwise specified."* Slice 8a drew the visitor and simulated it, but nothing
-   treated it as a **body**: the local pilot's bolts and warheads only ever tested `W.enemies`, and
-   the collision pass only ran for `state.players` against rocks, scenery and hostiles. Now a visiting
-   hull is a hull:
-   - `sim/player.js` — **`pilotHullRadius(P)`** (`SHIP_RADIUS` scaled by `SHIPS[...].sc`, the number
-     the screen draws it with) and a **pilot-vs-pilot collision pass** in `flight()`: the two ships
-     separate, ricochet (restitution 0.4) and pay the same `impact > 25 → 0.015/m·s` damage a rock or
-     a hostile ram charges. A **parked** visitor is included — its hull is drawn at the arrival launch
-     point, so it is hit-able there — and pays in this pass because `step.js` skips a docked record's
-     own tick; a flying visitor pays in its own. One collision, one hit, per pilot per tick.
-   - `sim/combat.js` — the pilot's **bolts** stop on another pilot's hull (`< 6 m`) and damage it
-     shields-first, exactly as on a hostile; the shooter's own hull, a dead wreck and a pilot in
-     another pocket are skipped.
-   - `sim/missile.js` — the pilot's **warheads** burst on another pilot's hull instead of sailing
-     through it (`< 6 m + hull radius`), with the same three exceptions.
-   - `sim/multiplayer.js` + `ui/multiplayer.js` — a visitor's hull reaching zero is **said out loud**:
-     `mp-guest-destroyed { guestId, name }` becomes the chat line *"…'s ship was destroyed in this
-     world. Its pilot is safe in its suitcase — go home to fly it again."* `hurt` already marked a
-     non-local record `dead`, `SHIP_FIELDS.dead` already stopped the far screen drawing it, and the
-     host's `views.js` already skipped it — the missing piece was the sentence. **Recovery is still
-     not built** (step 16 debt), so the words promise nothing the code cannot keep.
-
-**Tests:** `tests/multiplayer-damage.test.mjs` (new, **13**): the hash of nothing recognised (and a
-real hash not), a damaged record admitted and repaired end-to-end through two real sessions, a good
-hash never overwritten by a stale carry, a genuine mismatch still refused with the attempt ended in
-words, hulls separated and both sides paying, a slow nudge hurting nobody, pockets kept apart, bolts
-shields-then-hull and not through their owner, warheads bursting on a friend's hull, and a visitor
-destroyed with both screens told. `npm test` **1104/1104**.
-
-**What the owner must do:** hard-reload with Ctrl+Shift+R, then open **Connection → Connection
-details** and check the build line reads **`2026-11-25c`**. On the old browser, use the **same link**
-again — it should now join without the host issuing anything new. Then spawn a friend and try to fly
-through it, shoot it, and put a warhead in it: both hulls should knock apart and both should take
-damage. `testing/TESTING-16-SLICE8A.md` Part 7 is this retest.
-
-## 2026-11-25: Playtest 23 — a friend can be selected, and a pilot can always come back
-
-**Code change; rebuild needed; build `2026-11-25b`.** Save version unchanged (**29**): the fixes
-change what an edit does to an existing record, never the record's shape.
-
-Two reports from the owner's playtest of slice 8a, with the same root of the trouble — *state that
-was drawn or stored but never asked about again*:
-
-1. **A visiting pilot could not be selected.** *"cannot select a friends ship"*. Slice 8a drew the
-   hull and stopped there: F only ever offered hostiles, rocks, crates, rifts, gates, canisters and
-   the station; the N list turned a pilot row into a **name-only** lock (kind `"n"`), and the HUD drew
-   hull/shield bars for `k === "e"` alone. A visitor is not a hostile and, on a guest, not even a
-   record — so the fix is a new lock kind, **`"p"`**, and one new fact the screen publishes:
-   **`state.otherPilots`**, the mirror of every pilot `render/views.js` is drawing (`{ k: "p", id,
-   name, ship, place, pos, quat, hull, shield, dead, docked }`). The mirror is the only place a friend
-   exists on a guest's screen (slice 8a forbids a record), and it is what makes one fix cover both
-   screens. `sim/targeting.js` offers those pilots to F (reticle first, then the same cone as a
-   hostile), `lockName` returns **the pilot's own name**, `pruneLock` drops the lock when the hull
-   stops being drawn, the N list lists it under its **Ship** filter as a real row, and the HUD gives
-   its lock **the same two bars as any ship**. `sim/pilot-stats.js` (new) owns the two fractions, so
-   the host's own screen and the wire cannot disagree about a friend's bars — and `SHIP_FIELDS` gains
-   **`shield`** (a 0..1 fraction, clamped like `hull`) for exactly that reason: the owner asked for
-   "hull/shield stats like any other ship", and a bar that is always 0% because the number never
-   travelled is a decoration. An unlocked friend also wears its name in the sky now.
-2. **A pilot could not come back after leaving.** *"Stuck on 85% handshake … 'The link has already
-   been used, or it was copied wrongly.'"* The link was fine: `custody.guestRecord` hashed whatever
-   token it was handed, and the host's **write-back** (the two-second check, and the `left` mark a
-   departure writes) edits a record **without** the guest's secret — so a record that had been
-   written back once held the hash of **nothing** instead of the hash of the pilot's token, and every
-   later hello failed the handshake with that sentence, for ever. It looked intermittent because a
-   record marked `left` is re-admitted without a token check while a dropped-connection record is
-   not. Fix: **an update that carries no secret never changes the secret's hash**
-   (`custody.recordTokenHash`, `putGuest` passes the stored hash through). Nothing else about the
-   handshake changed, and a real token still replaces the hash (that is how a pilot is renamed onto a
-   new browser).
-
-Files: `src/data/multiplayer.js` (`SHIP_FIELDS` + `shield`), `src/sim/pilot-stats.js` (new),
-`src/sim/targeting.js`, `src/sim/flight-instruments.js`, `src/state/state.js` (`otherPilots`),
-`src/render/views.js`, `src/render/shipstream.js`, `src/net/ships.js`, `src/net/protocol.js`,
-`src/net/custody.js`, `src/net/multiplayer.js`, `src/ui/hud.js`, `src/ui/target-display.js`, plus the
-READMEs of `sim/`, `net/`, `render/`, `data/` and `state/`. Tests: **`tests/multiplayer-pilot-lock.test.mjs`**
-(12 new: the two fractions, F on a friend, the cone, prune, the N row, the host's and the guest's
-mirror, the shield field, and the HUD's gate) and **`tests/multiplayer-rejoin.test.mjs`** (5 new,
-written as the class rather than the case; all 5 fail on the old code).
-
-**What the owner should look for:** F on a friend's hull gives that pilot's name and two bars; the N
-list shows the friend as a Ship row with its name; and leaving and rejoining the same link works
-every time, including "Bring my pilot" afterwards.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
+- 2026-11-25: Playtest 23 — a friend can be selected, and a pilot can always come back
 - 2026-11-25: Step 16 slice 8a — the second hull, and the snapshots under it
 - 2026-11-24: Trading: both confirms clear, and offers come from the hold or the station
 - 2026-11-24: Slice 7 playtest passed

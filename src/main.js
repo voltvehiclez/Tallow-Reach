@@ -10,16 +10,17 @@ import { loadAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { shipDef } from "./data/ships.js";
 import { verticalFovForAspect } from "./data/camera.js";
-import { installInput, syncControls } from "./core/input.js";
+import { installInput, syncControls, clearControls } from "./core/input.js";
 import { updateAudio, initAudio } from "./core/audio.js";
 import { on, emit } from "./util/events.js";
 import { createPlayer, setShip } from "./sim/player.js";
 import { setWeapon, setSecondaryWeapon, refreshGuns } from "./sim/weapons.js";
 import { pocketBoomCount } from "./sim/effects.js";
 import { pocketPickCount, drainEFires } from "./sim/sfxlog.js";
-import { enemyDef } from "./data/enemies.js";
+import { BULLET_COLOURS } from "./data/weapons.js";
 import { WARP } from "./data/sectors.js";
 import { loadPlace } from "./sim/places.js";
+import { clearNetEntities } from "./sim/world.js";
 import { toggleLock } from "./sim/targeting.js";
 import { launch, tryDock, resumeFromSave } from "./sim/session.js";
 import { startWarp } from "./sim/sectors.js";
@@ -38,6 +39,7 @@ import { arriveGuest, leaveGuest, guestRecordOf, guestPlayers, applyGuestControl
 import { hostProfile, bundleFromProfile } from "./net/custody.js";
 import { shipEntries } from "./net/ships.js";
 import { createShipStream } from "./render/shipstream.js";
+import { createEntityStream, hasNetEntities, syncPocketEntities, collectGuestPocketSfx } from "./render/entitystream.js";
 import { stationsOfWorld } from "./net/world-places.js";
 import { requestWarp as netRequestWarp, requestDock as netRequestDock, isVisiting as netIsVisiting, isOn as isNetOn } from "./net/session.js";
 import { enterPlace as simEnterPlace } from "./sim/places.js";
@@ -101,8 +103,11 @@ import {
  *                        outlive the connection that described it.
  */
 const shipStream = createShipStream();
-// Own ship needs its own interpolated buffer too — otherwise a 165 Hz guest sees its own hull at 24 Hz. Same timings but a shorter delay for responsiveness (60 ms vs 100 ms for other pilots).
+// Own ship needs its own interpolated buffer too — otherwise a 165 Hz guest sees its own hull at 24 Hz. Same timings but a shorter delay for responsiveness (35 ms vs 100 ms for other pilots).
 const guestSelfStream = createShipStream({ delayMs: 35, samples: 8, staleMs: 1500, snapM: 50 });
+const entityStream = createEntityStream({ delayMs: 50, samples: 8, staleMs: 1500, snapM: 50 });
+const boomSeen = new Map();
+const pickSeen = new Map();
 
 /** Slice 8c: is this browser the guest whose own galaxy is frozen? */
 function isGuestVisiting() {
@@ -173,6 +178,9 @@ function applyOwnWeaponWx(entry) {
 function applySelfShip(entry) {
   const P = localPlayer();
   if (!P || !entry || typeof entry !== "object") return;
+  const prevPlace = P.place;
+  const prevPos = P.pos.clone();
+  const wasDocked = P.docked === true;
   const placeId = typeof entry.place === "string" ? entry.place.trim() : "";
   // Place first: entering a new pocket builds its scenery and sky.
   if (placeId && placeId !== state.place && placeId !== P.place) {
@@ -187,6 +195,7 @@ function applySelfShip(entry) {
   } else if (placeId && placeId !== P.place) {
     P.place = placeId;
   }
+  if (prevPlace && P.place && prevPlace !== P.place) entityStream.forgetPlace(prevPlace);
   // Position/rotation/velocity/throttle/docked/dead — the host's truth. Guest does not simulate.
   // `entry` may be a shipstream sample (pos is Vector3/Quaternion) or the raw wire entry (arrays).
   const pos = entry.pos;
@@ -199,7 +208,6 @@ function applySelfShip(entry) {
   if (Array.isArray(vel)) P.v.set(vel[0], vel[1], vel[2]);
   else if (vel && typeof vel.x === "number") P.v.copy(vel);
   P.thr = Number.isFinite(entry.throttle) ? entry.throttle : P.thr;
-  const wasDocked = P.docked === true;
   P.docked = entry.docked === true;
   P.dead = entry.dead === true;
   P.boost = entry.boost === true;
@@ -231,9 +239,11 @@ function applySelfShip(entry) {
       P.warp = null;
     }
   }
-  // A warp that moved us is a teleport, not a smear — snap the camera this frame.
-  const curPos = Array.isArray(entry.pos) ? new THREE.Vector3(entry.pos[0], entry.pos[1], entry.pos[2]) : entry.pos;
-  if (P.snap !== true && (P.place !== placeId || (curPos && P.pos.distanceTo(curPos) > 50))) {
+  // A warp, dock/launch transition, or teleport jump must snap the camera instead of panning.
+  if (
+    P.snap !== true &&
+    (prevPlace !== P.place || wasDocked !== P.docked || prevPos.distanceToSquared(P.pos) > 2500)
+  ) {
     P.snap = true;
   }
 }
@@ -244,20 +254,34 @@ function stashGuestHome() {
   state.guestHome = {
     place: state.place,
     worldPlace: state.worldState ? state.worldState.place : state.place,
+    docked: localPlayer()?.docked !== false,
   };
 }
 function restoreGuestHome() {
   const home = state.guestHome;
+  clearNetEntities();
+  shipStream.clear();
+  guestSelfStream.clear();
+  entityStream.clear();
+  boomSeen.clear();
+  pickSeen.clear();
   if (!home) return;
   const id = home.place || home.worldPlace;
   state.guestHome = null;
   if (typeof id === "string" && id) {
     const P = localPlayer();
+    const wasDocked = P?.docked === true;
     try { simEnterPlace(id, P); } catch (e) {}
     showPlace(state.place);
-    if (P) { P.docked = false; P.warp = null; }
+    if (P) {
+      P.warp = null;
+      P.docked = Boolean(home.docked);
+      P.snap = true;
+      if (!state.ui.intro && P.docked !== wasDocked) {
+        try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {}
+      }
+    }
   }
-  shipStream.clear();
 }
 
 function installMultiplayerShips() {
@@ -318,7 +342,9 @@ function installMultiplayerEntities() {
       if (!W) continue;
       const bullets = (W.bullets || []).map(e => ({
         id: e.id, pos: vec(e.pos), quat: quat(e.quat),
-        colour: Number.isFinite(e.colour) ? e.colour : Number.isFinite(e.color) ? e.color : 0xffcc66,
+        colour: Number.isFinite(e.colour) ? e.colour
+          : Number.isFinite(e.color) ? e.color
+          : (e.own ? BULLET_COLOURS.cannon : BULLET_COLOURS.hostile),
       }));
       const missiles = (W.missiles || []).map(e => ({ id: e.id, pos: vec(e.pos), quat: quat(e.quat) }));
       const crates = (W.crates || []).map(e => ({ id: e.id, pos: vec(e.pos), quat: quat(e.quat), item: e.item || "salv" }));
@@ -339,118 +365,22 @@ function installMultiplayerEntities() {
     }
     request.answered = true;
   });
-  // Guest: apply the pocket we are in. Records are kept per id so the between-ticks
-  // interpolation has an identity to hold on to; the host's sim is the clock.
-  const syncList = (list, incoming, kind, make) => {
-    const incomingArr = Array.isArray(incoming) ? incoming : [];
-    const seen = new Set();
-    for (const raw of incomingArr) {
-      if (!raw || typeof raw !== "object") continue;
-      const id = Math.floor(Number(raw.id) || 0);
-      seen.add(id);
-      let rec = null;
-      for (const r of list) if (r && r._net === true && r.id === id) { rec = r; break; }
-      if (!rec) {
-        rec = make(raw) || { id, kind, pos: new THREE.Vector3(), _net: true };
-        rec._net = true;
-        rec.id = id;
-        rec.kind = kind;
-        list.push(rec);
-      }
-      rec.pos.set(raw.pos?.[0] || 0, raw.pos?.[1] || 0, raw.pos?.[2] || 0);
-      if (raw.quat && rec.quat) rec.quat.set(raw.quat[0] || 0, raw.quat[1] || 0, raw.quat[2] || 0, raw.quat[3] ?? 1);
-      if (rec.quat && raw.quat) rec.quat.normalize();
-      if (kind === "bullet") rec.colour = raw.colour;
-      else if (kind === "crate") rec.item = typeof raw.item === "string" ? raw.item : "salv";
-      else if (kind === "fx") {
-        rec.col = raw.col; rec.size = raw.size; rec.l = raw.l; rec.t = raw.t;
-      }
-    }
-    for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i] && list[i]._net === true && !seen.has(list[i].id)) list.splice(i, 1);
-    }
-  };
-  // A hostile record to draw, lock and lead — the host's first-hand truth, never the guest's sim.
-  const makeEnemy = raw => ({
-    id: 0, kind: "enemy", def: "raider", place, _net: true,
-    pos: new THREE.Vector3(), quat: new THREE.Quaternion(), v: new THREE.Vector3(),
-    hp: 0, mx: 0, friendly: false, boosting: false,
-  });
-
-  // How many pocket explosions this screen has already rumbled for, per place — a counter that
-  // went backwards means a rebooted host, so re-baseline silently rather than rumble in a loop.
-  const boomSeen = new Map();
-  const pickSeen = new Map();
   on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires } = {}) => {
     if (!place || typeof place !== "string" || !isGuestVisiting()) return;
     if (place !== state.place) return;   // entities only for the pocket this screen is in
-    const W = placeWorld(place);   // the synced records; shooters that died this packet are still here
+    const W = placeWorld(place);
+    const P = localPlayer();
 
-    // A pickup chime is what a single-player screen would have heard — same pocket gate, same blip.
-    const pick = Math.floor(Number(picks) || 0);
-    const prevPick = pickSeen.get(place) ?? pick;
-    if (pick < prevPick) pickSeen.set(place, pick);
-    else if (pick > prevPick) {
-      const times = Math.min(pick - prevPick, 2);
-      for (let i = 0; i < times; i++) {
-        try { emit("sfx", { name: "pickup" }); } catch (e) {}
-      }
-      pickSeen.set(place, pick);
-    }
-    // Gunfire is only for ears in the pocket: each entry is a shooter's id — check our own range.
-    if (Array.isArray(efires) && efires.length && localPlayer()) {
-      const me = localPlayer().pos;
-      let heard = 0;
-      for (const id of efires) {
-        if (heard >= 2) break;
-        const rid = Math.floor(Number(id) || 0);
-        const shooter = W.enemies.find(r => r && r.id === rid);
-        // Distance to *this screen's* pilot, the same gate the host uses for its own local ear —
-        // just measured from our own ship instead of the host's.
-        const hr = shooter ? enemyDef(shooter.def)?.hearRange ?? 0 : 0;
-        if (shooter && hr > 0 && me.distanceToSquared(shooter.pos) <= hr * hr) {
-          try { emit("sfx", { name: "enemy-fire" }); } catch (e) {}
-          heard += 1;
-        }
-      }
-    }
-    // A rumble is what a single-player screen would have heard: the pocket just blew something up.
-    const boom = Math.floor(Number(booms) || 0);
-    const prevBoom = boomSeen.get(place) ?? boom;
-    if (boom < prevBoom) boomSeen.set(place, boom);
-    else if (boom > prevBoom) {
-      const times = Math.min(boom - prevBoom, 2);
-      for (let i = 0; i < times; i++) {
-        try { emit("sfx", { name: "explosion" }); } catch (e) {}
-      }
-      boomSeen.set(place, boom);
+    for (const sfx of collectGuestPocketSfx({ place, booms, picks, efires, enemies, W, player: P, boomSeen, pickSeen })) {
+      try { emit("sfx", sfx); } catch (e) {}
     }
     try {
-      syncList(W.bullets, bullets, "bullet", raw => ({
-        id: 0, kind: "bullet", pos: new THREE.Vector3(), quat: new THREE.Quaternion(), colour: raw.colour, _net: true,
-      }));
-      syncList(W.missiles, missiles, "missile", () => ({
-        id: 0, kind: "missile", pos: new THREE.Vector3(), quat: new THREE.Quaternion(), _net: true,
-      }));
-      syncList(W.crates, crates, "crate", () => ({
-        id: 0, kind: "crate", pos: new THREE.Vector3(), quat: new THREE.Quaternion(), item: "salv", _net: true,
-      }));
-      syncList(W.fx, fx, "fx", () => ({
-        id: 0, kind: "fx", pos: new THREE.Vector3(), col: 0xffaa00, size: 1, l: 0, t: 1, _net: true,
-      }));
-      syncList(W.enemies, enemies, "enemy", makeEnemy);
-      // The per-record fields syncList does not know, applied in place after the positional ones.
-      for (const rec of W.enemies) {
-        if (!rec || rec._net !== true) continue;
-        const raw = Array.isArray(enemies) ? enemies.find(r => r && Math.floor(Number(r.id) || 0) === rec.id) : null;
-        if (!raw) continue;
-        rec.def = typeof raw.def === "string" && raw.def ? raw.def : rec.def;
-        rec.friendly = raw.friendly === true;
-        rec.boosting = raw.boost === true;
-        rec.hp = Number.isFinite(raw.hp) ? raw.hp : rec.hp;
-        rec.mx = Number.isFinite(raw.mx) ? raw.mx : rec.mx;
-        rec.v = rec.v && typeof rec.v.set === "function" ? rec.v : new THREE.Vector3();
-        rec.v.set(Number(raw.v?.[0]) || 0, Number(raw.v?.[1]) || 0, Number(raw.v?.[2]) || 0);
+      const nowMs = Date.now();
+      const firstArrival = !hasNetEntities(W);
+      entityStream.receive({ place, bullets, missiles, crates, fx, enemies }, nowMs);
+      if (firstArrival) {
+        const initial = entityStream.samplePlace(place, nowMs);
+        if (initial) syncPocketEntities(W, initial, place);
       }
     } catch (e) { /* a broken pocket must never take the screen down */ }
   });
@@ -812,7 +742,11 @@ function stopHostTick() {
   if (hostWorkerUrl) { try { URL.revokeObjectURL(hostWorkerUrl); } catch (e) {} hostWorkerUrl = null; }
   if (hostTick) { clearInterval(hostTick); hostTick = null; }
 }
-on("mp-state", snap => { if (snap?.on) startHostTick(); else stopHostTick(); });
+on("mp-state", snap => {
+  state.multiplayer = !!(snap?.on);
+  if (snap?.on) startHostTick();
+  else stopHostTick();
+});
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden" && isNetOn()) startHostTick();
 });
@@ -870,10 +804,14 @@ function drawFrame(now) {
     Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
   }
   simClock.advance(dt);
-  // Guest's own ship is a stream too (see installMultiplayerShips) — otherwise a 165 Hz screen jitters at 24 Hz. Apply its interpolated pose before rendering so the camera chases the smoothed position, not the last raw packet.
+  // Guest's own ship and visited-pocket entities use buffered snapshot interpolation (35 ms / 50 ms)
+  // so high-refresh screens move smoothly instead of jittering at 24 Hz against 60 Hz prevPoses.
   if (isGuestVisiting()) {
-    const selfPoses = guestSelfStream.sample(Date.now());
+    const nowMs = Date.now();
+    const selfPoses = guestSelfStream.sample(nowMs);
     if (selfPoses.length) applySelfShip(selfPoses[0]);
+    const snap = entityStream.samplePlace(state.place, nowMs);
+    if (snap) syncPocketEntities(placeWorld(state.place), snap, state.place);
   }
   const alpha = simClock.alpha();
   updateEnemyViews(alpha);    // interpolate each hostile's mesh between 60 Hz ticks
@@ -908,13 +846,7 @@ function frame(now) {
     // One pointer at a time (playtest 25): the orange circle while the pilot steers, the system
     // cursor on the surfaces that take the stick. One comparison a frame.
     syncPointer();
-    if (state.paused || isChatOpen()) {
-      const c = localPlayer()?.controls;
-      if (c) {
-        c.pitch = 0; c.yaw = 0; c.roll = 0;
-        c.throttle = 0; c.boost = false; c.fire = false; c.secondary = false;
-      }
-    }
+    if (state.paused || isChatOpen()) clearControls();
     drawFrame(now);
   } catch (err) {
     reportCrash("frame", err);
