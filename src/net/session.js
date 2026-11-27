@@ -1447,7 +1447,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     on("host-keepalive-tick", () => {
       if (role !== "host" || !on) return;
       const now = Date.now();
-      const interval = Math.max(1, Math.round(1000 / SHIP_STREAM.hz));
+      const interval = Math.max(1, Math.round(1000 / SHIP_STREAM.hz) - 4);
       if (now - lastKeepaliveShipAt < interval) return;
       lastKeepaliveShipAt = now;
       broadcastShips();
@@ -1482,7 +1482,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
   function onEntities(message) {
     if (role !== "guest") return;
-    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], picks: message.picks || 0, efires: Array.isArray(message.efires) ? message.efires : [], at: Date.now() }); } catch (e) {}
+    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], picks: message.picks || 0, efires: Array.isArray(message.efires) ? message.efires : [], rocks: Array.isArray(message.rocks) ? message.rocks : null, at: Date.now() }); } catch (e) {}
   }
 
   /**

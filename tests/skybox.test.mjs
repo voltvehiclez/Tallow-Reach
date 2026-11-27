@@ -19,7 +19,7 @@ import { SKYBOXES } from "../src/data/skyboxes.js";
 import { INSTANCE_TEMPLATES, SKY_KINDS } from "../src/data/instances.js";
 import { DEFAULT_SKY } from "../src/data/places.js";
 import * as THREE from "three";
-import { CUBE_FACES, CUBE_FACE_FLIP } from "../src/render/cubemap.js";
+import { CUBE_FACES, CUBE_FACE_FLIP, orientFace } from "../src/render/cubemap.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = rel => fs.readFileSync(path.join(root, rel), "utf8");
@@ -327,4 +327,33 @@ test("the generator's presets are well formed (the tool trusts this file)", () =
   }
   // the owner asked for DARK space: no look may default to the brightest mood
   for (const [name, p] of Object.entries(presets)) assert.notEqual(p.mood, "dim", `${name}: skyboxes are dark space; "dim" is for a deliberate, owner-approved exception`);
+});
+
+test("orientFace sets needsUpdate only when texture.image exists (avoids WebGL texImage2D error on async load)", () => {
+  const mkTex = image => {
+    let updates = 0;
+    return {
+      image,
+      repeat: { y: 1 },
+      offset: { y: 0 },
+      get needsUpdate() { return updates; },
+      set needsUpdate(v) { if (v) updates++; },
+    };
+  };
+  const pendingPy = mkTex(undefined);
+  orientFace(pendingPy, 2); // py = flipped face
+  assert.equal(pendingPy.repeat.y, -1);
+  assert.equal(pendingPy.offset.y, 1);
+  assert.equal(pendingPy.needsUpdate, 0, "pending async texture must not set needsUpdate before image exists");
+
+  const readyNy = mkTex({ width: 1024, height: 1024 });
+  orientFace(readyNy, 3); // ny = flipped face
+  assert.equal(readyNy.repeat.y, -1);
+  assert.equal(readyNy.offset.y, 1);
+  assert.equal(readyNy.needsUpdate, 1, "loaded texture marks needsUpdate when image is ready");
+
+  const readyPx = mkTex({ width: 1024, height: 1024 });
+  orientFace(readyPx, 0); // px = unflipped face
+  assert.equal(readyPx.repeat.y, 1);
+  assert.equal(readyPx.needsUpdate, 0);
 });

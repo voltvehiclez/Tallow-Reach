@@ -482,3 +482,45 @@ test("every ore asteroid uses its own base surface colour with zero self-glow, m
   for (const { mat } of materials.values()) mat.dispose();
   fresh();
 });
+
+test("entity IDs of different kinds (rock vs bullet) never collide or share a view", () => {
+  const S = fresh();
+  views.installEnemyViews();
+  const sharedId = 7;
+  const rock = {
+    id: sharedId,
+    kind: "rock",
+    place: S.place,
+    type: "ferrite",
+    shape: 0,
+    pos: views.V(100, 0, 0),
+    quat: views.Q(),
+    scale: views.V(20, 20, 20),
+    s0: views.V(20, 20, 20),
+    r: 20,
+    ore: 30,
+    max: 30,
+  };
+  const bullet = {
+    id: sharedId,
+    kind: "bullet",
+    own: true,
+    pos: views.V(0, 0, 10),
+    quat: views.Q(),
+  };
+  S.world.asteroids.push(rock);
+  S.world.bullets.push(bullet);
+  views.emit("entity-spawned", { id: sharedId, kind: "rock" });
+  views.emit("entity-spawned", { id: sharedId, kind: "bullet" });
+  assert.equal(views.entityViewCount(), 2, "rock and bullet sharing numeric ID keep separate views");
+
+  views.updateEntityViews();
+  S.world.bullets.pop();
+  views.emit("entity-removed", { id: sharedId, kind: "bullet" });
+  assert.equal(views.entityViewCount(), 1, "removing bullet leaves same-ID rock intact");
+
+  S.world.asteroids.pop();
+  views.emit("entity-removed", { id: sharedId, kind: "rock" });
+  assert.equal(views.entityViewCount(), 0);
+  fresh();
+});

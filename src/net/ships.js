@@ -66,6 +66,12 @@ export function shipEntry(P, { id = "", name = "" } = {}) {
   const key = typeof id === "string" ? id.trim() : "";
   if (!P || !key) return null;
   const F = P.flight || {};
+  const pw = P.power || {};
+  const pwrCap = Number(pw.cap) || 0;
+  const pwrFrac = pwrCap > 0 ? Math.max(0, Math.min(1, Number(pw.stored || 0) / pwrCap)) : 1;
+  const pwrDrawVal = Math.max(0, Number(pw.draw) || 0);
+  const enMax = Number(P.enMax ?? P.drive?.bmax) || 0;
+  const enFracVal = enMax > 0 ? Math.max(0, Math.min(1, Number(P.en || 0) / enMax)) : 1;
   const entry = {
     id: key,
     name: String(name || P.name || "").trim(),
@@ -92,6 +98,12 @@ export function shipEntry(P, { id = "", name = "" } = {}) {
     beamStart: vec3(F.beamStart),
     beamEnd: vec3(F.beamEnd),
     mineFrac: round(Math.max(0, Math.min(1, Number(F.mineFrac) || 0))),
+    beamT: round(Math.max(0, Number(F.beamT) || 0)),
+    // --- HUD vitals & transient prompt parity ---
+    pwr: round(pwrFrac),
+    pwrDraw: round(pwrDrawVal, 2),
+    enFrac: round(enFracVal),
+    hint: typeof P.hudPrompt === "string" ? P.hudPrompt.slice(0, 120) : "",
     // --- the missile-lock block: MIR.target is a host-side record; only its presence travels.
     cone: round(Math.max(0, Math.min(45, Number(F.coneAngle) || 0))),
     lockT: round(Math.max(0, Number(F.missileLock && F.missileLock.t) || 0)),

@@ -133,7 +133,14 @@ export const SHIP_FIELDS = [
   "beamOn",    // the mining beam is cutting right now
   "beamStart", // where the beam leaves the ship, [x,y,z]
   "beamEnd",   // where the beam stops (rock or wall), [x,y,z]
-  "mineFrac",  // progress to the next ore, 0..1
+  "mineFrac",  // remaining ore fraction on the rock being cut, 0..1
+  "beamT",     // elapsed seconds toward the next ore on the active mining beam
+  // --- HUD vitals & transient prompt parity (2026-11-27e): guest power, boost and beam hints
+  // match single-player. All fractions/rates — never raw module objects or fits.
+  "pwr",       // stored ship power fraction, 0..1
+  "pwrDraw",   // current ship power draw, MJ/s
+  "enFrac",    // boost tank fraction, 0..1
+  "hint",      // current transient HUD prompt (#pr: ore left, blocked, out of power, lock)
   // --- the missile-lock block: the own screen must draw the lock ring and the cone exactly as a
   // single-player world does (the host's sim owns the lock; the guest simulates nothing).
   "cone",      // the launcher's lock cone in degrees, 0 when no launcher is fitted
@@ -264,7 +271,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-27d";
+export const BUILD = "2026-11-27e";
 
 export const NET = {
   snapshotSec: 2,
@@ -338,19 +345,16 @@ export const RELAYS = {
   // to happen. These are the long-running public relays; the first `redundancy` (5) are used.
   // If a player's network blocks all of them, the copy/paste code path needs no relay at all.
   relayUrls: [
-    // Popular public relays.
-    "wss://relay.damus.io",
+    // Reliable public relays without damus rate-limiting or dead nostr.band/wellorder endpoints;
+    // the first five are probed by diagnostics and span distinct operators.
     "wss://nos.lol",
-    "wss://relay.nostr.band",
     "wss://relay.primal.net",
     "wss://nostr.mom",
-    "wss://nostr-pub.wellorder.net",
-    // Then the library's own curated relays. Opening a socket is not enough: a relay that
-    // refuses these events (`blocked:`, `restricted:`, `auth-required:`) is retired by the
-    // library and stops being a way for two players to meet, so the list keeps more than one
-    // family of servers. Ten is a lot of sockets, but a silent room is worse.
     "wss://bucket.coracle.social",
     "wss://fanfares.nostr1.com",
+    "wss://relay.nostr.net",
+    "wss://relay.snort.social",
+    "wss://relay.ditto.pub",
     "wss://nostr-01.yakihonne.com",
     "wss://nostr.azzamo.net",
   ],

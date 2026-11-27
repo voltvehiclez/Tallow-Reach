@@ -70,6 +70,11 @@ function frameFrom(entry, at) {
     beamStart: entry.beamStart ? toVector(entry.beamStart) : null,
     beamEnd: entry.beamEnd ? toVector(entry.beamEnd) : null,
     mineFrac: num(entry.mineFrac, 0),
+    beamT: num(entry.beamT, 0),
+    pwr: entry.pwr === undefined ? 1 : num(entry.pwr, 1),
+    pwrDraw: num(entry.pwrDraw, 0),
+    enFrac: entry.enFrac === undefined ? 1 : num(entry.enFrac, 1),
+    hint: typeof entry.hint === "string" ? entry.hint : "",
     cone: num(entry.cone, 0),
     lockT: num(entry.lockT, 0),
     lockLocked: entry.lockLocked === true,
@@ -83,7 +88,17 @@ function frameFrom(entry, at) {
 }
 
 /** A pose to draw: fresh objects every call, so a mesh can never hold the buffer's own state. */
-function poseFrom(frame, pos = frame.pos, quat = frame.quat, velocity = frame.velocity, throttle = frame.throttle) {
+function poseFrom(
+  frame,
+  pos = frame.pos,
+  quat = frame.quat,
+  velocity = frame.velocity,
+  throttle = frame.throttle,
+  beamT = frame.beamT,
+  pwr = frame.pwr,
+  pwrDraw = frame.pwrDraw,
+  enFrac = frame.enFrac,
+) {
   return {
     id: frame.id,
     name: frame.name,
@@ -109,6 +124,11 @@ function poseFrom(frame, pos = frame.pos, quat = frame.quat, velocity = frame.ve
     beamStart: frame.beamStart,
     beamEnd: frame.beamEnd,
     mineFrac: frame.mineFrac,
+    beamT,
+    pwr,
+    pwrDraw,
+    enFrac,
+    hint: frame.hint,
     cone: frame.cone,
     lockT: frame.lockT,
     lockLocked: frame.lockLocked,
@@ -198,12 +218,20 @@ export function createShipStream({ delayMs, samples, staleMs, snapM } = {}) {
         continue;
       }
       const t = Math.max(0, Math.min(1, (target - a.at) / span));
+      const beamT = !b.beamOn ? 0 : (!a.beamOn || b.beamT < a.beamT ? b.beamT : a.beamT + (b.beamT - a.beamT) * t);
+      const pwr = a.pwr + (b.pwr - a.pwr) * t;
+      const pwrDraw = a.pwrDraw + (b.pwrDraw - a.pwrDraw) * t;
+      const enFrac = a.enFrac + (b.enFrac - a.enFrac) * t;
       out.push(poseFrom(
         b,
         a.pos.clone().lerp(b.pos, t),
         a.quat.clone().slerp(b.quat, t),
         a.velocity.clone().lerp(b.velocity, t),
         a.throttle + (b.throttle - a.throttle) * t,
+        beamT,
+        pwr,
+        pwrDraw,
+        enFrac,
       ));
     }
     return out;

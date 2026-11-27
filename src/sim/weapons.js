@@ -7,7 +7,7 @@ import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { shipDef } from "../data/ships.js";
 
-import { state, say, profileOf, placeWorld } from "../state/state.js";
+import { state, sayForPlayer, profileOf, placeWorld } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
@@ -90,7 +90,7 @@ export function updatePrimary(dt, P = state.player) {
     slot = primarySlotIndex(weapon, P),
     c = P.controls,
     d = shipDef(ship),
-    sayFor = text => { if (local) say(text); };
+    sayFor = (text, holdSec) => sayForPlayer(P, text, holdSec);
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.
   P.guns.forEach((g, i) => {
@@ -249,7 +249,7 @@ export function updatePrimary(dt, P = state.player) {
   // reach — the progress toward the next ore is lost.
   if (!F.beamOn && F.beamT > 0) {
     F.beamT = 0;
-    sayFor("Beam contact lost — the ore starts again");
+    sayFor("Beam contact lost — the ore starts again", 0.35);
   }
 }
 
@@ -261,7 +261,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
   const local = P === state.player,
     F = P.flight,
     c = P.controls,
-    sayFor = text => { if (local) say(text); },
+    sayFor = (text, holdSec) => sayForPlayer(P, text, holdSec),
     W = placeWorld(P.place || state.place),
     ML = F.missileLock;
 

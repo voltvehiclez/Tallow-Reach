@@ -96,6 +96,7 @@ export const LIMITS = {
   // Slice 8a: how many pilots one `ships` message carries. A wire cap, never a player cap.
   ships: 24,
   entities: 32,
+  rocks: 256,
   // The largest a position, a velocity or any other single axis figure may be, in metres. A
   // pocket is kilometres across at most; bigger than this is a hand-made or corrupt packet.
   reach: 1e6,
@@ -158,8 +159,22 @@ export function cleanMessage(kind, fields = {}) {
     // 8c+: host -> guest: bullets/missiles/crates/fx in the same pocket. Visual only; host authoritative.
     // One message per pocket that holds a visitor: the world's transient objects, as the
     // host's sim holds them. Visual only; the host decides hits, loot and lifetimes.
+    // `rocks` is attached only when a pocket's asteroid field changes (mining/depletion/respawn)
+    // or a visitor enters, so routine 24 Hz packets stay small.
     case "entities":
-      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms), enemies: cleanEnemies(fields.enemies), picks: u16(fields.picks), efires: cleanEFires(fields.efires) };
+      return {
+        t: "entities",
+        place: text(fields.place, LIMITS.id),
+        bullets: cleanBullets(fields.bullets),
+        missiles: cleanMissiles(fields.missiles),
+        crates: cleanCrates(fields.crates),
+        fx: cleanFx(fields.fx),
+        booms: u16(fields.booms),
+        enemies: cleanEnemies(fields.enemies),
+        picks: u16(fields.picks),
+        efires: cleanEFires(fields.efires),
+        ...(Array.isArray(fields.rocks) ? { rocks: cleanRocks(fields.rocks) } : {}),
+      };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
     // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
     // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
@@ -328,6 +343,11 @@ function cleanShips(raw) {
       beamStart: cleanVec3(entry.beamStart),
       beamEnd: cleanVec3(entry.beamEnd),
       mineFrac: Math.round(Math.max(0, Math.min(1, num(entry.mineFrac, 0))) * 1000) / 1000,
+      beamT: Math.round(Math.max(0, Math.min(60, num(entry.beamT, 0))) * 1000) / 1000,
+      pwr: Math.round(Math.max(0, Math.min(1, num(entry.pwr, 1))) * 1000) / 1000,
+      pwrDraw: Math.round(Math.max(0, Math.min(500, num(entry.pwrDraw, 0))) * 100) / 100,
+      enFrac: Math.round(Math.max(0, Math.min(1, num(entry.enFrac, 1))) * 1000) / 1000,
+      hint: text(entry.hint, 120),
       cone: Math.round(Math.max(0, Math.min(45, num(entry.cone, 0))) * 100) / 100,
       lockT: Math.round(Math.max(0, Math.min(60, num(entry.lockT, 0))) * 1000) / 1000,
       lockLocked: entry.lockLocked === true,
@@ -349,6 +369,11 @@ function cleanShips(raw) {
       delete last.beamEnd;
     }
     if (!last.mineFrac) delete last.mineFrac;
+    if (!last.beamT) delete last.beamT;
+    if (last.pwr === 1) delete last.pwr;
+    if (!last.pwrDraw) delete last.pwrDraw;
+    if (last.enFrac === 1) delete last.enFrac;
+    if (!last.hint) delete last.hint;
     if (!last.cone) delete last.cone;
     if (!last.lockT) delete last.lockT;
     if (!last.lockLocked) delete last.lockLocked;
@@ -471,6 +496,37 @@ function cleanEnemies(raw) {
     if (encounter) row.encounter = encounter;
     if (missionOwner) row.missionOwner = missionOwner;
     out.push(row);
+  }
+  return out;
+}
+
+function cleanRocks(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  const round2 = (value, fallback = 0) => Math.round(num(value, fallback) * 100) / 100;
+  const vec2 = v => Array.isArray(v)
+    ? [round2(v[0]), round2(v[1]), round2(v[2])]
+    : (v && typeof v === "object" ? [round2(v.x), round2(v.y), round2(v.z)] : [0, 0, 0]);
+  for (const r of raw) {
+    if (out.length >= LIMITS.rocks) break;
+    if (!r || typeof r !== "object" || Array.isArray(r)) continue;
+    const id = Math.floor(Number(r.id));
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const ore = Math.max(0, round2(r.ore, 0));
+    const max = Math.max(0.01, round2(r.max, 1));
+    const radius = Math.max(1, round2(r.r, 10));
+    out.push({
+      id,
+      type: text(r.type, 24) || "ferrite",
+      shape: Math.max(0, Math.min(16, Math.floor(Number(r.shape) || 0))),
+      r: radius,
+      ore,
+      max,
+      pos: vec2(r.pos),
+      quat: cleanQuat(r.quat),
+      s0: vec2(r.s0),
+      scale: vec2(r.scale),
+    });
   }
   return out;
 }

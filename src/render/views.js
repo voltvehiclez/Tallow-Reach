@@ -193,8 +193,8 @@ function ensureGlbRockSoup() {
 }
 
 const kinds = new Map();
-const drawn = new Map(); // group:id -> { mesh, kind, group, handler }
-const keyFor = (group, id) => `${group}:${id}`;
+const drawn = new Map(); // kind:id -> { mesh, kind, group, handler }
+const keyFor = (kind, id) => `${kind}:${id}`;
 
 // Previous-tick poses for smooth between-tick interpolation on high-refresh
 // displays (120/144/240 Hz). Keyed in a WeakMap so sim records stay pure.
@@ -616,7 +616,7 @@ registerEntityView("cache", {
 });
 
 function addView(e, handler) {
-  const key = keyFor(handler.group, e.id);
+  const key = keyFor(e.kind, e.id);
   if (drawn.has(key)) return drawn.get(key);
   capturePose(e);
   const mesh = handler.build(e);
@@ -666,7 +666,7 @@ function updateGroup(group) {
     if (handler.group !== group) continue;
     for (const e of handler.list()) {
       if (e.kind !== kind) continue;
-      const key = keyFor(group, e.id);
+      const key = keyFor(kind, e.id);
       seen.add(key);
       const view = drawn.get(key) || addView(e, handler);
       if (view) view.handler.update(e, view.mesh);
@@ -948,7 +948,15 @@ export function installEnemyViews() {
   on("enemy-spawned", ({ id }) => spawnView("enemy", id));
   on("enemy-removed", ({ id }) => removeView(keyFor("enemy", id)));
   on("entity-spawned", ({ id, kind }) => spawnView(kind, id));
-  on("entity-removed", ({ id }) => removeView(keyFor("entity", id)));
+  on("entity-removed", ({ id, kind }) => {
+    if (kind) {
+      removeView(keyFor(kind, id));
+    } else {
+      for (const [k, handler] of kinds) {
+        if (handler.group === "entity") removeView(keyFor(k, id));
+      }
+    }
+  });
   on("launched", () => snapRenderedPlayer());
   on("place-entered", () => snapRenderedPlayer());
 }

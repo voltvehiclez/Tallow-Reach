@@ -34,7 +34,11 @@ const stub = (extra = {}) => ({
   wxBoosts: 9,
   boost: true,
   shake: 0.6,
-  flight: { beamOn: true, beamStart: vec(0, 0, 200), beamEnd: vec(0, 0, 167.5), mineFrac: 0.75, coneAngle: 6.5, missileLock: { target: { id: 99 }, t: 1.5, locked: true } },
+  flight: { beamOn: true, beamStart: vec(0, 0, 200), beamEnd: vec(0, 0, 167.5), mineFrac: 0.75, beamT: 1.5, coneAngle: 6.5, missileLock: { target: { id: 99 }, t: 1.5, locked: true } },
+  power: { stored: 30, cap: 60, draw: 4.5 },
+  en: 6,
+  enMax: 10,
+  hudPrompt: "Hold to mine (12 left)",
   ...extra,
 });
 
@@ -57,18 +61,28 @@ test("weapons: the own-ship entry carries the weapon-effects block, and nothing 
   assert.equal(entry.lockT, 1.5);
   assert.equal(entry.lockLocked, true);
   assert.equal(entry.lockTarget, true, "only the fact of a held lock travels — never the host's record");
+  assert.equal(entry.beamT, 1.5);
+  assert.equal(entry.pwr, 0.5);
+  assert.equal(entry.pwrDraw, 4.5);
+  assert.equal(entry.enFrac, 0.6);
+  assert.equal(entry.hint, "Hold to mine (12 left)");
 });
 
 test("weapons: a record with no beam state and no counters cleans to zeroes, never NaN", () => {
-  const entry = shipEntry(stub({ flight: undefined, wxShots: undefined, wxMissiles: undefined, wxLocks: undefined, wxOre: undefined, wxHits: undefined, wxBoosts: undefined }), { id: "guest-1", name: "A" });
+  const entry = shipEntry(stub({ flight: undefined, power: undefined, en: undefined, enMax: undefined, hudPrompt: undefined, wxShots: undefined, wxMissiles: undefined, wxLocks: undefined, wxOre: undefined, wxHits: undefined, wxBoosts: undefined }), { id: "guest-1", name: "A" });
   assert.equal(entry.beamOn, false);
   assert.deepEqual(entry.beamStart, [0, 0, 0]);
   assert.deepEqual(entry.beamEnd, [0, 0, 0]);
   assert.equal(entry.mineFrac, 0);
+  assert.equal(entry.beamT, 0);
+  assert.equal(entry.pwr, 1);
+  assert.equal(entry.pwrDraw, 0);
+  assert.equal(entry.enFrac, 1);
+  assert.equal(entry.hint, "");
   for (const k of ["shots", "missiles", "locks", "ore", "hits", "boosts"]) assert.equal(entry[k], 0, k);
 });
 
-test("weapons: counters wrap at u16, and the beam survives the protocol cleaning", () => {
+test("weapons: counters wrap at u16, and the beam + HUD vitals survive protocol cleaning", () => {
   const message = cleanMessage("ships", { ships: [{ ...shipEntry(stub(), { id: "guest-1", name: "Acey" }), shots: 65537, missiles: 70000 }] });
   assert.equal(message.ships[0].shots, 1, "u16 wraps on the wire");
   assert.equal(message.ships[0].missiles, 4464);
@@ -76,16 +90,27 @@ test("weapons: counters wrap at u16, and the beam survives the protocol cleaning
   assert.deepEqual(message.ships[0].beamStart, [0, 0, 200]);
   assert.deepEqual(message.ships[0].beamEnd, [0, 0, 167.5]);
   assert.equal(message.ships[0].mineFrac, 0.75);
+  assert.equal(message.ships[0].beamT, 1.5);
+  assert.equal(message.ships[0].pwr, 0.5);
+  assert.equal(message.ships[0].pwrDraw, 4.5);
+  assert.equal(message.ships[0].enFrac, 0.6);
+  assert.equal(message.ships[0].hint, "Hold to mine (12 left)");
   assert.equal(message.shots, undefined, "and the cleaner drops anything that is not a `ships` field");
 });
 
-test("weapons: the ship stream keeps the whole block, so the own screen can apply it", () => {
+test("weapons: the ship stream interpolates beamT/pwr/pwrDraw/enFrac and keeps hint", () => {
   const stream = createShipStream({ delayMs: 35, samples: 8 });
   const t0 = 1000;
-  stream.receive([shipEntry(stub(), { id: "guest-1", name: "Acey" })], t0);
-  const pose = stream.sample(t0 - 35)[0];
+  stream.receive([shipEntry(stub({ flight: { beamOn: true, beamStart: vec(0, 0, 200), beamEnd: vec(0, 0, 167.5), mineFrac: 0.75, beamT: 1.0, coneAngle: 6.5, missileLock: { target: { id: 99 }, t: 1.5, locked: true } }, power: { stored: 20, cap: 100, draw: 4 }, en: 4, enMax: 10, hudPrompt: "Hold to mine (12 left)" }), { id: "guest-1", name: "Acey" })], t0);
+  stream.receive([shipEntry(stub({ flight: { beamOn: true, beamStart: vec(0, 0, 200), beamEnd: vec(0, 0, 167.5), mineFrac: 0.5, beamT: 2.0, coneAngle: 6.5, missileLock: { target: { id: 99 }, t: 1.5, locked: true } }, power: { stored: 60, cap: 100, draw: 8 }, en: 8, enMax: 10, hudPrompt: "Hold to mine (11 left)" }), { id: "guest-1", name: "Acey" })], t0 + 100);
+  const pose = stream.sample(t0 + 50 + 35)[0];
   assert.equal(pose.beamOn, true);
-  assert.equal(pose.mineFrac, 0.75);
+  assert.equal(pose.mineFrac, 0.5);
+  assert.ok(Math.abs(pose.beamT - 1.5) < 1e-6, "beamT interpolates monotonically while cutting");
+  assert.ok(Math.abs(pose.pwr - 0.4) < 1e-6);
+  assert.ok(Math.abs(pose.pwrDraw - 6) < 1e-6);
+  assert.ok(Math.abs(pose.enFrac - 0.6) < 1e-6);
+  assert.equal(pose.hint, "Hold to mine (11 left)");
   assert.equal(pose.shots, 41);
   assert.equal(pose.boosts, 9);
   assert.equal(pose.beamStart.x, 0);
@@ -95,4 +120,12 @@ test("weapons: the ship stream keeps the whole block, so the own screen can appl
   assert.equal(pose.lockT, 1.5);
   assert.equal(pose.lockLocked, true);
   assert.equal(pose.lockTarget, true);
+
+  // When beam transitions off -> on between a and b, b.beamT is preserved across the onset blend.
+  const onset = createShipStream({ delayMs: 35, samples: 8 });
+  onset.receive([shipEntry(stub({ flight: { beamOn: false, beamT: 0, beamStart: vec(0, 0, 0), beamEnd: vec(0, 0, 0), mineFrac: 0 } }), { id: "guest-1", name: "Acey" })], t0);
+  onset.receive([shipEntry(stub({ flight: { beamOn: true, beamT: 0.14, beamStart: vec(0, 0, 200), beamEnd: vec(0, 0, 167.5), mineFrac: 0.9 } }), { id: "guest-1", name: "Acey" })], t0 + 100);
+  const onsetPose = onset.sample(t0 + 36)[0];
+  assert.equal(onsetPose.beamOn, true);
+  assert.equal(onsetPose.beamT, 0.14);
 });

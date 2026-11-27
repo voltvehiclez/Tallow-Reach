@@ -1,4 +1,4 @@
-# Lessons archive: L37–L44 (multiplayer custody, rejoin & menu navigation)
+# Lessons archive: L35–L44 (multiplayer custody, rejoin & menu navigation)
 
 Moved out of [docs/LESSONS.md](../LESSONS.md) verbatim on 2026-11-27 to keep it under its size limit.
 Read them when a task touches multiplayer suitcase custody (`checkIn`/`bringPilotHomeAtMenu`), away-card routing, or post-join modal visibility.
@@ -141,3 +141,15 @@ Read them when a task touches multiplayer suitcase custody (`checkIn`/`bringPilo
 - **Enforced by:** "cargo bought at a station only the host's world has comes home safely" and "a stack
   that waited at the host's Meridian comes home to its OWN station" in
   `tests/multiplayer-carry.test.mjs`; reverting the fix fails both.
+
+### L36. A guard that returns `false` reads as "nothing happened" to every caller
+- **Seen:** owner, playtest 14 — "clicking the bring pilot home doesnt do anything... Im stuck in the menu."
+- **Cause:** `comeHome()` opened with `if (!leaveVisit()) return false;`. From the title there is no session to leave, so it returned before unpacking anything, and the caller showed nothing. The same shape hid the second half: unpacking used the ACTIVE save, which on the title is not the open world's, so even a caller that got that far had no profile to unpack into.
+- **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
+- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
+
+### L35. A connection that ends is an event the host must act on
+- **Seen:** owner, playtest 14 — "When my laptop leaves it still says that laptop is logged in in the players list and there is no notification in chat that it left." Its ship stayed too, and the pilot could not get back in.
+- **Cause:** three omissions on one path. The host removed the row but never wrote the record, so `world.guests[id]` kept the OLD token hash and the next hello was a "returning guest" refused for a token it no longer had. No chat line and no `mp-guest-left` were emitted. And `upsertGuest` let a `welcome`/`presence` list (no peer id) overwrite a known peer id with nothing, after which that guest could never be matched to the peer that left.
+- **Rule:** a departed peer is handled in ONE place (`forgetPeer`), and it touches every copy of the fact: the live row, the chat, `mp-guest-left`, presence, and the stored record. A record whose pilot has gone is a suitcase, not an identity — mark it (`left`); a fresh link re-admits it. Never overwrite a known correlation id with a missing one.
+- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (leaving is removed/announced/ship gone; a returning pilot gets in with a new token).

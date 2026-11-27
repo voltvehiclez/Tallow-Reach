@@ -66,6 +66,11 @@ export function stepSim(dt) {
   // A hint lasts until the next sim tick, not just a display frame. This keeps
   // it visible when a display renders more than once between sim ticks.
   state.hud.prompt = "";
+  for (const p of state.players) {
+    if (p && p !== state.player && (p.hudPromptUntil || 0) <= state.time) {
+      p.hudPrompt = "";
+    }
+  }
   // Local first preserves the old single-player ordering. Other players have
   // independent per-ship runtime; shared world systems are stepped exactly once.
   const local = state.player;

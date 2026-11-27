@@ -18,6 +18,19 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Fix host keepalive, guest Launch/HUD/beam/rock parity, pocket collisions, and view/cubemap bugs (build `2026-11-27e`)
+
+**Code change; rebuild needed; build `2026-11-27e`.** Save version unchanged (**29**). Wire adds five optional/cleaned fields to `SHIP_FIELDS` (`beamT`, `pwr`, `pwrDraw`, `enFrac`, `hint`) and optional `rocks` diff packets (`LIMITS.rocks = 256`) on `entities`.
+
+Fixed four post-playtest bug clusters found on `2026-11-27d`:
+
+1. **Views & WebGL console errors (`src/render/{views,cubemap}.js`, `src/data/multiplayer.js`, `src/net/transport.js`).** Keyed `views.js` `drawn` map by `${kind}:${id}` instead of `${group}:${id}` (eliminating rock/bullet/crate numeric ID collisions that turned Ferrite rocks into firing bolts), guarded `orientFace` `texture.needsUpdate = true` on `texture.image`, pruned dead/noisy relays to 10 curated `RELAYS.relayUrls`, and set `relayConfig.warnOnRelayFailure = false`.
+2. **Host background keepalive (`src/main.js`, `src/net/session.js`).** Added `data:` Worker fallback after `blob:` Worker errors (`file://` `SecurityError`) and a gesture-unlocked, zero-gain WebAudio `AudioWorkletNode` / `ScriptProcessorNode` heartbeat (paused/stopped cleanly when not hosting), plus tightened `host-keepalive-tick` throttle to `Math.round(1000 / SHIP_STREAM.hz) - 4`.
+3. **Guest Launch/power/warp parity & remote-pocket collision (`src/main.js`, `src/sim/player.js`).** Skipped stale pre-transition `applySelfShip` `docked` frames during `dockStreamCaughtUp === false` (with 1.5 s safety guard) so launching guests never freeze or snap to `[0,0,0]`, preserved non-docked `power`/`en` across `applyVisitSnapshot` `refillPower`, stored `P.warp.from` for guest Warp arrival notices alongside Launch notices, and switched `flight()` collisions in `src/sim/player.js` from `state.world` to `placeWorld(P.place || state.place)`.
+4. **Mining beam, HUD bars/prompts, and rock sync (`src/data/multiplayer.js`, `src/net/{ships,protocol,session}.js`, `src/state/state.js`, `src/sim/{step,weapons,combat,sectors,places,world}.js`, `src/render/{shipstream,entitystream}.js`, `src/ui/hud.js`, `src/main.js`).** Synced `beamT`/`pwr`/`pwrDraw`/`enFrac`/`hint` with interpolation, routed non-local transient hints via `sayForPlayer` (expired in `step.js`), matched `hud.js` `#bm` against `primarySlotIndex(S.pw, P)`, diffed/throttled `rocks` in `mp-entities`, synced in-place scaling/depletion via `syncPocketRocks` (guarded `loadPlace` against double-spawn), and updated `clearNetEntities` to purge `_net` rocks and reset `container.loaded = false`.
+
+**Tests:** Updated `tests/{skybox,views,multiplayer-weapons,multiplayer-playtest-20261127}.test.mjs` with unit and two-VM real `src/main.js` integration coverage. **Docs:** Updated `docs/HANDOFF.md`, `docs/LESSONS.md` (`L55`–`L56`, archived `L35`–`L36`), and `docs/architecture/multiplayer.md`.
+
 ## 2026-11-27: Fix guest `G` docking and undocked relog HUD/reticle (build `2026-11-27d`)
 
 **Code change; rebuild needed; build `2026-11-27d`.** Save version unchanged (**29**); no save or wire schema changes.

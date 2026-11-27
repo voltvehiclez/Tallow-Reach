@@ -545,6 +545,19 @@ export const say = text => {
   state.hud.prompt = text;
 };
 
+/**
+ * Show a transient HUD hint for `player`: local writes `state.hud.prompt`; a remote guest keeps
+ * it on `player.hudPrompt` for at least `holdSec` so a 24 Hz snapshot stream never misses a 1-tick hint.
+ */
+export const sayForPlayer = (player, text, holdSec = 0.12) => {
+  if (!player || player === state.player) {
+    say(text);
+    return;
+  }
+  player.hudPrompt = String(text || "");
+  player.hudPromptUntil = (Number(state.time) || 0) + Math.max(0, Number(holdSec) || 0);
+};
+
 /** Show a centre-screen message for `secs` seconds. */
 export const msg = (text, secs = 3) => {
   state.hud.msg = text;

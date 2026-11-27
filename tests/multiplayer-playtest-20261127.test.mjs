@@ -23,11 +23,12 @@ if (typeof globalThis.localStorage === "undefined") {
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = rel => readFileSync(path.join(ROOT, rel), "utf8");
 
-import { state, applySave, newRootSave, currentSave, placeWorld, resetPlaces } from "../src/state/state.js";
+import { state, applySave, newRootSave, currentSave, placeWorld, resetPlaces, sayForPlayer } from "../src/state/state.js";
 import { SAVE_VERSION, newProfile, newWorld, sanitizeSave, cleanVisitState } from "../src/state/profile.js";
 import { DEFAULT_PLACE, stationKeyAt, setPlaceCatalog } from "../src/data/places.js";
+import { RELAYS } from "../src/data/multiplayer.js";
 import { generateGalaxy } from "../src/sim/galaxy.js";
-import { V } from "../src/util/math.js";
+import { V, Q } from "../src/util/math.js";
 import { on } from "../src/util/events.js";
 import { cleanMessage } from "../src/net/protocol.js";
 import { checkOut, checkIn, hostProfile } from "../src/net/custody.js";
@@ -43,8 +44,12 @@ import {
   guestVisitStateSnapshot,
   resetGuests,
 } from "../src/sim/multiplayer.js";
-import { createPlayer } from "../src/sim/player.js";
-import { enterPlace, stationAt } from "../src/sim/places.js";
+import { createPlayer, createPlayerRecord, flight } from "../src/sim/player.js";
+import { enterPlace, loadPlace, stationAt } from "../src/sim/places.js";
+import { stepSim } from "../src/sim/step.js";
+import { clearNetEntities } from "../src/sim/world.js";
+import { addEntity } from "../src/sim/entity.js";
+import { syncPocketRocks } from "../src/render/entitystream.js";
 import { launch, tryDock, dockFailureReason } from "../src/sim/session.js";
 import { syncSpeedFromVelocity, displayedSpeed, truePlayerSpeed } from "../src/sim/flight-instruments.js";
 import { acceptContract, completeContract } from "../src/sim/contracts.js";
@@ -916,14 +921,19 @@ test("Bug A & B end-to-end (2026-11-27d): real src/main.js two-VM playtest cover
       if (gm.n > toShip) {
         host.ctx.__APP.invMod.addItem("station", gm.o, gm.n - toShip, P.profile, P.guestWorld);
       }
-      host.ctx.__APP.eventsMod.emit("mined", { ore: gm.o, amount: gm.n, player: P });
+      host.ctx.__APP.eventsMod.emit("mined", { item: gm.o, ore: gm.o, amount: gm.n, player: P });
     } else if (gm.type === "hunt") {
       for (let round = 0; round < 6; round++) {
-        const foes = [...W.enemies].filter(e => e.missionId === gm.id && e.hp > 0);
+        const foes = [...W.enemies].filter(e =>
+          (e.missionId === gm.id || e.encounter === `mission:${gm.id}`) && e.hp > 0
+        );
         if (!foes.length) break;
         for (const e of foes) {
           e.hp = 0;
-          host.ctx.__APP.eventsMod.emit("enemy-killed", { enemy: e, player: P });
+          host.ctx.__APP.eventsMod.emit("enemy-killed", {
+            def: e.def, faction: e.faction, enemy: e, byPlayer: P, player: P,
+            place: e.place || "reach", encounter: e.encounter, missionOwner: e.missionOwner,
+          });
         }
         await tick(guest, 4);
       }
@@ -990,6 +1000,495 @@ test("Bug A & B end-to-end (2026-11-27d): real src/main.js two-VM playtest cover
     assert.deepEqual(host.ctx.__CRASHES, []);
     assert.deepEqual(guest.ctx.__CRASHES, []);
     assert.deepEqual(guest2.ctx.__CRASHES, []);
+  } finally {
+    for (const t of allIntervals) clearInterval(t);
+    for (const t of allTimeouts) clearTimeout(t);
+  }
+});
+
+/* ------------------------------------------------------------------------- */
+/* 2026-11-27e fixes:                                                        */
+/*   1. Host background keepalive (data: worker / AudioWorklet / interval),  */
+/*      curated 10-relay list & warnOnRelayFailure = false,                  */
+/*   2. Guest Launch freeze skip, mid-flight power preserve, Launch/Warp msg */
+/*   3. Mining beam beamT/hint/power wire + HUD beam slot + syncPocketRocks  */
+/*   4. Remote-pocket flight() collision + clearNetEntities loaded = false   */
+/* ------------------------------------------------------------------------- */
+
+test("2026-11-27e (prompts & pocket collision): sayForPlayer isolates guest prompts & expires cleanly; remote-pocket flight collides with P.place rocks", () => {
+  applySave(newRootSave());
+  resetPlaces();
+  resetGuests();
+  state.place = DEFAULT_PLACE;
+  state.time = 10;
+  state.hud.prompt = "";
+  const localP = createPlayer();
+  const guestP = createPlayerRecord();
+  guestP.id = 99;
+  guestP.guestId = "guest-p";
+  guestP.place = "solace";
+  guestP.docked = false;
+  guestP.profile = newProfile("Guest");
+  guestP.configured = true;
+  guestP.drive = { spd: 200, rev: 60, side: 60, turn: 2, boost: 400, draw: 2, bmax: 10, buse: 2, bfill: 1, ignite: 20 };
+  guestP.power = { cap: 60, stored: 60, gen: 12, draw: 0, use: { drive: 0, shield: 0, guns: 0, beam: 0 } };
+  guestP.controls = neutralControls();
+  state.players.length = 0;
+  state.players.push(localP, guestP);
+  state.localPlayerIndex = 0;
+
+  sayForPlayer(guestP, "Beam contact lost — the ore starts again", 0.35);
+  assert.equal(state.hud.prompt, "", "guest prompt does not overwrite host local HUD prompt");
+  assert.equal(guestP.hudPrompt, "Beam contact lost — the ore starts again");
+  assert.ok(guestP.hudPromptUntil > state.time);
+
+  // Local player writes straight to state.hud.prompt
+  sayForPlayer(localP, "Host prompt");
+  assert.equal(state.hud.prompt, "Host prompt");
+
+  // stepSim expires guest hudPrompt once hudPromptUntil passes
+  stepSim(0.5);
+  assert.equal(guestP.hudPrompt, "");
+
+  // Remote-pocket collision: guest in "solace" hits a rock placed ONLY in placeWorld("solace"), not state.world!
+  const remoteW = placeWorld("solace");
+  remoteW.asteroids.length = 0;
+  addEntity(remoteW.asteroids, {
+    kind: "rock",
+    place: "solace",
+    type: "ferrite",
+    shape: 0,
+    pos: V(0, 0, -25),
+    quat: Q(),
+    scale: V(15, 15, 15),
+    s0: V(15, 15, 15),
+    r: 15,
+    ore: 20,
+    max: 20,
+  });
+  guestP.pos.set(0, 0, -14);
+  guestP.v.set(0, 0, -100);
+  flight(0.05, guestP);
+  assert.ok(guestP.v.z > -100 || guestP.pos.z > -15, "guest ship bounces off remote-pocket rock in placeWorld(P.place)");
+
+  resetGuests();
+});
+
+test("2026-11-27e (rocks & net reset): syncPocketRocks updates ore/scale in place without double-spawning and clearNetEntities resets container.loaded", () => {
+  applySave(newRootSave());
+  resetPlaces();
+  const pocket = DEFAULT_PLACE;
+  const W = placeWorld(pocket);
+  const c = state.places.get(pocket);
+
+  // Simulate host rock state before guest loads pocket locally
+  const rockA = { id: 41, type: "ferrite", shape: 1, r: 14, ore: 18, max: 30, pos: [100, 0, 0], quat: [0, 0, 0, 1], s0: [14, 14, 14], scale: [11, 11, 11] };
+  const rockB = { id: 42, type: "cobalt", shape: 2, r: 12, ore: 20, max: 20, pos: [300, 0, 0], quat: [0, 0, 0, 1], s0: [12, 12, 12], scale: [12, 12, 12] };
+  syncPocketRocks(W, [rockA, rockB], pocket);
+  assert.equal(W.asteroids.length, 2);
+  const recA = W.asteroids.find(r => r._hostId === 41);
+  assert.ok(recA && recA._net === true);
+
+  // Entering the pocket afterwards via loadPlace must NOT duplicate local rocks over _net rocks
+  loadPlace(pocket);
+  assert.equal(W.asteroids.length, 2, "loadPlace skips populateField when _net rocks are already present");
+  assert.equal(c.loaded, true);
+
+  // Subsequent shrink keeps exact same entity object identity, and depletion removes rockB
+  syncPocketRocks(W, [{ ...rockA, ore: 6, scale: [8.5, 8.5, 8.5] }], pocket);
+  assert.equal(W.asteroids.length, 1);
+  assert.strictEqual(W.asteroids[0], recA, "shrinking rock reuses existing object identity");
+  assert.equal(recA.ore, 6);
+  assert.equal(recA.scale.x, 8.5);
+
+  // Leaving host resets _net rocks and container.loaded so home belt repopulates cleanly
+  clearNetEntities();
+  assert.equal(W.asteroids.length, 0);
+  assert.equal(c.loaded, false);
+  loadPlace(pocket);
+  assert.ok(W.asteroids.length > 0, "returning home freshly repopulates local asteroids");
+});
+
+test("2026-11-27e (relays, transport, HUD & menu guards): curated relays, warnOnRelayFailure, primarySlotIndex beam matching, and netRequestDock", () => {
+  assert.equal(RELAYS.relayUrls.length, 10);
+  for (const url of RELAYS.relayUrls) assert.match(url, /^wss:\/\//);
+  for (const noisy of ["wss://relay.damus.io", "wss://relay.nostr.band", "wss://nostr.bitcoiner.social", "wss://relay.wellorder.org"]) {
+    assert.equal(RELAYS.relayUrls.includes(noisy), false, `${noisy} dropped from default relay list`);
+  }
+
+  const transportSrc = read("src/net/transport.js");
+  assert.match(transportSrc, /warnOnRelayFailure\s*=\s*false/);
+  const hudSrc = read("src/ui/hud.js");
+  assert.match(hudSrc, /primarySlotIndex\(\s*S\.pw\s*,\s*P\s*\)/);
+  const menuSrc = read("src/ui/menu.js");
+  assert.match(menuSrc, /if\s*\(\s*state\.away\s*\)\s*\{[^}]*netRequestDock\(\)/);
+});
+
+test("2026-11-27e end-to-end: real src/main.js two-VM guest Launch/power/mining-beam-HUD/rock-depletion and host background keepalive", async () => {
+  const esbuild = await import("esbuild");
+  const vm = await import("node:vm");
+  const shell = read("src/index.html");
+  const bundle = await esbuild.build({
+    stdin: {
+      contents: `
+        import "./src/main.js";
+        import * as stateMod from "./src/state/state.js";
+        import * as netSession from "./src/net/session.js";
+        import * as mpUi from "./src/ui/multiplayer.js";
+        import * as eventsMod from "./src/util/events.js";
+        import * as placesMod from "./src/sim/places.js";
+        import * as invMod from "./src/sim/inventory.js";
+        import * as worldMod from "./src/sim/world.js";
+        globalThis.__APP = { stateMod, netSession, mpUi, eventsMod, placesMod, invMod, worldMod };
+      `,
+      resolveDir: ROOT,
+    },
+    bundle: true,
+    write: false,
+    format: "iife",
+    loader: { ".webp": "dataurl", ".glb": "dataurl", ".txt": "text" },
+    plugins: [{
+      name: "stub-gl-only",
+      setup(build) {
+        const map = {
+          "render/scene.js": "scene-stub",
+          "render/menuview.js": "menuview-stub",
+          "render/gltf.js": "gltf-stub",
+          "render/shipviewer.js": "shipviewer-stub",
+          "core/audio.js": "audio-stub",
+          "render/warpfx.js": "warpfx-stub",
+          "render/views.js": "views-stub",
+          "render/target-picking.js": "pick-stub",
+          "ui/outfitting.js": "outfitting-stub",
+          "ui/crash.js": "crash-stub",
+        };
+        build.onResolve({ filter: /^trystero$/ }, () => ({ path: "trystero-stub", namespace: "stub" }));
+        build.onResolve({ filter: /^\./ }, args => {
+          const abs = path.resolve(args.resolveDir, args.path).replace(/\\/g, "/");
+          for (const [suffix, name] of Object.entries(map)) {
+            if (abs.endsWith("/src/" + suffix)) return { path: name, namespace: "stub" };
+          }
+        });
+        build.onLoad({ filter: /.*/, namespace: "stub" }, async args => {
+          if (args.path === "trystero-stub") return { contents: "export function joinRoom(cfg, roomId){ return globalThis.__makeRoom(cfg, roomId); } export function getRelaySockets(){ return {}; }" };
+          if (args.path === "scene-stub") return { contents: `
+            import * as THREE from "three";
+            export const renderer = { setPixelRatio(){}, setSize(){}, render(){}, domElement: document.createElement("canvas") };
+            export const scene = new THREE.Scene();
+            export const camera = new THREE.PerspectiveCamera(60, 1280/800, 0.1, 20000);
+            export const stars = new THREE.Group();
+            export const showPlace = () => {};
+            export const stepScenery = () => {};
+            export const updateScenery = () => {};
+            export const forgetPlace = () => {};
+          `, resolveDir: ROOT };
+          if (args.path === "menuview-stub") return { contents: "export const updateMenuView=()=>{}; export const menuView=()=>({scene:{},camera:{}}); export const resizeMenuView=()=>{};" };
+          if (args.path === "gltf-stub") return { contents: "export const instantiateModel=()=>null; export const modelTemplate=()=>null; export const spinNodes=()=>[]; export const engNodes=()=>[]; export const preloadAfterPaint=()=>Promise.resolve(); export const preloadModels=()=>Promise.resolve();" };
+          if (args.path === "shipviewer-stub") return { contents: "export const createShipViewer=()=>({ render(){}, dispose(){}, resize(){}, setShip(){} });" };
+          if (args.path === "audio-stub") return { contents: "export const updateAudio=()=>{}; export const initAudio=()=>{}; export const uiSound=()=>{}; export const hoverSound=()=>{}; export const isMuted=()=>false; export const toggleMute=()=>false; export const setAudioSuspended=()=>{};" };
+          if (args.path === "warpfx-stub") return { contents: "export const setupWarpStreaks=()=>{}; export const updateWarpStreaks=()=>{};" };
+          if (args.path === "views-stub") return { contents: `
+            import * as THREE from "three";
+            export const installEnemyViews=()=>{};
+            export const updateEnemyViews=()=>{};
+            export const updateEntityViews=()=>{};
+            export const snapshotSimPoses=()=>{};
+            export const snapRenderedPlayer=()=>{};
+            export const renderPlayerPose=(P)=>({pos:P.pos,quat:P.quat,v:P.v});
+            export const interpolatedPos=(o)=>o?.pos||new THREE.Vector3();
+            export const interpolatedVelocity=(o)=>o?.v||new THREE.Vector3();
+          `, resolveDir: ROOT };
+          if (args.path === "pick-stub") return { contents: "export const pickLockSurface=()=>null;" };
+          if (args.path === "outfitting-stub") return { contents: "export const updateOutfitting=()=>{}; export const mountOutfitting=()=>{};" };
+          if (args.path === "crash-stub") return { contents: "export const installCrashNotice=()=>{}; export const reportCrash=(w,e)=>{ globalThis.__CRASHES.push([w, String(e)]); };" };
+        });
+      },
+    }],
+  });
+
+  const code = bundle.outputFiles[0].text;
+  const rooms = new Map();
+  function makeVirtualRoom(who, roomId) {
+    const peerId = who + "-peer";
+    const listeners = { join: [], leave: [], msg: [] };
+    if (!rooms.has(roomId)) rooms.set(roomId, new Map());
+    const peersMap = rooms.get(roomId);
+    const api = {
+      peerId,
+      makeAction() {
+        return {
+          send(data, opts) {
+            const target = opts?.target;
+            for (const [id, other] of peersMap.entries()) {
+              if (id === peerId) continue;
+              if (target && id !== target) continue;
+              queueMicrotask(() => other._deliver(data, peerId));
+            }
+            return Promise.resolve();
+          },
+          onMessage(fn) { listeners.msg.push(fn); },
+        };
+      },
+      onPeerJoin(fn) { listeners.join.push(fn); },
+      onPeerLeave(fn) { listeners.leave.push(fn); },
+      onError() {},
+      getPeers() {
+        const o = {};
+        for (const id of peersMap.keys()) if (id !== peerId) o[id] = { direct: true };
+        return o;
+      },
+      leave() {
+        peersMap.delete(peerId);
+        for (const [, other] of peersMap.entries()) other._peerLeft(peerId);
+      },
+      _deliver(data, fromPeer) { for (const fn of listeners.msg) fn(data, { peerId: fromPeer }); },
+      _peerJoined(id) { for (const fn of listeners.join) fn({ peerId: id }); },
+      _peerLeft(id) { for (const fn of listeners.leave) fn({ peerId: id }); },
+    };
+    const existing = [...peersMap.keys()];
+    peersMap.set(peerId, api);
+    queueMicrotask(() => {
+      for (const id of existing) { peersMap.get(id)?._peerJoined(peerId); api._peerJoined(id); }
+    });
+    return api;
+  }
+
+  const allIntervals = [];
+  const allTimeouts = [];
+  function bootInstance(who) {
+    const storage = new Map();
+    const winListeners = {};
+    const docListeners = {};
+    const elsById = new Map();
+    function makeEl(tag = "div", id = "") {
+      const elListeners = {};
+      const el = {
+        tagName: tag.toUpperCase(), id, hidden: false, type: "", checked: false,
+        textContent: "", _innerHTML: "", value: "", dataset: {}, style: {}, children: [],
+        parentElement: null, attributes: {},
+        classList: {
+          _s: new Set(),
+          add(...xs) { xs.forEach(x => this._s.add(x)); },
+          remove(...xs) { xs.forEach(x => this._s.delete(x)); },
+          toggle(x, f) { const on = f === undefined ? !this._s.has(x) : !!f; if (on) this._s.add(x); else this._s.delete(x); return on; },
+          contains(x) { return this._s.has(x); },
+        },
+        get innerHTML() { return this._innerHTML; },
+        set innerHTML(v) {
+          this._innerHTML = String(v);
+          this.children = [];
+          const stack = [this];
+          const VOID = new Set(["input", "img", "br", "hr"]);
+          for (const m of this._innerHTML.matchAll(/<(\/?)(\w+)([^>]*)>/g)) {
+            const closing = !!m[1]; const t = m[2].toLowerCase(); const attrs = m[3];
+            if (closing) { if (stack.length > 1) stack.pop(); continue; }
+            const cid = (attrs.match(/\bid="([^"]+)"/) || [])[1] || "";
+            const c = makeEl(t, cid);
+            if (/\bhidden\b/.test(attrs)) c.hidden = true;
+            const cls = (attrs.match(/\bclass="([^"]+)"/) || [])[1];
+            if (cls) cls.split(/\s+/).forEach(x => x && c.classList.add(x));
+            for (const dm of attrs.matchAll(/\bdata-([a-z0-9-]+)="([^"]*)"/gi)) {
+              c.dataset[dm[1].replace(/-([a-z])/g, (_, ch) => ch.toUpperCase())] = dm[2];
+            }
+            stack[stack.length - 1].appendChild(c);
+            if (!VOID.has(t) && !attrs.endsWith("/")) stack.push(c);
+          }
+        },
+        appendChild(c) { c.parentElement = this; this.children.push(c); return c; },
+        prepend(c) { c.parentElement = this; this.children.unshift(c); return c; },
+        append(...cs) { cs.forEach(c => this.appendChild(c)); },
+        remove() {},
+        addEventListener(t, fn) { (elListeners[t] ||= []).push(fn); },
+        dispatchEvent(ev) { for (const fn of elListeners[ev.type] || []) fn(ev); },
+        setAttribute(k, v) { this.attributes[k] = String(v); },
+        getAttribute(k) { return this.attributes[k] ?? null; },
+        contains(target) { return target === this || this.children.some(c => c.contains?.(target)); },
+        querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+        querySelectorAll(sel) {
+          const out = [];
+          const walk = node => {
+            for (const c of node.children || []) {
+              let match = false;
+              if (sel.startsWith("#")) match = c.id === sel.slice(1);
+              else if (sel.startsWith(".")) match = c.classList.contains(sel.slice(1));
+              else match = c.tagName === sel.toUpperCase();
+              if (match) out.push(c);
+              walk(c);
+            }
+          };
+          walk(this);
+          return out;
+        },
+        closest() { return null; },
+        focus() { doc.activeElement = this; },
+        blur() { if (doc.activeElement === this) doc.activeElement = doc.body; },
+        select() {},
+        getBoundingClientRect() { return { top: 0, left: 0, width: 100, height: 20 }; },
+        getContext() { return { clearRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, save(){}, restore(){} }; },
+      };
+      if (id) elsById.set(id, el);
+      return el;
+    }
+    for (const m of shell.matchAll(/<(\w+)\s+[^>]*id="([^"]+)"([^>]*)>/g)) {
+      const el = makeEl(m[1], m[2]);
+      if (/\bhidden\b/.test(m[0])) el.hidden = true;
+    }
+    const body = makeEl("body");
+    const doc = {
+      body, documentElement: { clientWidth: 1280, clientHeight: 800 }, activeElement: body,
+      visibilityState: "visible", hidden: false,
+      createElement: tag => makeEl(tag), createElementNS: (_ns, tag) => makeEl(tag),
+      getElementById: id => elsById.get(id) || null,
+      addEventListener(t, fn) { (docListeners[t] ||= []).push(fn); },
+    };
+    const rafQueue = [];
+    let simNow = 1000;
+    const ctx = {
+      __CRASHES: [], __makeRoom: (_cfg, roomId) => makeVirtualRoom(who, roomId),
+      console,
+      setTimeout: (fn, ms, ...a) => { const t = setTimeout(fn, ms, ...a); allTimeouts.push(t); return t; },
+      clearTimeout,
+      setInterval: (fn, ms, ...a) => { const t = setInterval(fn, ms, ...a); allIntervals.push(t); return t; },
+      clearInterval, queueMicrotask, Promise,
+      Math, Date, JSON, Object, Array, Map, Set, Number, String, Boolean, Error, TypeError, RegExp,
+      Uint8Array, Float32Array, Int32Array, ArrayBuffer, URL, Blob, TextEncoder, TextDecoder,
+      localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)), removeItem: k => storage.delete(k), clear: () => storage.clear() },
+      location: { href: "https://example.test/", search: "", hash: "" }, history: { replaceState() {} },
+      innerWidth: 1280, innerHeight: 800, devicePixelRatio: 1,
+      performance: { now: () => simNow },
+      requestAnimationFrame: fn => { rafQueue.push(fn); return rafQueue.length; },
+      addEventListener(t, fn) { (winListeners[t] ||= []).push(fn); },
+      document: doc, window: null, navigator: { clipboard: { writeText: async () => {} } }, crypto: globalThis.crypto,
+    };
+    ctx.window = ctx; ctx.globalThis = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(code, ctx);
+    return {
+      ctx, doc, elsById,
+      stepFrame(ms = 16.666) { simNow += ms; const b = rafQueue.splice(0); for (const fn of b) fn(simNow); },
+      pressKey(c) { for (const fn of winListeners.keydown || []) fn({ code: c, repeat: false, altKey: false, target: doc.body, preventDefault() {} }); },
+      releaseKey(c) { for (const fn of winListeners.keyup || []) fn({ code: c, altKey: false, target: doc.body, preventDefault() {} }); },
+      mouseDown(btn = 0) { for (const fn of winListeners.mousedown || []) fn({ button: btn, target: doc.body, preventDefault() {} }); },
+      mouseUp(btn = 0) { for (const fn of winListeners.mouseup || []) fn({ button: btn, target: doc.body, preventDefault() {} }); },
+      setHidden(v) {
+        doc.visibilityState = v ? "hidden" : "visible";
+        doc.hidden = !!v;
+        for (const fn of docListeners.visibilitychange || []) fn({});
+      },
+      advanceClockOnly(ms) { simNow += ms; },
+    };
+  }
+
+  try {
+    const host = bootInstance("HOST");
+    const guest = bootInstance("GUEST");
+    const tick = async (n = 8) => {
+      for (let i = 0; i < n; i++) {
+        host.stepFrame(16.7);
+        guest.stepFrame(16.7);
+        await new Promise(r => setTimeout(r, 12));
+      }
+    };
+
+    host.ctx.__APP.netSession.setUsername("HostPilot");
+    host.elsById.get("panel").dispatchEvent({ type: "click", target: { closest() { return { dataset: { a: "intro" }, disabled: false }; } }, preventDefault() {} });
+    await new Promise(r => setTimeout(r, 15));
+    await host.ctx.__APP.netSession.hostWorld({ name: "HostPilot" });
+    const link = host.ctx.__APP.netSession.currentLink().link;
+
+    // Host background keepalive fires host-keepalive-tick when rAF stalls (hidden tab > 80ms)
+    let keepaliveTicks = 0;
+    host.ctx.__APP.eventsMod.on("host-keepalive-tick", () => { keepaliveTicks++; });
+    host.setHidden(true);
+    host.advanceClockOnly(120);
+    await new Promise(r => setTimeout(r, 45));
+    assert.ok(keepaliveTicks >= 1, "hidden host advances sim and emits host-keepalive-tick via keepalive timer");
+    host.setHidden(false);
+
+    guest.ctx.__APP.netSession.setUsername("GuestPilot");
+    await guest.ctx.__APP.netSession.joinWorld({ link });
+    await tick(4);
+    assert.equal(await guest.ctx.__APP.mpUi.act("bring"), true);
+    await tick(6);
+
+    // Equip mining beam in slot 2 (index 1) for guest so primarySlotIndex matching is exercised!
+    const hostGuestP = host.ctx.__APP.stateMod.state.players[1];
+    host.ctx.__APP.invMod.addItem("station", "beam_basic", 1, hostGuestP.profile, hostGuestP.guestWorld);
+    guest.ctx.__APP.netSession.requestGuestAction({ op: "invEquip", where: "station", slot: -1, id: "beam_basic" });
+    await tick(6);
+
+    // Launch via station button -> must stay undocked even if buffered docked:true sample arrives
+    guest.elsById.get("panel").dispatchEvent({ type: "click", target: { closest() { return { dataset: { a: "go" }, disabled: false }; } }, preventDefault() {} });
+    // Inject a stale buffered docked:true frame into mp-self-ship immediately after launch
+    host.ctx.__APP.eventsMod.emit; // noop sanity
+    guest.ctx.__APP.eventsMod.emit("mp-self-ship", { ship: { id: hostGuestP.guestId, place: "reach", docked: true, pos: [0, 0, 0], quat: [0, 0, 0, 1], velocity: [0, 0, 0] }, at: Date.now() - 10 });
+    await tick(10);
+    const gLocal = guest.ctx.__APP.stateMod.localPlayer();
+    assert.equal(gLocal.docked, false, "Launch keeps guest undocked without snapping back to stale docked frame");
+
+    // Verify guest controls drive ship forward after launch (not frozen!)
+    const posBeforeMove = hostGuestP.pos.clone();
+    guest.pressKey("KeyW");
+    await tick(30);
+    guest.releaseKey("KeyW");
+    assert.ok(hostGuestP.pos.distanceTo(posBeforeMove) > 0.5 && hostGuestP.v.length() > 1, "guest launches and moves freely via controls");
+
+    // Verify mid-flight power & energy are preserved across mp-visit updates
+    hostGuestP.power.stored = hostGuestP.power.cap * 0.4;
+    hostGuestP.en = hostGuestP.enMax * 0.35;
+    await tick(8);
+    gLocal.power.stored = gLocal.power.cap * 0.4;
+    gLocal.en = gLocal.enMax * 0.35;
+    guest.ctx.__APP.netSession.requestGuestAction({ op: "pw", slot: 1 });
+    await tick(8);
+    assert.ok(gLocal.power.stored < gLocal.power.cap * 0.9, "mid-flight mp-visit preserves depleted power instead of refilling to 100%");
+    assert.ok(gLocal.en < gLocal.enMax * 0.9, "mid-flight mp-visit preserves depleted boost energy");
+
+    // Place a host asteroid directly in front of guest's nose & fire mining beam in slot 2
+    const hostW = host.ctx.__APP.stateMod.placeWorld("reach");
+    const targetRock = hostW.asteroids[0];
+    assert.ok(targetRock, "reach has asteroids on host");
+    targetRock.ore = 5;
+    targetRock.max = 10;
+    hostGuestP.power.stored = hostGuestP.power.cap;
+    hostGuestP.quat.set(0, 0, 0, 1);
+    hostGuestP.v.set(0, 0, 0);
+    hostGuestP.pos.set(targetRock.pos.x, targetRock.pos.y, targetRock.pos.z + targetRock.r + 35);
+    await tick(6);
+
+    guest.mouseDown(0);
+    await tick(20);
+    assert.equal(hostGuestP.flight.beamOn, true, "host fires guest's mining beam in slot 2");
+    assert.ok(hostGuestP.flight.beamT > 0.1, "host advances guest beamT");
+    await tick(16);
+    assert.equal(guest.ctx.__APP.stateMod.state.flight.beamOn, true, "guest draws mining beam");
+    assert.ok(guest.ctx.__APP.stateMod.state.flight.beamT > 0, "guest receives beamT progress");
+    assert.equal(guest.elsById.get("bm").hidden, false, "guest HUD #bm progress bar visible");
+    assert.notEqual(guest.elsById.get("bmbar").style.width, "0%", "guest HUD #bmbar fills during mining");
+    assert.match(guest.elsById.get("pr").textContent, /Hold to mine|left/, "guest HUD #pr shows live mining hint");
+
+    // Release beam mid-cut -> guest sees contact-lost hint, which expires afterwards
+    guest.mouseUp(0);
+    for (let k = 0; k < 18; k++) {
+      host.stepFrame(4);
+      guest.stepFrame(4);
+      await new Promise(r => setTimeout(r, 15));
+      if (/Beam contact lost/.test(guest.elsById.get("pr").textContent)) break;
+    }
+    assert.match(guest.elsById.get("pr").textContent, /Beam contact lost/, "guest HUD receives timed beam contact-lost prompt");
+    await tick(36);
+    assert.equal(guest.elsById.get("pr").textContent, "", "guest HUD timed contact-lost prompt expires");
+
+    // Deplete the rock on host and confirm host asteroid disappearance syncs to guest world
+    const rockId = targetRock.id;
+    host.ctx.__APP.worldMod.dropEntity ? null : null;
+    hostW.asteroids.splice(hostW.asteroids.indexOf(targetRock), 1);
+    await tick(10);
+    const guestW = guest.ctx.__APP.stateMod.placeWorld("reach");
+    assert.equal(guestW.asteroids.some(r => r._hostId === rockId), false, "depleted host rock disappears from guest world");
+
+    assert.deepEqual(host.ctx.__CRASHES, []);
+    assert.deepEqual(guest.ctx.__CRASHES, []);
   } finally {
     for (const t of allIntervals) clearInterval(t);
     for (const t of allTimeouts) clearTimeout(t);

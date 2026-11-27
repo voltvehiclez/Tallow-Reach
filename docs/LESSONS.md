@@ -117,17 +117,7 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** when a record is frozen, BOTH halves must respect it — the copy on the wire and the copy the game keeps. A guest installing its own whole save uses its own seam (`saveKit.install`), never the host's narrow one; `captureActiveModeSave` hands an away pilot's record through untouched. Check anything that moves items at the seam the game actually stores through, not on plain objects.
 - **Enforced by:** four tests, chosen so **undoing any one fix fails one of them** — a test that passes with the fix reverted is not enforcement. `multiplayer-carry` (the round trip, the doubling failure mode, the frozen world not re-stamped) and `multiplayer-bring-pilot` (the real session seam: packing leaves the live stations empty, a suitcase from the host actually reaches the save).
 
-### L35. A connection that ends is an event the host must act on
-- **Seen:** owner, playtest 14 — "When my laptop leaves it still says that laptop is logged in in the players list and there is no notification in chat that it left." Its ship stayed too, and the pilot could not get back in.
-- **Cause:** three omissions on one path. The host removed the row but never wrote the record, so `world.guests[id]` kept the OLD token hash and the next hello was a "returning guest" refused for a token it no longer had. No chat line and no `mp-guest-left` were emitted. And `upsertGuest` let a `welcome`/`presence` list (no peer id) overwrite a known peer id with nothing, after which that guest could never be matched to the peer that left.
-- **Rule:** a departed peer is handled in ONE place (`forgetPeer`), and it touches every copy of the fact: the live row, the chat, `mp-guest-left`, presence, and the stored record. A record whose pilot has gone is a suitcase, not an identity — mark it (`left`); a fresh link re-admits it. Never overwrite a known correlation id with a missing one.
-- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (leaving is removed/announced/ship gone; a returning pilot gets in with a new token).
-
-### L36. A guard that returns `false` reads as "nothing happened" to every caller
-- **Seen:** owner, playtest 14 — "clicking the bring pilot home doesnt do anything... Im stuck in the menu."
-- **Cause:** `comeHome()` opened with `if (!leaveVisit()) return false;`. From the title there is no session to leave, so it returned before unpacking anything, and the caller showed nothing. The same shape hid the second half: unpacking used the ACTIVE save, which on the title is not the open world's, so even a caller that got that far had no profile to unpack into.
-- **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
-- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
+<!-- L35–L44 live in [archive/MULTIPLAYER_SLICE4_5_LESSONS.md](archive/MULTIPLAYER_SLICE4_5_LESSONS.md). -->
 
 ### L45. A panel raised by an event has to leave on its own
 - **Seen (owner, playtest 20):** *"Chat when a message is said then the chat is visible. However it
@@ -145,6 +135,37 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/multiplayer-ui.test.mjs` — "playtest 20: the chat shows a line and takes
   itself away, unless it is pinned": hidden before anything is said, up inside `CHAT.autoHideSec`,
   gone after it, pinned and typing keep it, a panel or the title does not.
+
+### L56. Multi-pocket simulation, guest HUD/beam vitals, rock sync, and `file://` host keepalive
+- **Seen (owner, `2026-11-27` on `2026-11-27d`):** minimizing host on `file://` froze the world; guest
+  Launch occasionally snapped back to `[0,0,0]`/`docked` or froze in remote pockets with broken rock
+  collisions; mining didn't show progress bar/hints/power drain or sync depleted/shrunk rocks; and
+  re-joining or losing Nostr relays spammed console errors.
+- **Cause:** `new Worker(blob:)` failed on `file://` without `data:` Worker or silent `AudioWorkletNode`
+  fallback; `applySelfShip` applied stale pre-launch `docked` snapshots and `applyVisitSnapshot`
+  refilled power mid-flight; `flight()` read `state.world` instead of `placeWorld(P.place)`; `say()`
+  dropped non-local guest prompts; `SHIP_FIELDS` omitted `beamT`/`pwr`/`pwrDraw`/`enFrac`/`hint`;
+  `hud.js` read `state.beams[0]` instead of `primarySlotIndex`; `mp-entities` omitted rocks; and
+  Trystero warned on dead relays.
+- **Rule:** add `data:` Worker + gesture-gated zero-gain `AudioWorkletNode` keepalive on host; gate
+  `applySelfShip` against stale pre-transition `docked` snapshots (`dockStreamCaughtUp`) and preserve
+  mid-flight power across `applyVisitSnapshot`; use `placeWorld(P.place || state.place)` in `flight()`;
+  route non-local hints via `sayForPlayer` + `step.js` expiration; sync `beamT`/`pwr`/`pwrDraw`/`enFrac`/`hint`
+  and `rocks` (`syncPocketRocks`, skipping `populateField` when `_net` rocks exist and resetting
+  `loaded = false` in `clearNetEntities`); match `hud.js` beam by `primarySlotIndex`; and keep
+  curated `RELAYS.relayUrls` with `warnOnRelayFailure = false`.
+- **Enforced by:** `tests/multiplayer-playtest-20261127.test.mjs` and `tests/multiplayer-weapons.test.mjs`.
+
+### L55. Entity views must key by `${kind}:${id}` and cube faces must wait for `texture.image`
+- **Seen (owner, `2026-11-27` on `2026-11-27d`):** Ferrite asteroids in the belt visually appeared as
+  firing red laser bolts, and `WebGLRenderer.texImage2D` logged `image is undefined` at boot.
+- **Cause:** `views.js` keyed its `drawn` map by `${group}:${id}` (`"entity:<id>"`), colliding rock IDs
+  with bullet/crate/missile IDs; and `cubemap.js` `orientFace` set `texture.needsUpdate = true` before
+  async WebP `texture.image` finished decoding.
+- **Rule:** key `views.js` `drawn` entries by `${kind}:${id}` across all entity kinds, and set
+  `texture.needsUpdate = true` in `orientFace` only when `texture.image` exists.
+- **Enforced by:** `tests/views.test.mjs` (overlapping rock/bullet ID isolation) and `tests/skybox.test.mjs`
+  (`orientFace` `texture.image` guard).
 
 ### L54. Integration glue in `src/main.js` must not swallow missing symbols or skip `intro` exit sync
 - **Seen (owner, `2026-11-27` on `2026-11-27c`):** guest `G` docking still did nothing at `0 m/s`,

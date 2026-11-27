@@ -12,7 +12,7 @@ import { SHIP_STREAM } from "../data/multiplayer.js";
 import { enemyDef } from "../data/enemies.js";
 import { BULLET_COLOURS } from "../data/weapons.js";
 import { dropEnemy } from "../sim/enemy.js";
-import { dropEntity } from "../sim/entity.js";
+import { addEntity, dropEntity } from "../sim/entity.js";
 import { purgeNonNetEntities } from "../sim/world.js";
 
 const _qa = Q();
@@ -391,6 +391,87 @@ export function syncPocketEntities(W, snapshot, place) {
       rec.v.set(Number(raw.v?.[0]) || 0, Number(raw.v?.[1]) || 0, Number(raw.v?.[2]) || 0);
     },
   );
+}
+
+/**
+ * Synchronise a visited pocket's asteroid field against host-authoritative rock snapshots.
+ * Existing matching rocks (by `_hostId`, or on first arrival by local type/position match)
+ * update their scale and ore in place so Three.js meshes shrink smoothly without rebuilding.
+ */
+export function syncPocketRocks(W, rocks, place) {
+  if (!W || !Array.isArray(rocks) || !place) return;
+  const list = W.asteroids || (W.asteroids = []);
+  const byHostId = new Map();
+  for (const r of list) {
+    if (r && r._net === true && r._hostId > 0) byHostId.set(r._hostId, r);
+  }
+  const seen = new Set();
+  for (const raw of rocks) {
+    if (!raw || typeof raw !== "object") continue;
+    const hostId = Math.floor(Number(raw.id) || 0);
+    if (hostId <= 0) continue;
+    seen.add(hostId);
+    const px = Number(raw.pos?.[0]) || 0;
+    const py = Number(raw.pos?.[1]) || 0;
+    const pz = Number(raw.pos?.[2]) || 0;
+    const type = typeof raw.type === "string" && raw.type ? raw.type : "ferrite";
+    let rec = byHostId.get(hostId);
+    if (!rec) {
+      rec = list.find(r =>
+        r && !r._net && r.type === type &&
+        Math.abs((r.pos?.x ?? 0) - px) < 0.25 &&
+        Math.abs((r.pos?.y ?? 0) - py) < 0.25 &&
+        Math.abs((r.pos?.z ?? 0) - pz) < 0.25
+      ) || null;
+      if (rec) {
+        rec._net = true;
+        rec._hostId = hostId;
+        byHostId.set(hostId, rec);
+      }
+    }
+    const q = quat4(raw.quat);
+    const sx0 = Number(raw.s0?.[0]) || Number(raw.r) || 10;
+    const sy0 = Number(raw.s0?.[1]) || Number(raw.r) || 10;
+    const sz0 = Number(raw.s0?.[2]) || Number(raw.r) || 10;
+    const scx = Number(raw.scale?.[0]) || sx0;
+    const scy = Number(raw.scale?.[1]) || sy0;
+    const scz = Number(raw.scale?.[2]) || sz0;
+    const ore = Math.max(0, Number(raw.ore) || 0);
+    const max = Math.max(0.01, Number(raw.max) || ore || 1);
+    const radius = Math.max(1, Number(raw.r) || 10);
+    const shape = Math.max(0, Math.floor(Number(raw.shape) || 0));
+    if (rec) {
+      rec.place = place;
+      rec.type = type;
+      rec.shape = shape;
+      rec.r = radius;
+      rec.ore = ore;
+      rec.max = max;
+      rec.pos.set(px, py, pz);
+      rec.quat.set(q[0], q[1], q[2], q[3]);
+      if (rec.s0) rec.s0.set(sx0, sy0, sz0); else rec.s0 = V(sx0, sy0, sz0);
+      if (rec.scale) rec.scale.set(scx, scy, scz); else rec.scale = V(scx, scy, scz);
+    } else {
+      addEntity(list, {
+        kind: "rock",
+        place,
+        type,
+        shape,
+        r: radius,
+        ore,
+        max,
+        pos: V(px, py, pz),
+        quat: Q(q[0], q[1], q[2], q[3]),
+        s0: V(sx0, sy0, sz0),
+        scale: V(scx, scy, scz),
+        _net: true,
+        _hostId: hostId,
+      });
+    }
+  }
+  for (const rec of [...list]) {
+    if (!rec || !rec._net || !seen.has(rec._hostId)) dropEntity(list, rec);
+  }
 }
 
 /**

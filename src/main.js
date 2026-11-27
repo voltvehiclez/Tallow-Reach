@@ -5,7 +5,7 @@ import { pickLockSurface } from "./render/target-picking.js";
 
 import { renderer, scene, camera, stars, showPlace, stepScenery, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame, placeWorld } from "./state/state.js";
+import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame, placeWorld, msg } from "./state/state.js";
 import { loadAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { shipDef, shipTypeOf } from "./data/ships.js";
@@ -20,7 +20,7 @@ import { pocketBoomCount } from "./sim/effects.js";
 import { pocketPickCount, drainEFires } from "./sim/sfxlog.js";
 import { BULLET_COLOURS } from "./data/weapons.js";
 import { WARP } from "./data/sectors.js";
-import { DEFAULT_PLACE } from "./data/places.js";
+import { DEFAULT_PLACE, placeAt } from "./data/places.js";
 import { loadPlace } from "./sim/places.js";
 import { clearNetEntities } from "./sim/world.js";
 import { toggleLock } from "./sim/targeting.js";
@@ -54,7 +54,7 @@ import {
 import { hostProfile } from "./net/custody.js";
 import { shipEntries } from "./net/ships.js";
 import { createShipStream } from "./render/shipstream.js";
-import { createEntityStream, hasNetEntities, syncPocketEntities, collectGuestPocketSfx } from "./render/entitystream.js";
+import { createEntityStream, hasNetEntities, syncPocketEntities, syncPocketRocks, collectGuestPocketSfx } from "./render/entitystream.js";
 import {
   requestWarp as netRequestWarp,
   requestDock as netRequestDock,
@@ -137,6 +137,7 @@ function isGuestVisiting() {
 let lastVisitShip = "";
 let lastVisitShipAt = 0;
 let lastVisitDockState = null;
+let lastVisitDockAt = 0;
 let dockStreamCaughtUp = true;
 let latestSlotReqId = 0;
 let lastVisitSnapshot = null;
@@ -164,6 +165,7 @@ function applyOwnWeaponWx(entry) {
     if (sb) F.beamStart = sb;
     if (eb) F.beamEnd = eb;
     if (Number.isFinite(entry.mineFrac)) F.mineFrac = entry.mineFrac;
+    F.beamT = F.beamOn && Number.isFinite(entry.beamT) ? Math.max(0, entry.beamT) : 0;
     // The lock ring and the cone follow the host's truth; the guest simulates no missiles.
     if (Number.isFinite(entry.cone)) F.coneAngle = entry.cone;
     const ML = F.missileLock || (F.missileLock = { target: null, t: 0, locked: false });
@@ -171,6 +173,22 @@ function applyOwnWeaponWx(entry) {
     ML.locked = entry.lockLocked === true;
     // A lock needs a target object; a stub is all the HUD reads (truthy). The host's record stays host-side.
     ML.target = entry.lockTarget === true ? (ML.target || { _net: true }) : null;
+  }
+  const P = localPlayer();
+  if (P?.power) {
+    const cap = Math.max(0, Number(P.power.cap) || 0);
+    if (cap > 0) {
+      const pwr = Number.isFinite(entry.pwr) ? Math.max(0, Math.min(1, entry.pwr)) : 1;
+      P.power.stored = pwr * cap;
+    }
+    if (Number.isFinite(entry.pwrDraw)) P.power.draw = Math.max(0, entry.pwrDraw);
+  }
+  if (P && Number(P.enMax) > 0) {
+    const ef = Number.isFinite(entry.enFrac) ? Math.max(0, Math.min(1, entry.enFrac)) : 1;
+    P.en = ef * P.enMax;
+  }
+  if (state.hud) {
+    state.hud.prompt = typeof entry.hint === "string" ? entry.hint : "";
   }
   if (!ownWxBaselined) {
     // First picture after joining: adopt the host's counters without a salvo of stale sounds.
@@ -208,6 +226,16 @@ function applySelfShip(entry) {
   const prevPlace = P.place;
   const prevPos = P.pos.clone();
   const wasDocked = P.docked === true;
+  const wasWarping = Boolean(P.warp);
+  const streamDocked = entry.docked === true;
+  if (lastVisitDockState !== null && !dockStreamCaughtUp) {
+    if (streamDocked !== lastVisitDockState && Date.now() - lastVisitDockAt < 1500) {
+      // Ignore pre-transition snapshots lingering in the buffered stream (e.g. a stale `docked: true`
+      // pose right after `launch()`) so the ship never snaps back to station coordinates or freezes.
+      return;
+    }
+    dockStreamCaughtUp = true;
+  }
   const placeId = typeof entry.place === "string" ? entry.place.trim() : "";
   // Place first: entering a new pocket builds its scenery and sky.
   if (placeId && placeId !== state.place && placeId !== P.place) {
@@ -253,15 +281,7 @@ function applySelfShip(entry) {
   if (Array.isArray(vel)) P.v.set(vel[0], vel[1], vel[2]);
   else if (vel && typeof vel.x === "number") P.v.copy(vel);
   P.thr = Number.isFinite(entry.throttle) ? entry.throttle : P.thr;
-  const streamDocked = entry.docked === true;
-  if (lastVisitDockState !== null && !dockStreamCaughtUp) {
-    if (streamDocked === lastVisitDockState) {
-      dockStreamCaughtUp = true;
-      P.docked = streamDocked;
-    }
-  } else {
-    P.docked = streamDocked;
-  }
+  P.docked = streamDocked;
   P.dead = entry.dead === true;
   P.boost = entry.boost === true;
   if (P.docked) {
@@ -273,6 +293,10 @@ function applySelfShip(entry) {
   // what puts the guest in the station screen (and its own suitcase on it) when the host docks it.
   if (P.docked !== wasDocked) {
     try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) { /* UI must never break the net path */ }
+    if (!P.docked) {
+      if ((P.drive?.spd || 0) > 0) msg("Launched. Fly to the asteroid field.", 4);
+      else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
+    }
   }
   if (Number.isFinite(entry.hull)) {
     const max = Number(P.hullMax) || 0;
@@ -290,10 +314,17 @@ function applySelfShip(entry) {
     if (wantWarp) {
       const fx = Number.isFinite(entry.warpFx) ? Math.max(0, Math.min(1, entry.warpFx)) : 0;
       const flash = Number.isFinite(entry.warpFlash) ? Math.max(0, Math.min(1, entry.warpFlash)) : 0;
-      const w = P.warp || (P.warp = { from: "", to: "", t: 0, fx: 0, flash: 0, switched: false, steer: { x: 0, y: 0 } });
+      const w = P.warp || (P.warp = { from: prevPlace || P.place || "", to: "", t: 0, fx: 0, flash: 0, switched: false, steer: { x: 0, y: 0 } });
       w.fx = fx; w.flash = flash;
     } else if (P.warp) {
+      const warpFrom = P.warp.from || prevPlace;
       P.warp = null;
+      if (wasWarping && warpFrom && P.place && warpFrom !== P.place) {
+        try {
+          const fromDef = placeAt(warpFrom), destDef = placeAt(P.place);
+          if (fromDef && destDef) msg(`Warp: ${fromDef.n} to ${destDef.n}. ${destDef.d}`, 4);
+        } catch (e) {}
+      }
     }
   }
   syncSpeedFromVelocity(P, Boolean(P.warp));
@@ -328,6 +359,7 @@ function restoreGuestHome() {
   lastVisitShip = "";
   lastVisitShipAt = 0;
   lastVisitDockState = null;
+  lastVisitDockAt = 0;
   dockStreamCaughtUp = true;
   latestSlotReqId = 0;
   lastVisitSnapshot = null;
@@ -422,11 +454,19 @@ function applyVisitSnapshot(visit) {
         setShip(nextShip, P, state.profile);
       }
     }
+    const prevPowerStored = P.power?.stored;
+    const prevPowerDraw = P.power?.draw;
+    const prevEn = P.en;
     refillPower(P);
     refreshDrive(P);
     refreshShield(P);
     refreshHull(P);
     refreshGuns(P);
+    if (visit.docked !== true && P.docked !== true) {
+      if (P.power && Number.isFinite(prevPowerStored)) P.power.stored = Math.min(P.power.cap || 0, prevPowerStored);
+      if (P.power && Number.isFinite(prevPowerDraw)) P.power.draw = prevPowerDraw;
+      if (Number.isFinite(prevEn)) P.en = Math.min(P.enMax || 0, prevEn);
+    }
     if (Number.isFinite(visit.hullMax) && visit.hullMax > 0) P.hullMax = visit.hullMax;
     if (Number.isFinite(visit.hull)) P.hull = visit.hull;
     if (Number.isFinite(visit.shieldMax)) P.shMax = visit.shieldMax;
@@ -445,6 +485,7 @@ function applyVisitSnapshot(visit) {
     const wantDocked = visit.docked === true;
     if (wantDocked !== lastVisitDockState) {
       lastVisitDockState = wantDocked;
+      lastVisitDockAt = Date.now();
       dockStreamCaughtUp = false;
     }
     if (wantDocked !== (P.docked === true)) {
@@ -453,6 +494,9 @@ function applyVisitSnapshot(visit) {
         P.v.set(0, 0, 0);
         P.thr = 0;
         syncSpeedFromVelocity(P, Boolean(P.warp));
+      } else {
+        if ((P.drive?.spd || 0) > 0) msg("Launched. Fly to the asteroid field.", 4);
+        else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
       }
       P.snap = true;
       try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {
@@ -539,15 +583,29 @@ function installMultiplayerShips() {
  *                          host's own, and a record the next snapshot no longer names is dropped
  */
 function installMultiplayerEntities() {
+  const lastPocketGuestKey = new Map();
+  const lastPocketRockSig = new Map();
   // Host: answer what is in every pocket that holds a visitor, so the guest sees the same sky.
   on("mp-entities-request", request => {
     if (!request || !Array.isArray(request.places)) return;
-    const wanted = new Set();
-    for (const g of guestPlayers()) if (g?.place) wanted.add(g.place);
+    const guestsByPlace = new Map();
+    for (const g of guestPlayers()) {
+      if (!g?.place) continue;
+      let ids = guestsByPlace.get(g.place);
+      if (!ids) { ids = []; guestsByPlace.set(g.place, ids); }
+      ids.push(g.guestId || String(g.id || ""));
+    }
+    for (const k of [...lastPocketGuestKey.keys()]) {
+      if (!guestsByPlace.has(k)) {
+        lastPocketGuestKey.delete(k);
+        lastPocketRockSig.delete(k);
+      }
+    }
     request.places.length = 0;
     const vec = v => [v.x, v.y, v.z];
     const quat = q => (q ? [q.x, q.y, q.z, q.w] : [0, 0, 0, 1]);
-    for (const placeId of wanted) {
+    const nowMs = Date.now();
+    for (const [placeId, guestIds] of guestsByPlace) {
       const W = placeWorld(placeId);
       if (!W) continue;
       const bullets = (W.bullets || []).map(e => ({
@@ -582,13 +640,44 @@ function installMultiplayerEntities() {
         if (e.missionOwner) row.missionOwner = e.missionOwner;
         return row;
       });
+      // Sync asteroids on pocket entry, depletion/respawn, or active mining (~12 Hz throttle)
+      // so guests see depleted rocks gone, shrinking rocks shrink, and respawned rocks return.
+      const asteroids = W.asteroids || [];
+      const guestKey = guestIds.slice().sort().join(",");
+      const entered = lastPocketGuestKey.get(placeId) !== guestKey;
+      lastPocketGuestKey.set(placeId, guestKey);
+      const rockSig = `${asteroids.length}|${asteroids.map(r => `${r.id}:${Math.round((r.ore || 0) * 10)}`).join(",")}`;
+      const prevRock = lastPocketRockSig.get(placeId);
+      const countChanged = !prevRock || prevRock.count !== asteroids.length;
+      const oreChanged = !prevRock || prevRock.sig !== rockSig;
+      let rocks;
+      if (entered || countChanged || (oreChanged && nowMs - prevRock.at >= 80)) {
+        lastPocketRockSig.set(placeId, { sig: rockSig, count: asteroids.length, at: nowMs });
+        rocks = asteroids.map(r => ({
+          id: r.id,
+          type: r.type || "ferrite",
+          shape: r.shape || 0,
+          r: r.r || 10,
+          ore: r.ore || 0,
+          max: r.max || 1,
+          pos: vec(r.pos),
+          quat: quat(r.quat),
+          s0: vec(r.s0 || { x: r.r || 10, y: r.r || 10, z: r.r || 10 }),
+          scale: vec(r.scale || r.s0 || { x: r.r || 10, y: r.r || 10, z: r.r || 10 }),
+        }));
+      }
       // Always answer for a pocket with a visitor — even with empty lists, so the guest clears
       // what is no longer there.
-      request.places.push({ place: placeId, bullets, missiles, crates, fx, booms: pocketBoomCount(placeId), enemies, picks: pocketPickCount(placeId), efires: drainEFires(placeId) });
+      request.places.push({
+        place: placeId, bullets, missiles, crates, fx,
+        booms: pocketBoomCount(placeId), enemies,
+        picks: pocketPickCount(placeId), efires: drainEFires(placeId),
+        ...(rocks ? { rocks } : {}),
+      });
     }
     request.answered = true;
   });
-  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires } = {}) => {
+  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires, rocks } = {}) => {
     if (!place || typeof place !== "string" || !isGuestVisiting()) return;
     if (place !== state.place) return;   // entities only for the pocket this screen is in
     const W = placeWorld(place);
@@ -598,6 +687,7 @@ function installMultiplayerEntities() {
       try { emit("sfx", sfx); } catch (e) {}
     }
     try {
+      if (Array.isArray(rocks)) syncPocketRocks(W, rocks, place);
       const nowMs = Date.now();
       const firstArrival = !hasNetEntities(W);
       entityStream.receive({ place, bullets, missiles, crates, fx, enemies }, nowMs);
@@ -760,8 +850,15 @@ refreshGuns();   // and the primary bays decide what fires on left click
 // Browsers only allow sound after a user gesture. The start button used to be
 // the only thing that started it, so a save that resumes out in space (start
 // screen skipped) was silent forever. Any click or key now starts/resumes it.
+let hasUserGesture = false;
+const noteUserGesture = () => {
+  hasUserGesture = true;
+  if (isNetOn()) startHostAudioKeepalive();
+};
 addEventListener("pointerdown", () => initAudio(), { passive: true });
 addEventListener("keydown", () => initAudio());
+addEventListener("pointerdown", noteUserGesture, { passive: true });
+addEventListener("keydown", noteUserGesture);
 
 installMultiplayerVisitors();
 installMultiplayerShips();
@@ -987,12 +1084,21 @@ const simClock = createSimClock(undefined, {
 
 // When this browser is hosting, the world must keep running even if the tab is
 // hidden or minimised — otherwise the guest sees a freeze. `requestAnimationFrame`
-// stalls in a hidden tab, so a worker (not throttled) drives the same clock
-// from wall time. It is cheap: one tick per SIM_DT (~60 Hz) and only while a
-// session is on. Fallback to setInterval if workers are blocked.
+// stalls in a hidden tab, and main-thread `setInterval` throttles to 1 Hz (1 fps).
+// On `file://`, `new Worker(blobUrl)` can also throw `SecurityError`, falling back
+// to that throttled `setInterval`. So alongside `Worker` (blob: then data:), we run
+// an unthrottled WebAudio hardware-thread heartbeat (`AudioWorkletNode`, falling back
+// to `ScriptProcessorNode` through a zero-gain node) once a user gesture has unlocked
+// AudioContext, keeping `simClock` + `host-keepalive-tick` at ~47–62 Hz even on `file://`.
 let hostTick = null;
 let hostWorker = null;
 let hostTickAt = 0;
+let hostAudioCtx = null;
+let hostAudioNode = null;
+let hostAudioGain = null;
+let hostAudioBusy = false;
+let hostKeepaliveOn = false;
+let mpRole = "";
 function advanceHostClock() {
   if (!isNetOn() || isSimulationPaused()) return;
   const now = performance.now();
@@ -1017,46 +1123,144 @@ function advanceHostClock() {
   try { emit("host-keepalive-tick", {}); } catch (e) {}
 }
 let hostWorkerUrl = null;
-function startHostTick() {
-  if (hostTick || hostWorker) return;
-  hostTickAt = performance.now();
+function armIntervalFallback() {
+  if (hostTick || hostWorker || hostAudioNode) return;
+  hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
+  if (typeof hostTick?.unref === "function") hostTick.unref();
+}
+function startHostWorker() {
+  if (hostWorker || typeof Worker !== "function") return false;
+  const workerSrc = "setInterval(()=>postMessage('tick'),16)";
+  const tryStart = (url, revokeOnStop) => {
+    try {
+      const w = new Worker(url);
+      w.onmessage = advanceHostClock;
+      w.onerror = () => {
+        try { w.terminate(); } catch (e) {}
+        if (hostWorker === w) hostWorker = null;
+        if (revokeOnStop && hostWorkerUrl === url) {
+          try { URL.revokeObjectURL(url); } catch (e) {}
+          hostWorkerUrl = null;
+        }
+        if (hostKeepaliveOn && revokeOnStop) {
+          const dataUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(workerSrc)}`;
+          if (!tryStart(dataUrl, false)) armIntervalFallback();
+        } else if (hostKeepaliveOn) {
+          armIntervalFallback();
+        }
+      };
+      hostWorker = w;
+      hostWorkerUrl = revokeOnStop ? url : null;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
   try {
-    const blob = new Blob(["setInterval(()=>postMessage('tick'),16)"], { type: "application/javascript" });
-    const url = URL.createObjectURL(blob);
-    hostWorkerUrl = url;
-    hostWorker = new Worker(url);
-    hostWorker.onmessage = advanceHostClock;
-    hostWorker.onerror = () => {
-      try { hostWorker.terminate(); } catch (e) {}
-      hostWorker = null;
-      if (hostWorkerUrl) { try { URL.revokeObjectURL(hostWorkerUrl); } catch (e) {} hostWorkerUrl = null; }
-      hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
-      if (typeof hostTick?.unref === "function") hostTick.unref();
+    if (typeof Blob === "function" && typeof URL?.createObjectURL === "function") {
+      const blob = new Blob([workerSrc], { type: "application/javascript" });
+      const blobUrl = URL.createObjectURL(blob);
+      if (tryStart(blobUrl, true)) return true;
+      try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+    }
+  } catch (e) {}
+  return tryStart(`data:text/javascript;charset=utf-8,${encodeURIComponent(workerSrc)}`, false);
+}
+function startHostAudioKeepalive() {
+  if (!hostKeepaliveOn || !hasUserGesture || hostAudioNode || hostAudioBusy) return;
+  const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (typeof Ctx !== "function") return;
+  hostAudioBusy = true;
+  try {
+    const ctx = hostAudioCtx || new Ctx({ latencyHint: "interactive" });
+    hostAudioCtx = ctx;
+    if (ctx.state === "suspended" && typeof ctx.resume === "function") {
+      ctx.resume().catch(() => {});
+    }
+    const attachZeroGain = node => {
+      if (!hostKeepaliveOn || hostAudioNode) {
+        try { node.disconnect?.(); } catch (e) {}
+        return;
+      }
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      node.connect(gain);
+      gain.connect(ctx.destination);
+      hostAudioNode = node;
+      hostAudioGain = gain;
+      if (hostTick) { clearInterval(hostTick); hostTick = null; }
     };
+    const fallbackScriptProcessor = () => {
+      if (!hostKeepaliveOn || hostAudioNode || typeof ctx.createScriptProcessor !== "function") return;
+      try {
+        const sp = ctx.createScriptProcessor(1024, 1, 1);
+        sp.onaudioprocess = advanceHostClock;
+        attachZeroGain(sp);
+      } catch (e) {}
+    };
+    const WorkletNode = globalThis.AudioWorkletNode;
+    if (ctx.audioWorklet && typeof ctx.audioWorklet.addModule === "function" && typeof WorkletNode === "function") {
+      const workletCode = "class K extends AudioWorkletProcessor{constructor(){super();this._n=0;}process(){if(++this._n>=6){this._n=0;this.port.postMessage(1);}return true;}}registerProcessor('tr-host-keepalive',K);";
+      const modUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(workletCode)}`;
+      ctx.audioWorklet.addModule(modUrl).then(() => {
+        hostAudioBusy = false;
+        if (!hostKeepaliveOn || hostAudioNode) return;
+        try {
+          const node = new WorkletNode(ctx, "tr-host-keepalive", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+          node.port.onmessage = advanceHostClock;
+          attachZeroGain(node);
+        } catch (e) {
+          fallbackScriptProcessor();
+        }
+      }).catch(() => {
+        hostAudioBusy = false;
+        fallbackScriptProcessor();
+      });
+    } else {
+      hostAudioBusy = false;
+      fallbackScriptProcessor();
+    }
   } catch (e) {
-    hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
-    if (typeof hostTick?.unref === "function") hostTick.unref();
+    hostAudioBusy = false;
   }
 }
+function startHostTick() {
+  hostKeepaliveOn = true;
+  if (!hostTickAt) hostTickAt = performance.now();
+  else hostTickAt = Math.max(hostTickAt, performance.now() - SIM_DT * 1000);
+  startHostWorker();
+  startHostAudioKeepalive();
+  if (!hostWorker && !hostAudioNode) armIntervalFallback();
+}
 function stopHostTick() {
+  hostKeepaliveOn = false;
   if (hostWorker) { try { hostWorker.terminate(); } catch (e) {} hostWorker = null; }
   if (hostWorkerUrl) { try { URL.revokeObjectURL(hostWorkerUrl); } catch (e) {} hostWorkerUrl = null; }
   if (hostTick) { clearInterval(hostTick); hostTick = null; }
+  if (hostAudioNode) {
+    try { hostAudioNode.onaudioprocess = null; } catch (e) {}
+    try { if (hostAudioNode.port) hostAudioNode.port.onmessage = null; } catch (e) {}
+    try { hostAudioNode.disconnect(); } catch (e) {}
+    hostAudioNode = null;
+  }
+  if (hostAudioGain) { try { hostAudioGain.disconnect(); } catch (e) {} hostAudioGain = null; }
+  if (hostAudioCtx) {
+    try { hostAudioCtx.close?.().catch?.(() => {}); } catch (e) {}
+    hostAudioCtx = null;
+  }
+  hostAudioBusy = false;
 }
 on("mp-state", snap => {
   state.multiplayer = !!(snap?.on);
-  if (snap?.on) startHostTick();
+  mpRole = snap?.role || "";
+  if (snap?.on && mpRole === "host") startHostTick();
   else stopHostTick();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden" && isNetOn()) startHostTick();
+  if (document.visibilityState === "hidden" && isNetOn() && mpRole === "host") startHostTick();
 });
 // Blur also stalls rAF on some window managers (clicking to second monitor).
-addEventListener("blur", () => { if (isNetOn()) startHostTick(); });
-addEventListener("focus", () => {
-  // Let rAF take over again; keep tick for a moment to avoid gap on focus switch.
-  setTimeout(() => { if (!document.hidden && hostTickAt && performance.now() - lastFrameAt < 200) stopHostTick(); }, 500);
-});
+addEventListener("blur", () => { if (isNetOn() && mpRole === "host") startHostTick(); });
 
 /**
  * One frame. Split from `frame` below so that anything it throws can be caught without stopping the
