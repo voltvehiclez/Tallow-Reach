@@ -72,6 +72,8 @@ export function shipEntry(P, { id = "", name = "" } = {}) {
     dead: P.dead === true,
     hull: round(hullFraction(P)),
     shield: round(shieldFraction(P)),
+    boost: P.boost === true,
+    shake: round(Math.max(0, Math.min(1, Number(P.shake) || 0))),
   };
   // The table in `data/multiplayer.js` is the contract, so an entry is built from it: a field
   // added there and forgotten here would be a silent hole in the picture.

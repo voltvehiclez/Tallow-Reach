@@ -1,6 +1,6 @@
 # Playtest — step 16, slice 8c: the host's world on the guest's screen
 
-**Build: `2026-11-26a`** — both machines. Check it in **Connection details** (or the title card); two machines on different builds cannot be trusted to agree about anything.
+**Build: `2026-11-26b`** — both machines. Check it in **Connection details** (or the title card); two machines on different builds cannot be trusted to agree about anything.
 
 *In 8b your keys made the host's hull move, but you were still flying in your own galaxy. In 8c your screen becomes the host's world: your ship is driven by what the host says, your own galaxy is frozen behind you, and you can go home to it.*
 
@@ -57,9 +57,31 @@
 
 **What to check:**
 
-- Guest's **G** sends a `dock` request; host runs `tryDock` for that pilot when in range. Guest sees **docked** screen and station menu.
+- Guest's **G** sends a `dock` request; host runs `tryDock` for that pilot when in range. On the next snapshot the guest's screen flips to docked: the station view and the panel open, the reticle is gone — the same flow as a local dock.
+- The panel shows **the guest's own ship's hangar and Inventory** (the visiting pilot's suitcase: its hull, its fit, its hold) with **Launch** on its own button. **Launch** asks the host to launch the visitor — the ship leaves on the host's sim, the panel closes when the snapshot flips.
 - Pressing **W** while docked **launches** again (same as 8b's docked visitor launching on first asking).
 - A guest far from any station pressing **G** does nothing — host rejects it.
+- **A docked hull is not visible to anyone** — inside the station, every screen (owner, 2026-11-26).
+
+## Part 4b — Death and recovery
+
+1. Have a hostiles-on or friendly-fire scenario, or a rock strike: let the guest's hull reach zero.
+
+**What to check:**
+
+- The guest's ship **recovers at its home station** (Meridian for a first-time joiner) **docked**, with the ordinary death rules: lost hold gone with the hull, `RECOVERY_FEE` (150 cr, capped by credits) charged, the home-hangar fallback or a lent Wasp. The explosion happens where the ship stood; the suitcase write-back carries it home.
+- The screen opens on the stranded-station card with the reason in chat (`mp-guest-recovered`).
+- If the guest is on an empty home pocket, the home station is Meridian regardless of where the death happened.
+
+## Part 4c — Boost, camera shake, engine glow
+
+1. **Guest**: boost (**Left Shift**) and fly.
+
+**What to check:**
+
+- The camera shakes on boost as it does single-player — shake now rides the wire as amplitude (`SHIP_FIELDS.shake`), decaying on the host's clock.
+- The ship's flame lengthens on boost, on both screens.
+- Smoothing at high refresh (165–240 Hz) comes from the 100 ms interpolation window; deeper smoothing (client-side prediction) is slice **8d**, not this one.
 
 ## Part 5 — Host warps, rifts don't bleed
 
@@ -87,7 +109,7 @@
 - **Guest still in own galaxy?** You must have pressed **Bring my pilot** — a plain Join only looks, it does not freeze your home pilot or bring you into host world.
 - **Warp button does nothing?** Host checks `campaignTravelRefusal` and `travelQuote` — same rules as local warp (direct link, not docked, not dead). Try a nearer pocket.
 - **Dock won't work?** You must be within dock range — same as local docking. Check you are in host's pocket with a station.
-- **Guest sees host's sky but host's enemies are gone?** Expected — guest sim skips world systems it does not own (enemies/bullets/crates are host-only in this slice).
+- **Guest sees the sky and the shots, but no enemies?** Expected — enemies are host-only in this slice. Bullets, missiles, crates and fx are **sent** to the guest as `entities` (one message per pocket a visitor occupies, 24 Hz, and the hidden-tab keepalive) and drawn as host-confirmed views; the guest never simulates them. The **mining beam and hitscan/muzzle cosmetics** are not on the wire yet — they are slice **8e** (the guest's own beam stays invisible on this screen).
 - **Place didn't change on guest warp?** Guest warp is host-authoritative; host must accept it. Check host's screen for the *warp engaged* message — if host refused, guest stays.
 
 ## What to report

@@ -1,3 +1,62 @@
+## 2026-11-25: Step 16 slice 8a — the second hull, and the snapshots under it
+
+**Code change; rebuild needed; build `2026-11-25a`.** Save version unchanged (**29**) — nothing new
+is saved: a ship snapshot is runtime only and is thrown away with the session.
+
+The owner asked for *"one world, two ships visible"*. Slice 7 made the visitor a name on the map;
+this slice draws it. Two halves, and the first one needs no wire at all:
+
+- **The host sees its visiting pilot.** `render/views.js` draws every **non-local record in
+  `state.players`** as a hull (`updateOtherPilotViews`, `otherPilotViewCount`), interpolated with the
+  same `renderPlayerPose` the local ship uses, so a visitor appears the moment it arrives. A docked
+  visitor is drawn **parked at the launch point its arrival put it on** — a visitor cannot fly in
+  this world until 8b, and a hull hidden until then would be no hull at all. Only pilots in the
+  **pocket being drawn** get a mesh; a dead pilot draws nothing.
+- **The wire underneath it** (host → guest, one direction): a new `ships` message kind in
+  `net/protocol.js`, carrying `SHIP_FIELDS` for every pilot — id, name, hull, place, position,
+  rotation, velocity, throttle, docked, dead, hull fraction. `src/data/multiplayer.js` gains
+  `SHIP_FIELDS`, `HOST_PILOT_ID` and **`SHIP_STREAM`**: `hz: 24` (**the owner's 20–30 Hz band; this
+  is a NEW value — `NET.snapshotSec` stays the 2 s *profile/suitcase* sync and means something
+  else**), `delayMs: 100`, `samples: 6`, `staleMs: 1500`, `snapM: 50`. The message is cleaned on the
+  way out **and** in like every other kind, and capped at `LIMITS.ships` (24) pilots per packet;
+  `session.js` sends several packets rather than dropping pilots, because there is no player cap.
+- **The guest draws it and simulates nothing.** `net/session.js` emits `mp-ships` (minus the guest's
+  own entry, which its own screen already draws); **`render/shipstream.js`** (new) keeps the last few
+  snapshots per pilot and gives the renderer a pose **100 ms in the past**, interpolated between the
+  two snapshots that straddle that moment, **held — never extrapolated** — past the newest, and drawn
+  as a step when the jump is over `snapM` or the pilot changed pocket. A pilot unheard for `staleMs`
+  is dropped, so a friend who left, a host that stopped sending and a dead channel all empty the sky.
+- **`net/ships.js`** (new) is the host's side of the picture: `shipEntry`/`shipEntries` turn live
+  records into exactly `SHIP_FIELDS`, as plain arrays and numbers. `session.js` never reads the
+  simulation: it asks on the bus (`mp-ships-request`) and `main.js` answers, the same seam the
+  suitcase uses. `net/` stays out of `sim/`, and `sim/` still never imports `net/`.
+
+**What a guest will not see yet, and should not be reported:** its own screen still shows its own
+galaxy (8c), so a friend's hull appears only if both are in the same pocket; a friend's hull does not
+move (controls are 8b); there is no name over a hull and a friend cannot be locked or shot at.
+
+Files: `src/data/multiplayer.js`, `src/net/ships.js` (new), `src/net/protocol.js`,
+`src/net/session.js`, `src/render/shipstream.js` (new), `src/render/views.js`, `src/main.js`,
+`src/util/events.js`, plus the READMEs of `data/`, `net/` and `render/`. Docs: `HANDOFF.md`,
+`ROADMAP.md`, `architecture/multiplayer.md` (three sections moved word for word to
+`docs/archive/` to stay under its size limit), `testing/TESTING-16-SLICE8A.md` (new) and
+`testing/README.md`. Tests: **`tests/multiplayer-slice8a.test.mjs`** (19 new: the field list, the
+protocol cap, the two sessions, interpolation/hold/stale, and the hulls drawn on both sides), and the
+pinned `KINDS` list in `tests/multiplayer-connection.test.mjs` now names `ships`.
+
+## 2026-11-24: Trading: both confirms clear, and offers come from the hold or the station
+
+**Docs only; no rebuild needed.** Save version unchanged (29). No code moved.
+
+Two owner answers settle the details [architecture/trading.md](architecture/trading.md) had left open:
+
+- **Any edit clears both confirms** (owner, 2026-11-24) — not only the editor's. That is the only
+  rule that stops a pilot changing its offer after the other side has agreed; credits follow the
+  same rule.
+- **A trade half takes any items in station as well as the ship's hold.** Each offered stack
+  remembers which container it came from, and a cancelled offer goes back there. Receiving is
+  unchanged: the station for the host, the lockers of the visiting record for a guest, so goods
+  come home.
 
 ## 2026-11-24: Slice 6's trading design, from the owner
 

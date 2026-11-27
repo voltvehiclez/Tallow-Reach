@@ -23,7 +23,7 @@ if (typeof document !== "undefined" && typeof document.addEventListener === "fun
     if (e.target?.id === "menu-username") writeSettings({ ...readSettings(), name: e.target.value });
   });
 }
-import { bringPilotHome, bringPilotHomeAtMenu } from "../net/session.js";
+import { bringPilotHome, bringPilotHomeAtMenu, requestDock as netRequestDock } from "../net/session.js";
 import { refillPower } from "../sim/power.js";
 import { refreshDrive } from "../sim/drive.js";
 import { refreshShield } from "../sim/shield.js";
@@ -593,7 +593,11 @@ const ACTIONS = {
     closePanelPopovers();
     state.ui.fit = null;
     hideLeftPanelElement(leftPanel);
-    launch();
+    // Slice 8c: a visitor cannot launch its own hull — the host owns the sim and the position.
+    // The Launch button asks the host to launch it (docked toggle); the snapshot flips the ship
+    // and the screen follows it.
+    if (state.away) { try { netRequestDock(); } catch (e) { /* the host is the sim; a dead wire shows as no launch */ } }
+    else launch();
   },
 
   // Contracts

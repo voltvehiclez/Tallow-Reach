@@ -111,6 +111,10 @@ export const SHIP_FIELDS = [
   "dead",      // its hull is gone: not drawn at all
   "hull",      // hull as a fraction 0..1, for a reader that wants to show it
   "shield",    // shield as a fraction 0..1, for the second bar (playtest 23)
+  "boost",     // the ship is boosting — the far screen lengthens this hull's flame and shakes the
+               // own camera on a screen that shows it (the engine glow reads it)
+  "shake",     // camera shake amplitude 0..1, decayed on the simulation clock; a guest's own
+               // boost shake rides the host's clock like everything else of that ship
 ];
 
 /**
@@ -137,9 +141,9 @@ export const HOST_PILOT_ID = "host";
  *             respawn) and is drawn as a jump, not smeared across the screen.
  */
 export const SHIP_STREAM = {
-  hz: 30,
-  delayMs: 50,
-  samples: 8,
+  hz: 24,
+  delayMs: 100,
+  samples: 6,
   staleMs: 1500,
   snapM: 50,
 };
@@ -226,7 +230,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-26a";
+export const BUILD = "2026-11-26b";
 
 export const NET = {
   snapshotSec: 2,

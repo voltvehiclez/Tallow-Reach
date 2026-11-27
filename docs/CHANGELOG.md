@@ -18,6 +18,23 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-26: Slice 8c follow-up (build `2026-11-26b`) — a visitor recovers like a pilot, and the pocket's shots reach the guest
+
+**Code change; rebuild needed; build `2026-11-26b` (`npm run build` 3611 KB).** Save version unchanged (**29**); the wire gains no new message kinds — the previously dead `entities` message is now actually sent, per pocket, and crates gained `quat` in its cleaning.
+
+Slice 8c shipped `2026-11-26a` with pieces that were written down but never wired, plus one snapshot rate that had drifted. The owner's six playtest reports (2026-11-26) exposed all of it; this pass fixes each one. The suite was red first (11 failures), all now green (1131/1131):
+
+1. **The guest's view is drawn from the same buffer as before, but the wire now carries everything the screen needs to feel local** — and the remaining roughness (turn-lag on 165–240 Hz) is named honestly as slice **8d** (client-side prediction), not hand-waved. **`SHIP_STREAM` had drifted** from the contract (24 Hz / 100 ms / 6 samples / 1500 ms / 50 m) to 30/50/8 — restored. **Boost and camera shake now ride the wire** (`SHIP_FIELDS.boost`/`shake`): the guest's own boost shakes its camera (the amplitude decays on the simulation clock per pilot, `sim/player.js` flight) and every hull's flame lengthens on boost — the previous AI's primitives shipped already decayed only for the local pilot.
+2. **Weapons effects are visible to the guest.** The host has always simulated the visitor's guns; what was broken was delivery — the `entities` wire (bullets, missiles, crates, fx) was dead code that sent `place: ""` with empty lists and applied them to a junk pocket. Now the host answers `mp-entities-request` with one `entities` message **per pocket a visitor occupies** (24 Hz, plus the hidden-tab keepalive), the guest keeps per-id records in the pocket's own lists (`_net` markers, dropped when a snapshot stops naming them, interpolated by the same `updatePose` path), and applies them only to the pocket it is in. Enemies, and the guest's own **mining beam / muzzle cosmetics**, remain host-only / unbuilt — the beam is slice **8e**.
+3. **A tabbed-out host no longer freezes the encounter.** The wall-time catch-up stepping in `main.js` was gated behind a check that skipped it exactly when the page was alive-but-quiet, and the ship/entity broadcasts only rode the page's (throttled) setInterval. Now the host-tick is dt-driven with a 5 s clamp, designed to be idempotent, and `host-keepalive-tick` (which broadcasts ships and entities from that path) fires on every host tick; rAF-alive still owns the sim while visible (no double-step). The worker fallback chain is unchanged. **Verify on two machines** — this is the one fix that cannot be proven in a unit test.
+4. **Docking works for a guest, in both directions.** The host's `mp-guest-dock` handler now treats one press as a dock↔launch toggle (`tryDock` / `launch` for the visitor), the guest's **Launch** button asks the host rather than calling `launch()` locally (the local call teleported the ship to the launch point), and the guest's screen follows the snapshot flip by emitting `docked`/`launched` locally — so the station card opens with the guest's own suitcase (its ship, its fit, its hold) and the reticle, panels and mission fan-out behave as they do single-player.
+5. **Death recovers docked, like any pilot, at the home station.** `die()` in `sim/session.js` now takes `(P, profile)`; a non-local record recovers in the world that holds it (the host's): cargo lost, `RECOVERY_FEE` (capped by cash) charged, fallback to the home hangar or a lent Wasp, and the record wakes **docked at the station's own position** — never at the undock point/launch, as the previous round did. No `place-entered` reaches the host's screen, the death pocket is not `clearTransient`ed (it would wipe the host's pocket), and the explosion is drawn in the pocket the ship stood in. `mp-guest-destroyed` is now **`mp-guest-recovered`**; `events.js`, the module READMEs and the test that pinned the old dead-end describe the built behavior.
+6. **Docked hulls are inside the station and are not drawn — on every screen** (owner, 2026-11-26). The skip in `render/views.js` is restored, worded to the owner's ruling; slice-8a's views tests now fly their visitor and pin the rule. The previous entry in this file wrongly claimed the opposite — corrected there and in `render/README.md`, `TESTING-16-SLICE8A.md`, and `HANDOFF`.
+
+Also: the `player-dead` fan-out (mission rules) can no longer be broken by a recovery throw; a profile-less/ship-less record is news, not a hull, and is announced as such.
+
+Not yet playtested: everything in this entry is `2026-11-26b`. The owner still needs to run [testing/TESTING-16-SLICE8C.md](../testing/TESTING-16-SLICE8C.md) on both machines, including a guest death and a docked relaunch.
+
 ## 2026-11-26: Slice 8c — the host's world on the guest's screen
 
 **Code change; rebuild needed; build `2026-11-26a`.** Save version unchanged (**29**); no saved field, no wire snapshot format change beyond two new guest→host kinds (`warp`, `dock`).
@@ -357,68 +374,10 @@ written as the class rather than the case; all 5 fail on the old code).
 list shows the friend as a Ship row with its name; and leaving and rejoining the same link works
 every time, including "Bring my pilot" afterwards.
 
-## 2026-11-25: Step 16 slice 8a — the second hull, and the snapshots under it
-
-**Code change; rebuild needed; build `2026-11-25a`.** Save version unchanged (**29**) — nothing new
-is saved: a ship snapshot is runtime only and is thrown away with the session.
-
-The owner asked for *"one world, two ships visible"*. Slice 7 made the visitor a name on the map;
-this slice draws it. Two halves, and the first one needs no wire at all:
-
-- **The host sees its visiting pilot.** `render/views.js` draws every **non-local record in
-  `state.players`** as a hull (`updateOtherPilotViews`, `otherPilotViewCount`), interpolated with the
-  same `renderPlayerPose` the local ship uses, so a visitor appears the moment it arrives. A docked
-  visitor is drawn **parked at the launch point its arrival put it on** — a visitor cannot fly in
-  this world until 8b, and a hull hidden until then would be no hull at all. Only pilots in the
-  **pocket being drawn** get a mesh; a dead pilot draws nothing.
-- **The wire underneath it** (host → guest, one direction): a new `ships` message kind in
-  `net/protocol.js`, carrying `SHIP_FIELDS` for every pilot — id, name, hull, place, position,
-  rotation, velocity, throttle, docked, dead, hull fraction. `src/data/multiplayer.js` gains
-  `SHIP_FIELDS`, `HOST_PILOT_ID` and **`SHIP_STREAM`**: `hz: 24` (**the owner's 20–30 Hz band; this
-  is a NEW value — `NET.snapshotSec` stays the 2 s *profile/suitcase* sync and means something
-  else**), `delayMs: 100`, `samples: 6`, `staleMs: 1500`, `snapM: 50`. The message is cleaned on the
-  way out **and** in like every other kind, and capped at `LIMITS.ships` (24) pilots per packet;
-  `session.js` sends several packets rather than dropping pilots, because there is no player cap.
-- **The guest draws it and simulates nothing.** `net/session.js` emits `mp-ships` (minus the guest's
-  own entry, which its own screen already draws); **`render/shipstream.js`** (new) keeps the last few
-  snapshots per pilot and gives the renderer a pose **100 ms in the past**, interpolated between the
-  two snapshots that straddle that moment, **held — never extrapolated** — past the newest, and drawn
-  as a step when the jump is over `snapM` or the pilot changed pocket. A pilot unheard for `staleMs`
-  is dropped, so a friend who left, a host that stopped sending and a dead channel all empty the sky.
-- **`net/ships.js`** (new) is the host's side of the picture: `shipEntry`/`shipEntries` turn live
-  records into exactly `SHIP_FIELDS`, as plain arrays and numbers. `session.js` never reads the
-  simulation: it asks on the bus (`mp-ships-request`) and `main.js` answers, the same seam the
-  suitcase uses. `net/` stays out of `sim/`, and `sim/` still never imports `net/`.
-
-**What a guest will not see yet, and should not be reported:** its own screen still shows its own
-galaxy (8c), so a friend's hull appears only if both are in the same pocket; a friend's hull does not
-move (controls are 8b); there is no name over a hull and a friend cannot be locked or shot at.
-
-Files: `src/data/multiplayer.js`, `src/net/ships.js` (new), `src/net/protocol.js`,
-`src/net/session.js`, `src/render/shipstream.js` (new), `src/render/views.js`, `src/main.js`,
-`src/util/events.js`, plus the READMEs of `data/`, `net/` and `render/`. Docs: `HANDOFF.md`,
-`ROADMAP.md`, `architecture/multiplayer.md` (three sections moved word for word to
-`docs/archive/` to stay under its size limit), `testing/TESTING-16-SLICE8A.md` (new) and
-`testing/README.md`. Tests: **`tests/multiplayer-slice8a.test.mjs`** (19 new: the field list, the
-protocol cap, the two sessions, interpolation/hold/stale, and the hulls drawn on both sides), and the
-pinned `KINDS` list in `tests/multiplayer-connection.test.mjs` now names `ships`.
-
-## 2026-11-24: Trading: both confirms clear, and offers come from the hold or the station
-
-**Docs only; no rebuild needed.** Save version unchanged (29). No code moved.
-
-Two owner answers settle the details [architecture/trading.md](architecture/trading.md) had left open:
-
-- **Any edit clears both confirms** (owner, 2026-11-24) — not only the editor's. That is the only
-  rule that stops a pilot changing its offer after the other side has agreed; credits follow the
-  same rule.
-- **A trade half takes any items in station as well as the ship's hold.** Each offered stack
-  remembers which container it came from, and a cancelled offer goes back there. Receiving is
-  unchanged: the station for the host, the lockers of the visiting record for a guest, so goods
-  come home.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-25: Step 16 slice 8a — the second hull, and the snapshots under it
+- 2026-11-24: Trading: both confirms clear, and offers come from the hold or the station
 - 2026-11-24: Slice 7 playtest passed
 - 2026-11-24: Slice 7 fix — the visitor is named on the galaxy chart, and the panel row leads
 - 2026-11-24: A visiting pilot's place is fixed at arrival (asked and recorded)

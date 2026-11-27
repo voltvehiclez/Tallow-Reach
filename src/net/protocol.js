@@ -38,6 +38,12 @@
 //                                                         means (refactor principle 7)
 //   warp       { t, to }                                  guest -> host (slice 8c): \"take my ship to this pocket\" — a request, not a teleport; host re-checks travel rules and runs startWarp for that pilot
 //   dock       { t }                                        guest -> host (slice 8c): \"dock now\" — host runs tryDock for that pilot when in range
+//   entities   { t, place, bullets[{ id, pos, quat, colour }], missiles[{ id, pos, quat }],
+//                crates[{ id, pos, quat, item }], fx[{ id, pos, col, size, l, t }] }
+//                                                        host -> guests: one message per pocket
+//                                                        that holds a visitor, `SHIP_STREAM.hz`
+//                                                        a second. Visual only; hits, loot and
+//                                                        lifetimes are the host's sim's business
 //
 // The `bye` is a courtesy, not a contract: a crashed tab sends nothing at all, which is why the
 // host still notices a peer that vanished on its own. It only makes the ordinary departure —
@@ -138,6 +144,8 @@ export function cleanMessage(kind, fields = {}) {
     case "ships":
       return { t: "ships", ships: cleanShips(fields.ships) };
     // 8c+: host -> guest: bullets/missiles/crates/fx in the same pocket. Visual only; host authoritative.
+    // One message per pocket that holds a visitor: the world's transient objects, as the
+    // host's sim holds them. Visual only; the host decides hits, loot and lifetimes.
     case "entities":
       return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx) };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
@@ -282,6 +290,8 @@ function cleanShips(raw) {
       // Shield, the second bar (playtest 23). A fraction on the wire, clamped like the hull: a
       // message that says 7.5 shields is a number a reader can draw, not HP from a host's fit.
       shield: Math.round(Math.max(0, Math.min(1, num(entry.shield, 0))) * 1000) / 1000,
+      boost: entry.boost === true,
+      shake: Math.round(Math.max(0, Math.min(1, num(entry.shake, 0))) * 1000) / 1000,
     });
   }
   return out;
@@ -345,7 +355,7 @@ function cleanCrates(raw) {
   for (const e of raw) {
     if (out.length >= LIMITS.entities) break;
     if (!e || typeof e !== "object") continue;
-    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), item: text(e.item, 20) });
+    out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), quat: cleanQuat(e.quat), item: text(e.item, 20) });
   }
   return out;
 }

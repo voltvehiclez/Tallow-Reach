@@ -10,7 +10,11 @@
 //   look          { dx, dy }         mouse movement while orbiting
 //   wheel         deltaY             mouse wheel
 //   hurt          { shielded, player } player took damage
-//   player-dead   { player, lost }   hull reached zero; `lost` is the hold at that moment, { itemId: count } (non-local recovery not yet implemented)
+//   player-dead   { player, lost }   hull reached zero; `lost` is the hold at that moment, { itemId: count }.
+//                                    Every record recovers by the same rules (sim/session.js `die`)
+//   mp-guest-recovered { guestId, name, home, text }
+//                                    a visitor's hull reached zero and the ordinary recovery ran:
+//                                    it wakes docked at the home station in this world
 //   docked                           player docked at the outpost
 //   launched                         player left the outpost
 //   died          text               ship destroyed (after docking)

@@ -274,16 +274,20 @@ test("playtest 24: a visitor's `snap` is consumed, so its hull interpolates betw
   }
 });
 
-test("playtest 24: a docked visitor is still drawn parked, and a snap is not lost on the way", () => {
+test("playtest 24: a flying visitor's snap is consumed on the way; a docked one is inside the station (owner, 2026-11-26)", () => {
   const S = bareWorld();
-  const parked = flyingVisitor({ docked: true, snap: false, pos: views.V(5, 0, 210) });
+  // A docked hull is inside the station and is not drawn — on this screen and on any other.
+  const docked = flyingVisitor({ docked: true, snap: false, pos: views.V(5, 0, 210) });
   views.updateEntityViews(1);
-  assert.deepEqual([drawnPos("guest-1").x, drawnPos("guest-1").y, drawnPos("guest-1").z], [5, 0, 210], "parked where it arrived");
-  assert.equal(views.state.otherPilots.length, 1);
+  assert.equal(views.state.otherPilots.length, 0, "a docked visitor is not in the sky");
+  assert.equal(docked.snap, false, "and it is not holding a stale snap flag either");
+  docked.docked = false;
+  views.updateEntityViews(1);
+  assert.equal(views.state.otherPilots.length, 1, "when it launches it is drawn again");
   assert.equal(S.players.length, 2);
   // Nothing about the local hull changed: its own snap handling stays `chaseView`'s job.
   assert.equal(views.localPlayer().snap, false, "the local record is untouched by the visitor's path");
-  parked.dead = true;
+  docked.dead = true;
   views.updateEntityViews(1);
   assert.equal(views.state.otherPilots.length, 0, "a dead pilot draws nothing");
 });

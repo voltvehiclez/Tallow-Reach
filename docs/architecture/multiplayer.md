@@ -249,9 +249,10 @@ recovery*, *player presentation and input*). Two slices, because neither half ca
 **The host says where every pilot is; a guest draws it and simulates nothing.** Every number below is
 in `src/data/multiplayer.js`:
 
-- **`SHIP_FIELDS`** — id, name, ship, place, position, rotation, velocity, throttle, docked, dead, hull
-  and (playtest 23) **shield**, both fractions, and nothing else — no fit, no hold, no credits — so a
-  snapshot cannot move a rule on the far side. `HOST_PILOT_ID` is the host's own hull.
+- **`SHIP_FIELDS`** — id, name, ship, place, pos, quat, velocity, throttle, docked, dead, hull,
+  shield (playtest 23), plus (`26b`) **boost** and **shake** (camera-shake amplitude, decayed on
+  the sim clock) — nothing else: no fit, no hold, no credits; a snapshot can move no rule.
+  `HOST_PILOT_ID` is the host's own hull.
 - **`SHIP_STREAM`** — `hz: 24` (**the owner's 20–30 Hz band**, not the 2 s *suitcase* sync), `delayMs`
   100, `samples` 6, `staleMs` 1500, `snapM` 50.
 - **The message** is `ships` (`net/protocol.js`): cleaned both ways like every other kind, capped at

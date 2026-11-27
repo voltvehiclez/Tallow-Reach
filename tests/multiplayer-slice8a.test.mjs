@@ -421,7 +421,7 @@ function bareWorld() {
   return views.state;
 }
 
-/** A visiting record, as `sim/multiplayer.js` leaves it: docked at the arrival station. */
+/** A visitor that has launched and is flying — the only kind the host's sky draws. */
 function visitor(extra = {}) {
   const P = {
     kind: "ship",
@@ -433,7 +433,7 @@ function visitor(extra = {}) {
     quat: views.Q(),
     v: views.V(0, 0, 0),
     thr: 0,
-    docked: true,
+    docked: false,
     dead: false,
     hull: 1,
     hullMax: 1,
@@ -486,6 +486,17 @@ test("slice 8a: another pilot's hull is drawn only in the pocket this screen sho
   P.place = DEFAULT_PLACE;
   views.updateEntityViews(1);
   assert.equal(views.otherPilotViewCount(), 1);
+});
+
+test("slice 8a: a docked visitor is inside its station and is not drawn (owner, 2026-11-26)", () => {
+  bareWorld();
+  const P = visitor({ docked: true });
+  views.updateEntityViews(1);
+  assert.equal(views.otherPilotViewCount(), 0, "a docked hull is inside the station — nothing in the sky");
+
+  P.docked = false;
+  views.updateEntityViews(1);
+  assert.equal(views.otherPilotViewCount(), 1, "and it leaves the station into the sky");
 });
 
 test("slice 8a: a dead pilot draws nothing, a new hull rebuilds the mesh, and a departure removes it", () => {

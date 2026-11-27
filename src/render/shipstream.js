@@ -58,6 +58,8 @@ function frameFrom(entry, at) {
     dead: entry.dead === true,
     hull: num(entry.hull, 1),
     shield: num(entry.shield, 0),
+    boost: entry.boost === true,
+    shake: num(entry.shake, 0),
   };
 }
 
@@ -76,6 +78,8 @@ function poseFrom(frame, pos = frame.pos, quat = frame.quat, velocity = frame.ve
     dead: frame.dead,
     hull: frame.hull,
     shield: frame.shield,
+    boost: frame.boost,
+    shake: frame.shake,
   };
 }
 

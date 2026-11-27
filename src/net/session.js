@@ -1225,9 +1225,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     return true;
   }
 
-  // Host minimised / tab hidden stalls rAF, so the regular 24 Hz timer is
-  // throttled to ~1 Hz and the guest freezes. A worker in main.js keeps the
-  // sim advancing; this hook keeps the ship picture at 24 Hz too.
+  // Host minimised / tab hidden stalls rAF, so the regular timers are
+  // throttled in a background tab. A worker in main.js keeps the sim advancing;
+  // this hook keeps the ship picture and the pocket's entities at the same rate.
   let lastKeepaliveShipAt = 0;
   try {
     on("host-keepalive-tick", () => {
@@ -1242,21 +1242,23 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   } catch (e) {}
 
   /* --- host -> guest: world entities (bullets/missiles/crates/fx) --- */
+  // One `entities` message per pocket a visitor occupies, at the ship snapshot's rate. The
+  // host is authoritative for everything in them; the guest draws them and simulates nothing.
   let entityTick = 0;
-  let lastKeepaliveEntityAt = 0;
   function collectEntities() {
-    const request = { place: "", bullets: [], missiles: [], crates: [], fx: [], answered: false };
+    const request = { places: [], answered: false };
     try { emit("mp-entities-request", request); } catch (e) {}
-    return request.answered ? request : null;
+    return request.answered && Array.isArray(request.places) ? request.places : [];
   }
   function broadcastEntities() {
     if (role !== "host" || !on) return 0;
     if (!guests.length) return 0;
-    const data = collectEntities();
-    if (!data || !data.place) return 0;
-    const message = cleanMessage("entities", data);
-    if (message && send(message)) return 1;
-    return 0;
+    let sent = 0;
+    for (const pocket of collectEntities()) {
+      const message = cleanMessage("entities", pocket);
+      if (message && send(message)) sent += 1;
+    }
+    return sent;
   }
   function startEntityStream() {
     if (entityTick || role !== "host") return false;

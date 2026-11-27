@@ -96,6 +96,12 @@ export function setShip(id, P = state.player, profile = profileOf(P)) {
 
 /** Flight model. Mouse steers, WASD strafes and throttles, Shift boosts. */
 export function flight(dt, P = state.player, runtime = null) {
+  // Camera shake decays on the simulation clock, per pilot, so a shake triggered aboard a visiting
+  // hull decays on the host's clock and reaches its screen on the wire (`SHIP_FIELDS.shake`).
+  if (P && P.shake > 0) {
+    const decayed = P.shake * Math.exp(-dt * 6);
+    P.shake = decayed <= 0.005 ? 0 : decayed;
+  }
   // Unconfigured non-local records cannot silently borrow the local fit or profile.
   if (
     P !== state.player &&
