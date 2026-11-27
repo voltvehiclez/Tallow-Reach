@@ -151,6 +151,11 @@ function applyOwnWeaponWx(entry) {
       const times = Math.min(cur - prev, 2);
       for (let i = 0; i < times; i++) {
         try { emit("sfx", { name: ownWxSfx[key] }); } catch (e) { /* a missing audio path must not break the net path */ }
+        // A wound on the guest goes through the same hurt bus a local wound does, so the HUD flash
+        // and any hurt listener behave as if the guest's own sim had been the one to apply it.
+        if (key === "hits") {
+          try { emit("hurt", { shielded: (localPlayer()?.sh ?? 0) > 0, player: localPlayer() }); } catch (e) { /* the flash must not break the net path */ }
+        }
       }
       ownWxSeen[key] = cur;
     }
@@ -301,9 +306,16 @@ function installMultiplayerEntities() {
         id: e.id, pos: vec(e.pos), col: Number.isFinite(e.col) ? e.col : 0xffaa00,
         size: e.size || 1, l: Number.isFinite(e.l) ? e.l : 0, t: Number.isFinite(e.t) ? e.t : 1,
       }));
+      // Enemies, from the host's first-hand record: the guest draws and locks them exactly as the
+      // host does (views read `def`, F-lock reads `W.enemies`), while every wound stays host-side.
+      const enemies = (W.enemies || []).map(e => ({
+        id: e.id, def: e.def, friendly: e.friendly === true, boost: e.boosting === true,
+        pos: vec(e.pos), quat: quat(e.quat), v: vec(e.v || { x: 0, y: 0, z: 0 }),
+        hp: Number.isFinite(e.hp) ? e.hp : 0, mx: Number.isFinite(e.mx) ? e.mx : 0,
+      }));
       // Always answer for a pocket with a visitor — even with empty lists, so the guest clears
       // what is no longer there.
-      request.places.push({ place: placeId, bullets, missiles, crates, fx, booms: pocketBoomCount(placeId) });
+      request.places.push({ place: placeId, bullets, missiles, crates, fx, booms: pocketBoomCount(placeId), enemies });
     }
     request.answered = true;
   });
@@ -338,12 +350,20 @@ function installMultiplayerEntities() {
       if (list[i] && list[i]._net === true && !seen.has(list[i].id)) list.splice(i, 1);
     }
   };
+  // A hostile record to draw, lock and lead — the host's first-hand truth, never the guest's sim.
+  const makeEnemy = raw => ({
+    id: 0, kind: "enemy", def: "raider", place, _net: true,
+    pos: new THREE.Vector3(), quat: new THREE.Quaternion(), v: new THREE.Vector3(),
+    hp: 0, mx: 0, friendly: false, boosting: false,
+  });
+
   // How many pocket explosions this screen has already rumbled for, per place — a counter that
   // went backwards means a rebooted host, so re-baseline silently rather than rumble in a loop.
   const boomSeen = new Map();
-  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms } = {}) => {
+  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies } = {}) => {
     if (!place || typeof place !== "string" || !isGuestVisiting()) return;
     if (place !== state.place) return;   // entities only for the pocket this screen is in
+
     // A rumble is what a single-player screen would have heard: the pocket just blew something up.
     const boom = Math.floor(Number(booms) || 0);
     const prevBoom = boomSeen.get(place) ?? boom;
@@ -369,6 +389,20 @@ function installMultiplayerEntities() {
       syncList(W.fx, fx, "fx", () => ({
         id: 0, kind: "fx", pos: new THREE.Vector3(), col: 0xffaa00, size: 1, l: 0, t: 1, _net: true,
       }));
+      syncList(W.enemies, enemies, "enemy", makeEnemy);
+      // The per-record fields syncList does not know, applied in place after the positional ones.
+      for (const rec of W.enemies) {
+        if (!rec || rec._net !== true) continue;
+        const raw = Array.isArray(enemies) ? enemies.find(r => r && Math.floor(Number(r.id) || 0) === rec.id) : null;
+        if (!raw) continue;
+        rec.def = typeof raw.def === "string" && raw.def ? raw.def : rec.def;
+        rec.friendly = raw.friendly === true;
+        rec.boosting = raw.boost === true;
+        rec.hp = Number.isFinite(raw.hp) ? raw.hp : rec.hp;
+        rec.mx = Number.isFinite(raw.mx) ? raw.mx : rec.mx;
+        rec.v = rec.v && typeof rec.v.set === "function" ? rec.v : new THREE.Vector3();
+        rec.v.set(Number(raw.v?.[0]) || 0, Number(raw.v?.[1]) || 0, Number(raw.v?.[2]) || 0);
+      }
     } catch (e) { /* a broken pocket must never take the screen down */ }
   });
 }

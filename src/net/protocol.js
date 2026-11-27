@@ -39,7 +39,8 @@
 //   warp       { t, to }                                  guest -> host (slice 8c): \"take my ship to this pocket\" — a request, not a teleport; host re-checks travel rules and runs startWarp for that pilot
 //   dock       { t }                                        guest -> host (slice 8c): \"dock now\" — host runs tryDock for that pilot when in range
 //   entities   { t, place, bullets[{ id, pos, quat, colour }], missiles[{ id, pos, quat }],
-//                crates[{ id, pos, quat, item }], fx[{ id, pos, col, size, l, t }] }
+//                crates[{ id, pos, quat, item }], fx[{ id, pos, col, size, l, t }], booms (u16),
+//                enemies[{ id, def, friendly, boost, pos, quat, v, hp, mx }] }
 //                                                        host -> guests: one message per pocket
 //                                                        that holds a visitor, `SHIP_STREAM.hz`
 //                                                        a second. Visual only; hits, loot and
@@ -147,7 +148,7 @@ export function cleanMessage(kind, fields = {}) {
     // One message per pocket that holds a visitor: the world's transient objects, as the
     // host's sim holds them. Visual only; the host decides hits, loot and lifetimes.
     case "entities":
-      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms) };
+      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms), enemies: cleanEnemies(fields.enemies) };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
     // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
     // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
@@ -402,6 +403,36 @@ function cleanFx(raw) {
     if (out.length >= LIMITS.entities) break;
     if (!e || typeof e !== "object") continue;
     out.push({ id: Math.max(0, Math.floor(Number(e.id) || 0)), pos: cleanVec3(e.pos), col: Math.max(0, Math.floor(Number(e.col) || 0)), size: Math.max(0, num(e.size, 1)), l: Math.max(0, num(e.l, 0)), t: Math.max(0, num(e.t, 1)) });
+  }
+  return out;
+}
+
+/**
+ * Enemies on the wire: everything a far screen needs to draw the hull, lock it and show it as hurt.
+ * The damage itself is host-side; a snapshot can carry no rule. `def` picks the mesh and the
+ * faction glow, `v` is the one number a ballistic lead is computed from, `mx` is the def's full hull
+ * so the far screen can fraction the bar the same way `sim/pilot-stats.js` does.
+ */
+function cleanEnemies(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
+    const id = Math.floor(Number(e.id));
+    const def = text(e.def, 40);
+    if (!Number.isFinite(id) || id <= 0 || !def) continue;
+    out.push({
+      id,
+      def,
+      friendly: e.friendly === true,
+      boost: e.boost === true,
+      pos: cleanVec3(e.pos),
+      quat: cleanQuat(e.quat),
+      v: cleanVec3(e.v),
+      hp: Math.max(0, Math.round(num(e.hp, 0) * 100) / 100),
+      mx: Math.max(0, Math.round(num(e.mx, 0) * 100) / 100),
+    });
   }
   return out;
 }
