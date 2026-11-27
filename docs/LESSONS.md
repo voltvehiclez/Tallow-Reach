@@ -146,6 +146,31 @@ Mission lessons are first because missions are where most bugs have come from. T
   itself away, unless it is pinned": hidden before anything is said, up inside `CHAT.autoHideSec`,
   gone after it, pinned and typing keep it, a panel or the title does not.
 
+### L53. Host-scoped guest progress stays in `world.guests[guestId].visitState` and survives disconnects and UI opens
+- **Seen (owner, `2026-11-27`):** rejoining a friend's world after leaving or reloading wiped host-world
+  missions, flags, contracts, position, shield/boost, and docked non-home station, and clicking Open
+  World / Continue overwritten an active visit via `resumeFromSave()`.
+- **Cause:** `hostProfile()` discarded home fields (`missions`/`flags`/`done`/`kills`) instead of loading
+  per-host-world `visitState`; `saveKit.write` never flushed `saveAutosave`, `forgetPeer` dropped rows
+  without flushing live state, and `enterGameMode("open")` ran local `resumeFromSave()` while `state.away`.
+- **Rule:** store host-scoped progress in `world.guests[guestId].visitState` (separate from portable
+  `bundle`), flush on `syncGuests`/`forgetPeer`/`stop`/`mp-host-flush`, persist via `saveAutosave`
+  (gating 30 Hz `markGuestSeen` with `{ persist: false }`), and skip `resumeFromSave()` when `state.away`.
+- **Enforced by:** `tests/multiplayer-playtest-20261127.test.mjs` — `visitState` survival across dirty
+  drops, host reloads, and `fresh: true` rejoins without custody leak; `enterGameMode("open")` guard.
+
+### L52. Shadowed guest ships must compute derived HUD fields, replace grace timers, and allow null paste-code peers
+- **Seen (owner, `2026-11-27`):** guest HUD speed froze at `0 m/s`, docking bounced after 250 ms or
+  failed silently over paste-code (`peerId: null`), and over-speed dock presses gave no feedback.
+- **Cause:** `applySelfShip` wrote `P.v` without updating `P.measuredSpeed`/`P.forwardSpeed`;
+  `withinDockGrace` ignored stale `ships` frames by wall clock rather than snapshot state; and
+  `session.js` rejected `!peerId` messages for paste-code connections.
+- **Rule:** update derived instruments (`syncSpeedFromVelocity`) whenever snapshots write `P.v`/`docked`;
+  gate snapshot `docked` flips deterministically on `lastVisitDockState` + `dockStreamCaughtUp`; route
+  `!peerId` via `resolveGuestEntry`; and emit `dockFailureReason` on `"docking-denied"`.
+- **Enforced by:** `tests/multiplayer-playtest-20261127.test.mjs` — `syncSpeedFromVelocity`, paste-code
+  `peerId: null` routing, `tryDock` speed denial notice, and removal of `withinDockGrace`.
+
 ### L51. A guest world view needs one interpolation buffer and host-parity SFX gates
 - **Seen (owner, playtest 26):** guest saw remote NPCs and bullets stutter at 24 Hz (60 Hz `prevPoses`
   overwrote snapshot poses), stale local NPCs stayed visible beside `_net` records, hostile shots turned

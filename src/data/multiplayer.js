@@ -72,7 +72,10 @@ export const AWAY_FIELDS = ["worldId", "hostName", "guestId", "token", "epoch", 
  */
 // `left` (playtest 14): the pilot has gone home, so this record is holding its suitcase
 // rather than an identity — the next hello may re-admit it on a fresh link.
-export const GUEST_FIELDS = ["name", "tokenHash", "epoch", "rev", "bundle", "lastSeen", "left"];
+// `visitState` (build `2026-11-27c`): per-host-world guest state (missions, flags,
+// counters, homeStation, place, resume pose/health, station boards/timers, drops/flags,
+// and stationSlots) — additive on save v29 so relogging into a host world preserves it.
+export const GUEST_FIELDS = ["name", "tokenHash", "epoch", "rev", "bundle", "lastSeen", "left", "visitState"];
 
 /** Pseudo-field name used for the lockers, which live in a save's `world`, not its profile. */
 export const LOCKERS_FIELD = "lockers";
@@ -261,7 +264,7 @@ export const ARRIVAL_STATION_KEY =
  * file, which is worth knowing before anything else is blamed. Bump it when a build is handed
  * over (it is shown in the multiplayer screen's connection details).
  */
-export const BUILD = "2026-11-27b";
+export const BUILD = "2026-11-27c";
 
 export const NET = {
   snapshotSec: 2,

@@ -422,10 +422,12 @@ function enterGameMode(mode) {
   if (switched) afterSaveChange();
   resetStationPanels(state.ui);
   initAudio();
-  if (!switched) {
+  if (switched && state.away) emit("mp-refresh-home", {});
+  if (!switched && !state.away) {
     clearNetEntities();
     resumeFromSave();
   }
+  if (state.away) emit("mp-refresh-visit", {});
   emit("mission-ui-refresh", {});
   const notice = recoveryNotice();
   if (notice) showNotice(notice);

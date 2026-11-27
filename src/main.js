@@ -24,7 +24,8 @@ import { DEFAULT_PLACE } from "./data/places.js";
 import { loadPlace } from "./sim/places.js";
 import { clearNetEntities } from "./sim/world.js";
 import { toggleLock } from "./sim/targeting.js";
-import { launch, tryDock, resumeFromSave } from "./sim/session.js";
+import { launch, tryDock, dockFailureReason, resumeFromSave } from "./sim/session.js";
+import { syncSpeedFromVelocity } from "./sim/flight-instruments.js";
 import { startWarp } from "./sim/sectors.js";
 import { riftAction, restoreInstances } from "./sim/instances.js";
 import { restoreWormholes } from "./sim/wormholes.js";
@@ -47,6 +48,7 @@ import {
   executeGuestAction,
   guestLockerSnapshot,
   guestProfileSnapshot,
+  guestVisitStateSnapshot,
 } from "./sim/multiplayer.js";
 import { hostProfile } from "./net/custody.js";
 import { shipEntries } from "./net/ships.js";
@@ -133,7 +135,8 @@ function isGuestVisiting() {
 
 let lastVisitShip = "";
 let lastVisitShipAt = 0;
-let lastVisitDockAt = 0;
+let lastVisitDockState = null;
+let dockStreamCaughtUp = true;
 let latestSlotReqId = 0;
 let lastVisitSnapshot = null;
 
@@ -249,10 +252,21 @@ function applySelfShip(entry) {
   if (Array.isArray(vel)) P.v.set(vel[0], vel[1], vel[2]);
   else if (vel && typeof vel.x === "number") P.v.copy(vel);
   P.thr = Number.isFinite(entry.throttle) ? entry.throttle : P.thr;
-  const withinDockGrace = lastVisitDockAt && (Date.now() - lastVisitDockAt < 250);
-  if (!withinDockGrace) P.docked = entry.docked === true;
+  const streamDocked = entry.docked === true;
+  if (lastVisitDockState !== null && !dockStreamCaughtUp) {
+    if (streamDocked === lastVisitDockState) {
+      dockStreamCaughtUp = true;
+      P.docked = streamDocked;
+    }
+  } else {
+    P.docked = streamDocked;
+  }
   P.dead = entry.dead === true;
   P.boost = entry.boost === true;
+  if (P.docked) {
+    P.v.set(0, 0, 0);
+    P.thr = 0;
+  }
   if (Number.isFinite(entry.shake)) P.shake = Math.max(0, Math.min(1, Number(entry.shake) || 0));
   // The station card and the reticle follow the host's dock decisions, like a local dock: this is
   // what puts the guest in the station screen (and its own suitcase on it) when the host docks it.
@@ -281,6 +295,7 @@ function applySelfShip(entry) {
       P.warp = null;
     }
   }
+  syncSpeedFromVelocity(P, Boolean(P.warp));
   // A warp, dock/launch transition, or teleport jump must snap the camera instead of panning.
   if (
     P.snap !== true &&
@@ -311,7 +326,8 @@ function restoreGuestHome() {
   pickSeen.clear();
   lastVisitShip = "";
   lastVisitShipAt = 0;
-  lastVisitDockAt = 0;
+  lastVisitDockState = null;
+  dockStreamCaughtUp = true;
   latestSlotReqId = 0;
   lastVisitSnapshot = null;
   clearHeldGhost();
@@ -424,9 +440,17 @@ function applyVisitSnapshot(visit) {
       } catch (e) {}
     }
     const wantDocked = visit.docked === true;
+    if (wantDocked !== lastVisitDockState) {
+      lastVisitDockState = wantDocked;
+      dockStreamCaughtUp = false;
+    }
     if (wantDocked !== (P.docked === true)) {
-      lastVisitDockAt = Date.now();
       P.docked = wantDocked;
+      if (P.docked) {
+        P.v.set(0, 0, 0);
+        P.thr = 0;
+        syncSpeedFromVelocity(P, Boolean(P.warp));
+      }
       P.snap = true;
       try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {}
     }
@@ -466,6 +490,17 @@ function installMultiplayerShips() {
     guestSelfStream.receive([ship], at || Date.now());
   });
   on("mp-visit", visit => applyVisitSnapshot(visit));
+  on("mp-refresh-home", () => {
+    state.guestHome = null;
+    if (state.away) stashGuestHome();
+  });
+  on("mp-refresh-visit", () => {
+    if (isGuestVisiting() && lastVisitSnapshot) {
+      applyVisitSnapshot(lastVisitSnapshot);
+      const latestSelf = guestSelfStream.sample(Date.now());
+      if (latestSelf) applySelfShip(latestSelf);
+    }
+  });
   on("mp-enter-world", () => {
     if (isGuestVisiting() && lastVisitSnapshot) applyVisitSnapshot(lastVisitSnapshot);
   });
@@ -568,15 +603,16 @@ function installMultiplayerEntities() {
 }
 
 function installMultiplayerVisitors() {
-  on("mp-guest-arrive", ({ guestId, name, bundle } = {}) => {
+  on("mp-guest-arrive", ({ guestId, name, bundle, visitState = null } = {}) => {
     if (!bundle) return;
-    const profile = hostProfile(bundle);
+    const profile = hostProfile(bundle, visitState);
     arriveGuest({
       guestId,
       name,
       profile,
       place: bundle.homeStation || null,
       lockers: Array.isArray(bundle.lockers) ? bundle.lockers : [],
+      visitState,
     });
   });
   on("mp-guest-left", ({ guestId } = {}) => {
@@ -601,17 +637,25 @@ function installMultiplayerVisitors() {
   on("mp-guest-dock", ({ guestId } = {}) => {
     const P = guestRecordOf(guestId);
     if (!P) return;
+    const wasDocked = P.docked === true;
+    let notice = "";
     // One button, like a local dock: in flight it docks, docked it launches. A visitor cannot
     // `launch()` locally (the teleport-to-launch-point bug), so both directions ride the host's
-    // sim — `docked` follows on the next snapshot.
+    // sim — `docked` follows immediately on both `visit` and `ships`.
     try {
       if (P.docked) launch(P, P.profile);
       else {
         cancelGuestHeld(P);
-        tryDock(P, P.profile, P.guestWorld || state.worldState);
+        if (!tryDock(P, P.profile, P.guestWorld || state.worldState)) {
+          notice = dockFailureReason(P, P.profile);
+        }
       }
     } catch (e) {}
-    emit("mp-guest-visit-push", { guestId });
+    emit("mp-guest-visit-push", {
+      guestId,
+      notice,
+      dockTransition: wasDocked !== (P.docked === true),
+    });
   });
   on("mp-guest-act", request => {
     if (!request?.guestId || !request?.action) return;
@@ -670,6 +714,7 @@ function installMultiplayerVisitors() {
     if (!P?.profile) return;
     request.profile = guestProfileSnapshot(P);
     request.lockers = guestLockerSnapshot(P);
+    request.visitState = guestVisitStateSnapshot(P);
     request.answered = true;
   });
 }
@@ -714,7 +759,10 @@ resumeFromSave();   // prepares the ship; the start screen still owns the panel
 // and closing the tab. `pagehide` and the hidden-tab event are the ones browsers
 // actually deliver on close; the timer bounds what a crash can lose.
 const saveResumePoint = () => {
-  if (!state.ui.intro && !state.away) saveCurrentGame();
+  if (!state.ui.intro && !state.away) {
+    try { emit("mp-host-flush", {}); } catch (e) {}
+    saveCurrentGame();
+  }
 };
 addEventListener("pagehide", saveResumePoint);
 document.addEventListener("visibilitychange", () => {

@@ -7,6 +7,7 @@
 // single player uses, and returns the updated state as a `visit` snapshot.
 
 import { state } from "../state/state.js";
+import { cleanSlotList, cleanVisitState, buildGuestVisitState } from "../state/profile.js";
 import { DEFAULT_PLACE, stationKeyAt } from "../data/places.js";
 import { canDiscard, isItem, itemName } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
@@ -58,8 +59,8 @@ import { acceptMission, chooseMission, missionOfferStation, nextMissionDialogue 
 
 const whole = n => Math.max(0, Math.floor(Number(n) || 0));
 
-/** Build a fresh, per-guest station/board/mission-drop world seeded with arrived lockers. */
-export function createGuestWorld(place = DEFAULT_PLACE, lockers = []) {
+/** Build a per-guest station/board/mission-drop world seeded with arrived lockers & optional saved visitState. */
+export function createGuestWorld(place = DEFAULT_PLACE, lockers = [], visitState = null) {
   const rb = state.worldState?.base && typeof state.worldState.base === "object" ? state.worldState.base : {};
   const base = {};
   for (const [id, m] of Object.entries(BASE_MODULES)) {
@@ -67,15 +68,16 @@ export function createGuestWorld(place = DEFAULT_PLACE, lockers = []) {
     const raw = Math.floor(Number(rb[id]));
     base[id] = Number.isFinite(raw) ? Math.max(lo, Math.min(m.max, raw)) : lo;
   }
+  const saved = cleanVisitState(visitState);
   const world = {
     place: place || DEFAULT_PLACE,
     base,
     stationStores: {},
     stationSlots: {},
-    board: [],
-    boards: {},
-    boardTimers: {},
-    missionState: {},
+    board: saved ? JSON.parse(JSON.stringify(saved.board)) : [],
+    boards: saved ? JSON.parse(JSON.stringify(saved.boards)) : {},
+    boardTimers: saved ? JSON.parse(JSON.stringify(saved.boardTimers)) : {},
+    missionState: saved ? JSON.parse(JSON.stringify(saved.missionState)) : {},
   };
   const origins = {};
   const unknownLockers = [];
@@ -93,6 +95,12 @@ export function createGuestWorld(place = DEFAULT_PLACE, lockers = []) {
     stock[item] = (stock[item] || 0) + count;
     const originMap = origins[station] || (origins[station] = {});
     if (!originMap[item]) originMap[item] = origin;
+  }
+  if (saved?.stationSlots) {
+    for (const [key, stock] of Object.entries(world.stationStores)) {
+      const slots = cleanSlotList(saved.stationSlots[key], stock);
+      if (slots) world.stationSlots[key] = slots;
+    }
   }
   ensureBoard(world, world.place);
   return { world, origins, unknownLockers };
@@ -174,6 +182,12 @@ export function guestProfileSnapshot(P) {
     }
   }
   return prof;
+}
+
+/** Snapshot a guest's per-host-world state (missions, boards, pose/place, stationSlots). */
+export function guestVisitStateSnapshot(P) {
+  if (!P?.profile) return null;
+  return buildGuestVisitState(P, P.guestWorld, guestProfileSnapshot(P));
 }
 
 /**

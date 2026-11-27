@@ -1260,6 +1260,111 @@ export function cleanAway(raw) {
  * prove against), so it is dropped. There is no count limit here: `NET.maxGuests` is a valve on a
  * live hosted session, not a player cap and not a limit on what a save may have recorded.
  */
+function cleanRawStationSlots(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [key, list] of Object.entries(raw)) {
+    if (!key || key.length > 160 || !Array.isArray(list)) continue;
+    const cleaned = [];
+    const len = Math.min(list.length, MAX_SAVED_SLOTS);
+    for (let i = 0; i < len; i++) {
+      const entry = list[i];
+      if (!Array.isArray(entry) || entry.length < 2) {
+        cleaned.push(null);
+        continue;
+      }
+      const [id, rawN] = entry;
+      const n = count(rawN);
+      if (typeof id === "string" && isItem(id) && n > 0) cleaned.push([id, Math.min(n, itemStack(id))]);
+      else cleaned.push(null);
+    }
+    while (cleaned.length && cleaned[cleaned.length - 1] === null) cleaned.pop();
+    if (cleaned.length) out[key] = cleaned;
+  }
+  return out;
+}
+
+/**
+ * Per-host-world guest state stored inside `world.guests[guestId].visitState`
+ * (build `2026-11-27c`, additive on v29). Keeps the guest's missions, flags,
+ * counters, host-world home station, location, in-space resume pose/health, and
+ * isolated `guestWorld` boards/timers/missionState/stationSlots across relogs
+ * without leaking into the portable cross-world suitcase (`bundle`).
+ */
+export function cleanVisitState(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const missions = (Array.isArray(raw.missions) ? raw.missions : []).map(cleanMission).filter(Boolean);
+  const flags = cleanFlags(raw.flags);
+  const done = count(raw.done);
+  const kills = count(raw.kills);
+  const homeStation = typeof raw.homeStation === "string" && raw.homeStation.trim()
+    ? raw.homeStation.trim().slice(0, 160)
+    : null;
+  const place = typeof raw.place === "string" && raw.place.trim()
+    ? raw.place.trim().slice(0, 160)
+    : DEFAULT_PLACE;
+  const resume = cleanResume(raw.resume);
+  const board = Array.isArray(raw.board) ? raw.board.map(cleanContract).filter(Boolean) : [];
+  const boardTimers = {};
+  if (raw.boardTimers && typeof raw.boardTimers === "object" && !Array.isArray(raw.boardTimers)) {
+    for (const [placeId, seconds] of Object.entries(raw.boardTimers)) {
+      if (!placeId || placeId.length > 160 || typeof seconds !== "number" || !Number.isFinite(seconds)) continue;
+      boardTimers[placeId] = Math.min(CONTRACT_REFRESH_SECONDS, Math.max(0, seconds));
+    }
+  }
+  const boards = {};
+  if (raw.boards && typeof raw.boards === "object" && !Array.isArray(raw.boards)) {
+    for (const [placeId, offers] of Object.entries(raw.boards)) {
+      if (!placeId || placeId.length > 160 || placeId === DEFAULT_PLACE || !Array.isArray(offers)) continue;
+      const clean = offers.map(cleanContract).filter(Boolean);
+      if (clean.length || Object.prototype.hasOwnProperty.call(boardTimers, placeId)) {
+        boards[placeId] = clean;
+      }
+    }
+  }
+  const missionState = cleanMissionState(raw.missionState);
+  const stationSlots = cleanRawStationSlots(raw.stationSlots);
+  return {
+    missions,
+    flags,
+    done,
+    kills,
+    homeStation,
+    place,
+    resume,
+    board,
+    boards,
+    boardTimers,
+    missionState,
+    stationSlots,
+  };
+}
+
+/** Snapshot a live visiting pilot's per-host-world state into a clean `visitState` record. */
+export function buildGuestVisitState(player, guestWorld, profileOverride = null) {
+  if (!player || typeof player !== "object") return null;
+  const prof = profileOverride && typeof profileOverride === "object" ? profileOverride : (player.profile || {});
+  const world = guestWorld && typeof guestWorld === "object" ? guestWorld : {};
+  const dockedOrDead = !!(player.docked || player.dead);
+  const resume = dockedOrDead || typeof player.pos?.toArray !== "function" || typeof player.quat?.toArray !== "function"
+    ? null
+    : { pos: player.pos.toArray(), quat: player.quat.toArray(), sh: player.sh, en: player.en };
+  return cleanVisitState({
+    missions: prof.missions || [],
+    flags: prof.flags || {},
+    done: prof.done || 0,
+    kills: prof.kills || 0,
+    homeStation: prof.homeStation || null,
+    place: player.place || world.place || DEFAULT_PLACE,
+    resume,
+    board: world.board || [],
+    boards: world.boards || {},
+    boardTimers: world.boardTimers || {},
+    missionState: world.missionState || {},
+    stationSlots: world.stationSlots || {},
+  });
+}
+
 function cleanGuests(raw) {
   const out = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
@@ -1278,6 +1383,8 @@ function cleanGuests(raw) {
       // v29 + playtest 14: additive, so no version bump — an older record simply has no
       // mark and reads as present, which is exactly the old behaviour.
       left: value.left === true,
+      // build `2026-11-27c`: additive per-host-world guest state (missions, boards, pose).
+      visitState: cleanVisitState(value.visitState),
     };
     const ordered = {};
     for (const field of GUEST_FIELDS) ordered[field] = record[field];

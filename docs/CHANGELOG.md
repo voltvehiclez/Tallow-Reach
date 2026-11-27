@@ -18,6 +18,19 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Post-8c live playtest fixes (build `2026-11-27c`) — guest HUD speed, docking, per-host `visitState` persistence, and UI resume guard
+
+**Code change; rebuild needed; build `2026-11-27c` (`npm run build` 3660 KB).** Save version unchanged (**29**; additive `visitState` field on `world.guests[guestId]` listed in `GUEST_FIELDS`).
+
+Fixed four bugs caught in live two-browser playtesting after `2026-11-27b`:
+
+1. **Guest HUD speed matches live velocity (`src/sim/flight-instruments.js`, `src/main.js`).** Exported `syncSpeedFromVelocity(player, warping)` and invoked it inside `applySelfShip` (zeroing velocity/throttle when docked) so guest `P.measuredSpeed` and `P.forwardSpeed` track forward/reverse flight, boost, and warp instead of staying stuck at `0 m/s`.
+2. **Reliable guest docking over both Trystero and paste-code links (`src/net/session.js`, `src/sim/session.js`, `src/main.js`).** Removed the 250 ms `withinDockGrace` timer that reverted guest docking on stale `ships` snapshots; `applySelfShip` and `applyVisitSnapshot` now synchronize `docked` deterministically via `lastVisitDockState` and `dockStreamCaughtUp`. Added `resolveGuestEntry(peerId)` and `hostPeerId || null` targeting so paste-code sessions (`peerId === null`) deliver `controls`/`warp`/`dock`/`act`, and exported `dockFailureReason` + `"docking-denied"` push feedback when pressing dock above `DOCK_MAX_SPEED` (broadcasting `ships` immediately on `dockTransition`).
+3. **Per-host-world guest progress persists across relogs without custody leak (`src/data/multiplayer.js`, `src/state/{profile,state}.js`, `src/net/{custody,multiplayer,session}.js`, `src/sim/{guest-actions,multiplayer,session}.js`, `src/main.js`).** Added `cleanVisitState`/`buildGuestVisitState` on `world.guests[guestId].visitState`, restored cleanly by `hostProfile(bundle, visitState)` + `arriveGuest()` + `applyResumePlacement()`. `syncGuests` / `saveGuestVisitState` / `captureActiveModeSave` quietly persist host-scoped missions, flags, counters, `homeStation`, pocket, flight `resume` pose/shield/boost, boards, drops, and `stationSlots` without bumping suitcase `rev`, while `forgetPeer` (`sendWire: false`), `stop()`, and `mp-host-flush` flush before disconnect/save and `saveKit.write` commits to `saveAutosave` (gating 30 Hz `markGuestSeen` with `{ persist: false }`). Also fixed `onCarry` to stamp `lastSent` so unchanged guests avoid an immediate redundant `rev` bump.
+4. **Menu resume guard (`src/ui/menu.js`).** `enterGameMode("open")` preserves `state.away` visits via `mp-refresh-home` / `mp-refresh-visit` instead of running `resumeFromSave()`, stopping docked home coordinates from clobbering airborne guest visits.
+
+**Tests:** Updated `tests/multiplayer-custody.test.mjs` (`GUEST_FIELDS` `"visitState"`) and added `tests/multiplayer-playtest-20261127.test.mjs` (**5** suites); `npm test` **1160/1160** passing. **Docs:** Updated `docs/architecture/multiplayer.md` (archived Playtest 23/24 notes to `docs/archive/MULTIPLAYER_PLAYTEST_23_24_NOTES.md`), `docs/HANDOFF.md`, and `docs/LESSONS.md` (`L52`–`L53`).
+
 ## 2026-11-27: Guest ship, station, inventory/fitting, and mission sync + owner isolation (build `2026-11-27b`)
 
 **Code change; rebuild needed; build `2026-11-27b`.** Save version unchanged (**29**). Wire adds two allowlisted/capped kinds (`act` guest→host and `visit` host→guest) plus optional mission/owner metadata on `entities` (`enemies`/`crates`).

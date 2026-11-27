@@ -204,40 +204,22 @@ export function dock(P = state.player, profile = profileOf(P), world = worldOf(P
  * the station menu. The pocket's arrival point is the fallback for older saves,
  * a damaged position, or a ship that cannot move.
  */
-export function resumeFromSave(P = state.player, profile = profileOf(P)) {
-  // The save may have been made inside a temporary run (slice 14b). The run and its place are
-  // rebuilt first — `enterPlace` refuses anything that is not a place — and filled in at the end,
-  // because entering a place clears that place's objects. Simple wormhole pockets (slice 14c) are
-  // rebuilt the same way: someone may be standing in one.
-  restoreInstances();
-  if (state.mode !== "campaign") restoreWormholes();
-  const placeId = state.worldState.place || DEFAULT_PLACE;
-  enterPlace(placeId, P);
-  emit("place-entered", { id: placeId, player: P });   // refresh scenery/views even when the id did not change
-  P.ship = profile.ship;
-  P.weapon = profile.pw;
-  P.missileStock = profile.msl;
+/**
+ * Shared placement & resume restoration for both single-player `resumeFromSave`
+ * and multiplayer `arriveGuest`: places `P` at `saved` in `placeId` (unless
+ * `saved === null` or the ship has no drive outside dock range, in which case
+ * it docks safely at `station`), restores `sh`/`en` capped to current fit,
+ * optionally tops up salvage crates when airborne, and emits `"launched"` or `"docked"`.
+ */
+export function applyResumePlacement(P, profile, placeId, saved, { dockedPosFromLaunch = false, topUpSalvage = false } = {}) {
+  const station = stationAt(placeId);
   P.warp = null;
   P.v.set(0, 0, 0);
   P.thr = 0;
   P.acc = 0;
   P.snap = true;
-  refillPower(P, profile);
-  refreshDrive(P, profile);
-  refreshShield(P, profile);
-  refreshGuns(P, profile);
-  refreshHull(P, profile);
   P.flight.lock = null;
   P.flight.missileLock = { target: null, t: 0, locked: false };
-
-  // Come back where you left off. `world.resume` is null while docked, so an
-  // older save (which has no resume point at all) keeps the old behaviour: dock
-  // if this pocket has a station, otherwise fly in at its arrival point.
-  const saved = state.worldState.resume;
-  const station = stationAt(placeId);
-
-  // Shields and boost return as they were, so quitting is not a free repair.
-  // A save without them tops up. Speed is always zero: you load stationary.
   P.en = saved && saved.en !== null ? Math.min(saved.en, P.drive.bmax) : P.drive.bmax;
   P.sh = saved && saved.sh !== null ? Math.min(saved.sh, P.shMax) : P.shMax;
 
@@ -259,17 +241,63 @@ export function resumeFromSave(P = state.player, profile = profileOf(P)) {
     P.docked = false;
     P.pos.set(...spot);
     if (facing) P.quat.set(...facing).normalize();
+    if (topUpSalvage) ensureSalvageCrates(placeId, profile, P);
     emit("launched", { player: P });
   } else {
     P.docked = true;
-    P.pos.set(...station.pos);
-    if (profile.ships.includes(profile.ship)) {
+    if (dockedPosFromLaunch && station.launch?.pos) {
+      P.pos.set(...station.launch.pos);
+      facePlayer(launchFace(placeId, station), 1, P);
+    } else {
+      P.pos.set(...station.pos);
+    }
+    if (profile.ships?.includes(profile.ship)) {
       (profile.shipPlaces || (profile.shipPlaces = {}))[profile.ship] = placeId;
     }
     emit("docked", { player: P });
   }
+  return P;
+}
+
+export function resumeFromSave(P = state.player, profile = profileOf(P)) {
+  // The save may have been made inside a temporary run (slice 14b). The run and its place are
+  // rebuilt first — `enterPlace` refuses anything that is not a place — and filled in at the end,
+  // because entering a place clears that place's objects. Simple wormhole pockets (slice 14c) are
+  // rebuilt the same way: someone may be standing in one.
+  restoreInstances();
+  if (state.mode !== "campaign") restoreWormholes();
+  const placeId = state.worldState.place || DEFAULT_PLACE;
+  enterPlace(placeId, P);
+  emit("place-entered", { id: placeId, player: P });   // refresh scenery/views even when the id did not change
+  P.ship = profile.ship;
+  P.weapon = profile.pw;
+  P.missileStock = profile.msl;
+  refillPower(P, profile);
+  refreshDrive(P, profile);
+  refreshShield(P, profile);
+  refreshGuns(P, profile);
+  refreshHull(P, profile);
+
+  applyResumePlacement(P, profile, placeId, state.worldState.resume, { dockedPosFromLaunch: false, topUpSalvage: false });
   populateInstances();   // the pilot is standing in the run now, so it can be filled in
   return P;
+}
+
+/** Explain why `tryDock` cannot dock `P` right now (or `""` if allowed/out of range). */
+export function dockFailureReason(P = state.player, profile = profileOf(P)) {
+  if (!P || P.docked || P.dead) return "";
+  const refusal = campaignDockRefusal(profile);
+  if (refusal) return refusal;
+  const station = stationAt(P.place || state.place);
+  if (!station) return "";
+  const at = V(...station.pos);
+  const range = station.dockRange ?? DOCK_RANGE;
+  const maxSpd = station.dockSpeed ?? DOCK_MAX_SPEED;
+  const dockSpd = Math.max(P.v.length(), P.measuredSpeed || 0);
+  if (P.pos.distanceTo(at) < range && dockSpd >= maxSpd) {
+    return `Too fast to dock (${Math.round(dockSpd)} m/s — slow below ${maxSpd} m/s).`;
+  }
+  return "";
 }
 
 /** Dock if close enough and slow enough. Otherwise do nothing. */
@@ -286,10 +314,17 @@ export function tryDock(P = state.player, profile = profileOf(P), world = state.
   const station = stationAt(P.place || state.place);
   if (!station) return false;   // no station in this pocket
   const at = V(...station.pos);
+  const range = station.dockRange ?? DOCK_RANGE;
+  const maxSpd = station.dockSpeed ?? DOCK_MAX_SPEED;
   const dockSpd = Math.max(P.v.length(), P.measuredSpeed || 0);
-  if (P.pos.distanceTo(at) < (station.dockRange ?? DOCK_RANGE) && dockSpd < (station.dockSpeed ?? DOCK_MAX_SPEED)) {
-    dock(P, profile, world);
-    return true;
+  if (P.pos.distanceTo(at) < range) {
+    if (dockSpd < maxSpd) {
+      dock(P, profile, world);
+      return true;
+    }
+    const reason = `Too fast to dock (${Math.round(dockSpd)} m/s — slow below ${maxSpd} m/s).`;
+    if (P === state.player) msg(reason, 3);
+    emit("docking-denied", { player: P, reason });
   }
   return false;
 }

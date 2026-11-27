@@ -54,7 +54,7 @@
 // merges the unknown content back by hand, and `totals()` in the tests proves every
 // stack that left comes back exactly once.
 
-import { sanitizeProfile, sanitizeSave, cleanAway, SAVE_VERSION } from "../state/profile.js";
+import { sanitizeProfile, sanitizeSave, cleanAway, cleanVisitState, SAVE_VERSION } from "../state/profile.js";
 import { isItem, isModule, itemVol, newStock } from "../data/items.js";
 import { isShipId } from "../data/ships.js";
 import { MODULES } from "../data/modules.js";
@@ -256,7 +256,7 @@ export function awayRecord({ worldId, hostName, guestId, token, epoch = 0, rev =
  * somebody's pilot. `world.guests` is written by the host, read by the host, and
  * never travels.
  */
-export function guestRecord({ name, token, tokenHash, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0, left = false } = {}) {
+export function guestRecord({ name, token, tokenHash, guestId, epoch = 0, rev = 0, bundle = null, lastSeen = 0, left = false, visitState = null } = {}) {
   const kept = isPlainObject(bundle) ? clone(bundle) : null;
   if (kept) delete kept.token;
   return {
@@ -269,6 +269,7 @@ export function guestRecord({ name, token, tokenHash, guestId, epoch = 0, rev = 
     // Playtest 14: a pilot that has gone home. The record stays because it holds the
     // suitcase; the mark is what lets the next hello re-admit it (see `onHello`).
     left: left === true,
+    visitState: cleanVisitState(visitState),
   };
 }
 
@@ -659,7 +660,7 @@ export function pocketOfStationKey(key) {
  * statistics of its own, and no story step can fire for a visitor. Used by slice 4
  * when the host has to rebuild a guest's pilot record.
  */
-export function hostProfile(bundle) {
+export function hostProfile(bundle, visitState = null) {
   // **`v` is stamped first, and that is not cosmetic.** A bundle's profile half is
   // `TRAVEL_FIELDS`, and `v` is a HOME field (it belongs to the save, not the pilot), so
   // the half has no version of its own. Handed to the sanitizer that way it is read as a
@@ -671,7 +672,16 @@ export function hostProfile(bundle) {
   const base = sanitizeProfile(sanitizeSave({ v: SAVE_VERSION, profile: raw, world: {} }).profile);
   const fresh = { ...base };
   for (const field of HOME_FIELDS) if (field in fresh) delete fresh[field];
-  return sanitizeProfile({ ...fresh, v: SAVE_VERSION, missions: [], flags: {}, done: 0, kills: 0 });
+  const saved = cleanVisitState(visitState);
+  return sanitizeProfile({
+    ...fresh,
+    v: SAVE_VERSION,
+    missions: saved ? clone(saved.missions) : [],
+    flags: saved ? clone(saved.flags) : {},
+    done: saved ? saved.done : 0,
+    kills: saved ? saved.kills : 0,
+    ...(saved?.homeStation ? { homeStation: saved.homeStation } : {}),
+  });
 }
 
 /**

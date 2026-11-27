@@ -86,6 +86,20 @@ function isReversing(P) {
   return false;
 }
 
+/** Sync scalar speed telemetry (`measuredSpeed`, `forwardSpeed`) from `P.v` and `P.quat` (for net-driven ships). */
+export function syncSpeedFromVelocity(P, warping = false) {
+  if (!P) return;
+  if (P.docked || P.dead || warping || !P.v || typeof P.v.length !== "function") {
+    if (P) {
+      P.measuredSpeed = 0;
+      P.forwardSpeed = 0;
+    }
+    return;
+  }
+  P.measuredSpeed = P.v.length();
+  P.forwardSpeed = P.quat && typeof P.v.dot === "function" ? P.v.dot(fwdQ(P.quat)) : P.measuredSpeed;
+}
+
 /**
  * Whole-number signed HUD velocity readout in m/s: negative when moving
  * backwards relative to the ship's nose, and never rounding an active collider
