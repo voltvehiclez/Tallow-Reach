@@ -56,9 +56,16 @@ function quatOf(P) {
  * `guestId` and name, but the host's own record carries neither (it is the pilot at the
  * controls), and the two must look the same on the wire.
  */
+const u16 = value => {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n % 65536;
+};
+
 export function shipEntry(P, { id = "", name = "" } = {}) {
   const key = typeof id === "string" ? id.trim() : "";
   if (!P || !key) return null;
+  const F = P.flight || {};
   const entry = {
     id: key,
     name: String(name || P.name || "").trim(),
@@ -74,6 +81,22 @@ export function shipEntry(P, { id = "", name = "" } = {}) {
     shield: round(shieldFraction(P)),
     boost: P.boost === true,
     shake: round(Math.max(0, Math.min(1, Number(P.shake) || 0))),
+    // --- the weapon-effects block: own-ship cosmetics and event counters, same on both screens.
+    shots: u16(P.wxShots),
+    missiles: u16(P.wxMissiles),
+    locks: u16(P.wxLocks),
+    ore: u16(P.wxOre),
+    hits: u16(P.wxHits),
+    boosts: u16(P.wxBoosts),
+    beamOn: F.beamOn === true,
+    beamStart: vec3(F.beamStart),
+    beamEnd: vec3(F.beamEnd),
+    mineFrac: round(Math.max(0, Math.min(1, Number(F.mineFrac) || 0))),
+    // --- the missile-lock block: MIR.target is a host-side record; only its presence travels.
+    cone: round(Math.max(0, Math.min(45, Number(F.coneAngle) || 0))),
+    lockT: round(Math.max(0, Number(F.missileLock && F.missileLock.t) || 0)),
+    lockLocked: !!(F.missileLock && F.missileLock.locked),
+    lockTarget: !!(F.missileLock && F.missileLock.target),
   };
   // The table in `data/multiplayer.js` is the contract, so an entry is built from it: a field
   // added there and forgotten here would be a silent hole in the picture.

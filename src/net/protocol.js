@@ -147,7 +147,7 @@ export function cleanMessage(kind, fields = {}) {
     // One message per pocket that holds a visitor: the world's transient objects, as the
     // host's sim holds them. Visual only; the host decides hits, loot and lifetimes.
     case "entities":
-      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx) };
+      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms) };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
     // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
     // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
@@ -262,6 +262,13 @@ function cleanQuat(raw) {
   return q.map(v => Math.round((v / len) * 10000) / 10000);
 }
 
+/** A monotonically increasing counter on the wire: an integer 0..65535 (u16, wraps mod 65536). */
+const u16 = value => {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n % 65536;
+};
+
 /**
  * A ship snapshot: the pilots the host drew, as `SHIP_FIELDS` says, capped at `LIMITS.ships`
  * per message. An entry with no id is dropped (nothing could be keyed on it), and every other
@@ -292,7 +299,36 @@ function cleanShips(raw) {
       shield: Math.round(Math.max(0, Math.min(1, num(entry.shield, 0))) * 1000) / 1000,
       boost: entry.boost === true,
       shake: Math.round(Math.max(0, Math.min(1, num(entry.shake, 0))) * 1000) / 1000,
+      // --- weapon effects, cleaned like everything else; a peer is never believed about a number.
+      shots: u16(entry.shots),
+      missiles: u16(entry.missiles),
+      locks: u16(entry.locks),
+      ore: u16(entry.ore),
+      hits: u16(entry.hits),
+      boosts: u16(entry.boosts),
+      beamOn: entry.beamOn === true,
+      beamStart: cleanVec3(entry.beamStart),
+      beamEnd: cleanVec3(entry.beamEnd),
+      mineFrac: Math.round(Math.max(0, Math.min(1, num(entry.mineFrac, 0))) * 1000) / 1000,
+      cone: Math.round(Math.max(0, Math.min(45, num(entry.cone, 0))) * 100) / 100,
+      lockT: Math.round(Math.max(0, Math.min(60, num(entry.lockT, 0))) * 1000) / 1000,
+      lockLocked: entry.lockLocked === true,
+      lockTarget: entry.lockTarget === true,
     });
+    // The weapon-effects block costs nothing until it is used: a default-zero field is omitted,
+    // not sent as `0` — 24 pilots every 42 ms is not the place to carry a full launch history.
+    // A reader's own cleaning (or `Number(x) || 0`) gives the same zero back, so nothing is lost.
+    const last = out[out.length - 1];
+    for (const key of ["shots", "missiles", "locks", "ore", "hits", "boosts"]) if (!last[key]) delete last[key];
+    if (!last.beamOn && last.beamStart.every(v => v === 0) && last.beamEnd.every(v => v === 0)) {
+      delete last.beamStart;
+      delete last.beamEnd;
+    }
+    if (!last.mineFrac) delete last.mineFrac;
+    if (!last.cone) delete last.cone;
+    if (!last.lockT) delete last.lockT;
+    if (!last.lockLocked) delete last.lockLocked;
+    if (!last.lockTarget) delete last.lockTarget;
   }
   return out;
 }

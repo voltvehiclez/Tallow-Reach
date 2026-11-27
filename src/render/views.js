@@ -2,7 +2,8 @@
 //
 // Step 16 slice 8a ended the local-only rule for **other pilots**: every hull but yours is drawn
 // from `state.players` on the host and from the host's snapshots on a guest (see "Other pilots"
-// below). The mining beam is still the local pilot's own.
+// below). The mining beam follows the OWN local pilot on every screen — a visiting guest's
+// beam rides the host's snapshot into its own `state.flight`.
 //
 // Refactor step 7 moved every world entity out of `sim/` and into plain data
 // (`sim/enemy.js`, `sim/entity.js`). This file owns the *meshes*. It watches the

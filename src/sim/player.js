@@ -210,6 +210,7 @@ export function flight(dt, P = state.player, runtime = null) {
     boostAllowed: canBoost,
     onBoostIgnite: () => {
       P.shake = 1;
+      P.wxBoosts = (P.wxBoosts || 0) + 1;
       emit("sfx", { name: "boost" });
       // The ignition: one flat gulp out of the cells, not a trickle.
       r.power.stored = Math.max(0, r.power.stored - (drv.ignite || 0));
@@ -370,6 +371,7 @@ export function hurt(d, P = state.player, profile = null) {
     throw new Error("Non-local damage requires its own profile");
   }
   P.last = state.time;
+  P.wxHits = (P.wxHits || 0) + 1;
   emit("sfx", { name: "hit" });
   if (P.sh > 0) {
     P.sh -= d;

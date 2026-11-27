@@ -115,6 +115,28 @@ export const SHIP_FIELDS = [
                // own camera on a screen that shows it (the engine glow reads it)
   "shake",     // camera shake amplitude 0..1, decayed on the simulation clock; a guest's own
                // boost shake rides the host's clock like everything else of that ship
+  // --- the weapon-effects block (2026-11-26, build `26c`): the own ship's weapons must look and
+  // sound the same to a visiting pilot as they do single-player. `shots`/`missiles`/`locks`/`ore`/
+  // `hits`/`boosts` are monotonically increasing event counters (u16, wraps); the own screen plays
+  // each counter's sound locally when it advances — a packet that loses a beat collapses two shots
+  // into one sound, never a backlog. `beamOn`/`beamStart`/`beamEnd`/`mineFrac` are the mining beam's
+  // state verbatim from the host's sim (beamStart/beamEnd world metres, y-up).
+  "shots",     // cannon volleys fired
+  "missiles",  // missiles launched
+  "locks",     // missile locks acquired
+  "ore",       // ore banked by the beam
+  "hits",      // times this hull was hit (shield or hull)
+  "boosts",    // boost ignitions
+  "beamOn",    // the mining beam is cutting right now
+  "beamStart", // where the beam leaves the ship, [x,y,z]
+  "beamEnd",   // where the beam stops (rock or wall), [x,y,z]
+  "mineFrac",  // progress to the next ore, 0..1
+  // --- the missile-lock block: the own screen must draw the lock ring and the cone exactly as a
+  // single-player world does (the host's sim owns the lock; the guest simulates nothing).
+  "cone",      // the launcher's lock cone in degrees, 0 when no launcher is fitted
+  "lockT",     // seconds on the current target (lock takes MISSILE.lock of them)
+  "lockLocked",// the lock is complete
+  "lockTarget",// a lock target is held (a true boole — the host's record, never an entity)
 ];
 
 /**

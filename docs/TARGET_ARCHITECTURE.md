@@ -224,7 +224,7 @@ refactor step that closes it (step 16 status: slices 1-7 built and confirmed, 8a
 | Docking and launch | **Closed in step 9 (owner-playtested):** `launch` and `dock`/`tryDock` operate on an explicit pilot and profile; `clearTransient()` only sweeps the field when no other active pilot remains in space. | — |
 | Warp and place ownership | **Closed in step 10 (owner-playtested):** each pilot owns `place` and `warp`; entities live in per-place containers; shared systems advance once per occupied place. Non-local presentation/input remain step 16. | — |
 | Death and recovery | `sim/player.js` and `sim/session.js`: only the local player gets ship loss, recovery and docking on `player-dead`; another player is marked dead until multiplayer respawn rules exist. | 16 (multiplayer) |
-| Player presentation and input | `render/views.js`, `core/input.js`: the screen follows the local ship and draws the local beam; **step 16 slice 8a draws every other pilot** too (the host's from `state.players`, a guest's from the host's snapshots, `render/shipstream.js`). Input still fills local controls only; remote controls are 8b. | 16 (multiplayer) |
+| Player presentation and input | `render/views.js`, `core/input.js`: the screen follows the local ship and draws the local beam (on a guest, the own beam is the host's snapshot verbatim, build `26c`); **step 16 slice 8a draws every other pilot** too (the host's from `state.players`, a guest's from the host's snapshots, `render/shipstream.js`). Input still fills local controls only; remote controls are 8b. | 16 (multiplayer) |
 
 ## Debt today (what the refactor closes)
 

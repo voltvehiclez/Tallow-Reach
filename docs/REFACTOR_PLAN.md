@@ -294,15 +294,15 @@ exists for exactly that, and the pause card says which path is in use.
      8b adds `state.localInput`, filled by `core/input.js` and read by the session — one new state,
      one new writer, recorded because it touches a rule.
    - **8c — the host's world on the guest's screen.** `state.place` and the scenery follow the host's
-     pocket (`place-entered` from the snapshot), the guest's sim skips world systems it does not own,
-     and its pilot record is the one the snapshots drive. The guest's own galaxy stays loaded but is
-     not stepped — it is where the pilot returns to on Go home.
-   - **8d — the guest predicts its own ship (owner, 2026-11-24); 8e makes the muzzle cosmetic.** Tick-tagged inputs, an `ack`
+     pocket, the guest's sim skips world systems it does not own, and its pilot record is the one the
+     snapshots drive; the guest's own galaxy stays loaded but not stepped.
+   - **8d — the guest predicts its own ship (owner, 2026-11-24). ~~8e~~ — dropped (owner, 2026-11-27):** weapon effects ride the wire as
+     host-confirmed events — the guest looks and hears single-player (see `docs/CHANGELOG.md`). Tick-tagged inputs, an `ack`
      carrying the whole predicted state, rewind-and-replay of unconfirmed inputs, a ~100 ms error
      blend and a snap only after a warp or respawn. Remotes are **interpolated, never predicted**,
      ~100 ms behind 20–30 Hz snapshots; damage, kills, loot, mining, inventory, docking and warp
-     stay host-confirmed. The dry run `flight()` needs, the per-guest aim direction, the cosmetic
-     muzzle, the order to build it and lag compensation (deferred to playtests) are
+     stay host-confirmed. The dry run `flight()` needs, the per-guest aim direction and lag
+     compensation (deferred to playtests) are
      [architecture/client-prediction.md](architecture/client-prediction.md).
 
 ## Rules each slice must keep

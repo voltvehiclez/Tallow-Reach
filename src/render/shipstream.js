@@ -60,6 +60,20 @@ function frameFrom(entry, at) {
     shield: num(entry.shield, 0),
     boost: entry.boost === true,
     shake: num(entry.shake, 0),
+    shots: num(entry.shots, 0),
+    missiles: num(entry.missiles, 0),
+    locks: num(entry.locks, 0),
+    ore: num(entry.ore, 0),
+    hits: num(entry.hits, 0),
+    boosts: num(entry.boosts, 0),
+    beamOn: entry.beamOn === true,
+    beamStart: entry.beamStart ? toVector(entry.beamStart) : null,
+    beamEnd: entry.beamEnd ? toVector(entry.beamEnd) : null,
+    mineFrac: num(entry.mineFrac, 0),
+    cone: num(entry.cone, 0),
+    lockT: num(entry.lockT, 0),
+    lockLocked: entry.lockLocked === true,
+    lockTarget: entry.lockTarget === true,
   };
 }
 
@@ -80,6 +94,20 @@ function poseFrom(frame, pos = frame.pos, quat = frame.quat, velocity = frame.ve
     shield: frame.shield,
     boost: frame.boost,
     shake: frame.shake,
+    shots: frame.shots,
+    missiles: frame.missiles,
+    locks: frame.locks,
+    ore: frame.ore,
+    hits: frame.hits,
+    boosts: frame.boosts,
+    beamOn: frame.beamOn,
+    beamStart: frame.beamStart,
+    beamEnd: frame.beamEnd,
+    mineFrac: frame.mineFrac,
+    cone: frame.cone,
+    lockT: frame.lockT,
+    lockLocked: frame.lockLocked,
+    lockTarget: frame.lockTarget,
   };
 }
 

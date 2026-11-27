@@ -142,6 +142,7 @@ export function updatePrimary(dt, P = state.player) {
           P
         );
       }
+      P.wxShots = (P.wxShots || 0) + 1;   // one volley, on the record so the wire can carry it
       emit("sfx", { name: "cannon" });
     }
   }
@@ -218,6 +219,7 @@ export function updatePrimary(dt, P = state.player) {
         best.scale.copy(best.s0).multiplyScalar(0.3 + (0.7 * best.ore) / best.max);
         F.mineFrac = best.ore / best.max;
         P.acc += gained;
+        P.wxOre = (P.wxOre || 0) + gained;   // a banked-ore chime per ore, on the record so the wire can carry it
         if (P === state.player) emit("sfx", { name: "ore-gained" });   // the beam sweep hits 100%: a resource is yours
         if (best.ore <= 0) {
           dropEntity(placeWorld(P.place || state.place).asteroids, best);   // removes it, and its mesh with it
@@ -337,6 +339,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
       ML.t += dt;
       if (!ML.locked && ML.t >= MISSILE.lock) {
         ML.locked = true;
+        P.wxLocks = (P.wxLocks || 0) + 1;
         emit("sfx", { name: "missile-lock" });
       }
     } else {
@@ -377,5 +380,6 @@ function fireMissile(target, launcher, player) {
   }
   // The missile itself is a record (`sim/missile.js`); its body and trail are
   // render/views.js's business.
+  player.wxMissiles = (player.wxMissiles || 0) + 1;
   launchMissile(target, launcher, playerFwd(player), playerMount("missile", 0, 0, 1, player, ship), player);
 }
