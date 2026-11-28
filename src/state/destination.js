@@ -5,5 +5,5 @@ import { state, currentSave, saveCurrentGame } from "./state.js";
 export function setDestination(destination) {
   state.ui.destination = destination;
   state.worldState.destination = destination;
-  if (!state.ui.intro) saveCurrentGame();
+  if (!state.ui.intro && !state.away) saveCurrentGame();
 }

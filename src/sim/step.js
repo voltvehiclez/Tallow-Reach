@@ -48,7 +48,6 @@ export function stepSim(dt) {
   // weapon/visual half for the local pocket only; world systems (enemies, rifts, wormholes,
   // contracts, place memory) stay frozen.
   if (isGuest()) {
-    if (state.hud) state.hud.prompt = "";
     // Guest does not simulate its own galaxy; host is authoritative for all world effects.
     // Bullets/missiles/crates/fx for the visited pocket are synced via mp-entities.
     // Local cosmetic is disabled to avoid duplicate host-confirmed projectiles.

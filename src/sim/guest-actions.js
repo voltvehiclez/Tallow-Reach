@@ -6,9 +6,9 @@
 // `(P, P.profile, P.guestWorld)`, runs the exact same shared `sim/` functions
 // single player uses, and returns the updated state as a `visit` snapshot.
 
-import { state } from "../state/state.js";
+import { state, instanceAt, placeWorld } from "../state/state.js";
 import { cleanSlotList, cleanVisitState, buildGuestVisitState } from "../state/profile.js";
-import { DEFAULT_PLACE, stationKeyAt } from "../data/places.js";
+import { DEFAULT_PLACE, featureById, stationKeyAt } from "../data/places.js";
 import { canDiscard, isItem, itemName } from "../data/items.js";
 import { BASE_DEFAULT, BASE_MODULES } from "../data/station.js";
 import { STORY_MISSIONS, TEST_MISSIONS } from "../data/missions/index.js";
@@ -40,6 +40,7 @@ import {
   unequipTo,
 } from "./fitting.js";
 import {
+  CACHE,
   STATION,
   countOf,
   moveItem,
@@ -56,6 +57,7 @@ import {
 import { canUse, useItem } from "./consumables.js";
 import { acceptContract, abandonContract, completeContract, ensureBoard, refreshBoard } from "./contracts.js";
 import { acceptMission, chooseMission, missionOfferStation, nextMissionDialogue } from "./missions.js";
+import { closeCacheTrade, notifyCacheMove, riftActionResult } from "./instances.js";
 
 const whole = n => Math.max(0, Math.floor(Number(n) || 0));
 
@@ -114,6 +116,7 @@ export function cancelGuestHeld(P) {
     return false;
   }
   P.guestHeld = null;
+  if (P.guestWorld && P.place) P.guestWorld.place = P.place;
   if (held.fromBay) {
     returnBayHeld(held, P, P.profile, P.guestWorld);
   } else {
@@ -190,6 +193,53 @@ export function guestVisitStateSnapshot(P) {
   return buildGuestVisitState(P, P.guestWorld, guestProfileSnapshot(P));
 }
 
+const canAccessCache = (P, here) => !P.docked && P.openCacheId === here && !!instanceAt(here)?.cache?.open;
+
+const allowedWhere = (P, here, profile, where) => {
+  if (!where) return false;
+  if (where === CACHE) return canAccessCache(P, here);
+  if (P.docked) return true;
+  return where === profile.ship;
+};
+
+function resolveGuestLock(P, here, kind, id) {
+  if (!kind || !id) return null;
+  const W = placeWorld(here);
+  if (kind === "enemy") {
+    const e = (W.enemies || []).find(o => o && o.hp > 0 && String(o.id) === id);
+    return e ? { k: "e", o: e } : null;
+  }
+  if (kind === "rock") {
+    const a = (W.asteroids || []).find(o => o && !o.gone && String(o.id) === id);
+    return a ? { k: "a", o: a } : null;
+  }
+  if (kind === "crate") {
+    const c = (W.crates || []).find(o => o && !o.gone && String(o.id) === id);
+    return c ? { k: "c", o: c } : null;
+  }
+  if (kind === "rift") {
+    const r = (W.rifts || []).find(o => o && !o.gone && String(o.id) === id);
+    return r ? { k: "r", o: r } : null;
+  }
+  if (kind === "gate") {
+    const g = (W.gates || []).find(o => o && !o.gone && String(o.id) === id);
+    return g ? { k: "g", o: g } : null;
+  }
+  if (kind === "cache") {
+    const k = (W.caches || []).find(o => o && !o.gone && String(o.id) === id);
+    return k ? { k: "k", o: k } : null;
+  }
+  if (kind === "pilot") {
+    const p = state.players.find(o => o && o !== P && !o.dead && (o.place || state.place) === here && (o.guestId || "host") === id);
+    return p ? { k: "p", o: p } : null;
+  }
+  if (kind === "station") {
+    const f = featureById(here, id);
+    return f ? { k: "s", o: { place: here, feature: id } } : null;
+  }
+  return null;
+}
+
 /**
  * Execute one validated guest `act` intent authoritatively on `(P, P.profile, P.guestWorld)`.
  * Returns `{ ok, changed, shipsChanged, notice, sound }`.
@@ -210,10 +260,50 @@ export function runGuestAction(P, action) {
   let notice = "";
   let sound = "";
   let inventoryTouched = false;
+  const cacheBefore = canAccessCache(P, here) ? { ...(instanceAt(here)?.cache?.stock || {}) } : null;
 
   const denyDock = () => ({ ok: false, changed: false, shipsChanged: false, notice: "Dock at a station first.", sound: "" });
 
   switch (op) {
+    case "lock": {
+      const kind = String(action.kind || "");
+      if (kind === "clear") {
+        P.flight.lock = null;
+        ok = true;
+        changed = true;
+        break;
+      }
+      const resolved = resolveGuestLock(P, here, kind, String(action.id || ""));
+      if (resolved) {
+        P.flight.lock = resolved;
+        ok = true;
+        changed = true;
+      }
+      break;
+    }
+
+    case "rift": {
+      if (P.docked || P.warp) break;
+      if (P.guestHeld) cancelGuestHeld(P);
+      const prevPlace = P.place;
+      const res = riftActionResult(P);
+      ok = res.ok;
+      changed = res.ok || res.entered || res.left || res.openedCache || P.place !== prevPlace;
+      shipsChanged = res.entered || res.left || P.place !== prevPlace;
+      notice = res.message || "";
+      if (res.openedCache) sound = "pickup";
+      break;
+    }
+
+    case "cacheClose": {
+      const rec = instanceAt(here);
+      if (P.guestHeld?.where === CACHE) cancelGuestHeld(P);
+      closeCacheTrade(rec, P);
+      ok = true;
+      changed = true;
+      break;
+    }
+
     case "pw": {
       const slot = Math.floor(Number(action.slot));
       if (!Number.isInteger(slot) || slot < 0 || slot >= 5) break;
@@ -244,14 +334,12 @@ export function runGuestAction(P, action) {
     case "invClick": {
       const where = action.where || "";
       const slot = Number.isInteger(action.slot) ? action.slot : -1;
-      if (!where || slot < 0) break;
-      if (!P.docked && where !== profile.ship) break;
+      if (!allowedWhere(P, here, profile, where) || slot < 0) break;
       const held = P.guestHeld && P.guestHeld.n > 0 ? P.guestHeld : null;
       if (!P.docked && held?.fromBay) break;
       if (action.shift) {
-        if (!P.docked) break;
         const other = action.toWhere || "";
-        if (!other || other === where) break;
+        if (!allowedWhere(P, here, profile, other) || other === where) break;
         const res = shiftMoveSlot(where, slot, other, profile, world);
         ok = res.ok;
         changed = res.ok;
@@ -284,8 +372,8 @@ export function runGuestAction(P, action) {
       const where = action.where || "";
       const slot = Number.isInteger(action.slot) ? action.slot : -1;
       const held = P.guestHeld && P.guestHeld.n > 0 ? P.guestHeld : null;
-      if (!held || !where || slot < 0) break;
-      if (!P.docked && (where !== profile.ship || held.fromBay)) break;
+      if (!held || !allowedWhere(P, here, profile, where) || slot < 0) break;
+      if (!P.docked && held.fromBay) break;
       const res = held.fromBay
         ? placeBayHeldInSlot(held, where, slot, profile, world)
         : placeHeldStack(held, where, slot, { one: true }, profile, world);
@@ -301,8 +389,7 @@ export function runGuestAction(P, action) {
       const where = action.where || "";
       const slot = Number.isInteger(action.slot) ? action.slot : -1;
       const amount = Math.floor(Number(action.n) || 0);
-      if (!where || slot < 0 || amount < 1) break;
-      if (!P.docked && where !== profile.ship) break;
+      if (!allowedWhere(P, here, profile, where) || slot < 0 || amount < 1) break;
       if (P.guestHeld) cancelGuestHeld(P);
       const res = takeFromSlot(where, slot, amount, profile, world);
       ok = res.ok;
@@ -318,8 +405,7 @@ export function runGuestAction(P, action) {
 
     case "invStack": {
       const where = action.where || "";
-      if (!where) break;
-      if (!P.docked && where !== profile.ship) break;
+      if (!allowedWhere(P, here, profile, where)) break;
       let returned = false;
       if (P.guestHeld && P.guestHeld.where === where) {
         cancelGuestHeld(P);
@@ -334,13 +420,14 @@ export function runGuestAction(P, action) {
     }
 
     case "invMove": {
-      if (!P.docked) return denyDock();
       const where = action.where || "";
       const toWhere = action.toWhere || "";
       const id = action.id || "";
       const amount = action.n > 0 ? action.n : Infinity;
-      if (!where || !toWhere || !id) break;
-      const moved = moveItem(where, toWhere, id, amount, profile, world);
+      if (!allowedWhere(P, here, profile, where) || !allowedWhere(P, here, profile, toWhere) || !id) break;
+      const before = countOf(toWhere, id, profile, world);
+      notice = moveItem(where, toWhere, id, amount, profile, world);
+      const moved = countOf(toWhere, id, profile, world) - before;
       changed = moved > 0;
       ok = changed;
       if (changed) { inventoryTouched = true; sound = "click"; }
@@ -365,7 +452,7 @@ export function runGuestAction(P, action) {
       const where = action.where || "";
       const slot = Number.isInteger(action.slot) ? action.slot : -1;
       const n = Math.floor(Number(action.n) || 0);
-      if (!P.docked && where !== profile.ship) break;
+      if (!allowedWhere(P, here, profile, where)) break;
       if (!canDiscard(id) || !(n > 0)) {
         notice = "That cannot be discarded.";
         break;
@@ -707,6 +794,18 @@ export function runGuestAction(P, action) {
       break;
   }
 
+  if (cacheBefore) {
+    const cacheAfter = instanceAt(here)?.cache?.stock || {};
+    const keys = new Set([...Object.keys(cacheBefore), ...Object.keys(cacheAfter)]);
+    for (const id of keys) {
+      const diff = whole(cacheAfter[id]) - whole(cacheBefore[id]);
+      if (diff > 0) {
+        notifyCacheMove("stow", id, diff, { player: P, heldFromCache: P.guestHeld?.where === CACHE });
+      } else if (diff < 0) {
+        notifyCacheMove("take", id, -diff, { player: P, heldFromCache: P.guestHeld?.where === CACHE });
+      }
+    }
+  }
   if (inventoryTouched) {
     try { emit("mission-inventory-changed", { player: P, profile }); } catch (e) {}
   }

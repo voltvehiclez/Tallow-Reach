@@ -77,7 +77,7 @@ export function purgeNonNetEntities(placeId = state.place) {
   const w = placeWorld(placeId);
   if (!w) return;
   for (const e of [...(w.enemies || [])]) if (e && !e._net) dropEnemy(e, placeId);
-  for (const key of ["bullets", "missiles", "fx"]) {
+  for (const key of ["bullets", "missiles", "fx", "rifts", "gates", "caches"]) {
     const list = w[key];
     if (!Array.isArray(list)) continue;
     for (const item of [...list]) if (item && !item._net) dropEntity(list, item);

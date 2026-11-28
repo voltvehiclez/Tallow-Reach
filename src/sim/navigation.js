@@ -5,7 +5,7 @@ import { setDestination } from "../state/destination.js";
 import { findDestinationRoute } from "./travel.js";
 import { startWarp } from "./sectors.js";
 
-export function jumpRoute(player = localPlayer()) {
+export function jumpRoute(player = localPlayer(), warpFn = startWarp) {
   if (!player || player.docked || player.dead || player.warp) return false;
   const destination = state.ui.destination;
   if (!destination) { msg("No destination set"); return false; }
@@ -13,5 +13,5 @@ export function jumpRoute(player = localPlayer()) {
     { player, profile: profileOf(player), world: state.worldState });
   if (!route) { msg("No route to destination."); return false; }
   if (route.length < 2) { setDestination(null); msg("Destination reached."); return false; }
-  return startWarp(player, route[1]);
+  return warpFn(player, route[1]);
 }

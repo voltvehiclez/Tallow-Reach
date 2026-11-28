@@ -299,7 +299,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!local || !state.freeCam.on) {
       const selectedEnemy = F.lock?.k === "e" && W.enemies.includes(F.lock.o) && F.lock.o.hp > 0 && !F.lock.o.friendly ? F.lock.o : null;
-      const selectedPilot = F.lock?.k === "p" && otherPilotsThere(P).includes(F.lock.o) && !F.lock.o.dead ? F.lock.o : null;
+      const selectedPilot = F.lock?.k === "p" && otherPilotsThere(P).includes(F.lock.o) && !F.lock.o.dead && !F.lock.o.docked ? F.lock.o : null;
       for (const e of W.enemies) {
         if (e.hp <= 0 || e.friendly) continue;
         const q = enemyPos(e).clone().sub(pp),
@@ -313,7 +313,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
       }
       // Other pilots (guest/host) are lockable exactly like hostiles: same cone/range, same priority for F-lock
       for (const pilot of otherPilotsThere(P)) {
-        if (pilot.dead) continue;
+        if (pilot.dead || pilot.docked) continue;
         const q = pilot.pos.clone().sub(pp);
         const d = q.length();
         if (d > MISSILE.range) continue;

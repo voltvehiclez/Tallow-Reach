@@ -120,6 +120,64 @@ function cleanEnemy(raw) {
   return out;
 }
 
+function cleanRift(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = Math.floor(Number(raw.id) || 0);
+  if (id <= 0) return null;
+  const out = {
+    id,
+    pos: vec3(raw.pos),
+    quat: quat4(raw.quat),
+    n: typeof raw.n === "string" && raw.n ? raw.n : "Rift",
+    dest: typeof raw.dest === "string" ? raw.dest : "",
+    r: Number.isFinite(raw.r) && raw.r > 0 ? raw.r : 26,
+    spin: Number.isFinite(raw.spin) ? raw.spin : 0.35,
+  };
+  if (typeof raw.variant === "string" && raw.variant) out.variant = raw.variant;
+  if (typeof raw.instance === "string" && raw.instance) out.instance = raw.instance;
+  if (typeof raw.wormhole === "string" && raw.wormhole) out.wormhole = raw.wormhole;
+  if (typeof raw.template === "string" && raw.template) out.template = raw.template;
+  if (typeof raw.peer === "string" && raw.peer) out.peer = raw.peer;
+  if (raw.locked === true) out.locked = true;
+  if (raw.reentrant === true) out.reentrant = true;
+  return out;
+}
+
+function cleanGate(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = Math.floor(Number(raw.id) || 0);
+  if (id <= 0) return null;
+  const out = {
+    id,
+    pos: vec3(raw.pos),
+    quat: quat4(raw.quat),
+    n: typeof raw.n === "string" && raw.n ? raw.n : "Way out",
+    r: Number.isFinite(raw.r) && raw.r > 0 ? raw.r : 26,
+    spin: Number.isFinite(raw.spin) ? raw.spin : 0.35,
+    locked: raw.locked === true,
+    exit: raw.exit !== false,
+  };
+  if (typeof raw.variant === "string" && raw.variant) out.variant = raw.variant;
+  return out;
+}
+
+function cleanCache(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = Math.floor(Number(raw.id) || 0);
+  if (id <= 0) return null;
+  const out = {
+    id,
+    pos: vec3(raw.pos),
+    quat: quat4(raw.quat),
+    n: typeof raw.n === "string" && raw.n ? raw.n : "Cache",
+    r: Number.isFinite(raw.r) && raw.r > 0 ? raw.r : 10,
+    spin: Number.isFinite(raw.spin) ? raw.spin : 0.35,
+    locked: raw.locked !== false,
+  };
+  if (typeof raw.loot === "string" && raw.loot) out.loot = raw.loot;
+  return out;
+}
+
 const cleanList = (arr, fn) => (Array.isArray(arr) ? arr.map(fn).filter(Boolean) : []);
 
 /**
@@ -175,6 +233,9 @@ export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM, 
       crates: cleanList(packet.crates, cleanCrate),
       fx: cleanList(packet.fx, cleanFx),
       enemies: cleanList(packet.enemies, cleanEnemy),
+      rifts: cleanList(packet.rifts, cleanRift),
+      gates: cleanList(packet.gates, cleanGate),
+      caches: cleanList(packet.caches, cleanCache),
     };
     const last = record.frames[record.frames.length - 1];
     if (last && last.at >= frame.at) record.frames[record.frames.length - 1] = frame;
@@ -252,6 +313,21 @@ export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM, 
         quat: slerp4(ai.quat, bi.quat, k),
         v: lerp3(ai.v, bi.v, k),
       })),
+      rifts: interpItems(a.rifts || [], b.rifts || [], t, (ai, bi, k) => ({
+        ...bi,
+        pos: lerp3(ai.pos, bi.pos, k),
+        quat: slerp4(ai.quat, bi.quat, k),
+      })),
+      gates: interpItems(a.gates || [], b.gates || [], t, (ai, bi, k) => ({
+        ...bi,
+        pos: lerp3(ai.pos, bi.pos, k),
+        quat: slerp4(ai.quat, bi.quat, k),
+      })),
+      caches: interpItems(a.caches || [], b.caches || [], t, (ai, bi, k) => ({
+        ...bi,
+        pos: lerp3(ai.pos, bi.pos, k),
+        quat: slerp4(ai.quat, bi.quat, k),
+      })),
     };
   }
 
@@ -269,7 +345,7 @@ export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM, 
 /** True when a world record already holds any `_net` entity (used for immediate first-packet sync). */
 export function hasNetEntities(W) {
   if (!W) return false;
-  for (const key of ["enemies", "bullets", "missiles", "crates", "fx"]) {
+  for (const key of ["enemies", "bullets", "missiles", "crates", "fx", "rifts", "gates", "caches"]) {
     if (Array.isArray(W[key]) && W[key].some(r => r && r._net === true)) return true;
   }
   return false;
@@ -417,6 +493,101 @@ export function syncPocketEntities(W, snapshot, place) {
       rec.mx = Number.isFinite(raw.mx) ? raw.mx : rec.mx;
       if (!rec.v || typeof rec.v.set !== "function") rec.v = V();
       rec.v.set(Number(raw.v?.[0]) || 0, Number(raw.v?.[1]) || 0, Number(raw.v?.[2]) || 0);
+    },
+  );
+
+  syncList(
+    W.rifts,
+    snapshot.rifts,
+    "rift",
+    (id, raw) => ({
+      id,
+      kind: "rift",
+      place,
+      n: raw.n || "Rift",
+      dest: raw.dest || "",
+      variant: raw.variant || "",
+      instance: raw.instance || "",
+      wormhole: raw.wormhole || "",
+      template: raw.template || "",
+      peer: raw.peer || "",
+      locked: raw.locked === true,
+      reentrant: raw.reentrant === true,
+      r: raw.r || 26,
+      spin: raw.spin ?? 0.35,
+      pos: V(),
+      quat: Q(),
+      _net: true,
+    }),
+    (rec, raw) => {
+      rec.place = place;
+      rec.n = raw.n || "Rift";
+      rec.dest = raw.dest || "";
+      rec.variant = raw.variant || "";
+      rec.instance = raw.instance || "";
+      rec.wormhole = raw.wormhole || "";
+      rec.template = raw.template || "";
+      rec.peer = raw.peer || "";
+      rec.locked = raw.locked === true;
+      rec.reentrant = raw.reentrant === true;
+      rec.r = raw.r || 26;
+      rec.spin = raw.spin ?? 0.35;
+    },
+  );
+
+  syncList(
+    W.gates,
+    snapshot.gates,
+    "gate",
+    (id, raw) => ({
+      id,
+      kind: "gate",
+      place,
+      n: raw.n || "Way out",
+      variant: raw.variant || "",
+      locked: raw.locked === true,
+      exit: raw.exit !== false,
+      r: raw.r || 26,
+      spin: raw.spin ?? 0.35,
+      pos: V(),
+      quat: Q(),
+      _net: true,
+    }),
+    (rec, raw) => {
+      rec.place = place;
+      rec.n = raw.n || "Way out";
+      rec.variant = raw.variant || "";
+      rec.locked = raw.locked === true;
+      rec.exit = raw.exit !== false;
+      rec.r = raw.r || 26;
+      rec.spin = raw.spin ?? 0.35;
+    },
+  );
+
+  syncList(
+    W.caches,
+    snapshot.caches,
+    "cache",
+    (id, raw) => ({
+      id,
+      kind: "cache",
+      place,
+      n: raw.n || "Cache",
+      loot: raw.loot || "",
+      locked: raw.locked !== false,
+      r: raw.r || 10,
+      spin: raw.spin ?? 0.35,
+      pos: V(),
+      quat: Q(),
+      _net: true,
+    }),
+    (rec, raw) => {
+      rec.place = place;
+      rec.n = raw.n || "Cache";
+      rec.loot = raw.loot || "";
+      rec.locked = raw.locked !== false;
+      rec.r = raw.r || 10;
+      rec.spin = raw.spin ?? 0.35;
     },
   );
 }

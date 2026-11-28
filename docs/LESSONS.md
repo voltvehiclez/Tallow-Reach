@@ -271,37 +271,6 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/multiplayer-8c-fixes.test.mjs` — Bug 1 toggles `setupMultiplayer()` from Pause
   and asserts `state.multiplayer` flips in sync.
 
-### L47. An invitation is not an identity
-- **Seen (owner, playtest 22):** *"If a second guest player joins, first guest is kicked out … the first
-  guest is never really able to rejoin."* One friend could visit; the second took the first one's place,
-  and the one thrown out then met *"That link has already been used, or it was copied wrongly"*.
-- **Cause:** a join link carries **one** secret per world (`?join=<worldId>#<token>`), and the guest used
-  that secret as **its own**: `guestId = guest-<token.slice(0,8)>`, `hello.token = linkToken`. Every friend
-  on one link arrived as the same pilot, so the host's one-window-per-pilot rule (correct code) retired the
-  first to make room, rewrote the record's hash, and left the retired browser holding a secret that no
-  longer matched. The symptom named the wrong object entirely.
-- **Rule:** a credential the *sender* hands out is never the identity of the *receiver*. Identity is minted
-  where the pilot lives (here `tr_mp.pilotToken`, one per browser) and sent every time; the invitation only
-  decides *where* it may be used. "Same person?" and "allowed in?" are two questions, and one shared secret
-  cannot answer both.
-- **A cap is a different bug from a collision.** The same report said "unlimited players"; raising
-  `NET.maxGuests` would have hidden the symptom for a week without fixing anything — the limit was never
-  reached. Ask which one the evidence supports before changing a number.
-- **Enforced by:** `tests/multiplayer-session.test.mjs` — "two guests with the same link are two pilots, and
-  neither is kicked", "the same pilot in two windows is still a takeover", "a guest's identity is its own
-  browser's, not the link's secret".
-
-### L46. A state read at a glance wants a colour, not a second word
-- **Seen (owner, playtest 22):** the chat's Pin button changed its word to *Pinned*, in the same breath as
-  an ask to make that column **narrower** — the word was doing a job the colour can do.
-- **Cause:** a label that changes is *unambiguous*, which suits a big button and not a 46-pixel strip: the
-  longest label sets the width for ever, and the word still does not say which way the *press* goes.
-- **Rule:** in a narrow, glanceable control the state is the fill and the label is the verb: one word that
-  never changes (*Pin*), amber-filled when on, amber-outlined when off, with `aria-pressed` and a `title`
-  for anybody who cannot see colour.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the pin's word is asserted constant, both fills are
-  asserted in `src/styles.css`, and the players strip's width is capped.
-
 [More lessons](archive/reticle-and-recovery-lessons.md) — L12–L14, L17, L20, L21–L29, L31 and L32,
-and [Slice 4–5 custody/UI/rejoin lessons](archive/MULTIPLAYER_SLICE4_5_LESSONS.md) — L37–L44,
+and [Slice 4–5 custody/UI/rejoin lessons](archive/MULTIPLAYER_SLICE4_5_LESSONS.md) — L35–L44, L46–L47,
 moved verbatim to keep this file under its size limit.

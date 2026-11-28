@@ -56,6 +56,7 @@ export function startWarp(player = localPlayer(), to = null) {
     },
   };
   P.acc = 0;
+  P.openCacheId = null;
   if (P === localPlayer()) state.freeCam.on = false;
   P.flight.beamOn = false;
   P.flight.beamT = 0;

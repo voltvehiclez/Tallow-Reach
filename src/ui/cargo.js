@@ -36,6 +36,7 @@ import { requestGuestAction } from "../net/session.js";
 
 let root = null;
 let menu = null;
+let pendingUse = null;
 
 /** May the flight inventory open? Space only: a docked pilot has the panel. */
 export function canOpenCargo(P = localPlayer(), ui = state.ui) {
@@ -331,9 +332,10 @@ function useConsumable(entry) {
   if (!canUse(id)) return;
   closeContextMenu();
   if (state.away) {
-    requestGuestAction({ op: "invUse", id, where });
+    const before = countOf(where, id);
+    const reqId = requestGuestAction({ op: "invUse", id, where });
+    if (reqId) pendingUse = { reqId, id, where, before };
     uiSound("confirm");
-    closeCargo();
     return;
   }
   const before = countOf(where, id);
@@ -538,7 +540,15 @@ export function setupCargo() {
   on("docked", () => closeCargo({ silent: true }));
   on("main-menu", () => closeCargo({ silent: true }));
   on("died", () => closeCargo({ silent: true }));
-  on("mp-visit", () => {
+  on("mp-visit", visit => {
+    if (pendingUse && visit?.ackReqId === pendingUse.reqId) {
+      const { id, where, before } = pendingUse;
+      pendingUse = null;
+      if (countOf(where, id) < before) {
+        closeCargo();
+        return;
+      }
+    }
     if (!isCargoOpen()) return;
     const card = root && root.querySelector(".cargo-card");
     const editing = Boolean(
@@ -564,6 +574,7 @@ export function openCargo() {
 /** Close it and hand the controls and sound back to the flight the pilot left. */
 export function closeCargo({ silent = false } = {}) {
   if (!isCargoOpen()) return false;
+  pendingUse = null;
   if (cancelHeldStack()) saveQuietly();
   clearHeldGhost();
   state.ui.cargo = null;

@@ -99,6 +99,9 @@ export function toggleLock(P = state.player, surfaceHit = undefined) {
  */
 export function otherPilotsThere(P = state.player) {
   const place = P?.place || state.place;
+  if (P && P !== state.player && state.players.includes(P)) {
+    return state.players.filter(p => p && p !== P && !p.dead && (p.place || state.place) === place);
+  }
   return (state.otherPilots || []).filter(pilot => pilot && !pilot.dead && pilot.place === place);
 }
 
@@ -116,7 +119,7 @@ export function lockPosition(lock) {
 export function lockName(lock) {
   if (lock.k === "n") return lock.o.name;
   // The pilot's own name — never "Ship" and never its guest id: the owner asked to see who it is.
-  if (lock.k === "p") return lock.o?.name || "Pilot";
+  if (lock.k === "p") return lock.o?.name || lock.o?.profile?.name || "Pilot";
   if (lock.k === "e") return lock.o.role === "prowl" ? "Unmarked" : lock.o.n || "hostile";
   if (lock.k === "a") return itemName(lock.o.type) + " rock, " + Math.ceil(lock.o.ore) + " left";
   if (lock.k === "c") return lock.o.item === "core" ? "reactor core" : lock.o.persistent && lock.o.missionId ? itemName(lock.o.item) : "crate";
@@ -176,6 +179,9 @@ export function pruneLock(P = state.player) {
 export function targetHealth(o) {
   const percent = (value, max) => Number.isFinite(value) && Number.isFinite(max) && max > 0
     ? Math.round(clamp(value / max, 0, 1) * 100) : 0;
+  if (o && Number.isFinite(o.hullMax)) {
+    return { shield: percent(o.sh, o.shMax), hull: percent(o.hull, o.hullMax) };
+  }
   if (o && Number.isFinite(o.hull) && !Number.isFinite(o.mx) && !Number.isFinite(o.hp)) {
     const of = value => Number.isFinite(value) ? Math.round(clamp(value, 0, 1) * 100) : 0;
     return { shield: of(o.shield), hull: of(o.hull) };

@@ -1303,6 +1303,50 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     return saved;
   }
 
+  const visitPrintOf = snap => JSON.stringify({
+    docked: !!snap.docked,
+    place: snap.place || "",
+    pw: snap.pw || 0,
+    sw: snap.sw || 0,
+    msl: snap.msl || 0,
+    hull: snap.hull || 0,
+    shield: snap.shield || 0,
+    held: snap.held || null,
+    openCacheId: snap.openCacheId || "",
+    profile: snap.profile || null,
+    world: snap.world || null,
+    galaxy: snap.galaxy || null,
+    shops: snap.shops || null,
+    wormholes: Array.isArray(snap.wormholes) ? snap.wormholes.map(w => ({
+      id: w.id,
+      parent: w.parent,
+      template: w.template,
+      seed: w.seed,
+      doomed: !!w.doomed,
+      lifetimeBucket: w.doomed ? 0 : ((w.lifetime || 0) > 60 ? 1 : Math.max(0, Math.ceil(w.lifetime || 0))),
+    })) : null,
+    connections: Array.isArray(snap.connections) ? snap.connections.map(c => ({
+      epoch: c.epoch || 0,
+      live: (c.lifetime || 0) > 0,
+    })) : null,
+    instance: snap.instance ? {
+      id: snap.instance.id,
+      template: snap.instance.template,
+      seed: snap.instance.seed,
+      origin: snap.instance.origin,
+      reentrant: !!snap.instance.reentrant,
+      warned: !!snap.instance.warned,
+      expired: !!snap.instance.expired,
+      collapsed: !!snap.instance.collapsed,
+      lifetimeBucket: snap.instance.warned
+        ? Math.max(0, Math.ceil(snap.instance.lifetime || 0))
+        : ((snap.instance.lifetime || 0) > 0 ? 1 : 0),
+      objectiveMet: !!snap.instance.objectiveMet,
+      mined: snap.instance.mined || 0,
+      cache: snap.instance.cache || null,
+    } : null,
+  });
+
   function pushVisit(guestId, { ackReqId = 0, notice = "", sound = "" } = {}) {
     if (role !== "host" || !on || !guestId) return false;
     const req = { guestId, answered: false, snapshot: null };
@@ -1310,18 +1354,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (!req.answered || !req.snapshot) return false;
     const snap = req.snapshot;
     try {
-      visitPrint.set(guestId, JSON.stringify({
-        docked: !!snap.docked,
-        place: snap.place || "",
-        pw: snap.pw || 0,
-        sw: snap.sw || 0,
-        msl: snap.msl || 0,
-        hull: snap.hull || 0,
-        shield: snap.shield || 0,
-        held: snap.held || null,
-        profile: snap.profile || null,
-        world: snap.world || null,
-      }));
+      visitPrint.set(guestId, visitPrintOf(snap));
     } catch (e) {}
     const msg = cleanMessage("visit", {
       ...snap,
@@ -1343,18 +1376,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const snap = req.snapshot;
     let print = "";
     try {
-      print = JSON.stringify({
-        docked: !!snap.docked,
-        place: snap.place || "",
-        pw: snap.pw || 0,
-        sw: snap.sw || 0,
-        msl: snap.msl || 0,
-        hull: snap.hull || 0,
-        shield: snap.shield || 0,
-        held: snap.held || null,
-        profile: snap.profile || null,
-        world: snap.world || null,
-      });
+      print = visitPrintOf(snap);
     } catch (e) {
       return false;
     }
@@ -1495,7 +1517,24 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
   function onEntities(message) {
     if (role !== "guest") return;
-    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], picks: message.picks || 0, efires: Array.isArray(message.efires) ? message.efires : [], rocks: Array.isArray(message.rocks) ? message.rocks : null, at: hrNow() }); } catch (e) {}
+    try {
+      emit("mp-entities", {
+        place: message.place,
+        bullets: message.bullets || [],
+        missiles: message.missiles || [],
+        crates: message.crates || [],
+        fx: message.fx || [],
+        booms: message.booms || 0,
+        enemies: message.enemies || [],
+        picks: message.picks || 0,
+        efires: Array.isArray(message.efires) ? message.efires : [],
+        rocks: Array.isArray(message.rocks) ? message.rocks : null,
+        rifts: message.rifts || [],
+        gates: message.gates || [],
+        caches: message.caches || [],
+        at: hrNow(),
+      });
+    } catch (e) {}
   }
 
   /**
@@ -1635,6 +1674,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const req = { guestId: entry.guestId, action: message, answered: false, result: null };
     try { emit("mp-guest-act", req); } catch (e) {}
     const res = req.result || {};
+    if (res.shipsChanged) {
+      broadcastShips();
+      broadcastEntities();
+    }
     pushVisit(entry.guestId, {
       ackReqId: message.reqId || 0,
       notice: res.notice || "",

@@ -29,7 +29,20 @@
 import { V, Q, UP } from "../util/math.js";
 import { emit, on } from "../util/events.js";
 import { random, makeRng } from "../util/rng.js";
-import { state, placeWorld, localPlayer, profileOf, instanceAt, msg, say, clearInstances } from "../state/state.js";
+import {
+  state,
+  placeWorld,
+  localPlayer,
+  profileOf,
+  worldOf,
+  ownerOf,
+  instanceAt,
+  msg,
+  say,
+  sayForPlayer,
+  clearInstances,
+} from "../state/state.js";
+import { cleanSlotList } from "../state/profile.js";
 import { RIFT, riftDef, isInstanceTemplate, instanceTemplate, instanceIdFor, waveGroups } from "../data/instances.js";
 import {
   registerInstancePlace,
@@ -194,6 +207,25 @@ export function exitDenial(record) {
   return null;
 }
 
+/** Notify every living pilot inside `placeId` (local via `msg`, remote guests via `mp-place-notice`). */
+function notifyPlacePilots(placeId, text, secs = 8) {
+  if (!placeId || !text) return;
+  const local = localPlayer();
+  if (local && (local.place || state.place) === placeId) {
+    msg(text, secs);
+  }
+  for (const P of state.players) {
+    if (!P || !P.guestId || P.dead || (P.place || state.place) !== placeId) continue;
+    emit("mp-place-notice", { guestId: P.guestId, place: placeId, text });
+  }
+}
+
+/** Every living pilot inside this instance. */
+export function pilotsInside(record, players = state.players) {
+  if (!record) return [];
+  return players.filter(p => p && !p.dead && (p.place || state.place) === record.id);
+}
+
 /**
  * What running out of time does. One handler per `EXPIRY_OUTCOME_TYPES` entry, so a future kind of
  * wormhole declares its outcome in data instead of asking for code.
@@ -206,10 +238,14 @@ export const EXPIRY_OUTCOMES = {
    * back where they entered by the time the death is resolved.
    */
   kill(record) {
-    state.deathNotice = record.onExpire?.message || null;
-    const P = pilotInside(record);
+    const notice = record.onExpire?.message || null;
+    const inside = pilotsInside(record).filter(p => !p.docked);
     destroyInstance(record, "expiry");
-    if (P && !P.dead && !P.docked) hurt(Infinity, P, profileOf(P));
+    for (const P of inside) {
+      state.deathNotice = notice;
+      hurt(Infinity, P, profileOf(P));
+    }
+    state.deathNotice = null;
   },
 
   /**
@@ -222,7 +258,7 @@ export const EXPIRY_OUTCOMES = {
     record.collapsed = true;
     record.doomOrigin = true;
     closeDoor(record);
-    if (record.onExpire?.message) msg(record.onExpire.message, 8);
+    if (record.onExpire?.message) notifyPlacePilots(record.id, record.onExpire.message, 8);
   },
 };
 
@@ -266,6 +302,7 @@ export function createInstance(templateId, seed, opts = {}) {
     tier: Number(opts.tier) > 0 ? Number(opts.tier) : Math.max(1, Number(template.tier) || 1),
     origin,
     entry: null,
+    entries: new Map(),
     difficulty,
     // A natural (simple) wormhole's site may be left and re-entered at any time; a rift may not.
     reentrant: template.reentrant === true,
@@ -355,30 +392,43 @@ function closeDoor(record) {
   return closed;
 }
 
+function sendPilotHome(record, P) {
+  if (!record || !P || (P.place || state.place) !== record.id) return false;
+  const entry = record.entries?.get(ownerOf(P)) || record.entry;
+  P.place = record.origin || P.place;
+  if (entry) {
+    P.pos.copy(entry.pos);
+    P.quat.copy(entry.quat);
+    P.sh = entry.sh;
+    P.en = entry.en;
+  }
+  P.v.set(0, 0, 0);
+  P.thr = 0;
+  P.warp = null;
+  P.openCacheId = null;
+  if (P.flight) {
+    P.flight.lock = null;
+    P.flight.missileLock = { target: null, t: 0, locked: false };
+  }
+  P.wxBursts = (P.wxBursts || 0) + 1;
+  P.snap = true;
+  if (P.guestWorld) P.guestWorld.place = P.place;
+  if (P === state.player) {
+    state.place = P.place;
+    // The saved world follows the pilot out of a run: it names a place, and it is gone now.
+    state.worldState.place = P.place;
+  }
+  return true;
+}
+
 /**
  * Put every pilot standing in this run back where they entered from, without touching the run
  * itself: the exit rules and the run's own records are untouched. `destroyInstance` calls this on
  * the way out, and so does leaving a re-enterable run — the place is the same, only the run stays.
  */
 function sendPilotsHome(record) {
-  const entry = record.entry;
   for (const P of state.players) {
-    if (!P || (P.place || state.place) !== record.id) continue;
-    P.place = record.origin || P.place;
-    if (entry) {
-      P.pos.copy(entry.pos);
-      P.quat.copy(entry.quat);
-      P.sh = entry.sh;
-      P.en = entry.en;
-    }
-    P.v.set(0, 0, 0);
-    P.thr = 0;
-    P.snap = true;
-    if (P === state.player) {
-      state.place = P.place;
-      // The saved world follows the pilot out of a run: it names a place, and it is gone now.
-      state.worldState.place = P.place;
-    }
+    sendPilotHome(record, P);
   }
   // The pocket the pilot comes back to has to BE a place again before they stand in it. A pilot who
   // entered this run without first loading its pocket (which is what happens after a reload: they
@@ -452,6 +502,41 @@ function restoreInstance(saved) {
   record.entry = entry
     ? { pos: V(...entry.pos), quat: Q(...entry.quat), sh: num(entry.sh), en: num(entry.en) }
     : null;
+  return record;
+}
+
+/**
+ * Synchronise a visiting guest's active instance record (or clear stale ones when outside)
+ * from a host `visit` snapshot so UI, map, and place lookups match host truth.
+ */
+export function syncGuestInstance(snap = null) {
+  const keepId = snap && typeof snap.id === "string" ? snap.id : "";
+  for (const [id, rec] of [...state.instances.entries()]) {
+    if (id === keepId) continue;
+    if (rec) rec.gone = true;
+    state.instances.delete(id);
+    unregisterInstancePlace(id);
+    state.places.delete(id);
+  }
+  if (!snap || !keepId || typeof snap.template !== "string" || !snap.template) return null;
+  let record = instanceAt(keepId);
+  if (!record) record = restoreInstance(snap);
+  if (!record) return null;
+  record.gone = false;
+  record.lifetime = Math.max(0, Number(snap.lifetime) || 0);
+  record.totalLifetime = Math.max(record.lifetime, Number(snap.totalLifetime) || 0);
+  record.warned = snap.warned === true;
+  record.expired = snap.expired === true;
+  record.mined = Math.max(0, Math.floor(Number(snap.mined) || 0));
+  record.spawned = snap.spawned === true;
+  if (record.objective) record.objective.met = snap.objectiveMet === true;
+  if (record.cache && snap.cache) {
+    record.cache.open = snap.cache.open === true;
+    record.cache.stock = stockFromSaved(snap.cache.stock);
+    const cleaned = Array.isArray(snap.cache.slots) ? cleanSlotList(snap.cache.slots, record.cache.stock) : null;
+    if (cleaned) record.cache.slots = cleaned;
+    else delete record.cache.slots;
+  }
   return record;
 }
 
@@ -631,8 +716,9 @@ export function openRift(riftId, player = localPlayer(), seed = null) {
     r: 26,
     gone: false,
   });
-  emit("sfx", { name: "warp-burst" });
-  emit("rift-opened", { id: rift.id, place: placeId, template: templateId, seed: s });
+  if (P) P.wxBursts = (P.wxBursts || 0) + 1;
+  if (P === localPlayer()) emit("sfx", { name: "warp-burst" });
+  emit("rift-opened", { id: rift.id, place: placeId, template: templateId, seed: s, player: P });
   return rift;
 }
 
@@ -660,23 +746,36 @@ export function enterRift(rift, player = localPlayer()) {
     const denied = exitDenial(rift);
     if (denied) return denied;
     const peer = state.galaxy?.pocketsById?.[rift.peer];
-    if (peer?.peer !== placeId || !enterPlace(peer.id,P)) return "That wormhole has collapsed.";
-    P.pos.set(...peer.enter.pos); P.v.set(0,0,0); P.thr=0; P.warp=null; P.snap=true;
-    emit("place-changed", {from:placeId,to:peer.id,player:P});
+    if (peer?.peer !== placeId || !enterPlace(peer.id, P)) return "That wormhole has collapsed.";
+    P.pos.set(...peer.enter.pos);
+    P.v.set(0, 0, 0);
+    P.thr = 0;
+    P.warp = null;
+    P.openCacheId = null;
+    if (P.flight) {
+      P.flight.lock = null;
+      P.flight.missileLock = { target: null, t: 0, locked: false };
+    }
+    P.wxBursts = (P.wxBursts || 0) + 1;
+    P.snap = true;
+    emit("place-changed", { from: placeId, to: peer.id, player: P });
     return true;
   }
   const record = createInstance(rift.template, rift.seed, { origin: placeId });
   if (!record) return "That rift leads nowhere.";
 
-  // Where the pilot came from, so leaving — or dying, or an ejection — puts them back exactly there.
-  record.entry = {
+  // Where each pilot came from, so leaving — or dying, or an ejection — puts them back exactly there.
+  const entry = {
     pos: playerPos(P).clone(),
     quat: P.quat.clone(),
     sh: P.sh,
     en: P.en,
   };
+  if (!record.entries) record.entries = new Map();
+  record.entries.set(ownerOf(P), entry);
+  record.entry = entry;
   if (!enterPlace(record.id, P)) {
-    destroyInstance(record, "refused");
+    if (!record.reentrant && !pilotsInside(record).length) destroyInstance(record, "refused");
     return "That rift leads nowhere.";
   }
 
@@ -686,12 +785,21 @@ export function enterRift(rift, player = localPlayer()) {
   P.thr = 0;
   P.snap = true;
   P.warp = null;
+  P.openCacheId = null;
+  if (P.flight) {
+    P.flight.lock = null;
+    P.flight.missileLock = { target: null, t: 0, locked: false };
+  }
+  P.wxBursts = (P.wxBursts || 0) + 1;
 
   if (!record.spawned) {
     spawnRun(record);
   }
-  msg(record.objective.n || "Objective", 8);
-  emit("rift-entered", { id: record.id, template: record.template, origin: record.origin });
+  if (P === localPlayer()) {
+    emit("sfx", { name: "warp-burst" });
+    msg(record.objective.n || "Objective", 8);
+  }
+  emit("rift-entered", { id: record.id, template: record.template, origin: record.origin, player: P });
   return true;
 }
 
@@ -793,21 +901,27 @@ export function leaveInstance(player = localPlayer()) {
   }
   const loss = exitDenial(record);
   if (loss) {
-    msg(loss, 5);
-    emit("travel-denied", { reason: loss, from: record.id, to: record.origin });
+    if (P === localPlayer()) {
+      msg(loss, 5);
+      emit("travel-denied", { reason: loss, from: record.id, to: record.origin });
+    }
     return loss;
   }
+  const otherInside = pilotsInside(record).some(p => p !== P);
   // A natural (simple) wormhole's run may be left at any time and re-entered until the pocket's
   // 20 minutes are spent: the pilot goes back where they came from, the run keeps its state, the
-  // door stays hanging in the pocket. A rift is one use and despawns here.
-  if (record.reentrant) {
-    sendPilotsHome(record);
-    emit("instance-closed", { id: record.id, origin: record.origin, reason: "left" });
-    emit("rift-left", { id: record.id, origin: record.origin });
+  // door stays hanging in the pocket. A rift is one use and despawns once its last pilot leaves.
+  if (record.reentrant || otherInside) {
+    sendPilotHome(record, P);
+    if (typeof record.origin === "string" && record.origin && isPlace(record.origin)) loadPlace(record.origin);
+    if (!otherInside && P === localPlayer()) {
+      emit("instance-closed", { id: record.id, origin: record.origin, reason: "left" });
+    }
+    emit("rift-left", { id: record.id, origin: record.origin, player: P });
     return true;
   }
   destroyInstance(record, "left");
-  emit("rift-left", { id: record.id, origin: record.origin });
+  emit("rift-left", { id: record.id, origin: record.origin, player: P });
   return true;
 }
 
@@ -832,6 +946,32 @@ export function instancePrompt(record, player = localPlayer()) {
 }
 
 /**
+ * Perform the R action for `player` without forcing local HUD side-effects on non-local pilots.
+ * Returns `{ ok, message, entered, left, openedCache }`.
+ */
+export function riftActionResult(player = localPlayer()) {
+  const P = player || localPlayer();
+  if (!P || P.dead) return { ok: false, message: "", entered: false, left: false, openedCache: false };
+  const placeId = P.place || state.place;
+  if (isInstancePlace(placeId)) {
+    const record = instanceAt(placeId);
+    const cache = record?.cache;
+    if (cache?.entity && playerPos(P).distanceTo(cache.pos) <= (Number(RIFT.cacheRange) || 0)) {
+      const out = openCacheTrade(record, P);
+      return { ok: out === true, message: out === true ? "" : String(out || ""), entered: false, left: false, openedCache: out === true };
+    }
+    const out = leaveInstance(P);
+    return { ok: out === true, message: out === true ? "" : String(out || ""), entered: false, left: out === true, openedCache: false };
+  }
+  const rift = nearestRift(P);
+  if (!rift) {
+    return { ok: false, message: "Nothing to enter here.", entered: false, left: false, openedCache: false };
+  }
+  const inResult = enterRift(rift, P);
+  return { ok: inResult === true, message: inResult === true ? "" : String(inResult || ""), entered: inResult === true, left: false, openedCache: false };
+}
+
+/**
  * The **R** key, on the nearest thing it can act on: outside, a rift door within range; inside, the
  * canister beside the pilot if there is one to open, otherwise the way out. One binding, one
  * deliberate press — a ship can never drift in or out by contact, and flying past a canister never
@@ -839,27 +979,12 @@ export function instancePrompt(record, player = localPlayer()) {
  */
 export function riftAction(player = localPlayer()) {
   const P = player || localPlayer();
-  if (!P || P.dead) return false;
-  const placeId = P.place || state.place;
-  if (isInstancePlace(placeId)) {
-    const record = instanceAt(placeId);
-    const cache = record?.cache;
-    if (cache?.entity && playerPos(P).distanceTo(cache.pos) <= (Number(RIFT.cacheRange) || 0)) {
-      // `openCacheTrade` says what happened either way, so this only reports whether it opened.
-      return openCacheTrade(record, P) === true;
-    }
-    const out = leaveInstance(P);
-    if (out !== true) msg(out, 5);
-    return out === true;
+  const res = riftActionResult(P);
+  if (!res.ok && res.message && P === localPlayer()) {
+    if (res.message === "Nothing to enter here.") say(res.message);
+    else msg(res.message, 5);
   }
-  const rift = nearestRift(P);
-  if (!rift) {
-    say("Nothing to enter here.");
-    return false;
-  }
-  const inResult = enterRift(rift, P);
-  if (inResult !== true) msg(inResult, 5);
-  return inResult === true;
+  return res.ok;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -933,9 +1058,10 @@ function canisterAt(player = localPlayer()) {
 export function openCacheTrade(record, player = localPlayer(), profile = null) {
   const cache = record?.cache;
   const P = player || localPlayer();
+  const isLocal = P === localPlayer();
   // Every answer here is a sentence the pilot sees: a refusal is never swallowed (LESSONS L11).
   const refuse = text => {
-    msg(text, 6);
+    if (isLocal) msg(text, 6);
     return text;
   };
   if (!cache) return refuse("There is nothing to open here.");
@@ -944,13 +1070,15 @@ export function openCacheTrade(record, player = localPlayer(), profile = null) {
   if (!cacheUnits(cache)) return refuse(`The ${cache.n} is empty.`);
 
   const prof = profile || profileOf(P) || state.profile;
-  emit("sfx", { name: "pickup" });
+  P.openCacheId = record.id;
+  if (isLocal) emit("sfx", { name: "pickup" });
   emit("instance-cache-open", {
     id: record.id,
     loot: cache.loot,
     n: cache.n,
     left: cacheUnits(cache),
     profile: prof,
+    player: P,
   });
   return true;
 }
@@ -960,9 +1088,11 @@ export function openCacheTrade(record, player = localPlayer(), profile = null) {
  * so the next press of R beside it reopens the same trade — unless it was emptied, which drops it
  * from the world for good (see `tradeCacheItem`).
  */
-export function closeCacheTrade(record = cacheTradeRecord()) {
+export function closeCacheTrade(record = cacheTradeRecord(), player = localPlayer()) {
+  const P = player || localPlayer();
+  if (P) P.openCacheId = null;
   if (!record) return false;
-  emit("instance-cache-closed", { id: record.id, left: cacheUnits(record.cache) });
+  emit("instance-cache-closed", { id: record.id, left: cacheUnits(record.cache), player: P });
   return true;
 }
 
@@ -983,25 +1113,29 @@ export function tradeCacheItem(dir, id, n = 1, player = localPlayer(), profile =
   if (!cache.open) return `The ${cache.n} is still sealed.`;
   const P = player || localPlayer();
   const prof = profile || profileOf(P) || state.profile;
+  const world = worldOf(P);
   const take = dir === "take";
   const from = take ? CACHE : prof.ship;
   const to = take ? prof.ship : CACHE;
 
-  const before = countOf(to, id, prof);
-  const text = moveItem(from, to, id, n, prof);
-  const moved = countOf(to, id, prof) - before;
+  const before = countOf(to, id, prof, world);
+  const text = moveItem(from, to, id, n, prof, world);
+  const moved = countOf(to, id, prof, world) - before;
   if (!(moved > 0)) return text;
 
-  emit("sfx", { name: "pickup" });
-  emit("instance-cache-moved", { id: record.id, item: id, n: moved, dir: take ? "take" : "stow" });
+  if (P === localPlayer()) emit("sfx", { name: "pickup" });
+  emit("instance-cache-moved", { id: record.id, item: id, n: moved, dir: take ? "take" : "stow", player: P });
   // Emptied, the canister is gone from the world: there is nothing left to fly to. Something put back
   // into it brings it back (the tick rebuilds a run's objects from the record), so a pilot who wants
   // to leave cargo behind can still do it.
   if (take && !cacheUnits(cache)) {
     if (cache.entity) dropEntity(placeWorld(record.id).caches, cache.entity);
     cache.entity = null;
+    for (const p of state.players) {
+      if (p && p.openCacheId === record.id) p.openCacheId = null;
+    }
     emit("instance-cache-empty", { id: record.id, loot: cache.loot });
-    msg(`The ${cache.n} is empty.`, 6);
+    notifyPlacePilots(record.id, `The ${cache.n} is empty.`, 6);
   }
   return text;
 }
@@ -1014,17 +1148,21 @@ export function tradeCacheItem(dir, id, n = 1, player = localPlayer(), profile =
  */
 export function notifyCacheMove(dir, id, moved, opts = {}) {
   if (!(moved > 0)) return;
-  const record = canisterAt(opts.player || localPlayer());
+  const P = opts.player || localPlayer();
+  const record = canisterAt(P);
   if (!record?.cache?.open) return;
   const cache = record.cache;
   const take = dir === "take";
-  emit("sfx", { name: "pickup" });
-  emit("instance-cache-moved", { id: record.id, item: id, n: moved, dir: take ? "take" : "stow" });
+  if (P === localPlayer()) emit("sfx", { name: "pickup" });
+  emit("instance-cache-moved", { id: record.id, item: id, n: moved, dir: take ? "take" : "stow", player: P });
   if (take && !cacheUnits(cache) && !opts.heldFromCache) {
     if (cache.entity) dropEntity(placeWorld(record.id).caches, cache.entity);
     cache.entity = null;
+    for (const p of state.players) {
+      if (p && p.openCacheId === record.id) p.openCacheId = null;
+    }
     emit("instance-cache-empty", { id: record.id, loot: cache.loot });
-    msg(`The ${cache.n} is empty.`, 6);
+    notifyPlacePilots(record.id, `The ${cache.n} is empty.`, 6);
   }
 }
 
@@ -1036,7 +1174,7 @@ function completeObjective(record) {
   const text = [record.objective.done || "Objective complete."];
   if (unlocked) text.push(`${record.cache.n} unlocked — fly to it and press R.`);
   if (!record.exit.requires.length || !exitDenial(record)) text.push("The way out is open.");
-  msg(text.join(" "), 8);
+  notifyPlacePilots(record.id, text.join(" "), 8);
   emit("instance-objective-done", { id: record.id, kind: record.objective.kind });
 }
 
@@ -1065,7 +1203,7 @@ export function updateInstances(dt) {
         const warning = instanceWarning(record);
         if (warning) {
           record.warned = true;
-          msg(warning, 8);
+          notifyPlacePilots(record.id, warning, 8);
           emit("instance-warning", { id: record.id, left: instanceTimeLeft(record) });
         }
       }
@@ -1096,10 +1234,10 @@ export function updateInstances(dt) {
     }
     // Both offer themselves the way a door does: a hint only where R would work, in the instance's
     // own words, and the refusal instead while the way out is sealed.
-    const P = localPlayer();
-    if (P && !P.dead && (P.place || state.place) === record.id) {
+    for (const P of state.players) {
+      if (!P || P.dead || (P.place || state.place) !== record.id) continue;
       const prompt = instancePrompt(record, P);
-      if (prompt) say(prompt);
+      if (prompt) sayForPlayer(P, prompt);
     }
   }
 }
@@ -1111,10 +1249,11 @@ export function updateRifts(dt, placeId = state.place) {
   for (const rift of rifts) {
     if (rift) rift.quat.multiply(_spin.setFromAxisAngle(UP, rift.spin * dt));
   }
-  const P = localPlayer();
-  if (!P || P.docked || P.dead || (P.place || state.place) !== placeId) return;
-  const rift = nearestRift(P, placeId);
-  if (rift) say(`Press R to enter ${rift.dest || rift.n}`);
+  for (const P of state.players) {
+    if (!P || P.docked || P.dead || (P.place || state.place) !== placeId) continue;
+    const rift = nearestRift(P, placeId);
+    if (rift) sayForPlayer(P, `Press R to enter ${rift.dest || rift.n}`);
+  }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1126,8 +1265,17 @@ export function updateRifts(dt, placeId = state.place) {
 // (owner rule), and this puts them back where they entered so the ordinary death rules — recovery
 // fee, loaned Wasp, docking at that pocket's station — then apply unchanged.
 on("dying", ({ player } = {}) => {
-  const record = instanceAt(player ? player.place || state.place : state.place);
-  if (record) destroyInstance(record, "death");
+  const P = player || localPlayer();
+  const record = instanceAt(P ? P.place || state.place : state.place);
+  if (!record) return;
+  const otherInside = pilotsInside(record).some(p => p !== P);
+  if (otherInside) {
+    sendPilotHome(record, P);
+    if (typeof record.origin === "string" && record.origin && isPlace(record.origin)) loadPlace(record.origin);
+    emit("rift-left", { id: record.id, origin: record.origin, player: P });
+  } else {
+    destroyInstance(record, "death");
+  }
 });
 
 // The beam put some ore in the hold (sim/weapons.js emits `mined`). A mine-ore objective counts

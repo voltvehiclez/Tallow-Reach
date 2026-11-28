@@ -154,6 +154,7 @@ export function dock(P = state.player, profile = profileOf(P), world = worldOf(P
   }
   P.docked = true;
   P.dockedAt = state.time;
+  P.openCacheId = null;
   P.v.set(0, 0, 0);
   P.thr = 0;
   P.acc = 0;

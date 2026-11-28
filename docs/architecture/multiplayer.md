@@ -316,39 +316,47 @@ pilot locks (`state.otherPilots`, `sim/pilot-stats.js`), solid pilot hulls (`pil
 preserving `tokenHash` across metadata/write-back updates (`tests/playtest24-fixes.test.mjs`,
 `tests/multiplayer-rejoin.test.mjs`, `tests/multiplayer-damage.test.mjs`).
 
-## Slice 8c & Guest State Sync (built `2026-11-26a/b`, `2026-11-27a`–`e`)
+## Slice 8c & Guest State Sync (built `2026-11-26a/b`, `2026-11-27a`–`h`)
 
 - **Host world on guest screen:** guest `state.place` and scenery follow the host's authoritative ship
   snapshot (`mp-self-ship` → `applySelfShip` + `render/shipstream.js`); `sim/step.js` skips local physics
   when `state.away`; host broadcasts pocket `entities` (`enemies`, `bullets`, `missiles`, `crates`, `fx`,
-  `booms`, `efires`, `pickups`) rendered via `render/entitystream.js` (`_net` records purged cleanly on
-  return home). `applySelfShip` calls `syncSpeedFromVelocity(P, Boolean(P.warp))` so guest HUD speed
-  tracks live velocity (forward/reverse/boost/warp; `0` while docked).
+  `booms`, `efires`, `pickups`, `rifts`, `gates`, `caches`) rendered via `render/entitystream.js` (`_net`
+  records purged cleanly on return home). `applySelfShip` calls `syncSpeedFromVelocity(P, Boolean(P.warp))`
+  so guest HUD speed tracks live velocity (`0` while docked).
 - **Docking & paste-code routing:** `applySelfShip` / `applyVisitSnapshot` synchronize `docked`
-  deterministically using `lastVisitDockState` and `dockStreamCaughtUp` (no 250 ms wall-clock revert).
-  `net/session.js` `resolveGuestEntry(peerId)` resolves paste-code guests (`peerId === null`) and replies
-  with `hostPeerId || null` so `controls`/`warp`/`dock`/`act` never drop on direct WebRTC links;
-  `tryDock` emits `"docking-denied"` (`dockFailureReason`) pushed via `visit` notices.
-- **Guest actions & isolated mission ownership:** `sim/guest-actions.js` executes 36 `act` ops (`pw`/`sw`,
-  inventory/slots/`guestHeld`, outfitting, shop/hangar, boards, story dialogue) on `(P, P.profile, P.guestWorld)`.
-  `mission.owner` / `missionOwner` scope spawns, drops, kills, and HUD highlights per pilot.
+  deterministically using `lastVisitDockState` and `dockStreamCaughtUp`. `net/session.js` `resolveGuestEntry(peerId)`
+  resolves paste-code guests (`peerId === null`) and replies via `hostPeerId || null`; `tryDock` emits
+  `"docking-denied"` (`dockFailureReason`) pushed via `visit` notices.
+- **Guest actions, target parity & isolated mission ownership:** `sim/guest-actions.js` executes `ACT_OPS`
+  (`pw`/`sw`, `lock`, `rift`, `cacheClose`, inventory/slots/`guestHeld`, outfitting, shop/hangar, boards,
+  story dialogue) on `(P, P.profile, P.guestWorld)`. `mission.owner` / `missionOwner` scope spawns, drops,
+  kills, and HUD highlights per pilot. `F`/`N` locks forward `{ op: "lock", kind, id }` so host missiles
+  and `otherPilotsThere`/`targetHealth` work symmetrically while docked pilots cannot be missile-locked;
+  `KeyJ` (`route:jump`) routes through `netRequestWarp`, `setDestination` skips saving while `state.away`,
+  `"travel-denied"` forwards notices, and `"place-changed"` clears reached destinations.
+- **Rifts, instances, shared `CACHE`, wormholes & galaxy sync (`2026-11-27h`):** `visit` carries host
+  `galaxy` (`seed`/`knowledge`), `shops`, `wormholes`, `connections`, and `instance` (multi-pilot `entries`,
+  isolated leave/dying extraction, `cache.stock` + `slots` + `tradeOpen`, bucketed `visitPrintOf`
+  lifetimes, and local HUD clock countdown); `pendingNetPlace` defers dynamic instance entry until
+  `syncGuestInstance` registers the pocket, and `restoreGuestHome` restores home galaxy/shops/wormholes/destination.
 - **Per-host-world `visitState` persistence (additive on v29):** `world.guests[guestId].visitState` (`GUEST_FIELDS`)
   persists host-world `missions`, `flags`, `done`, `kills`, `homeStation`, `place`, `resume`, `board`,
-  `boards`, `boardTimers`, `missionState`, and `stationSlots` per host save (`saveAutosave` via `saveKit.write`
-  with `{ persist: false }` on 30 Hz heartbeats). Pure flight/mission updates save quietly via `saveGuestVisitState`
-  without bumping suitcase `rev`; `forgetPeer` (`sendWire: false`), `stop()`, and `mp-host-flush` flush final
-  state; `hostProfile(bundle, visitState)` + `arriveGuest()` + `applyResumePlacement()` restore pose,
-  pocket, docked station, health/boost, and salvage crates without leaking into the portable suitcase or
-  home save. `enterGameMode("open")` preserves `state.away` (`mp-refresh-home` / `mp-refresh-visit`) rather
-  than overwriting with `resumeFromSave()`, emits `"open-world-entered"` so `ui/hud.js` (`syncWorldHud`)
-  re-syncs HUD/reticle state on undocked joins, and `main.js` indexes `latestSelf[0]` on `mp-refresh-visit`
-  plus imports `cancelGuestHeld` in `mp-guest-dock` (logging dock/warp/visit errors via `console.error`).
-
-- **Mining beam, HUD vitals, asteroid parity & host keepalive (`2026-11-27e`):** `SHIP_FIELDS` carries `beamT`, `pwr`, `pwrDraw`, `enFrac`, and `hint` (`sayForPlayer` guest hints expired by `step.js`), matched by `primarySlotIndex(S.pw, P)` in `ui/hud.js`. Host `mp-entities-request` sends diffed/throttled `rocks` (`LIMITS.rocks = 256`) synced via `render/entitystream.js` `syncPocketRocks` (`loadPlace` skips double-spawn when `_net` rocks exist; `clearNetEntities` resets `loaded = false`); `sim/player.js` `flight()` checks `placeWorld(P.place || state.place)` for remote-pocket collisions; `applyVisitSnapshot` preserves mid-flight `power`/`en`; `applySelfShip` skips stale `docked` snapshots before `dockStreamCaughtUp` and shows Launch/Warp notices; `main.js` adds `data:` Worker + zero-gain `AudioWorkletNode` host keepalive (`file://`-safe); and `transport.js` sets `warnOnRelayFailure = false` over 10 curated `RELAYS.relayUrls`.
-- **Pre-8d 240 Hz smoothing & paused-tab keepalive (`2026-11-27f`–`g`):** `guestSelfStream` (`snapM: 80`) and `entityStream` (`snapM: 300`, covering `900+300 m/s` cannon bolts without teleporting) in `main.js` use `SHIP_STREAM.delayMs` (`100 ms`) with `paceMs: 1000 / SHIP_STREAM.hz` arrival dejittering (matching `shipStream`), `hrNow` sub-ms receive/sample timestamps across `net/session.js` and `main.js`, lockstep `shipTick` (`entityTick = -1`) in `net/session.js`, Cubic Hermite turn-curve blending (`interpPos`) and `warpFx`/`warpFlash`/`shake` interpolation in `render/shipstream.js`, per-frame guest `gP.bs` boost damping in `drawFrame`, and a sub-audible `12 Hz` (`-57 dBFS`) carrier inside `hostAudioCtx` (`startHostAudioKeepalive`, resumed on `visibilitychange`) so paused or muted background host tabs keep Chromium's audible exemption and stay unthrottled.
+  `boards`, `boardTimers`, `missionState`, and `stationSlots` (`saveAutosave` via `saveKit.write`;
+  `{ persist: false }` on 30 Hz heartbeats). Pure flight/mission updates save quietly via `saveGuestVisitState`;
+  `forgetPeer`, `stop()`, and `mp-host-flush` flush final state; `enterGameMode("open")` preserves `state.away`
+  and emits `"open-world-entered"` so `ui/hud.js` (`syncWorldHud`) restores HUD/reticle state on undocked rejoins.
+- **Mining beam, HUD vitals, asteroid parity, 240 Hz smoothing & keepalive (`2026-11-27e`–`g`):** `SHIP_FIELDS`
+  carries `beamT`, `pwr`, `pwrDraw`, `enFrac`, and `hint` (`sayForPlayer`); diffed `rocks` (`LIMITS.rocks = 256`)
+  sync via `syncPocketRocks`; `flight()` reads `placeWorld(P.place || state.place)`; `guestSelfStream`
+  (`delayMs: 100`, `snapM: 80`) and `entityStream` (`snapM: 300`) use `paceMs` dejittering, `hrNow` sub-ms
+  timestamps, lockstep `shipTick`, Cubic Hermite turn curves, and damped `gP.bs`; and `main.js` keeps
+  background host tabs unthrottled via `data:` Worker + sub-audible `12 Hz` `AudioWorkletNode` over 10
+  curated `RELAYS.relayUrls` (`warnOnRelayFailure: false`).
 
 **Tests:** `tests/multiplayer-guest-sync.test.mjs`, `tests/multiplayer-8c-fixes.test.mjs`,
-`tests/multiplayer-playtest-20261127.test.mjs`; guide: [../../testing/TESTING-16-SLICE8C.md](../../testing/TESTING-16-SLICE8C.md).
+`tests/multiplayer-playtest-20261127.test.mjs`, `tests/multiplayer-parity.test.mjs`; guide:
+[../../testing/TESTING-16-SLICE8C.md](../../testing/TESTING-16-SLICE8C.md).
 
 **Away means this world is paused, and the card says so** (owner, playtests 18 and 20): the four rules,
 word for word, in [../archive/MULTIPLAYER_SLICE5_NOTES.md](../archive/MULTIPLAYER_SLICE5_NOTES.md).

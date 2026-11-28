@@ -174,6 +174,7 @@ export function leaveGuest(guestId) {
   const entry = guests.get(id);
   if (!entry) return false;
   cancelGuestHeld(entry.player);
+  if (entry.player) entry.player.openCacheId = null;
   guests.delete(id);
   const at = state.players.indexOf(entry.player);
   if (at >= 0) state.players.splice(at, 1);

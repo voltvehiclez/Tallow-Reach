@@ -18,6 +18,18 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Guest-vs-local feature parity — F/N/missile locks, route jump, rifts/instances/caches, wormholes, galaxy/shops & destination sync (build `2026-11-27h`)
+
+**Code change; rebuild needed; build `2026-11-27h`.** Save version unchanged (**29**); additive optional fields on `entities` (`rifts`, `gates`, `caches`), `visit` (`openCacheId`, `galaxy`, `shops`, `wormholes`, `connections`, `instance`), and `ACT_OPS` (`"lock"`, `"rift"`, `"cacheClose"`).
+
+Closed every gameplay parity gap between visiting guests and local/host pilots:
+
+1. **Targeting, N-list & missile parity (`src/sim/{targeting,missile,weapons,guest-actions}.js`, `src/main.js`):** Guest `KeyF` / `KeyN` selections forward `{ op: "lock", kind, id }` to the host so host-side missiles (`updateMissiles`) follow guest target locks, and `otherPilotsThere`/`targetHealth`/`updateMissileFlight` treat live host/guest pilots identically while blocking missile locks on docked pilots.
+2. **Rifts, dynamic instances, shared `CACHE` trades, wormholes & uncharted links (`src/sim/{instances,wormholes,uncharted,inventory,guest-actions,world,places}.js`, `src/net/{protocol,session}.js`, `src/render/entitystream.js`, `src/ui/{cache,cargo,hud}.js`, `src/main.js`):** Synced `rifts`/`gates`/`caches` via `mp-entities`, `visit.instance` (`syncGuestInstance` with multi-pilot `entries`, isolated exit/death extraction, cache `slots` + `tradeOpen`, and live HUD countdown interpolation), wormhole occupancy guards (`pocketOccupied`), and `uncharted` `pocketsById` expiry cleanup. Fixed two `guest-actions.js` bugs caught by integration testing (`cache?.stock` vs `cache?.loot` string, and `invMove` measuring moved quantity instead of string `moveItem > 0`). Routed guest `KeyR`, cache close/use/discard, and cargo consumable confirmation (`pendingUse`) over `act`/`visit`, and gated `"instance-cache-open"`/`"docked"`/`"rift-left"` events by `payload?.player`.
+3. **Galaxy, shops, starmap destination & travel notices (`src/sim/{galaxy-session,navigation,sectors,session}.js`, `src/state/destination.js`, `src/ui/starmap.js`, `src/main.js`):** Synced host `galaxy` (`seed`/`knowledge`), `shops`, `wormholes`, and `connections` cleanly across `visit` (bucketing `visitPrintOf` lifetimes so idle countdowns do not spam `visit` packets) with full home stash/restore on leaving; deferred dynamic instance `pendingNetPlace` transitions until `syncGuestInstance` registers the place; routed `KeyJ` (`jumpRoute` `warpFn`) and `"travel-denied"` notices to guests; guarded `setDestination` against overwriting the home save while away; and emitted `"place-changed"` on guest transitions so `starmap` clears reached destinations automatically.
+
+**Tests:** Added `tests/multiplayer-parity.test.mjs` (**6** suites including a two-VM real-`src/main.js` end-to-end test); **Docs:** Updated `docs/HANDOFF.md`, `docs/LESSONS.md` (`L58`; archived `L46`–`L47`), and `docs/architecture/multiplayer.md`.
+
 ## 2026-11-27: Fix paused-tab 1 Hz host throttling & 24 Hz cannon bolt snapping (build `2026-11-27g`)
 
 **Code change; rebuild needed; build `2026-11-27g`.** Save version unchanged (**29**); wire schema and `SHIP_STREAM` (`24 Hz` / `100 ms`) unchanged.
@@ -134,62 +146,9 @@ The guest still ran its own world in 8b — its own sim stepped its own scenery 
 - **Docs & guide:** new [testing/TESTING-16-SLICE8C.md](../testing/TESTING-16-SLICE8C.md) linked from [testing/README.md](../testing/README.md) (cut on host warp, free warp/dock, Go home, what you still won't see — enemies/bullets still host-only). Updated module READMEs and [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Tests:** `tests/docs.test.mjs` still green (HANDOFF 16-KB, ROADMAP 35-KB limits); `tests/multiplayer-connection.test.mjs` updated for the two new kinds; `npm test` green; `npm run build` 3604 KB.
 
-## 2026-11-25: Playtest 25 — one pointer at a time, and a lead pip for anything you can lock
-
-**Code change; rebuild needed; build `2026-11-25i`.** Save version unchanged (**29**); nothing saved
-and nothing on the wire changed.
-
-The owner confirmed all three playtest-24 fixes ("1. Works. 2. Works. 3. Works.") and sent two new
-reports from the same flight. Neither is a slice-8b feature; both are rules that were only ever
-written down in one place.
-
-- **1. "Pinning chat makes it so that when your orange circle cursor goes over the pinned chat your
-  white windows cursor is visible."** Two pointers live on the same screen: the system cursor and the
-  HUD's own orange circle (`#cur`). Only `canvas` hid the system one, so any element that took the
-  mouse — the pinned chat box does, `pointer-events: auto` — put a white arrow inside the ring. The
-  owner's rule is general: *"In the ship UI your orange circle cursor should always be prioritised if
-  you are steering. So UIs [that] decouple the steering like chat, inventory etc it's ok there to show
-  the white windows cursor."* So the answer is one body class, `pilot-pointer`, owned by the new
-  `src/ui/pointer.js`: **is the stick live?** — in a ship, not docked, not the title screen, not
-  paused, no surface holding the flight keys (chat, cargo, cache, chart, multiplayer screen, N list,
-  an act's end card). `main.js` asks it once a frame (`syncPointer()`, one comparison, a `classList`
-  write only when the answer changes) and `styles.css` finishes both halves: `body.pilot-pointer * {
-  cursor: none !important }` and `body:not(.pilot-pointer) #cur { display: none }` — so a pilot never
-  sees two pointers at once, in either direction. **Free camera (Left Alt) is not a decoupling** and
-  keeps the ring, per the owner: *"i still want the orange cursor like now since we are still flying
-  the ship just from a different view point."*
-- **2. "Lead indicator is not visible when I select a guest as a host with f."** The ballistic pip
-  was hard-wired to `lock.k === 'e'` — hostiles only — although playtest 23 made every pilot
-  selectable, so a locked friend drew nothing. It now follows **whatever F has locked, as long as it
-  is moving**: hostiles, visiting pilots on either machine, anything with a velocity. A pilot's lock
-  reference had no velocity at all, so `render/views.js` now carries one (`ref.v`): the host's
-  record's own interpolated `v`, or the `velocity` the host already sends in `SHIP_FIELDS` and
-  `render/shipstream.js` already smooths. Two gates stay, both about the shot: a wreck is skipped
-  (`hp <= 0`), and a target under `LEAD_MIN_SPEED` (0.5 m/s) has nothing to lead — a rock, a crate at
-  rest, a station and a rift door keep the screen quiet. The **weapon** side is unchanged, at the
-  owner's word (*"make the lead indicator currently only be for primary weapon, it's easier that way
-  right now"*): the selected primary bay's gun leads; an empty bay or the hitscan mining beam does
-  not, and the missile launcher is not consulted yet.
-- **3. "When chat is open the white cursor is only visible over the chat box."** The canvas hides the
-  system cursor for mouse-look flight, so a surface that took the stick only got the arrow back on its
-  own elements — everywhere else it was still `none`. The rule now gives the cursor the **whole
-  screen** on any decoupled surface (`body:not(.pilot-pointer) canvas { cursor: default }`, a type
-  selector with no `!important`, so a canvas with its own cursor keeps it), which is exactly what the
-  N list already did.
-- **4. "Are you sure that is the new build?"** The owner tested the previous round on a bundle that
-  contained neither fix, and nothing on the screen said which build was running. The chat box's empty
-  line now reads *Press Enter to chat. **Build 2026-11-25h*** — the one place both players always look
-  while flying. A screen without a build there is an old download or a cached page; hard-reload.
-- **Docs.** New guide [TESTING-25-POINTER-AND-LEAD.md](../testing/TESTING-25-POINTER-AND-LEAD.md)
-  (both reports, step by step). The rule itself is written into
-  [docs/architecture/ui-and-screens.md](architecture/ui-and-screens.md) and the two module READMEs.
-- **Tests.** `tests/playtest25-fixes.test.mjs` (8): the pointer table (including free camera and each
-  decoupling surface), the once-per-change DOM write, the two CSS rules, the frame loop's call, and
-  the lead pip — a pilot's reference carries a velocity on the host's screen and on a guest's, and
-  the instrument's gates (any lock, moving only, primary bay only). `npm test` **1131/1131**.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-25: Playtest 25 — one pointer at a time, and a lead pip for anything you can lock
 - 2026-11-25: Playtest 24 — a repaired pilot comes back repaired, the visitor's hull stops blurring, and the chat can be copied
 - 2026-11-25: Step 16 slice 8b — the guest's controls reach its ship
 - 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
